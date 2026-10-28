@@ -37,7 +37,7 @@ jobs:
       - run: terraform fmt -check -recursive infra
       - name: validate
         run: |
-          for dir in infra/bootstrap infra/control-plane; do
+          for dir in infra/bootstrap infra/control-plane infra/billing; do
             terraform -chdir="$dir" init -backend=false -input=false
             terraform -chdir="$dir" validate
           done

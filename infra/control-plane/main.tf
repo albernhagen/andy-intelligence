@@ -236,6 +236,11 @@ resource "google_cloud_run_v2_service" "control_plane" {
   template {
     service_account = google_service_account.runtime.email
 
+    # Cost caps (ADR-0028): bound billed time per request and requests per instance.
+    # API, webhook and Cloud Tasks handlers should answer fast; MCP streams reconnect.
+    timeout                          = "60s"
+    max_instance_request_concurrency = 80
+
     scaling {
       min_instance_count = 0
       max_instance_count = 2
@@ -273,12 +278,32 @@ resource "google_cloud_run_v2_service" "control_plane" {
   }
 
   lifecycle {
+    # CI deploys own the image and the revision labels deploy-cloudrun adds (commit-sha, managed-by).
     ignore_changes = [
       template[0].containers[0].image,
+      template[0].labels,
       client,
       client_version,
     ]
   }
 
   depends_on = [google_project_service.apis, google_firestore_database.default]
+}
+
+# ── Logs (ADR-0028) ─────────────────────────────────────────────────────────
+# Retention stays at the _Default bucket's 30 days (no resource needed). Drop only the
+# noisiest entries: successful request logs for static assets and /health. Errors still log.
+
+resource "google_logging_project_exclusion" "run_noise" {
+  name        = "control-plane-request-noise"
+  description = "Successful Cloud Run request logs for static assets and /health"
+  filter      = <<-EOT
+    resource.type = "cloud_run_revision"
+    AND resource.labels.service_name = "${local.service_name}"
+    AND log_id("run.googleapis.com/requests")
+    AND httpRequest.status < 400
+    AND (httpRequest.requestUrl : "/assets/" OR httpRequest.requestUrl : "/health")
+  EOT
+
+  depends_on = [google_project_service.apis]
 }

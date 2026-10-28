@@ -13,3 +13,6 @@ coverage/
 !*.tfvars.example
 .DS_Store
 .idea/
+
+# terraform show output (may contain variable values)
+*plan.txt
