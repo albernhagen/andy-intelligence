@@ -8,6 +8,7 @@ coverage/
 .terraform/
 *.tfstate
 *.tfstate.*
+*.tfplan
 *.tfvars
 !*.tfvars.example
 .DS_Store
