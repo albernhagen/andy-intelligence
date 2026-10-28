@@ -3,7 +3,7 @@ title: andy-intelligence — Architecture & Vision
 status: accepted (v1.x scope)
 owner: Andy
 last_updated: 2026-10-28
-revision: 2026-10-28a (M1.15: Usage alerts built)
+revision: 2026-10-28b (M1.12: Local quality gates built)
 ---
 
 # andy-intelligence — Architecture & Vision
@@ -303,14 +303,14 @@ Budgets live in their own Terraform root, `infra/billing`, planned and applied l
 
 ### 10.2 Local quality gates (ADR-0027)
 
-| When | Runs |
-|---|---|
-| Agent edits a file | Prettier + ESLint `--fix` (Claude Code hook) |
-| `git commit` | Prettier, ESLint, `terraform fmt`, workflow linter on staged files |
-| `git push` | Typecheck + tests |
-| PR | All of the above + build + security scans (CI) |
+| When | Runs | Where |
+|---|---|---|
+| Agent edits a file | Prettier `--write` + ESLint `--fix`; unfixable lint errors go back to the agent | Claude Code `PostToolUse` hook: `.claude/settings.json` → `scripts/format-edited-file.mjs` |
+| `git commit` | Prettier, ESLint, `terraform fmt -check`, actionlint (workflow linter) on staged files | lefthook `pre-commit` (`lefthook.yml`) |
+| `git push` | `pnpm typecheck` + `pnpm test` | lefthook `pre-push` |
+| PR | All of the above + build + security scans | CI (`ci.yml`; actionlint is a checksum-verified release binary) |
 
-Hooks install with `pnpm install` and call the same `pnpm` scripts as CI.
+Hooks install with `pnpm install` (root `prepare` script; skipped when there is no `.git`, e.g. the Docker build) and use the same tools and config as CI. actionlint is skipped locally if not installed (`brew install actionlint`); CI always runs it. `--no-verify` is for emergencies only.
 
 ### 10.3 Data
 - **Backups:** Firestore is the only copy of tickets, so daily Firestore scheduled backups (short retention; pennies at this size) ship in M1: First end-to-end flow. Optional BigQuery export for ad-hoc analytics later.
@@ -383,16 +383,14 @@ Repo scaffold, contracts package, Terraform for control-plane GCP project (plan 
 | **M1.7: Refinement** | `refine` step on the executor; questions written as structured records → inbox; answering re-runs DoR → Ready. | M | M1.3: UI: tickets + inbox, M1.4: MCP core tools, M1.6: Claude Code executor | A new ticket gets 1–5 questions; answering via MCP moves it to Ready |
 | **M1.8: Build + gate** | Dispatcher picks Ready tickets; `build` step opens PR with structured summary and ticket key; all merges gated (Andy); `would_auto_merge` recorded; outcome set from merge/close webhook; cost estimate on the Run. | M | M1.7: Refinement | Ready ticket → PR → Andy merges → ticket advances; Run shows cost estimate and outcome |
 | **M1.9: Quota capture** | Timeboxed, best-effort. Capture claude-sub `rate_limits` from runs if available headless; otherwise readings stay **unknown** per policy. UI banner on warn/pause/unknown. | S | M1.6: Claude Code executor | Gauge shows a reading or "unknown"; banner appears at thresholds (test with seeded readings) |
-
 | **M1.10: Security review automation** | Per-PR scans (CodeQL, dependency review, Terraform misconfig scan, workflow linter) as required checks; pin actions to SHAs + Dependabot; per-PR security-review agent workflow; `docs/security/threat-model.md` v1 seeded with known risks; system security review workflow (weekly + manual); `/security-review` and `/threat-model` procedures in `platform/procedures/`. Andy adds the reviewer token secret and required checks. | M | M0: Foundations | A test PR with a planted issue (e.g. over-broad IAM role) gets a high finding and a failing check; the label override works; a manual system review opens a threat-model PR |
-
 | **M1.11: Adversarial PR review** | Adversarial reviewer agent on every PR (ADR-0026) reusing M1.10 plumbing; reviewer procedure in `platform/procedures/`; `adversarial-review` check fails on unresolved blockers; `review-accepted` override label. | M | M1.10: Security review automation | A test PR with a planted bug (e.g. off-by-one with no test) gets a `blocker` with a failing scenario; replying + fixing clears the check; the label override works |
-| **M1.12: Local quality gates** | Git hooks (commit: format/lint/`terraform fmt`/workflow lint on staged files; push: typecheck + tests) installed by `pnpm install`; Claude Code hook formats and lints edited files (ADR-0027). | S | M0: Foundations | A commit with a lint error is blocked locally; an agent edit is auto-formatted; CI unchanged |
+| **M1.12: Local quality gates** | Git hooks (commit: format/lint/`terraform fmt`/workflow lint on staged files; push: typecheck + tests) installed by `pnpm install`; Claude Code hook formats and lints edited files (ADR-0027). | S | M0: Foundations | A commit with a lint error is blocked locally; an agent edit is auto-formatted; CI adds actionlint (Andy, 2026-10-28) |
 | **M1.13: GCP cost guardrails** | `infra/billing` root with a $25/month budget and alerts (local plans only); Cloud Run timeout/concurrency set; Cloud Tasks caps when the queue lands; log exclusions; kill switch documented, not built (ADR-0028, ADR-0029). Andy applies. | S | M0: Foundations | Budget visible in Billing with alert thresholds; Andy confirmed as a default alert recipient and Google Cloud mail reaching his inbox (Google has no test-alert feature); kill switch documented and off |
 | **M1.14: Cost kill switch** | Opt-in `kill_switch_enabled` (default off): budget → Pub/Sub at 150% → function scales Cloud Run to zero and pauses any Cloud Tasks queues; never disables billing; re-enable steps in the billing runbook (ADR-0028). Verify the scale-to-zero mechanism first. Raising a Needs-you item is a follow-up once M1.2: Ticket core merges (the budget email covers it until then). | M | M1.13: GCP cost guardrails | With the switch on and a test budget, a budget message takes the service offline; with it off, nothing is deployed |
 | **M1.15: Usage alerts** | Cloud Monitoring alert policies in `infra/control-plane` (email to Andy, address in gitignored tfvars + `TF_VAR_ALERT_EMAIL` Actions secret) on Cloud Run request rate, internet egress, Firestore read/write rate and log ingestion; thresholds well above normal use. Verify current alerting prices first (expected well under $1/month). | S | M1.13: GCP cost guardrails | Each policy visible in Monitoring; a temporarily lowered threshold fires an email within minutes |
 
-Do first, in parallel: M1.13: GCP cost guardrails (then M1.15: Usage alerts and M1.14: Cost kill switch), M1.12: Local quality gates, M1.10: Security review automation. Then M1.11: Adversarial PR review. M1.1: MCP OAuth spike and M1.2: Ticket core can start alongside.
+Order (Andy, 2026-10-28): M1.12: Local quality gates → M1.10: Security review automation → M1.2: Ticket core ‖ M1.1: MCP OAuth spike (in parallel) → M1.14: Cost kill switch → M1.11: Adversarial PR review. M1.13: GCP cost guardrails and M1.15: Usage alerts are merged.
 
 Can run in parallel once M1.2: Ticket core merges:
 - M1.3: UI: tickets + inbox

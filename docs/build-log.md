@@ -63,39 +63,49 @@ Temporary progress log until andy-intelligence can track its own work (then migr
 - Applied by Andy (2026-10-28). Test: request threshold set to 0 → alert email arrived within minutes → restored. Firestore document metrics confirmed under the Cloud Firestore Database resource in Metrics Explorer (no data yet: nothing uses Firestore until M1.2: Ticket core). CI plan: "No changes".
 - Lesson: `evaluation_missing_data` needs a non-zero `duration`; dropped (a threshold condition with no data stays inactive anyway).
 
+## 2026-10-28 — M1.15: Usage alerts merged; M1.12: Local quality gates built
+
+- Merged: PR #8: Usage alerts.
+- **Decided (Andy):** slice order M1.12: Local quality gates → M1.10: Security review automation → M1.2: Ticket core ‖ M1.1: MCP OAuth spike → M1.14: Cost kill switch → M1.11: Adversarial PR review.
+- Branch `m1.12/local-quality-gates`: lefthook 2.2.2 (verified current; `prepare` script installs hooks because pnpm 10 blocks dependency postinstall scripts, skipped without `.git` for the Docker build); pre-commit prettier/eslint/`terraform fmt`/actionlint on staged files; pre-push typecheck + tests; Claude Code `PostToolUse` hook in `.claude/settings.json` (platform plugin doesn't exist yet).
+- **Decided (Andy):** actionlint locally via brew, skipped with a message when missing; CI gets an actionlint job (checksum-verified v1.7.12 release binary, no third-party action). M1.12 "Done when" changed from "CI unchanged" accordingly.
+- Verified locally: a commit with an ESLint error, a Prettier issue and an unformatted `.tf` is blocked; the hook script formats an edited file and returns exit 2 with the ESLint error for unfixable issues. actionlint not run locally (sandbox can't run downloaded binaries); CI runs it.
+- Fixed: blank lines that split the M1 slice table in ARCHITECTURE §12.
+
 ## Slices: M1: First end-to-end flow: ticket → PR with Claude
 
 Status: todo / in progress / PR open / merged. Definitions: ARCHITECTURE §12.
 
-| Slice                                   | Size            | Depends on                                                                  | Status          |
-| --------------------------------------- | --------------- | --------------------------------------------------------------------------- | --------------- |
-| M1.0: Docs sync                         | S               | M0: Foundations                                                             | merged (PR #1)  |
-| M1.1: MCP OAuth spike                   | M               | M0: Foundations                                                             | todo            |
-| M1.2: Ticket core                       | M               | M0: Foundations                                                             | todo            |
-| M1.3: UI: tickets + inbox               | M               | M1.2: Ticket core                                                           | todo            |
-| M1.4: MCP core tools                    | S               | M1.1: MCP OAuth spike, M1.2: Ticket core                                    | todo            |
-| M1.5: GitHub App + project registration | M               | M1.2: Ticket core                                                           | todo            |
-| M1.6: Claude Code executor              | L (split 6a/6b) | M1.5: GitHub App + project registration                                     | todo            |
-| M1.7: Refinement                        | M               | M1.3: UI: tickets + inbox, M1.4: MCP core tools, M1.6: Claude Code executor | todo            |
-| M1.8: Build + gate                      | M               | M1.7: Refinement                                                            | todo            |
-| M1.9: Quota capture                     | S               | M1.6: Claude Code executor                                                  | todo            |
-| M1.10: Security review automation       | M               | M0: Foundations                                                             | todo            |
-| M1.11: Adversarial PR review            | M               | M1.10: Security review automation                                           | todo            |
-| M1.12: Local quality gates              | S               | M0: Foundations                                                             | todo            |
-| M1.13: GCP cost guardrails              | S               | M0: Foundations                                                             | merged (PR #7)  |
-| M1.14: Cost kill switch                 | M               | M1.13: GCP cost guardrails                                                  | todo            |
-| M1.15: Usage alerts                     | S               | M1.13: GCP cost guardrails                                                  | PR open (PR #8) |
+| Slice                                   | Size            | Depends on                                                                  | Status         |
+| --------------------------------------- | --------------- | --------------------------------------------------------------------------- | -------------- |
+| M1.0: Docs sync                         | S               | M0: Foundations                                                             | merged (PR #1) |
+| M1.1: MCP OAuth spike                   | M               | M0: Foundations                                                             | todo           |
+| M1.2: Ticket core                       | M               | M0: Foundations                                                             | todo           |
+| M1.3: UI: tickets + inbox               | M               | M1.2: Ticket core                                                           | todo           |
+| M1.4: MCP core tools                    | S               | M1.1: MCP OAuth spike, M1.2: Ticket core                                    | todo           |
+| M1.5: GitHub App + project registration | M               | M1.2: Ticket core                                                           | todo           |
+| M1.6: Claude Code executor              | L (split 6a/6b) | M1.5: GitHub App + project registration                                     | todo           |
+| M1.7: Refinement                        | M               | M1.3: UI: tickets + inbox, M1.4: MCP core tools, M1.6: Claude Code executor | todo           |
+| M1.8: Build + gate                      | M               | M1.7: Refinement                                                            | todo           |
+| M1.9: Quota capture                     | S               | M1.6: Claude Code executor                                                  | todo           |
+| M1.10: Security review automation       | M               | M0: Foundations                                                             | todo           |
+| M1.11: Adversarial PR review            | M               | M1.10: Security review automation                                           | todo           |
+| M1.12: Local quality gates              | S               | M0: Foundations                                                             | PR open        |
+| M1.13: GCP cost guardrails              | S               | M0: Foundations                                                             | merged (PR #7) |
+| M1.14: Cost kill switch                 | M               | M1.13: GCP cost guardrails                                                  | todo           |
+| M1.15: Usage alerts                     | S               | M1.13: GCP cost guardrails                                                  | merged (PR #8) |
 
-**Next (parallel sessions):**
+**Next (order decided by Andy, 2026-10-28):**
 
-1. M1.15: Usage alerts, then M1.14: Cost kill switch.
-2. M1.12: Local quality gates — every later slice benefits.
-3. M1.10: Security review automation — then M1.11: Adversarial PR review.
-4. M1.1: MCP OAuth spike and M1.2: Ticket core can start alongside.
+1. M1.12: Local quality gates (PR open).
+2. M1.10: Security review automation.
+3. M1.2: Ticket core and M1.1: MCP OAuth spike, in parallel.
+4. M1.14: Cost kill switch.
+5. M1.11: Adversarial PR review.
 
 **Pending decisions (Andy):**
 
-- M1.15: Usage alerts — merge PR #8: Usage alerts.
+- M1.12: Local quality gates — review and merge the PR.
 - M1.10: Security review automation — confirm defaults (high/critical blocks, `security-accepted` override, subscription token, weekly + milestone-end system review); create the reviewer token secret.
 - First real project to onboard (open question 8); needed by M1.5: GitHub App + project registration.
 - Claude plan and headless billing (open question 5); needed by M1.6: Claude Code executor.
