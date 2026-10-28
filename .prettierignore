@@ -1,0 +1,6 @@
+dist
+node_modules
+pnpm-lock.yaml
+infra/**/.terraform
+*.tfstate*
+docs/architecture/ARCHITECTURE.md
