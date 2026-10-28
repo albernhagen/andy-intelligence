@@ -13,11 +13,20 @@ One-time steps that need your credentials. **This repo is public:** nothing in t
 
 - Enable **Secret scanning** and **Push protection** (free on public repos). Push protection rejects pushes containing known credential formats, from anyone, including agents.
 
-**Protect `main`** (Settings → Rules → Rulesets → New branch ruleset, target `main`):
+**Protect `main`** (Settings → Rules → Rulesets → New branch ruleset). Name `main`, enforcement **Active**, bypass list empty, target **Include default branch**.
 
-- Require a pull request before merging.
-- Require status checks to pass: `check`, `terraform`, `trufflehog`.
-- Block force pushes and deletions.
+| Rule                                        | Set                                                                                        | Why                                                                                                      |
+| ------------------------------------------- | ------------------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------- |
+| Restrict deletions                          | On                                                                                         | `main` can't be deleted                                                                                  |
+| Block force pushes                          | On                                                                                         | History can't be rewritten                                                                               |
+| Require a pull request before merging       | On — required approvals **0**; allowed merge method **Squash**                             | All changes go through a PR. 0 approvals because you can't approve your own PRs.                         |
+| Require linear history                      | On                                                                                         | One squashed commit per slice                                                                            |
+| Require status checks to pass               | On — add `check`, `terraform`, `trufflehog`; leave "require branches to be up to date" off | Leave out `plan`: it only runs when `infra/control-plane` changes, so requiring it would block other PRs |
+| Restrict creations / updates                | Off                                                                                        | Would block merges                                                                                       |
+| Require signed commits                      | Off                                                                                        | Agent commits aren't signed                                                                              |
+| Require deployments to succeed              | Off                                                                                        | No GitHub environments                                                                                   |
+| Require code scanning results               | Off for now                                                                                | Turned on in M1.10: Security review automation, once CodeQL runs                                         |
+| Code quality, code coverage, Copilot review | Off                                                                                        | Not used; Copilot review costs AI credits and duplicates the security-review agent                       |
 
 **Outside contributions** (Settings → Actions → General):
 
