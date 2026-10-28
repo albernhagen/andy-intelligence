@@ -107,6 +107,8 @@ resource "google_project_iam_member" "tf_plan" {
     "roles/secretmanager.viewer",
     # Providers bill API calls to this project (user_project_override); needs serviceusage.services.use.
     "roles/serviceusage.serviceUsageConsumer",
+    # Basic Viewer can't read Firebase Security Rules rulesets/releases.
+    "roles/firebaserules.viewer",
   ])
   project = var.project_id
   role    = each.value
