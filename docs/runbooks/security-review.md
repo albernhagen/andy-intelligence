@@ -77,11 +77,13 @@ The run also calls `terraform-plan.yml` for a drift summary (addresses only, no 
 
 ## Troubleshooting
 
-| Symptom                                                               | Fix                                                                                                              |
-| --------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------- |
-| Comment says "not reviewed: … CLAUDE_CODE_OAUTH_TOKEN is not set"     | Step 1                                                                                                           |
-| "the agent run failed"                                                | Open the run log: quota exhausted or token expired → wait or redo step 1. The check is neutral meanwhile.        |
-| Dependabot PR: "not reviewed"                                         | Expected: Dependabot runs get no repo secrets. Dependency review and CodeQL still gate it.                       |
-| Dependabot Terraform PR: `Terraform plan` fails on missing `TF_VAR_*` | Expected (no Dependabot secrets). Plan locally before merging.                                                   |
-| System review fails "changed files other than the threat model"       | The agent overstepped; nothing was pushed. Re-run; if it repeats, tighten `platform/procedures/threat-model.md`. |
-| System review can't open the PR                                       | Step 3, Actions setting                                                                                          |
+| Symptom                                                               | Fix                                                                                                                                                                       |
+| --------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Comment says "not reviewed: … CLAUDE_CODE_OAUTH_TOKEN is not set"     | Step 1                                                                                                                                                                    |
+| "the agent run failed"                                                | Open the run log: quota exhausted or token expired → wait or redo step 1. The check is neutral meanwhile.                                                                 |
+| Docs-only PR: "not reviewed"                                          | Expected: the agent is skipped to save quota (ADR-0030). Agent rule files (`AGENTS.md`, `CLAUDE.md`, `docs/BUILD-PROMPT.md`, `platform/procedures/`) are always reviewed. |
+| Reviewer uses too much quota                                          | Each comment shows turns, tokens and an API-equivalent estimate. Lower `--max-turns` in `security-review.yml`, or move the reviewer to an API key with a spend cap.       |
+| Dependabot PR: "not reviewed"                                         | Expected: Dependabot runs get no repo secrets. Dependency review and CodeQL still gate it.                                                                                |
+| Dependabot Terraform PR: `Terraform plan` fails on missing `TF_VAR_*` | Expected (no Dependabot secrets). Plan locally before merging.                                                                                                            |
+| System review fails "changed files other than the threat model"       | The agent overstepped; nothing was pushed. Re-run; if it repeats, tighten `platform/procedures/threat-model.md`.                                                          |
+| System review can't open the PR                                       | Step 3, Actions setting                                                                                                                                                   |

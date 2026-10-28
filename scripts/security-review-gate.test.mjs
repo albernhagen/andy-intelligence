@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { MARKER, evaluate, parseFindings, sanitize } from "./security-review-gate.mjs";
+import { MARKER, evaluate, parseFindings, sanitize, usageLine } from "./security-review-gate.mjs";
 
 const finding = (severity, extra = {}) => ({
   severity,
@@ -101,5 +101,37 @@ describe("evaluate", () => {
     const { body } = evaluate({ ...base, findings: output([evil]) });
     expect(body).not.toContain("<script>");
     expect(body).not.toContain("@someone");
+  });
+});
+
+describe("usageLine", () => {
+  const result = {
+    type: "result",
+    num_turns: 12,
+    total_cost_usd: 0.4567,
+    usage: { input_tokens: 1000, cache_read_input_tokens: 20000, output_tokens: 1500 },
+  };
+
+  it("GivenResultMessage_WhenFormatted_ThenTurnsTokensAndEstimate", () => {
+    expect(usageLine([{ type: "system" }, result])).toBe(
+      "Usage: 12 turns, 21,000 input / 1,500 output tokens, ≈ $0.46 API-equivalent (estimate; billed to the subscription).",
+    );
+  });
+
+  it("GivenNoResultMessage_WhenFormatted_ThenEmpty", () => {
+    expect(usageLine([{ type: "assistant" }])).toBe("");
+    expect(usageLine(null)).toBe("");
+    expect(usageLine([{ type: "result" }])).toBe("");
+  });
+
+  it("GivenUsage_WhenEvaluated_ThenShownInFooter", () => {
+    const { body } = evaluate({
+      mode: "review",
+      accepted: false,
+      sha: "x",
+      findings: JSON.stringify({ summary: "", findings: [] }),
+      usage: "Usage: 3 turns.",
+    });
+    expect(body).toContain("<sub>Usage: 3 turns. Commit x.");
   });
 });

@@ -77,9 +77,23 @@ jobs:
           fetch-depth: 0
           persist-credentials: false
 
+      - name: Skip docs-only changes (saves quota, ADR-0030)
+        id: scope
+        if: steps.ctx.outputs.mode != 'skip'
+        env:
+          MODE: ${{ steps.ctx.outputs.mode }}
+          REASON: ${{ steps.ctx.outputs.reason }}
+        run: |
+          if [ "$MODE" = review ] && [ "$(git diff --name-only HEAD^1 HEAD | node scripts/security-review-scope.mjs)" = true ]; then
+            MODE=unavailable
+            REASON="docs-only change; the agent is skipped to save quota (rule files such as AGENTS.md are still reviewed)"
+          fi
+          { echo "mode=$MODE"; echo "reason=$REASON"; } >> "$GITHUB_OUTPUT"
+          echo "mode=$MODE"
+
       - name: Prepare review inputs
         id: prep
-        if: steps.ctx.outputs.mode == 'review'
+        if: steps.scope.outputs.mode == 'review'
         env:
           BASE_REF: ${{ github.event.pull_request.base.ref }}
         run: |
@@ -94,7 +108,7 @@ jobs:
 
       - name: Security-review agent
         id: review
-        if: steps.ctx.outputs.mode == 'review'
+        if: steps.scope.outputs.mode == 'review'
         continue-on-error: true # agent failure → neutral check, Andy decides (ADR-0025)
         timeout-minutes: 15
         uses: anthropics/claude-code-action@d70510b174a1244958df0b03166a54912811f3e6 # v1.0.264
@@ -111,7 +125,8 @@ jobs:
           claude_args: |
             --allowedTools "Read,Glob,Grep"
             --disallowedTools "Bash,Edit,Write,MultiEdit,NotebookEdit,WebFetch,WebSearch"
-            --max-turns 40
+            --model sonnet
+            --max-turns 25
             --json-schema '${{ steps.prep.outputs.schema }}'
 
       - name: Gate
@@ -119,11 +134,12 @@ jobs:
         if: steps.ctx.outputs.mode != 'skip'
         continue-on-error: true
         env:
-          MODE: ${{ steps.ctx.outputs.mode == 'review' && steps.review.outcome != 'success' && 'unavailable' || steps.ctx.outputs.mode }}
-          REASON: ${{ steps.ctx.outputs.mode == 'review' && 'the agent run failed (quota, outage or error); see the run log' || steps.ctx.outputs.reason }}
+          MODE: ${{ steps.scope.outputs.mode == 'review' && steps.review.outcome != 'success' && 'unavailable' || steps.scope.outputs.mode }}
+          REASON: ${{ steps.scope.outputs.mode == 'review' && 'the agent run failed (quota, outage or error); see the run log' || steps.scope.outputs.reason }}
           ACCEPTED: ${{ steps.ctx.outputs.accepted }}
           FINDINGS: ${{ steps.review.outputs.structured_output }}
           SHA: ${{ github.event.pull_request.head.sha }}
+          EXECUTION_FILE: ${{ steps.review.outputs.execution_file }}
         run: node scripts/security-review-gate.mjs "$RUNNER_TEMP/security-review.md"
 
       - name: Post or update the PR comment

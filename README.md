@@ -42,13 +42,13 @@ Claude Code runs `scripts/format-edited-file.mjs` after each Edit/Write (`.claud
 
 ### Security checks on PRs (ADR-0025, ADR-0030)
 
-| Check                                                | Workflow              | Fails on                                                         |
-| ---------------------------------------------------- | --------------------- | ---------------------------------------------------------------- |
-| `trufflehog`                                         | `secret-scan.yml`     | Verified or unverifiable secrets                                 |
-| `codeql (javascript-typescript)`, `codeql (actions)` | `security-scans.yml`  | Code scanning alerts, high or higher (ruleset)                   |
-| `dependency-review`                                  | `security-scans.yml`  | New dependency with a high/critical advisory                     |
-| `terraform-misconfig`                                | `security-scans.yml`  | Trivy HIGH/CRITICAL in `infra/`                                  |
-| `security-review`                                    | `security-review.yml` | Agent finding high/critical, unless labelled `security-accepted` |
+| Check                                                | Workflow              | Fails on                                                                                        |
+| ---------------------------------------------------- | --------------------- | ----------------------------------------------------------------------------------------------- |
+| `trufflehog`                                         | `secret-scan.yml`     | Verified or unverifiable secrets                                                                |
+| `codeql (javascript-typescript)`, `codeql (actions)` | `security-scans.yml`  | Code scanning alerts, high or higher (ruleset)                                                  |
+| `dependency-review`                                  | `security-scans.yml`  | New dependency with a high/critical advisory                                                    |
+| `terraform-misconfig`                                | `security-scans.yml`  | Trivy HIGH/CRITICAL in `infra/`                                                                 |
+| `security-review`                                    | `security-review.yml` | Agent finding high/critical, unless labelled `security-accepted` (docs-only PRs skip the agent) |
 
 Weekly + manual: `system-security-review.yml` opens a PR updating the threat model. Action pins are commit SHAs, bumped by Dependabot.
 

@@ -79,6 +79,7 @@ Temporary progress log until andy-intelligence can track its own work (then migr
 - Branch `m1.10/security-review`: `security-scans.yml` (CodeQL TS + Actions, dependency review, Trivy), `security-review.yml` + tested gate script, `system-security-review.yml` (calls a now-reusable `terraform-plan.yml`), all actions pinned to SHAs, Dependabot (npm, Actions, Terraform; 7-day cooldown), `docs/security/threat-model.md` v1 (R1–R8), procedures in `platform/procedures/`, runbook `docs/runbooks/security-review.md`.
 - Verified (official docs, 2026-10-28): `claude-code-action` v1.0.264 inputs (`claude_code_oauth_token`, `prompt`, `claude_args`, `--json-schema` → `structured_output`); `claude setup-token` gives a one-year token, model requests only; `trivy-action` tags were hijacked in March 2026 (CVE-2026-33634), so the binary is used.
 - Verified locally: gate tests; actionlint clean (v1.7.12 binary); `trivy config --severity HIGH,CRITICAL infra` finds nothing. Not verifiable locally: the agent run, CodeQL, dependency review (CI and the demo PR do that).
+- **Decided (Andy, later 2026-10-28):** cut reviewer quota, since it shares the subscription with all other Claude use: Sonnet, max 25 turns, docs-only PRs skip the agent, usage (turns, tokens, API-equivalent estimate) on every comment (ADR-0030).
 - Lesson: on `pull_request`, a PR runs its own workflow files; procedure and threat model are read from the base branch, the rest is threat-model risk R5.
 
 ## Slices: M1: First end-to-end flow: ticket → PR with Claude

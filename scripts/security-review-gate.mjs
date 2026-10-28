@@ -4,9 +4,10 @@
 // untrusted PR content, so every field is sanitized before it reaches the comment.
 //
 // Env: MODE (review | unavailable | fork), ACCEPTED ("true" when the security-accepted label
-// is on the PR), FINDINGS (the agent's JSON), REASON (why the agent didn't run), SHA.
+// is on the PR), FINDINGS (the agent's JSON), REASON (why the agent didn't run), SHA,
+// EXECUTION_FILE (the action's message log; its result message gives usage, ADR-0030).
 // Writes the comment body to the path in argv[2]; exit code 1 means the check fails.
-import { writeFileSync } from "node:fs";
+import { readFileSync, writeFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 
 export const MARKER = "<!-- security-review -->";
@@ -42,6 +43,28 @@ export function parseFindings(raw) {
   return { summary: typeof data.summary === "string" ? data.summary : "", findings };
 }
 
+/** One line of run usage from the action's execution file messages, or "" when absent. */
+export function usageLine(messages) {
+  const result = Array.isArray(messages) ? messages.findLast((m) => m?.type === "result") : null;
+  if (!result) return "";
+  const parts = [];
+  if (Number.isFinite(result.num_turns)) parts.push(`${result.num_turns} turns`);
+  const { input_tokens: input, output_tokens: output } = result.usage ?? {};
+  const cached =
+    (result.usage?.cache_read_input_tokens ?? 0) + (result.usage?.cache_creation_input_tokens ?? 0);
+  if (Number.isFinite(input) && Number.isFinite(output)) {
+    parts.push(
+      `${(input + cached).toLocaleString("en-US")} input / ${output.toLocaleString("en-US")} output tokens`,
+    );
+  }
+  if (Number.isFinite(result.total_cost_usd)) {
+    parts.push(
+      `≈ $${result.total_cost_usd.toFixed(2)} API-equivalent (estimate; billed to the subscription)`,
+    );
+  }
+  return parts.length > 0 ? `Usage: ${parts.join(", ")}.` : "";
+}
+
 function findingsTable(findings) {
   const sorted = [...findings].sort(
     (a, b) => SEVERITIES.indexOf(a.severity) - SEVERITIES.indexOf(b.severity),
@@ -58,8 +81,8 @@ function findingsTable(findings) {
 }
 
 /** Decides whether the check passes and builds the PR comment. */
-export function evaluate({ mode, accepted, findings: raw, reason, sha }) {
-  const footer = `\n\n<sub>Commit ${sanitize(sha) || "unknown"}. Rules: \`platform/procedures/security-review.md\`. Override: Andy adds the \`${LABEL}\` label and writes why in the PR; it is removed on the next push.</sub>`;
+export function evaluate({ mode, accepted, findings: raw, reason, sha, usage = "" }) {
+  const footer = `\n\n<sub>${usage ? `${usage} ` : ""}Commit ${sanitize(sha) || "unknown"}. Rules: \`platform/procedures/security-review.md\`. Override: Andy adds the \`${LABEL}\` label and writes why in the PR; it is removed on the next push.</sub>`;
 
   if (mode === "fork") {
     return {
@@ -96,6 +119,15 @@ export function evaluate({ mode, accepted, findings: raw, reason, sha }) {
   };
 }
 
+function readExecutionFile(path) {
+  if (!path) return null;
+  try {
+    return JSON.parse(readFileSync(path, "utf8"));
+  } catch {
+    return null;
+  }
+}
+
 function main() {
   const result = evaluate({
     mode: process.env.MODE,
@@ -103,6 +135,7 @@ function main() {
     findings: process.env.FINDINGS,
     reason: process.env.REASON,
     sha: process.env.SHA,
+    usage: usageLine(readExecutionFile(process.env.EXECUTION_FILE)),
   });
   writeFileSync(process.argv[2], result.body);
   process.stdout.write(`${result.body}\n`);
