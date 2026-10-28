@@ -2,8 +2,8 @@
 title: andy-intelligence — Architecture & Vision
 status: accepted (v1.x scope)
 owner: Andy
-last_updated: 2026-10-23
-revision: 2026-10-23a (agentic security review)
+last_updated: 2026-10-27
+revision: 2026-10-27a (adversarial review, local quality gates, GCP cost guardrails)
 ---
 
 # andy-intelligence — Architecture & Vision
@@ -48,7 +48,9 @@ Enterprise-shaped (durable state, policy, gates, least privilege, audit, contrac
 6. **Everything configurable in the UI, everything audited.**
 7. **Untrusted content is data, never instructions.** Issue bodies, comments, web pages, and logs may contain prompt injection.
 8. **Security is checked continuously.** Every PR gets deterministic scans and a security-review agent; the whole system gets a recurring threat-model review (§9.1).
-9. **Docs ship with the change.** A PR that changes behavior, structure, setup, or a decision updates the affected docs in the same PR (§14). This applies to the control plane and to every managed project.
+9. **No surprise bills.** Everything that scales has a cap; every GCP project has a budget with alerts (§10.1).
+10. **Quality is checked locally first.** The same lint/format/type/test checks run on agent edits, commit, push, and CI (§10.2).
+11. **Docs ship with the change.** A PR that changes behavior, structure, setup, or a decision updates the affected docs in the same PR (§14). This applies to the control plane and to every managed project.
 
 ---
 
@@ -112,7 +114,7 @@ Enterprise-shaped (durable state, policy, gates, least privilege, audit, contrac
 - **Hard vetoes → Andy reviews:** protected paths (CODEOWNERS: auth, payments, migrations, infra), dependency changes, CI not green, new behavior without new tests, diff > N lines, any agent-raised concern.
 - **Otherwise:** S tasks may auto-merge if project policy allows; M/L always go to Andy in v1.x.
 - From M1: First end-to-end flow onward, **record what the gate *would* have decided** to build the dataset for later model-based scoring.
-- Cross-model review: a reviewer from a different vendor than the implementer comments on every PR.
+- **Adversarial review** on every PR (ADR-0026): a fresh reviewer session tries to find reasons the PR should not merge, with a concrete failing scenario for each finding. The implementer answers every finding. Unresolved `blocker` findings are a hard veto unless Andy labels `review-accepted`. From M2/M3 the reviewer is a different vendor than the implementer.
 - Security review on every PR (§9.1). A high/critical security finding is a hard veto unless Andy marks it `security-accepted`.
 
 ### 4.6 Environments and release
@@ -288,6 +290,28 @@ Applies to this repo now (M1.10: Security review automation) and to every manage
 - Run records (tokens, cost, outcome, quota snapshot) in Firestore drive the UI; rollups via aggregation queries (§5).
 - Paid cost from OpenRouter usage; subscription runs record **API-equivalent cost estimates** (labelled as estimates) alongside quota %.
 - Transcripts are not stored; run detail links to the Action log / Jules session / PR.
+### 10.1 GCP cost guardrails (ADR-0028)
+
+| Layer | What |
+|---|---|
+| Caps on usage | Cloud Run max instances, timeout, concurrency; Cloud Tasks max rate/concurrency; image cleanup; log retention and exclusions |
+| Budget alerts | Billing budget per GCP project (control plane starts at $25/month); email at 50%, 90%, 100% actual and 100% forecast |
+| Kill switch (opt-in) | At 150% of budget: scale Cloud Run to zero, pause Cloud Tasks, flag Needs-you. Never disables billing. |
+
+Budgets live in their own Terraform root, `infra/billing`. Model spend caps are separate (§5).
+
+### 10.2 Local quality gates (ADR-0027)
+
+| When | Runs |
+|---|---|
+| Agent edits a file | Prettier + ESLint `--fix` (Claude Code hook) |
+| `git commit` | Prettier, ESLint, `terraform fmt`, workflow linter on staged files |
+| `git push` | Typecheck + tests |
+| PR | All of the above + build + security scans (CI) |
+
+Hooks install with `pnpm install` and call the same `pnpm` scripts as CI.
+
+### 10.3 Data
 - **Backups:** Firestore is the only copy of tickets, so daily Firestore scheduled backups (short retention; pennies at this size) ship in M1: First end-to-end flow. Optional BigQuery export for ad-hoc analytics later.
 
 ---
@@ -361,7 +385,11 @@ Repo scaffold, contracts package, Terraform for control-plane GCP project (plan 
 
 | **M1.10: Security review automation** | Per-PR scans (CodeQL, dependency review, Terraform misconfig scan, workflow linter) as required checks; pin actions to SHAs + Dependabot; per-PR security-review agent workflow; `docs/security/threat-model.md` v1 seeded with known risks; system security review workflow (weekly + manual); `/security-review` and `/threat-model` procedures in `platform/procedures/`. Andy adds the reviewer token secret and required checks. | M | M0: Foundations | A test PR with a planted issue (e.g. over-broad IAM role) gets a high finding and a failing check; the label override works; a manual system review opens a threat-model PR |
 
-Run M1.10: Security review automation first or alongside M1.1 and M1.2, so later slices are reviewed.
+| **M1.11: Adversarial PR review** | Adversarial reviewer agent on every PR (ADR-0026) reusing M1.10 plumbing; reviewer procedure in `platform/procedures/`; `adversarial-review` check fails on unresolved blockers; `review-accepted` override label. | M | M1.10: Security review automation | A test PR with a planted bug (e.g. off-by-one with no test) gets a `blocker` with a failing scenario; replying + fixing clears the check; the label override works |
+| **M1.12: Local quality gates** | Git hooks (commit: format/lint/`terraform fmt`/workflow lint on staged files; push: typecheck + tests) installed by `pnpm install`; Claude Code hook formats and lints edited files (ADR-0027). | S | M0: Foundations | A commit with a lint error is blocked locally; an agent edit is auto-formatted; CI unchanged |
+| **M1.13: GCP cost guardrails** | `infra/billing` root with a $25/month budget and alerts; Cloud Run timeout/concurrency set; Cloud Tasks caps when the queue lands; log exclusions; opt-in kill switch (off) (ADR-0028). Andy applies. | S | M0: Foundations | Budget visible in Billing with alert thresholds; a test notification reaches Andy's email; kill switch documented and disabled |
+
+Do first, in parallel: M1.13: GCP cost guardrails, M1.12: Local quality gates, M1.10: Security review automation. Then M1.11: Adversarial PR review. M1.1: MCP OAuth spike and M1.2: Ticket core can start alongside.
 
 Can run in parallel once M1.2: Ticket core merges:
 - M1.3: UI: tickets + inbox
@@ -375,12 +403,14 @@ Jules adapter (completion via PR webhook); freeze `Executor` contract (two adapt
 OpenCode executor via Actions; OpenRouter direct-call gateway for single-call steps; global and per-project caps with hard stops; quota-aware route fallback with 20% reserves; weekly model scout producing pending tier changes; initial tier list seeded by scout. Slice at milestone start.
 
 ### M4: Second project + epics + story board
-Second real project onboarded via template + bootstrap, including per-PR security checks and the weekly system security review (§9.1); agent read access to API/MCP scoped per project; epics with child tickets and dependencies; just-in-time re-planning; config editing and audit/revert in UI and MCP; drag-and-drop story board; dedicated run-detail screen. Slice at milestone start.
+Second real project onboarded via template + bootstrap, including per-PR security and adversarial review, local quality gates, and the weekly system security review (§9.1, §4.5, §10.2); agent read access to API/MCP scoped per project; epics with child tickets and dependencies; just-in-time re-planning; config editing and audit/revert in UI and MCP; drag-and-drop story board; dedicated run-detail screen. Slice at milestone start.
 
 ### M5: Dev → prod releases
-Project template Terraform + Cloud Deploy dev→prod; dev deploy + verification (Playwright/API tests + verification agent); promote/rollback from UI and MCP; release notes; rule-based auto-merge for S tasks. Slice at milestone start.
+Project template Terraform + Cloud Deploy dev→prod, with a budget and caps per dev/prod project (§10.1); dev deploy + verification (Playwright/API tests + verification agent); promote/rollback from UI and MCP; release notes; rule-based auto-merge for S tasks. Slice at milestone start.
 
 ### Later (explicitly deferred)
+After M5: Dev → prod releases: **custom domain** for the control plane (and per-project domains), with Firebase authorized domains and the MCP connector URL updated.
+
 Prod monitoring agent and alert→ticket flow; write-approval execution; model-based risk scoring; email/Slack digests; transcript storage; BigQuery analytics; promptfoo CI + red-team; Cloud Run Jobs executors; additional harnesses (Antigravity CLI, Codex).
 
 ---

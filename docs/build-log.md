@@ -38,38 +38,47 @@ Temporary progress log until andy-intelligence can track its own work (then migr
 - **Defaults (Andy to confirm):** high/critical agent findings block merge, overridable with the `security-accepted` label; reviewer runs on the Claude subscription token; system review weekly (if anything merged) + end of each milestone.
 - **Seed risks for the threat model:** CI's `tf-plan` identity has basic Viewer (likely reads Firestore data and logs) and is usable from any same-repo branch; repo secrets readable by same-repo branch workflows; public Cloud Run URL (cost abuse); Firebase web API key is public by design.
 
+## 2026-10-27 — M0: Foundations done; plan additions
+
+- Merged: PR #1: Foundations, PR #3: gitignore Terraform plan files, PR #4: first Terraform apply, PR #5: service_url host.
+- Infra applied by Andy (bootstrap 15 + 2 IAM fixes; control plane 27). CI plan shows "No changes". Deploy green. Google sign-in works at `https://control-plane-662512537397.us-central1.run.app`.
+- Lessons: Identity Platform needs a quota project with local credentials; CI's `tf-plan` needed `serviceusage.serviceUsageConsumer` and `firebaserules.viewer`; Google sign-in provider is enabled by hand in Firebase (needs an OAuth client no API can create).
+- Git history rewritten on all 4 repos to replace Andy's Gmail with the noreply address.
+- **Decided (Andy):** adversarial PR review (ADR-0026), local quality gates (ADR-0027), GCP cost guardrails (ADR-0028). Custom domain after M5: Dev → prod releases.
+
 ## Slices: M1: First end-to-end flow: ticket → PR with Claude
 
 Status: todo / in progress / PR open / merged. Definitions: ARCHITECTURE §12.
 
-| Slice                                   | Size            | Depends on                                                                  | Status                       |
-| --------------------------------------- | --------------- | --------------------------------------------------------------------------- | ---------------------------- |
-| M1.0: Docs sync                         | S               | M0: Foundations                                                             | PR open (PR #1: Foundations) |
-| M1.1: MCP OAuth spike                   | M               | M0: Foundations                                                             | todo                         |
-| M1.2: Ticket core                       | M               | M0: Foundations                                                             | todo                         |
-| M1.3: UI: tickets + inbox               | M               | M1.2: Ticket core                                                           | todo                         |
-| M1.4: MCP core tools                    | S               | M1.1: MCP OAuth spike, M1.2: Ticket core                                    | todo                         |
-| M1.5: GitHub App + project registration | M               | M1.2: Ticket core                                                           | todo                         |
-| M1.6: Claude Code executor              | L (split 6a/6b) | M1.5: GitHub App + project registration                                     | todo                         |
-| M1.7: Refinement                        | M               | M1.3: UI: tickets + inbox, M1.4: MCP core tools, M1.6: Claude Code executor | todo                         |
-| M1.8: Build + gate                      | M               | M1.7: Refinement                                                            | todo                         |
-| M1.9: Quota capture                     | S               | M1.6: Claude Code executor                                                  | todo                         |
-| M1.10: Security review automation       | M               | M0: Foundations                                                             | todo                         |
+| Slice                                   | Size            | Depends on                                                                  | Status         |
+| --------------------------------------- | --------------- | --------------------------------------------------------------------------- | -------------- |
+| M1.0: Docs sync                         | S               | M0: Foundations                                                             | merged (PR #1) |
+| M1.1: MCP OAuth spike                   | M               | M0: Foundations                                                             | todo           |
+| M1.2: Ticket core                       | M               | M0: Foundations                                                             | todo           |
+| M1.3: UI: tickets + inbox               | M               | M1.2: Ticket core                                                           | todo           |
+| M1.4: MCP core tools                    | S               | M1.1: MCP OAuth spike, M1.2: Ticket core                                    | todo           |
+| M1.5: GitHub App + project registration | M               | M1.2: Ticket core                                                           | todo           |
+| M1.6: Claude Code executor              | L (split 6a/6b) | M1.5: GitHub App + project registration                                     | todo           |
+| M1.7: Refinement                        | M               | M1.3: UI: tickets + inbox, M1.4: MCP core tools, M1.6: Claude Code executor | todo           |
+| M1.8: Build + gate                      | M               | M1.7: Refinement                                                            | todo           |
+| M1.9: Quota capture                     | S               | M1.6: Claude Code executor                                                  | todo           |
+| M1.10: Security review automation       | M               | M0: Foundations                                                             | todo           |
+| M1.11: Adversarial PR review            | M               | M1.10: Security review automation                                           | todo           |
+| M1.12: Local quality gates              | S               | M0: Foundations                                                             | todo           |
+| M1.13: GCP cost guardrails              | S               | M0: Foundations                                                             | todo           |
 
-Next, in parallel, once M0: Foundations merges:
+**Next (parallel sessions):**
 
-- M1.10: Security review automation (first, so later slices get reviewed)
-- M1.1: MCP OAuth spike
-- M1.2: Ticket core
+1. M1.13: GCP cost guardrails — the app is public now; cap spend first.
+2. M1.12: Local quality gates — every later slice benefits.
+3. M1.10: Security review automation — then M1.11: Adversarial PR review.
+4. M1.1: MCP OAuth spike and M1.2: Ticket core can start alongside.
 
 **Pending decisions (Andy):**
 
-- Confirm the M1.10: Security review automation defaults above; create the reviewer token secret when that slice starts.
-
+- M1.13: GCP cost guardrails — confirm $25/month budget; kill switch stays off unless you turn it on; provide billing account ID (gitignored tfvars + Actions secret).
+- M1.10: Security review automation — confirm defaults (high/critical blocks, `security-accepted` override, subscription token, weekly + milestone-end system review); create the reviewer token secret.
 - First real project to onboard (open question 8); needed by M1.5: GitHub App + project registration.
 - Claude plan and headless billing (open question 5); needed by M1.6: Claude Code executor.
-- MCP OAuth mechanism: answered by M1.1: MCP OAuth spike.
 
-**Blocked on Andy:**
-
-- M0: Foundations: runbook steps 0–4 (`docs/runbooks/m0-setup.md`), first `terraform plan` review, merge PR #1: Foundations.
+**Blocked on Andy:** nothing.
