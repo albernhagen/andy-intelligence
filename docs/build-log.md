@@ -59,30 +59,32 @@ Temporary progress log until andy-intelligence can track its own work (then migr
 - Merged: PR #7: GCP cost guardrails.
 - Branch `m1.15/usage-alerts`: email channel + six Cloud Monitoring alert policies in `infra/control-plane` (Cloud Run requests and bytes sent; Firestore reads, writes, deletes; log ingestion). Monitoring API enabled. Thresholds in `usage_alert_thresholds` (billing runbook section 5).
 - **Decided (Andy):** alert address is its own variable `alert_email` (gitignored tfvars + `TF_VAR_ALERT_EMAIL` Actions secret), not the allow-list; default thresholds as in the runbook.
-- Verified: alerting is free until at least 2027-09-01 (then $0.35 per metric reference/month + $0.50 per million points). Firestore metric names from Firestore docs; Cloud Run and log metric names not confirmed from Google's reference pages (too large to read) — the apply validates them (Monitoring rejects unknown metric types).
+- Verified: alerting is free until at least 2027-09-01 (then $0.35 per metric reference/month + $0.50 per million points). Firestore metric names from Firestore docs; Cloud Run and log metric names not confirmed from Google's reference pages (too large to read); the apply accepted all six.
+- Applied by Andy (2026-10-28). Test: request threshold set to 0 → alert email arrived within minutes → restored. Firestore document metrics confirmed under the Cloud Firestore Database resource in Metrics Explorer (no data yet: nothing uses Firestore until M1.2: Ticket core). CI plan: "No changes".
+- Lesson: `evaluation_missing_data` needs a non-zero `duration`; dropped (a threshold condition with no data stays inactive anyway).
 
 ## Slices: M1: First end-to-end flow: ticket → PR with Claude
 
 Status: todo / in progress / PR open / merged. Definitions: ARCHITECTURE §12.
 
-| Slice                                   | Size            | Depends on                                                                  | Status         |
-| --------------------------------------- | --------------- | --------------------------------------------------------------------------- | -------------- |
-| M1.0: Docs sync                         | S               | M0: Foundations                                                             | merged (PR #1) |
-| M1.1: MCP OAuth spike                   | M               | M0: Foundations                                                             | todo           |
-| M1.2: Ticket core                       | M               | M0: Foundations                                                             | todo           |
-| M1.3: UI: tickets + inbox               | M               | M1.2: Ticket core                                                           | todo           |
-| M1.4: MCP core tools                    | S               | M1.1: MCP OAuth spike, M1.2: Ticket core                                    | todo           |
-| M1.5: GitHub App + project registration | M               | M1.2: Ticket core                                                           | todo           |
-| M1.6: Claude Code executor              | L (split 6a/6b) | M1.5: GitHub App + project registration                                     | todo           |
-| M1.7: Refinement                        | M               | M1.3: UI: tickets + inbox, M1.4: MCP core tools, M1.6: Claude Code executor | todo           |
-| M1.8: Build + gate                      | M               | M1.7: Refinement                                                            | todo           |
-| M1.9: Quota capture                     | S               | M1.6: Claude Code executor                                                  | todo           |
-| M1.10: Security review automation       | M               | M0: Foundations                                                             | todo           |
-| M1.11: Adversarial PR review            | M               | M1.10: Security review automation                                           | todo           |
-| M1.12: Local quality gates              | S               | M0: Foundations                                                             | todo           |
-| M1.13: GCP cost guardrails              | S               | M0: Foundations                                                             | merged (PR #7) |
-| M1.14: Cost kill switch                 | M               | M1.13: GCP cost guardrails                                                  | todo           |
-| M1.15: Usage alerts                     | S               | M1.13: GCP cost guardrails                                                  | in progress    |
+| Slice                                   | Size            | Depends on                                                                  | Status          |
+| --------------------------------------- | --------------- | --------------------------------------------------------------------------- | --------------- |
+| M1.0: Docs sync                         | S               | M0: Foundations                                                             | merged (PR #1)  |
+| M1.1: MCP OAuth spike                   | M               | M0: Foundations                                                             | todo            |
+| M1.2: Ticket core                       | M               | M0: Foundations                                                             | todo            |
+| M1.3: UI: tickets + inbox               | M               | M1.2: Ticket core                                                           | todo            |
+| M1.4: MCP core tools                    | S               | M1.1: MCP OAuth spike, M1.2: Ticket core                                    | todo            |
+| M1.5: GitHub App + project registration | M               | M1.2: Ticket core                                                           | todo            |
+| M1.6: Claude Code executor              | L (split 6a/6b) | M1.5: GitHub App + project registration                                     | todo            |
+| M1.7: Refinement                        | M               | M1.3: UI: tickets + inbox, M1.4: MCP core tools, M1.6: Claude Code executor | todo            |
+| M1.8: Build + gate                      | M               | M1.7: Refinement                                                            | todo            |
+| M1.9: Quota capture                     | S               | M1.6: Claude Code executor                                                  | todo            |
+| M1.10: Security review automation       | M               | M0: Foundations                                                             | todo            |
+| M1.11: Adversarial PR review            | M               | M1.10: Security review automation                                           | todo            |
+| M1.12: Local quality gates              | S               | M0: Foundations                                                             | todo            |
+| M1.13: GCP cost guardrails              | S               | M0: Foundations                                                             | merged (PR #7)  |
+| M1.14: Cost kill switch                 | M               | M1.13: GCP cost guardrails                                                  | todo            |
+| M1.15: Usage alerts                     | S               | M1.13: GCP cost guardrails                                                  | PR open (PR #8) |
 
 **Next (parallel sessions):**
 
@@ -93,7 +95,7 @@ Status: todo / in progress / PR open / merged. Definitions: ARCHITECTURE §12.
 
 **Pending decisions (Andy):**
 
-- M1.15: Usage alerts — create the `TF_VAR_ALERT_EMAIL` secret, add `alert_email` to tfvars, review the plan, apply, run the alert test.
+- M1.15: Usage alerts — merge PR #8: Usage alerts.
 - M1.10: Security review automation — confirm defaults (high/critical blocks, `security-accepted` override, subscription token, weekly + milestone-end system review); create the reviewer token secret.
 - First real project to onboard (open question 8); needed by M1.5: GitHub App + project registration.
 - Claude plan and headless billing (open question 5); needed by M1.6: Claude Code executor.
