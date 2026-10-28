@@ -1,5 +1,7 @@
+# Use this URL, not the service's legacy hash URL (control-plane-<hash>-uc.a.run.app):
+# only this host is an authorized sign-in domain.
 output "service_url" {
-  value = google_cloud_run_v2_service.control_plane.uri
+  value = "https://${local.service_host}"
 }
 
 output "image_repository" {
