@@ -11,3 +11,4 @@ coverage/
 *.tfvars
 !*.tfvars.example
 .DS_Store
+.idea/
