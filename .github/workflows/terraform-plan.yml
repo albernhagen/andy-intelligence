@@ -26,12 +26,17 @@ jobs:
         working-directory: infra/control-plane
     env:
       TF_VAR_allowed_emails: ${{ secrets.TF_VAR_ALLOWED_EMAILS }}
+      TF_VAR_alert_email: ${{ secrets.TF_VAR_ALERT_EMAIL }}
     steps:
       - uses: actions/checkout@v7
-      - name: Check TF_VAR_ALLOWED_EMAILS secret
+      - name: Check variable secrets
         run: |
           if [ -z "$TF_VAR_allowed_emails" ]; then
             echo "::error::Repository secret TF_VAR_ALLOWED_EMAILS is not set (HCL list, e.g. [\"you@example.com\"]). See docs/runbooks/m0-setup.md step 3."
+            exit 1
+          fi
+          if [ -z "$TF_VAR_alert_email" ]; then
+            echo "::error::Repository secret TF_VAR_ALERT_EMAIL is not set (plain address, no quotes). See docs/runbooks/billing.md."
             exit 1
           fi
       - uses: google-github-actions/auth@v3
