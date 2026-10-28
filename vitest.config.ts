@@ -2,6 +2,10 @@ import { defineConfig } from "vitest/config";
 
 export default defineConfig({
   test: {
-    projects: ["packages/*", "apps/api"],
+    projects: [
+      "packages/*",
+      "apps/api",
+      { test: { name: "scripts", include: ["scripts/**/*.test.mjs"] } },
+    ],
   },
 });

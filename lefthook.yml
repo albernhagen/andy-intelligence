@@ -1,0 +1,30 @@
+# Local quality gates (ADR-0027). Installed by `pnpm install` (root `prepare` script).
+# Same tools and config as CI; CI stays the backstop.
+
+pre-commit:
+  parallel: true
+  commands:
+    prettier:
+      run: pnpm exec prettier --check --ignore-unknown {staged_files}
+    eslint:
+      glob: "*.{js,mjs,cjs,ts,tsx}"
+      run: pnpm exec eslint --no-warn-ignored {staged_files}
+    terraform-fmt:
+      glob: "*.tf"
+      run: terraform fmt -check {staged_files}
+    actionlint:
+      glob: ".github/workflows/*.{yml,yaml}"
+      run: |
+        if command -v actionlint >/dev/null 2>&1; then
+          actionlint {staged_files}
+        else
+          echo "actionlint not installed (brew install actionlint); skipped, CI still checks"
+        fi
+
+pre-push:
+  parallel: true
+  commands:
+    typecheck:
+      run: pnpm typecheck
+    test:
+      run: pnpm test

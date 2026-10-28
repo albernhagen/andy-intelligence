@@ -18,7 +18,7 @@ Docs ship with the change: a PR that changes commands, layout, design, or a deci
 
 ## Develop
 
-Tools: Node from `.nvmrc`; Terraform from `.terraform-version` via [tenv](https://github.com/tofuutils/tenv) (`brew install tenv`).
+Tools: Node from `.nvmrc`; pnpm (`corepack enable`); Terraform from `.terraform-version` via [tenv](https://github.com/tofuutils/tenv) (`brew install tenv`); optional [actionlint](https://github.com/rhysd/actionlint) (`brew install actionlint`).
 
 ```sh
 pnpm install
@@ -26,7 +26,19 @@ pnpm test        # vitest, all packages
 pnpm typecheck
 pnpm lint
 pnpm build
+pnpm format      # prettier --write
 ```
+
+### Quality gates (ADR-0027)
+
+`pnpm install` installs the git hooks ([lefthook](https://lefthook.dev), `lefthook.yml`):
+
+| Hook       | Runs on staged files                                                                 |
+| ---------- | ------------------------------------------------------------------------------------ |
+| pre-commit | `prettier --check`, `eslint`, `terraform fmt -check`, actionlint (skipped if absent) |
+| pre-push   | `pnpm typecheck`, `pnpm test` (whole repo)                                           |
+
+Claude Code runs `scripts/format-edited-file.mjs` after each Edit/Write (`.claude/settings.json`): Prettier + ESLint `--fix` on that file; unfixable lint errors go back to the agent. CI runs the same checks plus build and actionlint. Formatting failure on commit: `pnpm format`, re-stage. `--no-verify` is for emergencies only.
 
 Run locally (needs a Firebase project for sign-in):
 
@@ -48,5 +60,7 @@ pnpm --filter @andy/web dev          # :5173, proxies /api to :8080
 | `infra/bootstrap`     | One-time GCP bootstrap (state bucket, GitHub OIDC)   |
 | `infra/control-plane` | Control-plane GCP resources                          |
 | `infra/billing`       | Billing budget + alerts (local plans only)           |
+| `scripts`             | Repo tooling (Claude Code format hook)               |
+| `lefthook.yml`        | Git hooks: pre-commit lint/format, pre-push checks   |
 
 Infra setup: [`docs/runbooks/m0-setup.md`](docs/runbooks/m0-setup.md). Budget and cost caps: [`docs/runbooks/billing.md`](docs/runbooks/billing.md).
