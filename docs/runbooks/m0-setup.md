@@ -132,7 +132,7 @@ The **Deploy control plane** workflow builds the image, pushes it, rolls Cloud R
 
 ## 7. Verify M0: Foundations "Done when"
 
-- [ ] Open the `service_url` output, sign in with Google → "Needs you" page shows your email.
+- [ ] Open the `service_url` output (`https://control-plane-<project-number>.us-central1.run.app`; the `-uc.a.run.app` hash URL isn't an authorized sign-in domain), sign in with Google → "Needs you" page shows your email.
 - [ ] Sign in with a different Google account → "not allowed" message (API returns 403).
 - [ ] `curl -i <service_url>/api/me` → 401.
 - [ ] `terraform plan` in `infra/control-plane` → "No changes".
