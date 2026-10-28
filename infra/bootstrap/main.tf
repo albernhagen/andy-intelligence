@@ -10,12 +10,10 @@ terraform {
       version = "~> 7.0"
     }
   }
-  # Starts with local state. After first apply, migrate into the bucket it creates:
-  #   terraform init -migrate-state -backend-config="bucket=<project_id>-tfstate"
-  # (uncomment the backend block first).
-  # backend "gcs" {
-  #   prefix = "bootstrap"
-  # }
+
+  backend "gcs" {
+    prefix = "bootstrap"
+  }
 }
 
 provider "google" {
