@@ -53,6 +53,8 @@ jobs:
           terraform plan -input=false -lock=false -no-color -detailed-exitcode > plan.txt 2>&1 && rc=0 || rc=$?
           summary=$(grep -E '^(Plan:|No changes\.)' plan.txt || echo "plan failed (exit $rc); run it locally for details")
           echo "$summary"
+          # On failure print only Terraform's one-line error headlines (no resource values).
+          if [ "$rc" -ne 0 ] && [ "$rc" -ne 2 ]; then grep -E '^(│ )?Error: ' plan.txt | sort -u | head -20 || true; fi
           echo "### terraform plan (control-plane): $summary" >> "$GITHUB_STEP_SUMMARY"
           rm -f plan.txt
           # 0 = no changes, 2 = changes present; anything else is an error.
