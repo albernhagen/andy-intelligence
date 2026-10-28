@@ -1,0 +1,64 @@
+name: Deploy control plane
+
+on:
+  push:
+    branches: [main]
+    paths-ignore:
+      - "docs/**"
+      - "infra/**"
+      - "**.md"
+  workflow_dispatch:
+
+concurrency:
+  group: deploy-control-plane
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  id-token: write # OIDC → Workload Identity Federation
+
+env:
+  REGION: us-central1
+  SERVICE: control-plane
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    # Skip until infra exists and the repo variables are set (see docs/runbooks/m0-setup.md).
+    if: vars.GCP_WIF_PROVIDER != ''
+    steps:
+      - uses: actions/checkout@v7
+
+      - id: auth
+        uses: google-github-actions/auth@v3
+        with:
+          workload_identity_provider: ${{ vars.GCP_WIF_PROVIDER }}
+          service_account: ${{ vars.GCP_DEPLOYER_SA }}
+
+      - uses: google-github-actions/setup-gcloud@v3
+
+      - name: Configure Docker for Artifact Registry
+        run: gcloud auth configure-docker "${REGION}-docker.pkg.dev" --quiet
+
+      - uses: docker/setup-buildx-action@v4
+
+      - uses: docker/build-push-action@v7
+        with:
+          context: .
+          push: true
+          tags: ${{ vars.GCP_IMAGE_REPO }}/control-plane:${{ github.sha }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - uses: google-github-actions/deploy-cloudrun@v3
+        with:
+          service: ${{ env.SERVICE }}
+          region: ${{ env.REGION }}
+          image: ${{ vars.GCP_IMAGE_REPO }}/control-plane:${{ github.sha }}
+
+      - name: Smoke test
+        run: |
+          url=$(gcloud run services describe "$SERVICE" --region "$REGION" --format='value(status.url)')
+          curl -fsS "$url/health"
+          code=$(curl -s -o /dev/null -w '%{http_code}' "$url/api/me")
+          test "$code" = "401"
