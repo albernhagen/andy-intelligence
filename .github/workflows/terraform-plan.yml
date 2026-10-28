@@ -27,13 +27,13 @@ jobs:
     env:
       TF_VAR_allowed_emails: ${{ secrets.TF_VAR_ALLOWED_EMAILS }}
     steps:
+      - uses: actions/checkout@v7
       - name: Check TF_VAR_ALLOWED_EMAILS secret
         run: |
           if [ -z "$TF_VAR_allowed_emails" ]; then
             echo "::error::Repository secret TF_VAR_ALLOWED_EMAILS is not set (HCL list, e.g. [\"you@example.com\"]). See docs/runbooks/m0-setup.md step 3."
             exit 1
           fi
-      - uses: actions/checkout@v7
       - uses: google-github-actions/auth@v3
         with:
           workload_identity_provider: ${{ vars.GCP_WIF_PROVIDER }}
