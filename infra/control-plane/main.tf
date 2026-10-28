@@ -278,8 +278,10 @@ resource "google_cloud_run_v2_service" "control_plane" {
   }
 
   lifecycle {
+    # CI deploys own the image and the revision labels deploy-cloudrun adds (commit-sha, managed-by).
     ignore_changes = [
       template[0].containers[0].image,
+      template[0].labels,
       client,
       client_version,
     ]
