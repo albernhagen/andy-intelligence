@@ -20,7 +20,7 @@ export function sanitize(value) {
   const text = String(value ?? "")
     .replace(/[<>]/g, (c) => (c === "<" ? "&lt;" : "&gt;"))
     .replace(/@/g, "@​")
-    .replace(/\|/g, "\\|")
+    .replace(/[\\|]/g, "\\$&")
     .replace(/\s*\r?\n\s*/g, " ")
     .trim();
   return text.length > MAX_FIELD ? `${text.slice(0, MAX_FIELD)}…` : text;

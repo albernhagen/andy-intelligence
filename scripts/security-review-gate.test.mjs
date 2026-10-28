@@ -17,6 +17,10 @@ describe("sanitize", () => {
     expect(sanitize("<img src=x> @andy a|b\nnext")).toBe("&lt;img src=x&gt; @​andy a\\|b next");
   });
 
+  it("GivenBackslashBeforePipe_WhenSanitized_ThenPipeStaysEscaped", () => {
+    expect(sanitize("a\\|b")).toBe("a\\\\\\|b");
+  });
+
   it("GivenLongText_WhenSanitized_ThenTruncated", () => {
     expect(sanitize("x".repeat(600))).toHaveLength(501);
   });

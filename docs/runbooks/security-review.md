@@ -1,6 +1,6 @@
 # Security review — runbook (Andy)
 
-Manual steps for per-PR scans, the security-review agent and the system security review (ADR-0025: Agentic security review, ADR-0030: Security review automation choices). Do steps 1–5 once, after PR "M1.10: Security review automation" merges.
+Manual steps for per-PR scans, the security-review agent and the system security review (ADR-0025: Agentic security review, ADR-0030: Security review automation choices). Do step 3 **before** merging PR "M1.10: Security review automation" (`dependency-review` fails until the dependency graph is on); steps 1, 2, 4–6 after it merges.
 
 | Term                      | Meaning                                                                                                                             |
 | ------------------------- | ----------------------------------------------------------------------------------------------------------------------------------- |
