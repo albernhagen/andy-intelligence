@@ -14,15 +14,16 @@ Always loaded (`CLAUDE.md` is a symlink to this file). Full operating rules: [`d
 
 Update these in the **same PR** as the code:
 
-| If you changed…                              | Update                                                     |
-| -------------------------------------------- | ---------------------------------------------------------- |
-| Commands, env vars, packages/apps, layout    | `README.md`                                                |
-| Design, components, data model, scope, plan  | `docs/architecture/ARCHITECTURE.md` (bump `revision`)      |
-| A decision, or deviated from ARCHITECTURE.md | New ADR in `docs/architecture/adr/`; update old ADR status |
-| Any step Andy runs by hand                   | `docs/runbooks/*.md`                                       |
-| Slice status, pending decisions, blockers    | `docs/build-log.md`                                        |
-| Trust boundary, entry point, credential, IAM | `docs/security/threat-model.md`                            |
-| Agent rules or this table                    | `AGENTS.md`, `docs/BUILD-PROMPT.md`                        |
+| If you changed…                                | Update                                                     |
+| ---------------------------------------------- | ---------------------------------------------------------- |
+| Commands, env vars, packages/apps, layout      | `README.md`                                                |
+| Design, components, data model, scope, plan    | `docs/architecture/ARCHITECTURE.md` (bump `revision`)      |
+| A decision, or deviated from ARCHITECTURE.md   | New ADR in `docs/architecture/adr/`; update old ADR status |
+| Any step Andy runs by hand                     | `docs/runbooks/*.md`                                       |
+| Slice status, pending decisions, blockers      | `docs/build-log.md`                                        |
+| Trust boundary, entry point, credential, IAM   | `docs/security/threat-model.md`                            |
+| Agent rules or this table                      | `AGENTS.md`, `docs/BUILD-PROMPT.md`                        |
+| A quality, security, cost or scaling guardrail | ARCHITECTURE §8.1 project baseline inventory (ADR-0031)    |
 
 Write docs short and plain: lead with the point, tables/lists over prose, define every term and ID where it's used, no filler. A reader with no chat history should get it on first read.
 
@@ -41,4 +42,5 @@ If code and ARCHITECTURE.md disagree, ask which is wrong — don't silently "fix
 - Changed a trust boundary, entry point, credential, or IAM grant? Update `docs/security/threat-model.md` in the same PR.
 - Answer every adversarial-review finding on your PR: fixed (commit) or why not (ADR-0026).
 - Anything that can scale or spend (instances, queues, jobs, API calls) needs an explicit cap (ADR-0028).
+- Built a guardrail (check, hook, scan, cap, alert, repo setting)? Record in ARCHITECTURE §8.1 how managed projects get it (ADR-0031: Project baseline). Build it so it can be carried: reusable workflow, template file, declarative GitHub config, or Terraform module — not a one-off for this repo.
 - Pin third-party GitHub Actions to commit SHAs. Never use `pull_request_target`. Give workflows the fewest permissions that work.
