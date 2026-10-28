@@ -10,8 +10,8 @@ variable "billing_account_id" {
   sensitive   = true
 
   validation {
-    condition     = can(regex("^[0-9A-Z]{6}-[0-9A-Z]{6}-[0-9A-Z]{6}$", var.billing_account_id))
-    error_message = "billing_account_id must look like XXXXXX-XXXXXX-XXXXXX (no billingAccounts/ prefix)."
+    condition     = can(regex("^[0-9A-Z]{6}-[0-9A-Z]{6}-[0-9A-Z]{6}$", var.billing_account_id)) && var.billing_account_id != "XXXXXX-XXXXXX-XXXXXX"
+    error_message = "billing_account_id must be your real billing account ID, like 012345-6789AB-CDEF01 (no billingAccounts/ prefix)."
   }
 }
 

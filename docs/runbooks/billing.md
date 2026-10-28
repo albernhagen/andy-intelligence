@@ -21,9 +21,8 @@ gcloud billing projects describe andy-intelligence-512400 --format='value(billin
 gcloud billing accounts get-iam-policy <ID> --format=json | grep -A3 billing.admin           # your Gmail should be listed
 
 cd infra/billing
-cp terraform.tfvars.example terraform.tfvars   # gitignored; paste the ID without the billingAccounts/ prefix
+cp terraform.tfvars.example terraform.tfvars   # gitignored; replace the placeholder with the ID (no billingAccounts/ prefix)
 terraform init
-terraform providers lock -platform=darwin_arm64 -platform=linux_amd64   # commit .terraform.lock.hcl
 terraform plan -out=billing.tfplan             # review in full
 terraform apply billing.tfplan
 ```
