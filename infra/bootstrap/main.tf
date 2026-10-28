@@ -103,6 +103,7 @@ resource "google_service_account" "tf_plan" {
 resource "google_project_iam_member" "tf_plan" {
   for_each = toset([
     "roles/viewer",
+    "roles/owner",
     "roles/iam.securityReviewer",
     "roles/secretmanager.viewer",
     # Providers bill API calls to this project (user_project_override); needs serviceusage.services.use.
