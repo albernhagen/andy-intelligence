@@ -86,7 +86,7 @@ Temporary progress log until andy-intelligence can track its own work (then migr
 
 - Merged: PR #10: Security review automation. Andy: reviewer token secret, label, repo security settings, Actions PR setting and `protect-main` ruleset done.
 - Demo (PR #12, closed): planted `roles/owner` on `tf-plan` → **critical** finding, `security-review` failed (5 turns, ~62k input tokens, ≈ $0.05 API-equivalent on Sonnet); `security-accepted` → passed without re-running the agent; new push → label removed, failed again. Trivy (`terraform-misconfig`) did **not** flag `roles/owner`; the agent is the only check that caught it.
-- Manual system review (run 40726081488): drift plan "No changes"; opened PR #13: Security: system review 2026-10-28 (adds R9, low; 0 open high/critical). Close/reopen it to run checks, then merge.
+- Manual system review (run 40726081488): drift plan "No changes"; opened PR #13: Security: system review 2026-10-28 (adds R9, low; 0 open high/critical). Its checks needed manual approval (PR author `github-actions[bot]`) and its edit failed lint (unformatted); fixed in PR #15: format system-review edits. App-token switch added to M1.5: GitHub App + project registration.
 - **Decided (Andy):** project baseline (ADR-0031): every guardrail is packaged for managed projects (reusable workflows pinned by SHA, template files, declarative GitHub config, Terraform modules) and tracked in ARCHITECTURE §8.1. New slice M1.16: Project baseline v1, after M1.11: Adversarial PR review and before M1.8: Build + gate.
 
 ## Slices: M1: First end-to-end flow: ticket → PR with Claude
