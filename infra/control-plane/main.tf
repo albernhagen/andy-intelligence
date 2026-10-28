@@ -330,6 +330,7 @@ locals {
       filter    = "resource.type = \"cloud_run_revision\" AND resource.labels.service_name = \"${local.service_name}\" AND metric.type = \"run.googleapis.com/request_count\""
       window    = "300s"
       threshold = var.usage_alert_thresholds.run_requests_per_5m
+      bytes     = false
       what      = "requests in 5 minutes"
     }
     run-sent-bytes = {
@@ -337,13 +338,15 @@ locals {
       filter    = "resource.type = \"cloud_run_revision\" AND resource.labels.service_name = \"${local.service_name}\" AND metric.type = \"run.googleapis.com/container/network/sent_bytes_count\""
       window    = "3600s"
       threshold = var.usage_alert_thresholds.run_sent_bytes_per_hour
-      what      = "bytes sent in 1 hour (all outbound, not only internet egress)"
+      bytes     = true
+      what      = "sent in 1 hour (all outbound, not only internet egress)"
     }
     firestore-reads = {
       name      = "Firestore reads spike"
       filter    = "resource.type = \"firestore.googleapis.com/Database\" AND metric.type = \"firestore.googleapis.com/document/read_ops_count\""
       window    = "3600s"
       threshold = var.usage_alert_thresholds.firestore_reads_per_hour
+      bytes     = false
       what      = "document reads in 1 hour"
     }
     firestore-writes = {
@@ -351,6 +354,7 @@ locals {
       filter    = "resource.type = \"firestore.googleapis.com/Database\" AND metric.type = \"firestore.googleapis.com/document/write_ops_count\""
       window    = "3600s"
       threshold = var.usage_alert_thresholds.firestore_writes_per_hour
+      bytes     = false
       what      = "document writes in 1 hour"
     }
     firestore-deletes = {
@@ -358,6 +362,7 @@ locals {
       filter    = "resource.type = \"firestore.googleapis.com/Database\" AND metric.type = \"firestore.googleapis.com/document/delete_ops_count\""
       window    = "3600s"
       threshold = var.usage_alert_thresholds.firestore_writes_per_hour
+      bytes     = false
       what      = "document deletes in 1 hour"
     }
     log-bytes = {
@@ -365,7 +370,8 @@ locals {
       filter    = "resource.type = \"global\" AND metric.type = \"logging.googleapis.com/billing/bytes_ingested\""
       window    = "3600s"
       threshold = var.usage_alert_thresholds.log_bytes_per_hour
-      what      = "log bytes ingested in 1 hour (free tier: 50 GiB/month)"
+      bytes     = true
+      what      = "of logs ingested in 1 hour (free tier: 50 GiB/month)"
     }
   }
 }
@@ -379,13 +385,12 @@ resource "google_monitoring_alert_policy" "usage" {
   notification_channels = [google_monitoring_notification_channel.alert_email.id]
 
   conditions {
-    display_name = "More than ${each.value.threshold} ${each.value.what}"
+    display_name = "More than ${each.value.bytes ? "${format("%g", each.value.threshold / 1048576)} MiB" : each.value.threshold} ${each.value.what}"
     condition_threshold {
-      filter                  = each.value.filter
-      comparison              = "COMPARISON_GT"
-      threshold_value         = each.value.threshold
-      duration                = "0s"
-      evaluation_missing_data = "EVALUATION_MISSING_DATA_INACTIVE"
+      filter          = each.value.filter
+      comparison      = "COMPARISON_GT"
+      threshold_value = each.value.threshold
+      duration        = "0s"
       aggregations {
         alignment_period     = each.value.window
         per_series_aligner   = "ALIGN_SUM"
