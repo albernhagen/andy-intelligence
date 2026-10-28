@@ -50,11 +50,15 @@ Sign in:
 gcloud auth login
 gcloud auth application-default login
 gcloud config set project andy-intelligence-512400
+gcloud auth application-default set-quota-project andy-intelligence-512400   # Identity Platform rejects ADC calls without it
+gcloud billing projects describe andy-intelligence-512400                    # must show billingEnabled: true
 ```
 
 You need Owner on `andy-intelligence-512400`; the project creator has it.
 
 ## 2. Bootstrap (state bucket + GitHub federation)
+
+**From scratch only:** comment out the `backend "gcs"` block in `infra/bootstrap/main.tf` first — the bucket it points at doesn't exist yet. (Done once on 2026-10-27; state now lives in GCS.)
 
 ```sh
 cd infra/bootstrap
@@ -66,9 +70,10 @@ terraform apply bootstrap.tfplan
 
 Move bootstrap state into the bucket it just created:
 
-1. Uncomment the `backend "gcs"` block in `infra/bootstrap/main.tf`. Commit it, plus both `.terraform.lock.hcl` files, to a PR.
-2. `terraform init -migrate-state -backend-config="bucket=andy-intelligence-512400-tfstate"` → answer `yes`.
-3. Delete the local `terraform.tfstate*` files once the migration succeeds.
+1. Uncomment the `backend "gcs"` block.
+2. `terraform init -migrate-state` → answer `yes`.
+3. Delete the local `terraform.tfstate*` and `*.tfplan` files; `terraform plan` should say "No changes".
+4. Commit `main.tf` and both `.terraform.lock.hcl` files in a PR. Never commit `.tfvars`, `.tfstate`, or `.tfplan`.
 
 Set GitHub **repository variables** (Settings → Secrets and variables → Actions → **Variables**) from `terraform output`:
 
