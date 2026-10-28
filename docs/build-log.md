@@ -72,6 +72,16 @@ Temporary progress log until andy-intelligence can track its own work (then migr
 - Verified locally: a commit with an ESLint error, a Prettier issue and an unformatted `.tf` is blocked; the hook script formats an edited file and returns exit 2 with the ESLint error for unfixable issues. actionlint not run locally (sandbox can't run downloaded binaries); CI runs it.
 - Fixed: blank lines that split the M1 slice table in ARCHITECTURE §12.
 
+## 2026-10-28 — M1.12: Local quality gates merged; M1.10: Security review automation built
+
+- Merged: PR #9: Local quality gates.
+- **Decided (Andy):** M1.10 defaults confirmed (high/critical block, `security-accepted` override, subscription token, system review weekly if anything merged + milestone end); override label removed on every push; Trivy release binary for the Terraform scan; drift summary included now (ADR-0030: Security review automation choices).
+- Branch `m1.10/security-review`: `security-scans.yml` (CodeQL TS + Actions, dependency review, Trivy), `security-review.yml` + tested gate script, `system-security-review.yml` (calls a now-reusable `terraform-plan.yml`), all actions pinned to SHAs, Dependabot (npm, Actions, Terraform; 7-day cooldown), `docs/security/threat-model.md` v1 (R1–R8), procedures in `platform/procedures/`, runbook `docs/runbooks/security-review.md`.
+- Verified (official docs, 2026-10-28): `claude-code-action` v1.0.264 inputs (`claude_code_oauth_token`, `prompt`, `claude_args`, `--json-schema` → `structured_output`); `claude setup-token` gives a one-year token, model requests only; `trivy-action` tags were hijacked in March 2026 (CVE-2026-33634), so the binary is used.
+- Verified locally: gate tests; actionlint clean (v1.7.12 binary); `trivy config --severity HIGH,CRITICAL infra` finds nothing. Not verifiable locally: the agent run, CodeQL, dependency review (CI and the demo PR do that).
+- **Decided (Andy, later 2026-10-28):** cut reviewer quota, since it shares the subscription with all other Claude use: Sonnet, max 25 turns, docs-only PRs skip the agent, usage (turns, tokens, API-equivalent estimate) on every comment (ADR-0030).
+- Lesson: on `pull_request`, a PR runs its own workflow files; procedure and threat model are read from the base branch, the rest is threat-model risk R5.
+
 ## Slices: M1: First end-to-end flow: ticket → PR with Claude
 
 Status: todo / in progress / PR open / merged. Definitions: ARCHITECTURE §12.
@@ -88,25 +98,24 @@ Status: todo / in progress / PR open / merged. Definitions: ARCHITECTURE §12.
 | M1.7: Refinement                        | M               | M1.3: UI: tickets + inbox, M1.4: MCP core tools, M1.6: Claude Code executor | todo           |
 | M1.8: Build + gate                      | M               | M1.7: Refinement                                                            | todo           |
 | M1.9: Quota capture                     | S               | M1.6: Claude Code executor                                                  | todo           |
-| M1.10: Security review automation       | M               | M0: Foundations                                                             | todo           |
+| M1.10: Security review automation       | M               | M0: Foundations                                                             | PR open        |
 | M1.11: Adversarial PR review            | M               | M1.10: Security review automation                                           | todo           |
-| M1.12: Local quality gates              | S               | M0: Foundations                                                             | PR open        |
+| M1.12: Local quality gates              | S               | M0: Foundations                                                             | merged (PR #9) |
 | M1.13: GCP cost guardrails              | S               | M0: Foundations                                                             | merged (PR #7) |
 | M1.14: Cost kill switch                 | M               | M1.13: GCP cost guardrails                                                  | todo           |
 | M1.15: Usage alerts                     | S               | M1.13: GCP cost guardrails                                                  | merged (PR #8) |
 
 **Next (order decided by Andy, 2026-10-28):**
 
-1. M1.12: Local quality gates (PR open).
-2. M1.10: Security review automation.
+1. M1.12: Local quality gates (merged).
+2. M1.10: Security review automation (PR open).
 3. M1.2: Ticket core and M1.1: MCP OAuth spike, in parallel.
 4. M1.14: Cost kill switch.
 5. M1.11: Adversarial PR review.
 
 **Pending decisions (Andy):**
 
-- M1.12: Local quality gates — review and merge the PR.
-- M1.10: Security review automation — confirm defaults (high/critical blocks, `security-accepted` override, subscription token, weekly + milestone-end system review); create the reviewer token secret.
+- M1.10: Security review automation — review and merge the PR, then `docs/runbooks/security-review.md` steps 1–6 (token secret, label, settings, required checks, demo PR, manual system review).
 - First real project to onboard (open question 8); needed by M1.5: GitHub App + project registration.
 - Claude plan and headless billing (open question 5); needed by M1.6: Claude Code executor.
 

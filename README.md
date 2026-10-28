@@ -9,7 +9,7 @@ Personal control plane for agentic software development: ideas → refined ticke
 | [`docs/architecture/ARCHITECTURE.md`](docs/architecture/ARCHITECTURE.md) | Design and milestone/slice plan — source of truth           |
 | [`docs/architecture/adr/`](docs/architecture/adr/)                       | Architecture decisions (MADR)                               |
 | [`docs/build-log.md`](docs/build-log.md)                                 | Slice status, pending decisions, blockers                   |
-| `docs/security/threat-model.md` (from M1.10: Security review automation) | Threat model and open security risks                        |
+| [`docs/security/threat-model.md`](docs/security/threat-model.md)         | Threat model and open security risks                        |
 | [`docs/runbooks/`](docs/runbooks/)                                       | Manual steps (setup, secrets, apply)                        |
 | [`AGENTS.md`](AGENTS.md)                                                 | Rules for agents working in this repo (`CLAUDE.md` symlink) |
 | [`docs/BUILD-PROMPT.md`](docs/BUILD-PROMPT.md)                           | Session prompt for the building agent                       |
@@ -40,6 +40,18 @@ pnpm format      # prettier --write
 
 Claude Code runs `scripts/format-edited-file.mjs` after each Edit/Write (`.claude/settings.json`): Prettier + ESLint `--fix` on that file; unfixable lint errors go back to the agent. CI runs the same checks plus build and actionlint. Formatting failure on commit: `pnpm format`, re-stage. `--no-verify` is for emergencies only.
 
+### Security checks on PRs (ADR-0025, ADR-0030)
+
+| Check                                                | Workflow              | Fails on                                                                                        |
+| ---------------------------------------------------- | --------------------- | ----------------------------------------------------------------------------------------------- |
+| `trufflehog`                                         | `secret-scan.yml`     | Verified or unverifiable secrets                                                                |
+| `codeql (javascript-typescript)`, `codeql (actions)` | `security-scans.yml`  | Code scanning alerts, high or higher (ruleset)                                                  |
+| `dependency-review`                                  | `security-scans.yml`  | New dependency with a high/critical advisory                                                    |
+| `terraform-misconfig`                                | `security-scans.yml`  | Trivy HIGH/CRITICAL in `infra/`                                                                 |
+| `security-review`                                    | `security-review.yml` | Agent finding high/critical, unless labelled `security-accepted` (docs-only PRs skip the agent) |
+
+Weekly + manual: `system-security-review.yml` opens a PR updating the threat model. Action pins are commit SHAs, bumped by Dependabot.
+
 Run locally (needs a Firebase project for sign-in):
 
 ```sh
@@ -51,16 +63,17 @@ pnpm --filter @andy/web dev          # :5173, proxies /api to :8080
 
 ## Layout
 
-| Path                  | What                                                 |
-| --------------------- | ---------------------------------------------------- |
-| `apps/api`            | Hono API (later MCP, webhooks, jobs); serves the SPA |
-| `apps/web`            | React + Vite + shadcn UI                             |
-| `packages/contracts`  | Zod entities, ports, fakes, contract suites          |
-| `packages/store`      | Firestore client + Zod-validated converters          |
-| `infra/bootstrap`     | One-time GCP bootstrap (state bucket, GitHub OIDC)   |
-| `infra/control-plane` | Control-plane GCP resources                          |
-| `infra/billing`       | Billing budget + alerts (local plans only)           |
-| `scripts`             | Repo tooling (Claude Code format hook)               |
-| `lefthook.yml`        | Git hooks: pre-commit lint/format, pre-push checks   |
+| Path                  | What                                                         |
+| --------------------- | ------------------------------------------------------------ |
+| `apps/api`            | Hono API (later MCP, webhooks, jobs); serves the SPA         |
+| `apps/web`            | React + Vite + shadcn UI                                     |
+| `packages/contracts`  | Zod entities, ports, fakes, contract suites                  |
+| `packages/store`      | Firestore client + Zod-validated converters                  |
+| `infra/bootstrap`     | One-time GCP bootstrap (state bucket, GitHub OIDC)           |
+| `infra/control-plane` | Control-plane GCP resources                                  |
+| `infra/billing`       | Billing budget + alerts (local plans only)                   |
+| `scripts`             | Repo tooling (Claude Code format hook, security-review gate) |
+| `platform/procedures` | Agent procedures: `/security-review`, `/threat-model`        |
+| `lefthook.yml`        | Git hooks: pre-commit lint/format, pre-push checks           |
 
-Infra setup: [`docs/runbooks/m0-setup.md`](docs/runbooks/m0-setup.md). Budget and cost caps: [`docs/runbooks/billing.md`](docs/runbooks/billing.md).
+Infra setup: [`docs/runbooks/m0-setup.md`](docs/runbooks/m0-setup.md). Budget and cost caps: [`docs/runbooks/billing.md`](docs/runbooks/billing.md). Security review setup: [`docs/runbooks/security-review.md`](docs/runbooks/security-review.md).

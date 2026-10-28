@@ -3,7 +3,7 @@ title: andy-intelligence — Architecture & Vision
 status: accepted (v1.x scope)
 owner: Andy
 last_updated: 2026-10-28
-revision: 2026-10-28b (M1.12: Local quality gates built)
+revision: 2026-10-28d (M1.10: Security review automation built; reviewer on Sonnet, docs-only PRs skipped)
 ---
 
 # andy-intelligence — Architecture & Vision
@@ -281,6 +281,17 @@ Applies to this repo now (M1.10: Security review automation) and to every manage
 | System security review agent | End of each milestone; weekly if anything merged; on demand | Reads repo, threat model, ADRs, Terraform IAM, `terraform plan` drift; looks for risks no single PR shows | PR updating `docs/security/threat-model.md` | Milestone can't close with open high/critical risks unless Andy accepts them |
 
 **Agent guardrails:** same-repo PRs only (never forks, never `pull_request_target`); token `contents: read` + `pull-requests: write`; no shell or network tools; PR content is untrusted data. If the agent can't run, its check is neutral and Andy decides. Reviewer is a separate session from the implementer; from M2/M3 a different vendor.
+
+**Implementation (ADR-0030: Security review automation choices):**
+
+| Piece | Where |
+|---|---|
+| CodeQL (TS + Actions), dependency review, Trivy Terraform scan | `.github/workflows/security-scans.yml` (TruffleHog: `secret-scan.yml`; actionlint: `ci.yml`) |
+| Security-review agent + gate | `.github/workflows/security-review.yml` → `scripts/security-review-gate.mjs`; rules `platform/procedures/security-review.md` (read from the base branch); Sonnet, max 25 turns; docs-only PRs skip the agent (`scripts/security-review-scope.mjs`); usage on each comment |
+| System security review | `.github/workflows/system-security-review.yml` (Mondays if anything merged; manual) → calls `terraform-plan.yml` for drift → PR editing `docs/security/threat-model.md`; rules `platform/procedures/threat-model.md` |
+| Override | `security-accepted` label; removed on every push |
+| Action pins | Commit SHAs; Dependabot (npm, Actions, Terraform), 7-day cooldown (`.github/dependabot.yml`) |
+| Manual steps | `docs/runbooks/security-review.md` (token secret, label, required checks) |
 
 ---
 
