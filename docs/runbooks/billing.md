@@ -29,14 +29,18 @@ terraform apply billing.tfplan
 
 Check: [Billing → Budgets & alerts](https://console.cloud.google.com/billing/budgets) shows the budget with thresholds 50%, 90%, 100% (actual) and 100% (forecasted).
 
-## 2. Test that an alert reaches your email
+## 2. Check that alerts will reach you
 
-Google has no "send test alert". Lower the budget below this month's spend, wait, then restore it.
+Google has no "send test alert", so check the two things a test would prove:
 
-1. Billing → Reports, filter to `andy-intelligence-512400`, this month. Note the cost. **If it's $0.00, no alert can fire** — wait until there's some spend.
-2. `terraform apply -var budget_amount_usd=0.01` (review the plan: one in-place update of `amount`).
-3. Wait up to a day (usually a few hours). Expect emails from `CloudPlatform-noreply@google.com` for the crossed thresholds.
-4. `terraform apply` (back to $25). Plan must show only the `amount` change.
+1. **You're a default recipient:** `gcloud billing accounts get-iam-policy <ID>` lists your Gmail under `roles/billing.admin` (or `roles/billing.user`). Or Console → Billing → Account management → Permissions.
+2. **Google Cloud mail reaches your inbox:** Gmail shows recent mail from `cloudplatform-noreply@google.com`, not in spam.
+
+Optional end-to-end test (only works if this month's cost for the project is above $0.00):
+
+1. `terraform apply -var budget_amount_usd=0.01` (plan: one in-place update of `amount`).
+2. Wait a few hours (up to a day) for the threshold emails.
+3. `terraform apply` (back to $25; plan shows only the `amount` change).
 
 ## 3. Change the budget
 
