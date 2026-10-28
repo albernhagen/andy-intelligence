@@ -105,6 +105,8 @@ resource "google_project_iam_member" "tf_plan" {
     "roles/viewer",
     "roles/iam.securityReviewer",
     "roles/secretmanager.viewer",
+    # Providers bill API calls to this project (user_project_override); needs serviceusage.services.use.
+    "roles/serviceusage.serviceUsageConsumer",
   ])
   project = var.project_id
   role    = each.value
