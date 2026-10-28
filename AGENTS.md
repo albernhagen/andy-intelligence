@@ -37,7 +37,7 @@ If code and ARCHITECTURE.md disagree, ask which is wrong — don't silently "fix
 
 ## Security (ADR-0025, ARCHITECTURE §9.1)
 
-- Every PR gets security scans and a security-review agent (live once M1.10: Security review automation merges); fix high/critical findings or ask Andy to label `security-accepted`.
+- Every PR gets security scans and a security-review agent (`platform/procedures/security-review.md`); fix high/critical findings or ask Andy to label `security-accepted` (removed on every push).
 - Changed a trust boundary, entry point, credential, or IAM grant? Update `docs/security/threat-model.md` in the same PR.
 - Answer every adversarial-review finding on your PR: fixed (commit) or why not (ADR-0026).
 - Anything that can scale or spend (instances, queues, jobs, API calls) needs an explicit cap (ADR-0028).

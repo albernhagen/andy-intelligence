@@ -1,0 +1,28 @@
+{
+  "type": "object",
+  "properties": {
+    "summary": {
+      "type": "string",
+      "description": "One or two sentences: what was reviewed and the overall verdict."
+    },
+    "findings": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "severity": { "type": "string", "enum": ["critical", "high", "medium", "low", "info"] },
+          "title": { "type": "string" },
+          "file": { "type": "string" },
+          "line": { "type": "integer" },
+          "description": {
+            "type": "string",
+            "description": "What is wrong and how it could be exploited."
+          },
+          "recommendation": { "type": "string" }
+        },
+        "required": ["severity", "title", "description", "recommendation"]
+      }
+    }
+  },
+  "required": ["summary", "findings"]
+}

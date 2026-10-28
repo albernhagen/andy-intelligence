@@ -1,0 +1,33 @@
+---
+status: accepted
+date: 2026-10-28
+---
+
+# 0030 — Security review automation: implementation choices
+
+Implements ADR-0025: Agentic security review. Decided by Andy in M1.10: Security review automation (2026-10-28).
+
+## Context and Problem Statement
+
+ADR-0025 fixes what is checked and what blocks. Building it needed choices it left open: which Terraform scanner, how the agent's findings become a check, what the override label does after new commits, what "neutral" means in GitHub Actions, how fork and Dependabot PRs behave, and where the drift summary comes from. Verified (2026-10-28): `anthropics/claude-code-action` v1 takes `claude_code_oauth_token` (from `claude setup-token`, one year, model requests only), `prompt` (automation mode), `claude_args` (`--allowedTools`, `--json-schema`) and returns `structured_output`; passing `github_token` avoids the Claude GitHub App and `id-token: write`. `aquasecurity/trivy-action` had 76 of 77 tags hijacked in March 2026 (CVE-2026-33634).
+
+## Decision Outcome
+
+| Question                                                     | Decision                                                                                                                                                                                                   |
+| ------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Defaults (build log 2026-10-23)                              | Confirmed: high/critical block; `security-accepted` overrides; subscription token; system review weekly (if anything merged) + milestone end                                                               |
+| Terraform misconfig scanner                                  | Trivy `config`, checksum-verified release binary (same pattern as actionlint), fails on HIGH/CRITICAL. No `trivy-action`.                                                                                  |
+| Findings → check                                             | Agent returns JSON (`platform/procedures/security-review.schema.json`); `scripts/security-review-gate.mjs` (tested) decides pass/fail and writes one sticky PR comment, sanitized (no HTML, no @-mentions) |
+| Override label                                               | Removed by the workflow on every push, so a later commit can't hide new findings. Adding it re-runs only the gate, not the agent.                                                                          |
+| Agent can't run (no token, draft, Dependabot, quota, outage) | "Neutral" = check **passes** with a "not reviewed" comment; Andy decides. A true neutral conclusion needs `checks: write`, which ADR-0025 doesn't grant; GitHub treats neutral as passing anyway.          |
+| Fork PRs                                                     | Agent never runs; check **fails** unless `security-accepted` (fork code is the untrusted case)                                                                                                             |
+| Review integrity                                             | Procedure and threat model are read from the base branch; the agent gets Read/Glob/Grep only, hooks disabled, PR title/body not passed in                                                                  |
+| Drift summary                                                | `terraform-plan.yml` becomes reusable (`workflow_call`); the system review calls it and passes resource addresses only                                                                                     |
+| System review output                                         | Agent may edit only `docs/security/threat-model.md` (CI rejects anything else); the workflow, not the agent, pushes a branch and opens the PR                                                              |
+| Caps (ADR-0028)                                              | One review per PR at a time (`cancel-in-progress`), `--max-turns` 40 / 80, step timeouts 15 / 30 min, diff capped at 300 KB, Dependabot 5 PRs per ecosystem                                                |
+| Dependabot                                                   | npm, GitHub Actions, Terraform (three roots); weekly, grouped, 7-day cooldown                                                                                                                              |
+
+### Consequences
+
+- Good: every PR gets deterministic and agentic checks with no new cloud resources or IAM; overrides can't go stale; the gate logic is unit-tested.
+- Bad: a same-repo PR still runs its own workflow files and could weaken its own review (threat model R5); PRs opened by the system review need a close/reopen to start checks (GitHub doesn't trigger workflows from `GITHUB_TOKEN` events); Dependabot PRs get no agent review; Dependabot Terraform PRs fail the CI plan (no secrets).
