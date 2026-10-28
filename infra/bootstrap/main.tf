@@ -11,7 +11,9 @@ terraform {
     }
   }
 
+  # Comment out for a from-scratch bootstrap (the bucket doesn't exist yet); see the runbook.
   backend "gcs" {
+    bucket = "andy-intelligence-512400-tfstate"
     prefix = "bootstrap"
   }
 }
