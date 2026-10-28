@@ -21,8 +21,10 @@ terraform {
 }
 
 provider "google" {
-  project = var.project_id
-  region  = var.region
+  project               = var.project_id
+  region                = var.region
+  user_project_override = true
+  billing_project       = var.project_id
 }
 
 provider "google-beta" {
@@ -199,8 +201,18 @@ resource "google_identity_platform_config" "this" {
     local.service_host,
   ]
 
+  # Google sign-in only. The API returns these disabled blocks; declaring them keeps plans clean.
   sign_in {
     allow_duplicate_emails = false
+
+    email {
+      enabled           = false
+      password_required = false
+    }
+
+    phone_number {
+      enabled = false
+    }
   }
 
   depends_on = [google_project_service.apis, google_firebase_project.this]

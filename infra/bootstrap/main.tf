@@ -10,12 +10,12 @@ terraform {
       version = "~> 7.0"
     }
   }
-  # Starts with local state. After first apply, migrate into the bucket it creates:
-  #   terraform init -migrate-state -backend-config="bucket=<project_id>-tfstate"
-  # (uncomment the backend block first).
-  # backend "gcs" {
-  #   prefix = "bootstrap"
-  # }
+
+  # Comment out for a from-scratch bootstrap (the bucket doesn't exist yet); see the runbook.
+  backend "gcs" {
+    bucket = "andy-intelligence-512400-tfstate"
+    prefix = "bootstrap"
+  }
 }
 
 provider "google" {
@@ -105,6 +105,10 @@ resource "google_project_iam_member" "tf_plan" {
     "roles/viewer",
     "roles/iam.securityReviewer",
     "roles/secretmanager.viewer",
+    # Providers bill API calls to this project (user_project_override); needs serviceusage.services.use.
+    "roles/serviceusage.serviceUsageConsumer",
+    # Basic Viewer can't read Firebase Security Rules rulesets/releases.
+    "roles/firebaserules.viewer",
   ])
   project = var.project_id
   role    = each.value
