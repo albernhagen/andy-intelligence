@@ -47,5 +47,6 @@ pnpm --filter @andy/web dev          # :5173, proxies /api to :8080
 | `packages/store`      | Firestore client + Zod-validated converters          |
 | `infra/bootstrap`     | One-time GCP bootstrap (state bucket, GitHub OIDC)   |
 | `infra/control-plane` | Control-plane GCP resources                          |
+| `infra/billing`       | Billing budget + alerts (local plans only)           |
 
-Infra setup: [`docs/runbooks/m0-setup.md`](docs/runbooks/m0-setup.md).
+Infra setup: [`docs/runbooks/m0-setup.md`](docs/runbooks/m0-setup.md). Budget and cost caps: [`docs/runbooks/billing.md`](docs/runbooks/billing.md).

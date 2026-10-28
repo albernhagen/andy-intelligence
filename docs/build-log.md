@@ -46,6 +46,13 @@ Temporary progress log until andy-intelligence can track its own work (then migr
 - Git history rewritten on all 4 repos to replace Andy's Gmail with the noreply address.
 - **Decided (Andy):** adversarial PR review (ADR-0026), local quality gates (ADR-0027), GCP cost guardrails (ADR-0028). Custom domain after M5: Dev → prod releases.
 
+## 2026-10-27 — M1.13: GCP cost guardrails built
+
+- Branch `m1.13/gcp-cost-guardrails`. New root `infra/billing`: $25/month budget for `andy-intelligence-512400`, alerts at 50%, 90%, 100% actual and 100% forecast. Control plane: Cloud Run timeout 60s, concurrency 80; log exclusion for successful `/assets/*` and `/health` request logs; retention left at 30 days.
+- **Decided (Andy, ADR-0029):** `infra/billing` plans locally only (no billing role for `tf-plan`, no Actions secret); alerts go to the billing account's default admin/user recipients; kill switch split into new slice M1.14: Cost kill switch (off, not built).
+- Verified (Google docs): no "send test alert" exists; the test is applying a $0.01 budget (billing runbook step 2).
+- Not validated locally: this workspace can't reach the Terraform registry. CI runs `validate`; Andy generates `infra/billing/.terraform.lock.hcl`.
+
 ## Slices: M1: First end-to-end flow: ticket → PR with Claude
 
 Status: todo / in progress / PR open / merged. Definitions: ARCHITECTURE §12.
@@ -65,18 +72,19 @@ Status: todo / in progress / PR open / merged. Definitions: ARCHITECTURE §12.
 | M1.10: Security review automation       | M               | M0: Foundations                                                             | todo           |
 | M1.11: Adversarial PR review            | M               | M1.10: Security review automation                                           | todo           |
 | M1.12: Local quality gates              | S               | M0: Foundations                                                             | todo           |
-| M1.13: GCP cost guardrails              | S               | M0: Foundations                                                             | todo           |
+| M1.13: GCP cost guardrails              | S               | M0: Foundations                                                             | in progress    |
+| M1.14: Cost kill switch                 | M               | M1.2: Ticket core                                                           | todo           |
 
 **Next (parallel sessions):**
 
-1. M1.13: GCP cost guardrails — the app is public now; cap spend first.
+1. M1.13: GCP cost guardrails — the app is public now; cap spend first. (M1.14: Cost kill switch after M1.2: Ticket core.)
 2. M1.12: Local quality gates — every later slice benefits.
 3. M1.10: Security review automation — then M1.11: Adversarial PR review.
 4. M1.1: MCP OAuth spike and M1.2: Ticket core can start alongside.
 
 **Pending decisions (Andy):**
 
-- M1.13: GCP cost guardrails — confirm $25/month budget; kill switch stays off unless you turn it on; provide billing account ID (gitignored tfvars + Actions secret).
+- M1.13: GCP cost guardrails — review both Terraform plans, apply, run the alert test (`docs/runbooks/billing.md`).
 - M1.10: Security review automation — confirm defaults (high/critical blocks, `security-accepted` override, subscription token, weekly + milestone-end system review); create the reviewer token secret.
 - First real project to onboard (open question 8); needed by M1.5: GitHub App + project registration.
 - Claude plan and headless billing (open question 5); needed by M1.6: Claude Code executor.

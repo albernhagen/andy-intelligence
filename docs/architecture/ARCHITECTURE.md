@@ -3,7 +3,7 @@ title: andy-intelligence — Architecture & Vision
 status: accepted (v1.x scope)
 owner: Andy
 last_updated: 2026-10-27
-revision: 2026-10-27a (adversarial review, local quality gates, GCP cost guardrails)
+revision: 2026-10-27b (cost guardrails built; kill switch split into M1.14)
 ---
 
 # andy-intelligence — Architecture & Vision
@@ -295,10 +295,10 @@ Applies to this repo now (M1.10: Security review automation) and to every manage
 | Layer | What |
 |---|---|
 | Caps on usage | Cloud Run max instances, timeout, concurrency; Cloud Tasks max rate/concurrency; image cleanup; log retention and exclusions |
-| Budget alerts | Billing budget per GCP project (control plane starts at $25/month); email at 50%, 90%, 100% actual and 100% forecast |
-| Kill switch (opt-in) | At 150% of budget: scale Cloud Run to zero, pause Cloud Tasks, flag Needs-you. Never disables billing. |
+| Budget alerts | Billing budget per GCP project (control plane starts at $25/month); email at 50%, 90%, 100% actual and 100% forecast, to the billing account's admins/users (Google default, no addresses in config) |
+| Kill switch (opt-in, M1.14: Cost kill switch) | At 150% of budget: scale Cloud Run to zero, pause Cloud Tasks, flag Needs-you. Never disables billing. Off by default. |
 
-Budgets live in their own Terraform root, `infra/billing`. Model spend caps are separate (§5).
+Budgets live in their own Terraform root, `infra/billing`, planned and applied locally by Andy; CI only runs fmt/validate there (ADR-0029). Current caps and manual steps: `docs/runbooks/billing.md`. Model spend caps are separate (§5).
 
 ### 10.2 Local quality gates (ADR-0027)
 
@@ -374,7 +374,7 @@ Repo scaffold, contracts package, Terraform for control-plane GCP project (plan 
 |---|---|---|---|---|
 | **M1.0: Docs sync** | Bring this revision into the repo; ADRs for: Jules completion via PR webhook (§7.1), agent callback auth via Actions OIDC (§9), rollups via aggregation (§5), M1 scope/slicing (§12), docs upkeep (§14), contract suites for every port (§6). Resolve ADR-0012 with Andy. | S | M0: Foundations | ADRs merged; ADR-0012 accepted or rejected |
 | **M1.1: MCP OAuth spike** | Timeboxed (≤1 session). Prove Claude desktop custom connector → `/mcp` with Google-delegated OAuth and the allow-list. Throwaway `ping` tool only. Resolves open question 9. | M | M0: Foundations | Andy adds the connector in Claude desktop and calls `ping`; non-allow-listed account rejected; ADR records the mechanism |
-| **M1.2: Ticket core** | Contracts (Project, Ticket, TicketEvent, Question, Run); domain stage machine + DoR (with tests); Firestore store + converters; REST endpoints; Terraform for daily Firestore backup + Cloud Tasks queue + invoker SA. | M | M0: Foundations | API tests pass; `terraform plan` reviewed/applied by Andy; tickets created via API appear in Firestore with events |
+| **M1.2: Ticket core** | Contracts (Project, Ticket, TicketEvent, Question, Run); domain stage machine + DoR (with tests); Firestore store + converters; REST endpoints; Terraform for daily Firestore backup + Cloud Tasks queue (max rate/concurrency caps, ADR-0028) + invoker SA. | M | M0: Foundations | API tests pass; `terraform plan` reviewed/applied by Andy; tickets created via API appear in Firestore with events |
 | **M1.3: UI: tickets + inbox** | Ticket list grouped by stage, create/edit, detail with history, Needs-you inbox, answer question. | M | M1.2: Ticket core | Andy creates a ticket, sees history, answers a seeded question in the UI |
 | **M1.4: MCP core tools** | `create_ticket`, `list_needs_me`, `answer_question`, `status` using the auth proven in M1.1: MCP OAuth spike. | S | M1.1: MCP OAuth spike, M1.2: Ticket core | Same flows as M1.3 work from Claude desktop |
 | **M1.5: GitHub App + project registration** | `CodeHost` port + fake + contract suite; register the App (Andy creates it; builder provides manifest/instructions), webhook receiver (HMAC, idempotent by delivery ID), register one project and its repo. | M | M1.2: Ticket core | A PR/check event on the registered repo lands as an idempotent record; replayed delivery is a no-op |
@@ -387,7 +387,8 @@ Repo scaffold, contracts package, Terraform for control-plane GCP project (plan 
 
 | **M1.11: Adversarial PR review** | Adversarial reviewer agent on every PR (ADR-0026) reusing M1.10 plumbing; reviewer procedure in `platform/procedures/`; `adversarial-review` check fails on unresolved blockers; `review-accepted` override label. | M | M1.10: Security review automation | A test PR with a planted bug (e.g. off-by-one with no test) gets a `blocker` with a failing scenario; replying + fixing clears the check; the label override works |
 | **M1.12: Local quality gates** | Git hooks (commit: format/lint/`terraform fmt`/workflow lint on staged files; push: typecheck + tests) installed by `pnpm install`; Claude Code hook formats and lints edited files (ADR-0027). | S | M0: Foundations | A commit with a lint error is blocked locally; an agent edit is auto-formatted; CI unchanged |
-| **M1.13: GCP cost guardrails** | `infra/billing` root with a $25/month budget and alerts; Cloud Run timeout/concurrency set; Cloud Tasks caps when the queue lands; log exclusions; opt-in kill switch (off) (ADR-0028). Andy applies. | S | M0: Foundations | Budget visible in Billing with alert thresholds; a test notification reaches Andy's email; kill switch documented and disabled |
+| **M1.13: GCP cost guardrails** | `infra/billing` root with a $25/month budget and alerts (local plans only); Cloud Run timeout/concurrency set; Cloud Tasks caps when the queue lands; log exclusions; kill switch documented, not built (ADR-0028, ADR-0029). Andy applies. | S | M0: Foundations | Budget visible in Billing with alert thresholds; a test notification reaches Andy's email; kill switch documented and off |
+| **M1.14: Cost kill switch** | Opt-in `kill_switch_enabled` (default off): budget → Pub/Sub at 150% → function scales Cloud Run to zero, pauses Cloud Tasks queues, flags Needs-you; never disables billing; re-enable steps in the billing runbook (ADR-0028). Verify the scale-to-zero mechanism first. | M | M1.2: Ticket core | With the switch on and a test budget, a budget message takes the service offline and raises a Needs-you item; with it off, nothing is deployed |
 
 Do first, in parallel: M1.13: GCP cost guardrails, M1.12: Local quality gates, M1.10: Security review automation. Then M1.11: Adversarial PR review. M1.1: MCP OAuth spike and M1.2: Ticket core can start alongside.
 

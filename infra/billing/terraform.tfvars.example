@@ -1,0 +1,3 @@
+# Copy to terraform.tfvars (gitignored) and fill in. Never commit the real file.
+# Find the ID: gcloud billing projects describe andy-intelligence-512400 --format='value(billingAccountName)'
+billing_account_id = "XXXXXX-XXXXXX-XXXXXX"
