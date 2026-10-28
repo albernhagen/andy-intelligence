@@ -45,7 +45,7 @@ Set `budget_amount_usd` in `terraform.tfvars` (or change the default in `variabl
 
 ## 4. Kill switch
 
-**Not built; off.** Design (ADR-0028): at 150% of budget, the budget publishes to Pub/Sub, a small function scales Cloud Run to zero, pauses Cloud Tasks and flags Needs-you. It never disables billing. It lands in slice M1.14: Cost kill switch as an opt-in variable that defaults to off.
+**Not built; off.** Design (ADR-0028): at 150% of budget, the budget publishes to Pub/Sub, a small function scales Cloud Run to zero, pauses Cloud Tasks and flags Needs-you. It never disables billing. It lands in slice M1.14: Cost kill switch as an opt-in variable that defaults to off (Needs-you item added after M1.2: Ticket core). Minute-level usage alerts land in M1.15: Usage alerts.
 
 Until then, if spend runs away: `gcloud run services update control-plane --region us-central1 --ingress internal` stops public traffic (then `terraform plan` in `infra/control-plane` shows the drift; apply to restore).
 
