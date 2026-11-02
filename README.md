@@ -64,19 +64,19 @@ pnpm --filter @andy/web dev          # :5173, proxies /api to :8080
 
 ## Layout
 
-| Path                  | What                                                         |
-| --------------------- | ------------------------------------------------------------ |
-| `apps/api`            | Hono API (later MCP, webhooks, jobs); serves the SPA         |
-| `apps/web`            | React + Vite + shadcn UI                                     |
-| `packages/contracts`  | Zod entities, ports, fakes, contract suites                  |
-| `packages/domain`     | Ticket rules: stage moves, Definition of Ready, Needs-you    |
-| `packages/store`      | Firestore client, converters, `FirestoreWorkTracker`         |
-| `infra/bootstrap`     | One-time GCP bootstrap (state bucket, GitHub OIDC)           |
-| `infra/control-plane` | Control-plane GCP resources                                  |
-| `infra/billing`       | Billing budget + alerts (local plans only)                   |
-| `scripts`             | Repo tooling (Claude Code format hook, security-review gate) |
-| `platform/procedures` | Agent procedures: `/security-review`, `/threat-model`        |
-| `lefthook.yml`        | Git hooks: pre-commit lint/format, pre-push checks           |
-| `firebase.json`       | Firestore emulator config for `pnpm test:firestore`          |
+| Path                  | What                                                          |
+| --------------------- | ------------------------------------------------------------- |
+| `apps/api`            | Hono API (later MCP, webhooks, jobs); serves the SPA          |
+| `apps/web`            | React + Vite + shadcn UI                                      |
+| `packages/contracts`  | Zod entities, ports, fakes, contract suites                   |
+| `packages/domain`     | Ticket rules: stage moves, Definition of Ready, Needs-you     |
+| `packages/store`      | Firestore client, converters, `FirestoreWorkTracker`          |
+| `infra/bootstrap`     | One-time GCP bootstrap (state bucket, GitHub OIDC)            |
+| `infra/control-plane` | Control-plane GCP resources                                   |
+| `infra/billing`       | Billing budget, alerts, opt-in kill switch (local plans only) |
+| `scripts`             | Repo tooling (Claude Code format hook, security-review gate)  |
+| `platform/procedures` | Agent procedures: `/security-review`, `/threat-model`         |
+| `lefthook.yml`        | Git hooks: pre-commit lint/format, pre-push checks            |
+| `firebase.json`       | Firestore emulator config for `pnpm test:firestore`           |
 
 Infra setup: [`docs/runbooks/m0-setup.md`](docs/runbooks/m0-setup.md). Budget and cost caps: [`docs/runbooks/billing.md`](docs/runbooks/billing.md). Security review setup: [`docs/runbooks/security-review.md`](docs/runbooks/security-review.md).

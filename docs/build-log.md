@@ -114,6 +114,14 @@ Temporary progress log until andy-intelligence can track its own work (then migr
 - Verified locally: lint, typecheck, 83 tests, build; Trivy clean. Not run here: `terraform validate` (no registry access; CI runs it) and `pnpm test:firestore` (no Java; Andy runs it).
 - Open on `main`: Dependabot alerts for `@grpc/grpc-js` (high, low; via `firebase` web SDK), `glob`, `minimatch` (medium); no fix PRs yet.
 
+## 2026-11-01 — M1.2: Ticket core merged; M1.14: Cost kill switch built
+
+- Merged: PR #17: Ticket core. Andy to run: `infra/control-plane` apply (6 adds), `pnpm test:firestore`, Done-when check (`docs/runbooks/ticket-core.md`).
+- **Decided (Andy, ADR-0036: Kill switch runs on Cloud Workflows):** Cloud Workflows instead of a function; Needs-you item deferred until M1.3: UI: tickets + inbox; switch stays on in Andy's tfvars after the demo (code default off).
+- Verified (Google docs): manual scaling at 0 instances disables a Cloud Run service without a new revision; budget messages arrive several times a day, at least once, with `costAmount`/`budgetAmount`.
+- Branch `m1.14/cost-kill-switch`: `infra/billing/kill-switch.tf` (topic, Eventarc trigger, workflow, `cost-kill-switch` SA with a custom role) behind `kill_switch_enabled`; 150% budget threshold; billing runbook §4 (turn on, fake-message test, re-enable, turn off).
+- Verified locally: `terraform fmt`, Trivy clean, workflow YAML parses. Not run here: `terraform validate` (CI) and the apply + fake-message demo (Andy).
+
 ## Slices: M1: First end-to-end flow: ticket → PR with Claude
 
 Status: todo / in progress / PR open / merged. Definitions: ARCHITECTURE §12.
@@ -122,7 +130,7 @@ Status: todo / in progress / PR open / merged. Definitions: ARCHITECTURE §12.
 | --------------------------------------- | --------------- | ------------------------------------------------------------------------------------------- | --------------- |
 | M1.0: Docs sync                         | S               | M0: Foundations                                                                             | merged (PR #1)  |
 | M1.1: MCP OAuth spike                   | M               | M0: Foundations                                                                             | todo            |
-| M1.2: Ticket core                       | M               | M0: Foundations                                                                             | PR open         |
+| M1.2: Ticket core                       | M               | M0: Foundations                                                                             | merged (PR #17) |
 | M1.3: UI: tickets + inbox               | M               | M1.2: Ticket core                                                                           | todo            |
 | M1.4: MCP core tools                    | S               | M1.1: MCP OAuth spike, M1.2: Ticket core                                                    | todo            |
 | M1.5: GitHub App + project registration | M               | M1.2: Ticket core                                                                           | todo            |
@@ -134,7 +142,7 @@ Status: todo / in progress / PR open / merged. Definitions: ARCHITECTURE §12.
 | M1.11: Adversarial PR review            | M               | M1.10: Security review automation                                                           | todo            |
 | M1.12: Local quality gates              | S               | M0: Foundations                                                                             | merged (PR #9)  |
 | M1.13: GCP cost guardrails              | S               | M0: Foundations                                                                             | merged (PR #7)  |
-| M1.14: Cost kill switch                 | M               | M1.13: GCP cost guardrails                                                                  | todo            |
+| M1.14: Cost kill switch                 | M               | M1.13: GCP cost guardrails                                                                  | PR open         |
 | M1.15: Usage alerts                     | S               | M1.13: GCP cost guardrails                                                                  | merged (PR #8)  |
 | M1.16: Project baseline v1              | M               | M1.10: Security review automation, M1.11: Adversarial PR review, M1.12: Local quality gates | todo            |
 

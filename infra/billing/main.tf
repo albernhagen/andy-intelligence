@@ -1,5 +1,6 @@
 # Billing guardrails (ADR-0028, ADR-0029): a Cloud Billing budget with email alerts for the
-# control-plane project. Budgets belong to the billing account, so they live in their own root.
+# control-plane project, and the opt-in cost kill switch (kill-switch.tf). Budgets belong to
+# the billing account, so they live in their own root.
 # Plans and applies are local only (Andy): CI runs fmt/validate but has no billing access.
 
 terraform {
@@ -70,10 +71,22 @@ resource "google_billing_budget" "control_plane" {
     threshold_percent = 1.0
     spend_basis       = "FORECASTED_SPEND"
   }
+  # Email at the kill switch's default limit too, whether or not the switch is on.
+  threshold_rules {
+    threshold_percent = 1.5
+  }
 
-  # No all_updates_rule: Google's default sends threshold emails to the billing account's
-  # Billing Account Administrators and Users, so no address is in config. The kill switch's
-  # Pub/Sub topic lands with M1.14: Cost kill switch.
+  # Threshold emails go to Google's default recipients (the billing account's Billing Account
+  # Administrators and Users), so no address is in config. With the kill switch on, the budget
+  # also publishes its status to the kill switch topic; default emails stay on.
+  dynamic "all_updates_rule" {
+    for_each = var.kill_switch_enabled ? [1] : []
+    content {
+      pubsub_topic                   = google_pubsub_topic.budget[0].id
+      schema_version                 = "1.0"
+      disable_default_iam_recipients = false
+    }
+  }
 
   depends_on = [google_project_service.billingbudgets]
 }

@@ -1,6 +1,6 @@
 # Billing guardrails — runbook (Andy)
 
-GCP cost guardrails for the control plane (ADR-0028: GCP cost guardrails, ADR-0029: Billing root plans locally; kill switch split out). Budget: Terraform root `infra/billing` (sections 1–3). Usage alerts and caps: `infra/control-plane` (sections 5–6).
+GCP cost guardrails for the control plane (ADR-0028: GCP cost guardrails, ADR-0029: Billing root plans locally; kill switch split out). Budget and kill switch: Terraform root `infra/billing` (sections 1–4). Usage alerts and caps: `infra/control-plane` (sections 5–6).
 
 | Term               | Meaning                                                                                                    |
 | ------------------ | ---------------------------------------------------------------------------------------------------------- |
@@ -27,7 +27,7 @@ terraform plan -out=billing.tfplan             # review in full
 terraform apply billing.tfplan
 ```
 
-Check: [Billing → Budgets & alerts](https://console.cloud.google.com/billing/budgets) shows the budget with thresholds 50%, 90%, 100% (actual) and 100% (forecasted).
+Check: [Billing → Budgets & alerts](https://console.cloud.google.com/billing/budgets) shows the budget with thresholds 50%, 90%, 100%, 150% (actual) and 100% (forecasted).
 
 ## 2. Check that alerts will reach you
 
@@ -48,8 +48,53 @@ Set `budget_amount_usd` in `terraform.tfvars` (or change the default in `variabl
 
 ## 4. Kill switch
 
-**Not built; off.** Design (ADR-0028): at 150% of budget, the budget publishes to Pub/Sub, a small function scales Cloud Run to zero, pauses Cloud Tasks and flags Needs-you. It never disables billing. It lands in slice M1.14: Cost kill switch as an opt-in variable that defaults to off (Needs-you item added after M1.2: Ticket core).
-Until then, if spend runs away: `gcloud run services update control-plane --region us-central1 --ingress internal` stops public traffic (then `terraform plan` in `infra/control-plane` shows the drift; apply to restore).
+Opt-in (ADR-0028, ADR-0036: Kill switch runs on Cloud Workflows). When actual spend reaches 150% of the budget, a workflow sets the `control-plane` Cloud Run service to manual scaling at 0 instances (requests fail as "Service unavailable") and pauses every Cloud Tasks queue in `us-central1`. It never disables billing. You also get the 150% budget email.
+
+| Piece                                                                                  | Name                      |
+| -------------------------------------------------------------------------------------- | ------------------------- |
+| Pub/Sub topic the budget publishes to (several times a day)                            | `budget-notifications`    |
+| Eventarc trigger → workflow                                                            | `cost-kill-switch` (both) |
+| Identity (custom role: Cloud Run get/update, Cloud Tasks list/pause; actAs runtime SA) | `cost-kill-switch@…`      |
+
+Cost: about $0 (Pub/Sub free tier; Workflows' 5,000 free steps a month, about $0.01 per 1,000 beyond).
+
+### Turn on
+
+1. Add `kill_switch_enabled = true` to `infra/billing/terraform.tfvars`.
+2. `terraform plan -out=billing.tfplan` → expect about 13 to add (3 APIs, topic + publisher grant, SA, custom role, 3 role grants, actAs grant, workflow, trigger) and 1 in-place change to the budget (`all_updates_rule`, 150% threshold). Then `terraform apply billing.tfplan`.
+
+### Test (free; takes the service offline briefly)
+
+Publish a fake budget message at 200% of budget:
+
+```sh
+gcloud pubsub topics publish budget-notifications --project andy-intelligence-512400 \
+  --message '{"budgetDisplayName":"test","costAmount":50,"budgetAmount":25,"currencyCode":"USD"}'
+```
+
+Within a minute or two:
+
+- [ ] `curl -s -o /dev/null -w '%{http_code}\n' https://control-plane-662512537397.us-central1.run.app/health` is no longer 200.
+- [ ] `gcloud tasks queues describe run-watchdog --location us-central1 --format='value(state)'` → `PAUSED`.
+- [ ] Workflows console → `cost-kill-switch` → latest execution succeeded with "tripped".
+
+A message under the limit (e.g. `"costAmount":10`) should leave everything up; the execution returns "under limit".
+
+### Re-enable
+
+```sh
+gcloud run services update control-plane --region us-central1 --scaling auto
+gcloud tasks queues resume run-watchdog --location us-central1
+curl -s https://control-plane-662512537397.us-central1.run.app/health   # {"status":"ok",…}
+```
+
+If spend is still over 150%, the next budget message trips the switch again. Raise the budget, set `kill_switch_enabled = false`, or fix the cause first.
+
+### Turn off
+
+Set `kill_switch_enabled = false` (or remove the line), plan and apply: everything above is removed and the budget stops publishing.
+
+Manual stop (any time, without the switch): `gcloud run services update control-plane --region us-central1 --ingress internal` blocks public traffic; undo with `--ingress all` (or `terraform apply` in `infra/control-plane`).
 
 ## 5. Usage alerts
 
