@@ -161,6 +161,9 @@ runs:
         cap 50000 .review/previous-review.md
         [ -s .review/previous-review.md ] || rm .review/previous-review.md
         prev=$(grep -oE 'reviewed-sha: [0-9a-f]{7,40}' .review/previous-review.md 2>/dev/null | head -1 | cut -d' ' -f2 || true)
+        # A "not reviewed" comment never covered its commits (comments from before 9b6eccb still
+        # carry a SHA), so review the whole PR again.
+        if grep -q ': not reviewed' .review/previous-review.md 2>/dev/null; then prev=""; fi
         if [ "$INCREMENTAL" = true ] && [ -n "$prev" ] && [ "$prev" != "$HEAD_SHA" ] \
           && git cat-file -e "${prev}^{commit}" 2>/dev/null; then
           git diff "$prev" "$HEAD_SHA" > .review/new-commits.diff.full
