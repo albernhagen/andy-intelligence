@@ -1,9 +1,10 @@
 import { serve } from "@hono/node-server";
 import { serveStatic } from "@hono/node-server/serve-static";
-import { FirestoreWorkTracker, createFirestore } from "@andy/store";
+import { FirestoreOAuthGrantStore, FirestoreWorkTracker, createFirestore } from "@andy/store";
 import { createApp } from "./app";
 import { parseAllowList } from "./auth";
 import { firebaseVerifier } from "./firebase";
+import { ClientMetadataResolver } from "./mcp";
 
 function requireEnv(name: string): string {
   const value = process.env[name];
@@ -15,6 +16,9 @@ async function main() {
   const projectId = requireEnv("GCP_PROJECT_ID");
   const allowedEmails = parseAllowList(requireEnv("ALLOWED_EMAILS"));
   const port = Number(process.env.PORT ?? 8080);
+  const db = createFirestore(projectId);
+  // MCP is on only when the public URL is set (it is the OAuth issuer and resource).
+  const publicUrl = process.env.PUBLIC_URL?.replace(/\/+$/, "");
 
   const app = createApp({
     verifier: firebaseVerifier(projectId),
@@ -25,7 +29,14 @@ async function main() {
       firebaseAuthDomain: requireEnv("FIREBASE_AUTH_DOMAIN"),
       projectId,
     },
-    tracker: new FirestoreWorkTracker(createFirestore(projectId)),
+    tracker: new FirestoreWorkTracker(db),
+    mcp: publicUrl
+      ? {
+          publicUrl,
+          grants: new FirestoreOAuthGrantStore(db),
+          clients: new ClientMetadataResolver(),
+        }
+      : undefined,
   });
 
   // SPA: serve built web assets; unknown non-API paths fall back to index.html.

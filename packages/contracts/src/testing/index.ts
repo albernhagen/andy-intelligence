@@ -1,10 +1,12 @@
 import { describe, expect, it } from "vitest";
 import { Project, Question, QuotaReading, Ticket, TicketEvent } from "../entities";
 import {
+  OAuthGrant,
   RunHandle,
   RunReport,
   WorkTrackerError,
   type Executor,
+  type OAuthGrantStore,
   type QuotaSource,
   type RunRequest,
   type WorkTracker,
@@ -243,6 +245,72 @@ export function quotaSourceContract(
       await seed?.();
       const readings = await source.latest("claude-sub");
       for (const r of readings) expect(QuotaReading.parse(r)).toEqual(r);
+    });
+  });
+}
+
+/**
+ * `make` gets the clock the store must use, so the suite can test expiry without waiting.
+ * Keys are random per test, so the suite can run against a shared store.
+ */
+export function oauthGrantStoreContract(
+  name: string,
+  make: (now: () => Date) => Promise<OAuthGrantStore>,
+): void {
+  describe(`OAuthGrantStore contract: ${name}`, () => {
+    const start = new Date("2026-11-02T12:00:00Z");
+    const key = () => crypto.randomUUID();
+    const grant = (expiresAt = "2026-11-02T13:00:00Z"): OAuthGrant => ({
+      kind: "code",
+      clientId: "https://client.example/metadata.json",
+      email: "andy@example.com",
+      uid: "u1",
+      resource: "https://api.example/mcp",
+      scope: "mcp",
+      redirectUri: "https://client.example/callback",
+      codeChallenge: "challenge",
+      expiresAt,
+    });
+
+    it("GivenAStoredGrant_WhenRead_ThenItIsReturnedUnchangedAndStaysStored", async () => {
+      const store = await make(() => start);
+      const k = key();
+      await store.put(k, grant());
+      const read = await store.get(k);
+      expect(read).toEqual(grant());
+      expect(OAuthGrant.parse(read)).toEqual(read);
+      expect(await store.get(k)).toEqual(grant());
+    });
+
+    it("GivenAStoredGrant_WhenTaken_ThenItIsReturnedOnceOnly", async () => {
+      const store = await make(() => start);
+      const k = key();
+      await store.put(k, grant());
+      expect(await store.take(k)).toEqual(grant());
+      expect(await store.take(k)).toBeNull();
+      expect(await store.get(k)).toBeNull();
+    });
+
+    it("GivenConcurrentTakes_WhenRacing_ThenExactlyOneWins", async () => {
+      const store = await make(() => start);
+      const k = key();
+      await store.put(k, grant());
+      const results = await Promise.all([store.take(k), store.take(k), store.take(k)]);
+      expect(results.filter((r) => r !== null)).toHaveLength(1);
+    });
+
+    it("GivenAnExpiredGrant_WhenReadOrTaken_ThenItIsMissing", async () => {
+      const store = await make(() => start);
+      const k = key();
+      await store.put(k, grant("2026-11-02T11:59:59Z"));
+      expect(await store.get(k)).toBeNull();
+      expect(await store.take(k)).toBeNull();
+    });
+
+    it("GivenAnUnknownKey_WhenRead_ThenNull", async () => {
+      const store = await make(() => start);
+      expect(await store.get(key())).toBeNull();
+      expect(await store.take(key())).toBeNull();
     });
   });
 }
