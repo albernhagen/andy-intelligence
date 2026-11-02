@@ -116,6 +116,9 @@ jobs:
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
         run: |
           rm -rf .security-review
+          # The agent's edit isn't Prettier-formatted; CI's lint would fail the PR. Keep the
+          # version in step with prettier in pnpm-lock.yaml.
+          npx --yes prettier@3.9.10 --write docs/security/threat-model.md > /dev/null
           changed=$(git status --porcelain)
           if [ -z "$changed" ]; then
             echo "::notice title=system-security-review::No threat-model changes."
@@ -141,5 +144,5 @@ jobs:
             "Automated system security review (ADR-0025: Agentic security review)." \
             "- New findings: $new" "- Open high/critical risks: $open" \
             "$summary" \
-            "Run: $RUN_URL. Checks don't start on PRs opened by GitHub Actions: close and reopen this PR to run them (docs/runbooks/security-review.md).")
+            "Run: $RUN_URL. Checks on PRs opened by GitHub Actions wait for approval: approve the workflow runs on this PR (docs/runbooks/security-review.md).")
           gh pr create --base main --head "$branch" --title "Security: system review $date" --body "$body"

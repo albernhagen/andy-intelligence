@@ -69,7 +69,7 @@ gh workflow run system-security-review.yml --repo albernhagen/andy-intelligence
 gh run watch --repo albernhagen/andy-intelligence
 ```
 
-- If the threat model changed, a PR "Security: system review YYYY-MM-DD" opens. GitHub doesn't start checks on PRs opened by Actions: **close and reopen it** to run them, review, merge.
+- If the threat model changed, a PR "Security: system review YYYY-MM-DD" opens. It is opened by `github-actions[bot]`, so GitHub holds its checks: **approve the workflow runs** (banner on the PR), then review and merge. This goes away when M1.5: GitHub App + project registration opens these PRs with the App's token.
 - No changes → a notice, no PR.
 - Milestone gate: no `open` high/critical risk in `docs/security/threat-model.md`, unless you set it to `accepted` with a reason.
 
