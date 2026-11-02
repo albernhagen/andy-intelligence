@@ -127,7 +127,9 @@ export function evaluate({
   if (!role) throw new Error(`unknown review role: ${roleKey}`);
   const safeSha = sanitize(sha) || "unknown";
   const footer = `\n\n<sub>${usage ? `${usage} ` : ""}Commit ${safeSha}. Rules: \`${role.procedure}\`. Override: Andy adds the \`${role.label}\` label and writes why in the PR; it is removed on the next push.</sub>`;
-  const head = `${role.marker}\n${reviewedShaMarker(safeSha)}\n`;
+  // Only a completed review records its SHA: the next run reviews incrementally from it, so a
+  // neutral or fork comment must not, or the unreviewed commits would be skipped.
+  const head = `${role.marker}\n`;
 
   if (mode === "fork") {
     return {
@@ -164,7 +166,7 @@ export function evaluate({
       : "";
   return {
     pass: blocking.length === 0 || accepted,
-    body: `${head}### ${verdict}\n\n${counts}${summary}${table}${resolved}${footer}`,
+    body: `${head}${reviewedShaMarker(safeSha)}\n### ${verdict}\n\n${counts}${summary}${table}${resolved}${footer}`,
   };
 }
 

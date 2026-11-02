@@ -189,8 +189,16 @@ describe("evaluate (adversarial)", () => {
     expect(body).toContain("- Off-by-one fixed in abc @​x");
   });
 
-  it("GivenAnyRun_WhenEvaluated_ThenRecordsTheReviewedSha", () => {
+  it("GivenACompletedReview_WhenEvaluated_ThenRecordsTheReviewedSha", () => {
     expect(evaluate({ ...base, findings: out([]) }).body).toContain(reviewedShaMarker("def456"));
+  });
+
+  it("GivenANeutralOrForkRun_WhenEvaluated_ThenNoReviewedSha", () => {
+    expect(evaluate({ ...base, findings: "" }).body).not.toContain("reviewed-sha");
+    expect(evaluate({ ...base, mode: "unavailable", reason: "x" }).body).not.toContain(
+      "reviewed-sha",
+    );
+    expect(evaluate({ ...base, mode: "fork" }).body).not.toContain("reviewed-sha");
   });
 
   it("GivenAnUnknownRole_WhenEvaluated_ThenThrows", () => {
