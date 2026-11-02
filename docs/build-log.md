@@ -144,7 +144,14 @@ Temporary progress log until andy-intelligence can track its own work (then migr
 - Merged: PR #21: Adversarial PR review. (PR #20: kill switch plan fix was applied and demoed before it merged; see 2026-11-01.)
 - Demo (PR #22, closed): a planted off-by-one got a `blocker` with a failing scenario (≈ $0.05 API-equivalent). The fix push re-reviewed incrementally (`incremental review since <sha>`) and listed both findings under Resolved. A second planted bug got 2 blockers; `review-accepted` passed the check in ≈ 10 s without running the agent; a new push removed the label and the check failed again. M1.11: Adversarial PR review Done when met.
 - Andy created the `review-accepted` label and added `adversarial-review` to the required checks in `protect-main`.
-- Branch `m1.16/project-baseline` started; plan pending Andy's approval.
+- Branch `m1.16/project-baseline` started.
+
+## 2026-11-02 — M1.16: Project baseline v1 built
+
+- **Decided (Andy, ADR-0038: Baseline carried by composite actions):** composite actions in `platform/actions/` instead of reusable workflows (those only run from `.github/workflows/`, rename checks, and can't see their own commit); this repo calls them locally, managed repos pin a SHA; template = managed / seed / starter files listed in `platform/baseline/manifest.json`; GitHub config applied by `baseline.mjs` with Andy's `gh` (never CI); drift: `check` locally, labels + ruleset in the weekly system review; tags `vX.Y.Z`, Dependabot bumps pins; demo on a public scratch repo with no Claude token.
+- Branch `m1.16/project-baseline`: 9 actions; callers keep the 10 required check names (a test compares them with `github/ruleset-main.json`); `template/`; `platform/baseline/{manifest.json,github/*.json,baseline.mjs}` + tests; runbook `docs/runbooks/onboard-a-repo.md`; threat model R5 updated, R10 added.
+- Verified locally: lint, typecheck, tests (scripts project 73); `check albernhagen/andy-intelligence` (read-only) finds real drift: private vulnerability reporting off, SHA pinning not required, default workflow token `write`, `security-accepted` label colour/description (runbook §1 applies them); a rendered starter repo passes `pnpm lint/typecheck/test/build`. Not run here: actionlint (not installed; CI runs it), the composite actions themselves (this PR's checks run them), the scratch-repo demo (Andy, runbook §5).
+- Lessons: ESLint 10 picks up nested `eslint.config.js`, so starter config files end in `.template`; a `\s*$` regex in multiline mode swallowed newlines when pinning.
 
 ## Slices: M1: First end-to-end flow: ticket → PR with Claude
 
@@ -168,7 +175,7 @@ Status: todo / in progress / PR open / merged. Definitions: ARCHITECTURE §12.
 | M1.13: GCP cost guardrails              | S               | M0: Foundations                                                                             | merged (PR #7)  |
 | M1.14: Cost kill switch                 | M               | M1.13: GCP cost guardrails                                                                  | merged (PR #18) |
 | M1.15: Usage alerts                     | S               | M1.13: GCP cost guardrails                                                                  | merged (PR #8)  |
-| M1.16: Project baseline v1              | M               | M1.10: Security review automation, M1.11: Adversarial PR review, M1.12: Local quality gates | in progress     |
+| M1.16: Project baseline v1              | M               | M1.10: Security review automation, M1.11: Adversarial PR review, M1.12: Local quality gates | PR open         |
 
 **Next (order decided by Andy, 2026-10-28):**
 
@@ -177,7 +184,7 @@ Status: todo / in progress / PR open / merged. Definitions: ARCHITECTURE §12.
 3. M1.2: Ticket core and M1.1: MCP OAuth spike, in parallel.
 4. M1.14: Cost kill switch.
 5. M1.11: Adversarial PR review (merged).
-6. M1.16: Project baseline v1 (in progress; before M1.8: Build + gate).
+6. M1.16: Project baseline v1 (PR open; before M1.8: Build + gate).
 
 **Pending decisions (Andy):**
 

@@ -2,8 +2,8 @@
 title: andy-intelligence — Architecture & Vision
 status: accepted (v1.x scope)
 owner: Andy
-last_updated: 2026-11-01
-revision: 2026-11-01f (M1.11: Adversarial PR review: shared review actions, incremental re-review, ADR-0037)
+last_updated: 2026-11-02
+revision: 2026-11-02a (M1.16: Project baseline v1: composite actions, manifest, apply/check script, ADR-0038)
 ---
 
 # andy-intelligence — Architecture & Vision
@@ -265,41 +265,46 @@ docs/agent/*.md                   # shared procedures: size-rubric, build, revie
 docs/product/                     # product/domain context sources (§7.6; folder name set in the design)
 docs/security/threat-model.md     # living threat model + open risks (§9.1)
 specs/NNN-name/{design.md, tech-design.md, tasks.md, stories/*.md, mockups/}
-.github/workflows/                # thin callers → platform reusable workflows; CI checks
+.github/workflows/                # thin callers → platform composite actions, pinned by SHA (ADR-0038)
+.andy/baseline.json               # baseline version (andy-intelligence commit) this repo is on
 CODEOWNERS                        # always-gated paths
 infra/                            # Terraform: dev/prod Cloud Run, Cloud Deploy pipeline, read-only agent SAs
 ```
 **Required CI checks** on `main`: tests, lint, typecheck, protected-path check, secret scan, security scans and security-review agent (§9.1), "PR references a ticket" (ticket key in branch name or PR body, verified against the control-plane API). These enforce rules for every agent regardless of harness.
 
-Onboarding a project = UI/MCP "Add project" → bootstrap (applies the project baseline, §8.1: branch ruleset, repo settings, labels, template files, secrets refs, App install check, Terraform PR for GCP) → Andy approves Terraform PR.
+Onboarding a project = UI/MCP "Add project" → bootstrap (applies the project baseline, §8.1; until then `platform/baseline/baseline.mjs onboard`, runbook `docs/runbooks/onboard-a-repo.md`: branch ruleset, repo settings, labels, template files, secrets refs, App install check, Terraform PR for GCP) → Andy approves Terraform PR.
 
 ### 8.1 Project baseline (ADR-0031)
 
 Every guardrail built in this repo is packaged so each managed project gets it the same way, and this repo is configured from the same baseline. Built in M1.16: Project baseline v1. **Every slice that adds or changes a guardrail updates this table in the same PR.**
 
-Carried by: **RW** = reusable workflow in `platform/workflows/` (projects call it, pinned to a SHA) · **T** = file copied from `template/` · **G** = GitHub config in `platform/baseline/github/`, applied by script · **TF** = Terraform module in `infra/modules/` · **RB** = runbook step (secrets).
+Carried by (ADR-0038): **A** = composite action in `platform/actions/`; managed repos get this repo's caller workflow with the action pinned to a commit SHA · **M** = managed file (kept identical; listed in `platform/baseline/manifest.json`) · **S** = seed file, copied once from `template/` · **G** = GitHub config in `platform/baseline/github/`, applied by `platform/baseline/baseline.mjs` · **TF** = Terraform module in `infra/modules/` · **RB** = runbook step (secrets).
+
+Drift: `baseline.mjs check <repo>` (Andy, local, everything); the weekly system security review checks labels and ruleset (its token can't read the rest).
 
 | Guardrail | ADR | Source in this repo | Carried by | Status |
 |---|---|---|---|---|
-| Lint, typecheck, test, build | 0022 | `ci.yml` (`check`) | RW | not yet carried (M1.16) |
-| Workflow linter (actionlint) | 0027 | `ci.yml` | RW | not yet carried (M1.16) |
-| Terraform fmt/validate; public-safe plan summary | 0011, 0024 | `ci.yml`, `terraform-plan.yml` | RW | not yet carried (M1.16) |
-| Secret scan (TruffleHog) | 0015 | `secret-scan.yml` | RW | not yet carried (M1.16) |
-| CodeQL, dependency review, Terraform misconfig scan | 0025, 0030 | `security-scans.yml` | RW | not yet carried (M1.16) |
-| Security-review agent + gate | 0025, 0030 | `security-review.yml`, `scripts/security-review-*.mjs`, `platform/procedures/security-review.md` | RW | not yet carried (M1.16) |
-| System security review + drift | 0025, 0030 | `system-security-review.yml`, `platform/procedures/threat-model.md` | RW | not yet carried (M1.16) |
-| Adversarial PR review | 0026, 0037 | `adversarial-review.yml`, `.github/actions/agent-review-*`, `scripts/review-gate.mjs`, `platform/procedures/adversarial-review.md` | RW | not yet carried (M1.16) |
-| Local hooks (lefthook) + Claude Code format hook | 0027 | `lefthook.yml`, `.claude/settings.json`, `scripts/format-edited-file.mjs` | T | not yet carried (M1.16) |
-| Dependabot (npm, Actions, Terraform; cooldown) | 0025, 0030 | `.github/dependabot.yml` | T | not yet carried (M1.16) |
-| PR template (docs + security checklist) | 0022, 0025 | `.github/pull_request_template.md` | T | not yet carried (M1.16) |
-| Agent rules; docs ship with the change | 0022 | `AGENTS.md` | T | not yet carried (M1.16) |
-| Threat model seed | 0025 | `docs/security/threat-model.md` | T | not yet carried (M1.16) |
-| Public-repo hygiene (`.gitignore`: tfvars, state, `.env*`) | 0015 | `.gitignore` | T | not yet carried (M1.16) |
-| `main` ruleset: PR required, no force push/deletion, required checks, code scanning (CodeQL, high or higher) | 0025 | set by hand (`docs/runbooks/security-review.md`) | G | not yet carried (M1.16) |
-| Security & analysis: dependency graph, Dependabot alerts + security updates, secret scanning, push protection, private vulnerability reporting | 0015, 0025 | set by hand | G | not yet carried (M1.16) |
-| Actions: read-only default token; Actions may open PRs | 0025 | set by hand | G | not yet carried (M1.16) |
-| Labels `security-accepted`, `review-accepted` | 0025, 0026 | set by hand | G | not yet carried (M1.16) |
-| Reviewer token secret | 0030 | `CLAUDE_CODE_OAUTH_TOKEN` | RB | not yet carried (M1.16) |
+| Lint, typecheck, test, build | 0022 | `ci.yml` (`check`) → `platform/actions/ci-check` | A | carried (M1.16) |
+| Workflow linter (actionlint) | 0027 | `ci.yml` → `platform/actions/actionlint` | A | carried (M1.16) |
+| Terraform fmt/validate | 0011, 0024 | `ci.yml` → `platform/actions/terraform-check` (skips without `infra/`) | A | carried (M1.16) |
+| Public-safe Terraform plan summary | 0011 | `terraform-plan.yml` | — | not yet carried (M6: Dev → prod releases; needs per-project WIF) |
+| Secret scan (TruffleHog) | 0015 | `secret-scan.yml` → `platform/actions/secret-scan` | A | carried (M1.16) |
+| CodeQL, dependency review, Terraform misconfig scan | 0025, 0030 | `security-scans.yml` → `platform/actions/{codeql,dependency-review,terraform-misconfig}` | A | carried (M1.16) |
+| Security-review agent + gate | 0025, 0030, 0037 | `security-review.yml`, `platform/actions/agent-review-*`, `scripts/review-*.mjs`, `platform/procedures/security-review.md` | A | carried (M1.16); procedure read from the pinned commit |
+| Adversarial PR review | 0026, 0037 | `adversarial-review.yml`, `platform/actions/agent-review-*`, `scripts/review-gate.mjs`, `platform/procedures/adversarial-review.md` | A | carried (M1.16); procedure read from the pinned commit |
+| System security review + drift | 0025, 0030 | `system-security-review.yml`, `platform/procedures/threat-model.md` | — | not yet carried (M6: Dev → prod releases; its drift plan is GCP-specific). Baseline drift for this repo added (M1.16) |
+| Local hooks (lefthook) + Claude Code format hook + Prettier config | 0027 | `lefthook.yml`, `.claude/settings.json`, `scripts/format-edited-file.mjs`, `.prettierrc.json` | M | carried (M1.16) |
+| Dependabot (npm, Actions; cooldown) | 0025, 0030 | `template/.github/dependabot.yml` (this repo's adds Terraform) | M | carried (M1.16) |
+| PR template (docs + security checklist) | 0022, 0025 | `template/.github/pull_request_template.md` | M | carried (M1.16) |
+| Agent rules; docs ship with the change | 0022 | `template/AGENTS.md` | S | carried (M1.16) |
+| Threat model seed | 0025 | `template/docs/security/threat-model.md` | S | carried (M1.16) |
+| Public-repo hygiene (`.gitignore`: tfvars, state, `.env*`) | 0015 | `template/gitignore.lines` | M (lines) | carried (M1.16) |
+| `main` ruleset: PR required (squash), no force push/deletion, required checks, code scanning (CodeQL, high or higher) | 0025 | `github/ruleset-main.json` | G | carried (M1.16) |
+| Merge settings: squash only, delete branch on merge, no auto-merge | 0022 | `github/repo.json` | G | carried (M1.16) |
+| Security & analysis: Dependabot alerts + security updates, secret scanning, push protection, private vulnerability reporting; CodeQL default setup off | 0015, 0025 | `github/security.json` (dependency graph is always on for public repos) | G | carried (M1.16) |
+| Actions: read-only default token; Actions may open PRs; actions must be pinned to a full SHA | 0025, 0038 | `github/actions.json` | G | carried (M1.16) |
+| Labels `security-accepted`, `review-accepted` | 0025, 0026 | `github/labels.json` | G | carried (M1.16) |
+| Reviewer token secret | 0030 | `CLAUDE_CODE_OAUTH_TOKEN` | RB | carried (M1.16: `docs/runbooks/onboard-a-repo.md`) |
 | GCP budget + alerts | 0028, 0029 | `infra/billing` | TF | not yet carried (M6: Dev → prod releases) |
 | Cloud Run caps, log exclusions, usage alerts | 0028 | `infra/control-plane` | TF | not yet carried (M6: Dev → prod releases) |
 | Cost kill switch (opt-in) | 0028, 0036 | `infra/billing/kill-switch.tf` + workflow YAML | TF | not yet carried (M6: Dev → prod releases) |
@@ -343,7 +348,7 @@ Applies to this repo now (M1.10: Security review automation) and to every manage
 | Piece | Where |
 |---|---|
 | CodeQL (TS + Actions), dependency review, Trivy Terraform scan | `.github/workflows/security-scans.yml` (TruffleHog: `secret-scan.yml`; actionlint: `ci.yml`) |
-| Security-review agent + gate | `.github/workflows/security-review.yml` → shared actions `.github/actions/agent-review-{prepare,finish}` → `scripts/review-gate.mjs` (ADR-0037); rules `platform/procedures/security-review.md` (read from the base branch); Sonnet, max 25 turns; docs-only PRs skip the agent (`scripts/review-scope.mjs`); usage on each comment |
+| Security-review agent + gate | `.github/workflows/security-review.yml` → shared actions `platform/actions/agent-review-{prepare,finish}` → `scripts/review-gate.mjs` (ADR-0037, ADR-0038); rules `platform/procedures/security-review.md` (read from the base branch); Sonnet, max 25 turns; docs-only PRs skip the agent (`scripts/review-scope.mjs`); usage on each comment |
 | Adversarial-review agent | `.github/workflows/adversarial-review.yml`, same actions and gate; rules `platform/procedures/adversarial-review.md`; Sonnet, max 40 turns; later pushes review only new commits + open findings, with owner/collaborator replies as context; `review-accepted` override |
 | System security review | `.github/workflows/system-security-review.yml` (Mondays if anything merged; manual) → calls `terraform-plan.yml` for drift → PR editing `docs/security/threat-model.md`; rules `platform/procedures/threat-model.md` |
 | Override | `security-accepted` label; removed on every push |
@@ -466,10 +471,10 @@ Repo scaffold, contracts package, Terraform for control-plane GCP project (plan 
 | **M1.12: Local quality gates** | Git hooks (commit: format/lint/`terraform fmt`/workflow lint on staged files; push: typecheck + tests) installed by `pnpm install`; Claude Code hook formats and lints edited files (ADR-0027). | S | M0: Foundations | A commit with a lint error is blocked locally; an agent edit is auto-formatted; CI adds actionlint (Andy, 2026-10-28) |
 | **M1.13: GCP cost guardrails** | `infra/billing` root with a $25/month budget and alerts (local plans only); Cloud Run timeout/concurrency set; Cloud Tasks caps when the queue lands; log exclusions; kill switch documented, not built (ADR-0028, ADR-0029). Andy applies. | S | M0: Foundations | Budget visible in Billing with alert thresholds; Andy confirmed as a default alert recipient and Google Cloud mail reaching his inbox (Google has no test-alert feature); kill switch documented and off |
 | **M1.14: Cost kill switch** | Opt-in `kill_switch_enabled` (default off): budget → Pub/Sub at 150% → function scales Cloud Run to zero and pauses any Cloud Tasks queues; never disables billing; re-enable steps in the billing runbook (ADR-0028). Verify the scale-to-zero mechanism first. Raising a Needs-you item is a follow-up once M1.2: Ticket core merges (the budget email covers it until then). | M | M1.13: GCP cost guardrails | With the switch on and a test budget, a budget message takes the service offline; with it off, nothing is deployed |
-| **M1.16: Project baseline v1** | Package every guardrail in §8.1 (ADR-0031): move CI/security workflows to reusable workflows in `platform/workflows/` (scripts and procedures checked out from the pinned SHA) and make this repo call them; `template/` repo files; `platform/baseline/github/` (ruleset, security & analysis, Actions settings, labels) + idempotent apply script with `--dry-run` diff + drift check; runbook "Onboard a repo". Verify reusable-workflow limits (secrets, permissions, nesting) first. | M | M1.10: Security review automation, M1.11: Adversarial PR review, M1.12: Local quality gates | One command brings a scratch repo to the baseline and its test PR shows the same checks as this repo; re-running reports no drift; a setting changed by hand shows up as drift |
+| **M1.16: Project baseline v1** | Package every guardrail in §8.1 (ADR-0031, ADR-0038): move CI/security steps to composite actions in `platform/actions/` (scripts and procedures read from the pinned SHA) and make this repo call them; `template/` repo files + `platform/baseline/manifest.json`; `platform/baseline/github/` (ruleset, security & analysis, Actions settings, labels) + idempotent apply script with `--dry-run` diff + drift check; runbook "Onboard a repo". Verify reusable-workflow limits (secrets, permissions, nesting) first. | M | M1.10: Security review automation, M1.11: Adversarial PR review, M1.12: Local quality gates | One command brings a scratch repo to the baseline and its test PR shows the same checks as this repo; re-running reports no drift; a setting changed by hand shows up as drift |
 | **M1.15: Usage alerts** | Cloud Monitoring alert policies in `infra/control-plane` (email to Andy, address in gitignored tfvars + `TF_VAR_ALERT_EMAIL` Actions secret) on Cloud Run request rate, internet egress, Firestore read/write rate and log ingestion; thresholds well above normal use. Verify current alerting prices first (expected well under $1/month). | S | M1.13: GCP cost guardrails | Each policy visible in Monitoring; a temporarily lowered threshold fires an email within minutes |
 
-Order (Andy, 2026-10-28): M1.12: Local quality gates → M1.10: Security review automation → M1.2: Ticket core ‖ M1.1: MCP OAuth spike (in parallel) → M1.14: Cost kill switch → M1.11: Adversarial PR review → M1.16: Project baseline v1 (before M1.8: Build + gate). M1.10, M1.12, M1.13: GCP cost guardrails and M1.15: Usage alerts are merged.
+Order (Andy, 2026-10-28): M1.12: Local quality gates → M1.10: Security review automation → M1.2: Ticket core ‖ M1.1: MCP OAuth spike (in parallel) → M1.14: Cost kill switch → M1.11: Adversarial PR review → M1.16: Project baseline v1 (before M1.8: Build + gate). M1.2: Ticket core, M1.10, M1.11, M1.12, M1.13: GCP cost guardrails, M1.14: Cost kill switch and M1.15: Usage alerts are merged.
 
 Can run in parallel once M1.2: Ticket core merges:
 - M1.3: UI: tickets + inbox

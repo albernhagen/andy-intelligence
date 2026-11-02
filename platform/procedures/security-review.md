@@ -25,17 +25,17 @@ Also read the ADRs the change touches (`docs/architecture/adr/`) and `AGENTS.md`
 
 ## Checklist
 
-| Area                 | Look for                                                                                                                                                                                                            |
-| -------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Authn/authz          | New routes outside `/api/*` auth; allow-list bypass; token verification changes                                                                                                                                     |
-| IAM                  | Basic roles (`roles/owner`, `roles/editor`, `roles/viewer`), `*Admin` roles, project-level grants where resource-level works, `allUsers`/`allAuthenticatedUsers`, WIF bindings wider than one repo/ref, new SA keys |
-| Secrets              | Credentials, tokens, emails, tfvars or state in the diff; secrets in logs, `workflow_dispatch` inputs, URLs or error messages                                                                                       |
-| Injection            | Command/SQL/NoSQL/template injection; `${{ }}` of untrusted event fields inside `run:`; prompt injection paths into agents                                                                                          |
-| Workflows            | `pull_request_target`, `permissions` wider than needed or missing, unpinned actions (must be a full commit SHA), secrets reachable by forks, `persist-credentials` where a later step runs untrusted code           |
-| Public-repo exposure | Personal data, internal URLs, plan output with values, verbose CI logs                                                                                                                                              |
-| Cost abuse           | Anything that scales or spends without a cap (ADR-0028): instances, queues, jobs, retries, API calls, agent turns                                                                                                   |
-| Review integrity     | Changes to `.github/workflows/*-review.yml`, `.github/actions/agent-review*/`, `scripts/review-gate.mjs`, `scripts/review-scope.mjs` or `platform/procedures/` that weaken a review: at least `medium`              |
-| Threat model         | A new trust boundary, entry point, credential or IAM grant without a `docs/security/threat-model.md` update: `medium`                                                                                               |
+| Area                 | Look for                                                                                                                                                                                                                                |
+| -------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Authn/authz          | New routes outside `/api/*` auth; allow-list bypass; token verification changes                                                                                                                                                         |
+| IAM                  | Basic roles (`roles/owner`, `roles/editor`, `roles/viewer`), `*Admin` roles, project-level grants where resource-level works, `allUsers`/`allAuthenticatedUsers`, WIF bindings wider than one repo/ref, new SA keys                     |
+| Secrets              | Credentials, tokens, emails, tfvars or state in the diff; secrets in logs, `workflow_dispatch` inputs, URLs or error messages                                                                                                           |
+| Injection            | Command/SQL/NoSQL/template injection; `${{ }}` of untrusted event fields inside `run:`; prompt injection paths into agents                                                                                                              |
+| Workflows            | `pull_request_target`, `permissions` wider than needed or missing, unpinned actions (must be a full commit SHA), secrets reachable by forks, `persist-credentials` where a later step runs untrusted code                               |
+| Public-repo exposure | Personal data, internal URLs, plan output with values, verbose CI logs                                                                                                                                                                  |
+| Cost abuse           | Anything that scales or spends without a cap (ADR-0028): instances, queues, jobs, retries, API calls, agent turns                                                                                                                       |
+| Review integrity     | Changes to `.github/workflows/*-review.yml`, `platform/actions/`, `platform/baseline/`, `scripts/review-gate.mjs`, `scripts/review-scope.mjs` or `platform/procedures/` that weaken a review or a baseline guardrail: at least `medium` |
+| Threat model         | A new trust boundary, entry point, credential or IAM grant without a `docs/security/threat-model.md` update: `medium`                                                                                                                   |
 
 ## Severity
 
