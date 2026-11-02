@@ -155,6 +155,12 @@ Temporary progress log until andy-intelligence can track its own work (then migr
 - Demo fixes: `files` puts a `pnpm` shim on PATH when pnpm isn't installed (the clone's lefthook hooks call `pnpm`), and commits with this checkout's git identity (GitHub rejected the global private email, GH007). Andy installed pnpm (Homebrew; it switches to the pinned 10.28.0) and set the noreply address globally.
 - Lessons: ESLint 10 picks up nested `eslint.config.js`, so starter config files end in `.template`; a `\s*$` regex in multiline mode swallowed newlines when pinning.
 
+## 2026-11-02 — M1.16: Project baseline v1 merged; M1.1: MCP OAuth spike started
+
+- Merged: PR #23: Project baseline v1. Tagged `v1.0.0` (managed repos pin the baseline actions to this tag's SHA).
+- Andy applied the 4 repo settings `check` reported as drift: private vulnerability reporting on, SHA pinning required for actions, default workflow token read-only, `security-accepted` label colour and description.
+- Branch `m1.1/mcp-oauth-spike` started.
+
 ## Slices: M1: First end-to-end flow: ticket → PR with Claude
 
 Status: todo / in progress / PR open / merged. Definitions: ARCHITECTURE §12.
@@ -162,7 +168,7 @@ Status: todo / in progress / PR open / merged. Definitions: ARCHITECTURE §12.
 | Slice                                   | Size            | Depends on                                                                                  | Status          |
 | --------------------------------------- | --------------- | ------------------------------------------------------------------------------------------- | --------------- |
 | M1.0: Docs sync                         | S               | M0: Foundations                                                                             | merged (PR #1)  |
-| M1.1: MCP OAuth spike                   | M               | M0: Foundations                                                                             | todo            |
+| M1.1: MCP OAuth spike                   | M               | M0: Foundations                                                                             | in progress     |
 | M1.2: Ticket core                       | M               | M0: Foundations                                                                             | merged (PR #17) |
 | M1.3: UI: tickets + inbox               | M               | M1.2: Ticket core                                                                           | todo            |
 | M1.4: MCP core tools                    | S               | M1.1: MCP OAuth spike, M1.2: Ticket core                                                    | todo            |
@@ -177,7 +183,7 @@ Status: todo / in progress / PR open / merged. Definitions: ARCHITECTURE §12.
 | M1.13: GCP cost guardrails              | S               | M0: Foundations                                                                             | merged (PR #7)  |
 | M1.14: Cost kill switch                 | M               | M1.13: GCP cost guardrails                                                                  | merged (PR #18) |
 | M1.15: Usage alerts                     | S               | M1.13: GCP cost guardrails                                                                  | merged (PR #8)  |
-| M1.16: Project baseline v1              | M               | M1.10: Security review automation, M1.11: Adversarial PR review, M1.12: Local quality gates | PR open         |
+| M1.16: Project baseline v1              | M               | M1.10: Security review automation, M1.11: Adversarial PR review, M1.12: Local quality gates | merged (PR #23) |
 
 **Next (order decided by Andy, 2026-10-28):**
 
@@ -186,7 +192,7 @@ Status: todo / in progress / PR open / merged. Definitions: ARCHITECTURE §12.
 3. M1.2: Ticket core and M1.1: MCP OAuth spike, in parallel.
 4. M1.14: Cost kill switch.
 5. M1.11: Adversarial PR review (merged).
-6. M1.16: Project baseline v1 (PR open; before M1.8: Build + gate).
+6. M1.16: Project baseline v1 (merged, `v1.0.0`).
 
 **Pending decisions (Andy):**
 
