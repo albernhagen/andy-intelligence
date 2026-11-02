@@ -3,7 +3,7 @@ title: andy-intelligence — Architecture & Vision
 status: accepted (v1.x scope)
 owner: Andy
 last_updated: 2026-11-01
-revision: 2026-11-01a (deployment modes and standalone devkit: ADR-0032)
+revision: 2026-11-01b (deployment modes: ADR-0032; context sources: ADR-0033)
 ---
 
 # andy-intelligence — Architecture & Vision
@@ -236,6 +236,17 @@ v1.x screens:
 - **Releases** (dev status, promote to prod, rollback).
 API client generated from OpenAPI.
 
+### 7.6 Context sources (ADR-0033, design after M1: First end-to-end flow)
+Product and domain knowledge for agents, pluggable per project, behind a `ContextSource` port:
+
+| Kind | Example | When |
+|---|---|---|
+| Markdown docs (handwritten or copied-in snapshots) | Product brief, domain glossary, users, business rules, prompts | First (only kind needed now) |
+| MCP servers (read-only, per project) | Notion | Later |
+| Custom skills | A skill bringing its own context or tools | Later |
+
+Scopes: global (Andy's standards) → project → pipeline step. Same sources for the devkit and the control plane (ADR-0032). Context is untrusted data; a project's agents see only its own sources plus global ones; credentials per project, read-only; external calls and sizes capped.
+
 ---
 
 ## 8. Project template (what each managed project gets)
@@ -247,6 +258,7 @@ docs/features.md                  # living catalog of shipped features (updated 
 docs/architecture/overview.md     # current HLD; C4 L1–L2 in Mermaid
 docs/architecture/adr/NNNN-*.md   # MADR, immutable
 docs/agent/*.md                   # shared procedures: size-rubric, build, review, escalation, security
+docs/product/                     # product/domain context sources (§7.6; folder name set in the design)
 docs/security/threat-model.md     # living threat model + open risks (§9.1)
 specs/NNN-name/{design.md, tech-design.md, tasks.md, stories/*.md, mockups/}
 .github/workflows/                # thin callers → platform reusable workflows; CI checks
@@ -463,6 +475,8 @@ After M5: Dev → prod releases: **custom domain** for the control plane (and pe
 
 **Devkit standalone + local mode** (ADR-0032): phase 1 devkit in Claude Code with markdown tickets; phase 2 full control plane locally. Designed after M1: First end-to-end flow.
 
+**Context sources** (ADR-0033, §7.6): `ContextSource` port, project manifest, MCP and skill sources (Notion first, when wanted). Designed after M1: First end-to-end flow.
+
 Prod monitoring agent and alert→ticket flow; write-approval execution; model-based risk scoring; email/Slack digests; transcript storage; BigQuery analytics; promptfoo CI + red-team; Cloud Run Jobs executors; additional harnesses (Antigravity CLI, Codex).
 
 ---
@@ -483,6 +497,7 @@ Remaining:
 9. Claude custom-connector OAuth mechanism currently supported (dynamic client registration vs static client) — **answered by M1.1: MCP OAuth spike**.
 10. Whether the Jules GitHub integration or the Jules REST API should be the dispatch path (REST preferred for run tracking; must support auto-PR creation for the completion signal).
 11. Local mode design (ADR-0032): markdown ticket format, local executor (Claude Code CLI) and its trust boundary, local storage/queue/auth adapters, devkit packaging and versioning. Due after M1: First end-to-end flow.
+12. Context sources design (ADR-0033): folder name and manifest format, step-to-source mapping, `ContextSource` port shape, MCP registration per project. Due after M1: First end-to-end flow.
 
 ---
 

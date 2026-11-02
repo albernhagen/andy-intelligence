@@ -95,6 +95,11 @@ Temporary progress log until andy-intelligence can track its own work (then migr
 - Rule from now on: GCP specifics (runs/config/spend storage, Cloud Tasks, Firebase Auth) go behind ports when first built or touched (affects M1.2: Ticket core, M1.6: Claude Code executor).
 - Detailed design after M1: First end-to-end flow (ARCHITECTURE open question 11).
 
+## 2026-11-01 — Pluggable context sources planned
+
+- **Decided (Andy, ADR-0033: Pluggable context sources):** agents get product/domain context from pluggable sources per project: markdown docs (handwritten or copied in) now; read-only MCP servers (Notion first) and custom skills later. Scopes: global → project → step. No integration built now.
+- Detailed design after M1: First end-to-end flow (ARCHITECTURE open question 12).
+
 ## Slices: M1: First end-to-end flow: ticket → PR with Claude
 
 Status: todo / in progress / PR open / merged. Definitions: ARCHITECTURE §12.
@@ -133,5 +138,6 @@ Status: todo / in progress / PR open / merged. Definitions: ARCHITECTURE §12.
 - First real project to onboard (open question 8); needed by M1.5: GitHub App + project registration.
 - Claude plan and headless billing (open question 5); needed by M1.6: Claude Code executor.
 - Local mode design (open question 11); due after M1: First end-to-end flow.
+- Context sources design (open question 12); due after M1: First end-to-end flow.
 
 **Blocked on Andy:** nothing.
