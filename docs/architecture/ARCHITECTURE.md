@@ -3,7 +3,7 @@ title: andy-intelligence — Architecture & Vision
 status: accepted (v1.x scope)
 owner: Andy
 last_updated: 2026-11-01
-revision: 2026-11-01d (M1.2: Ticket core: stage moves, WorkTracker port, ADR-0034; after 2026-11-01c: M2: Multi-project in parallel, ADR-0035)
+revision: 2026-11-01e (M1.14: Cost kill switch on Cloud Workflows: ADR-0036)
 ---
 
 # andy-intelligence — Architecture & Vision
@@ -302,7 +302,7 @@ Carried by: **RW** = reusable workflow in `platform/workflows/` (projects call i
 | Reviewer token secret | 0030 | `CLAUDE_CODE_OAUTH_TOKEN` | RB | not yet carried (M1.16) |
 | GCP budget + alerts | 0028, 0029 | `infra/billing` | TF | not yet carried (M6: Dev → prod releases) |
 | Cloud Run caps, log exclusions, usage alerts | 0028 | `infra/control-plane` | TF | not yet carried (M6: Dev → prod releases) |
-| Cost kill switch (opt-in) | 0028 | M1.14: Cost kill switch | TF | planned (M6: Dev → prod releases) |
+| Cost kill switch (opt-in) | 0028, 0036 | `infra/billing/kill-switch.tf` + workflow YAML | TF | not yet carried (M6: Dev → prod releases) |
 | Daily Firestore backup (7-day retention) | 0028 | `infra/control-plane` | TF | not yet carried (M6: Dev → prod releases) |
 | Cloud Tasks queue caps (rate, concurrency, retries) | 0028 | `infra/control-plane` | TF | not yet carried (M6: Dev → prod releases) |
 | API request body cap (256 KB) | 0028 | `apps/api/src/app.ts` | — | control plane only (product apps choose their own) |
@@ -364,7 +364,7 @@ Applies to this repo now (M1.10: Security review automation) and to every manage
 | Caps on usage | Cloud Run max instances, timeout, concurrency; Cloud Tasks max rate/concurrency; image cleanup; log retention and exclusions |
 | Budget alerts | Billing budget per GCP project (control plane starts at $25/month); email at 50%, 90%, 100% actual and 100% forecast, to the billing account's admins/users (Google default, no addresses in config) |
 | Usage alerts (M1.15: Usage alerts) | Cloud Monitoring alerts within minutes on Cloud Run request rate, internet egress, Firestore operations and log volume. Budgets lag by hours and nothing in GCP caps egress, Firestore ops or log volume. |
-| Kill switch (opt-in, M1.14: Cost kill switch) | At 150% of budget: scale Cloud Run to zero, pause Cloud Tasks, email Andy (budget alert); a Needs-you item once tickets exist. Never disables billing. Off by default. |
+| Kill switch (opt-in, M1.14: Cost kill switch, ADR-0036) | Budget → Pub/Sub → Eventarc → Cloud Workflow. At 150% of budget: Cloud Run to manual scaling at 0 instances, pause every Cloud Tasks queue, plus a 150% budget email. Never disables billing. `kill_switch_enabled` in `infra/billing`, off by default; Needs-you item after M1.3: UI: tickets + inbox. |
 
 Budgets live in their own Terraform root, `infra/billing`, planned and applied locally by Andy; CI only runs fmt/validate there (ADR-0029). Current caps and manual steps: `docs/runbooks/billing.md`. Model spend caps are separate (§5).
 

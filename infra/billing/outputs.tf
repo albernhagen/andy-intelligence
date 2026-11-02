@@ -7,3 +7,8 @@ output "budget_name" {
 output "budget_amount_usd" {
   value = var.budget_amount_usd
 }
+
+output "kill_switch_topic" {
+  description = "Topic the budget publishes to; publish a fake message here to test the switch (billing runbook §4)."
+  value       = var.kill_switch_enabled ? google_pubsub_topic.budget[0].id : null
+}

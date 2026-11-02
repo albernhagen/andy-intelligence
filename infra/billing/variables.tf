@@ -25,3 +25,32 @@ variable "budget_amount_usd" {
     error_message = "budget_amount_usd must be greater than 0."
   }
 }
+
+variable "region" {
+  type        = string
+  description = "Region of the control-plane Cloud Run service and Cloud Tasks queues."
+  default     = "us-central1"
+}
+
+variable "kill_switch_enabled" {
+  type        = bool
+  description = "Opt-in cost kill switch (ADR-0028): at kill_switch_ratio of the budget, scale the control plane to zero and pause Cloud Tasks queues. Off by default; set it in terraform.tfvars."
+  default     = false
+}
+
+variable "kill_switch_ratio" {
+  type        = number
+  description = "Actual spend / budget at which the kill switch trips (1.5 = 150%)."
+  default     = 1.5
+
+  validation {
+    condition     = var.kill_switch_ratio >= 1
+    error_message = "kill_switch_ratio must be at least 1 (100% of budget)."
+  }
+}
+
+variable "kill_switch_service" {
+  type        = string
+  description = "Cloud Run service the kill switch takes offline."
+  default     = "control-plane"
+}

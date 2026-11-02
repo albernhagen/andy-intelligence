@@ -1,0 +1,66 @@
+# Cost kill switch (ADR-0028). Input: an Eventarc Pub/Sub event carrying a budget notification
+# (https://cloud.google.com/billing/docs/how-to/budgets-programmatic-notifications).
+# Messages arrive several times a day, possibly duplicated or out of order, so every step is
+# safe to repeat. Below the threshold it only returns.
+main:
+  params: [event]
+  steps:
+    - init:
+        assign:
+          - project: ${sys.get_env("PROJECT_ID")}
+          - region: ${sys.get_env("REGION")}
+          - service: ${sys.get_env("SERVICE")}
+          - ratio_limit: ${double(sys.get_env("RATIO"))}
+          - budget: ${json.decode(base64.decode(event.data.message.data))}
+    - check_budget:
+        switch:
+          - condition: ${double(budget.budgetAmount) <= 0}
+            return: "ignored: budget amount is 0"
+          - condition: ${double(budget.costAmount) / double(budget.budgetAmount) < ratio_limit}
+            return: '${"under limit, cost " + string(budget.costAmount) + " of " + string(budget.budgetAmount)}'
+    - log_trip:
+        call: sys.log
+        args:
+          severity: WARNING
+          json:
+            message: "cost kill switch tripped: taking the service offline"
+            costAmount: ${budget.costAmount}
+            budgetAmount: ${budget.budgetAmount}
+            limit: ${ratio_limit}
+            service: ${service}
+    # Manual scaling at 0 instances disables the service (requests fail as unavailable) without
+    # creating a revision. launchStage BETA matches Google's documented manual-scaling call.
+    - stop_service:
+        call: googleapis.run.v2.projects.locations.services.patch
+        args:
+          name: ${"projects/" + project + "/locations/" + region + "/services/" + service}
+          updateMask: launchStage,scaling.scalingMode,scaling.manualInstanceCount
+          body:
+            launchStage: BETA
+            scaling:
+              scalingMode: MANUAL
+              manualInstanceCount: 0
+    - list_queues:
+        call: googleapis.cloudtasks.v2.projects.locations.queues.list
+        args:
+          parent: ${"projects/" + project + "/locations/" + region}
+        result: listed
+    - pause_queues:
+        for:
+          value: queue
+          in: ${default(map.get(listed, "queues"), [])}
+          steps:
+            - pause:
+                call: googleapis.cloudtasks.v2.projects.locations.queues.pause
+                args:
+                  name: ${queue.name}
+    - log_done:
+        call: sys.log
+        args:
+          severity: WARNING
+          json:
+            message: "cost kill switch: service offline, queues paused"
+            service: ${service}
+            queues: ${len(default(map.get(listed, "queues"), []))}
+    - done:
+        return: "tripped: service offline, queues paused"
