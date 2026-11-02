@@ -26,7 +26,7 @@
     },
     "resolved": {
       "type": "array",
-      "description": "Previous findings that no longer hold, each as 'title: why' (fixed in <commit>, or the reply that settled it).",
+      "description": "Previous findings that no longer hold, each as \"title: why\" (fixed in a commit, or the reply that settled it).",
       "items": { "type": "string" }
     }
   },

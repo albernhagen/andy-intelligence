@@ -168,5 +168,10 @@ runs:
           echo "incremental review since $prev"
         fi
 
+        # The schema is passed inside single quotes (--json-schema '...'), so it can't contain one.
+        if grep -q "'" "$SCHEMA"; then
+          echo "::error title=agent-review::$SCHEMA contains a single quote, which breaks --json-schema"
+          exit 1
+        fi
         echo "schema=$(jq -c . "$SCHEMA")" >> "$GITHUB_OUTPUT"
         ls -la .review
