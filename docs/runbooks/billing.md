@@ -50,18 +50,18 @@ Set `budget_amount_usd` in `terraform.tfvars` (or change the default in `variabl
 
 Opt-in (ADR-0028, ADR-0036: Kill switch runs on Cloud Workflows). When actual spend reaches 150% of the budget, a workflow sets the `control-plane` Cloud Run service to manual scaling at 0 instances (requests fail as "Service unavailable") and pauses every Cloud Tasks queue in `us-central1`. It never disables billing. You also get the 150% budget email.
 
-| Piece                                                                                  | Name                      |
-| -------------------------------------------------------------------------------------- | ------------------------- |
-| Pub/Sub topic the budget publishes to (several times a day)                            | `budget-notifications`    |
-| Eventarc trigger → workflow                                                            | `cost-kill-switch` (both) |
-| Identity (custom role: Cloud Run get/update, Cloud Tasks list/pause; actAs runtime SA) | `cost-kill-switch@…`      |
+| Piece                                                                                             | Name                      |
+| ------------------------------------------------------------------------------------------------- | ------------------------- |
+| Pub/Sub topic the budget publishes to (several times a day)                                       | `budget-notifications`    |
+| Eventarc trigger → workflow                                                                       | `cost-kill-switch` (both) |
+| Identity (Cloud Run get/update on `control-plane` only; Cloud Tasks list/pause; actAs runtime SA) | `cost-kill-switch@…`      |
 
 Cost: about $0 (Pub/Sub free tier; Workflows' 5,000 free steps a month, about $0.01 per 1,000 beyond).
 
 ### Turn on
 
 1. Add `kill_switch_enabled = true` to `infra/billing/terraform.tfvars`.
-2. `terraform plan -out=billing.tfplan` → expect about 13 to add (3 APIs, topic + publisher grant, SA, custom role, 3 role grants, actAs grant, workflow, trigger) and 1 in-place change to the budget (`all_updates_rule`, 150% threshold). Then `terraform apply billing.tfplan`.
+2. `terraform plan -out=billing.tfplan` → expect about 15 to add (3 APIs, topic + publisher grant, SA, 2 custom roles, 1 service grant, 3 project grants, actAs grant, workflow, trigger) and 1 in-place change to the budget (`all_updates_rule`, 150% threshold). Then `terraform apply billing.tfplan`. (Applied the switch before the role was narrowed (2026-11-01)? Expect 2 to add, 1 to change: the Cloud Run role moves onto the service.)
 
 ### Test (free; takes the service offline briefly)
 
