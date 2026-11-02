@@ -126,6 +126,12 @@ function filesCommand(repo, ref) {
   const empty =
     run("git", ["-C", dir, "rev-parse", "--verify", "HEAD"], { allowFail: true }).status !== 0;
   const starter = !existsSync(path.join(dir, "package.json"));
+  // Commit as this checkout's identity (e.g. the noreply address set here), not the global one:
+  // GitHub rejects pushes that would publish a private email.
+  for (const key of ["user.name", "user.email"]) {
+    const value = run("git", ["-C", SOURCE_ROOT, "config", key], { allowFail: true }).stdout.trim();
+    if (value) run("git", ["-C", dir, "config", key, value]);
+  }
 
   for (const f of rendered.managed) writeFile(dir, f.path, f.content);
   for (const f of rendered.lines) {
