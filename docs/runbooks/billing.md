@@ -88,6 +88,8 @@ gcloud tasks queues resume run-watchdog --location us-central1
 curl -s https://control-plane-662512537397.us-central1.run.app/health   # {"status":"ok",…}
 ```
 
+For about a minute after `--scaling auto`, requests can return 500 ("try again in 30 seconds") while the service starts; it then returns 200 (seen in the 2026-11-01 demo).
+
 If spend is still over 150%, the next budget message trips the switch again. Raise the budget, set `kill_switch_enabled = false`, or fix the cause first.
 
 ### Turn off
