@@ -1,0 +1,37 @@
+name: Baseline — terraform
+description: >-
+  terraform fmt -check and validate for every root under infra/ (a folder with .tf files, except
+  infra/modules/), using the version in .terraform-version (ADR-0024, project baseline
+  ADR-0031/ADR-0038). Passes with a notice when the repo has no infra/. Run after actions/checkout.
+
+runs:
+  using: composite
+  steps:
+    - id: tf
+      shell: bash
+      run: |
+        if [ ! -d infra ]; then
+          echo "::notice title=terraform::no infra/ folder; nothing to check"
+          echo "skip=true" >> "$GITHUB_OUTPUT"
+          exit 0
+        fi
+        if [ ! -f .terraform-version ]; then
+          echo "::error title=terraform::infra/ exists but .terraform-version is missing (ADR-0024)"
+          exit 1
+        fi
+        echo "version=$(cat .terraform-version)" >> "$GITHUB_OUTPUT"
+    - if: steps.tf.outputs.skip != 'true'
+      uses: hashicorp/setup-terraform@dfe3c3f87815947d99a8997f908cb6525fc44e9e # v4.0.1
+      with:
+        terraform_version: ${{ steps.tf.outputs.version }}
+    - if: steps.tf.outputs.skip != 'true'
+      shell: bash
+      run: terraform fmt -check -recursive infra
+    - name: validate
+      if: steps.tf.outputs.skip != 'true'
+      shell: bash
+      run: |
+        for dir in $(find infra -name '*.tf' -not -path 'infra/modules/*' -not -path '*/.terraform/*' -exec dirname {} \; | sort -u); do
+          terraform -chdir="$dir" init -backend=false -input=false
+          terraform -chdir="$dir" validate
+        done

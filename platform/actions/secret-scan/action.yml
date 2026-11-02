@@ -1,0 +1,11 @@
+name: Baseline — secret scan
+description: >-
+  TruffleHog over the commits in the PR/push range; fails on verified or unverifiable secrets
+  (ADR-0015, project baseline ADR-0031/ADR-0038). Run after actions/checkout with fetch-depth 0.
+
+runs:
+  using: composite
+  steps:
+    - uses: trufflesecurity/trufflehog@e63326d6545de8f425d93ce24078c6e68d83f70e # v3.99.3
+      with:
+        extra_args: --results=verified,unknown

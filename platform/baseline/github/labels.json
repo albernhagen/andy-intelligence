@@ -1,0 +1,12 @@
+[
+  {
+    "name": "security-accepted",
+    "color": "B60205",
+    "description": "Andy accepts the security-review high/critical findings (reason in the PR)"
+  },
+  {
+    "name": "review-accepted",
+    "color": "D93F0B",
+    "description": "Andy accepts the adversarial-review blockers (reason in the PR)"
+  }
+]

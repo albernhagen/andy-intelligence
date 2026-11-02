@@ -1,0 +1,21 @@
+name: Baseline — actionlint
+description: >-
+  Lint GitHub Actions workflows with a checksum-verified actionlint release binary, no third-party
+  action (ADR-0027, project baseline ADR-0031/ADR-0038). Run after actions/checkout.
+
+runs:
+  using: composite
+  steps:
+    - name: install actionlint (checksum-verified release binary)
+      shell: bash
+      env:
+        VERSION: 1.7.12
+        # sha256 of actionlint_${VERSION}_linux_amd64.tar.gz from the release's checksums.txt
+        SHA256: 8aca8db96f1b94770f1b0d72b6dddcb1ebb8123cb3712530b08cc387b349a3d8
+      run: |
+        curl -sSfLo "$RUNNER_TEMP/actionlint.tar.gz" \
+          "https://github.com/rhysd/actionlint/releases/download/v${VERSION}/actionlint_${VERSION}_linux_amd64.tar.gz"
+        echo "${SHA256}  $RUNNER_TEMP/actionlint.tar.gz" | sha256sum -c -
+        tar -xzf "$RUNNER_TEMP/actionlint.tar.gz" -C "$RUNNER_TEMP" actionlint
+    - shell: bash
+      run: '"$RUNNER_TEMP/actionlint" -color'

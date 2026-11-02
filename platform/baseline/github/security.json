@@ -1,0 +1,8 @@
+{
+  "vulnerability_alerts": true,
+  "automated_security_fixes": true,
+  "private_vulnerability_reporting": true,
+  "secret_scanning": "enabled",
+  "secret_scanning_push_protection": "enabled",
+  "code_scanning_default_setup": "not-configured"
+}

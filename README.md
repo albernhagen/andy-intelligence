@@ -54,6 +54,18 @@ Claude Code runs `scripts/format-edited-file.mjs` after each Edit/Write (`.claud
 
 Weekly + manual: `system-security-review.yml` opens a PR updating the threat model. Action pins are commit SHAs, bumped by Dependabot.
 
+The steps behind these checks live in composite actions in `platform/actions/`; the workflows only set triggers, permissions and the job names the `main` ruleset requires (ADR-0038).
+
+### Project baseline (ADR-0031, ADR-0038)
+
+Every repo Andy manages gets the same checks, files and GitHub settings (ARCHITECTURE §8.1). Run from this repo with your `gh` login; never in CI. Steps: [`docs/runbooks/onboard-a-repo.md`](docs/runbooks/onboard-a-repo.md).
+
+```sh
+node platform/baseline/baseline.mjs onboard <owner/repo> --ref v1.0.0   # files + GitHub settings
+node platform/baseline/baseline.mjs apply <owner/repo> --dry-run        # show settings drift
+node platform/baseline/baseline.mjs check <owner/repo>                  # drift report; exit 1 on drift
+```
+
 Run locally (needs a Firebase project for sign-in):
 
 ```sh
@@ -75,9 +87,12 @@ pnpm --filter @andy/web dev          # :5173, proxies /api to :8080
 | `infra/bootstrap`     | One-time GCP bootstrap (state bucket, GitHub OIDC)            |
 | `infra/control-plane` | Control-plane GCP resources                                   |
 | `infra/billing`       | Billing budget, alerts, opt-in kill switch (local plans only) |
-| `scripts`             | Repo tooling (Claude Code format hook, security-review gate)  |
+| `scripts`             | Repo tooling (Claude Code format hook, review gate and scope) |
+| `platform/actions`    | Composite actions behind every required check (baseline)      |
+| `platform/baseline`   | Baseline manifest, GitHub config JSON, `baseline.mjs`         |
 | `platform/procedures` | Agent procedures: `/security-review`, `/threat-model`         |
+| `template`            | Files copied into managed repos (managed, seed, starter)      |
 | `lefthook.yml`        | Git hooks: pre-commit lint/format, pre-push checks            |
 | `firebase.json`       | Firestore emulator config for `pnpm test:firestore`           |
 
-Infra setup: [`docs/runbooks/m0-setup.md`](docs/runbooks/m0-setup.md). Budget and cost caps: [`docs/runbooks/billing.md`](docs/runbooks/billing.md). Security review setup: [`docs/runbooks/security-review.md`](docs/runbooks/security-review.md). Adversarial review: [`docs/runbooks/adversarial-review.md`](docs/runbooks/adversarial-review.md).
+Infra setup: [`docs/runbooks/m0-setup.md`](docs/runbooks/m0-setup.md). Budget and cost caps: [`docs/runbooks/billing.md`](docs/runbooks/billing.md). Security review setup: [`docs/runbooks/security-review.md`](docs/runbooks/security-review.md). Adversarial review: [`docs/runbooks/adversarial-review.md`](docs/runbooks/adversarial-review.md). Onboard a repo: [`docs/runbooks/onboard-a-repo.md`](docs/runbooks/onboard-a-repo.md).

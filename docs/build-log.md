@@ -139,6 +139,22 @@ Temporary progress log until andy-intelligence can track its own work (then migr
 - Branch `m1.11/adversarial-review`: `adversarial-review.yml`, `.github/actions/agent-review-{prepare,finish}`, `scripts/review-gate.mjs` (replaces `security-review-gate.mjs`; scope script renamed to `review-scope.mjs`), procedure + schema, `security-review.yml` moved onto the shared actions, runbook `docs/runbooks/adversarial-review.md`.
 - Verified locally: gate tests (38 in `scripts`), actionlint clean. Not verifiable locally: the agents (this PR's own checks run both), the demo (after merge).
 
+## 2026-11-02 — M1.11: Adversarial PR review merged and demoed; M1.16: Project baseline v1 started
+
+- Merged: PR #21: Adversarial PR review. (PR #20: kill switch plan fix was applied and demoed before it merged; see 2026-11-01.)
+- Demo (PR #22, closed): a planted off-by-one got a `blocker` with a failing scenario (≈ $0.05 API-equivalent). The fix push re-reviewed incrementally (`incremental review since <sha>`) and listed both findings under Resolved. A second planted bug got 2 blockers; `review-accepted` passed the check in ≈ 10 s without running the agent; a new push removed the label and the check failed again. M1.11: Adversarial PR review Done when met.
+- Andy created the `review-accepted` label and added `adversarial-review` to the required checks in `protect-main`.
+- Branch `m1.16/project-baseline` started.
+
+## 2026-11-02 — M1.16: Project baseline v1 built
+
+- **Decided (Andy, ADR-0038: Baseline carried by composite actions):** composite actions in `platform/actions/` instead of reusable workflows (those only run from `.github/workflows/`, rename checks, and can't see their own commit); this repo calls them locally, managed repos pin a SHA; template = managed / seed / starter files listed in `platform/baseline/manifest.json`; GitHub config applied by `baseline.mjs` with Andy's `gh` (never CI); drift: `check` locally, labels + ruleset in the weekly system review; tags `vX.Y.Z`, Dependabot bumps pins; demo on a public scratch repo with no Claude token.
+- Branch `m1.16/project-baseline`: 9 actions; callers keep the 10 required check names (a test compares them with `github/ruleset-main.json`); `template/`; `platform/baseline/{manifest.json,github/*.json,baseline.mjs}` + tests; runbook `docs/runbooks/onboard-a-repo.md`; threat model R5 updated, R10 added.
+- Verified locally: lint, typecheck, tests (scripts project 73); `check albernhagen/andy-intelligence` (read-only) finds real drift: private vulnerability reporting off, SHA pinning not required, default workflow token `write`, `security-accepted` label colour/description (runbook §1 applies them); a rendered starter repo passes `pnpm lint/typecheck/test/build`. Not run here: actionlint (not installed; CI runs it), the composite actions themselves (this PR's checks run them), the scratch-repo demo (Andy, runbook §5).
+- **Demo passed (Andy, 2026-11-02, scratch repo `albernhagen/baseline-scratch`, public, no Claude token):** `onboard --ref origin/m1.16/project-baseline` pushed the files and applied every settings section (`ok`); `CI` passed on `main` with the actions pinned from this repo; test PR #1 there showed the same 10 required checks, all passing, `CLEAN MERGEABLE`, both review agents "not reviewed"; `check` → no drift, exit 0; workflow permissions set to read-and-write by hand → `actions: drift … want "read", have "write"`, exit 1. M1.16: Project baseline v1 Done when met.
+- Demo fixes: `files` puts a `pnpm` shim on PATH when pnpm isn't installed (the clone's lefthook hooks call `pnpm`), and commits with this checkout's git identity (GitHub rejected the global private email, GH007). Andy installed pnpm (Homebrew; it switches to the pinned 10.28.0) and set the noreply address globally.
+- Lessons: ESLint 10 picks up nested `eslint.config.js`, so starter config files end in `.template`; a `\s*$` regex in multiline mode swallowed newlines when pinning.
+
 ## Slices: M1: First end-to-end flow: ticket → PR with Claude
 
 Status: todo / in progress / PR open / merged. Definitions: ARCHITECTURE §12.
@@ -156,12 +172,12 @@ Status: todo / in progress / PR open / merged. Definitions: ARCHITECTURE §12.
 | M1.8: Build + gate                      | M               | M1.7: Refinement, M1.16: Project baseline v1                                                | todo            |
 | M1.9: Quota capture                     | S               | M1.6: Claude Code executor                                                                  | todo            |
 | M1.10: Security review automation       | M               | M0: Foundations                                                                             | merged (PR #10) |
-| M1.11: Adversarial PR review            | M               | M1.10: Security review automation                                                           | PR open         |
+| M1.11: Adversarial PR review            | M               | M1.10: Security review automation                                                           | merged (PR #21) |
 | M1.12: Local quality gates              | S               | M0: Foundations                                                                             | merged (PR #9)  |
 | M1.13: GCP cost guardrails              | S               | M0: Foundations                                                                             | merged (PR #7)  |
 | M1.14: Cost kill switch                 | M               | M1.13: GCP cost guardrails                                                                  | merged (PR #18) |
 | M1.15: Usage alerts                     | S               | M1.13: GCP cost guardrails                                                                  | merged (PR #8)  |
-| M1.16: Project baseline v1              | M               | M1.10: Security review automation, M1.11: Adversarial PR review, M1.12: Local quality gates | todo            |
+| M1.16: Project baseline v1              | M               | M1.10: Security review automation, M1.11: Adversarial PR review, M1.12: Local quality gates | PR open         |
 
 **Next (order decided by Andy, 2026-10-28):**
 
@@ -169,8 +185,8 @@ Status: todo / in progress / PR open / merged. Definitions: ARCHITECTURE §12.
 2. M1.10: Security review automation (merged).
 3. M1.2: Ticket core and M1.1: MCP OAuth spike, in parallel.
 4. M1.14: Cost kill switch.
-5. M1.11: Adversarial PR review.
-6. M1.16: Project baseline v1 (before M1.8: Build + gate).
+5. M1.11: Adversarial PR review (merged).
+6. M1.16: Project baseline v1 (PR open; before M1.8: Build + gate).
 
 **Pending decisions (Andy):**
 

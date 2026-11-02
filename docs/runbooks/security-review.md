@@ -28,6 +28,8 @@ gh label create security-accepted --repo albernhagen/andy-intelligence \
 
 ## 3. Repo settings
 
+Steps 2–4 are now declared in `platform/baseline/github/` and applied with `node platform/baseline/baseline.mjs apply albernhagen/andy-intelligence` (`docs/runbooks/onboard-a-repo.md` §1). The tables below say what they set.
+
 | Where (Settings →)                       | Set                                                                                                                                                 |
 | ---------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Advanced Security                        | Dependency graph **on**; Dependabot alerts **on**; Dependabot security updates **on**; secret scanning + push protection **on** (already, ADR-0015) |

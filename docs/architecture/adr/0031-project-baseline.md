@@ -1,5 +1,5 @@
 ---
-status: accepted
+status: accepted (workflows row superseded by 0038)
 date: 2026-10-28
 ---
 
