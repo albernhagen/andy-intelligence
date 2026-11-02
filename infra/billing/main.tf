@@ -67,13 +67,15 @@ resource "google_billing_budget" "control_plane" {
   threshold_rules {
     threshold_percent = 1.0
   }
-  threshold_rules {
-    threshold_percent = 1.0
-    spend_basis       = "FORECASTED_SPEND"
-  }
   # Email at the kill switch's default limit too, whether or not the switch is on.
   threshold_rules {
     threshold_percent = 1.5
+  }
+  # Keep this order: the API returns actual-spend rules before forecast ones, and a different
+  # order here shows a swap on every plan.
+  threshold_rules {
+    threshold_percent = 1.0
+    spend_basis       = "FORECASTED_SPEND"
   }
 
   # Threshold emails go to Google's default recipients (the billing account's Billing Account

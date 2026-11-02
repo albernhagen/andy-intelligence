@@ -75,12 +75,14 @@ resource "google_project_iam_custom_role" "kill_switch_project" {
   ]
 }
 
+# Static keys: for_each keys must be known at plan time, and the custom role's name isn't
+# until it exists.
 resource "google_project_iam_member" "kill_switch" {
-  for_each = var.kill_switch_enabled ? toset([
-    google_project_iam_custom_role.kill_switch_project[0].name,
-    "roles/workflows.invoker", # the Eventarc trigger starts the workflow as this SA
-    "roles/logging.logWriter",
-  ]) : toset([])
+  for_each = var.kill_switch_enabled ? {
+    queues_and_operations = google_project_iam_custom_role.kill_switch_project[0].name
+    workflows_invoker     = "roles/workflows.invoker" # the Eventarc trigger starts the workflow as this SA
+    log_writer            = "roles/logging.logWriter"
+  } : {}
   project = var.project_id
   role    = each.value
   member  = "serviceAccount:${google_service_account.kill_switch[0].email}"
