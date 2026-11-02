@@ -169,9 +169,37 @@ describe("ticket API", () => {
     const res = await call("POST", `/api/projects/ai/tickets/${t.id}/comments`, { body: "hi" });
     expect(res.status).toBe(201);
     expect(res.json).toMatchObject({ kind: "comment", actor: "andy", body: "hi" });
-    expect((await call("GET", "/api/projects/ai/tickets/nope")).status).toBe(404);
-    expect((await call("GET", "/api/projects/ai/tickets/nope/events")).status).toBe(404);
-    expect((await call("POST", "/api/questions/nope/answer", { answer: "x" })).status).toBe(404);
+    const unknown = crypto.randomUUID();
+    expect((await call("GET", `/api/projects/ai/tickets/${unknown}`)).status).toBe(404);
+    expect((await call("GET", `/api/projects/ai/tickets/${unknown}/events`)).status).toBe(404);
+    expect((await call("POST", `/api/questions/${unknown}/answer`, { answer: "x" })).status).toBe(
+      404,
+    );
+  });
+
+  it("GivenMalformedIds_WhenCalled_Then400NotAStorageError", async () => {
+    await call("POST", "/api/projects", { name: "AI", key: "AI" });
+    for (const path of [
+      "/api/projects/__x__",
+      "/api/projects/ai/tickets/a.b",
+      "/api/projects/ai/tickets/__x__/events",
+      "/api/projects/AI/tickets",
+    ]) {
+      expect((await call("GET", path)).status, path).toBe(400);
+    }
+    expect((await call("POST", "/api/questions/__x__/answer", { answer: "x" })).status).toBe(400);
+  });
+
+  it("GivenAClientSuppliedVia_WhenAnswering_ThenTheRouteSetsUi", async () => {
+    const t = await projectWithTicket();
+    const { json } = await call("POST", `/api/projects/ai/tickets/${t.id}/questions`, {
+      text: "?",
+    });
+    const answered = await call("POST", `/api/questions/${String(json.id)}/answer`, {
+      answer: "a",
+      via: "mcp",
+    });
+    expect(answered.json.answeredVia).toBe("ui");
   });
 
   it("GivenAnOversizedBody_WhenPosted_Then413", async () => {

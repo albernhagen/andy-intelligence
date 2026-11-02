@@ -1,6 +1,5 @@
 import { createRoute, z, type OpenAPIHono } from "@hono/zod-openapi";
 import {
-  AnsweredVia,
   NewProject,
   NewQuestion,
   NewTicket,
@@ -33,9 +32,11 @@ const body = <S extends z.ZodType>(schema: S) => ({
   body: { content: { "application/json": { schema } }, required: true },
 });
 
-const ProjectParams = z.object({ projectId: z.string().min(1) });
-const TicketParams = ProjectParams.extend({ ticketId: z.string().min(1) });
-const QuestionParams = z.object({ questionId: z.string().min(1) });
+// Ids are checked before they reach storage paths: a project id is its lowercased key,
+// ticket and question ids are UUIDs. Anything else is a 400, never a storage error.
+const ProjectParams = z.object({ projectId: z.string().regex(/^[a-z][a-z0-9]{0,9}$/) });
+const TicketParams = ProjectParams.extend({ ticketId: z.uuid() });
+const QuestionParams = z.object({ questionId: z.uuid() });
 
 /** Callers can't set derived fields; the domain computes them. */
 const CreateTicket = NewTicket.omit({ dorStatus: true, needsYou: true });
@@ -48,7 +49,7 @@ const MoveStage = z.object({
   reason: z.string().nullable().default(null),
 });
 const Comment = z.object({ body: z.string().min(1) });
-const Answer = z.object({ answer: z.string().min(1), via: AnsweredVia.default("ui") });
+const Answer = z.object({ answer: z.string().min(1) });
 const Readiness = z.object({ met: z.boolean(), missing: z.array(z.string()) });
 const NeedsYou = z.object({ questions: z.array(Question), tickets: z.array(Ticket) });
 const TicketQuery = z.object({
@@ -244,8 +245,10 @@ export function registerTicketRoutes(
   });
 
   app.openapi(routes.answerQuestion, async (c) => {
-    const { answer, via } = c.req.valid("json");
-    return c.json(await service.answer(c.req.valid("param").questionId, answer, via, "andy"), 200);
+    // The channel is set by the route, not the caller, so history can't claim a channel the
+    // request didn't use. MCP tools (M1.4) answer with "mcp".
+    const { answer } = c.req.valid("json");
+    return c.json(await service.answer(c.req.valid("param").questionId, answer, "ui", "andy"), 200);
   });
 
   app.openapi(routes.needsYou, async (c) => c.json(await service.needsYou(), 200));
