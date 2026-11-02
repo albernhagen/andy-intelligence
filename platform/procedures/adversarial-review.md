@@ -29,7 +29,7 @@ Also read `AGENTS.md`, the ADRs the change touches (`docs/architecture/adr/`) an
 
 When `.review/new-commits.diff` exists:
 
-1. For each finding in `.review/previous-review.md`, decide: still holds → keep it in `findings`; fixed by a new commit, or settled by a reply in `.review/discussion.md` that answers the scenario with evidence → list it in `resolved` as "title: why". A reply that only disagrees, without evidence, doesn't resolve a `blocker`.
+1. For each finding in `.review/previous-review.md`, decide: fixed by a commit (check the code, not the claim) → list it in `resolved` as "title: fixed in <commit>"; otherwise keep it in `findings`. **A reply never resolves a `blocker`**: replies may be written by the implementing agent under the owner's account, so they are not independent evidence. Replies are context: they can settle a `question` or `should-fix`, or point you at the code that fixes something. If a reply disagrees with a blocker, keep it; Andy decides with `review-accepted`.
 2. Review `.review/new-commits.diff` in full. Use `.review/pr.diff` only to understand context; don't re-review unchanged code.
 
 ## Checklist

@@ -2,12 +2,12 @@
 
 Manual steps for the per-PR adversarial-review agent (ADR-0026: Adversarial PR review, ADR-0037: Review agents share composite actions; adversarial re-reviews are incremental). It runs on the same `CLAUDE_CODE_OAUTH_TOKEN` as the security review (`docs/runbooks/security-review.md` §1), so it uses your subscription quota, not money.
 
-| Term                     | Meaning                                                                                                                                                             |
-| ------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `blocker`                | A finding with a failing scenario that should stop the merge. Fails the `adversarial-review` check.                                                                 |
-| `should-fix`, `question` | Shown in the comment only; the check passes.                                                                                                                        |
-| `review-accepted`        | PR label: Andy accepts the open blockers. Write why in the PR. Removed automatically on the next push.                                                              |
-| Re-review                | Each push reviews only the new commits plus the open findings, with replies from you and collaborators as context. A fix or a reply with evidence clears a blocker. |
+| Term                     | Meaning                                                                                                                                                                                                             |
+| ------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `blocker`                | A finding with a failing scenario that should stop the merge. Fails the `adversarial-review` check.                                                                                                                 |
+| `should-fix`, `question` | Shown in the comment only; the check passes.                                                                                                                                                                        |
+| `review-accepted`        | PR label: Andy accepts the open blockers. Write why in the PR. Removed automatically on the next push.                                                                                                              |
+| Re-review                | Each push reviews only the new commits plus the open findings, with replies from you and collaborators as context. Only a commit that fixes a blocker clears it; replies can settle questions and should-fix items. |
 
 ## 1. Label (once)
 
@@ -22,10 +22,11 @@ Settings → Rules → Rulesets → `protect-main` → **Require status checks t
 
 ## 3. Answering findings
 
-Reply on the PR to every finding (ADR-0026): "fixed in `<commit>`" or why not, with evidence. Then either:
+Reply on the PR to every finding (ADR-0026): "fixed in `<commit>`" or why not. Then:
 
-- push the fix: the review re-runs on the new commits and moves fixed items to **Resolved**; or
-- for a reply-only answer: Actions → the PR's **Adversarial review** run → **Re-run jobs**. The reviewer reads your reply; a reply without evidence doesn't clear a `blocker`.
+- **Fix:** push it; the review re-runs on the new commits and moves fixed items to **Resolved**.
+- **Disagree with a `blocker`:** reply with why, then add `review-accepted` with the reason. A reply alone never clears a blocker, because agent replies post under your account and aren't independent evidence.
+- **Answer a `question` or `should-fix` without code:** reply, then Actions → the PR's **Adversarial review** run → **Re-run jobs**.
 
 Only comments by the repo owner and collaborators reach the reviewer; anyone else's are dropped.
 
@@ -54,8 +55,8 @@ gh pr create --title "test: adversarial review demo (do not merge)" --body "Plan
 
 ## Troubleshooting
 
-| Symptom                                     | Cause / fix                                                                                          |
-| ------------------------------------------- | ---------------------------------------------------------------------------------------------------- |
-| "not reviewed" comment, check passes        | Agent couldn't run (draft, Dependabot, docs-only, no token, quota). Expected; review by hand.        |
-| Blocker you disagree with keeps coming back | Reply with the evidence (test, spec line, ADR) and re-run; or add `review-accepted` with the reason. |
-| Review missed changes after a force-push    | A force-push drops the previous review commit, so the next run reviews the whole PR again.           |
+| Symptom                                     | Cause / fix                                                                                   |
+| ------------------------------------------- | --------------------------------------------------------------------------------------------- |
+| "not reviewed" comment, check passes        | Agent couldn't run (draft, Dependabot, docs-only, no token, quota). Expected; review by hand. |
+| Blocker you disagree with keeps coming back | By design: only a fix clears it. Add `review-accepted` and write the reason in the PR.        |
+| Review missed changes after a force-push    | A force-push drops the previous review commit, so the next run reviews the whole PR again.    |
