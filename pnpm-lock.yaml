@@ -38,6 +38,15 @@ importers:
       '@andy/contracts':
         specifier: workspace:*
         version: link:../../packages/contracts
+      '@andy/domain':
+        specifier: workspace:*
+        version: link:../../packages/domain
+      '@andy/store':
+        specifier: workspace:*
+        version: link:../../packages/store
+      '@google-cloud/firestore':
+        specifier: ^9.3.1
+        version: 9.3.1
       '@hono/node-server':
         specifier: ^2.1.5
         version: 2.1.5(hono@4.13.13)
@@ -118,6 +127,12 @@ importers:
       zod:
         specifier: ^4.6.7
         version: 4.6.7
+
+  packages/domain:
+    dependencies:
+      '@andy/contracts':
+        specifier: workspace:*
+        version: link:../contracts
 
   packages/store:
     dependencies:

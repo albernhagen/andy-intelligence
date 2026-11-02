@@ -3,7 +3,7 @@ title: andy-intelligence — Architecture & Vision
 status: accepted (v1.x scope)
 owner: Andy
 last_updated: 2026-11-01
-revision: 2026-11-01b (deployment modes: ADR-0032; context sources: ADR-0033)
+revision: 2026-11-01c (M1.2: Ticket core: stage moves, WorkTracker port, ADR-0034)
 ---
 
 # andy-intelligence — Architecture & Vision
@@ -89,15 +89,19 @@ Enterprise-shaped (durable state, policy, gates, least privilege, audit, contrac
 | **Monitoring** | CI deploys to dev; verification (smoke/e2e + verification agent) runs; Andy promotes to prod when ready | Dev verification passed (and, if released, prod deploy succeeded) |
 | **Done** | Summary included in rollups | — |
 
+**Stage moves** (`packages/domain`): forward one step, plus back for re-refine (ready → backlog), retry (in progress → ready) and rework (ready for review or monitoring → in progress). Backlog → ready requires the DoR. Andy can force any move with a reason; it is recorded in the ticket's history. Agents and the system can't force.
+
 **Needs-you is a flag, not a stage.** Flagged items stay in their stage and appear in the Needs-you inbox (UI + MCP).
 
 ### 4.2 Definition of Ready (story)
 - Problem/intent stated; acceptance criteria in **EARS** form ("WHEN … THE SYSTEM SHALL …").
-- Size tagged S/M/L with one-line justification (rubric in `docs/agent/size-rubric.md`).
+- Size tagged S/M/L with one-line justification (`sizeReason`) (rubric in `docs/agent/size-rubric.md`).
 - Dependencies declared (ticket "blocked by" links).
 - Tier assigned (default from policy, or override).
 - **No open questions.** Assumptions listed explicitly.
 - Per-project policy may allow "proceed on documented assumptions" for S tasks only; default is **require Andy's answers**.
+- **Epics** need only a stated intent and no open questions (no criteria, size or tier).
+- Checked in `packages/domain` (`checkDor`); `dorStatus` is computed on every change, never set by callers. EARS = any criterion containing "THE SYSTEM SHALL".
 
 ### 4.3 Refinement and questions
 - Every story receives a refinement pass: the agent drafts the story, lists assumptions, and asks **1–5 targeted questions** (highest-impact ambiguities first; multiple choice with a suggested default where possible).
@@ -129,14 +133,14 @@ Enterprise-shaped (durable state, policy, gates, least privilege, audit, contrac
 
 ## 5. Domain model (Firestore documents)
 
-All records carry `project_id` where applicable. Documents are validated with the Zod schemas in `packages/contracts` on every read and write; tickets and their events nest under their project (`projects/{p}/tickets/{t}/events/{e}`).
+All records carry `project_id` where applicable. Documents are validated with the Zod schemas in `packages/contracts` on every read and write; tickets and their events nest under their project (`projects/{p}/tickets/{t}/events/{e}`). Ticket numbers come from a per-project counter (`counters/tickets-{p}`) in the same transaction as the ticket. Queries use equality filters only (no composite indexes); results are sorted in memory.
 
 **Rollups** (cost per ticket/epic/model/provider) are **computed on read with Firestore aggregation queries** in v1.x — no denormalized counters to keep consistent. Revisit only if reads get measurably slow.
 
 | Entity | Key fields |
 |---|---|
 | **Project** | name, repos, GCP dev/prod project IDs, policy overrides, budget allocation, autonomy level, enabled |
-| **Ticket** (system of record) | key (e.g. `AI-42`), title, body, acceptance criteria (EARS), assumptions, type (epic/story/task/bug), parent, stage, size, tier, overrides (assignee agent/me, tier, model pin, autonomy, target env), needs_you, DoR status, rank, blocked_by (ticket ids) |
+| **Ticket** (system of record) | key (e.g. `AI-42`), title, body, acceptance criteria (EARS), assumptions, type (epic/story/task/bug), parent, stage, size, size reason, tier, overrides (assignee agent/me, tier, model pin, autonomy, target env), needs_you, DoR status, rank, blocked_by (ticket ids) |
 | **TicketEvent** | ticket, kind (comment / stage_change / field_change / run_linked / pr_linked …), actor (andy / agent:<run> / system), body/diff, timestamp — the ticket's full history |
 | **Question** | ticket, text, options, suggested_answer, assumptions, urgency, status, answer, answered_via, timestamps |
 | **Run** | ticket, step (refine/plan/build/review/verify/scout), harness, provider, model, tier, status, started/ended, deadline, tokens, cost_usd (actual or API-equivalent estimate), quota snapshot, links (Action run, Jules session, PR), executor identity (e.g. Actions `run_id` + workflow ref, Jules session id) used to authenticate/correlate completion signals, **outcome** (merged_clean / reworked / reverted / failed), would_auto_merge |
@@ -167,11 +171,11 @@ Missing or stale quota reading ⇒ treat as **unknown**: warn in UI, prefer next
 
 ## 6. Ports (contracts) and adapters
 
-Contracts are defined in `packages/contracts` (Zod schemas + TypeScript interfaces; OpenAPI generated for the API). **Every port has an in-memory fake and a shared contract test suite that every adapter, including the fake, must pass** (ADR-0012 rejected a narrower scope; see ADR-0023). A port's fake and suite land in the slice that first uses or adapts that port — before its first real adapter.
+Contracts are defined in `packages/contracts` (Zod schemas + TypeScript interfaces; OpenAPI generated for the API). **Every port has an in-memory fake and a shared contract test suite that every adapter, including the fake, must pass** (ADR-0012 rejected a narrower scope; see ADR-0023). CI runs suites on the fakes; suites that need an emulator (Firestore) run locally on demand (`pnpm test:firestore`, ADR-0034). A port's fake and suite land in the slice that first uses or adapts that port — before its first real adapter.
 
 | Port | Domain concepts | v1.x adapters | Later |
 |---|---|---|---|
-| `WorkTracker` | Ticket, Stage, Field, Comment, Child, Dependency | **Native (Firestore)** | GitHub Issues, Linear (mirror/export) |
+| `WorkTracker` | Project, Ticket, TicketEvent (history), Question; every write appends its event atomically | **Native (Firestore)** | Markdown in repo (ADR-0032), GitHub Issues, Linear (mirror/export) |
 | `CodeHost` | Repo, PullRequest, CheckRun, Merge | GitHub App (REST + webhooks) | — |
 | `Executor` | RunRequest, RunStatus, RunResult, CompletionSignal, Artifact links | **Claude Code via Actions**, **Jules REST API**, **OpenCode via Actions** | Cloud Run Jobs, Agent SDK, Replicas |
 | `ModelGateway` | Completion, Usage, Cost | OpenRouter (direct single-call steps) | LiteLLM, direct providers |
@@ -299,6 +303,9 @@ Carried by: **RW** = reusable workflow in `platform/workflows/` (projects call i
 | GCP budget + alerts | 0028, 0029 | `infra/billing` | TF | not yet carried (M5: Dev → prod releases) |
 | Cloud Run caps, log exclusions, usage alerts | 0028 | `infra/control-plane` | TF | not yet carried (M5: Dev → prod releases) |
 | Cost kill switch (opt-in) | 0028 | M1.14: Cost kill switch | TF | planned (M5: Dev → prod releases) |
+| Daily Firestore backup (7-day retention) | 0028 | `infra/control-plane` | TF | not yet carried (M5: Dev → prod releases) |
+| Cloud Tasks queue caps (rate, concurrency, retries) | 0028 | `infra/control-plane` | TF | not yet carried (M5: Dev → prod releases) |
+| API request body cap (256 KB) | 0028 | `apps/api/src/app.ts` | — | control plane only (product apps choose their own) |
 
 
 ---
@@ -373,7 +380,7 @@ Budgets live in their own Terraform root, `infra/billing`, planned and applied l
 Hooks install with `pnpm install` (root `prepare` script; skipped when there is no `.git`, e.g. the Docker build) and use the same tools and config as CI. actionlint is skipped locally if not installed (`brew install actionlint`); CI always runs it. `--no-verify` is for emergencies only.
 
 ### 10.3 Data
-- **Backups:** Firestore is the only copy of tickets, so daily Firestore scheduled backups (short retention; pennies at this size) ship in M1: First end-to-end flow. Optional BigQuery export for ad-hoc analytics later.
+- **Backups:** Firestore is the only copy of tickets, so a daily Firestore backup schedule with 7-day retention (`infra/control-plane`, M1.2: Ticket core; pennies at this size). Optional BigQuery export for ad-hoc analytics later.
 
 ---
 

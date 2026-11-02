@@ -1,5 +1,6 @@
 import { serve } from "@hono/node-server";
 import { serveStatic } from "@hono/node-server/serve-static";
+import { FirestoreWorkTracker, createFirestore } from "@andy/store";
 import { createApp } from "./app";
 import { parseAllowList } from "./auth";
 import { firebaseVerifier } from "./firebase";
@@ -24,6 +25,7 @@ async function main() {
       firebaseAuthDomain: requireEnv("FIREBASE_AUTH_DOMAIN"),
       projectId,
     },
+    tracker: new FirestoreWorkTracker(createFirestore(projectId)),
   });
 
   // SPA: serve built web assets; unknown non-API paths fall back to index.html.

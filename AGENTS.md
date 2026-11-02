@@ -31,7 +31,7 @@ If code and ARCHITECTURE.md disagree, ask which is wrong — don't silently "fix
 
 ## Engineering
 
-- Contract-first: Zod schemas + port interfaces in `packages/contracts` before adapters; every port has a fake and a contract suite (ADR-0023). No vendor terms in the domain.
+- Contract-first: Zod schemas + port interfaces in `packages/contracts` before adapters; every port has a fake and a contract suite (ADR-0023). CI runs suites on fakes; emulator-backed suites run locally (`pnpm test:firestore`) when the adapter changes (ADR-0034). No vendor terms in the domain. Ticket rules live in `packages/domain`.
 - Keep GCP specifics (storage for runs/config/spend, Cloud Tasks, Firebase Auth) behind ports so a later `local` mode only adds adapters; skill substance lives in vendor-neutral procedure docs (ADR-0032: Deployment modes and a standalone devkit).
 - Terraform: use the version in `.terraform-version` (install with `tenv`); commit `.terraform.lock.hcl` (ADR-0024).
 - Domain logic needs tests. `pnpm lint && pnpm typecheck && pnpm test && pnpm build` must pass before opening a PR. Git hooks (lefthook, installed by `pnpm install`) run lint/format on commit and typecheck/tests on push; a Claude Code hook formats each file you edit (ADR-0027). Don't bypass them with `--no-verify`.

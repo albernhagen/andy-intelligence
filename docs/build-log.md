@@ -100,6 +100,14 @@ Temporary progress log until andy-intelligence can track its own work (then migr
 - **Decided (Andy, ADR-0033: Pluggable context sources):** agents get product/domain context from pluggable sources per project: markdown docs (handwritten or copied in) now; read-only MCP servers (Notion first) and custom skills later. Scopes: global → project → step. No integration built now.
 - Detailed design after M1: First end-to-end flow (ARCHITECTURE open question 12).
 
+## 2026-11-01 — PR #14 and PR #15 merged; M1.2: Ticket core built
+
+- Merged: PR #14: Project baseline, deployment modes, context sources plan (ADR-0031, ADR-0032, ADR-0033); PR #15: format system-review threat-model edits.
+- **Decided (Andy):** Andy can force any stage move with a reason (recorded in history; agents can't); Firestore backups kept 7 days; epics need only intent + no open questions; Firestore adapter suite runs locally only, not in CI (ADR-0034: Contract suites that need an emulator run locally).
+- Branch `m1.2/ticket-core`: `WorkTracker` port reshaped around Project/Ticket/TicketEvent/Question (every write appends its event atomically) + fake + contract suite; `packages/domain` (stage moves, Definition of Ready, Needs-you); `FirestoreWorkTracker`; ticket REST API (`/api/projects…`, `/api/needs-you`, 256 KB body cap); Terraform: Cloud Tasks `run-watchdog` queue (capped), `tasks-invoker` SA, daily Firestore backup. Runbook `docs/runbooks/ticket-core.md`.
+- Verified locally: lint, typecheck, 83 tests, build; Trivy clean. Not run here: `terraform validate` (no registry access; CI runs it) and `pnpm test:firestore` (no Java; Andy runs it).
+- Open on `main`: Dependabot alerts for `@grpc/grpc-js` (high, low; via `firebase` web SDK), `glob`, `minimatch` (medium); no fix PRs yet.
+
 ## Slices: M1: First end-to-end flow: ticket → PR with Claude
 
 Status: todo / in progress / PR open / merged. Definitions: ARCHITECTURE §12.
@@ -108,7 +116,7 @@ Status: todo / in progress / PR open / merged. Definitions: ARCHITECTURE §12.
 | --------------------------------------- | --------------- | ------------------------------------------------------------------------------------------- | --------------- |
 | M1.0: Docs sync                         | S               | M0: Foundations                                                                             | merged (PR #1)  |
 | M1.1: MCP OAuth spike                   | M               | M0: Foundations                                                                             | todo            |
-| M1.2: Ticket core                       | M               | M0: Foundations                                                                             | todo            |
+| M1.2: Ticket core                       | M               | M0: Foundations                                                                             | PR open         |
 | M1.3: UI: tickets + inbox               | M               | M1.2: Ticket core                                                                           | todo            |
 | M1.4: MCP core tools                    | S               | M1.1: MCP OAuth spike, M1.2: Ticket core                                                    | todo            |
 | M1.5: GitHub App + project registration | M               | M1.2: Ticket core                                                                           | todo            |

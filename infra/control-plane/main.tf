@@ -49,6 +49,7 @@ locals {
 resource "google_project_service" "apis" {
   for_each = toset([
     "artifactregistry.googleapis.com",
+    "cloudtasks.googleapis.com", # run watchdog queue (M1.2: Ticket core)
     "cloudtrace.googleapis.com",
     "firebase.googleapis.com",
     "firebaserules.googleapis.com",
@@ -152,6 +153,13 @@ resource "google_firestore_database" "default" {
   delete_protection_state = "DELETE_PROTECTION_ENABLED"
   deletion_policy         = "ABANDON"
   depends_on              = [google_project_service.apis]
+}
+
+# Daily backups kept 7 days (Andy, 2026-11-01). Restore: docs/runbooks/m0-setup.md.
+resource "google_firestore_backup_schedule" "daily" {
+  database  = google_firestore_database.default.name
+  retention = "604800s"
+  daily_recurrence {}
 }
 
 # Server-only access: the Firebase web config is public, so client SDKs must be denied.
@@ -414,3 +422,48 @@ resource "google_monitoring_alert_policy" "usage" {
   depends_on = [google_project_service.apis]
 }
 
+
+# ── Run watchdog queue (ARCHITECTURE §7.1; used from M1.6: Claude Code executor) ──
+# One task per dispatched run, delivered at the run's deadline. Capped (ADR-0028): a bug
+# that enqueues in a loop can't fan out into unbounded Cloud Run requests.
+
+resource "google_cloud_tasks_queue" "run_watchdog" {
+  name     = "run-watchdog"
+  location = var.region
+
+  rate_limits {
+    max_dispatches_per_second = 5
+    max_concurrent_dispatches = 5
+  }
+
+  retry_config {
+    max_attempts       = 3
+    min_backoff        = "10s"
+    max_backoff        = "300s"
+    max_retry_duration = "3600s"
+  }
+
+  depends_on = [google_project_service.apis]
+}
+
+# Identity whose OIDC token Cloud Tasks attaches to each delivery; the API checks the token's
+# email and audience. It has no roles: it only proves "this call came from our queue".
+resource "google_service_account" "tasks_invoker" {
+  account_id   = "tasks-invoker"
+  display_name = "Cloud Tasks invoker (run watchdog)"
+}
+
+# The runtime enqueues watchdog tasks on this queue only...
+resource "google_cloud_tasks_queue_iam_member" "runtime_enqueues" {
+  name     = google_cloud_tasks_queue.run_watchdog.name
+  location = google_cloud_tasks_queue.run_watchdog.location
+  role     = "roles/cloudtasks.enqueuer"
+  member   = "serviceAccount:${google_service_account.runtime.email}"
+}
+
+# ...and may name the invoker SA as the tasks' identity (actAs on that one SA).
+resource "google_service_account_iam_member" "runtime_acts_as_invoker" {
+  service_account_id = google_service_account.tasks_invoker.name
+  role               = "roles/iam.serviceAccountUser"
+  member             = "serviceAccount:${google_service_account.runtime.email}"
+}

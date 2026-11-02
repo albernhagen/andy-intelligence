@@ -46,6 +46,7 @@ export const TicketOverrides = z.object({
 export type TicketOverrides = z.infer<typeof TicketOverrides>;
 
 export const DorStatus = z.enum(["not_met", "met"]);
+export type DorStatus = z.infer<typeof DorStatus>;
 
 /** e.g. "AI-42": project key + per-project number. */
 export const TicketKey = z.string().regex(/^[A-Z][A-Z0-9]{0,9}-\d+$/);
@@ -66,6 +67,8 @@ export const Ticket = z.object({
   stage: Stage,
   rank: z.string().min(1),
   size: Size.nullable(),
+  /** One-line justification for the size (Definition of Ready, ARCHITECTURE §4.2). */
+  sizeReason: z.string().nullable(),
   tier: TierKey.nullable(),
   overrides: TicketOverrides,
   needsYou: z.boolean(),
@@ -86,13 +89,18 @@ export const TicketEventKind = z.enum([
   "run_linked",
   "pr_linked",
 ]);
+export type TicketEventKind = z.infer<typeof TicketEventKind>;
+
+/** Who did it: "andy" | "system" | "agent:<runId>". */
+export const EventActor = z.string().regex(/^(andy|system|agent:.+)$/);
+export type EventActor = z.infer<typeof EventActor>;
 
 /** Append-only ticket history. actor: "andy" | "system" | "agent:<runId>". */
 export const TicketEvent = z.object({
   id: Id,
   ticketId: Id,
   kind: TicketEventKind,
-  actor: z.string().regex(/^(andy|system|agent:.+)$/),
+  actor: EventActor,
   runId: Id.nullable(),
   body: z.string().nullable(),
   data: z.record(z.string(), z.unknown()),
@@ -101,7 +109,9 @@ export const TicketEvent = z.object({
 export type TicketEvent = z.infer<typeof TicketEvent>;
 
 export const QuestionStatus = z.enum(["open", "answered", "withdrawn"]);
+export type QuestionStatus = z.infer<typeof QuestionStatus>;
 export const AnsweredVia = z.enum(["ui", "mcp"]);
+export type AnsweredVia = z.infer<typeof AnsweredVia>;
 
 export const Question = z.object({
   id: Id,

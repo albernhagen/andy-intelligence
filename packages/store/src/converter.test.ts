@@ -16,6 +16,7 @@ const ticket: Ticket = {
   stage: "backlog",
   rank: "a0",
   size: null,
+  sizeReason: null,
   tier: null,
   overrides: {},
   needsYou: false,
