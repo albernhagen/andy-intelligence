@@ -1,13 +1,22 @@
 import { z } from "zod";
 import {
+  DorStatus,
+  EventActor,
+  Id,
+  Project,
   ProviderKey,
+  Question,
+  QuestionStatus,
   QuotaReading,
   Route,
   RunStatus,
   RunStep,
   Stage,
-  TicketType,
+  Ticket,
+  Timestamp,
   Urgency,
+  type AnsweredVia,
+  type TicketEvent,
 } from "../entities";
 
 /**
@@ -17,35 +26,131 @@ import {
  */
 
 // ── WorkTracker ──────────────────────────────────────────────────────────────
+// System of record for work (ADR-0016): projects, tickets, their history and questions.
+// Storage only: stage rules and the Definition of Ready live in @andy/domain. Every write
+// appends its TicketEvent in the same atomic step, so history can't miss a change.
 
-export const WorkItem = z.object({
-  ref: z.string().min(1),
-  projectRef: z.string().min(1),
-  type: TicketType,
-  title: z.string().min(1),
-  body: z.string(),
-  stage: Stage,
-  parentRef: z.string().nullable(),
-  blockedBy: z.array(z.string()),
-  updatedAt: z.iso.datetime({ offset: true }),
+/** A failed precondition the caller can act on; the API maps these to HTTP statuses. */
+export class WorkTrackerError extends Error {
+  constructor(
+    readonly code: "not_found" | "conflict",
+    message: string,
+  ) {
+    super(message);
+    this.name = "WorkTrackerError";
+  }
+}
+
+export const NewProject = Project.pick({ name: true, key: true }).extend({
+  repos: Project.shape.repos.default([]),
+  autonomy: Project.shape.autonomy.default("gated"),
 });
-export type WorkItem = z.infer<typeof WorkItem>;
+export type NewProject = z.input<typeof NewProject>;
 
-export const NewWorkItem = WorkItem.pick({
-  projectRef: true,
-  type: true,
+export const NewTicket = Ticket.pick({ type: true, title: true }).extend({
+  body: z.string().default(""),
+  parentId: Id.nullable().default(null),
+  acceptanceCriteria: z.array(z.string()).default([]),
+  assumptions: z.array(z.string()).default([]),
+  size: Ticket.shape.size.default(null),
+  sizeReason: Ticket.shape.sizeReason.default(null),
+  tier: Ticket.shape.tier.default(null),
+  blockedBy: z.array(Id).default([]),
+  needsYou: z.boolean().default(false),
+  dorStatus: DorStatus.default("not_met"),
+});
+export type NewTicket = z.input<typeof NewTicket>;
+
+/** Fields a caller may edit directly. Stage moves go through `stage` so they get their own event. */
+export const TicketFields = Ticket.pick({
   title: true,
   body: true,
-}).extend({ parentRef: z.string().nullable().default(null) });
-export type NewWorkItem = z.input<typeof NewWorkItem>;
+  parentId: true,
+  acceptanceCriteria: true,
+  assumptions: true,
+  size: true,
+  sizeReason: true,
+  tier: true,
+  overrides: true,
+  needsYou: true,
+  dorStatus: true,
+  blockedBy: true,
+  rank: true,
+}).partial();
+export type TicketFields = z.infer<typeof TicketFields>;
+
+export const TicketChange = z.object({
+  fields: TicketFields.default({}),
+  stage: z
+    .object({ to: Stage, forced: z.boolean().default(false), reason: z.string().nullable() })
+    .optional(),
+  /** Optimistic concurrency: reject with `conflict` if the ticket changed since this read. */
+  ifUpdatedAt: Timestamp.optional(),
+});
+export type TicketChange = z.input<typeof TicketChange>;
+
+export const NewQuestion = Question.pick({ text: true }).extend({
+  options: z.array(z.string()).default([]),
+  suggestedAnswer: z.string().nullable().default(null),
+  assumptions: z.array(z.string()).default([]),
+  urgency: Question.shape.urgency.default("normal"),
+});
+export type NewQuestion = z.input<typeof NewQuestion>;
+
+export const QuestionFilter = z.object({
+  projectId: Id.optional(),
+  ticketId: Id.optional(),
+  status: QuestionStatus.optional(),
+});
+export type QuestionFilter = z.infer<typeof QuestionFilter>;
+
+export const TicketFilter = z.object({ stage: Stage.optional(), needsYou: z.boolean().optional() });
+export type TicketFilter = z.infer<typeof TicketFilter>;
 
 export interface WorkTracker {
-  create(item: NewWorkItem): Promise<WorkItem>;
-  get(ref: string): Promise<WorkItem | null>;
-  /** Items changed since `since` (ISO), or all items when omitted. Used by the run watchdog and UI refresh. */
-  list(projectRef: string, since?: string): Promise<WorkItem[]>;
-  setStage(ref: string, stage: Stage): Promise<void>;
-  comment(ref: string, body: string): Promise<void>;
+  /** Project id is the lowercased key; a duplicate key is a `conflict`. */
+  createProject(input: NewProject): Promise<Project>;
+  getProject(projectId: string): Promise<Project | null>;
+  listProjects(): Promise<Project[]>;
+
+  /** Allocates the next key (e.g. "AI-7") and appends a `created` event. */
+  createTicket(projectId: string, input: NewTicket, actor: EventActor): Promise<Ticket>;
+  getTicket(projectId: string, ticketId: string): Promise<Ticket | null>;
+  /** Sorted by rank. */
+  listTickets(projectId: string, filter?: TicketFilter): Promise<Ticket[]>;
+  /** Appends `fields_changed` (only fields that differ) and/or `stage_changed`. */
+  updateTicket(
+    projectId: string,
+    ticketId: string,
+    change: TicketChange,
+    actor: EventActor,
+  ): Promise<Ticket>;
+  addComment(
+    projectId: string,
+    ticketId: string,
+    body: string,
+    actor: EventActor,
+  ): Promise<TicketEvent>;
+  /** Oldest first. */
+  listEvents(projectId: string, ticketId: string): Promise<TicketEvent[]>;
+
+  /** Appends `question_asked` to the ticket. */
+  askQuestion(
+    projectId: string,
+    ticketId: string,
+    input: NewQuestion,
+    actor: EventActor,
+  ): Promise<Question>;
+  /** Only open questions can be answered (`conflict` otherwise); appends `question_answered`. */
+  answerQuestion(
+    questionId: string,
+    answer: string,
+    via: AnsweredVia,
+    actor: EventActor,
+  ): Promise<Question>;
+  getQuestion(questionId: string): Promise<Question | null>;
+  /** Oldest first. */
+  listQuestions(filter?: QuestionFilter): Promise<Question[]>;
 }
 
 // ── Executor (DRAFT — do not freeze until two adapters pass; ADR-0006) ───────

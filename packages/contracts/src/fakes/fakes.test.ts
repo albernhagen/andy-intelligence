@@ -1,10 +1,7 @@
 import { executorContract, quotaSourceContract, workTrackerContract } from "../testing";
 import { InMemoryExecutor, InMemoryQuotaSource, InMemoryWorkTracker } from "./index";
 
-workTrackerContract("in-memory", async () => ({
-  tracker: new InMemoryWorkTracker(),
-  projectRef: "demo",
-}));
+workTrackerContract("in-memory", async () => new InMemoryWorkTracker());
 
 executorContract("in-memory", async () => ({
   executor: new InMemoryExecutor(),

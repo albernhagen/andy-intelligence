@@ -1,3 +1,4 @@
+import { InMemoryWorkTracker } from "@andy/contracts";
 import { describe, expect, it } from "vitest";
 import { createApp } from "./app";
 import { parseAllowList, type TokenVerifier } from "./auth";
@@ -20,6 +21,7 @@ const app = createApp({
   allowedEmails: parseAllowList(" andy@example.com "),
   version: "test",
   webConfig: { firebaseApiKey: "k", firebaseAuthDomain: "d", projectId: "p" },
+  tracker: new InMemoryWorkTracker(),
 });
 
 const get = (path: string, token?: string) =>

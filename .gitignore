@@ -19,3 +19,6 @@ coverage/
 
 # Claude Code per-user settings
 .claude/settings.local.json
+
+# Firestore emulator (pnpm test:firestore)
+firestore-debug.log

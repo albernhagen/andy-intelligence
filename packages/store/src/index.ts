@@ -78,3 +78,5 @@ export function typedCollection<S extends z.ZodType<DocumentData>>(
 ): CollectionReference<z.infer<S>> {
   return db.collection(path).withConverter(zodConverter(schema));
 }
+
+export { FirestoreWorkTracker } from "./work-tracker";

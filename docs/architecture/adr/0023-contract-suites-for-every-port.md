@@ -1,5 +1,5 @@
 ---
-status: accepted
+status: accepted (amended by 0034: emulator suites run locally)
 date: 2026-10-22
 supersedes: 0012
 ---
