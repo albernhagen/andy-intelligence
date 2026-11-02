@@ -19,7 +19,7 @@ Apply before or after the code deploys: MCP turns on once both are done. Afterwa
 
 ## 1b. Run the Firestore adapter suite (needs Java)
 
-CI tests the in-memory fake only (ADR-0034). Run once for the new `FirestoreOAuthGrantStore`:
+CI tests the in-memory fake only (ADR-0034). Run once for the new `FirestoreOAuthGrantStore`. Needs Java 21+ for the emulator: `brew install openjdk@21`, then `export PATH="$(brew --prefix openjdk@21)/bin:$PATH"` (add it to `~/.zshrc`).
 
 ```sh
 pnpm test:firestore

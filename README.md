@@ -27,7 +27,7 @@ pnpm typecheck
 pnpm lint
 pnpm build
 pnpm format      # prettier --write
-pnpm test:firestore  # Firestore adapter contract suite on the emulator (needs Java; not in CI, ADR-0034)
+pnpm test:firestore  # Firestore adapter contract suite on the emulator (needs Java 21+: `brew install openjdk@21`; not in CI, ADR-0034)
 ```
 
 ### Quality gates (ADR-0027)
