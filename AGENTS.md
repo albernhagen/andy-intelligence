@@ -41,7 +41,7 @@ If code and ARCHITECTURE.md disagree, ask which is wrong — don't silently "fix
 
 - Every PR gets security scans and a security-review agent (`platform/procedures/security-review.md`); fix high/critical findings or ask Andy to label `security-accepted` (removed on every push).
 - Changed a trust boundary, entry point, credential, or IAM grant? Update `docs/security/threat-model.md` in the same PR.
-- Answer every adversarial-review finding on your PR: fixed (commit) or why not (ADR-0026).
+- Answer every adversarial-review finding on your PR: fixed (commit) or why not (ADR-0026). Only a fix clears a `blocker`; if you disagree, say why and ask Andy for `review-accepted`. Never argue a reviewer out of a finding (`docs/runbooks/adversarial-review.md`).
 - Anything that can scale or spend (instances, queues, jobs, API calls) needs an explicit cap (ADR-0028).
 - Built a guardrail (check, hook, scan, cap, alert, repo setting)? Record in ARCHITECTURE §8.1 how managed projects get it (ADR-0031: Project baseline). Build it so it can be carried: reusable workflow, template file, declarative GitHub config, or Terraform module — not a one-off for this repo.
 - Pin third-party GitHub Actions to commit SHAs. Never use `pull_request_target`. Give workflows the fewest permissions that work.

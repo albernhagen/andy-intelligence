@@ -3,7 +3,7 @@ title: andy-intelligence — Architecture & Vision
 status: accepted (v1.x scope)
 owner: Andy
 last_updated: 2026-11-01
-revision: 2026-11-01e (M1.14: Cost kill switch on Cloud Workflows: ADR-0036)
+revision: 2026-11-01f (M1.11: Adversarial PR review: shared review actions, incremental re-review, ADR-0037)
 ---
 
 # andy-intelligence — Architecture & Vision
@@ -288,7 +288,7 @@ Carried by: **RW** = reusable workflow in `platform/workflows/` (projects call i
 | CodeQL, dependency review, Terraform misconfig scan | 0025, 0030 | `security-scans.yml` | RW | not yet carried (M1.16) |
 | Security-review agent + gate | 0025, 0030 | `security-review.yml`, `scripts/security-review-*.mjs`, `platform/procedures/security-review.md` | RW | not yet carried (M1.16) |
 | System security review + drift | 0025, 0030 | `system-security-review.yml`, `platform/procedures/threat-model.md` | RW | not yet carried (M1.16) |
-| Adversarial PR review | 0026 | M1.11: Adversarial PR review | RW | planned (M1.11 builds it, M1.16 carries it) |
+| Adversarial PR review | 0026, 0037 | `adversarial-review.yml`, `.github/actions/agent-review-*`, `scripts/review-gate.mjs`, `platform/procedures/adversarial-review.md` | RW | not yet carried (M1.16) |
 | Local hooks (lefthook) + Claude Code format hook | 0027 | `lefthook.yml`, `.claude/settings.json`, `scripts/format-edited-file.mjs` | T | not yet carried (M1.16) |
 | Dependabot (npm, Actions, Terraform; cooldown) | 0025, 0030 | `.github/dependabot.yml` | T | not yet carried (M1.16) |
 | PR template (docs + security checklist) | 0022, 0025 | `.github/pull_request_template.md` | T | not yet carried (M1.16) |
@@ -343,7 +343,8 @@ Applies to this repo now (M1.10: Security review automation) and to every manage
 | Piece | Where |
 |---|---|
 | CodeQL (TS + Actions), dependency review, Trivy Terraform scan | `.github/workflows/security-scans.yml` (TruffleHog: `secret-scan.yml`; actionlint: `ci.yml`) |
-| Security-review agent + gate | `.github/workflows/security-review.yml` → `scripts/security-review-gate.mjs`; rules `platform/procedures/security-review.md` (read from the base branch); Sonnet, max 25 turns; docs-only PRs skip the agent (`scripts/security-review-scope.mjs`); usage on each comment |
+| Security-review agent + gate | `.github/workflows/security-review.yml` → shared actions `.github/actions/agent-review-{prepare,finish}` → `scripts/review-gate.mjs` (ADR-0037); rules `platform/procedures/security-review.md` (read from the base branch); Sonnet, max 25 turns; docs-only PRs skip the agent (`scripts/review-scope.mjs`); usage on each comment |
+| Adversarial-review agent | `.github/workflows/adversarial-review.yml`, same actions and gate; rules `platform/procedures/adversarial-review.md`; Sonnet, max 40 turns; later pushes review only new commits + open findings, with owner/collaborator replies as context; `review-accepted` override |
 | System security review | `.github/workflows/system-security-review.yml` (Mondays if anything merged; manual) → calls `terraform-plan.yml` for drift → PR editing `docs/security/threat-model.md`; rules `platform/procedures/threat-model.md` |
 | Override | `security-accepted` label; removed on every push |
 | Action pins | Commit SHAs; Dependabot (npm, Actions, Terraform), 7-day cooldown (`.github/dependabot.yml`) |

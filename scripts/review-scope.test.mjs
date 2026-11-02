@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { isDocsOnly } from "./security-review-scope.mjs";
+import { isDocsOnly } from "./review-scope.mjs";
 
 describe("isDocsOnly", () => {
   it("GivenOnlyDocsAndReadmes_WhenChecked_ThenTrue", () => {
@@ -7,7 +7,7 @@ describe("isDocsOnly", () => {
   });
 
   it("GivenAnyCodeOrWorkflowFile_WhenChecked_ThenFalse", () => {
-    expect(isDocsOnly(["docs/build-log.md", "scripts/security-review-gate.mjs"])).toBe(false);
+    expect(isDocsOnly(["docs/build-log.md", "scripts/review-gate.mjs"])).toBe(false);
     expect(isDocsOnly(["README.md", ".github/workflows/ci.yml"])).toBe(false);
     expect(isDocsOnly(["infra/bootstrap/main.tf"])).toBe(false);
   });

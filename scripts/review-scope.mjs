@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// Security-review scope (ADR-0030): docs-only PRs skip the agent to save subscription quota.
+// Review scope (ADR-0030, ADR-0037): docs-only PRs skip the review agents to save subscription quota.
 // Agent-facing rule files are never "docs": a PR that edits them still gets reviewed.
 // Reads changed paths (one per line) from stdin; prints "true" when the PR is docs-only.
 import { readFileSync } from "node:fs";

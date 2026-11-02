@@ -1,0 +1,34 @@
+{
+  "type": "object",
+  "properties": {
+    "summary": {
+      "type": "string",
+      "description": "One or two sentences: what was reviewed and the overall verdict."
+    },
+    "findings": {
+      "type": "array",
+      "description": "Every finding that is still open after this review, including ones carried over from the previous review.",
+      "items": {
+        "type": "object",
+        "properties": {
+          "severity": { "type": "string", "enum": ["blocker", "should-fix", "question"] },
+          "title": { "type": "string" },
+          "file": { "type": "string" },
+          "line": { "type": "integer" },
+          "scenario": {
+            "type": "string",
+            "description": "Concrete failing scenario (input → wrong result) or the exact rule broken (ADR, contract, AGENTS.md line)."
+          },
+          "recommendation": { "type": "string" }
+        },
+        "required": ["severity", "title", "scenario", "recommendation"]
+      }
+    },
+    "resolved": {
+      "type": "array",
+      "description": "Previous findings that no longer hold, each as \"title: why\" (fixed in a commit, or the reply that settled it).",
+      "items": { "type": "string" }
+    }
+  },
+  "required": ["summary", "findings"]
+}

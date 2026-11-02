@@ -1,0 +1,180 @@
+name: Agent review — prepare
+description: >-
+  Shared first half of a PR review agent (ADR-0025, ADR-0026, ADR-0037): decide the mode, drop
+  a stale override label, skip docs-only PRs, and write the agent's inputs to .review/. Run after
+  actions/checkout (fetch-depth 0); the caller runs the agent, then agent-review-finish.
+
+inputs:
+  label:
+    description: Override label for this role (removed on every push).
+    required: true
+  marker:
+    description: HTML comment that starts this role's sticky PR comment.
+    required: true
+  procedure:
+    description: Procedure path; copied from the base branch to .review/procedure.md.
+    required: true
+  schema:
+    description: JSON schema path for the agent's output.
+    required: true
+  context-files:
+    description: Extra repo paths (one per line) copied from the base branch into .review/.
+    default: ""
+  incremental:
+    description: '"true": on later pushes, also write .review/new-commits.diff since the last review.'
+    default: "false"
+  has-token:
+    description: '"true" when the Claude token secret is set.'
+    required: true
+  github-token:
+    description: Token for reading comments and removing the label.
+    required: true
+
+outputs:
+  mode:
+    description: review | unavailable | fork | skip
+    value: ${{ steps.scope.outputs.mode || steps.ctx.outputs.mode }}
+  reason:
+    description: Why the agent won't run (unavailable mode).
+    value: ${{ steps.scope.outputs.reason || steps.ctx.outputs.reason }}
+  accepted:
+    description: '"true" when the override label applies to this run.'
+    value: ${{ steps.ctx.outputs.accepted }}
+  schema:
+    description: Compact JSON schema for --json-schema.
+    value: ${{ steps.prep.outputs.schema }}
+
+runs:
+  using: composite
+  steps:
+    - name: Decide mode
+      id: ctx
+      shell: bash
+      env:
+        ACTION: ${{ github.event.action }}
+        LABELS: ${{ toJSON(github.event.pull_request.labels.*.name) }}
+        HEAD_REPO: ${{ github.event.pull_request.head.repo.full_name }}
+        DRAFT: ${{ github.event.pull_request.draft }}
+        ACTOR: ${{ github.actor }}
+        HAS_TOKEN: ${{ inputs.has-token }}
+        LABEL: ${{ inputs.label }}
+      run: |
+        labelled=$(jq -r --arg l "$LABEL" 'index($l) != null' <<<"$LABELS")
+        accepted=false
+        if [ "$labelled" = true ] && [ "$ACTION" != synchronize ]; then accepted=true; fi
+        reason=""
+        if [ "$HEAD_REPO" != "$GITHUB_REPOSITORY" ]; then mode=fork
+        elif [ "$ACTION" = labeled ]; then mode=skip
+        elif [ "$DRAFT" = true ]; then mode=unavailable; reason="draft PR; the review runs when it is marked ready"
+        elif [ "$ACTOR" = "dependabot[bot]" ]; then mode=unavailable; reason="Dependabot PR (no secrets); dependency review and CodeQL still run"
+        elif [ "$HAS_TOKEN" != true ]; then mode=unavailable; reason="repository secret CLAUDE_CODE_OAUTH_TOKEN is not set (docs/runbooks/security-review.md)"
+        else mode=review
+        fi
+        {
+          echo "mode=$mode"
+          echo "accepted=$accepted"
+          echo "labelled=$labelled"
+          echo "reason=$reason"
+        } >> "$GITHUB_OUTPUT"
+        echo "mode=$mode accepted=$accepted"
+
+    - name: Override label added
+      if: steps.ctx.outputs.mode == 'skip'
+      shell: bash
+      env:
+        LABEL: ${{ inputs.label }}
+      run: echo "::notice title=agent-review::$LABEL added; check passes without re-running the agent. Findings comment unchanged."
+
+    - name: Remove override label after a new push
+      if: github.event.action == 'synchronize' && steps.ctx.outputs.labelled == 'true' && steps.ctx.outputs.mode != 'fork'
+      shell: bash
+      env:
+        GH_TOKEN: ${{ inputs.github-token }}
+        PR: ${{ github.event.pull_request.number }}
+        LABEL: ${{ inputs.label }}
+      run: gh pr edit "$PR" --repo "$GITHUB_REPOSITORY" --remove-label "$LABEL"
+
+    - name: Skip docs-only changes (saves quota, ADR-0030)
+      id: scope
+      if: steps.ctx.outputs.mode != 'skip'
+      shell: bash
+      env:
+        MODE: ${{ steps.ctx.outputs.mode }}
+        REASON: ${{ steps.ctx.outputs.reason }}
+      run: |
+        if [ "$MODE" = review ] && [ "$(git diff --name-only HEAD^1 HEAD | node scripts/review-scope.mjs)" = true ]; then
+          MODE=unavailable
+          REASON="docs-only change; the agent is skipped to save quota (rule files such as AGENTS.md are still reviewed)"
+        fi
+        { echo "mode=$MODE"; echo "reason=$REASON"; } >> "$GITHUB_OUTPUT"
+        echo "mode=$MODE"
+
+    - name: Prepare review inputs
+      id: prep
+      if: steps.scope.outputs.mode == 'review'
+      shell: bash
+      env:
+        GH_TOKEN: ${{ inputs.github-token }}
+        PR: ${{ github.event.pull_request.number }}
+        BASE_REF: ${{ github.event.pull_request.base.ref }}
+        HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        PR_BODY: ${{ github.event.pull_request.body }}
+        PR_AUTHOR: ${{ github.event.pull_request.user.login }}
+        PR_ASSOC: ${{ github.event.pull_request.author_association }}
+        PROCEDURE: ${{ inputs.procedure }}
+        SCHEMA: ${{ inputs.schema }}
+        CONTEXT_FILES: ${{ inputs.context-files }}
+        MARKER: ${{ inputs.marker }}
+        INCREMENTAL: ${{ inputs.incremental }}
+      run: |
+        mkdir -p .review
+        # Write in full, then cap (ADR-0028). Piping into `head -c` would fail under pipefail.
+        cap() { head -c "$1" "$2.full" > "$2"; rm "$2.full"; }
+        # Checkout is the PR merged into its base: HEAD^1 is the base. Capped at 300 KB.
+        git diff HEAD^1 HEAD > .review/pr.diff.full
+        cap 300000 .review/pr.diff
+        # Rules come from the base branch, so a PR can't weaken its own review.
+        base_copy() { git show "origin/$BASE_REF:$1" > "$2" 2>/dev/null || cp "$1" "$2"; }
+        base_copy "$PROCEDURE" .review/procedure.md
+        while IFS= read -r f; do
+          [ -n "$f" ] && base_copy "$f" ".review/$(basename "$f")"
+        done <<<"$CONTEXT_FILES"
+
+        # Discussion: only the owner and collaborators (anyone can comment on a public repo).
+        # Still untrusted data for the agent. Capped at 50 KB.
+        trusted='["OWNER","MEMBER","COLLABORATOR"]'
+        {
+          if jq -e --arg a "$PR_ASSOC" --argjson t "$trusted" '$t | index($a)' <<<'null' > /dev/null; then
+            printf '## PR description (by %s)\n\n%s\n\n' "$PR_AUTHOR" "$PR_BODY"
+          fi
+          gh api "repos/$GITHUB_REPOSITORY/issues/$PR/comments" --paginate \
+            --jq ".[] | select(.author_association as \$a | $trusted | index(\$a)) | \"## \(.user.login), \(.created_at)\n\n\(.body)\n\""
+          gh api "repos/$GITHUB_REPOSITORY/pulls/$PR/comments" --paginate \
+            --jq ".[] | select(.author_association as \$a | $trusted | index(\$a)) | \"## \(.user.login) on \(.path):\(.line // .original_line), \(.created_at)\n\n\(.body)\n\""
+        } > .review/discussion.md.full
+        cap 50000 .review/discussion.md
+
+        # This role's previous review comment, if any, and the PR head it reviewed.
+        gh api "repos/$GITHUB_REPOSITORY/issues/$PR/comments" --paginate \
+          --jq ".[] | select(.user.login == \"github-actions[bot]\" and (.body | startswith(\"$MARKER\"))) | .body" \
+          > .review/previous-review.md.full
+        cap 50000 .review/previous-review.md
+        [ -s .review/previous-review.md ] || rm .review/previous-review.md
+        prev=$(grep -oE 'reviewed-sha: [0-9a-f]{7,40}' .review/previous-review.md 2>/dev/null | head -1 | cut -d' ' -f2 || true)
+        # A "not reviewed" comment never covered its commits (comments from before 9b6eccb still
+        # carry a SHA), so review the whole PR again.
+        if grep -q ': not reviewed' .review/previous-review.md 2>/dev/null; then prev=""; fi
+        if [ "$INCREMENTAL" = true ] && [ -n "$prev" ] && [ "$prev" != "$HEAD_SHA" ] \
+          && git cat-file -e "${prev}^{commit}" 2>/dev/null; then
+          git diff "$prev" "$HEAD_SHA" > .review/new-commits.diff.full
+          cap 300000 .review/new-commits.diff
+          echo "incremental review since $prev"
+        fi
+
+        # The schema is passed inside single quotes (--json-schema '...'), so it can't contain one.
+        if grep -q "'" "$SCHEMA"; then
+          echo "::error title=agent-review::$SCHEMA contains a single quote, which breaks --json-schema"
+          exit 1
+        fi
+        echo "schema=$(jq -c . "$SCHEMA")" >> "$GITHUB_OUTPUT"
+        ls -la .review
