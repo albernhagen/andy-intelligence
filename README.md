@@ -77,12 +77,25 @@ pnpm --filter @andy/web dev          # :5173, proxies /api to :8080
 
 Set `PUBLIC_URL` (the service's public origin, e.g. `http://localhost:8080`) to turn on `/mcp` and its OAuth endpoints (ADR-0039: MCP OAuth facade); Terraform sets it in Cloud Run.
 
+### Web UI (M1.3: UI: tickets + inbox)
+
+| Route                       | Screen                                                                                           |
+| --------------------------- | ------------------------------------------------------------------------------------------------ |
+| `/`                         | Needs you (home): open questions (options, suggested answer, free text) and flagged tickets      |
+| `/projects`                 | Project list and "new project"                                                                   |
+| `/p/:projectId`             | Tickets in one column per stage, "new ticket"                                                    |
+| `/p/:projectId/t/:ticketId` | Ticket detail: edit, Definition of Ready, moves (forced move needs a reason), questions, history |
+
+- API client: `openapi-fetch` typed by `apps/web/src/lib/api.gen.ts`, generated from the API's OpenAPI document. After changing an API route, run `pnpm --filter @andy/web gen:api` and commit the file; a test fails while it is stale.
+- Tests (`apps/web/src/**/*.test.tsx`, jsdom + Testing Library) render the UI against the real API in-process (`createApp` + `InMemoryWorkTracker`), so they also exercise auth, validation and the ticket rules. No browser e2e yet: it needs Firebase sign-in.
+- To try the inbox before refinement agents exist (M1.7: Refinement), use "Ask a question…" on a ticket.
+
 ## Layout
 
 | Path                  | What                                                          |
 | --------------------- | ------------------------------------------------------------- |
 | `apps/api`            | Hono API, MCP endpoint + its OAuth server; serves the SPA     |
-| `apps/web`            | React + Vite + shadcn UI                                      |
+| `apps/web`            | React + Vite + shadcn UI: Needs-you inbox, tickets, detail    |
 | `packages/contracts`  | Zod entities, ports, fakes, contract suites                   |
 | `packages/domain`     | Ticket rules: stage moves, Definition of Ready, Needs-you     |
 | `packages/store`      | Firestore client, converters, `FirestoreWorkTracker`          |

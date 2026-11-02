@@ -1,8 +1,14 @@
 import { useEffect, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
+import { RouterProvider } from "@tanstack/react-router";
 import type { User } from "firebase/auth";
 import { Button } from "@/components/ui/button";
-import { apiFetch, signIn, signOutUser, watchUser } from "@/lib/auth";
+import { ApiContext, createApi } from "@/lib/api";
+import { apiFetch, getIdToken, signIn, signOutUser, watchUser } from "@/lib/auth";
+import { makeRouter } from "./router";
+
+const api = createApi({ baseUrl: window.location.origin, getToken: getIdToken });
+const router = makeRouter();
 
 type Me = { email: string; uid: string };
 
@@ -68,10 +74,9 @@ export function App() {
         <p className="text-destructive">{user.email} is not allowed to use this control plane.</p>
       )}
       {me.data?.me && (
-        <section className="space-y-2">
-          <h2 className="text-lg font-medium">Needs you</h2>
-          <p className="text-muted-foreground">Nothing yet. Signed in as {me.data.me.email}.</p>
-        </section>
+        <ApiContext.Provider value={api}>
+          <RouterProvider router={router} />
+        </ApiContext.Provider>
       )}
     </Shell>
   );
@@ -79,7 +84,7 @@ export function App() {
 
 function Shell({ children, action }: { children: React.ReactNode; action?: React.ReactNode }) {
   return (
-    <div className="mx-auto max-w-4xl px-4 py-6">
+    <div className="mx-auto max-w-7xl px-4 py-6">
       <header className="mb-8 flex items-center justify-between border-b border-border pb-4">
         <h1 className="text-xl font-semibold">andy-intelligence</h1>
         {action}

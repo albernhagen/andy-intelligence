@@ -169,6 +169,12 @@ Temporary progress log until andy-intelligence can track its own work (then migr
 - Verified locally: lint, typecheck, tests (MCP SDK's own OAuth client completes discovery → CIMD → consent → token → `ping` → refresh rotation against the app), build, smoke run of the bundle. Not run here: `pnpm test:firestore` (no Java), `terraform validate`/plan, Trivy (CI), the Claude desktop connector (Andy, runbook).
 - Andy to run after merge: `infra/control-plane` apply (1 add, 1 change), `pnpm test:firestore`, runbook §3–4 (connector + `ping`; non-allow-listed account rejected). That is M1.1: MCP OAuth spike's Done when.
 
+## 2026-11-02 — M1.3: UI: tickets + inbox built
+
+- **Decided (Andy):** seed questions with "Ask a question…" on ticket detail; API client generated from OpenAPI (`openapi-typescript` + `openapi-fetch`, staleness test); no browser e2e yet (Playwright + Firebase Auth emulator is a follow-up).
+- PR #28: M1.3: UI: tickets + inbox: Needs-you inbox (home), projects, tickets by stage, ticket detail (edit, Definition of Ready, moves incl. forced move with a reason, questions, history). UI tests run against the real API in-process. Not checked in a real browser (needs sign-in): Andy runs the Done when after deploy.
+- Kill switch's Needs-you item (deferred to after this slice, 2026-11-01) is still not built: it needs workflow → API auth; its own slice.
+
 ## Slices: M1: First end-to-end flow: ticket → PR with Claude
 
 Status: todo / in progress / PR open / merged. Definitions: ARCHITECTURE §12.
@@ -178,7 +184,7 @@ Status: todo / in progress / PR open / merged. Definitions: ARCHITECTURE §12.
 | M1.0: Docs sync                         | S               | M0: Foundations                                                                             | merged (PR #1)  |
 | M1.1: MCP OAuth spike                   | M               | M0: Foundations                                                                             | PR open         |
 | M1.2: Ticket core                       | M               | M0: Foundations                                                                             | merged (PR #17) |
-| M1.3: UI: tickets + inbox               | M               | M1.2: Ticket core                                                                           | todo            |
+| M1.3: UI: tickets + inbox               | M               | M1.2: Ticket core                                                                           | PR open         |
 | M1.4: MCP core tools                    | S               | M1.1: MCP OAuth spike, M1.2: Ticket core                                                    | todo            |
 | M1.5: GitHub App + project registration | M               | M1.2: Ticket core                                                                           | todo            |
 | M1.6: Claude Code executor              | L (split 6a/6b) | M1.5: GitHub App + project registration                                                     | todo            |
