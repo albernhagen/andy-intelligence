@@ -5,7 +5,8 @@ import type { Hono, MiddlewareHandler } from "hono";
 import { bodyLimit } from "hono/body-limit";
 import type { AuthEnv } from "../auth";
 import { mcpUrls } from "./oauth";
-import { hashToken } from "./tokens";
+import type { FixedWindowLimiter } from "./rate-limit";
+import { hashToken, isTokenShaped } from "./tokens";
 
 const MCP_BODY_BYTES = 256 * 1024;
 
@@ -14,6 +15,8 @@ export interface McpEndpointDeps {
   grants: OAuthGrantStore;
   allowedEmails: ReadonlySet<string>;
   version: string;
+  /** Caps grant-store lookups callers can trigger without a valid token (ADR-0028). */
+  lookups: FixedWindowLimiter;
 }
 
 /**
@@ -25,7 +28,12 @@ export function requireMcpToken(deps: McpEndpointDeps): MiddlewareHandler<AuthEn
   const urls = mcpUrls(deps.publicUrl);
   return async (c, next) => {
     const match = /^Bearer\s+(.+)$/i.exec(c.req.header("authorization") ?? "");
-    const grant = match?.[1] ? await deps.grants.get(hashToken(match[1])) : null;
+    const token = match?.[1] && isTokenShaped(match[1]) ? match[1] : null;
+    if (token && !deps.lookups.tryTake()) {
+      c.header("retry-after", "60");
+      return c.json({ error: "rate_limited" }, 429);
+    }
+    const grant = token ? await deps.grants.get(hashToken(token)) : null;
     if (
       !grant ||
       grant.kind !== "access" ||

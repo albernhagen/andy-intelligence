@@ -70,6 +70,27 @@ describe("ClientMetadataResolver", () => {
   });
 });
 
+describe("ClientMetadataResolver caps", () => {
+  it("GivenAFailingLookup_WhenRepeatedWithinAMinute_ThenItIsNotFetchedAgain", async () => {
+    let now = 0;
+    const fetch = fetchReturning(doc, 404);
+    const resolver = new ClientMetadataResolver({ fetch, now: () => now });
+    await expect(resolver.resolve(CLIENT_ID)).rejects.toMatchObject({ code: "invalid_client" });
+    await expect(resolver.resolve(CLIENT_ID)).rejects.toMatchObject({ code: "invalid_client" });
+    expect(fetch).toHaveBeenCalledTimes(1);
+    now = 60 * 1000;
+    await expect(resolver.resolve(CLIENT_ID)).rejects.toMatchObject({ code: "invalid_client" });
+    expect(fetch).toHaveBeenCalledTimes(2);
+  });
+
+  it("GivenManyDistinctClientIds_WhenResolvedWithinAMinute_ThenFetchesStopAt30", async () => {
+    const fetch = fetchReturning(doc);
+    const resolver = new ClientMetadataResolver({ fetch, now: () => 0 });
+    for (let i = 0; i < 35; i++) await resolver.resolve(`https://claude.ai/c${i}`).catch(() => {});
+    expect(fetch).toHaveBeenCalledTimes(30);
+  });
+});
+
 describe("redirectUriAllowed", () => {
   const client = {
     clientId: CLIENT_ID,

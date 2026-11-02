@@ -9,7 +9,8 @@ import {
   type OAuthClient,
 } from "./client-metadata";
 import { OAuthError } from "./errors";
-import { hashToken, newToken, verifyPkceS256 } from "./tokens";
+import type { FixedWindowLimiter } from "./rate-limit";
+import { hashToken, isTokenShaped, newToken, verifyPkceS256 } from "./tokens";
 
 export const MCP_SCOPE = "mcp";
 export const CODE_TTL_S = 60;
@@ -24,6 +25,11 @@ export interface McpAuthDeps {
   clients: ClientMetadataResolver;
   allowedEmails: ReadonlySet<string>;
   now?: () => Date;
+}
+
+/** Shared per-instance cap on grant-store lookups from unauthenticated callers. */
+export interface LookupCap {
+  lookups: FixedWindowLimiter;
 }
 
 /** URLs derived from the public origin. The MCP endpoint is the OAuth protected resource. */
@@ -59,7 +65,7 @@ function log(severity: "INFO" | "WARNING", message: string, fields: Record<strin
  * user's Firebase ID token to /api/oauth/approve, which the /api allow-list guards.
  * Nothing is written before the allow-listed user approves.
  */
-export function registerOAuthRoutes(app: Hono<AuthEnv>, deps: McpAuthDeps) {
+export function registerOAuthRoutes(app: Hono<AuthEnv>, deps: McpAuthDeps & LookupCap) {
   const urls = mcpUrls(deps.publicUrl);
   const now = deps.now ?? (() => new Date());
   const expiresIn = (seconds: number) => new Date(now().getTime() + seconds * 1000).toISOString();
@@ -86,7 +92,18 @@ export function registerOAuthRoutes(app: Hono<AuthEnv>, deps: McpAuthDeps) {
     return { params, client };
   }
 
+  /** A token-shaped credential within the lookup cap, or an OAuth error. */
+  function lookupKey(token: string): string {
+    if (!isTokenShaped(token)) throw new OAuthError("invalid_grant", "malformed credential");
+    if (!deps.lookups.tryTake()) throw new RateLimited();
+    return hashToken(token);
+  }
+
   function oauthError(c: Context, err: unknown) {
+    if (err instanceof RateLimited) {
+      c.header("retry-after", "60");
+      return c.json({ error: "rate_limited" }, 429);
+    }
     if (!(err instanceof OAuthError)) throw err;
     log("WARNING", "oauth request rejected", {
       path: c.req.path,
@@ -223,7 +240,7 @@ export function registerOAuthRoutes(app: Hono<AuthEnv>, deps: McpAuthDeps) {
         const verifier = field("code_verifier");
         if (!code || !verifier)
           throw new OAuthError("invalid_request", "code and code_verifier are required");
-        grant = await deps.grants.take(hashToken(code));
+        grant = await deps.grants.take(lookupKey(code));
         if (
           !grant ||
           grant.kind !== "code" ||
@@ -237,7 +254,7 @@ export function registerOAuthRoutes(app: Hono<AuthEnv>, deps: McpAuthDeps) {
         const refresh = field("refresh_token");
         if (!refresh) throw new OAuthError("invalid_request", "refresh_token is required");
         // Rotation: the old refresh token is consumed here; a new one comes back below.
-        grant = await deps.grants.take(hashToken(refresh));
+        grant = await deps.grants.take(lookupKey(refresh));
         if (!grant || grant.kind !== "refresh" || grant.clientId !== clientId) {
           throw new OAuthError(
             "invalid_grant",
@@ -258,3 +275,5 @@ export function registerOAuthRoutes(app: Hono<AuthEnv>, deps: McpAuthDeps) {
     }
   });
 }
+
+class RateLimited extends Error {}

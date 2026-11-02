@@ -10,7 +10,8 @@ import { describe, expect, it } from "vitest";
 import { createApp } from "../app";
 import { parseAllowList, type TokenVerifier } from "../auth";
 import { ClientMetadataResolver } from "./client-metadata";
-import { hashToken } from "./tokens";
+import { LOOKUPS_PER_MINUTE } from "./index";
+import { hashToken, newToken } from "./tokens";
 
 const PUBLIC_URL = "https://control-plane.example.run.app";
 const RESOURCE = `${PUBLIC_URL}/mcp`;
@@ -213,6 +214,76 @@ describe("MCP OAuth flow (MCP SDK client)", () => {
     });
     expect(replay.status).toBe(400);
     expect(await replay.json()).toMatchObject({ error: "invalid_grant" });
+  });
+});
+
+describe("MCP OAuth refresh checks", () => {
+  const refresh = (ctx: ReturnType<typeof setup>, token: string, clientId = CLIENT_ID) =>
+    ctx.appFetch(`${PUBLIC_URL}/oauth/token`, {
+      method: "POST",
+      headers: { "content-type": "application/x-www-form-urlencoded" },
+      body: new URLSearchParams({
+        grant_type: "refresh_token",
+        refresh_token: token,
+        client_id: clientId,
+      }),
+    });
+
+  it("GivenAUserRemovedFromTheAllowList_WhenRefreshing_ThenInvalidGrant", async () => {
+    const ctx = setup();
+    const provider = await authorize(ctx);
+    (ctx.allowedEmails as Set<string>).clear();
+    const res = await refresh(ctx, provider.tokens()!.refresh_token!);
+    expect(res.status).toBe(400);
+    expect(await res.json()).toMatchObject({ error: "invalid_grant" });
+  });
+
+  it("GivenARefreshTokenFromAnotherClient_WhenRefreshing_ThenInvalidGrant", async () => {
+    const ctx = setup();
+    const provider = await authorize(ctx);
+    const res = await refresh(
+      ctx,
+      provider.tokens()!.refresh_token!,
+      "https://claude.ai/other-client",
+    );
+    expect(res.status).toBe(400);
+    expect(await res.json()).toMatchObject({ error: "invalid_grant" });
+  });
+});
+
+describe("MCP lookup cap (ADR-0028)", () => {
+  const callMcp = (ctx: ReturnType<typeof setup>, token: string) =>
+    ctx.appFetch(RESOURCE, {
+      method: "POST",
+      headers: { authorization: `Bearer ${token}` },
+      body: "{}",
+    });
+
+  it("GivenManyRandomTokens_WhenCallingMcp_ThenLookupsStopAtTheCapWith429", async () => {
+    const ctx = setup();
+    for (let i = 0; i < LOOKUPS_PER_MINUTE; i++)
+      expect((await callMcp(ctx, newToken())).status).toBe(401);
+    const res = await callMcp(ctx, newToken());
+    expect(res.status).toBe(429);
+    expect(res.headers.get("retry-after")).toBe("60");
+  });
+
+  it("GivenMalformedTokens_WhenCallingMcpOrTheTokenEndpoint_ThenNoLookupIsSpent", async () => {
+    const ctx = setup();
+    for (let i = 0; i < LOOKUPS_PER_MINUTE + 5; i++)
+      expect((await callMcp(ctx, "garbage")).status).toBe(401);
+    const res = await ctx.appFetch(`${PUBLIC_URL}/oauth/token`, {
+      method: "POST",
+      headers: { "content-type": "application/x-www-form-urlencoded" },
+      body: new URLSearchParams({
+        grant_type: "refresh_token",
+        refresh_token: "short",
+        client_id: CLIENT_ID,
+      }),
+    });
+    expect(await res.json()).toMatchObject({ error: "invalid_grant" });
+    // The cap is untouched, so a real token-shaped lookup still runs (and misses).
+    expect((await callMcp(ctx, newToken())).status).toBe(401);
   });
 });
 

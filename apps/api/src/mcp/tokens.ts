@@ -5,6 +5,11 @@ export function newToken(): string {
   return randomBytes(32).toString("base64url");
 }
 
+/** True if the string could be a token we issued (43 base64url chars); checked before any lookup. */
+export function isTokenShaped(value: string): boolean {
+  return /^[A-Za-z0-9_-]{43}$/.test(value);
+}
+
 /** Storage key for a token: grants are stored by hash, never by the token itself. */
 export function hashToken(token: string): string {
   return createHash("sha256").update(token).digest("base64url");

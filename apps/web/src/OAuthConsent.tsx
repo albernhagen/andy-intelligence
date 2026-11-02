@@ -52,6 +52,10 @@ export function OAuthConsent() {
       <p className="text-muted-foreground">
         {clientName} ({redirectHost}) wants to use andy-intelligence tools on your behalf.
       </p>
+      <p className="text-sm text-muted-foreground">
+        Approving lets it call every MCP tool as you, for up to 30 days unless refreshed. Only
+        approve if you just clicked Connect in {clientName} yourself.
+      </p>
       {user === undefined && <p className="text-muted-foreground">Loading…</p>}
       {user === null && (
         <Button onClick={() => signIn().catch((e: unknown) => setError(String(e)))}>

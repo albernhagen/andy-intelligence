@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { OAuthError } from "./errors";
+import { FixedWindowLimiter } from "./rate-limit";
 
 /** Hosts whose client ID metadata documents we accept: Claude's (ADR-0039: MCP OAuth facade). */
 export const CLAUDE_CLIENT_HOSTS = ["claude.ai", "claude.com"];
@@ -8,6 +9,9 @@ const MAX_BYTES = 16 * 1024;
 const FETCH_TIMEOUT_MS = 5_000;
 const CACHE_TTL_MS = 60 * 60 * 1000;
 const CACHE_MAX = 20;
+const FAILURE_TTL_MS = 60 * 1000;
+/** Metadata fetches per minute per instance. */
+const FETCHES_PER_MINUTE = 30;
 const LOOPBACK_HOSTS = new Set(["localhost", "127.0.0.1", "[::1]"]);
 
 export interface OAuthClient {
@@ -32,30 +36,48 @@ export interface ClientMetadataOptions {
  * Resolves OAuth clients from Client ID Metadata Documents (CIMD): the client_id is an
  * HTTPS URL and the document at that URL lists the client's redirect URIs. We fetch only
  * from allow-listed hosts, so /oauth/authorize can't be used to make us fetch arbitrary
- * URLs (SSRF). Successful lookups are cached; the cache is capped.
+ * URLs (SSRF). Lookups are cached (failures for a minute); the cache and the fetch rate
+ * are capped.
  */
 export class ClientMetadataResolver {
   private readonly allowedHosts: ReadonlySet<string>;
   private readonly fetch: typeof fetch;
   private readonly now: () => number;
-  private readonly cache = new Map<string, { client: OAuthClient; expires: number }>();
+  private readonly fetches: FixedWindowLimiter;
+  private readonly cache = new Map<string, { result: OAuthClient | OAuthError; expires: number }>();
 
   constructor(opts: ClientMetadataOptions = {}) {
     this.allowedHosts = new Set(opts.allowedHosts ?? CLAUDE_CLIENT_HOSTS);
     this.fetch = opts.fetch ?? globalThis.fetch;
     this.now = opts.now ?? Date.now;
+    this.fetches = new FixedWindowLimiter(FETCHES_PER_MINUTE, 60 * 1000, this.now);
   }
 
   async resolve(clientId: string): Promise<OAuthClient> {
-    const cached = this.cache.get(clientId);
-    if (cached && cached.expires > this.now()) return cached.client;
-
     const url = this.checkClientId(clientId);
-    const client = await this.load(url, clientId);
+    const cached = this.cache.get(clientId);
+    if (cached && cached.expires > this.now()) {
+      if (cached.result instanceof OAuthError) throw cached.result;
+      return cached.result;
+    }
+
+    if (!this.fetches.tryTake()) {
+      throw new OAuthError("invalid_client", "too many client lookups; try again in a minute");
+    }
+    // Failures are cached briefly too, so repeated bad requests don't each cause a fetch.
+    let result: OAuthClient | OAuthError;
+    try {
+      result = await this.load(url, clientId);
+    } catch (err) {
+      if (!(err instanceof OAuthError)) throw err;
+      result = err;
+    }
     this.cache.delete(clientId);
     if (this.cache.size >= CACHE_MAX) this.cache.delete(this.cache.keys().next().value!);
-    this.cache.set(clientId, { client, expires: this.now() + CACHE_TTL_MS });
-    return client;
+    const ttl = result instanceof OAuthError ? FAILURE_TTL_MS : CACHE_TTL_MS;
+    this.cache.set(clientId, { result, expires: this.now() + ttl });
+    if (result instanceof OAuthError) throw result;
+    return result;
   }
 
   private checkClientId(clientId: string): URL {
