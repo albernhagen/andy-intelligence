@@ -127,6 +127,10 @@ Temporary progress log until andy-intelligence can track its own work (then migr
 - Merged: PR #18: Cost kill switch.
 - Security review (low): the kill switch's Cloud Run permissions were project-wide. Follow-up PR binds `run.services.get/update` on the `control-plane` service only; queue list/pause and operation polling stay project-level (no narrower resource). This narrows the identity row in ADR-0036: Kill switch runs on Cloud Workflows.
 
+## 2026-11-01 — Kill switch plan fix
+
+- Andy applied `infra/control-plane` (6 added) and `infra/billing` without the switch (1 change: 150% threshold). With `kill_switch_enabled = true` the plan failed: `for_each` keyed by a custom role name unknown until apply. Fixed with static keys; budget threshold rules reordered to match the API (the plan showed a swap). Lesson: `terraform validate` doesn't catch unknown `for_each` keys; only a plan does, and `infra/billing` plans locally only.
+
 ## Slices: M1: First end-to-end flow: ticket → PR with Claude
 
 Status: todo / in progress / PR open / merged. Definitions: ARCHITECTURE §12.
