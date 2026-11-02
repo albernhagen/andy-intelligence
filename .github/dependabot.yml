@@ -15,7 +15,10 @@ updates:
         update-types: [minor, patch]
 
   - package-ecosystem: github-actions
-    directory: /
+    # `/` covers .github/workflows; the baseline's composite actions hold most pins (ADR-0038).
+    directories:
+      - /
+      - /platform/actions/*
     schedule:
       interval: weekly
     open-pull-requests-limit: 5

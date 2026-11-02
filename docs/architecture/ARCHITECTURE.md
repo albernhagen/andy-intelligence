@@ -280,7 +280,7 @@ Every guardrail built in this repo is packaged so each managed project gets it t
 
 Carried by (ADR-0038): **A** = composite action in `platform/actions/`; managed repos get this repo's caller workflow with the action pinned to a commit SHA · **M** = managed file (kept identical; listed in `platform/baseline/manifest.json`) · **S** = seed file, copied once from `template/` · **G** = GitHub config in `platform/baseline/github/`, applied by `platform/baseline/baseline.mjs` · **TF** = Terraform module in `infra/modules/` · **RB** = runbook step (secrets).
 
-Drift: `baseline.mjs check <repo>` (Andy, local, everything); the weekly system security review checks labels and ruleset (its token can't read the rest).
+Third-party action pins inside `platform/actions/` are bumped by this repo's Dependabot (`/platform/actions/*`); managed repos get them through the baseline pin. Drift: `baseline.mjs check <repo>` (Andy, local, everything); the weekly system security review checks labels and ruleset (its token can't read the rest).
 
 | Guardrail | ADR | Source in this repo | Carried by | Status |
 |---|---|---|---|---|
