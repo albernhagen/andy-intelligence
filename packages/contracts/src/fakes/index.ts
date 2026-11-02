@@ -15,6 +15,8 @@ import {
   type NewProject,
   type NewQuestion,
   type NewTicket,
+  type OAuthGrant,
+  type OAuthGrantStore,
   type QuestionFilter,
   type QuotaSource,
   type RunHandle,
@@ -239,5 +241,33 @@ export class InMemoryQuotaSource implements QuotaSource {
 
   async latest(provider: ProviderKey): Promise<QuotaReading[]> {
     return structuredClone(this.readings.get(provider) ?? []);
+  }
+}
+
+/** In-memory OAuthGrantStore. Expired grants read as missing, like the real store. */
+export class InMemoryOAuthGrantStore implements OAuthGrantStore {
+  private readonly grants = new Map<string, OAuthGrant>();
+
+  constructor(private readonly now: () => Date = () => new Date()) {}
+
+  async put(key: string, grant: OAuthGrant): Promise<void> {
+    this.grants.set(key, structuredClone(grant));
+  }
+
+  async get(key: string): Promise<OAuthGrant | null> {
+    return this.live(key);
+  }
+
+  async take(key: string): Promise<OAuthGrant | null> {
+    // Read and delete without an await in between, so concurrent takes can't both win.
+    const grant = this.live(key);
+    this.grants.delete(key);
+    return grant;
+  }
+
+  private live(key: string): OAuthGrant | null {
+    const grant = this.grants.get(key);
+    if (!grant || Date.parse(grant.expiresAt) <= this.now().getTime()) return null;
+    return structuredClone(grant);
   }
 }

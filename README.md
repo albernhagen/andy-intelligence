@@ -75,11 +75,13 @@ pnpm --filter @andy/api dev          # :8080
 pnpm --filter @andy/web dev          # :5173, proxies /api to :8080
 ```
 
+Set `PUBLIC_URL` (the service's public origin, e.g. `http://localhost:8080`) to turn on `/mcp` and its OAuth endpoints (ADR-0039: MCP OAuth facade); Terraform sets it in Cloud Run.
+
 ## Layout
 
 | Path                  | What                                                          |
 | --------------------- | ------------------------------------------------------------- |
-| `apps/api`            | Hono API (later MCP, webhooks, jobs); serves the SPA          |
+| `apps/api`            | Hono API, MCP endpoint + its OAuth server; serves the SPA     |
 | `apps/web`            | React + Vite + shadcn UI                                      |
 | `packages/contracts`  | Zod entities, ports, fakes, contract suites                   |
 | `packages/domain`     | Ticket rules: stage moves, Definition of Ready, Needs-you     |
@@ -95,4 +97,4 @@ pnpm --filter @andy/web dev          # :5173, proxies /api to :8080
 | `lefthook.yml`        | Git hooks: pre-commit lint/format, pre-push checks            |
 | `firebase.json`       | Firestore emulator config for `pnpm test:firestore`           |
 
-Infra setup: [`docs/runbooks/m0-setup.md`](docs/runbooks/m0-setup.md). Budget and cost caps: [`docs/runbooks/billing.md`](docs/runbooks/billing.md). Security review setup: [`docs/runbooks/security-review.md`](docs/runbooks/security-review.md). Adversarial review: [`docs/runbooks/adversarial-review.md`](docs/runbooks/adversarial-review.md). Onboard a repo: [`docs/runbooks/onboard-a-repo.md`](docs/runbooks/onboard-a-repo.md).
+Infra setup: [`docs/runbooks/m0-setup.md`](docs/runbooks/m0-setup.md). Budget and cost caps: [`docs/runbooks/billing.md`](docs/runbooks/billing.md). Security review setup: [`docs/runbooks/security-review.md`](docs/runbooks/security-review.md). Adversarial review: [`docs/runbooks/adversarial-review.md`](docs/runbooks/adversarial-review.md). Onboard a repo: [`docs/runbooks/onboard-a-repo.md`](docs/runbooks/onboard-a-repo.md). Connect Claude to MCP: [`docs/runbooks/mcp-connector.md`](docs/runbooks/mcp-connector.md).
