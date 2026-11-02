@@ -39,6 +39,8 @@ jobs:
     env:
       TF_VAR_allowed_emails: ${{ secrets.TF_VAR_ALLOWED_EMAILS }}
       TF_VAR_alert_email: ${{ secrets.TF_VAR_ALERT_EMAIL }}
+      # Not secret (ADR-0040); unset (empty) means the GitHub App is off.
+      TF_VAR_github_app_id: ${{ vars.TF_VAR_GITHUB_APP_ID }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Check variable secrets

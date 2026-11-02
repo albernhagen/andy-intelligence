@@ -1,16 +1,21 @@
-import type {
-  AnsweredVia,
-  EventActor,
-  Project,
-  ProviderKey,
-  Question,
-  QuotaReading,
-  Ticket,
-  TicketEvent,
+import {
+  CodeHostEvent,
+  Repo,
+  RepoName,
+  type AnsweredVia,
+  type EventActor,
+  type Project,
+  type ProviderKey,
+  type Question,
+  type QuotaReading,
+  type Ticket,
+  type TicketEvent,
 } from "../entities";
 import {
   RunRequest,
   WorkTrackerError,
+  type CodeEventLog,
+  type CodeHost,
   type Executor,
   type NewProject,
   type NewQuestion,
@@ -19,6 +24,7 @@ import {
   type OAuthGrantStore,
   type QuestionFilter,
   type QuotaSource,
+  type RecordResult,
   type RunHandle,
   type RunReport,
   type TicketChange,
@@ -269,5 +275,41 @@ export class InMemoryOAuthGrantStore implements OAuthGrantStore {
     const grant = this.grants.get(key);
     if (!grant || Date.parse(grant.expiresAt) <= this.now().getTime()) return null;
     return structuredClone(grant);
+  }
+}
+
+/** In-memory CodeHost: repos count as installed once added with `install`. */
+export class InMemoryCodeHost implements CodeHost {
+  private readonly repos = new Map<string, Repo>();
+
+  constructor(repos: Repo[] = []) {
+    repos.forEach((r) => this.install(r));
+  }
+
+  install(repo: Repo): void {
+    this.repos.set(repo.fullName.toLowerCase(), Repo.parse(repo));
+  }
+
+  async getRepo(fullName: string): Promise<Repo | null> {
+    if (!RepoName.safeParse(fullName).success) return null;
+    const repo = this.repos.get(fullName.toLowerCase());
+    return repo ? structuredClone(repo) : null;
+  }
+}
+
+/** In-memory CodeEventLog. The check and the write have no await between them: atomic. */
+export class InMemoryCodeEventLog implements CodeEventLog {
+  private readonly events = new Map<string, CodeHostEvent>();
+
+  async record(event: CodeHostEvent): Promise<RecordResult> {
+    const parsed = CodeHostEvent.parse(event);
+    if (this.events.has(parsed.deliveryId)) return "duplicate";
+    this.events.set(parsed.deliveryId, parsed);
+    return "recorded";
+  }
+
+  async get(deliveryId: string): Promise<CodeHostEvent | null> {
+    const event = this.events.get(deliveryId);
+    return event ? structuredClone(event) : null;
   }
 }

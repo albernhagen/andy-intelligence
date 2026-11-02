@@ -298,6 +298,26 @@ resource "google_cloud_run_v2_service" "control_plane" {
         name  = "PUBLIC_URL"
         value = "https://${local.service_host}"
       }
+      # GitHub App (ADR-0040): webhook receiver and repo checks; off until github_app_id is set.
+      dynamic "env" {
+        for_each = local.github_app_enabled ? [var.github_app_id] : []
+        content {
+          name  = "GITHUB_APP_ID"
+          value = env.value
+        }
+      }
+      dynamic "env" {
+        for_each = local.github_app_enabled ? local.github_secret_env : {}
+        content {
+          name = env.key
+          value_source {
+            secret_key_ref {
+              secret  = google_secret_manager_secret.github[env.value].secret_id
+              version = "latest" # rotation: add a version, then redeploy (runbook github-app.md)
+            }
+          }
+        }
+      }
     }
   }
 
@@ -311,7 +331,53 @@ resource "google_cloud_run_v2_service" "control_plane" {
     ]
   }
 
-  depends_on = [google_project_service.apis, google_firestore_database.default]
+  depends_on = [
+    google_project_service.apis,
+    google_firestore_database.default,
+    google_secret_manager_secret_iam_member.runtime_reads_github,
+  ]
+}
+
+# ── GitHub App (ADR-0040: GitHub App credentials and webhook intake) ─────────────
+# Secret containers only: Andy adds the versions with gcloud from the App's manifest
+# conversion (docs/runbooks/github-app.md), so values never pass through Terraform or state.
+
+locals {
+  # CI passes an empty string when the TF_VAR_GITHUB_APP_ID Actions variable is unset.
+  github_app_enabled = var.github_app_id != null && var.github_app_id != ""
+  github_secret_env = {
+    GITHUB_APP_PRIVATE_KEY = "github-app-private-key"
+    GITHUB_WEBHOOK_SECRET  = "github-webhook-secret"
+  }
+}
+
+resource "google_secret_manager_secret" "github" {
+  for_each  = toset(values(local.github_secret_env))
+  secret_id = each.value
+
+  replication {
+    auto {}
+  }
+
+  depends_on = [google_project_service.apis]
+}
+
+# The runtime reads these two secrets only (no project-wide accessor role).
+resource "google_secret_manager_secret_iam_member" "runtime_reads_github" {
+  for_each  = google_secret_manager_secret.github
+  secret_id = each.value.id
+  role      = "roles/secretmanager.secretAccessor"
+  member    = "serviceAccount:${google_service_account.runtime.email}"
+}
+
+# Webhook records (codeHostEvents) carry a `ttl` 30 days after receipt; Firestore deletes them
+# after it passes (ADR-0028: bounded storage).
+resource "google_firestore_field" "code_host_event_ttl" {
+  database   = google_firestore_database.default.name
+  collection = "codeHostEvents"
+  field      = "ttl"
+  ttl_config {}
+  index_config {} # not queried: no single-field indexes
 }
 
 # ── Logs (ADR-0028) ─────────────────────────────────────────────────────────

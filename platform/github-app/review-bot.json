@@ -1,0 +1,13 @@
+{
+  "name": "andy-intelligence-review-bot",
+  "description": "Opens the weekly system security review PR in andy-intelligence, so its checks run (ADR-0040).",
+  "url": "https://github.com/albernhagen/andy-intelligence",
+  "redirect_url": "http://localhost:1/",
+  "public": false,
+  "default_permissions": {
+    "metadata": "read",
+    "contents": "write",
+    "pull_requests": "write"
+  },
+  "default_events": []
+}

@@ -52,9 +52,12 @@ jobs:
     if: ${{ !cancelled() && needs.changes.outputs.run == 'true' }}
     runs-on: ubuntu-latest
     timeout-minutes: 40
+    # Holds the review bot App's key; deployment branches: main only (ADR-0040,
+    # docs/runbooks/github-app.md §5).
+    environment: system-review
     permissions:
-      contents: write # push the review branch
-      pull-requests: write # open the threat-model PR
+      contents: read # the branch is pushed with the review bot App token
+      pull-requests: write
     env:
       GH_TOKEN: ${{ github.token }}
       GH_REPO: ${{ github.repository }}
@@ -68,9 +71,14 @@ jobs:
         id: token
         env:
           HAS_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN != '' }}
+          HAS_BOT: ${{ vars.REVIEW_BOT_CLIENT_ID != '' && secrets.REVIEW_BOT_PRIVATE_KEY != '' }}
         run: |
           if [ "$HAS_TOKEN" != true ]; then
             echo "::error title=system-security-review::Repository secret CLAUDE_CODE_OAUTH_TOKEN is not set (docs/runbooks/security-review.md)."
+            exit 1
+          fi
+          if [ "$HAS_BOT" != true ]; then
+            echo "::error title=system-security-review::Review bot App not configured: variable REVIEW_BOT_CLIENT_ID and environment secret REVIEW_BOT_PRIVATE_KEY (docs/runbooks/github-app.md §5)."
             exit 1
           fi
 
@@ -113,8 +121,21 @@ jobs:
             --max-turns 80
             --json-schema '{"type":"object","properties":{"summary":{"type":"string"},"open_high_or_critical":{"type":"integer"},"new_findings":{"type":"integer"}},"required":["summary","open_high_or_critical","new_findings"]}'
 
+      # Minted after the agent ran, so the agent never sees it. PRs opened with an App token run
+      # their checks without manual approval (GITHUB_TOKEN-opened PRs don't).
+      - name: Review bot token
+        id: bot
+        uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
+        with:
+          client-id: ${{ vars.REVIEW_BOT_CLIENT_ID }}
+          private-key: ${{ secrets.REVIEW_BOT_PRIVATE_KEY }}
+          permission-contents: write
+          permission-pull-requests: write
+
       - name: Open threat-model PR
         env:
+          GH_TOKEN: ${{ steps.bot.outputs.token }}
+          BOT_SLUG: ${{ steps.bot.outputs.app-slug }}
           RESULT: ${{ steps.review.outputs.structured_output }}
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
         run: |
@@ -134,8 +155,9 @@ jobs:
           fi
           date=$(date -u +%Y-%m-%d)
           branch="security/system-review-$date-$GITHUB_RUN_ID"
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          bot_id=$(gh api "/users/${BOT_SLUG}%5Bbot%5D" --jq .id)
+          git config user.name "${BOT_SLUG}[bot]"
+          git config user.email "${bot_id}+${BOT_SLUG}[bot]@users.noreply.github.com"
           git switch -c "$branch"
           git commit -qam "Security: system review $date"
           git push -q "https://x-access-token:${GH_TOKEN}@github.com/${GH_REPO}.git" "$branch"
@@ -147,5 +169,5 @@ jobs:
             "Automated system security review (ADR-0025: Agentic security review)." \
             "- New findings: $new" "- Open high/critical risks: $open" \
             "$summary" \
-            "Run: $RUN_URL. Checks on PRs opened by GitHub Actions wait for approval: approve the workflow runs on this PR (docs/runbooks/security-review.md).")
+            "Run: $RUN_URL. Opened by the review bot App, so this PR's checks run on their own.")
           gh pr create --base main --head "$branch" --title "Security: system review $date" --body "$body"

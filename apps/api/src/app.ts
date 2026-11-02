@@ -1,10 +1,17 @@
 import { OpenAPIHono, createRoute, z } from "@hono/zod-openapi";
-import { WorkTrackerError, type OAuthGrantStore, type WorkTracker } from "@andy/contracts";
-import { DomainError, TicketService } from "@andy/domain";
+import {
+  WorkTrackerError,
+  type CodeEventLog,
+  type CodeHost,
+  type OAuthGrantStore,
+  type WorkTracker,
+} from "@andy/contracts";
+import { DomainError, ProjectService, TicketService } from "@andy/domain";
 import { bodyLimit } from "hono/body-limit";
 import { requireAllowedUser, type AuthEnv, type TokenVerifier } from "./auth";
 import { registerMcp, type ClientMetadataResolver } from "./mcp";
 import { registerTicketRoutes } from "./tickets";
+import { registerGitHubWebhook } from "./webhooks";
 
 /** Request body cap for /api/* (ADR-0028: everything that can grow gets a cap). */
 export const MAX_BODY_BYTES = 256 * 1024;
@@ -27,6 +34,13 @@ export interface AppDeps {
     publicUrl: string;
     grants: OAuthGrantStore;
     clients: ClientMetadataResolver;
+    now?: () => Date;
+  };
+  /** GitHub App (ADR-0040): webhook receiver + repo checks at registration; off when absent. */
+  github?: {
+    webhookSecret: string;
+    codeHost: CodeHost;
+    events: CodeEventLog;
     now?: () => Date;
   };
 }
@@ -59,6 +73,8 @@ const DOMAIN_STATUS = {
   dor_not_met: 422,
   reason_required: 422,
   forbidden: 403,
+  invalid_repo: 422,
+  repo_taken: 409,
 } as const;
 
 export function createApp(deps: AppDeps) {
@@ -102,6 +118,16 @@ export function createApp(deps: AppDeps) {
 
   app.get("/config.json", (c) => c.json(deps.webConfig));
 
+  // Public, outside /api: GitHub authenticates with the HMAC signature, not a user token.
+  if (deps.github) {
+    registerGitHubWebhook(app, {
+      secret: deps.github.webhookSecret,
+      events: deps.github.events,
+      tracker: deps.tracker,
+      now: deps.github.now,
+    });
+  }
+
   app.use("/api/*", requireAllowedUser(deps.verifier, deps.allowedEmails));
   app.use(
     "/api/*",
@@ -116,7 +142,12 @@ export function createApp(deps: AppDeps) {
     return c.json({ email, uid }, 200);
   });
 
-  registerTicketRoutes(app, deps.tracker, new TicketService(deps.tracker));
+  registerTicketRoutes(
+    app,
+    deps.tracker,
+    new TicketService(deps.tracker),
+    new ProjectService(deps.tracker, deps.github?.codeHost ?? null),
+  );
 
   // After the /api middleware, so /api/oauth/approve requires the allow-listed user.
   if (deps.mcp) {

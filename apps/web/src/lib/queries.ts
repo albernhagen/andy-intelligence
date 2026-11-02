@@ -90,7 +90,7 @@ function useWrite<V, R>(fn: (vars: V) => Promise<R>) {
 
 export function useCreateProject() {
   const api = useApi();
-  return useWrite(async (body: { name: string; key: string }) =>
+  return useWrite(async (body: { name: string; key: string; repos: string[] }) =>
     unwrap(await api.POST("/api/projects", { body })),
   );
 }

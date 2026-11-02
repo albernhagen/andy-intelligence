@@ -3,7 +3,7 @@ title: andy-intelligence — Architecture & Vision
 status: accepted (v1.x scope)
 owner: Andy
 last_updated: 2026-11-02
-revision: 2026-11-02c (M1.3: UI: tickets + inbox: screens built, §7.5; after 2026-11-02b M1.1: MCP OAuth spike, ADR-0039)
+revision: 2026-11-02d (M1.5: GitHub App + project registration: `CodeHost` + `CodeEventLog`, webhook receiver, two Apps, project #1 = andy-intelligence; ADR-0040)
 ---
 
 # andy-intelligence — Architecture & Vision
@@ -152,6 +152,7 @@ All records carry `project_id` where applicable. Documents are validated with th
 | **QuotaReading** | provider, window (5h / weekly / daily-tasks), used_pct, resets_at, source, taken_at, confidence |
 | **ConfigChange** | entity, diff, actor (andy / ui / agent / scout), reason, status (pending / applied / reverted), timestamps |
 | **Release** | project, image digest, tickets included, notes, status |
+| **CodeHostEvent** | delivery ID (document ID), project, repo, kind (pull_request / check_run / workflow_run), action, normalized PR / check / workflow fields, received_at; TTL 30 days (ADR-0040) |
 
 ### Configuration rules
 - **Global config is the ceiling; project config can only narrow** (disable providers, lower caps, raise reserves, pin tiers).
@@ -176,7 +177,8 @@ Contracts are defined in `packages/contracts` (Zod schemas + TypeScript interfac
 | Port | Domain concepts | v1.x adapters | Later |
 |---|---|---|---|
 | `WorkTracker` | Project, Ticket, TicketEvent (history), Question; every write appends its event atomically | **Native (Firestore)** | Markdown in repo (ADR-0032), GitHub Issues, Linear (mirror/export) |
-| `CodeHost` | Repo, PullRequest, CheckRun, Merge | GitHub App (REST + webhooks) | — |
+| `CodeHost` | Repo, PullRequest, CheckRun, Merge (v1: `getRepo`; PR/check reads and dispatch come with M1.6: Claude Code executor) | **GitHub App** (`@andy/github`, ADR-0040) | — |
+| `CodeEventLog` | CodeHostEvent (webhook deliveries, recorded once per delivery ID) | **Firestore** (ADR-0040) | Local store (ADR-0032) |
 | `Executor` | RunRequest, RunStatus, RunResult, CompletionSignal, Artifact links | **Claude Code via Actions**, **Jules REST API**, **OpenCode via Actions** | Cloud Run Jobs, Agent SDK, Replicas |
 | `ModelGateway` | Completion, Usage, Cost | OpenRouter (direct single-call steps) | LiteLLM, direct providers |
 | `QuotaSource` | QuotaReading | Claude statusline/`rate_limits` capture from runs, Jules task counter | Official APIs when available |
@@ -195,7 +197,8 @@ Contracts are defined in `packages/contracts` (Zod schemas + TypeScript interfac
 ### 7.1 Control plane service (Cloud Run)
 - **API** — REST, OpenAPI-documented, the single entry point for UI and MCP.
 - **MCP server** — remote, Streamable HTTP at `/mcp`. Tools generated from API contracts. v1.x tools: `list_projects`, `create_ticket`, `get_ticket`, `refine` (start refinement), `list_needs_me`, `answer_question`, `set_override`, `start`, `status`, `quota`, `promote_release`, `get_config`, `propose_config_change`.
-- **Webhook receiver** — GitHub App webhooks for PRs, check runs, and workflow runs (HMAC-verified, idempotent by delivery ID).
+- **Webhook receiver** — `POST /webhooks/github`: GitHub App webhooks for PRs, check runs, and workflow runs (ADR-0040). Body ≤ 1 MB → ≤ 300 requests/minute per instance → HMAC-SHA256 → event type → repo must belong to a project → recorded once per delivery ID (`CodeEventLog`; replays are no-ops). Off unless `GITHUB_APP_ID` is set.
+- **Project registration** — `POST /api/projects` with `repos`: each repo must have the control-plane App installed and belongs to one project only (`ProjectService` in `@andy/domain`). Project #1: `albernhagen/andy-intelligence` (key `AI`).
 - **Run completion signals** (event-driven, per executor):
   | Executor | Primary signal | Backup |
   |---|---|---|
@@ -321,6 +324,8 @@ Third-party action pins inside `platform/actions/` are bumped by this repo's Dep
 | Daily Firestore backup (7-day retention) | 0028 | `infra/control-plane` | TF | not yet carried (M6: Dev → prod releases) |
 | Cloud Tasks queue caps (rate, concurrency, retries) | 0028 | `infra/control-plane` | TF | not yet carried (M6: Dev → prod releases) |
 | API request body cap (256 KB) | 0028 | `apps/api/src/app.ts` | — | control plane only (product apps choose their own) |
+| Webhook caps (1 MB body, 300/minute per instance) + HMAC + 30-day TTL on records | 0028, 0040 | `apps/api/src/webhooks.ts`, `infra/control-plane` | — | control plane only (managed repos send webhooks; they don't receive them) |
+| Bot-opened PRs run their checks (App token from a `main`-only environment) | 0040 | `system-security-review.yml` | — | not yet carried (the system review itself isn't carried until M6: Dev → prod releases) |
 
 
 ---
@@ -329,13 +334,13 @@ Third-party action pins inside `platform/actions/` are bumped by this repo's Dep
 
 - **Identity:**
   - Andy: Google identity with an email allow-list (Andy only). UI via Firebase Auth (Google provider); MCP via our own OAuth server whose sign-in step is that same Firebase Google sign-in + allow-list (CIMD clients from `claude.ai`/`claude.com`, PKCE, hashed opaque tokens; ADR-0039).
-  - GitHub webhooks: HMAC signature.
+  - GitHub webhooks: HMAC-SHA256 signature with the webhook secret (ADR-0040).
   - Cloud Scheduler **and Cloud Tasks** (watchdog) → API: OIDC tokens for a dedicated invoker service account, audience = the service URL; the API verifies issuer, audience, and SA email.
   - **Agent callbacks from Actions runs:** the workflow requests a GitHub Actions OIDC token (`id-token: write`, audience = control plane). The API verifies it against GitHub's JWKS and checks `repository`, `job_workflow_ref` (must be the platform's reusable workflow), and `run_id` against the dispatched Run. No secret is passed through `workflow_dispatch` inputs (they are visible in public repos' run UI).
   - Non-Actions executors (Jules) don't call back; their completion arrives via GitHub webhooks.
 - **Least privilege:** agent service accounts and tokens are read-only; per-run GitHub App installation tokens scoped to the project's repos; separate per-project OpenRouter keys with caps; per-project GCP projects. Callback-authenticated agents can only write to their own Run and ticket (report, comment, question).
 - **Writes:** code via PR; infra via Terraform PR with plan in CI; prod via Cloud Deploy approval. The control plane never applies infra without Andy's approval.
-- **Secrets:** Secret Manager only; never in repo, logs, prompts, run records, or workflow inputs.
+- **Secrets:** Secret Manager only (control-plane GitHub App key and webhook secret: ADR-0040); never in repo, logs, prompts, run records, or workflow inputs. Exception: secrets GitHub Actions itself needs (Claude token; review bot App key, in a `main`-only environment).
 - **Prompt injection:** all agents instructed that tool output, issue text, web content, and logs are data. MCP scoping per project for agents. (Later: promptfoo red-team suite against MCP + agents.)
 - **Audit:** TicketEvent and ConfigChange tables; run records; GitHub history for code.
 - **Public repos:** no secrets, personal data, tfvars, or state in any repo; secret scanning + push protection + TruffleHog in CI (ADR-0015).
@@ -419,7 +424,7 @@ The control plane's Firestore holds real data from M1.2: Ticket core on; there i
 | Runtime | Cloud Run (single service), Cloud Tasks, Cloud Scheduler (weekly scout), Secret Manager |
 | Auth | Firebase Auth / Identity Platform (Google) + MCP OAuth facade; GitHub Actions OIDC for agent callbacks |
 | Work tracker | Native in Firestore + in-app UI + MCP (ADR-0016) |
-| Code host | GitHub App on Andy's personal account; public repos (ADR-0003, ADR-0015) |
+| Code host | GitHub Apps on Andy's personal account (control plane + review bot, ADR-0040); public repos (ADR-0003, ADR-0015) |
 | Executors | GitHub Actions (Claude Code, OpenCode), Jules REST API, OpenRouter |
 | Release | Cloud Deploy (per project) |
 | IaC | Terraform, version pinned in `.terraform-version`, installed with tenv (ADR-0024); provider versions pinned in committed `.terraform.lock.hcl` |
@@ -529,7 +534,7 @@ Remaining:
 5. Claude plan (Pro vs Max) — affects automated-run budget; confirm current billing for Action/headless usage.
 6. Google plan (AI Pro vs Ultra) and current Jules daily task quota.
 7. OpenRouter: account exists? initial monthly/daily caps?
-8. First real side project to onboard in M1: First end-to-end flow (and is andy-intelligence itself project #2 for dogfooding?).
+8. ~~First real side project to onboard in M1: First end-to-end flow~~ — **answered in M1.5: GitHub App + project registration**: andy-intelligence itself is project #1 (ADR-0040); side projects in M2: Multi-project in parallel.
 9. ~~Claude custom-connector OAuth mechanism currently supported (dynamic client registration vs static client)~~ — **answered by M1.1: MCP OAuth spike**: CIMD against our own authorization server (ADR-0039).
 10. Whether the Jules GitHub integration or the Jules REST API should be the dispatch path (REST preferred for run tracking; must support auto-PR creation for the completion signal).
 11. Local mode design (ADR-0032): markdown ticket format, local executor (Claude Code CLI) and its trust boundary, local storage/queue/auth adapters, devkit packaging and versioning. Due after M1: First end-to-end flow.

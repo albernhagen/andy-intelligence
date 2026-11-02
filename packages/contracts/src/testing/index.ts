@@ -1,10 +1,20 @@
 import { describe, expect, it } from "vitest";
-import { Project, Question, QuotaReading, Ticket, TicketEvent } from "../entities";
+import {
+  CodeHostEvent,
+  Project,
+  Question,
+  QuotaReading,
+  Repo,
+  Ticket,
+  TicketEvent,
+} from "../entities";
 import {
   OAuthGrant,
   RunHandle,
   RunReport,
   WorkTrackerError,
+  type CodeEventLog,
+  type CodeHost,
   type Executor,
   type OAuthGrantStore,
   type QuotaSource,
@@ -311,6 +321,138 @@ export function oauthGrantStoreContract(
       const store = await make(() => start);
       expect(await store.get(key())).toBeNull();
       expect(await store.take(key())).toBeNull();
+    });
+  });
+}
+
+/**
+ * CodeHost suite. `knownRepo` must exist with the App installed; `unknownRepo` must not (or
+ * not have the App). The GitHub adapter runs this against a real repo locally (ADR-0040).
+ */
+export function codeHostContract(
+  name: string,
+  make: () => Promise<{ host: CodeHost; knownRepo: string; unknownRepo: string }>,
+): void {
+  describe(`CodeHost contract: ${name}`, () => {
+    it("GivenAnInstalledRepo_WhenRead_ThenItsCanonicalDetailsAreReturned", async () => {
+      const { host, knownRepo } = await make();
+      const repo = await host.getRepo(knownRepo);
+      expect(repo).not.toBeNull();
+      expect(Repo.parse(repo)).toEqual(repo);
+      expect(repo!.fullName.toLowerCase()).toBe(knownRepo.toLowerCase());
+    });
+
+    it("GivenADifferentlyCasedName_WhenRead_ThenTheSameRepoIsReturned", async () => {
+      const { host, knownRepo } = await make();
+      const repo = await host.getRepo(knownRepo.toUpperCase());
+      expect(repo?.fullName.toLowerCase()).toBe(knownRepo.toLowerCase());
+    });
+
+    it("GivenARepoWithoutTheApp_WhenRead_ThenNull", async () => {
+      const { host, unknownRepo } = await make();
+      expect(await host.getRepo(unknownRepo)).toBeNull();
+    });
+
+    it("GivenAMalformedName_WhenRead_ThenNull", async () => {
+      const { host } = await make();
+      expect(await host.getRepo("../etc/passwd")).toBeNull();
+      expect(await host.getRepo("no-slash")).toBeNull();
+    });
+  });
+}
+
+/** CodeEventLog suite. Every test uses fresh delivery IDs, so it can share a store. */
+export function codeEventLogContract(name: string, make: () => Promise<CodeEventLog>): void {
+  describe(`CodeEventLog contract: ${name}`, () => {
+    const event = (deliveryId: string, title = "Add thing"): CodeHostEvent => ({
+      kind: "pull_request",
+      deliveryId,
+      projectId: "ai",
+      repo: "owner/repo",
+      action: "opened",
+      receivedAt: "2026-11-02T12:00:00.000Z",
+      pullRequest: {
+        number: 7,
+        state: "open",
+        draft: false,
+        title,
+        headRef: "m1.5/github-app",
+        headSha: "abc123",
+        baseRef: "main",
+        url: "https://github.com/owner/repo/pull/7",
+      },
+    });
+
+    it("GivenANewDelivery_WhenRecorded_ThenItIsStoredUnchanged", async () => {
+      const log = await make();
+      const id = crypto.randomUUID();
+      expect(await log.record(event(id))).toBe("recorded");
+      const read = await log.get(id);
+      expect(read).toEqual(event(id));
+      expect(CodeHostEvent.parse(read)).toEqual(read);
+    });
+
+    it("GivenARecordedDelivery_WhenReplayed_ThenItIsANoOpAndTheFirstRecordStays", async () => {
+      const log = await make();
+      const id = crypto.randomUUID();
+      await log.record(event(id));
+      expect(await log.record(event(id, "Changed on replay"))).toBe("duplicate");
+      expect(await log.get(id)).toEqual(event(id));
+    });
+
+    it("GivenConcurrentDeliveriesWithOneId_WhenRecorded_ThenExactlyOneIsRecorded", async () => {
+      const log = await make();
+      const id = crypto.randomUUID();
+      const results = await Promise.all([1, 2, 3].map(() => log.record(event(id))));
+      expect(results.filter((r) => r === "recorded")).toHaveLength(1);
+    });
+
+    it("GivenEachEventKind_WhenRecorded_ThenItRoundTrips", async () => {
+      const log = await make();
+      const base = {
+        projectId: "ai",
+        repo: "owner/repo",
+        action: "completed",
+        receivedAt: "2026-11-02T12:00:00.000Z",
+      };
+      const check: CodeHostEvent = {
+        ...base,
+        kind: "check_run",
+        deliveryId: crypto.randomUUID(),
+        checkRun: {
+          id: "1",
+          name: "check",
+          status: "completed",
+          conclusion: "success",
+          headSha: "abc123",
+          url: "https://github.com/owner/repo/runs/1",
+          pullRequestNumbers: [7],
+        },
+      };
+      const workflow: CodeHostEvent = {
+        ...base,
+        kind: "workflow_run",
+        deliveryId: crypto.randomUUID(),
+        workflowRun: {
+          id: "2",
+          name: "CI",
+          trigger: "pull_request",
+          status: "completed",
+          conclusion: null,
+          headBranch: null,
+          headSha: "abc123",
+          url: "https://github.com/owner/repo/actions/runs/2",
+        },
+      };
+      for (const e of [check, workflow]) {
+        await log.record(e);
+        expect(await log.get(e.deliveryId)).toEqual(e);
+      }
+    });
+
+    it("GivenAnUnknownDelivery_WhenRead_ThenNull", async () => {
+      const log = await make();
+      expect(await log.get(crypto.randomUUID())).toBeNull();
     });
   });
 }

@@ -11,7 +11,7 @@ import {
   TicketFields,
   Timestamp,
 } from "@andy/contracts";
-import type { TicketService } from "@andy/domain";
+import type { ProjectService, TicketService } from "@andy/domain";
 import type { WorkTracker } from "@andy/contracts";
 import type { AuthEnv } from "./auth";
 
@@ -174,11 +174,12 @@ export function registerTicketRoutes(
   app: OpenAPIHono<AuthEnv>,
   tracker: WorkTracker,
   service: TicketService,
+  projects: ProjectService,
 ): void {
   app.openapi(routes.listProjects, async (c) => c.json(await tracker.listProjects(), 200));
 
   app.openapi(routes.createProject, async (c) =>
-    c.json(await tracker.createProject(c.req.valid("json")), 201),
+    c.json(await projects.register(c.req.valid("json")), 201),
   );
 
   app.openapi(routes.getProject, async (c) => {

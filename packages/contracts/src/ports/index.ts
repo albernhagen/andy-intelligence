@@ -16,12 +16,15 @@ import {
   Timestamp,
   Urgency,
   type AnsweredVia,
+  type CodeHostEvent,
+  type Repo,
   type TicketEvent,
 } from "../entities";
 
 /**
  * Ports (ARCHITECTURE §6). Adapters implement these; the domain only sees these types.
- * WorkTracker, Executor and QuotaSource have fakes + contract suites (see ../testing).
+ * WorkTracker, Executor, QuotaSource, OAuthGrantStore, CodeHost and CodeEventLog have fakes +
+ * contract suites (see ../testing).
  * The rest are plain interfaces until a second adapter exists (ADR-0012).
  */
 
@@ -232,6 +235,30 @@ export interface OAuthGrantStore {
    * refresh tokens are single-use even under concurrent requests.
    */
   take(key: string): Promise<OAuthGrant | null>;
+}
+
+// ── CodeHost ─────────────────────────────────────────────────────────────────
+// Reads from the code host through our App (ARCHITECTURE §6). v1.x: GitHub App. Grows with
+// the slices that need it (PR/check reads for the watchdog, workflow dispatch: M1.6).
+
+export interface CodeHost {
+  /** The repo, or null when it doesn't exist or our App isn't installed on it. */
+  getRepo(fullName: string): Promise<Repo | null>;
+}
+
+// ── CodeEventLog ─────────────────────────────────────────────────────────────
+// Webhook deliveries from the code host, recorded once each (ADR-0040). Later slices react to
+// them (Run completion, PR outcome).
+
+export type RecordResult = "recorded" | "duplicate";
+
+export interface CodeEventLog {
+  /**
+   * Stores the event under its delivery ID, atomically. A delivery ID seen before is a no-op
+   * that returns "duplicate" and leaves the first record unchanged (replays, redeliveries).
+   */
+  record(event: CodeHostEvent): Promise<RecordResult>;
+  get(deliveryId: string): Promise<CodeHostEvent | null>;
 }
 
 // ── Plain interfaces (no contract suite yet) ─────────────────────────────────

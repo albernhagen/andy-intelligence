@@ -256,3 +256,97 @@ export const Release = z.object({
   ]),
 });
 export type Release = z.infer<typeof Release>;
+
+// ── Code host (ARCHITECTURE §6 `CodeHost`) ─────────────────────────────────────
+// Repos, pull requests, checks and workflow runs as the domain sees them. Adapters map the
+// vendor's webhook payloads onto these; raw payloads are never stored.
+
+/** "owner/name", the code host's full repo name. Compare case-insensitively. */
+export const RepoName = z.string().regex(/^[A-Za-z0-9-]{1,39}\/[A-Za-z0-9._-]{1,100}$/);
+export type RepoName = z.infer<typeof RepoName>;
+
+export const Repo = z.object({
+  /** Canonical spelling from the code host. */
+  fullName: RepoName,
+  defaultBranch: z.string().min(1),
+  private: z.boolean(),
+  url: z.url(),
+});
+export type Repo = z.infer<typeof Repo>;
+
+export const PullRequestState = z.enum(["open", "closed", "merged"]);
+export type PullRequestState = z.infer<typeof PullRequestState>;
+
+export const PullRequest = z.object({
+  number: z.number().int().positive(),
+  state: PullRequestState,
+  draft: z.boolean(),
+  /** Untrusted text; capped by the adapter. */
+  title: z.string().max(256),
+  headRef: z.string().min(1),
+  headSha: z.string().min(1),
+  baseRef: z.string().min(1),
+  url: z.url(),
+});
+export type PullRequest = z.infer<typeof PullRequest>;
+
+export const CheckStatus = z.enum(["queued", "in_progress", "completed"]);
+export type CheckStatus = z.infer<typeof CheckStatus>;
+
+export const CheckConclusion = z.enum([
+  "success",
+  "failure",
+  "neutral",
+  "cancelled",
+  "skipped",
+  "timed_out",
+  "action_required",
+  "stale",
+  "other",
+]);
+export type CheckConclusion = z.infer<typeof CheckConclusion>;
+
+export const CheckRun = z.object({
+  id: z.string().min(1),
+  name: z.string().min(1).max(256),
+  status: CheckStatus,
+  conclusion: CheckConclusion.nullable(),
+  headSha: z.string().min(1),
+  url: z.url(),
+  pullRequestNumbers: z.array(z.number().int().positive()),
+});
+export type CheckRun = z.infer<typeof CheckRun>;
+
+/** A CI workflow run (GitHub Actions in v1.x); M1.6 correlates these with Runs. */
+export const WorkflowRun = z.object({
+  id: z.string().min(1),
+  name: z.string().max(256),
+  /** What started it, e.g. "pull_request", "workflow_dispatch". */
+  trigger: z.string().min(1),
+  status: CheckStatus,
+  conclusion: CheckConclusion.nullable(),
+  headBranch: z.string().nullable(),
+  headSha: z.string().min(1),
+  url: z.url(),
+});
+export type WorkflowRun = z.infer<typeof WorkflowRun>;
+
+/** The code host's delivery ID; also the record's document ID, so no slashes. */
+export const DeliveryId = z.string().regex(/^[A-Za-z0-9-]{1,64}$/);
+
+const CodeHostEventBase = z.object({
+  deliveryId: DeliveryId,
+  projectId: Id,
+  repo: RepoName,
+  /** Vendor action, e.g. "opened", "closed", "completed". */
+  action: z.string().max(64),
+  receivedAt: Timestamp,
+});
+
+/** One webhook delivery about a registered repo, normalized. Idempotent by `deliveryId`. */
+export const CodeHostEvent = z.discriminatedUnion("kind", [
+  CodeHostEventBase.extend({ kind: z.literal("pull_request"), pullRequest: PullRequest }),
+  CodeHostEventBase.extend({ kind: z.literal("check_run"), checkRun: CheckRun }),
+  CodeHostEventBase.extend({ kind: z.literal("workflow_run"), workflowRun: WorkflowRun }),
+]);
+export type CodeHostEvent = z.infer<typeof CodeHostEvent>;

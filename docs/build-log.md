@@ -184,6 +184,13 @@ Temporary progress log until andy-intelligence can track its own work (then migr
 - M1.1: MCP OAuth spike Done when met. M1.4: MCP core tools is unblocked on the auth side (still needs M1.2: Ticket core, merged).
 - Lesson: the emulator needs a Java runtime; the runbooks now say how to install one.
 
+## 2026-11-02 — M1.5: GitHub App + project registration built
+
+- **Decided (Andy, ADR-0040: GitHub App credentials and webhook intake):** andy-intelligence is project #1 (open question 8; side projects in M2: Multi-project in parallel). Two private Apps from manifests: read-only control-plane App (webhooks) and a review bot App (contents + PR write, this repo only) so the control-plane key never leaves Secret Manager. Control-plane key + webhook secret in Secret Manager (Andy adds versions with `gcloud`); bot key in a `main`-only `system-review` environment.
+- Branch `m1.5/github-app`: `CodeHost` (`getRepo`) + `CodeEventLog` ports, fakes, contract suites; `FirestoreCodeEventLog` (`create()` per delivery ID); new `@andy/github` (`GitHubCodeHost` on `@octokit/auth-app`, HMAC via `@octokit/webhooks-methods`, payload mapping); `POST /webhooks/github` (1 MB, 300/minute per instance, HMAC, registered repos only); `ProjectService` (repo must have the App, one project per repo); repo field on the new-project form; Terraform: 2 secrets, runtime `secretAccessor` on them, `codeHostEvents` TTL, env behind `github_app_id`; `system-security-review.yml` opens its PR with the bot token. Runbook `docs/runbooks/github-app.md`; threat model R15, R16, R9 narrowed.
+- Verified locally: lint, typecheck, tests, build; `terraform validate`; smoke run of the bundle (unsigned delivery → 401, `/health` 200). Not run here: `pnpm test:firestore` (no Java), the GitHub contract suite (needs the App), actionlint/Trivy (CI).
+- Andy to run after merge: runbook `github-app.md` §1–6 (apply 5 adds; create App; apply 1 change; register `AI`; review bot; Done when: PR event recorded, redelivery → `duplicate`).
+
 ## Slices: M1: First end-to-end flow: ticket → PR with Claude
 
 Status: todo / in progress / PR open / merged. Definitions: ARCHITECTURE §12.
@@ -195,7 +202,7 @@ Status: todo / in progress / PR open / merged. Definitions: ARCHITECTURE §12.
 | M1.2: Ticket core                       | M               | M0: Foundations                                                                             | merged (PR #17) |
 | M1.3: UI: tickets + inbox               | M               | M1.2: Ticket core                                                                           | merged (PR #28) |
 | M1.4: MCP core tools                    | S               | M1.1: MCP OAuth spike, M1.2: Ticket core                                                    | todo            |
-| M1.5: GitHub App + project registration | M               | M1.2: Ticket core                                                                           | todo            |
+| M1.5: GitHub App + project registration | M               | M1.2: Ticket core                                                                           | in progress     |
 | M1.6: Claude Code executor              | L (split 6a/6b) | M1.5: GitHub App + project registration                                                     | todo            |
 | M1.7: Refinement                        | M               | M1.3: UI: tickets + inbox, M1.4: MCP core tools, M1.6: Claude Code executor                 | todo            |
 | M1.8: Build + gate                      | M               | M1.7: Refinement, M1.16: Project baseline v1                                                | todo            |
@@ -219,7 +226,6 @@ Status: todo / in progress / PR open / merged. Definitions: ARCHITECTURE §12.
 
 **Pending decisions (Andy):**
 
-- First real project to onboard (open question 8); needed by M1.5: GitHub App + project registration.
 - Claude plan and headless billing (open question 5); needed by M1.6: Claude Code executor.
 - Local mode design (open question 11); due after M1: First end-to-end flow.
 - Context sources design (open question 12); due after M1: First end-to-end flow.

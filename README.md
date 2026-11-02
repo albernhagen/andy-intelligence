@@ -77,6 +77,8 @@ pnpm --filter @andy/web dev          # :5173, proxies /api to :8080
 
 Set `PUBLIC_URL` (the service's public origin, e.g. `http://localhost:8080`) to turn on `/mcp` and its OAuth endpoints (ADR-0039: MCP OAuth facade); Terraform sets it in Cloud Run.
 
+Set `GITHUB_APP_ID`, `GITHUB_APP_PRIVATE_KEY` (PEM) and `GITHUB_WEBHOOK_SECRET` to turn on the GitHub webhook receiver `POST /webhooks/github` and the App-installed check when a project is created with repos (ADR-0040: GitHub App credentials and webhook intake). Without them, repos are only format-checked. In Cloud Run the key and secret come from Secret Manager; setup: [`docs/runbooks/github-app.md`](docs/runbooks/github-app.md).
+
 ### Web UI (M1.3: UI: tickets + inbox)
 
 | Route                       | Screen                                                                                           |
@@ -92,22 +94,24 @@ Set `PUBLIC_URL` (the service's public origin, e.g. `http://localhost:8080`) to 
 
 ## Layout
 
-| Path                  | What                                                          |
-| --------------------- | ------------------------------------------------------------- |
-| `apps/api`            | Hono API, MCP endpoint + its OAuth server; serves the SPA     |
-| `apps/web`            | React + Vite + shadcn UI: Needs-you inbox, tickets, detail    |
-| `packages/contracts`  | Zod entities, ports, fakes, contract suites                   |
-| `packages/domain`     | Ticket rules: stage moves, Definition of Ready, Needs-you     |
-| `packages/store`      | Firestore client, converters, `FirestoreWorkTracker`          |
-| `infra/bootstrap`     | One-time GCP bootstrap (state bucket, GitHub OIDC)            |
-| `infra/control-plane` | Control-plane GCP resources                                   |
-| `infra/billing`       | Billing budget, alerts, opt-in kill switch (local plans only) |
-| `scripts`             | Repo tooling (Claude Code format hook, review gate and scope) |
-| `platform/actions`    | Composite actions behind every required check (baseline)      |
-| `platform/baseline`   | Baseline manifest, GitHub config JSON, `baseline.mjs`         |
-| `platform/procedures` | Agent procedures: `/security-review`, `/threat-model`         |
-| `template`            | Files copied into managed repos (managed, seed, starter)      |
-| `lefthook.yml`        | Git hooks: pre-commit lint/format, pre-push checks            |
-| `firebase.json`       | Firestore emulator config for `pnpm test:firestore`           |
+| Path                  | What                                                                |
+| --------------------- | ------------------------------------------------------------------- |
+| `apps/api`            | Hono API, MCP endpoint + its OAuth server; serves the SPA           |
+| `apps/web`            | React + Vite + shadcn UI: Needs-you inbox, tickets, detail          |
+| `packages/contracts`  | Zod entities, ports, fakes, contract suites                         |
+| `packages/domain`     | Ticket and project rules: stages, DoR, Needs-you, repo registration |
+| `packages/store`      | Firestore client, converters, `FirestoreWorkTracker`                |
+| `packages/github`     | GitHub App adapter: `GitHubCodeHost`, webhook HMAC + mapping        |
+| `infra/bootstrap`     | One-time GCP bootstrap (state bucket, GitHub OIDC)                  |
+| `infra/control-plane` | Control-plane GCP resources                                         |
+| `infra/billing`       | Billing budget, alerts, opt-in kill switch (local plans only)       |
+| `scripts`             | Repo tooling (Claude Code format hook, review gate and scope)       |
+| `platform/actions`    | Composite actions behind every required check (baseline)            |
+| `platform/baseline`   | Baseline manifest, GitHub config JSON, `baseline.mjs`               |
+| `platform/procedures` | Agent procedures: `/security-review`, `/threat-model`               |
+| `platform/github-app` | GitHub App manifests + `form.mjs` (manifest flow page)              |
+| `template`            | Files copied into managed repos (managed, seed, starter)            |
+| `lefthook.yml`        | Git hooks: pre-commit lint/format, pre-push checks                  |
+| `firebase.json`       | Firestore emulator config for `pnpm test:firestore`                 |
 
-Infra setup: [`docs/runbooks/m0-setup.md`](docs/runbooks/m0-setup.md). Budget and cost caps: [`docs/runbooks/billing.md`](docs/runbooks/billing.md). Security review setup: [`docs/runbooks/security-review.md`](docs/runbooks/security-review.md). Adversarial review: [`docs/runbooks/adversarial-review.md`](docs/runbooks/adversarial-review.md). Onboard a repo: [`docs/runbooks/onboard-a-repo.md`](docs/runbooks/onboard-a-repo.md). Connect Claude to MCP: [`docs/runbooks/mcp-connector.md`](docs/runbooks/mcp-connector.md).
+Infra setup: [`docs/runbooks/m0-setup.md`](docs/runbooks/m0-setup.md). Budget and cost caps: [`docs/runbooks/billing.md`](docs/runbooks/billing.md). Security review setup: [`docs/runbooks/security-review.md`](docs/runbooks/security-review.md). Adversarial review: [`docs/runbooks/adversarial-review.md`](docs/runbooks/adversarial-review.md). Onboard a repo: [`docs/runbooks/onboard-a-repo.md`](docs/runbooks/onboard-a-repo.md). Connect Claude to MCP: [`docs/runbooks/mcp-connector.md`](docs/runbooks/mcp-connector.md). GitHub Apps and project registration: [`docs/runbooks/github-app.md`](docs/runbooks/github-app.md).
