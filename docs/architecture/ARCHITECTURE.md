@@ -3,7 +3,7 @@ title: andy-intelligence — Architecture & Vision
 status: accepted (v1.x scope)
 owner: Andy
 last_updated: 2026-11-02
-revision: 2026-11-02a (M1.16: Project baseline v1: composite actions, manifest, apply/check script, ADR-0038)
+revision: 2026-11-02b (M1.1: MCP OAuth spike: OAuth facade with CIMD and Firebase sign-in, OAuthGrantStore port, ADR-0039)
 ---
 
 # andy-intelligence — Architecture & Vision
@@ -183,6 +183,7 @@ Contracts are defined in `packages/contracts` (Zod schemas + TypeScript interfac
 | `Notifier` | Notice, Urgency | UI (banner + Needs-you inbox) | Email, Slack, push |
 | `Deployer` | Release, Promotion, Rollback | Cloud Deploy | — |
 | `Evaluator` | Suite, Case, Score | (stub) Ori Eval for scout smoke tests | promptfoo, Inspect AI |
+| `OAuthGrantStore` | OAuthGrant (code, access token, refresh token; keyed by token hash) | **Firestore** (ADR-0039) | Local store (ADR-0032) |
 | `Telemetry` | Trace, Span, CostEvent | OTel → Cloud Trace / Cloud Logging | BigQuery sink |
 
 **Rule:** freeze the `Executor` contract only after **two real adapters** (Claude Code + Jules) work. Vendor terms map to domain terms (a Jules *session* is a `Run`; its *activities* are run events).
@@ -318,7 +319,7 @@ Third-party action pins inside `platform/actions/` are bumped by this repo's Dep
 ## 9. Security
 
 - **Identity:**
-  - Andy: Google identity with an email allow-list (Andy only). UI via Firebase Auth (Google provider); MCP via OAuth delegated to Google sign-in.
+  - Andy: Google identity with an email allow-list (Andy only). UI via Firebase Auth (Google provider); MCP via our own OAuth server whose sign-in step is that same Firebase Google sign-in + allow-list (CIMD clients from `claude.ai`/`claude.com`, PKCE, hashed opaque tokens; ADR-0039).
   - GitHub webhooks: HMAC signature.
   - Cloud Scheduler **and Cloud Tasks** (watchdog) → API: OIDC tokens for a dedicated invoker service account, audience = the service URL; the API verifies issuer, audience, and SA email.
   - **Agent callbacks from Actions runs:** the workflow requests a GitHub Actions OIDC token (`id-token: write`, audience = control plane). The API verifies it against GitHub's JWKS and checks `repository`, `job_workflow_ref` (must be the platform's reusable workflow), and `run_id` against the dispatched Run. No secret is passed through `workflow_dispatch` inputs (they are visible in public repos' run UI).
@@ -520,7 +521,7 @@ Remaining:
 6. Google plan (AI Pro vs Ultra) and current Jules daily task quota.
 7. OpenRouter: account exists? initial monthly/daily caps?
 8. First real side project to onboard in M1: First end-to-end flow (and is andy-intelligence itself project #2 for dogfooding?).
-9. Claude custom-connector OAuth mechanism currently supported (dynamic client registration vs static client) — **answered by M1.1: MCP OAuth spike**.
+9. ~~Claude custom-connector OAuth mechanism currently supported (dynamic client registration vs static client)~~ — **answered by M1.1: MCP OAuth spike**: CIMD against our own authorization server (ADR-0039).
 10. Whether the Jules GitHub integration or the Jules REST API should be the dispatch path (REST preferred for run tracking; must support auto-PR creation for the completion signal).
 11. Local mode design (ADR-0032): markdown ticket format, local executor (Claude Code CLI) and its trust boundary, local storage/queue/auth adapters, devkit packaging and versioning. Due after M1: First end-to-end flow.
 12. Context sources design (ADR-0033): folder name and manifest format, step-to-source mapping, `ContextSource` port shape, MCP registration per project. Due after M1: First end-to-end flow.

@@ -161,6 +161,14 @@ Temporary progress log until andy-intelligence can track its own work (then migr
 - Andy applied the 4 repo settings `check` reported as drift: private vulnerability reporting on, SHA pinning required for actions, default workflow token read-only, `security-accepted` label colour and description.
 - Branch `m1.1/mcp-oauth-spike` started.
 
+## 2026-11-02 — M1.1: MCP OAuth spike built
+
+- **Decided (Andy, ADR-0039: MCP OAuth facade):** our own OAuth authorization server in the API; sign-in step = the existing Firebase Google sign-in + allow-list; clients via CIMD (client ID metadata documents on `claude.ai`/`claude.com`), no DCR; live proof after merge (the deployer only deploys `main`).
+- Verified (Claude connector docs, 2026-11-02): 401 + `resource_metadata` discovery, exact `resource` match, DCR or CIMD, PKCE S256, refresh-token rotation, callback `https://claude.ai/api/mcp/auth_callback`. Google directly needs a hand-made client + secret and gives no refresh tokens: rejected.
+- Branch `m1.1/mcp-oauth-spike`: `OAuthGrantStore` port + fake + contract suite + `FirestoreOAuthGrantStore`; `apps/api/src/mcp/` (discovery, `/oauth/authorize`, `/api/oauth/approve`, `/oauth/token`, stateless `/mcp` with a throwaway `ping`); SPA page `/oauth/consent`; `frame-ancestors 'none'` on every response; Terraform: `PUBLIC_URL` env + Firestore TTL on `oauthGrants`. Runbook `docs/runbooks/mcp-connector.md`; threat model R11–R13.
+- Verified locally: lint, typecheck, tests (MCP SDK's own OAuth client completes discovery → CIMD → consent → token → `ping` → refresh rotation against the app), build, smoke run of the bundle. Not run here: `pnpm test:firestore` (no Java), `terraform validate`/plan, Trivy (CI), the Claude desktop connector (Andy, runbook).
+- Andy to run after merge: `infra/control-plane` apply (1 add, 1 change), `pnpm test:firestore`, runbook §3–4 (connector + `ping`; non-allow-listed account rejected). That is M1.1: MCP OAuth spike's Done when.
+
 ## Slices: M1: First end-to-end flow: ticket → PR with Claude
 
 Status: todo / in progress / PR open / merged. Definitions: ARCHITECTURE §12.
@@ -168,7 +176,7 @@ Status: todo / in progress / PR open / merged. Definitions: ARCHITECTURE §12.
 | Slice                                   | Size            | Depends on                                                                                  | Status          |
 | --------------------------------------- | --------------- | ------------------------------------------------------------------------------------------- | --------------- |
 | M1.0: Docs sync                         | S               | M0: Foundations                                                                             | merged (PR #1)  |
-| M1.1: MCP OAuth spike                   | M               | M0: Foundations                                                                             | in progress     |
+| M1.1: MCP OAuth spike                   | M               | M0: Foundations                                                                             | PR open         |
 | M1.2: Ticket core                       | M               | M0: Foundations                                                                             | merged (PR #17) |
 | M1.3: UI: tickets + inbox               | M               | M1.2: Ticket core                                                                           | todo            |
 | M1.4: MCP core tools                    | S               | M1.1: MCP OAuth spike, M1.2: Ticket core                                                    | todo            |
