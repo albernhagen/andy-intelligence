@@ -3,7 +3,7 @@ title: andy-intelligence — Architecture & Vision
 status: accepted (v1.x scope)
 owner: Andy
 last_updated: 2026-11-02
-revision: 2026-11-02a (M1.16: Project baseline v1: composite actions, manifest, apply/check script, ADR-0038)
+revision: 2026-11-02b (M1.3: UI: tickets + inbox: screens built, §7.5)
 ---
 
 # andy-intelligence — Architecture & Vision
@@ -239,6 +239,15 @@ v1.x screens:
 - **Config** (providers, harnesses, models, tiers, policies; audit log with revert; pending approvals).
 - **Releases** (dev status, promote to prod, rollback).
 API client generated from OpenAPI.
+
+**Built in M1.3: UI: tickets + inbox:**
+- Routes: `/` Needs-you inbox; `/projects`; `/p/:projectId` tickets in one column per stage; `/p/:projectId/t/:ticketId` detail.
+- Detail: edit fields (saves send `ifUpdatedAt`; a 409 conflict asks Andy to reload), Definition of Ready from `/readiness`, history with comments, the ticket's questions, and "Ask a question…" (how Andy seeds one until M1.7: Refinement).
+- Moves: one button per move in `TRANSITIONS` (`packages/domain`), plus "Force move…" to any other stage with a reason (skips the transition and DoR rules; recorded in history). The API enforces the rules; its errors show inline.
+- Client: `openapi-fetch` typed by `apps/web/src/lib/api.gen.ts`, generated in-process from `createApp`'s OpenAPI document (`pnpm --filter @andy/web gen:api`); a test fails when it is stale. Every write refetches all queries (one user, small data).
+- Untrusted text renders as plain React text (no raw HTML or markdown).
+- Tests render the UI against the real API in-process (`createApp` + `InMemoryWorkTracker`). Browser e2e (Playwright with the Firebase Auth emulator) is a follow-up.
+- Not yet: run/PR/cost panels (no runs before M1.6: Claude Code executor), the kill switch's Needs-you item.
 
 ### 7.6 Context sources (ADR-0033, design after M1: First end-to-end flow)
 Product and domain knowledge for agents, pluggable per project, behind a `ContextSource` port:

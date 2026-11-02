@@ -3,6 +3,10 @@
   "version": "0.0.0",
   "private": true,
   "type": "module",
+  "exports": {
+    "./app": "./src/app.ts",
+    "./auth": "./src/auth.ts"
+  },
   "scripts": {
     "dev": "tsx watch src/main.ts",
     "build": "node build.mjs",

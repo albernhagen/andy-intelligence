@@ -48,9 +48,14 @@ export async function watchUser(cb: (user: User | null) => void): Promise<() => 
   return onIdTokenChanged(await getFirebaseAuth(), cb);
 }
 
-export async function apiFetch(path: string, init: RequestInit = {}): Promise<Response> {
+/** The signed-in user's Firebase ID token (refreshed by the SDK when near expiry), or null. */
+export async function getIdToken(): Promise<string | null> {
   const user = (await getFirebaseAuth()).currentUser;
-  const token = user ? await user.getIdToken() : null;
+  return user ? user.getIdToken() : null;
+}
+
+export async function apiFetch(path: string, init: RequestInit = {}): Promise<Response> {
+  const token = await getIdToken();
   const headers = new Headers(init.headers);
   if (token) headers.set("authorization", `Bearer ${token}`);
   return fetch(path, { ...init, headers });

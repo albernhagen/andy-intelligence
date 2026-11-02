@@ -60,6 +60,7 @@ Severity: `critical` (exploitable now, big blast radius) · `high` (exploitable 
 - Project baseline (ADR-0031, ADR-0038): repo settings, ruleset and labels are declared in `platform/baseline/github/`; `baseline.mjs check` shows drift; Actions requires SHA-pinned actions once applied.
 - Cost caps on Cloud Run, $25/month budget alerts, usage alerts (ADR-0028, ADR-0029).
 - Terraform applies only from Andy's machine; CI identity is read-only (ADR-0011).
+- SPA (M1.3: UI: tickets + inbox): ticket, question and event text (agent-written from M1.7: Refinement) renders as React text only: no raw HTML, markdown or auto-links. The ID token goes only to this origin's `/api/*` through the generated client.
 
 ## Open risks
 
