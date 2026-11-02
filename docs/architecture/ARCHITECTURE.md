@@ -3,7 +3,7 @@ title: andy-intelligence — Architecture & Vision
 status: accepted (v1.x scope)
 owner: Andy
 last_updated: 2026-11-02
-revision: 2026-11-02c (M1.3: UI: tickets + inbox: screens built, §7.5; after 2026-11-02b M1.1: MCP OAuth spike, ADR-0039)
+revision: 2026-11-02d (M1.4: MCP core tools: first tools, §7.1; after 2026-11-02c M1.3: UI: tickets + inbox)
 ---
 
 # andy-intelligence — Architecture & Vision
@@ -195,6 +195,7 @@ Contracts are defined in `packages/contracts` (Zod schemas + TypeScript interfac
 ### 7.1 Control plane service (Cloud Run)
 - **API** — REST, OpenAPI-documented, the single entry point for UI and MCP.
 - **MCP server** — remote, Streamable HTTP at `/mcp`. Tools generated from API contracts. v1.x tools: `list_projects`, `create_ticket`, `get_ticket`, `refine` (start refinement), `list_needs_me`, `answer_question`, `set_override`, `start`, `status`, `quota`, `promote_release`, `get_config`, `propose_config_change`.
+  - Built (M1.4: MCP core tools): `create_ticket` (project key, e.g. `AI`), `list_needs_me`, `answer_question` (recorded `answered_via = mcp`), `status` (ticket key → stage, DoR gaps, questions, last 5 events; no key → projects with ticket counts by stage, Needs-you count, signed-in email). Thin adapters over `TicketService` (`packages/domain`), shared with the REST API; rule violations come back as tool errors. Ticket keys resolve via the project id (= lowercased key). The M1.1 `ping` tool is gone; `status` is the connection check.
 - **Webhook receiver** — GitHub App webhooks for PRs, check runs, and workflow runs (HMAC-verified, idempotent by delivery ID).
 - **Run completion signals** (event-driven, per executor):
   | Executor | Primary signal | Backup |

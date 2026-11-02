@@ -1,6 +1,6 @@
 import { InMemoryWorkTracker, type NewTicket } from "@andy/contracts";
 import { beforeEach, describe, expect, it } from "vitest";
-import { DomainError, TicketService } from "./tickets";
+import { DomainError, RECENT_EVENTS, TicketService } from "./tickets";
 
 const readyStory: NewTicket = {
   type: "story",
@@ -102,5 +102,47 @@ describe("TicketService", () => {
       dorStatus: "met",
     });
     expect(await service.needsYou()).toEqual({ questions: [], tickets: [] });
+  });
+
+  it("GivenATicketKey_WhenFound_ThenItIsReturnedAndUnknownOrMalformedKeysAreNotFound", async () => {
+    const t = await service.create(projectId, readyStory, "andy");
+    expect((await service.findByKey(t.key)).id).toBe(t.id);
+    for (const key of ["AI-999", "ZZ-1", "ai-1", "AI", "../x-1"]) {
+      await expect(service.findByKey(key)).rejects.toMatchObject({ code: "not_found" });
+    }
+  });
+
+  it("GivenATicketWithAnOpenQuestion_WhenStatusIsRead_ThenItShowsReadinessQuestionsAndRecentHistory", async () => {
+    const t = await service.create(projectId, readyStory, "andy");
+    for (let i = 0; i < RECENT_EVENTS; i++) await service.comment(projectId, t.id, `c${i}`, "andy");
+    const q = await service.ask(projectId, t.id, { text: "Which board?" }, "agent:r1");
+
+    const status = await service.status(t.key);
+    expect(status.ticket).toMatchObject({ key: t.key, needsYou: true });
+    expect(status.readiness).toEqual({ met: false, missing: ["1 open question(s) answered"] });
+    expect(status.questions.map((x) => x.id)).toEqual([q.id]);
+    expect(status.recentEvents).toHaveLength(RECENT_EVENTS);
+    expect(status.recentEvents.at(-1)?.kind).toBe("fields_changed");
+  });
+
+  it("GivenTicketsInSeveralStages_WhenTheOverviewIsRead_ThenCountsAreByProjectAndStage", async () => {
+    await tracker.createProject({ name: "Other", key: "OT" });
+    const t = await service.create(projectId, readyStory, "andy");
+    await service.create(projectId, { type: "task", title: "x" }, "andy");
+    await service.move(projectId, t.id, "ready", "andy");
+    await service.ask(projectId, t.id, { text: "Which board?" }, "agent:r1");
+
+    const overview = await service.overview();
+    expect(overview.projects).toEqual([
+      expect.objectContaining({
+        key: "AI",
+        ticketsByStage: expect.objectContaining({ backlog: 1, ready: 1, done: 0 }),
+      }),
+      expect.objectContaining({
+        key: "OT",
+        ticketsByStage: expect.objectContaining({ backlog: 0 }),
+      }),
+    ]);
+    expect(overview.needsYou).toEqual({ questions: 1, tickets: 1 });
   });
 });

@@ -77,6 +77,8 @@ pnpm --filter @andy/web dev          # :5173, proxies /api to :8080
 
 Set `PUBLIC_URL` (the service's public origin, e.g. `http://localhost:8080`) to turn on `/mcp` and its OAuth endpoints (ADR-0039: MCP OAuth facade); Terraform sets it in Cloud Run.
 
+MCP tools (M1.4: MCP core tools, `apps/api/src/mcp/tools.ts`): `create_ticket`, `list_needs_me`, `answer_question`, `status` (no ticket: overview + who you're signed in as). They call the same `TicketService` as the REST API.
+
 ### Web UI (M1.3: UI: tickets + inbox)
 
 | Route                       | Screen                                                                                           |

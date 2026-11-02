@@ -39,11 +39,23 @@ curl -si -X POST "$URL/mcp" | grep -i www-authenticate     # 401 + resource_meta
 
 1. Settings → Connectors → Add custom connector. Name: `andy-intelligence`. URL: `<service_url>/mcp`. Leave the advanced OAuth fields empty.
 2. Connect. A browser tab opens on `/oauth/consent`: sign in with Google, then **Approve**. The tab returns to Claude.
-3. In a chat: "call the ping tool". Expect `pong (signed in as <your email>)`.
+3. In a chat: "call the andy-intelligence status tool". Expect `signedInAs: <your email>` and your projects. (M1.1 used a `ping` tool; M1.4: MCP core tools replaced it.)
 
 ## 4. Negative check (allow-list)
 
 Repeat section 3 signed in to a Google account **not** on the allow-list (or sign out on the consent page first): Approve shows "is not allowed to use this control plane" and no code is issued. Cloud Logging shows no `oauth approve: code issued` line for it.
+
+## 4b. Core tools (M1.4: MCP core tools Done when)
+
+After the M1.4 deploy, in a Claude desktop chat (reconnect the connector if Claude still lists `ping`). Each step should match what the UI shows for the same ticket.
+
+1. "Create a story in project AI titled 'MCP smoke test' with body 'check MCP tools'." Expect a new key (e.g. `AI-7`), stage `backlog`, and DoR gaps (acceptance criteria, size, tier).
+2. In the UI, open that ticket → **Ask a question…** → "Kanban or list?".
+3. "What needs me?" (`list_needs_me`). Expect the question with the ticket key and the ticket flagged.
+4. "Answer it: Kanban." (`answer_question`). Expect `answeredVia: mcp`; the UI's inbox no longer shows it and the ticket's history shows the answer.
+5. "Status of AI-7." Expect stage, DoR gaps (no open question any more), and recent history. "Status" with no ticket shows ticket counts per stage.
+6. Error path: "Status of AI-9999." Expect `ticket not found`.
+7. Move or delete the smoke-test ticket in the UI (e.g. force-move to `done` with reason "smoke test").
 
 ## 5. Revoke
 
