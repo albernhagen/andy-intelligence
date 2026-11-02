@@ -1,5 +1,13 @@
 import { describe, expect, it } from "vitest";
-import { MARKER, evaluate, parseFindings, sanitize, usageLine } from "./security-review-gate.mjs";
+import {
+  MARKER,
+  ROLES,
+  evaluate,
+  parseFindings,
+  reviewedShaMarker,
+  sanitize,
+  usageLine,
+} from "./review-gate.mjs";
 
 const finding = (severity, extra = {}) => ({
   severity,
@@ -114,7 +122,7 @@ describe("usageLine", () => {
 
   it("GivenResultMessage_WhenFormatted_ThenTurnsTokensAndEstimate", () => {
     expect(usageLine([{ type: "system" }, result])).toBe(
-      "Usage: 12 turns, 21,000 input / 1,500 output tokens, ≈ $0.46 API-equivalent (estimate; billed to the subscription).",
+      "Usage: 12 turns, 21,000 input / 1,500 output tokens, ≈ $0.46 API-equivalent (estimate; uses subscription quota, not billed).",
     );
   });
 
@@ -133,5 +141,59 @@ describe("usageLine", () => {
       usage: "Usage: 3 turns.",
     });
     expect(body).toContain("<sub>Usage: 3 turns. Commit x.");
+  });
+});
+
+describe("evaluate (adversarial)", () => {
+  const base = { role: "adversarial", mode: "review", accepted: false, sha: "def456" };
+  const adv = (severity, extra = {}) => ({
+    severity,
+    title: `${severity} finding`,
+    file: "src/paging.ts",
+    line: 12,
+    scenario: "page=2, size=10 → returns items 11–21 (one extra)",
+    recommendation: "use < not <=; add a test for the last page",
+    ...extra,
+  });
+  const out = (findings, resolved) =>
+    JSON.stringify({ summary: "Reviewed paging.", findings, resolved });
+
+  it("GivenABlocker_WhenNotAccepted_ThenFailsWithScenarioColumn", () => {
+    const result = evaluate({ ...base, findings: out([adv("blocker"), adv("question")]) });
+    expect(result.pass).toBe(false);
+    expect(result.body).toContain(ROLES.adversarial.marker);
+    expect(result.body).toContain("1 blocker");
+    expect(result.body).toContain("| Failing scenario |");
+    expect(result.body).toContain("page=2, size=10");
+  });
+
+  it("GivenABlocker_WhenReviewAccepted_ThenPassesWithWarning", () => {
+    const result = evaluate({ ...base, accepted: true, findings: out([adv("blocker")]) });
+    expect(result.pass).toBe(true);
+    expect(result.body).toContain("accepted by `review-accepted`");
+  });
+
+  it("GivenOnlyShouldFixAndQuestions_WhenEvaluated_ThenPasses", () => {
+    const result = evaluate({ ...base, findings: out([adv("should-fix"), adv("question")]) });
+    expect(result.pass).toBe(true);
+    expect(result.body).toContain("no blocker findings");
+  });
+
+  it("GivenSecuritySeverities_WhenParsedAsAdversarial_ThenNull", () => {
+    expect(parseFindings(out([adv("high")]), ROLES.adversarial)).toBeNull();
+  });
+
+  it("GivenResolvedItems_WhenEvaluated_ThenListedSanitized", () => {
+    const { body } = evaluate({ ...base, findings: out([], ["Off-by-one fixed in abc @x"]) });
+    expect(body).toContain("**Resolved since the last review:**");
+    expect(body).toContain("- Off-by-one fixed in abc @​x");
+  });
+
+  it("GivenAnyRun_WhenEvaluated_ThenRecordsTheReviewedSha", () => {
+    expect(evaluate({ ...base, findings: out([]) }).body).toContain(reviewedShaMarker("def456"));
+  });
+
+  it("GivenAnUnknownRole_WhenEvaluated_ThenThrows", () => {
+    expect(() => evaluate({ ...base, role: "nope", findings: out([]) })).toThrow();
   });
 });

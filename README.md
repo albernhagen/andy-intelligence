@@ -43,13 +43,14 @@ Claude Code runs `scripts/format-edited-file.mjs` after each Edit/Write (`.claud
 
 ### Security checks on PRs (ADR-0025, ADR-0030)
 
-| Check                                                | Workflow              | Fails on                                                                                        |
-| ---------------------------------------------------- | --------------------- | ----------------------------------------------------------------------------------------------- |
-| `trufflehog`                                         | `secret-scan.yml`     | Verified or unverifiable secrets                                                                |
-| `codeql (javascript-typescript)`, `codeql (actions)` | `security-scans.yml`  | Code scanning alerts, high or higher (ruleset)                                                  |
-| `dependency-review`                                  | `security-scans.yml`  | New dependency with a high/critical advisory                                                    |
-| `terraform-misconfig`                                | `security-scans.yml`  | Trivy HIGH/CRITICAL in `infra/`                                                                 |
-| `security-review`                                    | `security-review.yml` | Agent finding high/critical, unless labelled `security-accepted` (docs-only PRs skip the agent) |
+| Check                                                | Workflow                 | Fails on                                                                                                  |
+| ---------------------------------------------------- | ------------------------ | --------------------------------------------------------------------------------------------------------- |
+| `trufflehog`                                         | `secret-scan.yml`        | Verified or unverifiable secrets                                                                          |
+| `codeql (javascript-typescript)`, `codeql (actions)` | `security-scans.yml`     | Code scanning alerts, high or higher (ruleset)                                                            |
+| `dependency-review`                                  | `security-scans.yml`     | New dependency with a high/critical advisory                                                              |
+| `terraform-misconfig`                                | `security-scans.yml`     | Trivy HIGH/CRITICAL in `infra/`                                                                           |
+| `security-review`                                    | `security-review.yml`    | Agent finding high/critical, unless labelled `security-accepted` (docs-only PRs skip the agent)           |
+| `adversarial-review`                                 | `adversarial-review.yml` | Agent `blocker` with a failing scenario, unless labelled `review-accepted` (docs-only PRs skip the agent) |
 
 Weekly + manual: `system-security-review.yml` opens a PR updating the threat model. Action pins are commit SHAs, bumped by Dependabot.
 
@@ -79,4 +80,4 @@ pnpm --filter @andy/web dev          # :5173, proxies /api to :8080
 | `lefthook.yml`        | Git hooks: pre-commit lint/format, pre-push checks            |
 | `firebase.json`       | Firestore emulator config for `pnpm test:firestore`           |
 
-Infra setup: [`docs/runbooks/m0-setup.md`](docs/runbooks/m0-setup.md). Budget and cost caps: [`docs/runbooks/billing.md`](docs/runbooks/billing.md). Security review setup: [`docs/runbooks/security-review.md`](docs/runbooks/security-review.md).
+Infra setup: [`docs/runbooks/m0-setup.md`](docs/runbooks/m0-setup.md). Budget and cost caps: [`docs/runbooks/billing.md`](docs/runbooks/billing.md). Security review setup: [`docs/runbooks/security-review.md`](docs/runbooks/security-review.md). Adversarial review: [`docs/runbooks/adversarial-review.md`](docs/runbooks/adversarial-review.md).

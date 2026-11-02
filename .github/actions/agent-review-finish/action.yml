@@ -1,0 +1,80 @@
+name: Agent review — finish
+description: >-
+  Shared second half of a PR review agent (ADR-0025, ADR-0026, ADR-0037): gate the agent's
+  findings (scripts/review-gate.mjs), update the role's sticky PR comment, and fail the job on
+  unaccepted blocking findings. An agent that didn't run or failed gives a neutral pass.
+
+inputs:
+  role:
+    description: security | adversarial (config in scripts/review-gate.mjs).
+    required: true
+  marker:
+    description: HTML comment that starts this role's sticky PR comment.
+    required: true
+  mode:
+    description: Output of agent-review-prepare.
+    required: true
+  reason:
+    description: Output of agent-review-prepare.
+    default: ""
+  accepted:
+    description: Output of agent-review-prepare.
+    required: true
+  agent-outcome:
+    description: Outcome of the agent step (success | failure | cancelled | skipped).
+    default: skipped
+  findings:
+    description: The agent's structured output.
+    default: ""
+  execution-file:
+    description: The agent's execution file (usage line).
+    default: ""
+  github-token:
+    description: Token for the PR comment.
+    required: true
+
+runs:
+  using: composite
+  steps:
+    - name: Gate and comment
+      if: inputs.mode != 'skip'
+      shell: bash
+      env:
+        GH_TOKEN: ${{ inputs.github-token }}
+        PR: ${{ github.event.pull_request.number }}
+        ROLE: ${{ inputs.role }}
+        MARKER: ${{ inputs.marker }}
+        MODE_IN: ${{ inputs.mode }}
+        REASON_IN: ${{ inputs.reason }}
+        OUTCOME: ${{ inputs.agent-outcome }}
+        ACCEPTED: ${{ inputs.accepted }}
+        FINDINGS: ${{ inputs.findings }}
+        EXECUTION_FILE: ${{ inputs.execution-file }}
+        SHA: ${{ github.event.pull_request.head.sha }}
+      run: |
+        MODE=$MODE_IN
+        REASON=$REASON_IN
+        if [ "$MODE" = review ] && [ "$OUTCOME" != success ]; then
+          MODE=unavailable
+          REASON="the agent run failed (quota, outage or error); see the run log"
+        fi
+        export MODE REASON
+        body="$RUNNER_TEMP/$ROLE-review.md"
+        status=0
+        node scripts/review-gate.mjs "$body" || status=$?
+
+        # Fork PRs get a read-only token, so they get no comment.
+        if [ "$MODE" != fork ]; then
+          id=$(gh api "repos/$GITHUB_REPOSITORY/issues/$PR/comments" --paginate \
+            --jq ".[] | select(.user.login == \"github-actions[bot]\" and (.body | startswith(\"$MARKER\"))) | .id" | head -1)
+          if [ -n "$id" ]; then
+            gh api -X PATCH "repos/$GITHUB_REPOSITORY/issues/comments/$id" -F "body=@$body" > /dev/null
+          else
+            gh api "repos/$GITHUB_REPOSITORY/issues/$PR/comments" -F "body=@$body" > /dev/null
+          fi
+        fi
+
+        if [ "$status" -ne 0 ]; then
+          echo "::error title=$ROLE-review::Blocking findings. Fix them or reply with evidence, or Andy adds the override label with a reason in the PR."
+          exit 1
+        fi

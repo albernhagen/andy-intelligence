@@ -132,6 +132,13 @@ Temporary progress log until andy-intelligence can track its own work (then migr
 - Andy applied `infra/control-plane` (6 added) and `infra/billing` without the switch (1 change: 150% threshold). With `kill_switch_enabled = true` the plan failed: `for_each` keyed by a custom role name unknown until apply. Fixed with static keys; budget threshold rules reordered to match the API (the plan showed a swap). Lesson: `terraform validate` doesn't catch unknown `for_each` keys; only a plan does, and `infra/billing` plans locally only.
 - Applied by Andy from this branch: 15 added, 1 changed. **Demo passed:** fake budget message at 200% → workflow `SUCCEEDED`, `/health` 503 (manual scaling at 0 accepted with `launchStage: BETA`), `run-watchdog` `PAUSED`. Switch left on in Andy's tfvars. M1.14: Cost kill switch Done when met.
 
+## 2026-11-01 — PR #20 merged; M1.11: Adversarial PR review built
+
+- Merged: PR #20: kill switch plan fix (applied and demoed first).
+- **Decided (Andy, ADR-0037: Review agents share composite actions; adversarial re-reviews are incremental):** blockers clear by re-review with replies as context; shared plumbing; Sonnet, 40 turns, docs-only skip; quota kept low with incremental re-reviews. Composite actions instead of a reusable workflow, because a reusable workflow renames the required `security-review` check.
+- Branch `m1.11/adversarial-review`: `adversarial-review.yml`, `.github/actions/agent-review-{prepare,finish}`, `scripts/review-gate.mjs` (replaces `security-review-gate.mjs`; scope script renamed to `review-scope.mjs`), procedure + schema, `security-review.yml` moved onto the shared actions, runbook `docs/runbooks/adversarial-review.md`.
+- Verified locally: gate tests (38 in `scripts`), actionlint clean. Not verifiable locally: the agents (this PR's own checks run both), the demo (after merge).
+
 ## Slices: M1: First end-to-end flow: ticket → PR with Claude
 
 Status: todo / in progress / PR open / merged. Definitions: ARCHITECTURE §12.
@@ -149,7 +156,7 @@ Status: todo / in progress / PR open / merged. Definitions: ARCHITECTURE §12.
 | M1.8: Build + gate                      | M               | M1.7: Refinement, M1.16: Project baseline v1                                                | todo            |
 | M1.9: Quota capture                     | S               | M1.6: Claude Code executor                                                                  | todo            |
 | M1.10: Security review automation       | M               | M0: Foundations                                                                             | merged (PR #10) |
-| M1.11: Adversarial PR review            | M               | M1.10: Security review automation                                                           | todo            |
+| M1.11: Adversarial PR review            | M               | M1.10: Security review automation                                                           | PR open         |
 | M1.12: Local quality gates              | S               | M0: Foundations                                                                             | merged (PR #9)  |
 | M1.13: GCP cost guardrails              | S               | M0: Foundations                                                                             | merged (PR #7)  |
 | M1.14: Cost kill switch                 | M               | M1.13: GCP cost guardrails                                                                  | merged (PR #18) |
