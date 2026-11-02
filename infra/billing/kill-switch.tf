@@ -34,22 +34,41 @@ resource "google_pubsub_topic_iam_member" "billing_publishes" {
   member = "serviceAccount:billing-budget-alert@system.gserviceaccount.com"
 }
 
-# Runs the trigger and the workflow. Least privilege: a custom role with only what the
-# workflow calls, plus actAs on the runtime SA (Cloud Run checks it on service updates).
+# Runs the trigger and the workflow. Least privilege: custom roles with only what the workflow
+# calls, plus actAs on the runtime SA (Cloud Run checks it on service updates).
 resource "google_service_account" "kill_switch" {
   count        = local.kill_switch
   account_id   = "cost-kill-switch"
   display_name = "Cost kill switch (M1.14)"
 }
 
-resource "google_project_iam_custom_role" "kill_switch" {
+# Cloud Run permissions are bound on the one service only, so this SA can't update any other
+# service in the project (e.g. attach the runtime SA to a new workload).
+resource "google_project_iam_custom_role" "kill_switch_run" {
+  count       = local.kill_switch
+  role_id     = "costKillSwitchRun"
+  title       = "Cost kill switch: Cloud Run"
+  description = "Scale one Cloud Run service to zero (ADR-0028). Bound on that service only."
+  permissions = ["run.services.get", "run.services.update"]
+}
+
+resource "google_cloud_run_v2_service_iam_member" "kill_switch_run" {
+  count    = local.kill_switch
+  name     = var.kill_switch_service
+  location = var.region
+  role     = google_project_iam_custom_role.kill_switch_run[0].name
+  member   = "serviceAccount:${google_service_account.kill_switch[0].email}"
+}
+
+# Project level only where there's no narrower resource: listing queues happens at the
+# location, pausing must cover queues created later, and Cloud Run operations aren't
+# service resources (the connector polls the update's long-running operation).
+resource "google_project_iam_custom_role" "kill_switch_project" {
   count       = local.kill_switch
   role_id     = "costKillSwitch"
-  title       = "Cost kill switch"
-  description = "Scale Cloud Run services to zero and pause Cloud Tasks queues (ADR-0028)."
+  title       = "Cost kill switch: queues and operations"
+  description = "Pause Cloud Tasks queues and poll Cloud Run operations (ADR-0028)."
   permissions = [
-    "run.services.get",
-    "run.services.update",
     "run.operations.get",
     "cloudtasks.queues.list",
     "cloudtasks.queues.pause",
@@ -58,7 +77,7 @@ resource "google_project_iam_custom_role" "kill_switch" {
 
 resource "google_project_iam_member" "kill_switch" {
   for_each = var.kill_switch_enabled ? toset([
-    google_project_iam_custom_role.kill_switch[0].name,
+    google_project_iam_custom_role.kill_switch_project[0].name,
     "roles/workflows.invoker", # the Eventarc trigger starts the workflow as this SA
     "roles/logging.logWriter",
   ]) : toset([])
@@ -111,5 +130,5 @@ resource "google_eventarc_trigger" "kill_switch" {
     workflow = google_workflows_workflow.kill_switch[0].id
   }
 
-  depends_on = [google_project_iam_member.kill_switch]
+  depends_on = [google_project_iam_member.kill_switch, google_cloud_run_v2_service_iam_member.kill_switch_run]
 }

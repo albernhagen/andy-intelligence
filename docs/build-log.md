@@ -122,6 +122,11 @@ Temporary progress log until andy-intelligence can track its own work (then migr
 - Branch `m1.14/cost-kill-switch`: `infra/billing/kill-switch.tf` (topic, Eventarc trigger, workflow, `cost-kill-switch` SA with a custom role) behind `kill_switch_enabled`; 150% budget threshold; billing runbook §4 (turn on, fake-message test, re-enable, turn off).
 - Verified locally: `terraform fmt`, Trivy clean, workflow YAML parses. Not run here: `terraform validate` (CI) and the apply + fake-message demo (Andy).
 
+## 2026-11-01 — M1.14: Cost kill switch merged; role narrowed
+
+- Merged: PR #18: Cost kill switch.
+- Security review (low): the kill switch's Cloud Run permissions were project-wide. Follow-up PR binds `run.services.get/update` on the `control-plane` service only; queue list/pause and operation polling stay project-level (no narrower resource). This narrows the identity row in ADR-0036: Kill switch runs on Cloud Workflows.
+
 ## Slices: M1: First end-to-end flow: ticket → PR with Claude
 
 Status: todo / in progress / PR open / merged. Definitions: ARCHITECTURE §12.
@@ -142,7 +147,7 @@ Status: todo / in progress / PR open / merged. Definitions: ARCHITECTURE §12.
 | M1.11: Adversarial PR review            | M               | M1.10: Security review automation                                                           | todo            |
 | M1.12: Local quality gates              | S               | M0: Foundations                                                                             | merged (PR #9)  |
 | M1.13: GCP cost guardrails              | S               | M0: Foundations                                                                             | merged (PR #7)  |
-| M1.14: Cost kill switch                 | M               | M1.13: GCP cost guardrails                                                                  | PR open         |
+| M1.14: Cost kill switch                 | M               | M1.13: GCP cost guardrails                                                                  | merged (PR #18) |
 | M1.15: Usage alerts                     | S               | M1.13: GCP cost guardrails                                                                  | merged (PR #8)  |
 | M1.16: Project baseline v1              | M               | M1.10: Security review automation, M1.11: Adversarial PR review, M1.12: Local quality gates | todo            |
 
