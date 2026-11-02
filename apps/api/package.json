@@ -20,6 +20,7 @@
     "@google-cloud/firestore": "^9.3.1",
     "@hono/node-server": "^2.1.5",
     "@hono/zod-openapi": "^1.6.3",
+    "@modelcontextprotocol/sdk": "^1.32.2",
     "firebase-admin": "^14.5.0",
     "hono": "^4.13.13",
     "zod": "^4.6.7"

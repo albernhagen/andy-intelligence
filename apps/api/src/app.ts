@@ -1,8 +1,9 @@
 import { OpenAPIHono, createRoute, z } from "@hono/zod-openapi";
-import { WorkTrackerError, type WorkTracker } from "@andy/contracts";
+import { WorkTrackerError, type OAuthGrantStore, type WorkTracker } from "@andy/contracts";
 import { DomainError, TicketService } from "@andy/domain";
 import { bodyLimit } from "hono/body-limit";
 import { requireAllowedUser, type AuthEnv, type TokenVerifier } from "./auth";
+import { registerMcp, type ClientMetadataResolver } from "./mcp";
 import { registerTicketRoutes } from "./tickets";
 
 /** Request body cap for /api/* (ADR-0028: everything that can grow gets a cap). */
@@ -21,6 +22,13 @@ export interface AppDeps {
   /** Public Firebase web config (not secret) served to the SPA. */
   webConfig: WebConfig;
   tracker: WorkTracker;
+  /** MCP endpoint + its OAuth server; off (routes absent) when not configured. */
+  mcp?: {
+    publicUrl: string;
+    grants: OAuthGrantStore;
+    clients: ClientMetadataResolver;
+    now?: () => Date;
+  };
 }
 
 const Health = z.object({ status: z.literal("ok"), version: z.string() }).openapi("Health");
@@ -83,6 +91,13 @@ export function createApp(deps: AppDeps) {
     return c.json({ error: "internal error" }, 500);
   });
 
+  // No page of ours may be framed: the OAuth consent page must not be clickjacked.
+  app.use("*", async (c, next) => {
+    await next();
+    c.header("x-frame-options", "DENY");
+    c.header("content-security-policy", "frame-ancestors 'none'");
+  });
+
   app.openapi(healthRoute, (c) => c.json({ status: "ok" as const, version: deps.version }, 200));
 
   app.get("/config.json", (c) => c.json(deps.webConfig));
@@ -102,6 +117,11 @@ export function createApp(deps: AppDeps) {
   });
 
   registerTicketRoutes(app, deps.tracker, new TicketService(deps.tracker));
+
+  // After the /api middleware, so /api/oauth/approve requires the allow-listed user.
+  if (deps.mcp) {
+    registerMcp(app, { ...deps.mcp, allowedEmails: deps.allowedEmails, version: deps.version });
+  }
 
   app.openAPIRegistry.registerComponent("securitySchemes", "bearer", {
     type: "http",

@@ -155,6 +155,26 @@ Temporary progress log until andy-intelligence can track its own work (then migr
 - Demo fixes: `files` puts a `pnpm` shim on PATH when pnpm isn't installed (the clone's lefthook hooks call `pnpm`), and commits with this checkout's git identity (GitHub rejected the global private email, GH007). Andy installed pnpm (Homebrew; it switches to the pinned 10.28.0) and set the noreply address globally.
 - Lessons: ESLint 10 picks up nested `eslint.config.js`, so starter config files end in `.template`; a `\s*$` regex in multiline mode swallowed newlines when pinning.
 
+## 2026-11-02 — M1.16: Project baseline v1 merged; M1.1: MCP OAuth spike started
+
+- Merged: PR #23: Project baseline v1. Tagged `v1.0.0` (managed repos pin the baseline actions to this tag's SHA).
+- Andy applied the 4 repo settings `check` reported as drift: private vulnerability reporting on, SHA pinning required for actions, default workflow token read-only, `security-accepted` label colour and description.
+- Branch `m1.1/mcp-oauth-spike` started.
+
+## 2026-11-02 — M1.1: MCP OAuth spike built
+
+- **Decided (Andy, ADR-0039: MCP OAuth facade):** our own OAuth authorization server in the API; sign-in step = the existing Firebase Google sign-in + allow-list; clients via CIMD (client ID metadata documents on `claude.ai`/`claude.com`), no DCR; live proof after merge (the deployer only deploys `main`).
+- Verified (Claude connector docs, 2026-11-02): 401 + `resource_metadata` discovery, exact `resource` match, DCR or CIMD, PKCE S256, refresh-token rotation, callback `https://claude.ai/api/mcp/auth_callback`. Google directly needs a hand-made client + secret and gives no refresh tokens: rejected.
+- Branch `m1.1/mcp-oauth-spike`: `OAuthGrantStore` port + fake + contract suite + `FirestoreOAuthGrantStore`; `apps/api/src/mcp/` (discovery, `/oauth/authorize`, `/api/oauth/approve`, `/oauth/token`, stateless `/mcp` with a throwaway `ping`); SPA page `/oauth/consent`; `frame-ancestors 'none'` on every response; Terraform: `PUBLIC_URL` env + Firestore TTL on `oauthGrants`. Runbook `docs/runbooks/mcp-connector.md`; threat model R11–R13.
+- Verified locally: lint, typecheck, tests (MCP SDK's own OAuth client completes discovery → CIMD → consent → token → `ping` → refresh rotation against the app), build, smoke run of the bundle. Not run here: `pnpm test:firestore` (no Java), `terraform validate`/plan, Trivy (CI), the Claude desktop connector (Andy, runbook).
+- Andy to run after merge: `infra/control-plane` apply (1 add, 1 change), `pnpm test:firestore`, runbook §3–4 (connector + `ping`; non-allow-listed account rejected). That is M1.1: MCP OAuth spike's Done when.
+
+## 2026-11-02 — M1.3: UI: tickets + inbox built
+
+- **Decided (Andy):** seed questions with "Ask a question…" on ticket detail; API client generated from OpenAPI (`openapi-typescript` + `openapi-fetch`, staleness test); no browser e2e yet (Playwright + Firebase Auth emulator is a follow-up).
+- PR #28: M1.3: UI: tickets + inbox: Needs-you inbox (home), projects, tickets by stage, ticket detail (edit, Definition of Ready, moves incl. forced move with a reason, questions, history). UI tests run against the real API in-process. Not checked in a real browser (needs sign-in): Andy runs the Done when after deploy.
+- Kill switch's Needs-you item (deferred to after this slice, 2026-11-01) is still not built: it needs workflow → API auth; its own slice.
+
 ## Slices: M1: First end-to-end flow: ticket → PR with Claude
 
 Status: todo / in progress / PR open / merged. Definitions: ARCHITECTURE §12.
@@ -162,9 +182,9 @@ Status: todo / in progress / PR open / merged. Definitions: ARCHITECTURE §12.
 | Slice                                   | Size            | Depends on                                                                                  | Status          |
 | --------------------------------------- | --------------- | ------------------------------------------------------------------------------------------- | --------------- |
 | M1.0: Docs sync                         | S               | M0: Foundations                                                                             | merged (PR #1)  |
-| M1.1: MCP OAuth spike                   | M               | M0: Foundations                                                                             | todo            |
+| M1.1: MCP OAuth spike                   | M               | M0: Foundations                                                                             | PR open         |
 | M1.2: Ticket core                       | M               | M0: Foundations                                                                             | merged (PR #17) |
-| M1.3: UI: tickets + inbox               | M               | M1.2: Ticket core                                                                           | todo            |
+| M1.3: UI: tickets + inbox               | M               | M1.2: Ticket core                                                                           | PR open         |
 | M1.4: MCP core tools                    | S               | M1.1: MCP OAuth spike, M1.2: Ticket core                                                    | todo            |
 | M1.5: GitHub App + project registration | M               | M1.2: Ticket core                                                                           | todo            |
 | M1.6: Claude Code executor              | L (split 6a/6b) | M1.5: GitHub App + project registration                                                     | todo            |
@@ -177,7 +197,7 @@ Status: todo / in progress / PR open / merged. Definitions: ARCHITECTURE §12.
 | M1.13: GCP cost guardrails              | S               | M0: Foundations                                                                             | merged (PR #7)  |
 | M1.14: Cost kill switch                 | M               | M1.13: GCP cost guardrails                                                                  | merged (PR #18) |
 | M1.15: Usage alerts                     | S               | M1.13: GCP cost guardrails                                                                  | merged (PR #8)  |
-| M1.16: Project baseline v1              | M               | M1.10: Security review automation, M1.11: Adversarial PR review, M1.12: Local quality gates | PR open         |
+| M1.16: Project baseline v1              | M               | M1.10: Security review automation, M1.11: Adversarial PR review, M1.12: Local quality gates | merged (PR #23) |
 
 **Next (order decided by Andy, 2026-10-28):**
 
@@ -186,7 +206,7 @@ Status: todo / in progress / PR open / merged. Definitions: ARCHITECTURE §12.
 3. M1.2: Ticket core and M1.1: MCP OAuth spike, in parallel.
 4. M1.14: Cost kill switch.
 5. M1.11: Adversarial PR review (merged).
-6. M1.16: Project baseline v1 (PR open; before M1.8: Build + gate).
+6. M1.16: Project baseline v1 (merged, `v1.0.0`).
 
 **Pending decisions (Andy):**
 

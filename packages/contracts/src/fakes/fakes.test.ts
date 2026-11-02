@@ -1,5 +1,15 @@
-import { executorContract, quotaSourceContract, workTrackerContract } from "../testing";
-import { InMemoryExecutor, InMemoryQuotaSource, InMemoryWorkTracker } from "./index";
+import {
+  executorContract,
+  oauthGrantStoreContract,
+  quotaSourceContract,
+  workTrackerContract,
+} from "../testing";
+import {
+  InMemoryExecutor,
+  InMemoryOAuthGrantStore,
+  InMemoryQuotaSource,
+  InMemoryWorkTracker,
+} from "./index";
 
 workTrackerContract("in-memory", async () => new InMemoryWorkTracker());
 
@@ -34,3 +44,5 @@ quotaSourceContract("in-memory", async () => {
       ]),
   };
 });
+
+oauthGrantStoreContract("in-memory", async (now) => new InMemoryOAuthGrantStore(now));
