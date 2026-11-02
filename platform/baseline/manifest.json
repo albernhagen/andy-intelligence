@@ -1,0 +1,50 @@
+{
+  "$comment": "Project baseline files (ADR-0031, ADR-0038). from = path in this repo at the pinned commit. pin = rewrite local ./platform/actions/ uses to the pinned remote action.",
+  "source": "albernhagen/andy-intelligence",
+  "managed": [
+    { "path": ".github/workflows/ci.yml", "from": ".github/workflows/ci.yml", "pin": true },
+    {
+      "path": ".github/workflows/secret-scan.yml",
+      "from": ".github/workflows/secret-scan.yml",
+      "pin": true
+    },
+    {
+      "path": ".github/workflows/security-scans.yml",
+      "from": ".github/workflows/security-scans.yml",
+      "pin": true
+    },
+    {
+      "path": ".github/workflows/security-review.yml",
+      "from": ".github/workflows/security-review.yml",
+      "pin": true
+    },
+    {
+      "path": ".github/workflows/adversarial-review.yml",
+      "from": ".github/workflows/adversarial-review.yml",
+      "pin": true
+    },
+    { "path": ".github/dependabot.yml", "from": "template/.github/dependabot.yml" },
+    {
+      "path": ".github/pull_request_template.md",
+      "from": "template/.github/pull_request_template.md"
+    },
+    { "path": ".prettierrc.json", "from": ".prettierrc.json" },
+    { "path": "lefthook.yml", "from": "lefthook.yml" },
+    { "path": ".claude/settings.json", "from": ".claude/settings.json" },
+    { "path": "scripts/format-edited-file.mjs", "from": "scripts/format-edited-file.mjs" }
+  ],
+  "lines": [{ "path": ".gitignore", "from": "template/gitignore.lines" }],
+  "seed": [
+    { "path": "AGENTS.md", "from": "template/AGENTS.md" },
+    { "path": "docs/security/threat-model.md", "from": "template/docs/security/threat-model.md" }
+  ],
+  "starter": [
+    { "path": "package.json", "from": "template/starter/package.json.template" },
+    { "path": ".nvmrc", "from": "template/starter/.nvmrc" },
+    { "path": "tsconfig.json", "from": "template/starter/tsconfig.json.template" },
+    { "path": "eslint.config.js", "from": "template/starter/eslint.config.js.template" },
+    { "path": ".prettierignore", "from": "template/starter/.prettierignore" },
+    { "path": "src/index.ts", "from": "template/starter/src/index.ts" },
+    { "path": "src/index.test.ts", "from": "template/starter/src/index.test.ts" }
+  ]
+}

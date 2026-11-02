@@ -1,0 +1,53 @@
+{
+  "name": "protect-main",
+  "target": "branch",
+  "enforcement": "active",
+  "bypass_actors": [],
+  "conditions": { "ref_name": { "include": ["~DEFAULT_BRANCH"], "exclude": [] } },
+  "rules": [
+    { "type": "deletion" },
+    { "type": "non_fast_forward" },
+    {
+      "type": "pull_request",
+      "parameters": {
+        "required_approving_review_count": 0,
+        "dismiss_stale_reviews_on_push": false,
+        "require_code_owner_review": false,
+        "require_last_push_approval": false,
+        "required_review_thread_resolution": false,
+        "allowed_merge_methods": ["squash"]
+      }
+    },
+    {
+      "type": "required_status_checks",
+      "parameters": {
+        "strict_required_status_checks_policy": false,
+        "do_not_enforce_on_create": false,
+        "required_status_checks": [
+          { "context": "check", "integration_id": 15368 },
+          { "context": "actionlint", "integration_id": 15368 },
+          { "context": "terraform", "integration_id": 15368 },
+          { "context": "trufflehog", "integration_id": 15368 },
+          { "context": "security-review", "integration_id": 15368 },
+          { "context": "adversarial-review", "integration_id": 15368 },
+          { "context": "dependency-review", "integration_id": 15368 },
+          { "context": "terraform-misconfig", "integration_id": 15368 },
+          { "context": "codeql (javascript-typescript)", "integration_id": 15368 },
+          { "context": "codeql (actions)", "integration_id": 15368 }
+        ]
+      }
+    },
+    {
+      "type": "code_scanning",
+      "parameters": {
+        "code_scanning_tools": [
+          {
+            "tool": "CodeQL",
+            "security_alerts_threshold": "high_or_higher",
+            "alerts_threshold": "errors"
+          }
+        ]
+      }
+    }
+  ]
+}

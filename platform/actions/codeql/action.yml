@@ -1,0 +1,22 @@
+name: Baseline — CodeQL
+description: >-
+  CodeQL (security-extended queries, no build) for one language; results go to code scanning
+  (ADR-0025, ADR-0030, project baseline ADR-0031/ADR-0038). The job needs security-events: write.
+  Run after actions/checkout.
+
+inputs:
+  language:
+    description: CodeQL language, e.g. javascript-typescript or actions.
+    required: true
+
+runs:
+  using: composite
+  steps:
+    - uses: github/codeql-action/init@9b3254085494b55a0f7c4c2b3d2d52cc712ce370 # v4.39.1
+      with:
+        languages: ${{ inputs.language }}
+        build-mode: none
+        queries: security-extended
+    - uses: github/codeql-action/analyze@9b3254085494b55a0f7c4c2b3d2d52cc712ce370 # v4.39.1
+      with:
+        category: /language:${{ inputs.language }}

@@ -5,7 +5,7 @@ export default defineConfig({
     projects: [
       "packages/*",
       "apps/api",
-      { test: { name: "scripts", include: ["scripts/**/*.test.mjs"] } },
+      { test: { name: "scripts", include: ["scripts/**/*.test.mjs", "platform/**/*.test.mjs"] } },
     ],
   },
 });

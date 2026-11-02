@@ -1,0 +1,11 @@
+name: Baseline — dependency review
+description: >-
+  Fails a PR that adds a dependency with a high or critical advisory (ADR-0025, ADR-0030, project
+  baseline ADR-0031/ADR-0038). Pull requests only; needs the dependency graph on.
+
+runs:
+  using: composite
+  steps:
+    - uses: actions/dependency-review-action@a1d282b36b6f3519aa1f3fc636f609c47dddb294 # v5.0.0
+      with:
+        fail-on-severity: high

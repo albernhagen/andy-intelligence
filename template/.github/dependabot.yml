@@ -1,0 +1,27 @@
+# Dependabot version updates (project baseline, ADR-0031). Action pins are commit SHAs with a
+# version comment; Dependabot updates both, including the andy-intelligence baseline actions.
+# Caps: weekly, grouped, at most 5 open PRs per ecosystem. cooldown waits a few days after a
+# release, so a hijacked release is usually caught first.
+version: 2
+updates:
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    cooldown:
+      default-days: 7
+    groups:
+      minor-and-patch:
+        update-types: [minor, patch]
+
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    cooldown:
+      default-days: 7
+    groups:
+      actions:
+        patterns: ["*"]

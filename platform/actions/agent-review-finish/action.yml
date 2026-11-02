@@ -52,6 +52,8 @@ runs:
         EXECUTION_FILE: ${{ inputs.execution-file }}
         SHA: ${{ github.event.pull_request.head.sha }}
       run: |
+        # Gate script from the same commit as this action (pinned baseline, or this workspace).
+        BASELINE=$(cd "$GITHUB_ACTION_PATH/../../.." && pwd)
         MODE=$MODE_IN
         REASON=$REASON_IN
         if [ "$MODE" = review ] && [ "$OUTCOME" != success ]; then
@@ -61,7 +63,7 @@ runs:
         export MODE REASON
         body="$RUNNER_TEMP/$ROLE-review.md"
         status=0
-        node scripts/review-gate.mjs "$body" || status=$?
+        node "$BASELINE/scripts/review-gate.mjs" "$body" || status=$?
 
         # Fork PRs get a read-only token, so they get no comment.
         if [ "$MODE" != fork ]; then

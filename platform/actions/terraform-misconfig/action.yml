@@ -1,0 +1,30 @@
+name: Baseline — Terraform misconfig scan
+description: >-
+  trivy config on infra/, failing on high/critical (ADR-0025, ADR-0030, project baseline
+  ADR-0031/ADR-0038). Release binary, not aquasecurity/trivy-action (its tags were hijacked in
+  March 2026). Passes with a notice when the repo has no infra/. Run after actions/checkout.
+
+runs:
+  using: composite
+  steps:
+    - name: install trivy (checksum-verified release binary)
+      id: trivy
+      shell: bash
+      env:
+        VERSION: 0.76.1
+        # sha256 of trivy_${VERSION}_Linux-64bit.tar.gz from the release's checksums.txt.
+        SHA256: c7cbe3137fb8a48a17574bede3dd6beb16742d1e9772929940fc90082c39d9c0
+      run: |
+        if [ ! -d infra ]; then
+          echo "::notice title=terraform-misconfig::no infra/ folder; nothing to scan"
+          echo "skip=true" >> "$GITHUB_OUTPUT"
+          exit 0
+        fi
+        curl -sSfLo "$RUNNER_TEMP/trivy.tar.gz" \
+          "https://github.com/aquasecurity/trivy/releases/download/v${VERSION}/trivy_${VERSION}_Linux-64bit.tar.gz"
+        echo "${SHA256}  $RUNNER_TEMP/trivy.tar.gz" | sha256sum -c -
+        tar -xzf "$RUNNER_TEMP/trivy.tar.gz" -C "$RUNNER_TEMP" trivy
+    - name: trivy config (fails on high/critical)
+      if: steps.trivy.outputs.skip != 'true'
+      shell: bash
+      run: '"$RUNNER_TEMP/trivy" config --severity HIGH,CRITICAL --exit-code 1 infra'

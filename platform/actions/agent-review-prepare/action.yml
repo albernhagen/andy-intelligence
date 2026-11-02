@@ -3,6 +3,8 @@ description: >-
   Shared first half of a PR review agent (ADR-0025, ADR-0026, ADR-0037): decide the mode, drop
   a stale override label, skip docs-only PRs, and write the agent's inputs to .review/. Run after
   actions/checkout (fetch-depth 0); the caller runs the agent, then agent-review-finish.
+  Project baseline (ADR-0031, ADR-0038): managed repos pin this action by SHA, so its scripts and
+  procedures come from that pinned commit; this repo uses it locally and reads them from the base branch.
 
 inputs:
   label:
@@ -12,13 +14,13 @@ inputs:
     description: HTML comment that starts this role's sticky PR comment.
     required: true
   procedure:
-    description: Procedure path; copied from the base branch to .review/procedure.md.
+    description: Procedure path in the baseline repo (platform/procedures/…); copied to .review/procedure.md.
     required: true
   schema:
-    description: JSON schema path for the agent's output.
+    description: JSON schema path in the baseline repo for the agent's output.
     required: true
   context-files:
-    description: Extra repo paths (one per line) copied from the base branch into .review/.
+    description: Paths in the calling repo (one per line) copied from its base branch into .review/.
     default: ""
   incremental:
     description: '"true": on later pushes, also write .review/new-commits.diff since the last review.'
@@ -47,6 +49,16 @@ outputs:
 runs:
   using: composite
   steps:
+    - name: Locate baseline
+      id: root
+      shell: bash
+      run: |
+        # The repo this action came from: the pinned baseline commit, or this workspace when local.
+        dir=$(cd "$GITHUB_ACTION_PATH/../../.." && pwd)
+        local=false
+        [ "$dir" = "$(cd "$GITHUB_WORKSPACE" && pwd)" ] && local=true
+        { echo "dir=$dir"; echo "local=$local"; } >> "$GITHUB_OUTPUT"
+
     - name: Decide mode
       id: ctx
       shell: bash
@@ -101,8 +113,9 @@ runs:
       env:
         MODE: ${{ steps.ctx.outputs.mode }}
         REASON: ${{ steps.ctx.outputs.reason }}
+        BASELINE: ${{ steps.root.outputs.dir }}
       run: |
-        if [ "$MODE" = review ] && [ "$(git diff --name-only HEAD^1 HEAD | node scripts/review-scope.mjs)" = true ]; then
+        if [ "$MODE" = review ] && [ "$(git diff --name-only HEAD^1 HEAD | node "$BASELINE/scripts/review-scope.mjs")" = true ]; then
           MODE=unavailable
           REASON="docs-only change; the agent is skipped to save quota (rule files such as AGENTS.md are still reviewed)"
         fi
@@ -126,6 +139,8 @@ runs:
         CONTEXT_FILES: ${{ inputs.context-files }}
         MARKER: ${{ inputs.marker }}
         INCREMENTAL: ${{ inputs.incremental }}
+        BASELINE: ${{ steps.root.outputs.dir }}
+        LOCAL: ${{ steps.root.outputs.local }}
       run: |
         mkdir -p .review
         # Write in full, then cap (ADR-0028). Piping into `head -c` would fail under pipefail.
@@ -133,9 +148,15 @@ runs:
         # Checkout is the PR merged into its base: HEAD^1 is the base. Capped at 300 KB.
         git diff HEAD^1 HEAD > .review/pr.diff.full
         cap 300000 .review/pr.diff
-        # Rules come from the base branch, so a PR can't weaken its own review.
+        # Rules come from the base branch (or the pinned baseline), so a PR can't weaken its own review.
         base_copy() { git show "origin/$BASE_REF:$1" > "$2" 2>/dev/null || cp "$1" "$2"; }
-        base_copy "$PROCEDURE" .review/procedure.md
+        if [ "$LOCAL" = true ]; then
+          base_copy "$PROCEDURE" .review/procedure.md
+          base_copy "$SCHEMA" .review/schema.json
+        else
+          cp "$BASELINE/$PROCEDURE" .review/procedure.md
+          cp "$BASELINE/$SCHEMA" .review/schema.json
+        fi
         while IFS= read -r f; do
           [ -n "$f" ] && base_copy "$f" ".review/$(basename "$f")"
         done <<<"$CONTEXT_FILES"
@@ -172,9 +193,9 @@ runs:
         fi
 
         # The schema is passed inside single quotes (--json-schema '...'), so it can't contain one.
-        if grep -q "'" "$SCHEMA"; then
+        if grep -q "'" .review/schema.json; then
           echo "::error title=agent-review::$SCHEMA contains a single quote, which breaks --json-schema"
           exit 1
         fi
-        echo "schema=$(jq -c . "$SCHEMA")" >> "$GITHUB_OUTPUT"
+        echo "schema=$(jq -c . .review/schema.json)" >> "$GITHUB_OUTPUT"
         ls -la .review
