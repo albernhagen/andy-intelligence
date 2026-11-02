@@ -3,7 +3,7 @@ title: andy-intelligence — Architecture & Vision
 status: accepted (v1.x scope)
 owner: Andy
 last_updated: 2026-11-01
-revision: 2026-11-01b (deployment modes: ADR-0032; context sources: ADR-0033)
+revision: 2026-11-01c (M2: Multi-project in parallel; milestones renumbered; data evolution: ADR-0035)
 ---
 
 # andy-intelligence — Architecture & Vision
@@ -205,7 +205,7 @@ Contracts are defined in `packages/contracts` (Zod schemas + TypeScript interfac
 
 ### 7.2 Executors
 - **Claude Code**: reusable GitHub Actions workflow using `anthropics/claude-code-action` with `CLAUDE_CODE_OAUTH_TOKEN`; dispatched via `workflow_dispatch` with the run ID (non-secret) as input; reports back via an API callback authenticated with the workflow's GitHub OIDC token. Uses the platform skills plugin and subagents.
-- **Ticket context for agents** (all executors): the dispatch request carries the ticket snapshot (title, body, acceptance criteria, assumptions, answered questions). In M1: First end-to-end flow, that snapshot plus the callback (report/comment/question on its own ticket) is all an agent gets. From M4: Second project + epics + story board, agents that need more call the API/MCP read-only, scoped to that ticket's project, authenticated the same way (OIDC for Actions runs; a per-run token minted at dispatch for non-Actions executors).
+- **Ticket context for agents** (all executors): the dispatch request carries the ticket snapshot (title, body, acceptance criteria, assumptions, answered questions). In M1: First end-to-end flow, that snapshot plus the callback (report/comment/question on its own ticket) is all an agent gets. From M2: Multi-project in parallel, agents that need more call the API/MCP read-only, scoped to that ticket's project, authenticated the same way (OIDC for Actions runs; a per-run token minted at dispatch for non-Actions executors).
 - **OpenCode**: reusable Actions workflow running OpenCode with a per-project OpenRouter key; default harness for non-Claude models. Same callback auth as Claude Code.
 - **Jules**: REST API (`sessions`, `activities`, `approvePlan`, `sendMessage`), configured to open a PR on completion. Completion is detected via the PR webhook (§7.1); `activities` are read on demand (watchdog, run detail view), not polled.
 - **Direct**: in-process OpenRouter calls for single-call steps (sizing, question drafting where non-agentic, digests, scout analysis).
@@ -230,8 +230,8 @@ v1.x screens:
 - **Needs-you inbox** (questions, gate reviews, pending config changes, quota warnings) — home screen.
 - **Quota & spend** (per provider gauges with reset times; paid spend vs caps; persistent banner on warn/pause).
 - **Projects** (list, config, policy overrides).
-- **Tickets** — M1: list view grouped by stage, ticket detail with history and linked runs/PRs/cost, create/edit. M4: drag-and-drop story board (dnd-kit), epic grouping, overrides editing.
-- **Run detail** — M1: run summary inside ticket detail. M4: dedicated screen (metadata, cost, outcome, links out to Action log / Jules session / PR).
+- **Tickets** — M1: list view grouped by stage, ticket detail with history and linked runs/PRs/cost, create/edit. M2: filter and group by project. M5: drag-and-drop story board (dnd-kit), epic grouping, overrides editing.
+- **Run detail** — M1: run summary inside ticket detail. M5: dedicated screen (metadata, cost, outcome, links out to Action log / Jules session / PR).
 - **Config** (providers, harnesses, models, tiers, policies; audit log with revert; pending approvals).
 - **Releases** (dev status, promote to prod, rollback).
 API client generated from OpenAPI.
@@ -296,9 +296,9 @@ Carried by: **RW** = reusable workflow in `platform/workflows/` (projects call i
 | Actions: read-only default token; Actions may open PRs | 0025 | set by hand | G | not yet carried (M1.16) |
 | Labels `security-accepted`, `review-accepted` | 0025, 0026 | set by hand | G | not yet carried (M1.16) |
 | Reviewer token secret | 0030 | `CLAUDE_CODE_OAUTH_TOKEN` | RB | not yet carried (M1.16) |
-| GCP budget + alerts | 0028, 0029 | `infra/billing` | TF | not yet carried (M5: Dev → prod releases) |
-| Cloud Run caps, log exclusions, usage alerts | 0028 | `infra/control-plane` | TF | not yet carried (M5: Dev → prod releases) |
-| Cost kill switch (opt-in) | 0028 | M1.14: Cost kill switch | TF | planned (M5: Dev → prod releases) |
+| GCP budget + alerts | 0028, 0029 | `infra/billing` | TF | not yet carried (M6: Dev → prod releases) |
+| Cloud Run caps, log exclusions, usage alerts | 0028 | `infra/control-plane` | TF | not yet carried (M6: Dev → prod releases) |
+| Cost kill switch (opt-in) | 0028 | M1.14: Cost kill switch | TF | planned (M6: Dev → prod releases) |
 
 
 ---
@@ -321,7 +321,7 @@ Carried by: **RW** = reusable workflow in `platform/workflows/` (projects call i
 
 ### 9.1 Continuous security review (ADR-0025)
 
-Applies to this repo now (M1.10: Security review automation) and to every managed project from M4: Second project + epics + story board.
+Applies to this repo now (M1.10: Security review automation) and to every managed project from M2: Multi-project in parallel.
 
 | Layer | When | What | Output | Blocks |
 |---|---|---|---|---|
@@ -377,6 +377,13 @@ Hooks install with `pnpm install` (root `prepare` script; skipped when there is 
 
 ---
 
+### 10.4 Data evolution (ADR-0035)
+The control plane's Firestore holds real data from M1.2: Ticket core on; there is no separate dev copy.
+- **Additive by default:** new optional/defaulted fields need no migration.
+- **Breaking change:** bump `SCHEMA_VERSION`, add a tested upgrader `_v N → N+1` applied on read (and rewritten on next write); record it in an ADR.
+- **Backups:** daily, kept 7 days (M1.2: Ticket core). Before a risky deploy, run a manual export (runbook). Restore drill once per milestone.
+- A separate control-plane dev environment is optional later; moving data then = export/import + the same upgraders.
+
 ## 11. Technology choices
 
 | Concern | Choice |
@@ -385,7 +392,7 @@ Hooks install with `pnpm install` (root `prepare` script; skipped when there is 
 | API | Node HTTP framework with Zod-based OpenAPI generation (builder to propose; e.g., Hono + zod-openapi) |
 | MCP | Official MCP TypeScript SDK, Streamable HTTP, OAuth |
 | DB | Firestore (Native mode, default database, us-central1; free tier) with Zod-validated converters; no migrations (ADR-0017) |
-| UI | React, Vite, shadcn/ui, Tailwind, TanStack Router/Query/Table, dnd-kit (story board, from M4: Second project + epics + story board), shadcn charts; OpenAPI-generated client |
+| UI | React, Vite, shadcn/ui, Tailwind, TanStack Router/Query/Table, dnd-kit (story board, from M5: Epics + story board), shadcn charts; OpenAPI-generated client |
 | Runtime | Cloud Run (single service), Cloud Tasks, Cloud Scheduler (weekly scout), Secret Manager |
 | Auth | Firebase Auth / Identity Platform (Google) + MCP OAuth facade; GitHub Actions OIDC for agent callbacks |
 | Work tracker | Native in Firestore + in-app UI + MCP (ADR-0016) |
@@ -406,10 +413,13 @@ Each milestone must work **end to end** before the next starts. Acceptance crite
 |---|---|---|
 | M0 | Foundations: repo, sign-in, GCP infra | Empty app on Cloud Run, Andy-only sign-in, Terraform in place |
 | M1 | First end-to-end flow: ticket → PR with Claude | One project; ticket created from Claude desktop is refined, built by Claude Code, and merged |
-| M2 | Add Jules + model routing | Second agent; tiers route work by size; cross-model review |
-| M3 | Paid models + spend caps | OpenRouter/OpenCode, hard spend caps, weekly model scout |
-| M4 | Second project + epics + story board | Second repo onboarded; epics; drag-and-drop board; config editing |
-| M5 | Dev → prod releases | Per-project dev/prod deploys, verification, one-click promote, auto-merge for small tasks |
+| M2 | Multi-project in parallel | Several repos onboarded; stories per project; runs across projects at once under caps and quota |
+| M3 | Add Jules + model routing | Second agent; tiers route work by size; cross-model review |
+| M4 | Paid models + spend caps | OpenRouter/OpenCode, hard spend caps, weekly model scout |
+| M5 | Epics + story board | Epics; drag-and-drop board; config editing |
+| M6 | Dev → prod releases | Per-project dev/prod deploys, verification, one-click promote, auto-merge for small tasks |
+
+**Renumbered 2026-11-01 (ADR-0035):** M2: Multi-project in parallel was inserted. ADRs written before then mean M3 by "M2", M4 by "M3", M5 by "M4" and M6 by "M5".
 
 **Naming:** always write a milestone or slice as `ID: title`, e.g. "M1.2: Ticket core". The ID alone means nothing to a reader.
 
@@ -458,20 +468,23 @@ Can run in parallel once M1.2: Ticket core merges:
 - M1.4: MCP core tools (also needs M1.1: MCP OAuth spike)
 - M1.5: GitHub App + project registration
 
-### M2: Add Jules + model routing
+### M2: Multi-project in parallel
+Andy builds several systems at once (ADR-0035). Onboard N projects via M1.5: GitHub App + project registration and M1.16: Project baseline v1, each with per-PR security and adversarial review, local quality gates and the weekly system security review (§9.1, §4.5, §10.2); **stories by project**: tickets listed, filtered and grouped per project in the UI and MCP (`list_projects`, per-project ticket lists, Needs-you inbox grouped by project); concurrent runs across projects with explicit caps (max runs per project and globally, ADR-0028); quota-aware dispatch so parallel runs keep the subscription reserves (§5); agent read access to API/MCP scoped per project. Slice at milestone start.
+
+### M3: Add Jules + model routing
 Jules adapter (completion via PR webhook); freeze `Executor` contract (two adapters pass contract tests); harness/provider/model/tier config with compatibility rules; size-based routing; cross-model review; google-sub quota (task counting) and reserves. Slice at milestone start.
 
-### M3: Paid models + spend caps
+### M4: Paid models + spend caps
 OpenCode executor via Actions; OpenRouter direct-call gateway for single-call steps; global and per-project caps with hard stops; quota-aware route fallback with 20% reserves; weekly model scout producing pending tier changes; initial tier list seeded by scout. Slice at milestone start.
 
-### M4: Second project + epics + story board
-Second real project onboarded via template + bootstrap, including per-PR security and adversarial review, local quality gates, and the weekly system security review (§9.1, §4.5, §10.2); agent read access to API/MCP scoped per project; epics with child tickets and dependencies; just-in-time re-planning; config editing and audit/revert in UI and MCP; drag-and-drop story board; dedicated run-detail screen. Slice at milestone start.
+### M5: Epics + story board
+Epics with child tickets and dependencies; just-in-time re-planning; config editing and audit/revert in UI and MCP; drag-and-drop story board; dedicated run-detail screen. Slice at milestone start.
 
-### M5: Dev → prod releases
+### M6: Dev → prod releases
 Project template Terraform + Cloud Deploy dev→prod, with a budget and caps per dev/prod project (§10.1); dev deploy + verification (Playwright/API tests + verification agent); promote/rollback from UI and MCP; release notes; rule-based auto-merge for S tasks. Slice at milestone start.
 
 ### Later (explicitly deferred)
-After M5: Dev → prod releases: **custom domain** for the control plane (and per-project domains), with Firebase authorized domains and the MCP connector URL updated.
+After M6: Dev → prod releases: **custom domain** for the control plane (and per-project domains), with Firebase authorized domains and the MCP connector URL updated.
 
 **Devkit standalone + local mode** (ADR-0032): phase 1 devkit in Claude Code with markdown tickets; phase 2 full control plane locally. Designed after M1: First end-to-end flow.
 
@@ -489,7 +502,7 @@ Resolved in M1.0: Docs sync (ADR-0018 – ADR-0024): Jules completion detection 
 
 Remaining:
 
-2. Naming convention for per-project dev/prod GCP projects (needed by M5: Dev → prod releases).
+2. Naming convention for per-project dev/prod GCP projects (needed by M6: Dev → prod releases).
 5. Claude plan (Pro vs Max) — affects automated-run budget; confirm current billing for Action/headless usage.
 6. Google plan (AI Pro vs Ultra) and current Jules daily task quota.
 7. OpenRouter: account exists? initial monthly/daily caps?
