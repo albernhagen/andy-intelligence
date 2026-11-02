@@ -89,6 +89,12 @@ Temporary progress log until andy-intelligence can track its own work (then migr
 - Manual system review (run 40726081488): drift plan "No changes"; opened PR #13: Security: system review 2026-10-28 (adds R9, low; 0 open high/critical). Its checks needed manual approval (PR author `github-actions[bot]`) and its edit failed lint (unformatted); fixed in PR #15: format system-review edits. App-token switch added to M1.5: GitHub App + project registration.
 - **Decided (Andy):** project baseline (ADR-0031): every guardrail is packaged for managed projects (reusable workflows pinned by SHA, template files, declarative GitHub config, Terraform modules) and tracked in ARCHITECTURE §8.1. New slice M1.16: Project baseline v1, after M1.11: Adversarial PR review and before M1.8: Build + gate.
 
+## 2026-11-01 — Deployment modes and standalone devkit planned
+
+- **Decided (Andy, ADR-0032: Deployment modes and a standalone devkit):** three layers: devkit (vendor-neutral procedures + skills over MCP), control plane (one host for it), deployment mode (`gcp` now, `local` later). Devkit first: installs into Claude Code and works alone, tickets as markdown in the project repo; full local control plane later. Devkit lives in `devkit/` in this repo as a Claude Code plugin marketplace.
+- Rule from now on: GCP specifics (runs/config/spend storage, Cloud Tasks, Firebase Auth) go behind ports when first built or touched (affects M1.2: Ticket core, M1.6: Claude Code executor).
+- Detailed design after M1: First end-to-end flow (ARCHITECTURE open question 11).
+
 ## Slices: M1: First end-to-end flow: ticket → PR with Claude
 
 Status: todo / in progress / PR open / merged. Definitions: ARCHITECTURE §12.
@@ -126,5 +132,6 @@ Status: todo / in progress / PR open / merged. Definitions: ARCHITECTURE §12.
 
 - First real project to onboard (open question 8); needed by M1.5: GitHub App + project registration.
 - Claude plan and headless billing (open question 5); needed by M1.6: Claude Code executor.
+- Local mode design (open question 11); due after M1: First end-to-end flow.
 
 **Blocked on Andy:** nothing.

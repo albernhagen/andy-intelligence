@@ -2,8 +2,8 @@
 title: andy-intelligence — Architecture & Vision
 status: accepted (v1.x scope)
 owner: Andy
-last_updated: 2026-10-28
-revision: 2026-10-28e (project baseline planned: §8.1, M1.16)
+last_updated: 2026-11-01
+revision: 2026-11-01a (deployment modes and standalone devkit: ADR-0032)
 ---
 
 # andy-intelligence — Architecture & Vision
@@ -27,9 +27,10 @@ Enterprise-shaped (durable state, policy, gates, least privilege, audit, contrac
 8. **Dev self-test and easy prod release** for every project via a standard release process.
 9. **Digestible rollups** of what agents did (UI first; email/Slack later).
 10. **Contract-first**: every external dependency sits behind a port so vendors can be swapped.
+11. **Usable without the control plane** (later, ADR-0032): the devkit (§7.3) drives the lifecycle from Claude Code alone; the control plane runs on GCP now and locally later.
 
 ### Non-goals (v1.x)
-- Multi-user / multi-tenant SaaS.
+- Multi-user / multi-tenant SaaS. (A friend running their own single-tenant install is in scope later: ADR-0032.)
 - Production monitoring agent, auto-rollback, write-approval execution flow (deferred; agents simply have no write credentials).
 - Model-based risk scoring for auto-merge (v1.x uses rules only).
 - Storing full transcripts (link out instead).
@@ -209,9 +210,13 @@ Contracts are defined in `packages/contracts` (Zod schemas + TypeScript interfac
 - **Jules**: REST API (`sessions`, `activities`, `approvePlan`, `sendMessage`), configured to open a PR on completion. Completion is detected via the PR webhook (§7.1); `activities` are read on demand (watchdog, run detail view), not polled.
 - **Direct**: in-process OpenRouter calls for single-call steps (sizing, question drafting where non-agentic, digests, scout analysis).
 
-### 7.3 Skills (platform plugin, versioned)
+### 7.3 Skills (platform plugin, versioned) — the devkit
 `/ideate`, `/refine`, `/spec`, `/plan-story`, `/build`, `/review`, `/security-review` (per PR), `/threat-model` (system review), `/verify`, `/scout-models`, (later `/digest`).
 Substance lives in shared procedure docs (`docs/agent/*.md`) so non-Claude harnesses use the same knowledge; Claude skills/subagents are thin wrappers. Subagents with least-privilege tools: researcher (read-only), designer, critic (read-only), security reviewer (read-only, no shell or network), test-writer, implementer, verifier (run, no edit).
+
+**Devkit (ADR-0032, design after M1: First end-to-end flow):** these procedures + skills are a product of their own, in a `devkit/` folder in this repo, published as a Claude Code plugin marketplace. It reaches tools through MCP and works without the control plane: standalone, tickets/questions/status are markdown files in the project repo. The control plane is one host for it.
+
+**Deployment modes (ADR-0032):** `gcp` (this design) and, later, `local` (one process on the user's machine, their own subscription and GitHub). Rule from now on: GCP specifics (Firestore storage for runs/config/spend, Cloud Tasks, Firebase Auth + allow-list) go behind ports when first built or touched, so `local` only adds adapters.
 
 ### 7.4 Model scout (weekly)
 1. Pull OpenRouter models API (pricing, context, availability).
@@ -456,6 +461,8 @@ Project template Terraform + Cloud Deploy dev→prod, with a budget and caps per
 ### Later (explicitly deferred)
 After M5: Dev → prod releases: **custom domain** for the control plane (and per-project domains), with Firebase authorized domains and the MCP connector URL updated.
 
+**Devkit standalone + local mode** (ADR-0032): phase 1 devkit in Claude Code with markdown tickets; phase 2 full control plane locally. Designed after M1: First end-to-end flow.
+
 Prod monitoring agent and alert→ticket flow; write-approval execution; model-based risk scoring; email/Slack digests; transcript storage; BigQuery analytics; promptfoo CI + red-team; Cloud Run Jobs executors; additional harnesses (Antigravity CLI, Codex).
 
 ---
@@ -475,6 +482,7 @@ Remaining:
 8. First real side project to onboard in M1: First end-to-end flow (and is andy-intelligence itself project #2 for dogfooding?).
 9. Claude custom-connector OAuth mechanism currently supported (dynamic client registration vs static client) — **answered by M1.1: MCP OAuth spike**.
 10. Whether the Jules GitHub integration or the Jules REST API should be the dispatch path (REST preferred for run tracking; must support auto-PR creation for the completion signal).
+11. Local mode design (ADR-0032): markdown ticket format, local executor (Claude Code CLI) and its trust boundary, local storage/queue/auth adapters, devkit packaging and versioning. Due after M1: First end-to-end flow.
 
 ---
 
