@@ -175,6 +175,15 @@ Temporary progress log until andy-intelligence can track its own work (then migr
 - PR #28: M1.3: UI: tickets + inbox: Needs-you inbox (home), projects, tickets by stage, ticket detail (edit, Definition of Ready, moves incl. forced move with a reason, questions, history). UI tests run against the real API in-process. Not checked in a real browser (needs sign-in): Andy runs the Done when after deploy.
 - Kill switch's Needs-you item (deferred to after this slice, 2026-11-01) is still not built: it needs workflow → API auth; its own slice.
 
+## 2026-11-02 — M1.1: MCP OAuth spike merged and demoed
+
+- Merged: PR #29: MCP OAuth spike and PR #28: UI: tickets + inbox. Both review agents passed with no blocker or high/critical finding; the 5 lower findings were fixed before merge (threat-model table, lookup caps, failed-lookup cache, refresh tests, consent text; R14 added).
+- Applied by Andy: `infra/control-plane` (`PUBLIC_URL` env, `oauthGrants` TTL). `pnpm test:firestore` passed (19 tests, incl. the 5 `OAuthGrantStore` contract tests) once Java was installed.
+- **Demo passed:** Claude custom connector added with `https://control-plane-662512537397.us-central1.run.app/mcp`; Google sign-in + Approve on the consent page; `ping` from a Claude session returned `pong (signed in as <Andy's email>)`. Claude used CIMD (the server offers no other registration), so DCR isn't needed.
+- Allow-list rejection: **Decided (Andy):** no second Google account; the automated tests are the proof (non-allow-listed account → 403 at approve, removed email → 401 on `/mcp` and `invalid_grant` on refresh). Live probes without credentials all refused: approve with no or a forged token → 401, `/mcp` with a random token → 401, a made-up code → `invalid_grant`, a non-Claude `client_id` → `invalid_client`.
+- M1.1: MCP OAuth spike Done when met. M1.4: MCP core tools is unblocked on the auth side (still needs M1.2: Ticket core, merged).
+- Lesson: the emulator needs a Java runtime; the runbooks now say how to install one.
+
 ## Slices: M1: First end-to-end flow: ticket → PR with Claude
 
 Status: todo / in progress / PR open / merged. Definitions: ARCHITECTURE §12.
@@ -182,9 +191,9 @@ Status: todo / in progress / PR open / merged. Definitions: ARCHITECTURE §12.
 | Slice                                   | Size            | Depends on                                                                                  | Status          |
 | --------------------------------------- | --------------- | ------------------------------------------------------------------------------------------- | --------------- |
 | M1.0: Docs sync                         | S               | M0: Foundations                                                                             | merged (PR #1)  |
-| M1.1: MCP OAuth spike                   | M               | M0: Foundations                                                                             | PR open         |
+| M1.1: MCP OAuth spike                   | M               | M0: Foundations                                                                             | merged (PR #29) |
 | M1.2: Ticket core                       | M               | M0: Foundations                                                                             | merged (PR #17) |
-| M1.3: UI: tickets + inbox               | M               | M1.2: Ticket core                                                                           | PR open         |
+| M1.3: UI: tickets + inbox               | M               | M1.2: Ticket core                                                                           | merged (PR #28) |
 | M1.4: MCP core tools                    | S               | M1.1: MCP OAuth spike, M1.2: Ticket core                                                    | todo            |
 | M1.5: GitHub App + project registration | M               | M1.2: Ticket core                                                                           | todo            |
 | M1.6: Claude Code executor              | L (split 6a/6b) | M1.5: GitHub App + project registration                                                     | todo            |
@@ -203,7 +212,7 @@ Status: todo / in progress / PR open / merged. Definitions: ARCHITECTURE §12.
 
 1. M1.12: Local quality gates (merged).
 2. M1.10: Security review automation (merged).
-3. M1.2: Ticket core and M1.1: MCP OAuth spike, in parallel.
+3. M1.2: Ticket core and M1.1: MCP OAuth spike, in parallel (both merged).
 4. M1.14: Cost kill switch.
 5. M1.11: Adversarial PR review (merged).
 6. M1.16: Project baseline v1 (merged, `v1.0.0`).
