@@ -2,8 +2,8 @@
 title: andy-intelligence — Architecture & Vision
 status: accepted (v1.x scope)
 owner: Andy
-last_updated: 2026-10-28
-revision: 2026-10-28d (M1.10: Security review automation built; reviewer on Sonnet, docs-only PRs skipped)
+last_updated: 2026-11-01
+revision: 2026-11-01b (deployment modes: ADR-0032; context sources: ADR-0033)
 ---
 
 # andy-intelligence — Architecture & Vision
@@ -27,9 +27,10 @@ Enterprise-shaped (durable state, policy, gates, least privilege, audit, contrac
 8. **Dev self-test and easy prod release** for every project via a standard release process.
 9. **Digestible rollups** of what agents did (UI first; email/Slack later).
 10. **Contract-first**: every external dependency sits behind a port so vendors can be swapped.
+11. **Usable without the control plane** (later, ADR-0032): the devkit (§7.3) drives the lifecycle from Claude Code alone; the control plane runs on GCP now and locally later.
 
 ### Non-goals (v1.x)
-- Multi-user / multi-tenant SaaS.
+- Multi-user / multi-tenant SaaS. (A friend running their own single-tenant install is in scope later: ADR-0032.)
 - Production monitoring agent, auto-rollback, write-approval execution flow (deferred; agents simply have no write credentials).
 - Model-based risk scoring for auto-merge (v1.x uses rules only).
 - Storing full transcripts (link out instead).
@@ -209,9 +210,13 @@ Contracts are defined in `packages/contracts` (Zod schemas + TypeScript interfac
 - **Jules**: REST API (`sessions`, `activities`, `approvePlan`, `sendMessage`), configured to open a PR on completion. Completion is detected via the PR webhook (§7.1); `activities` are read on demand (watchdog, run detail view), not polled.
 - **Direct**: in-process OpenRouter calls for single-call steps (sizing, question drafting where non-agentic, digests, scout analysis).
 
-### 7.3 Skills (platform plugin, versioned)
+### 7.3 Skills (platform plugin, versioned) — the devkit
 `/ideate`, `/refine`, `/spec`, `/plan-story`, `/build`, `/review`, `/security-review` (per PR), `/threat-model` (system review), `/verify`, `/scout-models`, (later `/digest`).
 Substance lives in shared procedure docs (`docs/agent/*.md`) so non-Claude harnesses use the same knowledge; Claude skills/subagents are thin wrappers. Subagents with least-privilege tools: researcher (read-only), designer, critic (read-only), security reviewer (read-only, no shell or network), test-writer, implementer, verifier (run, no edit).
+
+**Devkit (ADR-0032, design after M1: First end-to-end flow):** these procedures + skills are a product of their own, in a `devkit/` folder in this repo, published as a Claude Code plugin marketplace. It reaches tools through MCP and works without the control plane: standalone, tickets/questions/status are markdown files in the project repo. The control plane is one host for it.
+
+**Deployment modes (ADR-0032):** `gcp` (this design) and, later, `local` (one process on the user's machine, their own subscription and GitHub). Rule from now on: GCP specifics (Firestore storage for runs/config/spend, Cloud Tasks, Firebase Auth + allow-list) go behind ports when first built or touched, so `local` only adds adapters.
 
 ### 7.4 Model scout (weekly)
 1. Pull OpenRouter models API (pricing, context, availability).
@@ -231,6 +236,17 @@ v1.x screens:
 - **Releases** (dev status, promote to prod, rollback).
 API client generated from OpenAPI.
 
+### 7.6 Context sources (ADR-0033, design after M1: First end-to-end flow)
+Product and domain knowledge for agents, pluggable per project, behind a `ContextSource` port:
+
+| Kind | Example | When |
+|---|---|---|
+| Markdown docs (handwritten or copied-in snapshots) | Product brief, domain glossary, users, business rules, prompts | First (only kind needed now) |
+| MCP servers (read-only, per project) | Notion | Later |
+| Custom skills | A skill bringing its own context or tools | Later |
+
+Scopes: global (Andy's standards) → project → pipeline step. Same sources for the devkit and the control plane (ADR-0032). Context is untrusted data; a project's agents see only its own sources plus global ones; credentials per project, read-only; external calls and sizes capped.
+
 ---
 
 ## 8. Project template (what each managed project gets)
@@ -242,6 +258,7 @@ docs/features.md                  # living catalog of shipped features (updated 
 docs/architecture/overview.md     # current HLD; C4 L1–L2 in Mermaid
 docs/architecture/adr/NNNN-*.md   # MADR, immutable
 docs/agent/*.md                   # shared procedures: size-rubric, build, review, escalation, security
+docs/product/                     # product/domain context sources (§7.6; folder name set in the design)
 docs/security/threat-model.md     # living threat model + open risks (§9.1)
 specs/NNN-name/{design.md, tech-design.md, tasks.md, stories/*.md, mockups/}
 .github/workflows/                # thin callers → platform reusable workflows; CI checks
@@ -250,7 +267,39 @@ infra/                            # Terraform: dev/prod Cloud Run, Cloud Deploy 
 ```
 **Required CI checks** on `main`: tests, lint, typecheck, protected-path check, secret scan, security scans and security-review agent (§9.1), "PR references a ticket" (ticket key in branch name or PR body, verified against the control-plane API). These enforce rules for every agent regardless of harness.
 
-Onboarding a project = UI/MCP "Add project" → bootstrap (branch protection, secrets refs, App install check, Terraform PR for GCP) → Andy approves Terraform PR.
+Onboarding a project = UI/MCP "Add project" → bootstrap (applies the project baseline, §8.1: branch ruleset, repo settings, labels, template files, secrets refs, App install check, Terraform PR for GCP) → Andy approves Terraform PR.
+
+### 8.1 Project baseline (ADR-0031)
+
+Every guardrail built in this repo is packaged so each managed project gets it the same way, and this repo is configured from the same baseline. Built in M1.16: Project baseline v1. **Every slice that adds or changes a guardrail updates this table in the same PR.**
+
+Carried by: **RW** = reusable workflow in `platform/workflows/` (projects call it, pinned to a SHA) · **T** = file copied from `template/` · **G** = GitHub config in `platform/baseline/github/`, applied by script · **TF** = Terraform module in `infra/modules/` · **RB** = runbook step (secrets).
+
+| Guardrail | ADR | Source in this repo | Carried by | Status |
+|---|---|---|---|---|
+| Lint, typecheck, test, build | 0022 | `ci.yml` (`check`) | RW | not yet carried (M1.16) |
+| Workflow linter (actionlint) | 0027 | `ci.yml` | RW | not yet carried (M1.16) |
+| Terraform fmt/validate; public-safe plan summary | 0011, 0024 | `ci.yml`, `terraform-plan.yml` | RW | not yet carried (M1.16) |
+| Secret scan (TruffleHog) | 0015 | `secret-scan.yml` | RW | not yet carried (M1.16) |
+| CodeQL, dependency review, Terraform misconfig scan | 0025, 0030 | `security-scans.yml` | RW | not yet carried (M1.16) |
+| Security-review agent + gate | 0025, 0030 | `security-review.yml`, `scripts/security-review-*.mjs`, `platform/procedures/security-review.md` | RW | not yet carried (M1.16) |
+| System security review + drift | 0025, 0030 | `system-security-review.yml`, `platform/procedures/threat-model.md` | RW | not yet carried (M1.16) |
+| Adversarial PR review | 0026 | M1.11: Adversarial PR review | RW | planned (M1.11 builds it, M1.16 carries it) |
+| Local hooks (lefthook) + Claude Code format hook | 0027 | `lefthook.yml`, `.claude/settings.json`, `scripts/format-edited-file.mjs` | T | not yet carried (M1.16) |
+| Dependabot (npm, Actions, Terraform; cooldown) | 0025, 0030 | `.github/dependabot.yml` | T | not yet carried (M1.16) |
+| PR template (docs + security checklist) | 0022, 0025 | `.github/pull_request_template.md` | T | not yet carried (M1.16) |
+| Agent rules; docs ship with the change | 0022 | `AGENTS.md` | T | not yet carried (M1.16) |
+| Threat model seed | 0025 | `docs/security/threat-model.md` | T | not yet carried (M1.16) |
+| Public-repo hygiene (`.gitignore`: tfvars, state, `.env*`) | 0015 | `.gitignore` | T | not yet carried (M1.16) |
+| `main` ruleset: PR required, no force push/deletion, required checks, code scanning (CodeQL, high or higher) | 0025 | set by hand (`docs/runbooks/security-review.md`) | G | not yet carried (M1.16) |
+| Security & analysis: dependency graph, Dependabot alerts + security updates, secret scanning, push protection, private vulnerability reporting | 0015, 0025 | set by hand | G | not yet carried (M1.16) |
+| Actions: read-only default token; Actions may open PRs | 0025 | set by hand | G | not yet carried (M1.16) |
+| Labels `security-accepted`, `review-accepted` | 0025, 0026 | set by hand | G | not yet carried (M1.16) |
+| Reviewer token secret | 0030 | `CLAUDE_CODE_OAUTH_TOKEN` | RB | not yet carried (M1.16) |
+| GCP budget + alerts | 0028, 0029 | `infra/billing` | TF | not yet carried (M5: Dev → prod releases) |
+| Cloud Run caps, log exclusions, usage alerts | 0028 | `infra/control-plane` | TF | not yet carried (M5: Dev → prod releases) |
+| Cost kill switch (opt-in) | 0028 | M1.14: Cost kill switch | TF | planned (M5: Dev → prod releases) |
+
 
 ---
 
@@ -389,19 +438,20 @@ Repo scaffold, contracts package, Terraform for control-plane GCP project (plan 
 | **M1.2: Ticket core** | Contracts (Project, Ticket, TicketEvent, Question, Run); domain stage machine + DoR (with tests); Firestore store + converters; REST endpoints; Terraform for daily Firestore backup + Cloud Tasks queue (max rate/concurrency caps, ADR-0028) + invoker SA. | M | M0: Foundations | API tests pass; `terraform plan` reviewed/applied by Andy; tickets created via API appear in Firestore with events |
 | **M1.3: UI: tickets + inbox** | Ticket list grouped by stage, create/edit, detail with history, Needs-you inbox, answer question. | M | M1.2: Ticket core | Andy creates a ticket, sees history, answers a seeded question in the UI |
 | **M1.4: MCP core tools** | `create_ticket`, `list_needs_me`, `answer_question`, `status` using the auth proven in M1.1: MCP OAuth spike. | S | M1.1: MCP OAuth spike, M1.2: Ticket core | Same flows as M1.3 work from Claude desktop |
-| **M1.5: GitHub App + project registration** | `CodeHost` port + fake + contract suite; register the App (Andy creates it; builder provides manifest/instructions), webhook receiver (HMAC, idempotent by delivery ID), register one project and its repo. | M | M1.2: Ticket core | A PR/check event on the registered repo lands as an idempotent record; replayed delivery is a no-op |
+| **M1.5: GitHub App + project registration** | `CodeHost` port + fake + contract suite; register the App (Andy creates it; builder provides manifest/instructions), webhook receiver (HMAC, idempotent by delivery ID), register one project and its repo; switch PRs opened by workflows (system security review) to an App installation token so their checks run without manual approval. | M | M1.2: Ticket core | A PR/check event on the registered repo lands as an idempotent record; replayed delivery is a no-op |
 | **M1.6: Claude Code executor** | Reusable workflow; `workflow_dispatch` from the App with run ID; OIDC-authenticated callback; Run records; Cloud Tasks watchdog at deadline; one automatic retry then Needs-you. Use a no-op "echo" step for testing. | L → split if it grows (6a dispatch+callback, 6b watchdog+retry) | M1.5: GitHub App + project registration | An echo run dispatches, calls back, and completes; a killed run is caught by the watchdog and flagged |
 | **M1.7: Refinement** | `refine` step on the executor; questions written as structured records → inbox; answering re-runs DoR → Ready. | M | M1.3: UI: tickets + inbox, M1.4: MCP core tools, M1.6: Claude Code executor | A new ticket gets 1–5 questions; answering via MCP moves it to Ready |
-| **M1.8: Build + gate** | Dispatcher picks Ready tickets; `build` step opens PR with structured summary and ticket key; all merges gated (Andy); `would_auto_merge` recorded; outcome set from merge/close webhook; cost estimate on the Run. | M | M1.7: Refinement | Ready ticket → PR → Andy merges → ticket advances; Run shows cost estimate and outcome |
+| **M1.8: Build + gate** | Dispatcher picks Ready tickets; `build` step opens PR with structured summary and ticket key; all merges gated (Andy); `would_auto_merge` recorded; outcome set from merge/close webhook; cost estimate on the Run. | M | M1.7: Refinement, M1.16: Project baseline v1 | Ready ticket → PR → Andy merges → ticket advances; Run shows cost estimate and outcome |
 | **M1.9: Quota capture** | Timeboxed, best-effort. Capture claude-sub `rate_limits` from runs if available headless; otherwise readings stay **unknown** per policy. UI banner on warn/pause/unknown. | S | M1.6: Claude Code executor | Gauge shows a reading or "unknown"; banner appears at thresholds (test with seeded readings) |
 | **M1.10: Security review automation** | Per-PR scans (CodeQL, dependency review, Terraform misconfig scan, workflow linter) as required checks; pin actions to SHAs + Dependabot; per-PR security-review agent workflow; `docs/security/threat-model.md` v1 seeded with known risks; system security review workflow (weekly + manual); `/security-review` and `/threat-model` procedures in `platform/procedures/`. Andy adds the reviewer token secret and required checks. | M | M0: Foundations | A test PR with a planted issue (e.g. over-broad IAM role) gets a high finding and a failing check; the label override works; a manual system review opens a threat-model PR |
 | **M1.11: Adversarial PR review** | Adversarial reviewer agent on every PR (ADR-0026) reusing M1.10 plumbing; reviewer procedure in `platform/procedures/`; `adversarial-review` check fails on unresolved blockers; `review-accepted` override label. | M | M1.10: Security review automation | A test PR with a planted bug (e.g. off-by-one with no test) gets a `blocker` with a failing scenario; replying + fixing clears the check; the label override works |
 | **M1.12: Local quality gates** | Git hooks (commit: format/lint/`terraform fmt`/workflow lint on staged files; push: typecheck + tests) installed by `pnpm install`; Claude Code hook formats and lints edited files (ADR-0027). | S | M0: Foundations | A commit with a lint error is blocked locally; an agent edit is auto-formatted; CI adds actionlint (Andy, 2026-10-28) |
 | **M1.13: GCP cost guardrails** | `infra/billing` root with a $25/month budget and alerts (local plans only); Cloud Run timeout/concurrency set; Cloud Tasks caps when the queue lands; log exclusions; kill switch documented, not built (ADR-0028, ADR-0029). Andy applies. | S | M0: Foundations | Budget visible in Billing with alert thresholds; Andy confirmed as a default alert recipient and Google Cloud mail reaching his inbox (Google has no test-alert feature); kill switch documented and off |
 | **M1.14: Cost kill switch** | Opt-in `kill_switch_enabled` (default off): budget → Pub/Sub at 150% → function scales Cloud Run to zero and pauses any Cloud Tasks queues; never disables billing; re-enable steps in the billing runbook (ADR-0028). Verify the scale-to-zero mechanism first. Raising a Needs-you item is a follow-up once M1.2: Ticket core merges (the budget email covers it until then). | M | M1.13: GCP cost guardrails | With the switch on and a test budget, a budget message takes the service offline; with it off, nothing is deployed |
+| **M1.16: Project baseline v1** | Package every guardrail in §8.1 (ADR-0031): move CI/security workflows to reusable workflows in `platform/workflows/` (scripts and procedures checked out from the pinned SHA) and make this repo call them; `template/` repo files; `platform/baseline/github/` (ruleset, security & analysis, Actions settings, labels) + idempotent apply script with `--dry-run` diff + drift check; runbook "Onboard a repo". Verify reusable-workflow limits (secrets, permissions, nesting) first. | M | M1.10: Security review automation, M1.11: Adversarial PR review, M1.12: Local quality gates | One command brings a scratch repo to the baseline and its test PR shows the same checks as this repo; re-running reports no drift; a setting changed by hand shows up as drift |
 | **M1.15: Usage alerts** | Cloud Monitoring alert policies in `infra/control-plane` (email to Andy, address in gitignored tfvars + `TF_VAR_ALERT_EMAIL` Actions secret) on Cloud Run request rate, internet egress, Firestore read/write rate and log ingestion; thresholds well above normal use. Verify current alerting prices first (expected well under $1/month). | S | M1.13: GCP cost guardrails | Each policy visible in Monitoring; a temporarily lowered threshold fires an email within minutes |
 
-Order (Andy, 2026-10-28): M1.12: Local quality gates → M1.10: Security review automation → M1.2: Ticket core ‖ M1.1: MCP OAuth spike (in parallel) → M1.14: Cost kill switch → M1.11: Adversarial PR review. M1.13: GCP cost guardrails and M1.15: Usage alerts are merged.
+Order (Andy, 2026-10-28): M1.12: Local quality gates → M1.10: Security review automation → M1.2: Ticket core ‖ M1.1: MCP OAuth spike (in parallel) → M1.14: Cost kill switch → M1.11: Adversarial PR review → M1.16: Project baseline v1 (before M1.8: Build + gate). M1.10, M1.12, M1.13: GCP cost guardrails and M1.15: Usage alerts are merged.
 
 Can run in parallel once M1.2: Ticket core merges:
 - M1.3: UI: tickets + inbox
@@ -423,6 +473,10 @@ Project template Terraform + Cloud Deploy dev→prod, with a budget and caps per
 ### Later (explicitly deferred)
 After M5: Dev → prod releases: **custom domain** for the control plane (and per-project domains), with Firebase authorized domains and the MCP connector URL updated.
 
+**Devkit standalone + local mode** (ADR-0032): phase 1 devkit in Claude Code with markdown tickets; phase 2 full control plane locally. Designed after M1: First end-to-end flow.
+
+**Context sources** (ADR-0033, §7.6): `ContextSource` port, project manifest, MCP and skill sources (Notion first, when wanted). Designed after M1: First end-to-end flow.
+
 Prod monitoring agent and alert→ticket flow; write-approval execution; model-based risk scoring; email/Slack digests; transcript storage; BigQuery analytics; promptfoo CI + red-team; Cloud Run Jobs executors; additional harnesses (Antigravity CLI, Codex).
 
 ---
@@ -442,6 +496,8 @@ Remaining:
 8. First real side project to onboard in M1: First end-to-end flow (and is andy-intelligence itself project #2 for dogfooding?).
 9. Claude custom-connector OAuth mechanism currently supported (dynamic client registration vs static client) — **answered by M1.1: MCP OAuth spike**.
 10. Whether the Jules GitHub integration or the Jules REST API should be the dispatch path (REST preferred for run tracking; must support auto-PR creation for the completion signal).
+11. Local mode design (ADR-0032): markdown ticket format, local executor (Claude Code CLI) and its trust boundary, local storage/queue/auth adapters, devkit packaging and versioning. Due after M1: First end-to-end flow.
+12. Context sources design (ADR-0033): folder name and manifest format, step-to-source mapping, `ContextSource` port shape, MCP registration per project. Due after M1: First end-to-end flow.
 
 ---
 
@@ -461,6 +517,7 @@ Docs are part of the change, not a follow-up. Every slice PR updates the docs it
 | `docs/security/threat-model.md` | Assets, trust boundaries, threats, mitigations, open risks | A trust boundary, entry point, credential, or IAM grant is added or changed; after each system security review |
 | `docs/BUILD-PROMPT.md` | How a building agent behaves | Operating rules change |
 | `AGENTS.md` (`CLAUDE.md` → symlink) | Short, always-loaded rules for agents working in the repo | Rules or doc map change |
+| §8.1 Project baseline inventory | Every guardrail and how managed projects get it | A quality, security, cost or scaling guardrail is added or changed |
 | Package/app `README.md` | Only when a package has setup or usage the root README can't cover in a line | That package's usage changes |
 
 Managed projects get the same rule through the template (§8): `docs/features.md` is updated on merge, `docs/architecture/overview.md` when the design changes, ADRs for decisions.
