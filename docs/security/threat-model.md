@@ -1,7 +1,7 @@
 ---
-version: 1
+version: 2
 last_reviewed: 2026-10-28
-reviewed_by: M1.10: Security review automation (seed, by hand)
+reviewed_by: system security review
 ---
 
 # Threat model — andy-intelligence
@@ -66,3 +66,4 @@ Severity: `critical` (exploitable now, big blast radius) · `high` (exploitable 
 | R6  | Prompt injection in a diff could make the reviewer under-report.                                                                                                                           | medium   | open      | Andy  | Read-only tools, structured output, deterministic scans, Andy merges every PR; different-vendor reviewer from M2: Add Jules + model routing. Docs-only PRs skip the agent, so text planted in `docs/` for future agents is caught only by Andy; agent rule files are always reviewed. |
 | R7  | Third-party GitHub Action supply chain (e.g. the March 2026 `trivy-action` tag hijack).                                                                                                    | low      | mitigated | Andy  | SHA pins, Dependabot cooldown; release binaries are checksum-verified.                                                                                                                                                                                                                |
 | R8  | Reviewer runs on Andy's subscription; a burst of pushes burns quota.                                                                                                                       | low      | mitigated | Andy  | Sonnet, `--max-turns` 25, docs-only PRs skipped, one run per PR at a time (cancel-in-progress), step timeouts; usage shown on every comment; neutral check when quota runs out.                                                                                                       |
+| R9  | The system-review job holds `contents: write` and `CLAUDE_CODE_OAUTH_TOKEN` while an agent reads the whole repo (untrusted text). If its tool limits failed, it could push to a branch.    | low      | mitigated | Andy  | Agent tools limited to Read/Glob/Grep/Edit of this file; no Bash; checkout uses `persist-credentials: false`; a later step rejects any other changed file and pushes only a new `security/` branch; Andy merges the PR. Branch protection on `main` would add a backstop.             |
