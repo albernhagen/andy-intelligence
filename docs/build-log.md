@@ -191,6 +191,13 @@ Temporary progress log until andy-intelligence can track its own work (then migr
 - Follow-up (adversarial review on PR #31): `status` reads whole projects. Add `getTicketByKey` + per-stage counts to the `WorkTracker` port before ~1,000 tickets in a project or M2: Multi-project in parallel (ARCHITECTURE §7.1).
 - Verified locally: lint, typecheck, tests (MCP SDK client in-process: each tool, tool errors, the create → question → answer → Ready flow), build. Not run here: the Claude desktop check (Andy, runbook `mcp-connector.md` §4b, after deploy). No Terraform or Firestore adapter change.
 
+## 2026-11-03 — AI-native SDLC playbook gaps planned
+
+- Compared the plan with Anthropic's [AI-native SDLC playbook](https://claude.com/resources/articles/the-ai-native-sdlc-playbook). Most of it is already planned.
+- **Decided (Andy, ADR-0040: Close the gaps against Anthropic's AI-native SDLC playbook):** new slices M1.17: Agent evals v1 and M1.18: Plan step; executor permission profile in M1.6: Claude Code executor; verification output, acceptance-criteria review pass and nit cap in M1.8: Build + gate; review-capacity cap and learning loop in M2: Multi-project in parallel; DORA metrics in M6: Dev → prod releases.
+- **Decided (Andy):** `README.md` gets a one-screen "How it works today" section, updated with every feature change (AGENTS.md docs table).
+- Wave 1 (in parallel): PR #31: M1.4: MCP core tools and PR #32: M1.5: GitHub App + project registration open; they update "How it works today" after this merges.
+
 ## Slices: M1: First end-to-end flow: ticket → PR with Claude
 
 Status: todo / in progress / PR open / merged. Definitions: ARCHITECTURE §12.
@@ -205,7 +212,7 @@ Status: todo / in progress / PR open / merged. Definitions: ARCHITECTURE §12.
 | M1.5: GitHub App + project registration | M               | M1.2: Ticket core                                                                           | todo            |
 | M1.6: Claude Code executor              | L (split 6a/6b) | M1.5: GitHub App + project registration                                                     | todo            |
 | M1.7: Refinement                        | M               | M1.3: UI: tickets + inbox, M1.4: MCP core tools, M1.6: Claude Code executor                 | todo            |
-| M1.8: Build + gate                      | M               | M1.7: Refinement, M1.16: Project baseline v1                                                | todo            |
+| M1.8: Build + gate                      | M               | M1.7: Refinement, M1.16: Project baseline v1, M1.17: Agent evals v1, M1.18: Plan step       | todo            |
 | M1.9: Quota capture                     | S               | M1.6: Claude Code executor                                                                  | todo            |
 | M1.10: Security review automation       | M               | M0: Foundations                                                                             | merged (PR #10) |
 | M1.11: Adversarial PR review            | M               | M1.10: Security review automation                                                           | merged (PR #21) |
@@ -214,6 +221,8 @@ Status: todo / in progress / PR open / merged. Definitions: ARCHITECTURE §12.
 | M1.14: Cost kill switch                 | M               | M1.13: GCP cost guardrails                                                                  | merged (PR #18) |
 | M1.15: Usage alerts                     | S               | M1.13: GCP cost guardrails                                                                  | merged (PR #8)  |
 | M1.16: Project baseline v1              | M               | M1.10: Security review automation, M1.11: Adversarial PR review, M1.12: Local quality gates | merged (PR #23) |
+| M1.17: Agent evals v1                   | M               | M1.11: Adversarial PR review, M1.16: Project baseline v1                                    | todo            |
+| M1.18: Plan step                        | M               | M1.6: Claude Code executor, M1.7: Refinement                                                | todo            |
 
 **Next (order decided by Andy, 2026-10-28):**
 
@@ -223,6 +232,8 @@ Status: todo / in progress / PR open / merged. Definitions: ARCHITECTURE §12.
 4. M1.14: Cost kill switch.
 5. M1.11: Adversarial PR review (merged).
 6. M1.16: Project baseline v1 (merged, `v1.0.0`).
+
+**Waves (Andy, 2026-11-03, ADR-0040):** 1. M1.4: MCP core tools ‖ M1.5: GitHub App + project registration → 2. M1.6a: dispatch + callback ‖ M1.17: Agent evals v1 → 3. M1.6b: watchdog + retry ‖ M1.7: Refinement ‖ M1.9: Quota capture → 4. M1.18: Plan step → 5. M1.8: Build + gate.
 
 **Pending decisions (Andy):**
 

@@ -2,6 +2,31 @@
 
 Personal control plane for agentic software development: ideas → refined tickets → agent runs (Claude Code, Jules, OpenCode) under cost and quota controls → PRs → dev → one-click prod.
 
+## How it works today
+
+What is built on `main` now. The target design is [ARCHITECTURE.md](docs/architecture/ARCHITECTURE.md); progress is in [`docs/build-log.md`](docs/build-log.md). Update this section in the same PR as any change to features, components or how to use the system.
+
+```
+ Browser UI ─┐                                   ┌─ Firestore (tickets, questions, history, OAuth grants)
+             ├─▶ Cloud Run: control-plane ───────┤
+ Claude (MCP)┘   API + /mcp + OAuth + SPA        └─ Cloud Tasks queue (run-watchdog; nothing uses it yet)
+ GitHub PRs ──▶ CI checks + review agents (GitHub Actions)
+```
+
+**Working:**
+
+| Feature                | What it does                                                                                                                                            | How to use                                                                               |
+| ---------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------- |
+| Sign-in                | Google sign-in; only emails on the allow-list get in                                                                                                    | Open the Cloud Run URL (`terraform output service_url` in `infra/control-plane`)         |
+| Tickets                | Projects, tickets moving through stages (Backlog → Ready → In progress → Ready for review → Monitoring → Done), Definition of Ready, history, questions | UI: `/projects`, then a project; or the REST API under `/api`                            |
+| Needs-you inbox        | Open questions and flagged tickets in one place                                                                                                         | UI home page `/`                                                                         |
+| Claude connector (MCP) | Claude desktop signs in through our OAuth server; tools `create_ticket`, `list_needs_me`, `answer_question`, `status`, same rules as the UI             | [`docs/runbooks/mcp-connector.md`](docs/runbooks/mcp-connector.md)                       |
+| PR checks              | Lint, typecheck, tests, build, secret/CodeQL/dependency/Terraform scans, security-review and adversarial-review agents                                  | Automatic on every PR; overrides with the `security-accepted` / `review-accepted` labels |
+| Project baseline       | Gives another repo the same checks, files and GitHub settings                                                                                           | `platform/baseline/baseline.mjs` ([runbook](docs/runbooks/onboard-a-repo.md))            |
+| Cost guardrails        | $25/month budget alerts, usage alerts, caps, opt-in kill switch at 150% of budget                                                                       | [`docs/runbooks/billing.md`](docs/runbooks/billing.md)                                   |
+
+**Not built yet:** agents doing ticket work. The next slices add the GitHub App, the Claude Code executor, refinement, a plan step, and build → PR (ARCHITECTURE §12, M1: First end-to-end flow).
+
 ## Docs
 
 | Doc                                                                      | What                                                        |
