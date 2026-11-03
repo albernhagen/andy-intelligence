@@ -13,15 +13,16 @@ import type { AuthEnv } from "./auth";
 import { FixedWindowLimiter } from "./mcp/rate-limit";
 
 /**
- * GitHub App webhook receiver (ADR-0041). Order of checks: body cap → rate cap → HMAC →
+ * GitHub App webhook receiver (ADR-0041). Order of checks: body cap → HMAC → rate cap →
  * event type → registered repo → record once by delivery ID. Nothing is stored before the
- * signature checks out, and only deliveries about registered repos are stored.
+ * signature checks out, and only deliveries about registered repos are stored. The rate cap
+ * counts signed deliveries only, so unsigned floods can't lock GitHub out.
  */
 
 export const WEBHOOK_PATH = "/webhooks/github";
 /** GitHub's own cap is 25 MB; PR/check/workflow payloads are tens of KB (ADR-0028). */
 export const MAX_WEBHOOK_BYTES = 1024 * 1024;
-/** Per instance, before the signature check; max 2 instances (ADR-0028). */
+/** Signed deliveries per instance per minute (bounds Firestore work); max 2 instances (ADR-0028). */
 export const WEBHOOK_RATE_LIMIT = 300;
 /** How long the repo → project map is reused; a new registration applies within this time. */
 export const REPO_INDEX_TTL_MS = 60_000;
@@ -71,14 +72,14 @@ export function registerGitHubWebhook(app: Hono<AuthEnv>, deps: WebhookDeps): vo
       },
     }),
     async (c) => {
-      if (!limiter.tryTake()) {
-        log("WARNING", "webhook rate limit hit");
-        return c.json({ error: "rate limited" }, 429);
-      }
       const raw = await c.req.text();
       if (!(await verifySignature(deps.secret, raw, c.req.header("x-hub-signature-256")))) {
         log("WARNING", "webhook signature rejected");
         return c.json({ error: "invalid signature" }, 401);
+      }
+      if (!limiter.tryTake()) {
+        log("WARNING", "webhook rate limit hit");
+        return c.json({ error: "rate limited" }, 429);
       }
 
       const event = c.req.header("x-github-event") ?? "";

@@ -68,6 +68,8 @@ Change: `google_cloud_run_v2_service.control_plane` gets `GITHUB_APP_ID`, `GITHU
 
 Check: the App's **Advanced** tab → Recent deliveries → the `ping` from creation → **Redeliver** → response `200 {"result":"pong"}`.
 
+Check the next deploy from `main` too (any merge): the deploy workflow only swaps the image and keeps the secret references; the runtime SA (not the deployer) needs access to the secrets, which step 1 granted. If the deploy fails with a Secret Manager permission error, stop and tell the building agent.
+
 ## 4. Register project #1
 
 In the UI (`/projects`): Name `andy-intelligence`, Key `AI`, GitHub repo `albernhagen/andy-intelligence` → Create project.
@@ -125,10 +127,10 @@ rm /tmp/app.pem
 
 ## Troubleshooting
 
-| Symptom                                                                    | Fix                                                                                             |
-| -------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------- |
-| Deliveries show `401 invalid signature`                                    | Webhook secret mismatch (often a trailing newline). Redo the webhook-secret row of §7.          |
-| Deliveries show `202 ignored, reason repo`                                 | Repo not registered to a project (§4), or registered < 60 s ago (cache).                        |
-| Revision fails to start: `missing required env var GITHUB_APP_PRIVATE_KEY` | A secret has no version: redo step 2.3.                                                         |
-| Deliveries show `429`                                                      | Rate cap hit (300/minute per instance). Wait, then redeliver the failed ones.                   |
-| System review: "Review bot App not configured"                             | Step 5: `REVIEW_BOT_CLIENT_ID` variable or `REVIEW_BOT_PRIVATE_KEY` environment secret missing. |
+| Symptom                                                                    | Fix                                                                                                                     |
+| -------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------- |
+| Deliveries show `401 invalid signature`                                    | Webhook secret mismatch (often a trailing newline). Redo the webhook-secret row of §7.                                  |
+| Deliveries show `202 ignored, reason repo`                                 | Repo not registered to a project (§4), or registered < 60 s ago (cache).                                                |
+| Revision fails to start: `missing required env var GITHUB_APP_PRIVATE_KEY` | A secret has no version: redo step 2.3.                                                                                 |
+| Deliveries show `429`                                                      | Signed-delivery cap hit (300/minute per instance; unsigned requests don't count). Wait, then redeliver the failed ones. |
+| System review: "Review bot App not configured"                             | Step 5: `REVIEW_BOT_CLIENT_ID` variable or `REVIEW_BOT_PRIVATE_KEY` environment secret missing.                         |

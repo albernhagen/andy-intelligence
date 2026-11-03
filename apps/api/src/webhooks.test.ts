@@ -160,7 +160,14 @@ describe("GitHub webhook receiver", () => {
     expect(res.status).toBe(413);
   });
 
-  it("GivenAFlood_WhenOverTheRateCap_Then429UntilTheWindowEnds", async () => {
+  it("GivenAnUnsignedFlood_WhenGitHubDelivers_ThenTheRealDeliveryIsStillRecorded", async () => {
+    for (let i = 0; i < WEBHOOK_RATE_LIMIT + 10; i++) {
+      expect((await deliver({ event: "ping", secret: "attacker" })).status).toBe(401);
+    }
+    expect(await (await deliver()).json()).toEqual({ result: "recorded" });
+  });
+
+  it("GivenASignedFlood_WhenOverTheRateCap_Then429UntilTheWindowEnds", async () => {
     for (let i = 0; i < WEBHOOK_RATE_LIMIT; i++) await deliver({ event: "ping" });
     expect((await deliver({ event: "ping" })).status).toBe(429);
     clock = new Date(clock.getTime() + 60_000);
