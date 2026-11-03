@@ -60,9 +60,19 @@ jobs:
           region: ${{ env.REGION }}
           image: ${{ vars.GCP_IMAGE_REPO }}/control-plane:${{ github.sha }}
 
+      # Tests the URL the service itself serves (PUBLIC_URL, ADR-0044), so it works before and
+      # after the custom-domain cutover. Any other host (run.app) must answer only /health.
       - name: Smoke test
         run: |
-          url=$(gcloud run services describe "$SERVICE" --region "$REGION" --format='value(status.url)')
+          svc=$(gcloud run services describe "$SERVICE" --region "$REGION" --format=json)
+          url=$(jq -r '.spec.template.spec.containers[0].env[] | select(.name == "PUBLIC_URL") | .value' <<< "$svc")
+          run_url=$(jq -r '.status.url' <<< "$svc")
+          url=${url:-$run_url}
           curl -fsS "$url/health"
           code=$(curl -s -o /dev/null -w '%{http_code}' "$url/api/me")
           test "$code" = "401"
+          if [ "$url" != "$run_url" ]; then
+            curl -fsS "$run_url/health"
+            code=$(curl -s -o /dev/null -w '%{http_code}' "$run_url/api/me")
+            test "$code" = "404"
+          fi

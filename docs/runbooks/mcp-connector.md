@@ -27,7 +27,7 @@ pnpm test:firestore
 
 ## 2. Check the endpoint
 
-Use the `service_url` output (`https://control-plane-<project-number>.us-central1.run.app`), not the legacy hash URL.
+Use the `service_url` output (`https://ai.andybernhagen.com`, ADR-0044: Custom domain before M6). The `run.app` URLs fail: they aren't the OAuth issuer or a sign-in domain.
 
 ```sh
 URL=$(terraform output -raw service_url)
@@ -68,4 +68,4 @@ After the M1.4 deploy, in a Claude desktop chat (reconnect the connector if Clau
 | -------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------- |
 | Claude says the server has no auth / can't connect | Step 2; `PUBLIC_URL` must equal the URL entered in Claude (same host, no trailing slash).                                                    |
 | `/oauth/authorize` shows `invalid_client`          | Cloud Logging `component="mcp-oauth"`: Claude's `client_id` host isn't `claude.ai`/`claude.com`, or it used DCR. Record it in the build log. |
-| Popup blocked on the consent page                  | Allow popups for the `run.app` host; sign-in uses the same Firebase popup as the UI.                                                         |
+| Popup blocked on the consent page                  | Allow popups for `ai.andybernhagen.com`; sign-in uses the same Firebase popup as the UI.                                                     |

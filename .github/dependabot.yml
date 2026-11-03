@@ -37,6 +37,7 @@ updates:
       - /infra/bootstrap
       - /infra/control-plane
       - /infra/billing
+      - /infra/dns
     schedule:
       interval: weekly
     open-pull-requests-limit: 5

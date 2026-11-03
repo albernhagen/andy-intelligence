@@ -37,6 +37,8 @@ async function main() {
       projectId,
     },
     tracker: new FirestoreWorkTracker(db),
+    // Serve only the public URL's host; the run.app URLs answer /health alone (ADR-0044).
+    publicHost: publicUrl ? new URL(publicUrl).host : undefined,
     mcp: publicUrl
       ? {
           publicUrl,

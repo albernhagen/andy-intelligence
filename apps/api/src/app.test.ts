@@ -50,6 +50,36 @@ describe("api", () => {
     expect(await res.json()).toEqual({ email: "Andy@Example.com", uid: "andy" });
   });
 
+  describe("public host only (ADR-0044)", () => {
+    const guarded = createApp({
+      verifier,
+      allowedEmails: parseAllowList("andy@example.com"),
+      version: "test",
+      webConfig: { firebaseApiKey: "k", firebaseAuthDomain: "d", projectId: "p" },
+      tracker: new InMemoryWorkTracker(),
+      publicHost: "AI.example.com",
+    });
+    const runApp = "https://control-plane-123.us-central1.run.app";
+
+    it("GivenThePublicHost_WhenCallingTheApi_ThenItIsServed", async () => {
+      expect((await guarded.request("https://ai.example.com/api/me")).status).toBe(401);
+      expect((await guarded.request("https://ai.example.com/config.json")).status).toBe(200);
+    });
+
+    it("GivenTheRunAppHost_WhenCallingAnythingButHealth_ThenNotFound", async () => {
+      for (const path of ["/api/me", "/config.json", "/openapi.json", "/mcp", "/webhooks/github"]) {
+        const res = await guarded.request(`${runApp}${path}`, { method: "GET" });
+        expect(res.status, path).toBe(404);
+      }
+      const post = await guarded.request(`${runApp}/github/token`, { method: "POST" });
+      expect(post.status).toBe(404);
+    });
+
+    it("GivenTheRunAppHost_WhenCallingHealth_ThenOk", async () => {
+      expect((await guarded.request(`${runApp}/health`)).status).toBe(200);
+    });
+  });
+
   it("publishes an OpenAPI document", async () => {
     const res = await get("/openapi.json");
     expect(res.status).toBe(200);
