@@ -6,7 +6,7 @@ How Andy moves the control plane from `https://control-plane-662512537397.us-cen
 - **`infra/dns`**: Terraform root for the Cloudflare records. Local plans and applies only; CI runs fmt/validate.
 - **`PUBLIC_URL`**: the env var the API uses as OAuth issuer, MCP resource, GitHub App URLs and Actions OIDC audience.
 
-After the switch, the `run.app` URL still serves, but it isn't a sign-in domain, so the UI and MCP only work on the new domain.
+After the switch, the `run.app` URLs answer only `GET /health` (for monitoring); everything else there is `404`, and they aren't sign-in domains. Until step 5, `PUBLIC_URL` is the run.app URL, so nothing changes before then (no lockout mid-switch).
 
 Merge the PR, then do steps 1–7 on the same day: the merged `system-security-review.yml` already uses the new URL as its OIDC audience, so its `publish` job fails until step 5.
 
@@ -69,7 +69,7 @@ terraform apply cp.tfplan
 ```
 
 - `google_identity_platform_config.this`: authorized domains swap the `run.app` host for `ai.andybernhagen.com`.
-- `google_cloud_run_v2_service.control_plane`: `PUBLIC_URL=https://ai.andybernhagen.com` → new revision.
+- `google_cloud_run_v2_service.control_plane`: `PUBLIC_URL=https://ai.andybernhagen.com` → new revision. From here the `run.app` URLs answer only `/health`.
 
 Afterwards the CI `plan` job shows "No changes". Existing MCP tokens stop working: they were issued for the old resource URL.
 
@@ -94,7 +94,9 @@ Claude desktop → Settings → Connectors → remove `andy-intelligence` → Ad
 ## 8. Done when
 
 - [ ] `curl -sI https://ai.andybernhagen.com/health` → `200`; the certificate is valid (`curl` prints no TLS error).
-- [ ] Google sign-in works at `https://ai.andybernhagen.com`. On the `run.app` URL it now fails with `auth/unauthorized-domain` (expected).
+- [ ] Google sign-in works at `https://ai.andybernhagen.com`.
+- [ ] The old URL is refused: `curl -s -o /dev/null -w '%{http_code}\n' https://control-plane-662512537397.us-central1.run.app/api/me` → `404`; `…/health` → `200`.
+- [ ] Next deploy's smoke test passes (it checks both).
 - [ ] In a Claude chat: "call the andy-intelligence status tool" → `signedInAs: <your email>`.
 - [ ] The App → Advanced → Recent deliveries → redeliver one → `200` (`{"result":"duplicate"}` for an old one); the delivery's URL is the new domain.
 - [ ] `gh workflow run system-security-review.yml --repo albernhagen/andy-intelligence`: if it reaches `publish`, the token step succeeds (logs: `jsonPayload.component="github-token"`).
@@ -109,6 +111,7 @@ Changing `custom_domain` alone won't do it. To return to `run.app`: revert this 
 | ----------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------- |
 | Step 3: `Caller is not authorized to administer the domain` | The Terraform account isn't a verified Search Console owner: step 1.5 and the Verify click in step 2, same Google account. |
 | Certificate pending after 24 hours                          | CNAME proxied (orange cloud) or wrong; a CAA record blocking `pki.goog`/`letsencrypt.org` (step 1.1).                      |
-| Sign-in popup: `auth/unauthorized-domain`                   | Step 5 not applied, or you're on the `run.app` URL.                                                                        |
+| Sign-in popup: `auth/unauthorized-domain`                   | Step 5 not applied.                                                                                                        |
+| `404 {"error":"not found"}`                                 | You're on a `run.app` URL; use `https://ai.andybernhagen.com`.                                                             |
 | Claude: can't connect / no auth                             | Connector still on the old URL (step 7), or `PUBLIC_URL` not switched (step 5).                                            |
 | `publish` job: `401` from `/github/token`                   | Step 5 not applied: the workflow's audience is already the new URL.                                                        |

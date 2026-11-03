@@ -3,7 +3,7 @@ title: andy-intelligence — Architecture & Vision
 status: accepted (v1.x scope)
 owner: Andy
 last_updated: 2026-11-03
-revision: 2026-11-03g (M1.20: Custom domain: control plane at https://ai.andybernhagen.com via a Cloud Run domain mapping, DNS in infra/dns, run.app no longer a sign-in domain; ADR-0044; after 2026-11-03f M1.19: GitHub App setup from the UI: connect from Settings → GitHub, credentials written by the API, repo tokens for CI via Actions OIDC, no review bot; ADR-0043; after 2026-11-03e M1.5: GitHub App + project registration)
+revision: 2026-11-03g (M1.20: Custom domain: control plane at https://ai.andybernhagen.com via a Cloud Run domain mapping, DNS in infra/dns, run.app URLs answer only /health; ADR-0044; after 2026-11-03f M1.19: GitHub App setup from the UI: connect from Settings → GitHub, credentials written by the API, repo tokens for CI via Actions OIDC, no review bot; ADR-0043; after 2026-11-03e M1.5: GitHub App + project registration)
 ---
 
 # andy-intelligence — Architecture & Vision
@@ -198,7 +198,7 @@ Contracts are defined in `packages/contracts` (Zod schemas + TypeScript interfac
 ## 7. Components
 
 ### 7.1 Control plane service (Cloud Run)
-- **Public URL** (ADR-0044) — `https://ai.andybernhagen.com`: Cloud Run domain mapping (Preview, $0, Google-managed certificate); DNS-only CNAME in Cloudflare, managed by the local-only `infra/dns` root. It is `PUBLIC_URL`: OAuth issuer and MCP resource, GitHub App URLs, Actions OIDC audience, and the only Firebase sign-in domain. The default `run.app` URL still serves but has no sign-in.
+- **Public URL** (ADR-0044) — `https://ai.andybernhagen.com`: Cloud Run domain mapping (Preview, $0, Google-managed certificate); DNS-only CNAME in Cloudflare, managed by the local-only `infra/dns` root. It is `PUBLIC_URL`: OAuth issuer and MCP resource, GitHub App URLs, Actions OIDC audience, and the only Firebase sign-in domain. The API serves only that host: the default `run.app` URLs answer `GET /health` (monitoring) and `404` for everything else. Cloud Tasks and Scheduler target `PUBLIC_URL` too.
 - **API** — REST, OpenAPI-documented, the single entry point for UI and MCP.
 - **MCP server** — remote, Streamable HTTP at `/mcp`. Tools generated from API contracts. v1.x tools: `list_projects`, `create_ticket`, `get_ticket`, `refine` (start refinement), `list_needs_me`, `answer_question`, `set_override`, `start`, `status`, `quota`, `promote_release`, `get_config`, `propose_config_change`.
   - Built (M1.4: MCP core tools): `create_ticket` (project key, e.g. `AI`), `list_needs_me`, `answer_question` (recorded `answered_via = mcp`), `status` (ticket key → stage, DoR gaps, questions, last 5 events; no key → projects with ticket counts by stage, Needs-you count, signed-in email). Thin adapters over `TicketService` (`packages/domain`), shared with the REST API; rule violations come back as tool errors. Ticket keys resolve via the project id (= lowercased key). Read cost: `status` with a key reads every ticket in that project; without one, every ticket in every project (as the Needs-you inbox already does per project). Fine for one user (1,000 tickets ≈ $0.0006 of Firestore reads per call; calls need Andy's token, R14 caps token guesses). Add `getTicketByKey` and per-stage counts to the `WorkTracker` port (ADR-0028 cap) before any project passes ~1,000 tickets or M2: Multi-project in parallel, whichever is first. The M1.1 `ping` tool is gone; `status` is the connection check.
@@ -352,7 +352,7 @@ Third-party action pins inside `platform/actions/` are bumped by this repo's Dep
 - **Identity:**
   - Andy: Google identity with an email allow-list (Andy only). UI via Firebase Auth (Google provider); MCP via our own OAuth server whose sign-in step is that same Firebase Google sign-in + allow-list (CIMD clients from `claude.ai`/`claude.com`, PKCE, hashed opaque tokens; ADR-0039).
   - GitHub webhooks: HMAC-SHA256 signature with the webhook secret (ADR-0041).
-  - Cloud Scheduler **and Cloud Tasks** (watchdog) → API: OIDC tokens for a dedicated invoker service account, audience = the service URL; the API verifies issuer, audience, and SA email.
+  - Cloud Scheduler **and Cloud Tasks** (watchdog) → API: OIDC tokens for a dedicated invoker service account, sent to and with audience = `PUBLIC_URL` (the run.app host refuses them, ADR-0044); the API verifies issuer, audience, and SA email.
   - **Agent callbacks from Actions runs:** the workflow requests a GitHub Actions OIDC token (`id-token: write`, audience = control plane). The API verifies it against GitHub's JWKS and checks `repository`, `job_workflow_ref` (must be the platform's reusable workflow), and `run_id` against the dispatched Run. No secret is passed through `workflow_dispatch` inputs (they are visible in public repos' run UI).
   - Non-Actions executors (Jules) don't call back; their completion arrives via GitHub webhooks.
 - **Least privilege:** agent service accounts and tokens are read-only; per-run GitHub App installation tokens scoped to the project's repos; separate per-project OpenRouter keys with caps; per-project GCP projects. Callback-authenticated agents can only write to their own Run and ticket (report, comment, question).
