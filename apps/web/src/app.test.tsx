@@ -22,6 +22,19 @@ describe("tickets UI", () => {
     expect(within(backlog).getByText("AI-1")).toBeTruthy();
   });
 
+  it("GivenARepo_WhenAndyCreatesAProject_ThenTheProjectListsIt", async () => {
+    const harness = renderApp("/projects");
+    await harness.user.type(await screen.findByLabelText("Name"), "Andy Intelligence");
+    await harness.user.type(screen.getByLabelText(/^Key/), "ai");
+    await harness.user.type(screen.getByLabelText(/^GitHub repo/), "albernhagen/andy-intelligence");
+    await harness.user.click(screen.getByRole("button", { name: "Create project" }));
+
+    await screen.findByRole("button", { name: "New ticket" });
+    expect((await harness.tracker.getProject("ai"))?.repos).toEqual([
+      "albernhagen/andy-intelligence",
+    ]);
+  });
+
   it("GivenATicket_WhenAndyEditsIt_ThenFieldsAndHistoryUpdate", async () => {
     const harness = renderApp();
     await harness.tracker.createProject({ name: "AI", key: "AI" });

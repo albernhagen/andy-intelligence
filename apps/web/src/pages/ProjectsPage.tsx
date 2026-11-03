@@ -12,6 +12,7 @@ export function ProjectsPage() {
   const navigate = useNavigate();
   const [name, setName] = useState("");
   const [key, setKey] = useState("");
+  const [repo, setRepo] = useState("");
 
   return (
     <section className="space-y-6">
@@ -29,6 +30,9 @@ export function ProjectsPage() {
             >
               {p.key}: {p.name}
             </Link>
+            {p.repos.length > 0 && (
+              <span className="text-muted-foreground"> ({p.repos.join(", ")})</span>
+            )}
           </li>
         ))}
       </ul>
@@ -38,7 +42,7 @@ export function ProjectsPage() {
         onSubmit={(e) => {
           e.preventDefault();
           create.mutate(
-            { name: name.trim(), key: key.trim() },
+            { name: name.trim(), key: key.trim(), repos: repo.trim() ? [repo.trim()] : [] },
             {
               onSuccess: (p) => void navigate({ to: "/p/$projectId", params: { projectId: p.id } }),
             },
@@ -55,6 +59,13 @@ export function ProjectsPage() {
             pattern="[A-Z][A-Z0-9]{0,9}"
             value={key}
             onChange={(e) => setKey(e.target.value.toUpperCase())}
+          />
+        </Field>
+        <Field label="GitHub repo (owner/name, optional; the GitHub App must be installed on it)">
+          <Input
+            pattern="[A-Za-z0-9\-]+/[A-Za-z0-9._\-]+"
+            value={repo}
+            onChange={(e) => setRepo(e.target.value)}
           />
         </Field>
         {create.error && <QueryError error={create.error} />}

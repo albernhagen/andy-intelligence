@@ -1,10 +1,14 @@
 import {
+  codeEventLogContract,
+  codeHostContract,
   executorContract,
   oauthGrantStoreContract,
   quotaSourceContract,
   workTrackerContract,
 } from "../testing";
 import {
+  InMemoryCodeEventLog,
+  InMemoryCodeHost,
   InMemoryExecutor,
   InMemoryOAuthGrantStore,
   InMemoryQuotaSource,
@@ -46,3 +50,18 @@ quotaSourceContract("in-memory", async () => {
 });
 
 oauthGrantStoreContract("in-memory", async (now) => new InMemoryOAuthGrantStore(now));
+
+codeHostContract("in-memory", async () => ({
+  host: new InMemoryCodeHost([
+    {
+      fullName: "Owner/Repo",
+      defaultBranch: "main",
+      private: false,
+      url: "https://github.com/Owner/Repo",
+    },
+  ]),
+  knownRepo: "owner/repo",
+  unknownRepo: "owner/other",
+}));
+
+codeEventLogContract("in-memory", async () => new InMemoryCodeEventLog());

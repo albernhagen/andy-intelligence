@@ -211,31 +211,38 @@ Temporary progress log until andy-intelligence can track its own work (then migr
 - PR #25: TypeScript 6: merged `main` in and dropped the deprecated `baseUrl` from `apps/web/tsconfig.json` (TS5101); gate passes.
 - PR #27: `@types/node` 26 closed: the runtime is Node 24 (`.nvmrc`). Dependabot now ignores `@types/node` majors (this repo and the baseline template); bump them with `.nvmrc`.
 
+## 2026-11-03 — M1.5: GitHub App + project registration built
+
+- **Decided (Andy, ADR-0041: GitHub App credentials and webhook intake):** andy-intelligence is project #1 (open question 8; side projects in M2: Multi-project in parallel). Two private Apps from manifests: read-only control-plane App (webhooks) and a review bot App (contents + PR write, this repo only) so the control-plane key never leaves Secret Manager. Control-plane key + webhook secret in Secret Manager (Andy adds versions with `gcloud`); bot key in a `main`-only `system-review` environment.
+- Branch `m1.5/github-app`: `CodeHost` (`getRepo`) + `CodeEventLog` ports, fakes, contract suites; `FirestoreCodeEventLog` (`create()` per delivery ID); new `@andy/github` (`GitHubCodeHost` on `@octokit/auth-app`, HMAC via `@octokit/webhooks-methods`, payload mapping); `POST /webhooks/github` (1 MB, 300/minute per instance, HMAC, registered repos only); `ProjectService` (repo must have the App, one project per repo); repo field on the new-project form; Terraform: 2 secrets, runtime `secretAccessor` on them, `codeHostEvents` TTL, env behind `github_app_id`; `system-security-review.yml` opens its PR with the bot token. Runbook `docs/runbooks/github-app.md`; threat model R18, R19, R9 narrowed.
+- Verified locally: lint, typecheck, tests, build; `terraform validate`; smoke run of the bundle (unsigned delivery → 401, `/health` 200). Not run here: `pnpm test:firestore` (no Java), the GitHub contract suite (needs the App), actionlint/Trivy (CI).
+- Andy to run after merge: runbook `github-app.md` §1–6 (apply 5 adds; create App; apply 1 change; register `AI`; review bot; Done when: PR event recorded, redelivery → `duplicate`).
+
 ## Slices: M1: First end-to-end flow: ticket → PR with Claude
 
 Status: todo / in progress / PR open / merged. Definitions: ARCHITECTURE §12.
 
-| Slice                                   | Size            | Depends on                                                                                  | Status          |
-| --------------------------------------- | --------------- | ------------------------------------------------------------------------------------------- | --------------- |
-| M1.0: Docs sync                         | S               | M0: Foundations                                                                             | merged (PR #1)  |
-| M1.1: MCP OAuth spike                   | M               | M0: Foundations                                                                             | merged (PR #29) |
-| M1.2: Ticket core                       | M               | M0: Foundations                                                                             | merged (PR #17) |
-| M1.3: UI: tickets + inbox               | M               | M1.2: Ticket core                                                                           | merged (PR #28) |
-| M1.4: MCP core tools                    | S               | M1.1: MCP OAuth spike, M1.2: Ticket core                                                    | PR open (#31)   |
-| M1.5: GitHub App + project registration | M               | M1.2: Ticket core                                                                           | todo            |
-| M1.6: Claude Code executor              | L (split 6a/6b) | M1.5: GitHub App + project registration                                                     | todo            |
-| M1.7: Refinement                        | M               | M1.3: UI: tickets + inbox, M1.4: MCP core tools, M1.6: Claude Code executor                 | todo            |
-| M1.8: Build + gate                      | M               | M1.7: Refinement, M1.16: Project baseline v1, M1.17: Agent evals v1, M1.18: Plan step       | todo            |
-| M1.9: Quota capture                     | S               | M1.6: Claude Code executor                                                                  | todo            |
-| M1.10: Security review automation       | M               | M0: Foundations                                                                             | merged (PR #10) |
-| M1.11: Adversarial PR review            | M               | M1.10: Security review automation                                                           | merged (PR #21) |
-| M1.12: Local quality gates              | S               | M0: Foundations                                                                             | merged (PR #9)  |
-| M1.13: GCP cost guardrails              | S               | M0: Foundations                                                                             | merged (PR #7)  |
-| M1.14: Cost kill switch                 | M               | M1.13: GCP cost guardrails                                                                  | merged (PR #18) |
-| M1.15: Usage alerts                     | S               | M1.13: GCP cost guardrails                                                                  | merged (PR #8)  |
-| M1.16: Project baseline v1              | M               | M1.10: Security review automation, M1.11: Adversarial PR review, M1.12: Local quality gates | merged (PR #23) |
-| M1.17: Agent evals v1                   | M               | M1.11: Adversarial PR review, M1.16: Project baseline v1                                    | todo            |
-| M1.18: Plan step                        | M               | M1.6: Claude Code executor, M1.7: Refinement                                                | todo            |
+| Slice                                   | Size            | Depends on                                                                                  | Status           |
+| --------------------------------------- | --------------- | ------------------------------------------------------------------------------------------- | ---------------- |
+| M1.0: Docs sync                         | S               | M0: Foundations                                                                             | merged (PR #1)   |
+| M1.1: MCP OAuth spike                   | M               | M0: Foundations                                                                             | merged (PR #29)  |
+| M1.2: Ticket core                       | M               | M0: Foundations                                                                             | merged (PR #17)  |
+| M1.3: UI: tickets + inbox               | M               | M1.2: Ticket core                                                                           | merged (PR #28)  |
+| M1.4: MCP core tools                    | S               | M1.1: MCP OAuth spike, M1.2: Ticket core                                                    | merged (PR #31)  |
+| M1.5: GitHub App + project registration | M               | M1.2: Ticket core                                                                           | PR open (PR #32) |
+| M1.6: Claude Code executor              | L (split 6a/6b) | M1.5: GitHub App + project registration                                                     | todo             |
+| M1.7: Refinement                        | M               | M1.3: UI: tickets + inbox, M1.4: MCP core tools, M1.6: Claude Code executor                 | todo             |
+| M1.8: Build + gate                      | M               | M1.7: Refinement, M1.16: Project baseline v1, M1.17: Agent evals v1, M1.18: Plan step       | todo             |
+| M1.9: Quota capture                     | S               | M1.6: Claude Code executor                                                                  | todo             |
+| M1.10: Security review automation       | M               | M0: Foundations                                                                             | merged (PR #10)  |
+| M1.11: Adversarial PR review            | M               | M1.10: Security review automation                                                           | merged (PR #21)  |
+| M1.12: Local quality gates              | S               | M0: Foundations                                                                             | merged (PR #9)   |
+| M1.13: GCP cost guardrails              | S               | M0: Foundations                                                                             | merged (PR #7)   |
+| M1.14: Cost kill switch                 | M               | M1.13: GCP cost guardrails                                                                  | merged (PR #18)  |
+| M1.15: Usage alerts                     | S               | M1.13: GCP cost guardrails                                                                  | merged (PR #8)   |
+| M1.16: Project baseline v1              | M               | M1.10: Security review automation, M1.11: Adversarial PR review, M1.12: Local quality gates | merged (PR #23)  |
+| M1.17: Agent evals v1                   | M               | M1.11: Adversarial PR review, M1.16: Project baseline v1                                    | todo             |
+| M1.18: Plan step                        | M               | M1.6: Claude Code executor, M1.7: Refinement                                                | todo             |
 
 **Next (order decided by Andy, 2026-10-28):**
 
@@ -250,7 +257,6 @@ Status: todo / in progress / PR open / merged. Definitions: ARCHITECTURE §12.
 
 **Pending decisions (Andy):**
 
-- First real project to onboard (open question 8); needed by M1.5: GitHub App + project registration.
 - Claude plan and headless billing (open question 5); needed by M1.6: Claude Code executor.
 - Local mode design (open question 11); due after M1: First end-to-end flow.
 - Context sources design (open question 12); due after M1: First end-to-end flow.

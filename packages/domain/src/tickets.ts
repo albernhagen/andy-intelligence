@@ -18,7 +18,13 @@ import { canTransition } from "./stages";
 /** A rule violation the caller caused; the API maps codes to HTTP statuses. */
 export class DomainError extends Error {
   constructor(
-    readonly code: "invalid_transition" | "dor_not_met" | "forbidden" | "reason_required",
+    readonly code:
+      | "invalid_transition"
+      | "dor_not_met"
+      | "forbidden"
+      | "reason_required"
+      | "invalid_repo"
+      | "repo_taken",
     message: string,
     readonly details: string[] = [],
   ) {

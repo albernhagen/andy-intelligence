@@ -16,11 +16,15 @@
   "dependencies": {
     "@andy/contracts": "workspace:*",
     "@andy/domain": "workspace:*",
+    "@andy/github": "workspace:*",
     "@andy/store": "workspace:*",
     "@google-cloud/firestore": "^9.3.1",
     "@hono/node-server": "^2.1.5",
     "@hono/zod-openapi": "^1.6.3",
     "@modelcontextprotocol/sdk": "^1.32.2",
+    "@octokit/auth-app": "^8.3.1",
+    "@octokit/core": "^7.0.8",
+    "@octokit/webhooks-methods": "^6.0.0",
     "firebase-admin": "^14.5.0",
     "hono": "^4.13.13",
     "zod": "^4.6.7"

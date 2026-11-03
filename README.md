@@ -7,9 +7,10 @@ Personal control plane for agentic software development: ideas → refined ticke
 What is built on `main` now. The target design is [ARCHITECTURE.md](docs/architecture/ARCHITECTURE.md); progress is in [`docs/build-log.md`](docs/build-log.md). Update this section in the same PR as any change to features, components or how to use the system.
 
 ```
- Browser UI ─┐                                   ┌─ Firestore (tickets, questions, history, OAuth grants)
+ Browser UI ─┐                                   ┌─ Firestore (tickets, questions, history, OAuth grants, webhook events)
              ├─▶ Cloud Run: control-plane ───────┤
- Claude (MCP)┘   API + /mcp + OAuth + SPA        └─ Cloud Tasks queue (run-watchdog; nothing uses it yet)
+ Claude (MCP)┤   API + /mcp + OAuth + SPA        ├─ Cloud Tasks queue (run-watchdog; nothing uses it yet)
+ GitHub App ─┘   + /webhooks/github                └─ Secret Manager (GitHub App key, webhook secret)
  GitHub PRs ──▶ CI checks + review agents (GitHub Actions)
 ```
 
@@ -20,13 +21,15 @@ What is built on `main` now. The target design is [ARCHITECTURE.md](docs/archite
 | Sign-in                | Google sign-in; only emails on the allow-list get in                                                                                                                                                                                 | Open the Cloud Run URL (`terraform output service_url` in `infra/control-plane`)         |
 | Tickets                | Projects, tickets moving through stages (Backlog → Ready → In progress → Ready for review → Monitoring → Done), Definition of Ready, history, questions                                                                              | UI: `/projects`, then a project; or the REST API under `/api`                            |
 | Needs-you inbox        | Open questions and flagged tickets in one place                                                                                                                                                                                      | UI home page `/`                                                                         |
+| GitHub App + webhooks  | PR, check and workflow events on registered repos are recorded once each (replays are no-ops); off until the App is set up                                                                                                           | [`docs/runbooks/github-app.md`](docs/runbooks/github-app.md)                             |
+| Project registration   | A project's repo must have the GitHub App installed and belongs to one project; project #1 is this repo (`AI`)                                                                                                                       | UI `/projects` → "GitHub repo" field                                                     |
 | Claude connector (MCP) | Claude desktop signs in through our OAuth server; tools `create_ticket`, `list_needs_me`, `answer_question`, `status`, same rules as the UI                                                                                          | [`docs/runbooks/mcp-connector.md`](docs/runbooks/mcp-connector.md)                       |
-| PR checks              | Lint, typecheck, tests, build, secret/CodeQL/dependency/Terraform scans, security-review and adversarial-review agents                                                                                                               | Automatic on every PR; overrides with the `security-accepted` / `review-accepted` labels |
+| PR checks              | Lint, typecheck, tests, build, secret/CodeQL/dependency/Terraform scans, security-review and adversarial-review agents; weekly system review PRs come from a bot App so their checks run                                             | Automatic on every PR; overrides with the `security-accepted` / `review-accepted` labels |
 | Dependabot updates     | Weekly grouped PRs; npm patches (and minors of 1.0+ packages) auto-merge after the checks pass and deploy with Andy's next merge; majors, 0.x minors, Actions and Terraform wait for Andy, who is requested as reviewer (CODEOWNERS) | Nothing for auto-merged ones; review the rest                                            |
 | Project baseline       | Gives another repo the same checks, files and GitHub settings                                                                                                                                                                        | `platform/baseline/baseline.mjs` ([runbook](docs/runbooks/onboard-a-repo.md))            |
 | Cost guardrails        | $25/month budget alerts, usage alerts, caps, opt-in kill switch at 150% of budget                                                                                                                                                    | [`docs/runbooks/billing.md`](docs/runbooks/billing.md)                                   |
 
-**Not built yet:** agents doing ticket work. The next slices add the GitHub App, the Claude Code executor, refinement, a plan step, and build → PR (ARCHITECTURE §12, M1: First end-to-end flow).
+**Not built yet:** agents doing ticket work. Nothing acts on webhook events yet. The next slices add the Claude Code executor, refinement, a plan step, and build → PR (ARCHITECTURE §12, M1: First end-to-end flow).
 
 ## Docs
 
@@ -107,6 +110,8 @@ Set `PUBLIC_URL` (the service's public origin, e.g. `http://localhost:8080`) to 
 
 MCP tools (M1.4: MCP core tools, `apps/api/src/mcp/tools.ts`): `create_ticket`, `list_needs_me`, `answer_question`, `status` (no ticket: overview + who you're signed in as). They call the same `TicketService` as the REST API.
 
+Set `GITHUB_APP_ID`, `GITHUB_APP_PRIVATE_KEY` (PEM) and `GITHUB_WEBHOOK_SECRET` to turn on the GitHub webhook receiver `POST /webhooks/github` and the App-installed check when a project is created with repos (ADR-0041: GitHub App credentials and webhook intake). Without them, repos are only format-checked. In Cloud Run the key and secret come from Secret Manager; setup: [`docs/runbooks/github-app.md`](docs/runbooks/github-app.md).
+
 ### Web UI (M1.3: UI: tickets + inbox)
 
 | Route                       | Screen                                                                                           |
@@ -122,22 +127,24 @@ MCP tools (M1.4: MCP core tools, `apps/api/src/mcp/tools.ts`): `create_ticket`, 
 
 ## Layout
 
-| Path                  | What                                                          |
-| --------------------- | ------------------------------------------------------------- |
-| `apps/api`            | Hono API, MCP endpoint + its OAuth server; serves the SPA     |
-| `apps/web`            | React + Vite + shadcn UI: Needs-you inbox, tickets, detail    |
-| `packages/contracts`  | Zod entities, ports, fakes, contract suites                   |
-| `packages/domain`     | Ticket rules: stage moves, Definition of Ready, Needs-you     |
-| `packages/store`      | Firestore client, converters, `FirestoreWorkTracker`          |
-| `infra/bootstrap`     | One-time GCP bootstrap (state bucket, GitHub OIDC)            |
-| `infra/control-plane` | Control-plane GCP resources                                   |
-| `infra/billing`       | Billing budget, alerts, opt-in kill switch (local plans only) |
-| `scripts`             | Repo tooling (Claude Code format hook, review gate and scope) |
-| `platform/actions`    | Composite actions behind every required check (baseline)      |
-| `platform/baseline`   | Baseline manifest, GitHub config JSON, `baseline.mjs`         |
-| `platform/procedures` | Agent procedures: `/security-review`, `/threat-model`         |
-| `template`            | Files copied into managed repos (managed, seed, starter)      |
-| `lefthook.yml`        | Git hooks: pre-commit lint/format, pre-push checks            |
-| `firebase.json`       | Firestore emulator config for `pnpm test:firestore`           |
+| Path                  | What                                                                |
+| --------------------- | ------------------------------------------------------------------- |
+| `apps/api`            | Hono API, MCP endpoint + its OAuth server; serves the SPA           |
+| `apps/web`            | React + Vite + shadcn UI: Needs-you inbox, tickets, detail          |
+| `packages/contracts`  | Zod entities, ports, fakes, contract suites                         |
+| `packages/domain`     | Ticket and project rules: stages, DoR, Needs-you, repo registration |
+| `packages/store`      | Firestore client, converters, `FirestoreWorkTracker`                |
+| `packages/github`     | GitHub App adapter: `GitHubCodeHost`, webhook HMAC + mapping        |
+| `infra/bootstrap`     | One-time GCP bootstrap (state bucket, GitHub OIDC)                  |
+| `infra/control-plane` | Control-plane GCP resources                                         |
+| `infra/billing`       | Billing budget, alerts, opt-in kill switch (local plans only)       |
+| `scripts`             | Repo tooling (Claude Code format hook, review gate and scope)       |
+| `platform/actions`    | Composite actions behind every required check (baseline)            |
+| `platform/baseline`   | Baseline manifest, GitHub config JSON, `baseline.mjs`               |
+| `platform/procedures` | Agent procedures: `/security-review`, `/threat-model`               |
+| `platform/github-app` | GitHub App manifests + `form.mjs` (manifest flow page)              |
+| `template`            | Files copied into managed repos (managed, seed, starter)            |
+| `lefthook.yml`        | Git hooks: pre-commit lint/format, pre-push checks                  |
+| `firebase.json`       | Firestore emulator config for `pnpm test:firestore`                 |
 
-Infra setup: [`docs/runbooks/m0-setup.md`](docs/runbooks/m0-setup.md). Budget and cost caps: [`docs/runbooks/billing.md`](docs/runbooks/billing.md). Security review setup: [`docs/runbooks/security-review.md`](docs/runbooks/security-review.md). Adversarial review: [`docs/runbooks/adversarial-review.md`](docs/runbooks/adversarial-review.md). Onboard a repo: [`docs/runbooks/onboard-a-repo.md`](docs/runbooks/onboard-a-repo.md). Connect Claude to MCP: [`docs/runbooks/mcp-connector.md`](docs/runbooks/mcp-connector.md).
+Infra setup: [`docs/runbooks/m0-setup.md`](docs/runbooks/m0-setup.md). Budget and cost caps: [`docs/runbooks/billing.md`](docs/runbooks/billing.md). Security review setup: [`docs/runbooks/security-review.md`](docs/runbooks/security-review.md). Adversarial review: [`docs/runbooks/adversarial-review.md`](docs/runbooks/adversarial-review.md). Onboard a repo: [`docs/runbooks/onboard-a-repo.md`](docs/runbooks/onboard-a-repo.md). Connect Claude to MCP: [`docs/runbooks/mcp-connector.md`](docs/runbooks/mcp-connector.md). GitHub Apps and project registration: [`docs/runbooks/github-app.md`](docs/runbooks/github-app.md).

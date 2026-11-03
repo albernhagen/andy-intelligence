@@ -6,6 +6,7 @@ import {
   type QueryDocumentSnapshot,
 } from "@google-cloud/firestore";
 import {
+  CodeHostEvent,
   ConfigChange,
   Model,
   OAuthGrant,
@@ -49,6 +50,7 @@ export const collections = {
   configChanges: { path: () => "configChanges", schema: ConfigChange },
   releases: { path: () => "releases", schema: Release },
   oauthGrants: { path: () => "oauthGrants", schema: OAuthGrant },
+  codeHostEvents: { path: () => "codeHostEvents", schema: CodeHostEvent },
 } as const;
 
 /** Zod-validated converter: rejects malformed documents on read and write. */
@@ -81,5 +83,10 @@ export function typedCollection<S extends z.ZodType<DocumentData>>(
   return db.collection(path).withConverter(zodConverter(schema));
 }
 
+export {
+  CODE_HOST_EVENT_RETENTION_MS,
+  CODE_HOST_EVENT_TTL_FIELD,
+  FirestoreCodeEventLog,
+} from "./code-event-log";
 export { FirestoreOAuthGrantStore, OAUTH_GRANT_TTL_FIELD } from "./oauth-grant-store";
 export { FirestoreWorkTracker } from "./work-tracker";
