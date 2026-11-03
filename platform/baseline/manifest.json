@@ -23,6 +23,11 @@
       "from": ".github/workflows/adversarial-review.yml",
       "pin": true
     },
+    {
+      "path": ".github/workflows/dependabot-auto-merge.yml",
+      "from": ".github/workflows/dependabot-auto-merge.yml",
+      "pin": true
+    },
     { "path": ".github/dependabot.yml", "from": "template/.github/dependabot.yml" },
     {
       "path": ".github/pull_request_template.md",
@@ -36,6 +41,7 @@
   "lines": [{ "path": ".gitignore", "from": "template/gitignore.lines" }],
   "seed": [
     { "path": "AGENTS.md", "from": "template/AGENTS.md" },
+    { "path": ".github/CODEOWNERS", "from": "template/.github/CODEOWNERS" },
     { "path": "docs/security/threat-model.md", "from": "template/docs/security/threat-model.md" }
   ],
   "starter": [

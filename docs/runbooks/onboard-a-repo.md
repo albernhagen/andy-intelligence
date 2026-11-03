@@ -6,7 +6,7 @@ The **project baseline** is the set of guardrails every repo Andy manages gets: 
 | --------------------- | -------------------------------------------------------------------------------------------------------------------------- |
 | Ref                   | A tag (`v1.0.0`), branch (`origin/main`) or SHA of andy-intelligence. It must be pushed: managed repos pin its commit SHA. |
 | Managed file          | Kept identical to the baseline (workflows, hooks, Dependabot, PR template, Prettier config). Edits show up as drift.       |
-| Seed file             | Written once if missing (`AGENTS.md`, `docs/security/threat-model.md`); the repo owns it after that.                       |
+| Seed file             | Written once if missing (`AGENTS.md`, `.github/CODEOWNERS`, `docs/security/threat-model.md`); the repo owns it after that. |
 | Starter               | A minimal TypeScript project (`package.json`, `tsconfig.json`, `src/`), written only into a repo with no `package.json`.   |
 | `.andy/baseline.json` | Which andy-intelligence commit the repo's files came from.                                                                 |
 | Drift                 | A live setting or managed file that differs from the baseline.                                                             |
@@ -106,6 +106,28 @@ gh pr create --fill && gh pr checks --watch
 2. **No drift:** `node platform/baseline/baseline.mjs check albernhagen/baseline-scratch` → every line `ok`, exit 0.
 3. **Hand change shows as drift:** Settings → Actions → General → Workflow permissions → **Read and write** → Save. `check` again → `actions: drift`, `workflow.default_workflow_permissions: want "read", have "write"`, exit 1. `apply` puts it back.
 4. Clean up: `gh auth refresh -s delete_repo` (once), then `gh repo delete albernhagen/baseline-scratch --yes`.
+
+## 6. Dependabot auto-merge and CODEOWNERS (ADR-0042)
+
+Once, after the PR that adds them merges:
+
+```sh
+git switch main && git pull
+node platform/baseline/baseline.mjs apply albernhagen/andy-intelligence --dry-run   # expect: repo.allow_auto_merge false → true
+node platform/baseline/baseline.mjs apply albernhagen/andy-intelligence
+```
+
+Check on the next Dependabot PR:
+
+| Dependabot PR                                             | Expected                                                                                                                                                                    |
+| --------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| npm patch, or minor of a 1.0+ package                     | `dependabot-auto-merge` job enables auto-merge; GitHub squash-merges after the required checks pass; `Deploy control plane` starts no deploy job for that merge (bot actor) |
+| Major, 0.x minor, GitHub Actions, or a Terraform provider | Job logs "… merged by hand"; the PR waits for you                                                                                                                           |
+| Any                                                       | You get a review request (CODEOWNERS). No request? GitHub → Settings → Notifications: "Participating, @mentions and custom" on                                              |
+
+Your next merge deploys the update. If `Deploy control plane` did deploy the bot's merge, note it in the build log: the `deploy.yml` guard failed.
+
+Managed repos get both with the next baseline tag (§4: Update a repo to a newer baseline).
 
 ## Troubleshooting
 
