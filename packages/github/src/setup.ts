@@ -19,6 +19,12 @@ export const APP_PERMISSIONS = {
 /** Webhook events (installation events are always sent to Apps). */
 export const APP_EVENTS = ["pull_request", "check_run", "workflow_run"] as const;
 
+/**
+ * Suggested App name. App names are global on GitHub and can't match an existing account
+ * ("andy-intelligence" is taken), so the UI lets Andy change it.
+ */
+export const DEFAULT_APP_NAME = "andy-intelligence-control";
+
 /** GitHub App names: up to 34 characters (letters, digits, spaces, `-`, `_`, `.`). */
 export const AppName = z.string().regex(/^[A-Za-z0-9][A-Za-z0-9 ._-]{0,33}$/);
 

@@ -1,6 +1,12 @@
 import { createRoute, z, type OpenAPIHono } from "@hono/zod-openapi";
 import { Repo } from "@andy/contracts";
-import { AppName, ManifestCode, appManifest, type CreatedApp } from "@andy/github";
+import {
+  AppName,
+  DEFAULT_APP_NAME,
+  ManifestCode,
+  appManifest,
+  type CreatedApp,
+} from "@andy/github";
 import type { AuthEnv } from "../auth";
 import type { GitHubConnection } from "./connection";
 
@@ -48,7 +54,7 @@ const routes = {
     ...secured,
     method: "get",
     path: "/api/github/manifest",
-    request: { query: z.object({ name: AppName.default("andy-intelligence") }) },
+    request: { query: z.object({ name: AppName.default(DEFAULT_APP_NAME) }) },
     responses: {
       200: json(
         z.object({ postUrl: z.string(), manifest: z.record(z.string(), z.unknown()) }),
