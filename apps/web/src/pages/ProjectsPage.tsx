@@ -3,12 +3,13 @@ import { Link, useNavigate } from "@tanstack/react-router";
 import { Button } from "@/components/ui/button";
 import { Field, Input } from "@/components/ui/input";
 import { Loading, QueryError } from "@/components/Status";
-import { useCreateProject, useProjects } from "@/lib/queries";
+import { useCreateProject, useGitHub, useProjects } from "@/lib/queries";
 
 /** Project picker; each project opens its ticket board. M2 adds filtering across projects. */
 export function ProjectsPage() {
   const projects = useProjects();
   const create = useCreateProject();
+  const github = useGitHub();
   const navigate = useNavigate();
   const [name, setName] = useState("");
   const [key, setKey] = useState("");
@@ -64,10 +65,17 @@ export function ProjectsPage() {
         <Field label="GitHub repo (owner/name, optional; the GitHub App must be installed on it)">
           <Input
             pattern="[A-Za-z0-9\-]+/[A-Za-z0-9._\-]+"
+            list="installed-repos"
             value={repo}
             onChange={(e) => setRepo(e.target.value)}
           />
         </Field>
+        {/* Suggestions from Settings → GitHub; empty when GitHub isn't connected. */}
+        <datalist id="installed-repos">
+          {github.data?.repos.map((r) => (
+            <option key={r.fullName} value={r.fullName} />
+          ))}
+        </datalist>
         {create.error && <QueryError error={create.error} />}
         <Button type="submit" disabled={create.isPending}>
           Create project

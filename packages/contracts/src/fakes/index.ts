@@ -1,7 +1,9 @@
 import {
+  CodeHostConnection,
   CodeHostEvent,
   Repo,
   RepoName,
+  type RepoToken,
   type AnsweredVia,
   type EventActor,
   type Project,
@@ -16,6 +18,7 @@ import {
   WorkTrackerError,
   type CodeEventLog,
   type CodeHost,
+  type CodeHostConnectionStore,
   type Executor,
   type NewProject,
   type NewQuestion,
@@ -282,7 +285,10 @@ export class InMemoryOAuthGrantStore implements OAuthGrantStore {
 export class InMemoryCodeHost implements CodeHost {
   private readonly repos = new Map<string, Repo>();
 
-  constructor(repos: Repo[] = []) {
+  constructor(
+    repos: Repo[] = [],
+    private readonly now: () => Date = () => new Date(),
+  ) {
     repos.forEach((r) => this.install(r));
   }
 
@@ -290,10 +296,45 @@ export class InMemoryCodeHost implements CodeHost {
     this.repos.set(repo.fullName.toLowerCase(), Repo.parse(repo));
   }
 
+  uninstall(fullName: string): void {
+    this.repos.delete(fullName.toLowerCase());
+  }
+
   async getRepo(fullName: string): Promise<Repo | null> {
     if (!RepoName.safeParse(fullName).success) return null;
     const repo = this.repos.get(fullName.toLowerCase());
     return repo ? structuredClone(repo) : null;
+  }
+
+  async listInstalledRepos(): Promise<Repo[]> {
+    return [...this.repos.values()]
+      .map((r) => structuredClone(r))
+      .sort((a, b) => a.fullName.localeCompare(b.fullName));
+  }
+
+  async issueRepoToken(fullName: string): Promise<RepoToken | null> {
+    const repo = await this.getRepo(fullName);
+    if (!repo) return null;
+    return {
+      token: `fake-token-${repo.fullName}`,
+      expiresAt: new Date(this.now().getTime() + 60 * 60 * 1000).toISOString(),
+      actor: "fake-app[bot]",
+    };
+  }
+}
+
+/** In-memory CodeHostConnectionStore. */
+export class InMemoryCodeHostConnectionStore implements CodeHostConnectionStore {
+  private connection: CodeHostConnection | null = null;
+
+  async get(): Promise<CodeHostConnection | null> {
+    return this.connection ? structuredClone(this.connection) : null;
+  }
+
+  async save(connection: CodeHostConnection): Promise<"saved" | "exists"> {
+    if (this.connection) return "exists";
+    this.connection = CodeHostConnection.parse(connection);
+    return "saved";
   }
 }
 

@@ -331,6 +331,30 @@ export const WorkflowRun = z.object({
 });
 export type WorkflowRun = z.infer<typeof WorkflowRun>;
 
+/** A short-lived token for one repo (contents + pull requests write), e.g. for a CI job. */
+export const RepoToken = z.object({
+  token: z.string().min(1),
+  expiresAt: Timestamp,
+  /** Git author name the token acts as, e.g. "andy-intelligence[bot]". */
+  actor: z.string().min(1),
+});
+export type RepoToken = z.infer<typeof RepoToken>;
+
+/**
+ * Our App on the code host (ADR-0043): identifiers plus the two secrets. Created once from
+ * the UI; the adapter keeps the secrets in a secret store, never next to the identifiers.
+ */
+export const CodeHostConnection = z.object({
+  appId: z.string().regex(/^[0-9]+$/),
+  slug: z.string().min(1),
+  clientId: z.string().min(1),
+  owner: z.string().min(1),
+  privateKey: z.string().min(1),
+  webhookSecret: z.string().min(1),
+  connectedAt: Timestamp,
+});
+export type CodeHostConnection = z.infer<typeof CodeHostConnection>;
+
 /** The code host's delivery ID; also the record's document ID, so no slashes. */
 export const DeliveryId = z.string().regex(/^[A-Za-z0-9-]{1,64}$/);
 

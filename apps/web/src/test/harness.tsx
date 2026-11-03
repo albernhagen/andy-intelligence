@@ -2,7 +2,12 @@ import { render } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { RouterProvider, createMemoryHistory } from "@tanstack/react-router";
-import { InMemoryWorkTracker } from "@andy/contracts";
+import {
+  InMemoryCodeEventLog,
+  InMemoryCodeHost,
+  InMemoryCodeHostConnectionStore,
+  InMemoryWorkTracker,
+} from "@andy/contracts";
 import { TicketService } from "@andy/domain";
 import { createApp } from "@andy/api/app";
 import { ApiContext, createApi } from "@/lib/api";
@@ -12,8 +17,18 @@ import { makeRouter } from "@/router";
  * Renders the UI against the real API running in-process (createApp + in-memory tracker), so
  * every UI test also exercises the API contract, auth middleware and domain rules.
  */
-export function renderApp(path = "/") {
+export function renderApp(path = "/", opts: { githubConnected?: boolean } = {}) {
   const tracker = new InMemoryWorkTracker();
+  // GitHub fakes (ADR-0043): one installed repo; any manifest code "connects" this App.
+  const connections = new InMemoryCodeHostConnectionStore();
+  const codeHost = new InMemoryCodeHost([
+    {
+      fullName: "albernhagen/andy-intelligence",
+      defaultBranch: "main",
+      private: false,
+      url: "https://github.com/albernhagen/andy-intelligence",
+    },
+  ]);
   const app = createApp({
     verifier: {
       async verify(token) {
@@ -25,7 +40,33 @@ export function renderApp(path = "/") {
     version: "test",
     webConfig: { firebaseApiKey: "k", firebaseAuthDomain: "d", projectId: "p" },
     tracker,
+    github: {
+      publicUrl: "http://localhost",
+      connections,
+      events: new InMemoryCodeEventLog(),
+      codeHostFor: () => codeHost,
+      exchangeCode: async () => ({
+        appId: "42",
+        slug: "andy-intelligence",
+        clientId: "Iv23x",
+        owner: "albernhagen",
+        privateKey: "PEM",
+        webhookSecret: "whs",
+      }),
+    },
   });
+  if (opts.githubConnected) {
+    // The in-memory save settles before the first request is made.
+    void connections.save({
+      appId: "42",
+      slug: "andy-intelligence",
+      clientId: "Iv23x",
+      owner: "albernhagen",
+      privateKey: "PEM",
+      webhookSecret: "whs",
+      connectedAt: "2026-11-03T00:00:00.000Z",
+    });
+  }
   const api = createApi({
     baseUrl: "http://localhost",
     getToken: async () => "andy-token",
@@ -42,7 +83,7 @@ export function renderApp(path = "/") {
       </ApiContext.Provider>
     </QueryClientProvider>,
   );
-  return { user, router, tracker, service: new TicketService(tracker) };
+  return { user, router, tracker, connections, service: new TicketService(tracker) };
 }
 
 /** A story that meets the Definition of Ready. */

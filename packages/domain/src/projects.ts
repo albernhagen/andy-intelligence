@@ -45,7 +45,7 @@ export class ProjectService {
     if (!repo) {
       throw new DomainError(
         "invalid_repo",
-        `${name} not found or the GitHub App isn't installed on it (docs/runbooks/github-app.md)`,
+        `${name} not found, GitHub isn't connected, or the GitHub App isn't installed on it (Settings → GitHub)`,
       );
     }
     return repo.fullName;

@@ -19,6 +19,7 @@
     "@andy/github": "workspace:*",
     "@andy/store": "workspace:*",
     "@google-cloud/firestore": "^9.3.1",
+    "@google-cloud/secret-manager": "^7.2.0",
     "@hono/node-server": "^2.1.5",
     "@hono/zod-openapi": "^1.6.3",
     "@modelcontextprotocol/sdk": "^1.32.2",
@@ -27,6 +28,7 @@
     "@octokit/webhooks-methods": "^6.0.0",
     "firebase-admin": "^14.5.0",
     "hono": "^4.13.13",
+    "jose": "^6.2.13",
     "zod": "^4.6.7"
   },
   "devDependencies": {

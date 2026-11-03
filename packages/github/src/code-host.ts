@@ -1,12 +1,28 @@
-import { Repo, RepoName, type CodeHost } from "@andy/contracts";
+import { Repo, RepoName, RepoToken, type CodeHost } from "@andy/contracts";
 import { createAppAuth } from "@octokit/auth-app";
 import { Octokit } from "@octokit/core";
 
 export interface GitHubAppCredentials {
   appId: string;
-  /** PEM private key of the GitHub App (Secret Manager in prod; ADR-0041). */
+  /** App slug, for the git author name `<slug>[bot]`. */
+  slug: string;
+  /** PEM private key of the GitHub App (Secret Manager in prod; ADR-0043). */
   privateKey: string;
 }
+
+/** Caps on listing (ADR-0028): installations scanned and repos returned. */
+const MAX_INSTALLATIONS = 10;
+const MAX_REPOS = 100;
+
+type GitHubRepo = { full_name: string; default_branch: string; private: boolean; html_url: string };
+
+const toRepo = (r: GitHubRepo) =>
+  Repo.parse({
+    fullName: r.full_name,
+    defaultBranch: r.default_branch,
+    private: r.private,
+    url: r.html_url,
+  });
 
 /**
  * CodeHost on a GitHub App. App-level calls use the App's JWT; repo reads use a short-lived
@@ -17,7 +33,7 @@ export class GitHubCodeHost implements CodeHost {
   private readonly request: { fetch?: typeof fetch; timeout: number };
 
   constructor(
-    credentials: GitHubAppCredentials,
+    private readonly credentials: GitHubAppCredentials,
     /** Test seam: a fetch stand-in. */
     fetchImpl?: typeof fetch,
   ) {
@@ -30,27 +46,64 @@ export class GitHubCodeHost implements CodeHost {
   }
 
   async getRepo(fullName: string): Promise<Repo | null> {
+    const installationId = await this.installationFor(fullName);
+    if (installationId === null) return null;
+    const [owner, repo] = fullName.split("/") as [string, string];
+    const res = await this.notFoundAsNull(async () =>
+      (await this.asInstallation(installationId)).request("GET /repos/{owner}/{repo}", {
+        owner,
+        repo,
+      }),
+    );
+    return res ? toRepo(res.data) : null;
+  }
+
+  async listInstalledRepos(): Promise<Repo[]> {
+    const installations = await this.octokit.request("GET /app/installations", {
+      per_page: MAX_INSTALLATIONS,
+    });
+    const repos: Repo[] = [];
+    for (const installation of installations.data) {
+      const res = await (
+        await this.asInstallation(installation.id)
+      ).request("GET /installation/repositories", { per_page: MAX_REPOS });
+      repos.push(...res.data.repositories.map(toRepo));
+    }
+    return repos.sort((a, b) => a.fullName.localeCompare(b.fullName)).slice(0, MAX_REPOS);
+  }
+
+  async issueRepoToken(fullName: string): Promise<RepoToken | null> {
+    const installationId = await this.installationFor(fullName);
+    if (installationId === null) return null;
+    const res = await this.octokit.request(
+      "POST /app/installations/{installation_id}/access_tokens",
+      {
+        installation_id: installationId,
+        repositories: [fullName.split("/")[1]!],
+        permissions: { contents: "write", pull_requests: "write" },
+      },
+    );
+    return RepoToken.parse({
+      token: res.data.token,
+      expiresAt: res.data.expires_at,
+      actor: `${this.credentials.slug}[bot]`,
+    });
+  }
+
+  private async installationFor(fullName: string): Promise<number | null> {
     if (!RepoName.safeParse(fullName).success) return null;
     const [owner, repo] = fullName.split("/") as [string, string];
-    const installation = await this.notFoundAsNull(() =>
+    const res = await this.notFoundAsNull(() =>
       this.octokit.request("GET /repos/{owner}/{repo}/installation", { owner, repo }),
     );
-    if (!installation) return null;
-    const { token } = (await this.octokit.auth({
-      type: "installation",
-      installationId: installation.data.id,
-    })) as { token: string };
-    const asInstallation = new Octokit({ auth: token, request: this.request });
-    const res = await this.notFoundAsNull(() =>
-      asInstallation.request("GET /repos/{owner}/{repo}", { owner, repo }),
-    );
-    if (!res) return null;
-    return Repo.parse({
-      fullName: res.data.full_name,
-      defaultBranch: res.data.default_branch,
-      private: res.data.private,
-      url: res.data.html_url,
-    });
+    return res ? res.data.id : null;
+  }
+
+  private async asInstallation(installationId: number): Promise<Octokit> {
+    const { token } = (await this.octokit.auth({ type: "installation", installationId })) as {
+      token: string;
+    };
+    return new Octokit({ auth: token, request: this.request });
   }
 
   private async notFoundAsNull<T>(call: () => Promise<T>): Promise<T | null> {

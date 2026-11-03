@@ -2,16 +2,29 @@ import { OpenAPIHono, createRoute, z } from "@hono/zod-openapi";
 import {
   WorkTrackerError,
   type CodeEventLog,
-  type CodeHost,
+  type CodeHostConnectionStore,
   type OAuthGrantStore,
   type WorkTracker,
 } from "@andy/contracts";
+import { exchangeManifestCode, type CreatedApp } from "@andy/github";
 import { DomainError, ProjectService, TicketService } from "@andy/domain";
 import { bodyLimit } from "hono/body-limit";
 import { requireAllowedUser, type AuthEnv, type TokenVerifier } from "./auth";
 import { registerMcp, type ClientMetadataResolver } from "./mcp";
 import { registerTicketRoutes } from "./tickets";
-import { registerGitHubWebhook } from "./webhooks";
+import {
+  ConnectedCodeHost,
+  GitHubConnection,
+  gitHubCodeHost,
+  type CodeHostFactory,
+} from "./github/connection";
+import { registerGitHubSetup } from "./github/setup";
+import {
+  actionsTokenVerifier,
+  registerGitHubToken,
+  type ActionsTokenVerifier,
+} from "./github/token";
+import { registerGitHubWebhook } from "./github/webhooks";
 
 /** Request body cap for /api/* (ADR-0028: everything that can grow gets a cap). */
 export const MAX_BODY_BYTES = 256 * 1024;
@@ -36,11 +49,19 @@ export interface AppDeps {
     clients: ClientMetadataResolver;
     now?: () => Date;
   };
-  /** GitHub App (ADR-0041): webhook receiver + repo checks at registration; off when absent. */
+  /**
+   * GitHub App (ADR-0041, ADR-0043): setup from the UI, webhook receiver, repo checks at
+   * registration, repo tokens for CI. Off (routes absent) when not configured, e.g. local dev.
+   */
   github?: {
-    webhookSecret: string;
-    codeHost: CodeHost;
+    /** This service's public origin: manifest URLs and the Actions OIDC audience. */
+    publicUrl: string;
+    connections: CodeHostConnectionStore;
     events: CodeEventLog;
+    /** Test seams; default to the real GitHub calls. */
+    codeHostFor?: CodeHostFactory;
+    exchangeCode?: (code: string) => Promise<CreatedApp>;
+    verifyActionsToken?: ActionsTokenVerifier;
     now?: () => Date;
   };
 }
@@ -118,13 +139,26 @@ export function createApp(deps: AppDeps) {
 
   app.get("/config.json", (c) => c.json(deps.webConfig));
 
-  // Public, outside /api: GitHub authenticates with the HMAC signature, not a user token.
-  if (deps.github) {
+  const github = deps.github;
+  const now = github?.now ?? (() => new Date());
+  const connection = github
+    ? new GitHubConnection(github.connections, github.codeHostFor ?? gitHubCodeHost, () =>
+        now().getTime(),
+      )
+    : null;
+
+  // Public, outside /api: GitHub signs webhooks (HMAC); CI jobs present an Actions OIDC token.
+  if (github && connection) {
     registerGitHubWebhook(app, {
-      secret: deps.github.webhookSecret,
-      events: deps.github.events,
+      secret: async () => (await connection.get())?.webhookSecret ?? null,
+      events: github.events,
       tracker: deps.tracker,
-      now: deps.github.now,
+      now,
+    });
+    registerGitHubToken(app, {
+      connection,
+      verify: github.verifyActionsToken ?? actionsTokenVerifier(github.publicUrl),
+      now,
     });
   }
 
@@ -148,8 +182,17 @@ export function createApp(deps: AppDeps) {
     app,
     deps.tracker,
     service,
-    new ProjectService(deps.tracker, deps.github?.codeHost ?? null),
+    new ProjectService(deps.tracker, connection ? new ConnectedCodeHost(connection) : null),
   );
+
+  if (github && connection) {
+    registerGitHubSetup(app, {
+      publicUrl: github.publicUrl,
+      connection,
+      exchangeCode: github.exchangeCode ?? ((code) => exchangeManifestCode(code)),
+      now,
+    });
+  }
 
   // After the /api middleware, so /api/oauth/approve requires the allow-listed user.
   if (deps.mcp) {

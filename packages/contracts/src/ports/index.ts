@@ -16,15 +16,17 @@ import {
   Timestamp,
   Urgency,
   type AnsweredVia,
+  type CodeHostConnection,
   type CodeHostEvent,
   type Repo,
+  type RepoToken,
   type TicketEvent,
 } from "../entities";
 
 /**
  * Ports (ARCHITECTURE §6). Adapters implement these; the domain only sees these types.
- * WorkTracker, Executor, QuotaSource, OAuthGrantStore, CodeHost and CodeEventLog have fakes +
- * contract suites (see ../testing).
+ * WorkTracker, Executor, QuotaSource, OAuthGrantStore, CodeHost, CodeEventLog and
+ * CodeHostConnectionStore have fakes + contract suites (see ../testing).
  * The rest are plain interfaces until a second adapter exists (ADR-0012).
  */
 
@@ -244,6 +246,23 @@ export interface OAuthGrantStore {
 export interface CodeHost {
   /** The repo, or null when it doesn't exist or our App isn't installed on it. */
   getRepo(fullName: string): Promise<Repo | null>;
+  /** Repos the App is installed on (at most 100), sorted by name. */
+  listInstalledRepos(): Promise<Repo[]>;
+  /**
+   * A token for one repo with contents + pull requests write, valid about an hour; null when
+   * the App isn't installed there. Callers decide who may get one (ADR-0043).
+   */
+  issueRepoToken(fullName: string): Promise<RepoToken | null>;
+}
+
+// ── CodeHostConnectionStore ──────────────────────────────────────────────────
+// The one connection to our App (ADR-0043). Saved once by the setup flow; read by everything
+// that talks to the code host.
+
+export interface CodeHostConnectionStore {
+  get(): Promise<CodeHostConnection | null>;
+  /** Saves the first connection; "exists" (and nothing written) when one is already saved. */
+  save(connection: CodeHostConnection): Promise<"saved" | "exists">;
 }
 
 // ── CodeEventLog ─────────────────────────────────────────────────────────────
