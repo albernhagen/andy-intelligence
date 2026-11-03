@@ -230,6 +230,10 @@ Temporary progress log until andy-intelligence can track its own work (then migr
 - Merged: PR #36: M1.19: GitHub App setup from the UI. Andy applied `infra/control-plane` (2 added, as expected).
 - Connecting failed on GitHub: the name `andy-intelligence` is reserved (an account with that name exists). Default App name is now `andy-intelligence-control`; runbook `github-app.md` says to skip step 1 when already applied and explains the naming rule.
 
+## 2026-11-03 — UI design and dashboards planned
+
+- **Decided (Andy, ADR-0045: UI design system, pluggable design skills (Hallmark first) and dashboards, in M5):** all in M5: Epics + story board: `apps/web/design.md` + tokens as the design source of truth; design skills pluggable per project, with a Hallmark trial on one screen (it targets HTML pages, unproven on React/shadcn); Playwright screenshots + `sloplint` as a non-blocking check; a Dashboards screen fed by the M1.8: Build + gate run metrics.
+
 ## Slices: M1: First end-to-end flow: ticket → PR with Claude
 
 Status: todo / in progress / PR open / merged. Definitions: ARCHITECTURE §12.
