@@ -205,6 +205,12 @@ Temporary progress log until andy-intelligence can track its own work (then migr
 - Branch `m1.0/dependabot-auto-merge`: `dependabot-auto-merge.yml` → `platform/actions/dependabot-auto-merge` (fetch-metadata v3.1.0, pinned) → `scripts/dependabot-merge.mjs` + tests; job runs the base branch's action; baseline: workflow (managed), CODEOWNERS (seed), `allow_auto_merge: true`; threat model R17; runbook `onboard-a-repo.md` §6.
 - Verified locally: scripts tests (decision + CLI), Prettier. Not run here: actionlint (CI), the first real auto-merge (Andy, runbook §6).
 
+## 2026-11-03 — Dependabot clean-up
+
+- Merged: PR #34: Dependabot auto-merge (ADR-0042); Andy applied `allow_auto_merge`.
+- PR #25: TypeScript 6: merged `main` in and dropped the deprecated `baseUrl` from `apps/web/tsconfig.json` (TS5101); gate passes.
+- PR #27: `@types/node` 26 closed: the runtime is Node 24 (`.nvmrc`). Dependabot now ignores `@types/node` majors (this repo and the baseline template); bump them with `.nvmrc`.
+
 ## 2026-11-03 — M1.5: GitHub App + project registration built
 
 - **Decided (Andy, ADR-0041: GitHub App credentials and webhook intake):** andy-intelligence is project #1 (open question 8; side projects in M2: Multi-project in parallel). Two private Apps from manifests: read-only control-plane App (webhooks) and a review bot App (contents + PR write, this repo only) so the control-plane key never leaves Secret Manager. Control-plane key + webhook secret in Secret Manager (Andy adds versions with `gcloud`); bot key in a `main`-only `system-review` environment.
