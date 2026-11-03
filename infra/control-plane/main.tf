@@ -259,8 +259,11 @@ resource "google_cloud_run_domain_mapping" "public" {
     namespace = var.project_id
   }
 
+  # A plain name, not a reference to the service: a reference would make the service a dependency,
+  # so the runbook's targeted apply of this mapping would also switch PUBLIC_URL before the
+  # certificate exists (runbook custom-domain.md §3).
   spec {
-    route_name = google_cloud_run_v2_service.control_plane.name
+    route_name = local.service_name
   }
 }
 

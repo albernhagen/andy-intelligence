@@ -8,7 +8,7 @@ How Andy moves the control plane from `https://control-plane-662512537397.us-cen
 
 After the switch, the `run.app` URLs answer only `GET /health` (for monitoring); everything else there is `404`, and they aren't sign-in domains. Until step 5, `PUBLIC_URL` is the run.app URL, so nothing changes before then (no lockout mid-switch).
 
-Merge the PR, then do steps 1–7 on the same day: the merged `system-security-review.yml` already uses the new URL as its OIDC audience, so its `publish` job fails until step 5.
+Merge the PR, then do steps 1–7 on the same day, and not on a Monday: the merged `system-security-review.yml` already uses the new URL as its OIDC audience, so its `publish` job gets `401` from `/github/token` until step 5. Don't run it by hand in that window; its schedule is Mondays. It fails closed, so never loosen the audience check to fix it.
 
 ## 1. Before you start
 
@@ -48,7 +48,7 @@ terraform plan -target=google_cloud_run_domain_mapping.public -out=map.tfplan   
 terraform apply map.tfplan
 ```
 
-Targeted on purpose: the rest of the plan switches `PUBLIC_URL` and sign-in, which must wait for the certificate. `terraform output domain_mapping_records` should show `CNAME ghs.googlehosted.com` for `ai`.
+Targeted on purpose: the rest of the plan switches `PUBLIC_URL` and sign-in, which must wait for the certificate. The mapping names the service as a plain string, not a reference, so the target doesn't pull in the service's pending `PUBLIC_URL` change. If the plan shows `1 to change`, stop: something added a dependency. `terraform output domain_mapping_records` should show `CNAME ghs.googlehosted.com` for `ai`.
 
 ## 4. Wait for the certificate
 
