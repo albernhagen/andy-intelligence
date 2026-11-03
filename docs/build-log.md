@@ -225,9 +225,13 @@ Temporary progress log until andy-intelligence can track its own work (then migr
 - Branch `m1.19/github-app-ui`: `CodeHostConnectionStore` port + fake + suite, `GcpCodeHostConnectionStore` (Firestore `config/codeHost` + Secret Manager versions); `CodeHost.listInstalledRepos` / `issueRepoToken`; `apps/api/src/github/` (connection cache, setup routes, token endpoint with `jose`, webhooks moved here); `/settings/github` + callback pages; `system-security-review.yml` split into review + `publish`; Terraform: `secretVersionAdder` on the two secrets, env/`github_app_id` removed; `platform/github-app/` removed. Runbook `github-app.md` rewritten (Terraform → Connect → Install → register); threat model v6.
 - Verified locally: lint, typecheck, tests, build, actionlint, `terraform validate`. Not run here: `pnpm test:firestore` (no Java), the live manifest flow and token endpoint (Andy, runbook §2–5).
 
-## 2026-11-03 — PR #36 merged; M1.20: Custom domain built (PR #38)
+## 2026-11-03 — PR #36 merged; GitHub App default name fixed
 
-- Merged: PR #36: M1.19: GitHub App setup from the UI.
+- Merged: PR #36: M1.19: GitHub App setup from the UI. Andy applied `infra/control-plane` (2 added, as expected).
+- Connecting failed on GitHub: the name `andy-intelligence` is reserved (an account with that name exists). Default App name is now `andy-intelligence-control`; runbook `github-app.md` says to skip step 1 when already applied and explains the naming rule.
+
+## 2026-11-03 — M1.20: Custom domain built (PR #38)
+
 - **Decided (Andy, ADR-0044: Custom domain before M6):** serve the control plane at `https://ai.andybernhagen.com` now (was "after M5/M6"), via a Cloud Run domain mapping ($0, Preview; a load balancer's ~$18/month breaks the $25 budget; Firebase Hosting caps requests at 60 s). DNS in a new local-only Terraform root `infra/dns` (Cloudflare provider; token "Edit zone DNS" on one zone, from the keychain). The `run.app` URL keeps serving but is no longer a sign-in domain.
 - Branch `m1.20/custom-domain`: `google_cloud_run_domain_mapping.public` + `custom_domain` variable; `PUBLIC_URL`, Firebase authorized domains and the `service_url` output on the new host; `infra/dns` (CNAME to `ghs.googlehosted.com`, DNS-only; Search Console TXT); `system-security-review.yml` OIDC audience; Dependabot covers `infra/dns`. Runbook `docs/runbooks/custom-domain.md`; threat model v7 (DNS zone asset, Cloudflare token, R20).
 - Verified locally: `terraform validate` + `fmt` on both roots; lint, typecheck, tests, build. Not run here: any plan or apply (needs Andy's GCP and Cloudflare credentials).

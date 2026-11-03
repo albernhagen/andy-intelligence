@@ -35,6 +35,14 @@ describe("GitHub setup", () => {
     });
   });
 
+  it("GivenNoName_WhenTheManifestIsRequested_ThenTheDefaultIsNotAReservedAccountName", async () => {
+    const { call } = githubApp();
+    const body = (await (await call("/api/github/manifest")).json()) as {
+      manifest: { name: string };
+    };
+    expect(body.manifest.name).toBe("andy-intelligence-control");
+  });
+
   it("GivenABadAppName_WhenTheManifestIsRequested_Then400", async () => {
     const { call } = githubApp();
     expect((await call("/api/github/manifest?name=%3Cscript%3E")).status).toBe(400);

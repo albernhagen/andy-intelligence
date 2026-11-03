@@ -6,13 +6,13 @@ You never handle the App's private key or webhook secret: GitHub hands them to t
 
 The App's URLs come from `PUBLIC_URL` (`https://ai.andybernhagen.com`, ADR-0044). If you connected before the custom domain, change the App's Homepage, Setup and Webhook URLs by hand (runbook `custom-domain.md` §6).
 
-| App                                              | Permissions                                                      | Webhook events                                                   | Credentials                                                                                            |
-| ------------------------------------------------ | ---------------------------------------------------------------- | ---------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------ |
-| Control plane (default name `andy-intelligence`) | read: metadata, checks, actions · write: contents, pull requests | `pull_request`, `check_run`, `workflow_run` → `/webhooks/github` | Secret Manager (`github-app-private-key`, `github-webhook-secret`); IDs in Firestore `config/codeHost` |
+| App                                                      | Permissions                                                      | Webhook events                                                   | Credentials                                                                                            |
+| -------------------------------------------------------- | ---------------------------------------------------------------- | ---------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------ |
+| Control plane (default name `andy-intelligence-control`) | read: metadata, checks, actions · write: contents, pull requests | `pull_request`, `check_run`, `workflow_run` → `/webhooks/github` | Secret Manager (`github-app-private-key`, `github-webhook-secret`); IDs in Firestore `config/codeHost` |
 
 ## 1. Apply Terraform (`infra/control-plane`)
 
-Two secret containers, the runtime's read and add-version access to them, and the TTL policy for `codeHostEvents`.
+**Skip if already applied** (a plan shows `No changes`). Creates two secret containers, the runtime's read and add-version access to them, and the TTL policy for `codeHostEvents`; without them Connect fails with a Secret Manager permission error.
 
 ```sh
 cd infra/control-plane
@@ -27,11 +27,11 @@ Merge and deploy the code before step 2.
 
 ## 2. Connect GitHub (UI)
 
-1. Open the control plane → **GitHub** (top nav) → keep or change the App name (must be unique on GitHub) → **Connect GitHub**.
+1. Open the control plane → **GitHub** (top nav) → keep or change the App name → **Connect GitHub**. The name must be unique on GitHub and can't match an existing user or organization (`andy-intelligence` is taken, so the default is `andy-intelligence-control`).
 2. On GitHub: **Create GitHub App for albernhagen**.
 3. GitHub sends you back to `/settings/github/callback`; the page connects and shows "Connected as …". Use the same browser tab throughout: the check that the callback is yours lives in that tab.
 
-If the name is taken, GitHub says so on its page: go back and pick another.
+If the name is taken or reserved, GitHub says so on its page: go back, change the name and click Connect again (a fresh state each time).
 
 ## 3. Install the App on repos
 
