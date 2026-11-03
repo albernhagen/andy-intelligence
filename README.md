@@ -2,6 +2,32 @@
 
 Personal control plane for agentic software development: ideas → refined tickets → agent runs (Claude Code, Jules, OpenCode) under cost and quota controls → PRs → dev → one-click prod.
 
+## How it works today
+
+What is built on `main` now. The target design is [ARCHITECTURE.md](docs/architecture/ARCHITECTURE.md); progress is in [`docs/build-log.md`](docs/build-log.md). Update this section in the same PR as any change to features, components or how to use the system.
+
+```
+ Browser UI ─┐                                   ┌─ Firestore (tickets, questions, history, OAuth grants)
+             ├─▶ Cloud Run: control-plane ───────┤
+ Claude (MCP)┘   API + /mcp + OAuth + SPA        └─ Cloud Tasks queue (run-watchdog; nothing uses it yet)
+ GitHub PRs ──▶ CI checks + review agents (GitHub Actions)
+```
+
+**Working:**
+
+| Feature                | What it does                                                                                                                                                                                                                         | How to use                                                                               |
+| ---------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------- |
+| Sign-in                | Google sign-in; only emails on the allow-list get in                                                                                                                                                                                 | Open the Cloud Run URL (`terraform output service_url` in `infra/control-plane`)         |
+| Tickets                | Projects, tickets moving through stages (Backlog → Ready → In progress → Ready for review → Monitoring → Done), Definition of Ready, history, questions                                                                              | UI: `/projects`, then a project; or the REST API under `/api`                            |
+| Needs-you inbox        | Open questions and flagged tickets in one place                                                                                                                                                                                      | UI home page `/`                                                                         |
+| Claude connector (MCP) | Claude desktop signs in through our OAuth server; only a test `ping` tool so far                                                                                                                                                     | [`docs/runbooks/mcp-connector.md`](docs/runbooks/mcp-connector.md)                       |
+| PR checks              | Lint, typecheck, tests, build, secret/CodeQL/dependency/Terraform scans, security-review and adversarial-review agents                                                                                                               | Automatic on every PR; overrides with the `security-accepted` / `review-accepted` labels |
+| Dependabot updates     | Weekly grouped PRs; npm patches (and minors of 1.0+ packages) auto-merge after the checks pass and deploy with Andy's next merge; majors, 0.x minors, Actions and Terraform wait for Andy, who is requested as reviewer (CODEOWNERS) | Nothing for auto-merged ones; review the rest                                            |
+| Project baseline       | Gives another repo the same checks, files and GitHub settings                                                                                                                                                                        | `platform/baseline/baseline.mjs` ([runbook](docs/runbooks/onboard-a-repo.md))            |
+| Cost guardrails        | $25/month budget alerts, usage alerts, caps, opt-in kill switch at 150% of budget                                                                                                                                                    | [`docs/runbooks/billing.md`](docs/runbooks/billing.md)                                   |
+
+**Not built yet:** agents doing ticket work. The next slices add the MCP ticket tools, the GitHub App, the Claude Code executor, refinement, a plan step, and build → PR (ARCHITECTURE §12, M1: First end-to-end flow).
+
 ## Docs
 
 | Doc                                                                      | What                                                        |
@@ -27,7 +53,7 @@ pnpm typecheck
 pnpm lint
 pnpm build
 pnpm format      # prettier --write
-pnpm test:firestore  # Firestore adapter contract suite on the emulator (needs Java; not in CI, ADR-0034)
+pnpm test:firestore  # Firestore adapter contract suite on the emulator (needs Java 21+: `brew install openjdk@21`; not in CI, ADR-0034)
 ```
 
 ### Quality gates (ADR-0027)
@@ -54,6 +80,8 @@ Claude Code runs `scripts/format-edited-file.mjs` after each Edit/Write (`.claud
 
 Weekly + manual: `system-security-review.yml` opens a PR updating the threat model. Action pins are commit SHAs, bumped by Dependabot.
 
+Dependabot (ADR-0042): npm updates that are patches, or minors of packages at 1.0+ auto-merge once the required checks pass (`dependabot-auto-merge.yml`); majors, 0.x minors, GitHub Actions and Terraform providers wait for Andy. Bot merges never deploy (`deploy.yml` guard). `.github/CODEOWNERS` requests Andy's review on every PR he didn't author.
+
 The steps behind these checks live in composite actions in `platform/actions/`; the workflows only set triggers, permissions and the job names the `main` ruleset requires (ADR-0038).
 
 ### Project baseline (ADR-0031, ADR-0038)
@@ -75,12 +103,27 @@ pnpm --filter @andy/api dev          # :8080
 pnpm --filter @andy/web dev          # :5173, proxies /api to :8080
 ```
 
+Set `PUBLIC_URL` (the service's public origin, e.g. `http://localhost:8080`) to turn on `/mcp` and its OAuth endpoints (ADR-0039: MCP OAuth facade); Terraform sets it in Cloud Run.
+
+### Web UI (M1.3: UI: tickets + inbox)
+
+| Route                       | Screen                                                                                           |
+| --------------------------- | ------------------------------------------------------------------------------------------------ |
+| `/`                         | Needs you (home): open questions (options, suggested answer, free text) and flagged tickets      |
+| `/projects`                 | Project list and "new project"                                                                   |
+| `/p/:projectId`             | Tickets in one column per stage, "new ticket"                                                    |
+| `/p/:projectId/t/:ticketId` | Ticket detail: edit, Definition of Ready, moves (forced move needs a reason), questions, history |
+
+- API client: `openapi-fetch` typed by `apps/web/src/lib/api.gen.ts`, generated from the API's OpenAPI document. After changing an API route, run `pnpm --filter @andy/web gen:api` and commit the file; a test fails while it is stale.
+- Tests (`apps/web/src/**/*.test.tsx`, jsdom + Testing Library) render the UI against the real API in-process (`createApp` + `InMemoryWorkTracker`), so they also exercise auth, validation and the ticket rules. No browser e2e yet: it needs Firebase sign-in.
+- To try the inbox before refinement agents exist (M1.7: Refinement), use "Ask a question…" on a ticket.
+
 ## Layout
 
 | Path                  | What                                                          |
 | --------------------- | ------------------------------------------------------------- |
-| `apps/api`            | Hono API (later MCP, webhooks, jobs); serves the SPA          |
-| `apps/web`            | React + Vite + shadcn UI                                      |
+| `apps/api`            | Hono API, MCP endpoint + its OAuth server; serves the SPA     |
+| `apps/web`            | React + Vite + shadcn UI: Needs-you inbox, tickets, detail    |
 | `packages/contracts`  | Zod entities, ports, fakes, contract suites                   |
 | `packages/domain`     | Ticket rules: stage moves, Definition of Ready, Needs-you     |
 | `packages/store`      | Firestore client, converters, `FirestoreWorkTracker`          |
@@ -95,4 +138,4 @@ pnpm --filter @andy/web dev          # :5173, proxies /api to :8080
 | `lefthook.yml`        | Git hooks: pre-commit lint/format, pre-push checks            |
 | `firebase.json`       | Firestore emulator config for `pnpm test:firestore`           |
 
-Infra setup: [`docs/runbooks/m0-setup.md`](docs/runbooks/m0-setup.md). Budget and cost caps: [`docs/runbooks/billing.md`](docs/runbooks/billing.md). Security review setup: [`docs/runbooks/security-review.md`](docs/runbooks/security-review.md). Adversarial review: [`docs/runbooks/adversarial-review.md`](docs/runbooks/adversarial-review.md). Onboard a repo: [`docs/runbooks/onboard-a-repo.md`](docs/runbooks/onboard-a-repo.md).
+Infra setup: [`docs/runbooks/m0-setup.md`](docs/runbooks/m0-setup.md). Budget and cost caps: [`docs/runbooks/billing.md`](docs/runbooks/billing.md). Security review setup: [`docs/runbooks/security-review.md`](docs/runbooks/security-review.md). Adversarial review: [`docs/runbooks/adversarial-review.md`](docs/runbooks/adversarial-review.md). Onboard a repo: [`docs/runbooks/onboard-a-repo.md`](docs/runbooks/onboard-a-repo.md). Connect Claude to MCP: [`docs/runbooks/mcp-connector.md`](docs/runbooks/mcp-connector.md).

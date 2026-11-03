@@ -8,6 +8,7 @@ import {
 import {
   ConfigChange,
   Model,
+  OAuthGrant,
   Policy,
   Project,
   Provider,
@@ -47,6 +48,7 @@ export const collections = {
   quotaReadings: { path: () => "quotaReadings", schema: QuotaReading },
   configChanges: { path: () => "configChanges", schema: ConfigChange },
   releases: { path: () => "releases", schema: Release },
+  oauthGrants: { path: () => "oauthGrants", schema: OAuthGrant },
 } as const;
 
 /** Zod-validated converter: rejects malformed documents on read and write. */
@@ -79,4 +81,5 @@ export function typedCollection<S extends z.ZodType<DocumentData>>(
   return db.collection(path).withConverter(zodConverter(schema));
 }
 
+export { FirestoreOAuthGrantStore, OAUTH_GRANT_TTL_FIELD } from "./oauth-grant-store";
 export { FirestoreWorkTracker } from "./work-tracker";

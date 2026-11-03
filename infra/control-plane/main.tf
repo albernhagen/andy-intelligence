@@ -162,6 +162,16 @@ resource "google_firestore_backup_schedule" "daily" {
   daily_recurrence {}
 }
 
+# MCP OAuth grants (ADR-0039: MCP OAuth facade) carry a `ttl` timestamp; Firestore deletes
+# them after it passes (usually within a day). The API ignores expired grants anyway.
+resource "google_firestore_field" "oauth_grant_ttl" {
+  database   = google_firestore_database.default.name
+  collection = "oauthGrants"
+  field      = "ttl"
+  ttl_config {}
+  index_config {} # not queried: no single-field indexes
+}
+
 # Server-only access: the Firebase web config is public, so client SDKs must be denied.
 # The API uses IAM (runtime SA), which bypasses these rules.
 resource "google_firebaserules_ruleset" "firestore_deny_all" {
@@ -282,6 +292,11 @@ resource "google_cloud_run_v2_service" "control_plane" {
       env {
         name  = "FIREBASE_AUTH_DOMAIN"
         value = data.google_firebase_web_app_config.ui.auth_domain
+      }
+      # OAuth issuer and MCP resource URL (ADR-0039); MCP is off without it.
+      env {
+        name  = "PUBLIC_URL"
+        value = "https://${local.service_host}"
       }
     }
   }

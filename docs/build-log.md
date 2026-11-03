@@ -155,6 +155,49 @@ Temporary progress log until andy-intelligence can track its own work (then migr
 - Demo fixes: `files` puts a `pnpm` shim on PATH when pnpm isn't installed (the clone's lefthook hooks call `pnpm`), and commits with this checkout's git identity (GitHub rejected the global private email, GH007). Andy installed pnpm (Homebrew; it switches to the pinned 10.28.0) and set the noreply address globally.
 - Lessons: ESLint 10 picks up nested `eslint.config.js`, so starter config files end in `.template`; a `\s*$` regex in multiline mode swallowed newlines when pinning.
 
+## 2026-11-02 — M1.16: Project baseline v1 merged; M1.1: MCP OAuth spike started
+
+- Merged: PR #23: Project baseline v1. Tagged `v1.0.0` (managed repos pin the baseline actions to this tag's SHA).
+- Andy applied the 4 repo settings `check` reported as drift: private vulnerability reporting on, SHA pinning required for actions, default workflow token read-only, `security-accepted` label colour and description.
+- Branch `m1.1/mcp-oauth-spike` started.
+
+## 2026-11-02 — M1.1: MCP OAuth spike built
+
+- **Decided (Andy, ADR-0039: MCP OAuth facade):** our own OAuth authorization server in the API; sign-in step = the existing Firebase Google sign-in + allow-list; clients via CIMD (client ID metadata documents on `claude.ai`/`claude.com`), no DCR; live proof after merge (the deployer only deploys `main`).
+- Verified (Claude connector docs, 2026-11-02): 401 + `resource_metadata` discovery, exact `resource` match, DCR or CIMD, PKCE S256, refresh-token rotation, callback `https://claude.ai/api/mcp/auth_callback`. Google directly needs a hand-made client + secret and gives no refresh tokens: rejected.
+- Branch `m1.1/mcp-oauth-spike`: `OAuthGrantStore` port + fake + contract suite + `FirestoreOAuthGrantStore`; `apps/api/src/mcp/` (discovery, `/oauth/authorize`, `/api/oauth/approve`, `/oauth/token`, stateless `/mcp` with a throwaway `ping`); SPA page `/oauth/consent`; `frame-ancestors 'none'` on every response; Terraform: `PUBLIC_URL` env + Firestore TTL on `oauthGrants`. Runbook `docs/runbooks/mcp-connector.md`; threat model R11–R13.
+- Verified locally: lint, typecheck, tests (MCP SDK's own OAuth client completes discovery → CIMD → consent → token → `ping` → refresh rotation against the app), build, smoke run of the bundle. Not run here: `pnpm test:firestore` (no Java), `terraform validate`/plan, Trivy (CI), the Claude desktop connector (Andy, runbook).
+- Andy to run after merge: `infra/control-plane` apply (1 add, 1 change), `pnpm test:firestore`, runbook §3–4 (connector + `ping`; non-allow-listed account rejected). That is M1.1: MCP OAuth spike's Done when.
+
+## 2026-11-02 — M1.3: UI: tickets + inbox built
+
+- **Decided (Andy):** seed questions with "Ask a question…" on ticket detail; API client generated from OpenAPI (`openapi-typescript` + `openapi-fetch`, staleness test); no browser e2e yet (Playwright + Firebase Auth emulator is a follow-up).
+- PR #28: M1.3: UI: tickets + inbox: Needs-you inbox (home), projects, tickets by stage, ticket detail (edit, Definition of Ready, moves incl. forced move with a reason, questions, history). UI tests run against the real API in-process. Not checked in a real browser (needs sign-in): Andy runs the Done when after deploy.
+- Kill switch's Needs-you item (deferred to after this slice, 2026-11-01) is still not built: it needs workflow → API auth; its own slice.
+
+## 2026-11-02 — M1.1: MCP OAuth spike merged and demoed
+
+- Merged: PR #29: MCP OAuth spike and PR #28: UI: tickets + inbox. Both review agents passed with no blocker or high/critical finding; the 5 lower findings were fixed before merge (threat-model table, lookup caps, failed-lookup cache, refresh tests, consent text; R14 added).
+- Applied by Andy: `infra/control-plane` (`PUBLIC_URL` env, `oauthGrants` TTL). `pnpm test:firestore` passed (19 tests, incl. the 5 `OAuthGrantStore` contract tests) once Java was installed.
+- **Demo passed:** Claude custom connector added with `https://control-plane-662512537397.us-central1.run.app/mcp`; Google sign-in + Approve on the consent page; `ping` from a Claude session returned `pong (signed in as <Andy's email>)`. Claude used CIMD (the server offers no other registration), so DCR isn't needed.
+- Allow-list rejection: **Decided (Andy):** no second Google account; the automated tests are the proof (non-allow-listed account → 403 at approve, removed email → 401 on `/mcp` and `invalid_grant` on refresh). Live probes without credentials all refused: approve with no or a forged token → 401, `/mcp` with a random token → 401, a made-up code → `invalid_grant`, a non-Claude `client_id` → `invalid_client`.
+- M1.1: MCP OAuth spike Done when met. M1.4: MCP core tools is unblocked on the auth side (still needs M1.2: Ticket core, merged).
+- Lesson: the emulator needs a Java runtime; the runbooks now say how to install one.
+
+## 2026-11-03 — AI-native SDLC playbook gaps planned
+
+- Compared the plan with Anthropic's [AI-native SDLC playbook](https://claude.com/resources/articles/the-ai-native-sdlc-playbook). Most of it is already planned.
+- **Decided (Andy, ADR-0040: Close the gaps against Anthropic's AI-native SDLC playbook):** new slices M1.17: Agent evals v1 and M1.18: Plan step; executor permission profile in M1.6: Claude Code executor; verification output, acceptance-criteria review pass and nit cap in M1.8: Build + gate; review-capacity cap and learning loop in M2: Multi-project in parallel; DORA metrics in M6: Dev → prod releases.
+- **Decided (Andy):** `README.md` gets a one-screen "How it works today" section, updated with every feature change (AGENTS.md docs table).
+- Wave 1 (in parallel): PR #31: M1.4: MCP core tools and PR #32: M1.5: GitHub App + project registration open; they update "How it works today" after this merges.
+
+## 2026-11-03 — PR #33 merged; Dependabot auto-merge built
+
+- Merged: PR #33: AI-native SDLC playbook gaps plan (ADR-0040). PR #31: M1.4: MCP core tools and PR #32: M1.5: GitHub App + project registration synced with `main`.
+- **Decided (Andy, ADR-0042: Dependabot auto-merge for patch and minor updates; CODEOWNERS requests Andy's review):** npm patches and minors of 1.0+ packages auto-merge after every required check; majors, 0.x minors, GitHub Actions and Terraform providers stay manual (review findings); `deploy.yml` skips bot merges; `* @albernhagen` in CODEOWNERS so Andy is notified of Dependabot PRs (review not required).
+- Branch `m1.0/dependabot-auto-merge`: `dependabot-auto-merge.yml` → `platform/actions/dependabot-auto-merge` (fetch-metadata v3.1.0, pinned) → `scripts/dependabot-merge.mjs` + tests; job runs the base branch's action; baseline: workflow (managed), CODEOWNERS (seed), `allow_auto_merge: true`; threat model R17; runbook `onboard-a-repo.md` §6.
+- Verified locally: scripts tests (decision + CLI), Prettier. Not run here: actionlint (CI), the first real auto-merge (Andy, runbook §6).
+
 ## Slices: M1: First end-to-end flow: ticket → PR with Claude
 
 Status: todo / in progress / PR open / merged. Definitions: ARCHITECTURE §12.
@@ -162,14 +205,14 @@ Status: todo / in progress / PR open / merged. Definitions: ARCHITECTURE §12.
 | Slice                                   | Size            | Depends on                                                                                  | Status          |
 | --------------------------------------- | --------------- | ------------------------------------------------------------------------------------------- | --------------- |
 | M1.0: Docs sync                         | S               | M0: Foundations                                                                             | merged (PR #1)  |
-| M1.1: MCP OAuth spike                   | M               | M0: Foundations                                                                             | todo            |
+| M1.1: MCP OAuth spike                   | M               | M0: Foundations                                                                             | merged (PR #29) |
 | M1.2: Ticket core                       | M               | M0: Foundations                                                                             | merged (PR #17) |
-| M1.3: UI: tickets + inbox               | M               | M1.2: Ticket core                                                                           | todo            |
+| M1.3: UI: tickets + inbox               | M               | M1.2: Ticket core                                                                           | merged (PR #28) |
 | M1.4: MCP core tools                    | S               | M1.1: MCP OAuth spike, M1.2: Ticket core                                                    | todo            |
 | M1.5: GitHub App + project registration | M               | M1.2: Ticket core                                                                           | todo            |
 | M1.6: Claude Code executor              | L (split 6a/6b) | M1.5: GitHub App + project registration                                                     | todo            |
 | M1.7: Refinement                        | M               | M1.3: UI: tickets + inbox, M1.4: MCP core tools, M1.6: Claude Code executor                 | todo            |
-| M1.8: Build + gate                      | M               | M1.7: Refinement, M1.16: Project baseline v1                                                | todo            |
+| M1.8: Build + gate                      | M               | M1.7: Refinement, M1.16: Project baseline v1, M1.17: Agent evals v1, M1.18: Plan step       | todo            |
 | M1.9: Quota capture                     | S               | M1.6: Claude Code executor                                                                  | todo            |
 | M1.10: Security review automation       | M               | M0: Foundations                                                                             | merged (PR #10) |
 | M1.11: Adversarial PR review            | M               | M1.10: Security review automation                                                           | merged (PR #21) |
@@ -177,16 +220,20 @@ Status: todo / in progress / PR open / merged. Definitions: ARCHITECTURE §12.
 | M1.13: GCP cost guardrails              | S               | M0: Foundations                                                                             | merged (PR #7)  |
 | M1.14: Cost kill switch                 | M               | M1.13: GCP cost guardrails                                                                  | merged (PR #18) |
 | M1.15: Usage alerts                     | S               | M1.13: GCP cost guardrails                                                                  | merged (PR #8)  |
-| M1.16: Project baseline v1              | M               | M1.10: Security review automation, M1.11: Adversarial PR review, M1.12: Local quality gates | PR open         |
+| M1.16: Project baseline v1              | M               | M1.10: Security review automation, M1.11: Adversarial PR review, M1.12: Local quality gates | merged (PR #23) |
+| M1.17: Agent evals v1                   | M               | M1.11: Adversarial PR review, M1.16: Project baseline v1                                    | todo            |
+| M1.18: Plan step                        | M               | M1.6: Claude Code executor, M1.7: Refinement                                                | todo            |
 
 **Next (order decided by Andy, 2026-10-28):**
 
 1. M1.12: Local quality gates (merged).
 2. M1.10: Security review automation (merged).
-3. M1.2: Ticket core and M1.1: MCP OAuth spike, in parallel.
+3. M1.2: Ticket core and M1.1: MCP OAuth spike, in parallel (both merged).
 4. M1.14: Cost kill switch.
 5. M1.11: Adversarial PR review (merged).
-6. M1.16: Project baseline v1 (PR open; before M1.8: Build + gate).
+6. M1.16: Project baseline v1 (merged, `v1.0.0`).
+
+**Waves (Andy, 2026-11-03, ADR-0040):** 1. M1.4: MCP core tools ‖ M1.5: GitHub App + project registration → 2. M1.6a: dispatch + callback ‖ M1.17: Agent evals v1 → 3. M1.6b: watchdog + retry ‖ M1.7: Refinement ‖ M1.9: Quota capture → 4. M1.18: Plan step → 5. M1.8: Build + gate.
 
 **Pending decisions (Andy):**
 

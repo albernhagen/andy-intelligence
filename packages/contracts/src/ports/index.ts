@@ -198,6 +198,42 @@ export interface QuotaSource {
   latest(provider: ProviderKey): Promise<QuotaReading[]>;
 }
 
+// ── OAuthGrantStore ──────────────────────────────────────────────────────────
+// Short-lived credentials issued by the MCP OAuth server (ADR-0039: MCP OAuth facade):
+// authorization codes, access tokens and refresh tokens. Callers key each grant by a hash
+// of the token, so the store never holds a usable credential.
+
+export const OAuthGrantKind = z.enum(["code", "access", "refresh"]);
+export type OAuthGrantKind = z.infer<typeof OAuthGrantKind>;
+
+export const OAuthGrant = z.object({
+  kind: OAuthGrantKind,
+  /** The OAuth client (a client ID metadata document URL). */
+  clientId: z.string().min(1),
+  /** Who approved the grant; re-checked against the allow-list on every use. */
+  email: z.string().min(1),
+  uid: z.string().min(1),
+  /** The protected resource (MCP endpoint URL) the grant is for. */
+  resource: z.url(),
+  scope: z.string(),
+  /** Code only: the redirect URI and PKCE S256 challenge it was issued for. */
+  redirectUri: z.string().nullable(),
+  codeChallenge: z.string().nullable(),
+  expiresAt: Timestamp,
+});
+export type OAuthGrant = z.infer<typeof OAuthGrant>;
+
+export interface OAuthGrantStore {
+  put(key: string, grant: OAuthGrant): Promise<void>;
+  /** The grant, or null when missing or expired. */
+  get(key: string): Promise<OAuthGrant | null>;
+  /**
+   * Removes and returns the grant atomically (null when missing or expired), so codes and
+   * refresh tokens are single-use even under concurrent requests.
+   */
+  take(key: string): Promise<OAuthGrant | null>;
+}
+
 // ── Plain interfaces (no contract suite yet) ─────────────────────────────────
 
 export interface Completion {

@@ -17,6 +17,7 @@ Update these in the **same PR** as the code:
 | If you changed…                                | Update                                                     |
 | ---------------------------------------------- | ---------------------------------------------------------- |
 | Commands, env vars, packages/apps, layout      | `README.md`                                                |
+| A feature, component, or how to use the system | `README.md` "How it works today" (keep it one screen)      |
 | Design, components, data model, scope, plan    | `docs/architecture/ARCHITECTURE.md` (bump `revision`)      |
 | A decision, or deviated from ARCHITECTURE.md   | New ADR in `docs/architecture/adr/`; update old ADR status |
 | Any step Andy runs by hand                     | `docs/runbooks/*.md`                                       |
