@@ -1,0 +1,5 @@
+# Requests Andy's review on every PR, Dependabot's included, so each one notifies him (ADR-0042).
+# Review is not required by the ruleset; GitHub never requests review from a PR's own author.
+# Add lines below for always-gated paths (auth, payments, migrations, infra); the review gate
+# treats every path listed after `*` as protected (ARCHITECTURE §4.5).
+* @albernhagen

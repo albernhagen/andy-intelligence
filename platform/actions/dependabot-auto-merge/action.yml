@@ -1,0 +1,39 @@
+name: Baseline — Dependabot auto-merge
+description: >-
+  Turns on auto-merge (squash) for npm updates from Dependabot that are patches or minors of
+  packages at 1.0+; GitHub merges once every required check passes. Majors, 0.x minors, GitHub
+  Actions and Terraform providers stay manual
+  (scripts/dependabot-merge.mjs, ADR-0042, project baseline ADR-0031/ADR-0038). Needs
+  `allow_auto_merge` on the repo and a job token with `contents: write` and `pull-requests: write`.
+
+inputs:
+  github-token:
+    description: The job's GITHUB_TOKEN.
+    required: true
+
+runs:
+  using: composite
+  steps:
+    - name: Dependabot metadata
+      id: meta
+      uses: dependabot/fetch-metadata@25dd0e34f4fe68f24cc83900b1fe3fe149efef98 # v3.1.0
+      with:
+        github-token: ${{ inputs.github-token }}
+
+    - name: Decide
+      id: decide
+      shell: bash
+      env:
+        ECOSYSTEM: ${{ steps.meta.outputs.package-ecosystem }}
+        DEPENDENCIES: ${{ steps.meta.outputs.updated-dependencies-json }}
+      run: |
+        BASELINE=$(cd "$GITHUB_ACTION_PATH/../../.." && pwd)
+        node "$BASELINE/scripts/dependabot-merge.mjs"
+
+    - name: Enable auto-merge
+      if: steps.decide.outputs.merge == 'true'
+      shell: bash
+      env:
+        GH_TOKEN: ${{ inputs.github-token }}
+        PR_URL: ${{ github.event.pull_request.html_url }}
+      run: gh pr merge --auto --squash "$PR_URL"

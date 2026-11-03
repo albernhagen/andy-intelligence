@@ -1,0 +1,37 @@
+name: Dependabot auto-merge
+
+# npm patches, and minors of packages at 1.0+, from Dependabot merge on their own once every
+# required check passes; majors, 0.x minors, GitHub Actions and Terraform wait for Andy (ADR-0042).
+# Project baseline caller (ADR-0038). Never `pull_request_target`.
+#
+# The job holds a write token, so it runs the base branch's copy of the action and script, never
+# the PR's (a Dependabot PR edits pins inside platform/actions/). Only Dependabot's own pushes
+# count: a human push to a Dependabot branch skips the job.
+# deploy.yml also skips pushes made by the bots, so these updates reach prod only with the next
+# merge Andy makes.
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+permissions: {}
+
+jobs:
+  dependabot-auto-merge:
+    if: >-
+      github.event.pull_request.user.login == 'dependabot[bot]' &&
+      github.actor == 'dependabot[bot]' &&
+      github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: write # merge
+      pull-requests: write # enable auto-merge
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.event.pull_request.base.sha }}
+          persist-credentials: false
+      - uses: ./platform/actions/dependabot-auto-merge
+        with:
+          github-token: ${{ github.token }}
