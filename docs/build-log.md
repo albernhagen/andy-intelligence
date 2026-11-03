@@ -234,8 +234,8 @@ Temporary progress log until andy-intelligence can track its own work (then migr
 
 - Merged: PR #37: default GitHub App name fixed.
 - Andy ran runbook `github-app.md` §2–4: connected the App from Settings → GitHub, installed it on `andy-intelligence`, registered project `AI` with repo `albernhagen/andy-intelligence`.
-- Logs: deliveries for `pull_request`, `check_run`, `workflow_run` arrived with valid signatures; those within 60 s of registering were ignored as "unregistered repo" (repo → project cache, by design). This PR's own events are the first to be recorded.
-- Open: "Done when" checks for M1.5 and M1.19 (recorded event, redelivery → `duplicate`, system review PR via the App token, `pnpm test:firestore`).
+- Logs: deliveries for `pull_request`, `check_run`, `workflow_run` arrived with valid signatures; those within 60 s of registering were ignored as "unregistered repo" (repo → project cache, by design). Recorded since 23:37 UTC: `pull_request` (PR #38 `synchronize`, PR #39 `opened`), `check_run` and `workflow_run` deliveries, each a `codeHostEvents` document with `projectId: "ai"` (checked in Firestore).
+- Open: redelivery → `duplicate` (Andy, App settings), system review PR via the App token, `pnpm test:firestore`.
 
 ## Slices: M1: First end-to-end flow: ticket → PR with Claude
 
