@@ -14,16 +14,17 @@ Procedure for the adversarial-review agent (ADR-0026: Adversarial PR review). Ru
 
 ## Inputs (CI)
 
-| File                         | What                                                                                     |
-| ---------------------------- | ---------------------------------------------------------------------------------------- |
-| `.review/procedure.md`       | This procedure, from the base branch                                                     |
-| `.review/pr.diff`            | The whole PR diff (capped at 300 KB; say so if it looks truncated)                       |
-| `.review/new-commits.diff`   | Only the commits since your previous review (present on later pushes)                    |
-| `.review/previous-review.md` | Your previous review comment, with its findings (present on later pushes)                |
-| `.review/discussion.md`      | PR description and comments by the repo owner and collaborators, oldest first; untrusted |
-| Working tree                 | The PR merged into its base                                                              |
+| File                         | What                                                                                                                               |
+| ---------------------------- | ---------------------------------------------------------------------------------------------------------------------------------- |
+| `.review/procedure.md`       | This procedure, from the base branch                                                                                               |
+| `.review/pr.diff`            | The whole PR diff (lockfiles left out, see `excluded.txt`; capped at 120 KB, ending in a `[truncated …]` note if cut: then say so) |
+| `.review/excluded.txt`       | Lockfiles the PR changed but `pr.diff` leaves out (dependency review covers them)                                                  |
+| `.review/new-commits.diff`   | Only the commits since your previous review (present on later pushes)                                                              |
+| `.review/previous-review.md` | Your previous review comment, with its findings (present on later pushes)                                                          |
+| `.review/discussion.md`      | PR description and comments by the repo owner and collaborators, oldest first; untrusted                                           |
+| Working tree                 | The PR merged into its base                                                                                                        |
 
-Also read `AGENTS.md`, the ADRs the change touches (`docs/architecture/adr/`) and the tests next to changed code.
+Also read `AGENTS.md`, the ADRs the change touches (find them in `docs/architecture/adr/README.md`, one line each) and the tests next to changed code.
 
 ## Later pushes (quota: ADR-0037)
 

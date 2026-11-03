@@ -1,0 +1,43 @@
+---
+status: accepted
+date: 2026-11-03
+amends: 0022
+---
+
+# 0046 — Context budget: small always-loaded docs, everything else on demand
+
+Decided by Andy, 2026-11-03.
+
+## Context and Problem Statement
+
+Agents (building sessions, review agents, later executor runs) pay for every token they load, in time, quota and focus. Measured 2026-11-03 (tokens ≈ words × 1.35):
+
+| Source              | Size                       | Loaded                           |
+| ------------------- | -------------------------- | -------------------------------- |
+| `AGENTS.md`         | ~0.9k                      | Every session                    |
+| `docs/build-log.md` | ~7.5k, growing ~1–2k a day | Every session                    |
+| `ARCHITECTURE.md`   | ~14.5k                     | Read whole by most slices        |
+| Threat model        | ~4.2k                      | Every security review            |
+| Review diff         | up to 300 KB (~75k)        | Every review, lockfiles included |
+
+Guidance: Claude Code loads `CLAUDE.md`/`AGENTS.md` every session (keep each under 200 lines) and loads a subdirectory's file only when files there are used; Anthropic's context-engineering guidance is to pre-load small, stable context and fetch the rest just in time, with subagents for broad searches.
+
+## Decision Outcome
+
+| Area                                                           | Decision                                                                                                                                                                                                                                                                 |
+| -------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Build log                                                      | `docs/build-log.md` is current status only (≤ 1 page); dated history moves to `docs/build-log/YYYY-MM.md`, read on demand.                                                                                                                                               |
+| ARCHITECTURE.md                                                | A reading map at the top; agents read their slice's §12 row and the sections it names. Merged slices' scope moves to `docs/architecture/history/`.                                                                                                                       |
+| ADRs                                                           | `docs/architecture/adr/README.md`: one line per ADR; a test fails if an ADR is missing from it.                                                                                                                                                                          |
+| Area rules                                                     | Nested `AGENTS.md` (+ `CLAUDE.md` symlink) in `infra/`, `.github/`, `packages/contracts/`, loaded only when an agent works there. Critical one-liners stay in the root file. The template's rules file is renamed `AGENTS.md.template` so it isn't loaded as live rules. |
+| Budgets                                                        | `context-budget.json` + `scripts/context-budget.mjs`, run in the baseline `check` step (carried to managed repos; default: every `AGENTS.md`/`CLAUDE.md` ≤ 200 lines). Over budget → trim, don't raise, unless Andy agrees.                                              |
+| Review agents                                                  | Lockfiles left out of the diff (listed in `.review/excluded.txt`; dependency review and CodeQL cover them); diff cap 300 KB → 120 KB with a truncation note.                                                                                                             |
+| Executor runs (M1.6: Claude Code executor, M1.8: Build + gate) | Fixed context per step (ticket snapshot, approved plan, `AGENTS.md`); exploration in subagents returning summaries; `--max-turns` per step; stable prompt prefix for caching; input tokens recorded per run and step.                                                    |
+| Evals (M1.17: Agent evals v1)                                  | Each case records input tokens; a token jump fails the check like a pass-rate drop.                                                                                                                                                                                      |
+| Dashboards (M5: Epics + story board)                           | Tokens per run and per step, so expensive steps stand out.                                                                                                                                                                                                               |
+| Tools                                                          | No vector database or retrieval service: the repo is small; grep, indexes and on-demand reads are cheaper and simpler.                                                                                                                                                   |
+
+### Consequences
+
+- Good: a session starts with ~2k tokens of rules plus a ~0.6k status page instead of ~10k+; reviews read about 40% of the old worst case; budgets stop docs creeping back.
+- Bad: agents must follow the map (a skipped section can be missed); docs now live in more files; a lockfile-only attack (e.g. a swapped tarball URL) is no longer in the agent's view and rests on dependency review (threat model R5).

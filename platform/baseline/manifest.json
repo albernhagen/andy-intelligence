@@ -40,7 +40,7 @@
   ],
   "lines": [{ "path": ".gitignore", "from": "template/gitignore.lines" }],
   "seed": [
-    { "path": "AGENTS.md", "from": "template/AGENTS.md" },
+    { "path": "AGENTS.md", "from": "template/AGENTS.md.template" },
     { "path": ".github/CODEOWNERS", "from": "template/.github/CODEOWNERS" },
     { "path": "docs/security/threat-model.md", "from": "template/docs/security/threat-model.md" }
   ],

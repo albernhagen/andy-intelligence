@@ -33,15 +33,16 @@ What is built on `main` now. The target design is [ARCHITECTURE.md](docs/archite
 
 ## Docs
 
-| Doc                                                                      | What                                                        |
-| ------------------------------------------------------------------------ | ----------------------------------------------------------- |
-| [`docs/architecture/ARCHITECTURE.md`](docs/architecture/ARCHITECTURE.md) | Design and milestone/slice plan — source of truth           |
-| [`docs/architecture/adr/`](docs/architecture/adr/)                       | Architecture decisions (MADR)                               |
-| [`docs/build-log.md`](docs/build-log.md)                                 | Slice status, pending decisions, blockers                   |
-| [`docs/security/threat-model.md`](docs/security/threat-model.md)         | Threat model and open security risks                        |
-| [`docs/runbooks/`](docs/runbooks/)                                       | Manual steps (setup, secrets, apply)                        |
-| [`AGENTS.md`](AGENTS.md)                                                 | Rules for agents working in this repo (`CLAUDE.md` symlink) |
-| [`docs/BUILD-PROMPT.md`](docs/BUILD-PROMPT.md)                           | Session prompt for the building agent                       |
+| Doc                                                                      | What                                                                   |
+| ------------------------------------------------------------------------ | ---------------------------------------------------------------------- |
+| [`docs/architecture/ARCHITECTURE.md`](docs/architecture/ARCHITECTURE.md) | Design and milestone/slice plan — source of truth                      |
+| [`docs/architecture/adr/`](docs/architecture/adr/)                       | Architecture decisions (MADR)                                          |
+| [`docs/build-log.md`](docs/build-log.md)                                 | Slice status, pending decisions, blockers (history: `docs/build-log/`) |
+| [`docs/architecture/adr/README.md`](docs/architecture/adr/README.md)     | ADR index, one line each                                               |
+| [`docs/security/threat-model.md`](docs/security/threat-model.md)         | Threat model and open security risks                                   |
+| [`docs/runbooks/`](docs/runbooks/)                                       | Manual steps (setup, secrets, apply)                                   |
+| [`AGENTS.md`](AGENTS.md)                                                 | Rules for agents working in this repo (`CLAUDE.md` symlink)            |
+| [`docs/BUILD-PROMPT.md`](docs/BUILD-PROMPT.md)                           | Session prompt for the building agent                                  |
 
 Docs ship with the change: a PR that changes commands, layout, design, or a decision updates the matching doc (ARCHITECTURE §14, ADR-0022).
 
@@ -56,6 +57,7 @@ pnpm typecheck
 pnpm lint
 pnpm build
 pnpm format      # prettier --write
+pnpm context:check   # agent-loaded docs within their size budgets (ADR-0046)
 pnpm test:firestore  # Firestore adapter contract suite on the emulator (needs Java 21+: `brew install openjdk@21`; not in CI, ADR-0034)
 ```
 
@@ -144,6 +146,7 @@ GitHub (ADR-0043: GitHub App setup from the UI) is on when `PUBLIC_URL` is set: 
 | `platform/actions`    | Composite actions behind every required check (baseline)            |
 | `platform/baseline`   | Baseline manifest, GitHub config JSON, `baseline.mjs`               |
 | `platform/procedures` | Agent procedures: `/security-review`, `/threat-model`               |
+| `context-budget.json` | Size budgets for agent-loaded docs (`pnpm context:check`, ADR-0046) |
 | `template`            | Files copied into managed repos (managed, seed, starter)            |
 | `lefthook.yml`        | Git hooks: pre-commit lint/format, pre-push checks                  |
 | `firebase.json`       | Firestore emulator config for `pnpm test:firestore`                 |

@@ -143,11 +143,22 @@ runs:
         LOCAL: ${{ steps.root.outputs.local }}
       run: |
         mkdir -p .review
-        # Write in full, then cap (ADR-0028). Piping into `head -c` would fail under pipefail.
-        cap() { head -c "$1" "$2.full" > "$2"; rm "$2.full"; }
-        # Checkout is the PR merged into its base: HEAD^1 is the base. Capped at 300 KB.
-        git diff HEAD^1 HEAD > .review/pr.diff.full
-        cap 300000 .review/pr.diff
+        # Write in full, then cap (ADR-0028); a capped file ends with a truncation note.
+        # Piping into `head -c` would fail under pipefail.
+        cap() {
+          head -c "$1" "$2.full" > "$2"
+          if [ "$(wc -c < "$2.full")" -gt "$1" ]; then printf '\n[truncated at %s bytes]\n' "$1" >> "$2"; fi
+          rm "$2.full"
+        }
+        # Lockfiles are left out of the agent's diff to save context (ADR-0046): dependency review
+        # and CodeQL check them; their names go to .review/excluded.txt.
+        LOCKS=(pnpm-lock.yaml package-lock.json yarn.lock)
+        EXCLUDE=(); for l in "${LOCKS[@]}"; do EXCLUDE+=(":(glob,exclude)**/$l"); done
+        INCLUDE=(); for l in "${LOCKS[@]}"; do INCLUDE+=(":(glob)**/$l"); done
+        # Checkout is the PR merged into its base: HEAD^1 is the base. Capped at 120 KB.
+        git diff HEAD^1 HEAD -- . "${EXCLUDE[@]}" > .review/pr.diff.full
+        cap 120000 .review/pr.diff
+        git diff --name-only HEAD^1 HEAD -- "${INCLUDE[@]}" > .review/excluded.txt
         # Rules come from the base branch (or the pinned baseline), so a PR can't weaken its own review.
         base_copy() { git show "origin/$BASE_REF:$1" > "$2" 2>/dev/null || cp "$1" "$2"; }
         if [ "$LOCAL" = true ]; then
@@ -187,8 +198,8 @@ runs:
         if grep -q ': not reviewed' .review/previous-review.md 2>/dev/null; then prev=""; fi
         if [ "$INCREMENTAL" = true ] && [ -n "$prev" ] && [ "$prev" != "$HEAD_SHA" ] \
           && git cat-file -e "${prev}^{commit}" 2>/dev/null; then
-          git diff "$prev" "$HEAD_SHA" > .review/new-commits.diff.full
-          cap 300000 .review/new-commits.diff
+          git diff "$prev" "$HEAD_SHA" -- . "${EXCLUDE[@]}" > .review/new-commits.diff.full
+          cap 120000 .review/new-commits.diff
           echo "incremental review since $prev"
         fi
 
