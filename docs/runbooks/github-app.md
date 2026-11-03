@@ -1,136 +1,83 @@
-# Runbook: GitHub Apps and project registration
+# Runbook: connect GitHub and register projects
 
-How Andy creates the two GitHub Apps, stores their credentials, turns on the webhook receiver and registers project #1 (ADR-0041: GitHub App credentials and webhook intake). Done once; §7 covers rotation.
+How Andy connects the control plane to GitHub from the UI, installs the App on repos and registers project #1 (ADR-0041: GitHub App credentials and webhook intake, amended by ADR-0043: GitHub App setup from the UI). Done once per control plane; §6 covers rotation.
 
-Never paste a private key, webhook secret or manifest `code` into chat, a file in a repo, or tfvars. The commands below pipe them straight into Secret Manager or GitHub.
+You never handle the App's private key or webhook secret: GitHub hands them to the API, which writes them to Secret Manager.
 
-| App           | Name                           | Permissions                                              | Webhook                                                          | Installed on                         | Credentials                 |
-| ------------- | ------------------------------ | -------------------------------------------------------- | ---------------------------------------------------------------- | ------------------------------------ | --------------------------- |
-| Control plane | `andy-intelligence`            | read: metadata, contents, pull requests, checks, actions | `pull_request`, `check_run`, `workflow_run` → `/webhooks/github` | every project repo                   | Secret Manager              |
-| Review bot    | `andy-intelligence-review-bot` | write: contents, pull requests                           | none                                                             | `albernhagen/andy-intelligence` only | `system-review` environment |
+| App                                              | Permissions                                                      | Webhook events                                                   | Credentials                                                                                            |
+| ------------------------------------------------ | ---------------------------------------------------------------- | ---------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------ |
+| Control plane (default name `andy-intelligence`) | read: metadata, checks, actions · write: contents, pull requests | `pull_request`, `check_run`, `workflow_run` → `/webhooks/github` | Secret Manager (`github-app-private-key`, `github-webhook-secret`); IDs in Firestore `config/codeHost` |
 
-## 1. Apply Terraform, step 1 (`infra/control-plane`)
+## 1. Apply Terraform (`infra/control-plane`)
 
-Creates the two empty secrets, the runtime's access to them, and a Firestore TTL policy for `codeHostEvents`.
+Two secret containers, the runtime's read and add-version access to them, and the TTL policy for `codeHostEvents`.
 
 ```sh
 cd infra/control-plane
-terraform plan -out=cp.tfplan   # expect: 5 to add, 0 to change, 0 to destroy
+terraform plan -out=cp.tfplan
 terraform apply cp.tfplan
 ```
 
-Adds: `google_secret_manager_secret.github["github-app-private-key"]`, `…["github-webhook-secret"]`, two `google_secret_manager_secret_iam_member.runtime_reads_github`, `google_firestore_field.code_host_event_ttl`.
+- From scratch: 7 to add.
+- If you already applied the M1.5 version (5 adds): **2 to add, 0 to change, 0 to destroy** (`google_secret_manager_secret_iam_member.runtime_adds_github_versions["github-app-private-key"]`, `…["github-webhook-secret"]`).
 
-## 2. Create the control-plane App (manifest flow)
+Merge and deploy the code before step 2.
 
-```sh
-node platform/github-app/form.mjs control-plane > /tmp/cp-app.html && open /tmp/cp-app.html
-```
+## 2. Connect GitHub (UI)
 
-1. Click **Create GitHub App**, then **Create GitHub App for albernhagen** on GitHub. If the name is taken, change `name` in `platform/github-app/control-plane.json` and commit that.
-2. GitHub redirects to `http://localhost:1/?code=…&state=…`. The page fails to load on purpose: the code stays in your address bar and reaches no server. Copy the `code` value (valid 1 hour).
-3. Exchange the code and store the credentials without writing them to disk:
+1. Open the control plane → **GitHub** (top nav) → keep or change the App name (must be unique on GitHub) → **Connect GitHub**.
+2. On GitHub: **Create GitHub App for albernhagen**.
+3. GitHub sends you back to `/settings/github/callback`; the page connects and shows "Connected as …". Use the same browser tab throughout: the check that the callback is yours lives in that tab.
 
-```sh
-read -s "CODE?manifest code: "    # zsh; paste the code, nothing is echoed
-json=$(gh api -X POST "/app-manifests/$CODE/conversions")
-jq -r .pem <<<"$json" | gcloud secrets versions add github-app-private-key --data-file=- --project andy-intelligence-512400
-jq -j .webhook_secret <<<"$json" | gcloud secrets versions add github-webhook-secret --data-file=- --project andy-intelligence-512400
-jq -r '"App ID: \(.id)  slug: \(.slug)"' <<<"$json"
-unset json CODE
-rm /tmp/cp-app.html
-```
+If the name is taken, GitHub says so on its page: go back and pick another.
 
-`jq -j` matters: a trailing newline in the webhook secret breaks every signature.
+## 3. Install the App on repos
 
-4. Install it: `https://github.com/apps/<slug>/installations/new` → **Only select repositories** → `andy-intelligence` → Install.
-
-## 3. Apply Terraform, step 2: turn the receiver on
-
-Add the App ID to your gitignored `infra/control-plane/terraform.tfvars`:
-
-```hcl
-github_app_id = "<App ID from step 2>"
-```
-
-and the same value as an Actions **variable** (not a secret; CI plans need it to match):
-
-```sh
-gh variable set TF_VAR_GITHUB_APP_ID --repo albernhagen/andy-intelligence --body "<App ID>"
-```
-
-```sh
-terraform plan -out=cp.tfplan   # expect: 0 to add, 1 to change, 0 to destroy
-terraform apply cp.tfplan
-```
-
-Change: `google_cloud_run_v2_service.control_plane` gets `GITHUB_APP_ID`, `GITHUB_APP_PRIVATE_KEY`, `GITHUB_WEBHOOK_SECRET` (new revision, current image). The code must be deployed (this PR merged) first, or the old image just ignores the env vars.
-
-Check: the App's **Advanced** tab → Recent deliveries → the `ping` from creation → **Redeliver** → response `200 {"result":"pong"}`.
-
-Check the next deploy from `main` too (any merge): the deploy workflow only swaps the image and keeps the secret references; the runtime SA (not the deployer) needs access to the secrets, which step 1 granted. If the deploy fails with a Secret Manager permission error, stop and tell the building agent.
+On Settings → GitHub: **Install on repos** → **Only select repositories** → `andy-intelligence` (and any project repo later) → Install. GitHub returns you to the settings page; reload to see the repo under "Installed on".
 
 ## 4. Register project #1
 
-In the UI (`/projects`): Name `andy-intelligence`, Key `AI`, GitHub repo `albernhagen/andy-intelligence` → Create project.
+UI → `/projects`: Name `andy-intelligence`, Key `AI`, GitHub repo `albernhagen/andy-intelligence` (suggested from the installed repos) → Create project.
 
-- `422 … GitHub App isn't installed` → step 2.4 missed or a typo.
-- `409 … already belongs to project` → the repo is registered already.
+- `422 … not found, GitHub isn't connected, or the GitHub App isn't installed` → step 2 or 3.
+- `409 … already belongs to project` → registered already.
 
-## 5. Create the review bot App
+## 5. M1.5 / M1.19 "Done when"
 
-```sh
-node platform/github-app/form.mjs review-bot > /tmp/bot-app.html && open /tmp/bot-app.html
-```
-
-Create it as in step 2.1–2.2, then:
-
-```sh
-gh api -X PUT repos/albernhagen/andy-intelligence/environments/system-review \
-  --input - <<<'{"deployment_branch_policy":{"protected_branches":false,"custom_branch_policies":true}}'
-gh api -X POST repos/albernhagen/andy-intelligence/environments/system-review/deployment-branch-policies \
-  -f name=main -f type=branch
-read -s "CODE?manifest code: "
-json=$(gh api -X POST "/app-manifests/$CODE/conversions")
-jq -r .pem <<<"$json" | gh secret set REVIEW_BOT_PRIVATE_KEY --env system-review --repo albernhagen/andy-intelligence
-gh variable set REVIEW_BOT_CLIENT_ID --repo albernhagen/andy-intelligence --body "$(jq -r .client_id <<<"$json")"
-jq -r '"slug: \(.slug)"' <<<"$json"
-unset json CODE
-rm /tmp/bot-app.html
-```
-
-Install it on `andy-intelligence` only (`https://github.com/apps/<slug>/installations/new`).
-
-Check: `gh workflow run system-security-review.yml --repo albernhagen/andy-intelligence`. If it opens a PR, the author is `<slug>[bot]` and its checks start without an approval banner. (No threat-model change → no PR; try again next week.)
-
-## 6. M1.5 "Done when" and local checks
-
-1. Open any PR on `andy-intelligence` (this PR's follow-up commit is fine). Within a minute, Firestore console → `codeHostEvents` has documents for `pull_request` and `check_run` / `workflow_run`, each with `projectId: "ai"`. Logs: `gcloud logging read 'jsonPayload.component="github-webhook"' --limit 20 --project andy-intelligence-512400`.
-2. **Replay is a no-op:** App settings → Advanced → Recent deliveries → pick a `pull_request` delivery → **Redeliver**. Response `200 {"result":"duplicate"}`; the document is unchanged (same `receivedAt`).
-3. Firestore adapter suite (needs Java 21+, see `mcp-connector.md` §1b): `pnpm test:firestore`.
-4. Optional, `CodeHost` contract against real GitHub (needs the control-plane key on disk briefly):
+1. Open any PR on `andy-intelligence`. Within a minute, Firestore → `codeHostEvents` has documents for `pull_request` and `check_run` / `workflow_run` with `projectId: "ai"`. Logs: `gcloud logging read 'jsonPayload.component="github-webhook"' --limit 20 --project andy-intelligence-512400`.
+2. **Replay is a no-op:** GitHub → Settings → Developer settings → GitHub Apps → the App → Advanced → Recent deliveries → a `pull_request` delivery → **Redeliver** → `200 {"result":"duplicate"}`; the document is unchanged.
+3. **Repo token for the system review:** `gh workflow run system-security-review.yml --repo albernhagen/andy-intelligence`. If the threat model changed, the `publish` job opens a PR authored by `<app-slug>[bot]` whose checks start without an approval banner. (No change → no PR; the `publish` job is skipped.) Logs: `jsonPayload.component="github-token"`.
+4. Firestore adapter suites (Java 21+, see `mcp-connector.md` §1b): `pnpm test:firestore`.
+5. Optional, `CodeHost` contract against real GitHub (puts the key on disk briefly; mints one real token):
 
 ```sh
 gcloud secrets versions access latest --secret github-app-private-key --project andy-intelligence-512400 > /tmp/app.pem
-GITHUB_APP_ID=<App ID> GITHUB_APP_PRIVATE_KEY_FILE=/tmp/app.pem GITHUB_CONTRACT_REPO=albernhagen/andy-intelligence \
-  pnpm vitest run --project github
+GITHUB_APP_ID=<App ID> GITHUB_APP_SLUG=<slug> GITHUB_APP_PRIVATE_KEY_FILE=/tmp/app.pem \
+  GITHUB_CONTRACT_REPO=albernhagen/andy-intelligence pnpm vitest run --project github
 rm /tmp/app.pem
 ```
 
-## 7. Rotate
+App ID and slug: Firestore `config/codeHost`, or Settings → GitHub.
 
-| What                      | How                                                                                                                                                                                                                                                                                                                                                                                         |
-| ------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Control-plane private key | App settings → Generate a private key → `gcloud secrets versions add github-app-private-key --data-file=<downloaded .pem>` → delete the file → redeploy (any merge, or `gcloud run services update control-plane --region us-central1 --update-labels rotated=$(date +%s)`) → delete the old key in App settings → `gcloud secrets versions disable <old> --secret github-app-private-key`. |
-| Webhook secret            | `openssl rand -hex 32 \| tr -d '\n' \| pbcopy`, then `pbpaste \| gcloud secrets versions add github-webhook-secret --data-file=-` → redeploy → paste into App settings → Webhook secret → clear the clipboard (`pbcopy < /dev/null`). Deliveries between the redeploy and the paste fail; redeliver them.                                                                                   |
-| Review bot key            | App settings → Generate a private key → `gh secret set REVIEW_BOT_PRIVATE_KEY --env system-review < <file>` → delete the file and the old key.                                                                                                                                                                                                                                              |
+## 6. Rotate
+
+New versions take effect within 5 minutes (the API's cache); no redeploy.
+
+| What                      | How                                                                                                                                                                                                                                                                                                                 |
+| ------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Private key               | App settings → **Generate a private key** → `gcloud secrets versions add github-app-private-key --data-file=<downloaded .pem> --project andy-intelligence-512400` → delete the file → after 5 minutes delete the old key in App settings → `gcloud secrets versions disable <old> --secret github-app-private-key`. |
+| Webhook secret            | `openssl rand -hex 32 \| tr -d '\n' \| pbcopy`, then `pbpaste \| gcloud secrets versions add github-webhook-secret --data-file=-` → paste into App settings → Webhook secret → clear the clipboard (`pbcopy < /dev/null`). Deliveries in the next 5 minutes may fail; redeliver them.                               |
+| Start over with a new App | Delete the App on GitHub, delete Firestore `config/codeHost`, wait 5 minutes, then step 2.                                                                                                                                                                                                                          |
 
 ## Troubleshooting
 
-| Symptom                                                                    | Fix                                                                                                                     |
-| -------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------- |
-| Deliveries show `401 invalid signature`                                    | Webhook secret mismatch (often a trailing newline). Redo the webhook-secret row of §7.                                  |
-| Deliveries show `202 ignored, reason repo`                                 | Repo not registered to a project (§4), or registered < 60 s ago (cache).                                                |
-| Revision fails to start: `missing required env var GITHUB_APP_PRIVATE_KEY` | A secret has no version: redo step 2.3.                                                                                 |
-| Deliveries show `429`                                                      | Signed-delivery cap hit (300/minute per instance; unsigned requests don't count). Wait, then redeliver the failed ones. |
-| System review: "Review bot App not configured"                             | Step 5: `REVIEW_BOT_CLIENT_ID` variable or `REVIEW_BOT_PRIVATE_KEY` environment secret missing.                         |
+| Symptom                                                               | Fix                                                                                                                                                   |
+| --------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Callback page: "This link didn't come from your Connect GitHub click" | Started in another tab or the page was reloaded after connecting. Go to Settings → GitHub; if not connected, start again. Codes expire after an hour. |
+| Callback: "GitHub rejected the code"                                  | Code expired or used. Delete the half-made App on GitHub (Developer settings → GitHub Apps) and start again.                                          |
+| `403` / `500` from Secret Manager when connecting                     | Step 1 not applied (`runtime_adds_github_versions`).                                                                                                  |
+| Deliveries show `503 GitHub is not connected`                         | Step 2 not done, or within 10 s of connecting. Redeliver.                                                                                             |
+| Deliveries show `401 invalid signature`                               | Webhook secret mismatch (§6 webhook secret row).                                                                                                      |
+| Deliveries show `202 ignored, reason repo`                            | Repo not registered (§4), or registered < 60 s ago.                                                                                                   |
+| Deliveries show `429`                                                 | Signed-delivery cap hit (300/minute per instance; unsigned requests don't count). Redeliver later. GitHub doesn't retry on its own.                   |
+| System review `publish`: "Control plane refused a repo token"         | `403 forbidden`: workflow or branch isn't in `TOKEN_POLICY` (`apps/api/src/github/token.ts`). `403 … not installed`: §3. `503`: §2.                   |

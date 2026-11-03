@@ -23,7 +23,7 @@ describe("tickets UI", () => {
   });
 
   it("GivenARepo_WhenAndyCreatesAProject_ThenTheProjectListsIt", async () => {
-    const harness = renderApp("/projects");
+    const harness = renderApp("/projects", { githubConnected: true });
     await harness.user.type(await screen.findByLabelText("Name"), "Andy Intelligence");
     await harness.user.type(screen.getByLabelText(/^Key/), "ai");
     await harness.user.type(screen.getByLabelText(/^GitHub repo/), "albernhagen/andy-intelligence");

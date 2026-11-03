@@ -1,10 +1,12 @@
 import { describe, expect, it } from "vitest";
 import {
+  CodeHostConnection,
   CodeHostEvent,
   Project,
   Question,
   QuotaReading,
   Repo,
+  RepoToken,
   Ticket,
   TicketEvent,
 } from "../entities";
@@ -15,6 +17,7 @@ import {
   WorkTrackerError,
   type CodeEventLog,
   type CodeHost,
+  type CodeHostConnectionStore,
   type Executor,
   type OAuthGrantStore,
   type QuotaSource,
@@ -357,6 +360,65 @@ export function codeHostContract(
       const { host } = await make();
       expect(await host.getRepo("../etc/passwd")).toBeNull();
       expect(await host.getRepo("no-slash")).toBeNull();
+    });
+
+    it("GivenAnInstalledRepo_WhenListingInstalledRepos_ThenItIsListed", async () => {
+      const { host, knownRepo } = await make();
+      const repos = await host.listInstalledRepos();
+      repos.forEach((r) => expect(Repo.parse(r)).toEqual(r));
+      expect(repos.map((r) => r.fullName.toLowerCase())).toContain(knownRepo.toLowerCase());
+    });
+
+    it("GivenAnInstalledRepo_WhenATokenIsIssued_ThenItIsValidForAboutAnHour", async () => {
+      const { host, knownRepo } = await make();
+      const token = await host.issueRepoToken(knownRepo);
+      expect(RepoToken.parse(token)).toEqual(token);
+      const ms = Date.parse(token!.expiresAt) - Date.now();
+      expect(ms).toBeGreaterThan(30 * 60 * 1000);
+      expect(ms).toBeLessThanOrEqual(61 * 60 * 1000);
+    });
+
+    it("GivenARepoWithoutTheApp_WhenATokenIsRequested_ThenNull", async () => {
+      const { host, unknownRepo } = await make();
+      expect(await host.issueRepoToken(unknownRepo)).toBeNull();
+      expect(await host.issueRepoToken("../x")).toBeNull();
+    });
+  });
+}
+
+/** CodeHostConnectionStore suite. `make` must return an empty store each time. */
+export function codeHostConnectionStoreContract(
+  name: string,
+  make: () => Promise<CodeHostConnectionStore>,
+): void {
+  describe(`CodeHostConnectionStore contract: ${name}`, () => {
+    const connection = (appId = "123"): CodeHostConnection => ({
+      appId,
+      slug: "andy-intelligence",
+      clientId: "Iv23abc",
+      owner: "albernhagen",
+      privateKey: "-----BEGIN RSA PRIVATE KEY-----\nabc\n-----END RSA PRIVATE KEY-----\n",
+      webhookSecret: "s3cret",
+      connectedAt: "2026-11-03T12:00:00.000Z",
+    });
+
+    it("GivenAnEmptyStore_WhenRead_ThenNull", async () => {
+      expect(await (await make()).get()).toBeNull();
+    });
+
+    it("GivenASavedConnection_WhenRead_ThenItIsReturnedUnchanged", async () => {
+      const store = await make();
+      expect(await store.save(connection())).toBe("saved");
+      const read = await store.get();
+      expect(read).toEqual(connection());
+      expect(CodeHostConnection.parse(read)).toEqual(read);
+    });
+
+    it("GivenASavedConnection_WhenSavedAgain_ThenExistsAndTheFirstStays", async () => {
+      const store = await make();
+      await store.save(connection());
+      expect(await store.save(connection("999"))).toBe("exists");
+      expect((await store.get())?.appId).toBe("123");
     });
   });
 }

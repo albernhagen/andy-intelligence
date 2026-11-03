@@ -1,8 +1,9 @@
 import { serve } from "@hono/node-server";
 import { serveStatic } from "@hono/node-server/serve-static";
-import { GitHubCodeHost } from "@andy/github";
 import {
   FirestoreCodeEventLog,
+  GcpCodeHostConnectionStore,
+  SecretManagerVersions,
   FirestoreOAuthGrantStore,
   FirestoreWorkTracker,
   createFirestore,
@@ -18,20 +19,6 @@ function requireEnv(name: string): string {
   return value;
 }
 
-/**
- * GitHub App (ADR-0041): on when GITHUB_APP_ID is set; the key and webhook secret come from
- * Secret Manager as env vars. A partial config is a deploy mistake, so it fails the start.
- */
-function githubConfig() {
-  const appId = process.env.GITHUB_APP_ID;
-  if (!appId) return undefined;
-  return {
-    appId,
-    privateKey: requireEnv("GITHUB_APP_PRIVATE_KEY"),
-    webhookSecret: requireEnv("GITHUB_WEBHOOK_SECRET"),
-  };
-}
-
 async function main() {
   const projectId = requireEnv("GCP_PROJECT_ID");
   const allowedEmails = parseAllowList(requireEnv("ALLOWED_EMAILS"));
@@ -39,7 +26,6 @@ async function main() {
   const db = createFirestore(projectId);
   // MCP is on only when the public URL is set (it is the OAuth issuer and resource).
   const publicUrl = process.env.PUBLIC_URL?.replace(/\/+$/, "");
-  const github = githubConfig();
 
   const app = createApp({
     verifier: firebaseVerifier(projectId),
@@ -58,10 +44,11 @@ async function main() {
           clients: new ClientMetadataResolver(),
         }
       : undefined,
-    github: github
+    // GitHub App (ADR-0043): connected from the UI; needs the public URL for its manifest.
+    github: publicUrl
       ? {
-          webhookSecret: github.webhookSecret,
-          codeHost: new GitHubCodeHost(github),
+          publicUrl,
+          connections: new GcpCodeHostConnectionStore(db, new SecretManagerVersions(projectId)),
           events: new FirestoreCodeEventLog(db),
         }
       : undefined,

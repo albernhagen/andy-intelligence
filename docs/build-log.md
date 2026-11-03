@@ -218,6 +218,13 @@ Temporary progress log until andy-intelligence can track its own work (then migr
 - Verified locally: lint, typecheck, tests, build; `terraform validate`; smoke run of the bundle (unsigned delivery → 401, `/health` 200). Not run here: `pnpm test:firestore` (no Java), the GitHub contract suite (needs the App), actionlint/Trivy (CI).
 - Andy to run after merge: runbook `github-app.md` §1–6 (apply 5 adds; create App; apply 1 change; register `AI`; review bot; Done when: PR event recorded, redelivery → `duplicate`).
 
+## 2026-11-03 — PR #32 merged; M1.19: GitHub App setup from the UI built
+
+- Merged: PR #32: M1.5: GitHub App + project registration. Andy applied `infra/control-plane` step 1 (5 added) and stopped: the rest of the runbook was too manual.
+- **Decided (Andy, ADR-0043: GitHub App setup from the UI):** new slice M1.19 before M1.6a: connect GitHub from the UI (manifest flow; the API writes the secrets), credentials read at runtime (no env vars, tfvar or second apply), installed-repo picker; review bot App replaced by `POST /github/token` (Actions OIDC → 1-hour repo token), which M1.6 and M1.8 reuse. Control-plane App gains contents + pull requests write.
+- Branch `m1.19/github-app-ui`: `CodeHostConnectionStore` port + fake + suite, `GcpCodeHostConnectionStore` (Firestore `config/codeHost` + Secret Manager versions); `CodeHost.listInstalledRepos` / `issueRepoToken`; `apps/api/src/github/` (connection cache, setup routes, token endpoint with `jose`, webhooks moved here); `/settings/github` + callback pages; `system-security-review.yml` split into review + `publish`; Terraform: `secretVersionAdder` on the two secrets, env/`github_app_id` removed; `platform/github-app/` removed. Runbook `github-app.md` rewritten (Terraform → Connect → Install → register); threat model v6.
+- Verified locally: lint, typecheck, tests, build, actionlint, `terraform validate`. Not run here: `pnpm test:firestore` (no Java), the live manifest flow and token endpoint (Andy, runbook §2–5).
+
 ## Slices: M1: First end-to-end flow: ticket → PR with Claude
 
 Status: todo / in progress / PR open / merged. Definitions: ARCHITECTURE §12.
@@ -229,8 +236,8 @@ Status: todo / in progress / PR open / merged. Definitions: ARCHITECTURE §12.
 | M1.2: Ticket core                       | M               | M0: Foundations                                                                             | merged (PR #17)  |
 | M1.3: UI: tickets + inbox               | M               | M1.2: Ticket core                                                                           | merged (PR #28)  |
 | M1.4: MCP core tools                    | S               | M1.1: MCP OAuth spike, M1.2: Ticket core                                                    | merged (PR #31)  |
-| M1.5: GitHub App + project registration | M               | M1.2: Ticket core                                                                           | PR open (PR #32) |
-| M1.6: Claude Code executor              | L (split 6a/6b) | M1.5: GitHub App + project registration                                                     | todo             |
+| M1.5: GitHub App + project registration | M               | M1.2: Ticket core                                                                           | merged (PR #32)  |
+| M1.6: Claude Code executor              | L (split 6a/6b) | M1.5: GitHub App + project registration, M1.19: GitHub App setup from the UI                | todo             |
 | M1.7: Refinement                        | M               | M1.3: UI: tickets + inbox, M1.4: MCP core tools, M1.6: Claude Code executor                 | todo             |
 | M1.8: Build + gate                      | M               | M1.7: Refinement, M1.16: Project baseline v1, M1.17: Agent evals v1, M1.18: Plan step       | todo             |
 | M1.9: Quota capture                     | S               | M1.6: Claude Code executor                                                                  | todo             |
@@ -243,6 +250,7 @@ Status: todo / in progress / PR open / merged. Definitions: ARCHITECTURE §12.
 | M1.16: Project baseline v1              | M               | M1.10: Security review automation, M1.11: Adversarial PR review, M1.12: Local quality gates | merged (PR #23)  |
 | M1.17: Agent evals v1                   | M               | M1.11: Adversarial PR review, M1.16: Project baseline v1                                    | todo             |
 | M1.18: Plan step                        | M               | M1.6: Claude Code executor, M1.7: Refinement                                                | todo             |
+| M1.19: GitHub App setup from the UI     | M               | M1.5: GitHub App + project registration                                                     | PR open (PR #36) |
 
 **Next (order decided by Andy, 2026-10-28):**
 
@@ -253,7 +261,7 @@ Status: todo / in progress / PR open / merged. Definitions: ARCHITECTURE §12.
 5. M1.11: Adversarial PR review (merged).
 6. M1.16: Project baseline v1 (merged, `v1.0.0`).
 
-**Waves (Andy, 2026-11-03, ADR-0040):** 1. M1.4: MCP core tools ‖ M1.5: GitHub App + project registration → 2. M1.6a: dispatch + callback ‖ M1.17: Agent evals v1 → 3. M1.6b: watchdog + retry ‖ M1.7: Refinement ‖ M1.9: Quota capture → 4. M1.18: Plan step → 5. M1.8: Build + gate.
+**Waves (Andy, 2026-11-03, ADR-0040):** 1. M1.4: MCP core tools ‖ M1.5: GitHub App + project registration → 2. M1.19: GitHub App setup from the UI → 3. M1.6a: dispatch + callback ‖ M1.17: Agent evals v1 → 3. M1.6b: watchdog + retry ‖ M1.7: Refinement ‖ M1.9: Quota capture → 4. M1.18: Plan step → 5. M1.8: Build + gate.
 
 **Pending decisions (Andy):**
 

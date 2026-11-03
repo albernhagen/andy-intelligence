@@ -7,6 +7,7 @@ import {
   type RouterHistory,
 } from "@tanstack/react-router";
 import { BoardPage } from "@/pages/BoardPage";
+import { GitHubCallbackPage, GitHubPage } from "@/pages/GitHubPage";
 import { InboxPage } from "@/pages/InboxPage";
 import { ProjectsPage } from "@/pages/ProjectsPage";
 import { TicketPage } from "@/pages/TicketPage";
@@ -23,6 +24,9 @@ const rootRoute = createRootRoute({
         <Link to="/projects" className={navLink}>
           Tickets
         </Link>
+        <Link to="/settings/github" className={navLink}>
+          GitHub
+        </Link>
       </nav>
       <Outlet />
     </>
@@ -34,6 +38,12 @@ const routeTree = rootRoute.addChildren([
   createRoute({ getParentRoute: () => rootRoute, path: "/", component: InboxPage }),
   createRoute({ getParentRoute: () => rootRoute, path: "/projects", component: ProjectsPage }),
   createRoute({ getParentRoute: () => rootRoute, path: "/p/$projectId", component: BoardPage }),
+  createRoute({ getParentRoute: () => rootRoute, path: "/settings/github", component: GitHubPage }),
+  createRoute({
+    getParentRoute: () => rootRoute,
+    path: "/settings/github/callback",
+    component: GitHubCallbackPage,
+  }),
   createRoute({
     getParentRoute: () => rootRoute,
     path: "/p/$projectId/t/$ticketId",

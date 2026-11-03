@@ -298,26 +298,6 @@ resource "google_cloud_run_v2_service" "control_plane" {
         name  = "PUBLIC_URL"
         value = "https://${local.service_host}"
       }
-      # GitHub App (ADR-0041): webhook receiver and repo checks; off until github_app_id is set.
-      dynamic "env" {
-        for_each = local.github_app_enabled ? [var.github_app_id] : []
-        content {
-          name  = "GITHUB_APP_ID"
-          value = env.value
-        }
-      }
-      dynamic "env" {
-        for_each = local.github_app_enabled ? local.github_secret_env : {}
-        content {
-          name = env.key
-          value_source {
-            secret_key_ref {
-              secret  = google_secret_manager_secret.github[env.value].secret_id
-              version = "latest" # rotation: add a version, then redeploy (runbook github-app.md)
-            }
-          }
-        }
-      }
     }
   }
 
@@ -334,25 +314,16 @@ resource "google_cloud_run_v2_service" "control_plane" {
   depends_on = [
     google_project_service.apis,
     google_firestore_database.default,
-    google_secret_manager_secret_iam_member.runtime_reads_github,
   ]
 }
 
 # ── GitHub App (ADR-0041: GitHub App credentials and webhook intake) ─────────────
-# Secret containers only: Andy adds the versions with gcloud from the App's manifest
-# conversion (docs/runbooks/github-app.md), so values never pass through Terraform or state.
-
-locals {
-  # CI passes an empty string when the TF_VAR_GITHUB_APP_ID Actions variable is unset.
-  github_app_enabled = var.github_app_id != null && var.github_app_id != ""
-  github_secret_env = {
-    GITHUB_APP_PRIVATE_KEY = "github-app-private-key"
-    GITHUB_WEBHOOK_SECRET  = "github-webhook-secret"
-  }
-}
+# Secret containers only. The API writes the versions itself when Andy connects GitHub from
+# the UI (ADR-0043: GitHub App setup from the UI), so values never pass through Terraform,
+# state, env vars or a terminal. IDs match CODE_HOST_SECRETS in packages/store.
 
 resource "google_secret_manager_secret" "github" {
-  for_each  = toset(values(local.github_secret_env))
+  for_each  = toset(["github-app-private-key", "github-webhook-secret"])
   secret_id = each.value
 
   replication {
@@ -367,6 +338,14 @@ resource "google_secret_manager_secret_iam_member" "runtime_reads_github" {
   for_each  = google_secret_manager_secret.github
   secret_id = each.value.id
   role      = "roles/secretmanager.secretAccessor"
+  member    = "serviceAccount:${google_service_account.runtime.email}"
+}
+
+# The setup flow adds versions to these two secrets only (no delete, no IAM, no other secret).
+resource "google_secret_manager_secret_iam_member" "runtime_adds_github_versions" {
+  for_each  = google_secret_manager_secret.github
+  secret_id = each.value.id
+  role      = "roles/secretmanager.secretVersionAdder"
   member    = "serviceAccount:${google_service_account.runtime.email}"
 }
 

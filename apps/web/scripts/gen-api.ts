@@ -1,6 +1,10 @@
 import { writeFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
-import { InMemoryWorkTracker } from "@andy/contracts";
+import {
+  InMemoryCodeEventLog,
+  InMemoryCodeHostConnectionStore,
+  InMemoryWorkTracker,
+} from "@andy/contracts";
 import { createApp } from "@andy/api/app";
 import openapiTS, { astToString, type OpenAPI3 } from "openapi-typescript";
 import { format, resolveConfig } from "prettier";
@@ -19,6 +23,12 @@ export async function generateApiTypes(): Promise<string> {
     version: "gen",
     webConfig: { firebaseApiKey: "", firebaseAuthDomain: "", projectId: "" },
     tracker: new InMemoryWorkTracker(),
+    // Fakes only, so the GitHub setup routes are in the document.
+    github: {
+      publicUrl: "http://localhost",
+      connections: new InMemoryCodeHostConnectionStore(),
+      events: new InMemoryCodeEventLog(),
+    },
   });
   const doc = (await (await app.request("/openapi.json")).json()) as OpenAPI3;
   const ast = await openapiTS(doc);

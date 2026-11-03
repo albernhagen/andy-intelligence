@@ -1,5 +1,6 @@
 import {
   codeEventLogContract,
+  codeHostConnectionStoreContract,
   codeHostContract,
   executorContract,
   oauthGrantStoreContract,
@@ -9,6 +10,7 @@ import {
 import {
   InMemoryCodeEventLog,
   InMemoryCodeHost,
+  InMemoryCodeHostConnectionStore,
   InMemoryExecutor,
   InMemoryOAuthGrantStore,
   InMemoryQuotaSource,
@@ -65,3 +67,5 @@ codeHostContract("in-memory", async () => ({
 }));
 
 codeEventLogContract("in-memory", async () => new InMemoryCodeEventLog());
+
+codeHostConnectionStoreContract("in-memory", async () => new InMemoryCodeHostConnectionStore());

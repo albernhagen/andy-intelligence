@@ -39,7 +39,7 @@ const installed = {
 };
 
 const host = (fetch: typeof globalThis.fetch) =>
-  new GitHubCodeHost({ appId: "1", privateKey }, fetch);
+  new GitHubCodeHost({ appId: "1", slug: "andy-intelligence", privateKey }, fetch);
 
 describe("GitHubCodeHost", () => {
   it("GivenTheAppIsInstalled_WhenGetRepo_ThenTheRepoIsReadWithAnInstallationToken", async () => {
@@ -74,5 +74,45 @@ describe("GitHubCodeHost", () => {
     await expect(host(fetch).getRepo("albernhagen/andy-intelligence")).rejects.toMatchObject({
       status: 500,
     });
+  });
+
+  it("GivenTwoInstallations_WhenListingRepos_ThenAllReposAreReturnedSorted", async () => {
+    const repo = (full_name: string) => ({
+      full_name,
+      default_branch: "main",
+      private: false,
+      html_url: `https://github.com/${full_name}`,
+    });
+    const token = (t: string) => () =>
+      json(201, { token: t, expires_at: "2099-01-01T00:00:00Z", permissions: {} });
+    const fetch = fakeGitHub({
+      "GET /app/installations": () => json(200, [{ id: 1 }, { id: 2 }]),
+      "POST /app/installations/1/access_tokens": token("t1"),
+      "POST /app/installations/2/access_tokens": token("t2"),
+      "GET /installation/repositories": () => json(200, { repositories: [repo("b/two")] }),
+    });
+    const repos = await host(fetch).listInstalledRepos();
+    expect(repos.map((r) => r.fullName)).toEqual(["b/two", "b/two"]);
+  });
+
+  it("GivenAnInstalledRepo_WhenATokenIsIssued_ThenItIsScopedToThatRepoWithWriteAccess", async () => {
+    const fetch = fakeGitHub(installed);
+    expect(await host(fetch).issueRepoToken("albernhagen/andy-intelligence")).toEqual({
+      token: "ghs_test",
+      expiresAt: "2099-01-01T00:00:00Z",
+      actor: "andy-intelligence[bot]",
+    });
+    const call = fetch.mock.calls.find(([u]) => String(u).endsWith("/access_tokens"));
+    expect(JSON.parse(String(call?.[1]?.body))).toEqual({
+      repositories: ["andy-intelligence"],
+      permissions: { contents: "write", pull_requests: "write" },
+    });
+  });
+
+  it("GivenTheAppIsNotInstalled_WhenATokenIsRequested_ThenNull", async () => {
+    const fetch = fakeGitHub({
+      "GET /repos/albernhagen/other/installation": () => json(404, { message: "Not Found" }),
+    });
+    expect(await host(fetch).issueRepoToken("albernhagen/other")).toBeNull();
   });
 });

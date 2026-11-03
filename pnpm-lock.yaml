@@ -50,6 +50,9 @@ importers:
       '@google-cloud/firestore':
         specifier: ^9.3.1
         version: 9.3.1
+      '@google-cloud/secret-manager':
+        specifier: ^7.2.0
+        version: 7.2.0
       '@hono/node-server':
         specifier: ^2.1.5
         version: 2.1.5(hono@4.13.13)
@@ -74,6 +77,9 @@ importers:
       hono:
         specifier: ^4.13.13
         version: 4.13.13
+      jose:
+        specifier: ^6.2.13
+        version: 6.2.13
       zod:
         specifier: ^4.6.7
         version: 4.6.7
@@ -208,6 +214,9 @@ importers:
       '@google-cloud/firestore':
         specifier: ^9.3.1
         version: 9.3.1
+      '@google-cloud/secret-manager':
+        specifier: ^7.2.0
+        version: 7.2.0
       zod:
         specifier: ^4.6.7
         version: 4.6.7
@@ -738,6 +747,10 @@ packages:
 
   '@google-cloud/promisify@6.2.1':
     resolution: {integrity: sha512-/+RvLJ5u+WhGay6Z3aY6OApDQmNqq1427Mmt7Eov9kYp69gdUiGSwFnygeTxfz69XBtYZLAnWikGMIoFXtKt+A==}
+    engines: {node: '>=22'}
+
+  '@google-cloud/secret-manager@7.2.0':
+    resolution: {integrity: sha512-SQ/e9mo7Pl5QpFIn3GOa8K/PhS+3HgQnlWpMZbaE1UiZBa42AFB+EqxWQZOljv0kNwemo/PWiesAh8TywU9uVw==}
     engines: {node: '>=22'}
 
   '@google-cloud/storage@8.4.0':
@@ -3546,6 +3559,12 @@ snapshots:
 
   '@google-cloud/promisify@6.2.1':
     optional: true
+
+  '@google-cloud/secret-manager@7.2.0':
+    dependencies:
+      google-gax: 6.13.0
+    transitivePeerDependencies:
+      - supports-color
 
   '@google-cloud/storage@8.4.0':
     dependencies:

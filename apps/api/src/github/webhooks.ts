@@ -9,11 +9,11 @@ import {
   verifySignature,
   webhookRepo,
 } from "@andy/github";
-import type { AuthEnv } from "./auth";
-import { FixedWindowLimiter } from "./mcp/rate-limit";
+import type { AuthEnv } from "../auth";
+import { FixedWindowLimiter } from "../mcp/rate-limit";
 
 /**
- * GitHub App webhook receiver (ADR-0041). Order of checks: body cap → HMAC → rate cap →
+ * GitHub App webhook receiver (ADR-0041, ADR-0043: secret read from the connection). Order of checks: body cap → HMAC → rate cap →
  * event type → registered repo → record once by delivery ID. Nothing is stored before the
  * signature checks out, and only deliveries about registered repos are stored. The rate cap
  * counts signed deliveries only, so unsigned floods can't lock GitHub out.
@@ -28,7 +28,8 @@ export const WEBHOOK_RATE_LIMIT = 300;
 export const REPO_INDEX_TTL_MS = 60_000;
 
 export interface WebhookDeps {
-  secret: string;
+  /** The webhook secret, or null before GitHub is connected (deliveries then get 503). */
+  secret: () => Promise<string | null>;
   events: CodeEventLog;
   tracker: WorkTracker;
   now?: () => Date;
@@ -72,8 +73,10 @@ export function registerGitHubWebhook(app: Hono<AuthEnv>, deps: WebhookDeps): vo
       },
     }),
     async (c) => {
+      const secret = await deps.secret();
+      if (!secret) return c.json({ error: "GitHub is not connected" }, 503);
       const raw = await c.req.text();
-      if (!(await verifySignature(deps.secret, raw, c.req.header("x-hub-signature-256")))) {
+      if (!(await verifySignature(secret, raw, c.req.header("x-hub-signature-256")))) {
         log("WARNING", "webhook signature rejected");
         return c.json({ error: "invalid signature" }, 401);
       }

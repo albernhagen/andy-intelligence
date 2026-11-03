@@ -1,8 +1,13 @@
-import { InMemoryCodeEventLog, InMemoryCodeHost, InMemoryWorkTracker } from "@andy/contracts";
+import {
+  InMemoryCodeEventLog,
+  InMemoryCodeHost,
+  InMemoryCodeHostConnectionStore,
+  InMemoryWorkTracker,
+} from "@andy/contracts";
 import { sign } from "@octokit/webhooks-methods";
 import { beforeEach, describe, expect, it } from "vitest";
-import { createApp } from "./app";
-import type { TokenVerifier } from "./auth";
+import { createApp } from "../app";
+import type { TokenVerifier } from "../auth";
 import { MAX_WEBHOOK_BYTES, REPO_INDEX_TTL_MS, WEBHOOK_PATH, WEBHOOK_RATE_LIMIT } from "./webhooks";
 
 const SECRET = "test-webhook-secret";
@@ -41,6 +46,16 @@ describe("GitHub webhook receiver", () => {
     tracker = new InMemoryWorkTracker();
     events = new InMemoryCodeEventLog();
     await tracker.createProject({ name: "andy-intelligence", key: "AI", repos: [REPO] });
+    const connections = new InMemoryCodeHostConnectionStore();
+    await connections.save({
+      appId: "1",
+      slug: "andy-intelligence",
+      clientId: "Iv1",
+      owner: "albernhagen",
+      privateKey: "PEM",
+      webhookSecret: SECRET,
+      connectedAt: "2026-11-03T00:00:00.000Z",
+    });
     app = createApp({
       verifier,
       allowedEmails: new Set(["andy@example.com"]),
@@ -48,15 +63,17 @@ describe("GitHub webhook receiver", () => {
       webConfig: { firebaseApiKey: "k", firebaseAuthDomain: "d", projectId: "p" },
       tracker,
       github: {
-        webhookSecret: SECRET,
-        codeHost: new InMemoryCodeHost([
-          {
-            fullName: REPO,
-            defaultBranch: "main",
-            private: false,
-            url: `https://github.com/${REPO}`,
-          },
-        ]),
+        publicUrl: "https://cp.example",
+        connections,
+        codeHostFor: () =>
+          new InMemoryCodeHost([
+            {
+              fullName: REPO,
+              defaultBranch: "main",
+              private: false,
+              url: `https://github.com/${REPO}`,
+            },
+          ]),
         events,
         now: () => clock,
       },
@@ -182,6 +199,33 @@ describe("GitHub webhook receiver", () => {
     clock = new Date(clock.getTime() + REPO_INDEX_TTL_MS);
     const fresh = await deliver({ payload: prPayload("albernhagen/later"), id: "a3" });
     expect(await fresh.json()).toEqual({ result: "recorded" });
+  });
+
+  it("GivenGitHubIsNotConnectedYet_WhenDelivered_Then503AndNothingIsStored", async () => {
+    const notConnected = createApp({
+      verifier,
+      allowedEmails: new Set(["andy@example.com"]),
+      version: "test",
+      webConfig: { firebaseApiKey: "k", firebaseAuthDomain: "d", projectId: "p" },
+      tracker,
+      github: {
+        publicUrl: "https://cp.example",
+        connections: new InMemoryCodeHostConnectionStore(),
+        events,
+      },
+    });
+    const body = JSON.stringify(prPayload());
+    const res = await notConnected.request(WEBHOOK_PATH, {
+      method: "POST",
+      headers: {
+        "x-github-event": "pull_request",
+        "x-github-delivery": "d1",
+        "x-hub-signature-256": await sign(SECRET, body),
+      },
+      body,
+    });
+    expect(res.status).toBe(503);
+    expect(await events.get("d1")).toBeNull();
   });
 
   it("GivenNoGitHubConfig_WhenDelivered_ThenTheRouteDoesNotExist", async () => {

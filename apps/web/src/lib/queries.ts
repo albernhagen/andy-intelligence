@@ -174,3 +174,20 @@ export function useAnswerQuestion() {
     ),
   );
 }
+
+/** GitHub App connection and installed repos (ADR-0043). Errors when GitHub isn't configured. */
+export function useGitHub() {
+  const api = useApi();
+  return useQuery({
+    queryKey: ["github"],
+    queryFn: async () => unwrap(await api.GET("/api/github")),
+    retry: false,
+  });
+}
+
+export function useConnectGitHub() {
+  const api = useApi();
+  return useWrite(async (code: string) =>
+    unwrap(await api.POST("/api/github/connect", { body: { code } })),
+  );
+}

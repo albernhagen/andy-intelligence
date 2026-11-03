@@ -51,6 +51,8 @@ export const collections = {
   releases: { path: () => "releases", schema: Release },
   oauthGrants: { path: () => "oauthGrants", schema: OAuthGrant },
   codeHostEvents: { path: () => "codeHostEvents", schema: CodeHostEvent },
+  /** Singleton settings documents, e.g. `config/codeHost` (ADR-0043). */
+  config: { path: () => "config" },
 } as const;
 
 /** Zod-validated converter: rejects malformed documents on read and write. */
@@ -83,6 +85,12 @@ export function typedCollection<S extends z.ZodType<DocumentData>>(
   return db.collection(path).withConverter(zodConverter(schema));
 }
 
+export {
+  CODE_HOST_SECRETS,
+  GcpCodeHostConnectionStore,
+  SecretManagerVersions,
+  type SecretVersions,
+} from "./code-host-connection-store";
 export {
   CODE_HOST_EVENT_RETENTION_MS,
   CODE_HOST_EVENT_TTL_FIELD,
