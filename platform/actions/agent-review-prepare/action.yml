@@ -150,13 +150,18 @@ runs:
           if [ "$(wc -c < "$2.full")" -gt "$1" ]; then printf '\n[truncated at %s bytes]\n' "$1" >> "$2"; fi
           rm "$2.full"
         }
-        # Lockfiles are left out of the agent's diff to save context (ADR-0046): dependency review
-        # and CodeQL check them; their names go to .review/excluded.txt.
+        # Lockfiles are left out of the agent's diff to save context (ADR-0046); their names go to
+        # .review/excluded.txt. The deterministic lockfile-sources check in `check` (npm registry +
+        # integrity only) and dependency review cover them instead.
         LOCKS=(pnpm-lock.yaml package-lock.json yarn.lock)
         EXCLUDE=(); for l in "${LOCKS[@]}"; do EXCLUDE+=(":(glob,exclude)**/$l"); done
         INCLUDE=(); for l in "${LOCKS[@]}"; do INCLUDE+=(":(glob)**/$l"); done
-        # Checkout is the PR merged into its base: HEAD^1 is the base. Capped at 120 KB.
-        git diff HEAD^1 HEAD -- . "${EXCLUDE[@]}" > .review/pr.diff.full
+        # Checkout is the PR merged into its base: HEAD^1 is the base. Code first, then Markdown, so
+        # a cap at 120 KB cuts docs before code.
+        {
+          git diff HEAD^1 HEAD -- . "${EXCLUDE[@]}" ':(glob,exclude)**/*.md'
+          git diff HEAD^1 HEAD -- ':(glob)**/*.md'
+        } > .review/pr.diff.full
         cap 120000 .review/pr.diff
         git diff --name-only HEAD^1 HEAD -- "${INCLUDE[@]}" > .review/excluded.txt
         # Rules come from the base branch (or the pinned baseline), so a PR can't weaken its own review.
@@ -198,7 +203,10 @@ runs:
         if grep -q ': not reviewed' .review/previous-review.md 2>/dev/null; then prev=""; fi
         if [ "$INCREMENTAL" = true ] && [ -n "$prev" ] && [ "$prev" != "$HEAD_SHA" ] \
           && git cat-file -e "${prev}^{commit}" 2>/dev/null; then
-          git diff "$prev" "$HEAD_SHA" -- . "${EXCLUDE[@]}" > .review/new-commits.diff.full
+          {
+            git diff "$prev" "$HEAD_SHA" -- . "${EXCLUDE[@]}" ':(glob,exclude)**/*.md'
+            git diff "$prev" "$HEAD_SHA" -- ':(glob)**/*.md'
+          } > .review/new-commits.diff.full
           cap 120000 .review/new-commits.diff
           echo "incremental review since $prev"
         fi

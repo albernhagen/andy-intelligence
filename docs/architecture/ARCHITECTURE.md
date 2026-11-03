@@ -355,7 +355,7 @@ Third-party action pins inside `platform/actions/` are bumped by this repo's Dep
 | Cloud Tasks queue caps (rate, concurrency, retries) | 0028 | `infra/control-plane` | TF | not yet carried (M6: Dev → prod releases) |
 | API request body cap (256 KB) | 0028 | `apps/api/src/app.ts` | — | control plane only (product apps choose their own) |
 | Context budget: agent-loaded docs within size budgets (`context-budget.json`; default `AGENTS.md`/`CLAUDE.md` ≤ 200 lines) | 0046 | `scripts/context-budget.mjs` in `platform/actions/ci-check` | A | carried (next baseline tag) |
-| Review agents: lockfiles out of the diff, 120 KB cap with truncation note | 0046 | `platform/actions/agent-review-prepare` | A | carried (next baseline tag) |
+| Review agents: lockfiles out of the diff (code first, 120 KB cap with truncation note); lockfile sources must be the npm registry with integrity | 0046 | `platform/actions/agent-review-prepare`; `scripts/lockfile-sources.mjs` in `platform/actions/ci-check` | A | carried (next baseline tag) |
 | Agent evals (`agent-evals` check) | 0040 | planned: M1.17: Agent evals v1 | A | not built |
 | Executor permission profile (headless Claude Code) | 0040 | planned: M1.6: Claude Code executor | A | not built |
 | Webhook caps (1 MB body, 300 signed deliveries/minute per instance) + HMAC + 30-day TTL on records | 0028, 0041 | `apps/api/src/webhooks.ts`, `infra/control-plane` | — | control plane only (managed repos send webhooks; they don't receive them) |
