@@ -1,11 +1,12 @@
 import {
   NewTicket,
+  Stage,
+  TicketKey,
   notFound,
   type AnsweredVia,
   type EventActor,
   type NewQuestion,
   type Question,
-  type Stage,
   type Ticket,
   type TicketEvent,
   type TicketFields,
@@ -34,6 +35,23 @@ export class DomainError extends Error {
 
 /** Fields callers may edit; `dorStatus` is always computed here. */
 export type EditableFields = Omit<TicketFields, "dorStatus">;
+
+/** One ticket at a glance: where it is, what blocks Ready, and what happened lately. */
+export interface TicketStatus {
+  ticket: Ticket;
+  readiness: DorResult;
+  questions: Question[];
+  recentEvents: TicketEvent[];
+}
+
+/** Every project with its ticket count per stage, plus the size of the Needs-you inbox. */
+export interface Overview {
+  projects: { key: string; name: string; ticketsByStage: Record<Stage, number> }[];
+  needsYou: { questions: number; tickets: number };
+}
+
+/** How many history events `status` returns, newest last. */
+export const RECENT_EVENTS = 5;
 
 export interface MoveOptions {
   force?: boolean;
@@ -160,6 +178,48 @@ export class TicketService {
       ...projects.map((p) => this.tracker.listTickets(p.id, { needsYou: true })),
     ]);
     return { questions, tickets: flagged.flat() };
+  }
+
+  /** "AI-42" → the ticket. A project's id is its key lowercased (WorkTracker contract). */
+  async findByKey(key: string): Promise<Ticket> {
+    if (!TicketKey.safeParse(key).success) throw notFound("ticket", key);
+    const projectId = key.slice(0, key.lastIndexOf("-")).toLowerCase();
+    const ticket = (await this.tracker.listTickets(projectId)).find((t) => t.key === key);
+    if (!ticket) throw notFound("ticket", key);
+    return ticket;
+  }
+
+  async status(key: string): Promise<TicketStatus> {
+    const ticket = await this.findByKey(key);
+    const [questions, events] = await Promise.all([
+      this.tracker.listQuestions({ ticketId: ticket.id }),
+      this.tracker.listEvents(ticket.projectId, ticket.id),
+    ]);
+    const open = questions.filter((q) => q.status === "open").length;
+    return {
+      ticket,
+      readiness: checkDor(ticket, open),
+      questions,
+      recentEvents: events.slice(-RECENT_EVENTS),
+    };
+  }
+
+  async overview(): Promise<Overview> {
+    const [projects, inbox] = await Promise.all([this.tracker.listProjects(), this.needsYou()]);
+    const counted = await Promise.all(
+      projects.map(async (p) => {
+        const ticketsByStage = Object.fromEntries(Stage.options.map((s) => [s, 0])) as Record<
+          Stage,
+          number
+        >;
+        for (const t of await this.tracker.listTickets(p.id)) ticketsByStage[t.stage]++;
+        return { key: p.key, name: p.name, ticketsByStage };
+      }),
+    );
+    return {
+      projects: counted,
+      needsYou: { questions: inbox.questions.length, tickets: inbox.tickets.length },
+    };
   }
 
   private async require(projectId: string, ticketId: string): Promise<Ticket> {

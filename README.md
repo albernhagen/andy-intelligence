@@ -23,13 +23,13 @@ What is built on `main` now. The target design is [ARCHITECTURE.md](docs/archite
 | Needs-you inbox        | Open questions and flagged tickets in one place                                                                                                                                                                                      | UI home page `/`                                                                         |
 | GitHub App + webhooks  | PR, check and workflow events on registered repos are recorded once each (replays are no-ops); off until the App is set up                                                                                                           | [`docs/runbooks/github-app.md`](docs/runbooks/github-app.md)                             |
 | Project registration   | A project's repo must have the GitHub App installed and belongs to one project; project #1 is this repo (`AI`)                                                                                                                       | UI `/projects` → "GitHub repo" field                                                     |
-| Claude connector (MCP) | Claude desktop signs in through our OAuth server; only a test `ping` tool so far                                                                                                                                                     | [`docs/runbooks/mcp-connector.md`](docs/runbooks/mcp-connector.md)                       |
+| Claude connector (MCP) | Claude desktop signs in through our OAuth server; tools `create_ticket`, `list_needs_me`, `answer_question`, `status`, same rules as the UI                                                                                          | [`docs/runbooks/mcp-connector.md`](docs/runbooks/mcp-connector.md)                       |
 | PR checks              | Lint, typecheck, tests, build, secret/CodeQL/dependency/Terraform scans, security-review and adversarial-review agents; weekly system review PRs come from a bot App so their checks run                                             | Automatic on every PR; overrides with the `security-accepted` / `review-accepted` labels |
 | Dependabot updates     | Weekly grouped PRs; npm patches (and minors of 1.0+ packages) auto-merge after the checks pass and deploy with Andy's next merge; majors, 0.x minors, Actions and Terraform wait for Andy, who is requested as reviewer (CODEOWNERS) | Nothing for auto-merged ones; review the rest                                            |
 | Project baseline       | Gives another repo the same checks, files and GitHub settings                                                                                                                                                                        | `platform/baseline/baseline.mjs` ([runbook](docs/runbooks/onboard-a-repo.md))            |
 | Cost guardrails        | $25/month budget alerts, usage alerts, caps, opt-in kill switch at 150% of budget                                                                                                                                                    | [`docs/runbooks/billing.md`](docs/runbooks/billing.md)                                   |
 
-**Not built yet:** agents doing ticket work. Nothing acts on webhook events yet. The next slices add the MCP ticket tools, the Claude Code executor, refinement, a plan step, and build → PR (ARCHITECTURE §12, M1: First end-to-end flow).
+**Not built yet:** agents doing ticket work. Nothing acts on webhook events yet. The next slices add the Claude Code executor, refinement, a plan step, and build → PR (ARCHITECTURE §12, M1: First end-to-end flow).
 
 ## Docs
 
@@ -107,6 +107,8 @@ pnpm --filter @andy/web dev          # :5173, proxies /api to :8080
 ```
 
 Set `PUBLIC_URL` (the service's public origin, e.g. `http://localhost:8080`) to turn on `/mcp` and its OAuth endpoints (ADR-0039: MCP OAuth facade); Terraform sets it in Cloud Run.
+
+MCP tools (M1.4: MCP core tools, `apps/api/src/mcp/tools.ts`): `create_ticket`, `list_needs_me`, `answer_question`, `status` (no ticket: overview + who you're signed in as). They call the same `TicketService` as the REST API.
 
 Set `GITHUB_APP_ID`, `GITHUB_APP_PRIVATE_KEY` (PEM) and `GITHUB_WEBHOOK_SECRET` to turn on the GitHub webhook receiver `POST /webhooks/github` and the App-installed check when a project is created with repos (ADR-0041: GitHub App credentials and webhook intake). Without them, repos are only format-checked. In Cloud Run the key and secret come from Secret Manager; setup: [`docs/runbooks/github-app.md`](docs/runbooks/github-app.md).
 

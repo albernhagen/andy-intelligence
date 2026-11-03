@@ -3,7 +3,7 @@ title: andy-intelligence — Architecture & Vision
 status: accepted (v1.x scope)
 owner: Andy
 last_updated: 2026-11-03
-revision: 2026-11-03d (M1.5: GitHub App + project registration: `CodeHost` + `CodeEventLog`, webhook receiver, two Apps, project #1 = andy-intelligence; ADR-0041; after 2026-11-03c ADR-0042: Dependabot auto-merge)
+revision: 2026-11-03e (M1.5: GitHub App + project registration: `CodeHost` + `CodeEventLog`, webhook receiver, two Apps, project #1 = andy-intelligence; ADR-0041; after 2026-11-03d M1.4: MCP core tools)
 ---
 
 # andy-intelligence — Architecture & Vision
@@ -199,6 +199,7 @@ Contracts are defined in `packages/contracts` (Zod schemas + TypeScript interfac
 ### 7.1 Control plane service (Cloud Run)
 - **API** — REST, OpenAPI-documented, the single entry point for UI and MCP.
 - **MCP server** — remote, Streamable HTTP at `/mcp`. Tools generated from API contracts. v1.x tools: `list_projects`, `create_ticket`, `get_ticket`, `refine` (start refinement), `list_needs_me`, `answer_question`, `set_override`, `start`, `status`, `quota`, `promote_release`, `get_config`, `propose_config_change`.
+  - Built (M1.4: MCP core tools): `create_ticket` (project key, e.g. `AI`), `list_needs_me`, `answer_question` (recorded `answered_via = mcp`), `status` (ticket key → stage, DoR gaps, questions, last 5 events; no key → projects with ticket counts by stage, Needs-you count, signed-in email). Thin adapters over `TicketService` (`packages/domain`), shared with the REST API; rule violations come back as tool errors. Ticket keys resolve via the project id (= lowercased key). Read cost: `status` with a key reads every ticket in that project; without one, every ticket in every project (as the Needs-you inbox already does per project). Fine for one user (1,000 tickets ≈ $0.0006 of Firestore reads per call; calls need Andy's token, R14 caps token guesses). Add `getTicketByKey` and per-stage counts to the `WorkTracker` port (ADR-0028 cap) before any project passes ~1,000 tickets or M2: Multi-project in parallel, whichever is first. The M1.1 `ping` tool is gone; `status` is the connection check.
 - **Webhook receiver** — `POST /webhooks/github`: GitHub App webhooks for PRs, check runs, and workflow runs (ADR-0041). Body ≤ 1 MB → ≤ 300 requests/minute per instance → HMAC-SHA256 → event type → repo must belong to a project → recorded once per delivery ID (`CodeEventLog`; replays are no-ops). Off unless `GITHUB_APP_ID` is set.
 - **Project registration** — `POST /api/projects` with `repos`: each repo must have the control-plane App installed and belongs to one project only (`ProjectService` in `@andy/domain`). Project #1: `albernhagen/andy-intelligence` (key `AI`).
 - **Run completion signals** (event-driven, per executor):

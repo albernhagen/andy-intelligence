@@ -142,16 +142,24 @@ export function createApp(deps: AppDeps) {
     return c.json({ email, uid }, 200);
   });
 
+  // One TicketService for REST and MCP: both get the same ticket rules (packages/domain).
+  const service = new TicketService(deps.tracker);
   registerTicketRoutes(
     app,
     deps.tracker,
-    new TicketService(deps.tracker),
+    service,
     new ProjectService(deps.tracker, deps.github?.codeHost ?? null),
   );
 
   // After the /api middleware, so /api/oauth/approve requires the allow-listed user.
   if (deps.mcp) {
-    registerMcp(app, { ...deps.mcp, allowedEmails: deps.allowedEmails, version: deps.version });
+    registerMcp(app, {
+      ...deps.mcp,
+      allowedEmails: deps.allowedEmails,
+      version: deps.version,
+      tracker: deps.tracker,
+      service,
+    });
   }
 
   app.openAPIRegistry.registerComponent("securitySchemes", "bearer", {
