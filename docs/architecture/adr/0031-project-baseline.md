@@ -1,5 +1,5 @@
 ---
-status: accepted (workflows row superseded by 0038)
+status: accepted (workflows row superseded by 0038; merge settings amended by 0042)
 date: 2026-10-28
 ---
 
