@@ -3,6 +3,7 @@ export {
   APP_EVENTS,
   APP_PERMISSIONS,
   AppName,
+  DEFAULT_APP_NAME,
   ManifestCode,
   appManifest,
   exchangeManifestCode,

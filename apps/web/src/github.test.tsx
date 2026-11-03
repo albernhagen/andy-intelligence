@@ -25,7 +25,7 @@ describe("GitHub settings UI", () => {
     await user.click(await screen.findByRole("button", { name: "Connect GitHub" }));
     await waitFor(() => expect(posted).toHaveLength(1));
     expect(posted[0]!.postUrl).toBe("https://github.com/settings/apps/new");
-    expect(posted[0]!.manifest).toMatchObject({ name: "andy-intelligence", public: false });
+    expect(posted[0]!.manifest).toMatchObject({ name: "andy-intelligence-control", public: false });
     expect(sessionStorage.getItem(STATE_KEY)).toBe(posted[0]!.state);
   });
 

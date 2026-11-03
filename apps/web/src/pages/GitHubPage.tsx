@@ -11,7 +11,7 @@ import { useConnectGitHub, useGitHub } from "@/lib/queries";
 export function GitHubPage() {
   const github = useGitHub();
   const api = useApi();
-  const [name, setName] = useState("andy-intelligence");
+  const [name, setName] = useState("andy-intelligence-control");
   const [error, setError] = useState<unknown>(null);
 
   async function connect() {
@@ -37,7 +37,7 @@ export function GitHubPage() {
             Creates a private GitHub App on your account for this control plane. GitHub asks you to
             confirm, then sends you back here.
           </p>
-          <Field label="App name (must be unique on GitHub)">
+          <Field label="App name (unique on GitHub and not an existing account name)">
             <Input value={name} onChange={(e) => setName(e.target.value)} />
           </Field>
           {error !== null && <QueryError error={error} />}
