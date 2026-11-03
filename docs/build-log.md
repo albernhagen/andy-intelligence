@@ -225,7 +225,7 @@ Temporary progress log until andy-intelligence can track its own work (then migr
 - Branch `m1.19/github-app-ui`: `CodeHostConnectionStore` port + fake + suite, `GcpCodeHostConnectionStore` (Firestore `config/codeHost` + Secret Manager versions); `CodeHost.listInstalledRepos` / `issueRepoToken`; `apps/api/src/github/` (connection cache, setup routes, token endpoint with `jose`, webhooks moved here); `/settings/github` + callback pages; `system-security-review.yml` split into review + `publish`; Terraform: `secretVersionAdder` on the two secrets, env/`github_app_id` removed; `platform/github-app/` removed. Runbook `github-app.md` rewritten (Terraform → Connect → Install → register); threat model v6.
 - Verified locally: lint, typecheck, tests, build, actionlint, `terraform validate`. Not run here: `pnpm test:firestore` (no Java), the live manifest flow and token endpoint (Andy, runbook §2–5).
 
-## 2026-11-03 — PR #36 merged; M1.20: Custom domain built
+## 2026-11-03 — PR #36 merged; M1.20: Custom domain built (PR #38)
 
 - Merged: PR #36: M1.19: GitHub App setup from the UI.
 - **Decided (Andy, ADR-0044: Custom domain before M6):** serve the control plane at `https://ai.andybernhagen.com` now (was "after M5/M6"), via a Cloud Run domain mapping ($0, Preview; a load balancer's ~$18/month breaks the $25 budget; Firebase Hosting caps requests at 60 s). DNS in a new local-only Terraform root `infra/dns` (Cloudflare provider; token "Edit zone DNS" on one zone, from the keychain). The `run.app` URL keeps serving but is no longer a sign-in domain.
