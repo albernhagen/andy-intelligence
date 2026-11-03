@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// Prints an HTML page that starts GitHub's App manifest flow (ADR-0040). Andy opens it locally
+// Prints an HTML page that starts GitHub's App manifest flow (ADR-0041). Andy opens it locally
 // and clicks Create; GitHub then redirects to http://localhost:1/?code=… (a dead page, so the
 // one-hour code never reaches a server). Runbook: docs/runbooks/github-app.md.
 //

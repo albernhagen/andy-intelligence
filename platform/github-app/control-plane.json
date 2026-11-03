@@ -1,6 +1,6 @@
 {
   "name": "andy-intelligence",
-  "description": "andy-intelligence control plane: records PR, check and workflow events for registered projects (ADR-0040).",
+  "description": "andy-intelligence control plane: records PR, check and workflow events for registered projects (ADR-0041).",
   "url": "https://github.com/albernhagen/andy-intelligence",
   "hook_attributes": {
     "url": "https://control-plane-662512537397.us-central1.run.app/webhooks/github",

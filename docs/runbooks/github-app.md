@@ -1,6 +1,6 @@
 # Runbook: GitHub Apps and project registration
 
-How Andy creates the two GitHub Apps, stores their credentials, turns on the webhook receiver and registers project #1 (ADR-0040: GitHub App credentials and webhook intake). Done once; §7 covers rotation.
+How Andy creates the two GitHub Apps, stores their credentials, turns on the webhook receiver and registers project #1 (ADR-0041: GitHub App credentials and webhook intake). Done once; §7 covers rotation.
 
 Never paste a private key, webhook secret or manifest `code` into chat, a file in a repo, or tfvars. The commands below pipe them straight into Secret Manager or GitHub.
 

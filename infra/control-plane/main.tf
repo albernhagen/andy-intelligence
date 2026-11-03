@@ -298,7 +298,7 @@ resource "google_cloud_run_v2_service" "control_plane" {
         name  = "PUBLIC_URL"
         value = "https://${local.service_host}"
       }
-      # GitHub App (ADR-0040): webhook receiver and repo checks; off until github_app_id is set.
+      # GitHub App (ADR-0041): webhook receiver and repo checks; off until github_app_id is set.
       dynamic "env" {
         for_each = local.github_app_enabled ? [var.github_app_id] : []
         content {
@@ -338,7 +338,7 @@ resource "google_cloud_run_v2_service" "control_plane" {
   ]
 }
 
-# ── GitHub App (ADR-0040: GitHub App credentials and webhook intake) ─────────────
+# ── GitHub App (ADR-0041: GitHub App credentials and webhook intake) ─────────────
 # Secret containers only: Andy adds the versions with gcloud from the App's manifest
 # conversion (docs/runbooks/github-app.md), so values never pass through Terraform or state.
 

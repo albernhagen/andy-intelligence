@@ -52,7 +52,7 @@ jobs:
     if: ${{ !cancelled() && needs.changes.outputs.run == 'true' }}
     runs-on: ubuntu-latest
     timeout-minutes: 40
-    # Holds the review bot App's key; deployment branches: main only (ADR-0040,
+    # Holds the review bot App's key; deployment branches: main only (ADR-0041,
     # docs/runbooks/github-app.md §5).
     environment: system-review
     permissions:

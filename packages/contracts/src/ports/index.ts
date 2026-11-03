@@ -247,7 +247,7 @@ export interface CodeHost {
 }
 
 // ── CodeEventLog ─────────────────────────────────────────────────────────────
-// Webhook deliveries from the code host, recorded once each (ADR-0040). Later slices react to
+// Webhook deliveries from the code host, recorded once each (ADR-0041). Later slices react to
 // them (Run completion, PR outcome).
 
 export type RecordResult = "recorded" | "duplicate";

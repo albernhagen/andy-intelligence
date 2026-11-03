@@ -4,7 +4,7 @@ import { Octokit } from "@octokit/core";
 
 export interface GitHubAppCredentials {
   appId: string;
-  /** PEM private key of the GitHub App (Secret Manager in prod; ADR-0040). */
+  /** PEM private key of the GitHub App (Secret Manager in prod; ADR-0041). */
   privateKey: string;
 }
 

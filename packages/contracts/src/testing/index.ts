@@ -327,7 +327,7 @@ export function oauthGrantStoreContract(
 
 /**
  * CodeHost suite. `knownRepo` must exist with the App installed; `unknownRepo` must not (or
- * not have the App). The GitHub adapter runs this against a real repo locally (ADR-0040).
+ * not have the App). The GitHub adapter runs this against a real repo locally (ADR-0041).
  */
 export function codeHostContract(
   name: string,

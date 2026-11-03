@@ -8,7 +8,7 @@ import { verify } from "@octokit/webhooks-methods";
 import { z } from "zod";
 
 /**
- * GitHub webhook intake (ADR-0040): signature check and payload → CodeHostEvent mapping.
+ * GitHub webhook intake (ADR-0041): signature check and payload → CodeHostEvent mapping.
  * Payloads are untrusted until the signature checks out, and only the fields below are kept.
  */
 

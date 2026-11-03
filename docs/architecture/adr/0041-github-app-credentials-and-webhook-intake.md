@@ -3,7 +3,7 @@ status: accepted
 date: 2026-11-02
 ---
 
-# 0040 — GitHub App credentials and webhook intake
+# 0041 — GitHub App credentials and webhook intake
 
 Decided by Andy, 2026-11-02 (M1.5: GitHub App + project registration). Also answers ARCHITECTURE open question 8.
 

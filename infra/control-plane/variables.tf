@@ -50,7 +50,7 @@ variable "usage_alert_thresholds" {
 
 variable "github_app_id" {
   type        = string
-  description = "App ID of the control-plane GitHub App (ADR-0040). Leave null or empty until the App exists and both secret versions are added (docs/runbooks/github-app.md); setting it turns the webhook receiver on. Not secret: also set the TF_VAR_GITHUB_APP_ID Actions variable so CI plans match."
+  description = "App ID of the control-plane GitHub App (ADR-0041). Leave null or empty until the App exists and both secret versions are added (docs/runbooks/github-app.md); setting it turns the webhook receiver on. Not secret: also set the TF_VAR_GITHUB_APP_ID Actions variable so CI plans match."
   default     = null
 
   validation {

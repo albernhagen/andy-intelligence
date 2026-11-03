@@ -19,7 +19,7 @@ function requireEnv(name: string): string {
 }
 
 /**
- * GitHub App (ADR-0040): on when GITHUB_APP_ID is set; the key and webhook secret come from
+ * GitHub App (ADR-0041): on when GITHUB_APP_ID is set; the key and webhook secret come from
  * Secret Manager as env vars. A partial config is a deploy mistake, so it fails the start.
  */
 function githubConfig() {

@@ -36,7 +36,7 @@ export interface AppDeps {
     clients: ClientMetadataResolver;
     now?: () => Date;
   };
-  /** GitHub App (ADR-0040): webhook receiver + repo checks at registration; off when absent. */
+  /** GitHub App (ADR-0041): webhook receiver + repo checks at registration; off when absent. */
   github?: {
     webhookSecret: string;
     codeHost: CodeHost;

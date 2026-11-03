@@ -13,7 +13,7 @@ import type { AuthEnv } from "./auth";
 import { FixedWindowLimiter } from "./mcp/rate-limit";
 
 /**
- * GitHub App webhook receiver (ADR-0040). Order of checks: body cap → rate cap → HMAC →
+ * GitHub App webhook receiver (ADR-0041). Order of checks: body cap → rate cap → HMAC →
  * event type → registered repo → record once by delivery ID. Nothing is stored before the
  * signature checks out, and only deliveries about registered repos are stored.
  */

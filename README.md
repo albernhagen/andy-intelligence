@@ -2,6 +2,34 @@
 
 Personal control plane for agentic software development: ideas → refined tickets → agent runs (Claude Code, Jules, OpenCode) under cost and quota controls → PRs → dev → one-click prod.
 
+## How it works today
+
+What is built on `main` now. The target design is [ARCHITECTURE.md](docs/architecture/ARCHITECTURE.md); progress is in [`docs/build-log.md`](docs/build-log.md). Update this section in the same PR as any change to features, components or how to use the system.
+
+```
+ Browser UI ─┐                                   ┌─ Firestore (tickets, questions, history, OAuth grants, webhook events)
+             ├─▶ Cloud Run: control-plane ───────┤
+ Claude (MCP)┤   API + /mcp + OAuth + SPA        ├─ Cloud Tasks queue (run-watchdog; nothing uses it yet)
+ GitHub App ─┘   + /webhooks/github                └─ Secret Manager (GitHub App key, webhook secret)
+ GitHub PRs ──▶ CI checks + review agents (GitHub Actions)
+```
+
+**Working:**
+
+| Feature                | What it does                                                                                                                                                                             | How to use                                                                               |
+| ---------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------- |
+| Sign-in                | Google sign-in; only emails on the allow-list get in                                                                                                                                     | Open the Cloud Run URL (`terraform output service_url` in `infra/control-plane`)         |
+| Tickets                | Projects, tickets moving through stages (Backlog → Ready → In progress → Ready for review → Monitoring → Done), Definition of Ready, history, questions                                  | UI: `/projects`, then a project; or the REST API under `/api`                            |
+| Needs-you inbox        | Open questions and flagged tickets in one place                                                                                                                                          | UI home page `/`                                                                         |
+| GitHub App + webhooks  | PR, check and workflow events on registered repos are recorded once each (replays are no-ops); off until the App is set up                                                               | [`docs/runbooks/github-app.md`](docs/runbooks/github-app.md)                             |
+| Project registration   | A project's repo must have the GitHub App installed and belongs to one project; project #1 is this repo (`AI`)                                                                           | UI `/projects` → "GitHub repo" field                                                     |
+| Claude connector (MCP) | Claude desktop signs in through our OAuth server; only a test `ping` tool so far                                                                                                         | [`docs/runbooks/mcp-connector.md`](docs/runbooks/mcp-connector.md)                       |
+| PR checks              | Lint, typecheck, tests, build, secret/CodeQL/dependency/Terraform scans, security-review and adversarial-review agents; weekly system review PRs come from a bot App so their checks run | Automatic on every PR; overrides with the `security-accepted` / `review-accepted` labels |
+| Project baseline       | Gives another repo the same checks, files and GitHub settings                                                                                                                            | `platform/baseline/baseline.mjs` ([runbook](docs/runbooks/onboard-a-repo.md))            |
+| Cost guardrails        | $25/month budget alerts, usage alerts, caps, opt-in kill switch at 150% of budget                                                                                                        | [`docs/runbooks/billing.md`](docs/runbooks/billing.md)                                   |
+
+**Not built yet:** agents doing ticket work. Nothing acts on webhook events yet. The next slices add the MCP ticket tools, the Claude Code executor, refinement, a plan step, and build → PR (ARCHITECTURE §12, M1: First end-to-end flow).
+
 ## Docs
 
 | Doc                                                                      | What                                                        |
@@ -77,7 +105,7 @@ pnpm --filter @andy/web dev          # :5173, proxies /api to :8080
 
 Set `PUBLIC_URL` (the service's public origin, e.g. `http://localhost:8080`) to turn on `/mcp` and its OAuth endpoints (ADR-0039: MCP OAuth facade); Terraform sets it in Cloud Run.
 
-Set `GITHUB_APP_ID`, `GITHUB_APP_PRIVATE_KEY` (PEM) and `GITHUB_WEBHOOK_SECRET` to turn on the GitHub webhook receiver `POST /webhooks/github` and the App-installed check when a project is created with repos (ADR-0040: GitHub App credentials and webhook intake). Without them, repos are only format-checked. In Cloud Run the key and secret come from Secret Manager; setup: [`docs/runbooks/github-app.md`](docs/runbooks/github-app.md).
+Set `GITHUB_APP_ID`, `GITHUB_APP_PRIVATE_KEY` (PEM) and `GITHUB_WEBHOOK_SECRET` to turn on the GitHub webhook receiver `POST /webhooks/github` and the App-installed check when a project is created with repos (ADR-0041: GitHub App credentials and webhook intake). Without them, repos are only format-checked. In Cloud Run the key and secret come from Secret Manager; setup: [`docs/runbooks/github-app.md`](docs/runbooks/github-app.md).
 
 ### Web UI (M1.3: UI: tickets + inbox)
 
