@@ -1,7 +1,8 @@
 name: Baseline — Dependabot auto-merge
 description: >-
-  Turns on auto-merge (squash) for patch and minor npm and GitHub Actions updates from Dependabot;
-  GitHub merges once every required check passes. Majors and Terraform providers stay manual
+  Turns on auto-merge (squash) for npm updates from Dependabot that are patches or minors of
+  packages at 1.0+; GitHub merges once every required check passes. Majors, 0.x minors, GitHub
+  Actions and Terraform providers stay manual
   (scripts/dependabot-merge.mjs, ADR-0042, project baseline ADR-0031/ADR-0038). Needs
   `allow_auto_merge` on the repo and a job token with `contents: write` and `pull-requests: write`.
 
@@ -24,7 +25,7 @@ runs:
       shell: bash
       env:
         ECOSYSTEM: ${{ steps.meta.outputs.package-ecosystem }}
-        UPDATE_TYPE: ${{ steps.meta.outputs.update-type }}
+        DEPENDENCIES: ${{ steps.meta.outputs.updated-dependencies-json }}
       run: |
         BASELINE=$(cd "$GITHUB_ACTION_PATH/../../.." && pwd)
         node "$BASELINE/scripts/dependabot-merge.mjs"

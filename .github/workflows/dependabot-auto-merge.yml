@@ -1,14 +1,14 @@
 name: Dependabot auto-merge
 
-# Patch and minor npm / GitHub Actions updates from Dependabot merge on their own once every
-# required check passes; majors and Terraform providers wait for Andy (ADR-0042).
+# npm patches, and minors of packages at 1.0+, from Dependabot merge on their own once every
+# required check passes; majors, 0.x minors, GitHub Actions and Terraform wait for Andy (ADR-0042).
 # Project baseline caller (ADR-0038). Never `pull_request_target`.
 #
 # The job holds a write token, so it runs the base branch's copy of the action and script, never
 # the PR's (a Dependabot PR edits pins inside platform/actions/). Only Dependabot's own pushes
 # count: a human push to a Dependabot branch skips the job.
-# A merge made with GITHUB_TOKEN starts no push workflows, so the control plane deploys these
-# updates with the next merge that does.
+# deploy.yml also skips pushes made by the bots, so these updates reach prod only with the next
+# merge Andy makes.
 
 on:
   pull_request:

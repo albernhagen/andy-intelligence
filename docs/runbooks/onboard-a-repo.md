@@ -118,13 +118,13 @@ node platform/baseline/baseline.mjs apply albernhagen/andy-intelligence
 
 Check on the next Dependabot PR:
 
-| Dependabot PR                   | Expected                                                                                                                                                    |
-| ------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Patch or minor (npm or Actions) | `dependabot-auto-merge` job enables auto-merge; GitHub squash-merges after the required checks pass; `Deploy control plane` does **not** run for that merge |
-| Major, or a Terraform provider  | Job logs "… is merged by hand"; the PR waits for you                                                                                                        |
-| Any                             | You get a review request (CODEOWNERS). No request? GitHub → Settings → Notifications: "Participating, @mentions and custom" on                              |
+| Dependabot PR                                             | Expected                                                                                                                                                                    |
+| --------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| npm patch, or minor of a 1.0+ package                     | `dependabot-auto-merge` job enables auto-merge; GitHub squash-merges after the required checks pass; `Deploy control plane` starts no deploy job for that merge (bot actor) |
+| Major, 0.x minor, GitHub Actions, or a Terraform provider | Job logs "… merged by hand"; the PR waits for you                                                                                                                           |
+| Any                                                       | You get a review request (CODEOWNERS). No request? GitHub → Settings → Notifications: "Participating, @mentions and custom" on                                              |
 
-If the merge did start `Deploy control plane`, note it in the build log: ADR-0042 assumed it wouldn't.
+Your next merge deploys the update. If `Deploy control plane` did deploy the bot's merge, note it in the build log: the `deploy.yml` guard failed.
 
 Managed repos get both with the next baseline tag (§4: Update a repo to a newer baseline).
 

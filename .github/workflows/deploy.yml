@@ -25,7 +25,11 @@ jobs:
   deploy:
     runs-on: ubuntu-latest
     # Skip until infra exists and the repo variables are set (see docs/runbooks/m0-setup.md).
-    if: vars.GCP_WIF_PROVIDER != ''
+    # Merges made by a bot (Dependabot auto-merge, ADR-0042) never deploy; Andy's next merge does.
+    if: >-
+      vars.GCP_WIF_PROVIDER != '' &&
+      github.actor != 'github-actions[bot]' &&
+      github.actor != 'dependabot[bot]'
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 

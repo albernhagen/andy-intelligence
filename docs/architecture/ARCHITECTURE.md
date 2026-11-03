@@ -119,7 +119,7 @@ Enterprise-shaped (durable state, policy, gates, least privilege, audit, contrac
 ### 4.5 Review gate (v1.x: rules only)
 - **Hard vetoes → Andy reviews:** protected paths (CODEOWNERS: auth, payments, migrations, infra), dependency changes, CI not green, new behavior without new tests, no verification output in the run summary (ADR-0040), diff > N lines, any agent-raised concern.
 - **Otherwise:** S tasks may auto-merge if project policy allows; M/L always go to Andy in v1.x.
-- **Dependabot** (ADR-0042): patch/minor npm and GitHub Actions updates auto-merge once every required check passes; majors and Terraform providers go to Andy. CODEOWNERS (`* @albernhagen`) requests Andy's review on every PR he didn't author; paths listed after `*` are the protected paths above.
+- **Dependabot** (ADR-0042): npm patches and minors of 1.0+ packages auto-merge once every required check passes, and deploy only with Andy's next merge; majors, 0.x minors, GitHub Actions and Terraform providers go to Andy. CODEOWNERS (`* @albernhagen`) requests Andy's review on every PR he didn't author; paths listed after `*` are the protected paths above.
 - From M1: First end-to-end flow onward, **record what the gate *would* have decided** to build the dataset for later model-based scoring.
 - **Adversarial review** on every PR (ADR-0026): a fresh reviewer session tries to find reasons the PR should not merge, with a concrete failing scenario for each finding. Three passes: bugs and logic, plus (from M1.8: Build + gate) compliance with the ticket's acceptance criteria and approved plan; nits capped at 5 (ADR-0040). The implementer answers every finding. Unresolved `blocker` findings are a hard veto unless Andy labels `review-accepted`. From M2/M3 the reviewer is a different vendor than the implementer.
 - Security review on every PR (§9.1). A high/critical security finding is a hard veto unless Andy marks it `security-accepted`.
@@ -317,7 +317,7 @@ Third-party action pins inside `platform/actions/` are bumped by this repo's Dep
 | Public-repo hygiene (`.gitignore`: tfvars, state, `.env*`) | 0015 | `template/gitignore.lines` | M (lines) | carried (M1.16) |
 | `main` ruleset: PR required (squash), no force push/deletion, required checks, code scanning (CodeQL, high or higher) | 0025 | `github/ruleset-main.json` | G | carried (M1.16) |
 | Merge settings: squash only, delete branch on merge, auto-merge allowed (Dependabot only, ADR-0042) | 0022, 0042 | `github/repo.json` | G | carried (M1.16; auto-merge from ADR-0042) |
-| Dependabot auto-merge: patch/minor npm + Actions after all required checks | 0042 | `dependabot-auto-merge.yml` → `platform/actions/dependabot-auto-merge`, `scripts/dependabot-merge.mjs` | A | carried (next baseline tag) |
+| Dependabot auto-merge: npm patches + stable minors after all required checks; bot merges don't deploy | 0042 | `dependabot-auto-merge.yml` → `platform/actions/dependabot-auto-merge`, `scripts/dependabot-merge.mjs` | A | carried (next baseline tag) |
 | CODEOWNERS: Andy requested on every PR (incl. Dependabot) | 0042 | `template/.github/CODEOWNERS` | S | carried (next baseline tag) |
 | Security & analysis: Dependabot alerts + security updates, secret scanning, push protection, private vulnerability reporting; CodeQL default setup off | 0015, 0025 | `github/security.json` (dependency graph is always on for public repos) | G | carried (M1.16) |
 | Actions: read-only default token; Actions may open PRs; actions must be pinned to a full SHA | 0025, 0038 | `github/actions.json` | G | carried (M1.16) |
