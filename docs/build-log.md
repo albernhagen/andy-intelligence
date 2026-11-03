@@ -230,32 +230,39 @@ Temporary progress log until andy-intelligence can track its own work (then migr
 - Merged: PR #36: M1.19: GitHub App setup from the UI. Andy applied `infra/control-plane` (2 added, as expected).
 - Connecting failed on GitHub: the name `andy-intelligence` is reserved (an account with that name exists). Default App name is now `andy-intelligence-control`; runbook `github-app.md` says to skip step 1 when already applied and explains the naming rule.
 
+## 2026-11-03 — GitHub connected; project #1 registered
+
+- Merged: PR #37: default GitHub App name fixed.
+- Andy ran runbook `github-app.md` §2–4: connected the App from Settings → GitHub, installed it on `andy-intelligence`, registered project `AI` with repo `albernhagen/andy-intelligence`.
+- Logs: deliveries for `pull_request`, `check_run`, `workflow_run` arrived with valid signatures; those within 60 s of registering were ignored as "unregistered repo" (repo → project cache, by design). This PR's own events are the first to be recorded.
+- Open: "Done when" checks for M1.5 and M1.19 (recorded event, redelivery → `duplicate`, system review PR via the App token, `pnpm test:firestore`).
+
 ## Slices: M1: First end-to-end flow: ticket → PR with Claude
 
 Status: todo / in progress / PR open / merged. Definitions: ARCHITECTURE §12.
 
-| Slice                                   | Size            | Depends on                                                                                  | Status           |
-| --------------------------------------- | --------------- | ------------------------------------------------------------------------------------------- | ---------------- |
-| M1.0: Docs sync                         | S               | M0: Foundations                                                                             | merged (PR #1)   |
-| M1.1: MCP OAuth spike                   | M               | M0: Foundations                                                                             | merged (PR #29)  |
-| M1.2: Ticket core                       | M               | M0: Foundations                                                                             | merged (PR #17)  |
-| M1.3: UI: tickets + inbox               | M               | M1.2: Ticket core                                                                           | merged (PR #28)  |
-| M1.4: MCP core tools                    | S               | M1.1: MCP OAuth spike, M1.2: Ticket core                                                    | merged (PR #31)  |
-| M1.5: GitHub App + project registration | M               | M1.2: Ticket core                                                                           | merged (PR #32)  |
-| M1.6: Claude Code executor              | L (split 6a/6b) | M1.5: GitHub App + project registration, M1.19: GitHub App setup from the UI                | todo             |
-| M1.7: Refinement                        | M               | M1.3: UI: tickets + inbox, M1.4: MCP core tools, M1.6: Claude Code executor                 | todo             |
-| M1.8: Build + gate                      | M               | M1.7: Refinement, M1.16: Project baseline v1, M1.17: Agent evals v1, M1.18: Plan step       | todo             |
-| M1.9: Quota capture                     | S               | M1.6: Claude Code executor                                                                  | todo             |
-| M1.10: Security review automation       | M               | M0: Foundations                                                                             | merged (PR #10)  |
-| M1.11: Adversarial PR review            | M               | M1.10: Security review automation                                                           | merged (PR #21)  |
-| M1.12: Local quality gates              | S               | M0: Foundations                                                                             | merged (PR #9)   |
-| M1.13: GCP cost guardrails              | S               | M0: Foundations                                                                             | merged (PR #7)   |
-| M1.14: Cost kill switch                 | M               | M1.13: GCP cost guardrails                                                                  | merged (PR #18)  |
-| M1.15: Usage alerts                     | S               | M1.13: GCP cost guardrails                                                                  | merged (PR #8)   |
-| M1.16: Project baseline v1              | M               | M1.10: Security review automation, M1.11: Adversarial PR review, M1.12: Local quality gates | merged (PR #23)  |
-| M1.17: Agent evals v1                   | M               | M1.11: Adversarial PR review, M1.16: Project baseline v1                                    | todo             |
-| M1.18: Plan step                        | M               | M1.6: Claude Code executor, M1.7: Refinement                                                | todo             |
-| M1.19: GitHub App setup from the UI     | M               | M1.5: GitHub App + project registration                                                     | PR open (PR #36) |
+| Slice                                   | Size            | Depends on                                                                                  | Status          |
+| --------------------------------------- | --------------- | ------------------------------------------------------------------------------------------- | --------------- |
+| M1.0: Docs sync                         | S               | M0: Foundations                                                                             | merged (PR #1)  |
+| M1.1: MCP OAuth spike                   | M               | M0: Foundations                                                                             | merged (PR #29) |
+| M1.2: Ticket core                       | M               | M0: Foundations                                                                             | merged (PR #17) |
+| M1.3: UI: tickets + inbox               | M               | M1.2: Ticket core                                                                           | merged (PR #28) |
+| M1.4: MCP core tools                    | S               | M1.1: MCP OAuth spike, M1.2: Ticket core                                                    | merged (PR #31) |
+| M1.5: GitHub App + project registration | M               | M1.2: Ticket core                                                                           | merged (PR #32) |
+| M1.6: Claude Code executor              | L (split 6a/6b) | M1.5: GitHub App + project registration, M1.19: GitHub App setup from the UI                | todo            |
+| M1.7: Refinement                        | M               | M1.3: UI: tickets + inbox, M1.4: MCP core tools, M1.6: Claude Code executor                 | todo            |
+| M1.8: Build + gate                      | M               | M1.7: Refinement, M1.16: Project baseline v1, M1.17: Agent evals v1, M1.18: Plan step       | todo            |
+| M1.9: Quota capture                     | S               | M1.6: Claude Code executor                                                                  | todo            |
+| M1.10: Security review automation       | M               | M0: Foundations                                                                             | merged (PR #10) |
+| M1.11: Adversarial PR review            | M               | M1.10: Security review automation                                                           | merged (PR #21) |
+| M1.12: Local quality gates              | S               | M0: Foundations                                                                             | merged (PR #9)  |
+| M1.13: GCP cost guardrails              | S               | M0: Foundations                                                                             | merged (PR #7)  |
+| M1.14: Cost kill switch                 | M               | M1.13: GCP cost guardrails                                                                  | merged (PR #18) |
+| M1.15: Usage alerts                     | S               | M1.13: GCP cost guardrails                                                                  | merged (PR #8)  |
+| M1.16: Project baseline v1              | M               | M1.10: Security review automation, M1.11: Adversarial PR review, M1.12: Local quality gates | merged (PR #23) |
+| M1.17: Agent evals v1                   | M               | M1.11: Adversarial PR review, M1.16: Project baseline v1                                    | todo            |
+| M1.18: Plan step                        | M               | M1.6: Claude Code executor, M1.7: Refinement                                                | todo            |
+| M1.19: GitHub App setup from the UI     | M               | M1.5: GitHub App + project registration                                                     | merged (PR #36) |
 
 **Next (order decided by Andy, 2026-10-28):**
 
