@@ -161,7 +161,7 @@ jobs:
       id-token: write # Actions OIDC token for the control plane's /github/token
     env:
       # The control plane's public URL (also the OIDC audience). Not secret.
-      CONTROL_PLANE_URL: https://control-plane-662512537397.us-central1.run.app
+      CONTROL_PLANE_URL: https://ai.andybernhagen.com
       GH_REPO: ${{ github.repository }}
       RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
     steps:

@@ -225,32 +225,41 @@ Temporary progress log until andy-intelligence can track its own work (then migr
 - Branch `m1.19/github-app-ui`: `CodeHostConnectionStore` port + fake + suite, `GcpCodeHostConnectionStore` (Firestore `config/codeHost` + Secret Manager versions); `CodeHost.listInstalledRepos` / `issueRepoToken`; `apps/api/src/github/` (connection cache, setup routes, token endpoint with `jose`, webhooks moved here); `/settings/github` + callback pages; `system-security-review.yml` split into review + `publish`; Terraform: `secretVersionAdder` on the two secrets, env/`github_app_id` removed; `platform/github-app/` removed. Runbook `github-app.md` rewritten (Terraform → Connect → Install → register); threat model v6.
 - Verified locally: lint, typecheck, tests, build, actionlint, `terraform validate`. Not run here: `pnpm test:firestore` (no Java), the live manifest flow and token endpoint (Andy, runbook §2–5).
 
+## 2026-11-03 — PR #36 merged; M1.20: Custom domain built
+
+- Merged: PR #36: M1.19: GitHub App setup from the UI.
+- **Decided (Andy, ADR-0044: Custom domain before M6):** serve the control plane at `https://ai.andybernhagen.com` now (was "after M5/M6"), via a Cloud Run domain mapping ($0, Preview; a load balancer's ~$18/month breaks the $25 budget; Firebase Hosting caps requests at 60 s). DNS in a new local-only Terraform root `infra/dns` (Cloudflare provider; token "Edit zone DNS" on one zone, from the keychain). The `run.app` URL keeps serving but is no longer a sign-in domain.
+- Branch `m1.20/custom-domain`: `google_cloud_run_domain_mapping.public` + `custom_domain` variable; `PUBLIC_URL`, Firebase authorized domains and the `service_url` output on the new host; `infra/dns` (CNAME to `ghs.googlehosted.com`, DNS-only; Search Console TXT); `system-security-review.yml` OIDC audience; Dependabot covers `infra/dns`. Runbook `docs/runbooks/custom-domain.md`; threat model v7 (DNS zone asset, Cloudflare token, R20).
+- Verified locally: `terraform validate` + `fmt` on both roots; lint, typecheck, tests, build. Not run here: any plan or apply (needs Andy's GCP and Cloudflare credentials).
+- Andy to run after merge, same day: runbook `custom-domain.md` §1–8 (`infra/dns` 2 adds; targeted mapping 1 add; certificate; `infra/control-plane` 2 changes; GitHub App URLs; Claude connector).
+
 ## Slices: M1: First end-to-end flow: ticket → PR with Claude
 
 Status: todo / in progress / PR open / merged. Definitions: ARCHITECTURE §12.
 
-| Slice                                   | Size            | Depends on                                                                                  | Status           |
-| --------------------------------------- | --------------- | ------------------------------------------------------------------------------------------- | ---------------- |
-| M1.0: Docs sync                         | S               | M0: Foundations                                                                             | merged (PR #1)   |
-| M1.1: MCP OAuth spike                   | M               | M0: Foundations                                                                             | merged (PR #29)  |
-| M1.2: Ticket core                       | M               | M0: Foundations                                                                             | merged (PR #17)  |
-| M1.3: UI: tickets + inbox               | M               | M1.2: Ticket core                                                                           | merged (PR #28)  |
-| M1.4: MCP core tools                    | S               | M1.1: MCP OAuth spike, M1.2: Ticket core                                                    | merged (PR #31)  |
-| M1.5: GitHub App + project registration | M               | M1.2: Ticket core                                                                           | merged (PR #32)  |
-| M1.6: Claude Code executor              | L (split 6a/6b) | M1.5: GitHub App + project registration, M1.19: GitHub App setup from the UI                | todo             |
-| M1.7: Refinement                        | M               | M1.3: UI: tickets + inbox, M1.4: MCP core tools, M1.6: Claude Code executor                 | todo             |
-| M1.8: Build + gate                      | M               | M1.7: Refinement, M1.16: Project baseline v1, M1.17: Agent evals v1, M1.18: Plan step       | todo             |
-| M1.9: Quota capture                     | S               | M1.6: Claude Code executor                                                                  | todo             |
-| M1.10: Security review automation       | M               | M0: Foundations                                                                             | merged (PR #10)  |
-| M1.11: Adversarial PR review            | M               | M1.10: Security review automation                                                           | merged (PR #21)  |
-| M1.12: Local quality gates              | S               | M0: Foundations                                                                             | merged (PR #9)   |
-| M1.13: GCP cost guardrails              | S               | M0: Foundations                                                                             | merged (PR #7)   |
-| M1.14: Cost kill switch                 | M               | M1.13: GCP cost guardrails                                                                  | merged (PR #18)  |
-| M1.15: Usage alerts                     | S               | M1.13: GCP cost guardrails                                                                  | merged (PR #8)   |
-| M1.16: Project baseline v1              | M               | M1.10: Security review automation, M1.11: Adversarial PR review, M1.12: Local quality gates | merged (PR #23)  |
-| M1.17: Agent evals v1                   | M               | M1.11: Adversarial PR review, M1.16: Project baseline v1                                    | todo             |
-| M1.18: Plan step                        | M               | M1.6: Claude Code executor, M1.7: Refinement                                                | todo             |
-| M1.19: GitHub App setup from the UI     | M               | M1.5: GitHub App + project registration                                                     | PR open (PR #36) |
+| Slice                                   | Size            | Depends on                                                                                  | Status          |
+| --------------------------------------- | --------------- | ------------------------------------------------------------------------------------------- | --------------- |
+| M1.0: Docs sync                         | S               | M0: Foundations                                                                             | merged (PR #1)  |
+| M1.1: MCP OAuth spike                   | M               | M0: Foundations                                                                             | merged (PR #29) |
+| M1.2: Ticket core                       | M               | M0: Foundations                                                                             | merged (PR #17) |
+| M1.3: UI: tickets + inbox               | M               | M1.2: Ticket core                                                                           | merged (PR #28) |
+| M1.4: MCP core tools                    | S               | M1.1: MCP OAuth spike, M1.2: Ticket core                                                    | merged (PR #31) |
+| M1.5: GitHub App + project registration | M               | M1.2: Ticket core                                                                           | merged (PR #32) |
+| M1.6: Claude Code executor              | L (split 6a/6b) | M1.5: GitHub App + project registration, M1.19: GitHub App setup from the UI                | todo            |
+| M1.7: Refinement                        | M               | M1.3: UI: tickets + inbox, M1.4: MCP core tools, M1.6: Claude Code executor                 | todo            |
+| M1.8: Build + gate                      | M               | M1.7: Refinement, M1.16: Project baseline v1, M1.17: Agent evals v1, M1.18: Plan step       | todo            |
+| M1.9: Quota capture                     | S               | M1.6: Claude Code executor                                                                  | todo            |
+| M1.10: Security review automation       | M               | M0: Foundations                                                                             | merged (PR #10) |
+| M1.11: Adversarial PR review            | M               | M1.10: Security review automation                                                           | merged (PR #21) |
+| M1.12: Local quality gates              | S               | M0: Foundations                                                                             | merged (PR #9)  |
+| M1.13: GCP cost guardrails              | S               | M0: Foundations                                                                             | merged (PR #7)  |
+| M1.14: Cost kill switch                 | M               | M1.13: GCP cost guardrails                                                                  | merged (PR #18) |
+| M1.15: Usage alerts                     | S               | M1.13: GCP cost guardrails                                                                  | merged (PR #8)  |
+| M1.16: Project baseline v1              | M               | M1.10: Security review automation, M1.11: Adversarial PR review, M1.12: Local quality gates | merged (PR #23) |
+| M1.17: Agent evals v1                   | M               | M1.11: Adversarial PR review, M1.16: Project baseline v1                                    | todo            |
+| M1.18: Plan step                        | M               | M1.6: Claude Code executor, M1.7: Refinement                                                | todo            |
+| M1.19: GitHub App setup from the UI     | M               | M1.5: GitHub App + project registration                                                     | merged (PR #36) |
+| M1.20: Custom domain                    | S               | M1.19: GitHub App setup from the UI                                                         | PR open         |
 
 **Next (order decided by Andy, 2026-10-28):**
 

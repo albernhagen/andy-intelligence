@@ -43,7 +43,10 @@ locals {
   repo_full_name = "${var.github_owner}/${var.github_repo}"
   # Cloud Run's deterministic URL; known before the service exists, so no dependency cycle.
   service_host = "${local.service_name}-${data.google_project.this.number}.${var.region}.run.app"
-  wif_pool     = "projects/${data.google_project.this.number}/locations/global/workloadIdentityPools/github"
+  # What browsers, Claude and GitHub use (ADR-0044). The run.app host keeps serving but isn't a
+  # sign-in domain, OAuth issuer or OIDC audience.
+  public_url = "https://${var.custom_domain}"
+  wif_pool   = "projects/${data.google_project.this.number}/locations/global/workloadIdentityPools/github"
 }
 
 resource "google_project_service" "apis" {
@@ -217,7 +220,7 @@ resource "google_identity_platform_config" "this" {
   authorized_domains = [
     "localhost",
     "${var.project_id}.firebaseapp.com",
-    local.service_host,
+    var.custom_domain,
   ]
 
   # Google sign-in only. The API returns these disabled blocks; declaring them keeps plans clean.
@@ -242,6 +245,24 @@ resource "google_identity_platform_config" "this" {
 # See docs/runbooks/m0-setup.md.
 
 # ── Service ─────────────────────────────────────────────────────────────────
+
+# ── Custom domain (ADR-0044) ────────────────────────────────────────────────
+# Preview feature, $0 (a load balancer would be ~$18/month). The account that applies this must
+# be a verified Search Console owner of the apex domain; the CNAME and verification TXT live in
+# infra/dns. Google issues the certificate once the CNAME resolves (usually ~15 min, up to 24 h).
+
+resource "google_cloud_run_domain_mapping" "public" {
+  name     = var.custom_domain
+  location = var.region
+
+  metadata {
+    namespace = var.project_id
+  }
+
+  spec {
+    route_name = google_cloud_run_v2_service.control_plane.name
+  }
+}
 
 resource "google_cloud_run_v2_service" "control_plane" {
   name     = local.service_name
@@ -296,7 +317,7 @@ resource "google_cloud_run_v2_service" "control_plane" {
       # OAuth issuer and MCP resource URL (ADR-0039); MCP is off without it.
       env {
         name  = "PUBLIC_URL"
-        value = "https://${local.service_host}"
+        value = local.public_url
       }
     }
   }

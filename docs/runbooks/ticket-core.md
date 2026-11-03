@@ -40,7 +40,7 @@ After the PR merges and deploys:
 2. Create a project and a ticket:
 
 ```sh
-URL=https://control-plane-662512537397.us-central1.run.app
+URL=https://ai.andybernhagen.com
 read -rs AUTH   # paste "Bearer eyJ…", press Enter
 curl -s -X POST "$URL/api/projects" -H "authorization: $AUTH" -H 'content-type: application/json' -d '{"name":"andy-intelligence","key":"AI"}'
 curl -s -X POST "$URL/api/projects/ai/tickets" -H "authorization: $AUTH" -H 'content-type: application/json' -d '{"type":"task","title":"First ticket"}'
