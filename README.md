@@ -20,13 +20,13 @@ What is built on `main` now. The target design is [ARCHITECTURE.md](docs/archite
 | Sign-in                | Google sign-in; only emails on the allow-list get in                                                                                                                                                                                 | Open the Cloud Run URL (`terraform output service_url` in `infra/control-plane`)         |
 | Tickets                | Projects, tickets moving through stages (Backlog → Ready → In progress → Ready for review → Monitoring → Done), Definition of Ready, history, questions                                                                              | UI: `/projects`, then a project; or the REST API under `/api`                            |
 | Needs-you inbox        | Open questions and flagged tickets in one place                                                                                                                                                                                      | UI home page `/`                                                                         |
-| Claude connector (MCP) | Claude desktop signs in through our OAuth server; only a test `ping` tool so far                                                                                                                                                     | [`docs/runbooks/mcp-connector.md`](docs/runbooks/mcp-connector.md)                       |
+| Claude connector (MCP) | Claude desktop signs in through our OAuth server; tools `create_ticket`, `list_needs_me`, `answer_question`, `status`, same rules as the UI                                                                                          | [`docs/runbooks/mcp-connector.md`](docs/runbooks/mcp-connector.md)                       |
 | PR checks              | Lint, typecheck, tests, build, secret/CodeQL/dependency/Terraform scans, security-review and adversarial-review agents                                                                                                               | Automatic on every PR; overrides with the `security-accepted` / `review-accepted` labels |
 | Dependabot updates     | Weekly grouped PRs; npm patches (and minors of 1.0+ packages) auto-merge after the checks pass and deploy with Andy's next merge; majors, 0.x minors, Actions and Terraform wait for Andy, who is requested as reviewer (CODEOWNERS) | Nothing for auto-merged ones; review the rest                                            |
 | Project baseline       | Gives another repo the same checks, files and GitHub settings                                                                                                                                                                        | `platform/baseline/baseline.mjs` ([runbook](docs/runbooks/onboard-a-repo.md))            |
 | Cost guardrails        | $25/month budget alerts, usage alerts, caps, opt-in kill switch at 150% of budget                                                                                                                                                    | [`docs/runbooks/billing.md`](docs/runbooks/billing.md)                                   |
 
-**Not built yet:** agents doing ticket work. The next slices add the MCP ticket tools, the GitHub App, the Claude Code executor, refinement, a plan step, and build → PR (ARCHITECTURE §12, M1: First end-to-end flow).
+**Not built yet:** agents doing ticket work. The next slices add the GitHub App, the Claude Code executor, refinement, a plan step, and build → PR (ARCHITECTURE §12, M1: First end-to-end flow).
 
 ## Docs
 
@@ -104,6 +104,8 @@ pnpm --filter @andy/web dev          # :5173, proxies /api to :8080
 ```
 
 Set `PUBLIC_URL` (the service's public origin, e.g. `http://localhost:8080`) to turn on `/mcp` and its OAuth endpoints (ADR-0039: MCP OAuth facade); Terraform sets it in Cloud Run.
+
+MCP tools (M1.4: MCP core tools, `apps/api/src/mcp/tools.ts`): `create_ticket`, `list_needs_me`, `answer_question`, `status` (no ticket: overview + who you're signed in as). They call the same `TicketService` as the REST API.
 
 ### Web UI (M1.3: UI: tickets + inbox)
 

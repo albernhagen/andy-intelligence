@@ -153,17 +153,20 @@ async function authorize(ctx: ReturnType<typeof setup>, provider = new TestProvi
 }
 
 describe("MCP OAuth flow (MCP SDK client)", () => {
-  it("GivenAnAllowListedUser_WhenTheSdkClientAuthorizesViaCimd_ThenPingAnswers", async () => {
+  it("GivenAnAllowListedUser_WhenTheSdkClientAuthorizesViaCimd_ThenStatusAnswers", async () => {
     const ctx = setup();
     const provider = await authorize(ctx);
     expect(provider.clientInformation()).toMatchObject({ client_id: CLIENT_ID });
 
     const client = await connect(ctx, provider);
-    const result = await client.callTool({ name: "ping", arguments: {} });
-    expect(result.content).toEqual([
-      { type: "text", text: "pong (signed in as andy@example.com)" },
+    const result = await client.callTool({ name: "status", arguments: {} });
+    expect(result.structuredContent).toMatchObject({ signedInAs: "andy@example.com" });
+    expect((await client.listTools()).tools.map((t) => t.name).sort()).toEqual([
+      "answer_question",
+      "create_ticket",
+      "list_needs_me",
+      "status",
     ]);
-    expect((await client.listTools()).tools.map((t) => t.name)).toEqual(["ping"]);
   });
 
   it("GivenAUserNotOnTheAllowList_WhenApproving_ThenForbiddenAndNoCodeIssued", async () => {
@@ -196,7 +199,7 @@ describe("MCP OAuth flow (MCP SDK client)", () => {
     ctx.advance(61 * 60 * 1000);
 
     const client = await connect(ctx, provider);
-    await client.callTool({ name: "ping", arguments: {} });
+    await client.callTool({ name: "status", arguments: {} });
     const second = provider.tokens()!;
     expect(second.access_token).not.toBe(first.access_token);
     expect(second.refresh_token).not.toBe(first.refresh_token);

@@ -1,4 +1,5 @@
-import type { OAuthGrantStore } from "@andy/contracts";
+import type { OAuthGrantStore, WorkTracker } from "@andy/contracts";
+import type { TicketService } from "@andy/domain";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { WebStandardStreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js";
 import type { Hono, MiddlewareHandler } from "hono";
@@ -7,6 +8,7 @@ import type { AuthEnv } from "../auth";
 import { mcpUrls } from "./oauth";
 import type { FixedWindowLimiter } from "./rate-limit";
 import { hashToken, isTokenShaped } from "./tokens";
+import { registerTools } from "./tools";
 
 const MCP_BODY_BYTES = 256 * 1024;
 
@@ -17,6 +19,8 @@ export interface McpEndpointDeps {
   version: string;
   /** Caps grant-store lookups callers can trigger without a valid token (ADR-0028). */
   lookups: FixedWindowLimiter;
+  tracker: WorkTracker;
+  service: TicketService;
 }
 
 /**
@@ -51,7 +55,7 @@ export function requireMcpToken(deps: McpEndpointDeps): MiddlewareHandler<AuthEn
 
 /**
  * Remote MCP endpoint (Streamable HTTP, stateless: a new server per request, so any Cloud
- * Run instance can answer). M1.1: MCP OAuth spike ships only the throwaway `ping` tool.
+ * Run instance can answer). Tools: tools.ts (M1.4: MCP core tools).
  */
 export function registerMcpEndpoint(app: Hono<AuthEnv>, deps: McpEndpointDeps) {
   app.use("/mcp", requireMcpToken(deps));
@@ -65,11 +69,7 @@ export function registerMcpEndpoint(app: Hono<AuthEnv>, deps: McpEndpointDeps) {
   app.all("/mcp", async (c) => {
     const { email } = c.get("identity");
     const server = new McpServer({ name: "andy-intelligence", version: deps.version });
-    server.registerTool(
-      "ping",
-      { description: "Checks the connection. Returns who you are signed in as." },
-      async () => ({ content: [{ type: "text", text: `pong (signed in as ${email})` }] }),
-    );
+    registerTools(server, { tracker: deps.tracker, service: deps.service, email });
     const transport = new WebStandardStreamableHTTPServerTransport({
       sessionIdGenerator: undefined,
       enableJsonResponse: true,
