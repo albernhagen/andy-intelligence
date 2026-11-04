@@ -4,7 +4,7 @@ Personal control plane for agentic software development: ideas → refined ticke
 
 ## How it works today
 
-What is built on `main` now. The target design is [ARCHITECTURE.md](docs/architecture/ARCHITECTURE.md); progress is in [`docs/build-log.md`](docs/build-log.md). Update this section in the same PR as any change to features, components or how to use the system.
+What is built on `main` now. The target design is [ARCHITECTURE.md](docs/architecture/ARCHITECTURE.md); progress is in tickets in project `AI` (map, decisions and blockers: [`docs/build-log.md`](docs/build-log.md)). Update this section in the same PR as any change to features, components or how to use the system.
 
 ```
  Browser UI ─┐                                   ┌─ Firestore (tickets, questions, history, OAuth grants, webhook events)
@@ -33,16 +33,16 @@ What is built on `main` now. The target design is [ARCHITECTURE.md](docs/archite
 
 ## Docs
 
-| Doc                                                                      | What                                                                   |
-| ------------------------------------------------------------------------ | ---------------------------------------------------------------------- |
-| [`docs/architecture/ARCHITECTURE.md`](docs/architecture/ARCHITECTURE.md) | Design and milestone/slice plan — source of truth                      |
-| [`docs/architecture/adr/`](docs/architecture/adr/)                       | Architecture decisions (MADR)                                          |
-| [`docs/build-log.md`](docs/build-log.md)                                 | Slice status, pending decisions, blockers (history: `docs/build-log/`) |
-| [`docs/architecture/adr/README.md`](docs/architecture/adr/README.md)     | ADR index, one line each                                               |
-| [`docs/security/threat-model.md`](docs/security/threat-model.md)         | Threat model and open security risks                                   |
-| [`docs/runbooks/`](docs/runbooks/)                                       | Manual steps (setup, secrets, apply)                                   |
-| [`AGENTS.md`](AGENTS.md)                                                 | Rules for agents working in this repo (`CLAUDE.md` symlink)            |
-| [`docs/BUILD-PROMPT.md`](docs/BUILD-PROMPT.md)                           | Session prompt for the building agent                                  |
+| Doc                                                                      | What                                                                                                           |
+| ------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------- |
+| [`docs/architecture/ARCHITECTURE.md`](docs/architecture/ARCHITECTURE.md) | Design and milestone/slice plan — source of truth                                                              |
+| [`docs/architecture/adr/`](docs/architecture/adr/)                       | Architecture decisions (MADR)                                                                                  |
+| [`docs/build-log.md`](docs/build-log.md)                                 | Slice → ticket map (status: tickets in project `AI`), pending decisions, blockers (history: `docs/build-log/`) |
+| [`docs/architecture/adr/README.md`](docs/architecture/adr/README.md)     | ADR index, one line each                                                                                       |
+| [`docs/security/threat-model.md`](docs/security/threat-model.md)         | Threat model and open security risks                                                                           |
+| [`docs/runbooks/`](docs/runbooks/)                                       | Manual steps (setup, secrets, apply)                                                                           |
+| [`AGENTS.md`](AGENTS.md)                                                 | Rules for agents working in this repo (`CLAUDE.md` symlink)                                                    |
+| [`docs/BUILD-PROMPT.md`](docs/BUILD-PROMPT.md)                           | Session prompt for the building agent                                                                          |
 
 Docs ship with the change: a PR that changes commands, layout, design, or a decision updates the matching doc (ARCHITECTURE §14, ADR-0022).
 

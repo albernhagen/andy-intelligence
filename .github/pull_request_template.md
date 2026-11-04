@@ -22,6 +22,6 @@
 - [ ] `docs/architecture/ARCHITECTURE.md` — design/scope/plan
 - [ ] ADR added or status updated
 - [ ] Runbook — manual steps
-- [ ] `docs/build-log.md` — slice status; new entry file in `docs/build-log/`
+- [ ] `docs/build-log.md` — decisions, blockers; new entry file in `docs/build-log/`; ticket in project `AI` named in "Why"
 - [ ] `docs/security/threat-model.md` — trust boundary / IAM / credentials changed
 - [ ] `AGENTS.md` / `docs/BUILD-PROMPT.md` — agent rules

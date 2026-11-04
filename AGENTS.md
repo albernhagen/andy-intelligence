@@ -4,7 +4,7 @@ Always loaded (`CLAUDE.md` is a symlink to this file). Full operating rules: [`d
 
 ## Every session
 
-1. Read `docs/build-log.md` (status only); work on exactly one slice, on a branch `m<N>.<slice>/<short-name>` cut from the latest `main`. No stacked PRs: if a dependency hasn't merged, the slice isn't ready.
+1. Read `docs/build-log.md` (pending decisions, blockers) and your slice's ticket in project `AI` (MCP `status`, ADR-0047); work on exactly one slice, on a branch `m<N>.<slice>/<short-name>` cut from the latest `main`. No stacked PRs: if a dependency hasn't merged, the slice isn't ready.
 2. Stop and ask before anything that costs money, touches cloud resources, IAM, secrets, external accounts, or `main`, or deviates from ARCHITECTURE.md.
 3. The repo is public: no secrets, tokens, personal emails, `*.tfvars`, `.env*`, or Terraform state — ever (ADR-0015).
 4. Talking to Andy (chat, PRs, docs): be brief, and never use a bare ID. Write `ID: title`: "M1.2: Ticket core", "M0: Foundations: repo, sign-in, GCP infra", "ADR-0019: Actions OIDC callbacks", "PR #1: Foundations". Milestone titles: ARCHITECTURE §12.
@@ -21,17 +21,17 @@ Always loaded (`CLAUDE.md` is a symlink to this file). Full operating rules: [`d
 
 Update these in the **same PR** as the code:
 
-| If you changed…                                | Update                                                                                  |
-| ---------------------------------------------- | --------------------------------------------------------------------------------------- |
-| Commands, env vars, packages/apps, layout      | `README.md`                                                                             |
-| A feature, component, or how to use the system | `README.md` "How it works today" (keep it one screen)                                   |
-| Design, components, data model, scope, plan    | `docs/architecture/ARCHITECTURE.md` (no revision line: git has history)                 |
-| A decision, or deviated from ARCHITECTURE.md   | New ADR + its line in `adr/README.md`; update the old ADR's status                      |
-| Any step Andy runs by hand                     | `docs/runbooks/*.md`                                                                    |
-| Slice status, pending decisions, blockers      | `docs/build-log.md` (status); what happened → new `docs/build-log/YYYY-MM-DD-<slug>.md` |
-| Trust boundary, entry point, credential, IAM   | `docs/security/threat-model.md`                                                         |
-| Agent rules or this table                      | `AGENTS.md` (root or nested), `docs/BUILD-PROMPT.md`                                    |
-| A quality, security, cost or scaling guardrail | ARCHITECTURE §8.1 project baseline inventory (ADR-0031)                                 |
+| If you changed…                                | Update                                                                                                                                       |
+| ---------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------- |
+| Commands, env vars, packages/apps, layout      | `README.md`                                                                                                                                  |
+| A feature, component, or how to use the system | `README.md` "How it works today" (keep it one screen)                                                                                        |
+| Design, components, data model, scope, plan    | `docs/architecture/ARCHITECTURE.md` (no revision line: git has history)                                                                      |
+| A decision, or deviated from ARCHITECTURE.md   | New ADR + its line in `adr/README.md`; update the old ADR's status                                                                           |
+| Any step Andy runs by hand                     | `docs/runbooks/*.md`                                                                                                                         |
+| Slice status, pending decisions, blockers      | Ticket in project `AI` (Andy moves it); `docs/build-log.md` (decisions, blockers); what happened → new `docs/build-log/YYYY-MM-DD-<slug>.md` |
+| Trust boundary, entry point, credential, IAM   | `docs/security/threat-model.md`                                                                                                              |
+| Agent rules or this table                      | `AGENTS.md` (root or nested), `docs/BUILD-PROMPT.md`                                                                                         |
+| A quality, security, cost or scaling guardrail | ARCHITECTURE §8.1 project baseline inventory (ADR-0031)                                                                                      |
 
 Write docs short and plain: lead with the point, tables/lists over prose, define every term and ID where it's used, no filler. A reader with no chat history should get it on first read.
 
