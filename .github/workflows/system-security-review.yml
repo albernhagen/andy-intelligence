@@ -9,6 +9,11 @@ on:
   schedule:
     - cron: "0 14 * * 1" # Mondays 14:00 UTC
   workflow_dispatch:
+    inputs:
+      token_check:
+        description: "Only check that the control plane issues a repo token (no review, no PR)"
+        type: boolean
+        default: false
 
 permissions: {}
 
@@ -30,7 +35,10 @@ jobs:
           fetch-depth: 0
           persist-credentials: false
       - id: check
+        env:
+          TOKEN_CHECK: ${{ inputs.token_check }}
         run: |
+          if [ "$TOKEN_CHECK" = true ]; then echo "run=false" >> "$GITHUB_OUTPUT"; exit 0; fi
           if [ "$GITHUB_EVENT_NAME" = workflow_dispatch ]; then echo "run=true" >> "$GITHUB_OUTPUT"; exit 0; fi
           # Skip the week if nothing but earlier reviews landed.
           n=$(git log --since="7 days ago" --format=%H -- . ':!docs/security/threat-model.md' | wc -l)
@@ -215,3 +223,36 @@ jobs:
             "$summary" \
             "Run: $RUN_URL. Opened with the control-plane GitHub App's token, so this PR's checks run on their own.")
           gh pr create --base main --head "$branch" --title "Security: system review $date" --body "$body"
+
+  # Manual check of the token path the `publish` job uses (ADR-0043): Actions OIDC token →
+  # control plane → App token → one read-only call → token revoked. No agent, no quota, no PR.
+  token-check:
+    if: github.event_name == 'workflow_dispatch' && inputs.token_check
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      id-token: write # Actions OIDC token for the control plane's /github/token
+    env:
+      CONTROL_PLANE_URL: https://ai.andybernhagen.com
+      GH_REPO: ${{ github.repository }}
+    steps:
+      - name: Repo token from the control plane, used once, then revoked
+        run: |
+          oidc=$(curl -sS --fail-with-body -H "Authorization: bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" \
+            "$ACTIONS_ID_TOKEN_REQUEST_URL&audience=$CONTROL_PLANE_URL" | jq -r .value)
+          echo "::add-mask::$oidc"
+          if ! resp=$(curl -sS --fail-with-body -X POST -H "Authorization: Bearer $oidc" "$CONTROL_PLANE_URL/github/token"); then
+            echo "::error title=token-check::Control plane refused a repo token: $resp (docs/runbooks/github-app.md)."
+            exit 1
+          fi
+          token=$(jq -r .token <<<"$resp")
+          echo "::add-mask::$token"
+          echo "actor: $(jq -r .actor <<<"$resp"), expires: $(jq -r .expiresAt <<<"$resp")"
+          repos=$(GH_TOKEN="$token" gh api /installation/repositories --jq '[.repositories[].full_name] | join(",")')
+          echo "token can see: $repos"
+          GH_TOKEN="$token" gh api -X DELETE /installation/token
+          if [ "$repos" != "$GH_REPO" ]; then
+            echo "::error title=token-check::Token should reach $GH_REPO only, got: $repos"
+            exit 1
+          fi
+          echo "::notice title=token-check::Repo token issued for $GH_REPO only, used and revoked."

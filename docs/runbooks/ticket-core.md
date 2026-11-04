@@ -23,10 +23,10 @@ Then check the PR's CI `plan` job: it should show "No changes" once you've appli
 
 ## 2. Run the Firestore adapter suite (needs Java)
 
-CI tests the in-memory fake only (ADR-0034). Run the same suite on the real adapter once per change to it:
+CI runs this suite on the real adapter when it changes (`firestore-suite`, ADR-0048). To run it locally:
 
 ```sh
-brew install openjdk@21   # once; firebase-tools needs Java 21+
+brew install openjdk   # once; firebase-tools needs Java 21+ on PATH (/opt/homebrew/opt/openjdk/bin)
 pnpm test:firestore
 ```
 
