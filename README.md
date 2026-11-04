@@ -56,7 +56,7 @@ pnpm typecheck
 pnpm lint
 pnpm build
 pnpm format      # prettier --write
-pnpm test:firestore  # Firestore adapter suites on the emulator (needs Java 21+ on PATH; CI runs them when the adapters change, ADR-0045)
+pnpm test:firestore  # Firestore adapter suites on the emulator (needs Java 21+ on PATH; CI runs them when the adapters change, ADR-0048)
 ```
 
 ### Quality gates (ADR-0027)

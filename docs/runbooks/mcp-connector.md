@@ -19,7 +19,7 @@ Apply before or after the code deploys: MCP turns on once both are done. Afterwa
 
 ## 1b. Run the Firestore adapter suite (needs Java)
 
-CI runs this suite when the adapter changes (`firestore-suite`, ADR-0045). To run it locally you need Java 21+ on `PATH`: `brew install openjdk`, then add `export PATH="/opt/homebrew/opt/openjdk/bin:$PATH"` to `~/.zshrc`.
+CI runs this suite when the adapter changes (`firestore-suite`, ADR-0048). To run it locally you need Java 21+ on `PATH`: `brew install openjdk`, then add `export PATH="/opt/homebrew/opt/openjdk/bin:$PATH"` to `~/.zshrc`.
 
 ```sh
 pnpm test:firestore

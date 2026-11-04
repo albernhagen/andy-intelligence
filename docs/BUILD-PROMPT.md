@@ -69,7 +69,7 @@ If a verified fact contradicts the architecture, stop and ask how to proceed.
 
 ### 5. Engineering standards
 
-- Contract-first: define Zod schemas/interfaces in `packages/contracts` before adapters. Every port gets an in-memory fake and a shared contract test suite that every adapter (and the fake) passes, written in the slice that first uses or adapts the port (ADR-0023). CI runs suites on the fakes; the Firestore emulator suites run in CI (`firestore-suite`) when the adapters, shared suites or dependencies change, and locally with `pnpm test:firestore` (ADR-0034, ADR-0045). Do not freeze the `Executor` contract until the Claude Code and Jules adapters both pass.
+- Contract-first: define Zod schemas/interfaces in `packages/contracts` before adapters. Every port gets an in-memory fake and a shared contract test suite that every adapter (and the fake) passes, written in the slice that first uses or adapts the port (ADR-0023). CI runs suites on the fakes; the Firestore emulator suites run in CI (`firestore-suite`) when the adapters, shared suites or dependencies change, and locally with `pnpm test:firestore` (ADR-0034, ADR-0048). Do not freeze the `Executor` contract until the Claude Code and Jules adapters both pass.
 - No vendor concepts in the domain layer.
 - Tests for domain logic (stage transitions, DoR, routing, quota policy, config narrowing/compatibility, override precedence) are required.
 - Small commits on slice branches; open PRs to `main` with a summary (what, why, risks, how verified, assumptions made). I merge.

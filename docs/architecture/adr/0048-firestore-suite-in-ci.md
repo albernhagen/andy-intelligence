@@ -4,7 +4,7 @@ date: 2026-11-04
 amends: 0034
 ---
 
-# 0045 — Firestore contract suites run in CI when the adapters change
+# 0048 — Firestore contract suites run in CI when the adapters change
 
 Decided by Andy, 2026-11-04, after M1.5: GitHub App + project registration and M1.19: GitHub App setup from the UI each added Firestore adapters whose emulator suite nobody ran until verification.
 
