@@ -218,6 +218,48 @@ export function workTrackerContract(name: string, make: () => Promise<WorkTracke
       const kinds = (await tracker.listEvents(project.id, ticket.id)).map((e) => e.kind);
       expect(kinds).toEqual(["created", "question_asked", "question_answered"]);
     });
+
+    it("GivenARunsQuestions_WhenAskedTwice_ThenTheyAreWrittenOnceWithTheRunId", async () => {
+      const { tracker, project, ticket } = await setup();
+      const inputs = [{ text: "Which store?", options: ["a", "b"] }, { text: "Size?" }];
+      const first = await tracker.askQuestions(
+        project.id,
+        ticket.id,
+        inputs,
+        "agent:run-7",
+        "run-7",
+      );
+      expect(first.map((q) => q.text)).toEqual(["Which store?", "Size?"]);
+      for (const q of first) {
+        expect(Question.parse(q)).toEqual(q);
+        expect(q).toMatchObject({ status: "open", runId: "run-7", ticketId: ticket.id });
+      }
+      const replay = await tracker.askQuestions(
+        project.id,
+        ticket.id,
+        inputs,
+        "agent:run-7",
+        "run-7",
+      );
+      expect(replay.map((q) => q.id).sort()).toEqual(first.map((q) => q.id).sort());
+      expect(await tracker.listQuestions({ ticketId: ticket.id })).toHaveLength(2);
+      const asked = (await tracker.listEvents(project.id, ticket.id)).filter(
+        (e) => e.kind === "question_asked",
+      );
+      expect(asked.map((e) => e.actor)).toEqual(["agent:run-7", "agent:run-7"]);
+    });
+
+    it("GivenAnInvalidQuestionInTheBatch_WhenAsked_ThenNoneAreWritten", async () => {
+      const { tracker, project, ticket } = await setup();
+      await expect(
+        tracker.askQuestions(project.id, ticket.id, [{ text: "ok" }, { text: "" }], "system"),
+      ).rejects.toThrow();
+      expect(await tracker.listQuestions({ ticketId: ticket.id })).toEqual([]);
+      await rejectsWith(
+        tracker.askQuestions(project.id, "nope", [{ text: "?" }], "system"),
+        "not_found",
+      );
+    });
   });
 }
 

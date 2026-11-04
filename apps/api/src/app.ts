@@ -106,6 +106,7 @@ const DOMAIN_STATUS = {
   invalid_repo: 422,
   repo_taken: 409,
   invalid_step: 422,
+  not_refinable: 422,
   run_limit: 409,
   run_finished: 409,
   executor_unavailable: 503,
@@ -232,6 +233,7 @@ export function createApp(deps: AppDeps) {
       version: deps.version,
       tracker: deps.tracker,
       service,
+      runs,
     });
   }
 

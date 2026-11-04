@@ -134,11 +134,21 @@ export function applyTicketChange(
   return { ticket: next, events };
 }
 
-export function buildQuestion(ticket: Ticket, input: NewQuestion, at: Date): Question {
+/**
+ * A new open question. With `runId` (questions an agent run asked) the id is derived from the
+ * run and the question's position, so writing the same run's questions twice hits the same ids.
+ */
+export function buildQuestion(
+  ticket: Ticket,
+  input: NewQuestion,
+  at: Date,
+  from: { runId: string; index: number } | null = null,
+): Question {
   const q = NewQuestion.parse(input);
   return {
     ...q,
-    id: crypto.randomUUID(),
+    id: from ? runQuestionId(from.runId, from.index) : crypto.randomUUID(),
+    runId: from?.runId ?? null,
     projectId: ticket.projectId,
     ticketId: ticket.id,
     status: "open",
@@ -147,6 +157,11 @@ export function buildQuestion(ticket: Ticket, input: NewQuestion, at: Date): Que
     createdAt: at.toISOString(),
     answeredAt: null,
   };
+}
+
+/** Id of a run's n-th question (0-based); deterministic, so per-run writes are idempotent. */
+export function runQuestionId(runId: string, index: number): string {
+  return `${runId}-q${index + 1}`;
 }
 
 export function notFound(what: string, id: string): WorkTrackerError {

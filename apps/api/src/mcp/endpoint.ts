@@ -1,5 +1,5 @@
 import type { OAuthGrantStore, WorkTracker } from "@andy/contracts";
-import type { TicketService } from "@andy/domain";
+import type { RunService, TicketService } from "@andy/domain";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { WebStandardStreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js";
 import type { Hono, MiddlewareHandler } from "hono";
@@ -21,6 +21,7 @@ export interface McpEndpointDeps {
   lookups: FixedWindowLimiter;
   tracker: WorkTracker;
   service: TicketService;
+  runs: RunService;
 }
 
 /**
@@ -69,7 +70,12 @@ export function registerMcpEndpoint(app: Hono<AuthEnv>, deps: McpEndpointDeps) {
   app.all("/mcp", async (c) => {
     const { email } = c.get("identity");
     const server = new McpServer({ name: "andy-intelligence", version: deps.version });
-    registerTools(server, { tracker: deps.tracker, service: deps.service, email });
+    registerTools(server, {
+      tracker: deps.tracker,
+      service: deps.service,
+      runs: deps.runs,
+      email,
+    });
     const transport = new WebStandardStreamableHTTPServerTransport({
       sessionIdGenerator: undefined,
       enableJsonResponse: true,

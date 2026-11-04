@@ -151,6 +151,18 @@ export interface WorkTracker {
     input: NewQuestion,
     actor: EventActor,
   ): Promise<Question>;
+  /**
+   * Asks several questions at once: all are written, or none (one `question_asked` event each).
+   * With `runId` the write is idempotent per run: if that run's questions exist already, they
+   * are returned and nothing is written, so a replayed agent report can't duplicate them.
+   */
+  askQuestions(
+    projectId: string,
+    ticketId: string,
+    inputs: NewQuestion[],
+    actor: EventActor,
+    runId?: string,
+  ): Promise<Question[]>;
   /** Only open questions can be answered (`conflict` otherwise); appends `question_answered`. */
   answerQuestion(
     questionId: string,

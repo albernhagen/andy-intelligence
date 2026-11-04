@@ -21,7 +21,8 @@ const STATUS_VARIANT: Record<RunStatus, "default" | "attention" | "ok"> = {
 
 /**
  * Agent runs on this ticket (M1.6a: Claude Code executor): start a refine run and follow it.
- * The list polls while a run is in flight. Agent text is untrusted, so it renders as plain text.
+ * The list polls while a run is in flight; when one ends, every query refreshes, so a refine
+ * run's questions appear (M1.7: Refinement). Agent text is untrusted: it renders as plain text.
  */
 export function Runs(path: TicketPath) {
   const runs = useRuns(path);

@@ -151,6 +151,35 @@ export class InMemoryWorkTracker implements WorkTracker {
     return structuredClone(question);
   }
 
+  async askQuestions(
+    projectId: string,
+    ticketId: string,
+    inputs: NewQuestion[],
+    actor: EventActor,
+    runId?: string,
+  ): Promise<Question[]> {
+    const ticket = this.requireTicket(projectId, ticketId);
+    const at = this.now();
+    // Build every question before storing any, so a bad input writes nothing.
+    const questions = inputs.map((input, index) =>
+      buildQuestion(ticket, input, at, runId ? { runId, index } : null),
+    );
+    if (runId && questions.length > 0 && this.questions.has(questions[0]!.id)) {
+      return [...this.questions.values()]
+        .filter((q) => q.runId === runId)
+        .map((q) => structuredClone(q));
+    }
+    for (const question of questions) {
+      this.questions.set(question.id, question);
+      this.events
+        .get(ticket.id)
+        ?.push(
+          event(ticket, "question_asked", actor, at, question.text, { questionId: question.id }),
+        );
+    }
+    return structuredClone(questions);
+  }
+
   async answerQuestion(
     questionId: string,
     answer: string,

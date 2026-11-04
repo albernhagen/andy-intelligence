@@ -1,0 +1,51 @@
+{
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "summary": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 4000,
+      "description": "The refine report in markdown: Ask, Gaps, Files, Risks (procedure refine.md), at most 300 words."
+    },
+    "questions": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 5,
+      "description": "1 to 5 questions for Andy, highest-impact ambiguity first.",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "text": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 500,
+            "description": "One question, answerable without reading the code."
+          },
+          "options": {
+            "type": "array",
+            "maxItems": 5,
+            "description": "Choices when the answer is one of a few; empty for an open question.",
+            "items": { "type": "string", "minLength": 1, "maxLength": 200 }
+          },
+          "suggestedAnswer": {
+            "type": ["string", "null"],
+            "minLength": 1,
+            "maxLength": 200,
+            "description": "The answer you would pick and why in a few words, or null."
+          },
+          "assumptions": {
+            "type": "array",
+            "maxItems": 5,
+            "description": "What you would assume if the question went unanswered.",
+            "items": { "type": "string", "minLength": 1, "maxLength": 300 }
+          },
+          "urgency": { "type": "string", "enum": ["low", "normal", "high"] }
+        },
+        "required": ["text", "options", "suggestedAnswer", "assumptions", "urgency"]
+      }
+    }
+  },
+  "required": ["summary", "questions"]
+}

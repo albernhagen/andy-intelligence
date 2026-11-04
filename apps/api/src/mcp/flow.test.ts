@@ -166,6 +166,7 @@ describe("MCP OAuth flow (MCP SDK client)", () => {
       "answer_question",
       "create_ticket",
       "list_needs_me",
+      "refine",
       "status",
     ]);
   });

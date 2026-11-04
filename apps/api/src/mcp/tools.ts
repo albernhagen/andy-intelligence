@@ -7,20 +7,21 @@ import {
   type Ticket,
   type WorkTracker,
 } from "@andy/contracts";
-import { DomainError, type TicketService } from "@andy/domain";
+import { DomainError, type RunService, type TicketService } from "@andy/domain";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import { z } from "zod";
 
 /**
- * MCP core tools (M1.4: MCP core tools). Thin adapters over TicketService, the same rules the
- * REST API and UI use. Every caller is Andy (allow-list), so actor = "andy", and answers are
+ * MCP core tools (M1.4: MCP core tools; `refine` from M1.7: Refinement). Thin adapters over
+ * TicketService and RunService, the same rules the REST API and UI use. Every caller is Andy (allow-list), so actor = "andy", and answers are
  * recorded with answeredVia = "mcp".
  */
 
 export interface ToolDeps {
   tracker: WorkTracker;
   service: TicketService;
+  runs: RunService;
   /** Signed-in email, shown by `status` so it doubles as the connection check. */
   email: string;
 }
@@ -39,6 +40,12 @@ const CreateTicketInput = NewTicket.omit({ dorStatus: true, needsYou: true }).ex
 const AnswerInput = {
   questionId: z.uuid().describe("Question id from `list_needs_me`."),
   answer: z.string().trim().min(1),
+};
+
+const RefineInput = {
+  ticket: TicketKey.describe(
+    'Ticket key, e.g. "AI-42". Must be in Backlog with no open questions.',
+  ),
 };
 
 const StatusInput = {
@@ -93,6 +100,8 @@ export function registerTools(server: McpServer, deps: ToolDeps): void {
             suggestedAnswer: q.suggestedAnswer,
             assumptions: q.assumptions,
             urgency: q.urgency,
+            // Agent-written text is untrusted (threat model R15): say which run asked.
+            askedByRun: q.runId,
             createdAt: q.createdAt,
           })),
           tickets: inbox.tickets.map(summary),
@@ -113,6 +122,31 @@ export function registerTools(server: McpServer, deps: ToolDeps): void {
         const question = await service.answer(questionId, answer, "mcp", "andy");
         const ticket = await tracker.getTicket(question.projectId, question.ticketId);
         return { question, ticket: ticket && summary(ticket) };
+      }),
+  );
+
+  server.registerTool(
+    "refine",
+    {
+      description:
+        "Starts a refine run on a Backlog ticket: an agent reads the ticket and the repo and asks 1-5 questions, which arrive in `list_needs_me` when the run ends (a few minutes). Answering the last one moves the ticket to Ready if its Definition of Ready is met.",
+      inputSchema: RefineInput,
+      annotations: { destructiveHint: false, idempotentHint: false, openWorldHint: true },
+    },
+    ({ ticket }) =>
+      run(async () => {
+        const found = await service.findByKey(ticket);
+        const started = await deps.runs.start(found.projectId, found.id, "refine");
+        return {
+          run: {
+            id: started.id,
+            step: started.step,
+            status: started.status,
+            model: started.route.model,
+            deadline: started.deadline,
+            link: started.links.executorRun ?? null,
+          },
+        };
       }),
   );
 

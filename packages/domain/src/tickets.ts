@@ -2,6 +2,7 @@ import {
   NewTicket,
   Stage,
   TicketKey,
+  WorkTrackerError,
   notFound,
   type AnsweredVia,
   type EventActor,
@@ -15,6 +16,10 @@ import {
 import { checkDor, type DorResult } from "./dor";
 import { canTransition } from "./stages";
 
+function log(severity: "INFO" | "WARNING", message: string, fields: object = {}) {
+  console.log(JSON.stringify({ severity, message, component: "tickets", ...fields }));
+}
+
 /** A rule violation the caller caused; the API maps codes to HTTP statuses. */
 export class DomainError extends Error {
   constructor(
@@ -26,6 +31,7 @@ export class DomainError extends Error {
       | "invalid_repo"
       | "repo_taken"
       | "invalid_step"
+      | "not_refinable"
       | "run_limit"
       | "run_finished"
       | "executor_unavailable"
@@ -156,7 +162,11 @@ export class TicketService {
     return question;
   }
 
-  /** Answering re-checks the Definition of Ready and clears Needs-you when nothing is open. */
+  /**
+   * Answering re-checks the Definition of Ready and clears Needs-you when nothing is open. The
+   * last answer on a Backlog ticket that now meets the DoR moves it to Ready (ARCHITECTURE §4.1:
+   * exit is automatic), as "system", through the same checks as any move.
+   */
   async answer(
     questionId: string,
     answer: string,
@@ -166,13 +176,34 @@ export class TicketService {
     const question = await this.tracker.answerQuestion(questionId, answer, via, actor);
     const ticket = await this.require(question.projectId, question.ticketId);
     const open = await this.openQuestionCount(ticket.id);
+    const met = checkDor(ticket, open).met;
     await this.tracker.updateTicket(
       ticket.projectId,
       ticket.id,
-      { fields: { needsYou: open > 0, dorStatus: checkDor(ticket, open).met ? "met" : "not_met" } },
+      { fields: { needsYou: open > 0, dorStatus: met ? "met" : "not_met" } },
       "system",
     );
+    if (met && ticket.stage === "backlog") await this.promote(ticket);
     return question;
+  }
+
+  /**
+   * Backlog → Ready by "system". `move` re-reads the ticket, re-checks the DoR and writes with
+   * `ifUpdatedAt`, so an edit that lands meanwhile wins; the answer stands either way and Andy
+   * can still move the ticket himself.
+   */
+  private async promote(ticket: Ticket): Promise<void> {
+    try {
+      await this.move(ticket.projectId, ticket.id, "ready", "system");
+      log("INFO", "ticket moved to ready after its last answer", { ticket: ticket.key });
+    } catch (err) {
+      const conflict = err instanceof WorkTrackerError && err.code === "conflict";
+      if (!conflict && !(err instanceof DomainError)) throw err;
+      log("WARNING", "ticket not moved to ready after its last answer", {
+        ticket: ticket.key,
+        reason: err.message,
+      });
+    }
   }
 
   /** The Needs-you inbox: open questions plus flagged tickets, across all projects. */

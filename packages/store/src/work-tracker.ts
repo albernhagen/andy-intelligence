@@ -173,6 +173,38 @@ export class FirestoreWorkTracker implements WorkTracker {
     });
   }
 
+  async askQuestions(
+    projectId: string,
+    ticketId: string,
+    inputs: NewQuestion[],
+    actor: EventActor,
+    runId?: string,
+  ): Promise<Question[]> {
+    return this.db.runTransaction(async (tx) => {
+      const ticket = (await tx.get(this.tickets(projectId).doc(ticketId))).data();
+      if (!ticket) throw notFound("ticket", ticketId);
+      const at = this.now();
+      const questions = inputs.map((input, index) =>
+        buildQuestion(ticket, input, at, runId ? { runId, index } : null),
+      );
+      if (questions.length === 0) return [];
+      const refs = questions.map((q) => this.questions().doc(q.id));
+      if (runId) {
+        // Ids derive from the run, so a replay finds them; reads come before any write.
+        const existing = (await tx.getAll(...refs)).flatMap((d) => d.data() ?? []);
+        if (existing.length > 0) return existing;
+      }
+      questions.forEach((question, i) => {
+        const asked = event(ticket, "question_asked", actor, at, question.text, {
+          questionId: question.id,
+        });
+        tx.create(refs[i]!, question);
+        tx.create(this.events(projectId, ticketId).doc(asked.id), asked);
+      });
+      return questions;
+    });
+  }
+
   async answerQuestion(
     questionId: string,
     answer: string,

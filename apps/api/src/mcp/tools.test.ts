@@ -266,24 +266,44 @@ describe("status", () => {
   });
 });
 
+describe("refine tool", () => {
+  it("GivenGitHubIsNotConnected_WhenRefineIsCalled_ThenAToolErrorSaysSo", async () => {
+    const ctx = await withProject();
+    await ctx.call("create_ticket", { project: "AI", type: "story", title: "Board" });
+    const result = await ctx.call("refine", { ticket: "AI-1" });
+    expect(result).toMatchObject({
+      isError: true,
+      text: expect.stringContaining("connect GitHub"),
+    });
+  });
+
+  it("GivenAnUnknownTicket_WhenRefineIsCalled_ThenAToolErrorSaysNotFound", async () => {
+    const ctx = await withProject();
+    const result = await ctx.call("refine", { ticket: "AI-9" });
+    expect(result).toMatchObject({ isError: true, text: expect.stringContaining("not found") });
+  });
+});
+
 describe("M1 flow from Claude desktop", () => {
-  it("GivenATicketCreatedOverMcp_WhenAnAgentAsksAndAndyAnswersOverMcp_ThenItCanMoveToReady", async () => {
+  it("GivenATicketCreatedOverMcp_WhenAnAgentAsksAndAndyAnswersOverMcp_ThenItMovesToReady", async () => {
     const ctx = await withProject();
     const created = await ctx.call("create_ticket", { project: "AI", ...readyStory });
     const id = (await ctx.service.findByKey(created.data.ticket.key)).id;
     await ctx.service.ask("ai", id, { text: "Which board?" }, "agent:r1");
 
     const [question] = (await ctx.call("list_needs_me")).data.questions;
-    await ctx.call("answer_question", { questionId: question.id, answer: "Kanban" });
+    const answered = await ctx.call("answer_question", {
+      questionId: question.id,
+      answer: "Kanban",
+    });
+    expect(answered.data.ticket).toMatchObject({
+      stage: "ready",
+      needsYou: false,
+      dorStatus: "met",
+    });
     expect((await ctx.call("status", { ticket: "AI-1" })).data.readiness).toEqual({
       met: true,
       missing: [],
     });
-
-    const moved = await ctx.rest(`/api/projects/ai/tickets/${id}/stage`, {
-      method: "POST",
-      body: JSON.stringify({ to: "ready" }),
-    });
-    expect(moved.status).toBe(200);
   });
 });

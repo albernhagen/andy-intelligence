@@ -36,10 +36,11 @@ async function setup(connected = true) {
 
 const result = {
   status: "succeeded",
-  summary: "**Ask**: a board",
+  summary: "{}",
   tokensIn: 1000,
   tokensOut: 200,
   costUsd: 0.01,
+  output: { summary: "**Ask**: a board", questions: [{ text: "Kanban or list?" }] },
 };
 
 describe("run routes", () => {
@@ -139,7 +140,7 @@ describe("run callbacks", () => {
     expect((await callback(`/runs/..%2F..%2Fx/context`, claims)).status).toBe(404);
   });
 
-  it("GivenTheRunReports_WhenReplayed_ThenRecordedOnceAndTheTicketGetsTheSummary", async () => {
+  it("GivenTheRunReports_WhenReplayed_ThenRecordedOnceAndTheTicketGetsTheSummaryAndQuestions", async () => {
     const { run, claims, callback, tracker, project, ticket } = await dispatched();
     const report = () =>
       callback(`/runs/${run.id}/report`, claims, { method: "POST", body: JSON.stringify(result) });
@@ -148,7 +149,12 @@ describe("run callbacks", () => {
     const comments = (await tracker.listEvents(project.id, ticket.id)).filter(
       (e) => e.actor === `agent:${run.id}`,
     );
-    expect(comments.map((e) => e.body)).toEqual(["**Ask**: a board"]);
+    expect(comments.filter((e) => e.kind === "comment").map((e) => e.body)).toEqual([
+      "**Ask**: a board\n\nAsked 1 question(s): answer them in Needs you.",
+    ]);
+    expect((await tracker.listQuestions({ ticketId: ticket.id })).map((q) => q.text)).toEqual([
+      "Kanban or list?",
+    ]);
     // A finished run can't be restarted by asking for context again.
     expect((await callback(`/runs/${run.id}/context`, claims)).status).toBe(409);
   });

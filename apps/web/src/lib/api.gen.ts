@@ -1501,6 +1501,8 @@ export interface paths {
               createdAt: string;
               /** Format: date-time */
               answeredAt: string | null;
+              /** @default null */
+              runId: string | null;
             }[];
           };
         };
@@ -1609,6 +1611,8 @@ export interface paths {
               createdAt: string;
               /** Format: date-time */
               answeredAt: string | null;
+              /** @default null */
+              runId: string | null;
             };
           };
         };
@@ -1719,6 +1723,8 @@ export interface paths {
               createdAt: string;
               /** Format: date-time */
               answeredAt: string | null;
+              /** @default null */
+              runId: string | null;
             };
           };
         };
@@ -1820,6 +1826,8 @@ export interface paths {
                 createdAt: string;
                 /** Format: date-time */
                 answeredAt: string | null;
+                /** @default null */
+                runId: string | null;
               }[];
               tickets: {
                 id: string;

@@ -31,9 +31,11 @@ Merged before the move to tickets: M1.0–M1.5, M1.10–M1.16, M1.19, M1.20 (lis
 - Safe deploy path for the control plane (tagged no-traffic Cloud Run revision per PR + rollback runbook): project `AI` keeps `autoMerge: none` until it exists (ADR-0050, ADR-0047 phase 2).
 - Contract suites for ports with one adapter (`OAuthGrantStore`, `CodeHostConnectionStore`): keep the fakes, drop the shared suite?
 - Production monitoring (alerts, error budget per project) as part of "shipped" (brief): add to M6: Dev → prod releases at slicing.
+- Refine doesn't set a ticket's tier, and the Definition of Ready needs one, so answering every question leaves a tier-less ticket in Backlog. Default the tier from policy (§4.2), or let refine propose one? (M1.7: Refinement, ADR-0054)
+- Refine must ask at least one question (§4.3: 1–5). Allow zero for a ticket that is already clear?
 - Local mode design (open question 11); due after M1: First end-to-end flow.
 - Context sources design (open question 12); due after M1: First end-to-end flow.
 
 ## Blocked on Andy
 
-- AI-1: M1.6a: Claude Code executor: after PR #51 merges, give the GitHub App Actions write and run the demos (runbook `agent-runs.md` §1, §3–4).
+- AI-1: M1.6a: Claude Code executor: after PR #51 merges, give the GitHub App Actions write and run the demos (runbook `agent-runs.md` §1, §3, §5).
