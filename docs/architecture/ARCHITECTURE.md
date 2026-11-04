@@ -100,7 +100,7 @@ Enterprise-shaped (durable state, policy, gates, least privilege, audit, contrac
 - Dependencies declared (ticket "blocked by" links).
 - Tier assigned (default from policy, or override).
 - **No open questions.** Assumptions listed explicitly.
-- Per-project policy may allow "proceed on documented assumptions" for S tasks only; default is **require Andy's answers**.
+- Per-project policy may allow "proceed on documented assumptions" for S tasks only; default is **require Andy's answers**. Overnight runs (ADR-0049) answer everything before launch and decide later ambiguity on recorded assumptions, listed in the morning report.
 - **Epics** need only a stated intent and no open questions (no criteria, size or tier).
 - Checked in `packages/domain` (`checkDor`); `dorStatus` is computed on every change, never set by callers. EARS = any criterion containing "THE SYSTEM SHALL".
 
@@ -112,7 +112,7 @@ Enterprise-shaped (durable state, policy, gates, least privilege, audit, contrac
 
 ### 4.4 Epics
 - Ticket types (Epic / Story / Task / Bug) + **child tickets** (`parent_id`).
-- Epic refinement produces stories with `depends_on`. Stories are vertical slices, independently mergeable behind feature flags; merge to `main`, no long-lived epic branches.
+- Epic refinement produces stories with `depends_on`. Stories are vertical slices, independently mergeable behind feature flags; merge to `main`, no long-lived epic branches. Exception: an **overnight run** (ADR-0049) merges its stories into a one-night branch `epic/<key>`, reviewed by Andy as one PR the next morning.
 - **Just-in-time re-planning:** when a story unblocks, a short plan pass re-reads the current codebase before execution. (Single tickets get this from M1.18: Plan step, ADR-0040.)
 - Epic status, cost, and progress roll up from children. Overrides on an epic cascade to its stories.
 
@@ -531,7 +531,7 @@ Jules adapter (completion via PR webhook); freeze `Executor` contract (two adapt
 OpenCode executor via Actions; OpenRouter direct-call gateway for single-call steps; global and per-project caps with hard stops; quota-aware route fallback with 20% reserves; weekly model scout producing pending tier changes; initial tier list seeded by scout. Slice at milestone start.
 
 ### M5: Epics + story board
-Epics with child tickets and dependencies; just-in-time re-planning; config editing and audit/revert in UI and MCP; drag-and-drop story board; dedicated run-detail screen. Slice at milestone start.
+Epics with child tickets and dependencies; just-in-time re-planning; config editing and audit/revert in UI and MCP; drag-and-drop story board; dedicated run-detail screen; **overnight runs** (ADR-0049: launch step with batched answers and plan approvals, one-night epic branch, night budget and stop time, morning report as a Needs-you item). Slice at milestone start.
 
 ### M6: Dev → prod releases
 Project template Terraform + Cloud Deploy dev→prod, with a budget and caps per dev/prod project (§10.1); dev deploy + verification (Playwright/API tests + verification agent); promote/rollback from UI and MCP; release notes; rule-based auto-merge for S tasks; DORA metrics (deploy frequency, lead time, change failure rate, time to restore; ADR-0040). Slice at milestone start.
