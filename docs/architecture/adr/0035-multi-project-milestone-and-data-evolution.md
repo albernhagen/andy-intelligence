@@ -1,5 +1,5 @@
 ---
-status: accepted
+status: accepted, amended by 0050 (milestone order)
 date: 2026-11-01
 ---
 
