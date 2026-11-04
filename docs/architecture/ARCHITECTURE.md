@@ -266,6 +266,9 @@ v1.x screens:
 - **Run detail** — M1: run summary inside ticket detail. M5: dedicated screen (metadata, cost, outcome, links out to Action log / Jules session / PR).
 - **Config** (providers, harnesses, models, tiers, policies; audit log with revert; pending approvals).
 - **Releases** (dev status, promote to prod, rollback).
+- **Dashboards** — M5 (ADR-0045): delivery (tickets by stage over time, lead time, rework, CI green on first try, review blockers), cost, quota and tokens per run and step over time (ADR-0046), per project and overall; aggregation queries + shadcn charts. DORA metrics from M6.
+
+**Design (M5, ADR-0045):** `apps/web/design.md` + shadcn theme tokens are the design source of truth that agents and design skills read. Design skills are pluggable per project (custom-skill context source, §7.6); Hallmark is the first candidate, trialled on one screen. Visual checks: Playwright screenshots + `sloplint --render` (non-blocking).
 API client generated from OpenAPI.
 
 **Built in M1.3: UI: tickets + inbox:**
@@ -286,7 +289,7 @@ Product and domain knowledge for agents, pluggable per project, behind a `Contex
 |---|---|---|
 | Markdown docs (handwritten or copied-in snapshots) | Product brief, domain glossary, users, business rules, prompts | First (only kind needed now) |
 | MCP servers (read-only, per project) | Notion | Later |
-| Custom skills | A skill bringing its own context or tools | Later |
+| Custom skills | A skill bringing its own context or tools, e.g. a design skill such as Hallmark reading the project's `design.md` (ADR-0045) | Later (design skills in M5) |
 
 Scopes: global (Andy's standards) → project → pipeline step. Same sources for the devkit and the control plane (ADR-0032). Context is untrusted data; a project's agents see only its own sources plus global ones; credentials per project, read-only; external calls and sizes capped.
 
@@ -443,7 +446,7 @@ The control plane's Firestore holds real data from M1.2: Ticket core on; there i
 - **Additive by default:** new optional/defaulted fields need no migration.
 - **Breaking change:** bump `SCHEMA_VERSION`, add a tested upgrader `_v N → N+1` applied on read (and rewritten on next write); record it in an ADR.
 - **Backups:** daily, kept 7 days (M1.2: Ticket core). Before a risky deploy, run a manual export (runbook). Restore drill once per milestone.
-- A separate control-plane dev environment is optional later; moving data then = export/import + the same upgraders.
+- A separate control-plane dev environment comes last (§12 Later: Control plane in dev + prod); moving data then = export/import + the same upgraders.
 
 ## 11. Technology choices
 
@@ -477,7 +480,7 @@ Each milestone must work **end to end** before the next starts. Acceptance crite
 | M2 | Multi-project in parallel | Several repos onboarded; stories per project; runs across projects at once under caps and quota |
 | M3 | Add Jules + model routing | Second agent; tiers route work by size; cross-model review |
 | M4 | Paid models + spend caps | OpenRouter/OpenCode, hard spend caps, weekly model scout |
-| M5 | Epics + story board | Epics; drag-and-drop board; config editing |
+| M5 | Epics + story board | Epics; drag-and-drop board; config editing; UI design system and dashboards |
 | M6 | Dev → prod releases | Per-project dev/prod deploys, verification, one-click promote, auto-merge for small tasks |
 
 **Renumbered 2026-11-01 (ADR-0035):** M2: Multi-project in parallel was inserted. ADRs written before then mean M3 by "M2", M4 by "M3", M5 by "M4" and M6 by "M5".
@@ -527,13 +530,15 @@ Jules adapter (completion via PR webhook); freeze `Executor` contract (two adapt
 OpenCode executor via Actions; OpenRouter direct-call gateway for single-call steps; global and per-project caps with hard stops; quota-aware route fallback with 20% reserves; weekly model scout producing pending tier changes; initial tier list seeded by scout. Slice at milestone start.
 
 ### M5: Epics + story board
-Epics with child tickets and dependencies; just-in-time re-planning; config editing and audit/revert in UI and MCP; drag-and-drop story board; dedicated run-detail screen; **overnight runs** (ADR-0049: launch step with batched answers and plan approvals, one-night epic branch, night budget and stop time, morning report as a Needs-you item). Slice at milestone start.
+Epics with child tickets and dependencies; just-in-time re-planning; config editing and audit/revert in UI and MCP; drag-and-drop story board; dedicated run-detail screen; UI design system (`design.md` + tokens), pluggable design skills with a Hallmark trial, Playwright screenshot checks, and a Dashboards screen (ADR-0045) including tokens per run and per step (ADR-0046); **overnight runs** (ADR-0049: launch step with batched answers and plan approvals, one-night epic branch, night budget and stop time, morning report as a Needs-you item). Slice at milestone start.
 
 ### M6: Dev → prod releases
 Project template Terraform + Cloud Deploy dev→prod, with a budget and caps per dev/prod project (§10.1); dev deploy + verification (Playwright/API tests + verification agent); promote/rollback from UI and MCP; release notes; rule-based auto-merge for S tasks; DORA metrics (deploy frequency, lead time, change failure rate, time to restore; ADR-0040). Slice at milestone start.
 
 ### Later (explicitly deferred)
 After M6: Dev → prod releases: **per-project custom domains**. (The control plane's own domain moved up to M1.20: Custom domain, ADR-0044.)
+
+**Control plane in dev + prod** (last; Andy, 2026-11-03): deploy the control plane itself to separate environments, reusing M6: Dev → prod releases' pipeline. Terraform roots parameterized per environment (GCP project ID, state prefix, domain as settings, not defaults); one image built once and promoted dev → prod; separate Firebase sign-in, GitHub App, MCP connector URL and budget per environment; data moved by export/import with the same upgraders (§10.4).
 
 **Devkit standalone + local mode** (ADR-0032): phase 1 devkit in Claude Code with markdown tickets; phase 2 full control plane locally. Designed after M1: First end-to-end flow.
 
