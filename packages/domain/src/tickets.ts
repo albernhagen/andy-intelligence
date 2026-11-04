@@ -22,7 +22,6 @@ export class DomainError extends Error {
       | "invalid_transition"
       | "dor_not_met"
       | "forbidden"
-      | "reason_required"
       | "invalid_repo"
       | "repo_taken"
       | "invalid_step"
@@ -110,8 +109,8 @@ export class TicketService {
   ): Promise<Ticket> {
     const ticket = await this.require(projectId, ticketId);
     if (force) {
+      // ADR-0054: the reason is optional; `forced: true` in history is the audit trail.
       if (actor !== "andy") throw new DomainError("forbidden", "only Andy can force a stage move");
-      if (!reason?.trim()) throw new DomainError("reason_required", "a forced move needs a reason");
     } else {
       if (!canTransition(ticket.stage, to)) {
         throw new DomainError("invalid_transition", `can't move from ${ticket.stage} to ${to}`);
@@ -126,7 +125,10 @@ export class TicketService {
     return this.tracker.updateTicket(
       projectId,
       ticketId,
-      { stage: { to, forced: force, reason: reason ?? null }, ifUpdatedAt: ticket.updatedAt },
+      {
+        stage: { to, forced: force, reason: reason?.trim() || null },
+        ifUpdatedAt: ticket.updatedAt,
+      },
       actor,
     );
   }

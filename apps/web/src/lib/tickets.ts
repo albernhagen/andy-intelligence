@@ -26,11 +26,20 @@ export function groupByStage(tickets: readonly Ticket[]): Record<Stage, Ticket[]
 }
 
 /**
- * Moves the domain allows from `stage`, and every stage Andy can force to with a reason. Forced
+ * Moves the domain allows from `stage`, and every stage Andy can force to. Forced
  * includes the allowed ones too, so Andy can e.g. force Backlog → Ready past an unmet DoR.
  */
 export function moveOptions(stage: Stage): { allowed: Stage[]; forced: Stage[] } {
   return { allowed: [...TRANSITIONS[stage]], forced: STAGES.filter((s) => s !== stage) };
+}
+
+/**
+ * What a board drop sends: a normal move when the domain allows `from → to`, else a forced one
+ * (Andy only; ADR-0054). `null` when dropped back on its own column.
+ */
+export function dropMove(from: Stage, to: Stage): { to: Stage; force: boolean } | null {
+  if (from === to) return null;
+  return { to, force: !moveOptions(from).allowed.includes(to) };
 }
 
 /** Textarea ↔ list: one item per non-blank line. */

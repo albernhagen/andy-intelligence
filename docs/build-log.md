@@ -5,7 +5,7 @@ Slice status lives in **tickets in project `AI`** (ADR-0047 phase 1). This page 
 ## Where to look
 
 - **Tickets:** the UI at `https://ai.andybernhagen.com`, or the MCP `status` tool (connector `andy-intelligence`): no key → counts per stage; a key (e.g. `AI-1`) → stage, Definition of Ready gaps, questions, history.
-- **Moving a ticket:** Andy, in the UI (Move to …). Agents can't change a stage over MCP yet; they say in the PR which ticket it closes. From M1.8: Build + gate, runs and PR webhooks move tickets.
+- **Moving a ticket:** Andy, in the UI: drag the card on the board, or Move to … on the ticket (AI-16: Board drag-and-drop; forced moves no longer need a reason). Agents can't change a stage over MCP yet; they say in the PR which ticket it closes. From M1.8: Build + gate, runs and PR webhooks move tickets.
 - **Slice definitions:** ARCHITECTURE §12. A ticket's body names its row.
 
 ## M1: First end-to-end flow: ticket → PR with Claude

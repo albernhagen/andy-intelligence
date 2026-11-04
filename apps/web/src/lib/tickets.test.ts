@@ -1,6 +1,13 @@
 import { describe, expect, it } from "vitest";
 import type { Question, Ticket, TicketEvent } from "@andy/contracts";
-import { describeEvent, groupByStage, linesToList, moveOptions, sortQuestions } from "./tickets";
+import {
+  describeEvent,
+  dropMove,
+  groupByStage,
+  linesToList,
+  moveOptions,
+  sortQuestions,
+} from "./tickets";
 
 const ticket = (over: Partial<Ticket>) =>
   ({ id: "t", stage: "backlog", rank: "m", ...over }) as Ticket;
@@ -73,5 +80,19 @@ describe("sortQuestions", () => {
       question({ id: "urgent", urgency: "high", createdAt: "2026-11-03T00:00:00.000Z" }),
     ]);
     expect(sorted.map((q) => q.id)).toEqual(["urgent", "early", "late", "low"]);
+  });
+});
+
+describe("dropMove", () => {
+  it("GivenBacklog_WhenDroppedOnReady_ThenANormalMove", () => {
+    expect(dropMove("backlog", "ready")).toEqual({ to: "ready", force: false });
+  });
+
+  it("GivenBacklog_WhenDroppedOnDone_ThenAForcedMove", () => {
+    expect(dropMove("backlog", "done")).toEqual({ to: "done", force: true });
+  });
+
+  it("GivenATicket_WhenDroppedOnItsOwnColumn_ThenNoMove", () => {
+    expect(dropMove("ready", "ready")).toBeNull();
   });
 });
