@@ -12,13 +12,24 @@ const json = (status: number, body: unknown) =>
   new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json" } });
 
 /** Routes GitHub API calls by method + path; anything else is a 500. */
-function fakeGitHub(routes: Record<string, () => Response>) {
+function fakeGitHub(routes: Record<string, (init?: RequestInit) => Response>) {
   return vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
     const url = new URL(typeof input === "string" ? input : input.toString());
     const route = routes[`${init?.method ?? "GET"} ${url.pathname}`];
-    return route ? route() : json(500, { message: `unexpected ${url.pathname}` });
+    return route ? route(init) : json(500, { message: `unexpected ${url.pathname}` });
   });
 }
+
+/** Like GitHub: the run's ID comes back only when the request sets `return_run_details`. */
+const dispatches = (init?: RequestInit) =>
+  (JSON.parse(String(init?.body ?? "{}")) as { return_run_details?: boolean })
+    .return_run_details === true
+    ? json(200, {
+        workflow_run_id: 123,
+        run_url: "https://api.github.com/repos/albernhagen/andy-intelligence/actions/runs/123",
+        html_url: "https://github.com/albernhagen/andy-intelligence/actions/runs/123",
+      })
+    : new Response(null, { status: 204 });
 
 const installed = {
   "GET /repos/albernhagen/andy-intelligence/installation": () => json(200, { id: 42 }),
@@ -119,12 +130,8 @@ describe("GitHubCodeHost", () => {
   it("GivenAnInstalledRepo_WhenAWorkflowIsDispatched_ThenItRunsOnTheDefaultBranchAndItsIdIsReturned", async () => {
     const fetch = fakeGitHub({
       ...installed,
-      "POST /repos/albernhagen/andy-intelligence/actions/workflows/agent-run.yml/dispatches": () =>
-        json(200, {
-          workflow_run_id: 123,
-          run_url: "https://api.github.com/repos/albernhagen/andy-intelligence/actions/runs/123",
-          html_url: "https://github.com/albernhagen/andy-intelligence/actions/runs/123",
-        }),
+      "POST /repos/albernhagen/andy-intelligence/actions/workflows/agent-run.yml/dispatches":
+        dispatches,
     });
     const dispatch = await host(fetch).dispatchWorkflow(
       "albernhagen/andy-intelligence",
@@ -139,6 +146,7 @@ describe("GitHubCodeHost", () => {
     expect(JSON.parse(String(call?.[1]?.body))).toEqual({
       ref: "main",
       inputs: { run_id: "r1", credential: "subscription" },
+      return_run_details: true,
     });
   });
 
