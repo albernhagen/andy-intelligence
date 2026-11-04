@@ -125,7 +125,8 @@ export class GitHubCodeHost implements CodeHost {
     const repo = await this.getRepo(fullName);
     if (!repo) return null;
     const [owner, name] = repo.fullName.split("/") as [string, string];
-    // GitHub answers 200 with the new run's ID and URLs (needs the App's Actions write).
+    // Needs the App's Actions write. Only with `return_run_details` does GitHub answer 200 with
+    // the new run's ID and URLs; without it, 204 and no body (GitHub changelog 2026-02-19).
     const res = await (
       await this.asInstallation(installationId)
     ).request("POST /repos/{owner}/{repo}/actions/workflows/{workflow_id}/dispatches", {
@@ -134,6 +135,7 @@ export class GitHubCodeHost implements CodeHost {
       workflow_id: workflow,
       ref: repo.defaultBranch,
       inputs,
+      return_run_details: true,
     });
     const data = res.data as { workflow_run_id?: number; html_url?: string } | undefined;
     if (!data?.workflow_run_id || !data.html_url) {
