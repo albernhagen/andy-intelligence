@@ -4,7 +4,7 @@ import { createFirestore } from "./index";
 import { FirestoreWorkTracker } from "./work-tracker";
 
 // Runs only against the Firestore emulator: `pnpm test:firestore` (needs Java), locally or in
-// CI's `firestore-suite` job when the adapters change (ADR-0045).
+// CI's `firestore-suite` job when the adapters change (ADR-0048).
 if (process.env.FIRESTORE_EMULATOR_HOST) {
   const db = createFirestore("demo-andy-intelligence");
   workTrackerContract("firestore (emulator)", async () => new FirestoreWorkTracker(db));
