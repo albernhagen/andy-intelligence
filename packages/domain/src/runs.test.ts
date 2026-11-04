@@ -319,6 +319,26 @@ describe("RunService", () => {
       expect(await tracker.listQuestions({ ticketId })).toHaveLength(2);
     });
 
+    it("GivenACrashBetweenWritingQuestionsAndFlaggingTheTicket_WhenReplayed_ThenTheTicketIsFlagged", async () => {
+      const run = await service.start(projectId, ticketId, "refine");
+      const caller = await callerOf(run.id);
+      const original = tracker.updateTicket.bind(tracker);
+      tracker.updateTicket = async (p, id, change, actor) => {
+        if (change.fields?.needsYou === true) throw new Error("instance died");
+        return original(p, id, change, actor);
+      };
+      await expect(service.report(run.id, caller, refined(good))).rejects.toThrow("died");
+      tracker.updateTicket = original;
+      expect((await tracker.getTicket(projectId, ticketId))?.needsYou).toBe(false);
+
+      expect(await service.report(run.id, caller, refined(good))).toBe("recorded");
+      expect(await tracker.getTicket(projectId, ticketId)).toMatchObject({
+        needsYou: true,
+        dorStatus: "not_met",
+      });
+      expect(await tracker.listQuestions({ ticketId })).toHaveLength(2);
+    });
+
     it("GivenAndyAnsweredBetweenACrashAndTheReplay_WhenReplayed_ThenTheTicketIsNotFlaggedAgain", async () => {
       await tracker.updateTicket(
         projectId,

@@ -340,14 +340,18 @@ export class RunService {
         error: `Its result was rejected (${issues.join("; ")}); no questions were written.`,
       };
     }
-    // A replay after a crash between writing the questions and closing the run: they are on the
-    // ticket already, and Andy may have answered them since. Don't touch the ticket again.
+    // A replay after a crash once the questions were written: they are on the ticket already and
+    // Andy may have answered some since. Re-flag only while some are still open, so a crash
+    // before the flag was set is healed and answers given since aren't undone.
     const written = run.ticketId
       ? (await this.tracker.listQuestions({ ticketId: run.ticketId })).filter(
           (q) => q.runId === run.id,
         )
       : [];
-    if (written.length > 0) return { summary: parsed.data.summary, asked: written.length };
+    if (written.length > 0) {
+      if (written.some((q) => q.status === "open")) await this.flagNeedsYou(run);
+      return { summary: parsed.data.summary, asked: written.length };
+    }
     const ticket = run.ticketId ? await this.tracker.getTicket(run.projectId, run.ticketId) : null;
     if (!ticket || ticket.stage !== "backlog") {
       return {
@@ -361,13 +365,19 @@ export class RunService {
       `agent:${run.id}`,
       run.id,
     );
+    await this.flagNeedsYou(run);
+    return { summary: parsed.data.summary, asked: questions.length };
+  }
+
+  /** Open questions flag the ticket Needs-you and block Ready (as `TicketService.ask` does). */
+  private async flagNeedsYou(run: Run): Promise<void> {
+    if (!run.ticketId) return;
     await this.tracker.updateTicket(
-      ticket.projectId,
-      ticket.id,
+      run.projectId,
+      run.ticketId,
       { fields: { needsYou: true, dorStatus: "not_met" } },
       "system",
     );
-    return { summary: parsed.data.summary, asked: questions.length };
   }
 
   /**
