@@ -3,6 +3,7 @@ export {
   AGENT_RUN_WORKFLOW,
   CLAUDE_EXECUTOR_REF,
   CREDENTIAL_INPUT,
+  PLATFORM_REPO,
   ClaudeCodeActionsExecutor,
 } from "./executor";
 export {

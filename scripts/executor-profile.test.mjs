@@ -23,6 +23,22 @@ describe("buildProfile", () => {
     }
   });
 
+  it("GivenAnyStep_WhenBuilt_ThenProcessEnvironmentAndRunnerFilesAreDenied", () => {
+    // The model credential is in the agent's process environment (security review on PR #51).
+    for (const step of Object.keys(profile.steps)) {
+      const { deny } = build(step).permissions;
+      for (const rule of [
+        "Read(//proc/**)",
+        "Read(//sys/**)",
+        "Read(//etc/**)",
+        "Read(//home/runner/work/_temp/**)",
+        "Read(//home/runner/.config/**)",
+      ]) {
+        expect(deny).toContain(rule);
+      }
+    }
+  });
+
   it("GivenAnyStep_WhenBuilt_ThenTfvarsStateAndCredentialReadsAreDenied", () => {
     const { deny } = build("build").permissions;
     for (const rule of [

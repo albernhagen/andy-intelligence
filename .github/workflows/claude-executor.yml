@@ -91,7 +91,7 @@ jobs:
           jq -e --arg id "$RUN_ID" --argjson cap "$MAX_TURNS_CAP" --argjson max "$MAX_PROMPT_CHARS" '
             (.runId == $id)
             and (.step | type == "string" and test("^[a-z][a-z-]{0,31}$"))
-            and (.model | type == "string" and test("^[A-Za-z0-9._-]{1,64}$"))
+            and (.model | type == "string" and test("^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$"))
             and (.maxTurns | type == "number" and . == floor and . >= 1 and . <= $cap)
             and (.prompt | type == "string" and length > 0 and length <= $max)
           ' "$body" > /dev/null || fail "GET /runs/$RUN_ID/context: unexpected response shape"

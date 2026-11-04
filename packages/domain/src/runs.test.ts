@@ -27,6 +27,9 @@ class WorkflowExecutor extends InMemoryExecutor {
   constructor(private readonly host: InMemoryCodeHost) {
     super();
   }
+  override async cancel(handle: RunHandle): Promise<void> {
+    if (handle.executor) await this.host.cancelWorkflowRun(handle.executor.repo, handle.externalId);
+  }
   override async start(req: RunRequest): Promise<RunHandle> {
     await super.start(req);
     const credential = req.billingType === "pay_per_use" ? "api_key" : "subscription";
@@ -113,6 +116,34 @@ describe("RunService", () => {
     await expect(later.start(projectId, ticketId, "refine")).resolves.toMatchObject({
       status: "queued",
     });
+  });
+
+  it("GivenTwoConcurrentStarts_WhenBothPassTheFirstCheck_ThenOnlyOneRunIsDispatched", async () => {
+    const results = await Promise.allSettled([
+      service.start(projectId, ticketId, "refine"),
+      service.start(projectId, ticketId, "refine"),
+    ]);
+    expect(results.filter((r) => r.status === "fulfilled")).toHaveLength(1);
+    expect(results.find((r) => r.status === "rejected")).toMatchObject({
+      reason: { name: "DomainError", code: "run_limit" },
+    });
+    expect(host.workflowRuns.size).toBe(1);
+    expect((await runs.listActive(projectId)).length).toBe(1);
+  });
+
+  it("GivenTheDispatchIsNotRecorded_WhenStarted_ThenTheWorkflowRunIsCancelledAndTheRunFailed", async () => {
+    const original = runs.update.bind(runs);
+    runs.update = async (id, patch, from) => {
+      if (patch.executor) throw new Error("firestore unavailable");
+      return original(id, patch, from);
+    };
+    await rejects(service.start(projectId, ticketId, "refine"), "dispatch_failed");
+    expect(host.workflowRuns.get("1")?.run).toMatchObject({
+      status: "completed",
+      conclusion: "cancelled",
+    });
+    const [run] = await runs.listForTicket(projectId, ticketId);
+    expect(run).toMatchObject({ status: "failed", error: expect.stringContaining("not recorded") });
   });
 
   it("GivenDispatchFails_WhenStarted_ThenTheRunIsFailedWithTheReason", async () => {

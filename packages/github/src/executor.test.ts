@@ -46,6 +46,20 @@ describe("ClaudeCodeActionsExecutor", () => {
     expect(host.workflowRuns.get(handle.externalId)?.inputs.credential).toBe("api_key");
   });
 
+  it("GivenAnotherRepoOrDefaultBranch_WhenStarted_ThenItFailsBeforeDispatch", async () => {
+    for (const other of [
+      { ...repo, fullName: "albernhagen/other", url: "https://github.com/albernhagen/other" },
+      { ...repo, defaultBranch: "trunk" },
+    ]) {
+      const host = new InMemoryCodeHost([other]);
+      const executor = new ClaudeCodeActionsExecutor(host);
+      await expect(
+        executor.start({ ...request("r5"), projectRef: other.fullName }),
+      ).rejects.toThrow(/only on albernhagen\/andy-intelligence/);
+      expect(host.workflowRuns.size).toBe(0);
+    }
+  });
+
   it("GivenTheAppIsNotInstalled_WhenStarted_ThenItFails", async () => {
     const executor = new ClaudeCodeActionsExecutor(new InMemoryCodeHost([]));
     await expect(executor.start(request("r3"))).rejects.toThrow(/isn.t installed/);

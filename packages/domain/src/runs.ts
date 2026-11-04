@@ -105,12 +105,7 @@ export class RunService {
     const ticket = await this.requireTicket(projectId, ticketId);
     const repo = project.repos[0];
     if (!repo) throw new DomainError("invalid_repo", `project ${project.key} has no repo`);
-    // A run past its deadline no longer counts, so a lost report can't block the project
-    // until the watchdog (M1.6b) settles it.
-    const nowMs = this.now().getTime();
-    const active = (await this.runs.listActive(projectId)).filter(
-      (r) => !r.deadline || Date.parse(r.deadline) > nowMs,
-    );
+    const active = await this.inFlight(projectId);
     if (active.length >= MAX_ACTIVE_RUNS_PER_PROJECT) {
       throw new DomainError("run_limit", `project ${project.key} already has a run in flight`, [
         `limit: ${MAX_ACTIVE_RUNS_PER_PROJECT}`,
@@ -132,6 +127,16 @@ export class RunService {
       maxTurns: limits.maxTurns,
     });
 
+    // Check again now that this run exists: two concurrent starts both pass the first check,
+    // and both see each other here, so the oldest wins and the newer one fails (ADR-0028 cap).
+    const winners = (await this.inFlight(projectId)).slice(0, MAX_ACTIVE_RUNS_PER_PROJECT);
+    if (!winners.some((r) => r.id === run.id)) {
+      await this.fail(run.id, "another run started at the same time");
+      throw new DomainError("run_limit", `project ${project.key} already has a run in flight`, [
+        `limit: ${MAX_ACTIVE_RUNS_PER_PROJECT}`,
+      ]);
+    }
+
     let handle;
     try {
       handle = await this.executor.start({
@@ -147,23 +152,34 @@ export class RunService {
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       log("ERROR", "run dispatch failed", { runId: run.id, ticket: ticket.key, error: message });
-      await this.runs.update(
-        run.id,
-        {
-          status: "failed",
-          endedAt: this.now().toISOString(),
-          error: `dispatch failed: ${message}`.slice(0, 2000),
-        },
-        ["queued"],
-      );
+      await this.fail(run.id, `dispatch failed: ${message}`);
       throw new DomainError("dispatch_failed", `couldn't start the run: ${message}`);
     }
 
-    const dispatched = await this.runs.update(
-      run.id,
-      { executor: handle.executor, links: { executorRun: handle.url ?? undefined } },
-      ["queued"],
-    );
+    let dispatched: Run;
+    try {
+      dispatched = await this.runs.update(
+        run.id,
+        { executor: handle.executor, links: { executorRun: handle.url ?? undefined } },
+        ["queued"],
+      );
+    } catch (err) {
+      // The executor run exists but can't be matched to this Run: its callbacks would all be
+      // refused. Stop it rather than leave it running unaccounted.
+      const message = err instanceof Error ? err.message : String(err);
+      log("ERROR", "dispatched run not recorded; cancelling it", {
+        runId: run.id,
+        externalId: handle.externalId,
+        error: message,
+      });
+      await this.executor
+        .cancel(handle)
+        .catch((e: unknown) =>
+          log("ERROR", "cancel after a failed record failed", { runId: run.id, error: String(e) }),
+        );
+      await this.fail(run.id, `dispatched but not recorded: ${message}`);
+      throw new DomainError("dispatch_failed", `couldn't record the run: ${message}`);
+    }
     log("INFO", "run dispatched", {
       runId: run.id,
       ticket: ticket.key,
@@ -250,6 +266,33 @@ export class RunService {
       await this.tracker.addComment(done.projectId, done.ticketId, body, `agent:${run.id}`);
     }
     return "recorded";
+  }
+
+  /**
+   * Runs in flight, oldest first (ties by id, so every caller orders them the same way). A run
+   * past its deadline no longer counts, so a lost report can't block the project until the
+   * watchdog (M1.6b) settles it.
+   */
+  private async inFlight(projectId: string): Promise<Run[]> {
+    const nowMs = this.now().getTime();
+    return (await this.runs.listActive(projectId))
+      .filter((r) => !r.deadline || Date.parse(r.deadline) > nowMs)
+      .sort(
+        (a, b) => (a.createdAt ?? "").localeCompare(b.createdAt ?? "") || a.id.localeCompare(b.id),
+      );
+  }
+
+  /** Marks a queued run failed; logs (doesn't throw) if that write fails too. */
+  private async fail(runId: string, error: string): Promise<void> {
+    await this.runs
+      .update(
+        runId,
+        { status: "failed", endedAt: this.now().toISOString(), error: error.slice(0, 2000) },
+        ["queued"],
+      )
+      .catch((e: unknown) =>
+        log("ERROR", "couldn't mark the run failed", { runId, error: String(e) }),
+      );
   }
 
   /** The run, if `caller` is the executor run it was dispatched as; `forbidden` otherwise. */

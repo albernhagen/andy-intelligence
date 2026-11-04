@@ -9,6 +9,14 @@ import type {
 } from "@andy/contracts";
 import { RunRequest as RunRequestSchema } from "@andy/contracts";
 
+/**
+ * The repo whose `claude-executor.yml` the callbacks must come from. Until M2: Multi-project in
+ * parallel gives other repos a caller pinned to this repo, only this repo can run agents: its
+ * `agent-run.yml` calls the executor locally, so the OIDC `job_workflow_ref` is this repo's
+ * workflow on its default branch.
+ */
+export const PLATFORM_REPO = "albernhagen/andy-intelligence";
+
 /** The per-project caller workflow the control plane dispatches (`.github/workflows/`). */
 export const AGENT_RUN_WORKFLOW = "agent-run.yml";
 
@@ -16,8 +24,7 @@ export const AGENT_RUN_WORKFLOW = "agent-run.yml";
  * The platform's reusable workflow every Claude Code run must execute (§9 agent callback
  * auth): a callback whose OIDC `job_workflow_ref` differs is refused.
  */
-export const CLAUDE_EXECUTOR_REF =
-  "albernhagen/andy-intelligence/.github/workflows/claude-executor.yml@refs/heads/main";
+export const CLAUDE_EXECUTOR_REF = `${PLATFORM_REPO}/.github/workflows/claude-executor.yml@refs/heads/main`;
 
 /** Workflow input values for the run's credential (the workflow picks the secret). */
 export const CREDENTIAL_INPUT = { subscription: "subscription", pay_per_use: "api_key" } as const;
@@ -41,6 +48,14 @@ export class ClaudeCodeActionsExecutor implements Executor {
     const parsed = RunRequestSchema.parse(req);
     const previous = this.started.get(parsed.runId);
     if (previous) return previous;
+    // Callbacks are checked against CLAUDE_EXECUTOR_REF, which only holds for the platform
+    // repo dispatched on `main`; anything else would have every callback refused.
+    const repo = await this.host.getRepo(parsed.projectRef);
+    if (repo && (repo.fullName.toLowerCase() !== PLATFORM_REPO || repo.defaultBranch !== "main")) {
+      throw new Error(
+        `agent runs work only on ${PLATFORM_REPO} (default branch main) until M2: Multi-project in parallel`,
+      );
+    }
     const dispatch = await this.host.dispatchWorkflow(
       parsed.projectRef,
       this.options.workflow ?? AGENT_RUN_WORKFLOW,
