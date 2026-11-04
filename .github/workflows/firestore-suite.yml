@@ -1,6 +1,6 @@
 name: Firestore suite
 
-# Contract suites on the real Firestore adapters, against the Firestore emulator (ADR-0045,
+# Contract suites on the real Firestore adapters, against the Firestore emulator (ADR-0048,
 # amends ADR-0034). The job always runs, so its check always reports; the emulator only starts
 # when the adapters, the shared suites or their dependencies changed, so most PRs stay fast.
 
