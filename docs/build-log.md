@@ -237,6 +237,14 @@ Temporary progress log until andy-intelligence can track its own work (then migr
 - Verified locally: `terraform validate` + `fmt` on both roots; lint, typecheck, tests, build. Not run here: any plan or apply (needs Andy's GCP and Cloudflare credentials).
 - Andy to run after merge, same day: runbook `custom-domain.md` §1–8 (`infra/dns` 2 adds; targeted mapping 1 add; certificate; `infra/control-plane` 2 changes; GitHub App URLs; Claude connector).
 
+## 2026-11-04 — PR #38 merged; custom domain live
+
+- Merged: PR #38: M1.20: Custom domain. Andy applied `infra/dns` (2 added), the targeted mapping (after verifying `andybernhagen.com` in Search Console; the first try failed and was replaced: 1 added, 1 destroyed) and `infra/control-plane` (2 changed). Certificate live 15 minutes after the mapping.
+- Verified: `https://ai.andybernhagen.com/health` 200 (Google Trust Services certificate); `/api/me` 401 there; `run.app` `/health` 200, `/api/me` and `/mcp` 404; MCP metadata names the new URL.
+- System review runs 41741740609 and 41743556966 failed in the expected cutover window (DNS not yet live, then audience mismatch).
+- Andy to finish: runbook `custom-domain.md` §6–8 (GitHub App URLs + redelivery, Claude connector, sign-in, system review rerun).
+- Runbook troubleshooting gained this cutover's lessons (Search Console check, failed-mapping retry, worktree `init`/tfvars, the certificate's last few minutes).
+
 ## Slices: M1: First end-to-end flow: ticket → PR with Claude
 
 Status: todo / in progress / PR open / merged. Definitions: ARCHITECTURE §12.
@@ -263,7 +271,7 @@ Status: todo / in progress / PR open / merged. Definitions: ARCHITECTURE §12.
 | M1.17: Agent evals v1                   | M               | M1.11: Adversarial PR review, M1.16: Project baseline v1                                    | todo            |
 | M1.18: Plan step                        | M               | M1.6: Claude Code executor, M1.7: Refinement                                                | todo            |
 | M1.19: GitHub App setup from the UI     | M               | M1.5: GitHub App + project registration                                                     | merged (PR #36) |
-| M1.20: Custom domain                    | S               | M1.19: GitHub App setup from the UI                                                         | PR open         |
+| M1.20: Custom domain                    | S               | M1.19: GitHub App setup from the UI                                                         | merged (PR #38) |
 
 **Next (order decided by Andy, 2026-10-28):**
 

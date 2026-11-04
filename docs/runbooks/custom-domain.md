@@ -48,18 +48,18 @@ terraform plan -target=google_cloud_run_domain_mapping.public -out=map.tfplan   
 terraform apply map.tfplan
 ```
 
-Targeted on purpose: the rest of the plan switches `PUBLIC_URL` and sign-in, which must wait for the certificate. The mapping names the service as a plain string, not a reference, so the target doesn't pull in the service's pending `PUBLIC_URL` change. If the plan shows `1 to change`, stop: something added a dependency. `terraform output domain_mapping_records` should show `CNAME ghs.googlehosted.com` for `ai`.
+Targeted on purpose: the rest of the plan switches `PUBLIC_URL` and sign-in, which must wait for the certificate. The mapping names the service as a plain string, not a reference, so the target doesn't pull in the service's pending `PUBLIC_URL` change. If the plan shows `1 to change`, stop: something added a dependency. A retry after a failed create shows `1 to add, 0 to change, 1 to destroy` (Terraform replaces the failed mapping); that is fine. `terraform output domain_mapping_records` should show `CNAME ghs.googlehosted.com` for `ai`.
 
 ## 4. Wait for the certificate
 
-Usually about 15 minutes; up to 24 hours.
+Usually about 15 minutes; up to 24 hours. On 2026-11-03 it took 15 minutes from the mapping to a working `/health`.
 
 ```sh
-gcloud beta run domain-mappings describe --domain ai.andybernhagen.com --region us-central1 --project andy-intelligence-512400 --format='value(status.conditions)'
+gcloud beta run domain-mappings describe --domain ai.andybernhagen.com --region us-central1 --project andy-intelligence-512400 --format='value(status.conditions)'   # needs: gcloud components install beta
 curl -s https://ai.andybernhagen.com/health    # {"status":"ok",…}
 ```
 
-Ready when every condition is `True` and `/health` returns 200 without certificate errors.
+Ready when `/health` returns 200 without certificate errors. The conditions turn `True` a few minutes earlier: until then HTTPS fails with `SSL_ERROR_SYSCALL` while plain HTTP already returns `302`. That's normal; wait.
 
 ## 5. Switch `PUBLIC_URL` and sign-in
 
@@ -107,11 +107,12 @@ Changing `custom_domain` alone won't do it. To return to `run.app`: revert this 
 
 ## Troubleshooting
 
-| Symptom                                                     | Fix                                                                                                                        |
-| ----------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------- |
-| Step 3: `Caller is not authorized to administer the domain` | The Terraform account isn't a verified Search Console owner: step 1.5 and the Verify click in step 2, same Google account. |
-| Certificate pending after 24 hours                          | CNAME proxied (orange cloud) or wrong; a CAA record blocking `pki.goog`/`letsencrypt.org` (step 1.1).                      |
-| Sign-in popup: `auth/unauthorized-domain`                   | Step 5 not applied.                                                                                                        |
-| `404 {"error":"not found"}`                                 | You're on a `run.app` URL; use `https://ai.andybernhagen.com`.                                                             |
-| Claude: can't connect / no auth                             | Connector still on the old URL (step 7), or `PUBLIC_URL` not switched (step 5).                                            |
-| `publish` job: `401` from `/github/token`                   | Step 5 not applied: the workflow's audience is already the new URL.                                                        |
+| Symptom                                                       | Fix                                                                                                                                                                                                                                                                                                                                                    |
+| ------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Step 3: `Caller is not authorized to administer the domain`   | The Terraform account isn't a verified Search Console owner. `gcloud domains list-user-verified` must list `andybernhagen.com`; if not, `gcloud domains verify andybernhagen.com` → Verify (same Google account). If unsure which account Terraform uses: `gcloud auth application-default login`. Then rerun step 3 (it replaces the failed mapping). |
+| `Backend initialization required` (a fresh clone or worktree) | `terraform init -reconfigure`. A worktree has no `terraform.tfvars` (gitignored): pass the main checkout's with `-var-file=…`, or Terraform prompts for `allowed_emails`.                                                                                                                                                                              |
+| Certificate pending after 24 hours                            | CNAME proxied (orange cloud) or wrong; a CAA record blocking `pki.goog`/`letsencrypt.org` (step 1.1).                                                                                                                                                                                                                                                  |
+| Sign-in popup: `auth/unauthorized-domain`                     | Step 5 not applied.                                                                                                                                                                                                                                                                                                                                    |
+| `404 {"error":"not found"}`                                   | You're on a `run.app` URL; use `https://ai.andybernhagen.com`.                                                                                                                                                                                                                                                                                         |
+| Claude: can't connect / no auth                               | Connector still on the old URL (step 7), or `PUBLIC_URL` not switched (step 5).                                                                                                                                                                                                                                                                        |
+| `publish` job: `401` from `/github/token`                     | Step 5 not applied: the workflow's audience is already the new URL.                                                                                                                                                                                                                                                                                    |
