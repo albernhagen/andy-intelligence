@@ -501,7 +501,7 @@ Each milestone is delivered as **slices**. A slice:
 - is sized so one agent session can finish it (S ≈ hours, M ≈ a session, L = split it);
 - declares its dependencies, so independent slices can run in parallel sessions/worktrees.
 
-Slice status lives in tickets in project `AI` (ADR-0047 phase 1, from M1.6a); `docs/build-log.md` maps slices to tickets and holds pending decisions and blockers (history in `docs/build-log/`). The milestone's **Done when** is checked only after all its slices merge.
+Slice status lives in tickets in project `AI` (ADR-0047 phase 1, since 2026-11-04); until the Needs-you inbox can hold them, `docs/build-log.md` maps slices to tickets and keeps pending decisions and blockers (history in `docs/build-log/`). The milestone's **Done when** is checked only after all its slices merge.
 
 ### M0: Foundations: repo, sign-in, GCP infra
 Repo scaffold, contracts package, Terraform for control-plane GCP project (plan reviewed by Andy), Firestore database (server-only access), auth (UI + API allow-list), CI, ADRs for decisions in this doc.
