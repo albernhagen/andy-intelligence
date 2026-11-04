@@ -2,8 +2,8 @@
 title: andy-intelligence — Architecture & Vision
 status: accepted (v1.x scope)
 owner: Andy
-last_updated: 2026-11-03
-revision: 2026-11-03g (M1.20: Custom domain: control plane at https://ai.andybernhagen.com via a Cloud Run domain mapping, DNS in infra/dns, run.app URLs answer only /health; ADR-0044; after 2026-11-03f M1.19: GitHub App setup from the UI: connect from Settings → GitHub, credentials written by the API, repo tokens for CI via Actions OIDC, no review bot; ADR-0043; after 2026-11-03e M1.5: GitHub App + project registration)
+last_updated: 2026-11-04
+revision: 2026-11-04a (Firestore emulator suites in CI when the adapters change, §6, §8.1; ADR-0045; after 2026-11-03g M1.20: Custom domain)
 ---
 
 # andy-intelligence — Architecture & Vision
@@ -174,7 +174,7 @@ Missing or stale quota reading ⇒ treat as **unknown**: warn in UI, prefer next
 
 ## 6. Ports (contracts) and adapters
 
-Contracts are defined in `packages/contracts` (Zod schemas + TypeScript interfaces; OpenAPI generated for the API). **Every port has an in-memory fake and a shared contract test suite that every adapter, including the fake, must pass** (ADR-0012 rejected a narrower scope; see ADR-0023). CI runs suites on the fakes; suites that need an emulator (Firestore) run locally on demand (`pnpm test:firestore`, ADR-0034). A port's fake and suite land in the slice that first uses or adapts that port — before its first real adapter.
+Contracts are defined in `packages/contracts` (Zod schemas + TypeScript interfaces; OpenAPI generated for the API). **Every port has an in-memory fake and a shared contract test suite that every adapter, including the fake, must pass** (ADR-0012 rejected a narrower scope; see ADR-0023). CI runs suites on the fakes, and the Firestore emulator suites when the adapters or suites change (`firestore-suite.yml`, ADR-0045; locally `pnpm test:firestore`). A port's fake and suite land in the slice that first uses or adapts that port — before its first real adapter.
 
 | Port | Domain concepts | v1.x adapters | Later |
 |---|---|---|---|
@@ -311,6 +311,7 @@ Third-party action pins inside `platform/actions/` are bumped by this repo's Dep
 | Guardrail | ADR | Source in this repo | Carried by | Status |
 |---|---|---|---|---|
 | Lint, typecheck, test, build | 0022 | `ci.yml` (`check`) → `platform/actions/ci-check` | A | carried (M1.16) |
+| Firestore adapter contract suites on the emulator (path-gated) | 0034, 0045 | `firestore-suite.yml` | — | control plane only (no managed project has Firestore adapters yet) |
 | Workflow linter (actionlint) | 0027 | `ci.yml` → `platform/actions/actionlint` | A | carried (M1.16) |
 | Terraform fmt/validate | 0011, 0024 | `ci.yml` → `platform/actions/terraform-check` (skips without `infra/`) | A | carried (M1.16) |
 | Public-safe Terraform plan summary | 0011 | `terraform-plan.yml` | — | not yet carried (M6: Dev → prod releases; needs per-project WIF) |
