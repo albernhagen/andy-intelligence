@@ -58,7 +58,7 @@ pnpm lint
 pnpm build
 pnpm format      # prettier --write
 pnpm context:check   # agent-loaded docs within their size budgets (ADR-0046)
-pnpm test:firestore  # Firestore adapter contract suite on the emulator (needs Java 21+: `brew install openjdk@21`; not in CI, ADR-0034)
+pnpm test:firestore  # Firestore adapter suites on the emulator (needs Java 21+ on PATH; CI runs them when the adapters change, ADR-0045)
 ```
 
 ### Quality gates (ADR-0027)
