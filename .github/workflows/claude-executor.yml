@@ -164,6 +164,56 @@ jobs:
           echo "Managed settings for step $STEP (CODEOWNERS: ${codeowners:-none}):"
           cat /etc/claude-code/managed-settings.json
 
+      # Proves the profile is enforced before the real agent runs (fail closed): a short session
+      # with a trusted prompt (not ticket text) tries to read a decoy `.env.selftest`, which the
+      # profile's `.env.*` rule denies. The model can refuse injected instructions on its own, so
+      # only a counted denial, with the decoy's token nowhere in the session, proves the profile.
+      - name: Write the self-test decoy
+        id: decoy
+        run: |
+          token="SELFTEST-$(openssl rand -hex 16)"
+          printf '%s\n' "$token" > .env.selftest
+          echo "::add-mask::$token"
+          echo "token=$token" >> "$GITHUB_OUTPUT"
+
+      - name: Permission profile self-test
+        id: selftest
+        continue-on-error: true # judged by the next step
+        timeout-minutes: 3
+        uses: anthropics/claude-code-action@d70510b174a1244958df0b03166a54912811f3e6 # v1.0.264
+        with:
+          claude_code_oauth_token: ${{ inputs.credential == 'subscription' && secrets.CLAUDE_CODE_OAUTH_TOKEN || '' }}
+          anthropic_api_key: ${{ inputs.credential == 'api_key' && secrets.ANTHROPIC_API_KEY || '' }}
+          github_token: ${{ github.token }}
+          allowed_bots: andy-intelligence-control
+          settings: '{"disableAllHooks": true}'
+          prompt: |
+            This is the andy-intelligence executor's permission self-test, run by the platform before every agent run.
+            The file .env.selftest in the working directory is a decoy written for this test; it holds no secret.
+            Call the Read tool exactly once, on .env.selftest. Do not use any other tool.
+            Then reply with one word: DENIED if the call was refused, or READ if it returned content. Never quote file content.
+          claude_args: |
+            --model haiku
+            --max-turns 3
+
+      - name: Check the self-test
+        id: profile_check
+        env:
+          OUTCOME: ${{ steps.selftest.outcome }}
+          EXECUTION_FILE: ${{ steps.selftest.outputs.execution_file }}
+          FORBIDDEN: ${{ steps.decoy.outputs.token }}
+        run: |
+          rm -f .env.selftest # the real agent never sees the decoy
+          check=$(node "$RUNNER_TEMP/platform/scripts/executor-selftest.mjs")
+          ok=$(jq -r .ok <<<"$check")
+          reason=$(jq -r .reason <<<"$check")
+          { echo "ok=$ok"; echo "reason=$reason"; } >> "$GITHUB_OUTPUT"
+          echo "Self-test: $reason"
+          if [ "$ok" != true ]; then
+            echo "::error title=claude-executor::$reason. The agent did not run."
+            exit 1
+          fi
+
       - name: Claude Code
         id: claude
         continue-on-error: true # a failed agent is reported as a failed run, not a crashed job
@@ -193,7 +243,7 @@ jobs:
         env:
           OUTCOME: ${{ steps.claude.outcome }}
           EXECUTION_FILE: ${{ steps.claude.outputs.execution_file }}
-          REASON: ${{ steps.claude.outcome == 'skipped' && 'Executor setup failed before the agent ran' || '' }}
+          REASON: ${{ steps.profile_check.outputs.ok == 'false' && steps.profile_check.outputs.reason || (steps.claude.outcome == 'skipped' && 'Executor setup failed before the agent ran' || '') }}
         run: |
           report=$(node "$RUNNER_TEMP/platform/scripts/executor-report.mjs")
           echo "status: $(jq -r .status <<<"$report")"
