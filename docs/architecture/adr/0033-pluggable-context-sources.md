@@ -1,5 +1,5 @@
 ---
-status: accepted (direction; detailed design after M1: First end-to-end flow)
+status: accepted (direction; markdown kind designed by 0053; MCP and skill sources after M2)
 date: 2026-11-01
 ---
 
