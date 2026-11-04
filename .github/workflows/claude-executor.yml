@@ -173,6 +173,10 @@ jobs:
           claude_code_oauth_token: ${{ inputs.credential == 'subscription' && secrets.CLAUDE_CODE_OAUTH_TOKEN || '' }}
           anthropic_api_key: ${{ inputs.credential == 'api_key' && secrets.ANTHROPIC_API_KEY || '' }}
           github_token: ${{ github.token }}
+          # The control plane's GitHub App starts every run, so the action's "human actor" check
+          # must allow that one bot by name (`[bot]` suffix optional). Never '*': on a public repo
+          # any App could then start runs. Update if the App is renamed (runbook agent-runs.md).
+          allowed_bots: andy-intelligence-control
           settings: '{"disableAllHooks": true}'
           prompt: ${{ needs.context.outputs.prompt }}
           # model and max_turns were validated in `context`. The managed profile already holds
