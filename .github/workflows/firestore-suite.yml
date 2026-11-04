@@ -1,0 +1,69 @@
+name: Firestore suite
+
+# Contract suites on the real Firestore adapters, against the Firestore emulator (ADR-0045,
+# amends ADR-0034). The job always runs, so its check always reports; the emulator only starts
+# when the adapters, the shared suites or their dependencies changed, so most PRs stay fast.
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: firestore-suite-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  firestore-suite:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Relevant changes?
+        id: changes
+        env:
+          BASE: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.sha || github.event.before }}
+        run: |
+          # A new branch or a force push has no usable base: run the suite.
+          if [ -z "$BASE" ] || ! git cat-file -e "$BASE^{commit}" 2>/dev/null; then
+            echo "run=true" >> "$GITHUB_OUTPUT"; exit 0
+          fi
+          changed=$(git diff --name-only "$BASE" HEAD -- \
+            packages/store packages/contracts/src firebase.json package.json pnpm-lock.yaml \
+            .github/workflows/firestore-suite.yml)
+          echo "$changed"
+          if [ -n "$changed" ]; then echo "run=true"; else echo "run=false"; fi >> "$GITHUB_OUTPUT"
+
+      - name: Nothing to test
+        if: steps.changes.outputs.run != 'true'
+        run: echo "::notice title=firestore-suite::No Firestore adapter or suite changes; skipped."
+
+      - if: steps.changes.outputs.run == 'true'
+        uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+      - if: steps.changes.outputs.run == 'true'
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+      - if: steps.changes.outputs.run == 'true'
+        uses: actions/setup-java@b843ebf9b913146b38da2eaa7aeddf76074ae1ad # v6.1.0
+        with:
+          distribution: temurin
+          java-version: "21"
+      # The emulator jar (~60 MB) is downloaded on first use; key on the pinned firebase-tools.
+      - if: steps.changes.outputs.run == 'true'
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.cache/firebase/emulators
+          key: firebase-emulators-${{ hashFiles('package.json') }}
+      - if: steps.changes.outputs.run == 'true'
+        run: pnpm install --frozen-lockfile
+      - if: steps.changes.outputs.run == 'true'
+        run: pnpm test:firestore
