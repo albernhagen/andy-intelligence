@@ -1,0 +1,3 @@
+# 2026-11-04 — Mobile planned
+
+- **Decided (Andy, ADR-0052: Mobile):** a new milestone M7: Mobile after M6: Dev → prod releases and before M3: Add Jules + model routing. The existing SPA becomes an installable web app on Andy's phone with Web Push behind the `Notifier` port (VAPID keys in Secret Manager, subscriptions behind a `PushSubscriptionStore` port): answer questions, approve plans and gated PRs, promote or roll back, pause dispatch from anywhere. Push on iOS is verified first; the fallback is a Capacitor shell around the same SPA, not React Native. No agent-written text in notifications; caps, quiet hours and per-category toggles.

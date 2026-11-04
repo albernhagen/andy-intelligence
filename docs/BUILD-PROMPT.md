@@ -60,7 +60,7 @@ If a verified fact contradicts the architecture, stop and ask how to proceed.
 
 ### 4. Milestone and slice discipline
 
-- Work strictly milestone by milestone, in the order ARCHITECTURE §12 gives (M0 → M1 → M2 → M5 → M6 → M3 → M4, ADR-0050). **Do not start a milestone until the previous one meets its "Done when" criteria and I confirm.**
+- Work strictly milestone by milestone, in the order ARCHITECTURE §12 gives (M0 → M1 → M2 → M5 → M6 → M7 → M3 → M4, ADR-0050, ADR-0052). **Do not start a milestone until the previous one meets its "Done when" criteria and I confirm.**
 - Each milestone is built as **slices** (ARCHITECTURE §12): one PR per slice, its own "Done when", sized for one session. Slices for M1: First end-to-end flow are defined in the doc; for later milestones (M2–M6, titles in ARCHITECTURE §12), propose the slice table (scope, size, depends on, done when) at milestone start and wait for my go-ahead.
 - **One slice per session by default.** Start from the tickets in project `AI` (UI or MCP `status`; the map is in `docs/build-log.md`) to find the next unblocked slice; confirm it with me; work on a branch named `m<N>.<slice>/<short-name>`.
 - Independent slices may run in parallel sessions or worktrees. Never start a slice whose dependencies haven't merged. **No stacked PRs:** every slice branches from the latest `main` and targets `main`.
