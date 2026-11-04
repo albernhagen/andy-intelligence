@@ -237,6 +237,10 @@ Temporary progress log until andy-intelligence can track its own work (then migr
 - Verified locally: `terraform validate` + `fmt` on both roots; lint, typecheck, tests, build. Not run here: any plan or apply (needs Andy's GCP and Cloudflare credentials).
 - Andy to run after merge, same day: runbook `custom-domain.md` §1–8 (`infra/dns` 2 adds; targeted mapping 1 add; certificate; `infra/control-plane` 2 changes; GitHub App URLs; Claude connector).
 
+## 2026-11-03 — Parallel-work coordination planned
+
+- **Decided (Andy, ADR-0047: Coordinating parallel work):** no LLM parent agent; the control plane stays the supervisor. M2: Multi-project in parallel adds conflict-aware dispatch, sync runs, a merge queue, collision-free IDs, an in-flight view and cross-project dependencies (from today's hand-resolved conflicts).
+
 ## Slices: M1: First end-to-end flow: ticket → PR with Claude
 
 Status: todo / in progress / PR open / merged. Definitions: ARCHITECTURE §12.

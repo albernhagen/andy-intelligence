@@ -3,7 +3,7 @@ title: andy-intelligence — Architecture & Vision
 status: accepted (v1.x scope)
 owner: Andy
 last_updated: 2026-11-03
-revision: 2026-11-03g (M1.20: Custom domain: control plane at https://ai.andybernhagen.com via a Cloud Run domain mapping, DNS in infra/dns, run.app URLs answer only /health; ADR-0044; after 2026-11-03f M1.19: GitHub App setup from the UI: connect from Settings → GitHub, credentials written by the API, repo tokens for CI via Actions OIDC, no review bot; ADR-0043; after 2026-11-03e M1.5: GitHub App + project registration)
+revision: 2026-11-03j (ADR-0047: Coordinating parallel work in M2: conflict-aware dispatch, sync runs, merge queue, collision-free IDs, in-flight view, cross-project dependencies; after 2026-11-03g)
 ---
 
 # andy-intelligence — Architecture & Vision
@@ -213,7 +213,7 @@ Contracts are defined in `packages/contracts` (Zod schemas + TypeScript interfac
   | Jules | `pull_request` opened webhook on the PR Jules creates (correlated to the Run by branch/PR body) | Watchdog reads session `activities` once at deadline |
   | Direct | In-process; no signal needed | — |
 - **Run watchdog** — when a run is dispatched, a Cloud Tasks task is queued for its deadline. If no completion signal has arrived by then, the watchdog checks the executor/PR directly **once**, then heals the record or flags Needs-you. No periodic polling; nothing runs when no work is in flight.
-- **Pipeline engine** — stage transitions, DoR checks, gate rules, dependency release, retry policy.
+- **Pipeline engine** — stage transitions, DoR checks, gate rules, dependency release, retry policy. It is the supervisor of parallel work; there is no LLM parent agent (ADR-0047). From M2: conflict-aware dispatch (no two in-flight tickets touching the same files in a repo), sync runs when `main` moves, a merge queue per repo, cross-project dependencies.
 - **Router** — picks the route for a step: overrides → tier routes in order → skip providers paused by quota/budget → fall back or queue.
 - **Scheduled jobs** (Cloud Scheduler → authenticated endpoint): weekly **model scout**; weekly **system security review** per project when something merged since the last one (§9.1). Quota readings are captured from run results, not sampled.
 - **UI** — static SPA served by the same service.
@@ -520,7 +520,7 @@ Can run in parallel once M1.2: Ticket core merges:
 - M1.5: GitHub App + project registration
 
 ### M2: Multi-project in parallel
-Andy builds several systems at once (ADR-0035). Onboard N projects via M1.5: GitHub App + project registration and M1.16: Project baseline v1, each with per-PR security and adversarial review, local quality gates and the weekly system security review (§9.1, §4.5, §10.2); **stories by project**: tickets listed, filtered and grouped per project in the UI and MCP (`list_projects`, per-project ticket lists, Needs-you inbox grouped by project); concurrent runs across projects with explicit caps (max runs per project and globally, ADR-0028); quota-aware dispatch so parallel runs keep the subscription reserves (§5); agent read access to API/MCP scoped per project; dispatch also capped by PRs waiting for Andy (review capacity), and repeated review findings become a pending `ConfigChange` to `AGENTS.md` or a procedure (ADR-0040). Slice at milestone start.
+Andy builds several systems at once (ADR-0035). Onboard N projects via M1.5: GitHub App + project registration and M1.16: Project baseline v1, each with per-PR security and adversarial review, local quality gates and the weekly system security review (§9.1, §4.5, §10.2); **stories by project**: tickets listed, filtered and grouped per project in the UI and MCP (`list_projects`, per-project ticket lists, Needs-you inbox grouped by project); concurrent runs across projects with explicit caps (max runs per project and globally, ADR-0028); quota-aware dispatch so parallel runs keep the subscription reserves (§5); agent read access to API/MCP scoped per project; coordination of parallel work (ADR-0047): conflict-aware dispatch from the plan's touched files, sync runs that bring open agent PRs up to date with `main`, a merge queue per repo via the App token, collision-free ADR/risk IDs and revisions, an in-flight view in MCP, cross-project dependencies; dispatch also capped by PRs waiting for Andy (review capacity), and repeated review findings become a pending `ConfigChange` to `AGENTS.md` or a procedure (ADR-0040). Slice at milestone start.
 
 ### M3: Add Jules + model routing
 Jules adapter (completion via PR webhook); freeze `Executor` contract (two adapters pass contract tests); harness/provider/model/tier config with compatibility rules; size-based routing; cross-model review; google-sub quota (task counting) and reserves. Slice at milestone start.
