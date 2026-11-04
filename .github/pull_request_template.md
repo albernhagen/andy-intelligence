@@ -19,9 +19,9 @@
 <!-- Tick each box or mark it n/a. Unticked means not done. -->
 
 - [ ] `README.md` — commands, env vars, layout
-- [ ] `docs/architecture/ARCHITECTURE.md` — design/scope/plan (revision bumped)
+- [ ] `docs/architecture/ARCHITECTURE.md` — design/scope/plan
 - [ ] ADR added or status updated
 - [ ] Runbook — manual steps
-- [ ] `docs/build-log.md` — slice status
+- [ ] `docs/build-log.md` — slice status; new entry file in `docs/build-log/`
 - [ ] `docs/security/threat-model.md` — trust boundary / IAM / credentials changed
 - [ ] `AGENTS.md` / `docs/BUILD-PROMPT.md` — agent rules

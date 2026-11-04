@@ -1,6 +1,6 @@
 # Build log — status
 
-Current state only: slices, what's next, decisions pending, blockers. Keep it under one page (context budget, ADR-0046). What happened and why goes in the dated history: [`docs/build-log/`](build-log/) (one file per month, newest at the bottom).
+Current state only: slices, what's next, decisions pending, blockers. Keep it under one page (context budget, ADR-0046). What happened and why goes in the history: [`docs/build-log/`](build-log/), one new file per entry (`YYYY-MM-DD-<slug>.md`), so parallel PRs never edit the same file.
 
 Temporary until andy-intelligence tracks its own work (then migrated to tickets).
 

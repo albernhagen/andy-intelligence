@@ -2,8 +2,6 @@
 title: andy-intelligence — Architecture & Vision
 status: accepted (v1.x scope)
 owner: Andy
-last_updated: 2026-11-03
-revision: 2026-11-03i (ADR-0046: Context budget: reading map, merged M1 slices moved to history/, budgets, leaner review input; after 2026-11-03g)
 ---
 
 # andy-intelligence — Architecture & Vision
@@ -572,10 +570,10 @@ Docs are part of the change, not a follow-up. Every slice PR updates the docs it
 |---|---|---|
 | `context-budget.json` | Size budgets for agent-loaded docs, checked in CI (ADR-0046) | A budgeted doc is added; never raise a number without Andy |
 | `README.md` | What the repo is; **How it works today** (what's built, how to use it, how it works; one screen, ADR-0040); how to develop/run/test, layout table, links to the docs below | Commands, env vars, packages/apps, or layout change; a feature, component or way of using the system is added or changed |
-| `docs/architecture/ARCHITECTURE.md` | Current target design and milestone/slice plan (this doc) | Design, scope, or plan changes. Bump `revision` and `last_updated` in the front matter. Never let it describe something the code contradicts. |
+| `docs/architecture/ARCHITECTURE.md` | Current target design and milestone/slice plan (this doc) | Design, scope, or plan changes. No revision counter: `git log` is its history (ADR-0046). Never let it describe something the code contradicts. |
 | `docs/architecture/adr/NNNN-*.md` | Why a decision was made (MADR) | Any architecture decision or deviation. ADR bodies are immutable; to change a decision write a new ADR and update the old one's `status` (`superseded by` / `amended by`). |
 | `docs/architecture/adr/README.md` | One line per ADR: number, decision, status (ADR-0046) | With every new ADR or status change (a test checks) |
-| `docs/build-log.md` | Current status only: slices, next, decisions pending, blockers (≤ 1 page, ADR-0046) | Every slice: start, PR open, merged. Dated history goes in `docs/build-log/YYYY-MM.md`. Retired once the system tracks its own work. |
+| `docs/build-log.md` | Current status only: slices, next, decisions pending, blockers (≤ 1 page, ADR-0046) | Every slice: start, PR open, merged. What happened goes in a new file per entry, `docs/build-log/YYYY-MM-DD-<slug>.md` (never append to a shared file). Retired once tickets track the work (ADR-0047 phase 1). |
 | `docs/runbooks/*.md` | Steps Andy runs by hand (setup, secrets, apply, release) | Any manual step is added, changed, or removed |
 | `docs/security/threat-model.md` | Assets, trust boundaries, threats, mitigations, open risks | A trust boundary, entry point, credential, or IAM grant is added or changed; after each system security review |
 | `docs/BUILD-PROMPT.md` | How a building agent behaves | Operating rules change |
@@ -585,4 +583,4 @@ Docs are part of the change, not a follow-up. Every slice PR updates the docs it
 
 Managed projects get the same rule through the template (§8): `docs/features.md` is updated on merge, `docs/architecture/overview.md` when the design changes, ADRs for decisions.
 
-The claude.ai Project holds reference copies of `ARCHITECTURE.md` and `BUILD-PROMPT.md` for planning conversations. **The repo is canonical**; refresh the Project copies when the architecture `revision` changes.
+The claude.ai Project holds reference copies of `ARCHITECTURE.md` and `BUILD-PROMPT.md` for planning conversations. **The repo is canonical**; refresh the Project copies when `ARCHITECTURE.md` changes on `main`.

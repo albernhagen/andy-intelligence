@@ -13,7 +13,7 @@ Always loaded (`CLAUDE.md` is a symlink to this file). Full operating rules: [`d
 
 - ARCHITECTURE.md: your slice's §12 row and the sections it names (map at the top), not the whole file.
 - ADRs: read `docs/architecture/adr/README.md` (one line each), then open only the ones you need.
-- Build-log history (`docs/build-log/YYYY-MM.md`): only when you need why something happened.
+- Build-log history (`docs/build-log/`, one file per entry): only when you need why something happened.
 - Broad searches or reading many files: use a subagent and keep its summary, not the file dumps.
 - `pnpm context:check` enforces size budgets (`context-budget.json`); trim, don't raise a budget, unless Andy agrees.
 
@@ -21,17 +21,17 @@ Always loaded (`CLAUDE.md` is a symlink to this file). Full operating rules: [`d
 
 Update these in the **same PR** as the code:
 
-| If you changed…                                | Update                                                                    |
-| ---------------------------------------------- | ------------------------------------------------------------------------- |
-| Commands, env vars, packages/apps, layout      | `README.md`                                                               |
-| A feature, component, or how to use the system | `README.md` "How it works today" (keep it one screen)                     |
-| Design, components, data model, scope, plan    | `docs/architecture/ARCHITECTURE.md` (bump `revision`)                     |
-| A decision, or deviated from ARCHITECTURE.md   | New ADR + its line in `adr/README.md`; update the old ADR's status        |
-| Any step Andy runs by hand                     | `docs/runbooks/*.md`                                                      |
-| Slice status, pending decisions, blockers      | `docs/build-log.md` (status); what happened → `docs/build-log/YYYY-MM.md` |
-| Trust boundary, entry point, credential, IAM   | `docs/security/threat-model.md`                                           |
-| Agent rules or this table                      | `AGENTS.md` (root or nested), `docs/BUILD-PROMPT.md`                      |
-| A quality, security, cost or scaling guardrail | ARCHITECTURE §8.1 project baseline inventory (ADR-0031)                   |
+| If you changed…                                | Update                                                                                  |
+| ---------------------------------------------- | --------------------------------------------------------------------------------------- |
+| Commands, env vars, packages/apps, layout      | `README.md`                                                                             |
+| A feature, component, or how to use the system | `README.md` "How it works today" (keep it one screen)                                   |
+| Design, components, data model, scope, plan    | `docs/architecture/ARCHITECTURE.md` (no revision line: git has history)                 |
+| A decision, or deviated from ARCHITECTURE.md   | New ADR + its line in `adr/README.md`; update the old ADR's status                      |
+| Any step Andy runs by hand                     | `docs/runbooks/*.md`                                                                    |
+| Slice status, pending decisions, blockers      | `docs/build-log.md` (status); what happened → new `docs/build-log/YYYY-MM-DD-<slug>.md` |
+| Trust boundary, entry point, credential, IAM   | `docs/security/threat-model.md`                                                         |
+| Agent rules or this table                      | `AGENTS.md` (root or nested), `docs/BUILD-PROMPT.md`                                    |
+| A quality, security, cost or scaling guardrail | ARCHITECTURE §8.1 project baseline inventory (ADR-0031)                                 |
 
 Write docs short and plain: lead with the point, tables/lists over prose, define every term and ID where it's used, no filler. A reader with no chat history should get it on first read.
 

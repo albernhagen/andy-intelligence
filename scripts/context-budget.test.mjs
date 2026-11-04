@@ -12,7 +12,7 @@ describe("globToRegExp", () => {
     ["**/AGENTS.md", "infra/AGENTS.md.template", false],
     ["platform/procedures/*.md", "platform/procedures/security-review.md", true],
     ["platform/procedures/*.md", "platform/procedures/x/y.md", false],
-    ["docs/build-log.md", "docs/build-log/2026-11.md", false],
+    ["docs/build-log.md", "docs/build-log/2026-11-03-context-budget-built.md", false],
   ])("GivenPattern%sAndPath%s_WhenMatched_Then%s", (pattern, path, expected) => {
     expect(globToRegExp(pattern).test(path)).toBe(expected);
   });
