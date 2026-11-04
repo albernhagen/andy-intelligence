@@ -1,0 +1,7 @@
+# 2026-11-04 — M1 slices moved to tickets (ADR-0047 phase 1)
+
+- Created over MCP (`create_ticket`, project `AI`), type story, stage Backlog: AI-1: M1.6a: Claude Code executor: dispatch + callback (M); AI-2: M1.7: Refinement (M); AI-3: M1.8: Build + gate (M); AI-4: M1.6b: Claude Code executor: watchdog + retry (S); AI-5: M1.9: Quota capture (S); AI-6: M1.17: Agent evals v1 (M). Each body names its ARCHITECTURE §12 row; acceptance criteria come from the row's "Done when".
+- Blocked-by links: AI-2 ← AI-1; AI-3 ← AI-2; AI-4 ← AI-1; AI-5 ← AI-3; AI-6 ← AI-3. Merged dependencies (M1.3, M1.4, M1.5, M1.16, M1.19) are named in the bodies, not linked: they have no tickets.
+- No ticket meets the Definition of Ready yet: tier is unset (set by refinement or Andy), and some criteria fail the literal "the system shall" EARS check (pending decision in `build-log.md`).
+- Merged before the move (PR in brackets): M1.0: Docs sync (#1); M1.1: MCP OAuth spike (#29); M1.2: Ticket core (#17); M1.3: UI: tickets + inbox (#28); M1.4: MCP core tools (#31); M1.5: GitHub App + project registration (#32); M1.10: Security review automation (#10); M1.11: Adversarial PR review (#21); M1.12: Local quality gates (#9); M1.13: GCP cost guardrails (#7); M1.14: Cost kill switch (#18); M1.15: Usage alerts (#8); M1.16: Project baseline v1 (#23); M1.19: GitHub App setup from the UI (#36); M1.20: Custom domain (#38).
+- `build-log.md` now points at the tickets and keeps only pending decisions and blockers.
