@@ -261,6 +261,10 @@ Temporary progress log until andy-intelligence can track its own work (then migr
 - System review run 41746394918 passed, but `publish` was skipped (no threat-model change), so the App-token PR path is still untested; it runs on the next review with a change.
 - **Decided (Andy, ADR-0048: Firestore contract suites run in CI when the adapters change):** new `firestore-suite.yml`; the emulator starts only when `packages/store`, `packages/contracts/src`, `firebase.json`, `package.json` or `pnpm-lock.yaml` change. Not a required check yet.
 
+## 2026-11-04 — Token-path check for the system review
+
+- The App-token path (Actions OIDC → `/github/token` → repo token) had not run live: the review's `publish` job only runs on a threat-model change. Added a manual `token_check` input to `system-security-review.yml`: a `token-check` job gets the token, checks it reaches this repo only, and revokes it (no agent, no PR). Runbook `github-app.md` §5.3.
+
 ## Slices: M1: First end-to-end flow: ticket → PR with Claude
 
 Status: todo / in progress / PR open / merged. Definitions: ARCHITECTURE §12.

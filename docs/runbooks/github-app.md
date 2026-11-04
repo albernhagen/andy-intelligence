@@ -48,7 +48,7 @@ UI → `/projects`: Name `andy-intelligence`, Key `AI`, GitHub repo `albernhagen
 
 1. Open any PR on `andy-intelligence`. Within a minute, Firestore → `codeHostEvents` has documents for `pull_request` and `check_run` / `workflow_run` with `projectId: "ai"`. Logs: `gcloud logging read 'jsonPayload.component="github-webhook"' --limit 20 --project andy-intelligence-512400`.
 2. **Replay is a no-op:** GitHub → Settings → Developer settings → GitHub Apps → the App → Advanced → Recent deliveries → a `pull_request` delivery → **Redeliver** → `200 {"result":"duplicate"}`; the document is unchanged.
-3. **Repo token for the system review:** `gh workflow run system-security-review.yml --repo albernhagen/andy-intelligence`. If the threat model changed, the `publish` job opens a PR authored by `<app-slug>[bot]` whose checks start without an approval banner. (No change → no PR; the `publish` job is skipped.) Logs: `jsonPayload.component="github-token"`.
+3. **Repo token for the system review:** `gh workflow run system-security-review.yml --repo albernhagen/andy-intelligence -f token_check=true`. Only the `token-check` job runs (no agent, no Claude quota, no PR): it gets a token from the control plane, lists the repos it reaches (must be `andy-intelligence` only), and revokes it. Pass = notice "Repo token issued … used and revoked". The real `publish` path (PR from `<app-slug>[bot]` whose checks start without an approval banner) runs on the next review with a threat-model change. Logs: `jsonPayload.component="github-token"`.
 4. Firestore adapter suites (Java 21+, see `mcp-connector.md` §1b): `pnpm test:firestore`.
 5. Optional, `CodeHost` contract against real GitHub (puts the key on disk briefly; mints one real token):
 
