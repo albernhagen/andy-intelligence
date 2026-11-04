@@ -3,7 +3,7 @@ title: andy-intelligence — Architecture & Vision
 status: accepted (v1.x scope)
 owner: Andy
 last_updated: 2026-11-03
-revision: 2026-11-03h (ADR-0045: UI design system, pluggable design skills, dashboards in M5; after 2026-11-03g M1.20: Custom domain, ADR-0044)
+revision: 2026-11-03h (ADR-0045: UI design system, pluggable design skills, dashboards in M5; after 2026-11-03g M1.20: Custom domain, ADR-0044; Later: control plane in dev + prod)
 ---
 
 # andy-intelligence — Architecture & Vision
@@ -430,7 +430,7 @@ The control plane's Firestore holds real data from M1.2: Ticket core on; there i
 - **Additive by default:** new optional/defaulted fields need no migration.
 - **Breaking change:** bump `SCHEMA_VERSION`, add a tested upgrader `_v N → N+1` applied on read (and rewritten on next write); record it in an ADR.
 - **Backups:** daily, kept 7 days (M1.2: Ticket core). Before a risky deploy, run a manual export (runbook). Restore drill once per milestone.
-- A separate control-plane dev environment is optional later; moving data then = export/import + the same upgraders.
+- A separate control-plane dev environment comes last (§12 Later: Control plane in dev + prod); moving data then = export/import + the same upgraders.
 
 ## 11. Technology choices
 
@@ -539,6 +539,8 @@ Project template Terraform + Cloud Deploy dev→prod, with a budget and caps per
 
 ### Later (explicitly deferred)
 After M6: Dev → prod releases: **per-project custom domains**. (The control plane's own domain moved up to M1.20: Custom domain, ADR-0044.)
+
+**Control plane in dev + prod** (last; Andy, 2026-11-03): deploy the control plane itself to separate environments, reusing M6: Dev → prod releases' pipeline. Terraform roots parameterized per environment (GCP project ID, state prefix, domain as settings, not defaults); one image built once and promoted dev → prod; separate Firebase sign-in, GitHub App, MCP connector URL and budget per environment; data moved by export/import with the same upgraders (§10.4).
 
 **Devkit standalone + local mode** (ADR-0032): phase 1 devkit in Claude Code with markdown tickets; phase 2 full control plane locally. Designed after M1: First end-to-end flow.
 
