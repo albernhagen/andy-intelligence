@@ -285,14 +285,10 @@ API client generated from OpenAPI.
 
 **Built in M1.19: GitHub App setup from the UI:** `/settings/github` (connect, install link, installed repos) and `/settings/github/callback`; the new-project form suggests installed repos.
 
-### 7.6 Context sources (ADR-0033, design after M1: First end-to-end flow)
-Product and domain knowledge for agents, pluggable per project, behind a `ContextSource` port:
+### 7.6 Context sources (ADR-0033, ADR-0053)
+Product and domain knowledge for agents, pluggable per project, behind a `ContextSource` port. Kinds: **markdown docs** in the repo (first), MCP servers such as Notion (later), custom skills such as a design skill reading `design.md` (ADR-0045, M5).
 
-| Kind | Example | When |
-|---|---|---|
-| Markdown docs (handwritten or copied-in snapshots) | Product brief, domain glossary, users, business rules, prompts | First (only kind needed now) |
-| MCP servers (read-only, per project) | Notion | Later |
-| Custom skills | A skill bringing its own context or tools, e.g. a design skill such as Hallmark reading the project's `design.md` (ADR-0045) | Later (design skills in M5) |
+**Project brief** (ADR-0053, M2): `docs/product/brief.md` (idea, users, vision, goals, architectural expectations, open questions), written by one onboarding interview from the `/onboard` skill (MCP) or the UI's new-project flow, both calling the API that opens it as a PR. Refine and plan raise a question when a ticket contradicts it; the build updates it in the same PR when Andy picks the brief. Ideate and refine read all of it, plan and build the expectations, reviews the goals.
 
 Scopes: global (Andy's standards) → project → pipeline step. Same sources for the devkit and the control plane (ADR-0032). Context is untrusted data; a project's agents see only its own sources plus global ones; credentials per project, read-only; external calls and sizes capped.
 
@@ -307,7 +303,7 @@ docs/features.md                  # living catalog of shipped features (updated 
 docs/architecture/overview.md     # current HLD; C4 L1–L2 in Mermaid
 docs/architecture/adr/NNNN-*.md   # MADR, immutable
 docs/agent/*.md                   # shared procedures: size-rubric, build, review, escalation, security
-docs/product/                     # product/domain context sources (§7.6; folder name set in the design)
+docs/product/brief.md             # project brief (ADR-0053) + further product docs
 docs/security/threat-model.md     # living threat model + open risks (§9.1)
 specs/NNN-name/{design.md, tech-design.md, tasks.md, stories/*.md, mockups/}
 .github/workflows/                # thin callers → platform composite actions, pinned by SHA (ADR-0038)
@@ -317,7 +313,7 @@ infra/                            # Terraform: dev/prod Cloud Run, Cloud Deploy 
 ```
 **Required CI checks** on `main`: tests, lint, typecheck, protected-path check, secret scan, security scans and security-review agent (§9.1), "PR references a ticket" (ticket key in branch name or PR body, verified against the control-plane API). These enforce rules for every agent regardless of harness.
 
-Onboarding a project = UI/MCP "Add project" → bootstrap (applies the project baseline, §8.1; until then `platform/baseline/baseline.mjs onboard`, runbook `docs/runbooks/onboard-a-repo.md`: branch ruleset, repo settings, labels, template files, secrets refs, App install check, Terraform PR for GCP) → Andy approves Terraform PR.
+Onboarding a project = UI/MCP "Add project" → onboarding interview → brief PR (ADR-0053) → bootstrap (applies the project baseline, §8.1; until then `platform/baseline/baseline.mjs onboard`, runbook `docs/runbooks/onboard-a-repo.md`: branch ruleset, repo settings, labels, template files, secrets refs, App install check, Terraform PR for GCP) → Andy approves Terraform PR.
 
 ### 8.1 Project baseline (ADR-0031)
 
@@ -527,7 +523,7 @@ Repo scaffold, contracts package, Terraform for control-plane GCP project (plan 
 Waves (ADR-0050): M1.6a → M1.7 → M1.8 → M1.6b ‖ M1.17: Agent evals v1 ‖ M1.9: Quota capture. M1.18: Plan step is folded into M1.8.
 
 ### M2: Multi-project in parallel
-Andy builds several systems at once (ADR-0035). Onboard N projects via M1.5: GitHub App + project registration and M1.16: Project baseline v1, each with per-PR security and adversarial review, local quality gates and the weekly system security review (§9.1, §4.5, §10.2); **stories by project**: tickets listed, filtered and grouped per project in the UI and MCP (`list_projects`, per-project ticket lists, Needs-you inbox grouped by project); concurrent runs across projects with explicit caps (max runs per project and globally, ADR-0028); quota-aware dispatch so parallel runs keep the subscription reserves (§5); agent read access to API/MCP scoped per project; coordination of parallel work (ADR-0047): conflict-aware dispatch from the plan's touched files, sync runs that bring open agent PRs up to date with `main`, a merge queue per repo via the App token, collision-free ADR and risk IDs, an in-flight view in MCP, cross-project dependencies; dispatch also capped by PRs waiting for Andy (review capacity), repeated review findings become a pending `ConfigChange` to `AGENTS.md` or a procedure (ADR-0040); **ideation** (ADR-0050): `/ideate` from Claude desktop, Claude Code or the UI turns an idea into an epic ticket in its project with a `specs/` draft in the repo (§7.3, §8). Slice at milestone start.
+Andy builds several systems at once (ADR-0035). Onboard N projects via M1.5: GitHub App + project registration and M1.16: Project baseline v1, each with per-PR security and adversarial review, local quality gates and the weekly system security review (§9.1, §4.5, §10.2); **stories by project**: tickets listed, filtered and grouped per project in the UI and MCP (`list_projects`, per-project ticket lists, Needs-you inbox grouped by project); concurrent runs across projects with explicit caps (max runs per project and globally, ADR-0028); quota-aware dispatch so parallel runs keep the subscription reserves (§5); agent read access to API/MCP scoped per project; coordination of parallel work (ADR-0047: conflict-aware dispatch, sync runs, merge queue, collision-free IDs, in-flight view, cross-project dependencies); **onboarding interview and project brief** (ADR-0053); dispatch also capped by PRs waiting for Andy (review capacity), repeated review findings become a pending `ConfigChange` to `AGENTS.md` or a procedure (ADR-0040); **ideation** (ADR-0050): `/ideate` from Claude desktop, Claude Code or the UI turns an idea into an epic ticket in its project with a `specs/` draft in the repo (§7.3, §8). Slice at milestone start.
 
 ### M3: Add Jules + model routing
 After M6: Dev → prod releases (ADR-0050). Jules adapter (completion via PR webhook); freeze `Executor` contract (two adapters pass contract tests); harness/provider/model/tier config with compatibility rules; cross-model review; google-sub quota (task counting) and reserves. Slice at milestone start.
@@ -573,7 +569,7 @@ Remaining:
 9. ~~Claude custom-connector OAuth mechanism currently supported (dynamic client registration vs static client)~~ — **answered by M1.1: MCP OAuth spike**: CIMD against our own authorization server (ADR-0039).
 10. Whether the Jules GitHub integration or the Jules REST API should be the dispatch path (REST preferred for run tracking; must support auto-PR creation for the completion signal).
 11. Local mode design (ADR-0032): markdown ticket format, local executor (Claude Code CLI) and its trust boundary, local storage/queue/auth adapters, devkit packaging and versioning. Due after M1: First end-to-end flow.
-12. Context sources design (ADR-0033): folder name and manifest format, step-to-source mapping, `ContextSource` port shape, MCP registration per project. Due after M1: First end-to-end flow.
+12. Context sources design (ADR-0033): markdown kind **answered by ADR-0053** (brief, interview, step mapping). Port shape and MCP registration: after M2: Multi-project in parallel.
 
 ---
 

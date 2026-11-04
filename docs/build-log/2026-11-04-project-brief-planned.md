@@ -1,0 +1,3 @@
+# 2026-11-04 — Project brief and onboarding interview planned
+
+- **Decided (Andy, ADR-0053: Project brief):** each project gets `docs/product/brief.md` (idea, users and business, vision, goals and non-goals, architectural expectations, open questions), written by one onboarding interview with two front ends, both supported: an `/onboard` skill in Claude Code or Claude desktop through MCP, and the UI's new-project flow. Both call the same API, which renders the brief and opens it as a PR. Refine and plan raise a question when a ticket contradicts the brief; the build updates it in the same PR when Andy chooses the brief. Lands in M2: Multi-project in parallel. Answers open question 12 for the markdown kind; MCP and skill sources move to after M2.
