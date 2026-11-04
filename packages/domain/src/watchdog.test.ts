@@ -249,6 +249,28 @@ describe("RunService watchdog", () => {
     expect((await ticket()).needsYou).toBe(true);
   });
 
+  it("GivenTheRetryCommentFails_WhenTheRetryIsDispatched_ThenRetriedAndNotFlagged", async () => {
+    const run = await service.start(projectId, ticketId, "refine");
+    finishWorkflow("1", "failure");
+    const addComment = tracker.addComment.bind(tracker);
+    tracker.addComment = async (p, t, body, actor) => {
+      if (body.startsWith("Retrying")) throw new Error("firestore unavailable");
+      return addComment(p, t, body, actor);
+    };
+    now = AFTER_DEADLINE;
+    expect(await service.checkDeadline(run.id)).toBe("retried");
+    expect((await ticket()).needsYou).toBe(false);
+  });
+
+  it("GivenTheRetryCantStartAfterAReportedFailure_WhenReported_ThenStillRecordedAndFlagged", async () => {
+    const run = await service.start(projectId, ticketId, "refine");
+    host.failDispatch = new Error("GitHub is down");
+    const caller = (await runs.get(run.id))!.executor!;
+    expect(await service.report(run.id, caller, failedReport)).toBe("recorded");
+    expect((await runs.get(run.id))?.status).toBe("failed");
+    expect((await ticket()).needsYou).toBe(true);
+  });
+
   it("GivenTheRetryCantStart_WhenTheCheckArrives_ThenNeedsYouWithTheReason", async () => {
     const run = await service.start(projectId, ticketId, "refine");
     finishWorkflow("1", "failure");

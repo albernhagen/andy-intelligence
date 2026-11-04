@@ -71,6 +71,8 @@ Expect **0 to add, 1 to change, 0 to destroy**: `google_cloud_run_v2_service.con
 4. Cancel the retry the same way. Expect: no third run; the ticket is flagged **Needs you** (home page) with a comment naming the reason.
 5. The flag stays until cleared; the UI has no toggle yet, so `PATCH /api/projects/ai/tickets/{id}` with `{"needsYou": false}`.
 
+**Cancelling on purpose:** any cancel in Actions counts as a kill, so the run retries once; cancel the retry too. The ticket is then flagged Needs-you.
+
 A check delivered before the deadline answers `503` and Cloud Tasks retries it later; a check for a run that already reported is a no-op.
 
 ## Troubleshooting

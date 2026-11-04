@@ -204,12 +204,13 @@ export class RunService {
     const started = retryOf
       ? `Retrying the ${startable} run (attempt ${run.attempt} of ${MAX_RUN_ATTEMPTS})`
       : `Started a ${startable} run (${run.route.model})`;
-    await this.tracker.addComment(
-      projectId,
-      ticketId,
-      `${started}: ${handle.url ?? run.id}`,
-      "system",
-    );
+    // Best effort: the run is dispatched and recorded, so a failed comment mustn't read as a
+    // failed start (a retry would then be flagged Needs-you while it runs).
+    await this.tracker
+      .addComment(projectId, ticketId, `${started}: ${handle.url ?? run.id}`, "system")
+      .catch((e: unknown) =>
+        log("ERROR", "run start comment not written", { runId: run.id, error: String(e) }),
+      );
     return dispatched;
   }
 

@@ -25,4 +25,7 @@ Built in M1.6b: Claude Code executor: watchdog + retry. Fills in §7.1 "Run watc
 ### Consequences
 
 - Good: no polling and nothing queued without a run; replays and late checks change nothing; a retry is auditable on its own Run.
+- Accepted: a reported failure dispatches its retry inside the report request (a few Firestore calls and one GitHub dispatch). Retry errors never fail the report (it still answers "recorded"); a slow dispatch can make the `report` job log a timeout, and its re-post is a no-op.
+- Accepted: if the instance dies between ending a run and starting its retry, the queue's redelivery finds the run settled, so it is neither retried nor flagged. The run shows its end and `error`; rare enough not to add a two-step flag.
+- Bad: cancelling a run by hand in Actions counts as a kill and retries once (the executor can't tell who cancelled); cancel the retry too.
 - Bad: a run that fails for a reason a retry can't fix (a bad ticket) spends a second run of quota; the Needs-you flag has no UI toggle yet; if GitHub is down at the deadline for all three deliveries, the run stays `running` (logged).
