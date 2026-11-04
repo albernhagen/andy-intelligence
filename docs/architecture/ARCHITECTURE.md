@@ -47,7 +47,7 @@ Enterprise-shaped (durable state, policy, gates, least privilege, audit, contrac
 - Production monitoring agent, auto-rollback, write-approval execution flow (deferred; agents simply have no write credentials).
 - Model-based risk scoring for auto-merge (v1.x uses rules only).
 - Storing full transcripts (link out instead).
-- Email/Slack notifications (UI only for now; `Notifier` port exists).
+- Email/Slack notifications (UI only for now; `Notifier` port exists; push from the phone in M7: Mobile, ADR-0052).
 - Custom sandboxes / Cloud Run Jobs executors (GitHub Actions is the executor runtime).
 
 ---
@@ -198,7 +198,7 @@ Contracts are defined in `packages/contracts` (Zod schemas + TypeScript interfac
 | `Executor` | RunRequest, RunStatus, RunResult, CompletionSignal, Artifact links | **Claude Code via Actions**, **Jules REST API**, **OpenCode via Actions** | Cloud Run Jobs, Agent SDK, Replicas |
 | `ModelGateway` | Completion, Usage, Cost | OpenRouter (direct single-call steps) | LiteLLM, direct providers |
 | `QuotaSource` | QuotaReading | Claude statusline/`rate_limits` capture from runs, Jules task counter | Official APIs when available |
-| `Notifier` | Notice, Urgency | UI (banner + Needs-you inbox) | Email, Slack, push |
+| `Notifier` | Notice, Urgency | UI (banner + Needs-you inbox) | Email (pending S slice), Web Push + `PushSubscriptionStore` (M7: Mobile, ADR-0052), Slack |
 | `Deployer` | Release, Promotion, Rollback | Cloud Deploy | — |
 | `Evaluator` | Suite, Case, Score | Agent evals (M1.17: Agent evals v1: procedure/prompt regression suite, tool chosen in the slice); Ori Eval for scout smoke tests | promptfoo, Inspect AI |
 | `OAuthGrantStore` | OAuthGrant (code, access token, refresh token; keyed by token hash) | **Firestore** (ADR-0039) | Local store (ADR-0032) |
@@ -260,6 +260,7 @@ Substance lives in shared procedure docs (`docs/agent/*.md`) so non-Claude harne
 ### 7.5 UI (React + Vite + shadcn/ui + Tailwind, TanStack Router/Query/Table, dnd-kit, shadcn charts)
 v1.x screens:
 - **Needs-you inbox** (questions, gate reviews, pending config changes, quota warnings) — home screen.
+- **Phone** (M7: Mobile, ADR-0052): the same SPA installed from Safari as a web app, phone layout for the inbox, ticket detail, releases and the quota banner; push notifications deep-link to the item; answer, approve plan or PR, promote, pause dispatch from the phone.
 - **Quota & spend** (per provider gauges with reset times; paid spend vs caps; persistent banner on warn/pause).
 - **Projects** (list, config, policy overrides).
 - **Tickets** — M1: list view grouped by stage, ticket detail with history and linked runs/PRs/cost, create/edit. M2: filter and group by project. M5: drag-and-drop story board (dnd-kit), epic grouping, overrides editing.
@@ -483,8 +484,9 @@ Each milestone must work **end to end** before the next starts. Acceptance crite
 | M4 | Paid models + spend caps | OpenRouter/OpenCode, hard spend caps, weekly model scout |
 | M5 | Epics + story board | Epics; drag-and-drop board; config editing; UI design system and dashboards |
 | M6 | Dev → prod releases | Per-project dev/prod deploys, verification, one-click promote, DORA metrics |
+| M7 | Mobile | The UI installed on Andy's phone with push notifications; answer, approve, promote and pause from anywhere |
 
-**Order (ADR-0050):** M0 → M1 → M2 → **M5 → M6 → M3 → M4**. Claude-only through M6: Jules (M3) and paid models with the scout (M4) come after releases. IDs keep their meaning.
+**Order (ADR-0050, ADR-0052):** M0 → M1 → M2 → **M5 → M6 → M7 → M3 → M4**. Claude-only through M6: Jules (M3) and paid models with the scout (M4) come after releases. IDs keep their meaning.
 
 **Renumbered 2026-11-01 (ADR-0035):** M2: Multi-project in parallel was inserted. ADRs written before then mean M3 by "M2", M4 by "M3", M5 by "M4" and M6 by "M5".
 
@@ -536,6 +538,9 @@ Epics with child tickets and dependencies; just-in-time re-planning; config edit
 
 ### M6: Dev → prod releases
 Environments as per-project policy (ADR-0050): MVPs get one prod project + PR previews; dev + prod when a project opts in. Project template Terraform + Cloud Deploy dev→prod, with a budget and caps per project (§10.1); dev deploy + verification (Playwright/API tests + verification agent); promote/rollback from UI and MCP; release notes; DORA metrics (deploy frequency, lead time, change failure rate, time to restore; ADR-0040). Slice at milestone start.
+
+### M7: Mobile
+The control-plane UI as an installable web app with push (ADR-0052): verify Web Push on Andy's iPhone first (fallback: a Capacitor shell around the same SPA, new ADR); `Notifier` adapter `web-push` with VAPID keys in Secret Manager and a `PushSubscriptionStore` port; notice types (question, plan or PR awaiting Andy, failed run, release ready, quota, budget, kill switch) with deep links, caps per hour and day, quiet hours and per-category toggles; phone layout for the inbox, ticket detail with run summary, releases and the quota banner; actions from the phone: answer, approve or reject a plan, approve a gated PR, promote or roll back, pause and resume dispatch; no agent-written text in a notification; threat model for the subscribe endpoint and the key. Slice at milestone start.
 
 ### Later (explicitly deferred)
 After M6: Dev → prod releases: **per-project custom domains**. (The control plane's own domain moved up to M1.20: Custom domain, ADR-0044.)
