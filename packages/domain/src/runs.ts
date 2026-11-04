@@ -10,12 +10,15 @@ import {
   type Route,
   type Run,
   type RunExecutor,
+  type RunHandle,
   type RunStep,
   type RunStore,
   type Ticket,
+  type WatchdogQueue,
   type WorkTracker,
 } from "@andy/contracts";
 import { DomainError } from "./tickets";
+import { afterFailure, deadlineAction, MAX_RUN_ATTEMPTS } from "./watchdog";
 
 /**
  * Agent runs (M1.6a: Claude Code executor, ARCHITECTURE §7.1–7.2, §9). Andy starts a run on a
@@ -63,6 +66,12 @@ export interface RunContext {
   prompt: string;
 }
 
+/**
+ * What the watchdog did with a run at its deadline. `early`: delivered before the deadline,
+ * nothing done (the queue retries later).
+ */
+export type WatchdogOutcome = "unknown" | "early" | "settled" | "healed" | "retried" | "flagged";
+
 /** What a run reports when it ends. Summary is untrusted agent text. */
 export interface RunResult {
   status: "succeeded" | "failed";
@@ -83,6 +92,8 @@ export class RunService {
     /** Null when no executor is configured (local dev, GitHub not connected). */
     private readonly executor: Executor | null,
     private readonly now: () => Date = () => new Date(),
+    /** Null when no queue is configured (local dev): runs then have no watchdog. */
+    private readonly watchdog: WatchdogQueue | null = null,
   ) {}
 
   async list(projectId: string, ticketId: string): Promise<Run[]> {
@@ -90,7 +101,8 @@ export class RunService {
     return this.runs.listForTicket(projectId, ticketId);
   }
 
-  async start(projectId: string, ticketId: string, step: string): Promise<Run> {
+  /** `retryOf`: the failed run this one retries (the watchdog's automatic retry). */
+  async start(projectId: string, ticketId: string, step: string, retryOf?: Run): Promise<Run> {
     if (!STARTABLE_STEPS.includes(step as StartableStep)) {
       throw new DomainError("invalid_step", `can't start a ${step} run yet`, [
         `startable steps: ${STARTABLE_STEPS.join(", ")}`,
@@ -125,6 +137,8 @@ export class RunService {
       deadline: new Date(this.now().getTime() + limits.timeoutMinutes * 60_000).toISOString(),
       prompt,
       maxTurns: limits.maxTurns,
+      attempt: retryOf ? retryOf.attempt + 1 : 1,
+      retryOf: retryOf?.id ?? null,
     });
 
     // Check again now that this run exists: two concurrent starts both pass the first check,
@@ -184,11 +198,16 @@ export class RunService {
       runId: run.id,
       ticket: ticket.key,
       externalId: handle.externalId,
+      attempt: run.attempt,
     });
+    await this.scheduleWatchdog(dispatched);
+    const started = retryOf
+      ? `Retrying the ${startable} run (attempt ${run.attempt} of ${MAX_RUN_ATTEMPTS})`
+      : `Started a ${startable} run (${run.route.model})`;
     await this.tracker.addComment(
       projectId,
       ticketId,
-      `Started a ${startable} run (${run.route.model}): ${handle.url ?? run.id}`,
+      `${started}: ${handle.url ?? run.id}`,
       "system",
     );
     return dispatched;
@@ -265,7 +284,127 @@ export class RunService {
           : `The ${done.step} run failed.${summary ? `\n\n${summary}` : ""}`;
       await this.tracker.addComment(done.projectId, done.ticketId, body, `agent:${run.id}`);
     }
+    if (result.status === "failed") await this.retryOrFlag(done, "reported a failure");
     return "recorded";
+  }
+
+  /**
+   * The watchdog's one look at a run, at its deadline (§7.1). A run that already reported is
+   * left alone. Otherwise the executor is asked once: a finished run is healed, anything else
+   * is ended (and stopped if still going), then retried once or flagged Needs-you. Status
+   * changes are conditional, so a late or replayed check is a no-op.
+   */
+  async checkDeadline(runId: string): Promise<WatchdogOutcome> {
+    const run = await this.runs.get(runId);
+    if (!run) {
+      log("WARNING", "watchdog check for an unknown run", { runId });
+      return "unknown";
+    }
+    if (!ACTIVE_RUN_STATUSES.includes(run.status)) return "settled";
+    if (run.deadline && Date.parse(run.deadline) > this.now().getTime()) {
+      log("WARNING", "watchdog check before the deadline", { runId, deadline: run.deadline });
+      return "early";
+    }
+    const handle = this.executor ? handleOf(run) : null;
+    const status = handle ? (await this.executor!.status(handle)).status : null;
+    const action = deadlineAction(status);
+    if (action.kind === "end" && action.cancel && handle) {
+      await this.executor!.cancel(handle).catch((e: unknown) =>
+        log("ERROR", "watchdog couldn't cancel the run", { runId, error: String(e) }),
+      );
+    }
+
+    const at = this.now().toISOString();
+    const error =
+      action.kind === "heal"
+        ? "the report never arrived; status taken from the executor"
+        : `the run ${action.error}`;
+    let ended: Run;
+    try {
+      ended = await this.runs.update(
+        run.id,
+        {
+          status: action.kind === "heal" ? "succeeded" : action.status,
+          startedAt: run.startedAt ?? at,
+          endedAt: at,
+          error,
+        },
+        ACTIVE_RUN_STATUSES,
+      );
+    } catch (err) {
+      // The report arrived while we looked: it wins.
+      if (err instanceof WorkTrackerError && err.code === "conflict") return "settled";
+      throw err;
+    }
+    log("WARNING", "watchdog ended a run", { runId, executorStatus: status, error });
+    if (action.kind === "heal") {
+      if (ended.ticketId) {
+        await this.tracker.addComment(
+          ended.projectId,
+          ended.ticketId,
+          `The ${ended.step} run finished, but its report never arrived (${run.id}).`,
+          "system",
+        );
+      }
+      return "healed";
+    }
+    return this.retryOrFlag(ended, action.error);
+  }
+
+  /** Queues the run's watchdog check at its deadline; logs (doesn't throw) on failure. */
+  private async scheduleWatchdog(run: Run): Promise<void> {
+    if (!run.deadline) return;
+    if (!this.watchdog) {
+      log("WARNING", "no watchdog queue: the run is unwatched", { runId: run.id });
+      return;
+    }
+    try {
+      await this.watchdog.schedule({ runId: run.id, at: run.deadline });
+    } catch (err) {
+      // The run still works; without its check a lost report leaves it `running` (it stops
+      // blocking new runs at the deadline, see inFlight).
+      log("ERROR", "watchdog check not queued", { runId: run.id, error: String(err) });
+    }
+  }
+
+  /**
+   * After a run failed or was killed: one automatic retry, else Needs-you on the ticket. Never
+   * throws: the run is already recorded as ended, so errors are logged for Andy.
+   */
+  private async retryOrFlag(run: Run, reason: string): Promise<"retried" | "flagged"> {
+    if (!run.ticketId) return "flagged";
+    let why = `The ${run.step} run ${reason}`;
+    if (afterFailure(run) === "retry") {
+      try {
+        const retry = await this.start(run.projectId, run.ticketId, run.step, run);
+        log("INFO", "run retried", { runId: run.id, retryId: retry.id, reason });
+        return "retried";
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        log("ERROR", "automatic retry failed to start", { runId: run.id, error: message });
+        why += `, and the retry couldn't start: ${message}`;
+      }
+    } else {
+      why += ` on its retry (attempt ${run.attempt} of ${MAX_RUN_ATTEMPTS})`;
+    }
+    try {
+      await this.tracker.updateTicket(
+        run.projectId,
+        run.ticketId,
+        { fields: { needsYou: true } },
+        "system",
+      );
+      await this.tracker.addComment(
+        run.projectId,
+        run.ticketId,
+        `Needs you: ${why} (${run.id}). Check the run log, then start it again.`,
+        "system",
+      );
+      log("WARNING", "run flagged Needs-you", { runId: run.id, reason: why });
+    } catch (err) {
+      log("ERROR", "couldn't flag the ticket Needs-you", { runId: run.id, error: String(err) });
+    }
+    return "flagged";
   }
 
   /**
@@ -317,6 +456,17 @@ export class RunService {
     if (!ticket) throw notFound("ticket", ticketId);
     return ticket;
   }
+}
+
+/** The executor handle a dispatched run was recorded with; null if it never got one. */
+function handleOf(run: Run): RunHandle | null {
+  if (!run.executor) return null;
+  return {
+    runId: run.id,
+    externalId: run.executor.externalId,
+    url: run.links.executorRun ?? null,
+    executor: run.executor,
+  };
 }
 
 /**

@@ -38,17 +38,22 @@ const verifier: TokenVerifier = {
   },
 };
 
-export function githubApp(overrides: Partial<NonNullable<AppDeps["github"]>> = {}) {
+export function githubApp(
+  overrides: Partial<NonNullable<AppDeps["github"]>> = {},
+  extra: Pick<AppDeps, "watchdog"> = {},
+) {
   const connections = new InMemoryCodeHostConnectionStore();
   const host = new InMemoryCodeHost([repo()]);
   const tracker = new InMemoryWorkTracker();
+  const runs = new InMemoryRunStore();
   const app = createApp({
     verifier,
     allowedEmails: new Set(["andy@example.com"]),
     version: "test",
     webConfig: { firebaseApiKey: "k", firebaseAuthDomain: "d", projectId: "p" },
     tracker,
-    runs: new InMemoryRunStore(),
+    runs,
+    ...extra,
     github: {
       publicUrl: PUBLIC_URL,
       connections,
@@ -67,5 +72,5 @@ export function githubApp(overrides: Partial<NonNullable<AppDeps["github"]>> = {
         ...(init.headers as Record<string, string>),
       },
     });
-  return { app, call, connections, host, tracker };
+  return { app, call, connections, host, tracker, runs };
 }
