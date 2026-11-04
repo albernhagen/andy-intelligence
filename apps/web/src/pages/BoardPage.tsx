@@ -58,8 +58,8 @@ function Columns({ tickets, projectId }: { tickets: Ticket[]; projectId: string 
           {groups[stage].map((t) => (
             <Link
               key={t.id}
-              to="/p/$projectId/t/$ticketId"
-              params={{ projectId, ticketId: t.id }}
+              to="/p/$projectId/t/$ticketRef"
+              params={{ projectId, ticketRef: t.key }}
               className="block space-y-1 rounded-md border border-border bg-background p-2 text-sm hover:border-foreground/30"
             >
               <span className="block">

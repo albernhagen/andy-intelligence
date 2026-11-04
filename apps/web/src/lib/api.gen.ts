@@ -878,6 +878,135 @@ export interface paths {
     };
     trace?: never;
   };
+  "/api/tickets/{key}": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get: {
+      parameters: {
+        query?: never;
+        header?: never;
+        path: {
+          key: string;
+        };
+        cookie?: never;
+      };
+      requestBody?: never;
+      responses: {
+        /** @description Ticket */
+        200: {
+          headers: {
+            [name: string]: unknown;
+          };
+          content: {
+            "application/json": {
+              id: string;
+              projectId: string;
+              key: string;
+              /** @enum {string} */
+              type: "epic" | "story" | "task" | "bug";
+              parentId: string | null;
+              title: string;
+              body: string;
+              acceptanceCriteria: string[];
+              assumptions: string[];
+              /** @enum {string} */
+              stage:
+                "backlog" | "ready" | "in_progress" | "ready_for_review" | "monitoring" | "done";
+              rank: string;
+              /** @enum {string|null} */
+              size: "S" | "M" | "L" | null;
+              sizeReason: string | null;
+              /** @enum {string|null} */
+              tier: "frontier" | "strong" | "fast" | "cheap" | null;
+              overrides: {
+                assignee?: "me" | ("claude-code" | "jules" | "opencode" | "direct");
+                /** @enum {string} */
+                tier?: "frontier" | "strong" | "fast" | "cheap";
+                modelPin?: {
+                  /** @enum {string} */
+                  harness: "claude-code" | "jules" | "opencode" | "direct";
+                  /** @enum {string} */
+                  provider: "claude-sub" | "google-sub" | "openrouter";
+                  model: string;
+                };
+                /** @enum {string} */
+                autonomy?: "autonomous" | "gated" | "manual";
+                /** @enum {string} */
+                targetEnv?: "dev" | "prod";
+              };
+              needsYou: boolean;
+              /** @enum {string} */
+              dorStatus: "not_met" | "met";
+              blockedBy: string[];
+              /** Format: date-time */
+              createdAt: string;
+              /** Format: date-time */
+              updatedAt: string;
+            };
+          };
+        };
+        /** @description Invalid request */
+        400: {
+          headers: {
+            [name: string]: unknown;
+          };
+          content: {
+            "application/json": {
+              error: string;
+              details?: string[];
+            };
+          };
+        };
+        /** @description Not found */
+        404: {
+          headers: {
+            [name: string]: unknown;
+          };
+          content: {
+            "application/json": {
+              error: string;
+              details?: string[];
+            };
+          };
+        };
+        /** @description Conflict */
+        409: {
+          headers: {
+            [name: string]: unknown;
+          };
+          content: {
+            "application/json": {
+              error: string;
+              details?: string[];
+            };
+          };
+        };
+        /** @description Rule violation */
+        422: {
+          headers: {
+            [name: string]: unknown;
+          };
+          content: {
+            "application/json": {
+              error: string;
+              details?: string[];
+            };
+          };
+        };
+      };
+    };
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   "/api/projects/{projectId}/tickets/{ticketId}/readiness": {
     parameters: {
       query?: never;

@@ -8,6 +8,7 @@ import {
   Stage,
   Ticket,
   TicketEvent,
+  TicketKey,
   TicketFields,
   Timestamp,
 } from "@andy/contracts";
@@ -102,6 +103,13 @@ const routes = {
     method: "get",
     path: "/api/projects/{projectId}/tickets/{ticketId}",
     request: { params: TicketParams },
+    responses: { 200: ok(Ticket, "Ticket"), ...errors },
+  }),
+  getTicketByKey: createRoute({
+    ...secured,
+    method: "get",
+    path: "/api/tickets/{key}",
+    request: { params: z.object({ key: TicketKey }) },
     responses: { 200: ok(Ticket, "Ticket"), ...errors },
   }),
   patchTicket: createRoute({
@@ -203,6 +211,12 @@ export function registerTicketRoutes(
     const ticket = await tracker.getTicket(projectId, ticketId);
     return ticket ? c.json(ticket, 200) : c.json(notFound("ticket"), 404);
   });
+
+  // Readable links (AI-7): the UI routes by key, e.g. /p/ai/t/AI-2. Reads the project's
+  // tickets, like MCP `status` (cost note: ARCHITECTURE §7.1).
+  app.openapi(routes.getTicketByKey, async (c) =>
+    c.json(await service.findByKey(c.req.valid("param").key), 200),
+  );
 
   app.openapi(routes.patchTicket, async (c) => {
     const { projectId, ticketId } = c.req.valid("param");
