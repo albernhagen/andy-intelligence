@@ -340,6 +340,14 @@ export class RunService {
         error: `Its result was rejected (${issues.join("; ")}); no questions were written.`,
       };
     }
+    // A replay after a crash between writing the questions and closing the run: they are on the
+    // ticket already, and Andy may have answered them since. Don't touch the ticket again.
+    const written = run.ticketId
+      ? (await this.tracker.listQuestions({ ticketId: run.ticketId })).filter(
+          (q) => q.runId === run.id,
+        )
+      : [];
+    if (written.length > 0) return { summary: parsed.data.summary, asked: written.length };
     const ticket = run.ticketId ? await this.tracker.getTicket(run.projectId, run.ticketId) : null;
     if (!ticket || ticket.stage !== "backlog") {
       return {

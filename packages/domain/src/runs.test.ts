@@ -15,7 +15,7 @@ import {
   RunService,
   refinePrompt,
 } from "./runs";
-import type { DomainError } from "./tickets";
+import { TicketService, type DomainError } from "./tickets";
 
 const REPO = {
   fullName: "albernhagen/andy-intelligence",
@@ -317,6 +317,46 @@ describe("RunService", () => {
       expect(await service.report(run.id, caller, refined(good))).toBe("recorded");
       expect(await service.report(run.id, caller, refined(good))).toBe("duplicate");
       expect(await tracker.listQuestions({ ticketId })).toHaveLength(2);
+    });
+
+    it("GivenAndyAnsweredBetweenACrashAndTheReplay_WhenReplayed_ThenTheTicketIsNotFlaggedAgain", async () => {
+      await tracker.updateTicket(
+        projectId,
+        ticketId,
+        {
+          fields: {
+            body: "Andy can't see tickets.",
+            acceptanceCriteria: ["WHEN Andy opens the board THE SYSTEM SHALL list tickets"],
+            size: "S",
+            sizeReason: "one screen",
+            tier: "strong",
+          },
+        },
+        "andy",
+      );
+      const run = await service.start(projectId, ticketId, "refine");
+      const caller = await callerOf(run.id);
+      const original = runs.update.bind(runs);
+      runs.update = async (id, patch, from) => {
+        if (patch.status === "succeeded") throw new Error("instance died");
+        return original(id, patch, from);
+      };
+      await expect(service.report(run.id, caller, refined(good))).rejects.toThrow("died");
+      runs.update = original;
+      const tickets = new TicketService(tracker);
+      for (const q of await tracker.listQuestions({ ticketId })) {
+        await tickets.answer(q.id, "yes", "mcp", "andy");
+      }
+      expect((await tracker.getTicket(projectId, ticketId))?.stage).toBe("ready");
+
+      expect(await service.report(run.id, caller, refined(good))).toBe("recorded");
+      expect(await runs.get(run.id)).toMatchObject({ status: "succeeded" });
+      expect(await tracker.getTicket(projectId, ticketId)).toMatchObject({
+        stage: "ready",
+        needsYou: false,
+        dorStatus: "met",
+      });
+      expect(await tracker.listQuestions({ ticketId, status: "open" })).toEqual([]);
     });
 
     it.each([

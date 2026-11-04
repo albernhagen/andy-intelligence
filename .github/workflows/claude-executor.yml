@@ -173,32 +173,8 @@ jobs:
         env:
           STEP: ${{ needs.context.outputs.step }}
           RUN_PROMPT: ${{ needs.context.outputs.prompt }}
-        run: |
-          dir="$RUNNER_TEMP/platform/platform/procedures"
-          {
-            delimiter="PROMPT_$(openssl rand -hex 16)"
-            echo "prompt<<$delimiter"
-            if [ -f "$dir/$STEP.md" ]; then
-              cat "$dir/$STEP.md"
-              printf '\n---\n\n'
-            fi
-            printf '%s\n' "$RUN_PROMPT"
-            echo "$delimiter"
-          } >> "$GITHUB_OUTPUT"
-          if [ -f "$dir/$STEP.schema.json" ]; then
-            schema=$(jq -ce 'select(type == "object")' "$dir/$STEP.schema.json") || {
-              echo "::error title=claude-executor::$STEP.schema.json is not a JSON object"
-              exit 1
-            }
-            # claude_args is split like a shell line: the schema rides in single quotes.
-            case "$schema" in *"'"*)
-              echo "::error title=claude-executor::$STEP.schema.json must not contain a single quote"
-              exit 1
-              ;;
-            esac
-            echo "schema_args=--json-schema '$schema'" >> "$GITHUB_OUTPUT"
-          fi
-          echo "Step $STEP: procedure $([ -f "$dir/$STEP.md" ] && echo yes || echo no), schema $([ -f "$dir/$STEP.schema.json" ] && echo yes || echo no)."
+          PROCEDURES_DIR: ${{ runner.temp }}/platform/platform/procedures
+        run: node "$RUNNER_TEMP/platform/scripts/executor-procedure.mjs"
 
       - name: Claude Code
         id: claude
