@@ -180,6 +180,18 @@ describe("RunService", () => {
     expect((await runs.get(run.id))?.status).toBe("queued");
   });
 
+  it("GivenACancelledTicket_WhenARunIsStarted_ThenInvalidTransitionAndNothingIsDispatched", async () => {
+    await tracker.updateTicket(
+      projectId,
+      ticketId,
+      { stage: { to: "cancelled", reason: null } },
+      "andy",
+    );
+    await rejects(service.start(projectId, ticketId, "refine"), "invalid_transition");
+    expect(host.workflowRuns.size).toBe(0);
+    expect(await runs.listForTicket(projectId, ticketId)).toEqual([]);
+  });
+
   it("GivenARunOnAnotherTicketOrNone_WhenATicketsRunsAreCancelled_ThenOnlyItsRunsAreTouched", async () => {
     const other = await tracker.createTicket(projectId, { type: "task", title: "Other" }, "andy");
     const run = await service.start(projectId, other.id, "refine");

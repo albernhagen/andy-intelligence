@@ -191,6 +191,15 @@ describe("TicketService", () => {
       expect(events.at(-1)?.body).toContain("r1");
     });
 
+    it("GivenTheTicketChangesWhileItsRunsStop_WhenCancelled_ThenItIsStillCancelled", async () => {
+      const t = await service.create(projectId, readyStory, "andy");
+      canceller.cancelForTicket.mockImplementation(async () => {
+        await tracker.updateTicket(projectId, t.id, { fields: { needsYou: true } }, "system");
+        return [];
+      });
+      expect((await service.cancel(projectId, t.id, "andy")).stage).toBe("cancelled");
+    });
+
     it("GivenTheRunCantBeStopped_WhenTheTicketIsCancelled_ThenTheStageIsUnchanged", async () => {
       const t = await service.create(projectId, readyStory, "andy");
       canceller.cancelForTicket.mockRejectedValue(new DomainError("cancel_failed", "no"));

@@ -103,6 +103,9 @@ export class RunService {
     const project = await this.tracker.getProject(projectId);
     if (!project) throw notFound("project", projectId);
     const ticket = await this.requireTicket(projectId, ticketId);
+    if (ticket.stage === "cancelled") {
+      throw new DomainError("invalid_transition", `${ticket.key} is cancelled; reopen it first`);
+    }
     const repo = project.repos[0];
     if (!repo) throw new DomainError("invalid_repo", `project ${project.key} has no repo`);
     const active = await this.inFlight(projectId);

@@ -172,13 +172,12 @@ export class TicketService {
       throw new DomainError("invalid_transition", `${ticket.key} is already cancelled`);
     }
     const cancelled = (await this.runs?.cancelForTicket(projectId, ticketId)) ?? [];
+    // No `ifUpdatedAt`: cancel is valid from any stage, so a write since the read (e.g. a run's
+    // report) mustn't fail it after the runs are already stopped.
     const updated = await this.tracker.updateTicket(
       projectId,
       ticketId,
-      {
-        stage: { to: "cancelled", forced: false, reason: reason?.trim() || null },
-        ifUpdatedAt: ticket.updatedAt,
-      },
+      { stage: { to: "cancelled", forced: false, reason: reason?.trim() || null } },
       actor,
     );
     for (const run of cancelled) {
