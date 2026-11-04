@@ -3,7 +3,7 @@ status: accepted
 date: 2026-11-03
 ---
 
-# 0047 — Coordinating parallel work: deterministic supervisor, no LLM parent agent
+# 0047 — Coordinating parallel work: deterministic supervisor, no LLM parent agent; building andy-intelligence with itself
 
 Decided by Andy, 2026-11-03.
 
@@ -31,7 +31,18 @@ No LLM parent agent. The control plane stays the supervisor and gains collision 
 
 The epic-level LLM step (split, order waves, re-plan as stories unblock, §4.4) decides; the dispatcher, queue and sync runs carry it out.
 
+**Building andy-intelligence with itself** (project `AI`, registered in M1.5: GitHub App + project registration), in phases as capabilities land:
+
+| Phase                    | When                                                                    | What moves into the control plane                                                                                                  |
+| ------------------------ | ----------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------- |
+| 1. Track                 | Now (tickets, inbox, UI and MCP tools are merged)                       | Remaining slices become tickets in project `AI`, created and answered from Claude desktop; `docs/build-log.md` shrinks to history. |
+| 2. Build small work      | M1: First end-to-end flow done (M1.8: Build + gate)                     | S tickets for this repo run end to end: refine → plan → PR → reviews → Andy merges.                                                |
+| 3. Default for most work | M2: Multi-project in parallel done (sync runs, conflict-aware dispatch) | Parallel waves run through the control plane instead of hand-run sessions.                                                         |
+
+Interactive sessions (Claude Code + the devkit, ADR-0032) stay for trust-boundary work (auth, IAM, Terraform, workflows, the review gates) and anything that could break the deploy: an agent changing the system that runs it could weaken its own checks (threat model R5), and a broken control plane can't repair itself.
+
 ### Consequences
 
 - Good: parallel work scales without a person resolving conflicts; state stays in Firestore, not in an agent's context; every coordination decision is auditable and testable.
+- Good: andy-intelligence is its own first user, so gaps show up in daily use.
 - Bad: tickets with overlapping files run one after another (less parallelism); sync runs spend quota; the touched-files list is a prediction, so a run can still conflict (the sync run handles it).

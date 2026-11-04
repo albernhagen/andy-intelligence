@@ -3,7 +3,7 @@ title: andy-intelligence — Architecture & Vision
 status: accepted (v1.x scope)
 owner: Andy
 last_updated: 2026-11-03
-revision: 2026-11-03j (ADR-0047: Coordinating parallel work in M2: conflict-aware dispatch, sync runs, merge queue, collision-free IDs, in-flight view, cross-project dependencies; after 2026-11-03g)
+revision: 2026-11-03j (ADR-0047: Coordinating parallel work in M2 and building andy-intelligence with itself in 3 phases: conflict-aware dispatch, sync runs, merge queue, collision-free IDs, in-flight view, cross-project dependencies; after 2026-11-03g)
 ---
 
 # andy-intelligence — Architecture & Vision
@@ -469,6 +469,8 @@ Each milestone must work **end to end** before the next starts. Acceptance crite
 **Naming:** always write a milestone or slice as `ID: title`, e.g. "M1.2: Ticket core". The ID alone means nothing to a reader.
 
 ### How milestones are built: slices
+**With itself (ADR-0047):** 1. track slices as tickets in project `AI` now; 2. S tickets built by the control plane once M1: First end-to-end flow is done; 3. most work, including parallel waves, once M2: Multi-project in parallel is done. Trust-boundary work (auth, IAM, Terraform, workflows, review gates) and deploy-breaking changes stay in interactive sessions.
+
 Each milestone is delivered as **slices**. A slice:
 - is one PR, branched from the latest `main` after its dependencies have merged — no stacked PRs;
 - has its own **Done when** that Andy can check in a few minutes;
