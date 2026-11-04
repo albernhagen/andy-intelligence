@@ -24,7 +24,7 @@ Status: todo / in progress / PR open. Definitions: ARCHITECTURE §12.
 **Pending decisions (Andy):**
 
 - Email notifications for Needs-you (a `Notifier` adapter, S): move up from Later so the loop doesn't wait for an open tab?
-- Safe deploy path for the control plane (tagged no-traffic Cloud Run revision per PR + rollback runbook) before agents merge here (ADR-0047 phase 2).
+- Safe deploy path for the control plane (tagged no-traffic Cloud Run revision per PR + rollback runbook): project `AI` keeps `autoMerge: none` until it exists (ADR-0050, ADR-0047 phase 2).
 - Retire this file into tickets in project `AI` (ADR-0047 phase 1): now?
 - Contract suites for ports with one adapter (`OAuthGrantStore`, `CodeHostConnectionStore`): keep the fakes, drop the shared suite?
 - Local mode design (open question 11); due after M1: First end-to-end flow.
