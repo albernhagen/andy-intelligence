@@ -4,16 +4,6 @@ Current state only: slices, what's next, decisions pending, blockers. Keep it un
 
 Temporary until andy-intelligence tracks its own work (then migrated to tickets).
 
-## 2026-11-04 — Token-path check for the system review
-
-- The App-token path (Actions OIDC → `/github/token` → repo token) had not run live: the review's `publish` job only runs on a threat-model change. Added a manual `token_check` input to `system-security-review.yml`: a `token-check` job gets the token, checks it reaches this repo only, and revokes it (no agent, no PR). Runbook `github-app.md` §5.3.
-
-## 2026-11-04 — M1.19: GitHub App setup from the UI Done when met
-
-- Merged: PR #46: token check.
-- **Token check passed** (run 41748331077): `token-check` exchanged the Actions OIDC token at `https://ai.andybernhagen.com/github/token`; the control plane logged `repo token issued` for `system-security-review.yml@refs/heads/main`; actor `andy-intelligence-control[bot]`, 1-hour expiry; the token reached `albernhagen/andy-intelligence` only and was revoked.
-- With connect → install → register done from the UI, webhooks recorded, replay `duplicate` and `pnpm test:firestore` green, M1.19: GitHub App setup from the UI Done when is met. One part still runs on its own: the first review PR opened by the App, with its checks starting unattended (GitHub's documented behaviour for App tokens), on the next review with a threat-model change.
-
 ## Slices: M1: First end-to-end flow: ticket → PR with Claude
 
 Status: todo / in progress / PR open. Definitions: ARCHITECTURE §12.
