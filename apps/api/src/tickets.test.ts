@@ -57,6 +57,21 @@ describe("ticket API", () => {
     return json as unknown as Ticket;
   }
 
+  it("GivenATicketKey_WhenReadByKey_ThenTheTicketIsReturned", async () => {
+    const ticket = await projectWithTicket();
+    const { status, json } = await call("GET", `/api/tickets/${ticket.key}`);
+    expect(status).toBe(200);
+    expect(json).toMatchObject({ id: ticket.id, key: "AI-1" });
+  });
+
+  it("GivenAnUnknownOrMalformedKey_WhenReadByKey_Then404Or400", async () => {
+    await projectWithTicket();
+    expect((await call("GET", "/api/tickets/AI-99")).status).toBe(404);
+    expect((await call("GET", "/api/tickets/ZZ-1")).status).toBe(404);
+    expect((await call("GET", "/api/tickets/ai-1")).status).toBe(400);
+    expect((await call("GET", "/api/tickets/AI-1", undefined, "nope")).status).toBe(401);
+  });
+
   it("GivenNoToken_WhenCallingTicketRoutes_ThenUnauthenticated", async () => {
     expect((await call("GET", "/api/projects", undefined, "nope")).status).toBe(401);
     expect((await call("GET", "/api/needs-you", undefined, "nope")).status).toBe(401);

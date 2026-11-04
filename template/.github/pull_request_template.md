@@ -1,3 +1,5 @@
+Ticket: <!-- link to the ticket; PR title: `<KEY>: <ticket title>` -->
+
 ## What
 
 ## Why

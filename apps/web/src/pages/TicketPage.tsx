@@ -1,5 +1,6 @@
-import { useState } from "react";
-import { Link, useParams } from "@tanstack/react-router";
+import { useEffect, useState } from "react";
+import { Link, useNavigate, useParams } from "@tanstack/react-router";
+import { useQueryClient } from "@tanstack/react-query";
 import type { Ticket } from "@andy/contracts";
 import { AskQuestionForm } from "@/components/AskQuestionForm";
 import { History } from "@/components/History";
@@ -14,21 +15,43 @@ import { ApiError } from "@/lib/api";
 import {
   useEvents,
   useReadiness,
-  useTicket,
+  ticketQueryKey,
+  useTicketByRef,
   useTicketQuestions,
   useUpdateTicket,
 } from "@/lib/queries";
 import { STAGE_LABELS } from "@/lib/tickets";
 
-/** Ticket detail: fields (view/edit), Definition of Ready, moves, agent runs, questions and history. */
+/**
+ * Ticket detail: fields (view/edit), Definition of Ready, moves, agent runs, questions and
+ * history. The URL holds the ticket key (`/p/ai/t/AI-2`); an older id link loads the ticket and
+ * swaps in the key URL.
+ */
 export function TicketPage() {
-  const path = useParams({ from: "/p/$projectId/t/$ticketId" });
-  const ticket = useTicket(path);
+  const { projectId, ticketRef } = useParams({ from: "/p/$projectId/t/$ticketRef" });
+  const ticket = useTicketByRef(projectId, ticketRef);
+  const navigate = useNavigate();
+  const queryClient = useQueryClient();
   const [editing, setEditing] = useState(false);
+  const loaded = ticket.data;
+  const key = loaded?.key;
+
+  useEffect(() => {
+    if (loaded && key && key !== ticketRef) {
+      // Seed the key URL's query, so the swap shows no loading state.
+      queryClient.setQueryData(ticketQueryKey(projectId, key), loaded);
+      void navigate({
+        to: "/p/$projectId/t/$ticketRef",
+        params: { projectId, ticketRef: key },
+        replace: true,
+      });
+    }
+  }, [loaded, key, ticketRef, projectId, navigate, queryClient]);
 
   if (ticket.isPending) return <Loading />;
   if (ticket.isError) return <QueryError error={ticket.error} />;
   const t = ticket.data;
+  const path = { projectId: t.projectId, ticketId: t.id };
 
   return (
     <article className="space-y-6">

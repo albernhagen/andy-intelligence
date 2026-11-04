@@ -26,14 +26,25 @@ export function useTickets(projectId: string) {
 
 type TicketPath = { projectId: string; ticketId: string };
 
-export function useTicket(path: TicketPath) {
+export const ticketQueryKey = (projectId: string, ref: string) => ["ticket", projectId, ref];
+
+/** A ticket by key (`AI-2`, readable links) or by id (older links). */
+export function useTicketByRef(projectId: string, ref: string) {
   const api = useApi();
   return useQuery({
-    queryKey: ["ticket", path],
+    queryKey: ticketQueryKey(projectId, ref),
     queryFn: async () =>
-      unwrap(await api.GET("/api/projects/{projectId}/tickets/{ticketId}", { params: { path } })),
+      isTicketKey(ref)
+        ? unwrap(await api.GET("/api/tickets/{key}", { params: { path: { key: ref } } }))
+        : unwrap(
+            await api.GET("/api/projects/{projectId}/tickets/{ticketId}", {
+              params: { path: { projectId, ticketId: ref } },
+            }),
+          ),
   });
 }
+
+export const isTicketKey = (ref: string) => /^[A-Z][A-Z0-9]{0,9}-\d+$/.test(ref);
 
 export function useReadiness(path: TicketPath) {
   const api = useApi();

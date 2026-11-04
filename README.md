@@ -118,13 +118,13 @@ GitHub (ADR-0043: GitHub App setup from the UI) is on when `PUBLIC_URL` is set: 
 
 ### Web UI (M1.3: UI: tickets + inbox)
 
-| Route                       | Screen                                                                                           |
-| --------------------------- | ------------------------------------------------------------------------------------------------ |
-| `/`                         | Needs you (home): open questions (options, suggested answer, free text) and flagged tickets      |
-| `/projects`                 | Project list and "new project"                                                                   |
-| `/settings/github`          | Connect the GitHub App, install link, installed repos (M1.19: GitHub App setup from the UI)      |
-| `/p/:projectId`             | Tickets in one column per stage, "new ticket"                                                    |
-| `/p/:projectId/t/:ticketId` | Ticket detail: edit, Definition of Ready, moves (forced move needs a reason), questions, history |
+| Route                        | Screen                                                                                                                                                    |
+| ---------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `/`                          | Needs you (home): open questions (options, suggested answer, free text) and flagged tickets                                                               |
+| `/projects`                  | Project list and "new project"                                                                                                                            |
+| `/settings/github`           | Connect the GitHub App, install link, installed repos (M1.19: GitHub App setup from the UI)                                                               |
+| `/p/:projectId`              | Tickets in one column per stage, "new ticket"                                                                                                             |
+| `/p/:projectId/t/:ticketKey` | Ticket detail (e.g. `/p/ai/t/AI-2`; old id links redirect): edit, Definition of Ready, moves (forced move needs a reason), agent runs, questions, history |
 
 - API client: `openapi-fetch` typed by `apps/web/src/lib/api.gen.ts`, generated from the API's OpenAPI document. After changing an API route, run `pnpm --filter @andy/web gen:api` and commit the file; a test fails while it is stale.
 - Tests (`apps/web/src/**/*.test.tsx`, jsdom + Testing Library) render the UI against the real API in-process (`createApp` + `InMemoryWorkTracker`), so they also exercise auth, validation and the ticket rules. No browser e2e yet: it needs Firebase sign-in.

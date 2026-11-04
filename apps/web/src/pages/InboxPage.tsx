@@ -61,8 +61,8 @@ export function InboxPage() {
 function TicketLink(props: { projectId: string; ticketId: string; ticket: Ticket | undefined }) {
   return (
     <Link
-      to="/p/$projectId/t/$ticketId"
-      params={{ projectId: props.projectId, ticketId: props.ticketId }}
+      to="/p/$projectId/t/$ticketRef"
+      params={{ projectId: props.projectId, ticketRef: props.ticket?.key ?? props.ticketId }}
       className="text-sm underline-offset-2 hover:underline"
     >
       {props.ticket ? `${props.ticket.key}: ${props.ticket.title}` : "Open ticket"}

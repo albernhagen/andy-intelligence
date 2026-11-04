@@ -46,7 +46,7 @@ const routeTree = rootRoute.addChildren([
   }),
   createRoute({
     getParentRoute: () => rootRoute,
-    path: "/p/$projectId/t/$ticketId",
+    path: "/p/$projectId/t/$ticketRef",
     component: TicketPage,
   }),
 ]);
