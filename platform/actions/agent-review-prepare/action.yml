@@ -143,11 +143,41 @@ runs:
         LOCAL: ${{ steps.root.outputs.local }}
       run: |
         mkdir -p .review
-        # Write in full, then cap (ADR-0028). Piping into `head -c` would fail under pipefail.
-        cap() { head -c "$1" "$2.full" > "$2"; rm "$2.full"; }
-        # Checkout is the PR merged into its base: HEAD^1 is the base. Capped at 300 KB.
-        git diff HEAD^1 HEAD > .review/pr.diff.full
-        cap 300000 .review/pr.diff
+        # Write in full, then cap (ADR-0028); a capped file ends with a truncation note, and every
+        # changed file the cap cut (wholly or partly) is listed in <file>.unshown.txt, which the
+        # procedure makes the agent read from the working tree. Piping into `head -c` would fail
+        # under pipefail.
+        cap() {
+          head -c "$1" "$2.full" > "$2"
+          if [ "$(wc -c < "$2.full")" -gt "$1" ]; then
+            printf '\n[truncated at %s bytes]\n' "$1" >> "$2"
+            files() { grep -E '^diff --git ' "$1" | sed -E 's|^diff --git a/.* b/||'; }
+            { comm -23 <(files "$2.full" | sort -u) <(files "$2" | sort -u); files "$2" | tail -1; } \
+              | sort -u > "$2.unshown.txt"
+          fi
+          rm "$2.full"
+        }
+        # Lockfiles are left out of the agent's diff to save context (ADR-0046); their names go to
+        # .review/excluded.txt. The deterministic lockfile-sources check in `check` (npm registry +
+        # integrity only) and dependency review cover them instead.
+        LOCKS=(pnpm-lock.yaml package-lock.json yarn.lock)
+        EXCLUDE=(); for l in "${LOCKS[@]}"; do EXCLUDE+=(":(glob,exclude)**/$l"); done
+        INCLUDE=(); for l in "${LOCKS[@]}"; do INCLUDE+=(":(glob)**/$l"); done
+        # Trust-sensitive paths first, then other code, then Markdown, so a cap cuts docs first.
+        SENSITIVE=(.github platform scripts infra template .claude lefthook.yml
+          ':(glob)**/package.json' ':(glob)**/AGENTS.md' ':(glob)**/CLAUDE.md' ':(glob)**/*.tf')
+        NOT_SENSITIVE=(); for p in "${SENSITIVE[@]}"; do
+          case "$p" in :\(glob\)*) NOT_SENSITIVE+=(":(glob,exclude)${p#:(glob)}") ;; *) NOT_SENSITIVE+=(":(exclude)$p") ;; esac
+        done
+        ordered_diff() {
+          git diff "$1" "$2" -- "${SENSITIVE[@]}" "${EXCLUDE[@]}"
+          git diff "$1" "$2" -- . "${NOT_SENSITIVE[@]}" "${EXCLUDE[@]}" ':(glob,exclude)**/*.md'
+          git diff "$1" "$2" -- ':(glob)**/*.md' "${NOT_SENSITIVE[@]}"
+        }
+        # Checkout is the PR merged into its base: HEAD^1 is the base. Capped at 120 KB.
+        ordered_diff HEAD^1 HEAD > .review/pr.diff.full
+        cap 120000 .review/pr.diff
+        git diff --name-only HEAD^1 HEAD -- "${INCLUDE[@]}" > .review/excluded.txt
         # Rules come from the base branch (or the pinned baseline), so a PR can't weaken its own review.
         base_copy() { git show "origin/$BASE_REF:$1" > "$2" 2>/dev/null || cp "$1" "$2"; }
         if [ "$LOCAL" = true ]; then
@@ -187,8 +217,8 @@ runs:
         if grep -q ': not reviewed' .review/previous-review.md 2>/dev/null; then prev=""; fi
         if [ "$INCREMENTAL" = true ] && [ -n "$prev" ] && [ "$prev" != "$HEAD_SHA" ] \
           && git cat-file -e "${prev}^{commit}" 2>/dev/null; then
-          git diff "$prev" "$HEAD_SHA" > .review/new-commits.diff.full
-          cap 300000 .review/new-commits.diff
+          ordered_diff "$prev" "$HEAD_SHA" > .review/new-commits.diff.full
+          cap 120000 .review/new-commits.diff
           echo "incremental review since $prev"
         fi
 

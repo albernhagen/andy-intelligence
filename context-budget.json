@@ -1,0 +1,16 @@
+{
+  "$comment": "Context budgets for agent-loaded docs (ADR-0046), checked by scripts/context-budget.mjs in CI. First matching pattern wins. Over budget: move detail to an on-demand doc rather than raising the number.",
+  "budgets": [
+    { "pattern": "AGENTS.md", "maxLines": 100, "maxWords": 900 },
+    { "pattern": "**/AGENTS.md", "maxLines": 40, "maxWords": 300 },
+    { "pattern": "**/CLAUDE.md", "maxLines": 200 },
+    { "pattern": "template/AGENTS.md.template", "maxLines": 100, "maxWords": 600 },
+    { "pattern": "docs/build-log.md", "maxLines": 60, "maxWords": 800 },
+    { "pattern": "docs/BUILD-PROMPT.md", "maxWords": 2300 },
+    { "pattern": "docs/architecture/ARCHITECTURE.md", "maxWords": 11000 },
+    { "pattern": "docs/architecture/adr/README.md", "maxWords": 1500 },
+    { "pattern": "docs/security/threat-model.md", "maxWords": 3600 },
+    { "pattern": "platform/procedures/*.md", "maxWords": 900 },
+    { "pattern": "README.md", "maxWords": 2000 }
+  ]
+}
