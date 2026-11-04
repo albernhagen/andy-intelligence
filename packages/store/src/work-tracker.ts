@@ -109,7 +109,12 @@ export class FirestoreWorkTracker implements WorkTracker {
     let query: Query<Ticket> = this.tickets(projectId);
     if (filter.stage !== undefined) query = query.where("stage", "==", filter.stage);
     if (filter.needsYou !== undefined) query = query.where("needsYou", "==", filter.needsYou);
-    const tickets = (await query.get()).docs.map((d) => d.data());
+    // Older documents have no `archived` field (read as false), and an equality query on false
+    // would skip them, so `archived: false` filters in memory.
+    if (filter.archived === true) query = query.where("archived", "==", true);
+    const tickets = (await query.get()).docs
+      .map((d) => d.data())
+      .filter((t) => filter.archived !== false || !t.archived);
     return tickets.sort((a, b) => a.rank.localeCompare(b.rank));
   }
 

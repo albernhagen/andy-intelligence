@@ -74,6 +74,11 @@ export const Ticket = z.object({
   needsYou: z.boolean(),
   dorStatus: DorStatus,
   blockedBy: z.array(Id),
+  /**
+   * Hidden from the board, the Needs-you inbox and status counts; only Done or Cancelled
+   * tickets (AI-15: Cancel and archive tickets). The default keeps older documents readable.
+   */
+  archived: z.boolean().default(false),
   createdAt: Timestamp,
   updatedAt: Timestamp,
 });

@@ -7,6 +7,7 @@ import {
   type EventActor,
   type NewQuestion,
   type Question,
+  type Run,
   type Ticket,
   type TicketEvent,
   type TicketFields,
@@ -29,7 +30,8 @@ export class DomainError extends Error {
       | "run_limit"
       | "run_finished"
       | "executor_unavailable"
-      | "dispatch_failed",
+      | "dispatch_failed"
+      | "cancel_failed",
     message: string,
     readonly details: string[] = [],
   ) {
@@ -49,7 +51,7 @@ export interface TicketStatus {
   recentEvents: TicketEvent[];
 }
 
-/** Every project with its ticket count per stage, plus the size of the Needs-you inbox. */
+/** Every project with its unarchived ticket count per stage, plus the size of the Needs-you inbox. */
 export interface Overview {
   projects: { key: string; name: string; ticketsByStage: Record<Stage, number> }[];
   needsYou: { questions: number; tickets: number };
@@ -57,6 +59,14 @@ export interface Overview {
 
 /** How many history events `status` returns, newest last. */
 export const RECENT_EVENTS = 5;
+
+/** Stages a ticket can be archived in (AI-15: Cancel and archive tickets). */
+export const ARCHIVABLE_STAGES: readonly Stage[] = ["done", "cancelled"];
+
+/** Stops a ticket's runs in flight before it is cancelled; RunService implements it. */
+export interface RunCanceller {
+  cancelForTicket(projectId: string, ticketId: string): Promise<Run[]>;
+}
 
 export interface MoveOptions {
   force?: boolean;
@@ -70,7 +80,10 @@ export interface MoveOptions {
  * corrected by the next change to the ticket.
  */
 export class TicketService {
-  constructor(private readonly tracker: WorkTracker) {}
+  constructor(
+    private readonly tracker: WorkTracker,
+    private readonly runs: RunCanceller | null = null,
+  ) {}
 
   async create(projectId: string, input: NewTicket, actor: EventActor): Promise<Ticket> {
     const parsed = NewTicket.parse(input);
@@ -109,6 +122,12 @@ export class TicketService {
     { force = false, reason = null }: MoveOptions = {},
   ): Promise<Ticket> {
     const ticket = await this.require(projectId, ticketId);
+    if (to === "cancelled") {
+      throw new DomainError("invalid_transition", "cancel the ticket instead of moving it");
+    }
+    if (ticket.stage === "cancelled" && actor !== "andy") {
+      throw new DomainError("forbidden", "only Andy can reopen a cancelled ticket");
+    }
     if (force) {
       if (actor !== "andy") throw new DomainError("forbidden", "only Andy can force a stage move");
       if (!reason?.trim()) throw new DomainError("reason_required", "a forced move needs a reason");
@@ -123,10 +142,75 @@ export class TicketService {
         }
       }
     }
+    // Only Done or Cancelled tickets stay archived, so moving out of them unarchives.
+    const unarchive = ticket.archived && !ARCHIVABLE_STAGES.includes(to);
     return this.tracker.updateTicket(
       projectId,
       ticketId,
-      { stage: { to, forced: force, reason: reason ?? null }, ifUpdatedAt: ticket.updatedAt },
+      {
+        fields: unarchive ? { archived: false } : {},
+        stage: { to, forced: force, reason: reason ?? null },
+        ifUpdatedAt: ticket.updatedAt,
+      },
+      actor,
+    );
+  }
+
+  /**
+   * Andy cancels a ticket from any stage. Its runs in flight are cancelled first; if that fails,
+   * the stage doesn't change. The reason, if given, goes in the stage event.
+   */
+  async cancel(
+    projectId: string,
+    ticketId: string,
+    actor: EventActor,
+    reason: string | null = null,
+  ): Promise<Ticket> {
+    if (actor !== "andy") throw new DomainError("forbidden", "only Andy can cancel a ticket");
+    const ticket = await this.require(projectId, ticketId);
+    if (ticket.stage === "cancelled") {
+      throw new DomainError("invalid_transition", `${ticket.key} is already cancelled`);
+    }
+    const cancelled = (await this.runs?.cancelForTicket(projectId, ticketId)) ?? [];
+    const updated = await this.tracker.updateTicket(
+      projectId,
+      ticketId,
+      {
+        stage: { to: "cancelled", forced: false, reason: reason?.trim() || null },
+        ifUpdatedAt: ticket.updatedAt,
+      },
+      actor,
+    );
+    for (const run of cancelled) {
+      await this.tracker.addComment(
+        projectId,
+        ticketId,
+        `Cancelled the ${run.step} run ${run.links.executorRun ?? run.id} with the ticket.`,
+        "system",
+      );
+    }
+    return updated;
+  }
+
+  /** Andy archives (hides) a Done or Cancelled ticket, or unarchives any ticket. */
+  async archive(
+    projectId: string,
+    ticketId: string,
+    archived: boolean,
+    actor: EventActor,
+  ): Promise<Ticket> {
+    if (actor !== "andy") throw new DomainError("forbidden", "only Andy can archive a ticket");
+    const ticket = await this.require(projectId, ticketId);
+    if (archived && !ARCHIVABLE_STAGES.includes(ticket.stage)) {
+      throw new DomainError(
+        "invalid_transition",
+        `only Done or Cancelled tickets can be archived; ${ticket.key} is ${ticket.stage}`,
+      );
+    }
+    return this.tracker.updateTicket(
+      projectId,
+      ticketId,
+      { fields: { archived }, ifUpdatedAt: ticket.updatedAt },
       actor,
     );
   }
@@ -175,14 +259,21 @@ export class TicketService {
     return question;
   }
 
-  /** The Needs-you inbox: open questions plus flagged tickets, across all projects. */
+  /** The Needs-you inbox: open questions plus flagged tickets, across all projects, unarchived. */
   async needsYou(): Promise<{ questions: Question[]; tickets: Ticket[] }> {
     const projects = await this.tracker.listProjects();
-    const [questions, ...flagged] = await Promise.all([
+    const [questions, flagged, archived] = await Promise.all([
       this.tracker.listQuestions({ status: "open" }),
-      ...projects.map((p) => this.tracker.listTickets(p.id, { needsYou: true })),
+      Promise.all(
+        projects.map((p) => this.tracker.listTickets(p.id, { needsYou: true, archived: false })),
+      ),
+      Promise.all(projects.map((p) => this.tracker.listTickets(p.id, { archived: true }))),
     ]);
-    return { questions, tickets: flagged.flat() };
+    const hidden = new Set(archived.flat().map((t) => t.id));
+    return {
+      questions: questions.filter((q) => !hidden.has(q.ticketId)),
+      tickets: flagged.flat(),
+    };
   }
 
   /** "AI-42" → the ticket. A project's id is its key lowercased (WorkTracker contract). */
@@ -217,7 +308,9 @@ export class TicketService {
           Stage,
           number
         >;
-        for (const t of await this.tracker.listTickets(p.id)) ticketsByStage[t.stage]++;
+        for (const t of await this.tracker.listTickets(p.id, { archived: false })) {
+          ticketsByStage[t.stage]++;
+        }
         return { key: p.key, name: p.name, ticketsByStage };
       }),
     );

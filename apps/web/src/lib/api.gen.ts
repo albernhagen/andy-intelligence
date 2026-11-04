@@ -333,8 +333,16 @@ export interface paths {
     get: {
       parameters: {
         query?: {
-          stage?: "backlog" | "ready" | "in_progress" | "ready_for_review" | "monitoring" | "done";
+          stage?:
+            | "backlog"
+            | "ready"
+            | "in_progress"
+            | "ready_for_review"
+            | "monitoring"
+            | "done"
+            | "cancelled";
           needsYou?: "true" | "false";
+          archived?: "true" | "false";
         };
         header?: never;
         path: {
@@ -363,7 +371,13 @@ export interface paths {
               assumptions: string[];
               /** @enum {string} */
               stage:
-                "backlog" | "ready" | "in_progress" | "ready_for_review" | "monitoring" | "done";
+                | "backlog"
+                | "ready"
+                | "in_progress"
+                | "ready_for_review"
+                | "monitoring"
+                | "done"
+                | "cancelled";
               rank: string;
               /** @enum {string|null} */
               size: "S" | "M" | "L" | null;
@@ -390,6 +404,8 @@ export interface paths {
               /** @enum {string} */
               dorStatus: "not_met" | "met";
               blockedBy: string[];
+              /** @default false */
+              archived: boolean;
               /** Format: date-time */
               createdAt: string;
               /** Format: date-time */
@@ -508,7 +524,13 @@ export interface paths {
               assumptions: string[];
               /** @enum {string} */
               stage:
-                "backlog" | "ready" | "in_progress" | "ready_for_review" | "monitoring" | "done";
+                | "backlog"
+                | "ready"
+                | "in_progress"
+                | "ready_for_review"
+                | "monitoring"
+                | "done"
+                | "cancelled";
               rank: string;
               /** @enum {string|null} */
               size: "S" | "M" | "L" | null;
@@ -535,6 +557,8 @@ export interface paths {
               /** @enum {string} */
               dorStatus: "not_met" | "met";
               blockedBy: string[];
+              /** @default false */
+              archived: boolean;
               /** Format: date-time */
               createdAt: string;
               /** Format: date-time */
@@ -636,7 +660,13 @@ export interface paths {
               assumptions: string[];
               /** @enum {string} */
               stage:
-                "backlog" | "ready" | "in_progress" | "ready_for_review" | "monitoring" | "done";
+                | "backlog"
+                | "ready"
+                | "in_progress"
+                | "ready_for_review"
+                | "monitoring"
+                | "done"
+                | "cancelled";
               rank: string;
               /** @enum {string|null} */
               size: "S" | "M" | "L" | null;
@@ -663,6 +693,8 @@ export interface paths {
               /** @enum {string} */
               dorStatus: "not_met" | "met";
               blockedBy: string[];
+              /** @default false */
+              archived: boolean;
               /** Format: date-time */
               createdAt: string;
               /** Format: date-time */
@@ -792,7 +824,13 @@ export interface paths {
               assumptions: string[];
               /** @enum {string} */
               stage:
-                "backlog" | "ready" | "in_progress" | "ready_for_review" | "monitoring" | "done";
+                | "backlog"
+                | "ready"
+                | "in_progress"
+                | "ready_for_review"
+                | "monitoring"
+                | "done"
+                | "cancelled";
               rank: string;
               /** @enum {string|null} */
               size: "S" | "M" | "L" | null;
@@ -819,6 +857,8 @@ export interface paths {
               /** @enum {string} */
               dorStatus: "not_met" | "met";
               blockedBy: string[];
+              /** @default false */
+              archived: boolean;
               /** Format: date-time */
               createdAt: string;
               /** Format: date-time */
@@ -915,7 +955,13 @@ export interface paths {
               assumptions: string[];
               /** @enum {string} */
               stage:
-                "backlog" | "ready" | "in_progress" | "ready_for_review" | "monitoring" | "done";
+                | "backlog"
+                | "ready"
+                | "in_progress"
+                | "ready_for_review"
+                | "monitoring"
+                | "done"
+                | "cancelled";
               rank: string;
               /** @enum {string|null} */
               size: "S" | "M" | "L" | null;
@@ -942,6 +988,8 @@ export interface paths {
               /** @enum {string} */
               dorStatus: "not_met" | "met";
               blockedBy: string[];
+              /** @default false */
+              archived: boolean;
               /** Format: date-time */
               createdAt: string;
               /** Format: date-time */
@@ -1119,7 +1167,14 @@ export interface paths {
         content: {
           "application/json": {
             /** @enum {string} */
-            to: "backlog" | "ready" | "in_progress" | "ready_for_review" | "monitoring" | "done";
+            to:
+              | "backlog"
+              | "ready"
+              | "in_progress"
+              | "ready_for_review"
+              | "monitoring"
+              | "done"
+              | "cancelled";
             /** @default false */
             force?: boolean;
             /** @default null */
@@ -1147,7 +1202,13 @@ export interface paths {
               assumptions: string[];
               /** @enum {string} */
               stage:
-                "backlog" | "ready" | "in_progress" | "ready_for_review" | "monitoring" | "done";
+                | "backlog"
+                | "ready"
+                | "in_progress"
+                | "ready_for_review"
+                | "monitoring"
+                | "done"
+                | "cancelled";
               rank: string;
               /** @enum {string|null} */
               size: "S" | "M" | "L" | null;
@@ -1174,6 +1235,298 @@ export interface paths {
               /** @enum {string} */
               dorStatus: "not_met" | "met";
               blockedBy: string[];
+              /** @default false */
+              archived: boolean;
+              /** Format: date-time */
+              createdAt: string;
+              /** Format: date-time */
+              updatedAt: string;
+            };
+          };
+        };
+        /** @description Invalid request */
+        400: {
+          headers: {
+            [name: string]: unknown;
+          };
+          content: {
+            "application/json": {
+              error: string;
+              details?: string[];
+            };
+          };
+        };
+        /** @description Not found */
+        404: {
+          headers: {
+            [name: string]: unknown;
+          };
+          content: {
+            "application/json": {
+              error: string;
+              details?: string[];
+            };
+          };
+        };
+        /** @description Conflict */
+        409: {
+          headers: {
+            [name: string]: unknown;
+          };
+          content: {
+            "application/json": {
+              error: string;
+              details?: string[];
+            };
+          };
+        };
+        /** @description Rule violation */
+        422: {
+          headers: {
+            [name: string]: unknown;
+          };
+          content: {
+            "application/json": {
+              error: string;
+              details?: string[];
+            };
+          };
+        };
+      };
+    };
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/projects/{projectId}/tickets/{ticketId}/cancel": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    post: {
+      parameters: {
+        query?: never;
+        header?: never;
+        path: {
+          projectId: string;
+          ticketId: string;
+        };
+        cookie?: never;
+      };
+      requestBody: {
+        content: {
+          "application/json": {
+            /** @default null */
+            reason?: string | null;
+          };
+        };
+      };
+      responses: {
+        /** @description Cancelled; runs in flight stopped first */
+        200: {
+          headers: {
+            [name: string]: unknown;
+          };
+          content: {
+            "application/json": {
+              id: string;
+              projectId: string;
+              key: string;
+              /** @enum {string} */
+              type: "epic" | "story" | "task" | "bug";
+              parentId: string | null;
+              title: string;
+              body: string;
+              acceptanceCriteria: string[];
+              assumptions: string[];
+              /** @enum {string} */
+              stage:
+                | "backlog"
+                | "ready"
+                | "in_progress"
+                | "ready_for_review"
+                | "monitoring"
+                | "done"
+                | "cancelled";
+              rank: string;
+              /** @enum {string|null} */
+              size: "S" | "M" | "L" | null;
+              sizeReason: string | null;
+              /** @enum {string|null} */
+              tier: "frontier" | "strong" | "fast" | "cheap" | null;
+              overrides: {
+                assignee?: "me" | ("claude-code" | "jules" | "opencode" | "direct");
+                /** @enum {string} */
+                tier?: "frontier" | "strong" | "fast" | "cheap";
+                modelPin?: {
+                  /** @enum {string} */
+                  harness: "claude-code" | "jules" | "opencode" | "direct";
+                  /** @enum {string} */
+                  provider: "claude-sub" | "google-sub" | "openrouter";
+                  model: string;
+                };
+                /** @enum {string} */
+                autonomy?: "autonomous" | "gated" | "manual";
+                /** @enum {string} */
+                targetEnv?: "dev" | "prod";
+              };
+              needsYou: boolean;
+              /** @enum {string} */
+              dorStatus: "not_met" | "met";
+              blockedBy: string[];
+              /** @default false */
+              archived: boolean;
+              /** Format: date-time */
+              createdAt: string;
+              /** Format: date-time */
+              updatedAt: string;
+            };
+          };
+        };
+        /** @description Invalid request */
+        400: {
+          headers: {
+            [name: string]: unknown;
+          };
+          content: {
+            "application/json": {
+              error: string;
+              details?: string[];
+            };
+          };
+        };
+        /** @description Not found */
+        404: {
+          headers: {
+            [name: string]: unknown;
+          };
+          content: {
+            "application/json": {
+              error: string;
+              details?: string[];
+            };
+          };
+        };
+        /** @description Conflict */
+        409: {
+          headers: {
+            [name: string]: unknown;
+          };
+          content: {
+            "application/json": {
+              error: string;
+              details?: string[];
+            };
+          };
+        };
+        /** @description Rule violation */
+        422: {
+          headers: {
+            [name: string]: unknown;
+          };
+          content: {
+            "application/json": {
+              error: string;
+              details?: string[];
+            };
+          };
+        };
+      };
+    };
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/projects/{projectId}/tickets/{ticketId}/archive": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    post: {
+      parameters: {
+        query?: never;
+        header?: never;
+        path: {
+          projectId: string;
+          ticketId: string;
+        };
+        cookie?: never;
+      };
+      requestBody: {
+        content: {
+          "application/json": {
+            /** @default true */
+            archived?: boolean;
+          };
+        };
+      };
+      responses: {
+        /** @description Archived or unarchived */
+        200: {
+          headers: {
+            [name: string]: unknown;
+          };
+          content: {
+            "application/json": {
+              id: string;
+              projectId: string;
+              key: string;
+              /** @enum {string} */
+              type: "epic" | "story" | "task" | "bug";
+              parentId: string | null;
+              title: string;
+              body: string;
+              acceptanceCriteria: string[];
+              assumptions: string[];
+              /** @enum {string} */
+              stage:
+                | "backlog"
+                | "ready"
+                | "in_progress"
+                | "ready_for_review"
+                | "monitoring"
+                | "done"
+                | "cancelled";
+              rank: string;
+              /** @enum {string|null} */
+              size: "S" | "M" | "L" | null;
+              sizeReason: string | null;
+              /** @enum {string|null} */
+              tier: "frontier" | "strong" | "fast" | "cheap" | null;
+              overrides: {
+                assignee?: "me" | ("claude-code" | "jules" | "opencode" | "direct");
+                /** @enum {string} */
+                tier?: "frontier" | "strong" | "fast" | "cheap";
+                modelPin?: {
+                  /** @enum {string} */
+                  harness: "claude-code" | "jules" | "opencode" | "direct";
+                  /** @enum {string} */
+                  provider: "claude-sub" | "google-sub" | "openrouter";
+                  model: string;
+                };
+                /** @enum {string} */
+                autonomy?: "autonomous" | "gated" | "manual";
+                /** @enum {string} */
+                targetEnv?: "dev" | "prod";
+              };
+              needsYou: boolean;
+              /** @enum {string} */
+              dorStatus: "not_met" | "met";
+              blockedBy: string[];
+              /** @default false */
+              archived: boolean;
               /** Format: date-time */
               createdAt: string;
               /** Format: date-time */
@@ -1834,7 +2187,13 @@ export interface paths {
                 assumptions: string[];
                 /** @enum {string} */
                 stage:
-                  "backlog" | "ready" | "in_progress" | "ready_for_review" | "monitoring" | "done";
+                  | "backlog"
+                  | "ready"
+                  | "in_progress"
+                  | "ready_for_review"
+                  | "monitoring"
+                  | "done"
+                  | "cancelled";
                 rank: string;
                 /** @enum {string|null} */
                 size: "S" | "M" | "L" | null;
@@ -1861,6 +2220,8 @@ export interface paths {
                 /** @enum {string} */
                 dorStatus: "not_met" | "met";
                 blockedBy: string[];
+                /** @default false */
+                archived: boolean;
                 /** Format: date-time */
                 createdAt: string;
                 /** Format: date-time */

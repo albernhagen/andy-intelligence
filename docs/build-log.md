@@ -5,7 +5,7 @@ Slice status lives in **tickets in project `AI`** (ADR-0047 phase 1). This page 
 ## Where to look
 
 - **Tickets:** the UI at `https://ai.andybernhagen.com`, or the MCP `status` tool (connector `andy-intelligence`): no key → counts per stage; a key (e.g. `AI-1`) → stage, Definition of Ready gaps, questions, history.
-- **Moving a ticket:** Andy, in the UI (Move to …). Agents can't change a stage over MCP yet; they say in the PR which ticket it closes. From M1.8: Build + gate, runs and PR webhooks move tickets.
+- **Moving a ticket:** Andy, in the UI (Move to …). Cancel and archive: Andy, in the UI or MCP `cancel_ticket` / `archive_ticket`. Agents can't change a stage over MCP yet; they say in the PR which ticket it closes. From M1.8: Build + gate, runs and PR webhooks move tickets.
 - **Slice definitions:** ARCHITECTURE §12. A ticket's body names its row.
 
 ## M1: First end-to-end flow: ticket → PR with Claude
@@ -31,6 +31,7 @@ Merged before the move to tickets: M1.0–M1.5, M1.10–M1.16, M1.19, M1.20 (lis
 - Safe deploy path for the control plane (tagged no-traffic Cloud Run revision per PR + rollback runbook): project `AI` keeps `autoMerge: none` until it exists (ADR-0050, ADR-0047 phase 2).
 - Contract suites for ports with one adapter (`OAuthGrantStore`, `CodeHostConnectionStore`): keep the fakes, drop the shared suite?
 - Production monitoring (alerts, error budget per project) as part of "shipped" (brief): add to M6: Dev → prod releases at slicing.
+- A cancelled ticket's open questions stay in the inbox until it is archived (AI-15: Cancel and archive tickets). Withdraw them on cancel instead?
 - Local mode design (open question 11); due after M1: First end-to-end flow.
 - Context sources design (open question 12); due after M1: First end-to-end flow.
 

@@ -86,6 +86,7 @@ export const TicketFields = Ticket.pick({
   dorStatus: true,
   blockedBy: true,
   rank: true,
+  archived: true,
 }).partial();
 export type TicketFields = z.infer<typeof TicketFields>;
 
@@ -114,7 +115,11 @@ export const QuestionFilter = z.object({
 });
 export type QuestionFilter = z.infer<typeof QuestionFilter>;
 
-export const TicketFilter = z.object({ stage: Stage.optional(), needsYou: z.boolean().optional() });
+export const TicketFilter = z.object({
+  stage: Stage.optional(),
+  needsYou: z.boolean().optional(),
+  archived: z.boolean().optional(),
+});
 export type TicketFilter = z.infer<typeof TicketFilter>;
 
 export interface WorkTracker {

@@ -1,6 +1,14 @@
 import { describe, expect, it } from "vitest";
 import type { Question, Ticket, TicketEvent } from "@andy/contracts";
-import { describeEvent, groupByStage, linesToList, moveOptions, sortQuestions } from "./tickets";
+import {
+  canArchive,
+  describeEvent,
+  groupByStage,
+  linesToList,
+  moveOptions,
+  sortQuestions,
+  visibleTickets,
+} from "./tickets";
 
 const ticket = (over: Partial<Ticket>) =>
   ({ id: "t", stage: "backlog", rank: "m", ...over }) as Ticket;
@@ -23,6 +31,7 @@ describe("groupByStage", () => {
       "ready_for_review",
       "monitoring",
       "done",
+      "cancelled",
     ]);
     expect(groups.backlog.map((t) => t.id)).toEqual(["a", "b"]);
     expect(groups.done.map((t) => t.id)).toEqual(["c"]);
@@ -44,6 +53,25 @@ describe("moveOptions", () => {
     expect(forced).not.toContain("done");
     expect(forced).toHaveLength(5);
   });
+
+  it("GivenCancelled_WhenListingMoves_ThenReopenToBacklogIsAllowedAndCancelledIsNeverForced", () => {
+    expect(moveOptions("cancelled").allowed).toEqual(["backlog"]);
+    expect(moveOptions("ready").forced).not.toContain("cancelled");
+  });
+});
+
+describe("visibleTickets and canArchive", () => {
+  it("GivenAnArchivedTicket_WhenTheToggleIsOffOrOn_ThenItIsHiddenOrListed", () => {
+    const tickets = [ticket({ id: "a" }), ticket({ id: "b", archived: true })];
+    expect(visibleTickets(tickets, false).map((t) => t.id)).toEqual(["a"]);
+    expect(visibleTickets(tickets, true).map((t) => t.id)).toEqual(["a", "b"]);
+  });
+
+  it("GivenEachStage_WhenCheckingArchive_ThenOnlyDoneAndCancelledCanBeArchived", () => {
+    expect(canArchive({ stage: "done" })).toBe(true);
+    expect(canArchive({ stage: "cancelled" })).toBe(true);
+    expect(canArchive({ stage: "monitoring" })).toBe(false);
+  });
 });
 
 describe("linesToList", () => {
@@ -53,6 +81,16 @@ describe("linesToList", () => {
 });
 
 describe("describeEvent", () => {
+  it("GivenAnArchiveChange_WhenDescribed_ThenItSaysArchivedOrUnarchived", () => {
+    const diff = (to: boolean) => ({ diff: { archived: { from: !to, to } } });
+    expect(describeEvent(event({ kind: "fields_changed", data: diff(true) }))).toBe(
+      "archived the ticket",
+    );
+    expect(describeEvent(event({ kind: "fields_changed", data: diff(false) }))).toBe(
+      "unarchived the ticket",
+    );
+  });
+
   it("GivenAForcedStageChange_WhenDescribed_ThenItSaysForceMovedWithLabels", () => {
     const e = event({ kind: "stage_changed", data: { from: "backlog", to: "done", forced: true } });
     expect(describeEvent(e)).toBe("force-moved Backlog → Done");

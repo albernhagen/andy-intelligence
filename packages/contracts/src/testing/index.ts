@@ -130,6 +130,18 @@ export function workTrackerContract(name: string, make: () => Promise<WorkTracke
       ]);
     });
 
+    it("GivenAnArchivedTicket_WhenListedByArchived_ThenOnlyMatchingTicketsAreReturned", async () => {
+      const { tracker, project, ticket } = await setup();
+      expect(ticket.archived).toBe(false);
+      const second = await tracker.createTicket(project.id, { type: "task", title: "Two" }, "andy");
+      await tracker.updateTicket(project.id, second.id, { fields: { archived: true } }, "andy");
+      const ids = async (archived?: boolean) =>
+        (await tracker.listTickets(project.id, { archived })).map((t) => t.id);
+      expect(await ids(true)).toEqual([second.id]);
+      expect(await ids(false)).toEqual([ticket.id]);
+      expect(await ids()).toEqual([ticket.id, second.id]);
+    });
+
     it("GivenFieldAndStageChanges_WhenUpdated_ThenHistoryRecordsOnlyRealChanges", async () => {
       const { tracker, project, ticket } = await setup();
       const updated = await tracker.updateTicket(

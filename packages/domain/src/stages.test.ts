@@ -23,4 +23,11 @@ describe("canTransition", () => {
     expect(canTransition("done", "backlog")).toBe(false);
     expect(canTransition("backlog", "backlog")).toBe(false);
   });
+
+  it("GivenCancelled_WhenMoving_ThenOnlyReopeningToBacklogIsAllowedAndNothingMovesIn", () => {
+    expect(canTransition("cancelled", "backlog")).toBe(true);
+    expect(canTransition("cancelled", "ready")).toBe(false);
+    expect(canTransition("done", "cancelled")).toBe(false);
+    expect(canTransition("in_progress", "cancelled")).toBe(false);
+  });
 });
