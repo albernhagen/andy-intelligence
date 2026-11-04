@@ -84,4 +84,21 @@ describe("board drag-and-drop", () => {
       expect((await harness.tracker.getTicket("ai", ticket.id))?.stage).toBe("backlog"),
     );
   });
+
+  it("GivenTwoTicketsMissingDoR_WhenBothDroppedOnReadyInARow_ThenEachCardShowsItsError", async () => {
+    const harness = renderApp();
+    await harness.tracker.createProject({ name: "AI", key: "AI" });
+    const first = await harness.service.create("ai", { type: "story", title: "One" }, "andy");
+    const second = await harness.service.create("ai", { type: "story", title: "Two" }, "andy");
+    await harness.router.navigate({ to: "/p/ai" });
+    const backlog = await screen.findByRole("region", { name: "Backlog" });
+    await within(backlog).findByText(second.key);
+
+    await drag(harness.user, first.key, 1);
+    await drag(harness.user, second.key, 1);
+
+    await waitFor(() => expect(screen.getAllByRole("alert")).toHaveLength(2));
+    expect(within(backlog).getByText(first.key)).toBeTruthy();
+    expect(within(backlog).getByText(second.key)).toBeTruthy();
+  });
 });

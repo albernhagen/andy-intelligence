@@ -62,7 +62,8 @@ const KEYBOARD_CODES = { start: ["Space"], cancel: ["Escape"], end: ["Space"] };
 function Columns({ tickets, projectId }: { tickets: Ticket[]; projectId: string }) {
   const groups = groupByStage(tickets);
   const move = useBoardMove(projectId);
-  const [failed, setFailed] = useState<{ ticketId: string; error: Error } | null>(null);
+  // One error per card, so a quick second drop can't hide the first one's failure.
+  const [errors, setErrors] = useState<Record<string, Error>>({});
   // A mouse drag ends with a click on the card's link; this swallows that one click.
   const justDragged = useRef(false);
   const sensors = useSensors(
@@ -71,7 +72,7 @@ function Columns({ tickets, projectId }: { tickets: Ticket[]; projectId: string 
     useSensor(KeyboardSensor, { keyboardCodes: KEYBOARD_CODES }),
   );
 
-  function onDragEnd({ active, over }: DragEndEvent) {
+  async function onDragEnd({ active, over }: DragEndEvent) {
     justDragged.current = true;
     setTimeout(() => (justDragged.current = false), 0);
     const ticket = tickets.find((t) => t.id === active.id);
@@ -79,18 +80,20 @@ function Columns({ tickets, projectId }: { tickets: Ticket[]; projectId: string 
     if (!ticket || !to.success) return;
     const next = dropMove(ticket.stage, to.data);
     if (!next) return;
-    setFailed(null);
+    setErrors(({ [ticket.id]: _, ...rest }) => rest);
     // No optimistic update: the card stays in its column until the API accepts the move.
-    move.mutate(
-      { ticketId: ticket.id, ...next },
-      { onError: (error) => setFailed({ ticketId: ticket.id, error }) },
-    );
+    // mutateAsync, not mutate's per-call callbacks: those only fire for the latest call.
+    try {
+      await move.mutateAsync({ ticketId: ticket.id, ...next });
+    } catch (error) {
+      setErrors((e) => ({ ...e, [ticket.id]: error as Error }));
+    }
   }
 
   return (
     <DndContext
       sensors={sensors}
-      onDragEnd={onDragEnd}
+      onDragEnd={(e) => void onDragEnd(e)}
       onDragCancel={() => (justDragged.current = false)}
     >
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
@@ -102,7 +105,7 @@ function Columns({ tickets, projectId }: { tickets: Ticket[]; projectId: string 
                 ticket={t}
                 projectId={projectId}
                 onClick={(e) => justDragged.current && e.preventDefault()}
-                error={failed?.ticketId === t.id ? failed.error : null}
+                error={errors[t.id] ?? null}
               />
             ))}
           </Column>
