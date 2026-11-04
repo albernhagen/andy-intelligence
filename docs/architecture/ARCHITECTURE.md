@@ -113,7 +113,7 @@ Enterprise-shaped (durable state, policy, gates, least privilege, audit, contrac
 - Dependencies declared (ticket "blocked by" links).
 - Tier assigned (default from policy, or override).
 - **No open questions.** Assumptions listed explicitly.
-- Per-project policy may allow "proceed on documented assumptions" for S tasks only; default is **require Andy's answers**.
+- Per-project policy may allow "proceed on documented assumptions" for S tasks only; default is **require Andy's answers**. Overnight runs (ADR-0049) answer everything before launch and decide later ambiguity on recorded assumptions, listed in the morning report.
 - **Epics** need only a stated intent and no open questions (no criteria, size or tier).
 - Checked in `packages/domain` (`checkDor`); `dorStatus` is computed on every change, never set by callers. EARS = any criterion containing "THE SYSTEM SHALL".
 
@@ -125,7 +125,7 @@ Enterprise-shaped (durable state, policy, gates, least privilege, audit, contrac
 
 ### 4.4 Epics
 - Ticket types (Epic / Story / Task / Bug) + **child tickets** (`parent_id`).
-- Epic refinement produces stories with `depends_on`. Stories are vertical slices, independently mergeable behind feature flags; merge to `main`, no long-lived epic branches.
+- Epic refinement produces stories with `depends_on`. Stories are vertical slices, independently mergeable behind feature flags; merge to `main`, no long-lived epic branches. Exception: an **overnight run** (ADR-0049) merges its stories into a one-night branch `epic/<key>`, reviewed by Andy as one PR the next morning.
 - **Just-in-time re-planning:** when a story unblocks, a short plan pass re-reads the current codebase before execution. (Single tickets get this from M1.18: Plan step, ADR-0040.)
 - Epic status, cost, and progress roll up from children. Overrides on an epic cascade to its stories.
 
@@ -226,7 +226,7 @@ Contracts are defined in `packages/contracts` (Zod schemas + TypeScript interfac
   | Jules | `pull_request` opened webhook on the PR Jules creates (correlated to the Run by branch/PR body) | Watchdog reads session `activities` once at deadline |
   | Direct | In-process; no signal needed | — |
 - **Run watchdog** — when a run is dispatched, a Cloud Tasks task is queued for its deadline. If no completion signal has arrived by then, the watchdog checks the executor/PR directly **once**, then heals the record or flags Needs-you. No periodic polling; nothing runs when no work is in flight.
-- **Pipeline engine** — stage transitions, DoR checks, gate rules, dependency release, retry policy.
+- **Pipeline engine** — stage transitions, DoR checks, gate rules, dependency release, retry policy. It is the supervisor of parallel work; there is no LLM parent agent (ADR-0047). From M2: conflict-aware dispatch (no two in-flight tickets touching the same files in a repo), sync runs when `main` moves, a merge queue per repo, cross-project dependencies.
 - **Router** — picks the route for a step: overrides → tier routes in order → skip providers paused by quota/budget → fall back or queue.
 - **Scheduled jobs** (Cloud Scheduler → authenticated endpoint): weekly **model scout**; weekly **system security review** per project when something merged since the last one (§9.1). Quota readings are captured from run results, not sampled.
 - **UI** — static SPA served by the same service.
@@ -488,6 +488,8 @@ Each milestone must work **end to end** before the next starts. Acceptance crite
 **Naming:** always write a milestone or slice as `ID: title`, e.g. "M1.2: Ticket core". The ID alone means nothing to a reader.
 
 ### How milestones are built: slices
+**With itself (ADR-0047):** 1. track slices as tickets in project `AI` now; 2. S tickets built by the control plane once M1: First end-to-end flow is done; 3. most work, including parallel waves, once M2: Multi-project in parallel is done. Trust-boundary work (auth, IAM, Terraform, workflows, review gates) and deploy-breaking changes stay in interactive sessions.
+
 Each milestone is delivered as **slices**. A slice:
 - is one PR, branched from the latest `main` after its dependencies have merged — no stacked PRs;
 - has its own **Done when** that Andy can check in a few minutes;
@@ -519,7 +521,7 @@ Repo scaffold, contracts package, Terraform for control-plane GCP project (plan 
 Waves after M1.4: MCP core tools and M1.5: GitHub App + project registration (ADR-0040): M1.19: GitHub App setup from the UI → M1.6a ‖ M1.17: Agent evals v1 → M1.6b ‖ M1.7: Refinement ‖ M1.9: Quota capture → M1.18: Plan step → M1.8: Build + gate.
 
 ### M2: Multi-project in parallel
-Andy builds several systems at once (ADR-0035). Onboard N projects via M1.5: GitHub App + project registration and M1.16: Project baseline v1, each with per-PR security and adversarial review, local quality gates and the weekly system security review (§9.1, §4.5, §10.2); **stories by project**: tickets listed, filtered and grouped per project in the UI and MCP (`list_projects`, per-project ticket lists, Needs-you inbox grouped by project); concurrent runs across projects with explicit caps (max runs per project and globally, ADR-0028); quota-aware dispatch so parallel runs keep the subscription reserves (§5); agent read access to API/MCP scoped per project; dispatch also capped by PRs waiting for Andy (review capacity), and repeated review findings become a pending `ConfigChange` to `AGENTS.md` or a procedure (ADR-0040). Slice at milestone start.
+Andy builds several systems at once (ADR-0035). Onboard N projects via M1.5: GitHub App + project registration and M1.16: Project baseline v1, each with per-PR security and adversarial review, local quality gates and the weekly system security review (§9.1, §4.5, §10.2); **stories by project**: tickets listed, filtered and grouped per project in the UI and MCP (`list_projects`, per-project ticket lists, Needs-you inbox grouped by project); concurrent runs across projects with explicit caps (max runs per project and globally, ADR-0028); quota-aware dispatch so parallel runs keep the subscription reserves (§5); agent read access to API/MCP scoped per project; coordination of parallel work (ADR-0047): conflict-aware dispatch from the plan's touched files, sync runs that bring open agent PRs up to date with `main`, a merge queue per repo via the App token, collision-free ADR and risk IDs, an in-flight view in MCP, cross-project dependencies; dispatch also capped by PRs waiting for Andy (review capacity), and repeated review findings become a pending `ConfigChange` to `AGENTS.md` or a procedure (ADR-0040). Slice at milestone start.
 
 ### M3: Add Jules + model routing
 Jules adapter (completion via PR webhook); freeze `Executor` contract (two adapters pass contract tests); harness/provider/model/tier config with compatibility rules; size-based routing; cross-model review; google-sub quota (task counting) and reserves. Slice at milestone start.
@@ -528,7 +530,7 @@ Jules adapter (completion via PR webhook); freeze `Executor` contract (two adapt
 OpenCode executor via Actions; OpenRouter direct-call gateway for single-call steps; global and per-project caps with hard stops; quota-aware route fallback with 20% reserves; weekly model scout producing pending tier changes; initial tier list seeded by scout. Slice at milestone start.
 
 ### M5: Epics + story board
-Epics with child tickets and dependencies; just-in-time re-planning; config editing and audit/revert in UI and MCP; drag-and-drop story board; dedicated run-detail screen; UI design system (`design.md` + tokens), pluggable design skills with a Hallmark trial, Playwright screenshot checks, and a Dashboards screen (ADR-0045) including tokens per run and per step (ADR-0046). Slice at milestone start.
+Epics with child tickets and dependencies; just-in-time re-planning; config editing and audit/revert in UI and MCP; drag-and-drop story board; dedicated run-detail screen; UI design system (`design.md` + tokens), pluggable design skills with a Hallmark trial, Playwright screenshot checks, and a Dashboards screen (ADR-0045) including tokens per run and per step (ADR-0046); **overnight runs** (ADR-0049: launch step with batched answers and plan approvals, one-night epic branch, night budget and stop time, morning report as a Needs-you item). Slice at milestone start.
 
 ### M6: Dev → prod releases
 Project template Terraform + Cloud Deploy dev→prod, with a budget and caps per dev/prod project (§10.1); dev deploy + verification (Playwright/API tests + verification agent); promote/rollback from UI and MCP; release notes; rule-based auto-merge for S tasks; DORA metrics (deploy frequency, lead time, change failure rate, time to restore; ADR-0040). Slice at milestone start.
