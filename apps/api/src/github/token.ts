@@ -21,11 +21,18 @@ export const ACTIONS_ISSUER = "https://token.actions.githubusercontent.com";
 export interface ActionsClaims {
   repository: string;
   workflow_ref: string;
+  /** The workflow the job runs in; a reusable workflow's own ref (agent run callbacks). */
+  job_workflow_ref?: string;
+  /** The workflow run's ID (agent run callbacks). */
+  run_id?: string;
 }
 
 export type ActionsTokenVerifier = (jwt: string) => Promise<ActionsClaims>;
 
-/** Workflows that may get a repo token. M1.6: Claude Code executor adds its workflow here. */
+/**
+ * Workflows that may get a repo token. Agent runs don't need one yet: refine is read-only
+ * (M1.6a); M1.8: Build + gate adds the executor's workflow when it opens PRs.
+ */
 export const TOKEN_POLICY: readonly ActionsClaims[] = [
   {
     repository: "albernhagen/andy-intelligence",
@@ -45,7 +52,13 @@ export function actionsTokenVerifier(
     if (typeof payload.repository !== "string" || typeof payload.workflow_ref !== "string") {
       throw new Error("token lacks repository or workflow_ref");
     }
-    return { repository: payload.repository, workflow_ref: payload.workflow_ref };
+    const optional = (v: unknown) => (typeof v === "string" ? v : undefined);
+    return {
+      repository: payload.repository,
+      workflow_ref: payload.workflow_ref,
+      job_workflow_ref: optional(payload.job_workflow_ref),
+      run_id: optional(payload.run_id),
+    };
   };
 }
 

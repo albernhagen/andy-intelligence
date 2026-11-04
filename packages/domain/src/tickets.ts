@@ -24,7 +24,12 @@ export class DomainError extends Error {
       | "forbidden"
       | "reason_required"
       | "invalid_repo"
-      | "repo_taken",
+      | "repo_taken"
+      | "invalid_step"
+      | "run_limit"
+      | "run_finished"
+      | "executor_unavailable"
+      | "dispatch_failed",
     message: string,
     readonly details: string[] = [],
   ) {

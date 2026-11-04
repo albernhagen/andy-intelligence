@@ -3,6 +3,7 @@ import { fileURLToPath } from "node:url";
 import {
   InMemoryCodeEventLog,
   InMemoryCodeHostConnectionStore,
+  InMemoryRunStore,
   InMemoryWorkTracker,
 } from "@andy/contracts";
 import { createApp } from "@andy/api/app";
@@ -23,6 +24,7 @@ export async function generateApiTypes(): Promise<string> {
     version: "gen",
     webConfig: { firebaseApiKey: "", firebaseAuthDomain: "", projectId: "" },
     tracker: new InMemoryWorkTracker(),
+    runs: new InMemoryRunStore(),
     // Fakes only, so the GitHub setup routes are in the document.
     github: {
       publicUrl: "http://localhost",

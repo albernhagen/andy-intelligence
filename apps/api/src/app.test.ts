@@ -1,4 +1,4 @@
-import { InMemoryWorkTracker } from "@andy/contracts";
+import { InMemoryWorkTracker, InMemoryRunStore } from "@andy/contracts";
 import { describe, expect, it } from "vitest";
 import { createApp } from "./app";
 import { parseAllowList, type TokenVerifier } from "./auth";
@@ -22,6 +22,7 @@ const app = createApp({
   version: "test",
   webConfig: { firebaseApiKey: "k", firebaseAuthDomain: "d", projectId: "p" },
   tracker: new InMemoryWorkTracker(),
+  runs: new InMemoryRunStore(),
 });
 
 const get = (path: string, token?: string) =>
@@ -57,6 +58,7 @@ describe("api", () => {
       version: "test",
       webConfig: { firebaseApiKey: "k", firebaseAuthDomain: "d", projectId: "p" },
       tracker: new InMemoryWorkTracker(),
+      runs: new InMemoryRunStore(),
       publicHost: "AI.example.com",
     });
     const runApp = "https://control-plane-123.us-central1.run.app";

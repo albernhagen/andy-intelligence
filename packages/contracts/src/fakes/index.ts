@@ -4,6 +4,10 @@ import {
   Repo,
   RepoName,
   type RepoToken,
+  type Run,
+  type RunStatus,
+  type WorkflowDispatch,
+  type WorkflowRun,
   type AnsweredVia,
   type EventActor,
   type Project,
@@ -29,7 +33,11 @@ import {
   type QuotaSource,
   type RecordResult,
   type RunHandle,
+  type RunPatch,
   type RunReport,
+  type RunStore,
+  type NewRun,
+  ACTIVE_RUN_STATUSES,
   type TicketChange,
   type TicketFilter,
   type WorkTracker,
@@ -42,6 +50,7 @@ import {
   event,
   notFound,
 } from "../ports/work-tracker-support";
+import { applyRunPatch, buildRun, newestFirst } from "../ports/run-support";
 
 /** In-memory WorkTracker. Writes are synchronous, so each one is trivially atomic. */
 export class InMemoryWorkTracker implements WorkTracker {
@@ -237,7 +246,46 @@ export class InMemoryExecutor implements Executor {
   }
 
   private handleFor(runId: string): RunHandle {
-    return { runId, externalId: `fake-${runId}`, url: null };
+    return { runId, externalId: `fake-${runId}`, url: null, executor: null };
+  }
+}
+
+/** In-memory RunStore. Check-and-write has no await in between, so updates are atomic. */
+export class InMemoryRunStore implements RunStore {
+  private readonly runs = new Map<string, Run>();
+
+  constructor(private readonly now: () => Date = () => new Date()) {}
+
+  async create(input: NewRun): Promise<Run> {
+    const run = buildRun(input, crypto.randomUUID(), this.now());
+    this.runs.set(run.id, run);
+    return structuredClone(run);
+  }
+
+  async get(runId: string): Promise<Run | null> {
+    return clone(this.runs.get(runId));
+  }
+
+  async listForTicket(projectId: string, ticketId: string): Promise<Run[]> {
+    return [...this.runs.values()]
+      .filter((r) => r.projectId === projectId && r.ticketId === ticketId)
+      .sort(newestFirst)
+      .map((r) => structuredClone(r));
+  }
+
+  async listActive(projectId: string): Promise<Run[]> {
+    return [...this.runs.values()]
+      .filter((r) => r.projectId === projectId && ACTIVE_RUN_STATUSES.includes(r.status))
+      .sort(newestFirst)
+      .map((r) => structuredClone(r));
+  }
+
+  async update(runId: string, patch: RunPatch, from: readonly RunStatus[]): Promise<Run> {
+    const current = this.runs.get(runId);
+    if (!current) throw notFound("run", runId);
+    const run = applyRunPatch(current, patch, from);
+    this.runs.set(runId, run);
+    return structuredClone(run);
   }
 }
 
@@ -284,6 +332,13 @@ export class InMemoryOAuthGrantStore implements OAuthGrantStore {
 /** In-memory CodeHost: repos count as installed once added with `install`. */
 export class InMemoryCodeHost implements CodeHost {
   private readonly repos = new Map<string, Repo>();
+  /** Workflow runs started with `dispatchWorkflow`, by run ID. */
+  readonly workflowRuns = new Map<
+    string,
+    { repo: string; workflow: string; inputs: Record<string, string>; run: WorkflowRun }
+  >();
+  /** Test seam: make the next dispatches fail. */
+  failDispatch: Error | null = null;
 
   constructor(
     repos: Repo[] = [],
@@ -320,6 +375,46 @@ export class InMemoryCodeHost implements CodeHost {
       expiresAt: new Date(this.now().getTime() + 60 * 60 * 1000).toISOString(),
       actor: "fake-app[bot]",
     };
+  }
+
+  async dispatchWorkflow(
+    fullName: string,
+    workflow: string,
+    inputs: Record<string, string>,
+  ): Promise<WorkflowDispatch | null> {
+    const repo = await this.getRepo(fullName);
+    if (!repo) return null;
+    if (this.failDispatch) throw this.failDispatch;
+    const id = String(this.workflowRuns.size + 1);
+    const url = `${repo.url}/actions/runs/${id}`;
+    this.workflowRuns.set(id, {
+      repo: repo.fullName,
+      workflow,
+      inputs: { ...inputs },
+      run: {
+        id,
+        name: workflow,
+        trigger: "workflow_dispatch",
+        status: "queued",
+        conclusion: null,
+        headBranch: repo.defaultBranch,
+        headSha: "0000000",
+        url,
+      },
+    });
+    return { id, url };
+  }
+
+  async getWorkflowRun(fullName: string, runId: string): Promise<WorkflowRun | null> {
+    const entry = this.workflowRuns.get(runId);
+    if (!entry || entry.repo.toLowerCase() !== fullName.toLowerCase()) return null;
+    return structuredClone(entry.run);
+  }
+
+  async cancelWorkflowRun(fullName: string, runId: string): Promise<void> {
+    const run = await this.getWorkflowRun(fullName, runId);
+    if (!run || run.status === "completed") return;
+    this.workflowRuns.get(runId)!.run = { ...run, status: "completed", conclusion: "cancelled" };
   }
 }
 

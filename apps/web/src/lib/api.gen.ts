@@ -1750,6 +1750,279 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  "/api/projects/{projectId}/tickets/{ticketId}/runs": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get: {
+      parameters: {
+        query?: never;
+        header?: never;
+        path: {
+          projectId: string;
+          ticketId: string;
+        };
+        cookie?: never;
+      };
+      requestBody?: never;
+      responses: {
+        /** @description Runs, newest first */
+        200: {
+          headers: {
+            [name: string]: unknown;
+          };
+          content: {
+            "application/json": {
+              id: string;
+              projectId: string;
+              ticketId: string | null;
+              /** @enum {string} */
+              step: "refine" | "plan" | "build" | "review" | "verify" | "scout";
+              route: {
+                /** @enum {string} */
+                harness: "claude-code" | "jules" | "opencode" | "direct";
+                /** @enum {string} */
+                provider: "claude-sub" | "google-sub" | "openrouter";
+                model: string;
+              };
+              /** @enum {string|null} */
+              tier: "frontier" | "strong" | "fast" | "cheap" | null;
+              /** @enum {string} */
+              status: "queued" | "running" | "succeeded" | "failed" | "cancelled";
+              /** Format: date-time */
+              startedAt: string | null;
+              /** Format: date-time */
+              endedAt: string | null;
+              tokensIn: number | null;
+              tokensOut: number | null;
+              costUsd: number | null;
+              costIsEstimate: boolean;
+              quotaSnapshot: {
+                [key: string]: unknown;
+              } | null;
+              links: {
+                /** Format: uri */
+                executorRun?: string;
+                /** Format: uri */
+                pullRequest?: string;
+              };
+              /** @enum {string|null} */
+              outcome: "merged_clean" | "reworked" | "reverted" | "failed" | null;
+              wouldAutoMerge: boolean | null;
+              /**
+               * Format: date-time
+               * @default null
+               */
+              createdAt: string | null;
+              /**
+               * Format: date-time
+               * @default null
+               */
+              deadline: string | null;
+              /** @default null */
+              prompt: string | null;
+              /** @default null */
+              maxTurns: number | null;
+              /** @default null */
+              summary: string | null;
+              /** @default null */
+              error: string | null;
+              /** @default null */
+              executor: {
+                repo: string;
+                ref: string;
+                externalId: string;
+              } | null;
+            }[];
+          };
+        };
+        /** @description Not found */
+        404: {
+          headers: {
+            [name: string]: unknown;
+          };
+          content: {
+            "application/json": {
+              error: string;
+              details?: string[];
+            };
+          };
+        };
+      };
+    };
+    put?: never;
+    post: {
+      parameters: {
+        query?: never;
+        header?: never;
+        path: {
+          projectId: string;
+          ticketId: string;
+        };
+        cookie?: never;
+      };
+      requestBody: {
+        content: {
+          "application/json": {
+            /** @enum {string} */
+            step: "refine";
+          };
+        };
+      };
+      responses: {
+        /** @description Dispatched */
+        201: {
+          headers: {
+            [name: string]: unknown;
+          };
+          content: {
+            "application/json": {
+              id: string;
+              projectId: string;
+              ticketId: string | null;
+              /** @enum {string} */
+              step: "refine" | "plan" | "build" | "review" | "verify" | "scout";
+              route: {
+                /** @enum {string} */
+                harness: "claude-code" | "jules" | "opencode" | "direct";
+                /** @enum {string} */
+                provider: "claude-sub" | "google-sub" | "openrouter";
+                model: string;
+              };
+              /** @enum {string|null} */
+              tier: "frontier" | "strong" | "fast" | "cheap" | null;
+              /** @enum {string} */
+              status: "queued" | "running" | "succeeded" | "failed" | "cancelled";
+              /** Format: date-time */
+              startedAt: string | null;
+              /** Format: date-time */
+              endedAt: string | null;
+              tokensIn: number | null;
+              tokensOut: number | null;
+              costUsd: number | null;
+              costIsEstimate: boolean;
+              quotaSnapshot: {
+                [key: string]: unknown;
+              } | null;
+              links: {
+                /** Format: uri */
+                executorRun?: string;
+                /** Format: uri */
+                pullRequest?: string;
+              };
+              /** @enum {string|null} */
+              outcome: "merged_clean" | "reworked" | "reverted" | "failed" | null;
+              wouldAutoMerge: boolean | null;
+              /**
+               * Format: date-time
+               * @default null
+               */
+              createdAt: string | null;
+              /**
+               * Format: date-time
+               * @default null
+               */
+              deadline: string | null;
+              /** @default null */
+              prompt: string | null;
+              /** @default null */
+              maxTurns: number | null;
+              /** @default null */
+              summary: string | null;
+              /** @default null */
+              error: string | null;
+              /** @default null */
+              executor: {
+                repo: string;
+                ref: string;
+                externalId: string;
+              } | null;
+            };
+          };
+        };
+        /** @description Invalid request */
+        400: {
+          headers: {
+            [name: string]: unknown;
+          };
+          content: {
+            "application/json": {
+              error: string;
+              details?: string[];
+            };
+          };
+        };
+        /** @description Not found */
+        404: {
+          headers: {
+            [name: string]: unknown;
+          };
+          content: {
+            "application/json": {
+              error: string;
+              details?: string[];
+            };
+          };
+        };
+        /** @description A run is already in flight */
+        409: {
+          headers: {
+            [name: string]: unknown;
+          };
+          content: {
+            "application/json": {
+              error: string;
+              details?: string[];
+            };
+          };
+        };
+        /** @description Rule violation */
+        422: {
+          headers: {
+            [name: string]: unknown;
+          };
+          content: {
+            "application/json": {
+              error: string;
+              details?: string[];
+            };
+          };
+        };
+        /** @description The executor refused the run */
+        502: {
+          headers: {
+            [name: string]: unknown;
+          };
+          content: {
+            "application/json": {
+              error: string;
+              details?: string[];
+            };
+          };
+        };
+        /** @description No executor (GitHub not connected) */
+        503: {
+          headers: {
+            [name: string]: unknown;
+          };
+          content: {
+            "application/json": {
+              error: string;
+              details?: string[];
+            };
+          };
+        };
+      };
+    };
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   "/api/github": {
     parameters: {
       query?: never;
