@@ -1,5 +1,6 @@
+import { useEffect, useRef } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import type { Stage } from "@andy/contracts";
+import type { Run, Stage } from "@andy/contracts";
 import { unwrap, useApi } from "./api";
 
 /** Query hooks over the generated API client. One user, small data: every write refetches all. */
@@ -69,6 +70,44 @@ export function useTicketQuestions(path: TicketPath) {
         }),
       ),
   });
+}
+
+/** How often the runs list refetches while a run is queued or running. */
+export const RUN_POLL_MS = 5_000;
+
+export const isActiveRun = (run: Pick<Run, "status">) =>
+  run.status === "queued" || run.status === "running";
+
+/** Poll only while a run is in flight; stop once every run has finished (no websockets). */
+export function runsRefetchInterval(runs: readonly Pick<Run, "status">[] | undefined) {
+  return runs?.some(isActiveRun) ? RUN_POLL_MS : false;
+}
+
+/**
+ * The ticket's agent runs, newest first. When a run it saw in flight finishes, everything is
+ * refetched, so the agent's comment, questions and ticket changes show up.
+ */
+export function useRuns(path: TicketPath) {
+  const api = useApi();
+  const queryClient = useQueryClient();
+  const query = useQuery({
+    queryKey: ["runs", path],
+    queryFn: async () =>
+      unwrap(
+        await api.GET("/api/projects/{projectId}/tickets/{ticketId}/runs", { params: { path } }),
+      ),
+    refetchInterval: (q) => runsRefetchInterval(q.state.data),
+  });
+
+  const active = useRef<Set<string>>(new Set());
+  useEffect(() => {
+    if (!query.data) return;
+    const finished = query.data.some((r) => active.current.has(r.id) && !isActiveRun(r));
+    active.current = new Set(query.data.filter(isActiveRun).map((r) => r.id));
+    if (finished) void queryClient.invalidateQueries();
+  }, [query.data, queryClient]);
+
+  return query;
 }
 
 export function useNeedsYou() {
@@ -170,6 +209,18 @@ export function useAnswerQuestion() {
       await api.POST("/api/questions/{questionId}/answer", {
         params: { path: { questionId } },
         body: { answer },
+      }),
+    ),
+  );
+}
+
+export function useStartRun(path: TicketPath) {
+  const api = useApi();
+  return useWrite(async (body: { step: "refine" }) =>
+    unwrap(
+      await api.POST("/api/projects/{projectId}/tickets/{ticketId}/runs", {
+        params: { path },
+        body,
       }),
     ),
   );

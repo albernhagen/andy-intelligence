@@ -1,5 +1,6 @@
 import { z } from "zod";
 import {
+  BillingType,
   DorStatus,
   EventActor,
   Id,
@@ -9,6 +10,8 @@ import {
   QuestionStatus,
   QuotaReading,
   Route,
+  Run,
+  RunExecutor,
   RunStatus,
   RunStep,
   Stage,
@@ -21,11 +24,13 @@ import {
   type Repo,
   type RepoToken,
   type TicketEvent,
+  type WorkflowDispatch,
+  type WorkflowRun,
 } from "../entities";
 
 /**
  * Ports (ARCHITECTURE §6). Adapters implement these; the domain only sees these types.
- * WorkTracker, Executor, QuotaSource, OAuthGrantStore, CodeHost, CodeEventLog and
+ * WorkTracker, RunStore, Executor, QuotaSource, OAuthGrantStore, CodeHost, CodeEventLog and
  * CodeHostConnectionStore have fakes + contract suites (see ../testing).
  * The rest are plain interfaces until a second adapter exists (ADR-0012).
  */
@@ -166,15 +171,19 @@ export const RunRequest = z.object({
   ticketRef: z.string().nullable(),
   step: RunStep,
   route: Route,
+  /** From the route's Provider: which credential the run uses (ADR-0050). */
+  billingType: BillingType.default("subscription"),
   instructions: z.string().min(1),
   callbackUrl: z.url().nullable(),
 });
-export type RunRequest = z.infer<typeof RunRequest>;
+export type RunRequest = z.input<typeof RunRequest>;
 
 export const RunHandle = z.object({
   runId: z.string().min(1),
   externalId: z.string().min(1),
   url: z.url().nullable(),
+  /** What the run must prove to be on callback; null for executors that don't call back. */
+  executor: RunExecutor.nullable().default(null),
 });
 export type RunHandle = z.infer<typeof RunHandle>;
 
@@ -194,6 +203,56 @@ export interface Executor {
   start(req: RunRequest): Promise<RunHandle>;
   status(handle: RunHandle): Promise<RunReport>;
   cancel(handle: RunHandle): Promise<void>;
+}
+
+// ── RunStore ─────────────────────────────────────────────────────────────────
+// Run records (ARCHITECTURE §5): one per executor run, linked to its ticket. Status changes are
+// conditional on the current status, so a late or replayed callback can't undo a finished run.
+// Errors are WorkTrackerError (`not_found`, `conflict`), mapped the same way by the API.
+
+export const NewRun = Run.pick({
+  projectId: true,
+  ticketId: true,
+  step: true,
+  route: true,
+  tier: true,
+  deadline: true,
+  prompt: true,
+  maxTurns: true,
+});
+export type NewRun = z.input<typeof NewRun>;
+
+/** Fields a status change may set. */
+export const RunPatch = Run.pick({
+  status: true,
+  startedAt: true,
+  endedAt: true,
+  tokensIn: true,
+  tokensOut: true,
+  costUsd: true,
+  costIsEstimate: true,
+  links: true,
+  summary: true,
+  error: true,
+  executor: true,
+}).partial();
+export type RunPatch = z.input<typeof RunPatch>;
+
+export const ACTIVE_RUN_STATUSES: readonly RunStatus[] = ["queued", "running"];
+
+export interface RunStore {
+  /** A new run in `queued`, with a generated id and `createdAt`. */
+  create(input: NewRun): Promise<Run>;
+  get(runId: string): Promise<Run | null>;
+  /** Newest first. */
+  listForTicket(projectId: string, ticketId: string): Promise<Run[]>;
+  /** Runs in `queued` or `running` for the project. */
+  listActive(projectId: string): Promise<Run[]>;
+  /**
+   * Applies the patch atomically, only if the run's status is one of `from`;
+   * `conflict` otherwise, `not_found` when there is no such run.
+   */
+  update(runId: string, patch: RunPatch, from: readonly RunStatus[]): Promise<Run>;
 }
 
 // ── QuotaSource ──────────────────────────────────────────────────────────────
@@ -240,8 +299,8 @@ export interface OAuthGrantStore {
 }
 
 // ── CodeHost ─────────────────────────────────────────────────────────────────
-// Reads from the code host through our App (ARCHITECTURE §6). v1.x: GitHub App. Grows with
-// the slices that need it (PR/check reads for the watchdog, workflow dispatch: M1.6).
+// The code host through our App (ARCHITECTURE §6). v1.x: GitHub App. Grows with the slices
+// that need it (workflow dispatch: M1.6a; PR/check reads for the watchdog: M1.6b).
 
 export interface CodeHost {
   /** The repo, or null when it doesn't exist or our App isn't installed on it. */
@@ -253,6 +312,19 @@ export interface CodeHost {
    * the App isn't installed there. Callers decide who may get one (ADR-0043).
    */
   issueRepoToken(fullName: string): Promise<RepoToken | null>;
+  /**
+   * Starts `workflow` (a file name in the repo's workflow directory) on the default branch with
+   * string inputs. Null when the App isn't installed on the repo.
+   */
+  dispatchWorkflow(
+    fullName: string,
+    workflow: string,
+    inputs: Record<string, string>,
+  ): Promise<WorkflowDispatch | null>;
+  /** Null when the run or the repo isn't known. */
+  getWorkflowRun(fullName: string, runId: string): Promise<WorkflowRun | null>;
+  /** Asks the code host to stop the run; a finished or unknown run is a no-op. */
+  cancelWorkflowRun(fullName: string, runId: string): Promise<void>;
 }
 
 // ── CodeHostConnectionStore ──────────────────────────────────────────────────

@@ -1,4 +1,10 @@
-import { InMemoryWorkTracker, type Question, type Ticket, type TicketEvent } from "@andy/contracts";
+import {
+  InMemoryWorkTracker,
+  type Question,
+  type Ticket,
+  type TicketEvent,
+  InMemoryRunStore,
+} from "@andy/contracts";
 import { beforeEach, describe, expect, it } from "vitest";
 import { MAX_BODY_BYTES, createApp } from "./app";
 import type { TokenVerifier } from "./auth";
@@ -28,6 +34,7 @@ describe("ticket API", () => {
       version: "test",
       webConfig: { firebaseApiKey: "k", firebaseAuthDomain: "d", projectId: "p" },
       tracker: new InMemoryWorkTracker(),
+      runs: new InMemoryRunStore(),
     });
   });
 

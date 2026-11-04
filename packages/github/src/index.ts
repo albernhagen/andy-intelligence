@@ -1,5 +1,11 @@
 export { GitHubCodeHost, type GitHubAppCredentials } from "./code-host";
 export {
+  AGENT_RUN_WORKFLOW,
+  CLAUDE_EXECUTOR_REF,
+  CREDENTIAL_INPUT,
+  ClaudeCodeActionsExecutor,
+} from "./executor";
+export {
   APP_EVENTS,
   APP_PERMISSIONS,
   AppName,

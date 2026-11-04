@@ -1,0 +1,189 @@
+import { spawnSync } from "node:child_process";
+import { mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { describe, expect, it } from "vitest";
+import {
+  DEFAULT_PROFILE,
+  buildProfile,
+  codeownersPatterns,
+  toRulePaths,
+} from "./executor-profile.mjs";
+
+const profile = JSON.parse(readFileSync(DEFAULT_PROFILE, "utf8"));
+const ROOT = "/work/proj";
+const build = (step, codeowners = "") => buildProfile({ profile, step, codeowners, root: ROOT });
+
+describe("buildProfile", () => {
+  it("GivenAnyStep_WhenBuilt_ThenEnvFileReadsAreDenied", () => {
+    for (const step of Object.keys(profile.steps)) {
+      const { deny } = build(step).permissions;
+      expect(deny).toContain("Read(//**/.env)");
+      expect(deny).toContain("Read(//**/.env.*)");
+    }
+  });
+
+  it("GivenAnyStep_WhenBuilt_ThenTfvarsStateAndCredentialReadsAreDenied", () => {
+    const { deny } = build("build").permissions;
+    for (const rule of [
+      "Read(//**/*.tfvars)",
+      "Read(//**/*.tfstate)",
+      "Read(//**/.terraform/**)",
+      "Read(~/.ssh/**)",
+      "Read(~/.config/gcloud/**)",
+      "Read(~/.claude/.credentials.json)",
+    ])
+      expect(deny).toContain(rule);
+  });
+
+  it("GivenCodeownersPath_WhenBuilt_ThenItBecomesAnEditDeny", () => {
+    const { deny } = build("build", "/infra/ @andy\n").permissions;
+    expect(deny).toContain("Edit(//work/proj/infra/**)");
+  });
+
+  it("GivenRefine_WhenBuilt_ThenNoEditWriteOrBashAllowed", () => {
+    const { allow, deny } = build("refine").permissions;
+    expect(allow).toEqual(["Read", "Glob", "Grep"]);
+    for (const tool of ["Bash", "Edit", "Write", "MultiEdit"]) {
+      expect(allow.some((rule) => rule === tool || rule.startsWith(`${tool}(`))).toBe(false);
+      expect(deny).toContain(tool);
+    }
+  });
+
+  it("GivenBuild_WhenBuilt_ThenEditsAllowedButBashLeftToM18", () => {
+    const { allow } = build("build").permissions;
+    expect(allow).toEqual(expect.arrayContaining(["Edit", "Write"]));
+    expect(allow.some((rule) => rule.startsWith("Bash"))).toBe(false);
+  });
+
+  it("GivenAnyStep_WhenBuilt_ThenBypassPermissionsModeIsDisabled", () => {
+    expect(build("plan").permissions.disableBypassPermissionsMode).toBe("disable");
+  });
+
+  it("GivenAnyStep_WhenBuilt_ThenProjectHooksDoNotRun", () => {
+    const settings = build("build");
+    expect(settings.allowManagedHooksOnly).toBe(true);
+    expect(settings.disableAllHooks).toBe(true);
+  });
+
+  it("GivenAnyStep_WhenBuilt_ThenOnlyManagedPermissionRulesAndNoProjectMcpServers", () => {
+    const settings = build("review");
+    expect(settings.allowManagedPermissionRulesOnly).toBe(true);
+    expect(settings.allowManagedMcpServersOnly).toBe(true);
+    expect(settings.allowedMcpServers).toEqual([]);
+  });
+
+  it("GivenAnyStep_WhenBuilt_ThenTrustAnchorEditsAreDenied", () => {
+    const { deny } = build("build").permissions;
+    for (const rule of [
+      "Edit(//**/.github/workflows/**)",
+      "Edit(//**/CODEOWNERS)",
+      "Edit(//**/platform/executor/**)",
+      "Edit(//**/.claude/**)",
+    ])
+      expect(deny).toContain(rule);
+  });
+
+  it("GivenUnknownStep_WhenBuilt_ThenThrows", () => {
+    expect(() => build("deploy")).toThrow(/unknown step/);
+    expect(() => build("toString")).toThrow(/unknown step/);
+  });
+
+  it("GivenTwoBuilds_WhenBuilt_ThenBaseProfileIsNotMutated", () => {
+    build("build", "*.ts @andy");
+    expect(build("refine").permissions.deny.some((r) => r.includes("*.ts"))).toBe(false);
+  });
+});
+
+describe("codeownersPatterns", () => {
+  it("GivenCommentsBlanksAndOwnerlessLines_WhenParsed_ThenOnlyOwnedPatterns", () => {
+    const text = "# owners\n\n*.js @a @b\n/docs/ @org/team # inline\nunowned.txt\n  \n";
+    expect(codeownersPatterns(text)).toEqual(["*.js", "/docs/"]);
+  });
+
+  it("GivenEscapedSpaceAndHash_WhenParsed_ThenUnescaped", () => {
+    expect(codeownersPatterns("my\\ file.txt @a\n\\#notes @b\n")).toEqual([
+      "my file.txt",
+      "#notes",
+    ]);
+  });
+});
+
+describe("toRulePaths", () => {
+  it("GivenLeadingSlash_WhenConverted_ThenAnchoredAtRoot", () => {
+    expect(toRulePaths("/package.json", ROOT)).toEqual([
+      "//work/proj/package.json",
+      "//work/proj/package.json/**",
+    ]);
+  });
+
+  it("GivenNoSlash_WhenConverted_ThenAnyDepth", () => {
+    expect(toRulePaths("*.tf", ROOT)).toEqual(["//work/proj/**/*.tf", "//work/proj/**/*.tf/**"]);
+  });
+
+  it("GivenTrailingSlash_WhenConverted_ThenDirectoryContents", () => {
+    expect(toRulePaths("apps/", ROOT)).toEqual(["//work/proj/**/apps/**"]);
+    expect(toRulePaths("/infra/", ROOT)).toEqual(["//work/proj/infra/**"]);
+  });
+
+  it("GivenMiddleSlash_WhenConverted_ThenAnchoredAtRoot", () => {
+    expect(toRulePaths("docs/security", ROOT)).toEqual([
+      "//work/proj/docs/security",
+      "//work/proj/docs/security/**",
+    ]);
+  });
+
+  it("GivenGlobSuffixes_WhenConverted_ThenKeptAsIs", () => {
+    expect(toRulePaths("docs/*", ROOT)).toEqual(["//work/proj/docs/*"]);
+    expect(toRulePaths("/apps/**", ROOT)).toEqual(["//work/proj/apps/**"]);
+    expect(toRulePaths("**/logs", ROOT)).toEqual(["//work/proj/**/logs", "//work/proj/**/logs/**"]);
+  });
+
+  it("GivenStar_WhenConverted_ThenWholeRepo", () => {
+    expect(toRulePaths("*", ROOT)).toEqual(["//work/proj/**"]);
+  });
+});
+
+describe("CLI", () => {
+  const script = join(import.meta.dirname, "executor-profile.mjs");
+  const dir = mkdtempSync(join(tmpdir(), "executor-profile-"));
+
+  it("GivenStepAndCodeowners_WhenRun_ThenWritesManagedSettings", () => {
+    const codeowners = join(dir, "CODEOWNERS");
+    writeFileSync(codeowners, "/infra/ @andy\n");
+    const out = join(dir, "managed-settings.json");
+    const result = spawnSync(
+      process.execPath,
+      [script, "--step", "plan", "--codeowners", codeowners, "--root", ROOT, "--out", out],
+      { encoding: "utf8" },
+    );
+    expect(result.status).toBe(0);
+    const settings = JSON.parse(readFileSync(out, "utf8"));
+    expect(settings.permissions.deny).toContain("Edit(//work/proj/infra/**)");
+    expect(settings.steps).toBeUndefined();
+  });
+
+  it("GivenMissingCodeowners_WhenRun_ThenNoExtraRules", () => {
+    const out = join(dir, "no-codeowners.json");
+    const result = spawnSync(
+      process.execPath,
+      [script, "--step", "refine", "--codeowners", join(dir, "nope"), "--root", ROOT, "--out", out],
+      { encoding: "utf8" },
+    );
+    expect(result.status).toBe(0);
+    const { deny } = JSON.parse(readFileSync(out, "utf8")).permissions;
+    expect(deny.some((rule) => rule.includes("//work/proj"))).toBe(false);
+  });
+
+  it("GivenUnknownStep_WhenRun_ThenExitsNonZero", () => {
+    const result = spawnSync(
+      process.execPath,
+      [script, "--step", "deploy", "--out", join(dir, "x.json")],
+      {
+        encoding: "utf8",
+      },
+    );
+    expect(result.status).not.toBe(0);
+    expect(result.stderr).toContain("unknown step");
+  });
+});

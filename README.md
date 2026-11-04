@@ -7,11 +7,12 @@ Personal control plane for agentic software development: ideas → refined ticke
 What is built on `main` now. The target design is [ARCHITECTURE.md](docs/architecture/ARCHITECTURE.md); progress is in [`docs/build-log.md`](docs/build-log.md). Update this section in the same PR as any change to features, components or how to use the system.
 
 ```
- Browser UI ─┐                                   ┌─ Firestore (tickets, questions, history, OAuth grants, webhook events)
+ Browser UI ─┐                                   ┌─ Firestore (tickets, questions, history, runs, OAuth grants, webhook events)
              ├─▶ Cloud Run: control-plane ───────┤
  Claude (MCP)┤   API + /mcp + OAuth + SPA        ├─ Cloud Tasks queue (run-watchdog; nothing uses it yet)
  GitHub App ─┘   + /webhooks/github                └─ Secret Manager (GitHub App key, webhook secret)
  GitHub PRs ──▶ CI checks + review agents (GitHub Actions)
+ Agent runs ◀─▶ agent-run.yml → claude-executor.yml (GitHub Actions; dispatched by the App, call back with OIDC)
 ```
 
 **Working:**
@@ -24,12 +25,13 @@ What is built on `main` now. The target design is [ARCHITECTURE.md](docs/archite
 | GitHub App + webhooks  | Connect GitHub once from the UI (two clicks on GitHub); PR, check and workflow events on registered repos are then recorded once each (replays are no-ops)                                                                           | UI: GitHub (top nav) → Connect, then Install on repos ([runbook](docs/runbooks/github-app.md)) |
 | Project registration   | A project's repo must have the GitHub App installed and belongs to one project; project #1 is this repo (`AI`)                                                                                                                       | UI `/projects` → "GitHub repo" (suggests installed repos)                                      |
 | Claude connector (MCP) | Claude desktop signs in through our OAuth server; tools `create_ticket`, `list_needs_me`, `answer_question`, `status`, same rules as the UI                                                                                          | [`docs/runbooks/mcp-connector.md`](docs/runbooks/mcp-connector.md)                             |
+| Agent runs             | Start a Claude Code run on a ticket: it runs on GitHub Actions under a locked-down permission profile, on Andy's subscription, and posts a read-only refine report as a ticket comment; one run per project at a time                | UI: ticket → Runs → Start refine run ([runbook](docs/runbooks/agent-runs.md))                  |
 | PR checks              | Lint, typecheck, tests, build, secret/CodeQL/dependency/Terraform scans, security-review and adversarial-review agents; weekly system review PRs are opened with a control-plane App token, so their checks run                      | Automatic on every PR; overrides with the `security-accepted` / `review-accepted` labels       |
 | Dependabot updates     | Weekly grouped PRs; npm patches (and minors of 1.0+ packages) auto-merge after the checks pass and deploy with Andy's next merge; majors, 0.x minors, Actions and Terraform wait for Andy, who is requested as reviewer (CODEOWNERS) | Nothing for auto-merged ones; review the rest                                                  |
 | Project baseline       | Gives another repo the same checks, files and GitHub settings                                                                                                                                                                        | `platform/baseline/baseline.mjs` ([runbook](docs/runbooks/onboard-a-repo.md))                  |
 | Cost guardrails        | $25/month budget alerts, usage alerts, caps, opt-in kill switch at 150% of budget                                                                                                                                                    | [`docs/runbooks/billing.md`](docs/runbooks/billing.md)                                         |
 
-**Not built yet:** agents doing ticket work. Nothing acts on webhook events yet (the Claude Code executor will). The next slices add the Claude Code executor, refinement, a plan step, and build → PR (ARCHITECTURE §12, M1: First end-to-end flow).
+**Not built yet:** agents changing code. Runs do a read-only report only; nothing acts on webhook events yet. Next: the run watchdog, refinement questions, and build → PR (ARCHITECTURE §12, M1: First end-to-end flow).
 
 ## Docs
 
@@ -145,6 +147,7 @@ GitHub (ADR-0043: GitHub App setup from the UI) is on when `PUBLIC_URL` is set: 
 | `scripts`             | Repo tooling (Claude Code format hook, review gate and scope)       |
 | `platform/actions`    | Composite actions behind every required check (baseline)            |
 | `platform/baseline`   | Baseline manifest, GitHub config JSON, `baseline.mjs`               |
+| `platform/executor`   | Permission profile for headless agent runs (ADR-0051)               |
 | `platform/procedures` | Agent procedures: `/security-review`, `/threat-model`               |
 | `context-budget.json` | Size budgets for agent-loaded docs (`pnpm context:check`, ADR-0046) |
 | `template`            | Files copied into managed repos (managed, seed, starter)            |

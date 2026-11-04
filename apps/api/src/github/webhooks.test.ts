@@ -3,6 +3,7 @@ import {
   InMemoryCodeHost,
   InMemoryCodeHostConnectionStore,
   InMemoryWorkTracker,
+  InMemoryRunStore,
 } from "@andy/contracts";
 import { sign } from "@octokit/webhooks-methods";
 import { beforeEach, describe, expect, it } from "vitest";
@@ -62,6 +63,7 @@ describe("GitHub webhook receiver", () => {
       version: "test",
       webConfig: { firebaseApiKey: "k", firebaseAuthDomain: "d", projectId: "p" },
       tracker,
+      runs: new InMemoryRunStore(),
       github: {
         publicUrl: "https://cp.example",
         connections,
@@ -208,6 +210,7 @@ describe("GitHub webhook receiver", () => {
       version: "test",
       webConfig: { firebaseApiKey: "k", firebaseAuthDomain: "d", projectId: "p" },
       tracker,
+      runs: new InMemoryRunStore(),
       github: {
         publicUrl: "https://cp.example",
         connections: new InMemoryCodeHostConnectionStore(),
@@ -235,6 +238,7 @@ describe("GitHub webhook receiver", () => {
       version: "test",
       webConfig: { firebaseApiKey: "k", firebaseAuthDomain: "d", projectId: "p" },
       tracker,
+      runs: new InMemoryRunStore(),
     });
     const res = await off.request(WEBHOOK_PATH, { method: "POST", body: "{}" });
     expect(res.status).toBe(404);

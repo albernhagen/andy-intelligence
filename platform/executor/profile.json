@@ -1,0 +1,64 @@
+{
+  "$comment": "Executor permission profile (ADR-0040, ARCHITECTURE §7.2). scripts/executor-profile.mjs merges `settings` + one entry of `steps` + CODEOWNERS Edit denies into /etc/claude-code/managed-settings.json, the top-precedence Claude Code settings source, so nothing in the project's .claude/ can loosen it. Paths: `//` = filesystem root, `~/` = home, `//**/x` = x anywhere (https://code.claude.com/docs/en/permissions#read-and-edit). A Read deny also blocks Edit/Write of that path.",
+  "settings": {
+    "allowManagedPermissionRulesOnly": true,
+    "allowManagedHooksOnly": true,
+    "disableAllHooks": true,
+    "allowManagedMcpServersOnly": true,
+    "allowedMcpServers": [],
+    "enableAllProjectMcpServers": false,
+    "strictKnownMarketplaces": [],
+    "permissions": {
+      "disableBypassPermissionsMode": "disable",
+      "disableAutoMode": "disable",
+      "blockReadsOutsideWorkingDirectories": true,
+      "blockWritesOutsideWorkingDirectories": true,
+      "allow": [],
+      "deny": [
+        "Read(//**/.env)",
+        "Read(//**/.env.*)",
+        "Read(//**/*.tfvars)",
+        "Read(//**/*.tfvars.json)",
+        "Read(//**/*.tfstate)",
+        "Read(//**/*.tfstate.*)",
+        "Read(//**/.terraform/**)",
+        "Read(//**/*.pem)",
+        "Read(//**/*.key)",
+        "Read(//**/*.p12)",
+        "Read(//**/credentials*.json)",
+        "Read(//**/*service-account*.json)",
+        "Read(~/.ssh/**)",
+        "Read(~/.aws/**)",
+        "Read(~/.config/gcloud/**)",
+        "Read(~/.claude/.credentials.json)",
+        "Read(~/.docker/config.json)",
+        "Read(~/.netrc)",
+        "Read(~/.git-credentials)",
+        "Edit(//**/.github/workflows/**)",
+        "Edit(//**/CODEOWNERS)",
+        "Edit(//**/platform/executor/**)",
+        "Edit(//**/.claude/**)",
+        "Edit(//etc/claude-code/**)"
+      ]
+    }
+  },
+  "steps": {
+    "refine": {
+      "allow": ["Read", "Glob", "Grep"],
+      "deny": ["Bash", "Edit", "Write", "MultiEdit", "NotebookEdit", "WebFetch", "WebSearch"]
+    },
+    "plan": {
+      "allow": ["Read", "Glob", "Grep"],
+      "deny": ["Bash", "Edit", "Write", "MultiEdit", "NotebookEdit", "WebFetch", "WebSearch"]
+    },
+    "review": {
+      "allow": ["Read", "Glob", "Grep"],
+      "deny": ["Bash", "Edit", "Write", "MultiEdit", "NotebookEdit", "WebFetch", "WebSearch"]
+    },
+    "build": {
+      "$comment": "Bash allow rules for the project's own commands (lint, test, build) come in M1.8: Build + gate. Until then Bash is not allowed, so a headless run can't use it.",
+      "allow": ["Read", "Glob", "Grep", "Edit", "Write", "MultiEdit"],
+      "deny": ["NotebookEdit", "WebFetch", "WebSearch"]
+    }
+  }
+}

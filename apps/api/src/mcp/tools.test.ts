@@ -4,6 +4,7 @@ import {
   type NewTicket,
   type Ticket,
   type WorkTracker,
+  InMemoryRunStore,
 } from "@andy/contracts";
 import { TicketService } from "@andy/domain";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
@@ -47,6 +48,7 @@ async function setup(tracker: WorkTracker = new InMemoryWorkTracker()) {
     version: "test",
     webConfig: { firebaseApiKey: "k", firebaseAuthDomain: "d", projectId: "p" },
     tracker,
+    runs: new InMemoryRunStore(),
     mcp: { publicUrl: PUBLIC_URL, grants, clients: new ClientMetadataResolver() },
   });
   const token = newToken();

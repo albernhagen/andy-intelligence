@@ -5,6 +5,7 @@ import {
   executorContract,
   oauthGrantStoreContract,
   quotaSourceContract,
+  runStoreContract,
   workTrackerContract,
 } from "../testing";
 import {
@@ -14,6 +15,7 @@ import {
   InMemoryExecutor,
   InMemoryOAuthGrantStore,
   InMemoryQuotaSource,
+  InMemoryRunStore,
   InMemoryWorkTracker,
 } from "./index";
 
@@ -65,6 +67,8 @@ codeHostContract("in-memory", async () => ({
   knownRepo: "owner/repo",
   unknownRepo: "owner/other",
 }));
+
+runStoreContract("in-memory", async () => new InMemoryRunStore());
 
 codeEventLogContract("in-memory", async () => new InMemoryCodeEventLog());
 

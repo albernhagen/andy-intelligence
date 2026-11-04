@@ -6,6 +6,7 @@ import {
   InMemoryCodeEventLog,
   InMemoryCodeHost,
   InMemoryCodeHostConnectionStore,
+  InMemoryRunStore,
   InMemoryWorkTracker,
 } from "@andy/contracts";
 import { TicketService } from "@andy/domain";
@@ -19,6 +20,7 @@ import { makeRouter } from "@/router";
  */
 export function renderApp(path = "/", opts: { githubConnected?: boolean } = {}) {
   const tracker = new InMemoryWorkTracker();
+  const runs = new InMemoryRunStore();
   // GitHub fakes (ADR-0043): one installed repo; any manifest code "connects" this App.
   const connections = new InMemoryCodeHostConnectionStore();
   const codeHost = new InMemoryCodeHost([
@@ -40,6 +42,7 @@ export function renderApp(path = "/", opts: { githubConnected?: boolean } = {}) 
     version: "test",
     webConfig: { firebaseApiKey: "k", firebaseAuthDomain: "d", projectId: "p" },
     tracker,
+    runs,
     github: {
       publicUrl: "http://localhost",
       connections,
@@ -83,7 +86,15 @@ export function renderApp(path = "/", opts: { githubConnected?: boolean } = {}) 
       </ApiContext.Provider>
     </QueryClientProvider>,
   );
-  return { user, router, tracker, connections, service: new TicketService(tracker) };
+  return {
+    user,
+    router,
+    tracker,
+    runs,
+    codeHost,
+    connections,
+    service: new TicketService(tracker),
+  };
 }
 
 /** A story that meets the Definition of Ready. */

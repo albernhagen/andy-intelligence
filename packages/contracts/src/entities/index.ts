@@ -136,10 +136,26 @@ export type RunStatus = z.infer<typeof RunStatus>;
 export const RunOutcome = z.enum(["merged_clean", "reworked", "reverted", "failed"]);
 export type RunOutcome = z.infer<typeof RunOutcome>;
 
+/** Caps on run text (ADR-0028). */
+export const RUN_PROMPT_MAX = 100_000;
+export const RUN_SUMMARY_MAX = 20_000;
+
 export const RunLinks = z.object({
   executorRun: z.url().optional(),
   pullRequest: z.url().optional(),
 });
+
+/**
+ * Who the run must prove to be when it calls back (§9 agent callback auth), set at dispatch:
+ * the repo it runs in, the executor definition it must run (e.g. a CI workflow ref) and the
+ * code host's ID for the run.
+ */
+export const RunExecutor = z.object({
+  repo: z.string().min(1),
+  ref: z.string().min(1),
+  externalId: z.string().min(1),
+});
+export type RunExecutor = z.infer<typeof RunExecutor>;
 
 export const Run = z.object({
   id: Id,
@@ -159,10 +175,23 @@ export const Run = z.object({
   links: RunLinks,
   outcome: RunOutcome.nullable(),
   wouldAutoMerge: z.boolean().nullable(),
+  // Added in M1.6a: Claude Code executor (defaults keep older documents readable).
+  createdAt: Timestamp.nullable().default(null),
+  /** When the run must have reported by; the watchdog (M1.6b) checks it then. */
+  deadline: Timestamp.nullable().default(null),
+  /** The instructions the run gets (ticket snapshot inside; untrusted text). */
+  prompt: z.string().max(RUN_PROMPT_MAX).nullable().default(null),
+  maxTurns: z.number().int().positive().nullable().default(null),
+  /** The agent's report, capped. Untrusted text. */
+  summary: z.string().max(RUN_SUMMARY_MAX).nullable().default(null),
+  /** Why the run failed to start or finish, for Andy. */
+  error: z.string().max(2000).nullable().default(null),
+  executor: RunExecutor.nullable().default(null),
 });
 export type Run = z.infer<typeof Run>;
 
 export const BillingType = z.enum(["subscription", "pay_per_use"]);
+export type BillingType = z.infer<typeof BillingType>;
 
 export const Provider = z.object({
   key: ProviderKey,
@@ -330,6 +359,13 @@ export const WorkflowRun = z.object({
   url: z.url(),
 });
 export type WorkflowRun = z.infer<typeof WorkflowRun>;
+
+/** A CI workflow run just started on a repo's default branch. */
+export const WorkflowDispatch = z.object({
+  id: z.string().min(1),
+  url: z.url(),
+});
+export type WorkflowDispatch = z.infer<typeof WorkflowDispatch>;
 
 /** A short-lived token for one repo (contents + pull requests write), e.g. for a CI job. */
 export const RepoToken = z.object({

@@ -7,6 +7,7 @@ import {
   QuotaReading,
   Repo,
   RepoToken,
+  Run,
   Ticket,
   TicketEvent,
 } from "../entities";
@@ -21,7 +22,9 @@ import {
   type Executor,
   type OAuthGrantStore,
   type QuotaSource,
+  type NewRun,
   type RunRequest,
+  type RunStore,
   type WorkTracker,
 } from "../ports";
 
@@ -383,6 +386,18 @@ export function codeHostContract(
       expect(await host.issueRepoToken(unknownRepo)).toBeNull();
       expect(await host.issueRepoToken("../x")).toBeNull();
     });
+
+    it("GivenARepoWithoutTheApp_WhenAWorkflowIsDispatched_ThenNull", async () => {
+      const { host, unknownRepo } = await make();
+      expect(await host.dispatchWorkflow(unknownRepo, "agent-run.yml", {})).toBeNull();
+      expect(await host.dispatchWorkflow("../x", "agent-run.yml", {})).toBeNull();
+    });
+
+    it("GivenAnUnknownWorkflowRun_WhenRead_ThenNull", async () => {
+      const { host, knownRepo, unknownRepo } = await make();
+      expect(await host.getWorkflowRun(knownRepo, "999999999999")).toBeNull();
+      expect(await host.getWorkflowRun(unknownRepo, "1")).toBeNull();
+    });
   });
 }
 
@@ -515,6 +530,100 @@ export function codeEventLogContract(name: string, make: () => Promise<CodeEvent
     it("GivenAnUnknownDelivery_WhenRead_ThenNull", async () => {
       const log = await make();
       expect(await log.get(crypto.randomUUID())).toBeNull();
+    });
+  });
+}
+
+/**
+ * RunStore suite. Every test makes runs under a random project id, so it can share a store
+ * (e.g. the Firestore emulator).
+ */
+export function runStoreContract(name: string, make: () => Promise<RunStore>): void {
+  describe(`RunStore contract: ${name}`, () => {
+    const newRun = (projectId: string, ticketId = "t1"): NewRun => ({
+      projectId,
+      ticketId,
+      step: "refine",
+      route: { harness: "claude-code", provider: "claude-sub", model: "sonnet" },
+      tier: null,
+      deadline: "2026-11-04T13:00:00.000Z",
+      prompt: "Read the ticket.",
+      maxTurns: 30,
+    });
+    const project = () => `p${crypto.randomUUID().slice(0, 8)}`;
+
+    it("GivenANewRun_WhenCreated_ThenItIsQueuedAndReadBackUnchanged", async () => {
+      const store = await make();
+      const run = await store.create(newRun(project()));
+      expect(Run.parse(run)).toEqual(run);
+      expect(run.status).toBe("queued");
+      expect(run.createdAt).not.toBeNull();
+      expect(await store.get(run.id)).toEqual(run);
+    });
+
+    it("GivenAnUnknownId_WhenRead_ThenNull", async () => {
+      expect(await (await make()).get(crypto.randomUUID())).toBeNull();
+    });
+
+    it("GivenRunsOnTwoTickets_WhenListedForOne_ThenOnlyItsRunsNewestFirst", async () => {
+      const store = await make();
+      const p = project();
+      const first = await store.create(newRun(p, "a"));
+      await new Promise((r) => setTimeout(r, 5));
+      const second = await store.create(newRun(p, "a"));
+      await store.create(newRun(p, "b"));
+      const ids = (await store.listForTicket(p, "a")).map((r) => r.id);
+      expect(ids).toEqual([second.id, first.id]);
+    });
+
+    it("GivenQueuedAndFinishedRuns_WhenListingActive_ThenOnlyQueuedOrRunning", async () => {
+      const store = await make();
+      const p = project();
+      const queued = await store.create(newRun(p));
+      const done = await store.create(newRun(p));
+      await store.update(done.id, { status: "succeeded" }, ["queued"]);
+      expect((await store.listActive(p)).map((r) => r.id)).toEqual([queued.id]);
+    });
+
+    it("GivenAQueuedRun_WhenUpdatedFromQueued_ThenOnlyThePatchedFieldsChange", async () => {
+      const store = await make();
+      const run = await store.create(newRun(project()));
+      const updated = await store.update(
+        run.id,
+        { status: "running", startedAt: "2026-11-04T12:01:00.000Z" },
+        ["queued"],
+      );
+      expect(updated).toEqual({ ...run, status: "running", startedAt: "2026-11-04T12:01:00.000Z" });
+      expect(await store.get(run.id)).toEqual(updated);
+    });
+
+    it("GivenAFinishedRun_WhenUpdatedFromActive_ThenConflictAndNothingChanges", async () => {
+      const store = await make();
+      const run = await store.create(newRun(project()));
+      const done = await store.update(run.id, { status: "succeeded", summary: "ok" }, ["queued"]);
+      await rejectsWith(
+        store.update(run.id, { status: "failed" }, ["queued", "running"]),
+        "conflict",
+      );
+      expect(await store.get(run.id)).toEqual(done);
+    });
+
+    it("GivenAnUnknownRun_WhenUpdated_ThenNotFound", async () => {
+      const store = await make();
+      await rejectsWith(
+        store.update(crypto.randomUUID(), { status: "failed" }, ["queued"]),
+        "not_found",
+      );
+    });
+
+    it("GivenTwoConcurrentUpdatesFromQueued_WhenApplied_ThenExactlyOneWins", async () => {
+      const store = await make();
+      const run = await store.create(newRun(project()));
+      const results = await Promise.allSettled([
+        store.update(run.id, { status: "succeeded" }, ["queued"]),
+        store.update(run.id, { status: "failed" }, ["queued"]),
+      ]);
+      expect(results.filter((r) => r.status === "fulfilled")).toHaveLength(1);
     });
   });
 }

@@ -4,13 +4,15 @@ import {
   type CodeEventLog,
   type CodeHostConnectionStore,
   type OAuthGrantStore,
+  type RunStore,
   type WorkTracker,
 } from "@andy/contracts";
-import { exchangeManifestCode, type CreatedApp } from "@andy/github";
-import { DomainError, ProjectService, TicketService } from "@andy/domain";
+import { ClaudeCodeActionsExecutor, exchangeManifestCode, type CreatedApp } from "@andy/github";
+import { DomainError, ProjectService, RunService, TicketService } from "@andy/domain";
 import { bodyLimit } from "hono/body-limit";
 import { requireAllowedUser, type AuthEnv, type TokenVerifier } from "./auth";
 import { registerMcp, type ClientMetadataResolver } from "./mcp";
+import { registerRunCallbacks, registerRunRoutes } from "./runs";
 import { registerTicketRoutes } from "./tickets";
 import {
   ConnectedCodeHost,
@@ -42,6 +44,8 @@ export interface AppDeps {
   /** Public Firebase web config (not secret) served to the SPA. */
   webConfig: WebConfig;
   tracker: WorkTracker;
+  /** Agent run records (M1.6a: Claude Code executor). */
+  runs: RunStore;
   /**
    * The only host served (ADR-0044), e.g. `ai.andybernhagen.com`. Requests for any other host
    * (the default run.app URLs) get 404, except /health for monitoring. Unset: every host (local dev).
@@ -101,6 +105,11 @@ const DOMAIN_STATUS = {
   forbidden: 403,
   invalid_repo: 422,
   repo_taken: 409,
+  invalid_step: 422,
+  run_limit: 409,
+  run_finished: 409,
+  executor_unavailable: 503,
+  dispatch_failed: 502,
 } as const;
 
 export function createApp(deps: AppDeps) {
@@ -160,19 +169,25 @@ export function createApp(deps: AppDeps) {
       )
     : null;
 
+  // Runs dispatch through the GitHub App; without it, starting a run is refused (503).
+  const runs = new RunService(
+    deps.tracker,
+    deps.runs,
+    connection ? new ClaudeCodeActionsExecutor(new ConnectedCodeHost(connection)) : null,
+    now,
+  );
+
   // Public, outside /api: GitHub signs webhooks (HMAC); CI jobs present an Actions OIDC token.
   if (github && connection) {
+    const verifyActionsToken = github.verifyActionsToken ?? actionsTokenVerifier(github.publicUrl);
     registerGitHubWebhook(app, {
       secret: async () => (await connection.get())?.webhookSecret ?? null,
       events: github.events,
       tracker: deps.tracker,
       now,
     });
-    registerGitHubToken(app, {
-      connection,
-      verify: github.verifyActionsToken ?? actionsTokenVerifier(github.publicUrl),
-      now,
-    });
+    registerGitHubToken(app, { connection, verify: verifyActionsToken, now });
+    registerRunCallbacks(app, { runs, verify: verifyActionsToken, now });
   }
 
   app.use("/api/*", requireAllowedUser(deps.verifier, deps.allowedEmails));
@@ -197,6 +212,8 @@ export function createApp(deps: AppDeps) {
     service,
     new ProjectService(deps.tracker, connection ? new ConnectedCodeHost(connection) : null),
   );
+
+  registerRunRoutes(app, runs);
 
   if (github && connection) {
     registerGitHubSetup(app, {
