@@ -105,7 +105,7 @@ Enterprise-shaped (durable state, policy, gates, least privilege, audit, contrac
 
 **Stage moves** (`packages/domain`): forward one step, plus back for re-refine (ready → backlog), retry (in progress → ready) and rework (ready for review or monitoring → in progress). Backlog → ready requires the DoR. Andy can force any move with a reason; it is recorded in the ticket's history. Agents and the system can't force; MCP `move_ticket` moves one step forward only.
 
-**Same-repo PRs move tickets:** key from the PR's head branch, else its description's first line (first `KEY-n` of the repo's project); the webhook records `pr_linked`, then moves it as `system`, stepwise, from Ready on: opened (not draft) → Ready for review; merged into the default branch → Done (via Monitoring, ADR-0054); closed unmerged → In progress + Needs-you.
+**Same-repo PRs move tickets:** key from the PR's head branch, else its description's first line (first `KEY-n` of the repo's project); the webhook records `pr_linked`, then moves it as `system`, stepwise, from Ready on: opened (not draft) → Ready for review; merged into the default branch → Done (via Monitoring, ADR-0055); closed unmerged → In progress + Needs-you.
 
 **Needs-you is a flag, not a stage.** Flagged items stay in their stage and appear in the Needs-you inbox (UI + MCP).
 

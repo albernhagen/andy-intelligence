@@ -3,7 +3,7 @@ status: accepted
 date: 2026-11-04
 ---
 
-# 0054 — A merged PR completes its ticket until M6: Dev → prod releases
+# 0055 — A merged PR completes its ticket until M6: Dev → prod releases
 
 Built in AI-14: Tickets move on PR events. Deviates from ARCHITECTURE §4.1 for now: Monitoring's exit ("dev verification passed") isn't checked.
 

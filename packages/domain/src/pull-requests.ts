@@ -103,7 +103,7 @@ export class PullRequestTickets {
         return { ...base, moves, unflagged: !after.needsYou };
       }
       case "merged":
-        // Merge means Done until M6: Dev → prod releases (ADR-0054); other bases only link.
+        // Merge means Done until M6: Dev → prod releases (ADR-0055); other bases only link.
         if (!pr.intoDefaultBranch) return { ...base, moves: [] };
         return { ...base, moves: await this.walk(ticket, "done", reason) };
       case "closed":
