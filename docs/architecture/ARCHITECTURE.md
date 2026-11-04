@@ -275,7 +275,7 @@ v1.x screens:
 API client generated from OpenAPI.
 
 **Built in M1.3: UI: tickets + inbox:**
-- Routes: `/` Needs-you inbox; `/projects`; `/p/:projectId` tickets in one column per stage; `/p/:projectId/t/:ticketId` detail.
+- Routes: `/` Needs-you inbox; `/projects`; `/p/:projectId` tickets in one column per stage; `/p/:projectId/t/:ticketRef` detail (ref = key, e.g. `AI-2`; an id or wrong project switches to the canonical URL).
 - Detail (`/p/<project>/t/<KEY>`, e.g. `/p/ai/t/AI-2`; an older id URL switches to the key URL): edit fields (saves send `ifUpdatedAt`; a 409 conflict asks Andy to reload), Definition of Ready from `/readiness`, history with comments, the ticket's questions, and "Ask a question…" (how Andy seeds one until M1.7: Refinement).
 - Moves: one button per move in `TRANSITIONS` (`packages/domain`), plus "Force move…" to any other stage with a reason (skips the transition and DoR rules; recorded in history). The API enforces the rules; its errors show inline.
 - Client: `openapi-fetch` typed by `apps/web/src/lib/api.gen.ts`, generated in-process from `createApp`'s OpenAPI document (`pnpm --filter @andy/web gen:api`); a test fails when it is stale. Every write refetches all queries (one user, small data).

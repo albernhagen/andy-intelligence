@@ -34,19 +34,19 @@ export function TicketPage() {
   const queryClient = useQueryClient();
   const [editing, setEditing] = useState(false);
   const loaded = ticket.data;
-  const key = loaded?.key;
 
+  // The canonical URL is the ticket's own project + key: an id link or a key under another
+  // project's path switches to it.
   useEffect(() => {
-    if (loaded && key && key !== ticketRef) {
-      // Seed the key URL's query, so the swap shows no loading state.
-      queryClient.setQueryData(ticketQueryKey(projectId, key), loaded);
-      void navigate({
-        to: "/p/$projectId/t/$ticketRef",
-        params: { projectId, ticketRef: key },
-        replace: true,
-      });
-    }
-  }, [loaded, key, ticketRef, projectId, navigate, queryClient]);
+    if (!loaded || (loaded.key === ticketRef && loaded.projectId === projectId)) return;
+    // Seed the canonical URL's query, so the swap shows no loading state.
+    queryClient.setQueryData(ticketQueryKey(loaded.projectId, loaded.key), loaded);
+    void navigate({
+      to: "/p/$projectId/t/$ticketRef",
+      params: { projectId: loaded.projectId, ticketRef: loaded.key },
+      replace: true,
+    });
+  }, [loaded, ticketRef, projectId, navigate, queryClient]);
 
   if (ticket.isPending) return <Loading />;
   if (ticket.isError) return <QueryError error={ticket.error} />;

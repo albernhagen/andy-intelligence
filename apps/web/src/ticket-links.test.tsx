@@ -25,6 +25,14 @@ describe("ticket links", () => {
     await waitFor(() => expect(harness.router.state.location.pathname).toBe("/p/ai/t/AI-1"));
   });
 
+  it("GivenAKeyUnderAnotherProjectsPath_WhenOpened_ThenTheUrlSwitchesToTheTicketsProject", async () => {
+    const { harness } = await seeded();
+    await harness.tracker.createProject({ name: "Other", key: "OT" });
+    await harness.router.navigate({ to: "/p/ot/t/AI-1" });
+    expect(await screen.findByRole("heading", { name: "AI-1: Board" })).toBeTruthy();
+    await waitFor(() => expect(harness.router.state.location.pathname).toBe("/p/ai/t/AI-1"));
+  });
+
   it("GivenAnUnknownKey_WhenOpened_ThenNotFoundIsShown", async () => {
     const { harness } = await seeded();
     await harness.router.navigate({ to: "/p/ai/t/AI-99" });
