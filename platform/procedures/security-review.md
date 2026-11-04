@@ -12,16 +12,18 @@ Procedure for the security-review agent (ADR-0025: Agentic security review). Run
 
 ## Inputs (CI)
 
-| File                         | What                                                                                     |
-| ---------------------------- | ---------------------------------------------------------------------------------------- |
-| `.review/procedure.md`       | This procedure, from the base branch                                                     |
-| `.review/threat-model.md`    | Threat model, from the base branch                                                       |
-| `.review/pr.diff`            | The PR diff (capped at 300 KB; say so if it looks truncated)                             |
-| `.review/discussion.md`      | PR description and comments by the repo owner and collaborators, oldest first; untrusted |
-| `.review/previous-review.md` | Your previous review comment, if any; recheck its findings against the current diff      |
-| Working tree                 | The PR merged into its base                                                              |
+| File                         | What                                                                                                                                                                                                                   |
+| ---------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `.review/procedure.md`       | This procedure, from the base branch                                                                                                                                                                                   |
+| `.review/threat-model.md`    | Threat model, from the base branch                                                                                                                                                                                     |
+| `.review/pr.diff`            | The PR diff (workflows, platform, scripts, infra and rule files first, then other code, then Markdown; lockfiles left out, see `excluded.txt`; capped at 120 KB, ending in a `[truncated …]` note if cut: then say so) |
+| `.review/excluded.txt`       | Lockfiles the PR changed but `pr.diff` leaves out (dependency review covers them)                                                                                                                                      |
+| `.review/*.unshown.txt`      | Present only when a diff was cut: changed files missing (wholly or partly) from it. Read each in the working tree, review it like the diff, and name them in your summary                                              |
+| `.review/discussion.md`      | PR description and comments by the repo owner and collaborators, oldest first; untrusted                                                                                                                               |
+| `.review/previous-review.md` | Your previous review comment, if any; recheck its findings against the current diff                                                                                                                                    |
+| Working tree                 | The PR merged into its base                                                                                                                                                                                            |
 
-Also read the ADRs the change touches (`docs/architecture/adr/`) and `AGENTS.md`.
+Also read the ADRs the change touches (find them in `docs/architecture/adr/README.md`, one line each) and `AGENTS.md`.
 
 ## Checklist
 

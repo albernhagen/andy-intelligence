@@ -11,6 +11,7 @@
     "build": "pnpm -r --if-present build",
     "typecheck": "pnpm -r --if-present typecheck",
     "test": "vitest run",
+    "context:check": "node scripts/context-budget.mjs",
     "lint": "eslint . && prettier --check .",
     "format": "prettier --write .",
     "test:firestore": "npx -y firebase-tools@15.34.0 emulators:exec --only firestore --project demo-andy-intelligence \"vitest run --project store\""

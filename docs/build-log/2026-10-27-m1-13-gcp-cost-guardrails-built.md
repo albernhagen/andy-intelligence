@@ -1,0 +1,7 @@
+# 2026-10-27 — M1.13: GCP cost guardrails built
+
+- Branch `m1.13/gcp-cost-guardrails`. New root `infra/billing`: $25/month budget for `andy-intelligence-512400`, alerts at 50%, 90%, 100% actual and 100% forecast. Control plane: Cloud Run timeout 60s, concurrency 80; log exclusion for successful `/assets/*` and `/health` request logs; retention left at 30 days.
+- **Decided (Andy, ADR-0029):** `infra/billing` plans locally only (no billing role for `tf-plan`, no Actions secret); alerts go to the billing account's default admin/user recipients; kill switch split into new slice M1.14: Cost kill switch (off, not built; depends only on M1.13, Needs-you item added after M1.2: Ticket core); new slice M1.15: Usage alerts, because GCP has no hard cap on egress, Firestore ops or log volume and budgets lag by hours.
+- Verified (Google docs): no "send test alert" exists. **Decided (Andy, 2026-10-28):** instead of a $0.01 live test, "Done when" checks recipient + delivery: Andy is billing admin (default recipient) and `cloudplatform-noreply@google.com` mail reaches his inbox. Budget confirmed in the console. The live test stays optional in the billing runbook.
+- Applied by Andy (2026-10-28): control plane (log exclusion added, Cloud Run timeout 300s → 60s), billing (Budget API enabled, budget created). CI plan for control plane: "No changes".
+- Lessons: Cloud Run revision labels from the deploy workflow are now in `ignore_changes` (plans would strip them); the provider hides `calendar_period = "MONTH"` from plans because monthly is the API default.

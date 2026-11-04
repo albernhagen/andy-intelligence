@@ -5,6 +5,8 @@ pre-commit:
   parallel: true
   commands:
     prettier:
+      # CLAUDE.md files are symlinks to AGENTS.md; prettier refuses symlinks passed by name.
+      exclude: ["CLAUDE.md", "**/CLAUDE.md"]
       run: pnpm exec prettier --check --ignore-unknown {staged_files}
     eslint:
       glob: "*.{js,mjs,cjs,ts,tsx}"
