@@ -52,6 +52,9 @@ export function webhookRepo(payload: unknown): string | null {
 
 const cap = (s: string, n = 256) => (s.length > n ? s.slice(0, n) : s);
 
+/** Only the description's first line is kept: it may carry the ticket key (AI-14). */
+const firstLine = (s: string) => s.split(/\r?\n/, 1)[0]?.trim() ?? "";
+
 const status = (s: string): CheckStatus =>
   s === "completed" ? "completed" : s === "in_progress" ? "in_progress" : "queued";
 
@@ -67,7 +70,13 @@ const PullRequestPayload = z.object({
     merged: z.boolean().nullish(),
     draft: z.boolean().nullish(),
     title: z.string(),
-    head: z.object({ ref: z.string(), sha: z.string() }),
+    body: z.string().nullish(),
+    head: z.object({
+      ref: z.string(),
+      sha: z.string(),
+      // null when the fork was deleted
+      repo: z.object({ full_name: z.string() }).nullish(),
+    }),
     base: z.object({ ref: z.string() }),
     html_url: z.string(),
   }),
@@ -122,10 +131,11 @@ export function toCodeHostEvent(meta: DeliveryMeta, payload: unknown): CodeHostE
   return result.data;
 }
 
-function build(event: RecordedEvent, base: object, payload: unknown): unknown {
+function build(event: RecordedEvent, base: { repo: string }, payload: unknown): unknown {
   switch (event) {
     case "pull_request": {
       const { action, pull_request: pr } = parse(PullRequestPayload, payload, event);
+      const { repo } = base;
       return {
         ...base,
         kind: event,
@@ -135,6 +145,8 @@ function build(event: RecordedEvent, base: object, payload: unknown): unknown {
           state: pr.merged ? "merged" : pr.state === "open" ? "open" : "closed",
           draft: pr.draft ?? false,
           title: cap(pr.title),
+          bodyFirstLine: cap(firstLine(pr.body ?? "")),
+          fromFork: pr.head.repo?.full_name !== repo,
           headRef: pr.head.ref,
           headSha: pr.head.sha,
           baseRef: pr.base.ref,

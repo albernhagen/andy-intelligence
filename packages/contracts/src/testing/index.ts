@@ -191,6 +191,16 @@ export function workTrackerContract(name: string, make: () => Promise<WorkTracke
       expect((await tracker.listEvents(project.id, ticket.id)).at(-1)).toEqual(comment);
     });
 
+    it("GivenATicket_WhenAPullRequestIsLinked_ThenAPrLinkedEventAndTheTicketIsUnchanged", async () => {
+      const { tracker, project, ticket } = await setup();
+      const link = { number: 7, url: "https://example.com/pr/7", state: "merged" } as const;
+      const linked = await tracker.linkPullRequest(project.id, ticket.id, link, "system");
+      expect(linked).toMatchObject({ kind: "pr_linked", actor: "system", data: link });
+      expect((await tracker.listEvents(project.id, ticket.id)).at(-1)).toEqual(linked);
+      expect(await tracker.getTicket(project.id, ticket.id)).toEqual(ticket);
+      await rejectsWith(tracker.linkPullRequest(project.id, "nope", link, "system"), "not_found");
+    });
+
     it("GivenAQuestion_WhenAnswered_ThenStatusAndHistoryUpdateAndASecondAnswerConflicts", async () => {
       const { tracker, project, ticket } = await setup();
       const q = await tracker.askQuestion(
@@ -453,6 +463,8 @@ export function codeEventLogContract(name: string, make: () => Promise<CodeEvent
         state: "open",
         draft: false,
         title,
+        bodyFirstLine: "AI-7",
+        fromFork: false,
         headRef: "m1.5/github-app",
         headSha: "abc123",
         baseRef: "main",

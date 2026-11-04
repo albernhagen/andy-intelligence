@@ -27,8 +27,8 @@ const pullRequest = (over: Record<string, unknown> = {}) => ({
     merged: false,
     draft: false,
     title: "M1.5: GitHub App",
-    body: "not stored",
-    head: { ref: "m1.5/github-app", sha: "abc123" },
+    body: "https://ai.andybernhagen.com/p/ai/t/AI-14\r\n\nThe rest is not stored.",
+    head: { ref: "m1.5/github-app", sha: "abc123", repo: { full_name: repository.full_name } },
     base: { ref: "main" },
     html_url: "https://github.com/albernhagen/andy-intelligence/pull/31",
     ...over,
@@ -72,6 +72,8 @@ describe("toCodeHostEvent", () => {
         state: "open",
         draft: false,
         title: "M1.5: GitHub App",
+        bodyFirstLine: "https://ai.andybernhagen.com/p/ai/t/AI-14",
+        fromFork: false,
         headRef: "m1.5/github-app",
         headSha: "abc123",
         baseRef: "main",
@@ -94,6 +96,21 @@ describe("toCodeHostEvent", () => {
   it("GivenAVeryLongTitle_WhenMapped_ThenItIsCapped", () => {
     const event = toCodeHostEvent(meta("pull_request"), pullRequest({ title: "x".repeat(5000) }));
     expect(event.kind === "pull_request" && event.pullRequest.title.length).toBe(256);
+  });
+
+  it("GivenAPullRequestFromAForkOrADeletedFork_WhenMapped_ThenFromFork", () => {
+    for (const repo of [{ full_name: "stranger/andy-intelligence" }, null]) {
+      const head = { ref: "AI-1", sha: "abc123", repo };
+      const event = toCodeHostEvent(meta("pull_request"), pullRequest({ head }));
+      expect(event.kind === "pull_request" && event.pullRequest.fromFork).toBe(true);
+    }
+  });
+
+  it("GivenANullOrVeryLongBody_WhenMapped_ThenTheFirstLineIsEmptyOrCapped", () => {
+    const none = toCodeHostEvent(meta("pull_request"), pullRequest({ body: null }));
+    expect(none.kind === "pull_request" && none.pullRequest.bodyFirstLine).toBe("");
+    const long = toCodeHostEvent(meta("pull_request"), pullRequest({ body: "y".repeat(5000) }));
+    expect(long.kind === "pull_request" && long.pullRequest.bodyFirstLine.length).toBe(256);
   });
 
   it("GivenACompletedCheckRunWithAnUnknownConclusion_WhenMapped_ThenConclusionIsOther", () => {
