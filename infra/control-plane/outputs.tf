@@ -1,7 +1,11 @@
-# Use this URL, not the service's legacy hash URL (control-plane-<hash>-uc.a.run.app):
-# only this host is an authorized sign-in domain.
+# The custom domain (ADR-0044): the only authorized sign-in domain, OAuth issuer and OIDC audience.
 output "service_url" {
-  value = "https://${local.service_host}"
+  value = local.public_url
+}
+
+output "domain_mapping_records" {
+  description = "DNS records Cloud Run expects (infra/dns creates them)."
+  value       = try(google_cloud_run_domain_mapping.public.status[0].resource_records, [])
 }
 
 output "image_repository" {

@@ -230,6 +230,13 @@ Temporary progress log until andy-intelligence can track its own work (then migr
 - Merged: PR #36: M1.19: GitHub App setup from the UI. Andy applied `infra/control-plane` (2 added, as expected).
 - Connecting failed on GitHub: the name `andy-intelligence` is reserved (an account with that name exists). Default App name is now `andy-intelligence-control`; runbook `github-app.md` says to skip step 1 when already applied and explains the naming rule.
 
+## 2026-11-03 — M1.20: Custom domain built (PR #38)
+
+- **Decided (Andy, ADR-0044: Custom domain before M6):** serve the control plane at `https://ai.andybernhagen.com` now (was "after M5/M6"), via a Cloud Run domain mapping ($0, Preview; a load balancer's ~$18/month breaks the $25 budget; Firebase Hosting caps requests at 60 s). DNS in a new local-only Terraform root `infra/dns` (Cloudflare provider; token "Edit zone DNS" on one zone, from the keychain). **Andy, later the same day:** "don't keep the old run URLs": the API serves only `PUBLIC_URL`'s host; `run.app` answers `/health` alone (monitoring), 404 otherwise. The deploy smoke test reads `PUBLIC_URL` from the service and checks both hosts.
+- Branch `m1.20/custom-domain`: `google_cloud_run_domain_mapping.public` + `custom_domain` variable; `PUBLIC_URL`, Firebase authorized domains and the `service_url` output on the new host; `infra/dns` (CNAME to `ghs.googlehosted.com`, DNS-only; Search Console TXT); `system-security-review.yml` OIDC audience; host guard in `apps/api/src/app.ts` (`publicHost`); deploy smoke test on `PUBLIC_URL`; Dependabot covers `infra/dns`. Runbook `docs/runbooks/custom-domain.md`; threat model v7 (DNS zone asset, Cloudflare token, R20).
+- Verified locally: `terraform validate` + `fmt` on both roots; lint, typecheck, tests, build. Not run here: any plan or apply (needs Andy's GCP and Cloudflare credentials).
+- Andy to run after merge, same day: runbook `custom-domain.md` §1–8 (`infra/dns` 2 adds; targeted mapping 1 add; certificate; `infra/control-plane` 2 changes; GitHub App URLs; Claude connector).
+
 ## 2026-11-03 — GitHub connected; project #1 registered
 
 - Merged: PR #37: default GitHub App name fixed.
@@ -265,6 +272,7 @@ Status: todo / in progress / PR open / merged. Definitions: ARCHITECTURE §12.
 | M1.17: Agent evals v1                   | M               | M1.11: Adversarial PR review, M1.16: Project baseline v1                                    | todo            |
 | M1.18: Plan step                        | M               | M1.6: Claude Code executor, M1.7: Refinement                                                | todo            |
 | M1.19: GitHub App setup from the UI     | M               | M1.5: GitHub App + project registration                                                     | merged (PR #36) |
+| M1.20: Custom domain                    | S               | M1.19: GitHub App setup from the UI                                                         | merged (PR #38) |
 
 **Next (order decided by Andy, 2026-10-28):**
 

@@ -1,0 +1,6 @@
+# Copy to terraform.tfvars (gitignored) and fill in. Never commit the real file.
+# Cloudflare dashboard → andybernhagen.com → Overview → API → Zone ID
+zone_id = "0123456789abcdef0123456789abcdef"
+
+# Search Console → Add property → Domain → andybernhagen.com → the TXT value, without the prefix
+google_site_verification = "XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX"

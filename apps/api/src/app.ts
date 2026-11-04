@@ -42,6 +42,11 @@ export interface AppDeps {
   /** Public Firebase web config (not secret) served to the SPA. */
   webConfig: WebConfig;
   tracker: WorkTracker;
+  /**
+   * The only host served (ADR-0044), e.g. `ai.andybernhagen.com`. Requests for any other host
+   * (the default run.app URLs) get 404, except /health for monitoring. Unset: every host (local dev).
+   */
+  publicHost?: string;
   /** MCP endpoint + its OAuth server; off (routes absent) when not configured. */
   mcp?: {
     publicUrl: string;
@@ -134,6 +139,14 @@ export function createApp(deps: AppDeps) {
     c.header("x-frame-options", "DENY");
     c.header("content-security-policy", "frame-ancestors 'none'");
   });
+
+  const publicHost = deps.publicHost?.toLowerCase();
+  if (publicHost) {
+    app.use("*", async (c, next) => {
+      if (c.req.path === "/health" || new URL(c.req.url).host === publicHost) return next();
+      return c.json({ error: "not found" }, 404);
+    });
+  }
 
   app.openapi(healthRoute, (c) => c.json({ status: "ok" as const, version: deps.version }, 200));
 

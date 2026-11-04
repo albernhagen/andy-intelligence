@@ -115,7 +115,7 @@ Terraform has already created the Firebase project, web app, and Identity Platfo
 1. https://console.firebase.google.com → project **andy-intelligence-512400** → **Build → Authentication**. (If prompted "Get started", click it.)
 2. **Sign-in method** tab → **Add new provider** → **Google** → toggle **Enable**.
 3. Public-facing name: `andy-intelligence`; support email: your Google account → **Save**.
-4. **Settings** tab → **Authorized domains**: confirm the `control-plane-<number>.us-central1.run.app` domain is listed (Terraform adds it).
+4. **Settings** tab → **Authorized domains**: confirm `ai.andybernhagen.com` is listed (Terraform adds it once the custom domain is set up: runbook `custom-domain.md`).
 
 Only emails in `allowed_emails` get past the API; anyone else can complete Google sign-in but receives 403.
 
@@ -132,7 +132,7 @@ The **Deploy control plane** workflow builds the image, pushes it, rolls Cloud R
 
 ## 7. Verify M0: Foundations "Done when"
 
-- [ ] Open the `service_url` output (`https://control-plane-<project-number>.us-central1.run.app`; the `-uc.a.run.app` hash URL isn't an authorized sign-in domain), sign in with Google → "Needs you" page shows your email.
+- [ ] Open the `service_url` output (`https://ai.andybernhagen.com`, ADR-0044; the `run.app` URLs aren't authorized sign-in domains), sign in with Google → "Needs you" page shows your email.
 - [ ] Sign in with a different Google account → "not allowed" message (API returns 403).
 - [ ] `curl -i <service_url>/api/me` → 401.
 - [ ] `terraform plan` in `infra/control-plane` → "No changes".

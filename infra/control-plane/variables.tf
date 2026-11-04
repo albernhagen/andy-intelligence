@@ -18,6 +18,12 @@ variable "github_repo" {
   default = "andy-intelligence"
 }
 
+variable "custom_domain" {
+  type        = string
+  description = "Public host of the control plane (ADR-0044). Must match custom_domain in infra/dns."
+  default     = "ai.andybernhagen.com"
+}
+
 variable "allowed_emails" {
   type        = list(string)
   description = "Google accounts allowed to use the UI/API/MCP. Never committed: set via gitignored terraform.tfvars locally or the TF_VAR_ALLOWED_EMAILS Actions secret."

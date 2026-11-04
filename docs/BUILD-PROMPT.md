@@ -122,10 +122,10 @@ andy-intelligence/
 ## Where things stand (read before doing anything)
 
 - Read `AGENTS.md`, `docs/architecture/ARCHITECTURE.md`, `docs/build-log.md`, ADRs in `docs/architecture/adr/`, and `docs/runbooks/m0-setup.md` on `main` (or on the open M0 / M1.0 branches if they haven't merged).
-- Key decisions already made (don't relitigate without new facts): personal public GitHub repo (ADR-0003); native work tracking with in-app UI + MCP, GitHub for code only (ADR-0016); Firestore, event-driven, no polling (ADR-0017); GCP project `andy-intelligence-512400`, `us-central1`, default run.app URL (ADR-0007); app-level auth on a public Cloud Run service (ADR-0010); Terraform plans in CI, applies by Andy locally (ADR-0011); public-repo secret hygiene (ADR-0015).
+- Key decisions already made (don't relitigate without new facts): personal public GitHub repo (ADR-0003); native work tracking with in-app UI + MCP, GitHub for code only (ADR-0016); Firestore, event-driven, no polling (ADR-0017); GCP project `andy-intelligence-512400`, `us-central1`, custom domain `ai.andybernhagen.com` via a Cloud Run domain mapping (ADR-0007, ADR-0044); app-level auth on a public Cloud Run service (ADR-0010); Terraform plans in CI, applies by Andy locally (ADR-0011); public-repo secret hygiene (ADR-0015).
 - Decided in M1.0: Docs sync (ADR-0018 – ADR-0025) and later planning (ADR-0026 – ADR-0028): Jules completion via PR webhook + deadline watchdog; agent callbacks authenticated with GitHub Actions OIDC; rollups via Firestore aggregation queries; M1 scope cuts (list view, no DnD board) and slicing; docs ship with the change; ADR-0012 **rejected** — every port gets a fake + contract suite; no stacked PRs; Terraform pinned via tenv (ADR-0024); agentic security review per PR and per system evolution (ADR-0025); adversarial PR review (ADR-0026); local quality gates (ADR-0027); GCP cost guardrails (ADR-0028). Custom domain is deferred until after M5: Dev → prod releases.
 - Pending decisions: MCP OAuth mechanism (answered by M1.1: MCP OAuth spike).
-- M0: Foundations is **done** (2026-10-27): infra applied, deploy green, Google sign-in works at `https://control-plane-662512537397.us-central1.run.app`. Next slices are in `docs/build-log.md`.
+- M0: Foundations is **done** (2026-10-27): infra applied, deploy green, Google sign-in worked at `https://control-plane-662512537397.us-central1.run.app`; from M1.20: Custom domain the control plane is at `https://ai.andybernhagen.com` (ADR-0044). Next slices are in `docs/build-log.md`.
 
 ## Your first response
 
