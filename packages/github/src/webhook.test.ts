@@ -16,7 +16,7 @@ const meta = (event: DeliveryMeta["event"]): DeliveryMeta => ({
   receivedAt: "2026-11-02T12:00:00.000Z",
 });
 
-const repository = { full_name: "albernhagen/andy-intelligence", id: 1 };
+const repository = { full_name: "albernhagen/andy-intelligence", id: 1, default_branch: "main" };
 
 const pullRequest = (over: Record<string, unknown> = {}) => ({
   action: "opened",
@@ -74,6 +74,7 @@ describe("toCodeHostEvent", () => {
         title: "M1.5: GitHub App",
         bodyFirstLine: "https://ai.andybernhagen.com/p/ai/t/AI-14",
         fromFork: false,
+        intoDefaultBranch: true,
         headRef: "m1.5/github-app",
         headSha: "abc123",
         baseRef: "main",
@@ -104,6 +105,11 @@ describe("toCodeHostEvent", () => {
       const event = toCodeHostEvent(meta("pull_request"), pullRequest({ head }));
       expect(event.kind === "pull_request" && event.pullRequest.fromFork).toBe(true);
     }
+  });
+
+  it("GivenAPullRequestIntoAnotherBranch_WhenMapped_ThenNotIntoTheDefaultBranch", () => {
+    const event = toCodeHostEvent(meta("pull_request"), pullRequest({ base: { ref: "feature" } }));
+    expect(event.kind === "pull_request" && event.pullRequest.intoDefaultBranch).toBe(false);
   });
 
   it("GivenANullOrVeryLongBody_WhenMapped_ThenTheFirstLineIsEmptyOrCapped", () => {

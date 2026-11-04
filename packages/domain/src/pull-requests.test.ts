@@ -37,6 +37,7 @@ const prEvent = (action: string, pr: Partial<PullRequest> = {}): PrEvent => ({
     title: "AI-1: something",
     bodyFirstLine: "",
     fromFork: false,
+    intoDefaultBranch: true,
     headRef: "AI-1/something",
     headSha: "abc",
     baseRef: "main",
@@ -151,6 +152,42 @@ describe("PullRequestTickets", () => {
     expect((await reload(t)).stage).toBe("done");
     const linked = (await systemEvents(t)).find((e) => e.kind === "pr_linked");
     expect(linked?.data).toMatchObject({ state: "merged", url: expect.stringContaining("/70") });
+  });
+
+  it("GivenATicketInReview_WhenMergedIntoANonDefaultBranch_ThenLinkedOnly", async () => {
+    const t = await ticketAt("ready_for_review");
+    const merged = prEvent("closed", {
+      state: "merged",
+      baseRef: "feature",
+      intoDefaultBranch: false,
+    });
+    expect(await prs.apply(merged, project)).toMatchObject({ result: "linked", moves: [] });
+    expect((await reload(t)).stage).toBe("ready_for_review");
+  });
+
+  it("GivenAPullRequestClosedUnmerged_WhenReopened_ThenReadyForReviewAndNeedsYouCleared", async () => {
+    const t = await ticketAt("ready_for_review");
+    await prs.apply(prEvent("closed", { state: "closed" }), project);
+    const result = await prs.apply(prEvent("reopened"), project);
+    expect(result).toMatchObject({ moves: ["ready_for_review"], unflagged: true });
+    expect(await reload(t)).toMatchObject({ stage: "ready_for_review", needsYou: false });
+  });
+
+  it("GivenAnOpenQuestion_WhenTheClosedPullRequestIsReopened_ThenStillNeedsYou", async () => {
+    const t = await ticketAt("ready_for_review");
+    await prs.apply(prEvent("closed", { state: "closed" }), project);
+    await service.ask(project.id, t.id, { text: "Which?" }, "agent:r1");
+    expect(await prs.apply(prEvent("reopened"), project)).toMatchObject({ unflagged: false });
+    expect((await reload(t)).needsYou).toBe(true);
+  });
+
+  it("GivenAFlagFromSomethingElse_WhenAPullRequestOpens_ThenTheFlagStays", async () => {
+    const t = await ticketAt("in_progress");
+    await service.flag(project.id, t.id, "system");
+    await prs.apply(prEvent("closed", { number: 69, state: "closed" }), project);
+    const result = await prs.apply(prEvent("opened"), project);
+    expect(result.unflagged).toBeUndefined();
+    expect(await reload(t)).toMatchObject({ stage: "ready_for_review", needsYou: true });
   });
 
   it("GivenATicketInReview_WhenItsPullRequestClosesUnmerged_ThenInProgressAndNeedsYou", async () => {

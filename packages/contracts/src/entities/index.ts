@@ -316,6 +316,8 @@ export const PullRequest = z.object({
   bodyFirstLine: z.string().max(256).default(""),
   /** Opened from another repo (anyone can do that on a public repo); never moves a ticket. */
   fromFork: z.boolean().default(false),
+  /** Targets the repo's default branch; only such a merge completes a ticket (ADR-0054). */
+  intoDefaultBranch: z.boolean().default(false),
   headRef: z.string().min(1),
   headSha: z.string().min(1),
   baseRef: z.string().min(1),

@@ -168,6 +168,14 @@ describe("TicketService", () => {
     await rejects(service.moveForward(t.key, "ready", "andy"), "dor_not_met");
   });
 
+  it("GivenAFlaggedTicket_WhenUnflagged_ThenClearedUnlessAQuestionIsOpen", async () => {
+    const t = await service.create(projectId, readyStory, "andy");
+    await service.flag(projectId, t.id, "system");
+    expect((await service.unflag(projectId, t.id, "system")).needsYou).toBe(false);
+    await service.ask(projectId, t.id, { text: "Which?" }, "agent:r1");
+    expect((await service.unflag(projectId, t.id, "system")).needsYou).toBe(true);
+  });
+
   it("GivenATicket_WhenFlagged_ThenNeedsYou", async () => {
     const t = await service.create(projectId, readyStory, "andy");
     expect((await service.flag(projectId, t.id, "system")).needsYou).toBe(true);

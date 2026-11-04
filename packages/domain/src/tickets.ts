@@ -143,6 +143,17 @@ export class TicketService {
     return this.move(ticket.projectId, ticket.id, to, actor);
   }
 
+  /** Takes the ticket out of the Needs-you inbox unless a question is still open. */
+  async unflag(projectId: string, ticketId: string, actor: EventActor): Promise<Ticket> {
+    const open = await this.openQuestionCount(ticketId);
+    return this.tracker.updateTicket(
+      projectId,
+      ticketId,
+      { fields: { needsYou: open > 0 } },
+      actor,
+    );
+  }
+
   /** Puts the ticket in the Needs-you inbox. */
   flag(projectId: string, ticketId: string, actor: EventActor): Promise<Ticket> {
     return this.tracker.updateTicket(projectId, ticketId, { fields: { needsYou: true } }, actor);

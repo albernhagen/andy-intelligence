@@ -61,6 +61,8 @@ export interface PullRequestTicketResult {
   /** Stages the ticket moved through, in order. */
   moves?: Stage[];
   flagged?: boolean;
+  /** Needs-you cleared because this PR, whose close had set it, is open again. */
+  unflagged?: boolean;
 }
 
 export class PullRequestTickets {
@@ -83,6 +85,7 @@ export class PullRequestTickets {
     const ticket = await this.find(key);
     if (!ticket) return { result: "ignored", reason: "no_ticket", ticket: key };
 
+    const flaggedByThisClose = outcome === "opened" && (await this.closedLast(ticket, pr.number));
     await this.tracker.linkPullRequest(
       ticket.projectId,
       ticket.id,
@@ -93,14 +96,18 @@ export class PullRequestTickets {
     const base = { result: "linked" as const, ticket: key, outcome };
 
     switch (outcome) {
-      case "opened":
-        if (pr.draft) return { ...base, moves: [] };
-        return { ...base, moves: await this.walk(ticket, "ready_for_review", reason) };
+      case "opened": {
+        const moves = pr.draft ? [] : await this.walk(ticket, "ready_for_review", reason);
+        if (!flaggedByThisClose) return { ...base, moves };
+        const after = await this.tickets.unflag(ticket.projectId, ticket.id, "system");
+        return { ...base, moves, unflagged: !after.needsYou };
+      }
       case "merged":
-        // Merge means Done until M6: Dev → prod releases gives Monitoring its own exit.
+        // Merge means Done until M6: Dev → prod releases (ADR-0054); other bases only link.
+        if (!pr.intoDefaultBranch) return { ...base, moves: [] };
         return { ...base, moves: await this.walk(ticket, "done", reason) };
       case "closed":
-        return this.reopen(ticket, reason, base);
+        return this.rework(ticket, reason, base);
     }
   }
 
@@ -114,8 +121,19 @@ export class PullRequestTickets {
     return steps;
   }
 
+  /**
+   * Whether this PR's latest link on a flagged ticket is a close, i.e. the flag is ours to clear
+   * on reopen. Flags from questions or runs are left alone.
+   */
+  private async closedLast(ticket: Ticket, prNumber: number): Promise<boolean> {
+    if (!ticket.needsYou) return false;
+    const events = await this.tracker.listEvents(ticket.projectId, ticket.id);
+    const last = events.findLast((e) => e.kind === "pr_linked" && e.data.number === prNumber);
+    return last?.data.state === "closed";
+  }
+
   /** Closed unmerged: back to In progress (rework) and Needs-you, from review or later. */
-  private async reopen(
+  private async rework(
     ticket: Ticket,
     reason: string,
     base: PullRequestTicketResult,

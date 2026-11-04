@@ -64,6 +64,7 @@ const conclusion = (c: string | null | undefined) =>
 
 const PullRequestPayload = z.object({
   action: z.string(),
+  repository: z.object({ default_branch: z.string().nullish() }).nullish(),
   pull_request: z.object({
     number: z.number(),
     state: z.string(),
@@ -134,8 +135,9 @@ export function toCodeHostEvent(meta: DeliveryMeta, payload: unknown): CodeHostE
 function build(event: RecordedEvent, base: { repo: string }, payload: unknown): unknown {
   switch (event) {
     case "pull_request": {
-      const { action, pull_request: pr } = parse(PullRequestPayload, payload, event);
+      const { action, pull_request: pr, repository } = parse(PullRequestPayload, payload, event);
       const { repo } = base;
+      const defaultBranch = repository?.default_branch;
       return {
         ...base,
         kind: event,
@@ -147,6 +149,7 @@ function build(event: RecordedEvent, base: { repo: string }, payload: unknown): 
           title: cap(pr.title),
           bodyFirstLine: cap(firstLine(pr.body ?? "")),
           fromFork: pr.head.repo?.full_name !== repo,
+          intoDefaultBranch: pr.base.ref === defaultBranch,
           headRef: pr.head.ref,
           headSha: pr.head.sha,
           baseRef: pr.base.ref,

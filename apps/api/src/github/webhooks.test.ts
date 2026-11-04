@@ -23,7 +23,7 @@ const verifier: TokenVerifier = {
 
 const prPayload = (repo = REPO) => ({
   action: "opened",
-  repository: { full_name: repo },
+  repository: { full_name: repo, default_branch: "main" },
   pull_request: {
     number: 31,
     state: "open",

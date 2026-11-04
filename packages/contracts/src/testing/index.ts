@@ -465,6 +465,7 @@ export function codeEventLogContract(name: string, make: () => Promise<CodeEvent
         title,
         bodyFirstLine: "AI-7",
         fromFork: false,
+        intoDefaultBranch: true,
         headRef: "m1.5/github-app",
         headSha: "abc123",
         baseRef: "main",
