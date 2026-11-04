@@ -499,7 +499,7 @@ Each milestone is delivered as **slices**. A slice:
 - is sized so one agent session can finish it (S ≈ hours, M ≈ a session, L = split it);
 - declares its dependencies, so independent slices can run in parallel sessions/worktrees.
 
-`docs/build-log.md` tracks slice status (todo / in progress / PR open / merged; history in `docs/build-log/`) until the system can track its own work. The milestone's **Done when** is checked only after all its slices merge.
+Slice status lives in tickets in project `AI` (ADR-0047 phase 1, from M1.6a); `docs/build-log.md` maps slices to tickets and holds pending decisions and blockers (history in `docs/build-log/`). The milestone's **Done when** is checked only after all its slices merge.
 
 ### M0: Foundations: repo, sign-in, GCP infra
 Repo scaffold, contracts package, Terraform for control-plane GCP project (plan reviewed by Andy), Firestore database (server-only access), auth (UI + API allow-list), CI, ADRs for decisions in this doc.
@@ -583,7 +583,7 @@ Docs are part of the change, not a follow-up. Every slice PR updates the docs it
 | `docs/architecture/ARCHITECTURE.md` | Current target design and milestone/slice plan (this doc) | Design, scope, or plan changes. No revision counter: `git log` is its history (ADR-0046). Never let it describe something the code contradicts. |
 | `docs/architecture/adr/NNNN-*.md` | Why a decision was made (MADR) | Any architecture decision or deviation. ADR bodies are immutable; to change a decision write a new ADR and update the old one's `status` (`superseded by` / `amended by`). |
 | `docs/architecture/adr/README.md` | One line per ADR: number, decision, status (ADR-0046) | With every new ADR or status change (a test checks) |
-| `docs/build-log.md` | Current status only: slices, next, decisions pending, blockers (≤ 1 page, ADR-0046) | Every slice: start, PR open, merged. What happened goes in a new file per entry, `docs/build-log/YYYY-MM-DD-<slug>.md` (never append to a shared file). Retired once tickets track the work (ADR-0047 phase 1). |
+| `docs/build-log.md` | Slice → ticket map, decisions pending, blockers (≤ 1 page, ADR-0046); slice status is in tickets in project `AI` (ADR-0047 phase 1) | When a decision or blocker changes. What happened goes in a new file per entry, `docs/build-log/YYYY-MM-DD-<slug>.md` (never append to a shared file). |
 | `docs/runbooks/*.md` | Steps Andy runs by hand (setup, secrets, apply, release) | Any manual step is added, changed, or removed |
 | `docs/security/threat-model.md` | Assets, trust boundaries, threats, mitigations, open risks | A trust boundary, entry point, credential, or IAM grant is added or changed; after each system security review |
 | `docs/BUILD-PROMPT.md` | How a building agent behaves | Operating rules change |
