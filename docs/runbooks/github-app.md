@@ -6,9 +6,9 @@ You never handle the App's private key or webhook secret: GitHub hands them to t
 
 The App's URLs come from `PUBLIC_URL` (`https://ai.andybernhagen.com`, ADR-0044). If you connected before the custom domain, change the App's Homepage, Setup and Webhook URLs by hand (runbook `custom-domain.md` §6).
 
-| App                                                      | Permissions                                                      | Webhook events                                                   | Credentials                                                                                            |
-| -------------------------------------------------------- | ---------------------------------------------------------------- | ---------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------ |
-| Control plane (default name `andy-intelligence-control`) | read: metadata, checks, actions · write: contents, pull requests | `pull_request`, `check_run`, `workflow_run` → `/webhooks/github` | Secret Manager (`github-app-private-key`, `github-webhook-secret`); IDs in Firestore `config/codeHost` |
+| App                                                      | Permissions                                                                                                        | Webhook events                                                   | Credentials                                                                                            |
+| -------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------ | ---------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------ |
+| Control plane (default name `andy-intelligence-control`) | read: metadata, checks · write: contents, pull requests, actions (agent runs, [`agent-runs.md`](agent-runs.md) §1) | `pull_request`, `check_run`, `workflow_run` → `/webhooks/github` | Secret Manager (`github-app-private-key`, `github-webhook-secret`); IDs in Firestore `config/codeHost` |
 
 ## 1. Apply Terraform (`infra/control-plane`)
 

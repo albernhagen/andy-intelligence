@@ -115,4 +115,68 @@ describe("GitHubCodeHost", () => {
     });
     expect(await host(fetch).issueRepoToken("albernhagen/other")).toBeNull();
   });
+
+  it("GivenAnInstalledRepo_WhenAWorkflowIsDispatched_ThenItRunsOnTheDefaultBranchAndItsIdIsReturned", async () => {
+    const fetch = fakeGitHub({
+      ...installed,
+      "POST /repos/albernhagen/andy-intelligence/actions/workflows/agent-run.yml/dispatches": () =>
+        json(200, {
+          workflow_run_id: 123,
+          run_url: "https://api.github.com/repos/albernhagen/andy-intelligence/actions/runs/123",
+          html_url: "https://github.com/albernhagen/andy-intelligence/actions/runs/123",
+        }),
+    });
+    const dispatch = await host(fetch).dispatchWorkflow(
+      "albernhagen/andy-intelligence",
+      "agent-run.yml",
+      { run_id: "r1", credential: "subscription" },
+    );
+    expect(dispatch).toEqual({
+      id: "123",
+      url: "https://github.com/albernhagen/andy-intelligence/actions/runs/123",
+    });
+    const call = fetch.mock.calls.find(([u]) => String(u).endsWith("/dispatches"));
+    expect(JSON.parse(String(call?.[1]?.body))).toEqual({
+      ref: "main",
+      inputs: { run_id: "r1", credential: "subscription" },
+    });
+  });
+
+  it("GivenGitHubReturnsNoRunId_WhenAWorkflowIsDispatched_ThenItFails", async () => {
+    const fetch = fakeGitHub({
+      ...installed,
+      "POST /repos/albernhagen/andy-intelligence/actions/workflows/agent-run.yml/dispatches": () =>
+        new Response(null, { status: 204 }),
+    });
+    await expect(
+      host(fetch).dispatchWorkflow("albernhagen/andy-intelligence", "agent-run.yml", {}),
+    ).rejects.toThrow(/run's ID/);
+  });
+
+  it("GivenAPathInTheWorkflowName_WhenDispatched_ThenItIsRefused", async () => {
+    const fetch = fakeGitHub(installed);
+    await expect(
+      host(fetch).dispatchWorkflow("albernhagen/andy-intelligence", "../x.yml", {}),
+    ).rejects.toThrow(/workflow file/);
+    expect(fetch).not.toHaveBeenCalled();
+  });
+
+  it("GivenACompletedWorkflowRun_WhenRead_ThenItIsMapped", async () => {
+    const fetch = fakeGitHub({
+      ...installed,
+      "GET /repos/albernhagen/andy-intelligence/actions/runs/123": () =>
+        json(200, {
+          id: 123,
+          name: "Agent run r1",
+          event: "workflow_dispatch",
+          status: "completed",
+          conclusion: "success",
+          head_branch: "main",
+          head_sha: "abc",
+          html_url: "https://github.com/albernhagen/andy-intelligence/actions/runs/123",
+        }),
+    });
+    const run = await host(fetch).getWorkflowRun("albernhagen/andy-intelligence", "123");
+    expect(run).toMatchObject({ id: "123", status: "completed", conclusion: "success" });
+  });
 });

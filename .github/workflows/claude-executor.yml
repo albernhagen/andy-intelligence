@@ -1,0 +1,258 @@
+name: Claude Code executor
+
+# The platform's Claude Code executor (ARCHITECTURE §7.2, M1.6: Claude Code executor). A project's
+# agent-run.yml calls it with a run ID; it fetches the run's prompt from the control plane, runs
+# claude-code-action under the executor permission profile (ADR-0040) and reports the result back.
+# The control plane accepts the callbacks only from this file on main: it checks the Actions OIDC
+# token's `job_workflow_ref` (ADR-0019: Agent callbacks authenticated with GitHub Actions OIDC).
+#
+# Three jobs so the agent's job never holds an OIDC token (as ADR-0043 does for the system
+# review): `context` and `report` talk to the control plane; `agent` only has the model
+# credential and a read-only repo token, and never runs before the profile is installed.
+# The prompt is ticket text: untrusted data. It travels in env, job outputs and the action's
+# `prompt` input, never inside a `run:` script.
+
+on:
+  workflow_call:
+    inputs:
+      run_id:
+        description: "Control-plane run ID (not secret)"
+        type: string
+        required: true
+      credential:
+        description: "Model credential: subscription (CLAUDE_CODE_OAUTH_TOKEN) or api_key (ANTHROPIC_API_KEY)"
+        type: string
+        required: true
+    secrets:
+      CLAUDE_CODE_OAUTH_TOKEN:
+        required: false
+      ANTHROPIC_API_KEY:
+        required: false
+
+permissions: {}
+
+env:
+  # The control plane's public URL (also the OIDC audience). Not secret.
+  CONTROL_PLANE_URL: https://ai.andybernhagen.com
+
+jobs:
+  context:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      id-token: write # Actions OIDC token for GET /runs/{id}/context
+    outputs:
+      step: ${{ steps.context.outputs.step }}
+      model: ${{ steps.context.outputs.model }}
+      max_turns: ${{ steps.context.outputs.max_turns }}
+      read_only: ${{ steps.context.outputs.read_only }}
+      prompt: ${{ steps.context.outputs.prompt }}
+      platform_sha: ${{ steps.context.outputs.platform_sha }}
+      error: ${{ steps.context.outputs.error }}
+    steps:
+      - name: Validate inputs and fetch the run context
+        id: context
+        env:
+          RUN_ID: ${{ inputs.run_id }}
+          CREDENTIAL: ${{ inputs.credential }}
+          HAS_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN != '' }}
+          HAS_API_KEY: ${{ secrets.ANTHROPIC_API_KEY != '' }}
+          MAX_TURNS_CAP: 200 # spend cap per run (ADR-0028), whatever the control plane asks
+          MAX_PROMPT_CHARS: 200000
+        run: |
+          fail() {
+            echo "error=$1" >> "$GITHUB_OUTPUT"
+            echo "::error title=claude-executor::$1"
+            exit 1
+          }
+          [[ "$RUN_ID" =~ ^[A-Za-z0-9-]{1,64}$ ]] || fail "run_id must be 1-64 letters, digits or hyphens"
+          case "$CREDENTIAL" in
+            subscription) [ "$HAS_OAUTH_TOKEN" = true ] || fail "credential=subscription but secret CLAUDE_CODE_OAUTH_TOKEN is empty" ;;
+            api_key) [ "$HAS_API_KEY" = true ] || fail "credential=api_key but secret ANTHROPIC_API_KEY is empty" ;;
+            *) fail "credential must be subscription or api_key" ;;
+          esac
+
+          oidc=$(curl -sS --fail-with-body -H "Authorization: bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" \
+            "$ACTIONS_ID_TOKEN_REQUEST_URL&audience=$CONTROL_PLANE_URL" | jq -r .value) || fail "could not get an Actions OIDC token"
+          echo "::add-mask::$oidc"
+          # The commit this reusable workflow runs from, from the token's job_workflow_sha claim
+          # (actionlint doesn't know job.workflow_sha yet). The agent job checks the platform out there.
+          payload=$(cut -d. -f2 <<<"$oidc" | tr '_-' '/+')
+          while [ $(( ${#payload} % 4 )) -ne 0 ]; do payload="$payload="; done
+          platform_sha=$(base64 -d <<<"$payload" | jq -r '.job_workflow_sha // empty') || platform_sha=""
+          [[ "$platform_sha" =~ ^[0-9a-f]{40}$ ]] || platform_sha=""
+
+          body="$RUNNER_TEMP/context.json"
+          code=$(curl -sS --retry 2 --max-time 30 -o "$body" -w '%{http_code}' \
+            -H "Authorization: Bearer $oidc" "$CONTROL_PLANE_URL/runs/$RUN_ID/context") || code=000
+          if [ "$code" != 200 ]; then
+            fail "GET /runs/$RUN_ID/context returned HTTP $code: $(head -c 300 "$body" 2>/dev/null | tr -d '\r\n')"
+          fi
+          jq -e --arg id "$RUN_ID" --argjson cap "$MAX_TURNS_CAP" --argjson max "$MAX_PROMPT_CHARS" '
+            (.runId == $id)
+            and (.step | type == "string" and test("^[a-z][a-z-]{0,31}$"))
+            and (.model | type == "string" and test("^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$"))
+            and (.maxTurns | type == "number" and . == floor and . >= 1 and . <= $cap)
+            and (.prompt | type == "string" and length > 0 and length <= $max)
+          ' "$body" > /dev/null || fail "GET /runs/$RUN_ID/context: unexpected response shape"
+
+          step=$(jq -r .step "$body")
+          case "$step" in refine | plan | review) read_only=true ;; *) read_only=false ;; esac
+          {
+            echo "step=$step"
+            echo "model=$(jq -r .model "$body")"
+            echo "max_turns=$(jq -r .maxTurns "$body")"
+            echo "read_only=$read_only"
+            echo "platform_sha=$platform_sha"
+            delimiter="PROMPT_$(openssl rand -hex 16)"
+            echo "prompt<<$delimiter"
+            jq -r .prompt "$body"
+            echo "$delimiter"
+          } >> "$GITHUB_OUTPUT"
+          rm -f "$body"
+          echo "Run $RUN_ID: step $step, read-only $read_only."
+
+  # Holds the model credential. It runs no project code itself: the project is checked out from
+  # its default branch (not a PR) and only read by the agent, whose tools the profile limits.
+  agent:
+    needs: context
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+    outputs:
+      report: ${{ steps.report.outputs.report }}
+    steps:
+      - name: Check out the project
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.event.repository.default_branch }}
+          fetch-depth: 1
+          persist-credentials: false
+
+      # The profile and scripts come from the platform at the commit this workflow runs from
+      # (the OIDC job_workflow_sha claim; main if absent), never from the project, so a project
+      # can't swap in its own profile.
+      - name: Check out the platform
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: albernhagen/andy-intelligence
+          ref: ${{ needs.context.outputs.platform_sha || 'main' }}
+          path: .executor-platform
+          fetch-depth: 1
+          persist-credentials: false
+          sparse-checkout: |
+            scripts
+            platform/executor
+
+      - name: Install the permission profile as managed settings
+        env:
+          STEP: ${{ needs.context.outputs.step }}
+        run: |
+          mv .executor-platform "$RUNNER_TEMP/platform"
+          codeowners=""
+          for f in .github/CODEOWNERS CODEOWNERS docs/CODEOWNERS; do
+            if [ -f "$f" ]; then codeowners="$GITHUB_WORKSPACE/$f"; break; fi
+          done
+          node "$RUNNER_TEMP/platform/scripts/executor-profile.mjs" --step "$STEP" \
+            --root "$GITHUB_WORKSPACE" --codeowners "$codeowners" --out "$RUNNER_TEMP/managed-settings.json"
+          # Managed settings are Claude Code's top-precedence source: the project's .claude/
+          # can't loosen them. Root-owned, and the only managed source on the runner.
+          sudo rm -rf /etc/claude-code
+          sudo install -D -m 0644 -o root -g root "$RUNNER_TEMP/managed-settings.json" \
+            /etc/claude-code/managed-settings.json
+          echo "Managed settings for step $STEP (CODEOWNERS: ${codeowners:-none}):"
+          cat /etc/claude-code/managed-settings.json
+
+      - name: Claude Code
+        id: claude
+        continue-on-error: true # a failed agent is reported as a failed run, not a crashed job
+        timeout-minutes: 25
+        uses: anthropics/claude-code-action@d70510b174a1244958df0b03166a54912811f3e6 # v1.0.264
+        with:
+          claude_code_oauth_token: ${{ inputs.credential == 'subscription' && secrets.CLAUDE_CODE_OAUTH_TOKEN || '' }}
+          anthropic_api_key: ${{ inputs.credential == 'api_key' && secrets.ANTHROPIC_API_KEY || '' }}
+          github_token: ${{ github.token }}
+          settings: '{"disableAllHooks": true}'
+          prompt: ${{ needs.context.outputs.prompt }}
+          # model and max_turns were validated in `context`. The managed profile already holds
+          # the step's allow/deny rules (allowManagedPermissionRulesOnly ignores --allowedTools);
+          # the flags repeat them for read-only steps as a second layer.
+          claude_args: |
+            --model ${{ needs.context.outputs.model }}
+            --max-turns ${{ needs.context.outputs.max_turns }}
+            ${{ needs.context.outputs.read_only == 'true' && '--allowedTools "Read,Glob,Grep" --disallowedTools "Bash,Edit,Write,MultiEdit,NotebookEdit,WebFetch,WebSearch"' || '' }}
+
+      - name: Build the run report
+        id: report
+        if: always()
+        env:
+          OUTCOME: ${{ steps.claude.outcome }}
+          EXECUTION_FILE: ${{ steps.claude.outputs.execution_file }}
+          REASON: ${{ steps.claude.outcome == 'skipped' && 'Executor setup failed before the agent ran' || '' }}
+        run: |
+          report=$(node "$RUNNER_TEMP/platform/scripts/executor-report.mjs")
+          echo "status: $(jq -r .status <<<"$report")"
+          delimiter="REPORT_$(openssl rand -hex 16)"
+          printf 'report<<%s\n%s\n%s\n' "$delimiter" "$report" "$delimiter" >> "$GITHUB_OUTPUT"
+
+  report:
+    needs: [context, agent]
+    if: always()
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      id-token: write # Actions OIDC token for POST /runs/{id}/report
+    steps:
+      - name: Report to the control plane
+        env:
+          RUN_ID: ${{ inputs.run_id }}
+          REPORT: ${{ needs.agent.outputs.report }}
+          CONTEXT_RESULT: ${{ needs.context.result }}
+          CONTEXT_ERROR: ${{ needs.context.outputs.error }}
+          AGENT_RESULT: ${{ needs.agent.result }}
+        run: |
+          if ! [[ "$RUN_ID" =~ ^[A-Za-z0-9-]{1,64}$ ]]; then
+            echo "::error title=claude-executor::Invalid run_id; nothing to report to."
+            exit 1
+          fi
+          body="$RUNNER_TEMP/report.json"
+          if [ -n "$REPORT" ] && jq -e 'type == "object" and (.status == "succeeded" or .status == "failed")' <<<"$REPORT" > /dev/null 2>&1; then
+            printf '%s' "$REPORT" > "$body"
+          else
+            if [ "$CONTEXT_RESULT" != success ]; then
+              reason="Executor could not start: ${CONTEXT_ERROR:-context job $CONTEXT_RESULT}"
+            else
+              reason="Executor agent job $AGENT_RESULT before it built a report"
+            fi
+            jq -cn --arg s "$reason" '{status: "failed", summary: $s, tokensIn: null, tokensOut: null, costUsd: null}' > "$body"
+          fi
+          echo "Reporting status: $(jq -r .status "$body")"
+
+          response="$RUNNER_TEMP/report-response.txt"
+          for attempt in 1 2 3; do
+            code=000
+            if oidc=$(curl -sS --fail-with-body -H "Authorization: bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" \
+              "$ACTIONS_ID_TOKEN_REQUEST_URL&audience=$CONTROL_PLANE_URL" | jq -r .value) && [ -n "$oidc" ] && [ "$oidc" != null ]; then
+              echo "::add-mask::$oidc"
+              code=$(curl -sS --max-time 30 -o "$response" -w '%{http_code}' -X POST \
+                -H "Authorization: Bearer $oidc" -H "Content-Type: application/json" \
+                --data-binary "@$body" "$CONTROL_PLANE_URL/runs/$RUN_ID/report") || code=000
+            fi
+            case "$code" in
+              2??)
+                echo "Reported run $RUN_ID (HTTP $code)."
+                exit 0
+                ;;
+              000 | 5??)
+                echo "::warning title=claude-executor::Report attempt $attempt failed (HTTP $code)."
+                [ "$attempt" -lt 3 ] && sleep $((attempt * 5))
+                ;;
+              *)
+                echo "::error title=claude-executor::Control plane rejected the report: HTTP $code: $(head -c 300 "$response" | tr -d '\r\n')"
+                exit 1
+                ;;
+            esac
+          done
+          echo "::error title=claude-executor::Could not report run $RUN_ID after 3 attempts."
+          exit 1

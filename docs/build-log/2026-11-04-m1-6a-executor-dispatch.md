@@ -1,0 +1,7 @@
+# 2026-11-04 — M1.6a: Claude Code executor: dispatch + callback (AI-1)
+
+- Verified open question 5 first (ADR-0051): Anthropic's docs bill runs authenticated with `CLAUDE_CODE_OAUTH_TOKEN` to the subscription and document `claude setup-token` for CI; fine for Andy's own runs on his repos; plan limits assume ordinary individual use; token lasts a year.
+- Built: `RunStore` port (fake, contract suite, Firestore adapter), `CodeHost` dispatch/read/cancel of workflow runs, `ClaudeCodeActionsExecutor` (`@andy/github`), `RunService` (`@andy/domain`), `POST/GET /api/projects/{p}/tickets/{t}/runs`, OIDC callbacks `GET /runs/{id}/context` and `POST /runs/{id}/report`, workflows `agent-run.yml` + `claude-executor.yml`, permission profile `platform/executor/profile.json` + `scripts/executor-profile.mjs`, UI Runs section (polls every 5 s while a run is in flight).
+- Choices (ADR-0051): prompt fetched over OIDC, never in dispatch inputs; three jobs so the agent job holds no OIDC token; profile installed as managed settings with `allowManagedPermissionRulesOnly`; refine as a read-only report; one run in flight per project, runs past their 45-minute deadline stop counting.
+- Andy: grant the App Actions write (runbook `agent-runs.md` §1), then run the done-when demos (§3–4). Not live-verified yet: that the action's CLI honours the managed settings.
+- Built in parallel by two subagents (workflows + profile; UI) while the main session did contracts, domain and API.

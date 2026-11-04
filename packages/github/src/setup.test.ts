@@ -19,7 +19,7 @@ describe("appManifest", () => {
       contents: "write",
       pull_requests: "write",
       checks: "read",
-      actions: "read",
+      actions: "write",
     });
   });
 

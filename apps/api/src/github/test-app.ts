@@ -4,6 +4,7 @@ import {
   InMemoryCodeHostConnectionStore,
   InMemoryWorkTracker,
   type Repo,
+  InMemoryRunStore,
 } from "@andy/contracts";
 import type { CreatedApp } from "@andy/github";
 import { createApp, type AppDeps } from "../app";
@@ -47,6 +48,7 @@ export function githubApp(overrides: Partial<NonNullable<AppDeps["github"]>> = {
     version: "test",
     webConfig: { firebaseApiKey: "k", firebaseAuthDomain: "d", projectId: "p" },
     tracker,
+    runs: new InMemoryRunStore(),
     github: {
       publicUrl: PUBLIC_URL,
       connections,

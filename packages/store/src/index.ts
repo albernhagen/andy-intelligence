@@ -98,3 +98,4 @@ export {
 } from "./code-event-log";
 export { FirestoreOAuthGrantStore, OAUTH_GRANT_TTL_FIELD } from "./oauth-grant-store";
 export { FirestoreWorkTracker } from "./work-tracker";
+export { FirestoreRunStore } from "./run-store";

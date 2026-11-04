@@ -7,13 +7,14 @@ import { z } from "zod";
  * `exchangeManifestCode` turns into the App's identifiers, private key and webhook secret.
  */
 
-/** Permissions the control-plane App asks for. Write is for PRs from CI (token endpoint). */
+/** Permissions the control-plane App asks for. Contents/PR write: PRs from CI (token endpoint). */
 export const APP_PERMISSIONS = {
   metadata: "read",
   contents: "write",
   pull_requests: "write",
   checks: "read",
-  actions: "read",
+  // Write: the control plane dispatches agent runs (M1.6a: Claude Code executor).
+  actions: "write",
 } as const;
 
 /** Webhook events (installation events are always sent to Apps). */

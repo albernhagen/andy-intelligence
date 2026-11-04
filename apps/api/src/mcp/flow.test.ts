@@ -1,4 +1,4 @@
-import { InMemoryOAuthGrantStore, InMemoryWorkTracker } from "@andy/contracts";
+import { InMemoryOAuthGrantStore, InMemoryWorkTracker, InMemoryRunStore } from "@andy/contracts";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import type { OAuthClientProvider } from "@modelcontextprotocol/sdk/client/auth.js";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
@@ -49,6 +49,7 @@ function setup(allowList = "andy@example.com") {
     version: "test",
     webConfig: { firebaseApiKey: "k", firebaseAuthDomain: "d", projectId: "p" },
     tracker: new InMemoryWorkTracker(),
+    runs: new InMemoryRunStore(),
     mcp: {
       publicUrl: PUBLIC_URL,
       grants,
@@ -433,6 +434,7 @@ describe("MCP off", () => {
       version: "test",
       webConfig: { firebaseApiKey: "k", firebaseAuthDomain: "d", projectId: "p" },
       tracker: new InMemoryWorkTracker(),
+      runs: new InMemoryRunStore(),
     });
     expect((await app.request("/mcp", { method: "POST" })).status).toBe(404);
     expect((await app.request("/.well-known/oauth-authorization-server")).status).toBe(404);

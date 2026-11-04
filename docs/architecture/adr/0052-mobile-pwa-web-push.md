@@ -1,6 +1,7 @@
 ---
 status: accepted (direction; sliced at M7 start)
 date: 2026-11-04
+amends: 0050 (milestone order only)
 ---
 
 # 0052 — Mobile: the control-plane UI as an installable web app with push, in M7

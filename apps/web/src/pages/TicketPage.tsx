@@ -5,6 +5,7 @@ import { AskQuestionForm } from "@/components/AskQuestionForm";
 import { History } from "@/components/History";
 import { MoveControls } from "@/components/MoveControls";
 import { QuestionCard } from "@/components/QuestionCard";
+import { Runs } from "@/components/Runs";
 import { Loading, QueryError } from "@/components/Status";
 import { TicketForm } from "@/components/TicketForm";
 import { Badge } from "@/components/ui/badge";
@@ -19,7 +20,7 @@ import {
 } from "@/lib/queries";
 import { STAGE_LABELS } from "@/lib/tickets";
 
-/** Ticket detail: fields (view/edit), Definition of Ready, moves, questions and history. */
+/** Ticket detail: fields (view/edit), Definition of Ready, moves, agent runs, questions and history. */
 export function TicketPage() {
   const path = useParams({ from: "/p/$projectId/t/$ticketId" });
   const ticket = useTicket(path);
@@ -59,6 +60,7 @@ export function TicketPage() {
       )}
       <Readiness projectId={path.projectId} ticketId={path.ticketId} />
       <MoveControls ticket={t} />
+      <Runs projectId={path.projectId} ticketId={path.ticketId} />
       <Questions projectId={path.projectId} ticketId={path.ticketId} />
       <Events projectId={path.projectId} ticketId={path.ticketId} />
     </article>

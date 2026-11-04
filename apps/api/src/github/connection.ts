@@ -63,4 +63,16 @@ export class ConnectedCodeHost implements CodeHost {
   async issueRepoToken(fullName: string) {
     return (await this.connection.codeHost())?.issueRepoToken(fullName) ?? null;
   }
+
+  async dispatchWorkflow(fullName: string, workflow: string, inputs: Record<string, string>) {
+    return (await this.connection.codeHost())?.dispatchWorkflow(fullName, workflow, inputs) ?? null;
+  }
+
+  async getWorkflowRun(fullName: string, runId: string) {
+    return (await this.connection.codeHost())?.getWorkflowRun(fullName, runId) ?? null;
+  }
+
+  async cancelWorkflowRun(fullName: string, runId: string) {
+    await (await this.connection.codeHost())?.cancelWorkflowRun(fullName, runId);
+  }
 }
