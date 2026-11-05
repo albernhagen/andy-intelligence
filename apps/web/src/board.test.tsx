@@ -124,7 +124,7 @@ const dndKitClickWindow = () => new Promise((resolve) => setTimeout(resolve, 60)
 
 describe("board drop keeps the board in view (AI-25)", () => {
   it("GivenABacklogTicket_WhenMouseDroppedOnDone_ThenItMovesAndTheLinkIsNotFollowed", async () => {
-    const { harness, ticket } = await boardWith({ type: "task", title: "Spike" });
+    const { harness, ticket } = await boardWith({ type: "chore", title: "Spike" });
 
     const followed = await mouseDrag(ticket.key, 5);
 
@@ -135,7 +135,7 @@ describe("board drop keeps the board in view (AI-25)", () => {
   });
 
   it("GivenACardWasJustDropped_WhenItIsClicked_ThenTheTicketOpens", async () => {
-    const { harness, ticket } = await boardWith({ type: "task", title: "Spike" });
+    const { harness, ticket } = await boardWith({ type: "chore", title: "Spike" });
     await mouseDrag(ticket.key, 5);
     const done = screen.getByRole("region", { name: "Done" });
     await within(done).findByText(ticket.key);
@@ -149,7 +149,7 @@ describe("board drop keeps the board in view (AI-25)", () => {
   });
 
   it("GivenADropWithNoTrailingClick_WhenEnterIsPressedOnTheCard_ThenTheTicketOpens", async () => {
-    const { harness, ticket } = await boardWith({ type: "task", title: "Spike" });
+    const { harness, ticket } = await boardWith({ type: "chore", title: "Spike" });
     // Like a touch drop: no click follows it, so the suppression is still armed.
     await mouseDrag(ticket.key, 5, { click: false });
     const done = screen.getByRole("region", { name: "Done" });
@@ -165,7 +165,7 @@ describe("board drop keeps the board in view (AI-25)", () => {
   });
 
   it("GivenABacklogTicket_WhenKeyboardDroppedOnDone_ThenTheBoardStaysInView", async () => {
-    const { harness, ticket } = await boardWith({ type: "task", title: "Spike" });
+    const { harness, ticket } = await boardWith({ type: "chore", title: "Spike" });
 
     await drag(harness.user, ticket.key, 5);
 

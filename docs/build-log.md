@@ -10,14 +10,14 @@ Slice status lives in **tickets in project `AI`** (ADR-0047 phase 1). This page 
 
 ## Milestone map (ADR-0060: Milestones in completion order)
 
-Every ticket sits under a milestone. Milestones are epic tickets in project `AI`; until tickets can be re-parented (M3: New UI and MCP), this table is the map. Done: AI-1, AI-2, AI-4, AI-14, AI-15, AI-16, AI-17 (M1); merged M1 slices: [`history/m1-merged-slices.md`](architecture/history/m1-merged-slices.md).
+Every ticket sits under a milestone. Milestones are epic tickets in project `AI`; until tickets can be re-parented (M3: New UI and MCP), this table is the map. Done: AI-1, AI-2, AI-4, AI-14, AI-15, AI-16, AI-17, AI-20, AI-24, AI-25 (M1); merged M1 slices: [`history/m1-merged-slices.md`](architecture/history/m1-merged-slices.md).
 
-| Milestone                                          | Open tickets, in order                                                                                                                                                                                     |
-| -------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| M1: First end-to-end flow: ticket → PR with Claude | Ticket model v2 (ADR-0058, to create) → AI-3: M1.8: Build + gate, as 8a build run then 8b gate (to create). Any time: AI-20: Context-budget test overwrites the git index; the board-drop bug (to create). |
-| M2: Self-hosting: andy-intelligence builds itself  | AI-5: M1.9: Quota capture; AI-6: M1.17: Agent evals v1; the rest at milestone start (ADR-0060 lists it).                                                                                                   |
-| M3: New UI and MCP                                 | Design source and app shell (may start beside M1), board v2, story panel, command palette, MCP tools (all to create, ADR-0059); AI-19: One permission function.                                            |
-| M8: Project members                                | AI-18: Project members.                                                                                                                                                                                    |
+| Milestone                                          | Open tickets, in order                                                                                                                                                    |
+| -------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| M1: First end-to-end flow: ticket → PR with Claude | AI-3: M1.8: Build + gate, as 8a build run then 8b gate (8b to create).                                                                                                    |
+| M2: Self-hosting: andy-intelligence builds itself  | AI-5: M1.9: Quota capture; AI-6: M1.17: Agent evals v1; the rest at milestone start (ADR-0060 lists it).                                                                  |
+| M3: New UI and MCP                                 | AI-26: Design source and app shell (in review, PR #72), then board v2, story panel, command palette, MCP tools (all to create, ADR-0059); AI-19: One permission function. |
+| M8: Project members                                | AI-18: Project members.                                                                                                                                                   |
 
 ## Pending decisions (Andy)
 
