@@ -1,5 +1,6 @@
 import {
   NewProject,
+  ProjectPatch,
   RepoName,
   type CodeHost,
   type Project,
@@ -17,7 +18,15 @@ export class ProjectService {
     private readonly tracker: WorkTracker,
     /** Null when the GitHub App isn't configured (local dev): repos are only format-checked. */
     private readonly codeHost: CodeHost | null,
+    /** The refine dispatcher (ADR-0054): turning auto-refine on starts any waiting refine. */
+    private readonly refineNext: ((projectId: string) => Promise<unknown>) | null = null,
   ) {}
+
+  async update(projectId: string, patch: ProjectPatch): Promise<Project> {
+    const project = await this.tracker.updateProject(projectId, ProjectPatch.parse(patch));
+    if (project.autoRefine) await this.refineNext?.(projectId);
+    return project;
+  }
 
   async register(input: NewProject): Promise<Project> {
     const parsed = NewProject.parse(input);

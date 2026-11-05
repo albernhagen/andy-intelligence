@@ -26,6 +26,7 @@ export function buildProject(input: NewProject): Project {
     gcpProdProjectId: null,
     monthlyBudgetUsd: null,
     enabled: true,
+    autoRefine: true,
   };
 }
 

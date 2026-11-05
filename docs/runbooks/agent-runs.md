@@ -34,16 +34,16 @@ To use a capped API key instead: add secret `ANTHROPIC_API_KEY` and set `claude-
 3. Expect: run `queued` → `running` → `succeeded` within a few minutes; a **Run log** link to the Actions run; the report (Ask, Gaps, Files, Risks) plus "Asked N question(s)" as a comment by `agent:<run id>` in History; the questions under Questions and in Needs you; tokens and `~$… (estimate)` on the run.
 4. A second start while one is in flight: `409 … already has a run in flight`. A start while questions are open: `422 … open question(s)`.
 
-## 4. Refine → answer over MCP → Ready (M1.7: Refinement demo)
+## 4. Create → refine starts by itself → answer over MCP → Ready (M1.7: Refinement demo)
 
-In Claude desktop with the `andy-intelligence` connector (`mcp-connector.md`):
+In Claude desktop with the `andy-intelligence` connector (`mcp-connector.md`), with no other run in flight in project `AI`:
 
-1. `create_ticket` in project `AI` with a body, EARS criteria ("WHEN … THE SYSTEM SHALL …"), size, size reason and **tier** (refine doesn't set the tier; without one the ticket stays in Backlog after the answers).
-2. `refine` with its key. Expect a run with a link; a few minutes later `status` shows 1–5 open questions and `needsYou: true`.
+1. `create_ticket` in project `AI` with a body and EARS criteria ("WHEN … THE SYSTEM SHALL …"). Leave size and tier empty. Don't call `refine`.
+2. Expect: `status` with its key shows a `system` comment "Started a refine run"; a few minutes later 1–5 open questions, `needsYou: true`, and size, size reason and tier filled by the run.
 3. `list_needs_me`, then `answer_question` for each (`askedByRun` names the run that asked).
-4. Expect: the last answer returns the ticket with `stage: "ready"`; History shows `stage_changed` by `system`.
+4. Expect: the last answer returns the ticket with `stage: "ready"`; History shows `stage_changed` by `system`. If the Definition of Ready is still unmet, a second refine starts instead (`status` shows it); answer its questions too.
 
-If the ticket stays in Backlog, `status` lists what the Definition of Ready still misses: fix it in the UI and move it yourself.
+Off switch: untick "Auto-refine" on `/projects` or `set_auto_refine` `enabled: false`; new tickets then wait until you start refine (ticket → Runs, or MCP `refine`).
 
 ## 5. A run can't read secrets (M1.6a done-when demo 2)
 
@@ -59,13 +59,15 @@ Proving the profile live (a counted denial) is part of M1.8, when runs get Bash 
 
 ## Troubleshooting
 
-| Symptom                                                                                      | Fix                                                                                                                                                                        |
-| -------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Start → `502 … Resource not accessible by integration`                                       | §1 not done or not accepted                                                                                                                                                |
-| Start → `502 … isn't connected or the App isn't installed`                                   | Connect GitHub / install the App on the repo (`github-app.md`)                                                                                                             |
-| Run stays `queued`                                                                           | The `context` job failed: open the Run log. `credential=subscription but secret … is empty` → §2. `HTTP 403` → the run was dispatched from another workflow or branch      |
-| Run `failed` in about 20 s; the `agent` job log says `Workflow initiated by non-human actor` | The App's name isn't in `allowed_bots` in `claude-executor.yml` (e.g. the App was renamed): set it to the App's slug, never `*`                                            |
-| Run `failed`, summary `Agent stopped: error_max_turns`                                       | The ticket needs a tighter ask; turns are capped at 30                                                                                                                     |
-| Refine run `failed`: "Its result was rejected (…); no questions were written"                | The agent's output broke `RefineOutput` (e.g. 6 questions, a question over 500 characters). Start refine again; if it repeats, tighten `platform/procedures/refine.md`     |
-| Start → `409 … has had 3 refine runs`                                                        | Cap per ticket (ADR-0028). Refine by hand (ask questions in the UI) or raise `MAX_REFINE_RUNS_PER_TICKET` in a PR                                                          |
-| Run stuck `running` past its deadline                                                        | The `report` job failed after 3 tries; the watchdog (M1.6b) will catch these. Until then it stays `running`, but stops blocking new runs once its deadline (45 min) passes |
+| Symptom                                                                                      | Fix                                                                                                                                                                                                            |
+| -------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Start → `502 … Resource not accessible by integration`                                       | §1 not done or not accepted                                                                                                                                                                                    |
+| Start → `502 … isn't connected or the App isn't installed`                                   | Connect GitHub / install the App on the repo (`github-app.md`)                                                                                                                                                 |
+| Run stays `queued`                                                                           | The `context` job failed: open the Run log. `credential=subscription but secret … is empty` → §2. `HTTP 403` → the run was dispatched from another workflow or branch                                          |
+| Run `failed` in about 20 s; the `agent` job log says `Workflow initiated by non-human actor` | The App's name isn't in `allowed_bots` in `claude-executor.yml` (e.g. the App was renamed): set it to the App's slug, never `*`                                                                                |
+| Run `failed`, summary `Agent stopped: error_max_turns`                                       | The ticket needs a tighter ask; turns are capped at 30                                                                                                                                                         |
+| Refine run `failed`: "Its result was rejected (…); no questions were written"                | The agent's output broke `RefineOutput` (e.g. 6 questions, a question over 500 characters). Start refine again; if it repeats, tighten `platform/procedures/refine.md`                                         |
+| Start → `409 … has had 3 refine runs`                                                        | Cap per ticket (ADR-0028). Refine by hand (ask questions in the UI) or raise `MAX_REFINE_RUNS_PER_TICKET` in a PR                                                                                              |
+| New ticket gets no refine run                                                                | Another run is in flight in the project (it starts when that one reports), "Auto-refine" is off, GitHub isn't connected, or the ticket has open questions or is flagged Needs you                              |
+| Ticket in Needs you with "Refine couldn't start" or "Refine ran 3 times"                     | Dispatch failed (see the rows above), or 3 passes left the DoR unmet: finish the ticket by hand, clear Needs you, move it to Ready. A failed refine is never retried by itself: start it again from the ticket |
+| Run stuck `running` past its deadline                                                        | The `report` job failed after 3 tries; the watchdog (M1.6b) will catch these. Until then it stays `running`, but stops blocking new runs once its deadline (45 min) passes                                     |

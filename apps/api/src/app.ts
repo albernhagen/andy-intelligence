@@ -8,7 +8,13 @@ import {
   type WorkTracker,
 } from "@andy/contracts";
 import { ClaudeCodeActionsExecutor, exchangeManifestCode, type CreatedApp } from "@andy/github";
-import { DomainError, ProjectService, RunService, TicketService } from "@andy/domain";
+import {
+  DomainError,
+  ProjectService,
+  RefineDispatcher,
+  RunService,
+  TicketService,
+} from "@andy/domain";
 import { bodyLimit } from "hono/body-limit";
 import { requireAllowedUser, type AuthEnv, type TokenVerifier } from "./auth";
 import { registerMcp, type ClientMetadataResolver } from "./mcp";
@@ -171,12 +177,16 @@ export function createApp(deps: AppDeps) {
     : null;
 
   // Runs dispatch through the GitHub App; without it, starting a run is refused (503).
+  // The refine dispatcher (ADR-0054) starts the next waiting refine after each report, ticket
+  // create and last answer; `next` never throws.
   const runs = new RunService(
     deps.tracker,
     deps.runs,
     connection ? new ClaudeCodeActionsExecutor(new ConnectedCodeHost(connection)) : null,
     now,
+    async (projectId) => void (await refiner.next(projectId)),
   );
+  const refiner = new RefineDispatcher(deps.tracker, deps.runs, runs, now);
 
   // Public, outside /api: GitHub signs webhooks (HMAC); CI jobs present an Actions OIDC token.
   if (github && connection) {
@@ -206,13 +216,13 @@ export function createApp(deps: AppDeps) {
   });
 
   // One TicketService for REST and MCP: both get the same ticket rules (packages/domain).
-  const service = new TicketService(deps.tracker);
-  registerTicketRoutes(
-    app,
+  const service = new TicketService(deps.tracker, (projectId) => refiner.next(projectId));
+  const projects = new ProjectService(
     deps.tracker,
-    service,
-    new ProjectService(deps.tracker, connection ? new ConnectedCodeHost(connection) : null),
+    connection ? new ConnectedCodeHost(connection) : null,
+    (p) => refiner.next(p),
   );
+  registerTicketRoutes(app, deps.tracker, service, projects);
 
   registerRunRoutes(app, runs);
 
@@ -234,6 +244,7 @@ export function createApp(deps: AppDeps) {
       tracker: deps.tracker,
       service,
       runs,
+      projects,
     });
   }
 

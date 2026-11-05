@@ -284,6 +284,26 @@ describe("refine tool", () => {
   });
 });
 
+describe("set_auto_refine tool", () => {
+  it("GivenAProject_WhenAutoRefineIsTurnedOffThenOn_ThenTheSettingIsStored", async () => {
+    const ctx = await withProject();
+    expect((await ctx.call("set_auto_refine", { project: "ai", enabled: false })).data).toEqual({
+      project: "AI",
+      autoRefine: false,
+    });
+    expect((await ctx.call("set_auto_refine", { project: "AI", enabled: true })).data).toEqual({
+      project: "AI",
+      autoRefine: true,
+    });
+  });
+
+  it("GivenAnUnknownProject_WhenSet_ThenAToolErrorSaysNotFound", async () => {
+    const ctx = await withProject();
+    const result = await ctx.call("set_auto_refine", { project: "ZZ", enabled: true });
+    expect(result).toMatchObject({ isError: true, text: expect.stringContaining("not found") });
+  });
+});
+
 describe("M1 flow from Claude desktop", () => {
   it("GivenATicketCreatedOverMcp_WhenAnAgentAsksAndAndyAnswersOverMcp_ThenItMovesToReady", async () => {
     const ctx = await withProject();

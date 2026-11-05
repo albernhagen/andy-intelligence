@@ -5,8 +5,6 @@ import {
   InMemoryWorkTracker,
   type Executor,
   type RunExecutor,
-  type RunHandle,
-  type RunRequest,
 } from "@andy/contracts";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
@@ -15,6 +13,7 @@ import {
   RunService,
   refinePrompt,
 } from "./runs";
+import { WorkflowExecutor } from "./test-executor";
 import { TicketService, type DomainError } from "./tickets";
 
 const REPO = {
@@ -24,34 +23,6 @@ const REPO = {
   url: "https://github.com/albernhagen/andy-intelligence",
 };
 const NOW = new Date("2026-11-04T12:00:00.000Z");
-const EXECUTOR_REF =
-  "albernhagen/andy-intelligence/.github/workflows/claude-executor.yml@refs/heads/main";
-
-/** An executor that dispatches a workflow on the fake code host, like the Actions adapter. */
-class WorkflowExecutor extends InMemoryExecutor {
-  constructor(private readonly host: InMemoryCodeHost) {
-    super();
-  }
-  override async cancel(handle: RunHandle): Promise<void> {
-    if (handle.executor) await this.host.cancelWorkflowRun(handle.executor.repo, handle.externalId);
-  }
-  override async start(req: RunRequest): Promise<RunHandle> {
-    await super.start(req);
-    const credential = req.billingType === "pay_per_use" ? "api_key" : "subscription";
-    const d = await this.host.dispatchWorkflow(req.projectRef, "agent-run.yml", {
-      run_id: req.runId,
-      credential,
-    });
-    if (!d) throw new Error("not installed");
-    return {
-      runId: req.runId,
-      externalId: d.id,
-      url: d.url,
-      executor: { repo: req.projectRef, ref: EXECUTOR_REF, externalId: d.id },
-    };
-  }
-}
-
 describe("RunService", () => {
   let tracker: InMemoryWorkTracker;
   let runs: InMemoryRunStore;
@@ -207,7 +178,13 @@ describe("RunService", () => {
       tokensIn: 1200,
       tokensOut: 300,
       costUsd: 0.02,
-      output: { summary: "**Ask**: a board", questions: [{ text: "Kanban or list?" }] },
+      output: {
+        summary: "**Ask**: a board",
+        size: "S",
+        sizeReason: "one screen",
+        tier: "fast",
+        questions: [{ text: "Kanban or list?" }],
+      },
     };
     expect(await service.report(run.id, caller, result)).toBe("recorded");
     expect(await runs.get(run.id)).toMatchObject({
@@ -287,7 +264,12 @@ describe("RunService", () => {
       await service.context(run.id, caller);
       return { run, caller, outcome: await service.report(run.id, caller, refined(output)) };
     };
-    const good = { summary: "**Ask**: a board", questions: [question("A?"), question("B?")] };
+    const sizing = { size: "M", sizeReason: "board and API", tier: "strong" };
+    const good = {
+      summary: "**Ask**: a board",
+      ...sizing,
+      questions: [question("A?"), question("B?")],
+    };
 
     it("GivenAValidResult_WhenReported_ThenItsQuestionsAreOpenOnTheTicketWhichNeedsYou", async () => {
       const { run } = await finish(good);
@@ -381,15 +363,16 @@ describe("RunService", () => {
 
     it.each([
       ["no output", undefined],
-      ["no questions", { summary: "s", questions: [] }],
+      ["no questions", { ...good, questions: [] }],
       [
         "six questions",
-        { summary: "s", questions: Array.from({ length: 6 }, (_, i) => question(`Q${i}?`)) },
+        { ...good, questions: Array.from({ length: 6 }, (_, i) => question(`Q${i}?`)) },
       ],
-      ["an oversized question", { summary: "s", questions: [question("x".repeat(501))] }],
+      ["an oversized question", { ...good, questions: [question("x".repeat(501))] }],
+      ["no tier", { summary: "s", size: "S", sizeReason: "r", questions: [question("A?")] }],
       ["an extra field", { ...good, stage: "ready" }],
     ])(
-      "GivenAResultWith%s_WhenReported_ThenTheRunFailsAndNoQuestionsAreWritten",
+      "GivenAResultWith%s_WhenReported_ThenTheRunFailsNoQuestionsAreWrittenAndTheTicketNeedsYou",
       async (_, output) => {
         const { run } = await finish(output);
         expect(await runs.get(run.id)).toMatchObject({
@@ -399,12 +382,65 @@ describe("RunService", () => {
         expect(await tracker.listQuestions({ ticketId })).toEqual([]);
         expect(await tracker.getTicket(projectId, ticketId)).toMatchObject({
           stage: "backlog",
-          needsYou: false,
+          needsYou: true,
+          size: null,
+          tier: null,
         });
-        const last = (await tracker.listEvents(projectId, ticketId)).at(-1);
-        expect(last?.body).toMatch(/^The refine run failed\. Its result was rejected/);
+        const comment = (await tracker.listEvents(projectId, ticketId)).findLast(
+          (e) => e.kind === "comment",
+        );
+        expect(comment?.body).toMatch(/^The refine run failed\. Its result was rejected/);
       },
     );
+
+    it("GivenATicketWithoutSizeOrTier_WhenRefined_ThenRefinesSizeAndTierAreWritten", async () => {
+      await finish(good);
+      expect(await tracker.getTicket(projectId, ticketId)).toMatchObject({
+        size: "M",
+        sizeReason: "board and API",
+        tier: "strong",
+      });
+    });
+
+    it("GivenAndySetSizeAndTier_WhenRefined_ThenHisValuesStay", async () => {
+      await tracker.updateTicket(
+        projectId,
+        ticketId,
+        { fields: { size: "L", sizeReason: "Andy's reason", tier: "frontier" } },
+        "andy",
+      );
+      await finish(good);
+      expect(await tracker.getTicket(projectId, ticketId)).toMatchObject({
+        size: "L",
+        sizeReason: "Andy's reason",
+        tier: "frontier",
+      });
+    });
+
+    it("GivenTheTicketLeftBacklog_WhenARefineFails_ThenTheTicketIsNotFlagged", async () => {
+      const run = await service.start(projectId, ticketId, "refine");
+      await tracker.updateTicket(
+        projectId,
+        ticketId,
+        { stage: { to: "ready", reason: "x" } },
+        "andy",
+      );
+      await service.report(run.id, await callerOf(run.id), { ...refined(null), status: "failed" });
+      expect((await tracker.getTicket(projectId, ticketId))?.needsYou).toBe(false);
+    });
+
+    it("GivenARunEndedHook_WhenAReportIsRecorded_ThenItIsCalledOnceForTheProjectAndItsErrorIsSwallowed", async () => {
+      const ended = vi.fn(async () => {
+        throw new Error("boom");
+      });
+      const hooked = new RunService(tracker, runs, new WorkflowExecutor(host), () => NOW, ended);
+      const run = await hooked.start(projectId, ticketId, "refine");
+      const caller = await callerOf(run.id);
+      expect(await hooked.report(run.id, caller, refined(good))).toBe("recorded");
+      expect(await hooked.report(run.id, caller, refined(good))).toBe("duplicate");
+      expect(ended).toHaveBeenCalledTimes(1);
+      expect(ended).toHaveBeenCalledWith(projectId);
+    });
 
     it("GivenAFailedRun_WhenReportedWithAnOutput_ThenNoQuestionsAreWritten", async () => {
       const run = await service.start(projectId, ticketId, "refine");

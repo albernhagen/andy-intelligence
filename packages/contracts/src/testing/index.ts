@@ -68,6 +68,18 @@ export function workTrackerContract(name: string, make: () => Promise<WorkTracke
       expect(await tracker.getProject("does-not-exist")).toBeNull();
     });
 
+    it("GivenAProject_WhenAutoRefineIsTurnedOff_ThenItIsStoredAndDefaultsOnForNewProjects", async () => {
+      const tracker = await make();
+      const created = await tracker.createProject({ name: "Settings", key: uniqueKey() });
+      expect(created.autoRefine).toBe(true);
+      const updated = await tracker.updateProject(created.id, { autoRefine: false });
+      expect(updated).toEqual({ ...created, autoRefine: false });
+      expect(await tracker.getProject(created.id)).toEqual(updated);
+      await expect(tracker.updateProject("nope", { autoRefine: true })).rejects.toMatchObject({
+        code: "not_found",
+      });
+    });
+
     it("GivenAnExistingKey_WhenCreatingAProject_ThenConflict", async () => {
       const { tracker, project } = await setup();
       await rejectsWith(tracker.createProject({ name: "Again", key: project.key }), "conflict");

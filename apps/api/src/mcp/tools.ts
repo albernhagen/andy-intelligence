@@ -7,7 +7,12 @@ import {
   type Ticket,
   type WorkTracker,
 } from "@andy/contracts";
-import { DomainError, type RunService, type TicketService } from "@andy/domain";
+import {
+  DomainError,
+  type ProjectService,
+  type RunService,
+  type TicketService,
+} from "@andy/domain";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import { z } from "zod";
@@ -22,6 +27,7 @@ export interface ToolDeps {
   tracker: WorkTracker;
   service: TicketService;
   runs: RunService;
+  projects: ProjectService;
   /** Signed-in email, shown by `status` so it doubles as the connection check. */
   email: string;
 }
@@ -48,6 +54,11 @@ const RefineInput = {
   ),
 };
 
+const AutoRefineInput = {
+  project: ProjectKey,
+  enabled: z.boolean().describe("true: refine starts on its own for new and answered tickets."),
+};
+
 const StatusInput = {
   ticket: TicketKey.optional().describe('Ticket key, e.g. "AI-42". Omit for an overview.'),
 };
@@ -68,7 +79,7 @@ export function registerTools(server: McpServer, deps: ToolDeps): void {
     "create_ticket",
     {
       description:
-        "Creates a ticket in a project's backlog. Returns its key and what the Definition of Ready still needs.",
+        "Creates a ticket in a project's backlog. Returns its key and what the Definition of Ready still needs. With the project's auto-refine on (default), a refine run starts on its own and its questions arrive in `list_needs_me`.",
       inputSchema: CreateTicketInput,
       annotations: { destructiveHint: false, idempotentHint: false },
     },
@@ -129,7 +140,7 @@ export function registerTools(server: McpServer, deps: ToolDeps): void {
     "refine",
     {
       description:
-        "Starts a refine run on a Backlog ticket: an agent reads the ticket and the repo and asks 1-5 questions, which arrive in `list_needs_me` when the run ends (a few minutes). Answering the last one moves the ticket to Ready if its Definition of Ready is met.",
+        "Starts a refine run on a Backlog ticket now: an agent reads the ticket and the repo, proposes size and tier, and asks 1-5 questions, which arrive in `list_needs_me` when the run ends (a few minutes). Answering the last one moves the ticket to Ready if its Definition of Ready is met. Only needed when auto-refine is off or a refine failed.",
       inputSchema: RefineInput,
       annotations: { destructiveHint: false, idempotentHint: false, openWorldHint: true },
     },
@@ -147,6 +158,21 @@ export function registerTools(server: McpServer, deps: ToolDeps): void {
             link: started.links.executorRun ?? null,
           },
         };
+      }),
+  );
+
+  server.registerTool(
+    "set_auto_refine",
+    {
+      description:
+        "Turns a project's auto-refine on or off. On: refine starts on its own when a ticket is created or its questions are answered, one run at a time per project.",
+      inputSchema: AutoRefineInput,
+      annotations: { destructiveHint: false, idempotentHint: true },
+    },
+    ({ project, enabled }) =>
+      run(async () => {
+        const updated = await deps.projects.update(project.toLowerCase(), { autoRefine: enabled });
+        return { project: updated.key, autoRefine: updated.autoRefine };
       }),
   );
 

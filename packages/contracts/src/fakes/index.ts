@@ -18,6 +18,7 @@ import {
   type TicketEvent,
 } from "../entities";
 import {
+  ProjectPatch,
   RunRequest,
   WorkTrackerError,
   type CodeEventLog,
@@ -76,6 +77,14 @@ export class InMemoryWorkTracker implements WorkTracker {
 
   async listProjects(): Promise<Project[]> {
     return [...this.projects.values()].map((p) => structuredClone(p));
+  }
+
+  async updateProject(projectId: string, patch: ProjectPatch): Promise<Project> {
+    const project = this.projects.get(projectId);
+    if (!project) throw notFound("project", projectId);
+    const updated = { ...project, ...ProjectPatch.parse(patch) };
+    this.projects.set(projectId, updated);
+    return structuredClone(updated);
   }
 
   async createTicket(projectId: string, input: NewTicket, actor: EventActor): Promise<Ticket> {

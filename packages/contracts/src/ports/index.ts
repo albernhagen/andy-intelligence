@@ -114,6 +114,10 @@ export const QuestionFilter = z.object({
 });
 export type QuestionFilter = z.infer<typeof QuestionFilter>;
 
+/** Project settings Andy can change after registration. */
+export const ProjectPatch = Project.pick({ autoRefine: true }).partial();
+export type ProjectPatch = z.infer<typeof ProjectPatch>;
+
 export const TicketFilter = z.object({ stage: Stage.optional(), needsYou: z.boolean().optional() });
 export type TicketFilter = z.infer<typeof TicketFilter>;
 
@@ -122,6 +126,8 @@ export interface WorkTracker {
   createProject(input: NewProject): Promise<Project>;
   getProject(projectId: string): Promise<Project | null>;
   listProjects(): Promise<Project[]>;
+  /** `not_found` for an unknown project. */
+  updateProject(projectId: string, patch: ProjectPatch): Promise<Project>;
 
   /** Allocates the next key (e.g. "AI-7") and appends a `created` event. */
   createTicket(projectId: string, input: NewTicket, actor: EventActor): Promise<Ticket>;

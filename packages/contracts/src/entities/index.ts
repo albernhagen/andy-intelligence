@@ -33,6 +33,8 @@ export const Project = z.object({
   autonomy: AutonomyLevel,
   monthlyBudgetUsd: z.number().nonnegative().nullable(),
   enabled: z.boolean(),
+  /** Refine starts on its own for new and answered Backlog tickets (ADR-0054); default on. */
+  autoRefine: z.boolean().default(true),
 });
 export type Project = z.infer<typeof Project>;
 
@@ -146,6 +148,7 @@ export const REFINE_LIMITS = {
   option: 200,
   maxAssumptions: 5,
   assumption: 300,
+  sizeReason: 300,
 } as const;
 
 const capped = (max: number) => z.string().trim().min(1).max(max);
@@ -164,6 +167,10 @@ export type RefineQuestion = z.infer<typeof RefineQuestion>;
 
 export const RefineOutput = z.strictObject({
   summary: capped(REFINE_LIMITS.summary),
+  /** Refine's proposal; written only where the ticket has none, so Andy's values win. */
+  size: Size,
+  sizeReason: capped(REFINE_LIMITS.sizeReason),
+  tier: TierKey,
   questions: z
     .array(RefineQuestion)
     .min(REFINE_LIMITS.minQuestions)

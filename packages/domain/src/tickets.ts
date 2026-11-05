@@ -76,12 +76,21 @@ export interface MoveOptions {
  * corrected by the next change to the ticket.
  */
 export class TicketService {
-  constructor(private readonly tracker: WorkTracker) {}
+  constructor(
+    private readonly tracker: WorkTracker,
+    /**
+     * Starts refine when a ticket may be waiting for it (the refine dispatcher, ADR-0054):
+     * after a create and after a ticket's last open question is answered. It never throws.
+     */
+    private readonly refineNext: ((projectId: string) => Promise<unknown>) | null = null,
+  ) {}
 
   async create(projectId: string, input: NewTicket, actor: EventActor): Promise<Ticket> {
     const parsed = NewTicket.parse(input);
     const dorStatus = checkDor(parsed, 0).met ? "met" : "not_met";
-    return this.tracker.createTicket(projectId, { ...parsed, dorStatus }, actor);
+    const ticket = await this.tracker.createTicket(projectId, { ...parsed, dorStatus }, actor);
+    await this.refineNext?.(projectId);
+    return ticket;
   }
 
   async update(
@@ -165,7 +174,8 @@ export class TicketService {
   /**
    * Answering re-checks the Definition of Ready and clears Needs-you when nothing is open. The
    * last answer on a Backlog ticket that now meets the DoR moves it to Ready (ARCHITECTURE §4.1:
-   * exit is automatic), as "system", through the same checks as any move.
+   * exit is automatic), as "system", through the same checks as any move. When the DoR is still
+   * unmet, the refine dispatcher may run refine again with the answers.
    */
   async answer(
     questionId: string,
@@ -184,6 +194,7 @@ export class TicketService {
       "system",
     );
     if (met && ticket.stage === "backlog") await this.promote(ticket);
+    else if (open === 0 && ticket.stage === "backlog") await this.refineNext?.(ticket.projectId);
     return question;
   }
 

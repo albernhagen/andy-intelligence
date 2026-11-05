@@ -145,6 +145,14 @@ export function useCreateProject() {
   );
 }
 
+/** Project settings (ADR-0054: autoRefine). */
+export function useUpdateProject(projectId: string) {
+  const api = useApi();
+  return useWrite(async (body: { autoRefine: boolean }) =>
+    unwrap(await api.PATCH("/api/projects/{projectId}", { params: { path: { projectId } }, body })),
+  );
+}
+
 export type TicketInput = {
   title: string;
   body: string;

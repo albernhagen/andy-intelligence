@@ -1,6 +1,6 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
-import { REFINE_LIMITS, RefineOutput } from "./index";
+import { REFINE_LIMITS, RefineOutput, Size, TierKey } from "./index";
 
 // The schema the executor hands the agent (`--json-schema`). It must stay in step with
 // RefineOutput, which the control plane checks the result against.
@@ -12,6 +12,7 @@ const schema = JSON.parse(schemaText);
 const item = schema.properties.questions.items;
 
 const question = { text: "Which store?", options: ["Firestore"], suggestedAnswer: "Firestore" };
+const sizing = { size: "S", sizeReason: "one module", tier: "fast" };
 
 describe("RefineOutput", () => {
   it("GivenTheAgentSchemaFile_WhenComparedWithTheLimits_ThenTheyMatch", () => {
@@ -24,6 +25,10 @@ describe("RefineOutput", () => {
     expect(item.properties.suggestedAnswer.maxLength).toBe(REFINE_LIMITS.option);
     expect(item.properties.assumptions.maxItems).toBe(REFINE_LIMITS.maxAssumptions);
     expect(item.properties.assumptions.items.maxLength).toBe(REFINE_LIMITS.assumption);
+    expect(schema.properties.sizeReason.maxLength).toBe(REFINE_LIMITS.sizeReason);
+    expect(schema.properties.size.enum).toEqual(Size.options);
+    expect(schema.properties.tier.enum).toEqual(TierKey.options);
+    expect([...schema.required].sort()).toEqual(Object.keys(RefineOutput.shape).sort());
     expect(Object.keys(item.properties).sort()).toEqual(
       ["assumptions", "options", "suggestedAnswer", "text", "urgency"].sort(),
     );
@@ -35,19 +40,24 @@ describe("RefineOutput", () => {
   });
 
   it("GivenAValidResult_WhenParsed_ThenDefaultsAreFilledAndTextTrimmed", () => {
-    const out = RefineOutput.parse({ summary: " ok ", questions: [question] });
+    const out = RefineOutput.parse({ summary: " ok ", ...sizing, questions: [question] });
     expect(out.summary).toBe("ok");
     expect(out.questions[0]).toEqual({ ...question, assumptions: [], urgency: "normal" });
   });
 
   it.each([
-    ["no questions", { summary: "s", questions: [] }],
-    ["six questions", { summary: "s", questions: Array(6).fill(question) }],
-    ["a question too long", { summary: "s", questions: [{ text: "x".repeat(501) }] }],
-    ["a blank question", { summary: "s", questions: [{ text: "   " }] }],
-    ["too many options", { summary: "s", questions: [{ text: "q", options: Array(6).fill("o") }] }],
-    ["an unknown field", { summary: "s", questions: [question], stage: "ready" }],
-    ["a summary too long", { summary: "x".repeat(4001), questions: [question] }],
+    ["no questions", { summary: "s", ...sizing, questions: [] }],
+    ["no tier", { summary: "s", size: "S", sizeReason: "r", questions: [question] }],
+    ["an unknown size", { summary: "s", ...sizing, size: "XL", questions: [question] }],
+    ["six questions", { summary: "s", ...sizing, questions: Array(6).fill(question) }],
+    ["a question too long", { summary: "s", ...sizing, questions: [{ text: "x".repeat(501) }] }],
+    ["a blank question", { summary: "s", ...sizing, questions: [{ text: "   " }] }],
+    [
+      "too many options",
+      { summary: "s", ...sizing, questions: [{ text: "q", options: Array(6).fill("o") }] },
+    ],
+    ["an unknown field", { summary: "s", ...sizing, questions: [question], stage: "ready" }],
+    ["a summary too long", { summary: "x".repeat(4001), ...sizing, questions: [question] }],
   ])("GivenAResultWith%s_WhenParsed_ThenItIsRejected", (_, value) => {
     expect(RefineOutput.safeParse(value).success).toBe(false);
   });

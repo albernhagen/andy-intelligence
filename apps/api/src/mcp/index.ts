@@ -1,5 +1,5 @@
 import type { WorkTracker } from "@andy/contracts";
-import type { RunService, TicketService } from "@andy/domain";
+import type { ProjectService, RunService, TicketService } from "@andy/domain";
 import type { Hono } from "hono";
 import type { AuthEnv } from "../auth";
 import { registerMcpEndpoint } from "./endpoint";
@@ -20,6 +20,7 @@ export function registerMcp(
     tracker: WorkTracker;
     service: TicketService;
     runs: RunService;
+    projects: ProjectService;
   },
 ) {
   const lookups = new FixedWindowLimiter(LOOKUPS_PER_MINUTE, 60 * 1000);

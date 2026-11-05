@@ -17,7 +17,7 @@ Procedure for the refine step (ARCHITECTURE §4.2–4.3, ADR-0054: Refine run pr
 2. **Acceptance criteria** in EARS form ("WHEN … THE SYSTEM SHALL …"), testable, covering the failure cases (errors, limits, retries), not only the happy path.
 3. **Size** S, M or L with a one-line reason that fits the files you expect to change.
 4. **Dependencies**: tickets or changes this one needs first.
-5. **Tier** set (Andy sets it; flag it in the summary if missing, don't ask about it).
+5. **Tier**: the model tier the build needs (`frontier` for hard design or security work, `strong` for most code, `fast` for small well-specified changes, `cheap` for mechanical ones).
 6. **Assumptions** written down: anything you would have to guess.
 
 ## Questions
@@ -35,6 +35,7 @@ Don't ask what the code or the docs already answer: read them instead. Don't ask
 
 End with the structured output the run asks for (the schema `refine.schema.json` sits next to this file):
 
+- `size`, `sizeReason`, `tier`: your proposal, always given. The control plane writes them only where the ticket has none, so Andy's values win. If you're unsure, still give your best guess and make one question confirm it.
 - `summary`: markdown, at most 300 words, with these sections:
   1. **Ask**: what the ticket asks for, in one sentence.
   2. **Gaps**: what the Definition of Ready still misses, and criteria you would add or reword (EARS).
@@ -42,4 +43,4 @@ End with the structured output the run asks for (the schema `refine.schema.json`
   4. **Risks**: what could go wrong (security, data, cost, concurrency).
 - `questions`: 1 to 5, as above.
 
-The control plane checks the result: a result that doesn't match the schema fails the run and writes no questions. Your questions land in Andy's Needs-you inbox; when he has answered them all and the Definition of Ready is met, the ticket moves to Ready.
+The control plane checks the result: a result that doesn't match the schema fails the run and writes no questions. Your questions land in Andy's Needs-you inbox; when he has answered them all and the Definition of Ready is met, the ticket moves to Ready. If it still isn't met, refine runs again with his answers (at most 3 runs per ticket).

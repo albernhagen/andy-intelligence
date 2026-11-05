@@ -87,6 +87,16 @@ describe("ticket API", () => {
     expect((await call("GET", "/api/projects/zz")).status).toBe(404);
   });
 
+  it("GivenAProject_WhenAutoRefineIsPatched_ThenItIsStoredAndUnknownProjectsAre404", async () => {
+    await call("POST", "/api/projects", { name: "AI", key: "AI" });
+    expect((await call("GET", "/api/projects/ai")).json).toMatchObject({ autoRefine: true });
+    const patched = await call("PATCH", "/api/projects/ai", { autoRefine: false });
+    expect(patched).toMatchObject({ status: 200, json: { key: "AI", autoRefine: false } });
+    expect((await call("GET", "/api/projects/ai")).json).toMatchObject({ autoRefine: false });
+    expect((await call("PATCH", "/api/projects/zz", { autoRefine: true })).status).toBe(404);
+    expect((await call("PATCH", "/api/projects/ai", { autoRefine: "yes" })).status).toBe(400);
+  });
+
   it("GivenAnInvalidBody_WhenCreatingATicket_Then400WithFieldPaths", async () => {
     await call("POST", "/api/projects", { name: "AI", key: "AI" });
     const res = await call("POST", "/api/projects/ai/tickets", { type: "nope", title: "" });

@@ -40,7 +40,13 @@ const result = {
   tokensIn: 1000,
   tokensOut: 200,
   costUsd: 0.01,
-  output: { summary: "**Ask**: a board", questions: [{ text: "Kanban or list?" }] },
+  output: {
+    summary: "**Ask**: a board",
+    size: "S",
+    sizeReason: "one screen",
+    tier: "fast",
+    questions: [{ text: "Kanban or list?" }],
+  },
 };
 
 describe("run routes", () => {

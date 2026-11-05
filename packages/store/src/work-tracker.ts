@@ -5,6 +5,7 @@ import {
   type Query,
 } from "@google-cloud/firestore";
 import {
+  ProjectPatch,
   WorkTrackerError,
   applyTicketChange,
   buildProject,
@@ -86,6 +87,18 @@ export class FirestoreWorkTracker implements WorkTracker {
 
   async listProjects(): Promise<Project[]> {
     return (await this.projects().get()).docs.map((d) => d.data());
+  }
+
+  async updateProject(projectId: string, patch: ProjectPatch): Promise<Project> {
+    const changes = ProjectPatch.parse(patch);
+    return this.db.runTransaction(async (tx) => {
+      const ref = this.projects().doc(projectId);
+      const project = (await tx.get(ref)).data();
+      if (!project) throw notFound("project", projectId);
+      const updated = { ...project, ...changes };
+      tx.set(ref, updated);
+      return updated;
+    });
   }
 
   async createTicket(projectId: string, input: NewTicket, actor: EventActor): Promise<Ticket> {
