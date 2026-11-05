@@ -204,6 +204,8 @@ export function createApp(deps: AppDeps) {
     async (projectId) => void (await refiner.next(projectId)),
   );
   const refiner = new RefineDispatcher(deps.tracker, deps.runs, runs, now);
+  // One TicketService for REST, MCP and webhooks: all get the same ticket rules (packages/domain).
+  const service = new TicketService(deps.tracker, runs, (projectId) => refiner.next(projectId));
 
   // Public, outside /api: the watchdog queue presents a Google OIDC token for the invoker SA.
   if (deps.watchdog) {
@@ -223,6 +225,7 @@ export function createApp(deps: AppDeps) {
       secret: async () => (await connection.get())?.webhookSecret ?? null,
       events: github.events,
       tracker: deps.tracker,
+      tickets: service,
       now,
     });
     registerGitHubToken(app, { connection, verify: verifyActionsToken, now });
@@ -243,8 +246,6 @@ export function createApp(deps: AppDeps) {
     return c.json({ email, uid }, 200);
   });
 
-  // One TicketService for REST and MCP: both get the same ticket rules (packages/domain).
-  const service = new TicketService(deps.tracker, runs, (projectId) => refiner.next(projectId));
   const projects = new ProjectService(
     deps.tracker,
     connection ? new ConnectedCodeHost(connection) : null,

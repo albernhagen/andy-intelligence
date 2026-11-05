@@ -20,8 +20,9 @@ Under ADR-0056 a PR moved its ticket only from Ready or later; a Backlog ticket 
 | Merged       | A PR merged into the default branch completes its ticket (to Done, via Monitoring) from any stage except Done and Cancelled.                                                                                                                                                    |
 | Link only    | Drafts, PRs into other branches, Cancelled or archived tickets, and epics (they never run). Closed unmerged is unchanged.                                                                                                                                                       |
 | How it moves | One named path, `TicketService.followPullRequest` (`packages/domain`): every step of the pipeline in order, as `system`, unforced, with the PR link as the reason. It skips only the Definition of Ready check: the work exists. It is not a general "system may force" switch. |
-| On Done      | Open questions are withdrawn and Needs-you clears, as on cancel (AI-15).                                                                                                                                                                                                        |
+| On Done      | The ticket's runs in flight are cancelled (each gets a comment), open questions are withdrawn and Needs-you clears, as on cancel (AI-15).                                                                                                                                       |
 | Replays      | Still no-ops: the delivery log records each delivery ID once.                                                                                                                                                                                                                   |
+| Conflicts    | A write that lands mid-walk re-reads the ticket and carries on from its stage, at most 3 times; then the walk fails and is logged. The delivery is recorded once, so nothing retries it.                                                                                        |
 
 ### Consequences
 
