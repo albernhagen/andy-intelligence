@@ -174,8 +174,8 @@ export class TicketService {
       throw new DomainError("invalid_transition", `${ticket.key} is already cancelled`);
     }
     const cancelled = (await this.runs?.cancelForTicket(projectId, ticketId)) ?? [];
-    await this.withdrawOpenQuestions(ticketId, actor);
-    // No `ifUpdatedAt`: cancel is valid from any stage, so a write since the read (e.g. a run's
+    // Stage first, questions after: if withdrawing fails partway, the ticket is still cancelled
+    // and `needsYou()` already skips cancelled tickets. No `ifUpdatedAt`: cancel is valid from any stage, so a write since the read (e.g. a run's
     // report) mustn't fail it after the runs are already stopped.
     const updated = await this.tracker.updateTicket(
       projectId,
@@ -186,6 +186,7 @@ export class TicketService {
       },
       actor,
     );
+    await this.withdrawOpenQuestions(ticketId, actor);
     for (const run of cancelled) {
       await this.tracker.addComment(
         projectId,
@@ -228,13 +229,17 @@ export class TicketService {
     return this.tracker.listEvents(projectId, ticketId);
   }
 
-  /** An open question flags the ticket Needs-you and blocks Ready. */
+  /** An open question flags the ticket Needs-you and blocks Ready. Cancelled tickets take none. */
   async ask(
     projectId: string,
     ticketId: string,
     input: NewQuestion,
     actor: EventActor,
   ): Promise<Question> {
+    const ticket = await this.require(projectId, ticketId);
+    if (ticket.stage === "cancelled") {
+      throw new DomainError("invalid_transition", `${ticket.key} is cancelled; reopen it first`);
+    }
     const question = await this.tracker.askQuestion(projectId, ticketId, input, actor);
     await this.tracker.updateTicket(
       projectId,
@@ -264,20 +269,24 @@ export class TicketService {
     return question;
   }
 
-  /** The Needs-you inbox: open questions plus flagged tickets, across all projects, unarchived. */
+  /**
+   * The Needs-you inbox: open questions plus flagged tickets, across all projects. Archived and
+   * cancelled tickets are left out, so a question that slips past a cancel never shows.
+   */
   async needsYou(): Promise<{ questions: Question[]; tickets: Ticket[] }> {
     const projects = await this.tracker.listProjects();
-    const [questions, flagged, archived] = await Promise.all([
+    const [questions, flagged, archived, cancelled] = await Promise.all([
       this.tracker.listQuestions({ status: "open" }),
       Promise.all(
         projects.map((p) => this.tracker.listTickets(p.id, { needsYou: true, archived: false })),
       ),
       Promise.all(projects.map((p) => this.tracker.listTickets(p.id, { archived: true }))),
+      Promise.all(projects.map((p) => this.tracker.listTickets(p.id, { stage: "cancelled" }))),
     ]);
-    const hidden = new Set(archived.flat().map((t) => t.id));
+    const hidden = new Set([...archived.flat(), ...cancelled.flat()].map((t) => t.id));
     return {
       questions: questions.filter((q) => !hidden.has(q.ticketId)),
-      tickets: flagged.flat(),
+      tickets: flagged.flat().filter((t) => !hidden.has(t.id)),
     };
   }
 
