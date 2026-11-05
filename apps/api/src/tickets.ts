@@ -6,6 +6,7 @@ import {
   NewTicket,
   Project,
   Question,
+  QuestionId,
   Stage,
   Ticket,
   TicketEvent,
@@ -34,11 +35,12 @@ const body = <S extends z.ZodType>(schema: S) => ({
   body: { content: { "application/json": { schema } }, required: true },
 });
 
-// Ids are checked before they reach storage paths: a project id is its lowercased key,
-// ticket and question ids are UUIDs. Anything else is a 400, never a storage error.
+// Ids are checked before they reach storage paths: a project id is its lowercased key, a
+// ticket id is a UUID, a question id is a UUID or a run's `<runId>-q<n>` (`QuestionId`).
+// Anything else is a 400, never a storage error.
 const ProjectParams = z.object({ projectId: z.string().regex(/^[a-z][a-z0-9]{0,9}$/) });
 const TicketParams = ProjectParams.extend({ ticketId: z.uuid() });
-const QuestionParams = z.object({ questionId: z.uuid() });
+const QuestionParams = z.object({ questionId: QuestionId });
 
 /** Callers can't set derived fields; the domain computes them. */
 const CreateTicket = NewTicket.omit({ dorStatus: true, needsAttention: true });

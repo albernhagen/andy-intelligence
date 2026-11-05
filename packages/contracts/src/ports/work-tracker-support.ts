@@ -1,4 +1,5 @@
 import type { EventActor, Project, Question, Ticket, TicketEvent } from "../entities";
+import { QuestionId } from "../entities";
 import {
   NewProject,
   NewQuestion,
@@ -148,7 +149,8 @@ export function buildQuestion(
   const q = NewQuestion.parse(input);
   return {
     ...q,
-    id: from ? runQuestionId(from.runId, from.index) : crypto.randomUUID(),
+    // Parsed so a run id that can't form a sendable question id fails here, not when Andy answers.
+    id: QuestionId.parse(from ? runQuestionId(from.runId, from.index) : crypto.randomUUID()),
     runId: from?.runId ?? null,
     projectId: ticket.projectId,
     ticketId: ticket.id,
