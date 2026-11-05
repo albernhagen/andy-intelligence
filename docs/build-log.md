@@ -37,4 +37,3 @@ Merged before the move to tickets: M1.0–M1.5, M1.10–M1.16, M1.19, M1.20 (lis
 ## Blocked on Andy
 
 - AI-1: M1.6a: Claude Code executor: after PR #51 merges, give the GitHub App Actions write and run the demos (runbook `agent-runs.md` §1, §3–4).
-- AI-4: M1.6b: Claude Code executor: watchdog + retry: after its PR merges, apply `infra/control-plane` (expect 0 add, 1 change, 0 destroy: two env vars) and run the demo (runbook `agent-runs.md` §5–6).
