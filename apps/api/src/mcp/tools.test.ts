@@ -337,6 +337,14 @@ describe("set_auto_build tool", () => {
   it("GivenAProject_WhenAutoBuildIsTurnedOn_ThenItIsStoredAndAutoRefineIsUntouched", async () => {
     const ctx = await withProject();
     await ctx.call("set_auto_refine", { project: "AI", enabled: false });
+    expect(await ctx.call("set_auto_build", { project: "AI", enabled: true })).toMatchObject({
+      isError: true,
+      text: expect.stringContaining("builds are off"),
+    });
+    await ctx.rest("/api/projects/ai", {
+      method: "PATCH",
+      body: JSON.stringify({ buildEnabled: true }),
+    });
     expect((await ctx.call("set_auto_build", { project: "AI", enabled: true })).data).toEqual({
       project: "AI",
       autoBuild: true,

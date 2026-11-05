@@ -46,7 +46,7 @@ export class BuildDispatcher {
   private async dispatch(projectId: string): Promise<Run | null> {
     if (!this.runs.canDispatch) return null;
     const project = await this.tracker.getProject(projectId);
-    if (!project?.autoBuild) return null;
+    if (!project?.autoBuild || !project.buildEnabled) return null;
     if (await this.busy(projectId)) return null;
     const tickets = await this.tracker.listTickets(projectId, { archived: false });
     const inFlight = tickets.filter(

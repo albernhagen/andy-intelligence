@@ -148,8 +148,11 @@ export function useCreateProject() {
 /** Project settings (ADR-0054: autoRefine; ADR-0063: autoBuild). */
 export function useUpdateProject(projectId: string) {
   const api = useApi();
-  return useWrite(async (body: { autoRefine?: boolean; autoBuild?: boolean }) =>
-    unwrap(await api.PATCH("/api/projects/{projectId}", { params: { path: { projectId } }, body })),
+  return useWrite(
+    async (body: { autoRefine?: boolean; autoBuild?: boolean; buildEnabled?: boolean }) =>
+      unwrap(
+        await api.PATCH("/api/projects/{projectId}", { params: { path: { projectId } }, body }),
+      ),
   );
 }
 

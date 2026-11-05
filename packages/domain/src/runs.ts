@@ -112,6 +112,8 @@ export interface RunResult {
   branch?: string | null;
   /** Build: the pull request the publish job opened, if any. */
   pullRequest?: string | null;
+  /** Build: tooling or dependency files the change touches (flagged on the PR). */
+  toolingFiles?: string[];
 }
 
 function log(severity: "INFO" | "WARNING" | "ERROR", message: string, fields: object = {}) {
@@ -162,7 +164,14 @@ export class RunService {
       throw new DomainError("invalid_transition", `${ticket.key} is cancelled; reopen it first`);
     }
     if (startable === "refine") await this.checkRefinable(ticket);
-    else await this.checkBuildable(ticket);
+    else {
+      if (!project.buildEnabled) {
+        throw new DomainError("not_buildable", `builds are off for project ${project.key}`, [
+          "Andy turns them on in /projects after the live sandbox proof (runbook agent-runs.md §9)",
+        ]);
+      }
+      await this.checkBuildable(ticket);
+    }
     const repo = project.repos[0];
     if (!repo) throw new DomainError("invalid_repo", `project ${project.key} has no repo`);
     const active = await this.inFlight(projectId);
@@ -349,6 +358,7 @@ export class RunService {
             ? {
                 plan: built.plan,
                 branch: built.branch,
+                toolingFiles: built.toolingFiles,
                 links: { ...run.links, pullRequest: built.pullRequest ?? undefined },
               }
             : {}),
@@ -370,10 +380,14 @@ export class RunService {
     if (done.ticketId) {
       const asks = asked > 0 ? `\n\nAsked ${asked} question(s): answer them in Needs you.` : "";
       const pr = built?.pullRequest ? `\n\nPull request: ${built.pullRequest}` : "";
+      const tooling =
+        built && built.toolingFiles.length > 0
+          ? `\n\nChanges tooling or dependency files (review before running the branch locally): ${built.toolingFiles.join(", ")}`
+          : "";
       const kept = status === "failed" && built?.branch ? `\n\nBranch kept: ${built.branch}` : "";
       const body =
         status === "succeeded"
-          ? `${summary ?? "The run finished without a summary."}${asks}${pr}`
+          ? `${summary ?? "The run finished without a summary."}${asks}${pr}${tooling}`
           : `The ${done.step} run failed.${error ? ` ${error}` : ""}${summary ? `\n\n${summary}` : ""}${kept}`;
       await this.tracker.addComment(done.projectId, done.ticketId, body, `agent:${run.id}`);
     }
@@ -556,7 +570,10 @@ export class RunService {
       error =
         "It finished without opening a pull request (no changes, or the PR couldn't be opened).";
     }
-    return { plan, branch, pullRequest, summary, error };
+    const toolingFiles = (result.toolingFiles ?? [])
+      .filter((f) => typeof f === "string" && f.length > 0 && f.length <= 300)
+      .slice(0, 50);
+    return { plan, branch, pullRequest, summary, error, toolingFiles };
   }
 
   /** A build the control plane rejected flags its ticket: retrying the same agent rarely fixes it. */
@@ -889,6 +906,7 @@ interface BuildRecord {
   summary: string | null;
   /** Why a reported success counts as a failure; null when it stands. */
   error: string | null;
+  toolingFiles: string[];
 }
 
 /** The executor handle a dispatched run was recorded with; null if it never got one. */

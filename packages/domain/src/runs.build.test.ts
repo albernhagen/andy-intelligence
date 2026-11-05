@@ -77,6 +77,16 @@ describe("RunService build runs", () => {
       () => NOW,
     );
     projectId = (await tracker.createProject({ name: "AI", key: "AI", repos: [REPO.fullName] })).id;
+    await tracker.updateProject(projectId, { buildEnabled: true });
+  });
+
+  it("GivenBuildsNotEnabledForTheProject_WhenABuildIsStartedByHand_ThenNotBuildableWithTheReason", async () => {
+    await tracker.updateProject(projectId, { buildEnabled: false });
+    const t = await ticketIn("ready");
+    await expect(service.start(projectId, t.id, "build")).rejects.toMatchObject({
+      code: "not_buildable",
+      message: expect.stringContaining("builds are off"),
+    });
   });
 
   it("GivenABacklogTicket_WhenABuildIsStarted_ThenNotBuildable", async () => {
@@ -185,6 +195,14 @@ describe("RunService build runs", () => {
     });
     const events = await tracker.listEvents(projectId, ticket.id);
     expect(events.some((e) => e.body?.includes(`its branch ${retryBranch} is kept`))).toBe(true);
+  });
+
+  it("GivenAChangeToToolingFiles_WhenReported_ThenTheyAreRecordedAndNamedOnTheTicket", async () => {
+    const { ticket, run } = await started();
+    await report(run, { pullRequest: `${REPO.url}/pull/9`, toolingFiles: ["package.json"] });
+    expect((await runs.get(run.id))!.toolingFiles).toEqual(["package.json"]);
+    const comment = (await tracker.listEvents(projectId, ticket.id)).at(-1);
+    expect(comment?.body).toContain("Changes tooling or dependency files");
   });
 
   it("GivenAForeignBranch_WhenReported_ThenItIsNotRecorded", async () => {

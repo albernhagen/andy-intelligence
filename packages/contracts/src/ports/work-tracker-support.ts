@@ -29,6 +29,9 @@ export function buildProject(input: NewProject): Project {
     enabled: true,
     autoRefine: true,
     autoBuild: false,
+    buildEnabled: false,
+    buildEnabledBy: null,
+    buildEnabledAt: null,
   };
 }
 

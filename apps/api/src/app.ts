@@ -261,6 +261,7 @@ export function createApp(deps: AppDeps) {
     deps.tracker,
     connection ? new ConnectedCodeHost(connection) : null,
     dispatchNext,
+    now,
   );
   registerTicketRoutes(app, deps.tracker, service, projects);
 

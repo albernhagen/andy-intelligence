@@ -231,7 +231,11 @@ export function registerTools(server: McpServer, deps: ToolDeps): void {
     },
     ({ project, enabled }) =>
       run(async () => {
-        const updated = await deps.projects.update(project.toLowerCase(), { autoBuild: enabled });
+        const updated = await deps.projects.update(
+          project.toLowerCase(),
+          { autoBuild: enabled },
+          deps.email,
+        );
         return { project: updated.key, autoBuild: updated.autoBuild };
       }),
   );
@@ -279,7 +283,11 @@ export function registerTools(server: McpServer, deps: ToolDeps): void {
     },
     ({ project, enabled }) =>
       run(async () => {
-        const updated = await deps.projects.update(project.toLowerCase(), { autoRefine: enabled });
+        const updated = await deps.projects.update(
+          project.toLowerCase(),
+          { autoRefine: enabled },
+          deps.email,
+        );
         return { project: updated.key, autoRefine: updated.autoRefine };
       }),
   );

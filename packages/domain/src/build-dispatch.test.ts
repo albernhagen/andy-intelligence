@@ -83,7 +83,11 @@ describe("BuildDispatcher", () => {
     runStore = new InMemoryRunStore(now);
     host = new InMemoryCodeHost([REPO]);
     projectId = (await tracker.createProject({ name: "AI", key: "AI", repos: [REPO.fullName] })).id;
-    await tracker.updateProject(projectId, { autoRefine: false, autoBuild: true });
+    await tracker.updateProject(projectId, {
+      autoRefine: false,
+      autoBuild: true,
+      buildEnabled: true,
+    });
   });
 
   it("GivenAutoBuildOff_WhenATicketReachesReady_ThenNoBuildStarts", async () => {
@@ -237,6 +241,35 @@ describe("BuildDispatcher", () => {
     expect((await tracker.getTicket(projectId, t.id))!.needsAttention).toBe(true);
   });
 
+  it("GivenBuildsNotEnabled_WhenNext_ThenNothingStartsEvenWithAutoBuildOn", async () => {
+    await tracker.updateProject(projectId, { buildEnabled: false });
+    const { dispatcher } = wire();
+    const t = await inReady("Board");
+    expect(await dispatcher.next(projectId)).toBeNull();
+    expect(await builds(t.id)).toEqual([]);
+  });
+
+  it("GivenBuildsNotEnabled_WhenAndyTurnsAutoBuildOn_ThenItIsRefused", async () => {
+    await tracker.updateProject(projectId, { autoBuild: false, buildEnabled: false });
+    const { projects } = wire();
+    await expect(
+      projects.update(projectId, { autoBuild: true }, "andy@example.com"),
+    ).rejects.toMatchObject({
+      code: "not_buildable",
+    });
+  });
+
+  it("GivenBuildsOn_WhenAndyTurnsThemOff_ThenWhoAndWhenAreRecordedAndAutoBuildGoesOffToo", async () => {
+    const { projects } = wire();
+    const off = await projects.update(projectId, { buildEnabled: false }, "andy@example.com");
+    expect(off).toMatchObject({
+      buildEnabled: false,
+      autoBuild: false,
+      buildEnabledBy: "andy@example.com",
+    });
+    expect(off.buildEnabledAt).not.toBeNull();
+  });
+
   it("GivenNoExecutor_WhenNext_ThenNothingStartsAndNothingThrows", async () => {
     const { dispatcher } = wire(null);
     await inReady("Board");
@@ -247,7 +280,7 @@ describe("BuildDispatcher", () => {
     await tracker.updateProject(projectId, { autoBuild: false });
     const { projects } = wire();
     const t = await inReady("Board");
-    await projects.update(projectId, { autoBuild: true });
+    await projects.update(projectId, { autoBuild: true }, "andy@example.com");
     expect(await builds(t.id)).toHaveLength(1);
   });
 });

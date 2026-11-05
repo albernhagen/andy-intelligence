@@ -1,8 +1,13 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { DEFAULT_PROFILE } from "./executor-profile.mjs";
+import { Buffer } from "node:buffer";
 import {
   MAX_BODY,
+  PublishRefused,
+  oneLine,
+  publish,
+  toolingFiles,
   MAX_CHANGED_FILES,
   checkChange,
   globToRegExp,
@@ -153,5 +158,149 @@ describe("executor publish", () => {
     expect(pr({ status: "succeeded", output: long }).body.length).toBeLessThanOrEqual(MAX_BODY);
     const titled = pullRequest({ ticketKey: "AI-3", ticketTitle: "a\nb", report: null });
     expect(titled.title).toBe("AI-3: a b");
+  });
+});
+
+describe("executor publish job", () => {
+  const raw = (...paths) => paths.map((p) => `:000000 100644 0000000 abc1234 A\0${p}\0`).join("");
+  const baseEnv = {
+    PATCH: "/tmp/change.patch",
+    PROFILE: DEFAULT_PROFILE,
+    CODEOWNERS: "",
+    RUN_ID: "run1",
+    BRANCH: "agent/AI-3/run1",
+    REPO: "albernhagen/andy-intelligence",
+    BASE: "main",
+    PROJECT_ID: "ai",
+    TICKET_KEY: "AI-3",
+    TICKET_TITLE: "Build run",
+    MODEL: "sonnet",
+    REPORT: JSON.stringify({ status: "succeeded", output }),
+    CONTROL_PLANE_URL: "https://ai.andybernhagen.com",
+    ACTIONS_ID_TOKEN_REQUEST_URL: "https://actions.example/token?x=1",
+    ACTIONS_ID_TOKEN_REQUEST_TOKEN: "req",
+  };
+  function harness(paths = ["apps/web/src/a.ts"], { tokenStatus = 200 } = {}) {
+    const calls = [];
+    const git = (args, env = {}) => {
+      calls.push({ args, env });
+      if (args.includes("--raw")) return raw(...paths);
+      if (args.includes("--name-only")) return "staged\n";
+      return "";
+    };
+    const requests = [];
+    const reply = (status, body) => ({
+      ok: status < 300,
+      status,
+      json: async () => body,
+      text: async () => JSON.stringify(body),
+    });
+    const fetch = async (url, init = {}) => {
+      requests.push({ url, init });
+      if (url.startsWith("https://actions.example")) return reply(200, { value: "oidc-jwt" });
+      if (url.endsWith("/github/token")) return reply(tokenStatus, { token: "ghs_secret" });
+      return reply(201, { html_url: "https://github.com/albernhagen/andy-intelligence/pull/90" });
+    };
+    const lines = [];
+    const outputs = {};
+    const run = (env = baseEnv) =>
+      publish({
+        env,
+        git,
+        fetch,
+        emit: (l) => lines.push(l),
+        output: (k, v) => (outputs[k] = v),
+      });
+    return { calls, requests, lines, outputs, run };
+  }
+  const pushed = (calls) => calls.find((c) => c.args[0] === "push");
+
+  it("GivenAnOrdinaryChange_WhenPublished_ThenItPushesWithTheTokenInEnvOnlyAndOpensThePr", async () => {
+    const h = harness();
+    const result = await h.run();
+    expect(result.pullRequest).toBe("https://github.com/albernhagen/andy-intelligence/pull/90");
+    const push = pushed(h.calls);
+    expect(push.args.join(" ")).not.toContain("ghs_secret");
+    expect(push.env.GIT_CONFIG_VALUE_0).toContain(
+      Buffer.from("x-access-token:ghs_secret").toString("base64"),
+    );
+    expect(h.lines.filter((l) => l.includes("ghs_secret"))).toEqual(["::add-mask::ghs_secret"]);
+    expect(h.lines.join("\n")).not.toContain("Build run");
+    const body = JSON.parse(h.requests.at(-1).init.body);
+    expect(body).toMatchObject({ title: "AI-3: Build run", head: "agent/AI-3/run1", base: "main" });
+    expect(body.body.split("\n")[0]).toBe("https://ai.andybernhagen.com/p/ai/t/AI-3");
+    expect(h.outputs).toMatchObject({ branch: "agent/AI-3/run1", tooling_files: "[]" });
+  });
+
+  it("GivenAProtectedPath_WhenPublished_ThenItIsRefusedBeforeAnyTokenOrPush", async () => {
+    const h = harness(["infra/control-plane/main.tf"]);
+    await expect(h.run()).rejects.toBeInstanceOf(PublishRefused);
+    expect(pushed(h.calls)).toBeUndefined();
+    expect(h.requests).toEqual([]);
+  });
+
+  it("GivenABadBranchOrRepo_WhenPublished_ThenItIsRefusedBeforeGitRuns", async () => {
+    const h = harness();
+    await expect(h.run({ ...baseEnv, BRANCH: "main" })).rejects.toBeInstanceOf(PublishRefused);
+    await expect(h.run({ ...baseEnv, REPO: "a b" })).rejects.toBeInstanceOf(PublishRefused);
+    expect(h.calls).toEqual([]);
+  });
+
+  it("GivenTheTokenIsRefused_WhenPublished_ThenNothingIsPushed", async () => {
+    const h = harness(["a.ts"], { tokenStatus: 403 });
+    await expect(h.run()).rejects.toThrow("POST /github/token returned HTTP 403");
+    expect(pushed(h.calls)).toBeUndefined();
+  });
+
+  it("GivenAFailedAgent_WhenPublished_ThenTheBranchIsPushedButNoPrOpens", async () => {
+    const h = harness();
+    const result = await h.run({ ...baseEnv, REPORT: JSON.stringify({ status: "failed" }) });
+    expect(result.pullRequest).toBeNull();
+    expect(pushed(h.calls)).toBeDefined();
+    expect(h.requests.some((r) => r.url.includes("/pulls"))).toBe(false);
+  });
+
+  it("GivenToolingFiles_WhenPublished_ThenThePrSaysSoRightAfterTheTicketLinkAndTheOutputListsThem", async () => {
+    const h = harness(["package.json", "apps/web/vite.config.ts", "src/a.ts"]);
+    await h.run();
+    const body = JSON.parse(h.requests.at(-1).init.body).body.split("\n");
+    expect(body[0]).toBe("https://ai.andybernhagen.com/p/ai/t/AI-3");
+    expect(body[2]).toContain("Changes tooling or dependency files");
+    expect(JSON.parse(h.outputs.tooling_files)).toEqual([
+      "package.json",
+      "apps/web/vite.config.ts",
+    ]);
+  });
+
+  it("GivenABugTicket_WhenPublished_ThenTheFailingTestIsAddedLiterallyAndCommittedFirst", async () => {
+    const h = harness(["test/a.test.ts", "src/a.ts"]);
+    const report = { status: "succeeded", output: { ...output, failingTestFiles: [":(glob)**"] } };
+    await h.run({ ...baseEnv, REPORT: JSON.stringify(report) });
+    const add = h.calls.find((c) => c.args[0] === "--literal-pathspecs");
+    expect(add.args).toEqual(["--literal-pathspecs", "add", "--", ":(glob)**"]);
+    const commits = h.calls.filter((c) => c.args[0] === "commit").map((c) => c.args[3]);
+    expect(commits).toEqual(["AI-3: Build run: failing test", "AI-3: Build run"]);
+  });
+
+  it("GivenAMalformedAgentOutput_WhenThePrIsWritten_ThenItFallsBackInsteadOfCrashing", () => {
+    const { body } = pr({ status: "succeeded", summary: "s", output: { plan: null } });
+    expect(body).toContain("None: the run returned no structured result.");
+  });
+
+  it("GivenAgentTextWithNewlinesAndWorkflowCommands_WhenLogged_ThenItStaysOnOneLine", () => {
+    expect(oneLine("a.ts\n::add-mask::x")).toBe("a.ts : :add-mask: :x");
+  });
+
+  it("GivenToolingPaths_WhenClassified_ThenConfigsLockfilesAndManifestsMatchAndCodeDoesNot", () => {
+    const paths = [
+      "package.json",
+      "pnpm-lock.yaml",
+      "tsconfig.base.json",
+      "vitest.config.ts",
+      ".gitattributes",
+      "lefthook.yml",
+      "src/config.ts",
+    ];
+    expect(toolingFiles(paths.map((p) => entry(p)))).toEqual(paths.slice(0, 6));
   });
 });

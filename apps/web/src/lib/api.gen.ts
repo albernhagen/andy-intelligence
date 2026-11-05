@@ -126,6 +126,15 @@ export interface paths {
               autoRefine: boolean;
               /** @default false */
               autoBuild: boolean;
+              /** @default false */
+              buildEnabled: boolean;
+              /** @default null */
+              buildEnabledBy: string | null;
+              /**
+               * Format: date-time
+               * @default null
+               */
+              buildEnabledAt: string | null;
             }[];
           };
         };
@@ -176,6 +185,15 @@ export interface paths {
               autoRefine: boolean;
               /** @default false */
               autoBuild: boolean;
+              /** @default false */
+              buildEnabled: boolean;
+              /** @default null */
+              buildEnabledBy: string | null;
+              /**
+               * Format: date-time
+               * @default null
+               */
+              buildEnabledAt: string | null;
             };
           };
         };
@@ -274,6 +292,15 @@ export interface paths {
               autoRefine: boolean;
               /** @default false */
               autoBuild: boolean;
+              /** @default false */
+              buildEnabled: boolean;
+              /** @default null */
+              buildEnabledBy: string | null;
+              /**
+               * Format: date-time
+               * @default null
+               */
+              buildEnabledAt: string | null;
             };
           };
         };
@@ -346,6 +373,7 @@ export interface paths {
           "application/json": {
             autoRefine?: boolean;
             autoBuild?: boolean;
+            buildEnabled?: boolean;
           };
         };
       };
@@ -371,6 +399,15 @@ export interface paths {
               autoRefine: boolean;
               /** @default false */
               autoBuild: boolean;
+              /** @default false */
+              buildEnabled: boolean;
+              /** @default null */
+              buildEnabledBy: string | null;
+              /**
+               * Format: date-time
+               * @default null
+               */
+              buildEnabledAt: string | null;
             };
           };
         };
@@ -2492,6 +2529,8 @@ export interface paths {
               } | null;
               /** @default null */
               branch: string | null;
+              /** @default [] */
+              toolingFiles: string[];
               /**
                * Format: date-time
                * @default null
@@ -2615,6 +2654,8 @@ export interface paths {
               } | null;
               /** @default null */
               branch: string | null;
+              /** @default [] */
+              toolingFiles: string[];
               /**
                * Format: date-time
                * @default null

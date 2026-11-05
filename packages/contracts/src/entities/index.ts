@@ -40,6 +40,13 @@ export const Project = z.object({
    * default off: Andy turns it on per project.
    */
   autoBuild: z.boolean().default(false),
+  /**
+   * Build runs may start at all, by hand or by the dispatcher (ADR-0063). Off until Andy turns
+   * it on after the live sandbox proof (runbook `agent-runs.md` §9); who and when are recorded.
+   */
+  buildEnabled: z.boolean().default(false),
+  buildEnabledBy: z.string().max(320).nullable().default(null),
+  buildEnabledAt: Timestamp.nullable().default(null),
 });
 export type Project = z.infer<typeof Project>;
 
@@ -318,6 +325,8 @@ export const Run = z.object({
   plan: BuildPlan.nullable().default(null),
   /** The branch a build run pushed (kept after a failure, for Andy to inspect). */
   branch: z.string().max(200).nullable().default(null),
+  /** Tooling or dependency files the build's change touches, flagged on its PR (ADR-0063). */
+  toolingFiles: z.array(z.string().max(300)).max(50).default([]),
   /** When the run's one repo token was issued to its publish job; null until then. */
   pushGrantedAt: Timestamp.nullable().default(null),
 });

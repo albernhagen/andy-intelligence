@@ -1,12 +1,17 @@
 import {
   NewProject,
-  ProjectPatch,
+  ProjectSettings,
   RepoName,
   type CodeHost,
   type Project,
   type WorkTracker,
 } from "@andy/contracts";
+import { notFound } from "@andy/contracts";
 import { DomainError } from "./tickets";
+
+function log(severity: "INFO" | "WARNING", message: string, fields: object = {}) {
+  console.log(JSON.stringify({ severity, message, component: "projects", ...fields }));
+}
 
 /**
  * Project registration rules (M1.5: GitHub App + project registration). A repo belongs to at
@@ -23,10 +28,37 @@ export class ProjectService {
      * on starts any waiting run.
      */
     private readonly dispatchNext: ((projectId: string) => Promise<unknown>) | null = null,
+    private readonly now: () => Date = () => new Date(),
   ) {}
 
-  async update(projectId: string, patch: ProjectPatch): Promise<Project> {
-    const project = await this.tracker.updateProject(projectId, ProjectPatch.parse(patch));
+  /**
+   * Changes a project's switches. `buildEnabled` records who (`by`, the signed-in email) and
+   * when; turning it off turns `autoBuild` off too, and `autoBuild` can't be on without it
+   * (ADR-0063: no build before the live sandbox proof).
+   */
+  async update(projectId: string, settings: ProjectSettings, by: string): Promise<Project> {
+    const patch = ProjectSettings.parse(settings);
+    const current = await this.tracker.getProject(projectId);
+    if (!current) throw notFound("project", projectId);
+    const buildEnabled = patch.buildEnabled ?? current.buildEnabled;
+    if (patch.autoBuild === true && !buildEnabled) {
+      throw new DomainError("not_buildable", `builds are off for project ${current.key}`, [
+        "turn builds on first, after the live sandbox proof (runbook agent-runs.md §9)",
+      ]);
+    }
+    const project = await this.tracker.updateProject(projectId, {
+      ...patch,
+      ...(patch.buildEnabled === undefined
+        ? {}
+        : {
+            buildEnabledBy: by,
+            buildEnabledAt: this.now().toISOString(),
+            ...(patch.buildEnabled ? {} : { autoBuild: false }),
+          }),
+    });
+    if (patch.buildEnabled !== undefined) {
+      log("INFO", "project builds switched", { projectId, buildEnabled: patch.buildEnabled, by });
+    }
     if (project.autoRefine || project.autoBuild) await this.dispatchNext?.(projectId);
     return project;
   }

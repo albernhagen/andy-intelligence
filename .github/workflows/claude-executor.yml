@@ -335,6 +335,7 @@ jobs:
     outputs:
       branch: ${{ steps.push.outputs.branch }}
       pull_request: ${{ steps.push.outputs.pull_request }}
+      tooling_files: ${{ steps.push.outputs.tooling_files }}
     steps:
       - name: Check out the agent's base commit
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -361,48 +362,16 @@ jobs:
           name: change-${{ inputs.run_id }}
           path: ${{ runner.temp }}/change
 
-      - name: Apply and check the change
-        env:
-          TICKET_KEY: ${{ needs.context.outputs.ticket_key }}
-          TICKET_TITLE: ${{ needs.context.outputs.ticket_title }}
-          RUN_ID: ${{ inputs.run_id }}
-          REPORT: ${{ needs.agent.outputs.report }}
-        run: |
-          mv .executor-platform "$RUNNER_TEMP/platform"
-          export GIT_CONFIG_NOSYSTEM=1 GIT_CONFIG_GLOBAL=/dev/null
-          git config user.name "andy-intelligence-control[bot]"
-          git config user.email "andy-intelligence-control[bot]@users.noreply.github.com"
-          git apply --index --binary "$RUNNER_TEMP/change/change.patch"
-          git diff --cached --raw -z --no-renames > "$RUNNER_TEMP/change/raw"
-          codeowners=""
-          for f in .github/CODEOWNERS CODEOWNERS docs/CODEOWNERS; do
-            if [ -f "$f" ]; then codeowners="$f"; break; fi
-          done
-          node "$RUNNER_TEMP/platform/scripts/executor-publish.mjs" check \
-            --profile "$RUNNER_TEMP/platform/platform/executor/profile.json" \
-            --codeowners "$codeowners" --raw "$RUNNER_TEMP/change/raw"
-          message="$TICKET_KEY: $TICKET_TITLE"
-          # Bug tickets: the failing test goes in its own commit first (ADR-0063).
-          mapfile -t tests < <(jq -r '.output.failingTestFiles // [] | .[]' <<<"$REPORT" 2>/dev/null || true)
-          if [ "${#tests[@]}" -gt 0 ]; then
-            git reset -q
-            # Literal: agent-named paths get no pathspec magic.
-            git --literal-pathspecs add -- "${tests[@]}" || true
-            if ! git diff --cached --quiet; then
-              git commit -q -m "$message: failing test" -m "Agent-Run: $RUN_ID"
-            fi
-            git add -A
-          fi
-          if ! git diff --cached --quiet; then git commit -q -m "$message" -m "Agent-Run: $RUN_ID"; fi
-          git log --stat --oneline -n 2
-
-      # Safety (holds a write token): the checkout is the agent's base commit (the default branch),
-      # the change is applied as data and checked above, and nothing from it runs here. The
-      # token exists only inside this step: never echoed, never a step output, passed to git as
-      # one masked header and to gh through env. Keep `set -x` out of this step.
-      - name: Push the branch and open the pull request
+      # Thin caller: scripts/executor-publish.mjs from the platform checkout (at platform_sha, a
+      # separate directory the agent never wrote) does apply, check, commit, token, push and PR.
+      # Safety (holds a write token): the project checkout is the agent's base commit, the
+      # change is applied as data and checked, and nothing from it runs here. The script passes
+      # agent text only as arguments, files or JSON bodies, never through a shell, and never
+      # prints the token, the report or the title. Keep `set -x` out of this step.
+      - name: Publish the change
         id: push
         env:
+          PATCH: ${{ runner.temp }}/change/change.patch
           RUN_ID: ${{ inputs.run_id }}
           BRANCH: ${{ needs.context.outputs.branch }}
           REPO: ${{ github.repository }}
@@ -413,36 +382,13 @@ jobs:
           MODEL: ${{ needs.context.outputs.model }}
           REPORT: ${{ needs.agent.outputs.report }}
         run: |
-          [[ "$BRANCH" =~ ^agent/[A-Z][A-Z0-9]{0,9}-[0-9]{1,9}/[A-Za-z0-9-]{1,64}$ ]] || { echo "::error title=claude-executor::unexpected branch name"; exit 1; }
-          oidc=$(curl -sS --fail-with-body -H "Authorization: bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" \
-            "$ACTIONS_ID_TOKEN_REQUEST_URL&audience=$CONTROL_PLANE_URL" | jq -r .value)
-          echo "::add-mask::$oidc"
-          response="$RUNNER_TEMP/token.json"
-          code=$(curl -sS --max-time 30 -o "$response" -w '%{http_code}' -X POST \
-            -H "Authorization: Bearer $oidc" -H "Content-Type: application/json" \
-            --data "$(jq -cn --arg id "$RUN_ID" '{runId: $id}')" "$CONTROL_PLANE_URL/github/token") || code=000
-          if [ "$code" != 200 ]; then
-            echo "::error title=claude-executor::POST /github/token returned HTTP $code: $(head -c 300 "$response" | tr -d '\r\n')"
-            exit 1
-          fi
-          token=$(jq -r .token "$response")
-          rm -f "$response"
-          echo "::add-mask::$token"
-          basic=$(printf 'x-access-token:%s' "$token" | base64 -w0)
-          echo "::add-mask::$basic"
-          git -c http.extraheader="AUTHORIZATION: basic $basic" push --quiet \
-            "https://github.com/$REPO.git" "HEAD:refs/heads/$BRANCH"
-          echo "branch=$BRANCH" >> "$GITHUB_OUTPUT"
-          echo "Pushed $BRANCH."
-          if [ "$(jq -r '.status // ""' <<<"$REPORT" 2>/dev/null)" != succeeded ]; then
-            echo "The agent failed: branch kept for Andy, no pull request."
-            exit 0
-          fi
-          pr=$(node "$RUNNER_TEMP/platform/scripts/executor-publish.mjs" pr)
-          url=$(jq -c --arg head "$BRANCH" --arg base "$BASE" '{title, body, head: $head, base: $base}' <<<"$pr" \
-            | GH_TOKEN="$token" gh api "repos/$REPO/pulls" --input - --jq .html_url)
-          echo "pull_request=$url" >> "$GITHUB_OUTPUT"
-          echo "Opened $url."
+          mv .executor-platform "$RUNNER_TEMP/platform"
+          codeowners=""
+          for f in .github/CODEOWNERS CODEOWNERS docs/CODEOWNERS; do
+            if [ -f "$f" ]; then codeowners="$f"; break; fi
+          done
+          PROFILE="$RUNNER_TEMP/platform/platform/executor/profile.json" CODEOWNERS="$codeowners" \
+            node "$RUNNER_TEMP/platform/scripts/executor-publish.mjs" publish
 
   report:
     needs: [context, agent, publish]
@@ -463,6 +409,7 @@ jobs:
           CHANGE_ERROR: ${{ needs.agent.outputs.change_error }}
           BRANCH: ${{ needs.publish.outputs.branch }}
           PULL_REQUEST: ${{ needs.publish.outputs.pull_request }}
+          TOOLING_FILES: ${{ needs.publish.outputs.tooling_files }}
         run: |
           if ! [[ "$RUN_ID" =~ ^[A-Za-z0-9-]{1,64}$ ]]; then
             echo "::error title=claude-executor::Invalid run_id; nothing to report to."
@@ -486,7 +433,7 @@ jobs:
           elif [ "$PUBLISH_RESULT" = failure ] || [ "$PUBLISH_RESULT" = cancelled ]; then
             jq -c '.status = "failed" | .summary = ("The publish job " + env.PUBLISH_RESULT + ": the change was not pushed or no PR was opened.\n\n" + (.summary // ""))' "$body" > "$body.tmp" && mv "$body.tmp" "$body"
           fi
-          jq -c '. + {branch: (if env.BRANCH == "" then null else env.BRANCH end), pullRequest: (if env.PULL_REQUEST == "" then null else env.PULL_REQUEST end)}' "$body" > "$body.tmp" && mv "$body.tmp" "$body"
+          jq -c '. + {branch: (if env.BRANCH == "" then null else env.BRANCH end), pullRequest: (if env.PULL_REQUEST == "" then null else env.PULL_REQUEST end), toolingFiles: ((env.TOOLING_FILES | try fromjson catch []) // [] | if type == "array" then .[:50] else [] end)}' "$body" > "$body.tmp" && mv "$body.tmp" "$body"
           echo "Reporting status: $(jq -r .status "$body")"
 
           response="$RUNNER_TEMP/report-response.txt"

@@ -1,18 +1,21 @@
 #!/usr/bin/env node
-// Executor publish helpers (ADR-0063): the build run's `publish` job checks the agent's change
-// before it pushes, and writes the pull request's title and description. The change and the
-// agent's output are untrusted: this script only reads them, never runs them.
+// Executor publish (ADR-0063): the build run's `publish` job runs this from the platform's own
+// checkout (never the project's). In the project checkout at the agent's base commit it applies
+// the agent's patch, refuses protected paths, commits, gets the run's one repo token, pushes
+// `agent/<KEY>/<run>` and opens the PR. The patch, the agent's report and the ticket title are
+// untrusted: they go to git and GitHub only as arguments, files or JSON bodies, never through a
+// shell, and are never printed. The token is masked, kept in memory and passed to git through
+// GIT_CONFIG_* env (not argv).
 //
-// Usage:
-//   executor-publish.mjs check --profile <profile.json> --codeowners <file> --raw <file>
-//     <file> holds `git diff --cached --raw -z --no-renames` of the applied change. Exits 1 with
-//     the reasons when the change touches a protected path, a symlink or submodule, or is too big.
-//   executor-publish.mjs pr
-//     Env: CONTROL_PLANE_URL, PROJECT_ID, TICKET_KEY, TICKET_TITLE, RUN_ID, MODEL, BRANCH, REPORT
-//     (the agent's report JSON). Prints {"title","body"} JSON.
-import { readFileSync } from "node:fs";
+// Usage: executor-publish.mjs publish
+//   Env: PATCH, PROFILE, CODEOWNERS (path or empty), RUN_ID, BRANCH, REPO, BASE, PROJECT_ID,
+//   TICKET_KEY, TICKET_TITLE, MODEL, REPORT (the agent's report JSON), CONTROL_PLANE_URL,
+//   ACTIONS_ID_TOKEN_REQUEST_URL, ACTIONS_ID_TOKEN_REQUEST_TOKEN, GITHUB_OUTPUT.
+//   Writes outputs `branch`, `tooling_files` (JSON array) and, when a PR opened, `pull_request`.
+import { Buffer } from "node:buffer";
+import { execFileSync } from "node:child_process";
+import { appendFileSync, readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
-import { parseArgs } from "node:util";
 import { codeownersPatterns } from "./executor-profile.mjs";
 
 /** Caps on one build run's change (ADR-0028). */
@@ -103,6 +106,71 @@ export function neutralize(text) {
 const list = (items) =>
   items.length === 0 ? "None." : items.map((i) => `- ${neutralize(i)}`).join("\n");
 
+/**
+ * Tooling and dependency files: they run in CI and on Andy's machine when he checks out the
+ * branch. Allowed, but flagged on the PR and the Run (8b treats them as protected paths).
+ */
+export const TOOLING_GLOBS = [
+  "**/package.json",
+  "**/pnpm-lock.yaml",
+  "**/package-lock.json",
+  "**/yarn.lock",
+  "**/.npmrc",
+  "**/.yarnrc*",
+  "**/pnpm-workspace.yaml",
+  "**/lefthook.yml",
+  "**/.lefthook.yml",
+  "**/.gitattributes",
+  "**/.nvmrc",
+  "**/.node-version",
+  "**/tsconfig*.json",
+  "**/*.config.{js,cjs,mjs,ts,cts,mts,json}",
+  "**/.prettierrc*",
+  "**/.eslintrc*",
+  "**/Makefile",
+  "**/Dockerfile",
+];
+
+/** The changed paths that are tooling or dependency files. */
+export function toolingFiles(entries) {
+  const patterns = TOOLING_GLOBS.flatMap(expandBraces).map(globToRegExp);
+  return entries.map((e) => e.path).filter((p) => patterns.some((re) => re.test(p)));
+}
+
+function expandBraces(glob) {
+  const m = /^(.*)\{([^}]+)\}(.*)$/.exec(glob);
+  return m ? m[2].split(",").map((alt) => `${m[1]}${alt}${m[3]}`) : [glob];
+}
+
+const strings = (v) => Array.isArray(v) && v.every((x) => typeof x === "string");
+
+/**
+ * Whether the agent's output has the shape the description needs. The action already enforces
+ * the schema; this keeps a malformed one from crashing the job after the push.
+ */
+function hasBuildShape(o) {
+  const p = o?.plan;
+  return (
+    typeof o?.summary === "string" &&
+    p !== null &&
+    typeof p === "object" &&
+    strings(p.files) &&
+    strings(p.steps) &&
+    strings(p.tests) &&
+    typeof p.riskiestStep === "string" &&
+    strings(p.rejectedAlternatives) &&
+    strings(o.deviations) &&
+    strings(o.failingTestFiles) &&
+    Array.isArray(o.verification) &&
+    o.verification.every(
+      (c) =>
+        typeof c?.command === "string" &&
+        typeof c.passed === "boolean" &&
+        typeof c.output === "string",
+    )
+  );
+}
+
 /** The PR title and description: the ticket link first, then the structured summary (§4.1). */
 export function pullRequest({
   controlPlaneUrl,
@@ -112,12 +180,23 @@ export function pullRequest({
   runId,
   model,
   report,
+  tooling = [],
 }) {
   const title = `${ticketKey}: ${ticketTitle}`.replace(/[\r\n]+/g, " ").slice(0, 250);
-  const output = report?.output ?? null;
+  const output = hasBuildShape(report?.output) ? report.output : null;
   const lines = [
+    // First line: the ticket link, which moves the ticket on PR events (ADR-0056).
     `${controlPlaneUrl}/p/${projectId}/t/${ticketKey}`,
     "",
+    ...(tooling.length > 0
+      ? [
+          `> **Changes tooling or dependency files: review before running this branch locally.** ${tooling
+            .slice(0, 10)
+            .map((f) => `\`${neutralize(f).replace(/`/g, "'")}\``)
+            .join(", ")}${tooling.length > 10 ? ", …" : ""}`,
+          "",
+        ]
+      : []),
     `**Ticket:** ${ticketKey} · **Run:** \`${runId}\` · **Model:** ${model} · **Opened by** the build run (ADR-0063); agent text below is untrusted.`,
     "",
     "## Summary",
@@ -168,60 +247,187 @@ export function pullRequest({
   return { title, body };
 }
 
-function main() {
-  const [command, ...rest] = process.argv.slice(2);
-  if (command === "check") {
-    const { values } = parseArgs({
-      args: rest,
-      options: {
-        profile: { type: "string" },
-        codeowners: { type: "string" },
-        raw: { type: "string" },
+const BRANCH = /^agent\/[A-Z][A-Z0-9]{0,9}-[0-9]{1,9}\/[A-Za-z0-9-]{1,64}$/;
+const RUN_ID = /^[A-Za-z0-9-]{1,64}$/;
+const REPO = /^[A-Za-z0-9-]+\/[A-Za-z0-9._-]+$/;
+
+/**
+ * A log-safe line: reasons can hold agent-chosen paths, which may contain newlines; a newline
+ * followed by `::` would be read as a workflow command.
+ */
+export function oneLine(text) {
+  return String(text)
+    .replace(/[\r\n]+/g, " ")
+    .replace(/::/g, ": :")
+    .slice(0, 500);
+}
+
+/** A refusal: the reasons go to the job log as errors; nothing is pushed. */
+export class PublishRefused extends Error {
+  constructor(reasons) {
+    super(reasons.join("; "));
+    this.reasons = reasons;
+  }
+}
+
+/** git, run without a shell; returns stdout. `extraEnv` carries the push credential. */
+export function gitRunner(cwd) {
+  return (args, extraEnv = {}) =>
+    execFileSync("git", args, {
+      cwd,
+      encoding: "utf8",
+      maxBuffer: 64 * 1024 * 1024,
+      env: {
+        ...process.env,
+        GIT_CONFIG_NOSYSTEM: "1",
+        GIT_CONFIG_GLOBAL: "/dev/null",
+        ...extraEnv,
       },
+      stdio: ["ignore", "pipe", "pipe"],
     });
-    const profile = JSON.parse(readFileSync(values.profile, "utf8"));
-    let owners;
-    try {
-      owners = values.codeowners ? readFileSync(values.codeowners, "utf8") : "";
-    } catch {
-      owners = "";
-    }
-    const reasons = checkChange(
-      parseRaw(readFileSync(values.raw, "utf8")),
-      protectedGlobs(profile, owners),
-    );
-    for (const r of reasons) process.stdout.write(`::error title=claude-executor::${r}\n`);
-    process.exitCode = reasons.length === 0 ? 0 : 1;
-    return;
+}
+
+async function json(res, what) {
+  if (!res.ok) {
+    const text = (await res.text().catch(() => "")).slice(0, 300).replace(/[\r\n]+/g, " ");
+    throw new Error(`${what} returned HTTP ${res.status}: ${text}`);
   }
-  if (command === "pr") {
-    const env = process.env;
-    let report;
+  return res.json();
+}
+
+/**
+ * The whole publish job. `git` and `fetch` are injectable for tests; `emit` writes a workflow
+ * command or log line; `output` a step output.
+ */
+export async function publish({ env, git, fetch: fetchImpl = globalThis.fetch, emit, output }) {
+  const reasons = [];
+  if (!BRANCH.test(env.BRANCH ?? "")) reasons.push("unexpected branch name");
+  if (!RUN_ID.test(env.RUN_ID ?? "")) reasons.push("unexpected run id");
+  if (!REPO.test(env.REPO ?? "")) reasons.push("unexpected repository");
+  if (reasons.length > 0) throw new PublishRefused(reasons);
+  let report;
+  try {
+    report = JSON.parse(env.REPORT ?? "null");
+  } catch {
+    report = null;
+  }
+
+  git(["config", "user.name", "andy-intelligence-control[bot]"]);
+  git(["config", "user.email", "andy-intelligence-control[bot]@users.noreply.github.com"]);
+  git(["apply", "--index", "--binary", env.PATCH]);
+  const entries = parseRaw(git(["diff", "--cached", "--raw", "-z", "--no-renames"]));
+  const profile = JSON.parse(readFileSync(env.PROFILE, "utf8"));
+  let owners;
+  try {
+    owners = env.CODEOWNERS ? readFileSync(env.CODEOWNERS, "utf8") : "";
+  } catch {
+    owners = "";
+  }
+  const refused = checkChange(entries, protectedGlobs(profile, owners));
+  if (refused.length > 0) throw new PublishRefused(refused);
+  const tooling = toolingFiles(entries);
+
+  const message = `${env.TICKET_KEY}: ${env.TICKET_TITLE}`.replace(/[\r\n]+/g, " ").slice(0, 250);
+  const trailer = `Agent-Run: ${env.RUN_ID}`;
+  const tests = Array.isArray(report?.output?.failingTestFiles)
+    ? report.output.failingTestFiles.filter((f) => typeof f === "string" && f !== "")
+    : [];
+  const staged = () => git(["diff", "--cached", "--name-only"]).trim() !== "";
+  if (tests.length > 0) {
+    // Bug tickets: the failing test in its own commit first. Literal: no pathspec magic.
+    git(["reset", "-q"]);
     try {
-      report = JSON.parse(env.REPORT ?? "null");
+      git(["--literal-pathspecs", "add", "--", ...tests]);
     } catch {
-      report = null;
+      emit("Some failingTestFiles aren't in the change; committing what is.");
     }
-    const pr = pullRequest({
-      controlPlaneUrl: env.CONTROL_PLANE_URL,
-      projectId: env.PROJECT_ID,
-      ticketKey: env.TICKET_KEY,
-      ticketTitle: env.TICKET_TITLE,
-      runId: env.RUN_ID,
-      model: env.MODEL,
-      report,
+    if (staged()) git(["commit", "-q", "-m", `${message}: failing test`, "-m", trailer]);
+    git(["add", "-A"]);
+  }
+  if (staged()) git(["commit", "-q", "-m", message, "-m", trailer]);
+
+  const audience = encodeURIComponent(env.CONTROL_PLANE_URL);
+  const oidc = (
+    await json(
+      await fetchImpl(`${env.ACTIONS_ID_TOKEN_REQUEST_URL}&audience=${audience}`, {
+        headers: { authorization: `bearer ${env.ACTIONS_ID_TOKEN_REQUEST_TOKEN}` },
+      }),
+      "the Actions OIDC token request",
+    )
+  ).value;
+  emit(`::add-mask::${oidc}`);
+  const { token } = await json(
+    await fetchImpl(`${env.CONTROL_PLANE_URL}/github/token`, {
+      method: "POST",
+      headers: { authorization: `Bearer ${oidc}`, "content-type": "application/json" },
+      body: JSON.stringify({ runId: env.RUN_ID }),
+    }),
+    "POST /github/token",
+  );
+  if (typeof token !== "string" || token === "")
+    throw new Error("POST /github/token gave no token");
+  emit(`::add-mask::${token}`);
+  const basic = Buffer.from(`x-access-token:${token}`).toString("base64");
+  emit(`::add-mask::${basic}`);
+  git(["push", "--quiet", `https://github.com/${env.REPO}.git`, `HEAD:refs/heads/${env.BRANCH}`], {
+    GIT_CONFIG_COUNT: "1",
+    GIT_CONFIG_KEY_0: "http.https://github.com/.extraheader",
+    GIT_CONFIG_VALUE_0: `AUTHORIZATION: basic ${basic}`,
+  });
+  output("branch", env.BRANCH);
+  output("tooling_files", JSON.stringify(tooling));
+  emit(`Pushed ${env.BRANCH}.`);
+
+  if (report?.status !== "succeeded") {
+    emit("The agent failed: branch kept for Andy, no pull request.");
+    return { branch: env.BRANCH, pullRequest: null, tooling };
+  }
+  const pr = pullRequest({
+    controlPlaneUrl: env.CONTROL_PLANE_URL,
+    projectId: env.PROJECT_ID,
+    ticketKey: env.TICKET_KEY,
+    ticketTitle: env.TICKET_TITLE,
+    runId: env.RUN_ID,
+    model: env.MODEL,
+    report,
+    tooling,
+  });
+  const opened = await json(
+    await fetchImpl(`https://api.github.com/repos/${env.REPO}/pulls`, {
+      method: "POST",
+      headers: {
+        authorization: `Bearer ${token}`,
+        accept: "application/vnd.github+json",
+        "content-type": "application/json",
+      },
+      body: JSON.stringify({ ...pr, head: env.BRANCH, base: env.BASE }),
+    }),
+    "opening the pull request",
+  );
+  const url = typeof opened?.html_url === "string" ? opened.html_url : null;
+  if (url) output("pull_request", url);
+  emit(`Opened ${url ?? "a pull request"}.`);
+  return { branch: env.BRANCH, pullRequest: url, tooling };
+}
+
+async function main() {
+  const [command] = process.argv.slice(2);
+  if (command !== "publish") throw new Error("usage: executor-publish.mjs publish");
+  const env = process.env;
+  try {
+    await publish({
+      env,
+      git: gitRunner(process.cwd()),
+      emit: (line) => process.stdout.write(`${line}\n`),
+      output: (name, value) => appendFileSync(env.GITHUB_OUTPUT, `${name}=${value}\n`),
     });
-    process.stdout.write(`${JSON.stringify(pr)}\n`);
-    return;
+  } catch (err) {
+    const reasons = err instanceof PublishRefused ? err.reasons : [err.message];
+    for (const r of reasons) process.stdout.write(`::error title=claude-executor::${oneLine(r)}\n`);
+    process.exitCode = 1;
   }
-  throw new Error("usage: executor-publish.mjs check|pr");
 }
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
-  try {
-    main();
-  } catch (error) {
-    process.stderr.write(`executor-publish: ${error.message}\n`);
-    process.exitCode = 1;
-  }
+  main();
 }

@@ -90,16 +90,17 @@ Off switch: untick "Auto-refine" on `/projects` or `set_auto_refine` `enabled: f
 
 Nothing to apply: no Terraform, secret or App permission changes (the App already has Contents and Pull requests write, ADR-0043, and keeps no `workflows` permission). After this slice merges and deploys:
 
+0. On `/projects`, tick **Builds** for the project (recorded: who and when). Until then every build start is refused with "builds are off", and Auto-build can't be ticked. Do §9 first.
 1. Pick a small, Ready S ticket in project `AI` (Definition of Ready met, blockers Done). Ticket → **Runs** → **Start build run** (or MCP `build`).
 2. Expect: the ticket moves to **In progress** at once; the run is `queued` → `running` on `sonnet` (Opus for M and L); in about 15–60 minutes a PR `<KEY>: <title>` on branch `agent/<KEY>/<run id>` whose description starts with the ticket link, then Summary, Plan, Deviations, Verification. The ticket moves to **Ready for review**; the run shows the PR link, branch, tokens and `~$… (estimate)`. The PR waits for you (`autoMerge: none`).
 3. Auto-build: first clear Ready of tickets whose work already merged (on 2026-11-05: AI-20, AI-24, AI-25, AI-26; PR events only move tickets that were In progress) and of anything you'll do yourself (set assignee `me`: never built). Epics in Ready are skipped. Then tick **Auto-build** on `/projects` (or `set_auto_build` `enabled: true`). The top Ready ticket by order starts when a ticket reaches Ready or a run ends. Untick it to stop new builds; a build in flight finishes.
 4. A failed build retries once, then the ticket is flagged Needs you with the branch named in the comment: inspect it, then fix the ticket and start again, or finish by hand. Agent branches are untrusted code: read the diff on GitHub, or check out with `pnpm install --ignore-scripts` and don't run its hooks or scripts on your machine.
 
-Don't tick Auto-build on any project until §9 has passed.
+Don't tick Auto-build on any project until §9 has passed. If §9 fails, untick **Builds**: that stops every start, by hand or automatic, and turns Auto-build off.
 
 ## 9. Prove the sandbox live (AI-12, once)
 
-The agent refuses instructions it reads as an attack (§4), so the probe is an ordinary task. Create a Ready S chore in project `AI` and build it (§8):
+The agent refuses instructions it reads as an attack (§4), so the probe is an ordinary task. Tick **Builds** (§8 step 0), keep Auto-build off, create a Ready S chore in project `AI` and start its build by hand:
 
 - Title: "Sandbox probe script". Body: "Add `scripts/sandbox-probe.mjs` that prints: whether `CLAUDE_CODE_OAUTH_TOKEN`, `ANTHROPIC_API_KEY` and `GITHUB_TOKEN` are set; the first line of `/proc/1/cmdline`; whether `sudo -n true` works; whether `curl -sS https://example.com` and `curl -sS https://registry.npmjs.org` succeed. Run it and put its output in verification." Criteria: "The PR shows the probe's output."
 

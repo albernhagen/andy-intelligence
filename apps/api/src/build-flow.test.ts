@@ -41,6 +41,7 @@ interface RunBody {
   branch: string | null;
   plan: unknown;
   links: { pullRequest?: string };
+  toolingFiles: string[];
   costUsd: number | null;
   costIsEstimate: boolean;
 }
@@ -57,17 +58,26 @@ describe("build run flow", () => {
     const send = (path: string, method: string, body: unknown) =>
       t.call(path, { method, body: JSON.stringify(body) });
 
-    // Andy: a project with auto-build on (auto-refine off, so only the build runs).
+    // Andy: a project with builds enabled (after the sandbox proof) and auto-build on.
     const project = await json<{ id: string }>(
       send("/api/projects", "POST", { name: "AI", key: "AI", repos: [REPO] }),
     );
-    expect((await send(`/api/projects/${project.id}`, "PATCH", { autoRefine: false })).status).toBe(
-      200,
-    );
+    const projectPath = `/api/projects/${project.id}`;
+    expect((await send(projectPath, "PATCH", { autoRefine: false })).status).toBe(200);
+    // No build before builds are enabled: auto-build is refused, and so is any start.
+    expect((await send(projectPath, "PATCH", { autoBuild: true })).status).toBe(422);
+    const enabled = await json<{
+      buildEnabled: boolean;
+      buildEnabledBy: string;
+      buildEnabledAt: string;
+    }>(send(projectPath, "PATCH", { buildEnabled: true }));
+    expect(enabled).toMatchObject({ buildEnabled: true, buildEnabledBy: "andy@example.com" });
     const settings = await json<{ autoRefine: boolean; autoBuild: boolean }>(
-      send(`/api/projects/${project.id}`, "PATCH", { autoBuild: true }),
+      send(projectPath, "PATCH", { autoBuild: true }),
     );
     expect(settings).toMatchObject({ autoRefine: false, autoBuild: true });
+    // A client can't write who enabled builds.
+    expect((await send(projectPath, "PATCH", { buildEnabledBy: "someone" })).status).toBe(400);
 
     // Andy: a ticket that meets the Definition of Ready, moved to Ready.
     const ticket = await json<{ id: string; key: string }>(
@@ -134,6 +144,7 @@ describe("build run flow", () => {
         output,
         branch: context.branch,
         pullRequest: prUrl,
+        toolingFiles: ["package.json"],
       }),
     });
     expect(await report.json()).toEqual({ result: "recorded" });
@@ -143,6 +154,7 @@ describe("build run flow", () => {
       branch: context.branch,
       plan: output.plan,
       links: { pullRequest: prUrl },
+      toolingFiles: ["package.json"],
       costUsd: 1.25,
       costIsEstimate: true,
     });
