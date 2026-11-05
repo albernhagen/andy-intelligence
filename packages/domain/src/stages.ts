@@ -3,6 +3,8 @@ import type { Stage } from "@andy/contracts";
 /**
  * Allowed stage moves (ARCHITECTURE §4.1): forward one step, plus the backward moves the
  * pipeline needs (re-refine, retry, rework). Andy can force any move; the reason is optional (ADR-0057).
+ * Cancelled is reached only through `TicketService.cancel` (it stops runs first) and reopens
+ * to Backlog.
  */
 export const TRANSITIONS: Readonly<Record<Stage, readonly Stage[]>> = {
   backlog: ["ready"],
@@ -11,6 +13,7 @@ export const TRANSITIONS: Readonly<Record<Stage, readonly Stage[]>> = {
   ready_for_review: ["monitoring", "in_progress"],
   monitoring: ["done", "in_progress"],
   done: [],
+  cancelled: ["backlog"],
 };
 
 export function canTransition(from: Stage, to: Stage): boolean {
@@ -29,7 +32,8 @@ export const PIPELINE: readonly Stage[] = [
 
 /** An allowed move that goes forward one step (no re-refine, retry or rework). */
 export function isForwardMove(from: Stage, to: Stage): boolean {
-  return canTransition(from, to) && PIPELINE.indexOf(to) === PIPELINE.indexOf(from) + 1;
+  const at = PIPELINE.indexOf(from);
+  return at >= 0 && canTransition(from, to) && PIPELINE.indexOf(to) === at + 1;
 }
 
 /**

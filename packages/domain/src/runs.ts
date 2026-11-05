@@ -115,6 +115,9 @@ export class RunService {
     const project = await this.tracker.getProject(projectId);
     if (!project) throw notFound("project", projectId);
     const ticket = await this.requireTicket(projectId, ticketId);
+    if (ticket.stage === "cancelled") {
+      throw new DomainError("invalid_transition", `${ticket.key} is cancelled; reopen it first`);
+    }
     const repo = project.repos[0];
     if (!repo) throw new DomainError("invalid_repo", `project ${project.key} has no repo`);
     const active = await this.inFlight(projectId);
@@ -287,6 +290,47 @@ export class RunService {
     }
     if (result.status === "failed") await this.retryOrFlag(done, "reported a failure");
     return "recorded";
+  }
+
+  /**
+   * Cancels the ticket's runs in flight (AI-15: Cancel and archive tickets): stops each one at
+   * the executor, then marks it cancelled. Throws `cancel_failed` if the executor can't stop a
+   * dispatched run, so the caller doesn't cancel the ticket around a run that keeps going. A run
+   * that finished meanwhile is left as it is. Returns the runs it cancelled.
+   */
+  async cancelForTicket(projectId: string, ticketId: string): Promise<Run[]> {
+    const active = (await this.runs.listActive(projectId)).filter((r) => r.ticketId === ticketId);
+    const cancelled: Run[] = [];
+    for (const run of active) {
+      const handle = handleOf(run);
+      if (handle) {
+        if (!this.executor) {
+          throw new DomainError("cancel_failed", `can't stop run ${run.id}: no executor`);
+        }
+        try {
+          await this.executor.cancel(handle);
+        } catch (err) {
+          const message = err instanceof Error ? err.message : String(err);
+          log("ERROR", "run cancel failed", { runId: run.id, error: message });
+          throw new DomainError("cancel_failed", `couldn't stop run ${run.id}: ${message}`);
+        }
+      }
+      // A queued run without an executor handle is mid-dispatch: once it is cancelled here,
+      // `start` can't record the dispatch and stops the executor run itself.
+      try {
+        cancelled.push(
+          await this.runs.update(
+            run.id,
+            { status: "cancelled", endedAt: this.now().toISOString(), error: "ticket cancelled" },
+            ACTIVE_RUN_STATUSES,
+          ),
+        );
+      } catch (err) {
+        if (!(err instanceof WorkTrackerError && err.code === "conflict")) throw err;
+      }
+      log("INFO", "run cancelled with its ticket", { runId: run.id, ticketId });
+    }
+    return cancelled;
   }
 
   /**

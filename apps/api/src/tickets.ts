@@ -41,7 +41,7 @@ const QuestionParams = z.object({ questionId: z.uuid() });
 
 /** Callers can't set derived fields; the domain computes them. */
 const CreateTicket = NewTicket.omit({ dorStatus: true, needsYou: true });
-const PatchTicket = TicketFields.omit({ dorStatus: true }).extend({
+const PatchTicket = TicketFields.omit({ dorStatus: true, archived: true }).extend({
   ifUpdatedAt: Timestamp.optional(),
 });
 const MoveStage = z.object({
@@ -49,17 +49,17 @@ const MoveStage = z.object({
   force: z.boolean().default(false),
   reason: z.string().nullable().default(null),
 });
+const CancelTicket = z.object({ reason: z.string().nullable().default(null) });
+const ArchiveTicket = z.object({ archived: z.boolean().default(true) });
 const Comment = z.object({ body: z.string().min(1) });
 const Answer = z.object({ answer: z.string().min(1) });
 const Readiness = z.object({ met: z.boolean(), missing: z.array(z.string()) });
 const NeedsYou = z.object({ questions: z.array(Question), tickets: z.array(Ticket) });
-const TicketQuery = z.object({
-  stage: Stage.optional(),
-  needsYou: z
-    .enum(["true", "false"])
-    .transform((v) => v === "true")
-    .optional(),
-});
+const BoolQuery = z
+  .enum(["true", "false"])
+  .transform((v) => v === "true")
+  .optional();
+const TicketQuery = z.object({ stage: Stage.optional(), needsYou: BoolQuery, archived: BoolQuery });
 
 const secured = { security: [{ bearer: [] }] };
 
@@ -132,6 +132,20 @@ const routes = {
     path: "/api/projects/{projectId}/tickets/{ticketId}/stage",
     request: { params: TicketParams, ...body(MoveStage) },
     responses: { 200: ok(Ticket, "Moved"), ...errors },
+  }),
+  cancelTicket: createRoute({
+    ...secured,
+    method: "post",
+    path: "/api/projects/{projectId}/tickets/{ticketId}/cancel",
+    request: { params: TicketParams, ...body(CancelTicket) },
+    responses: { 200: ok(Ticket, "Cancelled; runs in flight stopped first"), ...errors },
+  }),
+  archiveTicket: createRoute({
+    ...secured,
+    method: "post",
+    path: "/api/projects/{projectId}/tickets/{ticketId}/archive",
+    request: { params: TicketParams, ...body(ArchiveTicket) },
+    responses: { 200: ok(Ticket, "Archived or unarchived"), ...errors },
   }),
   listEvents: createRoute({
     ...secured,
@@ -233,6 +247,18 @@ export function registerTicketRoutes(
     const { projectId, ticketId } = c.req.valid("param");
     const { to, force, reason } = c.req.valid("json");
     return c.json(await service.move(projectId, ticketId, to, "andy", { force, reason }), 200);
+  });
+
+  app.openapi(routes.cancelTicket, async (c) => {
+    const { projectId, ticketId } = c.req.valid("param");
+    const { reason } = c.req.valid("json");
+    return c.json(await service.cancel(projectId, ticketId, "andy", reason), 200);
+  });
+
+  app.openapi(routes.archiveTicket, async (c) => {
+    const { projectId, ticketId } = c.req.valid("param");
+    const { archived } = c.req.valid("json");
+    return c.json(await service.archive(projectId, ticketId, archived, "andy"), 200);
   });
 
   app.openapi(routes.listEvents, async (c) => {

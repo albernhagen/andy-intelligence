@@ -138,6 +138,48 @@ describe("tickets UI", () => {
   });
 });
 
+describe("cancel and archive", () => {
+  it("GivenATicket_WhenAndyCancelsItWithAReasonAndArchivesIt_ThenTheBoardHidesItUntilShowArchived", async () => {
+    const harness = renderApp();
+    await harness.tracker.createProject({ name: "AI", key: "AI" });
+    const ticket = await harness.service.create("ai", readyStory, "andy");
+    await harness.router.navigate({ to: `/p/ai/t/${ticket.id}` });
+    const { user } = harness;
+
+    expect(screen.queryByRole("button", { name: "Archive" })).toBeNull();
+    await user.click(await screen.findByRole("button", { name: "Cancel ticket…" }));
+    await user.type(screen.getByLabelText("Why cancel (optional)"), "not needed");
+    await user.click(screen.getByRole("button", { name: "Cancel ticket" }));
+
+    const history = screen.getByRole("region", { name: "History" });
+    expect(await within(history).findByText(/moved Backlog → Cancelled/)).toBeTruthy();
+    expect(within(history).getByText("not needed")).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Move to Backlog" })).toBeTruthy();
+
+    await user.click(screen.getByRole("button", { name: "Archive" }));
+    expect(await screen.findByRole("button", { name: "Unarchive" })).toBeTruthy();
+    expect((await harness.tracker.getTicket("ai", ticket.id))?.archived).toBe(true);
+
+    await harness.router.navigate({ to: "/p/ai" });
+    const cancelled = await screen.findByRole("region", { name: "Cancelled" });
+    expect(within(cancelled).queryByText(/Board/)).toBeNull();
+    await user.click(screen.getByLabelText("Show archived"));
+    expect(await within(cancelled).findByText(/Board/)).toBeTruthy();
+  });
+
+  it("GivenACancelledTicket_WhenAndyReopensIt_ThenItIsBackInBacklog", async () => {
+    const harness = renderApp();
+    await harness.tracker.createProject({ name: "AI", key: "AI" });
+    const ticket = await harness.service.create("ai", readyStory, "andy");
+    await harness.service.cancel("ai", ticket.id, "andy");
+    await harness.router.navigate({ to: `/p/ai/t/${ticket.id}` });
+
+    await harness.user.click(await screen.findByRole("button", { name: "Move to Backlog" }));
+    expect(await screen.findByRole("button", { name: "Cancel ticket…" })).toBeTruthy();
+    expect((await harness.tracker.getTicket("ai", ticket.id))?.stage).toBe("backlog");
+  });
+});
+
 describe("Needs-you inbox", () => {
   it("GivenNothingOpen_WhenOpeningTheInbox_ThenItSaysNothingNeedsYou", async () => {
     renderApp("/");

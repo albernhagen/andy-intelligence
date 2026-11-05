@@ -4,6 +4,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import type { Ticket } from "@andy/contracts";
 import { AskQuestionForm } from "@/components/AskQuestionForm";
 import { History } from "@/components/History";
+import { CancelArchiveControls } from "@/components/CancelArchiveControls";
 import { MoveControls } from "@/components/MoveControls";
 import { QuestionCard } from "@/components/QuestionCard";
 import { Runs } from "@/components/Runs";
@@ -69,6 +70,7 @@ export function TicketPage() {
         <Badge>{STAGE_LABELS[t.stage]}</Badge>
         <Badge>{t.type}</Badge>
         {t.needsYou && <Badge variant="attention">needs you</Badge>}
+        {t.archived && <Badge>archived</Badge>}
         {!editing && (
           <Button size="sm" variant="outline" className="ml-auto" onClick={() => setEditing(true)}>
             Edit
@@ -83,6 +85,7 @@ export function TicketPage() {
       )}
       <Readiness projectId={path.projectId} ticketId={path.ticketId} />
       <MoveControls ticket={t} />
+      <CancelArchiveControls ticket={t} />
       <Runs projectId={path.projectId} ticketId={path.ticketId} />
       <Questions projectId={path.projectId} ticketId={path.ticketId} />
       <Events projectId={path.projectId} ticketId={path.ticketId} />

@@ -22,6 +22,7 @@ const ticket: Ticket = {
   needsYou: false,
   dorStatus: "not_met",
   blockedBy: [],
+  archived: false,
   createdAt: "2026-10-21T00:00:00Z",
   updatedAt: "2026-10-21T00:00:00Z",
 };
@@ -43,6 +44,12 @@ describe("zodConverter", () => {
   it("strips the version and validates on read", () => {
     expect(conv.fromFirestore(snap({ ...ticket, _v: 1 }))).toEqual(ticket);
     expect(() => conv.fromFirestore(snap({ ...ticket, stage: "nope" }))).toThrow();
+  });
+
+  it("GivenATicketWrittenBeforeArchiving_WhenRead_ThenItIsNotArchived", () => {
+    const older: Partial<Ticket> = { ...ticket };
+    delete older.archived;
+    expect(conv.fromFirestore(snap({ ...older, _v: 1 }))).toEqual(ticket);
   });
 
   it("nests ticket history under the ticket", () => {
