@@ -118,7 +118,7 @@ Enterprise-shaped (durable state, policy, gates, least privilege, audit, contrac
 - **No open questions.** Assumptions listed explicitly.
 - Per-project policy may allow "proceed on documented assumptions" for S tasks only; default is **require Andy's answers**. Overnight runs (ADR-0049) answer everything before launch and decide later ambiguity on recorded assumptions, listed in the morning report.
 - **Epics** need only a stated intent and no open questions (no criteria, size or tier).
-- Checked in `packages/domain` (`checkDor`); `dorStatus` is computed on every change, never set by callers. EARS = any criterion containing "THE SYSTEM SHALL".
+- Checked in `packages/domain` (`checkDor`); `dorStatus` is computed on every change, never set by callers. EARS = any criterion containing "THE SYSTEM SHALL". Planned changes: ADR-0058.
 
 ### 4.3 Refinement and questions
 - Every story receives a refinement pass: the agent drafts the story, lists assumptions, and asks **1–5 targeted questions** (highest-impact ambiguities first; multiple choice with a suggested default where possible).
@@ -159,7 +159,7 @@ All records carry `project_id` where applicable. Documents are validated with th
 | Entity | Key fields |
 |---|---|
 | **Project** | name, repos, GCP dev/prod project IDs, policy overrides, budget allocation, autonomy level, enabled |
-| **Ticket** (system of record) | key (e.g. `AI-42`), title, body, acceptance criteria (EARS), assumptions, type (epic/story/task/bug), parent, stage, size, size reason, tier, overrides (assignee agent/me, tier, model pin, autonomy, target env), needs_you, DoR status, rank, blocked_by (ticket ids), archived |
+| **Ticket** (system of record) | key (e.g. `AI-42`), title, body, acceptance criteria (EARS), assumptions, type (epic/story/task/bug; renamed by ADR-0058), parent, stage, size, size reason, tier, overrides (assignee agent/me, tier, model pin, autonomy, target env), needs_you, DoR status, rank, blocked_by (ticket ids), archived |
 | **TicketEvent** | ticket, kind (comment / stage_change / field_change / run_linked / pr_linked …), actor (andy / agent:<run> / system), body/diff, timestamp — the ticket's full history |
 | **Question** | ticket, text, options, suggested_answer, assumptions, urgency, status, answer, answered_via, run (if an agent asked), timestamps |
 | **Run** | ticket, step (refine/plan/build/review/verify/scout), harness, provider, model, tier, status, started/ended, deadline, attempt + retry_of, tokens, cost_usd (actual or API-equivalent estimate), quota snapshot, links (Action run, Jules session, PR), executor identity (e.g. Actions `run_id` + workflow ref, Jules session id) used to authenticate/correlate completion signals, **outcome** (merged_clean / reworked / reverted / failed), would_auto_merge |
@@ -269,19 +269,19 @@ v1.x screens:
 - **Phone** (M7: Mobile, ADR-0052): the same SPA installed from Safari as a web app, phone layout for the inbox, ticket detail, releases and the quota banner; push notifications deep-link to the item; answer, approve plan or PR, promote, pause dispatch from the phone.
 - **Quota & spend** (per provider gauges with reset times; paid spend vs caps; persistent banner on warn/pause).
 - **Projects** (list, config, policy overrides).
-- **Tickets** — M1: list view grouped by stage, ticket detail with history and linked runs/PRs/cost, create/edit. M2: filter and group by project. Drag-and-drop (dnd-kit): built early (AI-16). M5: epic grouping, overrides editing.
+- **Tickets** — M1: one column per stage with drag-and-drop (AI-16), ticket detail with history and linked runs/PRs/cost, create/edit. Before M2 (ADR-0059): project switcher, status on cards, story panel, command palette. M2: filter and group by project. M5: epic grouping, overrides editing.
 - **Run detail** — M1: run summary inside ticket detail. M5: dedicated screen (metadata, cost, outcome, links out to Action log / Jules session / PR).
 - **Config** (providers, harnesses, models, tiers, policies; audit log with revert; pending approvals).
 - **Releases** (dev status, promote to prod, rollback).
 - **Dashboards** — M5 (ADR-0045): delivery (tickets by stage over time, lead time, rework, CI green on first try, review blockers), cost, quota and tokens per run and step over time (ADR-0046), per project and overall; aggregation queries + shadcn charts. DORA metrics from M6.
 
-**Design (M5, ADR-0045):** `apps/web/design.md` + shadcn theme tokens are the design source of truth that agents and design skills read. Design skills are pluggable per project (custom-skill context source, §7.6); Hallmark is the first candidate, trialled on one screen. Visual checks: Playwright screenshots + `sloplint --render` (non-blocking).
+**Design (ADR-0045; before M2, ADR-0059):** `apps/web/design.md` + shadcn theme tokens are the design source of truth agents and design skills read; Playwright screenshot checks. M5: design skills, pluggable per project (custom-skill context source, §7.6); Hallmark trial first; `sloplint --render` (non-blocking).
 API client generated from OpenAPI.
 
 **Built in M1.3: UI: tickets + inbox:**
 - Routes: `/` Needs-you inbox; `/projects`; `/p/:projectId` tickets in one column per stage; `/p/:projectId/t/:ticketRef` detail (ref = key, e.g. `AI-2`; an id or wrong project switches to the canonical URL).
-- Detail (`/p/<project>/t/<KEY>`; old id URLs redirect): edit fields (saves send `ifUpdatedAt`; a 409 conflict asks Andy to reload), Definition of Ready from `/readiness`, history with comments, the ticket's questions, and "Ask a question…".
-- Moves: one button per move in `TRANSITIONS` (`packages/domain`), plus "Force move…" to any other stage (skips the rules; recorded in history). Board drag-and-drop (mouse, touch, keyboard): allowed column = normal move, else forced (not onto Cancelled). "Cancel ticket…" (optional reason), Archive/Unarchive, board "Show archived" toggle. The API enforces rules; errors show inline.
+- Detail: edit fields (saves send `ifUpdatedAt`; a 409 conflict asks Andy to reload), Definition of Ready from `/readiness`, history with comments, the ticket's questions, and "Ask a question…".
+- Moves: one button per move in `TRANSITIONS` (`packages/domain`), plus "Force move…" (skips the rules; recorded). Board drag-and-drop (mouse, touch, keyboard): allowed column = normal move, else forced (not onto Cancelled). Cancel (optional reason), Archive/Unarchive, "Show archived" toggle. The API enforces rules; errors show inline.
 - Client: `openapi-fetch` typed by `apps/web/src/lib/api.gen.ts`, generated in-process from `createApp`'s OpenAPI document (`pnpm --filter @andy/web gen:api`); a test fails when it is stale. Every write refetches all queries (one user, small data).
 - Untrusted text renders as plain text (no HTML or markdown).
 - Tests render the UI against the in-process API (`createApp` + fakes); browser e2e later.
@@ -484,7 +484,7 @@ Each milestone must work **end to end** before the next starts. Acceptance crite
 | M2 | Multi-project in parallel | Several repos onboarded; stories per project; runs across projects at once under caps and quota |
 | M3 | Add Jules + model routing | Second agent; tiers route work by size; cross-model review |
 | M4 | Paid models + spend caps | OpenRouter/OpenCode, hard spend caps, weekly model scout |
-| M5 | Epics + story board | Epics; epic grouping on the board; config editing; UI design system and dashboards |
+| M5 | Epics + story board | Epics; epic grouping on the board; config editing; design skills and dashboards |
 | M6 | Dev → prod releases | Per-project dev/prod deploys, verification, one-click promote, DORA metrics |
 | M7 | Mobile | The UI installed on Andy's phone with push notifications; answer, approve, promote and pause from anywhere |
 
@@ -523,10 +523,10 @@ Repo scaffold, contracts package, Terraform for control-plane GCP project (plan 
 | **M1.9: Quota capture** | Timeboxed, best-effort. Capture claude-sub `rate_limits` from runs if available headless; otherwise readings stay **unknown** per policy. UI banner on warn/pause/unknown. | S | M1.8: Build + gate | Gauge shows a reading or "unknown"; banner appears at thresholds (test with seeded readings) |
 | **M1.17: Agent evals v1** | Eval suite for the agent configuration (ADR-0040): `Evaluator` port + fake + contract suite; cases = input (diff, ticket) + deterministic checks on structured output; seed cases from the review demos (PR #12, PR #22: planted bugs must get a high/critical or `blocker`), clean diffs (no blocker) and the first real runs' refine and build outputs; required `agent-evals` check that runs when `platform/procedures/**`, `AGENTS.md`, `template/AGENTS.md.template` or `.claude/**` change, passes without running otherwise, fails below the pass-rate threshold; capped cases/turns per run (subscription quota). Pick the tool first (promptfoo is the candidate). Each case records input tokens; a token jump fails like a pass-rate drop (ADR-0046). | M | M1.8: Build + gate | A PR that weakens the adversarial procedure (e.g. drops the failing-scenario rule) fails `agent-evals`; reverting it passes; a code-only PR skips the run |
 
-Waves (ADR-0050): M1.6a → M1.7 → M1.8 → M1.6b ‖ M1.17: Agent evals v1 ‖ M1.9: Quota capture. M1.18: Plan step is folded into M1.8.
+Waves (ADR-0050): M1.6a → M1.7 → M1.8 → M1.6b ‖ M1.17: Agent evals v1 ‖ M1.9: Quota capture. M1.18: Plan step is folded into M1.8. Before M2: ticket model v2, UX foundation (ADR-0058, ADR-0059).
 
 ### M2: Multi-project in parallel
-Andy builds several systems at once (ADR-0035). Onboard N projects via M1.5: GitHub App + project registration and M1.16: Project baseline v1 (per-PR reviews, local gates, weekly system review: §9.1, §4.5, §10.2); **stories by project** in the UI and MCP (`list_projects`, per-project lists, inbox grouped by project); concurrent runs across projects with explicit caps (max runs per project and globally, ADR-0028); quota-aware dispatch so parallel runs keep the subscription reserves (§5); agent read access to API/MCP scoped per project; coordination of parallel work (ADR-0047: conflict-aware dispatch, sync runs, merge queue, collision-free IDs, in-flight view, cross-project dependencies); **onboarding interview and project brief** (ADR-0053); dispatch also capped by PRs waiting for Andy (review capacity), repeated review findings become a pending `ConfigChange` to `AGENTS.md` or a procedure (ADR-0040); **ideation** (ADR-0050): `/ideate` from Claude desktop, Claude Code or the UI turns an idea into an epic ticket in its project with a `specs/` draft in the repo (§7.3, §8). Slice at milestone start.
+Andy builds several systems at once (ADR-0035). Onboard N projects via M1.5: GitHub App + project registration and M1.16: Project baseline v1 (per-PR reviews, local gates, weekly system review: §9.1, §4.5, §10.2); **stories by project** in the UI and MCP (`list_projects`, per-project lists, inbox grouped by project); concurrent runs across projects with explicit caps (max runs per project and globally, ADR-0028); quota-aware dispatch so parallel runs keep the subscription reserves (§5); agent read access to API/MCP scoped per project; coordination of parallel work (ADR-0047: conflict-aware dispatch, sync runs, merge queue, collision-free IDs, in-flight view, cross-project dependencies); **onboarding interview and project brief** (ADR-0053); dispatch also capped by PRs waiting for Andy (review capacity), repeated review findings become a pending `ConfigChange` to `AGENTS.md` or a procedure (ADR-0040); **ideation** (ADR-0050): `/ideate` from Claude desktop, Claude Code or the UI turns an idea into an epic ticket in its project with a `specs/` draft in the repo (§7.3, §8); spike tickets (ADR-0058). Slice at milestone start.
 
 ### M3: Add Jules + model routing
 After M6: Dev → prod releases (ADR-0050). Jules adapter (completion via PR webhook); freeze `Executor` contract (two adapters pass contract tests); harness/provider/model/tier config with compatibility rules; cross-model review; google-sub quota (task counting) and reserves. Slice at milestone start.
@@ -535,7 +535,7 @@ After M6: Dev → prod releases (ADR-0050). Jules adapter (completion via PR web
 After M3: Add Jules + model routing (ADR-0050): the spend-optimization goal, started when the Claude plan is cut or cheaper models are wanted. OpenCode executor via Actions; OpenRouter direct-call gateway for single-call steps; a capped API-key Claude provider; global and per-project caps with hard stops; quota-aware route fallback with 20% reserves; weekly model scout producing pending tier changes. Slice at milestone start.
 
 ### M5: Epics + story board
-Epics with child tickets and dependencies; just-in-time re-planning; config editing and audit/revert in UI and MCP; epic grouping on the board; dedicated run-detail screen; UI design system (`design.md` + tokens), pluggable design skills with a Hallmark trial, Playwright screenshot checks, and a Dashboards screen (ADR-0045) including tokens per run and per step (ADR-0046); **overnight runs** (ADR-0049: launch step with batched answers and plan approvals, one-night epic branch, night budget and stop time, morning report as a Needs-you item). Slice at milestone start.
+Epics with child tickets and dependencies; just-in-time re-planning; config editing and audit/revert in UI and MCP; epic grouping on the board; dedicated run-detail screen; pluggable design skills with a Hallmark trial and a Dashboards screen (ADR-0045; `design.md` earlier, ADR-0059) including tokens per run and per step (ADR-0046); **overnight runs** (ADR-0049: launch step with batched answers and plan approvals, one-night epic branch, night budget and stop time, morning report as a Needs-you item). Slice at milestone start.
 
 ### M6: Dev → prod releases
 Environments as per-project policy (ADR-0050): MVPs get one prod project + PR previews; dev + prod when a project opts in. Project template Terraform + Cloud Deploy dev→prod, with a budget and caps per project (§10.1); dev deploy + verification (Playwright/API tests + verification agent); promote/rollback from UI and MCP; release notes; DORA metrics (deploy frequency, lead time, change failure rate, time to restore; ADR-0040). Slice at milestone start.
