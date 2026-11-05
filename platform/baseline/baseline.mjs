@@ -174,9 +174,7 @@ function filesCommand(repo, ref) {
   run(
     "gh",
     ["pr", "create", "--repo", repo, "--head", branch, "--title", message, "--body", body],
-    {
-      stdio: "inherit",
-    },
+    { stdio: "inherit", env },
   );
 }
 
