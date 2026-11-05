@@ -3,6 +3,15 @@ import { z } from "zod";
 export const Id = z.string().min(1);
 export type Id = z.infer<typeof Id>;
 
+/**
+ * A question's id as callers send it (URL path, MCP tool input). Two forms exist: a UUID for
+ * questions Andy or the system asked, and `<runId>-q<n>` for questions an agent run asked
+ * (`runQuestionId`). Letters, digits and `-` only, so it is safe in a storage path (no `/`, no
+ * `.`, and never Firestore's reserved `__name__` form); capped.
+ */
+export const QuestionId = z.string().regex(/^[A-Za-z0-9-]{1,64}$/, "Invalid question id");
+export type QuestionId = z.infer<typeof QuestionId>;
+
 export const Timestamp = z.iso.datetime({ offset: true });
 
 /**

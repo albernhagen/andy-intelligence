@@ -1,6 +1,7 @@
 import {
   NewTicket,
   Project,
+  QuestionId,
   Stage,
   TicketKey,
   WorkTrackerError,
@@ -48,7 +49,7 @@ const CreateTicketInput = NewTicket.omit({ dorStatus: true, needsAttention: true
 }).shape;
 
 const AnswerInput = {
-  questionId: z.uuid().describe("Question id from `list_needs_me`."),
+  questionId: QuestionId.describe("Question id from `list_needs_me`."),
   answer: z.string().trim().min(1),
 };
 
