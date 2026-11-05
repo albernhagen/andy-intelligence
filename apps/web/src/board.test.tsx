@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { screen, waitFor, within } from "@testing-library/react";
+import { fireEvent, screen, waitFor, within } from "@testing-library/react";
 import { STAGES } from "@/lib/tickets";
 import { readyStory, renderApp } from "@/test/harness";
 
@@ -100,5 +100,77 @@ describe("board drag-and-drop", () => {
     await waitFor(() => expect(screen.getAllByRole("alert")).toHaveLength(2));
     expect(within(backlog).getByText(first.key)).toBeTruthy();
     expect(within(backlog).getByText(second.key)).toBeTruthy();
+  });
+});
+
+/**
+ * AI-25: Dropping a card on the board opens the ticket. A real mouse drag ends with a click on
+ * the card's link. Once a drag starts, dnd-kit stops that click's propagation at the document, so
+ * React never sees it; only cancelling its default keeps the browser from following the href.
+ * fireEvent.click returns false when the click's default was prevented.
+ */
+async function mouseDrag(key: string, columns: number, { click = true } = {}) {
+  const card = document.querySelector<HTMLElement>(`[data-ticket="${key}"]`)!;
+  const y = 65;
+  fireEvent.mouseDown(card, { button: 0, clientX: 100, clientY: y });
+  fireEvent.mouseMove(document, { clientX: 110, clientY: y });
+  fireEvent.mouseMove(document, { clientX: 100 + columns * COLUMN_WIDTH, clientY: y });
+  fireEvent.mouseUp(document, { button: 0, clientX: 100 + columns * COLUMN_WIDTH, clientY: y });
+  return click ? fireEvent.click(card, { button: 0, detail: 1 }) : true;
+}
+
+/** dnd-kit keeps swallowing clicks for 50 ms after a drop; no person clicks again that fast. */
+const dndKitClickWindow = () => new Promise((resolve) => setTimeout(resolve, 60));
+
+describe("board drop keeps the board in view (AI-25)", () => {
+  it("GivenABacklogTicket_WhenMouseDroppedOnDone_ThenItMovesAndTheLinkIsNotFollowed", async () => {
+    const { harness, ticket } = await boardWith({ type: "task", title: "Spike" });
+
+    const followed = await mouseDrag(ticket.key, 5);
+
+    expect(followed).toBe(false);
+    const done = screen.getByRole("region", { name: "Done" });
+    expect(await within(done).findByText(ticket.key)).toBeTruthy();
+    expect(harness.router.state.location.pathname).toBe("/p/ai");
+  });
+
+  it("GivenACardWasJustDropped_WhenItIsClicked_ThenTheTicketOpens", async () => {
+    const { harness, ticket } = await boardWith({ type: "task", title: "Spike" });
+    await mouseDrag(ticket.key, 5);
+    const done = screen.getByRole("region", { name: "Done" });
+    await within(done).findByText(ticket.key);
+    await dndKitClickWindow();
+
+    await harness.user.click(within(done).getByText(ticket.key));
+
+    await waitFor(() =>
+      expect(harness.router.state.location.pathname).toBe(`/p/ai/t/${ticket.key}`),
+    );
+  });
+
+  it("GivenADropWithNoTrailingClick_WhenEnterIsPressedOnTheCard_ThenTheTicketOpens", async () => {
+    const { harness, ticket } = await boardWith({ type: "task", title: "Spike" });
+    // Like a touch drop: no click follows it, so the suppression is still armed.
+    await mouseDrag(ticket.key, 5, { click: false });
+    const done = screen.getByRole("region", { name: "Done" });
+    await within(done).findByText(ticket.key);
+    await dndKitClickWindow();
+
+    document.querySelector<HTMLElement>(`[data-ticket="${ticket.key}"]`)!.focus();
+    await harness.user.keyboard("{Enter}");
+
+    await waitFor(() =>
+      expect(harness.router.state.location.pathname).toBe(`/p/ai/t/${ticket.key}`),
+    );
+  });
+
+  it("GivenABacklogTicket_WhenKeyboardDroppedOnDone_ThenTheBoardStaysInView", async () => {
+    const { harness, ticket } = await boardWith({ type: "task", title: "Spike" });
+
+    await drag(harness.user, ticket.key, 5);
+
+    const done = screen.getByRole("region", { name: "Done" });
+    expect(await within(done).findByText(ticket.key)).toBeTruthy();
+    expect(harness.router.state.location.pathname).toBe("/p/ai");
   });
 });
