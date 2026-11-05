@@ -22,6 +22,11 @@ export const MAX_BUILD_RUNS_PER_TICKET = 4;
  */
 export const MAX_TICKETS_IN_FLIGHT = 3;
 
+/** Andy does the work himself (`overrides.assignee: "me"`): no build run, ever; refine still runs. */
+export function isAndysWork(ticket: Pick<Ticket, "overrides">): boolean {
+  return ticket.overrides.assignee === "me";
+}
+
 /** The branch a build run pushes. One per run, so a retry never overwrites kept partial work. */
 export function branchFor(ticketKey: string, runId: string): string {
   return `agent/${ticketKey}/${runId}`;

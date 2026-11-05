@@ -1,5 +1,10 @@
 import type { Run, RunStore, Ticket, WorkTracker } from "@andy/contracts";
-import { MAX_BUILD_RUNS_PER_TICKET, MAX_TICKETS_IN_FLIGHT, unfinishedBlockers } from "./builds";
+import {
+  MAX_BUILD_RUNS_PER_TICKET,
+  MAX_TICKETS_IN_FLIGHT,
+  isAndysWork,
+  unfinishedBlockers,
+} from "./builds";
 import { checkDor } from "./dor";
 import type { RunService } from "./runs";
 import { DomainError } from "./tickets";
@@ -15,7 +20,7 @@ function log(severity: "INFO" | "WARNING" | "ERROR", message: string, fields: ob
  * is turned on. Each call starts at most one run: the first waiting Ready ticket by rank (order
  * is priority, ADR-0058).
  *
- * A Ready ticket waits when it isn't archived or flagged Needs-you, meets the Definition of Ready,
+ * A Ready ticket waits when it isn't an epic, assigned to Andy (`overrides.assignee: "me"`), archived or flagged Needs-you, meets the Definition of Ready,
  * has every `blockedBy` ticket Done and is under its build-run cap. The project's
  * one-run-in-flight cap (ADR-0028) queues the rest; MAX_TICKETS_IN_FLIGHT stops dispatch while
  * too many built tickets wait for review.
@@ -54,7 +59,10 @@ export class BuildDispatcher {
 
     // listTickets is sorted by rank: the first waiting ticket is the top of the order.
     for (const ticket of tickets.filter((t) => t.stage === "ready")) {
-      if (ticket.needsAttention || !(await this.waiting(ticket))) continue;
+      // An epic never runs (ADR-0058); refine can leave one in Ready. Andy's own work never builds.
+      if (ticket.type === "epic" || isAndysWork(ticket)) continue;
+      if (ticket.archived || ticket.needsAttention) continue;
+      if (!(await this.waiting(ticket))) continue;
       try {
         const run = await this.runs.start(projectId, ticket.id, "build");
         log("INFO", "build started on its own", { ticket: ticket.key, runId: run.id });

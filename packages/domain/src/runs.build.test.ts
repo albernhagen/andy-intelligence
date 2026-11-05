@@ -84,6 +84,26 @@ describe("RunService build runs", () => {
     await rejects(service.start(projectId, t.id, "build"), "not_buildable");
   });
 
+  it("GivenATicketAssignedToAndy_WhenABuildIsStarted_ThenNotBuildableButRefineStillRuns", async () => {
+    const mine = await ticketIn("ready", { overrides: { assignee: "me" } });
+    await expect(service.start(projectId, mine.id, "build")).rejects.toMatchObject({
+      code: "not_buildable",
+      message: expect.stringContaining("assigned to Andy"),
+    });
+    const backlog = await ticketIn("backlog", { overrides: { assignee: "me" } });
+    expect((await service.start(projectId, backlog.id, "refine")).step).toBe("refine");
+  });
+
+  it("GivenAReadyEpic_WhenABuildIsStarted_ThenNotBuildable", async () => {
+    const epic = await ticketIn("ready", {
+      type: "epic",
+      acceptanceCriteria: [],
+      size: null,
+      sizeReason: null,
+    });
+    await rejects(service.start(projectId, epic.id, "build"), "not_buildable");
+  });
+
   it("GivenAReadyTicketBlockedByAnOpenTicket_WhenABuildIsStarted_ThenNotBuildable", async () => {
     const blocker = await ticketIn("backlog");
     const t = await ticketIn("ready", { blockedBy: [blocker.key] });

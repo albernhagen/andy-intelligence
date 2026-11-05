@@ -27,6 +27,7 @@ import {
   branchFor,
   buildPrompt,
   buildRoute,
+  isAndysWork,
   isPullRequestOf,
   unfinishedBlockers,
 } from "./builds";
@@ -438,6 +439,16 @@ export class RunService {
    * blockers are Done, at most MAX_BUILD_RUNS_PER_TICKET times.
    */
   private async checkBuildable(ticket: Ticket): Promise<void> {
+    if (isAndysWork(ticket)) {
+      throw new DomainError("not_buildable", `${ticket.key} is assigned to Andy`, [
+        'overrides.assignee is "me": Andy does this one; clear it to let an agent build',
+      ]);
+    }
+    if (ticket.type === "epic") {
+      throw new DomainError("not_buildable", `${ticket.key} is an epic`, [
+        "epics never run (ADR-0058); build its stories",
+      ]);
+    }
     if (!BUILDABLE_STAGES.includes(ticket.stage)) {
       throw new DomainError("not_buildable", `${ticket.key} is in ${ticket.stage}`, [
         "build runs on Ready or In progress tickets",

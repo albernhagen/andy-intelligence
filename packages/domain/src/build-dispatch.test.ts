@@ -161,6 +161,45 @@ describe("BuildDispatcher", () => {
     expect(await dispatcher.next(projectId)).toBeNull();
   });
 
+  it("GivenAnEpicAtTheTopOfReady_WhenNext_ThenItIsSkippedAndTheNextTicketStarts", async () => {
+    const { dispatcher } = wire();
+    const epic = await inReady("Milestone", {
+      type: "epic",
+      acceptanceCriteria: [],
+      size: null,
+      sizeReason: null,
+    });
+    const story = await inReady("Story");
+    expect((await dispatcher.next(projectId))?.ticketId).toBe(story.id);
+    expect(await builds(epic.id)).toEqual([]);
+  });
+
+  it("GivenATopTicketAssignedToAndy_WhenNext_ThenItIsSkippedAndTheNextTicketStarts", async () => {
+    const { dispatcher } = wire();
+    const mine = await inReady("Mine", { overrides: { assignee: "me" } });
+    const story = await inReady("Story");
+    expect((await dispatcher.next(projectId))?.ticketId).toBe(story.id);
+    expect(await builds(mine.id)).toEqual([]);
+  });
+
+  it("GivenAnArchivedReadyTicket_WhenNext_ThenItIsSkipped", async () => {
+    const { dispatcher } = wire();
+    const t = await inReady("Archived");
+    await tracker.updateTicket(projectId, t.id, { fields: { archived: true } }, "andy");
+    expect(await dispatcher.next(projectId)).toBeNull();
+    expect(await builds(t.id)).toEqual([]);
+  });
+
+  it("GivenACancelledTicket_WhenNext_ThenItIsNeverBuilt", async () => {
+    const { dispatcher, tickets } = wire();
+    const t = await inReady("Cancelled");
+    await tracker.updateProject(projectId, { autoBuild: false });
+    await tickets.cancel(projectId, t.id, "andy");
+    await tracker.updateProject(projectId, { autoBuild: true });
+    expect(await dispatcher.next(projectId)).toBeNull();
+    expect(await builds(t.id)).toEqual([]);
+  });
+
   it("GivenTooManyTicketsWaitingForReview_WhenNext_ThenDispatchPauses", async () => {
     const { dispatcher } = wire();
     for (let i = 0; i < MAX_TICKETS_IN_FLIGHT; i++) {
