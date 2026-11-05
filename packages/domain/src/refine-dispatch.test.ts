@@ -212,6 +212,20 @@ describe("RefineDispatcher", () => {
     expect(await refines(second.id)).toHaveLength(1);
   });
 
+  it("GivenCancelledAndArchivedTickets_WhenAutoRefineTurnsOn_ThenNeitherIsRefined", async () => {
+    const { tickets, projects } = wire();
+    await projects.update(projectId, { autoRefine: false });
+    const cancelled = await tickets.create(projectId, { type: "story", title: "One" }, "andy");
+    await tickets.cancel(projectId, cancelled.id, "andy");
+    const archived = await tickets.create(projectId, { type: "story", title: "Two" }, "andy");
+    // Archived while in Backlog (e.g. reopened after archiving): still hidden, still skipped.
+    await tracker.updateTicket(projectId, archived.id, { fields: { archived: true } }, "andy");
+
+    await projects.update(projectId, { autoRefine: true });
+    expect(await refines(cancelled.id)).toEqual([]);
+    expect(await refines(archived.id)).toEqual([]);
+  });
+
   it("GivenAutoRefineOff_WhenATicketIsCreated_ThenNoRunStartsUntilItIsTurnedOn", async () => {
     const { tickets, projects } = wire();
     await projects.update(projectId, { autoRefine: false });
