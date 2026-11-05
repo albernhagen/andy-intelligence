@@ -109,14 +109,14 @@ describe("board drag-and-drop", () => {
  * React never sees it; only cancelling its default keeps the browser from following the href.
  * fireEvent.click returns false when the click's default was prevented.
  */
-async function mouseDrag(key: string, columns: number) {
+async function mouseDrag(key: string, columns: number, { click = true } = {}) {
   const card = document.querySelector<HTMLElement>(`[data-ticket="${key}"]`)!;
   const y = 65;
   fireEvent.mouseDown(card, { button: 0, clientX: 100, clientY: y });
   fireEvent.mouseMove(document, { clientX: 110, clientY: y });
   fireEvent.mouseMove(document, { clientX: 100 + columns * COLUMN_WIDTH, clientY: y });
   fireEvent.mouseUp(document, { button: 0, clientX: 100 + columns * COLUMN_WIDTH, clientY: y });
-  return fireEvent.click(card, { button: 0, detail: 1 });
+  return click ? fireEvent.click(card, { button: 0, detail: 1 }) : true;
 }
 
 /** dnd-kit keeps swallowing clicks for 50 ms after a drop; no person clicks again that fast. */
@@ -148,9 +148,10 @@ describe("board drop keeps the board in view (AI-25)", () => {
     );
   });
 
-  it("GivenACardWasJustDropped_WhenEnterIsPressedOnIt_ThenTheTicketOpens", async () => {
+  it("GivenADropWithNoTrailingClick_WhenEnterIsPressedOnTheCard_ThenTheTicketOpens", async () => {
     const { harness, ticket } = await boardWith({ type: "task", title: "Spike" });
-    await mouseDrag(ticket.key, 5);
+    // Like a touch drop: no click follows it, so the suppression is still armed.
+    await mouseDrag(ticket.key, 5, { click: false });
     const done = screen.getByRole("region", { name: "Done" });
     await within(done).findByText(ticket.key);
     await dndKitClickWindow();
