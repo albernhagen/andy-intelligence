@@ -2,15 +2,23 @@
 // Executor run report (ARCHITECTURE §7.2, §9): turns the claude-code-action step outcome and its
 // execution file (the SDK message log; the last `result` message has the answer and usage) into
 // the body the control plane takes at POST /runs/{id}/report. A missing or garbled file means a
-// failed run with null usage, never a crash.
+// failed run with null usage, never a crash. Steps run with --json-schema (refine, ADR-0054) also
+// send the agent's `structured_output` as `output`; the control plane checks it.
 //
 // Env: OUTCOME (the action step's outcome: success | failure | cancelled | skipped), EXECUTION_FILE
 // (path), REASON (optional one-line reason, used when the agent left no answer).
 // Prints the report JSON on one line to stdout.
+import { Buffer } from "node:buffer";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 
 export const MAX_SUMMARY = 20000;
+/**
+ * With a structured output, the summary is only a fallback, and the output is dropped when it is
+ * this big (UTF-8 bytes); together they stay under the control plane's 96 KB report cap.
+ */
+export const MAX_SUMMARY_WITH_OUTPUT = 4000;
+export const MAX_OUTPUT_BYTES = 48 * 1024;
 
 /** Reads the execution file; null when it is missing or not a JSON array. */
 export function readMessages(path) {
@@ -23,10 +31,18 @@ export function readMessages(path) {
   }
 }
 
-/** Shortens text to at most MAX_SUMMARY characters, marking the cut. */
-export function truncate(text) {
-  if (text.length <= MAX_SUMMARY) return text;
-  return `${text.slice(0, MAX_SUMMARY - 1)}…`;
+/** Shortens text to at most `max` characters, marking the cut. */
+export function truncate(text, max = MAX_SUMMARY) {
+  if (text.length <= max) return text;
+  return `${text.slice(0, max - 1)}…`;
+}
+
+/** The result's structured output, or null when absent or too big to send. */
+export function structuredOutput(result) {
+  const output = result?.structured_output;
+  if (output === undefined || output === null) return null;
+  const size = Buffer.byteLength(JSON.stringify(output), "utf8");
+  return size <= MAX_OUTPUT_BYTES ? output : null;
 }
 
 const intOrNull = (n) => (Number.isFinite(n) ? Math.trunc(n) : null);
@@ -51,13 +67,18 @@ export function buildReport({ outcome, messages, reason }) {
       (outcome ? `Agent step ${outcome}; no result in the execution file` : "Agent did not run");
   }
 
-  return {
+  const output = succeeded ? structuredOutput(result) : null;
+  const report = {
     status: succeeded ? "succeeded" : "failed",
-    summary: summary === null ? null : truncate(String(summary)),
+    summary:
+      summary === null
+        ? null
+        : truncate(String(summary), output === null ? MAX_SUMMARY : MAX_SUMMARY_WITH_OUTPUT),
     tokensIn: input === null ? null : input + cached,
     tokensOut: intOrNull(usage.output_tokens),
     costUsd: Number.isFinite(result?.total_cost_usd) ? result.total_cost_usd : null,
   };
+  return output === null ? report : { ...report, output };
 }
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) {

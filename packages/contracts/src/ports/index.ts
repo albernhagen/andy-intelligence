@@ -123,6 +123,10 @@ export const QuestionFilter = z.object({
 });
 export type QuestionFilter = z.infer<typeof QuestionFilter>;
 
+/** Project settings Andy can change after registration. */
+export const ProjectPatch = Project.pick({ autoRefine: true }).partial();
+export type ProjectPatch = z.infer<typeof ProjectPatch>;
+
 export const TicketFilter = z.object({
   stage: Stage.optional(),
   needsYou: z.boolean().optional(),
@@ -135,6 +139,8 @@ export interface WorkTracker {
   createProject(input: NewProject): Promise<Project>;
   getProject(projectId: string): Promise<Project | null>;
   listProjects(): Promise<Project[]>;
+  /** `not_found` for an unknown project. */
+  updateProject(projectId: string, patch: ProjectPatch): Promise<Project>;
 
   /** Allocates the next key (e.g. "AI-7") and appends a `created` event. */
   createTicket(projectId: string, input: NewTicket, actor: EventActor): Promise<Ticket>;
@@ -171,6 +177,18 @@ export interface WorkTracker {
     input: NewQuestion,
     actor: EventActor,
   ): Promise<Question>;
+  /**
+   * Asks several questions at once: all are written, or none (one `question_asked` event each).
+   * With `runId` the write is idempotent per run: if that run's questions exist already, they
+   * are returned and nothing is written, so a replayed agent report can't duplicate them.
+   */
+  askQuestions(
+    projectId: string,
+    ticketId: string,
+    inputs: NewQuestion[],
+    actor: EventActor,
+    runId?: string,
+  ): Promise<Question[]>;
   /** Only open questions can be answered (`conflict` otherwise); appends `question_answered`. */
   answerQuestion(
     questionId: string,

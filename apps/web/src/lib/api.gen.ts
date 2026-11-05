@@ -122,6 +122,8 @@ export interface paths {
               autonomy: "autonomous" | "gated" | "manual";
               monthlyBudgetUsd: number | null;
               enabled: boolean;
+              /** @default true */
+              autoRefine: boolean;
             }[];
           };
         };
@@ -168,6 +170,8 @@ export interface paths {
               autonomy: "autonomous" | "gated" | "manual";
               monthlyBudgetUsd: number | null;
               enabled: boolean;
+              /** @default true */
+              autoRefine: boolean;
             };
           };
         };
@@ -262,6 +266,8 @@ export interface paths {
               autonomy: "autonomous" | "gated" | "manual";
               monthlyBudgetUsd: number | null;
               enabled: boolean;
+              /** @default true */
+              autoRefine: boolean;
             };
           };
         };
@@ -320,7 +326,96 @@ export interface paths {
     delete?: never;
     options?: never;
     head?: never;
-    patch?: never;
+    patch: {
+      parameters: {
+        query?: never;
+        header?: never;
+        path: {
+          projectId: string;
+        };
+        cookie?: never;
+      };
+      requestBody: {
+        content: {
+          "application/json": {
+            /** @default true */
+            autoRefine?: boolean;
+          };
+        };
+      };
+      responses: {
+        /** @description Updated */
+        200: {
+          headers: {
+            [name: string]: unknown;
+          };
+          content: {
+            "application/json": {
+              id: string;
+              name: string;
+              repos: string[];
+              key: string;
+              gcpDevProjectId: string | null;
+              gcpProdProjectId: string | null;
+              /** @enum {string} */
+              autonomy: "autonomous" | "gated" | "manual";
+              monthlyBudgetUsd: number | null;
+              enabled: boolean;
+              /** @default true */
+              autoRefine: boolean;
+            };
+          };
+        };
+        /** @description Invalid request */
+        400: {
+          headers: {
+            [name: string]: unknown;
+          };
+          content: {
+            "application/json": {
+              error: string;
+              details?: string[];
+            };
+          };
+        };
+        /** @description Not found */
+        404: {
+          headers: {
+            [name: string]: unknown;
+          };
+          content: {
+            "application/json": {
+              error: string;
+              details?: string[];
+            };
+          };
+        };
+        /** @description Conflict */
+        409: {
+          headers: {
+            [name: string]: unknown;
+          };
+          content: {
+            "application/json": {
+              error: string;
+              details?: string[];
+            };
+          };
+        };
+        /** @description Rule violation */
+        422: {
+          headers: {
+            [name: string]: unknown;
+          };
+          content: {
+            "application/json": {
+              error: string;
+              details?: string[];
+            };
+          };
+        };
+      };
+    };
     trace?: never;
   };
   "/api/projects/{projectId}/tickets": {
@@ -1856,6 +1951,8 @@ export interface paths {
               createdAt: string;
               /** Format: date-time */
               answeredAt: string | null;
+              /** @default null */
+              runId: string | null;
             }[];
           };
         };
@@ -1964,6 +2061,8 @@ export interface paths {
               createdAt: string;
               /** Format: date-time */
               answeredAt: string | null;
+              /** @default null */
+              runId: string | null;
             };
           };
         };
@@ -2074,6 +2173,8 @@ export interface paths {
               createdAt: string;
               /** Format: date-time */
               answeredAt: string | null;
+              /** @default null */
+              runId: string | null;
             };
           };
         };
@@ -2175,6 +2276,8 @@ export interface paths {
                 createdAt: string;
                 /** Format: date-time */
                 answeredAt: string | null;
+                /** @default null */
+                runId: string | null;
               }[];
               tickets: {
                 id: string;

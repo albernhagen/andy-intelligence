@@ -6,8 +6,8 @@ import { useAskQuestion } from "@/lib/queries";
 import { linesToList } from "@/lib/tickets";
 
 /**
- * Asks a question on a ticket (flags it Needs-you). Refinement agents ask from M1.7: Refinement;
- * until then this is how Andy seeds one, e.g. to test the inbox.
+ * Asks a question on a ticket by hand (flags it Needs-you). Refine runs ask theirs (M1.7:
+ * Refinement); this is for the questions Andy wants answered himself, or to test the inbox.
  */
 export function AskQuestionForm(props: { projectId: string; ticketId: string }) {
   const ask = useAskQuestion(props);

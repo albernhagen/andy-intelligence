@@ -267,6 +267,44 @@ describe("status", () => {
   });
 });
 
+describe("refine tool", () => {
+  it("GivenGitHubIsNotConnected_WhenRefineIsCalled_ThenAToolErrorSaysSo", async () => {
+    const ctx = await withProject();
+    await ctx.call("create_ticket", { project: "AI", type: "story", title: "Board" });
+    const result = await ctx.call("refine", { ticket: "AI-1" });
+    expect(result).toMatchObject({
+      isError: true,
+      text: expect.stringContaining("connect GitHub"),
+    });
+  });
+
+  it("GivenAnUnknownTicket_WhenRefineIsCalled_ThenAToolErrorSaysNotFound", async () => {
+    const ctx = await withProject();
+    const result = await ctx.call("refine", { ticket: "AI-9" });
+    expect(result).toMatchObject({ isError: true, text: expect.stringContaining("not found") });
+  });
+});
+
+describe("set_auto_refine tool", () => {
+  it("GivenAProject_WhenAutoRefineIsTurnedOffThenOn_ThenTheSettingIsStored", async () => {
+    const ctx = await withProject();
+    expect((await ctx.call("set_auto_refine", { project: "ai", enabled: false })).data).toEqual({
+      project: "AI",
+      autoRefine: false,
+    });
+    expect((await ctx.call("set_auto_refine", { project: "AI", enabled: true })).data).toEqual({
+      project: "AI",
+      autoRefine: true,
+    });
+  });
+
+  it("GivenAnUnknownProject_WhenSet_ThenAToolErrorSaysNotFound", async () => {
+    const ctx = await withProject();
+    const result = await ctx.call("set_auto_refine", { project: "ZZ", enabled: true });
+    expect(result).toMatchObject({ isError: true, text: expect.stringContaining("not found") });
+  });
+});
+
 describe("cancel_ticket and archive_ticket", () => {
   it("GivenATicket_WhenCancelledAndArchivedOverMcp_ThenStatusCountsLeaveItOut", async () => {
     const ctx = await withProject();
@@ -357,23 +395,25 @@ describe("move_ticket", () => {
 });
 
 describe("M1 flow from Claude desktop", () => {
-  it("GivenATicketCreatedOverMcp_WhenAnAgentAsksAndAndyAnswersOverMcp_ThenItCanMoveToReady", async () => {
+  it("GivenATicketCreatedOverMcp_WhenAnAgentAsksAndAndyAnswersOverMcp_ThenItMovesToReady", async () => {
     const ctx = await withProject();
     const created = await ctx.call("create_ticket", { project: "AI", ...readyStory });
     const id = (await ctx.service.findByKey(created.data.ticket.key)).id;
     await ctx.service.ask("ai", id, { text: "Which board?" }, "agent:r1");
 
     const [question] = (await ctx.call("list_needs_me")).data.questions;
-    await ctx.call("answer_question", { questionId: question.id, answer: "Kanban" });
+    const answered = await ctx.call("answer_question", {
+      questionId: question.id,
+      answer: "Kanban",
+    });
+    expect(answered.data.ticket).toMatchObject({
+      stage: "ready",
+      needsYou: false,
+      dorStatus: "met",
+    });
     expect((await ctx.call("status", { ticket: "AI-1" })).data.readiness).toEqual({
       met: true,
       missing: [],
     });
-
-    const moved = await ctx.rest(`/api/projects/ai/tickets/${id}/stage`, {
-      method: "POST",
-      body: JSON.stringify({ to: "ready" }),
-    });
-    expect(moved.status).toBe(200);
   });
 });
