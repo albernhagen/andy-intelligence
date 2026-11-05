@@ -12,6 +12,7 @@
     { "pattern": "docs/architecture/adr/README.md", "maxWords": 1500 },
     { "pattern": "docs/security/threat-model.md", "maxWords": 3600 },
     { "pattern": "platform/procedures/*.md", "maxWords": 900 },
-    { "pattern": "README.md", "maxWords": 2000 }
+    { "pattern": "README.md", "maxWords": 2000 },
+    { "pattern": "apps/web/design.md", "maxWords": 900 }
   ]
 }

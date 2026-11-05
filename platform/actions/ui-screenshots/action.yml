@@ -1,0 +1,36 @@
+name: Baseline — UI screenshots
+description: >-
+  Playwright screenshot checks for a web app (ADR-0059: Visual checks, project baseline ADR-0031/ADR-0038).
+  Runs `playwright test` in the app's folder and fails on any diff from the stored images; on failure
+  uploads the actual, expected and diff images as the `ui-screenshots` artifact. Run after
+  actions/checkout, in the Playwright container image so renders match the stored ones.
+
+inputs:
+  working-directory:
+    description: The web app's folder (holds playwright.config.ts).
+    default: apps/web
+
+runs:
+  using: composite
+  steps:
+    - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+    - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+      with:
+        node-version-file: .nvmrc
+        cache: pnpm
+    - shell: bash
+      run: pnpm install --frozen-lockfile
+    - name: Screenshot checks
+      shell: bash
+      working-directory: ${{ inputs.working-directory }}
+      run: pnpm exec playwright test
+    - name: Upload actual images
+      if: failure()
+      uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+      with:
+        name: ui-screenshots
+        path: |
+          ${{ inputs.working-directory }}/test-results/
+          ${{ inputs.working-directory }}/playwright-report/
+        retention-days: 14
+        if-no-files-found: ignore

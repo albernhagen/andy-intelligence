@@ -42,7 +42,7 @@ describe("ticket links", () => {
   it("GivenTheBoard_WhenRendered_ThenTicketLinksUseTheKey", async () => {
     const { harness } = await seeded();
     await harness.router.navigate({ to: "/p/ai" });
-    const link = await screen.findByRole("link", { name: /Board/ });
+    const link = await screen.findByRole("link", { name: /^AI-1 / });
     expect(link.getAttribute("href")).toBe("/p/ai/t/AI-1");
   });
 });
