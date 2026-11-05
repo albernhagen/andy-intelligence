@@ -67,3 +67,9 @@ gcloud firestore export "gs://$GCP_PROJECT_ID-firestore-exports/$(date +%F)-pre-
 ```
 
 Undo: `gcloud firestore import gs://…/<that folder>`; it overwrites documents with the same ID and leaves newer ones.
+
+**When the refine result schema changes too** (`platform/procedures/refine.schema.json`, e.g. AI-24): the executor reads the schema from `main` at dispatch, while the API changes only when its deploy finishes, so a refine run that spans the switch reports in the wrong shape and fails (the ticket is flagged; nothing is lost). Avoid it:
+
+1. Before merging: MCP `set_auto_refine` off for each project, and wait until no refine run is `queued` or `running` (ticket → Runs, or `status`).
+2. Merge, and wait for the deploy to finish.
+3. Turn auto-refine back on. Re-run `refine` on any ticket a failed run flagged.
