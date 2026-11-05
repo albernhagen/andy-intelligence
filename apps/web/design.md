@@ -16,6 +16,7 @@ Stack: React, Tailwind v4, shadcn/ui components in `src/components/ui/`, icons f
 - One shell on every screen (`src/components/AppShell.tsx`): header with the project picker, navigation, and the "Needs you N" count. Pages render inside it and never draw their own header.
 - The picker is the global scope. Project screens live under `/p/<project>/…`, cross-project screens under `/all/…`. A new screen gets both forms, or says why it can't (the board needs one project).
 - Content is full width with `px-4 sm:px-6` and `py-4`. Forms and prose cap at `max-w-2xl`.
+- A ticket is a panel over the board (640px; full page under 900px), led by its status line. Prose renders through `Markdown`.
 
 ## Type
 

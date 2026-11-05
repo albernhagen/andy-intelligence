@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
-import { Link, useParams } from "@tanstack/react-router";
+import { Link, Outlet, useParams } from "@tanstack/react-router";
 import {
   DndContext,
   KeyboardSensor,
@@ -73,6 +73,7 @@ export function BoardPage() {
       {tickets.data && (
         <Columns tickets={visibleTickets(tickets.data, showArchived)} projectId={projectId} />
       )}
+      <Outlet />
     </section>
   );
 }

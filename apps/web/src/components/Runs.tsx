@@ -1,9 +1,9 @@
 import { useState } from "react";
 import type { Run, RunStatus } from "@andy/contracts";
-import { Loading, QueryError } from "@/components/Status";
+import { QueryError } from "@/components/Status";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { isActiveRun, useRuns, useStartRun } from "@/lib/queries";
+import { isActiveRun, useStartRun } from "@/lib/queries";
 
 type TicketPath = { projectId: string; ticketId: string };
 
@@ -11,27 +11,25 @@ type TicketPath = { projectId: string; ticketId: string };
 const SHORT_SUMMARY_CHARS = 400;
 const SHORT_SUMMARY_LINES = 6;
 
-const STATUS_VARIANT: Record<RunStatus, "default" | "attention" | "ok"> = {
+/** Status markers from design.md. */
+const STATUS_VARIANT: Record<RunStatus, "default" | "running" | "success" | "danger"> = {
   queued: "default",
-  running: "default",
-  succeeded: "ok",
-  failed: "attention",
+  running: "running",
+  succeeded: "success",
+  failed: "danger",
   cancelled: "default",
 };
 
 /**
- * Agent runs on this ticket (M1.6a: Claude Code executor): start a refine run and follow it.
- * The list polls while a run is in flight; when one ends, every query refreshes, so a refine
- * run's questions appear (M1.7: Refinement). Agent text is untrusted: it renders as plain text.
+ * Starts a refine run on the ticket (M1.6a: Claude Code executor); off while one is in flight.
+ * The runs themselves show in the activity timeline (`RunItem`); `useRuns` polls while one is in
+ * flight and refetches everything when it ends, so a refine run's questions appear (M1.7).
  */
-export function Runs(path: TicketPath) {
-  const runs = useRuns(path);
+export function StartRefineRun({ path, runs }: { path: TicketPath; runs: Run[] | undefined }) {
   const start = useStartRun(path);
-  const inFlight = runs.data?.some(isActiveRun) ?? false;
-
+  const inFlight = runs?.some(isActiveRun) ?? false;
   return (
-    <section aria-label="Runs" className="space-y-2">
-      <h3 className="text-sm font-medium">Runs</h3>
+    <div className="space-y-1">
       <Button
         size="sm"
         variant="outline"
@@ -41,21 +39,12 @@ export function Runs(path: TicketPath) {
         Start refine run
       </Button>
       {start.error && <QueryError error={start.error} />}
-      {runs.isPending && <Loading />}
-      {runs.isError && <QueryError error={runs.error} />}
-      {runs.data?.length === 0 && <p className="text-sm text-muted-foreground">No runs yet.</p>}
-      {runs.data && runs.data.length > 0 && (
-        <ol className="space-y-2">
-          {runs.data.map((r) => (
-            <RunItem key={r.id} run={r} />
-          ))}
-        </ol>
-      )}
-    </section>
+    </div>
   );
 }
 
-function RunItem({ run }: { run: Run }) {
+/** One run in the timeline. Agent text (summary, error) is untrusted: plain text only. */
+export function RunItem({ run }: { run: Run }) {
   const created = run.createdAt ?? run.startedAt;
   return (
     <li className="space-y-1 rounded-md border border-border p-3 text-sm">

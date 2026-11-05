@@ -1,7 +1,7 @@
 import { expect, test, type Page } from "@playwright/test";
 
 /**
- * AI-26: screenshot checks for the shell, board and ticket page. A diff fails CI; a deliberate
+ * AI-26: screenshot checks for the shell, board and story panel (AI-29). A diff fails CI; a deliberate
  * change updates the stored images in the same PR (README: "Screenshot checks").
  */
 
@@ -34,7 +34,22 @@ test("board under All projects asks for a project", async ({ page }) => {
   await expect(page).toHaveScreenshot("board-pick-project.png");
 });
 
-test("ticket page", async ({ page }) => {
+test("story panel over the board", async ({ page }) => {
   await open(page, "/p/ai/t/AI-1", "Picking a project should feel like picking a tenant.");
-  await expect(page).toHaveScreenshot("ticket.png", { fullPage: true });
+  await expect(page.getByText("Ship it")).toBeVisible();
+  await expect(page).toHaveScreenshot("story-panel.png");
+});
+
+test("story panel editing the description", async ({ page }) => {
+  await open(page, "/p/ai/t/AI-1", "Picking a project should feel like picking a tenant.");
+  await page.getByRole("button", { name: "Edit description" }).click();
+  await expect(page.getByLabel("Description")).toBeVisible();
+  await expect(page).toHaveScreenshot("story-panel-editing.png");
+});
+
+test("story panel with a question", async ({ page }) => {
+  await open(page, "/p/ai/t/AI-3", "Waiting for you: 1 question");
+  await expect(page.getByRole("region", { name: "Activity" })).toBeVisible();
+  await page.getByRole("region", { name: "Questions" }).scrollIntoViewIfNeeded();
+  await expect(page).toHaveScreenshot("story-panel-question.png");
 });

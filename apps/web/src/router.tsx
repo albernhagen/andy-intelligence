@@ -19,6 +19,12 @@ const rootRoute = createRootRoute({
   notFoundComponent: () => <p className="text-muted-foreground">Page not found.</p>,
 });
 
+const boardRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/p/$projectId",
+  component: BoardPage,
+});
+
 /** URLs carry the picker's scope (lib/scope.ts): `/p/<project>/…` or `/all/…`. */
 const routeTree = rootRoute.addChildren([
   createRoute({
@@ -39,16 +45,14 @@ const routeTree = rootRoute.addChildren([
   createRoute({ getParentRoute: () => rootRoute, path: "/all/inbox", component: InboxPage }),
   createRoute({ getParentRoute: () => rootRoute, path: "/all/board", component: PickProjectPage }),
   createRoute({ getParentRoute: () => rootRoute, path: "/projects", component: ProjectsPage }),
-  createRoute({ getParentRoute: () => rootRoute, path: "/p/$projectId", component: BoardPage }),
+  boardRoute.addChildren([
+    // The story panel opens over the board, in its <Outlet /> (ADR-0059: UX foundation).
+    createRoute({ getParentRoute: () => boardRoute, path: "t/$ticketRef", component: TicketPage }),
+  ]),
   createRoute({
     getParentRoute: () => rootRoute,
     path: "/p/$projectId/inbox",
     component: InboxPage,
-  }),
-  createRoute({
-    getParentRoute: () => rootRoute,
-    path: "/p/$projectId/t/$ticketRef",
-    component: TicketPage,
   }),
   createRoute({ getParentRoute: () => rootRoute, path: "/settings/github", component: GitHubPage }),
   createRoute({

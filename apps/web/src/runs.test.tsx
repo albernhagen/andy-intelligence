@@ -5,7 +5,7 @@ import { renderApp } from "@/test/harness";
 import { RUN_POLL_MS, runsRefetchInterval } from "@/lib/queries";
 import { formatCost } from "@/components/Runs";
 
-/** Ticket detail → Runs (M1.6a: Claude Code executor), against the in-process API. */
+/** Story panel → runs in the activity timeline (M1.6a: Claude Code executor), in-process API. */
 
 const REPO = "albernhagen/andy-intelligence";
 
@@ -26,7 +26,7 @@ async function setup() {
     });
   const open = async (ticketId = ticket.id) => {
     await harness.router.navigate({ to: `/p/ai/t/${ticketId}` });
-    return screen.findByRole("region", { name: "Runs" });
+    return screen.findByRole("region", { name: "Activity" });
   };
   return { ...harness, ticket, queueRun, open };
 }
@@ -39,9 +39,7 @@ describe("runs UI", () => {
   it("GivenAConnectedProject_WhenAndyStartsARefineRun_ThenTheQueuedRunIsListedWithItsLog", async () => {
     const { user, open, runs, ticket } = await setup();
     const section = await open();
-    expect(await within(section).findByText("No runs yet.")).toBeTruthy();
-
-    await user.click(within(section).getByRole("button", { name: "Start refine run" }));
+    await user.click(await within(section).findByRole("button", { name: "Start refine run" }));
 
     expect(await within(section).findByText("queued")).toBeTruthy();
     expect(within(section).getByText("sonnet")).toBeTruthy();
@@ -154,8 +152,7 @@ describe("runs UI", () => {
     await act(() => vi.advanceTimersByTimeAsync(RUN_POLL_MS));
 
     expect(await within(section).findByText("succeeded")).toBeTruthy();
-    const history = screen.getByRole("region", { name: "History" });
-    await waitFor(() => expect(within(history).getByText("Refined the ticket.")).toBeTruthy());
+    await waitFor(() => expect(within(section).getByText("Refined the ticket.")).toBeTruthy());
   });
 });
 

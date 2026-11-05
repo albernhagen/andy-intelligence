@@ -32,14 +32,30 @@ export async function createFakeApp() {
     {
       ...feature(
         "Design source and app shell",
-        "Picking a project should feel like picking a tenant.",
+        [
+          "Picking a project should feel like picking a tenant.",
+          "",
+          "## Shape",
+          "",
+          "- One **shell** on every screen, with the project picker",
+          "- Tokens in `index.css`; see [the design source](https://github.com/albernhagen/andy-intelligence/blob/main/apps/web/design.md)",
+        ].join("\n"),
       ),
       ...ready,
+      outOfScope: ["Dashboards", "Command palette"],
+      touches: ["apps/web/src/components/AppShell.tsx", "apps/web/design.md"],
     },
     "andy",
   );
   await service.move("ai", shell.id, "ready", "andy");
   await service.move("ai", shell.id, "in_progress", "andy");
+  await tracker.linkPullRequest(
+    "ai",
+    shell.id,
+    { number: 72, url: "https://github.com/albernhagen/andy-intelligence/pull/72", state: "open" },
+    "system",
+  );
+  await service.comment("ai", shell.id, "Screenshots look right. **Ship it** after CI.", "andy");
 
   const drop = await service.create(
     "ai",

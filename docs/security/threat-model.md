@@ -78,7 +78,7 @@ Severity: `critical` (exploitable now, big blast radius) · `high` (exploitable 
 - Terraform applies only from Andy's machine; CI is read-only (ADR-0011).
 - GitHub App setup from the UI (ADR-0043): App credentials go from GitHub straight to Secret Manager; CI gets repo tokens only through the OIDC-checked endpoint.
 - GitHub webhooks (ADR-0041): HMAC before any parse or store; normalized records only (no raw payload; PR title and description's first line capped).
-- SPA (M1.3: UI: tickets + inbox): ticket, question and event text (partly agent-written) renders as React text only: no raw HTML, markdown or auto-links. The ID token goes only to this origin's `/api/*` through the generated client.
+- SPA: ticket text is untrusted (partly agent-written). Descriptions, comments, questions: pinned `react-markdown`, no `rehype-raw` (HTML shows as text), no image loads, only http(s)/mailto links (new tab, `noreferrer`, host shown; AI-29). ID token only to same-origin `/api/*`.
 
 ## Open risks
 
