@@ -1,6 +1,7 @@
 import {
   NewTicket,
   Project,
+  Stage,
   TicketKey,
   WorkTrackerError,
   type Question,
@@ -43,6 +44,11 @@ const AnswerInput = {
 
 const StatusInput = {
   ticket: TicketKey.optional().describe('Ticket key, e.g. "AI-42". Omit for an overview.'),
+};
+
+const MoveInput = {
+  ticket: TicketKey.describe('Ticket key, e.g. "AI-42".'),
+  to: Stage.describe("Target stage: the next one forward from where the ticket is."),
 };
 
 const summary = (t: Ticket) => ({
@@ -114,6 +120,18 @@ export function registerTools(server: McpServer, deps: ToolDeps): void {
         const ticket = await tracker.getTicket(question.projectId, question.ticketId);
         return { question, ticket: ticket && summary(ticket) };
       }),
+  );
+
+  server.registerTool(
+    "move_ticket",
+    {
+      description:
+        "Moves a ticket one stage forward (backlog → ready → in_progress → ready_for_review → monitoring → done). Backlog → ready needs the Definition of Ready. Backward or skipping moves are refused; Andy makes those in the UI.",
+      inputSchema: MoveInput,
+      annotations: { destructiveHint: false, idempotentHint: false },
+    },
+    ({ ticket, to }) =>
+      run(async () => ({ ticket: summary(await service.moveForward(ticket, to, "andy")) })),
   );
 
   server.registerTool(

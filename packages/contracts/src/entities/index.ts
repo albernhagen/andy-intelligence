@@ -317,6 +317,12 @@ export const PullRequest = z.object({
   draft: z.boolean(),
   /** Untrusted text; capped by the adapter. */
   title: z.string().max(256),
+  /** Untrusted text: the description's first line only (it may carry a ticket key), capped. */
+  bodyFirstLine: z.string().max(256).default(""),
+  /** Opened from another repo (anyone can do that on a public repo); never moves a ticket. */
+  fromFork: z.boolean().default(false),
+  /** Targets the repo's default branch; only such a merge completes a ticket (ADR-0056). */
+  intoDefaultBranch: z.boolean().default(false),
   headRef: z.string().min(1),
   headSha: z.string().min(1),
   baseRef: z.string().min(1),
