@@ -1,3 +1,5 @@
+import { compareRanks } from "@andy/contracts";
+
 /**
  * Order in a lane is the priority (ADR-0058). Ranks sort as plain strings. A new ticket's rank is
  * its zero-padded number (`rankFor`, 10 digits). A reorder (AI-28: Board v2) places a ticket
@@ -56,7 +58,7 @@ export function rankBetween(before: string | null, after: string | null): string
     throw new Error("no rank sorts before 0000000000");
   }
   const a = parse(before);
-  const b = after === null || after <= before ? null : parse(after);
+  const b = after === null || compareRanks(after, before) <= 0 ? null : parse(after);
   if (b !== null && b.whole === a.whole) {
     return format({ whole: a.whole, fraction: fractionBetween(a.fraction, b.fraction) });
   }

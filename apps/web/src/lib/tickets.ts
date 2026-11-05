@@ -1,5 +1,6 @@
 import {
   Stage,
+  compareRanks,
   type Question,
   type Ticket,
   type TicketEvent,
@@ -50,8 +51,7 @@ export function canArchive(ticket: Pick<Ticket, "stage">): boolean {
 export function groupByStage<T extends Ticket>(tickets: readonly T[]): Record<Stage, T[]> {
   const groups = Object.fromEntries(STAGES.map((s) => [s, [] as T[]])) as Record<Stage, T[]>;
   for (const t of tickets) groups[t.stage].push(t);
-  for (const s of STAGES)
-    groups[s].sort((a, b) => (a.rank < b.rank ? -1 : a.rank > b.rank ? 1 : 0));
+  for (const s of STAGES) groups[s].sort((a, b) => compareRanks(a.rank, b.rank));
   return groups;
 }
 
