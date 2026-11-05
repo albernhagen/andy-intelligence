@@ -1,0 +1,7 @@
+# 2026-11-05 — Coordinating parallel sessions written down as a platform procedure
+
+- **Why:** on 2026-11-04 and 2026-11-05 one coordinating Claude Code session ran sixteen worker sessions, up to five at a time (AI-2 to AI-31). The rules it applied lived only in that conversation, its context had been summarized once, and its MCP tool list was frozen at four tools. Andy asked whether to start a new parent session per milestone, and whether the practice belongs in the system.
+- **Decision (Andy):** one coordinator per milestone, handed over between batches; the rules go into the platform, since they are not specific to this repo.
+- **`platform/procedures/coordinate.md`** (vendor-neutral, ADR-0032): picking a batch, file ownership, ticket then brief, what to check when a worker reports, one merge at a time with a re-sync, after-merge upkeep, handover. Each rule comes from something that went wrong: two green PRs broke `main` twice; three sessions took the same ADR number; a PR merged before its docs; tickets stayed in Backlog after their PRs merged.
+- **`docs/runbooks/coordinating-sessions.md`**: how it is run in the Claude desktop app for this repo (start message, pinning, auto-archive, upkeep worker, what the coordinator owns).
+- **Where it goes:** it is the manual form of M2: Self-hosting's dispatcher (ADR-0047: Coordinating parallel work). The devkit (ADR-0032) can ship it as a `/coordinate` skill for projects driven from a harness.
