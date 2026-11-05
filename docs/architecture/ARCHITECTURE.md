@@ -138,7 +138,7 @@ Enterprise-shaped (durable state, policy, gates, least privilege, audit, contrac
 - **Otherwise:** agent PRs merge on their own once every required check and both review agents pass (from M1.8: Build + gate, ADR-0050), per the project's `autoMerge` policy: `none` / `s` / `s-and-m` (default) / `all`.
 - **Dependabot** (ADR-0042): npm patches and minors of 1.0+ packages auto-merge once every required check passes, and deploy only with Andy's next merge; majors, 0.x minors, GitHub Actions and Terraform providers go to Andy. CODEOWNERS (`* @albernhagen`) requests Andy's review on every PR he didn't author; paths listed after `*` are the protected paths above.
 - From M1: First end-to-end flow onward, **record what the gate *would* have decided** to build the dataset for later model-based scoring.
-- **Adversarial review** on every PR (ADR-0026): a fresh reviewer session tries to find reasons the PR should not merge, with a concrete failing scenario for each finding. Three passes: bugs and logic, plus (from M1.8: Build + gate) compliance with the ticket's acceptance criteria and approved plan; nits capped at 5 (ADR-0040). The implementer answers every finding. Unresolved `blocker` findings are a hard veto unless Andy labels `review-accepted`. From M2/M3 the reviewer is a different vendor than the implementer.
+- **Adversarial review** on every PR (ADR-0026): a fresh reviewer session tries to find reasons the PR should not merge, with a concrete failing scenario for each finding. Three passes: bugs and logic, plus (from M1.8: Build + gate) compliance with the ticket's acceptance criteria and approved plan; nits capped at 5 (ADR-0040). The implementer answers every finding. Unresolved `blocker` findings are a hard veto unless Andy labels `review-accepted`. From M9 the reviewer is a different vendor than the implementer.
 - Security review on every PR (§9.1). A high/critical security finding is a hard veto unless Andy marks it `security-accepted`.
 
 ### 4.6 Environments and release
@@ -219,12 +219,12 @@ Contracts are defined in `packages/contracts` (Zod schemas + TypeScript interfac
 - **Public URL** (ADR-0044) — `https://ai.andybernhagen.com`: Cloud Run domain mapping (Preview, $0, Google-managed certificate); DNS-only CNAME in Cloudflare, managed by the local-only `infra/dns` root. It is `PUBLIC_URL`: OAuth issuer and MCP resource, GitHub App URLs, Actions OIDC audience, and the only Firebase sign-in domain. The API serves only that host: the default `run.app` URLs answer `GET /health` (monitoring) and `404` for everything else. Cloud Tasks and Scheduler target `PUBLIC_URL` too.
 - **API** — REST, OpenAPI-documented, the single entry point for UI and MCP.
 - **MCP server** — remote, Streamable HTTP at `/mcp`. Tools generated from API contracts. v1.x tools: `list_projects`, `create_ticket`, `get_ticket`, `refine` (start refinement), `list_needs_me`, `answer_question`, `set_override`, `start`, `status`, `quota`, `promote_release`, `get_config`, `propose_config_change`.
-  - Built (M1.4: MCP core tools; from M1.7: `refine`, `set_auto_refine`): `create_ticket` (project key, e.g. `AI`), `list_needs_me`, `answer_question` (`answered_via = mcp`), `status` (ticket key → stage, DoR gaps, questions, last 5 events; no key → unarchived counts by stage, Needs-you count, signed-in email; connection check); `move_ticket` (one step forward); `cancel_ticket`, `archive_ticket`. Thin adapters over `TicketService`, shared with the REST API; rule violations are tool errors. Key lookups and the refine dispatcher read the whole project; no key, every project (≈ $0.0006 at 1,000 tickets); add `getTicketByKey` and per-stage counts (ADR-0028) before ~1,000 tickets or M2: Multi-project in parallel.
+  - Built (M1.4: MCP core tools; from M1.7: `refine`, `set_auto_refine`): `create_ticket` (project key, e.g. `AI`), `list_needs_me`, `answer_question` (`answered_via = mcp`), `status` (ticket key → stage, DoR gaps, questions, last 5 events; no key → unarchived counts by stage, Needs-you count, signed-in email; connection check); `move_ticket` (one step forward); `cancel_ticket`, `archive_ticket`. Thin adapters over `TicketService`, shared with the REST API; rule violations are tool errors. Key lookups and the refine dispatcher read the whole project; no key, every project (≈ $0.0006 at 1,000 tickets); add `getTicketByKey` and per-stage counts (ADR-0028) before ~1,000 tickets or M5: Multi-project in parallel.
 - **Webhook receiver** — `POST /webhooks/github`: GitHub App webhooks for PRs, check runs, and workflow runs (ADR-0041). Body ≤ 1 MB → HMAC-SHA256 → ≤ 300 signed deliveries/minute per instance → event type → repo must belong to a project → recorded once per delivery ID (`CodeEventLog`; replays are no-ops) → a new `pull_request` delivery moves its ticket (§4.1). Off unless `GITHUB_APP_ID` is set.
 - **Project registration** — `POST /api/projects` with `repos`: each repo must have the control-plane App installed and belongs to one project only (`ProjectService` in `@andy/domain`). Project #1: `albernhagen/andy-intelligence` (key `AI`).
 - **GitHub setup** (ADR-0043) — Settings → GitHub runs GitHub's App manifest flow: `GET /api/github/manifest`, GitHub's Create page, `/settings/github/callback` (state checked in the tab), `POST /api/github/connect` saves the App (IDs in Firestore `config/codeHost`, secrets as Secret Manager versions). Credentials are read at runtime (cached 5 minutes). `GET /api/github` lists installed repos.
 - **Repo tokens for CI** — `POST /github/token`: a workflow presents its Actions OIDC token (audience = service URL); if `repository` + `workflow_ref` match `TOKEN_POLICY` it gets a 1-hour App token with contents + pull requests write on its repo (ADR-0043). Today: the system security review's `publish` job; M1.8: Build + gate adds the executor's (refine runs are read-only).
-- **Agent runs** (M1.6a, ADR-0051) — Andy or the refine dispatcher (§4.3) starts a run on a ticket (`POST /api/projects/{p}/tickets/{t}/runs`, step `refine`; this repo only until M2; one run in flight per project, re-checked after create). `RunService` creates the Run (prompt, deadline), dispatches `agent-run.yml` via the App (run ID, credential kind), records the workflow run ID. The run calls `GET /runs/{id}/context` (its prompt; marks it running) and `POST /runs/{id}/report` (result; summary → ticket comment by `agent:<run>`, refine output → questions, §4.3) with its Actions OIDC token; `repository`, `job_workflow_ref` and `run_id` must match the Run (§9). A replayed report is a no-op.
+- **Agent runs** (M1.6a, ADR-0051) — Andy or the refine dispatcher (§4.3) starts a run on a ticket (`POST /api/projects/{p}/tickets/{t}/runs`, step `refine`; this repo only until M5; one run in flight per project, re-checked after create). `RunService` creates the Run (prompt, deadline), dispatches `agent-run.yml` via the App (run ID, credential kind), records the workflow run ID. The run calls `GET /runs/{id}/context` (its prompt; marks it running) and `POST /runs/{id}/report` (result; summary → ticket comment by `agent:<run>`, refine output → questions, §4.3) with its Actions OIDC token; `repository`, `job_workflow_ref` and `run_id` must match the Run (§9). A replayed report is a no-op.
 - **Run completion signals** (event-driven, per executor):
   | Executor | Primary signal | Backup |
   |---|---|---|
@@ -232,14 +232,14 @@ Contracts are defined in `packages/contracts` (Zod schemas + TypeScript interfac
   | Jules | `pull_request` opened webhook on the PR Jules creates (correlated to the Run by branch/PR body) | Watchdog reads session `activities` once at deadline |
   | Direct | In-process; no signal needed | — |
 - **Run watchdog** (M1.6b, ADR-0055) — each dispatched run queues one check at its deadline (Cloud Tasks, one task per run) for `POST /runs/{id}/watchdog` (§9). Unreported, it asks the executor **once**: finished → heal the Run; failed, killed or overdue → one automatic retry (as after a reported failure); a failed retry flags Needs-you.
-- **Pipeline engine** — stage transitions, DoR checks, gate rules, dependency release, retry policy. It is the supervisor of parallel work; there is no LLM parent agent (ADR-0047). From M2: conflict-aware dispatch (no two in-flight tickets touching the same files in a repo), sync runs when `main` moves, a merge queue per repo, cross-project dependencies.
+- **Pipeline engine** — stage transitions, DoR checks, gate rules, dependency release, retry policy. It is the supervisor of parallel work; there is no LLM parent agent (ADR-0047). From M2: conflict-aware dispatch (no two in-flight tickets touching the same files in a repo), sync runs when `main` moves. From M5: a merge queue per repo, cross-project dependencies.
 - **Router** — picks the route for a step: overrides → tier routes in order → skip providers paused by quota/budget → fall back or queue.
 - **Scheduled jobs** (Cloud Scheduler → authenticated endpoint): weekly **model scout**; weekly **system security review** per project when something merged since the last one (§9.1). Quota readings are captured from run results, not sampled.
 - **UI** — static SPA served by the same service.
 
 ### 7.2 Executors
 - **Claude Code**: reusable GitHub Actions workflow using `anthropics/claude-code-action` with `CLAUDE_CODE_OAUTH_TOKEN`; dispatched via `workflow_dispatch` with the run ID (non-secret) as input; reports back via an API callback authenticated with the workflow's GitHub OIDC token. Uses the platform skills plugin and subagents. **Context per step** (ADR-0046): ticket snapshot, approved plan and `AGENTS.md` only; exploration in subagents that return summaries; `--max-turns` per step; a stable prompt prefix so caching works; input tokens recorded per run and step. Runs with a **permission profile** from `platform/` that the project can't override (ADR-0040, built in M1.6: Claude Code executor): no reads of `.env*`, `*.tfvars`, Terraform state or credential files; bypass-permissions mode disabled; tools allowed per step (refine and plan read-only; build edits + the project's own commands); edits to CODEOWNERS paths blocked at edit time; sandbox with a network allowlist if it works on Actions runners. **Built (M1.6a, ADR-0051):** `claude-executor.yml`, three jobs so the agent's job never holds an OIDC token (`context` fetches the prompt, `agent` runs the action, `report` posts the result); the prompt never travels in dispatch inputs. Per step, `platform/procedures/<step>.md` prefixes the prompt and `<step>.schema.json` becomes `--json-schema` (platform commit, ADR-0054). The profile (`platform/executor/profile.json`, merged per step with CODEOWNERS edit denies by `scripts/executor-profile.mjs`) is installed as managed settings, so only its permission rules apply and project hooks and MCP servers are off. The action's human-actor check allows only the App's bot (`allowed_bots`). Sandbox and network allowlist come with Bash in M1.8: Build + gate, which must also keep the model credential out of Bash's reach (Read denies don't stop `cat /proc/self/environ`).
-- **Ticket context for agents** (all executors): the dispatch request carries the ticket snapshot (title, body, acceptance criteria, assumptions, answered questions). In M1: First end-to-end flow, that snapshot plus the callback on its own ticket is all an agent gets. From M2: Multi-project in parallel, agents that need more call the API/MCP read-only, scoped to that ticket's project, authenticated the same way (OIDC for Actions runs; a per-run token minted at dispatch for non-Actions executors).
+- **Ticket context for agents** (all executors): the dispatch request carries the ticket snapshot (title, body, acceptance criteria, assumptions, answered questions). In M1: First end-to-end flow, that snapshot plus the callback on its own ticket is all an agent gets. From M5: Multi-project in parallel, agents that need more call the API/MCP read-only, scoped to that ticket's project, authenticated the same way (OIDC for Actions runs; a per-run token minted at dispatch for non-Actions executors).
 - **OpenCode**: reusable Actions workflow running OpenCode with a per-project OpenRouter key; default harness for non-Claude models. Same callback auth as Claude Code.
 - **Jules**: REST API (`sessions`, `activities`, `approvePlan`, `sendMessage`), configured to open a PR on completion. Completion is detected via the PR webhook (§7.1); `activities` are read on demand (watchdog, run detail view), not polled.
 - **Direct**: in-process OpenRouter calls for single-call steps (sizing, question drafting where non-agentic, digests, scout analysis).
@@ -269,13 +269,13 @@ v1.x screens:
 - **Phone** (M7: Mobile, ADR-0052): the same SPA installed from Safari as a web app, phone layout for the inbox, ticket detail, releases and the quota banner; push notifications deep-link to the item; answer, approve plan or PR, promote, pause dispatch from the phone.
 - **Quota & spend** (per provider gauges with reset times; paid spend vs caps; persistent banner on warn/pause).
 - **Projects** (list, config, policy overrides).
-- **Tickets** — M1: one column per stage with drag-and-drop (AI-16), ticket detail with history and linked runs/PRs/cost, create/edit. Before M2 (ADR-0059): project switcher, status on cards, story panel, command palette. M2: filter and group by project. M5: epic grouping, overrides editing.
-- **Run detail** — M1: run summary inside ticket detail. M5: dedicated screen (metadata, cost, outcome, links out to Action log / Jules session / PR).
+- **Tickets** — M1: one column per stage with drag-and-drop (AI-16), ticket detail with history and linked runs/PRs/cost, create/edit. M3 (ADR-0059): project switcher, status on cards, story panel, command palette. M5: filter and group by project. M4: epic grouping, overrides editing.
+- **Run detail** — M1: run summary inside ticket detail. M4: dedicated screen (metadata, cost, outcome, links out to Action log / Jules session / PR).
 - **Config** (providers, harnesses, models, tiers, policies; audit log with revert; pending approvals).
 - **Releases** (dev status, promote to prod, rollback).
-- **Dashboards** — M5 (ADR-0045): delivery (tickets by stage over time, lead time, rework, CI green on first try, review blockers), cost, quota and tokens per run and step over time (ADR-0046), per project and overall; aggregation queries + shadcn charts. DORA metrics from M6.
+- **Dashboards** — M4 (ADR-0045): delivery (tickets by stage over time, lead time, rework, CI green on first try, review blockers), cost, quota and tokens per run and step over time (ADR-0046), per project and overall; aggregation queries + shadcn charts. DORA metrics from M6.
 
-**Design (ADR-0045; before M2, ADR-0059):** `apps/web/design.md` + shadcn theme tokens are the design source of truth agents and design skills read; Playwright screenshot checks. M5: design skills, pluggable per project (custom-skill context source, §7.6); Hallmark trial first; `sloplint --render` (non-blocking).
+**Design (ADR-0045; M3, ADR-0059):** `apps/web/design.md` + shadcn theme tokens are the design source of truth agents and design skills read; Playwright screenshot checks. M4: design skills, pluggable per project (custom-skill context source, §7.6); Hallmark trial first; `sloplint --render` (non-blocking).
 API client generated from OpenAPI.
 
 **Built in M1.3: UI: tickets + inbox:**
@@ -290,9 +290,9 @@ API client generated from OpenAPI.
 **Built in M1.19: GitHub App setup from the UI:** `/settings/github` (connect, install link, installed repos) and `/settings/github/callback`; the new-project form suggests installed repos.
 
 ### 7.6 Context sources (ADR-0033, ADR-0053)
-Product and domain knowledge for agents, pluggable per project, behind a `ContextSource` port. Kinds: **markdown docs** in the repo (first), MCP servers such as Notion (later), custom skills such as a design skill reading `design.md` (ADR-0045, M5).
+Product and domain knowledge for agents, pluggable per project, behind a `ContextSource` port. Kinds: **markdown docs** in the repo (first), MCP servers such as Notion (later), custom skills such as a design skill reading `design.md` (ADR-0045, M4).
 
-**Project brief** (ADR-0053, M2): `docs/product/brief.md` (idea, users, vision, goals, architectural expectations, open questions), written by one onboarding interview from the `/onboard` skill (MCP) or the UI's new-project flow, both calling the API that opens it as a PR. Refine and plan raise a question when a ticket contradicts it; the build updates it in the same PR when Andy picks the brief. Ideate and refine read all of it, plan and build the expectations, reviews the goals.
+**Project brief** (ADR-0053, M5): `docs/product/brief.md` (idea, users, vision, goals, architectural expectations, open questions), written by one onboarding interview from the `/onboard` skill (MCP) or the UI's new-project flow, both calling the API that opens it as a PR. Refine and plan raise a question when a ticket contradicts it; the build updates it in the same PR when Andy picks the brief. Ideate and refine read all of it, plan and build the expectations, reviews the goals.
 
 Scopes: global (Andy's standards) → project → pipeline step. Same sources for the devkit and the control plane (ADR-0032). Context is untrusted data; a project's agents see only its own sources plus global ones; credentials per project, read-only; external calls and sizes capped.
 
@@ -363,7 +363,7 @@ Third-party action pins inside `platform/actions/` are bumped by this repo's Dep
 | Context budget: agent-loaded docs within size budgets (`context-budget.json`; default `AGENTS.md`/`CLAUDE.md` ≤ 200 lines) | 0046 | `scripts/context-budget.mjs` in `platform/actions/ci-check` | A | carried (next baseline tag) |
 | Review agents: lockfiles out of the diff (code first, 120 KB cap with truncation note); lockfile sources must be the npm registry with integrity | 0046 | `platform/actions/agent-review-prepare`; `scripts/lockfile-sources.mjs` in `platform/actions/ci-check` | A | carried (next baseline tag) |
 | Agent evals (`agent-evals` check) | 0040 | planned: M1.17: Agent evals v1 | A | not built |
-| Executor permission profile (headless Claude Code) | 0040, 0051 | `platform/executor/profile.json` + `scripts/executor-profile.mjs`, installed by the reusable `claude-executor.yml` | — | built (M1.6a); managed repos call the reusable workflow from M2: Multi-project in parallel |
+| Executor permission profile (headless Claude Code) | 0040, 0051 | `platform/executor/profile.json` + `scripts/executor-profile.mjs`, installed by the reusable `claude-executor.yml` | — | built (M1.6a); managed repos call the reusable workflow from M5: Multi-project in parallel |
 | Webhook caps (1 MB body, 300 signed deliveries/minute per instance) + HMAC + 30-day TTL on records | 0028, 0041 | `apps/api/src/webhooks.ts`, `infra/control-plane` | — | control plane only (managed repos send webhooks; they don't receive them) |
 | Bot-opened PRs run their checks (repo token from the control plane via Actions OIDC; agent job holds no write credential) | 0041, 0043 | `system-security-review.yml` (`publish` job), `apps/api/src/github/token.ts` | — | not yet carried (the system review itself isn't carried until M6: Dev → prod releases) |
 
@@ -388,7 +388,7 @@ Third-party action pins inside `platform/actions/` are bumped by this repo's Dep
 
 ### 9.1 Continuous security review (ADR-0025)
 
-Applies to this repo now (M1.10: Security review automation) and to every managed project from M2: Multi-project in parallel.
+Applies to this repo now (M1.10: Security review automation) and to every managed project from M5: Multi-project in parallel.
 
 | Layer | When | What | Output | Blocks |
 |---|---|---|---|---|
@@ -396,7 +396,7 @@ Applies to this repo now (M1.10: Security review automation) and to every manage
 | Security-review agent | Every PR push | Read-only agent reviews the diff against the threat model and ADRs: authn/authz, IAM, secrets, injection incl. prompt injection, workflow permissions, public-repo exposure, cost abuse | One PR comment, findings by severity | High/critical, unless Andy labels `security-accepted` with a reason |
 | System security review agent | End of each milestone; weekly if anything merged; on demand | Reads repo, threat model, ADRs, Terraform IAM, `terraform plan` drift; looks for risks no single PR shows | PR updating `docs/security/threat-model.md` | Milestone can't close with open high/critical risks unless Andy accepts them |
 
-**Agent guardrails:** same-repo PRs only (never forks, never `pull_request_target`); token `contents: read` + `pull-requests: write`; no shell or network tools; PR content is untrusted data. If the agent can't run, its check is neutral and Andy decides. Reviewer is a separate session from the implementer; from M2/M3 a different vendor.
+**Agent guardrails:** same-repo PRs only (never forks, never `pull_request_target`); token `contents: read` + `pull-requests: write`; no shell or network tools; PR content is untrusted data. If the agent can't run, its check is neutral and Andy decides. Reviewer is a separate session from the implementer; from M9 a different vendor.
 
 **Implementation (ADR-0030: Security review automation choices):**
 
@@ -475,27 +475,30 @@ The control plane's Firestore holds real data from M1.2: Ticket core on; there i
 
 ## 12. Milestones (v1.x)
 
-Each milestone must work **end to end** before the next starts. Acceptance criteria are verified by Andy. Every milestone's "Done when" also requires a system security review with no open high/critical risks, unless Andy accepted them (§9.1).
+Each milestone must work **end to end** before the next starts (a ticket may start early only as ADR-0060 allows). Acceptance criteria are verified by Andy. Every milestone's "Done when" also requires a system security review with no open high/critical risks, unless Andy accepted them (§9.1).
 
 | ID | Milestone | Outcome |
 |---|---|---|
 | M0 | Foundations: repo, sign-in, GCP infra | Empty app on Cloud Run, Andy-only sign-in, Terraform in place |
 | M1 | First end-to-end flow: ticket → PR with Claude | One project; ticket created from Claude desktop is refined, built by Claude Code, and merged |
-| M2 | Multi-project in parallel | Several repos onboarded; stories per project; runs across projects at once under caps and quota |
-| M3 | Add Jules + model routing | Second agent; tiers route work by size; cross-model review |
-| M4 | Paid models + spend caps | OpenRouter/OpenCode, hard spend caps, weekly model scout |
-| M5 | Epics + story board | Epics; epic grouping on the board; config editing; design skills and dashboards |
+| M2 | Self-hosting: andy-intelligence builds itself | Project `AI` builds and merges its own tickets, several at once, while Andy is away |
+| M3 | New UI and MCP | Project picker, board that shows status, story panel, command palette; MCP tools to edit and organize tickets |
+| M4 | Epics + story board | Epics; epic grouping on the board; config editing; design skills and dashboards |
+| M5 | Multi-project in parallel | Several repos onboarded; stories per project; runs across projects at once under caps and quota |
 | M6 | Dev → prod releases | Per-project dev/prod deploys, verification, one-click promote, DORA metrics |
 | M7 | Mobile | The UI installed on Andy's phone with push notifications; answer, approve, promote and pause from anywhere |
+| M8 | Project members | Other users on a project, with basic roles |
+| M9 | Add Jules + model routing | Second agent; tiers route work by size; cross-model review |
+| M10 | Paid models + spend caps | OpenRouter/OpenCode, hard spend caps, weekly model scout |
 
-**Order (ADR-0050, ADR-0052):** M0 → M1 → M2 → **M5 → M6 → M7 → M3 → M4**. Claude-only through M6: Jules (M3) and paid models with the scout (M4) come after releases. IDs keep their meaning.
+**Order (ADR-0060):** numbers follow completion order; a reorder renumbers milestones in a new ADR; the title is the stable name. Claude-only through M8.
 
-**Renumbered 2026-11-01 (ADR-0035):** M2: Multi-project in parallel was inserted. ADRs written before then mean M3 by "M2", M4 by "M3", M5 by "M4" and M6 by "M5".
+**Older documents** use earlier numbers: ADR-0060 has the mapping (ADR-0035 for ADRs before 2026-11-01).
 
 **Naming:** always write a milestone or slice as `ID: title`, e.g. "M1.2: Ticket core". The ID alone means nothing to a reader.
 
 ### How milestones are built: slices
-**With itself (ADR-0047):** 1. track slices as tickets in project `AI` now; 2. S tickets built by the control plane once M1: First end-to-end flow is done; 3. most work, including parallel waves, once M2: Multi-project in parallel is done. Trust-boundary work (auth, IAM, Terraform, workflows, review gates) and deploy-breaking changes stay in interactive sessions.
+**With itself (ADR-0047):** 1. track slices as tickets in project `AI` now; 2. S tickets built by the control plane once M1: First end-to-end flow is done; 3. most work, including parallel waves, once M5: Multi-project in parallel is done. Trust-boundary work (auth, IAM, Terraform, workflows, review gates) and deploy-breaking changes stay in interactive sessions.
 
 Each milestone is delivered as **slices**. A slice:
 - is one PR, branched from the latest `main` after its dependencies have merged — no stacked PRs;
@@ -514,34 +517,42 @@ Repo scaffold, contracts package, Terraform for control-plane GCP project (plan 
 
 **Explicitly not in M1: First end-to-end flow:** epics, dedicated run-detail screen, agent read access to API/MCP, routing beyond Claude Code (model per size only).
 
-**Merged slices** (scope and Done when moved to [`history/m1-merged-slices.md`](history/m1-merged-slices.md), ADR-0046): M1.0: Docs sync; M1.1: MCP OAuth spike; M1.2: Ticket core; M1.3: UI: tickets + inbox; M1.4: MCP core tools; M1.5: GitHub App + project registration; M1.19: GitHub App setup from the UI; M1.20: Custom domain; M1.10: Security review automation; M1.11: Adversarial PR review; M1.12: Local quality gates; M1.13: GCP cost guardrails; M1.14: Cost kill switch; M1.16: Project baseline v1; M1.15: Usage alerts; M1.7: Refinement.
+**Merged slices** (scope and Done when moved to [`history/m1-merged-slices.md`](history/m1-merged-slices.md), ADR-0046): M1.0: Docs sync; M1.1: MCP OAuth spike; M1.2: Ticket core; M1.3: UI: tickets + inbox; M1.4: MCP core tools; M1.5: GitHub App + project registration; M1.19: GitHub App setup from the UI; M1.20: Custom domain; M1.10: Security review automation; M1.11: Adversarial PR review; M1.12: Local quality gates; M1.13: GCP cost guardrails; M1.14: Cost kill switch; M1.16: Project baseline v1; M1.15: Usage alerts; M1.7: Refinement; M1.6: Claude Code executor.
 
 | Slice | Scope | Size | Depends on | Done when |
 |---|---|---|---|---|
-| **M1.6: Claude Code executor** | **6a:** reusable workflow running the real `claude-code-action`; `workflow_dispatch` from the App with run ID; OIDC-authenticated callback; Run records; the executor takes the credential kind from the route's `Provider` (subscription token now, API key later, ADR-0050); **permission profile** for headless runs (§7.2, ADR-0040); threat model gets ticket text as untrusted input. First verify open question 5 (headless billing). **6b:** Cloud Tasks watchdog at deadline; one automatic retry then Needs-you. | L (6a dispatch+callback, 6b watchdog+retry) | M1.5: GitHub App + project registration, M1.19: GitHub App setup from the UI | 6a: a run on a seeded ticket dispatches, calls back with its report, and completes; a run that tries to read `.env` or edit a CODEOWNERS path is refused. 6b (built): a killed run is caught by the watchdog and flagged |
 | **M1.8: Build + gate** | Dispatcher picks Ready tickets; model per size (Sonnet for S, Opus for M/L, overridable per ticket); `build` run starts read-only and writes its plan (files, order of work, tests, riskiest step, rejected alternatives), stops there if the project's `planApproval` policy applies (approve/reject with a reason from UI and MCP), then opens a PR titled `<KEY>: <ticket title>` whose description starts with a link to the ticket (`<PUBLIC_URL>/p/<project>/t/<KEY>`), with a structured summary (ticket key, plan, deviations, verification output); bug tickets commit a failing test first; verifier subagent; gate vetoes a PR without verification output; adversarial procedure adds the acceptance-criteria + plan pass and the nit cap of 5; **auto-merge** per the project's `autoMerge` policy (default S and M) when every required check and both review agents pass, done by the control plane with the App token (a bot actor: no deploy of this repo), vetoed PRs go to Andy; before it is on: the executor's permission profile proven live with a counted denial (AI-12), protected paths in CODEOWNERS (this repo and the baseline seed), threat-model R21 completed, §8.1 row for `autoMerge` and `planApproval`; project `AI` stays `autoMerge: none` until the control plane has a safe deploy path (ADR-0050); `would_auto_merge` recorded; outcome set from merge/close webhook; cost estimate and metrics (CI green on first try, review blockers, Andy's commits before merge, rework) on the Run (ADR-0040). | M | M1.7: Refinement, M1.16: Project baseline v1 | Ready S ticket → PR with plan and verification output → merges on its own → ticket advances; with `autoMerge: none` the PR waits for Andy; with `planApproval: all` the run stops after the plan and continues on approval; Run shows cost estimate, outcome and metrics; a PR summary without verification output is vetoed |
 | **M1.9: Quota capture** | Timeboxed, best-effort. Capture claude-sub `rate_limits` from runs if available headless; otherwise readings stay **unknown** per policy. UI banner on warn/pause/unknown. | S | M1.8: Build + gate | Gauge shows a reading or "unknown"; banner appears at thresholds (test with seeded readings) |
 | **M1.17: Agent evals v1** | Eval suite for the agent configuration (ADR-0040): `Evaluator` port + fake + contract suite; cases = input (diff, ticket) + deterministic checks on structured output; seed cases from the review demos (PR #12, PR #22: planted bugs must get a high/critical or `blocker`), clean diffs (no blocker) and the first real runs' refine and build outputs; required `agent-evals` check that runs when `platform/procedures/**`, `AGENTS.md`, `template/AGENTS.md.template` or `.claude/**` change, passes without running otherwise, fails below the pass-rate threshold; capped cases/turns per run (subscription quota). Pick the tool first (promptfoo is the candidate). Each case records input tokens; a token jump fails like a pass-rate drop (ADR-0046). | M | M1.8: Build + gate | A PR that weakens the adversarial procedure (e.g. drops the failing-scenario rule) fails `agent-evals`; reverting it passes; a code-only PR skips the run |
 
-Waves (ADR-0050): M1.6a → M1.7 → M1.8 → M1.6b ‖ M1.17: Agent evals v1 ‖ M1.9: Quota capture. M1.18: Plan step is folded into M1.8. Before M2: ticket model v2, UX foundation (ADR-0058, ADR-0059).
+Waves (ADR-0050): M1.6a → M1.7 → M1.8 → M1.6b ‖ M1.17: Agent evals v1 ‖ M1.9: Quota capture. M1.18: Plan step is folded into M1.8. M1 closes with ticket model v2 (ADR-0058) and M1.8 as 8a then 8b; M1.9 and M1.17 belong to M2 (ADR-0060).
 
-### M2: Multi-project in parallel
-Andy builds several systems at once (ADR-0035). Onboard N projects via M1.5: GitHub App + project registration and M1.16: Project baseline v1 (per-PR reviews, local gates, weekly system review: §9.1, §4.5, §10.2); **stories by project** in the UI and MCP (`list_projects`, per-project lists, inbox grouped by project); concurrent runs across projects with explicit caps (max runs per project and globally, ADR-0028); quota-aware dispatch so parallel runs keep the subscription reserves (§5); agent read access to API/MCP scoped per project; coordination of parallel work (ADR-0047: conflict-aware dispatch, sync runs, merge queue, collision-free IDs, in-flight view, cross-project dependencies); **onboarding interview and project brief** (ADR-0053); dispatch also capped by PRs waiting for Andy (review capacity), repeated review findings become a pending `ConfigChange` to `AGENTS.md` or a procedure (ADR-0040); **ideation** (ADR-0050): `/ideate` from Claude desktop, Claude Code or the UI turns an idea into an epic ticket in its project with a `specs/` draft in the repo (§7.3, §8); spike tickets (ADR-0058). Slice at milestone start.
+### M2: Self-hosting: andy-intelligence builds itself
+Scope and "Done when": ADR-0060. Safe deploy and rollback, then `autoMerge` on for project `AI`; several runs at once in a project (ADR-0047) under Andy's dial, caps and pause; M1.9: Quota capture; M1.17: Agent evals v1; email notifications; cost per ticket; a daily digest.
 
-### M3: Add Jules + model routing
-After M6: Dev → prod releases (ADR-0050). Jules adapter (completion via PR webhook); freeze `Executor` contract (two adapters pass contract tests); harness/provider/model/tier config with compatibility rules; cross-model review; google-sub quota (task counting) and reserves. Slice at milestone start.
+### M3: New UI and MCP
+The UX foundation (ADR-0059), ticket-organizing MCP tools and AI-19: One permission function (ADR-0060).
 
-### M4: Paid models + spend caps
-After M3: Add Jules + model routing (ADR-0050): the spend-optimization goal, started when the Claude plan is cut or cheaper models are wanted. OpenCode executor via Actions; OpenRouter direct-call gateway for single-call steps; a capped API-key Claude provider; global and per-project caps with hard stops; quota-aware route fallback with 20% reserves; weekly model scout producing pending tier changes. Slice at milestone start.
-
-### M5: Epics + story board
+### M4: Epics + story board
 Epics with child tickets and dependencies; just-in-time re-planning; config editing and audit/revert in UI and MCP; epic grouping on the board; dedicated run-detail screen; pluggable design skills with a Hallmark trial and a Dashboards screen (ADR-0045; `design.md` earlier, ADR-0059) including tokens per run and per step (ADR-0046); **overnight runs** (ADR-0049: launch step with batched answers and plan approvals, one-night epic branch, night budget and stop time, morning report as a Needs-you item). Slice at milestone start.
+
+### M5: Multi-project in parallel
+Andy builds several systems at once (ADR-0035). Onboard N projects via M1.5: GitHub App + project registration and M1.16: Project baseline v1 (per-PR reviews, local gates, weekly system review: §9.1, §4.5, §10.2); **stories by project** in the UI and MCP (`list_projects`, per-project lists, inbox grouped by project); concurrent runs across projects with explicit caps (max runs per project and globally, ADR-0028); quota-aware dispatch so parallel runs keep the subscription reserves (§5); agent read access to API/MCP scoped per project; coordination across projects (ADR-0047: merge queue, cross-project dependencies; the single-project parts are in M2); **onboarding interview and project brief** (ADR-0053); repeated review findings become a pending `ConfigChange` to `AGENTS.md` or a procedure (ADR-0040); **ideation** (ADR-0050): `/ideate` from Claude desktop, Claude Code or the UI turns an idea into an epic ticket in its project with a `specs/` draft in the repo (§7.3, §8); spike tickets (ADR-0058). Slice at milestone start.
 
 ### M6: Dev → prod releases
 Environments as per-project policy (ADR-0050): MVPs get one prod project + PR previews; dev + prod when a project opts in. Project template Terraform + Cloud Deploy dev→prod, with a budget and caps per project (§10.1); dev deploy + verification (Playwright/API tests + verification agent); promote/rollback from UI and MCP; release notes; DORA metrics (deploy frequency, lead time, change failure rate, time to restore; ADR-0040). Slice at milestone start.
 
 ### M7: Mobile
 The control-plane UI as an installable web app with push (ADR-0052 has the design): verify Web Push on Andy's iPhone first; `web-push` `Notifier` adapter and `PushSubscriptionStore` port; notice types with deep links, caps, quiet hours; phone layout for the inbox, ticket detail, releases; answer, approve, promote, pause from the phone; no agent-written text in a notification. Slice at milestone start.
+
+### M8: Project members
+Other users on a project with basic roles (AI-18). Designed at milestone start.
+
+### M9: Add Jules + model routing
+After M6: Dev → prod releases (ADR-0050). Jules adapter (completion via PR webhook); freeze `Executor` contract (two adapters pass contract tests); harness/provider/model/tier config with compatibility rules; cross-model review; google-sub quota (task counting) and reserves. Slice at milestone start.
+
+### M10: Paid models + spend caps
+After M9: Add Jules + model routing (ADR-0050): the spend-optimization goal, started when the Claude plan is cut or cheaper models are wanted. OpenCode executor via Actions; OpenRouter direct-call gateway for single-call steps; a capped API-key Claude provider; global and per-project caps with hard stops; quota-aware route fallback with 20% reserves; weekly model scout producing pending tier changes. Slice at milestone start.
 
 ### Later (explicitly deferred)
 After M6: Dev → prod releases: **per-project custom domains**. (The control plane's own domain moved up to M1.20: Custom domain, ADR-0044.)
@@ -568,11 +579,11 @@ Remaining:
 5. ~~Claude plan (Pro vs Max) — affects automated-run budget~~ — **decided (ADR-0050)**: automated runs use Andy's subscription for now, behind a `Provider` so a capped API key is configuration later. Verified in M1.6a (ADR-0051): Anthropic's docs bill OAuth-token runs to the subscription and document `claude setup-token` for CI; plan limits assume ordinary individual use.
 6. Google plan (AI Pro vs Ultra) and current Jules daily task quota.
 7. OpenRouter: account exists? initial monthly/daily caps?
-8. ~~First real side project to onboard in M1: First end-to-end flow~~ — **answered in M1.5: GitHub App + project registration**: andy-intelligence itself is project #1 (ADR-0041); side projects in M2: Multi-project in parallel.
+8. ~~First real side project to onboard in M1: First end-to-end flow~~ — **answered in M1.5: GitHub App + project registration**: andy-intelligence itself is project #1 (ADR-0041); side projects in M5: Multi-project in parallel.
 9. ~~Claude custom-connector OAuth mechanism currently supported (dynamic client registration vs static client)~~ — **answered by M1.1: MCP OAuth spike**: CIMD against our own authorization server (ADR-0039).
 10. Whether the Jules GitHub integration or the Jules REST API should be the dispatch path (REST preferred for run tracking; must support auto-PR creation for the completion signal).
 11. Local mode design (ADR-0032): markdown ticket format, local executor (Claude Code CLI) and its trust boundary, local storage/queue/auth adapters, devkit packaging and versioning. Due after M1: First end-to-end flow.
-12. Context sources design (ADR-0033): markdown kind **answered by ADR-0053** (brief, interview, step mapping). Port shape and MCP registration: after M2: Multi-project in parallel.
+12. Context sources design (ADR-0033): markdown kind **answered by ADR-0053** (brief, interview, step mapping). Port shape and MCP registration: after M5: Multi-project in parallel.
 
 ---
 

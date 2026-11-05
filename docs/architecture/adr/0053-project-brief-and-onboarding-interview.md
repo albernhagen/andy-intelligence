@@ -1,5 +1,5 @@
 ---
-status: accepted (built in M2: Multi-project in parallel)
+status: accepted (built in M5: Multi-project in parallel)
 date: 2026-11-04
 amends: 0033
 ---

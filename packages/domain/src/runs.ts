@@ -41,7 +41,7 @@ export const DEFAULT_ROUTE: Route = {
 /**
  * How each provider is billed (ARCHITECTURE §5 Provider). The executor takes the run's
  * credential kind from here (ADR-0050): moving Claude to a capped API key is a change here plus
- * one repo secret, until provider config moves to Firestore with M5: Epics + story board.
+ * one repo secret, until provider config moves to Firestore with M4: Epics + story board.
  */
 export const PROVIDER_BILLING: Record<ProviderKey, BillingType> = {
   "claude-sub": "subscription",
@@ -55,7 +55,7 @@ export const STEP_LIMITS: Record<StartableStep, { maxTurns: number; timeoutMinut
   refine: { maxTurns: 30, timeoutMinutes: 45 },
 };
 
-/** Runs in flight per project (ADR-0028). One until M2: Multi-project in parallel. */
+/** Runs in flight per project (ADR-0028). One until M5: Multi-project in parallel. */
 export const MAX_ACTIVE_RUNS_PER_PROJECT = 1;
 
 /**

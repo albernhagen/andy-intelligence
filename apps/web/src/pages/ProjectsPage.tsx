@@ -6,7 +6,7 @@ import { Field, Input } from "@/components/ui/input";
 import { Loading, QueryError } from "@/components/Status";
 import { useCreateProject, useGitHub, useProjects, useUpdateProject } from "@/lib/queries";
 
-/** Project picker; each project opens its ticket board. M2 adds filtering across projects. */
+/** Project picker; each project opens its ticket board. M5: Multi-project in parallel adds filtering across projects. */
 export function ProjectsPage() {
   const projects = useProjects();
   const create = useCreateProject();
