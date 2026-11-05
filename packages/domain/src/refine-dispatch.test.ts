@@ -52,7 +52,7 @@ describe("RefineDispatcher", () => {
   const now = () => new Date((ms += 1000));
 
   function wire(executor: Executor | null = new WorkflowExecutor(host)) {
-    const runs: RunService = new RunService(tracker, runStore, executor, now, async (p) => {
+    const runs: RunService = new RunService(tracker, runStore, executor, now, null, async (p) => {
       await dispatcher.next(p);
     });
     const dispatcher = new RefineDispatcher(tracker, runStore, runs, now);
@@ -184,6 +184,21 @@ describe("RefineDispatcher", () => {
     const next = await tickets.create(projectId, { type: "story", title: "Two" }, "andy");
     expect(await refines(next.id)).toHaveLength(1);
     expect(await refines(failed.id)).toHaveLength(1);
+  });
+
+  it("GivenTheWatchdogEndsARefine_WhenItsRetryEndsToo_ThenTheNextTicketStarts", async () => {
+    const { tickets, runs } = wire();
+    const first = await tickets.create(projectId, { type: "story", title: "One" }, "andy");
+    const second = await tickets.create(projectId, { type: "story", title: "Two" }, "andy");
+    const pastDeadline = () => (ms += 46 * 60_000);
+
+    pastDeadline();
+    expect(await runs.checkDeadline((await refines(first.id))[0]!.id)).toBe("retried");
+    expect(await refines(second.id)).toEqual([]);
+
+    pastDeadline();
+    expect(await runs.checkDeadline((await refines(first.id))[0]!.id)).toBe("flagged");
+    expect(await refines(second.id)).toHaveLength(1);
   });
 
   it("GivenAutoRefineOff_WhenATicketIsCreated_ThenNoRunStartsUntilItIsTurnedOn", async () => {

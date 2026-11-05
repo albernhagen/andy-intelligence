@@ -19,6 +19,7 @@ import {
 } from "../entities";
 import {
   ProjectPatch,
+  PullRequestLink,
   RunRequest,
   WorkTrackerError,
   type CodeEventLog,
@@ -38,6 +39,8 @@ import {
   type RunReport,
   type RunStore,
   type NewRun,
+  WatchdogCheck,
+  type WatchdogQueue,
   ACTIVE_RUN_STATUSES,
   type TicketChange,
   type TicketFilter,
@@ -135,6 +138,18 @@ export class InMemoryWorkTracker implements WorkTracker {
     const comment = event(ticket, "comment", actor, this.now(), body);
     this.events.get(ticket.id)?.push(comment);
     return structuredClone(comment);
+  }
+
+  async linkPullRequest(
+    projectId: string,
+    ticketId: string,
+    link: PullRequestLink,
+    actor: EventActor,
+  ): Promise<TicketEvent> {
+    const ticket = this.requireTicket(projectId, ticketId);
+    const linked = event(ticket, "pr_linked", actor, this.now(), null, PullRequestLink.parse(link));
+    this.events.get(ticket.id)?.push(linked);
+    return structuredClone(linked);
   }
 
   async listEvents(projectId: string, ticketId: string): Promise<TicketEvent[]> {
@@ -324,6 +339,26 @@ export class InMemoryRunStore implements RunStore {
     const run = applyRunPatch(current, patch, from);
     this.runs.set(runId, run);
     return structuredClone(run);
+  }
+}
+
+/** In-memory WatchdogQueue: holds checks until a test delivers them with `due`. */
+export class InMemoryWatchdogQueue implements WatchdogQueue {
+  readonly checks = new Map<string, WatchdogCheck>();
+
+  async schedule(check: WatchdogCheck): Promise<"scheduled" | "duplicate"> {
+    const parsed = WatchdogCheck.parse(check);
+    if (this.checks.has(parsed.runId)) return "duplicate";
+    this.checks.set(parsed.runId, parsed);
+    return "scheduled";
+  }
+
+  /** Test helper: run IDs whose check is due at `now`, earliest first. */
+  due(now: Date): string[] {
+    return [...this.checks.values()]
+      .filter((c) => Date.parse(c.at) <= now.getTime())
+      .sort((a, b) => a.at.localeCompare(b.at))
+      .map((c) => c.runId);
   }
 }
 

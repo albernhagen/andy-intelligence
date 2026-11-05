@@ -67,16 +67,30 @@ describe("TicketService", () => {
     });
   });
 
-  it("GivenAForcedMove_WhenNotAndyOrNoReason_ThenRejected", async () => {
+  it("GivenAForcedMove_WhenNotAndy_ThenForbidden", async () => {
     const t = await service.create(projectId, readyStory, "andy");
     await rejects(
       service.move(projectId, t.id, "done", "agent:r1", { force: true, reason: "x" }),
       "forbidden",
     );
-    await rejects(
-      service.move(projectId, t.id, "done", "andy", { force: true, reason: " " }),
-      "reason_required",
-    );
+    await rejects(service.move(projectId, t.id, "done", "system", { force: true }), "forbidden");
+  });
+
+  it("GivenAForcedMove_WhenByAndyWithoutAReason_ThenRecordedAsForcedWithNoBody", async () => {
+    const t = await service.create(projectId, { type: "task", title: "x" }, "andy");
+    const moved = await service.move(projectId, t.id, "done", "andy", { force: true });
+    expect(moved.stage).toBe("done");
+    expect((await service.history(projectId, t.id)).at(-1)).toMatchObject({
+      kind: "stage_changed",
+      body: null,
+      data: { from: "backlog", to: "done", forced: true },
+    });
+  });
+
+  it("GivenAForcedMove_WhenTheReasonIsBlank_ThenStoredAsNoReason", async () => {
+    const t = await service.create(projectId, { type: "task", title: "x" }, "andy");
+    await service.move(projectId, t.id, "done", "andy", { force: true, reason: "  " });
+    expect((await service.history(projectId, t.id)).at(-1)).toMatchObject({ body: null });
   });
 
   it("GivenAnOpenQuestion_WhenAsked_ThenTicketNeedsYouAndCantBeReady", async () => {
@@ -213,5 +227,41 @@ describe("TicketService", () => {
       }),
     ]);
     expect(overview.needsYou).toEqual({ questions: 1, tickets: 1 });
+  });
+  it("GivenAReadyTicket_WhenMovedForwardByKey_ThenOneStepAndNotForced", async () => {
+    const t = await service.create(projectId, readyStory, "andy");
+    await service.move(projectId, t.id, "ready", "andy");
+    const moved = await service.moveForward(t.key, "in_progress", "andy");
+    expect(moved.stage).toBe("in_progress");
+    expect((await tracker.listEvents(projectId, t.id)).at(-1)?.data).toMatchObject({
+      forced: false,
+    });
+  });
+
+  it("GivenABackwardOrSkippingMove_WhenMovedForwardByKey_ThenRejectedAndUnchanged", async () => {
+    const t = await service.create(projectId, readyStory, "andy");
+    await service.move(projectId, t.id, "ready", "andy");
+    await rejects(service.moveForward(t.key, "backlog", "andy"), "invalid_transition");
+    await rejects(service.moveForward(t.key, "ready_for_review", "andy"), "invalid_transition");
+    expect((await tracker.getTicket(projectId, t.id))?.stage).toBe("ready");
+  });
+
+  it("GivenAnIncompleteStory_WhenMovedForwardToReady_ThenTheDorStillApplies", async () => {
+    const t = await service.create(projectId, { type: "story", title: "x" }, "andy");
+    await rejects(service.moveForward(t.key, "ready", "andy"), "dor_not_met");
+  });
+
+  it("GivenAFlaggedTicket_WhenUnflagged_ThenClearedUnlessAQuestionIsOpen", async () => {
+    const t = await service.create(projectId, readyStory, "andy");
+    await service.flag(projectId, t.id, "system");
+    expect((await service.unflag(projectId, t.id, "system")).needsYou).toBe(false);
+    await service.ask(projectId, t.id, { text: "Which?" }, "agent:r1");
+    expect((await service.unflag(projectId, t.id, "system")).needsYou).toBe(true);
+  });
+
+  it("GivenATicket_WhenFlagged_ThenNeedsYou", async () => {
+    const t = await service.create(projectId, readyStory, "andy");
+    expect((await service.flag(projectId, t.id, "system")).needsYou).toBe(true);
+    expect((await service.needsYou()).tickets.map((x) => x.id)).toEqual([t.id]);
   });
 });

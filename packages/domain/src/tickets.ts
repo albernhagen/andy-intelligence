@@ -14,7 +14,7 @@ import {
   type WorkTracker,
 } from "@andy/contracts";
 import { checkDor, type DorResult } from "./dor";
-import { canTransition } from "./stages";
+import { canTransition, isForwardMove } from "./stages";
 
 function log(severity: "INFO" | "WARNING", message: string, fields: object = {}) {
   console.log(JSON.stringify({ severity, message, component: "tickets", ...fields }));
@@ -27,7 +27,6 @@ export class DomainError extends Error {
       | "invalid_transition"
       | "dor_not_met"
       | "forbidden"
-      | "reason_required"
       | "invalid_repo"
       | "repo_taken"
       | "invalid_step"
@@ -125,8 +124,8 @@ export class TicketService {
   ): Promise<Ticket> {
     const ticket = await this.require(projectId, ticketId);
     if (force) {
+      // ADR-0057: the reason is optional; `forced: true` in history is the audit trail.
       if (actor !== "andy") throw new DomainError("forbidden", "only Andy can force a stage move");
-      if (!reason?.trim()) throw new DomainError("reason_required", "a forced move needs a reason");
     } else {
       if (!canTransition(ticket.stage, to)) {
         throw new DomainError("invalid_transition", `can't move from ${ticket.stage} to ${to}`);
@@ -141,9 +140,40 @@ export class TicketService {
     return this.tracker.updateTicket(
       projectId,
       ticketId,
-      { stage: { to, forced: force, reason: reason ?? null }, ifUpdatedAt: ticket.updatedAt },
+      {
+        stage: { to, forced: force, reason: reason?.trim() || null },
+        ifUpdatedAt: ticket.updatedAt,
+      },
       actor,
     );
+  }
+
+  /** One step forward by ticket key, never forced (the MCP `move_ticket` tool). */
+  async moveForward(key: string, to: Stage, actor: EventActor): Promise<Ticket> {
+    const ticket = await this.findByKey(key);
+    if (!isForwardMove(ticket.stage, to)) {
+      throw new DomainError(
+        "invalid_transition",
+        `can't move ${key} from ${ticket.stage} to ${to}: only one step forward is allowed`,
+      );
+    }
+    return this.move(ticket.projectId, ticket.id, to, actor);
+  }
+
+  /** Takes the ticket out of the Needs-you inbox unless a question is still open. */
+  async unflag(projectId: string, ticketId: string, actor: EventActor): Promise<Ticket> {
+    const open = await this.openQuestionCount(ticketId);
+    return this.tracker.updateTicket(
+      projectId,
+      ticketId,
+      { fields: { needsYou: open > 0 } },
+      actor,
+    );
+  }
+
+  /** Puts the ticket in the Needs-you inbox. */
+  flag(projectId: string, ticketId: string, actor: EventActor): Promise<Ticket> {
+    return this.tracker.updateTicket(projectId, ticketId, { fields: { needsYou: true } }, actor);
   }
 
   comment(projectId: string, ticketId: string, body: string, actor: EventActor) {

@@ -25,6 +25,7 @@ import {
   type NewRun,
   type RunRequest,
   type RunStore,
+  type WatchdogQueue,
   type WorkTracker,
 } from "../ports";
 
@@ -201,6 +202,16 @@ export function workTrackerContract(name: string, make: () => Promise<WorkTracke
         runId: "run-1",
       });
       expect((await tracker.listEvents(project.id, ticket.id)).at(-1)).toEqual(comment);
+    });
+
+    it("GivenATicket_WhenAPullRequestIsLinked_ThenAPrLinkedEventAndTheTicketIsUnchanged", async () => {
+      const { tracker, project, ticket } = await setup();
+      const link = { number: 7, url: "https://example.com/pr/7", state: "merged" } as const;
+      const linked = await tracker.linkPullRequest(project.id, ticket.id, link, "system");
+      expect(linked).toMatchObject({ kind: "pr_linked", actor: "system", data: link });
+      expect((await tracker.listEvents(project.id, ticket.id)).at(-1)).toEqual(linked);
+      expect(await tracker.getTicket(project.id, ticket.id)).toEqual(ticket);
+      await rejectsWith(tracker.linkPullRequest(project.id, "nope", link, "system"), "not_found");
     });
 
     it("GivenAQuestion_WhenAnswered_ThenStatusAndHistoryUpdateAndASecondAnswerConflicts", async () => {
@@ -507,6 +518,9 @@ export function codeEventLogContract(name: string, make: () => Promise<CodeEvent
         state: "open",
         draft: false,
         title,
+        bodyFirstLine: "AI-7",
+        fromFork: false,
+        intoDefaultBranch: true,
         headRef: "m1.5/github-app",
         headSha: "abc123",
         baseRef: "main",
@@ -678,6 +692,28 @@ export function runStoreContract(name: string, make: () => Promise<RunStore>): v
         store.update(run.id, { status: "failed" }, ["queued"]),
       ]);
       expect(results.filter((r) => r.status === "fulfilled")).toHaveLength(1);
+    });
+  });
+}
+
+export function watchdogQueueContract(name: string, make: () => Promise<WatchdogQueue>): void {
+  describe(`WatchdogQueue contract: ${name}`, () => {
+    const runId = () => `run-${crypto.randomUUID()}`;
+    const at = "2026-11-04T13:00:00.000Z";
+
+    it("GivenANewRun_WhenScheduled_ThenScheduled", async () => {
+      expect(await (await make()).schedule({ runId: runId(), at })).toBe("scheduled");
+    });
+
+    it("GivenAScheduledRun_WhenScheduledAgain_ThenDuplicate", async () => {
+      const queue = await make();
+      const id = runId();
+      await queue.schedule({ runId: id, at });
+      expect(await queue.schedule({ runId: id, at: "2026-11-04T14:00:00.000Z" })).toBe("duplicate");
+    });
+
+    it("GivenAnInvalidRunId_WhenScheduled_ThenRejected", async () => {
+      await expect((await make()).schedule({ runId: "a/b", at })).rejects.toThrow();
     });
   });
 }

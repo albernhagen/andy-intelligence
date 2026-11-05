@@ -6,6 +6,7 @@ import {
   oauthGrantStoreContract,
   quotaSourceContract,
   runStoreContract,
+  watchdogQueueContract,
   workTrackerContract,
 } from "../testing";
 import {
@@ -16,6 +17,7 @@ import {
   InMemoryOAuthGrantStore,
   InMemoryQuotaSource,
   InMemoryRunStore,
+  InMemoryWatchdogQueue,
   InMemoryWorkTracker,
 } from "./index";
 
@@ -73,3 +75,5 @@ runStoreContract("in-memory", async () => new InMemoryRunStore());
 codeEventLogContract("in-memory", async () => new InMemoryCodeEventLog());
 
 codeHostConnectionStoreContract("in-memory", async () => new InMemoryCodeHostConnectionStore());
+
+watchdogQueueContract("in-memory", async () => new InMemoryWatchdogQueue());

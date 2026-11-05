@@ -157,15 +157,13 @@ describe("ticket API", () => {
     expect(res.status).toBe(409);
   });
 
-  it("GivenAForcedMove_WhenNoReason_Then422ElseMoved", async () => {
+  it("GivenAForcedMove_WhenNoReason_ThenMoved", async () => {
     const t = await projectWithTicket();
-    const base = `/api/projects/ai/tickets/${t.id}`;
-    expect((await call("POST", `${base}/stage`, { to: "done", force: true })).status).toBe(422);
-    const res = await call("POST", `${base}/stage`, {
+    const res = await call("POST", `/api/projects/ai/tickets/${t.id}/stage`, {
       to: "done",
       force: true,
-      reason: "shipped by hand",
     });
+    expect(res.status).toBe(200);
     expect(res.json.stage).toBe("done");
   });
 

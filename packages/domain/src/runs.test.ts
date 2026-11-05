@@ -417,7 +417,7 @@ describe("RunService", () => {
       });
     });
 
-    it("GivenTheTicketLeftBacklog_WhenARefineFails_ThenTheTicketIsNotFlagged", async () => {
+    it("GivenTheTicketLeftBacklog_WhenARefineResultIsRejected_ThenTheTicketIsNotFlagged", async () => {
       const run = await service.start(projectId, ticketId, "refine");
       await tracker.updateTicket(
         projectId,
@@ -425,7 +425,7 @@ describe("RunService", () => {
         { stage: { to: "ready", reason: "x" } },
         "andy",
       );
-      await service.report(run.id, await callerOf(run.id), { ...refined(null), status: "failed" });
+      await service.report(run.id, await callerOf(run.id), refined(null));
       expect((await tracker.getTicket(projectId, ticketId))?.needsYou).toBe(false);
     });
 
@@ -433,7 +433,14 @@ describe("RunService", () => {
       const ended = vi.fn(async () => {
         throw new Error("boom");
       });
-      const hooked = new RunService(tracker, runs, new WorkflowExecutor(host), () => NOW, ended);
+      const hooked = new RunService(
+        tracker,
+        runs,
+        new WorkflowExecutor(host),
+        () => NOW,
+        null,
+        ended,
+      );
       const run = await hooked.start(projectId, ticketId, "refine");
       const caller = await callerOf(run.id);
       expect(await hooked.report(run.id, caller, refined(good))).toBe("recorded");
@@ -484,10 +491,8 @@ describe("RunService", () => {
     it("GivenTheRefineCapIsReached_WhenAnotherIsStarted_ThenRunLimitAndNothingIsDispatched", async () => {
       for (let i = 0; i < MAX_REFINE_RUNS_PER_TICKET; i++) {
         const run = await service.start(projectId, ticketId, "refine");
-        await service.report(run.id, await callerOf(run.id), {
-          ...refined(null),
-          status: "failed",
-        });
+        // A rejected result isn't retried, so each pass is one run.
+        await service.report(run.id, await callerOf(run.id), refined(null));
       }
       await rejects(service.start(projectId, ticketId, "refine"), "run_limit");
       expect(host.workflowRuns.size).toBe(MAX_REFINE_RUNS_PER_TICKET);

@@ -5,6 +5,7 @@ import {
   type CodeHostConnectionStore,
   type OAuthGrantStore,
   type RunStore,
+  type WatchdogQueue,
   type WorkTracker,
 } from "@andy/contracts";
 import { ClaudeCodeActionsExecutor, exchangeManifestCode, type CreatedApp } from "@andy/github";
@@ -33,6 +34,7 @@ import {
   type ActionsTokenVerifier,
 } from "./github/token";
 import { registerGitHubWebhook } from "./github/webhooks";
+import { invokerTokenVerifier, registerRunWatchdog, type InvokerTokenVerifier } from "./watchdog";
 
 /** Request body cap for /api/* (ADR-0028: everything that can grow gets a cap). */
 export const MAX_BODY_BYTES = 256 * 1024;
@@ -57,6 +59,20 @@ export interface AppDeps {
    * (the default run.app URLs) get 404, except /health for monitoring. Unset: every host (local dev).
    */
   publicHost?: string;
+  /**
+   * Run watchdog (M1.6b, §7.1): each dispatched run queues a check at its deadline, delivered
+   * to `/runs/{id}/watchdog` with the invoker's OIDC token. Off (no checks, route absent) when
+   * not configured, e.g. local dev.
+   */
+  watchdog?: {
+    queue: WatchdogQueue;
+    /** The OIDC audience: `PUBLIC_URL`. */
+    publicUrl: string;
+    /** The invoker service account the queue's tokens must be for. */
+    invokerEmail: string;
+    /** Test seam; defaults to Google's ID token verification. */
+    verifyInvokerToken?: InvokerTokenVerifier;
+  };
   /** MCP endpoint + its OAuth server; off (routes absent) when not configured. */
   mcp?: {
     publicUrl: string;
@@ -107,7 +123,6 @@ const meRoute = createRoute({
 const DOMAIN_STATUS = {
   invalid_transition: 422,
   dor_not_met: 422,
-  reason_required: 422,
   forbidden: 403,
   invalid_repo: 422,
   repo_taken: 409,
@@ -177,16 +192,28 @@ export function createApp(deps: AppDeps) {
     : null;
 
   // Runs dispatch through the GitHub App; without it, starting a run is refused (503).
-  // The refine dispatcher (ADR-0054) starts the next waiting refine after each report, ticket
-  // create and last answer; `next` never throws.
+  // The refine dispatcher (ADR-0054) starts the next waiting refine after each report or
+  // watchdog end, ticket create and last answer; `next` never throws.
   const runs = new RunService(
     deps.tracker,
     deps.runs,
     connection ? new ClaudeCodeActionsExecutor(new ConnectedCodeHost(connection)) : null,
     now,
+    deps.watchdog?.queue ?? null,
     async (projectId) => void (await refiner.next(projectId)),
   );
   const refiner = new RefineDispatcher(deps.tracker, deps.runs, runs, now);
+
+  // Public, outside /api: the watchdog queue presents a Google OIDC token for the invoker SA.
+  if (deps.watchdog) {
+    registerRunWatchdog(app, {
+      runs,
+      verify:
+        deps.watchdog.verifyInvokerToken ??
+        invokerTokenVerifier(deps.watchdog.publicUrl, deps.watchdog.invokerEmail),
+      now,
+    });
+  }
 
   // Public, outside /api: GitHub signs webhooks (HMAC); CI jobs present an Actions OIDC token.
   if (github && connection) {

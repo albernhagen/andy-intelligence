@@ -235,6 +235,11 @@ export const Run = z.object({
   /** Why the run failed to start or finish, for Andy. */
   error: z.string().max(2000).nullable().default(null),
   executor: RunExecutor.nullable().default(null),
+  // Added in M1.6b: Claude Code executor: watchdog + retry.
+  /** 1 for a run Andy started; 2 for its automatic retry (at most one, ADR-0028). */
+  attempt: z.number().int().positive().default(1),
+  /** The run this one retries; null for a first attempt. */
+  retryOf: Id.nullable().default(null),
 });
 export type Run = z.infer<typeof Run>;
 
@@ -360,6 +365,12 @@ export const PullRequest = z.object({
   draft: z.boolean(),
   /** Untrusted text; capped by the adapter. */
   title: z.string().max(256),
+  /** Untrusted text: the description's first line only (it may carry a ticket key), capped. */
+  bodyFirstLine: z.string().max(256).default(""),
+  /** Opened from another repo (anyone can do that on a public repo); never moves a ticket. */
+  fromFork: z.boolean().default(false),
+  /** Targets the repo's default branch; only such a merge completes a ticket (ADR-0056). */
+  intoDefaultBranch: z.boolean().default(false),
   headRef: z.string().min(1),
   headSha: z.string().min(1),
   baseRef: z.string().min(1),
