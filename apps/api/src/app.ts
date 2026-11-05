@@ -9,7 +9,13 @@ import {
   type WorkTracker,
 } from "@andy/contracts";
 import { ClaudeCodeActionsExecutor, exchangeManifestCode, type CreatedApp } from "@andy/github";
-import { DomainError, ProjectService, RunService, TicketService } from "@andy/domain";
+import {
+  DomainError,
+  ProjectService,
+  RefineDispatcher,
+  RunService,
+  TicketService,
+} from "@andy/domain";
 import { bodyLimit } from "hono/body-limit";
 import { requireAllowedUser, type AuthEnv, type TokenVerifier } from "./auth";
 import { registerMcp, type ClientMetadataResolver } from "./mcp";
@@ -121,6 +127,7 @@ const DOMAIN_STATUS = {
   invalid_repo: 422,
   repo_taken: 409,
   invalid_step: 422,
+  not_refinable: 422,
   run_limit: 409,
   run_finished: 409,
   executor_unavailable: 503,
@@ -186,13 +193,17 @@ export function createApp(deps: AppDeps) {
     : null;
 
   // Runs dispatch through the GitHub App; without it, starting a run is refused (503).
+  // The refine dispatcher (ADR-0054) starts the next waiting refine after each report or
+  // watchdog end, ticket create and last answer; `next` never throws.
   const runs = new RunService(
     deps.tracker,
     deps.runs,
     connection ? new ClaudeCodeActionsExecutor(new ConnectedCodeHost(connection)) : null,
     now,
     deps.watchdog?.queue ?? null,
+    async (projectId) => void (await refiner.next(projectId)),
   );
+  const refiner = new RefineDispatcher(deps.tracker, deps.runs, runs, now);
 
   // Public, outside /api: the watchdog queue presents a Google OIDC token for the invoker SA.
   if (deps.watchdog) {
@@ -233,13 +244,13 @@ export function createApp(deps: AppDeps) {
   });
 
   // One TicketService for REST and MCP: both get the same ticket rules (packages/domain).
-  const service = new TicketService(deps.tracker, runs);
-  registerTicketRoutes(
-    app,
+  const service = new TicketService(deps.tracker, runs, (projectId) => refiner.next(projectId));
+  const projects = new ProjectService(
     deps.tracker,
-    service,
-    new ProjectService(deps.tracker, connection ? new ConnectedCodeHost(connection) : null),
+    connection ? new ConnectedCodeHost(connection) : null,
+    (p) => refiner.next(p),
   );
+  registerTicketRoutes(app, deps.tracker, service, projects);
 
   registerRunRoutes(app, runs);
 
@@ -260,6 +271,8 @@ export function createApp(deps: AppDeps) {
       version: deps.version,
       tracker: deps.tracker,
       service,
+      runs,
+      projects,
     });
   }
 

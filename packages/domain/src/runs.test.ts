@@ -5,12 +5,16 @@ import {
   InMemoryWorkTracker,
   type Executor,
   type RunExecutor,
-  type RunHandle,
-  type RunRequest,
 } from "@andy/contracts";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { MAX_ACTIVE_RUNS_PER_PROJECT, RunService, refinePrompt } from "./runs";
-import type { DomainError } from "./tickets";
+import {
+  MAX_ACTIVE_RUNS_PER_PROJECT,
+  MAX_REFINE_RUNS_PER_TICKET,
+  RunService,
+  refinePrompt,
+} from "./runs";
+import { WorkflowExecutor } from "./test-executor";
+import { TicketService, type DomainError } from "./tickets";
 
 const REPO = {
   fullName: "albernhagen/andy-intelligence",
@@ -19,34 +23,6 @@ const REPO = {
   url: "https://github.com/albernhagen/andy-intelligence",
 };
 const NOW = new Date("2026-11-04T12:00:00.000Z");
-const EXECUTOR_REF =
-  "albernhagen/andy-intelligence/.github/workflows/claude-executor.yml@refs/heads/main";
-
-/** An executor that dispatches a workflow on the fake code host, like the Actions adapter. */
-class WorkflowExecutor extends InMemoryExecutor {
-  constructor(private readonly host: InMemoryCodeHost) {
-    super();
-  }
-  override async cancel(handle: RunHandle): Promise<void> {
-    if (handle.executor) await this.host.cancelWorkflowRun(handle.executor.repo, handle.externalId);
-  }
-  override async start(req: RunRequest): Promise<RunHandle> {
-    await super.start(req);
-    const credential = req.billingType === "pay_per_use" ? "api_key" : "subscription";
-    const d = await this.host.dispatchWorkflow(req.projectRef, "agent-run.yml", {
-      run_id: req.runId,
-      credential,
-    });
-    if (!d) throw new Error("not installed");
-    return {
-      runId: req.runId,
-      externalId: d.id,
-      url: d.url,
-      executor: { repo: req.projectRef, ref: EXECUTOR_REF, externalId: d.id },
-    };
-  }
-}
-
 describe("RunService", () => {
   let tracker: InMemoryWorkTracker;
   let runs: InMemoryRunStore;
@@ -251,10 +227,17 @@ describe("RunService", () => {
     await service.context(run.id, caller);
     const result = {
       status: "succeeded" as const,
-      summary: "**Ask**: a board",
+      summary: "{}",
       tokensIn: 1200,
       tokensOut: 300,
       costUsd: 0.02,
+      output: {
+        summary: "**Ask**: a board",
+        size: "S",
+        sizeReason: "one screen",
+        tier: "fast",
+        questions: [{ text: "Kanban or list?" }],
+      },
     };
     expect(await service.report(run.id, caller, result)).toBe("recorded");
     expect(await runs.get(run.id)).toMatchObject({
@@ -269,7 +252,7 @@ describe("RunService", () => {
     expect(events.at(-1)).toMatchObject({
       kind: "comment",
       actor: `agent:${run.id}`,
-      body: "**Ask**: a board",
+      body: expect.stringMatching(/^\*\*Ask\*\*: a board\n\nAsked 1 question/),
     });
   });
 
@@ -303,13 +286,280 @@ describe("RunService", () => {
     const run = await service.start(projectId, ticketId, "refine");
     const caller = await callerOf(run.id);
     await service.report(run.id, caller, {
-      status: "succeeded",
+      status: "failed",
       summary: "x".repeat(50_000),
       tokensIn: 1,
       tokensOut: 1,
       costUsd: 0,
     });
     expect((await runs.get(run.id))?.summary?.length).toBe(20_000);
+  });
+
+  describe("refine", () => {
+    const question = (text: string) => ({
+      text,
+      options: ["yes", "no"],
+      suggestedAnswer: "yes",
+      assumptions: [],
+      urgency: "normal",
+    });
+    const refined = (output: unknown) => ({
+      status: "succeeded" as const,
+      summary: null,
+      tokensIn: 1,
+      tokensOut: 1,
+      costUsd: 0,
+      output,
+    });
+    const finish = async (output: unknown) => {
+      const run = await service.start(projectId, ticketId, "refine");
+      const caller = await callerOf(run.id);
+      await service.context(run.id, caller);
+      return { run, caller, outcome: await service.report(run.id, caller, refined(output)) };
+    };
+    const sizing = { size: "M", sizeReason: "board and API", tier: "strong" };
+    const good = {
+      summary: "**Ask**: a board",
+      ...sizing,
+      questions: [question("A?"), question("B?")],
+    };
+
+    it("GivenAValidResult_WhenReported_ThenItsQuestionsAreOpenOnTheTicketWhichNeedsYou", async () => {
+      const { run } = await finish(good);
+      const questions = await tracker.listQuestions({ ticketId });
+      expect(questions.map((q) => [q.text, q.status, q.runId])).toEqual([
+        ["A?", "open", run.id],
+        ["B?", "open", run.id],
+      ]);
+      expect(await tracker.getTicket(projectId, ticketId)).toMatchObject({
+        stage: "backlog",
+        needsYou: true,
+        dorStatus: "not_met",
+      });
+      expect((await runs.get(run.id))?.status).toBe("succeeded");
+    });
+
+    it("GivenAReportReplayedAfterACrashBeforeTheRunWasClosed_WhenReportedAgain_ThenQuestionsAreNotDuplicated", async () => {
+      const run = await service.start(projectId, ticketId, "refine");
+      const caller = await callerOf(run.id);
+      const original = runs.update.bind(runs);
+      runs.update = async (id, patch, from) => {
+        if (patch.status === "succeeded") throw new Error("instance died");
+        return original(id, patch, from);
+      };
+      await expect(service.report(run.id, caller, refined(good))).rejects.toThrow("died");
+      runs.update = original;
+      expect(await service.report(run.id, caller, refined(good))).toBe("recorded");
+      expect(await service.report(run.id, caller, refined(good))).toBe("duplicate");
+      expect(await tracker.listQuestions({ ticketId })).toHaveLength(2);
+    });
+
+    it("GivenACrashBetweenWritingQuestionsAndFlaggingTheTicket_WhenReplayed_ThenTheTicketIsFlagged", async () => {
+      const run = await service.start(projectId, ticketId, "refine");
+      const caller = await callerOf(run.id);
+      const original = tracker.updateTicket.bind(tracker);
+      tracker.updateTicket = async (p, id, change, actor) => {
+        if (change.fields?.needsYou === true) throw new Error("instance died");
+        return original(p, id, change, actor);
+      };
+      await expect(service.report(run.id, caller, refined(good))).rejects.toThrow("died");
+      tracker.updateTicket = original;
+      expect((await tracker.getTicket(projectId, ticketId))?.needsYou).toBe(false);
+
+      expect(await service.report(run.id, caller, refined(good))).toBe("recorded");
+      expect(await tracker.getTicket(projectId, ticketId)).toMatchObject({
+        needsYou: true,
+        dorStatus: "not_met",
+      });
+      expect(await tracker.listQuestions({ ticketId })).toHaveLength(2);
+    });
+
+    it("GivenAndyAnsweredBetweenACrashAndTheReplay_WhenReplayed_ThenTheTicketIsNotFlaggedAgain", async () => {
+      await tracker.updateTicket(
+        projectId,
+        ticketId,
+        {
+          fields: {
+            body: "Andy can't see tickets.",
+            acceptanceCriteria: ["WHEN Andy opens the board THE SYSTEM SHALL list tickets"],
+            size: "S",
+            sizeReason: "one screen",
+            tier: "strong",
+          },
+        },
+        "andy",
+      );
+      const run = await service.start(projectId, ticketId, "refine");
+      const caller = await callerOf(run.id);
+      const original = runs.update.bind(runs);
+      runs.update = async (id, patch, from) => {
+        if (patch.status === "succeeded") throw new Error("instance died");
+        return original(id, patch, from);
+      };
+      await expect(service.report(run.id, caller, refined(good))).rejects.toThrow("died");
+      runs.update = original;
+      const tickets = new TicketService(tracker);
+      for (const q of await tracker.listQuestions({ ticketId })) {
+        await tickets.answer(q.id, "yes", "mcp", "andy");
+      }
+      expect((await tracker.getTicket(projectId, ticketId))?.stage).toBe("ready");
+
+      expect(await service.report(run.id, caller, refined(good))).toBe("recorded");
+      expect(await runs.get(run.id)).toMatchObject({ status: "succeeded" });
+      expect(await tracker.getTicket(projectId, ticketId)).toMatchObject({
+        stage: "ready",
+        needsYou: false,
+        dorStatus: "met",
+      });
+      expect(await tracker.listQuestions({ ticketId, status: "open" })).toEqual([]);
+    });
+
+    it.each([
+      ["no output", undefined],
+      ["no questions", { ...good, questions: [] }],
+      [
+        "six questions",
+        { ...good, questions: Array.from({ length: 6 }, (_, i) => question(`Q${i}?`)) },
+      ],
+      ["an oversized question", { ...good, questions: [question("x".repeat(501))] }],
+      ["no tier", { summary: "s", size: "S", sizeReason: "r", questions: [question("A?")] }],
+      ["an extra field", { ...good, stage: "ready" }],
+    ])(
+      "GivenAResultWith%s_WhenReported_ThenTheRunFailsNoQuestionsAreWrittenAndTheTicketNeedsYou",
+      async (_, output) => {
+        const { run } = await finish(output);
+        expect(await runs.get(run.id)).toMatchObject({
+          status: "failed",
+          error: expect.stringContaining("rejected"),
+        });
+        expect(await tracker.listQuestions({ ticketId })).toEqual([]);
+        expect(await tracker.getTicket(projectId, ticketId)).toMatchObject({
+          stage: "backlog",
+          needsYou: true,
+          size: null,
+          tier: null,
+        });
+        const comment = (await tracker.listEvents(projectId, ticketId)).findLast(
+          (e) => e.kind === "comment",
+        );
+        expect(comment?.body).toMatch(/^The refine run failed\. Its result was rejected/);
+      },
+    );
+
+    it("GivenATicketWithoutSizeOrTier_WhenRefined_ThenRefinesSizeAndTierAreWritten", async () => {
+      await finish(good);
+      expect(await tracker.getTicket(projectId, ticketId)).toMatchObject({
+        size: "M",
+        sizeReason: "board and API",
+        tier: "strong",
+      });
+    });
+
+    it("GivenAndySetSizeAndTier_WhenRefined_ThenHisValuesStay", async () => {
+      await tracker.updateTicket(
+        projectId,
+        ticketId,
+        { fields: { size: "L", sizeReason: "Andy's reason", tier: "frontier" } },
+        "andy",
+      );
+      await finish(good);
+      expect(await tracker.getTicket(projectId, ticketId)).toMatchObject({
+        size: "L",
+        sizeReason: "Andy's reason",
+        tier: "frontier",
+      });
+    });
+
+    it("GivenTheTicketLeftBacklog_WhenARefineResultIsRejected_ThenTheTicketIsNotFlagged", async () => {
+      const run = await service.start(projectId, ticketId, "refine");
+      await tracker.updateTicket(
+        projectId,
+        ticketId,
+        { stage: { to: "ready", reason: "x" } },
+        "andy",
+      );
+      await service.report(run.id, await callerOf(run.id), refined(null));
+      expect((await tracker.getTicket(projectId, ticketId))?.needsYou).toBe(false);
+    });
+
+    it("GivenARunEndedHook_WhenAReportIsRecorded_ThenItIsCalledOnceForTheProjectAndItsErrorIsSwallowed", async () => {
+      const ended = vi.fn(async () => {
+        throw new Error("boom");
+      });
+      const hooked = new RunService(
+        tracker,
+        runs,
+        new WorkflowExecutor(host),
+        () => NOW,
+        null,
+        ended,
+      );
+      const run = await hooked.start(projectId, ticketId, "refine");
+      const caller = await callerOf(run.id);
+      expect(await hooked.report(run.id, caller, refined(good))).toBe("recorded");
+      expect(await hooked.report(run.id, caller, refined(good))).toBe("duplicate");
+      expect(ended).toHaveBeenCalledTimes(1);
+      expect(ended).toHaveBeenCalledWith(projectId);
+    });
+
+    it("GivenAFailedRun_WhenReportedWithAnOutput_ThenNoQuestionsAreWritten", async () => {
+      const run = await service.start(projectId, ticketId, "refine");
+      await service.report(run.id, await callerOf(run.id), { ...refined(good), status: "failed" });
+      expect(await tracker.listQuestions({ ticketId })).toEqual([]);
+      expect((await tracker.getTicket(projectId, ticketId))?.stage).toBe("backlog");
+    });
+
+    it("GivenTheTicketLeftBacklogDuringTheRun_WhenReported_ThenNoQuestionsAreWritten", async () => {
+      const run = await service.start(projectId, ticketId, "refine");
+      await tracker.updateTicket(
+        projectId,
+        ticketId,
+        { stage: { to: "ready", reason: "x" } },
+        "andy",
+      );
+      await service.report(run.id, await callerOf(run.id), refined(good));
+      expect(await runs.get(run.id)).toMatchObject({
+        status: "failed",
+        error: expect.stringContaining("moved to ready"),
+      });
+      expect(await tracker.listQuestions({ ticketId })).toEqual([]);
+    });
+
+    it("GivenATicketPastBacklog_WhenRefineIsStarted_ThenNotRefinable", async () => {
+      await tracker.updateTicket(
+        projectId,
+        ticketId,
+        { stage: { to: "ready", reason: "x" } },
+        "andy",
+      );
+      await rejects(service.start(projectId, ticketId, "refine"), "not_refinable");
+    });
+
+    it("GivenOpenQuestions_WhenRefineIsStarted_ThenNotRefinableUntilTheyAreAnswered", async () => {
+      await finish(good);
+      await rejects(service.start(projectId, ticketId, "refine"), "not_refinable");
+      expect(host.workflowRuns.size).toBe(1);
+    });
+
+    it("GivenTheRefineCapIsReached_WhenAnotherIsStarted_ThenRunLimitAndNothingIsDispatched", async () => {
+      for (let i = 0; i < MAX_REFINE_RUNS_PER_TICKET; i++) {
+        const run = await service.start(projectId, ticketId, "refine");
+        // A rejected result isn't retried, so each pass is one run.
+        await service.report(run.id, await callerOf(run.id), refined(null));
+      }
+      await rejects(service.start(projectId, ticketId, "refine"), "run_limit");
+      expect(host.workflowRuns.size).toBe(MAX_REFINE_RUNS_PER_TICKET);
+    });
+
+    it("GivenAnsweredQuestions_WhenRefinedAgain_ThenThePromptCarriesTheAnswers", async () => {
+      await finish(good);
+      for (const q of await tracker.listQuestions({ ticketId })) {
+        await tracker.answerQuestion(q.id, `answer to ${q.text}`, "mcp", "andy");
+      }
+      const run = await service.start(projectId, ticketId, "refine");
+      const context = await service.context(run.id, await callerOf(run.id));
+      expect(context.prompt).toContain('"answer": "answer to A?"');
+    });
   });
 
   it("GivenAnInMemoryExecutorWithoutCallbacks_WhenStarted_ThenNoCallerCanReport", async () => {

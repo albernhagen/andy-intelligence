@@ -3,7 +3,14 @@ import { mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import { MAX_SUMMARY, buildReport, readMessages, truncate } from "./executor-report.mjs";
+import {
+  MAX_OUTPUT_BYTES,
+  MAX_SUMMARY,
+  MAX_SUMMARY_WITH_OUTPUT,
+  buildReport,
+  readMessages,
+  truncate,
+} from "./executor-report.mjs";
 
 const resultMessage = (extra = {}) => ({
   type: "result",
@@ -83,6 +90,34 @@ describe("buildReport", () => {
     });
     expect(report.summary).toHaveLength(MAX_SUMMARY);
     expect(report.summary.endsWith("…")).toBe(true);
+  });
+
+  it("GivenAStructuredOutput_WhenBuilt_ThenItIsSentAsOutputWithAShortSummary", () => {
+    const output = { summary: "s", questions: [{ text: "q?" }] };
+    const report = buildReport({
+      outcome: "success",
+      messages: [resultMessage({ result: "x".repeat(10_000), structured_output: output })],
+    });
+    expect(report.output).toEqual(output);
+    expect(report.summary).toHaveLength(MAX_SUMMARY_WITH_OUTPUT);
+  });
+
+  it("GivenAnOversizedStructuredOutput_WhenBuilt_ThenTheOutputIsDropped", () => {
+    const output = { summary: "x".repeat(MAX_OUTPUT_BYTES + 1), questions: [] };
+    const report = buildReport({
+      outcome: "success",
+      messages: [resultMessage({ structured_output: output })],
+    });
+    expect(report).not.toHaveProperty("output");
+    expect(report.status).toBe("succeeded");
+  });
+
+  it("GivenAFailedRunWithAStructuredOutput_WhenBuilt_ThenNoOutputIsSent", () => {
+    const report = buildReport({
+      outcome: "failure",
+      messages: [resultMessage({ structured_output: { summary: "s", questions: [] } })],
+    });
+    expect(report).not.toHaveProperty("output");
   });
 
   it("GivenShortText_WhenTruncated_ThenUnchanged", () => {

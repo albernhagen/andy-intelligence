@@ -1,9 +1,10 @@
 import { useState } from "react";
 import { Link, useNavigate } from "@tanstack/react-router";
+import type { Project } from "@andy/contracts";
 import { Button } from "@/components/ui/button";
 import { Field, Input } from "@/components/ui/input";
 import { Loading, QueryError } from "@/components/Status";
-import { useCreateProject, useGitHub, useProjects } from "@/lib/queries";
+import { useCreateProject, useGitHub, useProjects, useUpdateProject } from "@/lib/queries";
 
 /** Project picker; each project opens its ticket board. M2 adds filtering across projects. */
 export function ProjectsPage() {
@@ -34,6 +35,7 @@ export function ProjectsPage() {
             {p.repos.length > 0 && (
               <span className="text-muted-foreground"> ({p.repos.join(", ")})</span>
             )}
+            <AutoRefineToggle project={p} />
           </li>
         ))}
       </ul>
@@ -82,5 +84,22 @@ export function ProjectsPage() {
         </Button>
       </form>
     </section>
+  );
+}
+
+/** On: refine starts on its own for new and answered Backlog tickets (ADR-0054). */
+function AutoRefineToggle({ project }: { project: Project }) {
+  const update = useUpdateProject(project.id);
+  return (
+    <label className="ml-3 inline-flex items-center gap-1 text-sm text-muted-foreground">
+      <input
+        type="checkbox"
+        checked={project.autoRefine}
+        disabled={update.isPending}
+        onChange={(e) => update.mutate({ autoRefine: e.target.checked })}
+      />
+      Auto-refine
+      {update.error && <QueryError error={update.error} />}
+    </label>
   );
 }

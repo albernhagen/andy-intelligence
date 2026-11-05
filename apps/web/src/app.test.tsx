@@ -35,6 +35,19 @@ describe("tickets UI", () => {
     ]);
   });
 
+  it("GivenAProject_WhenAndyUnticksAutoRefine_ThenTheProjectStoresIt", async () => {
+    const harness = renderApp("/projects");
+    await harness.tracker.createProject({ name: "AI", key: "AI" });
+    await harness.router.invalidate();
+    const toggle = await screen.findByRole("checkbox", { name: "Auto-refine" });
+    expect((toggle as HTMLInputElement).checked).toBe(true);
+
+    await harness.user.click(toggle);
+    await waitFor(async () =>
+      expect((await harness.tracker.getProject("ai"))?.autoRefine).toBe(false),
+    );
+  });
+
   it("GivenATicket_WhenAndyEditsIt_ThenFieldsAndHistoryUpdate", async () => {
     const harness = renderApp();
     await harness.tracker.createProject({ name: "AI", key: "AI" });

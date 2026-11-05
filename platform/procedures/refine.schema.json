@@ -1,0 +1,67 @@
+{
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "summary": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 4000,
+      "description": "The refine report in markdown: Ask, Gaps, Files, Risks (procedure refine.md), at most 300 words."
+    },
+    "size": {
+      "type": "string",
+      "enum": ["S", "M", "L"],
+      "description": "Your size for the ticket. Used only if the ticket has none."
+    },
+    "sizeReason": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 300,
+      "description": "One line: why that size, from the files you expect to change."
+    },
+    "tier": {
+      "type": "string",
+      "enum": ["frontier", "strong", "fast", "cheap"],
+      "description": "Your model tier for building it. Used only if the ticket has none."
+    },
+    "questions": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 5,
+      "description": "1 to 5 questions for Andy, highest-impact ambiguity first.",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "text": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 500,
+            "description": "One question, answerable without reading the code."
+          },
+          "options": {
+            "type": "array",
+            "maxItems": 5,
+            "description": "Choices when the answer is one of a few; empty for an open question.",
+            "items": { "type": "string", "minLength": 1, "maxLength": 200 }
+          },
+          "suggestedAnswer": {
+            "type": ["string", "null"],
+            "minLength": 1,
+            "maxLength": 200,
+            "description": "The answer you would pick and why in a few words, or null."
+          },
+          "assumptions": {
+            "type": "array",
+            "maxItems": 5,
+            "description": "What you would assume if the question went unanswered.",
+            "items": { "type": "string", "minLength": 1, "maxLength": 300 }
+          },
+          "urgency": { "type": "string", "enum": ["low", "normal", "high"] }
+        },
+        "required": ["text", "options", "suggestedAnswer", "assumptions", "urgency"]
+      }
+    }
+  },
+  "required": ["summary", "size", "sizeReason", "tier", "questions"]
+}

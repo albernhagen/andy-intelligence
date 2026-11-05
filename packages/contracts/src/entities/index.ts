@@ -33,6 +33,8 @@ export const Project = z.object({
   autonomy: AutonomyLevel,
   monthlyBudgetUsd: z.number().nonnegative().nullable(),
   enabled: z.boolean(),
+  /** Refine starts on its own for new and answered Backlog tickets (ADR-0054); default on. */
+  autoRefine: z.boolean().default(true),
 });
 export type Project = z.infer<typeof Project>;
 
@@ -133,8 +135,54 @@ export const Question = z.object({
   answeredVia: AnsweredVia.nullable(),
   createdAt: Timestamp,
   answeredAt: Timestamp.nullable(),
+  /** The agent run that asked it (M1.7: Refinement); null when Andy or the system asked. */
+  runId: Id.nullable().default(null),
 });
 export type Question = z.infer<typeof Question>;
+
+/**
+ * What a refine run returns (M1.7: Refinement, ARCHITECTURE §4.3): a short report and 1–5
+ * questions. Untrusted agent output, so every field is capped (ADR-0028). The executor hands the
+ * agent the same shape as `platform/procedures/refine.schema.json`; this schema is the check.
+ */
+export const REFINE_LIMITS = {
+  minQuestions: 1,
+  maxQuestions: 5,
+  summary: 4000,
+  text: 500,
+  maxOptions: 5,
+  option: 200,
+  maxAssumptions: 5,
+  assumption: 300,
+  sizeReason: 300,
+} as const;
+
+const capped = (max: number) => z.string().trim().min(1).max(max);
+
+export const RefineQuestion = z.strictObject({
+  text: capped(REFINE_LIMITS.text),
+  options: z.array(capped(REFINE_LIMITS.option)).max(REFINE_LIMITS.maxOptions).default([]),
+  suggestedAnswer: capped(REFINE_LIMITS.option).nullable().default(null),
+  assumptions: z
+    .array(capped(REFINE_LIMITS.assumption))
+    .max(REFINE_LIMITS.maxAssumptions)
+    .default([]),
+  urgency: Urgency.default("normal"),
+});
+export type RefineQuestion = z.infer<typeof RefineQuestion>;
+
+export const RefineOutput = z.strictObject({
+  summary: capped(REFINE_LIMITS.summary),
+  /** Refine's proposal; written only where the ticket has none, so Andy's values win. */
+  size: Size,
+  sizeReason: capped(REFINE_LIMITS.sizeReason),
+  tier: TierKey,
+  questions: z
+    .array(RefineQuestion)
+    .min(REFINE_LIMITS.minQuestions)
+    .max(REFINE_LIMITS.maxQuestions),
+});
+export type RefineOutput = z.infer<typeof RefineOutput>;
 
 export const RunStatus = z.enum(["queued", "running", "succeeded", "failed", "cancelled"]);
 export type RunStatus = z.infer<typeof RunStatus>;

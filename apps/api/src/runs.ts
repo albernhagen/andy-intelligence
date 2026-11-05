@@ -70,7 +70,7 @@ export const RUN_CONTEXT_PATH = "/runs/:runId/context";
 export const RUN_REPORT_PATH = "/runs/:runId/report";
 /** Verified callbacks per instance per minute (max 2 instances; ADR-0028). */
 export const RUN_CALLBACK_RATE_LIMIT = 60;
-/** Report body cap: a 20,000-character summary plus a little JSON. */
+/** Report body cap: a 20,000-character summary plus the step's capped structured output. */
 export const RUN_REPORT_MAX_BYTES = 96 * 1024;
 
 const RunId = z.string().regex(/^[A-Za-z0-9-]{1,64}$/);
@@ -81,6 +81,8 @@ const Report = z.object({
   tokensIn: z.number().int().nonnegative().nullable(),
   tokensOut: z.number().int().nonnegative().nullable(),
   costUsd: z.number().nonnegative().nullable(),
+  /** The step's structured result (refine: RefineOutput); RunService checks it. */
+  output: z.unknown().optional(),
 });
 
 function log(severity: "INFO" | "WARNING", message: string, fields: Record<string, unknown> = {}) {

@@ -118,6 +118,75 @@ describe("TicketService", () => {
     expect(await service.needsYou()).toEqual({ questions: [], tickets: [] });
   });
 
+  it("GivenTwoOpenQuestionsAndTheDorOtherwiseMet_WhenBothAreAnswered_ThenTheLastAnswerMovesItToReady", async () => {
+    const t = await service.create(projectId, readyStory, "andy");
+    const [q1, q2] = await tracker.askQuestions(
+      projectId,
+      t.id,
+      [{ text: "Which board?" }, { text: "Which order?" }],
+      "agent:r1",
+      "r1",
+    );
+    await service.answer(q1!.id, "Kanban", "mcp", "andy");
+    expect((await tracker.getTicket(projectId, t.id))?.stage).toBe("backlog");
+
+    await service.answer(q2!.id, "By rank", "mcp", "andy");
+    expect(await tracker.getTicket(projectId, t.id)).toMatchObject({
+      stage: "ready",
+      needsYou: false,
+      dorStatus: "met",
+    });
+    expect((await tracker.listEvents(projectId, t.id)).at(-1)).toMatchObject({
+      kind: "stage_changed",
+      actor: "system",
+      data: { from: "backlog", to: "ready", forced: false },
+    });
+  });
+
+  it("GivenTheDorIsNotMetOtherwise_WhenTheLastQuestionIsAnswered_ThenItStaysInBacklog", async () => {
+    const t = await service.create(projectId, { ...readyStory, tier: null }, "andy");
+    const q = await service.ask(projectId, t.id, { text: "Which board?" }, "agent:r1");
+    await service.answer(q.id, "Kanban", "mcp", "andy");
+    expect(await tracker.getTicket(projectId, t.id)).toMatchObject({
+      stage: "backlog",
+      needsYou: false,
+      dorStatus: "not_met",
+    });
+  });
+
+  it("GivenAConcurrentEdit_WhenTheLastAnswerTriesToMoveIt_ThenTheAnswerStandsAndTheTicketStaysInBacklog", async () => {
+    // A clock that ticks, so the concurrent edit changes updatedAt.
+    let ms = Date.parse("2026-11-04T12:00:00.000Z");
+    tracker = new InMemoryWorkTracker(() => new Date(ms++));
+    service = new TicketService(tracker);
+    projectId = (await tracker.createProject({ name: "AI2", key: "AJ" })).id;
+    const t = await service.create(projectId, readyStory, "andy");
+    const q = await service.ask(projectId, t.id, { text: "Which board?" }, "agent:r1");
+    const original = tracker.updateTicket.bind(tracker);
+    tracker.updateTicket = async (p, id, change, actor) => {
+      // Someone edits the ticket between the move's read and its write.
+      if (change.stage) await original(p, id, { fields: { title: "Board v2" } }, "andy");
+      return original(p, id, change, actor);
+    };
+    vi.spyOn(console, "log").mockImplementation(() => {});
+    await expect(service.answer(q.id, "Kanban", "mcp", "andy")).resolves.toMatchObject({
+      status: "answered",
+    });
+    expect(await tracker.getTicket(projectId, t.id)).toMatchObject({
+      stage: "backlog",
+      title: "Board v2",
+    });
+  });
+
+  it("GivenATicketPastBacklog_WhenItsLastQuestionIsAnswered_ThenItsStageIsUnchanged", async () => {
+    const t = await service.create(projectId, readyStory, "andy");
+    await service.move(projectId, t.id, "ready", "andy");
+    await service.move(projectId, t.id, "in_progress", "andy");
+    const q = await service.ask(projectId, t.id, { text: "Which board?" }, "agent:r1");
+    await service.answer(q.id, "Kanban", "mcp", "andy");
+    expect((await tracker.getTicket(projectId, t.id))?.stage).toBe("in_progress");
+  });
+
   it("GivenATicketKey_WhenFound_ThenItIsReturnedAndUnknownOrMalformedKeysAreNotFound", async () => {
     const t = await service.create(projectId, readyStory, "andy");
     expect((await service.findByKey(t.key)).id).toBe(t.id);

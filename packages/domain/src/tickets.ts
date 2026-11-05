@@ -17,6 +17,10 @@ import {
 import { checkDor, type DorResult } from "./dor";
 import { canTransition, isForwardMove } from "./stages";
 
+function log(severity: "INFO" | "WARNING", message: string, fields: object = {}) {
+  console.log(JSON.stringify({ severity, message, component: "tickets", ...fields }));
+}
+
 /** A rule violation the caller caused; the API maps codes to HTTP statuses. */
 export class DomainError extends Error {
   constructor(
@@ -27,6 +31,7 @@ export class DomainError extends Error {
       | "invalid_repo"
       | "repo_taken"
       | "invalid_step"
+      | "not_refinable"
       | "run_limit"
       | "run_finished"
       | "executor_unavailable"
@@ -83,12 +88,20 @@ export class TicketService {
   constructor(
     private readonly tracker: WorkTracker,
     private readonly runs: RunCanceller | null = null,
+    /**
+     * Starts refine when a ticket may be waiting for it (the refine dispatcher, ADR-0054):
+     * after a create, after a ticket's last open question is answered, and after a cancel stops
+     * a run. It never throws.
+     */
+    private readonly refineNext: ((projectId: string) => Promise<unknown>) | null = null,
   ) {}
 
   async create(projectId: string, input: NewTicket, actor: EventActor): Promise<Ticket> {
     const parsed = NewTicket.parse(input);
     const dorStatus = checkDor(parsed, 0).met ? "met" : "not_met";
-    return this.tracker.createTicket(projectId, { ...parsed, dorStatus }, actor);
+    const ticket = await this.tracker.createTicket(projectId, { ...parsed, dorStatus }, actor);
+    await this.refineNext?.(projectId);
+    return ticket;
   }
 
   async update(
@@ -202,6 +215,8 @@ export class TicketService {
         "system",
       );
     }
+    // A cancelled run frees the project's run slot: the next waiting refine can start.
+    if (cancelled.length > 0) await this.refineNext?.(projectId);
     return updated;
   }
 
@@ -285,7 +300,12 @@ export class TicketService {
     return question;
   }
 
-  /** Answering re-checks the Definition of Ready and clears Needs-you when nothing is open. */
+  /**
+   * Answering re-checks the Definition of Ready and clears Needs-you when nothing is open. The
+   * last answer on a Backlog ticket that now meets the DoR moves it to Ready (ARCHITECTURE §4.1:
+   * exit is automatic), as "system", through the same checks as any move. When the DoR is still
+   * unmet, the refine dispatcher may run refine again with the answers.
+   */
   async answer(
     questionId: string,
     answer: string,
@@ -295,13 +315,35 @@ export class TicketService {
     const question = await this.tracker.answerQuestion(questionId, answer, via, actor);
     const ticket = await this.require(question.projectId, question.ticketId);
     const open = await this.openQuestionCount(ticket.id);
+    const met = checkDor(ticket, open).met;
     await this.tracker.updateTicket(
       ticket.projectId,
       ticket.id,
-      { fields: { needsYou: open > 0, dorStatus: checkDor(ticket, open).met ? "met" : "not_met" } },
+      { fields: { needsYou: open > 0, dorStatus: met ? "met" : "not_met" } },
       "system",
     );
+    if (met && ticket.stage === "backlog") await this.promote(ticket);
+    else if (open === 0 && ticket.stage === "backlog") await this.refineNext?.(ticket.projectId);
     return question;
+  }
+
+  /**
+   * Backlog → Ready by "system". `move` re-reads the ticket, re-checks the DoR and writes with
+   * `ifUpdatedAt`, so an edit that lands meanwhile wins; the answer stands either way and Andy
+   * can still move the ticket himself.
+   */
+  private async promote(ticket: Ticket): Promise<void> {
+    try {
+      await this.move(ticket.projectId, ticket.id, "ready", "system");
+      log("INFO", "ticket moved to ready after its last answer", { ticket: ticket.key });
+    } catch (err) {
+      const conflict = err instanceof WorkTrackerError && err.code === "conflict";
+      if (!conflict && !(err instanceof DomainError)) throw err;
+      log("WARNING", "ticket not moved to ready after its last answer", {
+        ticket: ticket.key,
+        reason: err.message,
+      });
+    }
   }
 
   /**
