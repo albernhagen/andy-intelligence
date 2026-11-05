@@ -58,14 +58,15 @@ Data-heavy screens favour density over air:
 
 One small set, reused everywhere (board, inbox, ticket page, picker). Build them from `Badge` (`src/components/ui/badge.tsx`).
 
-| Marker          | Shows                       | Look                                                                                        |
-| --------------- | --------------------------- | ------------------------------------------------------------------------------------------- |
-| Type            | Story, bug, task, epic      | Lucide icon in `muted-foreground`, type name as its label                                   |
-| Size            | S, M, L                     | `Badge` default, the letter only                                                            |
-| Run in flight   | Step and elapsed time       | `Badge variant="running"`: "Refining · 3 min"                                               |
-| PR state        | Number and check state      | "PR #12" with `success` (passing, merged) or `destructive` (failing); neutral while pending |
-| Needs attention | The ticket waits on a human | `Badge variant="attention"`: "Needs you"                                                    |
-| Blocked         | Blocked by another ticket   | `Badge variant="danger"`: "Blocked"                                                         |
+| Marker          | Shows                        | Look                                                            |
+| --------------- | ---------------------------- | --------------------------------------------------------------- |
+| Type            | Feature, chore, bug, epic    | Lucide icon in `muted-foreground`, type name as its title       |
+| Size            | S, M, L                      | `Badge` default, the letter only                                |
+| Run in flight   | Step and elapsed time        | `Badge variant="running"`: "Refining · 3 min"                   |
+| PR state        | Number and state             | "PR #12 · open" neutral, `success` merged, `destructive` closed |
+| Needs attention | The ticket waits on a human  | `Badge variant="attention"`: "2 questions", else "Needs you"    |
+| Blocked         | An unfinished blocker        | `Badge variant="danger"`: "Blocked by AI-3"                     |
+| Queue           | Place in Ready; what is next | Number before the key; `Badge variant="success"`: "Next"        |
 
 No spinners or pulsing in markers: a running marker is static text, so screenshots are stable and nothing distracts.
 
