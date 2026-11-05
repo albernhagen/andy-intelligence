@@ -1,10 +1,15 @@
-import { readFileSync } from "node:fs";
+import { Buffer } from "node:buffer";
+import { mkdtempSync, readFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { URL } from "node:url";
 import { describe, expect, it } from "vitest";
 import { DEFAULT_PROFILE } from "./executor-profile.mjs";
-import { Buffer } from "node:buffer";
 import {
+  GitError,
   MAX_BODY,
   PublishRefused,
+  gitRunner,
   oneLine,
   publish,
   toolingFiles,
@@ -197,8 +202,11 @@ describe("executor publish job", () => {
     });
     const fetch = async (url, init = {}) => {
       requests.push({ url, init });
-      if (url.startsWith("https://actions.example")) return reply(200, { value: "oidc-jwt" });
-      if (url.endsWith("/github/token")) return reply(tokenStatus, { token: "ghs_secret" });
+      const { origin, pathname } = new URL(url);
+      if (origin === "https://actions.example") return reply(200, { value: "oidc-jwt" });
+      if (origin === "https://ai.andybernhagen.com" && pathname === "/github/token") {
+        return reply(tokenStatus, { token: "ghs_secret" });
+      }
       return reply(201, { html_url: "https://github.com/albernhagen/andy-intelligence/pull/90" });
     };
     const lines = [];
@@ -257,7 +265,9 @@ describe("executor publish job", () => {
     const result = await h.run({ ...baseEnv, REPORT: JSON.stringify({ status: "failed" }) });
     expect(result.pullRequest).toBeNull();
     expect(pushed(h.calls)).toBeDefined();
-    expect(h.requests.some((r) => r.url.includes("/pulls"))).toBe(false);
+    expect(h.requests.map((r) => new URL(r.url).pathname)).not.toContain(
+      "/repos/albernhagen/andy-intelligence/pulls",
+    );
   });
 
   it("GivenToolingFiles_WhenPublished_ThenThePrSaysSoRightAfterTheTicketLinkAndTheOutputListsThem", async () => {
@@ -285,6 +295,22 @@ describe("executor publish job", () => {
   it("GivenAMalformedAgentOutput_WhenThePrIsWritten_ThenItFallsBackInsteadOfCrashing", () => {
     const { body } = pr({ status: "succeeded", summary: "s", output: { plan: null } });
     expect(body).toContain("None: the run returned no structured result.");
+  });
+
+  it("GivenAGitCommitThatFails_WhenReported_ThenTheTitleAndArgumentsAreNotInTheMessage", () => {
+    const dir = mkdtempSync(join(tmpdir(), "publish-git-"));
+    const git = gitRunner(dir);
+    const title = "AI-3: RecognisableSecretTitle";
+    let error;
+    try {
+      git(["commit", "-q", "-m", title, "-m", "Agent-Run: run1"]);
+    } catch (err) {
+      error = err;
+    }
+    expect(error).toBeInstanceOf(GitError);
+    expect(error.message).toMatch(/^git commit failed \(exit \d+\)/);
+    expect(error.message).not.toContain("RecognisableSecretTitle");
+    expect(error.message).not.toContain("Agent-Run");
   });
 
   it("GivenAgentTextWithNewlinesAndWorkflowCommands_WhenLogged_ThenItStaysOnOneLine", () => {

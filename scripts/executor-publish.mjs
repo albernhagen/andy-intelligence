@@ -270,21 +270,47 @@ export class PublishRefused extends Error {
   }
 }
 
+/**
+ * A failed git call, reported by subcommand, exit code and git's stderr only: the argument list
+ * holds the commit message (`KEY: title`) and paths, which are never printed.
+ */
+export class GitError extends Error {
+  constructor(subcommand, status, stderr) {
+    super(
+      `git ${subcommand} failed (exit ${status ?? "?"}): ${String(stderr ?? "")
+        .trim()
+        .slice(0, 300)}`,
+    );
+    this.name = "GitError";
+  }
+}
+
+/** The git subcommand of an argument list (skipping leading `--global-options`). */
+function subcommandOf(args) {
+  return args.find((a) => !a.startsWith("-")) ?? "?";
+}
+
 /** git, run without a shell; returns stdout. `extraEnv` carries the push credential. */
 export function gitRunner(cwd) {
-  return (args, extraEnv = {}) =>
-    execFileSync("git", args, {
-      cwd,
-      encoding: "utf8",
-      maxBuffer: 64 * 1024 * 1024,
-      env: {
-        ...process.env,
-        GIT_CONFIG_NOSYSTEM: "1",
-        GIT_CONFIG_GLOBAL: "/dev/null",
-        ...extraEnv,
-      },
-      stdio: ["ignore", "pipe", "pipe"],
-    });
+  return (args, extraEnv = {}) => {
+    try {
+      return execFileSync("git", args, {
+        cwd,
+        encoding: "utf8",
+        maxBuffer: 64 * 1024 * 1024,
+        env: {
+          ...process.env,
+          GIT_CONFIG_NOSYSTEM: "1",
+          GIT_CONFIG_GLOBAL: "/dev/null",
+          ...extraEnv,
+        },
+        stdio: ["ignore", "pipe", "pipe"],
+      });
+    } catch (err) {
+      // execFileSync's own message repeats the full command line: never pass it on.
+      throw new GitError(subcommandOf(args), err?.status, err?.stderr);
+    }
+  };
 }
 
 async function json(res, what) {
