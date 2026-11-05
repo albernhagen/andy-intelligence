@@ -166,6 +166,32 @@ describe("inbox v2", () => {
     expect(question("Third?")).toBeTruthy();
   });
 
+  it("GivenAnAnswerInFlight_WhenTheCardRenders_ThenEveryAnswerControlOnItIsLocked", async () => {
+    // Holds answer requests until released, so the test sees the card mid-answer.
+    let release = () => {};
+    const held = new Promise<void>((r) => (release = r));
+    const h = renderApp("/projects", {
+      beforeFetch: async (req) => {
+        if (req.url.endsWith("/answer")) await held;
+      },
+    });
+    await h.tracker.createProject({ name: "Andy Intelligence", key: "AI" });
+    const t = await h.service.create("ai", readyStory, "andy");
+    await askAsRun(h, t.id, "run1", [layout, colour]);
+    await open(h, "/p/ai/inbox");
+    const board = await card("AI-1: Board");
+
+    await h.user.click(within(board).getByRole("button", { name: "Accept all suggested (2)" }));
+
+    // Accept all runs: no single answer can race it (AI-30 review), nor a second accept all.
+    const buttons = within(board).getAllByRole("button");
+    await waitFor(() => expect(buttons.every((b) => (b as HTMLButtonElement).disabled)).toBe(true));
+    release();
+    await waitFor(() => expect(screen.queryByRole("article", { name: "AI-1: Board" })).toBeNull());
+    const answers = await h.tracker.listQuestions({ ticketId: t.id });
+    expect(answers.map((q) => q.answer)).toEqual(["List", "Blue"]);
+  });
+
   it("GivenADoneTicketWithAQuestion_WhenTheInboxOpens_ThenItIsListedLastUnderStale", async () => {
     await twoTickets("/p/ai/inbox", async (h) => {
       const old = await h.service.create("ai", { type: "chore", title: "Old work" }, "andy");

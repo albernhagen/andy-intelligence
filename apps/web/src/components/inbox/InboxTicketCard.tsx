@@ -1,11 +1,12 @@
 import { useState } from "react";
+import { useIsMutating } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
 import { StageBadge, TypeMarker } from "@/components/TicketMarkers";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { errorText } from "@/lib/api";
 import type { InboxCard } from "@/lib/needs-you";
-import { useAnswerQuestion } from "@/lib/queries";
+import { answerKey, useAnswerQuestion } from "@/lib/queries";
 import { InboxQuestion } from "./InboxQuestion";
 
 /**
@@ -14,6 +15,10 @@ import { InboxQuestion } from "./InboxQuestion";
  */
 export function InboxTicketCard({ card }: { card: InboxCard }) {
   const { ticket } = card;
+  // One lock per card: a single answer or "Accept all suggested", never both at once.
+  const answering = useIsMutating({ mutationKey: answerKey(card.ticketId) }) > 0;
+  const [acceptingAll, setAcceptingAll] = useState(false);
+  const locked = answering || acceptingAll;
   const label = ticket ? `${ticket.key}: ${ticket.title}` : "Ticket";
   return (
     <article aria-label={label} className="space-y-1 rounded-md border border-border p-2">
@@ -34,12 +39,12 @@ export function InboxTicketCard({ card }: { card: InboxCard }) {
           )}
         </Link>
         {ticket && <StageBadge stage={ticket.stage} archived={ticket.archived} />}
-        <AcceptAllSuggested card={card} />
+        <AcceptAllSuggested card={card} locked={locked} onBusy={setAcceptingAll} />
       </header>
       {card.questions.length > 0 ? (
         <ul className="divide-y divide-border">
           {card.questions.map((q) => (
-            <InboxQuestion key={q.id} question={q} />
+            <InboxQuestion key={q.id} question={q} locked={locked} />
           ))}
         </ul>
       ) : (
@@ -53,15 +58,19 @@ export function InboxTicketCard({ card }: { card: InboxCard }) {
 }
 
 /** Answers every question on the card that has a suggestion, in order; stops at the first error. */
-function AcceptAllSuggested({ card }: { card: InboxCard }) {
-  const answer = useAnswerQuestion();
-  const [busy, setBusy] = useState(false);
+function AcceptAllSuggested(props: {
+  card: InboxCard;
+  locked: boolean;
+  onBusy: (busy: boolean) => void;
+}) {
+  const { card, locked, onBusy } = props;
+  const answer = useAnswerQuestion(card.ticketId);
   const [error, setError] = useState<unknown>(null);
   const suggested = card.questions.filter((q) => q.suggestedAnswer);
   if (suggested.length === 0) return null;
 
   async function acceptAll() {
-    setBusy(true);
+    onBusy(true);
     setError(null);
     try {
       for (const q of suggested) {
@@ -70,7 +79,7 @@ function AcceptAllSuggested({ card }: { card: InboxCard }) {
     } catch (e) {
       setError(e);
     } finally {
-      setBusy(false);
+      onBusy(false);
     }
   }
 
@@ -81,7 +90,7 @@ function AcceptAllSuggested({ card }: { card: InboxCard }) {
         size="sm"
         variant="outline"
         className="ml-auto"
-        disabled={busy}
+        disabled={locked}
         onClick={acceptAll}
       >
         Accept all suggested ({suggested.length})

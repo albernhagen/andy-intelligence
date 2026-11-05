@@ -13,10 +13,13 @@ export function answerChoices(question: Pick<Question, "options" | "suggestedAns
   return [suggestedAnswer, ...options.filter((o) => o !== suggestedAnswer)];
 }
 
-/** One open question in the inbox: one click on a choice answers it; free text stays. */
-export function InboxQuestion({ question }: { question: Question }) {
+/**
+ * One open question in the inbox: one click on a choice answers it; free text stays. `locked`
+ * while any answer on its card is in flight, so two answers never race (AI-30 review).
+ */
+export function InboxQuestion({ question, locked }: { question: Question; locked: boolean }) {
   const [text, setText] = useState("");
-  const submit = useAnswerQuestion();
+  const submit = useAnswerQuestion(question.ticketId);
   const answer = (value: string) => submit.mutate({ questionId: question.id, answer: value });
 
   return (
@@ -40,7 +43,7 @@ export function InboxQuestion({ question }: { question: Question }) {
               type="button"
               size="sm"
               variant="outline"
-              disabled={submit.isPending}
+              disabled={locked}
               onClick={() => answer(choice)}
             >
               {choice}
@@ -63,7 +66,7 @@ export function InboxQuestion({ question }: { question: Question }) {
           placeholder="Or type an answer"
           className="h-8"
         />
-        <Button type="submit" size="sm" disabled={!text.trim() || submit.isPending}>
+        <Button type="submit" size="sm" disabled={!text.trim() || locked}>
           Answer
         </Button>
       </form>

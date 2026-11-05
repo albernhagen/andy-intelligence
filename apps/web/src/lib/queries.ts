@@ -137,9 +137,11 @@ export function useNeedsYou() {
 function useWrite<V, R>(
   fn: (vars: V) => Promise<R>,
   applied?: (queryClient: QueryClient, vars: V) => void,
+  mutationKey?: readonly unknown[],
 ) {
   const queryClient = useQueryClient();
   return useMutation({
+    mutationKey,
     mutationFn: fn,
     onSuccess: (_data, vars) => {
       applied?.(queryClient, vars);
@@ -271,8 +273,11 @@ export function useAskQuestion(path: TicketPath) {
   );
 }
 
+/** Key of answers in flight on one ticket, so its inbox card can lock while any runs. */
+export const answerKey = (ticketId: string) => ["answer", ticketId] as const;
+
 /** An answered question leaves the inbox (and the header count) as soon as the API confirms it. */
-export function useAnswerQuestion() {
+export function useAnswerQuestion(ticketId?: string) {
   const api = useApi();
   return useWrite(
     async ({ questionId, answer }: { questionId: string; answer: string }) =>
@@ -287,6 +292,7 @@ export function useAnswerQuestion() {
         ["needs-you"],
         (data) => data && withoutQuestion(data, questionId),
       ),
+    ticketId ? answerKey(ticketId) : undefined,
   );
 }
 
