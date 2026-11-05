@@ -9,7 +9,7 @@ PNPM=$(node -p 'require("./package.json").packageManager')
 docker run --rm -e CI=1 -v "$PWD:/src:ro" -v "$PWD/apps/web/e2e/__screenshots__:/out" "$IMAGE" sh -c '
   set -eu
   mkdir /work && cd /src && tar --exclude=node_modules --exclude=.git -cf - . | tar -xf - -C /work
-  cd /work && npm install -g --silent "$0" && pnpm install --frozen-lockfile --silent
+  cd /work && npm install -g --silent "$0" && pnpm install --frozen-lockfile --ignore-scripts --silent
   cd apps/web && status=0 && pnpm exec playwright test --update-snapshots "$@" || status=$?
   cp e2e/__screenshots__/*.png /out/ 2>/dev/null || true
   exit $status
