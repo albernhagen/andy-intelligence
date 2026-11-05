@@ -2,6 +2,7 @@ import {
   NewTicket,
   Stage,
   TicketKey,
+  WorkTrackerError,
   notFound,
   type AnsweredVia,
   type EventActor,
@@ -158,7 +159,8 @@ export class TicketService {
 
   /**
    * Andy cancels a ticket from any stage. Its runs in flight are cancelled first; if that fails,
-   * the stage doesn't change. The reason, if given, goes in the stage event.
+   * the stage doesn't change. Its open questions are withdrawn (kept in history) and Needs-you is
+   * cleared; reopening doesn't bring them back. The reason, if given, goes in the stage event.
    */
   async cancel(
     projectId: string,
@@ -172,12 +174,16 @@ export class TicketService {
       throw new DomainError("invalid_transition", `${ticket.key} is already cancelled`);
     }
     const cancelled = (await this.runs?.cancelForTicket(projectId, ticketId)) ?? [];
+    await this.withdrawOpenQuestions(ticketId, actor);
     // No `ifUpdatedAt`: cancel is valid from any stage, so a write since the read (e.g. a run's
     // report) mustn't fail it after the runs are already stopped.
     const updated = await this.tracker.updateTicket(
       projectId,
       ticketId,
-      { stage: { to: "cancelled", forced: false, reason: reason?.trim() || null } },
+      {
+        fields: { needsYou: false },
+        stage: { to: "cancelled", forced: false, reason: reason?.trim() || null },
+      },
       actor,
     );
     for (const run of cancelled) {
@@ -323,6 +329,17 @@ export class TicketService {
     const ticket = await this.tracker.getTicket(projectId, ticketId);
     if (!ticket) throw notFound("ticket", ticketId);
     return ticket;
+  }
+
+  /** A question answered meanwhile is skipped (`conflict`); it is no longer open either way. */
+  private async withdrawOpenQuestions(ticketId: string, actor: EventActor): Promise<void> {
+    for (const q of await this.tracker.listQuestions({ ticketId, status: "open" })) {
+      try {
+        await this.tracker.withdrawQuestion(q.id, actor);
+      } catch (err) {
+        if (!(err instanceof WorkTrackerError && err.code === "conflict")) throw err;
+      }
+    }
   }
 
   private async openQuestionCount(ticketId: string): Promise<number> {

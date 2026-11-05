@@ -209,6 +209,25 @@ export class FirestoreWorkTracker implements WorkTracker {
     });
   }
 
+  async withdrawQuestion(questionId: string, actor: EventActor): Promise<Question> {
+    return this.db.runTransaction(async (tx) => {
+      const ref = this.questions().doc(questionId);
+      const question = (await tx.get(ref)).data();
+      if (!question) throw notFound("question", questionId);
+      if (question.status !== "open") {
+        throw new WorkTrackerError("conflict", `question is ${question.status}: ${questionId}`);
+      }
+      const ticketRef = this.tickets(question.projectId).doc(question.ticketId);
+      const ticket = (await tx.get(ticketRef)).data();
+      if (!ticket) throw notFound("ticket", question.ticketId);
+      const withdrawn: Question = { ...question, status: "withdrawn" };
+      const e = event(ticket, "question_withdrawn", actor, this.now(), null, { questionId });
+      tx.set(ref, withdrawn);
+      tx.create(this.events(ticket.projectId, ticket.id).doc(e.id), e);
+      return withdrawn;
+    });
+  }
+
   async getQuestion(questionId: string): Promise<Question | null> {
     return (await this.questions().doc(questionId).get()).data() ?? null;
   }

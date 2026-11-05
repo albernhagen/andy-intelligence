@@ -113,7 +113,7 @@ pnpm --filter @andy/web dev          # :5173, proxies /api to :8080
 
 Set `PUBLIC_URL` (the service's public origin, e.g. `http://localhost:8080`) to turn on `/mcp` and its OAuth endpoints (ADR-0039: MCP OAuth facade); Terraform sets it in Cloud Run.
 
-MCP tools (M1.4: MCP core tools, `apps/api/src/mcp/tools.ts`): `create_ticket`, `list_needs_me`, `answer_question`, `status` (no ticket: overview + who you're signed in as), `cancel_ticket` (stops its run first), `archive_ticket` (Done or Cancelled only; hidden from board, inbox, counts). They call the same `TicketService` as the REST API.
+MCP tools (M1.4: MCP core tools, `apps/api/src/mcp/tools.ts`): `create_ticket`, `list_needs_me`, `answer_question`, `status` (no ticket: overview + who you're signed in as), `cancel_ticket` (stops its run, withdraws open questions), `archive_ticket` (Done or Cancelled only; hidden from board, inbox, counts). They call the same `TicketService` as the REST API.
 
 GitHub (ADR-0043: GitHub App setup from the UI) is on when `PUBLIC_URL` is set: connect it from `/settings/github`. The App's key and webhook secret live in Secret Manager (written by the API, read at runtime); CI jobs get repo tokens from `POST /github/token` with their Actions OIDC token. Locally without `PUBLIC_URL`, repos on projects are only format-checked. Setup: [`docs/runbooks/github-app.md`](docs/runbooks/github-app.md).
 

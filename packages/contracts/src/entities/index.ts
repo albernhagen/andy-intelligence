@@ -91,6 +91,7 @@ export const TicketEventKind = z.enum([
   "fields_changed",
   "question_asked",
   "question_answered",
+  "question_withdrawn",
   "run_linked",
   "pr_linked",
 ]);

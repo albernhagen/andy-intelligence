@@ -200,11 +200,56 @@ describe("TicketService", () => {
       expect((await service.cancel(projectId, t.id, "andy")).stage).toBe("cancelled");
     });
 
+    it("GivenOpenQuestions_WhenTheTicketIsCancelled_ThenTheyAreWithdrawnAndItLeavesTheInbox", async () => {
+      const t = await service.create(projectId, readyStory, "andy");
+      const q1 = await service.ask(projectId, t.id, { text: "Which?" }, "agent:r1");
+      const q2 = await service.ask(projectId, t.id, { text: "Why?" }, "agent:r1");
+      await service.answer(q2.id, "because", "ui", "andy");
+      await service.ask(projectId, t.id, { text: "When?" }, "agent:r1");
+
+      const result = await service.cancel(projectId, t.id, "andy");
+      expect(result).toMatchObject({ stage: "cancelled", needsYou: false });
+      const statuses = (await tracker.listQuestions({ ticketId: t.id })).map((q) => q.status);
+      expect(statuses).toEqual(["withdrawn", "answered", "withdrawn"]);
+      expect(await tracker.getQuestion(q1.id)).toMatchObject({ status: "withdrawn" });
+      expect(await service.needsYou()).toEqual({ questions: [], tickets: [] });
+      const kinds = (await service.history(projectId, t.id)).map((e) => e.kind);
+      expect(kinds.filter((k) => k === "question_withdrawn")).toHaveLength(2);
+    });
+
+    it("GivenWithdrawnQuestions_WhenTheTicketIsReopened_ThenTheyStayWithdrawn", async () => {
+      const t = await service.create(projectId, readyStory, "andy");
+      await service.ask(projectId, t.id, { text: "Which?" }, "agent:r1");
+      await service.cancel(projectId, t.id, "andy");
+
+      const reopened = await service.move(projectId, t.id, "backlog", "andy");
+      expect(reopened.needsYou).toBe(false);
+      expect(await tracker.listQuestions({ ticketId: t.id, status: "open" })).toEqual([]);
+      expect(await service.needsYou()).toEqual({ questions: [], tickets: [] });
+    });
+
+    it("GivenAQuestionAnsweredWhileCancelling_WhenTheTicketIsCancelled_ThenItStaysAnswered", async () => {
+      const t = await service.create(projectId, readyStory, "andy");
+      const q = await service.ask(projectId, t.id, { text: "Which?" }, "agent:r1");
+      canceller.cancelForTicket.mockImplementation(async () => {
+        await tracker.answerQuestion(q.id, "a", "mcp", "andy");
+        return [];
+      });
+      const listed = vi
+        .spyOn(tracker, "listQuestions")
+        .mockResolvedValueOnce([{ ...q, status: "open" }]);
+      expect((await service.cancel(projectId, t.id, "andy")).stage).toBe("cancelled");
+      expect(await tracker.getQuestion(q.id)).toMatchObject({ status: "answered" });
+      listed.mockRestore();
+    });
+
     it("GivenTheRunCantBeStopped_WhenTheTicketIsCancelled_ThenTheStageIsUnchanged", async () => {
       const t = await service.create(projectId, readyStory, "andy");
       canceller.cancelForTicket.mockRejectedValue(new DomainError("cancel_failed", "no"));
+      const q = await service.ask(projectId, t.id, { text: "Which?" }, "agent:r1");
       await rejects(service.cancel(projectId, t.id, "andy"), "cancel_failed");
       expect((await tracker.getTicket(projectId, t.id))?.stage).toBe("backlog");
+      expect(await tracker.getQuestion(q.id)).toMatchObject({ status: "open" });
     });
 
     it("GivenAnAgentOrTheSystem_WhenCancellingOrArchiving_ThenForbidden", async () => {
@@ -279,10 +324,9 @@ describe("TicketService", () => {
     });
 
     it("GivenAnArchivedTicketWithAnOpenQuestion_WhenTheInboxAndOverviewAreRead_ThenItIsHidden", async () => {
-      const t = await service.create(projectId, readyStory, "andy");
+      const t = await cancelled();
       await service.ask(projectId, t.id, { text: "Still needed?" }, "agent:r1");
       await service.create(projectId, { type: "task", title: "visible" }, "andy");
-      await service.cancel(projectId, t.id, "andy");
       expect((await service.overview()).projects[0]?.ticketsByStage.cancelled).toBe(1);
       expect((await service.needsYou()).tickets).toHaveLength(1);
 

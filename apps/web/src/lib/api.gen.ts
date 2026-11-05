@@ -1626,6 +1626,7 @@ export interface paths {
                 | "fields_changed"
                 | "question_asked"
                 | "question_answered"
+                | "question_withdrawn"
                 | "run_linked"
                 | "pr_linked";
               actor: string;
@@ -1741,6 +1742,7 @@ export interface paths {
                 | "fields_changed"
                 | "question_asked"
                 | "question_answered"
+                | "question_withdrawn"
                 | "run_linked"
                 | "pr_linked";
               actor: string;

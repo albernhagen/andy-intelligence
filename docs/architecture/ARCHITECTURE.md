@@ -102,7 +102,7 @@ Enterprise-shaped (durable state, policy, gates, least privilege, audit, contrac
 | **Ready for review** | Rule-based gate decides auto-merge vs. Andy | Merged |
 | **Monitoring** | CI deploys to dev; verification (smoke/e2e + verification agent) runs; Andy promotes to prod when ready | Dev verification passed (and, if released, prod deploy succeeded) |
 | **Done** | Summary included in rollups | — |
-| **Cancelled** | Andy cancelled it from any stage; its run stops first | Andy reopens it to Backlog |
+| **Cancelled** | Andy cancelled it from any stage; run stops, questions withdrawn | Andy reopens it to Backlog |
 
 **Stage moves** (`packages/domain`): forward one step, plus back for re-refine (ready → backlog), retry (in progress → ready) and rework (ready for review or monitoring → in progress). Backlog → ready requires the DoR. Andy can force any move with a reason; it is recorded in the ticket's history. Only Andy forces, cancels (its own action, not a move), reopens or archives. **Archived** (a flag) hides a Done or Cancelled ticket from the board, inbox and `status` counts.
 

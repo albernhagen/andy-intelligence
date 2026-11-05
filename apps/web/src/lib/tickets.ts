@@ -80,6 +80,8 @@ export function describeEvent(event: TicketEvent): string {
       return "asked a question";
     case "question_answered":
       return "answered a question";
+    case "question_withdrawn":
+      return "withdrew a question";
     case "run_linked":
       return "linked a run";
     case "pr_linked":

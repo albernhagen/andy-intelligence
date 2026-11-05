@@ -163,6 +163,8 @@ export interface WorkTracker {
     via: AnsweredVia,
     actor: EventActor,
   ): Promise<Question>;
+  /** Only open questions can be withdrawn (`conflict` otherwise); appends `question_withdrawn`. */
+  withdrawQuestion(questionId: string, actor: EventActor): Promise<Question>;
   getQuestion(questionId: string): Promise<Question | null>;
   /** Oldest first. */
   listQuestions(filter?: QuestionFilter): Promise<Question[]>;
