@@ -37,6 +37,8 @@ import {
   type RunReport,
   type RunStore,
   type NewRun,
+  WatchdogCheck,
+  type WatchdogQueue,
   ACTIVE_RUN_STATUSES,
   type TicketChange,
   type TicketFilter,
@@ -286,6 +288,26 @@ export class InMemoryRunStore implements RunStore {
     const run = applyRunPatch(current, patch, from);
     this.runs.set(runId, run);
     return structuredClone(run);
+  }
+}
+
+/** In-memory WatchdogQueue: holds checks until a test delivers them with `due`. */
+export class InMemoryWatchdogQueue implements WatchdogQueue {
+  readonly checks = new Map<string, WatchdogCheck>();
+
+  async schedule(check: WatchdogCheck): Promise<"scheduled" | "duplicate"> {
+    const parsed = WatchdogCheck.parse(check);
+    if (this.checks.has(parsed.runId)) return "duplicate";
+    this.checks.set(parsed.runId, parsed);
+    return "scheduled";
+  }
+
+  /** Test helper: run IDs whose check is due at `now`, earliest first. */
+  due(now: Date): string[] {
+    return [...this.checks.values()]
+      .filter((c) => Date.parse(c.at) <= now.getTime())
+      .sort((a, b) => a.at.localeCompare(b.at))
+      .map((c) => c.runId);
   }
 }
 

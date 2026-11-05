@@ -187,6 +187,11 @@ export const Run = z.object({
   /** Why the run failed to start or finish, for Andy. */
   error: z.string().max(2000).nullable().default(null),
   executor: RunExecutor.nullable().default(null),
+  // Added in M1.6b: Claude Code executor: watchdog + retry.
+  /** 1 for a run Andy started; 2 for its automatic retry (at most one, ADR-0028). */
+  attempt: z.number().int().positive().default(1),
+  /** The run this one retries; null for a first attempt. */
+  retryOf: Id.nullable().default(null),
 });
 export type Run = z.infer<typeof Run>;
 

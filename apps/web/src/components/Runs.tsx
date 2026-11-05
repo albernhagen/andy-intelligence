@@ -62,6 +62,7 @@ function RunItem({ run }: { run: Run }) {
         <Badge variant={STATUS_VARIANT[run.status]}>{run.status}</Badge>
         <span className="font-medium">{run.step}</span>
         <span className="text-muted-foreground">{run.route.model}</span>
+        {run.retryOf && <span className="text-muted-foreground">retry {run.attempt}</span>}
         {created && <Time label="started" iso={created} />}
         {run.endedAt && <Time label="ended" iso={run.endedAt} />}
         {run.links.executorRun && (
