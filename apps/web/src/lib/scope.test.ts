@@ -11,6 +11,7 @@ describe("scope", () => {
     ["/p/ai/t/AI-2", { kind: "project", projectId: "ai" }],
     ["/settings/github", null],
     ["/allotment", null],
+    ["/p/%zz/inbox", { kind: "project", projectId: "%zz" }],
   ])("GivenPath%s_WhenParsed_ThenScopeIsNamed", (path, scope) => {
     expect(scopeFromPath(path)).toEqual(scope);
   });

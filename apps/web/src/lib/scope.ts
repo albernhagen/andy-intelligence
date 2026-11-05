@@ -17,7 +17,16 @@ const STORAGE_KEY = "andy.scope";
 export function scopeFromPath(pathname: string): Scope | null {
   if (/^\/all(\/|$)/.test(pathname)) return ALL;
   const project = /^\/p\/([^/]+)/.exec(pathname)?.[1];
-  return project ? { kind: "project", projectId: decodeURIComponent(project) } : null;
+  return project ? { kind: "project", projectId: decode(project) } : null;
+}
+
+/** A bad escape (`/p/%zz`) must not crash the shell; the raw segment then shows "not found". */
+function decode(segment: string): string {
+  try {
+    return decodeURIComponent(segment);
+  } catch {
+    return segment;
+  }
 }
 
 /** The section a path shows: the ticket page belongs to the board, everything else unscoped. */
