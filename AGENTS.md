@@ -1,6 +1,6 @@
 # Agent rules — andy-intelligence
 
-Always loaded (`CLAUDE.md` is a symlink to this file). Full operating rules: [`docs/BUILD-PROMPT.md`](docs/BUILD-PROMPT.md). Design: [`docs/architecture/ARCHITECTURE.md`](docs/architecture/ARCHITECTURE.md) — the source of truth. More rules load when you read or edit files in `infra/`, `.github/` or `packages/contracts/` (their own `AGENTS.md`; `CLAUDE.md` symlinks so Claude Code loads them on writes too).
+Always loaded (`CLAUDE.md` is a symlink to this file). Full operating rules: [`docs/BUILD-PROMPT.md`](docs/BUILD-PROMPT.md). Design: [`docs/architecture/ARCHITECTURE.md`](docs/architecture/ARCHITECTURE.md) (overview) and its topic files — the source of truth. More rules load when you read or edit files in `infra/`, `.github/` or `packages/contracts/` (their own `AGENTS.md`; `CLAUDE.md` symlinks so Claude Code loads them on writes too).
 
 ## Every session
 
@@ -11,7 +11,7 @@ Always loaded (`CLAUDE.md` is a symlink to this file). Full operating rules: [`d
 
 ## Context: load only what the task needs (ADR-0046)
 
-- ARCHITECTURE.md: your slice's §12 row and the sections it names (map at the top), not the whole file.
+- ARCHITECTURE.md is a short overview with a reading map (ADR-0061); open only the topic files (`docs/architecture/*.md`) your ticket needs.
 - ADRs: read `docs/architecture/adr/README.md` (one line each), then open only the ones you need.
 - Build-log history (`docs/build-log/`, one file per entry): only when you need why something happened.
 - Broad searches or reading many files: use a subagent and keep its summary, not the file dumps.
@@ -25,7 +25,7 @@ Update these in the **same PR** as the code:
 | ---------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------- |
 | Commands, env vars, packages/apps, layout      | `README.md`                                                                                                                                  |
 | A feature, component, or how to use the system | `README.md` "How it works today" (keep it one screen)                                                                                        |
-| Design, components, data model, scope, plan    | `docs/architecture/ARCHITECTURE.md` (no revision line: git has history)                                                                      |
+| Design, components, data model, scope, plan    | The topic file in `docs/architecture/`; `ARCHITECTURE.md` only if design intent, components or milestones change (ADR-0061)                  |
 | A decision, or deviated from ARCHITECTURE.md   | New ADR + its line in `adr/README.md`; update the old ADR's status                                                                           |
 | Any step Andy runs by hand                     | `docs/runbooks/*.md`                                                                                                                         |
 | Slice status, pending decisions, blockers      | Ticket in project `AI` (Andy moves it); `docs/build-log.md` (decisions, blockers); what happened → new `docs/build-log/YYYY-MM-DD-<slug>.md` |
@@ -35,7 +35,7 @@ Update these in the **same PR** as the code:
 
 Write docs short and plain: lead with the point, tables/lists over prose, define every term and ID where it's used, no filler. A reader with no chat history should get it on first read.
 
-If code and ARCHITECTURE.md disagree, ask which is wrong — don't silently "fix" either. ADR bodies are immutable.
+If code and the architecture docs disagree, ask which is wrong — don't silently "fix" either. ADR bodies are immutable.
 
 ## Engineering
 

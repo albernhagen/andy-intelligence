@@ -38,7 +38,7 @@ What is built on `main` now. The target design is [ARCHITECTURE.md](docs/archite
 
 | Doc                                                                      | What                                                                                                           |
 | ------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------- |
-| [`docs/architecture/ARCHITECTURE.md`](docs/architecture/ARCHITECTURE.md) | Design and milestone/slice plan — source of truth                                                              |
+| [`docs/architecture/ARCHITECTURE.md`](docs/architecture/ARCHITECTURE.md) | Design overview, milestone table, reading map — source of truth; detail in topic files beside it (ADR-0061)    |
 | [`docs/architecture/adr/`](docs/architecture/adr/)                       | Architecture decisions (MADR)                                                                                  |
 | [`docs/build-log.md`](docs/build-log.md)                                 | Slice → ticket map (status: tickets in project `AI`), pending decisions, blockers (history: `docs/build-log/`) |
 | [`docs/product/brief.md`](docs/product/brief.md)                         | Project brief for project `AI`: idea, users, vision, goals, architectural expectations (ADR-0053)              |
