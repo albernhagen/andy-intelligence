@@ -2,14 +2,20 @@
 
 @custom-variant dark (&:is(.dark *));
 
+/* Theme tokens: the colour roles in design.md. Components use them through Tailwind classes. */
 :root {
   --background: oklch(1 0 0);
   --foreground: oklch(0.145 0 0);
+  --muted: oklch(0.97 0 0);
   --muted-foreground: oklch(0.556 0 0);
   --border: oklch(0.922 0 0);
+  --ring: oklch(0.708 0 0);
   --primary: oklch(0.205 0 0);
   --primary-foreground: oklch(0.985 0 0);
   --destructive: oklch(0.577 0.245 27.325);
+  --attention: oklch(0.555 0.16 55);
+  --running: oklch(0.52 0.19 260);
+  --success: oklch(0.52 0.14 150);
   --radius: 0.625rem;
 }
 
@@ -17,24 +23,34 @@
   :root {
     --background: oklch(0.145 0 0);
     --foreground: oklch(0.985 0 0);
+    --muted: oklch(0.205 0 0);
     --muted-foreground: oklch(0.708 0 0);
     --border: oklch(1 0 0 / 10%);
+    --ring: oklch(0.556 0 0);
     --primary: oklch(0.922 0 0);
     --primary-foreground: oklch(0.205 0 0);
+    --attention: oklch(0.8 0.15 70);
+    --running: oklch(0.75 0.13 255);
+    --success: oklch(0.77 0.15 150);
   }
 }
 
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
+  --color-muted: var(--muted);
   --color-muted-foreground: var(--muted-foreground);
   --color-border: var(--border);
+  --color-ring: var(--ring);
   --color-primary: var(--primary);
   --color-primary-foreground: var(--primary-foreground);
   --color-destructive: var(--destructive);
+  --color-attention: var(--attention);
+  --color-running: var(--running);
+  --color-success: var(--success);
   --radius-md: calc(var(--radius) - 2px);
 }
 
 body {
-  @apply bg-background text-foreground antialiased;
+  @apply bg-background text-sm text-foreground antialiased;
 }

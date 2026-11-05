@@ -25,7 +25,13 @@ API client generated from OpenAPI.
 - Moves: one button per move in `TRANSITIONS` (`packages/domain`), plus "Force move…" (skips the rules; recorded). Board drag-and-drop (mouse, touch, keyboard): allowed column = normal move, else forced (not onto Cancelled). Cancel (optional reason), Archive/Unarchive, "Show archived" toggle. The API enforces rules; errors show inline.
 - Client: `openapi-fetch` typed by `apps/web/src/lib/api.gen.ts`, generated in-process from `createApp`'s OpenAPI document (`pnpm --filter @andy/web gen:api`); a test fails when it is stale. Every write refetches all queries (one user, small data).
 - Untrusted text renders as plain text (no HTML or markdown).
-- Tests render the UI against the in-process API (`createApp` + fakes); browser e2e later.
+- Tests render the UI against the in-process API (`createApp` + fakes).
 - Not yet: PR/cost panels, the kill switch's Needs-you item.
+
+**Built in AI-26: Design source and app shell (M3, ADR-0059):**
+- `apps/web/design.md` and the tokens in `index.css` (status roles `attention`, `running`, `success`; a `Badge` variant per marker).
+- One shell (`AppShell.tsx`, the router's root): project picker (key + name, each project's waiting count, All projects, Add project), Board / Inbox / Settings, "Needs you N" across projects.
+- Scope in the URL: `/p/:projectId/…` or `/all/…`; added `/p/:projectId/inbox`, `/all/inbox`, `/all/board` (asks for a project). Last scope in `localStorage`; `/` opens its inbox.
+- Screenshot checks: Playwright over the API with seeded fakes (`apps/web/e2e/`), CI job `ui-screenshots` (§8.1).
 
 **Built in M1.19: GitHub App setup from the UI:** `/settings/github` (connect, install link, installed repos) and `/settings/github/callback`; the new-project form suggests installed repos.

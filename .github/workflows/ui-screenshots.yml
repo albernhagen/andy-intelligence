@@ -1,0 +1,32 @@
+name: UI screenshots
+
+# Playwright screenshot checks for the web app (ADR-0059: Visual checks): the shell, board and
+# ticket page against the real API over seeded fakes. Fails on a diff from
+# apps/web/e2e/__screenshots__ and uploads the actual images. Steps: platform/actions/ui-screenshots.
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions: {}
+
+concurrency:
+  group: ui-screenshots-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  ui-screenshots:
+    runs-on: ubuntu-latest
+    # Cap (ADR-0028); the Playwright config also caps the test run at 5 minutes.
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    # Same image as `pnpm --filter @andy/web screenshots:update`, so fonts and rendering match.
+    container:
+      image: mcr.microsoft.com/playwright:v1.64.1-noble@sha256:2f05f8a734509a7b3f26a912639488ee08f58a7b292d14d62271bcff9038768f
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: ./platform/actions/ui-screenshots

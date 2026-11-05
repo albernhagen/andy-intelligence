@@ -1,20 +1,23 @@
-import { Link } from "@tanstack/react-router";
+import { Link, useParams } from "@tanstack/react-router";
 import type { Ticket } from "@andy/contracts";
 import { QuestionCard } from "@/components/QuestionCard";
 import { Loading, QueryError } from "@/components/Status";
+import { inboxItems } from "@/lib/needs-you";
 import { useNeedsYou } from "@/lib/queries";
 import { sortQuestions } from "@/lib/tickets";
 
-/** Needs-you inbox, the home screen (ARCHITECTURE §7.5): open questions, then flagged tickets. */
+/**
+ * Needs-you inbox, the home screen (ARCHITECTURE §7.5): open questions, then flagged tickets.
+ * Under `/p/<project>/inbox` only that project's; under `/all/inbox` every project's.
+ */
 export function InboxPage() {
+  const { projectId } = useParams({ strict: false });
   const needsYou = useNeedsYou();
   if (needsYou.isPending) return <Loading />;
   if (needsYou.isError) return <QueryError error={needsYou.error} />;
 
-  const { questions, tickets } = needsYou.data;
-  const byId = new Map(tickets.map((t) => [t.id, t]));
-  const withQuestions = new Set(questions.map((q) => q.ticketId));
-  const otherFlagged = tickets.filter((t) => !withQuestions.has(t.id));
+  const byId = new Map(needsYou.data.tickets.map((t) => [t.id, t]));
+  const { questions, flagged: otherFlagged } = inboxItems(needsYou.data, projectId);
 
   return (
     <section className="space-y-6">

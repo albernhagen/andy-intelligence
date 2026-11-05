@@ -1,0 +1,4 @@
+@import "../src/index.css";
+
+/* Vite's root here is e2e/, so point Tailwind's class scan at the app's sources. */
+@source "../src";

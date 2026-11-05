@@ -22,3 +22,7 @@ coverage/
 
 # Firestore emulator (pnpm test:firestore)
 firestore-debug.log
+
+# Playwright screenshot checks (apps/web/e2e): actual images and reports
+test-results/
+playwright-report/
