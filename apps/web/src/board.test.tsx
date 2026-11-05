@@ -59,7 +59,7 @@ describe("board drag-and-drop", () => {
   });
 
   it("GivenABacklogTicket_WhenDraggedToDone_ThenAForcedMoveWithNoReasonIsRecorded", async () => {
-    const { harness, ticket } = await boardWith({ type: "task", title: "Spike" });
+    const { harness, ticket } = await boardWith({ type: "chore", title: "Spike" });
 
     await drag(harness.user, ticket.key, 5);
 
@@ -73,7 +73,7 @@ describe("board drag-and-drop", () => {
   });
 
   it("GivenATicketMissingDoR_WhenDraggedToReady_ThenTheErrorShowsAndTheCardStaysInBacklog", async () => {
-    const { harness, ticket } = await boardWith({ type: "story", title: "Board" });
+    const { harness, ticket } = await boardWith({ type: "feature", title: "Board" });
 
     await drag(harness.user, ticket.key, 1);
 
@@ -88,8 +88,8 @@ describe("board drag-and-drop", () => {
   it("GivenTwoTicketsMissingDoR_WhenBothDroppedOnReadyInARow_ThenEachCardShowsItsError", async () => {
     const harness = renderApp();
     await harness.tracker.createProject({ name: "AI", key: "AI" });
-    const first = await harness.service.create("ai", { type: "story", title: "One" }, "andy");
-    const second = await harness.service.create("ai", { type: "story", title: "Two" }, "andy");
+    const first = await harness.service.create("ai", { type: "feature", title: "One" }, "andy");
+    const second = await harness.service.create("ai", { type: "feature", title: "Two" }, "andy");
     await harness.router.navigate({ to: "/p/ai" });
     const backlog = await screen.findByRole("region", { name: "Backlog" });
     await within(backlog).findByText(second.key);

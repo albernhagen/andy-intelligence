@@ -110,7 +110,9 @@ export class InMemoryWorkTracker implements WorkTracker {
     return [...this.tickets.values()]
       .filter((t) => t.projectId === projectId)
       .filter((t) => filter.stage === undefined || t.stage === filter.stage)
-      .filter((t) => filter.needsYou === undefined || t.needsYou === filter.needsYou)
+      .filter(
+        (t) => filter.needsAttention === undefined || t.needsAttention === filter.needsAttention,
+      )
       .filter((t) => filter.archived === undefined || t.archived === filter.archived)
       .sort((a, b) => a.rank.localeCompare(b.rank))
       .map((t) => structuredClone(t));

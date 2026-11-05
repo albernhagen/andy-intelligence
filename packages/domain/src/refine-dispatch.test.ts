@@ -28,14 +28,15 @@ const question = (text: string) => ({
 });
 const output = {
   summary: "**Ask**: a board",
+  type: "feature",
   size: "S",
   sizeReason: "one screen",
-  tier: "fast",
+  outOfScope: [],
+  touches: ["apps/web/**"],
   questions: [question("A?"), question("B?")],
 };
-/** Everything the Definition of Ready needs except what refine proposes (size, tier). */
+/** Everything the Definition of Ready needs except what refine proposes (type, size). */
 const clear = {
-  type: "story" as const,
   title: "Board",
   body: "Andy can't see his tickets.",
   acceptanceCriteria: ["WHEN Andy opens the board THE SYSTEM SHALL list his tickets"],
@@ -99,7 +100,7 @@ describe("RefineDispatcher", () => {
 
   it("GivenAutoRefineOn_WhenATicketIsCreated_ThenARefineRunStartsWithoutAndy", async () => {
     const { tickets } = wire();
-    const ticket = await tickets.create(projectId, { type: "story", title: "Board" }, "andy");
+    const ticket = await tickets.create(projectId, { type: "feature", title: "Board" }, "andy");
     const [run] = await refines(ticket.id);
     expect(run).toMatchObject({ status: "queued", executor: expect.anything() });
     expect(host.workflowRuns.size).toBe(1);
@@ -107,9 +108,9 @@ describe("RefineDispatcher", () => {
 
   it("GivenARefineInFlight_WhenMoreTicketsAreCreated_ThenTheyWaitAndStartOldestFirstAsRunsEnd", async () => {
     const { tickets, runs } = wire();
-    const first = await tickets.create(projectId, { type: "story", title: "One" }, "andy");
-    const second = await tickets.create(projectId, { type: "story", title: "Two" }, "andy");
-    const third = await tickets.create(projectId, { type: "story", title: "Three" }, "andy");
+    const first = await tickets.create(projectId, { type: "feature", title: "One" }, "andy");
+    const second = await tickets.create(projectId, { type: "feature", title: "Two" }, "andy");
+    const third = await tickets.create(projectId, { type: "feature", title: "Three" }, "andy");
     expect(await refines(second.id)).toEqual([]);
 
     await finish(runs, (await refines(first.id))[0]!);
@@ -126,22 +127,22 @@ describe("RefineDispatcher", () => {
     const ticket = await tickets.create(projectId, clear, "andy");
     await finish(runs, (await refines(ticket.id))[0]!);
     expect(await tracker.getTicket(projectId, ticket.id)).toMatchObject({
-      needsYou: true,
+      needsAttention: true,
+      type: "feature",
       size: "S",
-      tier: "fast",
     });
 
     await answerAll(tickets, ticket.id);
     expect(await tracker.getTicket(projectId, ticket.id)).toMatchObject({
       stage: "ready",
-      needsYou: false,
+      needsAttention: false,
     });
     expect(await refines(ticket.id)).toHaveLength(1);
   });
 
   it("GivenRefineAskedQuestions_WhenAndyAnswersAllAndTheDorIsStillUnmet_ThenRefineRunsAgainWithTheAnswers", async () => {
     const { tickets, runs } = wire();
-    const ticket = await tickets.create(projectId, { type: "story", title: "Board" }, "andy");
+    const ticket = await tickets.create(projectId, { type: "feature", title: "Board" }, "andy");
     await finish(runs, (await refines(ticket.id))[0]!);
     const [q] = await tracker.listQuestions({ ticketId: ticket.id, status: "open" });
     await tickets.answer(q!.id, "yes", "ui", "andy");
@@ -155,7 +156,7 @@ describe("RefineDispatcher", () => {
 
   it("GivenTheRefineCapIsReached_WhenTheDorIsStillUnmet_ThenTheTicketNeedsYouWithTheGapsAndNoRunStarts", async () => {
     const { tickets, runs } = wire();
-    const ticket = await tickets.create(projectId, { type: "story", title: "Board" }, "andy");
+    const ticket = await tickets.create(projectId, { type: "feature", title: "Board" }, "andy");
     for (let i = 0; i < MAX_REFINE_RUNS_PER_TICKET; i++) {
       await finish(runs, (await refines(ticket.id))[0]!);
       await answerAll(tickets, ticket.id);
@@ -163,7 +164,7 @@ describe("RefineDispatcher", () => {
     expect(await refines(ticket.id)).toHaveLength(MAX_REFINE_RUNS_PER_TICKET);
     expect(await tracker.getTicket(projectId, ticket.id)).toMatchObject({
       stage: "backlog",
-      needsYou: true,
+      needsAttention: true,
     });
     const last = (await tracker.listEvents(projectId, ticket.id)).findLast(
       (e) => e.kind === "comment",
@@ -176,20 +177,20 @@ describe("RefineDispatcher", () => {
 
   it("GivenARefineFailed_WhenTheNextRunIsDispatched_ThenItIsNotRetriedAndTheTicketNeedsYou", async () => {
     const { tickets, runs } = wire();
-    const failed = await tickets.create(projectId, { type: "story", title: "One" }, "andy");
+    const failed = await tickets.create(projectId, { type: "feature", title: "One" }, "andy");
     await finish(runs, (await refines(failed.id))[0]!, { output: { summary: "no questions" } });
     expect((await refines(failed.id))[0]?.status).toBe("failed");
-    expect((await tracker.getTicket(projectId, failed.id))?.needsYou).toBe(true);
+    expect((await tracker.getTicket(projectId, failed.id))?.needsAttention).toBe(true);
 
-    const next = await tickets.create(projectId, { type: "story", title: "Two" }, "andy");
+    const next = await tickets.create(projectId, { type: "feature", title: "Two" }, "andy");
     expect(await refines(next.id)).toHaveLength(1);
     expect(await refines(failed.id)).toHaveLength(1);
   });
 
   it("GivenTheWatchdogEndsARefine_WhenItsRetryEndsToo_ThenTheNextTicketStarts", async () => {
     const { tickets, runs } = wire();
-    const first = await tickets.create(projectId, { type: "story", title: "One" }, "andy");
-    const second = await tickets.create(projectId, { type: "story", title: "Two" }, "andy");
+    const first = await tickets.create(projectId, { type: "feature", title: "One" }, "andy");
+    const second = await tickets.create(projectId, { type: "feature", title: "Two" }, "andy");
     const pastDeadline = () => (ms += 46 * 60_000);
 
     pastDeadline();
@@ -203,8 +204,8 @@ describe("RefineDispatcher", () => {
 
   it("GivenARefineInFlight_WhenItsTicketIsCancelled_ThenTheNextTicketStarts", async () => {
     const { tickets } = wire();
-    const first = await tickets.create(projectId, { type: "story", title: "One" }, "andy");
-    const second = await tickets.create(projectId, { type: "story", title: "Two" }, "andy");
+    const first = await tickets.create(projectId, { type: "feature", title: "One" }, "andy");
+    const second = await tickets.create(projectId, { type: "feature", title: "Two" }, "andy");
     expect(await refines(second.id)).toEqual([]);
 
     await tickets.cancel(projectId, first.id, "andy");
@@ -215,9 +216,9 @@ describe("RefineDispatcher", () => {
   it("GivenCancelledAndArchivedTickets_WhenAutoRefineTurnsOn_ThenNeitherIsRefined", async () => {
     const { tickets, projects } = wire();
     await projects.update(projectId, { autoRefine: false });
-    const cancelled = await tickets.create(projectId, { type: "story", title: "One" }, "andy");
+    const cancelled = await tickets.create(projectId, { type: "feature", title: "One" }, "andy");
     await tickets.cancel(projectId, cancelled.id, "andy");
-    const archived = await tickets.create(projectId, { type: "story", title: "Two" }, "andy");
+    const archived = await tickets.create(projectId, { type: "feature", title: "Two" }, "andy");
     // Archived while in Backlog (e.g. reopened after archiving): still hidden, still skipped.
     await tracker.updateTicket(projectId, archived.id, { fields: { archived: true } }, "andy");
 
@@ -229,7 +230,7 @@ describe("RefineDispatcher", () => {
   it("GivenAutoRefineOff_WhenATicketIsCreated_ThenNoRunStartsUntilItIsTurnedOn", async () => {
     const { tickets, projects } = wire();
     await projects.update(projectId, { autoRefine: false });
-    const ticket = await tickets.create(projectId, { type: "story", title: "Board" }, "andy");
+    const ticket = await tickets.create(projectId, { type: "feature", title: "Board" }, "andy");
     expect(await refines(ticket.id)).toEqual([]);
 
     await projects.update(projectId, { autoRefine: true });
@@ -238,7 +239,7 @@ describe("RefineDispatcher", () => {
 
   it("GivenNoExecutor_WhenATicketIsCreated_ThenTheTicketIsCreatedAndNoRunStarts", async () => {
     const { tickets } = wire(null);
-    const ticket = await tickets.create(projectId, { type: "story", title: "Board" }, "andy");
+    const ticket = await tickets.create(projectId, { type: "feature", title: "Board" }, "andy");
     expect(ticket.key).toBe("AI-1");
     expect(await runStore.listActive(projectId)).toEqual([]);
   });
@@ -246,15 +247,15 @@ describe("RefineDispatcher", () => {
   it("GivenTheDispatchFails_WhenATicketIsCreated_ThenTheTicketIsCreatedAndNeedsYouWithTheReason", async () => {
     host = new InMemoryCodeHost([]);
     const { tickets } = wire();
-    const ticket = await tickets.create(projectId, { type: "story", title: "Board" }, "andy");
-    expect(await tracker.getTicket(projectId, ticket.id)).toMatchObject({ needsYou: true });
+    const ticket = await tickets.create(projectId, { type: "feature", title: "Board" }, "andy");
+    expect(await tracker.getTicket(projectId, ticket.id)).toMatchObject({ needsAttention: true });
     const last = (await tracker.listEvents(projectId, ticket.id)).findLast(
       (e) => e.kind === "comment",
     );
     expect(last?.body).toMatch(/^Refine couldn't start/);
 
     // Flagged: the next event doesn't try it again.
-    await tickets.create(projectId, { type: "story", title: "Two" }, "andy");
+    await tickets.create(projectId, { type: "feature", title: "Two" }, "andy");
     expect(await refines(ticket.id)).toHaveLength(1);
   });
 

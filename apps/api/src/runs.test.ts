@@ -16,7 +16,7 @@ async function setup(connected = true) {
   const project = await t.tracker.createProject({ name: "AI", key: "AI", repos: [REPO] });
   const ticket = await t.tracker.createTicket(
     project.id,
-    { type: "story", title: "Board" },
+    { type: "feature", title: "Board" },
     "andy",
   );
   const runsPath = `/api/projects/${project.id}/tickets/${ticket.id}/runs`;
@@ -42,9 +42,11 @@ const result = {
   costUsd: 0.01,
   output: {
     summary: "**Ask**: a board",
+    type: "feature",
     size: "S",
     sizeReason: "one screen",
-    tier: "fast",
+    outOfScope: [],
+    touches: [],
     questions: [{ text: "Kanban or list?" }],
   },
 };

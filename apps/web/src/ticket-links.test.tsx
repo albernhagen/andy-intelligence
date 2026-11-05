@@ -8,7 +8,7 @@ describe("ticket links", () => {
   async function seeded() {
     const harness = renderApp();
     await harness.tracker.createProject({ name: "AI", key: "AI" });
-    const ticket = await harness.service.create("ai", { type: "story", title: "Board" }, "andy");
+    const ticket = await harness.service.create("ai", { type: "feature", title: "Board" }, "andy");
     return { harness, ticket };
   }
 

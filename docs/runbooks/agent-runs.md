@@ -1,6 +1,6 @@
 # Runbook: agent runs (Claude Code executor)
 
-How Andy enables and checks agent runs (M1.6a: Claude Code executor: dispatch + callback, ADR-0051; M1.6b: Claude Code executor: watchdog + retry; M1.7: Refinement, ADR-0054). A run is one Claude Code session on GitHub Actions for one ticket step. Today the only step is `refine`: a read-only pass that reports on the ticket, proposes size and tier, and asks Andy 1–5 questions (procedure: `platform/procedures/refine.md`). It starts on its own (§7).
+How Andy enables and checks agent runs (M1.6a: Claude Code executor: dispatch + callback, ADR-0051; M1.6b: Claude Code executor: watchdog + retry; M1.7: Refinement, ADR-0054). A run is one Claude Code session on GitHub Actions for one ticket step. Today the only step is `refine`: a read-only pass that reports on the ticket, proposes type, size, out of scope and touches (written only where empty), and asks Andy 1–5 questions (procedure: `platform/procedures/refine.md`). It starts on its own (§7).
 
 | Piece               | Where                                                                                                                                                                                                                         |
 | ------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -69,7 +69,7 @@ Expect **0 to add, 1 to change, 0 to destroy**: `google_cloud_run_v2_service.con
    - Nothing reports (cancel again to force-stop `report`) → at the deadline (45 min) the watchdog asks GitHub, marks the run `cancelled`, and starts the retry.
 3. Expect: a comment **Retrying the refine run (attempt 2 of 2)** with the new run's link; the first run `cancelled` or `failed` with its reason in `error`.
 4. Cancel the retry the same way. Expect: no third run; the ticket is flagged **Needs you** (home page) with a comment naming the reason.
-5. The flag stays until cleared; the UI has no toggle yet, so `PATCH /api/projects/ai/tickets/{id}` with `{"needsYou": false}`.
+5. The flag stays until cleared; the UI has no toggle yet, so `PATCH /api/projects/ai/tickets/{id}` with `{"needsAttention": false}`.
 
 **Cancelling on purpose:** any cancel in Actions counts as a kill, so the run retries once; cancel the retry too. The ticket is then flagged Needs-you.
 
@@ -79,8 +79,8 @@ A check delivered before the deadline answers `503` and Cloud Tasks retries it l
 
 In Claude desktop with the `andy-intelligence` connector (`mcp-connector.md`), with no other run in flight in project `AI`:
 
-1. `create_ticket` in project `AI` with a body and EARS criteria ("WHEN … THE SYSTEM SHALL …"). Leave size and tier empty. Don't call `refine`.
-2. Expect: `status` with its key shows a `system` comment "Started a refine run"; a few minutes later 1–5 open questions, `needsYou: true`, and size, size reason and tier filled by the run.
+1. `create_ticket` in project `AI` with only a title, a body and criteria ("WHEN … the system shall …"). Leave type and size empty. Don't call `refine`.
+2. Expect: `status` with its key shows a `system` comment "Started a refine run"; a few minutes later 1–5 open questions, `needsAttention: true`, and type, size, size reason, out of scope and touches filled by the run.
 3. `list_needs_me`, then `answer_question` for each (`askedByRun` names the run that asked).
 4. Expect: the last answer returns the ticket with `stage: "ready"`; History shows `stage_changed` by `system`. If the Definition of Ready is still unmet, a second refine starts instead (`status` shows it); answer its questions too.
 
