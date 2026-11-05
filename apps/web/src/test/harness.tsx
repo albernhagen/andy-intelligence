@@ -89,6 +89,7 @@ export function renderApp(path = "/", opts: { githubConnected?: boolean } = {}) 
   return {
     user,
     router,
+    queryClient,
     tracker,
     runs,
     codeHost,

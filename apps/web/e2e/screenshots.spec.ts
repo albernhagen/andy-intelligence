@@ -1,7 +1,7 @@
 import { expect, test, type Page } from "@playwright/test";
 
 /**
- * AI-26: screenshot checks for the shell, board and ticket page. A diff fails CI; a deliberate
+ * AI-26: screenshot checks for the shell, board, ticket page and inbox (AI-30). A diff fails CI; a deliberate
  * change updates the stored images in the same PR (README: "Screenshot checks").
  */
 
@@ -9,12 +9,17 @@ async function open(page: Page, path: string, ready: string) {
   await page.goto(path);
   await expect(page.getByText(ready).first()).toBeVisible();
   // The header count is loaded once every screen has it.
-  await expect(page.getByRole("link", { name: "Needs you 2" })).toBeVisible();
+  await expect(page.getByRole("link", { name: "Needs you 6" })).toBeVisible();
 }
 
 test("shell: inbox under All projects", async ({ page }) => {
   await open(page, "/all/inbox", "Keep backups for 7 or 30 days?");
   await expect(page).toHaveScreenshot("shell-all-projects-inbox.png");
+});
+
+test("inbox: busy project with a stale ticket", async ({ page }) => {
+  await open(page, "/p/ops/inbox", "Delete the old bucket too?");
+  await expect(page).toHaveScreenshot("inbox-busy.png", { fullPage: true });
 });
 
 test("shell: project picker open", async ({ page }) => {

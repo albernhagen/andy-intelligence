@@ -19,18 +19,18 @@ v1.x screens:
 **Design (ADR-0045; M3, ADR-0059):** `apps/web/design.md` + shadcn theme tokens are the design source of truth agents and design skills read; Playwright screenshot checks. M4: design skills, pluggable per project (custom-skill context source, §7.6); Hallmark trial first; `sloplint --render` (non-blocking).
 
 **Built in M1.3: UI: tickets + inbox:**
-- Routes: `/` Needs-you inbox; `/projects`; `/p/:projectId` tickets in one column per stage; `/p/:projectId/t/:ticketRef` detail (ref = key, e.g. `AI-2`; an id or wrong project switches to the canonical URL).
+- Routes: `/projects`; `/p/:projectId` tickets in one column per stage; `/p/:projectId/t/:ticketRef` detail (ref = key, e.g. `AI-2`; an id or wrong project switches to the canonical URL).
 - Detail: edit fields (type editable, empty until set; Tier pins `overrides.tier`, its empty option shows the tier from size; saves send `ifUpdatedAt`; a 409 asks Andy to reload), Definition of Ready from `/readiness`, history with comments, the ticket's questions, and "Ask a question…".
 - Moves: one button per move in `TRANSITIONS` (`packages/domain`), plus "Force move…" (skips the rules; recorded). Board drag-and-drop (mouse, touch, keyboard): allowed column = normal move, else forced (not onto Cancelled). Cancel (optional reason), Archive/Unarchive, "Show archived" toggle. The API enforces rules; errors show inline.
-- Client: `openapi-fetch` typed by `apps/web/src/lib/api.gen.ts`, generated in-process from `createApp`'s OpenAPI document (`pnpm --filter @andy/web gen:api`); a test fails when it is stale. Every write refetches all queries (one user, small data).
+- Client: `openapi-fetch` typed by `apps/web/src/lib/api.gen.ts`, generated from `createApp`'s OpenAPI document (README); a test fails when it is stale. Every write refetches all queries.
 - Untrusted text renders as plain text (no HTML or markdown).
-- Tests render the UI against the in-process API (`createApp` + fakes).
-- Not yet: PR/cost panels, the kill switch's Needs-you item.
+- Not yet: PR/cost panels, kill-switch item.
 
 **Built in AI-26: Design source and app shell (M3, ADR-0059):**
 - `apps/web/design.md` and the tokens in `index.css` (status roles `attention`, `running`, `success`; a `Badge` variant per marker).
 - One shell (`AppShell.tsx`, the router's root): project picker (key + name, each project's waiting count, All projects, Add project), Board / Inbox / Settings, "Needs you N" across projects.
-- Scope in the URL: `/p/:projectId/…` or `/all/…`; added `/p/:projectId/inbox`, `/all/inbox`, `/all/board` (asks for a project). Last scope in `localStorage`; `/` opens its inbox.
+- Scope in the URL: `/p/:projectId/…` or `/all/…` (`/all/board` asks for a project). Last scope in `localStorage`; `/` redirects to its inbox. Every screen has a URL.
+- Inbox (AI-30): a card per ticket, by project, most unblocking first (`lib/needs-you.ts`); Done, Cancelled, archived last under "Stale". One-click answers, "Accept all suggested".
 - Screenshot checks: Playwright over the API with seeded fakes (`apps/web/e2e/`), CI job `ui-screenshots` (§8.1).
 
 **Built in M1.19: GitHub App setup from the UI:** `/settings/github` (connect, install link, installed repos) and `/settings/github/callback`; the new-project form suggests installed repos.
