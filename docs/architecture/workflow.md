@@ -24,7 +24,7 @@ Overview and reading map: [ARCHITECTURE.md](ARCHITECTURE.md). Section numbers ma
 
 ### 4.2 Definition of Ready (per type, ADR-0058)
 - **Type** set: feature, chore, bug or epic. A title alone is a valid ticket; refine fills the type.
-- Problem/intent stated; for a bug, steps to reproduce and the actual behaviour.
+- Problem/intent stated (a non-empty body; for a bug, refine asks for steps to reproduce and the actual behaviour, which are not checked mechanically).
 - Acceptance criteria: **feature**, at least one, each in **EARS** form, any sentence with "… shall …" ("WHEN … the API shall …"); **bug**, at least one stating the expected behaviour; **chore**, a "done when" checklist in any wording.
 - Size tagged S/M/L with one-line justification (`sizeReason`) (rubric in `docs/agent/size-rubric.md`).
 - Dependencies declared (ticket "blocked by" links).
