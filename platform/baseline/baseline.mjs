@@ -14,6 +14,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { applySections, checkSections, SECTIONS } from "./github.mjs";
 import { baselineRecord, fileDrift, mergeLines, renderFiles } from "./files.mjs";
+import { cleanGitEnv } from "../../scripts/git-env.mjs";
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const SOURCE_ROOT = path.resolve(HERE, "../..");
@@ -103,17 +104,18 @@ function writeFile(dir, file, content) {
 
 /**
  * Environment for commands in the cloned repo. Its git hooks (lefthook) call `pnpm`, so when pnpm
- * isn't installed, a shim that runs it through npx goes first on PATH.
+ * isn't installed, a shim that runs it through npx goes first on PATH. No `GIT_*` variables, so
+ * running this from a git hook can't write to the hook's repository (AI-20).
  */
 function repoEnv() {
   const found = spawnSync("pnpm", ["--version"], { encoding: "utf8" });
-  if (!found.error && found.status === 0) return process.env;
+  if (!found.error && found.status === 0) return cleanGitEnv();
   const bin = mkdtempSync(path.join(tmpdir(), "pnpm-shim-"));
   writeFileSync(path.join(bin, "pnpm"), '#!/bin/sh\nexec npx -y pnpm@10.28.0 "$@"\n', {
     mode: 0o755,
   });
   console.log("pnpm not on PATH; using npx pnpm@10.28.0");
-  return { ...process.env, PATH: `${bin}${path.delimiter}${process.env.PATH}` };
+  return cleanGitEnv({ ...process.env, PATH: `${bin}${path.delimiter}${process.env.PATH}` });
 }
 
 /** Clones the repo, writes the baseline files, and pushes (empty repo) or opens a PR. */
@@ -122,15 +124,16 @@ function filesCommand(repo, ref) {
   const sha = resolveRef(ref, m.source);
   const rendered = renderFiles(m, readAt(sha), { sha, ref });
   const dir = mkdtempSync(path.join(tmpdir(), "baseline-"));
-  run("gh", ["repo", "clone", repo, dir, "--", "--quiet"]);
+  const env = repoEnv();
+  run("gh", ["repo", "clone", repo, dir, "--", "--quiet"], { env });
   const empty =
-    run("git", ["-C", dir, "rev-parse", "--verify", "HEAD"], { allowFail: true }).status !== 0;
+    run("git", ["-C", dir, "rev-parse", "--verify", "HEAD"], { allowFail: true, env }).status !== 0;
   const starter = !existsSync(path.join(dir, "package.json"));
   // Commit as this checkout's identity (e.g. the noreply address set here), not the global one:
   // GitHub rejects pushes that would publish a private email.
   for (const key of ["user.name", "user.email"]) {
     const value = run("git", ["-C", SOURCE_ROOT, "config", key], { allowFail: true }).stdout.trim();
-    if (value) run("git", ["-C", dir, "config", key, value]);
+    if (value) run("git", ["-C", dir, "config", key, value], { env });
   }
 
   for (const f of rendered.managed) writeFile(dir, f.path, f.content);
@@ -145,12 +148,13 @@ function filesCommand(repo, ref) {
   const date = new Date().toISOString().slice(0, 10);
   writeFile(dir, ".andy/baseline.json", baselineRecord({ source: m.source, sha, ref, date }));
   // Creates pnpm-lock.yaml for a starter repo (CI installs with --frozen-lockfile) and installs hooks.
-  const env = repoEnv();
   if (existsSync(path.join(dir, "package.json")))
     run("pnpm", ["install"], { cwd: dir, stdio: "inherit", env });
 
-  run("git", ["-C", dir, "add", "-A"]);
-  if (run("git", ["-C", dir, "diff", "--cached", "--quiet"], { allowFail: true }).status === 0) {
+  run("git", ["-C", dir, "add", "-A"], { env });
+  if (
+    run("git", ["-C", dir, "diff", "--cached", "--quiet"], { allowFail: true, env }).status === 0
+  ) {
     console.log(`${repo}: files already match baseline ${ref} (${sha.slice(0, 7)})`);
     return;
   }

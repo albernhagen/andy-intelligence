@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { DEFAULT_BUDGETS, check, globToRegExp, loadBudgets, measure } from "./context-budget.mjs";
+import { cleanGitEnv } from "./git-env.mjs";
 
 describe("globToRegExp", () => {
   it.each([
@@ -73,10 +74,11 @@ describe("loadBudgets", () => {
 /** A temp git repo holding `files` plus a CLAUDE.md symlink to AGENTS.md, all staged. */
 const repo = (files) => {
   const dir = mkdtempSync(join(tmpdir(), "budget-repo-"));
-  execFileSync("git", ["init", "-q"], { cwd: dir });
+  const env = cleanGitEnv();
+  execFileSync("git", ["init", "-q"], { cwd: dir, env });
   for (const [path, text] of Object.entries(files)) writeFileSync(join(dir, path), text);
   symlinkSync("AGENTS.md", join(dir, "CLAUDE.md"));
-  execFileSync("git", ["add", "-A"], { cwd: dir });
+  execFileSync("git", ["add", "-A"], { cwd: dir, env });
   return dir;
 };
 
@@ -87,7 +89,7 @@ describe("repo helper", () => {
   // temp dir overwrite the real repository's index on every push.
   it("GivenGitHookEnvironment_WhenTempRepoCreated_ThenOuterRepositoryIndexUnchanged", () => {
     const outer = mkdtempSync(join(tmpdir(), "budget-outer-"));
-    const clean = { PATH: process.env.PATH, HOME: process.env.HOME };
+    const clean = cleanGitEnv();
     execFileSync("git", ["init", "-q"], { cwd: outer, env: clean });
     writeFileSync(join(outer, "keep.txt"), "keep\n");
     execFileSync("git", ["add", "keep.txt"], { cwd: outer, env: clean });
@@ -105,7 +107,9 @@ describe("repo helper", () => {
 
 describe("CLI", () => {
   const script = join(import.meta.dirname, "context-budget.mjs");
-  const run = (dir) => spawnSync(process.execPath, [script, dir], { encoding: "utf8" });
+  // `git ls-files` in the CLI must read the temp repo, not a hook's GIT_DIR.
+  const run = (dir) =>
+    spawnSync(process.execPath, [script, dir], { encoding: "utf8", env: cleanGitEnv() });
 
   it("GivenSmallAgentsFile_WhenRun_ThenPassesAndSkipsSymlink", () => {
     const result = run(repo({ "AGENTS.md": "rules\n" }));
