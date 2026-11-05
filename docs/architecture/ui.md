@@ -20,8 +20,8 @@ v1.x screens:
 
 **Built in M1.3: UI: tickets + inbox:**
 - Routes: `/` Needs-you inbox; `/projects`; `/p/:projectId` tickets in one column per stage; `/p/:projectId/t/:ticketRef` ticket (ref = key, e.g. `AI-2`; an id or wrong project switches to the canonical URL).
-- Moves: a button per `TRANSITIONS` move plus "Force move…" (recorded); board drag-and-drop (mouse, touch, keyboard): allowed column = normal move, else forced (not Cancelled). Cancel (optional reason), Archive/Unarchive, "Show archived". The API enforces rules; errors show inline.
-- Client: `openapi-fetch` typed by `lib/api.gen.ts`, generated from `createApp`'s OpenAPI document (`pnpm --filter @andy/web gen:api`); a test catches staleness. Every write refetches all queries.
+- Moves: one button per move in `TRANSITIONS` (`packages/domain`), plus "Force move…" (skips the rules; recorded). Board drag-and-drop (mouse, touch, keyboard): allowed column = normal move, else forced (not onto Cancelled). Cancel (optional reason), Archive/Unarchive, "Show archived" toggle. The API enforces rules; errors show inline.
+- Client: `openapi-fetch` typed by `apps/web/src/lib/api.gen.ts`, generated in-process from `createApp`'s OpenAPI document (`pnpm --filter @andy/web gen:api`); a test fails when it is stale. Every write refetches all queries (one user, small data).
 - Tests render the UI against the in-process API (`createApp` + fakes).
 - Not yet: PR/cost panels, the kill switch's Needs-you item.
 
@@ -31,6 +31,11 @@ v1.x screens:
 - Scope in the URL: `/p/:projectId/…` or `/all/…`; added `/p/:projectId/inbox`, `/all/inbox`, `/all/board` (asks for a project). Last scope in `localStorage`; `/` opens its inbox.
 - Screenshot checks: Playwright over the API with seeded fakes (`apps/web/e2e/`), CI job `ui-screenshots` (§8.1).
 
-**Built in AI-29: Story panel (M3, ADR-0059):** the ticket route is the board's child: a 640px panel over it (full page under 900px; Esc closes). Status line from stage, questions, run, PR, blockers; markdown description (Write / Preview), checklist, scope; a rail of moves and facts; questions; one timeline. Fields save in place (`ifUpdatedAt`; a 409 offers Reload). Descriptions, comments, questions render as safe markdown (`components/Markdown.tsx`); other untrusted text stays plain.
+**Built in AI-29: Story panel (M3, ADR-0059):**
+- Route: `/p/:projectId/t/:ticketRef` is a child of the board route, rendered in the board's `<Outlet />`: a 640px panel over the board, full page under 900px. Esc (outside a field or editor) or Close returns to `/p/:projectId`; direct loads show the board with the panel.
+- Status line first (`lib/status-line.ts`, one pure function): stage, open questions, run in flight (step, minutes), latest linked PR and its state, unfinished blockers, place in the Ready queue. E.g. "Waiting for you: 2 questions", "Refining · 1 min", "Ready · next in the queue", "Blocked by AI-3". No PR check state yet (the API has none).
+- One document: title, markdown description (Write / Preview), checklist ("Done when" for a chore), assumptions, out of scope, touches. Rail: stage, moves, Definition of Ready, type, size and reason, tier (from size; choosing one pins `overrides.tier`), epic, blocked by, cancel and archive. Then questions (answered in place) and one timeline of history, comments and runs, with the comment box and "Start refine run".
+- Edit in place: each field saves only itself with `ifUpdatedAt`; the saved ticket goes straight into the cache, so a quick next edit isn't a false conflict. A 409 shows the API's message and a Reload button; the draft stays. Lists add with Enter and remove with ×.
+- Markdown (`components/Markdown.tsx`, `react-markdown` pinned) for descriptions, comments and question text, which is untrusted, partly agent-written: no `rehype-raw`, so HTML shows as text; only http, https and mailto URLs; images never load (a link labelled with the alt text); links open in a new tab with `rel="noopener noreferrer nofollow"` and show their host. Other text (run summaries, reasons) stays plain.
 
 **Built in M1.19: GitHub App setup from the UI:** `/settings/github` (connect, install link, installed repos) and `/settings/github/callback`; the new-project form suggests installed repos.
