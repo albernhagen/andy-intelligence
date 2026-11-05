@@ -7,6 +7,7 @@ import {
   FirestoreOAuthGrantStore,
   FirestoreRunStore,
   FirestoreWorkTracker,
+  CloudTasksWatchdogQueue,
   createFirestore,
 } from "@andy/store";
 import { createApp } from "./app";
@@ -27,6 +28,25 @@ async function main() {
   const db = createFirestore(projectId);
   // MCP is on only when the public URL is set (it is the OAuth issuer and resource).
   const publicUrl = process.env.PUBLIC_URL?.replace(/\/+$/, "");
+  // Run watchdog (M1.6b): on when its queue and invoker are set; tasks target the public URL.
+  const watchdogQueue = process.env.WATCHDOG_QUEUE;
+  const invokerEmail = process.env.WATCHDOG_INVOKER_EMAIL;
+  const watchdog =
+    publicUrl && watchdogQueue && invokerEmail
+      ? {
+          queue: new CloudTasksWatchdogQueue({ queue: watchdogQueue, publicUrl, invokerEmail }),
+          publicUrl,
+          invokerEmail,
+        }
+      : undefined;
+  if (!watchdog) {
+    console.log(
+      JSON.stringify({
+        severity: "WARNING",
+        message: "run watchdog off: set PUBLIC_URL, WATCHDOG_QUEUE and WATCHDOG_INVOKER_EMAIL",
+      }),
+    );
+  }
 
   const app = createApp({
     verifier: firebaseVerifier(projectId),
@@ -41,6 +61,7 @@ async function main() {
     runs: new FirestoreRunStore(db),
     // Serve only the public URL's host; the run.app URLs answer /health alone (ADR-0044).
     publicHost: publicUrl ? new URL(publicUrl).host : undefined,
+    watchdog,
     mcp: publicUrl
       ? {
           publicUrl,

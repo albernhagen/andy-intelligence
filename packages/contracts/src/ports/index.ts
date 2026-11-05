@@ -30,7 +30,7 @@ import {
 
 /**
  * Ports (ARCHITECTURE §6). Adapters implement these; the domain only sees these types.
- * WorkTracker, RunStore, Executor, QuotaSource, OAuthGrantStore, CodeHost, CodeEventLog and
+ * WorkTracker, RunStore, WatchdogQueue, Executor, QuotaSource, OAuthGrantStore, CodeHost, CodeEventLog and
  * CodeHostConnectionStore have fakes + contract suites (see ../testing).
  * The rest are plain interfaces until a second adapter exists (ADR-0012).
  */
@@ -234,6 +234,8 @@ export const NewRun = Run.pick({
   deadline: true,
   prompt: true,
   maxTurns: true,
+  attempt: true,
+  retryOf: true,
 });
 export type NewRun = z.input<typeof NewRun>;
 
@@ -268,6 +270,26 @@ export interface RunStore {
    * `conflict` otherwise, `not_found` when there is no such run.
    */
   update(runId: string, patch: RunPatch, from: readonly RunStatus[]): Promise<Run>;
+}
+
+// ── WatchdogQueue ───────────────────────────────────────────────────────────
+// Delayed checks of runs at their deadline (ARCHITECTURE §7.1 run watchdog). One check per run:
+// the queue delivers it to the control plane at `at`, which looks at the run once. Nothing is
+// queued when no run is in flight, so nothing runs (no polling).
+
+export const WatchdogCheck = z.object({
+  runId: z.string().regex(/^[A-Za-z0-9-]{1,64}$/),
+  /** When to deliver the check: the run's deadline. */
+  at: Timestamp,
+});
+export type WatchdogCheck = z.infer<typeof WatchdogCheck>;
+
+export interface WatchdogQueue {
+  /**
+   * Queues the run's check for delivery at `at`. Idempotent by run ID: a second call for the
+   * same run queues nothing and returns "duplicate", so a run has at most one check.
+   */
+  schedule(check: WatchdogCheck): Promise<"scheduled" | "duplicate">;
 }
 
 // ── QuotaSource ──────────────────────────────────────────────────────────────

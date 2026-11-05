@@ -1,14 +1,14 @@
 # Runbook: agent runs (Claude Code executor)
 
-How Andy enables and checks agent runs (M1.6a: Claude Code executor: dispatch + callback; ADR-0051). A run is one Claude Code session on GitHub Actions for one ticket step. Today the only step is `refine`: a read-only report on the ticket.
+How Andy enables and checks agent runs (M1.6a: Claude Code executor: dispatch + callback, ADR-0051; M1.6b: Claude Code executor: watchdog + retry). A run is one Claude Code session on GitHub Actions for one ticket step. Today the only step is `refine`: a read-only report on the ticket.
 
-| Piece               | Where                                                                                                                    |
-| ------------------- | ------------------------------------------------------------------------------------------------------------------------ |
-| Start / watch a run | UI → ticket → **Runs** → **Start refine run** (polls every 5 s while a run is in flight)                                 |
-| Dispatched workflow | `.github/workflows/agent-run.yml` → `claude-executor.yml` (jobs `context`, `agent`, `report`)                            |
-| Permission profile  | `platform/executor/profile.json`, installed as `/etc/claude-code/managed-settings.json` (printed in the `agent` job log) |
-| Logs                | Cloud Logging `jsonPayload.component="runs"` (dispatch, report) and `"run-callback"` (callbacks)                         |
-| Caps                | 1 run in flight per project; refine: 30 turns, deadline 45 min; jobs time out at 5 / 30 / 5 min                          |
+| Piece               | Where                                                                                                                                                                                       |
+| ------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Start / watch a run | UI → ticket → **Runs** → **Start refine run** (polls every 5 s while a run is in flight)                                                                                                    |
+| Dispatched workflow | `.github/workflows/agent-run.yml` → `claude-executor.yml` (jobs `context`, `agent`, `report`)                                                                                               |
+| Permission profile  | `platform/executor/profile.json`, installed as `/etc/claude-code/managed-settings.json` (printed in the `agent` job log)                                                                    |
+| Logs                | Cloud Logging `jsonPayload.component="runs"` (dispatch, report, watchdog decisions), `"run-callback"` (callbacks) and `"run-watchdog"` (watchdog calls)                                     |
+| Caps                | 1 run in flight per project; refine: 30 turns, deadline 45 min; jobs time out at 5 / 30 / 5 min; 1 automatic retry per run; 1 watchdog check per run (queue: 5/s, 5 concurrent, 3 attempts) |
 
 ## 1. Give the GitHub App Actions write (once)
 
@@ -46,13 +46,42 @@ What covers it until M1.8: Build + gate:
 
 Proving the profile live (a counted denial) is part of M1.8, when runs get Bash and edit tools and the sandbox lands (AI-12). If a refine report ever quotes a secret, stop starting runs, switch to a capped API key (§2), and tell the agent session.
 
+## 5. Turn on the watchdog (once)
+
+The watchdog needs two env vars on Cloud Run, set by Terraform (queue and `tasks-invoker` service account already exist):
+
+```bash
+cd infra/control-plane && terraform plan
+```
+
+Expect **0 to add, 1 to change, 0 to destroy**: `google_cloud_run_v2_service.control_plane` gains `WATCHDOG_QUEUE` and `WATCHDOG_INVOKER_EMAIL`. Then `terraform apply`. Until then the service logs `run watchdog off` at startup and runs have no deadline check.
+
+## 6. A killed run is caught (done-when demo 6b)
+
+1. Start a refine run (§3). Check its watchdog task is queued (task ID = run ID):
+
+   ```bash
+   gcloud tasks list --queue run-watchdog --location us-central1 --project andy-intelligence-512400
+   ```
+
+2. Kill it: Actions → the run → **Cancel workflow** while the `agent` job runs. Two outcomes, both caught:
+   - The `report` job still posts `failed` → a retry starts at once.
+   - Nothing reports (cancel again to force-stop `report`) → at the deadline (45 min) the watchdog asks GitHub, marks the run `cancelled`, and starts the retry.
+3. Expect: a comment **Retrying the refine run (attempt 2 of 2)** with the new run's link; the first run `cancelled` or `failed` with its reason in `error`.
+4. Cancel the retry the same way. Expect: no third run; the ticket is flagged **Needs you** (home page) with a comment naming the reason.
+5. The flag stays until cleared; the UI has no toggle yet, so `PATCH /api/projects/ai/tickets/{id}` with `{"needsYou": false}`.
+
+**Cancelling on purpose:** any cancel in Actions counts as a kill, so the run retries once; cancel the retry too. The ticket is then flagged Needs-you.
+
+A check delivered before the deadline answers `503` and Cloud Tasks retries it later; a check for a run that already reported is a no-op.
+
 ## Troubleshooting
 
-| Symptom                                                                                      | Fix                                                                                                                                                                        |
-| -------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Start → `502 … Resource not accessible by integration`                                       | §1 not done or not accepted                                                                                                                                                |
-| Start → `502 … isn't connected or the App isn't installed`                                   | Connect GitHub / install the App on the repo (`github-app.md`)                                                                                                             |
-| Run stays `queued`                                                                           | The `context` job failed: open the Run log. `credential=subscription but secret … is empty` → §2. `HTTP 403` → the run was dispatched from another workflow or branch      |
-| Run `failed` in about 20 s; the `agent` job log says `Workflow initiated by non-human actor` | The App's name isn't in `allowed_bots` in `claude-executor.yml` (e.g. the App was renamed): set it to the App's slug, never `*`                                            |
-| Run `failed`, summary `Agent stopped: error_max_turns`                                       | The ticket needs a tighter ask; turns are capped at 30                                                                                                                     |
-| Run stuck `running` past its deadline                                                        | The `report` job failed after 3 tries; the watchdog (M1.6b) will catch these. Until then it stays `running`, but stops blocking new runs once its deadline (45 min) passes |
+| Symptom                                                                                      | Fix                                                                                                                                                                                                                                                                                       |
+| -------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Start → `502 … Resource not accessible by integration`                                       | §1 not done or not accepted                                                                                                                                                                                                                                                               |
+| Start → `502 … isn't connected or the App isn't installed`                                   | Connect GitHub / install the App on the repo (`github-app.md`)                                                                                                                                                                                                                            |
+| Run stays `queued`                                                                           | The `context` job failed: open the Run log. `credential=subscription but secret … is empty` → §2. `HTTP 403` → the run was dispatched from another workflow or branch                                                                                                                     |
+| Run `failed` in about 20 s; the `agent` job log says `Workflow initiated by non-human actor` | The App's name isn't in `allowed_bots` in `claude-executor.yml` (e.g. the App was renamed): set it to the App's slug, never `*`                                                                                                                                                           |
+| Run `failed`, summary `Agent stopped: error_max_turns`                                       | The ticket needs a tighter ask; turns are capped at 30                                                                                                                                                                                                                                    |
+| Run stuck `running` past its deadline                                                        | The watchdog didn't fire: startup log `run watchdog off` → §5; `watchdog check not queued` in `component="runs"` → the runtime can't enqueue (IAM); `watchdog token rejected` → `WATCHDOG_INVOKER_EMAIL` or `PUBLIC_URL` is wrong. The run stops blocking new runs at its deadline anyway |
