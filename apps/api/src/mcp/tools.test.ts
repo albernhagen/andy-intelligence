@@ -282,6 +282,16 @@ describe("cancel_ticket and archive_ticket", () => {
     expect(overview.data.projects[0].ticketsByStage.cancelled).toBe(0);
   });
 
+  it("GivenACancelledTicket_WhenMoveTicketReopensIt_ThenAToolErrorAndItStaysCancelled", async () => {
+    const ctx = await withProject();
+    await ctx.call("create_ticket", { project: "AI", type: "task", title: "x" });
+    await ctx.call("cancel_ticket", { ticket: "AI-1" });
+    const res = await ctx.call("move_ticket", { ticket: "AI-1", to: "backlog" });
+    expect(res).toMatchObject({ isError: true, text: expect.stringMatching(/one step forward/) });
+    const status = await ctx.call("status", { ticket: "AI-1" });
+    expect(status.data.ticket.stage).toBe("cancelled");
+  });
+
   it("GivenATicketNotDoneOrCancelled_WhenArchivedOverMcp_ThenAToolError", async () => {
     const ctx = await withProject();
     await ctx.call("create_ticket", { project: "AI", type: "task", title: "x" });
@@ -296,6 +306,53 @@ describe("cancel_ticket and archive_ticket", () => {
       isError: true,
       text: "ticket not found: AI-9",
     });
+  });
+});
+
+describe("move_ticket", () => {
+  it("GivenAReadyTicket_WhenMovedOneStepForward_ThenMovedUnforcedAndVisibleOverRest", async () => {
+    const ctx = await withProject();
+    const t = await ctx.service.create("ai", readyStory, "andy");
+    await ctx.service.move("ai", t.id, "ready", "andy");
+    const res = await ctx.call("move_ticket", { ticket: "AI-1", to: "in_progress" });
+    expect(res).toMatchObject({ isError: false, data: { ticket: { stage: "in_progress" } } });
+    const events = await ctx.tracker.listEvents("ai", t.id);
+    expect(events.at(-1)).toMatchObject({ kind: "stage_changed", data: { forced: false } });
+    const body = (await (await ctx.rest(`/api/projects/ai/tickets/${t.id}`)).json()) as Ticket;
+    expect(body.stage).toBe("in_progress");
+  });
+
+  it("GivenABackwardOrSkippingMove_WhenCalled_ThenAToolErrorAndTheTicketIsUnchanged", async () => {
+    const ctx = await withProject();
+    const t = await ctx.service.create("ai", readyStory, "andy");
+    await ctx.service.move("ai", t.id, "ready", "andy");
+    for (const to of ["backlog", "ready_for_review", "done"]) {
+      const res = await ctx.call("move_ticket", { ticket: "AI-1", to });
+      expect(res).toMatchObject({ isError: true, text: expect.stringMatching(/one step forward/) });
+    }
+    expect((await ctx.tracker.getTicket("ai", t.id))?.stage).toBe("ready");
+  });
+
+  it("GivenAnIncompleteStory_WhenMovedToReady_ThenAToolErrorNamesTheDorGaps", async () => {
+    const ctx = await withProject();
+    await ctx.service.create("ai", { type: "story", title: "x" }, "andy");
+    const res = await ctx.call("move_ticket", { ticket: "AI-1", to: "ready" });
+    expect(res).toMatchObject({
+      isError: true,
+      text: expect.stringMatching(/^Definition of Ready not met: /),
+    });
+  });
+
+  it("GivenAnUnknownKeyOrAForceArgument_WhenCalled_ThenAToolErrorOrForceIsIgnored", async () => {
+    const ctx = await withProject();
+    expect(await ctx.call("move_ticket", { ticket: "AI-9", to: "ready" })).toMatchObject({
+      isError: true,
+      text: "ticket not found: AI-9",
+    });
+    const t = await ctx.service.create("ai", readyStory, "andy");
+    const res = await ctx.call("move_ticket", { ticket: "AI-1", to: "done", force: true });
+    expect(res.isError).toBe(true);
+    expect((await ctx.tracker.getTicket("ai", t.id))?.stage).toBe("backlog");
   });
 });
 

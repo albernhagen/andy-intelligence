@@ -5,6 +5,7 @@ import {
   type Query,
 } from "@google-cloud/firestore";
 import {
+  PullRequestLink,
   WorkTrackerError,
   applyTicketChange,
   buildProject,
@@ -148,6 +149,22 @@ export class FirestoreWorkTracker implements WorkTracker {
       const comment = event(ticket, "comment", actor, this.now(), body);
       tx.create(this.events(projectId, ticketId).doc(comment.id), comment);
       return comment;
+    });
+  }
+
+  async linkPullRequest(
+    projectId: string,
+    ticketId: string,
+    link: PullRequestLink,
+    actor: EventActor,
+  ): Promise<TicketEvent> {
+    const data = PullRequestLink.parse(link);
+    return this.db.runTransaction(async (tx) => {
+      const ticket = (await tx.get(this.tickets(projectId).doc(ticketId))).data();
+      if (!ticket) throw notFound("ticket", ticketId);
+      const linked = event(ticket, "pr_linked", actor, this.now(), null, data);
+      tx.create(this.events(projectId, ticketId).doc(linked.id), linked);
+      return linked;
     });
   }
 

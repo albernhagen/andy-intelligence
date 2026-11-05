@@ -100,6 +100,12 @@ describe("describeEvent", () => {
     const e = event({ kind: "fields_changed", data: { diff: { title: {}, body: {} } } });
     expect(describeEvent(e)).toBe("changed title, body");
   });
+
+  it("GivenALinkedPullRequest_WhenDescribed_ThenItNamesTheNumberAndState", () => {
+    const e = event({ kind: "pr_linked", data: { number: 70, state: "merged", url: "u" } });
+    expect(describeEvent(e)).toBe("linked pull request #70 (merged)");
+    expect(describeEvent(event({ kind: "pr_linked", data: {} }))).toBe("linked a pull request");
+  });
 });
 
 describe("sortQuestions", () => {

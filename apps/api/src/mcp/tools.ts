@@ -1,6 +1,7 @@
 import {
   NewTicket,
   Project,
+  Stage,
   TicketKey,
   WorkTrackerError,
   type Question,
@@ -53,6 +54,11 @@ const CancelInput = {
 const ArchiveInput = {
   ticket: TicketKey.describe('Ticket key, e.g. "AI-42". Must be Done or Cancelled to archive.'),
   archived: z.boolean().default(true).describe("false unarchives."),
+};
+
+const MoveInput = {
+  ticket: TicketKey.describe('Ticket key, e.g. "AI-42".'),
+  to: Stage.describe("Target stage: the next one forward from where the ticket is."),
 };
 
 const summary = (t: Ticket) => ({
@@ -158,6 +164,18 @@ export function registerTools(server: McpServer, deps: ToolDeps): void {
           ticket: summary(await service.archive(found.projectId, found.id, archived, "andy")),
         };
       }),
+  );
+
+  server.registerTool(
+    "move_ticket",
+    {
+      description:
+        "Moves a ticket one stage forward (backlog → ready → in_progress → ready_for_review → monitoring → done). Backlog → ready needs the Definition of Ready. Backward or skipping moves are refused; Andy makes those in the UI.",
+      inputSchema: MoveInput,
+      annotations: { destructiveHint: false, idempotentHint: false },
+    },
+    ({ ticket, to }) =>
+      run(async () => ({ ticket: summary(await service.moveForward(ticket, to, "andy")) })),
   );
 
   server.registerTool(

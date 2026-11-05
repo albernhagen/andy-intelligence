@@ -100,6 +100,14 @@ export const TicketChange = z.object({
 });
 export type TicketChange = z.input<typeof TicketChange>;
 
+/** What a `pr_linked` event records about a pull request. */
+export const PullRequestLink = z.object({
+  number: z.number().int().positive(),
+  url: z.url(),
+  state: z.enum(["open", "closed", "merged"]),
+});
+export type PullRequestLink = z.infer<typeof PullRequestLink>;
+
 export const NewQuestion = Question.pick({ text: true }).extend({
   options: z.array(z.string()).default([]),
   suggestedAnswer: z.string().nullable().default(null),
@@ -144,6 +152,13 @@ export interface WorkTracker {
     projectId: string,
     ticketId: string,
     body: string,
+    actor: EventActor,
+  ): Promise<TicketEvent>;
+  /** Appends `pr_linked` with the pull request's number, URL and state; the ticket is unchanged. */
+  linkPullRequest(
+    projectId: string,
+    ticketId: string,
+    link: PullRequestLink,
     actor: EventActor,
   ): Promise<TicketEvent>;
   /** Oldest first. */

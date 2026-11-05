@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { canTransition } from "./stages";
+import { canTransition, forwardPath, isForwardMove } from "./stages";
 
 describe("canTransition", () => {
   it("GivenEachStage_WhenMovingForwardOneStep_ThenAllowed", () => {
@@ -29,5 +29,36 @@ describe("canTransition", () => {
     expect(canTransition("cancelled", "ready")).toBe(false);
     expect(canTransition("done", "cancelled")).toBe(false);
     expect(canTransition("in_progress", "cancelled")).toBe(false);
+  });
+});
+
+describe("isForwardMove", () => {
+  it("GivenOneStepForward_WhenChecked_ThenTrue", () => {
+    expect(isForwardMove("ready", "in_progress")).toBe(true);
+    expect(isForwardMove("monitoring", "done")).toBe(true);
+  });
+
+  it("GivenABackwardOrSkippingMove_WhenChecked_ThenFalse", () => {
+    expect(isForwardMove("in_progress", "ready")).toBe(false);
+    expect(isForwardMove("ready_for_review", "in_progress")).toBe(false);
+    expect(isForwardMove("ready", "ready_for_review")).toBe(false);
+    expect(isForwardMove("done", "done")).toBe(false);
+  });
+
+  it("GivenACancelledTicket_WhenReopeningIsChecked_ThenItIsNotAForwardMove", () => {
+    expect(isForwardMove("cancelled", "backlog")).toBe(false);
+    expect(isForwardMove("monitoring", "cancelled")).toBe(false);
+  });
+});
+
+describe("forwardPath", () => {
+  it("GivenAStageAhead_WhenWalked_ThenEveryStepInOrder", () => {
+    expect(forwardPath("ready", "ready_for_review")).toEqual(["in_progress", "ready_for_review"]);
+    expect(forwardPath("ready_for_review", "done")).toEqual(["monitoring", "done"]);
+  });
+
+  it("GivenAStageBehindOrTheSame_WhenWalked_ThenEmpty", () => {
+    expect(forwardPath("done", "ready_for_review")).toEqual([]);
+    expect(forwardPath("in_progress", "in_progress")).toEqual([]);
   });
 });

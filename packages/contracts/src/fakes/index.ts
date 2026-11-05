@@ -18,6 +18,7 @@ import {
   type TicketEvent,
 } from "../entities";
 import {
+  PullRequestLink,
   RunRequest,
   WorkTrackerError,
   type CodeEventLog,
@@ -129,6 +130,18 @@ export class InMemoryWorkTracker implements WorkTracker {
     const comment = event(ticket, "comment", actor, this.now(), body);
     this.events.get(ticket.id)?.push(comment);
     return structuredClone(comment);
+  }
+
+  async linkPullRequest(
+    projectId: string,
+    ticketId: string,
+    link: PullRequestLink,
+    actor: EventActor,
+  ): Promise<TicketEvent> {
+    const ticket = this.requireTicket(projectId, ticketId);
+    const linked = event(ticket, "pr_linked", actor, this.now(), null, PullRequestLink.parse(link));
+    this.events.get(ticket.id)?.push(linked);
+    return structuredClone(linked);
   }
 
   async listEvents(projectId: string, ticketId: string): Promise<TicketEvent[]> {
