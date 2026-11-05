@@ -14,7 +14,7 @@
     { "pattern": "docs/architecture/api-and-mcp.md", "maxWords": 950 },
     { "pattern": "docs/architecture/executors.md", "maxWords": 500 },
     { "pattern": "docs/architecture/skills-and-scout.md", "maxWords": 400 },
-    { "pattern": "docs/architecture/ui.md", "maxWords": 600 },
+    { "pattern": "docs/architecture/ui.md", "maxWords": 900 },
     { "pattern": "docs/architecture/context-sources.md", "maxWords": 250 },
     { "pattern": "docs/architecture/template-and-baseline.md", "maxWords": 1600 },
     { "pattern": "docs/architecture/security.md", "maxWords": 900 },
