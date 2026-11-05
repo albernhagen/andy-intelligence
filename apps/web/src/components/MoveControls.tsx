@@ -8,7 +8,7 @@ import { STAGE_LABELS, moveOptions } from "@/lib/tickets";
 
 /**
  * Stage moves (ARCHITECTURE §4.1): one button per move the domain allows, plus Andy's forced
- * move to any other stage, which needs a reason that is recorded in the ticket's history.
+ * move to any other stage, with an optional reason (ADR-0057); history marks it forced.
  * The API enforces the rules (e.g. DoR for Backlog → Ready); its errors show here.
  */
 export function MoveControls({ ticket }: { ticket: Ticket }) {
@@ -47,7 +47,7 @@ export function MoveControls({ ticket }: { ticket: Ticket }) {
             e.preventDefault();
             if (!to) return;
             move.mutate(
-              { to, force: true, reason: reason.trim() },
+              { to, force: true, reason: reason.trim() || null },
               {
                 onSuccess: () => {
                   setForcing(false);
@@ -68,11 +68,11 @@ export function MoveControls({ ticket }: { ticket: Ticket }) {
               ))}
             </Select>
           </Field>
-          <Field label="Reason">
-            <Input required value={reason} onChange={(e) => setReason(e.target.value)} />
+          <Field label="Reason (optional)">
+            <Input value={reason} onChange={(e) => setReason(e.target.value)} />
           </Field>
           <div className="flex gap-2">
-            <Button type="submit" size="sm" disabled={move.isPending || !to || !reason.trim()}>
+            <Button type="submit" size="sm" disabled={move.isPending || !to}>
               Force move
             </Button>
             <Button type="button" size="sm" variant="outline" onClick={() => setForcing(false)}>

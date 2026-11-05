@@ -2,7 +2,7 @@ import type { Stage } from "@andy/contracts";
 
 /**
  * Allowed stage moves (ARCHITECTURE §4.1): forward one step, plus the backward moves the
- * pipeline needs (re-refine, retry, rework). Andy can force any move with a reason.
+ * pipeline needs (re-refine, retry, rework). Andy can force any move; the reason is optional (ADR-0057).
  */
 export const TRANSITIONS: Readonly<Record<Stage, readonly Stage[]>> = {
   backlog: ["ready"],

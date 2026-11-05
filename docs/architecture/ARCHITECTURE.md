@@ -103,7 +103,7 @@ Enterprise-shaped (durable state, policy, gates, least privilege, audit, contrac
 | **Monitoring** | CI deploys to dev; verification (smoke/e2e + verification agent) runs; Andy promotes to prod when ready | Dev verification passed (and, if released, prod deploy succeeded) |
 | **Done** | Summary included in rollups | — |
 
-**Stage moves** (`packages/domain`): forward one step, plus back for re-refine (ready → backlog), retry (in progress → ready) and rework (ready for review or monitoring → in progress). Backlog → ready requires the DoR. Andy can force any move with a reason; it is recorded in the ticket's history. Agents and the system can't force; MCP `move_ticket` moves one step forward only.
+**Stage moves** (`packages/domain`): forward one step, plus back for re-refine (ready → backlog), retry (in progress → ready) and rework (ready for review or monitoring → in progress). Backlog → ready requires the DoR. Andy can force any move, reason optional (ADR-0057); history marks it forced. Agents and the system can't force; MCP `move_ticket` moves one step forward only.
 
 **Same-repo PRs move tickets:** key from the PR's head branch, else its description's first line (first `KEY-n` of the repo's project); the webhook records `pr_linked`, then moves it as `system`, stepwise from Ready: opened (not draft) → Ready for review; merged into the default branch → Done (via Monitoring, ADR-0056); closed unmerged → In progress + Needs-you.
 
@@ -267,7 +267,7 @@ v1.x screens:
 - **Phone** (M7: Mobile, ADR-0052): the same SPA installed from Safari as a web app, phone layout for the inbox, ticket detail, releases and the quota banner; push notifications deep-link to the item; answer, approve plan or PR, promote, pause dispatch from the phone.
 - **Quota & spend** (per provider gauges with reset times; paid spend vs caps; persistent banner on warn/pause).
 - **Projects** (list, config, policy overrides).
-- **Tickets** — M1: list view grouped by stage, ticket detail with history and linked runs/PRs/cost, create/edit. M2: filter and group by project. M5: drag-and-drop story board (dnd-kit), epic grouping, overrides editing.
+- **Tickets** — M1: list view grouped by stage, ticket detail with history and linked runs/PRs/cost, create/edit. M2: filter and group by project. Drag-and-drop (dnd-kit): built early (AI-16). M5: epic grouping, overrides editing.
 - **Run detail** — M1: run summary inside ticket detail. M5: dedicated screen (metadata, cost, outcome, links out to Action log / Jules session / PR).
 - **Config** (providers, harnesses, models, tiers, policies; audit log with revert; pending approvals).
 - **Releases** (dev status, promote to prod, rollback).
@@ -279,10 +279,10 @@ API client generated from OpenAPI.
 **Built in M1.3: UI: tickets + inbox:**
 - Routes: `/` Needs-you inbox; `/projects`; `/p/:projectId` tickets in one column per stage; `/p/:projectId/t/:ticketRef` detail (ref = key, e.g. `AI-2`; an id or wrong project switches to the canonical URL).
 - Detail (`/p/<project>/t/<KEY>`, e.g. `/p/ai/t/AI-2`; an older id URL switches to the key URL): edit fields (saves send `ifUpdatedAt`; a 409 conflict asks Andy to reload), Definition of Ready from `/readiness`, history with comments, the ticket's questions, and "Ask a question…" (how Andy seeds one until M1.7: Refinement).
-- Moves: one button per move in `TRANSITIONS` (`packages/domain`), plus "Force move…" to any other stage with a reason (skips the transition and DoR rules; recorded in history). The API enforces the rules; its errors show inline.
+- Moves: one button per move in `TRANSITIONS` (`packages/domain`), plus "Force move…" to any other stage (skips the rules; recorded in history). Board drag-and-drop (mouse, touch, Space + arrows): normal move to an allowed column, else forced. The API enforces the rules; errors show inline.
 - Client: `openapi-fetch` typed by `apps/web/src/lib/api.gen.ts`, generated in-process from `createApp`'s OpenAPI document (`pnpm --filter @andy/web gen:api`); a test fails when it is stale. Every write refetches all queries (one user, small data).
 - Untrusted text renders as plain React text (no raw HTML or markdown).
-- Tests render the UI against the real API in-process (`createApp` + `InMemoryWorkTracker`). Browser e2e (Playwright with the Firebase Auth emulator) is a follow-up.
+- Tests render the UI against the real API in-process (`createApp` + `InMemoryWorkTracker`). Browser e2e (Playwright, Firebase Auth emulator): later.
 - Not yet: run/PR/cost panels (no runs before M1.6: Claude Code executor), the kill switch's Needs-you item.
 
 **Built in M1.19: GitHub App setup from the UI:** `/settings/github` (connect, install link, installed repos) and `/settings/github/callback`; the new-project form suggests installed repos.
@@ -458,7 +458,7 @@ The control plane's Firestore holds real data from M1.2: Ticket core on; there i
 | API | Node HTTP framework with Zod-based OpenAPI generation (builder to propose; e.g., Hono + zod-openapi) |
 | MCP | Official MCP TypeScript SDK, Streamable HTTP, OAuth |
 | DB | Firestore (Native mode, default database, us-central1; free tier) with Zod-validated converters; no migrations (ADR-0017) |
-| UI | React, Vite, shadcn/ui, Tailwind, TanStack Router/Query/Table, dnd-kit (story board, from M5: Epics + story board), shadcn charts; OpenAPI-generated client |
+| UI | React, Vite, shadcn/ui, Tailwind, TanStack Router/Query/Table, dnd-kit (board drag-and-drop), shadcn charts; OpenAPI-generated client |
 | Runtime | Cloud Run (single service), Cloud Tasks, Cloud Scheduler (weekly scout), Secret Manager |
 | Auth | Firebase Auth / Identity Platform (Google) + MCP OAuth facade; GitHub Actions OIDC for agent callbacks |
 | Work tracker | Native in Firestore + in-app UI + MCP (ADR-0016) |
@@ -482,7 +482,7 @@ Each milestone must work **end to end** before the next starts. Acceptance crite
 | M2 | Multi-project in parallel | Several repos onboarded; stories per project; runs across projects at once under caps and quota |
 | M3 | Add Jules + model routing | Second agent; tiers route work by size; cross-model review |
 | M4 | Paid models + spend caps | OpenRouter/OpenCode, hard spend caps, weekly model scout |
-| M5 | Epics + story board | Epics; drag-and-drop board; config editing; UI design system and dashboards |
+| M5 | Epics + story board | Epics; epic grouping on the board; config editing; UI design system and dashboards |
 | M6 | Dev → prod releases | Per-project dev/prod deploys, verification, one-click promote, DORA metrics |
 | M7 | Mobile | The UI installed on Andy's phone with push notifications; answer, approve, promote and pause from anywhere |
 
@@ -510,7 +510,7 @@ Repo scaffold, contracts package, Terraform for control-plane GCP project (plan 
 ### M1: First end-to-end flow: ticket → PR with Claude
 **Done when:** From Claude desktop, Andy creates a ticket → agent asks refinement questions → Andy answers via MCP → ticket reaches Ready → Claude plans and builds (Sonnet for S, Opus for M/L) and reports its verification output → PR opens → it merges on its own (S/M) or Andy merges (L) → run shows in the UI with cost/quota.
 
-**Explicitly not in M1: First end-to-end flow:** drag-and-drop board, epics, dedicated run-detail screen, agent read access to API/MCP, routing beyond Claude Code (model per size only).
+**Explicitly not in M1: First end-to-end flow:** epics, dedicated run-detail screen, agent read access to API/MCP, routing beyond Claude Code (model per size only).
 
 **Merged slices** (scope and Done when moved to [`history/m1-merged-slices.md`](history/m1-merged-slices.md), ADR-0046): M1.0: Docs sync; M1.1: MCP OAuth spike; M1.2: Ticket core; M1.3: UI: tickets + inbox; M1.4: MCP core tools; M1.5: GitHub App + project registration; M1.19: GitHub App setup from the UI; M1.20: Custom domain; M1.10: Security review automation; M1.11: Adversarial PR review; M1.12: Local quality gates; M1.13: GCP cost guardrails; M1.14: Cost kill switch; M1.16: Project baseline v1; M1.15: Usage alerts.
 
@@ -534,7 +534,7 @@ After M6: Dev → prod releases (ADR-0050). Jules adapter (completion via PR web
 After M3: Add Jules + model routing (ADR-0050): the spend-optimization goal, started when the Claude plan is cut or cheaper models are wanted. OpenCode executor via Actions; OpenRouter direct-call gateway for single-call steps; a capped API-key Claude provider; global and per-project caps with hard stops; quota-aware route fallback with 20% reserves; weekly model scout producing pending tier changes. Slice at milestone start.
 
 ### M5: Epics + story board
-Epics with child tickets and dependencies; just-in-time re-planning; config editing and audit/revert in UI and MCP; drag-and-drop story board; dedicated run-detail screen; UI design system (`design.md` + tokens), pluggable design skills with a Hallmark trial, Playwright screenshot checks, and a Dashboards screen (ADR-0045) including tokens per run and per step (ADR-0046); **overnight runs** (ADR-0049: launch step with batched answers and plan approvals, one-night epic branch, night budget and stop time, morning report as a Needs-you item). Slice at milestone start.
+Epics with child tickets and dependencies; just-in-time re-planning; config editing and audit/revert in UI and MCP; epic grouping on the board; dedicated run-detail screen; UI design system (`design.md` + tokens), pluggable design skills with a Hallmark trial, Playwright screenshot checks, and a Dashboards screen (ADR-0045) including tokens per run and per step (ADR-0046); **overnight runs** (ADR-0049: launch step with batched answers and plan approvals, one-night epic branch, night budget and stop time, morning report as a Needs-you item). Slice at milestone start.
 
 ### M6: Dev → prod releases
 Environments as per-project policy (ADR-0050): MVPs get one prod project + PR previews; dev + prod when a project opts in. Project template Terraform + Cloud Deploy dev→prod, with a budget and caps per project (§10.1); dev deploy + verification (Playwright/API tests + verification agent); promote/rollback from UI and MCP; release notes; DORA metrics (deploy frequency, lead time, change failure rate, time to restore; ADR-0040). Slice at milestone start.

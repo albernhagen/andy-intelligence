@@ -188,6 +188,19 @@ export function useMoveTicket(path: TicketPath) {
   );
 }
 
+/** Board drag-and-drop: one mutation for every card, so the ticket id comes with each call. */
+export function useBoardMove(projectId: string) {
+  const api = useApi();
+  return useWrite(async ({ ticketId, ...body }: { ticketId: string; to: Stage; force: boolean }) =>
+    unwrap(
+      await api.POST("/api/projects/{projectId}/tickets/{ticketId}/stage", {
+        params: { path: { projectId, ticketId } },
+        body: { ...body, reason: null },
+      }),
+    ),
+  );
+}
+
 export function useAddComment(path: TicketPath) {
   const api = useApi();
   return useWrite(async (body: { body: string }) =>
