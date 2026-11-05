@@ -35,6 +35,11 @@ export const Project = z.object({
   enabled: z.boolean(),
   /** Refine starts on its own for new and answered Backlog tickets (ADR-0054); default on. */
   autoRefine: z.boolean().default(true),
+  /**
+   * The build dispatcher takes Ready tickets on its own, top of the order first (ADR-0063);
+   * default off: Andy turns it on per project.
+   */
+  autoBuild: z.boolean().default(false),
 });
 export type Project = z.infer<typeof Project>;
 
@@ -200,6 +205,52 @@ export const RefineOutput = z.strictObject({
 });
 export type RefineOutput = z.infer<typeof RefineOutput>;
 
+/**
+ * What a build run returns (M1.8a: Build run, ADR-0063): its plan, written read-only before any
+ * edit, what it did differently, and the checks it ran. Untrusted agent output, every field
+ * capped (ADR-0028). `platform/procedures/build.schema.json` is the agent's copy; this is the check.
+ */
+export const BUILD_LIMITS = {
+  summary: 4000,
+  item: 500,
+  path: 300,
+  maxFiles: 50,
+  maxSteps: 20,
+  maxTests: 20,
+  maxAlternatives: 5,
+  maxDeviations: 10,
+  maxChecks: 10,
+  command: 200,
+  checkOutput: 2000,
+} as const;
+
+export const BuildPlan = z.strictObject({
+  files: z.array(capped(BUILD_LIMITS.path)).min(1).max(BUILD_LIMITS.maxFiles),
+  steps: z.array(capped(BUILD_LIMITS.item)).min(1).max(BUILD_LIMITS.maxSteps),
+  tests: z.array(capped(BUILD_LIMITS.item)).max(BUILD_LIMITS.maxTests),
+  riskiestStep: capped(BUILD_LIMITS.item),
+  rejectedAlternatives: z.array(capped(BUILD_LIMITS.item)).max(BUILD_LIMITS.maxAlternatives),
+});
+export type BuildPlan = z.infer<typeof BuildPlan>;
+
+export const BuildCheck = z.strictObject({
+  command: capped(BUILD_LIMITS.command),
+  passed: z.boolean(),
+  /** The last lines of its output. */
+  output: z.string().max(BUILD_LIMITS.checkOutput),
+});
+export type BuildCheck = z.infer<typeof BuildCheck>;
+
+export const BuildOutput = z.strictObject({
+  summary: capped(BUILD_LIMITS.summary),
+  plan: BuildPlan,
+  deviations: z.array(capped(BUILD_LIMITS.item)).max(BUILD_LIMITS.maxDeviations),
+  verification: z.array(BuildCheck).min(1).max(BUILD_LIMITS.maxChecks),
+  /** Bug tickets: the test files that fail before the fix; committed first (ADR-0063). */
+  failingTestFiles: z.array(capped(BUILD_LIMITS.path)).max(BUILD_LIMITS.maxTests),
+});
+export type BuildOutput = z.infer<typeof BuildOutput>;
+
 export const RunStatus = z.enum(["queued", "running", "succeeded", "failed", "cancelled"]);
 export type RunStatus = z.infer<typeof RunStatus>;
 
@@ -262,6 +313,13 @@ export const Run = z.object({
   attempt: z.number().int().positive().default(1),
   /** The run this one retries; null for a first attempt. */
   retryOf: Id.nullable().default(null),
+  // Added in M1.8a: Build run (ADR-0063).
+  /** A build run's plan, from its checked result. Untrusted agent text. */
+  plan: BuildPlan.nullable().default(null),
+  /** The branch a build run pushed (kept after a failure, for Andy to inspect). */
+  branch: z.string().max(200).nullable().default(null),
+  /** When the run's one repo token was issued to its publish job; null until then. */
+  pushGrantedAt: Timestamp.nullable().default(null),
 });
 export type Run = z.infer<typeof Run>;
 

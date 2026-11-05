@@ -36,6 +36,7 @@ export function ProjectsPage() {
               <span className="text-muted-foreground"> ({p.repos.join(", ")})</span>
             )}
             <AutoRefineToggle project={p} />
+            <AutoBuildToggle project={p} />
           </li>
         ))}
       </ul>
@@ -99,6 +100,23 @@ function AutoRefineToggle({ project }: { project: Project }) {
         onChange={(e) => update.mutate({ autoRefine: e.target.checked })}
       />
       Auto-refine
+      {update.error && <QueryError error={update.error} />}
+    </label>
+  );
+}
+
+/** On: Ready tickets are built on their own, top of the order first (ADR-0063); default off. */
+function AutoBuildToggle({ project }: { project: Project }) {
+  const update = useUpdateProject(project.id);
+  return (
+    <label className="ml-3 inline-flex items-center gap-1 text-sm text-muted-foreground">
+      <input
+        type="checkbox"
+        checked={project.autoBuild}
+        disabled={update.isPending}
+        onChange={(e) => update.mutate({ autoBuild: e.target.checked })}
+      />
+      Auto-build
       {update.error && <QueryError error={update.error} />}
     </label>
   );

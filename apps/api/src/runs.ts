@@ -83,6 +83,9 @@ const Report = z.object({
   costUsd: z.number().nonnegative().nullable(),
   /** The step's structured result (refine: RefineOutput); RunService checks it. */
   output: z.unknown().optional(),
+  /** Build: the branch and PR the publish job made; RunService checks they are the run's own. */
+  branch: z.string().max(200).nullable().optional(),
+  pullRequest: z.string().max(500).nullable().optional(),
 });
 
 function log(severity: "INFO" | "WARNING", message: string, fields: Record<string, unknown> = {}) {

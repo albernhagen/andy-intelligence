@@ -1,5 +1,5 @@
 ---
-status: accepted
+status: accepted, amended by 0063 (permission profile, token policy)
 date: 2026-11-04
 ---
 

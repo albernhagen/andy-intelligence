@@ -66,10 +66,33 @@ describe("buildProfile", () => {
     }
   });
 
-  it("GivenBuild_WhenBuilt_ThenEditsAllowedButBashLeftToM18", () => {
-    const { allow } = build("build").permissions;
-    expect(allow).toEqual(expect.arrayContaining(["Edit", "Write"]));
-    expect(allow.some((rule) => rule.startsWith("Bash"))).toBe(false);
+  it("GivenBuild_WhenBuilt_ThenEditsAndBashAreAllowedOnlyInsideTheSandbox", () => {
+    const settings = build("build");
+    expect(settings.permissions.allow).toEqual(expect.arrayContaining(["Edit", "Write", "Bash"]));
+    expect(settings.sandbox).toMatchObject({
+      enabled: true,
+      failIfUnavailable: true,
+      allowUnsandboxedCommands: false,
+      network: { allowedDomains: ["registry.npmjs.org"], strictAllowlist: true },
+    });
+    expect(settings.sandbox.filesystem.denyWrite).toEqual(["/work/proj/.git"]);
+  });
+
+  it("GivenBuild_WhenBuilt_ThenModelAndGitHubCredentialsAreUnsetForBash", () => {
+    const names = build("build").sandbox.credentials.envVars.map((v) => `${v.name}:${v.mode}`);
+    for (const name of ["CLAUDE_CODE_OAUTH_TOKEN", "ANTHROPIC_API_KEY", "GITHUB_TOKEN"]) {
+      expect(names).toContain(`${name}:deny`);
+    }
+  });
+
+  it("GivenReadOnlySteps_WhenBuilt_ThenNoSandboxIsNeeded", () => {
+    expect(build("refine").sandbox).toBeUndefined();
+  });
+
+  it("GivenTheCatchAllCodeownersLine_WhenBuilt_ThenOnlyTheLinesAfterItBecomeEditDenies", () => {
+    const { deny } = build("build", "* @andy\n/infra/ @andy\n").permissions;
+    expect(deny).not.toContain("Edit(//work/proj/**)");
+    expect(deny).toContain("Edit(//work/proj/infra/**)");
   });
 
   it("GivenAnyStep_WhenBuilt_ThenBypassPermissionsModeIsDisabled", () => {
@@ -92,10 +115,13 @@ describe("buildProfile", () => {
   it("GivenAnyStep_WhenBuilt_ThenTrustAnchorEditsAreDenied", () => {
     const { deny } = build("build").permissions;
     for (const rule of [
-      "Edit(//**/.github/workflows/**)",
+      "Edit(//**/.github/**)",
+      "Edit(//**/platform/actions/**)",
+      "Edit(//**/scripts/review-*.mjs)",
       "Edit(//**/CODEOWNERS)",
       "Edit(//**/platform/executor/**)",
       "Edit(//**/.claude/**)",
+      "Edit(//**/.git/**)",
     ])
       expect(deny).toContain(rule);
   });

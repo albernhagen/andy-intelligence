@@ -32,6 +32,7 @@ export class DomainError extends Error {
       | "repo_taken"
       | "invalid_step"
       | "not_refinable"
+      | "not_buildable"
       | "run_limit"
       | "run_finished"
       | "executor_unavailable"
@@ -89,18 +90,18 @@ export class TicketService {
     private readonly tracker: WorkTracker,
     private readonly runs: RunCanceller | null = null,
     /**
-     * Starts refine when a ticket may be waiting for it (the refine dispatcher, ADR-0054):
-     * after a create, after a ticket's last open question is answered, and after a cancel stops
-     * a run. It never throws.
+     * Starts the next waiting run when one may be waiting (the build and refine dispatchers,
+     * ADR-0063, ADR-0054): after a create, after a ticket's last open question is answered, after
+     * a ticket reaches Ready, and after a cancel stops a run. It never throws.
      */
-    private readonly refineNext: ((projectId: string) => Promise<unknown>) | null = null,
+    private readonly dispatchNext: ((projectId: string) => Promise<unknown>) | null = null,
   ) {}
 
   async create(projectId: string, input: NewTicket, actor: EventActor): Promise<Ticket> {
     const parsed = NewTicket.parse(input);
     const dorStatus = checkDor(parsed, 0).met ? "met" : "not_met";
     const ticket = await this.tracker.createTicket(projectId, { ...parsed, dorStatus }, actor);
-    await this.refineNext?.(projectId);
+    await this.dispatchNext?.(projectId);
     return ticket;
   }
 
@@ -161,7 +162,7 @@ export class TicketService {
     // before the stage changes, so a failure leaves the ticket cancelled (hidden) and retryable.
     const reopen = ticket.stage === "cancelled";
     if (reopen) await this.withdrawOpenQuestions(ticketId, actor);
-    return this.tracker.updateTicket(
+    const moved = await this.tracker.updateTicket(
       projectId,
       ticketId,
       {
@@ -174,6 +175,9 @@ export class TicketService {
       },
       actor,
     );
+    // A ticket reaching Ready may be the next build (ADR-0063).
+    if (to === "ready") await this.dispatchNext?.(projectId);
+    return moved;
   }
 
   /**
@@ -215,8 +219,8 @@ export class TicketService {
         "system",
       );
     }
-    // A cancelled run frees the project's run slot: the next waiting refine can start.
-    if (cancelled.length > 0) await this.refineNext?.(projectId);
+    // A cancelled run frees the project's run slot: the next waiting run can start.
+    if (cancelled.length > 0) await this.dispatchNext?.(projectId);
     return updated;
   }
 
@@ -328,7 +332,7 @@ export class TicketService {
       "system",
     );
     if (met && ticket.stage === "backlog") await this.promote(ticket);
-    else if (open === 0 && ticket.stage === "backlog") await this.refineNext?.(ticket.projectId);
+    else if (open === 0 && ticket.stage === "backlog") await this.dispatchNext?.(ticket.projectId);
     return question;
   }
 

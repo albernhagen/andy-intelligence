@@ -10,6 +10,7 @@ import {
 } from "@andy/contracts";
 import { ClaudeCodeActionsExecutor, exchangeManifestCode, type CreatedApp } from "@andy/github";
 import {
+  BuildDispatcher,
   DomainError,
   ProjectService,
   RefineDispatcher,
@@ -128,6 +129,7 @@ const DOMAIN_STATUS = {
   repo_taken: 409,
   invalid_step: 422,
   not_refinable: 422,
+  not_buildable: 422,
   run_limit: 409,
   run_finished: 409,
   executor_unavailable: 503,
@@ -193,17 +195,22 @@ export function createApp(deps: AppDeps) {
     : null;
 
   // Runs dispatch through the GitHub App; without it, starting a run is refused (503).
-  // The refine dispatcher (ADR-0054) starts the next waiting refine after each report or
-  // watchdog end, ticket create and last answer; `next` never throws.
+  // The dispatchers start the next waiting run after each report or watchdog end, ticket
+  // create, last answer, move to Ready and switch turned on: a build first (ADR-0063, projects
+  // with autoBuild), else a refine (ADR-0054). One run per project, so at most one starts;
+  // `next` never throws.
   const runs = new RunService(
     deps.tracker,
     deps.runs,
     connection ? new ClaudeCodeActionsExecutor(new ConnectedCodeHost(connection)) : null,
     now,
     deps.watchdog?.queue ?? null,
-    async (projectId) => void (await refiner.next(projectId)),
+    async (projectId) => void (await dispatchNext(projectId)),
   );
   const refiner = new RefineDispatcher(deps.tracker, deps.runs, runs, now);
+  const builder = new BuildDispatcher(deps.tracker, deps.runs, runs, now);
+  const dispatchNext = async (projectId: string) =>
+    (await builder.next(projectId)) ?? (await refiner.next(projectId));
 
   // Public, outside /api: the watchdog queue presents a Google OIDC token for the invoker SA.
   if (deps.watchdog) {
@@ -225,7 +232,12 @@ export function createApp(deps: AppDeps) {
       tracker: deps.tracker,
       now,
     });
-    registerGitHubToken(app, { connection, verify: verifyActionsToken, now });
+    registerGitHubToken(app, {
+      connection,
+      verify: verifyActionsToken,
+      claimRunGrant: (runId, caller) => runs.claimPushGrant(runId, caller),
+      now,
+    });
     registerRunCallbacks(app, { runs, verify: verifyActionsToken, now });
   }
 
@@ -244,11 +256,11 @@ export function createApp(deps: AppDeps) {
   });
 
   // One TicketService for REST and MCP: both get the same ticket rules (packages/domain).
-  const service = new TicketService(deps.tracker, runs, (projectId) => refiner.next(projectId));
+  const service = new TicketService(deps.tracker, runs, dispatchNext);
   const projects = new ProjectService(
     deps.tracker,
     connection ? new ConnectedCodeHost(connection) : null,
-    (p) => refiner.next(p),
+    dispatchNext,
   );
   registerTicketRoutes(app, deps.tracker, service, projects);
 

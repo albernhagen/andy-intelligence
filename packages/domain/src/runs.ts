@@ -1,5 +1,6 @@
 import {
   ACTIVE_RUN_STATUSES,
+  BuildOutput,
   RUN_SUMMARY_MAX,
   RefineOutput,
   WorkTrackerError,
@@ -14,11 +15,22 @@ import {
   type RunHandle,
   type RunStep,
   type RunStore,
+  type Stage,
   type Ticket,
   type TicketFields,
   type WatchdogQueue,
   type WorkTracker,
 } from "@andy/contracts";
+import {
+  BUILDABLE_STAGES,
+  MAX_BUILD_RUNS_PER_TICKET,
+  branchFor,
+  buildPrompt,
+  buildRoute,
+  isPullRequestOf,
+  unfinishedBlockers,
+} from "./builds";
+import { checkDor } from "./dor";
 import { DomainError } from "./tickets";
 import { TIER_ROUTES } from "./tiers";
 import { afterFailure, deadlineAction, MAX_RUN_ATTEMPTS } from "./watchdog";
@@ -29,13 +41,13 @@ import { afterFailure, deadlineAction, MAX_RUN_ATTEMPTS } from "./watchdog";
  * proving on every call that it is the run that was dispatched.
  */
 
-/** Steps that can be started in M1.6a. Refine is read-only; M1.7 and M1.8 add the rest. */
-export const STARTABLE_STEPS = ["refine"] as const satisfies readonly RunStep[];
+/** Steps that can be started. Refine is read-only; build edits, runs checks and opens a PR (ADR-0063). */
+export const STARTABLE_STEPS = ["refine", "build"] as const satisfies readonly RunStep[];
 export type StartableStep = (typeof STARTABLE_STEPS)[number];
 
 /**
- * Until M1.8: Build + gate routes build runs by `tierFor(ticket)`, every run uses the `fast`
- * tier's route (Sonnet), from the one tier policy in `tiers.ts`.
+ * Refine runs use the `fast` tier's route (Sonnet); build runs are routed by the ticket's tier
+ * (`buildRoute`, ADR-0063), from the one tier policy in `tiers.ts`.
  */
 export const DEFAULT_ROUTE: Route = TIER_ROUTES.fast;
 
@@ -54,6 +66,8 @@ export const PROVIDER_BILLING: Record<ProviderKey, BillingType> = {
 export const STEP_LIMITS: Record<StartableStep, { maxTurns: number; timeoutMinutes: number }> = {
   // Above the workflow's own worst case: context 5 + agent 30 + report 5 minutes.
   refine: { maxTurns: 30, timeoutMinutes: 45 },
+  // context 5 + agent 60 + publish 10 + report 5 minutes, plus queueing.
+  build: { maxTurns: 150, timeoutMinutes: 90 },
 };
 
 /** Runs in flight per project (ADR-0028). One until M5: Multi-project in parallel. */
@@ -72,6 +86,10 @@ export interface RunContext {
   model: string;
   maxTurns: number;
   prompt: string;
+  /** The run's ticket, for the PR title and link (build). Title is untrusted text. */
+  ticket: { projectId: string; key: string; title: string } | null;
+  /** The branch a build run pushes; null for other steps. */
+  branch: string | null;
 }
 
 /**
@@ -89,6 +107,10 @@ export interface RunResult {
   tokensIn: number | null;
   tokensOut: number | null;
   costUsd: number | null;
+  /** Build: the branch the publish job pushed (also after a failure), if any. */
+  branch?: string | null;
+  /** Build: the pull request the publish job opened, if any. */
+  pullRequest?: string | null;
 }
 
 function log(severity: "INFO" | "WARNING" | "ERROR", message: string, fields: object = {}) {
@@ -139,6 +161,7 @@ export class RunService {
       throw new DomainError("invalid_transition", `${ticket.key} is cancelled; reopen it first`);
     }
     if (startable === "refine") await this.checkRefinable(ticket);
+    else await this.checkBuildable(ticket);
     const repo = project.repos[0];
     if (!repo) throw new DomainError("invalid_repo", `project ${project.key} has no repo`);
     const active = await this.inFlight(projectId);
@@ -151,13 +174,17 @@ export class RunService {
 
     const questions = await this.tracker.listQuestions({ ticketId, status: "answered" });
     const limits = STEP_LIMITS[startable];
-    const prompt = refinePrompt(ticket, repo, questions);
+    const build = startable === "build" ? buildRoute(ticket) : null;
+    const prompt =
+      startable === "build"
+        ? buildPrompt(ticket, repo, questions)
+        : refinePrompt(ticket, repo, questions);
     const run = await this.runs.create({
       projectId,
       ticketId,
       step: startable,
-      route: DEFAULT_ROUTE,
-      tier: null,
+      route: build?.route ?? DEFAULT_ROUTE,
+      tier: build?.tier ?? null,
       deadline: new Date(this.now().getTime() + limits.timeoutMinutes * 60_000).toISOString(),
       prompt,
       maxTurns: limits.maxTurns,
@@ -225,6 +252,7 @@ export class RunService {
       attempt: run.attempt,
     });
     await this.scheduleWatchdog(dispatched);
+    if (startable === "build") await this.markInProgress(ticket);
     const started = retryOf
       ? `Retrying the ${startable} run (attempt ${run.attempt} of ${MAX_RUN_ATTEMPTS})`
       : `Started a ${startable} run (${run.route.model})`;
@@ -252,12 +280,15 @@ export class RunService {
     }
     if (!run.prompt || !run.maxTurns)
       throw new DomainError("run_finished", `run ${runId} has no instructions`);
+    const ticket = run.ticketId ? await this.tracker.getTicket(run.projectId, run.ticketId) : null;
     return {
       runId: run.id,
       step: run.step,
       model: run.route.model,
       maxTurns: run.maxTurns,
       prompt: run.prompt,
+      ticket: ticket ? { projectId: ticket.projectId, key: ticket.key, title: ticket.title } : null,
+      branch: ticket && run.step === "build" ? branchFor(ticket.key, run.id) : null,
     };
   }
 
@@ -277,6 +308,7 @@ export class RunService {
     let summary = result.summary ? result.summary.slice(0, RUN_SUMMARY_MAX) : null;
     let error: string | null = null;
     let asked = 0;
+    let built: BuildRecord | null = null;
     // Questions are written before the run is closed: the write is idempotent per run, so a
     // report replayed after a crash here finishes the job instead of duplicating it.
     if (run.step === "refine" && status === "succeeded") {
@@ -288,6 +320,14 @@ export class RunService {
         summary = refined.summary;
         asked = refined.asked;
       }
+    }
+    if (run.step === "build") {
+      built = await this.checkBuild(run, result);
+      if (status === "succeeded" && built.error) {
+        status = "failed";
+        error = built.error;
+      }
+      if (built.summary) summary = built.summary;
     }
     let done: Run;
     try {
@@ -304,6 +344,13 @@ export class RunService {
           costUsd: result.costUsd,
           // On a subscription the reported cost is the API-equivalent estimate.
           costIsEstimate: PROVIDER_BILLING[run.route.provider] === "subscription",
+          ...(built
+            ? {
+                plan: built.plan,
+                branch: built.branch,
+                links: { ...run.links, pullRequest: built.pullRequest ?? undefined },
+              }
+            : {}),
         },
         ACTIVE_RUN_STATUSES,
       );
@@ -321,16 +368,19 @@ export class RunService {
     });
     if (done.ticketId) {
       const asks = asked > 0 ? `\n\nAsked ${asked} question(s): answer them in Needs you.` : "";
+      const pr = built?.pullRequest ? `\n\nPull request: ${built.pullRequest}` : "";
+      const kept = status === "failed" && built?.branch ? `\n\nBranch kept: ${built.branch}` : "";
       const body =
         status === "succeeded"
-          ? `${summary ?? "The run finished without a summary."}${asks}`
-          : `The ${done.step} run failed.${error ? ` ${error}` : ""}${summary ? `\n\n${summary}` : ""}`;
+          ? `${summary ?? "The run finished without a summary."}${asks}${pr}`
+          : `The ${done.step} run failed.${error ? ` ${error}` : ""}${summary ? `\n\n${summary}` : ""}${kept}`;
       await this.tracker.addComment(done.projectId, done.ticketId, body, `agent:${run.id}`);
     }
     // A reported failure gets the watchdog policy (one retry, then Needs-you); a refine result
     // the control plane rejected is flagged at once: retrying the same agent rarely fixes it.
     if (result.status === "failed") await this.retryOrFlag(done, "reported a failure");
     else if (done.step === "refine" && status === "failed") await this.flagFailedRefine(done);
+    else if (done.step === "build" && status === "failed") await this.flagFailedBuild(done);
     // After the retry, so a retry keeps the project's run slot.
     await this.runEnded(done);
     return "recorded";
@@ -352,6 +402,155 @@ export class RunService {
     if (!run.ticketId) return;
     const ticket = await this.tracker.getTicket(run.projectId, run.ticketId);
     if (ticket?.stage !== "backlog") return;
+    await this.tracker.updateTicket(
+      run.projectId,
+      run.ticketId,
+      { fields: { needsAttention: true } },
+      "system",
+    );
+  }
+
+  /**
+   * The publish job's one repo token per build run (ADR-0063): the caller must be the build
+   * run's own executor run, still in flight. Read-then-write, so two calls racing in the same
+   * instant could both pass; both come from the platform's own workflow run.
+   */
+  async claimPushGrant(runId: string, caller: RunExecutor): Promise<Run> {
+    const run = await this.requireCaller(runId, caller);
+    if (run.step !== "build") {
+      throw new DomainError("forbidden", `run ${runId} is a ${run.step} run; only build runs push`);
+    }
+    if (run.status !== "running")
+      throw new DomainError("run_finished", `run ${runId} is ${run.status}`);
+    if (run.pushGrantedAt) {
+      log("WARNING", "second push token request for a run", { runId });
+      throw new DomainError("forbidden", `run ${runId} already got its push token`);
+    }
+    const granted = await this.runs.update(run.id, { pushGrantedAt: this.now().toISOString() }, [
+      "running",
+    ]);
+    log("INFO", "push token granted", { runId, repo: caller.repo });
+    return granted;
+  }
+
+  /**
+   * Builds run on a Ready or In progress ticket that meets the Definition of Ready, whose
+   * blockers are Done, at most MAX_BUILD_RUNS_PER_TICKET times.
+   */
+  private async checkBuildable(ticket: Ticket): Promise<void> {
+    if (!BUILDABLE_STAGES.includes(ticket.stage)) {
+      throw new DomainError("not_buildable", `${ticket.key} is in ${ticket.stage}`, [
+        "build runs on Ready or In progress tickets",
+      ]);
+    }
+    const open = await this.tracker.listQuestions({ ticketId: ticket.id, status: "open" });
+    const dor = checkDor(ticket, open.length);
+    if (!dor.met) {
+      throw new DomainError(
+        "not_buildable",
+        `${ticket.key} doesn't meet the Definition of Ready`,
+        dor.missing,
+      );
+    }
+    const blockers = unfinishedBlockers(ticket, await this.blockerStages(ticket));
+    if (blockers.length > 0) {
+      throw new DomainError("not_buildable", `${ticket.key} is blocked by ${blockers.join(", ")}`, [
+        "blockers must be Done first",
+      ]);
+    }
+    const builds = (await this.runs.listForTicket(ticket.projectId, ticket.id)).filter(
+      (r) => r.step === "build" && r.executor !== null,
+    );
+    if (builds.length >= MAX_BUILD_RUNS_PER_TICKET) {
+      throw new DomainError("run_limit", `${ticket.key} has had ${builds.length} build runs`, [
+        `limit: ${MAX_BUILD_RUNS_PER_TICKET} per ticket; finish it by hand`,
+      ]);
+    }
+  }
+
+  /** Stage of each ticket a `blockedBy` entry can name, by key and by id (see unfinishedBlockers). */
+  async blockerStages(ticket: Ticket): Promise<Map<string, Stage>> {
+    const stages = new Map<string, Stage>();
+    if (ticket.blockedBy.length === 0) return stages;
+    const projects = new Set([
+      ticket.projectId,
+      ...ticket.blockedBy
+        .filter((b) => b.includes("-"))
+        .map((b) => b.slice(0, b.lastIndexOf("-")).toLowerCase()),
+    ]);
+    for (const projectId of projects) {
+      for (const t of await this.tracker.listTickets(projectId).catch(() => [])) {
+        stages.set(t.key, t.stage);
+        stages.set(t.id, t.stage);
+      }
+    }
+    return stages;
+  }
+
+  /**
+   * Ready → In progress as `system` once a build is dispatched (ADR-0063), clearing Needs-you (a
+   * restart after a flag). A ticket already In progress (a retry) only loses the flag. Logs on
+   * conflict: the run is dispatched either way.
+   */
+  private async markInProgress(ticket: Ticket): Promise<void> {
+    try {
+      await this.tracker.updateTicket(
+        ticket.projectId,
+        ticket.id,
+        {
+          fields: { needsAttention: false },
+          ...(ticket.stage === "ready"
+            ? { stage: { to: "in_progress" as const, forced: false, reason: null } }
+            : {}),
+          ifUpdatedAt: ticket.updatedAt,
+        },
+        "system",
+      );
+    } catch (err) {
+      log("ERROR", "ticket not moved to in progress at build dispatch", {
+        ticket: ticket.key,
+        error: String(err),
+      });
+    }
+  }
+
+  /**
+   * Checks a build run's report: the branch must be the run's own, the PR must be in the run's
+   * repo (anything else is dropped and logged), and a success needs a valid BuildOutput and a PR.
+   */
+  private async checkBuild(run: Run, result: RunResult): Promise<BuildRecord> {
+    const ticket = run.ticketId ? await this.tracker.getTicket(run.projectId, run.ticketId) : null;
+    const repo = run.executor?.repo ?? "";
+    const expected = ticket ? branchFor(ticket.key, run.id) : null;
+    const branch = result.branch && result.branch === expected ? result.branch : null;
+    if (result.branch && !branch)
+      log("WARNING", "build report names a foreign branch", { runId: run.id });
+    const pullRequest =
+      result.pullRequest && isPullRequestOf(repo, result.pullRequest) ? result.pullRequest : null;
+    if (result.pullRequest && !pullRequest) {
+      log("WARNING", "build report names a foreign pull request", { runId: run.id });
+    }
+    const parsed = BuildOutput.safeParse(result.output);
+    const plan = parsed.success ? parsed.data.plan : null;
+    const summary = parsed.success ? parsed.data.summary : null;
+    let error: string | null = null;
+    if (!parsed.success) {
+      const issues = parsed.error.issues
+        .slice(0, 5)
+        .map((i) => `${i.path.join(".") || "result"}: ${i.message}`);
+      if (result.status === "succeeded")
+        log("WARNING", "build result rejected", { runId: run.id, issues });
+      error = `Its result was rejected (${issues.join("; ")}).`;
+    } else if (!pullRequest) {
+      error =
+        "It finished without opening a pull request (no changes, or the PR couldn't be opened).";
+    }
+    return { plan, branch, pullRequest, summary, error };
+  }
+
+  /** A build the control plane rejected flags its ticket: retrying the same agent rarely fixes it. */
+  private async flagFailedBuild(run: Run): Promise<void> {
+    if (!run.ticketId) return;
     await this.tracker.updateTicket(
       run.projectId,
       run.ticketId,
@@ -599,6 +798,7 @@ export class RunService {
     } else {
       why += ` on its retry (attempt ${run.attempt} of ${MAX_RUN_ATTEMPTS})`;
     }
+    if (run.branch) why += `; its branch ${run.branch} is kept`;
     try {
       await this.tracker.updateTicket(
         run.projectId,
@@ -668,6 +868,16 @@ export class RunService {
     if (!ticket) throw notFound("ticket", ticketId);
     return ticket;
   }
+}
+
+/** What a build report leaves on its Run once checked. */
+interface BuildRecord {
+  plan: Run["plan"];
+  branch: string | null;
+  pullRequest: string | null;
+  summary: string | null;
+  /** Why a reported success counts as a failure; null when it stands. */
+  error: string | null;
 }
 
 /** The executor handle a dispatched run was recorded with; null if it never got one. */

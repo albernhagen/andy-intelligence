@@ -20,6 +20,8 @@ Overview and reading map: [ARCHITECTURE.md](ARCHITECTURE.md). Section numbers ma
 
 **Same-repo PRs move tickets:** key from the PR's head branch, else its description's first line (first `KEY-n` of the repo's project); the webhook records `pr_linked`, then moves it as `system`, stepwise from Ready: opened (not draft) → Ready for review; merged into the default branch → Done (via Monitoring, ADR-0056); closed unmerged → In progress + Needs-you.
 
+**Built (M1.8a, ADR-0063): Ready → In progress.** With a project's `autoBuild` on (default off), the build dispatcher starts the top Ready ticket by rank whose DoR is met and `blockedBy` tickets are Done, on events only (Ready, run ended, switch on); one run per project, paused at 3 tickets In progress or Ready for review, ≤ 4 build runs per ticket. Dispatch moves it to In progress; one retry, then Needs-you with the branch kept. `planApproval` comes next (8a, second PR).
+
 **Needs-you is a flag, not a stage.** Flagged items stay in their stage and appear in the Needs-you inbox (UI + MCP).
 
 ### 4.2 Definition of Ready (per type, ADR-0058)
