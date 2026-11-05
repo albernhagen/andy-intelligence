@@ -328,4 +328,25 @@ describe("unsaved drafts and quick saves (PR #80 review)", () => {
     );
     expect(within(panel).queryByRole("alert")).toBeNull();
   });
+
+  it("GivenASaveQueuedBehindAnother_WhenShown_ThenItsFieldIsPendingUntilItSaves", async () => {
+    const harness = await seeded();
+    const panel = await harness.open();
+    const size = within(panel).getByLabelText("Size") as HTMLSelectElement;
+    const type = within(panel).getByLabelText("Type") as HTMLSelectElement;
+
+    fireEvent.change(size, { target: { value: "M" } });
+    fireEvent.change(type, { target: { value: "bug" } });
+
+    // The Type save waits behind the Size save, and is already shown as pending (disabled),
+    // so it can't be sent twice.
+    expect(size.disabled).toBe(true);
+    expect(type.disabled).toBe(true);
+    await waitFor(() => expect(type.disabled).toBe(false));
+    expect(size.disabled).toBe(false);
+    expect(await harness.tracker.getTicket("ai", harness.ticket.id)).toMatchObject({
+      size: "M",
+      type: "bug",
+    });
+  });
 });

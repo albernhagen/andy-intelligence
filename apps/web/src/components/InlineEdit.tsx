@@ -26,7 +26,10 @@ const saveQueues = new Map<string, Promise<void>>();
 export function useTicketSave(ticket: Ticket) {
   const update = useUpdateTicket({ projectId: ticket.projectId, ticketId: ticket.id });
   const queryClient = useQueryClient();
+  // Saves of this field queued or in flight: pending from the click, not only once it runs.
+  const [inFlight, setInFlight] = useState(0);
   const save = (patch: Omit<TicketPatch, "ifUpdatedAt">, onSaved?: () => void) => {
+    setInFlight((n) => n + 1);
     const run = async () => {
       const cached = queryClient.getQueryData<Ticket>(ticketQueryKey(ticket.projectId, ticket.key));
       try {
@@ -39,6 +42,8 @@ export function useTicketSave(ticket: Ticket) {
         onSaved?.();
       } catch {
         // Shown through `update.error` next to the field.
+      } finally {
+        setInFlight((n) => n - 1);
       }
     };
     const next = (saveQueues.get(ticket.id) ?? Promise.resolve()).then(run);
@@ -46,7 +51,7 @@ export function useTicketSave(ticket: Ticket) {
   };
   return {
     save,
-    pending: update.isPending,
+    pending: inFlight > 0,
     error: update.error ? <SaveError error={update.error} /> : null,
   };
 }
