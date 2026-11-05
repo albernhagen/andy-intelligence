@@ -117,7 +117,6 @@ const meRoute = createRoute({
 const DOMAIN_STATUS = {
   invalid_transition: 422,
   dor_not_met: 422,
-  reason_required: 422,
   forbidden: 403,
   invalid_repo: 422,
   repo_taken: 409,

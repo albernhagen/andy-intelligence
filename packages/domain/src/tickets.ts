@@ -24,7 +24,6 @@ export class DomainError extends Error {
       | "invalid_transition"
       | "dor_not_met"
       | "forbidden"
-      | "reason_required"
       | "invalid_repo"
       | "repo_taken"
       | "invalid_step"
@@ -130,8 +129,8 @@ export class TicketService {
       throw new DomainError("forbidden", "only Andy can reopen a cancelled ticket");
     }
     if (force) {
+      // ADR-0057: the reason is optional; `forced: true` in history is the audit trail.
       if (actor !== "andy") throw new DomainError("forbidden", "only Andy can force a stage move");
-      if (!reason?.trim()) throw new DomainError("reason_required", "a forced move needs a reason");
     } else {
       if (!canTransition(ticket.stage, to)) {
         throw new DomainError("invalid_transition", `can't move from ${ticket.stage} to ${to}`);
@@ -157,7 +156,7 @@ export class TicketService {
           ...(unarchive ? { archived: false } : {}),
           ...(reopen ? { needsYou: false } : {}),
         },
-        stage: { to, forced: force, reason: reason ?? null },
+        stage: { to, forced: force, reason: reason?.trim() || null },
         ifUpdatedAt: ticket.updatedAt,
       },
       actor,
@@ -182,8 +181,9 @@ export class TicketService {
     }
     const cancelled = (await this.runs?.cancelForTicket(projectId, ticketId)) ?? [];
     // Stage first, questions after: if withdrawing fails partway, the ticket is still cancelled
-    // and `needsYou()` already skips cancelled tickets. No `ifUpdatedAt`: cancel is valid from any stage, so a write since the read (e.g. a run's
-    // report) mustn't fail it after the runs are already stopped.
+    // and `needsYou()` already skips cancelled tickets. No `ifUpdatedAt`: cancel is valid from
+    // any stage, so a write since the read (e.g. a run's report) mustn't fail it after the runs
+    // are already stopped.
     const updated = await this.tracker.updateTicket(
       projectId,
       ticketId,

@@ -112,7 +112,7 @@ describe("tickets UI", () => {
     expect((submit as HTMLButtonElement).disabled).toBe(true);
 
     await user.selectOptions(screen.getByLabelText("Force to"), "Done");
-    await user.type(screen.getByLabelText("Reason"), "shipped by hand");
+    await user.type(screen.getByLabelText("Reason (optional)"), "shipped by hand");
     await user.click(submit);
 
     const history = screen.getByRole("region", { name: "History" });
@@ -121,7 +121,7 @@ describe("tickets UI", () => {
     expect((await harness.tracker.getTicket("ai", ticket.id))?.stage).toBe("done");
   });
 
-  it("GivenATicketMissingDoR_WhenAndyForcesItToReady_ThenItMovesAnyway", async () => {
+  it("GivenATicketMissingDoR_WhenAndyForcesItToReadyWithNoReason_ThenItMovesAnyway", async () => {
     const harness = renderApp();
     await harness.tracker.createProject({ name: "AI", key: "AI" });
     const ticket = await harness.service.create("ai", { type: "story", title: "Board" }, "andy");
@@ -130,7 +130,6 @@ describe("tickets UI", () => {
 
     await user.click(await screen.findByRole("button", { name: "Force move…" }));
     await user.selectOptions(screen.getByLabelText("Force to"), "Ready");
-    await user.type(screen.getByLabelText("Reason"), "spike, no criteria needed");
     await user.click(screen.getByRole("button", { name: "Force move" }));
 
     const history = screen.getByRole("region", { name: "History" });
