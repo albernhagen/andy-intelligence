@@ -1,5 +1,5 @@
 {
-  "$comment": "Executor permission profile (ADR-0040, ARCHITECTURE §7.2). scripts/executor-profile.mjs merges `settings` + one entry of `steps` + CODEOWNERS Edit denies into /etc/claude-code/managed-settings.json, the top-precedence Claude Code settings source, so nothing in the project's .claude/ can loosen it. Paths: `//` = filesystem root, `~/` = home, `//**/x` = x anywhere (https://code.claude.com/docs/en/permissions#read-and-edit). A Read deny also blocks Edit/Write of that path. A step's `sandbox` becomes the top-level `sandbox` (Claude Code's Bash sandbox: bubblewrap + network proxy, https://code.claude.com/docs/en/sandboxing); `${ROOT}` is the checkout. A catch-all CODEOWNERS `*` line is not a protected path (ARCHITECTURE §4.5), so it adds no Edit deny. `.github/`, `platform/actions/` and `scripts/review-*.mjs` are denied because PR review jobs run them while holding the Claude token (threat model R5, ADR-0063); the build's publish job refuses a patch touching any of these Edit-denied paths.",
+  "$comment": "Executor permission profile (ADR-0040, ARCHITECTURE §7.2). scripts/executor-profile.mjs merges `settings` + one entry of `steps` + CODEOWNERS Edit denies into /etc/claude-code/managed-settings.json, the top-precedence Claude Code settings source, so nothing in the project's .claude/ can loosen it. Paths: `//` = filesystem root, `~/` = home, `//**/x` = x anywhere (https://code.claude.com/docs/en/permissions#read-and-edit). A Read deny also blocks Edit/Write of that path. A step's `sandbox` becomes the top-level `sandbox` (Claude Code's Bash sandbox: bubblewrap + network proxy, https://code.claude.com/docs/en/sandboxing); `${ROOT}` is the checkout. A catch-all CODEOWNERS `*` line is not a protected path (ARCHITECTURE §4.5), so it adds no Edit deny. `.github/`, `platform/actions/`, `scripts/review-*.mjs` and `.mcp.json` are denied because PR review jobs run them while holding the Claude token, and `infra/` and `.terraform-version` because `terraform-plan` runs them with GCP credentials and secrets (threat model R2, R5, ADR-0063); the build's publish job refuses a patch touching any of these Edit-denied paths.",
   "settings": {
     "allowManagedPermissionRulesOnly": true,
     "allowManagedHooksOnly": true,
@@ -44,6 +44,9 @@
         "Edit(//**/platform/executor/**)",
         "Edit(//**/platform/actions/**)",
         "Edit(//**/scripts/review-*.mjs)",
+        "Edit(//**/infra/**)",
+        "Edit(//**/.terraform-version)",
+        "Edit(//**/.mcp.json)",
         "Edit(//**/.claude/**)",
         "Edit(//**/.git/**)",
         "Edit(//etc/claude-code/**)"

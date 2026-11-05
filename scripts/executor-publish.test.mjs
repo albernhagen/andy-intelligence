@@ -53,6 +53,9 @@ describe("executor publish", () => {
         "**/.github/**",
         "**/platform/actions/**",
         "**/scripts/review-*.mjs",
+        "**/infra/**",
+        "**/.terraform-version",
+        "**/.mcp.json",
         "**/CODEOWNERS",
         "**/platform/executor/**",
         "**/.claude/**",
@@ -79,6 +82,25 @@ describe("executor publish", () => {
     expect(checkChange([entry(".github/workflows/ci.yml")], globs)).toEqual([
       ".github/workflows/ci.yml: protected (**/.github/**)",
     ]);
+  });
+
+  it("GivenCodeThatPrJobsRunWithCredentials_WhenChecked_ThenItIsRefused", () => {
+    const paths = [
+      "infra/control-plane/main.tf",
+      ".terraform-version",
+      ".mcp.json",
+      "platform/actions/x/action.yml",
+      "scripts/review-gate.mjs",
+    ];
+    expect(
+      checkChange(
+        paths.map((p) => entry(p)),
+        globs,
+      ),
+    ).toHaveLength(paths.length);
+    expect(
+      checkChange([entry("scripts/executor-publish.mjs"), entry("apps/api/src/app.ts")], globs),
+    ).toEqual([]);
   });
 
   it("GivenOwnedPathsSymlinksAndSubmodules_WhenChecked_ThenEachIsRefused", () => {

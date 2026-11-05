@@ -93,7 +93,9 @@ Nothing to apply: no Terraform, secret or App permission changes (the App alread
 1. Pick a small, Ready S ticket in project `AI` (Definition of Ready met, blockers Done). Ticket → **Runs** → **Start build run** (or MCP `build`).
 2. Expect: the ticket moves to **In progress** at once; the run is `queued` → `running` on `sonnet` (Opus for M and L); in about 15–60 minutes a PR `<KEY>: <title>` on branch `agent/<KEY>/<run id>` whose description starts with the ticket link, then Summary, Plan, Deviations, Verification. The ticket moves to **Ready for review**; the run shows the PR link, branch, tokens and `~$… (estimate)`. The PR waits for you (`autoMerge: none`).
 3. Auto-build: first clear Ready of tickets whose work already merged (on 2026-11-05: AI-20, AI-24, AI-25, AI-26; PR events only move tickets that were In progress) and of anything you'll do yourself (set assignee `me`: never built). Epics in Ready are skipped. Then tick **Auto-build** on `/projects` (or `set_auto_build` `enabled: true`). The top Ready ticket by order starts when a ticket reaches Ready or a run ends. Untick it to stop new builds; a build in flight finishes.
-4. A failed build retries once, then the ticket is flagged Needs you with the branch named in the comment: inspect it, then fix the ticket and start again, or finish by hand.
+4. A failed build retries once, then the ticket is flagged Needs you with the branch named in the comment: inspect it, then fix the ticket and start again, or finish by hand. Agent branches are untrusted code: read the diff on GitHub, or check out with `pnpm install --ignore-scripts` and don't run its hooks or scripts on your machine.
+
+Don't tick Auto-build on any project until §9 has passed.
 
 ## 9. Prove the sandbox live (AI-12, once)
 

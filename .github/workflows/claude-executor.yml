@@ -144,6 +144,7 @@ jobs:
       report: ${{ steps.report.outputs.report }}
       base_sha: ${{ steps.change.outputs.base_sha }}
       has_change: ${{ steps.change.outputs.has_change }}
+      change_error: ${{ steps.change.outputs.change_error }}
     steps:
       - name: Check out the project
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -273,16 +274,24 @@ jobs:
           export GIT_DIR="$RUNNER_TEMP/pristine.git" GIT_WORK_TREE="$GITHUB_WORKSPACE"
           export GIT_CONFIG_NOSYSTEM=1 GIT_CONFIG_GLOBAL=/dev/null
           git() { command git -c core.fsmonitor=false -c core.hooksPath=/dev/null -c core.untrackedCache=false "$@"; }
+          # A change that can't be collected or is over the cap fails the run with the reason
+          # (the report job reads change_error), never reads as "no change".
+          fail() {
+            echo "has_change=false" >> "$GITHUB_OUTPUT"
+            echo "change_error=$1" >> "$GITHUB_OUTPUT"
+            echo "::error title=claude-executor::$1"
+            exit 0
+          }
           echo "base_sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
           mkdir -p "$RUNNER_TEMP/change"
-          git add -A
-          git diff --cached --binary --no-ext-diff --no-textconv --no-renames > "$RUNNER_TEMP/change/change.patch"
+          git add -A || fail "Couldn't collect the change (git add failed)."
+          git diff --cached --binary --no-ext-diff --no-textconv --no-renames > "$RUNNER_TEMP/change/change.patch" \
+            || fail "Couldn't collect the change (git diff failed)."
           size=$(stat -c %s "$RUNNER_TEMP/change/change.patch")
           if [ "$size" -eq 0 ]; then
             echo "has_change=false" >> "$GITHUB_OUTPUT"; echo "No change."
           elif [ "$size" -gt "$MAX_PATCH_BYTES" ]; then
-            echo "has_change=false" >> "$GITHUB_OUTPUT"
-            echo "::error title=claude-executor::The change is $size bytes; the cap is $MAX_PATCH_BYTES."
+            fail "The change is $size bytes; the cap is $MAX_PATCH_BYTES (a missing .gitignore entry, e.g. node_modules?)."
           else
             echo "has_change=true" >> "$GITHUB_OUTPUT"
             git diff --cached --stat --no-ext-diff | tail -n 30
@@ -387,7 +396,10 @@ jobs:
           if ! git diff --cached --quiet; then git commit -q -m "$message" -m "Agent-Run: $RUN_ID"; fi
           git log --stat --oneline -n 2
 
-      # One step, so the App token never leaves it (not even as a masked step output).
+      # Safety (holds a write token): the checkout is the agent's base commit (the default branch),
+      # the change is applied as data and checked above, and nothing from it runs here. The
+      # token exists only inside this step: never echoed, never a step output, passed to git as
+      # one masked header and to gh through env. Keep `set -x` out of this step.
       - name: Push the branch and open the pull request
         id: push
         env:
@@ -448,6 +460,7 @@ jobs:
           CONTEXT_ERROR: ${{ needs.context.outputs.error }}
           AGENT_RESULT: ${{ needs.agent.result }}
           PUBLISH_RESULT: ${{ needs.publish.result }}
+          CHANGE_ERROR: ${{ needs.agent.outputs.change_error }}
           BRANCH: ${{ needs.publish.outputs.branch }}
           PULL_REQUEST: ${{ needs.publish.outputs.pull_request }}
         run: |
@@ -468,7 +481,9 @@ jobs:
           fi
           # Build: the publish job's branch and PR go with the report; a publish that failed after
           # a successful agent fails the run (the control plane retries it once).
-          if [ "$PUBLISH_RESULT" = failure ] || [ "$PUBLISH_RESULT" = cancelled ]; then
+          if [ -n "$CHANGE_ERROR" ]; then
+            jq -c '.status = "failed" | .summary = (env.CHANGE_ERROR + "\n\n" + (.summary // ""))' "$body" > "$body.tmp" && mv "$body.tmp" "$body"
+          elif [ "$PUBLISH_RESULT" = failure ] || [ "$PUBLISH_RESULT" = cancelled ]; then
             jq -c '.status = "failed" | .summary = ("The publish job " + env.PUBLISH_RESULT + ": the change was not pushed or no PR was opened.\n\n" + (.summary // ""))' "$body" > "$body.tmp" && mv "$body.tmp" "$body"
           fi
           jq -c '. + {branch: (if env.BRANCH == "" then null else env.BRANCH end), pullRequest: (if env.PULL_REQUEST == "" then null else env.PULL_REQUEST end)}' "$body" > "$body.tmp" && mv "$body.tmp" "$body"
