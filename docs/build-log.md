@@ -23,10 +23,11 @@ Merged before the move to tickets: M1.0–M1.5, M1.10–M1.16, M1.19, M1.20 (lis
 
 **Waves (ADR-0050):** 1. AI-1 → 2. AI-2 → 3. AI-3 → 4. AI-4 ‖ AI-5 ‖ AI-6. M1.18: Plan step is folded into M1.8.
 
+**Before M2: Multi-project in parallel (ADR-0058: Ticket model, ADR-0059: UX foundation):** ticket model v2 (before AI-3: M1.8: Build + gate), then the app shell with a project switcher, board v2, story panel and command palette. Their tickets are created when the two ADRs merge; AI-17 (split ARCHITECTURE.md) runs first, alone.
+
 ## Pending decisions (Andy)
 
 - `blockedBy` holds ticket **keys** (`AI-1`); ARCHITECTURE §5 says ticket ids, and nothing reads the field yet. Keep keys (readable, unique across projects) and fix §5 in M1.8: Build + gate, where the dispatcher first reads it?
-- The Definition of Ready's EARS check matches only the literal "the system shall", so criteria like "the gate shall …" count as missing. Widen it to any "… shall", or write criteria that way?
 - Email notifications for Needs-you (a `Notifier` adapter, S): move up from Later so the loop doesn't wait for an open tab?
 - Safe deploy path for the control plane (tagged no-traffic Cloud Run revision per PR + rollback runbook): project `AI` keeps `autoMerge: none` until it exists (ADR-0050, ADR-0047 phase 2).
 - Contract suites for ports with one adapter (`OAuthGrantStore`, `CodeHostConnectionStore`): keep the fakes, drop the shared suite?

@@ -1,0 +1,52 @@
+---
+status: accepted (direction; built by tickets in project AI before M1.8: Build + gate and M2: Multi-project in parallel)
+date: 2026-11-04
+amends: ARCHITECTURE §4.2, §5
+---
+
+# 0058 — Ticket model: Shortcut-style stories, typed by behaviour, drafted by agents
+
+Decided by Andy, 2026-11-04.
+
+## Context and Problem Statement
+
+The ticket schema has four types (epic, story, task, bug), but type changes one thing: epics skip part of the Definition of Ready (DoR, §4.2). There is no stated way to say what runs next, and every new ticket fails the DoR on "tier", a field with no decision behind it. Andy wants the ticketing system to be simple, modelled on Shortcut (the tracker he liked most), with an agentic twist: the system fills things in and he steps in where he wants.
+
+The test for every field: it changes what an agent does or what Andy decides. Fields that only feed reports are left out.
+
+## Decision Outcome
+
+| Topic                 | Decision                                                                                                                                                                                                                                                                                                                              |
+| --------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Basis                 | Shortcut: stories of a few types, simple swim lanes, one markdown description. Jira and GitHub Issues are not references.                                                                                                                                                                                                             |
+| Types                 | `feature`, `chore`, `bug`, plus `epic` as a container that never runs. `story` becomes `feature` and `task` becomes `chore` (a schema upgrader, §10.4). Type may be empty at capture; refine fills it.                                                                                                                                |
+| Type drives behaviour | See the table below. Type does not change the `autoMerge` policy: size does (ADR-0050).                                                                                                                                                                                                                                               |
+| One document          | A ticket reads as a title, a markdown description and a checklist. Stored fields stay structured: `body` (markdown), `acceptanceCriteria` (the checklist), `assumptions`, and two new optional lists, `outOfScope` and `touches`.                                                                                                     |
+| Priority              | No priority field. **Order in the column is the priority** (`rank`). Ready is a queue: the dispatcher takes from the top, skipping tickets that are blocked or whose `touches` overlap a ticket in progress. The UI makes the order obvious (ADR-0059).                                                                               |
+| Estimate              | Size S / M / L with `sizeReason` is the only estimate. No points, hours or sprints. Size already picks the model, the `autoMerge` and the `planApproval` behaviour. Actual cost, turns and rework per size are shown on the dashboards (M5: Epics + story board) so sizes get checked against reality.                                |
+| Tier                  | Derived from size by policy; no longer a DoR item. `overrides.tier` still pins one.                                                                                                                                                                                                                                                   |
+| Scope                 | `outOfScope`: what the ticket must not change. `touches`: areas or path globs it expects to edit. Both drafted by refine, both optional. An empty `touches` means unknown, not "nothing".                                                                                                                                             |
+| Automatic by default  | A title alone is a valid ticket (UI quick add, MCP `create_ticket`). Refine starts on its own and drafts type, description, checklist, size, out of scope and touches. It asks a question only when it cannot decide. Andy can edit anything at any time. **Refine fills empty fields only**; to change a field that is set, it asks. |
+| Readiness wording     | For features, a criterion in EARS form is any sentence with "… shall …" (not only "the system shall"). This settles the build log's pending decision.                                                                                                                                                                                 |
+| Not built             | Priority levels, labels, iterations, points, teams, custom fields, custom workflows, "relates to" links. `blockedBy` and `parentId` stay. Add one only when a real need shows up.                                                                                                                                                     |
+| Later                 | **Spike**: a ticket whose output is a written answer and proposed tickets, not a PR. Noted for M2: Multi-project in parallel with ideation (ADR-0050); not built now.                                                                                                                                                                 |
+
+### What each type changes
+
+| Type    | Ready when                                                                                                                              | Refine                                                                  | Build                                                                      |
+| ------- | --------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------- | -------------------------------------------------------------------------- |
+| Feature | Description states the intent; at least one criterion, each in EARS form; size; no open questions                                       | Asks product questions; drafts criteria                                 | Plan in the PR; `docs/features.md` updated                                 |
+| Bug     | Description has steps to reproduce and actual behaviour; at least one criterion stating the expected behaviour; size; no open questions | Tries to find the cause; asks only if the expected behaviour is unclear | Commits a failing test first (already in M1.8: Build + gate)               |
+| Chore   | Description states the intent; a "done when" checklist (any wording); size; no open questions                                           | Rarely asks                                                             | Must not change user-visible behaviour; the adversarial review checks that |
+| Epic    | Intent stated; no open questions (unchanged)                                                                                            | Splits into child tickets (M5: Epics + story board)                     | Never runs                                                                 |
+
+### Slices (tickets in project `AI`, created when this ADR merges)
+
+1. **Ticket model v2** (M): the type rename and upgrader, empty type at capture, per-type DoR, `outOfScope` and `touches`, tier derived from size, refine fills empty fields including type; contracts, domain, store, API, MCP. Before M1.8: Build + gate.
+2. **M1.8: Build + gate** (AI-3) gains: dispatch in rank order, skip overlapping `touches`.
+3. UI for all of it: ADR-0059.
+
+### Consequences
+
+- Good: four fields for Andy (title, type, size, order) and the rest drafted for him; type means something; no ticket waits on a field nobody decides; `touches` gives the dispatcher what it needs to keep parallel tickets off the same files.
+- Bad: a rename that touches every layer and stored tickets; `touches` is a guess by refine and can be wrong (the merge still catches conflicts); no priority level means a truly urgent ticket is "drag it to the top"; refusing to overwrite set fields means a stale description stays until Andy or a question changes it.

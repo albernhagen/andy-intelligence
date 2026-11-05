@@ -1,5 +1,5 @@
 ---
-status: accepted
+status: accepted, amended by 0059 (timing of design.md, tokens and screenshot checks)
 date: 2026-11-03
 ---
 
