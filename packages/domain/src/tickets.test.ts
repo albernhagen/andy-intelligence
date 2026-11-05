@@ -228,6 +228,18 @@ describe("TicketService", () => {
       expect(await service.needsYou()).toEqual({ questions: [], tickets: [] });
     });
 
+    it("GivenAQuestionAskedDuringTheCancel_WhenTheTicketIsReopened_ThenItIsWithdrawnAndNeedsYouIsClear", async () => {
+      const t = await cancelled();
+      // A question that landed between cancel's stage check and its withdraw step.
+      const late = await tracker.askQuestion(projectId, t.id, { text: "Late?" }, "agent:r1");
+      await tracker.updateTicket(projectId, t.id, { fields: { needsYou: true } }, "system");
+
+      const reopened = await service.move(projectId, t.id, "backlog", "andy");
+      expect(reopened).toMatchObject({ stage: "backlog", needsYou: false });
+      expect(await tracker.getQuestion(late.id)).toMatchObject({ status: "withdrawn" });
+      expect(await service.needsYou()).toEqual({ questions: [], tickets: [] });
+    });
+
     it("GivenAQuestionAnsweredWhileCancelling_WhenTheTicketIsCancelled_ThenItStaysAnswered", async () => {
       const t = await service.create(projectId, readyStory, "andy");
       const q = await service.ask(projectId, t.id, { text: "Which?" }, "agent:r1");

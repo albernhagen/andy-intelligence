@@ -145,11 +145,18 @@ export class TicketService {
     }
     // Only Done or Cancelled tickets stay archived, so moving out of them unarchives.
     const unarchive = ticket.archived && !ARCHIVABLE_STAGES.includes(to);
+    // A question that slipped in while the ticket was being cancelled is withdrawn on reopen,
+    // before the stage changes, so a failure leaves the ticket cancelled (hidden) and retryable.
+    const reopen = ticket.stage === "cancelled";
+    if (reopen) await this.withdrawOpenQuestions(ticketId, actor);
     return this.tracker.updateTicket(
       projectId,
       ticketId,
       {
-        fields: unarchive ? { archived: false } : {},
+        fields: {
+          ...(unarchive ? { archived: false } : {}),
+          ...(reopen ? { needsYou: false } : {}),
+        },
         stage: { to, forced: force, reason: reason ?? null },
         ifUpdatedAt: ticket.updatedAt,
       },
