@@ -13,7 +13,7 @@ import {
   type WorkTracker,
 } from "@andy/contracts";
 import { checkDor, type DorResult } from "./dor";
-import { canTransition } from "./stages";
+import { canTransition, isForwardMove } from "./stages";
 
 /** A rule violation the caller caused; the API maps codes to HTTP statuses. */
 export class DomainError extends Error {
@@ -131,6 +131,34 @@ export class TicketService {
       },
       actor,
     );
+  }
+
+  /** One step forward by ticket key, never forced (the MCP `move_ticket` tool). */
+  async moveForward(key: string, to: Stage, actor: EventActor): Promise<Ticket> {
+    const ticket = await this.findByKey(key);
+    if (!isForwardMove(ticket.stage, to)) {
+      throw new DomainError(
+        "invalid_transition",
+        `can't move ${key} from ${ticket.stage} to ${to}: only one step forward is allowed`,
+      );
+    }
+    return this.move(ticket.projectId, ticket.id, to, actor);
+  }
+
+  /** Takes the ticket out of the Needs-you inbox unless a question is still open. */
+  async unflag(projectId: string, ticketId: string, actor: EventActor): Promise<Ticket> {
+    const open = await this.openQuestionCount(ticketId);
+    return this.tracker.updateTicket(
+      projectId,
+      ticketId,
+      { fields: { needsYou: open > 0 } },
+      actor,
+    );
+  }
+
+  /** Puts the ticket in the Needs-you inbox. */
+  flag(projectId: string, ticketId: string, actor: EventActor): Promise<Ticket> {
+    return this.tracker.updateTicket(projectId, ticketId, { fields: { needsYou: true } }, actor);
   }
 
   comment(projectId: string, ticketId: string, body: string, actor: EventActor) {

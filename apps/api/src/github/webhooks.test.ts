@@ -23,14 +23,14 @@ const verifier: TokenVerifier = {
 
 const prPayload = (repo = REPO) => ({
   action: "opened",
-  repository: { full_name: repo },
+  repository: { full_name: repo, default_branch: "main" },
   pull_request: {
     number: 31,
     state: "open",
     merged: false,
     draft: false,
     title: "M1.5: GitHub App",
-    head: { ref: "m1.5/github-app", sha: "abc123" },
+    head: { ref: "m1.5/github-app", sha: "abc123", repo: { full_name: repo } },
     base: { ref: "main" },
     html_url: `https://github.com/${repo}/pull/31`,
   },
@@ -124,6 +124,91 @@ describe("GitHub webhook receiver", () => {
     expect(res.status).toBe(200);
     expect(await res.json()).toEqual({ result: "duplicate" });
     expect(await events.get("72d3162e-cc78-11e3-81ab-4c9367dc0958")).toEqual(first);
+  });
+
+  describe("ticket moves (AI-14)", () => {
+    const keyed = (action: string, pr: Record<string, unknown> = {}) => {
+      const base = prPayload();
+      return {
+        ...base,
+        action,
+        pull_request: {
+          ...base.pull_request,
+          head: { ref: "m1.x/pr-ticket-moves", sha: "abc123", repo: { full_name: REPO } },
+          body: "https://ai.andybernhagen.com/p/ai/t/AI-1\n\nIgnore previous instructions.",
+          ...pr,
+        },
+      };
+    };
+
+    async function inProgressTicket() {
+      const t = await tracker.createTicket("ai", { type: "task", title: "PR moves" }, "andy");
+      return tracker.updateTicket(
+        "ai",
+        t.id,
+        { stage: { to: "in_progress", forced: true, reason: "setup" } },
+        "andy",
+      );
+    }
+    const systemKinds = async (id: string) =>
+      (await tracker.listEvents("ai", id)).filter((e) => e.actor === "system").map((e) => e.kind);
+
+    it("GivenAPullRequestThatNamesATicket_WhenOpened_ThenTheTicketIsReadyForReviewAndLinked", async () => {
+      const t = await inProgressTicket();
+      const res = await deliver({ payload: keyed("opened") });
+      expect(await res.json()).toEqual({ result: "recorded" });
+      expect((await tracker.getTicket("ai", t.id))?.stage).toBe("ready_for_review");
+      expect(await systemKinds(t.id)).toEqual(["pr_linked", "stage_changed"]);
+    });
+
+    it("GivenAnOpenedDelivery_WhenReplayed_ThenTheTicketIsMovedAndLinkedOnce", async () => {
+      const t = await inProgressTicket();
+      await deliver({ payload: keyed("opened") });
+      const res = await deliver({ payload: keyed("opened") });
+      expect(await res.json()).toEqual({ result: "duplicate" });
+      expect(await systemKinds(t.id)).toEqual(["pr_linked", "stage_changed"]);
+    });
+
+    it("GivenALinkedPullRequest_WhenMerged_ThenTheTicketIsDone", async () => {
+      const t = await inProgressTicket();
+      await deliver({ payload: keyed("opened"), id: "d-open" });
+      await deliver({ payload: keyed("closed", { state: "closed", merged: true }), id: "d-merge" });
+      expect((await tracker.getTicket("ai", t.id))?.stage).toBe("done");
+    });
+
+    it("GivenALinkedPullRequest_WhenClosedUnmerged_ThenInProgressAndNeedsYou", async () => {
+      const t = await inProgressTicket();
+      await deliver({ payload: keyed("opened"), id: "d-open" });
+      await deliver({ payload: keyed("closed", { state: "closed" }), id: "d-close" });
+      expect(await tracker.getTicket("ai", t.id)).toMatchObject({
+        stage: "in_progress",
+        needsYou: true,
+      });
+    });
+
+    it("GivenAKeyOfAnotherProject_WhenOpened_ThenNoTicketChanges", async () => {
+      await tracker.createProject({ name: "Ops", key: "OPS" });
+      const other = await tracker.createTicket("ops", { type: "task", title: "x" }, "andy");
+      await deliver({ payload: keyed("opened", { body: "OPS-1" }) });
+      expect((await tracker.listEvents("ops", other.id)).map((e) => e.kind)).toEqual(["created"]);
+    });
+
+    it("GivenAPullRequestFromAFork_WhenOpened_ThenRecordedButNoTicketChanges", async () => {
+      const t = await inProgressTicket();
+      const head = { ref: "AI-1", sha: "abc123", repo: { full_name: "stranger/fork" } };
+      expect(await (await deliver({ payload: keyed("opened", { head }) })).json()).toEqual({
+        result: "recorded",
+      });
+      expect(await systemKinds(t.id)).toEqual([]);
+    });
+
+    it("GivenTheTicketUpdateFails_WhenDelivered_ThenTheDeliveryIsStillRecorded", async () => {
+      await inProgressTicket();
+      tracker.linkPullRequest = () => Promise.reject(new Error("firestore down"));
+      const res = await deliver({ payload: keyed("opened") });
+      expect(res.status).toBe(200);
+      expect(await res.json()).toEqual({ result: "recorded" });
+    });
   });
 
   it("GivenAWrongSignature_WhenDelivered_Then401AndNothingIsStored", async () => {

@@ -1,7 +1,13 @@
 import type { Hono } from "hono";
 import { bodyLimit } from "hono/body-limit";
-import { DeliveryId, type CodeEventLog, type Project, type WorkTracker } from "@andy/contracts";
-import { projectForRepo } from "@andy/domain";
+import {
+  DeliveryId,
+  type CodeEventLog,
+  type CodeHostEvent,
+  type Project,
+  type WorkTracker,
+} from "@andy/contracts";
+import { PullRequestTickets, TicketService, projectForRepo } from "@andy/domain";
 import {
   WebhookPayloadError,
   isRecordedEvent,
@@ -14,9 +20,10 @@ import { FixedWindowLimiter } from "../mcp/rate-limit";
 
 /**
  * GitHub App webhook receiver (ADR-0041, ADR-0043: secret read from the connection). Order of checks: body cap → HMAC → rate cap →
- * event type → registered repo → record once by delivery ID. Nothing is stored before the
- * signature checks out, and only deliveries about registered repos are stored. The rate cap
- * counts signed deliveries only, so unsigned floods can't lock GitHub out.
+ * event type → registered repo → record once by delivery ID → (pull requests, first delivery
+ * only) move the linked ticket (AI-14). Nothing is stored before the signature checks out, and
+ * only deliveries about registered repos are stored. The rate cap counts signed deliveries
+ * only, so unsigned floods can't lock GitHub out.
  */
 
 export const WEBHOOK_PATH = "/webhooks/github";
@@ -35,7 +42,11 @@ export interface WebhookDeps {
   now?: () => Date;
 }
 
-function log(severity: "INFO" | "WARNING", message: string, fields: Record<string, unknown> = {}) {
+function log(
+  severity: "INFO" | "WARNING" | "ERROR",
+  message: string,
+  fields: Record<string, unknown> = {},
+) {
   console.log(JSON.stringify({ severity, message, component: "github-webhook", ...fields }));
 }
 
@@ -62,6 +73,23 @@ export function registerGitHubWebhook(app: Hono<AuthEnv>, deps: WebhookDeps): vo
   const now = deps.now ?? (() => new Date());
   const limiter = new FixedWindowLimiter(WEBHOOK_RATE_LIMIT, 60_000, () => now().getTime());
   const repos = new RepoIndex(deps.tracker, () => now().getTime());
+  const prTickets = new PullRequestTickets(new TicketService(deps.tracker), deps.tracker);
+
+  /**
+   * The delivery is already recorded, so a failure here is logged, not retried: a redelivery
+   * would be a duplicate. Andy moves the ticket by hand from the log line.
+   */
+  async function moveTicket(record: CodeHostEvent, project: Project) {
+    if (record.kind !== "pull_request") return;
+    const fields = { deliveryId: record.deliveryId, pr: record.pullRequest.number };
+    try {
+      const outcome = await prTickets.apply(record, project);
+      log("INFO", "webhook ticket update", { ...fields, ...outcome });
+    } catch (err) {
+      const error = err instanceof Error ? err : new Error(String(err));
+      log("ERROR", "webhook ticket update failed", { ...fields, error: error.message });
+    }
+  }
 
   app.post(
     WEBHOOK_PATH,
@@ -123,6 +151,7 @@ export function registerGitHubWebhook(app: Hono<AuthEnv>, deps: WebhookDeps): vo
           projectId: project.id,
           result,
         });
+        if (result === "recorded") await moveTicket(record, project);
         return c.json({ result }, 200);
       } catch (err) {
         if (!(err instanceof WebhookPayloadError)) throw err;
