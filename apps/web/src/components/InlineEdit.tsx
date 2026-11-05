@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { createContext, useContext, useEffect, useId, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { X } from "lucide-react";
 import type { Ticket } from "@andy/contracts";
@@ -12,29 +12,59 @@ import { cn } from "@/lib/utils";
 
 /**
  * In-place editing for the story panel (ADR-0059: "every field edits in place"). Each editor
- * saves only its own fields with the `updatedAt` it was read at; a 409 asks Andy to reload,
- * and his draft stays so he can save again.
+ * saves only its own fields with `ifUpdatedAt`; a 409 asks Andy to reload, and his draft stays
+ * so he can save again.
  */
+
+/**
+ * One save at a time per ticket. Each waits for the one before and then sends the latest cached
+ * `updatedAt`, so two quick edits in different fields never conflict with each other; a change
+ * made elsewhere still does.
+ */
+const saveQueues = new Map<string, Promise<void>>();
+
 export function useTicketSave(ticket: Ticket) {
   const update = useUpdateTicket({ projectId: ticket.projectId, ticketId: ticket.id });
   const queryClient = useQueryClient();
+  const save = (patch: Omit<TicketPatch, "ifUpdatedAt">, onSaved?: () => void) => {
+    const run = async () => {
+      const cached = queryClient.getQueryData<Ticket>(ticketQueryKey(ticket.projectId, ticket.key));
+      try {
+        const saved = await update.mutateAsync({
+          ...patch,
+          ifUpdatedAt: (cached ?? ticket).updatedAt,
+        });
+        // The saved ticket at once (before the refetch), so the next save sends its `updatedAt`.
+        queryClient.setQueryData(ticketQueryKey(saved.projectId, saved.key), saved);
+        onSaved?.();
+      } catch {
+        // Shown through `update.error` next to the field.
+      }
+    };
+    const next = (saveQueues.get(ticket.id) ?? Promise.resolve()).then(run);
+    saveQueues.set(ticket.id, next);
+  };
   return {
-    save: (patch: Omit<TicketPatch, "ifUpdatedAt">, onSaved?: () => void) =>
-      update.mutate(
-        { ...patch, ifUpdatedAt: ticket.updatedAt },
-        {
-          onSuccess: (saved) => {
-            // The saved ticket at once (before the refetch), so a quick next edit sends the new
-            // `updatedAt` instead of a stale one that would conflict.
-            queryClient.setQueryData(ticketQueryKey(saved.projectId, saved.key), saved);
-            onSaved?.();
-          },
-        },
-      ),
+    save,
     pending: update.isPending,
     error: update.error ? <SaveError error={update.error} /> : null,
-    reset: update.reset,
   };
+}
+
+/**
+ * Unsaved typing in the panel, so leaving it can ask first (Andy never loses typed text
+ * silently). The panel provides the set; each editor registers while it holds a draft.
+ */
+export const UnsavedDrafts = createContext<Set<string> | null>(null);
+
+export function useUnsavedDraft(dirty: boolean) {
+  const drafts = useContext(UnsavedDrafts);
+  const id = useId();
+  useEffect(() => {
+    if (!drafts || !dirty) return;
+    drafts.add(id);
+    return () => void drafts.delete(id);
+  }, [drafts, dirty, id]);
 }
 
 function SaveError({ error }: { error: Error }) {
@@ -107,6 +137,7 @@ export function InlineText({
   wrap?: (button: React.ReactNode) => React.ReactNode;
 }) {
   const [draft, setDraft] = useState<string | null>(null);
+  useUnsavedDraft(draft !== null && draft.trim() !== value);
   if (draft === null)
     return (
       <>
@@ -155,6 +186,7 @@ export function InlineText({
 export function MarkdownField({ label, value, onSave, pending, error }: EditorProps<string>) {
   const [draft, setDraft] = useState<string | null>(null);
   const [preview, setPreview] = useState(false);
+  useUnsavedDraft(draft !== null && draft !== value);
   const edit = () => {
     setPreview(false);
     setDraft(value);
@@ -247,6 +279,7 @@ export function EditableList({
   ordered = false,
 }: EditorProps<string[]> & { ordered?: boolean }) {
   const [draft, setDraft] = useState("");
+  useUnsavedDraft(draft.trim() !== "");
   const List = ordered ? "ol" : "ul";
   return (
     <section aria-label={label} className="space-y-1">

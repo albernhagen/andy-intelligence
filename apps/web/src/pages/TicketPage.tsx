@@ -1,5 +1,5 @@
-import { useCallback, useEffect, useRef } from "react";
-import { Link, useNavigate, useParams } from "@tanstack/react-router";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { Link, useBlocker, useNavigate, useParams } from "@tanstack/react-router";
 import { useQueryClient } from "@tanstack/react-query";
 import { X } from "lucide-react";
 import { Size, TicketType, TierKey, type Ticket } from "@andy/contracts";
@@ -7,7 +7,13 @@ import { TIER_FOR_SIZE } from "@andy/domain";
 import { Activity } from "@/components/Activity";
 import { AskQuestionForm } from "@/components/AskQuestionForm";
 import { CancelArchiveControls } from "@/components/CancelArchiveControls";
-import { EditableList, InlineText, MarkdownField, useTicketSave } from "@/components/InlineEdit";
+import {
+  EditableList,
+  InlineText,
+  MarkdownField,
+  UnsavedDrafts,
+  useTicketSave,
+} from "@/components/InlineEdit";
 import { MoveControls } from "@/components/MoveControls";
 import { QuestionCard } from "@/components/QuestionCard";
 import { Loading, QueryError } from "@/components/Status";
@@ -62,6 +68,7 @@ export function TicketPage() {
     [navigate, projectId],
   );
   useEscapeToClose(close);
+  const drafts = useConfirmLeavingDrafts();
   // Keyboard first: the panel takes focus when it opens or shows another ticket.
   useEffect(() => panel.current?.focus({ preventScroll: true }), [ticketRef]);
 
@@ -90,10 +97,31 @@ export function TicketPage() {
       <div className="px-4 py-4 sm:px-6">
         {ticket.isPending && <Loading />}
         {ticket.isError && <QueryError error={ticket.error} />}
-        {loaded && <Story ticket={loaded} />}
+        {loaded && (
+          // Keyed by ticket: another ticket starts with fresh editors, never this one's drafts.
+          <UnsavedDrafts.Provider value={drafts}>
+            <Story key={loaded.id} ticket={loaded} />
+          </UnsavedDrafts.Provider>
+        )}
       </div>
     </aside>
   );
+}
+
+/**
+ * Leaving the ticket (Close, Esc, another card, a link, Back, a reload) with unsaved typing asks
+ * first; Cancel keeps the panel and the draft. Returns the set the editors register in.
+ */
+function useConfirmLeavingDrafts(): Set<string> {
+  const [drafts] = useState(() => new Set<string>());
+  useBlocker({
+    shouldBlockFn: ({ current, next }) =>
+      current.pathname !== next.pathname &&
+      drafts.size > 0 &&
+      !window.confirm("Discard your unsaved changes to this ticket?"),
+    enableBeforeUnload: () => drafts.size > 0,
+  });
+  return drafts;
 }
 
 /** Esc closes the panel, unless a field, an open editor or a menu took it first. */

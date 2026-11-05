@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { fireEvent, screen, waitFor, within } from "@testing-library/react";
 import { DEFAULT_ROUTE } from "@andy/domain";
 import { readyStory, renderApp } from "@/test/harness";
@@ -253,5 +253,79 @@ describe("untrusted markdown in the panel", () => {
     const panel = await open();
     fireEvent.click(within(panel).getByRole("link", { name: "docs" }));
     expect(within(panel).queryByLabelText("Description")).toBeNull();
+  });
+});
+
+describe("unsaved drafts and quick saves (PR #80 review)", () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  async function withDraft(harness: Awaited<ReturnType<typeof seeded>>) {
+    const panel = await harness.open();
+    await harness.user.click(within(panel).getByRole("button", { name: "Edit description" }));
+    await harness.user.type(within(panel).getByLabelText("Description"), "half-written");
+    return panel;
+  }
+
+  it("GivenADraftOnOneTicket_WhenAndySwitchesToAnotherCachedTicket_ThenTheDraftIsNotCarriedOver", async () => {
+    const confirm = vi.spyOn(window, "confirm").mockReturnValue(true);
+    const harness = await seeded();
+    await harness.service.create("ai", { type: "chore", title: "Auth" }, "andy");
+    // AI-2 is in the query cache before AI-1 opens, so switching back shows no loading state.
+    await harness.router.navigate({ to: "/p/ai/t/AI-2" });
+    await screen.findByRole("dialog", { name: "AI-2: Auth" });
+    await withDraft(harness);
+
+    await harness.router.navigate({ to: "/p/ai/t/AI-2" });
+
+    const panel = await screen.findByRole("dialog", { name: "AI-2: Auth" });
+    expect(confirm).toHaveBeenCalledOnce();
+    expect(within(panel).queryByLabelText("Description")).toBeNull();
+    expect(within(panel).queryByText("half-written")).toBeNull();
+  });
+
+  it("GivenUnsavedTyping_WhenAndyClosesAndCancelsTheConfirm_ThenThePanelAndDraftStay", async () => {
+    const confirm = vi.spyOn(window, "confirm").mockReturnValue(false);
+    const harness = await seeded();
+    const panel = await withDraft(harness);
+
+    await harness.user.click(within(panel).getByRole("button", { name: "Close" }));
+
+    expect(confirm).toHaveBeenCalledOnce();
+    expect(harness.router.state.location.pathname).toBe("/p/ai/t/AI-1");
+    expect((within(panel).getByLabelText("Description") as HTMLTextAreaElement).value).toBe(
+      "half-written",
+    );
+
+    confirm.mockReturnValue(true);
+    await harness.user.click(within(panel).getByRole("button", { name: "Close" }));
+    await waitFor(() => expect(harness.router.state.location.pathname).toBe("/p/ai"));
+  });
+
+  it("GivenNoUnsavedTyping_WhenAndyCloses_ThenItClosesWithoutAsking", async () => {
+    const confirm = vi.spyOn(window, "confirm");
+    const harness = await seeded();
+    const panel = await harness.open();
+    await harness.user.click(within(panel).getByRole("button", { name: "Close" }));
+    await waitFor(() => expect(harness.router.state.location.pathname).toBe("/p/ai"));
+    expect(confirm).not.toHaveBeenCalled();
+  });
+
+  it("GivenTwoFieldsChangedBeforeTheFirstSaveReturns_WhenSaved_ThenBothSaveWithoutAConflict", async () => {
+    const harness = await seeded();
+    const panel = await harness.open();
+
+    // Both changes in the same tick: the second save starts before the first returns.
+    fireEvent.change(within(panel).getByLabelText("Size"), { target: { value: "M" } });
+    fireEvent.change(within(panel).getByLabelText("Type"), { target: { value: "bug" } });
+
+    await waitFor(async () =>
+      expect(await harness.tracker.getTicket("ai", harness.ticket.id)).toMatchObject({
+        size: "M",
+        type: "bug",
+      }),
+    );
+    expect(within(panel).queryByRole("alert")).toBeNull();
   });
 });

@@ -2,6 +2,7 @@ import { useState } from "react";
 import type { Run, TicketEvent } from "@andy/contracts";
 import { Markdown } from "@/components/Markdown";
 import { RunItem, StartRefineRun } from "@/components/Runs";
+import { useUnsavedDraft } from "@/components/InlineEdit";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/input";
 import { QueryError } from "@/components/Status";
@@ -24,6 +25,7 @@ export function Activity(props: {
   const path = { projectId: props.projectId, ticketId: props.ticketId };
   const comment = useAddComment(path);
   const [body, setBody] = useState("");
+  useUnsavedDraft(body.trim() !== "");
 
   return (
     <section aria-label="Activity" className="space-y-3">
