@@ -36,7 +36,7 @@ Enterprise-shaped (durable state, policy, gates, least privilege, audit, contrac
 
 1. **Ideate with system context.** Design new features with knowledge of the current architecture and shipped features; outputs become markdown in the project repo.
 2. **Ticketing from anywhere.** Create and refine work in the UI or conversationally from any MCP-capable AI tool (Claude desktop first).
-3. **Mandatory refinement.** Every story gets a refinement pass in which agents ask Andy targeted questions before work starts.
+3. **Mandatory refinement.** Every ticket gets a refinement pass in which agents ask Andy targeted questions before work starts.
 4. **Autonomous end-to-end by default**, with overrides at global → project → epic → ticket level.
 5. **Cost and quota control.** Visibility into subscription usage and pay-per-use spend; reserves on subscriptions (Andy uses them outside this system); hard caps on paid spend; warnings in the UI.
 6. **Model tiers.** Each pipeline step uses a tier, not a hardcoded model; tiers map to ordered routes of (harness, provider, model); a weekly scout proposes tier updates.
@@ -103,13 +103,13 @@ A ticket moves Backlog → Ready → In progress → Ready for review → Monito
 
 The seven stages, their exit criteria, allowed moves (forward, re-refine, retry, rework; Andy forces, cancels, archives), PR events moving tickets, and Needs-you as a flag. [`workflow.md` §4.1](workflow.md#41-stages-ticketstage-shown-as-columnsgroups-in-the-ui)
 
-### 4.2 Definition of Ready (story)
+### 4.2 Definition of Ready (per type)
 
-EARS criteria, size with reason, dependencies, tier, no open questions; epics need only intent; checked by `checkDor` in `packages/domain`. [`workflow.md` §4.2](workflow.md#42-definition-of-ready-story)
+Per type (feature, chore, bug): intent, criteria ("… shall …" for features), size with reason, dependencies, no open questions; epics need only intent; tier comes from size; checked by `checkDor` in `packages/domain`. [`workflow.md` §4.2](workflow.md#42-definition-of-ready-per-type-adr-0058)
 
 ### 4.3 Refinement and questions
 
-Every story gets a refinement pass that asks Andy 1–5 structured questions; answers re-check the DoR; refine runs start on events (ADR-0054). [`workflow.md` §4.3](workflow.md#43-refinement-and-questions)
+Every ticket gets a refinement pass that asks Andy 1–5 structured questions; answers re-check the DoR; refine runs start on events (ADR-0054). [`workflow.md` §4.3](workflow.md#43-refinement-and-questions)
 
 ### 4.4 Epics
 

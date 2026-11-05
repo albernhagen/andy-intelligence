@@ -22,25 +22,27 @@ Overview and reading map: [ARCHITECTURE.md](ARCHITECTURE.md). Section numbers ma
 
 **Needs-you is a flag, not a stage.** Flagged items stay in their stage and appear in the Needs-you inbox (UI + MCP).
 
-### 4.2 Definition of Ready (story)
-- Problem/intent stated; acceptance criteria in **EARS** form ("WHEN … THE SYSTEM SHALL …").
+### 4.2 Definition of Ready (per type, ADR-0058)
+- **Type** set: feature, chore, bug or epic. A title alone is a valid ticket; refine fills the type.
+- Problem/intent stated (a non-empty body; for a bug, refine asks for steps to reproduce and the actual behaviour, which are not checked mechanically).
+- Acceptance criteria: **feature**, at least one, each in **EARS** form, any sentence with "… shall …" ("WHEN … the API shall …"); **bug**, at least one stating the expected behaviour; **chore**, a "done when" checklist in any wording.
 - Size tagged S/M/L with one-line justification (`sizeReason`) (rubric in `docs/agent/size-rubric.md`).
 - Dependencies declared (ticket "blocked by" links).
-- Tier assigned (default from policy, or override).
 - **No open questions.** Assumptions listed explicitly.
+- Tier is not a readiness item: `tierFor` derives it from size (S → `fast`, Sonnet; M and L → `strong`, Opus; ADR-0050); `overrides.tier` pins one (ADR-0062).
 - Per-project policy may allow "proceed on documented assumptions" for S tasks only; default is **require Andy's answers**. Overnight runs (ADR-0049) answer everything before launch and decide later ambiguity on recorded assumptions, listed in the morning report.
-- **Epics** need only a stated intent and no open questions (no criteria, size or tier).
-- Checked in `packages/domain` (`checkDor`); `dorStatus` is computed on every change, never set by callers. EARS = any criterion containing "THE SYSTEM SHALL". Planned changes: ADR-0058.
+- **Epics** need only a stated intent and no open questions (no criteria or size).
+- Checked in `packages/domain` (`checkDor`); `dorStatus` is computed on every change, never set by callers.
 
 ### 4.3 Refinement and questions
-- Every story receives a refinement pass: the agent drafts the story, lists assumptions, and asks **1–5 targeted questions** (highest-impact ambiguities first; multiple choice with a suggested default where possible).
+- Every ticket receives a refinement pass: the agent drafts the ticket, lists assumptions, and asks **1–5 targeted questions** (highest-impact ambiguities first; multiple choice with a suggested default where possible).
 - Questions are **structured records** (§5 Question).
 - Andy answers in UI or MCP. A `/refine` skill in Claude desktop batches pending questions across projects into one conversation.
 - Answering re-checks the DoR; the last answer moves a Backlog ticket that meets it to Ready (`system`, `ifUpdatedAt`).
-- **Built (M1.7, ADR-0054):** refine starts on events (ticket created, last answer leaving the DoR unmet, run ended), oldest ticket first, unless `autoRefine` is off. ≤ 3 runs per ticket; output written once per run, size and tier only where unset; failures flag Needs-you.
+- **Built (M1.7, ADR-0054):** refine starts on events (ticket created, last answer leaving the DoR unmet, run ended), oldest ticket first, unless `autoRefine` is off. ≤ 3 runs per ticket; output written once per run; type, size, out of scope and touches only where empty (it asks to change a set field); failures flag Needs-you.
 
 ### 4.4 Epics
-- Ticket types (Epic / Story / Task / Bug) + **child tickets** (`parent_id`).
+- Ticket types (Epic / Feature / Chore / Bug, ADR-0058) + **child tickets** (`parent_id`).
 - Epic refinement produces stories with `depends_on`. Stories are vertical slices, independently mergeable behind feature flags; merge to `main`, no long-lived epic branches. Exception: an **overnight run** (ADR-0049) merges its stories into a one-night branch `epic/<key>`, reviewed by Andy as one PR the next morning.
 - **Just-in-time re-planning:** when a story unblocks, a short plan pass re-reads the current codebase before execution. (Single tickets get it as the plan section of every build run, M1.8: Build + gate, ADR-0050.)
 - Epic status, cost, and progress roll up from children. Overrides on an epic cascade to its stories.

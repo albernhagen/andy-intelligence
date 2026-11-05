@@ -39,7 +39,7 @@ End with the structured output the run asks for (the schema `refine.schema.json`
 - `type`, `size`, `sizeReason`, `outOfScope`, `touches`: your proposal, always given (empty lists allowed). The control plane writes each only where the ticket's field is empty, so Andy's values win. If you think a value that is already set is wrong, ask a question; never expect your proposal to replace it. If you're unsure, still give your best guess and make one question confirm it.
 - `summary`: markdown, at most 300 words, with these sections:
   1. **Ask**: what the ticket asks for, in one sentence.
-  2. **Gaps**: what the Definition of Ready still misses, and criteria you would add or reword (EARS).
+  2. **Gaps**: what the Definition of Ready still misses, and criteria you would add or reword (EARS for features).
   3. **Files**: the files most likely to change.
   4. **Risks**: what could go wrong (security, data, cost, concurrency).
 - `questions`: 1 to 5, as above.
