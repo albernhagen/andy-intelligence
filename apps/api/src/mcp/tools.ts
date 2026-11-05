@@ -64,6 +64,16 @@ const StatusInput = {
   ticket: TicketKey.optional().describe('Ticket key, e.g. "AI-42". Omit for an overview.'),
 };
 
+const CancelInput = {
+  ticket: TicketKey.describe('Ticket key, e.g. "AI-42".'),
+  reason: z.string().trim().max(500).optional().describe("Why; recorded in the ticket's history."),
+};
+
+const ArchiveInput = {
+  ticket: TicketKey.describe('Ticket key, e.g. "AI-42". Must be Done or Cancelled to archive.'),
+  archived: z.boolean().default(true).describe("false unarchives."),
+};
+
 const MoveInput = {
   ticket: TicketKey.describe('Ticket key, e.g. "AI-42".'),
   to: Stage.describe("Target stage: the next one forward from where the ticket is."),
@@ -76,6 +86,7 @@ const summary = (t: Ticket) => ({
   stage: t.stage,
   dorStatus: t.dorStatus,
   needsYou: t.needsYou,
+  archived: t.archived,
 });
 
 export function registerTools(server: McpServer, deps: ToolDeps): void {
@@ -163,6 +174,39 @@ export function registerTools(server: McpServer, deps: ToolDeps): void {
             deadline: started.deadline,
             link: started.links.executorRun ?? null,
           },
+        };
+      }),
+  );
+
+  server.registerTool(
+    "cancel_ticket",
+    {
+      description:
+        "Cancels a ticket from any stage, stopping its runs in flight first. Andy only. Reopen by moving it to Backlog in the UI.",
+      inputSchema: CancelInput,
+      annotations: { destructiveHint: true, idempotentHint: false },
+    },
+    ({ ticket, reason }) =>
+      run(async () => {
+        const found = await service.findByKey(ticket);
+        const cancelled = await service.cancel(found.projectId, found.id, "andy", reason ?? null);
+        return { ticket: summary(cancelled) };
+      }),
+  );
+
+  server.registerTool(
+    "archive_ticket",
+    {
+      description:
+        "Archives a Done or Cancelled ticket: hides it from the board, the Needs-you inbox and status counts. Andy only.",
+      inputSchema: ArchiveInput,
+      annotations: { destructiveHint: false, idempotentHint: true },
+    },
+    ({ ticket, archived }) =>
+      run(async () => {
+        const found = await service.findByKey(ticket);
+        return {
+          ticket: summary(await service.archive(found.projectId, found.id, archived, "andy")),
         };
       }),
   );

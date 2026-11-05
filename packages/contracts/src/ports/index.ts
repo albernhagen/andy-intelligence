@@ -86,6 +86,7 @@ export const TicketFields = Ticket.pick({
   dorStatus: true,
   blockedBy: true,
   rank: true,
+  archived: true,
 }).partial();
 export type TicketFields = z.infer<typeof TicketFields>;
 
@@ -126,7 +127,11 @@ export type QuestionFilter = z.infer<typeof QuestionFilter>;
 export const ProjectPatch = Project.pick({ autoRefine: true }).partial();
 export type ProjectPatch = z.infer<typeof ProjectPatch>;
 
-export const TicketFilter = z.object({ stage: Stage.optional(), needsYou: z.boolean().optional() });
+export const TicketFilter = z.object({
+  stage: Stage.optional(),
+  needsYou: z.boolean().optional(),
+  archived: z.boolean().optional(),
+});
 export type TicketFilter = z.infer<typeof TicketFilter>;
 
 export interface WorkTracker {
@@ -191,6 +196,8 @@ export interface WorkTracker {
     via: AnsweredVia,
     actor: EventActor,
   ): Promise<Question>;
+  /** Only open questions can be withdrawn (`conflict` otherwise); appends `question_withdrawn`. */
+  withdrawQuestion(questionId: string, actor: EventActor): Promise<Question>;
   getQuestion(questionId: string): Promise<Question | null>;
   /** Oldest first. */
   listQuestions(filter?: QuestionFilter): Promise<Question[]>;

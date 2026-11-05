@@ -5,7 +5,10 @@ export type Id = z.infer<typeof Id>;
 
 export const Timestamp = z.iso.datetime({ offset: true });
 
-/** Workflow stages (ARCHITECTURE §4.1). Needs-you is a flag, not a stage. */
+/**
+ * Workflow stages (ARCHITECTURE §4.1). Needs-you is a flag, not a stage. Done and Cancelled are
+ * terminal; only Andy cancels, and a cancelled ticket reopens to Backlog.
+ */
 export const Stage = z.enum([
   "backlog",
   "ready",
@@ -13,6 +16,7 @@ export const Stage = z.enum([
   "ready_for_review",
   "monitoring",
   "done",
+  "cancelled",
 ]);
 export type Stage = z.infer<typeof Stage>;
 

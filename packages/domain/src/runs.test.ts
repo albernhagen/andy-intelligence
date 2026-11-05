@@ -122,6 +122,59 @@ describe("RunService", () => {
     expect(run).toMatchObject({ status: "failed", error: expect.stringContaining("not recorded") });
   });
 
+  it("GivenADispatchedRun_WhenItsTicketsRunsAreCancelled_ThenTheWorkflowRunIsStoppedAndTheRunCancelled", async () => {
+    const run = await service.start(projectId, ticketId, "refine");
+    const cancelled = await service.cancelForTicket(projectId, ticketId);
+    expect(cancelled.map((r) => r.id)).toEqual([run.id]);
+    expect(host.workflowRuns.get("1")?.run).toMatchObject({ conclusion: "cancelled" });
+    expect(await runs.get(run.id)).toMatchObject({
+      status: "cancelled",
+      endedAt: NOW.toISOString(),
+    });
+  });
+
+  it("GivenACancelledRun_WhenItReportsLate_ThenDuplicateAndContextIsRefused", async () => {
+    const run = await service.start(projectId, ticketId, "refine");
+    await service.cancelForTicket(projectId, ticketId);
+    const caller = await callerOf(run.id);
+    const result = { summary: "x", tokensIn: 1, tokensOut: 1, costUsd: 0 };
+    expect(await service.report(run.id, caller, { status: "succeeded", ...result })).toBe(
+      "duplicate",
+    );
+    await rejects(service.context(run.id, caller), "run_finished");
+    expect((await runs.get(run.id))?.status).toBe("cancelled");
+  });
+
+  it("GivenTheExecutorCantStopTheRun_WhenCancelled_ThenCancelFailedAndTheRunStaysActive", async () => {
+    const executor = new WorkflowExecutor(host);
+    executor.cancel = async () => {
+      throw new Error("GitHub unavailable");
+    };
+    const failing = make(executor);
+    const run = await failing.start(projectId, ticketId, "refine");
+    await rejects(failing.cancelForTicket(projectId, ticketId), "cancel_failed");
+    expect((await runs.get(run.id))?.status).toBe("queued");
+  });
+
+  it("GivenACancelledTicket_WhenARunIsStarted_ThenInvalidTransitionAndNothingIsDispatched", async () => {
+    await tracker.updateTicket(
+      projectId,
+      ticketId,
+      { stage: { to: "cancelled", reason: null } },
+      "andy",
+    );
+    await rejects(service.start(projectId, ticketId, "refine"), "invalid_transition");
+    expect(host.workflowRuns.size).toBe(0);
+    expect(await runs.listForTicket(projectId, ticketId)).toEqual([]);
+  });
+
+  it("GivenARunOnAnotherTicketOrNone_WhenATicketsRunsAreCancelled_ThenOnlyItsRunsAreTouched", async () => {
+    const other = await tracker.createTicket(projectId, { type: "task", title: "Other" }, "andy");
+    const run = await service.start(projectId, other.id, "refine");
+    expect(await service.cancelForTicket(projectId, ticketId)).toEqual([]);
+    expect((await runs.get(run.id))?.status).toBe("queued");
+  });
+
   it("GivenDispatchFails_WhenStarted_ThenTheRunIsFailedWithTheReason", async () => {
     host.failDispatch = new Error("Resource not accessible by integration");
     await rejects(service.start(projectId, ticketId, "refine"), "dispatch_failed");

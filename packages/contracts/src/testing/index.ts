@@ -143,6 +143,18 @@ export function workTrackerContract(name: string, make: () => Promise<WorkTracke
       ]);
     });
 
+    it("GivenAnArchivedTicket_WhenListedByArchived_ThenOnlyMatchingTicketsAreReturned", async () => {
+      const { tracker, project, ticket } = await setup();
+      expect(ticket.archived).toBe(false);
+      const second = await tracker.createTicket(project.id, { type: "task", title: "Two" }, "andy");
+      await tracker.updateTicket(project.id, second.id, { fields: { archived: true } }, "andy");
+      const ids = async (archived?: boolean) =>
+        (await tracker.listTickets(project.id, { archived })).map((t) => t.id);
+      expect(await ids(true)).toEqual([second.id]);
+      expect(await ids(false)).toEqual([ticket.id]);
+      expect(await ids()).toEqual([ticket.id, second.id]);
+    });
+
     it("GivenFieldAndStageChanges_WhenUpdated_ThenHistoryRecordsOnlyRealChanges", async () => {
       const { tracker, project, ticket } = await setup();
       const updated = await tracker.updateTicket(
@@ -282,6 +294,22 @@ export function workTrackerContract(name: string, make: () => Promise<WorkTracke
         tracker.askQuestions(project.id, "nope", [{ text: "?" }], "system"),
         "not_found",
       );
+    });
+
+    it("GivenAnOpenQuestion_WhenWithdrawn_ThenItIsKeptAsWithdrawnAndCannotBeAnswered", async () => {
+      const { tracker, project, ticket } = await setup();
+      const q = await tracker.askQuestion(project.id, ticket.id, { text: "Which?" }, "system");
+
+      const withdrawn = await tracker.withdrawQuestion(q.id, "andy");
+      expect(withdrawn).toMatchObject({ id: q.id, status: "withdrawn", answer: null });
+      expect(await tracker.getQuestion(q.id)).toEqual(withdrawn);
+      expect(await tracker.listQuestions({ ticketId: ticket.id, status: "open" })).toEqual([]);
+      await rejectsWith(tracker.withdrawQuestion(q.id, "andy"), "conflict");
+      await rejectsWith(tracker.answerQuestion(q.id, "a", "ui", "andy"), "conflict");
+      await rejectsWith(tracker.withdrawQuestion("nope", "andy"), "not_found");
+
+      const kinds = (await tracker.listEvents(project.id, ticket.id)).map((e) => e.kind);
+      expect(kinds).toEqual(["created", "question_asked", "question_withdrawn"]);
     });
   });
 }

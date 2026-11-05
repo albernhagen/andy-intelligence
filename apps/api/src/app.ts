@@ -132,6 +132,7 @@ const DOMAIN_STATUS = {
   run_finished: 409,
   executor_unavailable: 503,
   dispatch_failed: 502,
+  cancel_failed: 502,
 } as const;
 
 export function createApp(deps: AppDeps) {
@@ -243,7 +244,7 @@ export function createApp(deps: AppDeps) {
   });
 
   // One TicketService for REST and MCP: both get the same ticket rules (packages/domain).
-  const service = new TicketService(deps.tracker, (projectId) => refiner.next(projectId));
+  const service = new TicketService(deps.tracker, runs, (projectId) => refiner.next(projectId));
   const projects = new ProjectService(
     deps.tracker,
     connection ? new ConnectedCodeHost(connection) : null,

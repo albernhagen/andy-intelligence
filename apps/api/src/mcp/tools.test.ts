@@ -224,6 +224,7 @@ describe("status", () => {
             ready_for_review: 0,
             monitoring: 0,
             done: 0,
+            cancelled: 0,
           },
         },
       ],
@@ -301,6 +302,48 @@ describe("set_auto_refine tool", () => {
     const ctx = await withProject();
     const result = await ctx.call("set_auto_refine", { project: "ZZ", enabled: true });
     expect(result).toMatchObject({ isError: true, text: expect.stringContaining("not found") });
+  });
+});
+
+describe("cancel_ticket and archive_ticket", () => {
+  it("GivenATicket_WhenCancelledAndArchivedOverMcp_ThenStatusCountsLeaveItOut", async () => {
+    const ctx = await withProject();
+    await ctx.call("create_ticket", { project: "AI", type: "task", title: "x" });
+    const cancelled = await ctx.call("cancel_ticket", { ticket: "AI-1", reason: "not needed" });
+    expect(cancelled.data.ticket).toMatchObject({ stage: "cancelled", archived: false });
+    const status = await ctx.call("status", { ticket: "AI-1" });
+    expect(status.data.recentEvents.at(-1)).toMatchObject({ actor: "andy", body: "not needed" });
+
+    const archived = await ctx.call("archive_ticket", { ticket: "AI-1" });
+    expect(archived.data.ticket).toMatchObject({ archived: true });
+    const overview = await ctx.call("status");
+    expect(overview.data.projects[0].ticketsByStage.cancelled).toBe(0);
+  });
+
+  it("GivenACancelledTicket_WhenMoveTicketReopensIt_ThenAToolErrorAndItStaysCancelled", async () => {
+    const ctx = await withProject();
+    await ctx.call("create_ticket", { project: "AI", type: "task", title: "x" });
+    await ctx.call("cancel_ticket", { ticket: "AI-1" });
+    const res = await ctx.call("move_ticket", { ticket: "AI-1", to: "backlog" });
+    expect(res).toMatchObject({ isError: true, text: expect.stringMatching(/one step forward/) });
+    const status = await ctx.call("status", { ticket: "AI-1" });
+    expect(status.data.ticket.stage).toBe("cancelled");
+  });
+
+  it("GivenATicketNotDoneOrCancelled_WhenArchivedOverMcp_ThenAToolError", async () => {
+    const ctx = await withProject();
+    await ctx.call("create_ticket", { project: "AI", type: "task", title: "x" });
+    const res = await ctx.call("archive_ticket", { ticket: "AI-1" });
+    expect(res.isError).toBe(true);
+    expect(res.text).toContain("only Done or Cancelled");
+  });
+
+  it("GivenAnUnknownTicket_WhenCancelledOverMcp_ThenAToolError", async () => {
+    const ctx = await withProject();
+    expect(await ctx.call("cancel_ticket", { ticket: "AI-9" })).toMatchObject({
+      isError: true,
+      text: "ticket not found: AI-9",
+    });
   });
 });
 

@@ -60,7 +60,7 @@ describe("RefineDispatcher", () => {
     return {
       runs,
       dispatcher,
-      tickets: new TicketService(tracker, next),
+      tickets: new TicketService(tracker, runs, next),
       projects: new ProjectService(tracker, null, next),
     };
   }
@@ -198,6 +198,17 @@ describe("RefineDispatcher", () => {
 
     pastDeadline();
     expect(await runs.checkDeadline((await refines(first.id))[0]!.id)).toBe("flagged");
+    expect(await refines(second.id)).toHaveLength(1);
+  });
+
+  it("GivenARefineInFlight_WhenItsTicketIsCancelled_ThenTheNextTicketStarts", async () => {
+    const { tickets } = wire();
+    const first = await tickets.create(projectId, { type: "story", title: "One" }, "andy");
+    const second = await tickets.create(projectId, { type: "story", title: "Two" }, "andy");
+    expect(await refines(second.id)).toEqual([]);
+
+    await tickets.cancel(projectId, first.id, "andy");
+    expect((await refines(first.id))[0]?.status).toBe("cancelled");
     expect(await refines(second.id)).toHaveLength(1);
   });
 

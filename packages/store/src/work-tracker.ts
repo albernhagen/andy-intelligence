@@ -123,7 +123,12 @@ export class FirestoreWorkTracker implements WorkTracker {
     let query: Query<Ticket> = this.tickets(projectId);
     if (filter.stage !== undefined) query = query.where("stage", "==", filter.stage);
     if (filter.needsYou !== undefined) query = query.where("needsYou", "==", filter.needsYou);
-    const tickets = (await query.get()).docs.map((d) => d.data());
+    // Older documents have no `archived` field (read as false), and an equality query on false
+    // would skip them, so `archived: false` filters in memory.
+    if (filter.archived === true) query = query.where("archived", "==", true);
+    const tickets = (await query.get()).docs
+      .map((d) => d.data())
+      .filter((t) => filter.archived !== false || !t.archived);
     return tickets.sort((a, b) => a.rank.localeCompare(b.rank));
   }
 
@@ -263,6 +268,25 @@ export class FirestoreWorkTracker implements WorkTracker {
       tx.set(ref, answered);
       tx.create(this.events(ticket.projectId, ticket.id).doc(e.id), e);
       return answered;
+    });
+  }
+
+  async withdrawQuestion(questionId: string, actor: EventActor): Promise<Question> {
+    return this.db.runTransaction(async (tx) => {
+      const ref = this.questions().doc(questionId);
+      const question = (await tx.get(ref)).data();
+      if (!question) throw notFound("question", questionId);
+      if (question.status !== "open") {
+        throw new WorkTrackerError("conflict", `question is ${question.status}: ${questionId}`);
+      }
+      const ticketRef = this.tickets(question.projectId).doc(question.ticketId);
+      const ticket = (await tx.get(ticketRef)).data();
+      if (!ticket) throw notFound("ticket", question.ticketId);
+      const withdrawn: Question = { ...question, status: "withdrawn" };
+      const e = event(ticket, "question_withdrawn", actor, this.now(), null, { questionId });
+      tx.set(ref, withdrawn);
+      tx.create(this.events(ticket.projectId, ticket.id).doc(e.id), e);
+      return withdrawn;
     });
   }
 

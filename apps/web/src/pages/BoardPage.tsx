@@ -17,7 +17,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Loading, QueryError } from "@/components/Status";
 import { useBoardMove, useCreateTicket, useTickets } from "@/lib/queries";
-import { STAGE_LABELS, STAGES, dropMove, groupByStage } from "@/lib/tickets";
+import { STAGE_LABELS, STAGES, dropMove, groupByStage, visibleTickets } from "@/lib/tickets";
 
 /**
  * Tickets grouped by stage, one column each. Drag a card to another column to move it: an
@@ -29,12 +29,23 @@ export function BoardPage() {
   const tickets = useTickets(projectId);
   const create = useCreateTicket(projectId);
   const [creating, setCreating] = useState(false);
+  const [showArchived, setShowArchived] = useState(false);
 
   return (
     <section className="space-y-4">
       <div className="flex items-center justify-between">
         <h2 className="text-lg font-medium">Tickets</h2>
-        {!creating && <Button onClick={() => setCreating(true)}>New ticket</Button>}
+        <div className="flex items-center gap-3">
+          <label className="flex items-center gap-1 text-sm">
+            <input
+              type="checkbox"
+              checked={showArchived}
+              onChange={(e) => setShowArchived(e.target.checked)}
+            />
+            Show archived
+          </label>
+          {!creating && <Button onClick={() => setCreating(true)}>New ticket</Button>}
+        </div>
       </div>
 
       {creating && (
@@ -51,7 +62,9 @@ export function BoardPage() {
 
       {tickets.isPending && <Loading />}
       {tickets.isError && <QueryError error={tickets.error} />}
-      {tickets.data && <Columns tickets={tickets.data} projectId={projectId} />}
+      {tickets.data && (
+        <Columns tickets={visibleTickets(tickets.data, showArchived)} projectId={projectId} />
+      )}
     </section>
   );
 }
@@ -96,7 +109,7 @@ function Columns({ tickets, projectId }: { tickets: Ticket[]; projectId: string 
       onDragEnd={(e) => void onDragEnd(e)}
       onDragCancel={() => (justDragged.current = false)}
     >
-      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
+      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-7">
         {STAGES.map((stage) => (
           <Column key={stage} stage={stage} count={groups[stage].length}>
             {groups[stage].map((t) => (
@@ -174,6 +187,7 @@ function Card({
           {t.size && <Badge>{t.size}</Badge>}
           {t.dorStatus === "met" && <Badge variant="ok">DoR</Badge>}
           {t.needsYou && <Badge variant="attention">needs you</Badge>}
+          {t.archived && <Badge>archived</Badge>}
         </span>
       </Link>
       {error && <QueryError error={error} />}

@@ -23,6 +23,13 @@ describe("canTransition", () => {
     expect(canTransition("done", "backlog")).toBe(false);
     expect(canTransition("backlog", "backlog")).toBe(false);
   });
+
+  it("GivenCancelled_WhenMoving_ThenOnlyReopeningToBacklogIsAllowedAndNothingMovesIn", () => {
+    expect(canTransition("cancelled", "backlog")).toBe(true);
+    expect(canTransition("cancelled", "ready")).toBe(false);
+    expect(canTransition("done", "cancelled")).toBe(false);
+    expect(canTransition("in_progress", "cancelled")).toBe(false);
+  });
 });
 
 describe("isForwardMove", () => {
@@ -36,6 +43,11 @@ describe("isForwardMove", () => {
     expect(isForwardMove("ready_for_review", "in_progress")).toBe(false);
     expect(isForwardMove("ready", "ready_for_review")).toBe(false);
     expect(isForwardMove("done", "done")).toBe(false);
+  });
+
+  it("GivenACancelledTicket_WhenReopeningIsChecked_ThenItIsNotAForwardMove", () => {
+    expect(isForwardMove("cancelled", "backlog")).toBe(false);
+    expect(isForwardMove("monitoring", "cancelled")).toBe(false);
   });
 });
 

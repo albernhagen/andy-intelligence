@@ -145,6 +145,27 @@ describe("PullRequestTickets", () => {
     expect((await reload(t)).stage).toBe("done");
   });
 
+  it("GivenACancelledTicket_WhenItsPullRequestOpensMergesOrCloses_ThenLinkedOnlyAndNotFlagged", async () => {
+    const t = await service.create(project.id, readyStory, "andy");
+    await service.cancel(project.id, t.id, "andy");
+    for (const e of [
+      prEvent("opened"),
+      prEvent("closed", { state: "merged" }),
+      prEvent("closed", { state: "closed" }),
+    ]) {
+      expect(await prs.apply(e, project)).toMatchObject({ result: "linked", moves: [] });
+    }
+    expect(await reload(t)).toMatchObject({ stage: "cancelled", needsYou: false });
+    expect(await service.needsYou()).toEqual({ questions: [], tickets: [] });
+  });
+
+  it("GivenAnArchivedDoneTicket_WhenAnotherPullRequestOpens_ThenItStaysArchivedAndDone", async () => {
+    const t = await ticketAt("done");
+    await service.archive(project.id, t.id, true, "andy");
+    expect((await prs.apply(prEvent("opened"), project)).moves).toEqual([]);
+    expect(await reload(t)).toMatchObject({ stage: "done", archived: true });
+  });
+
   it("GivenATicketInReview_WhenItsPullRequestMerges_ThenDoneThroughMonitoring", async () => {
     const t = await ticketAt("ready_for_review");
     const result = await prs.apply(prEvent("closed", { state: "merged" }), project);

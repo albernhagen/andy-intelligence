@@ -111,6 +111,7 @@ export class InMemoryWorkTracker implements WorkTracker {
       .filter((t) => t.projectId === projectId)
       .filter((t) => filter.stage === undefined || t.stage === filter.stage)
       .filter((t) => filter.needsYou === undefined || t.needsYou === filter.needsYou)
+      .filter((t) => filter.archived === undefined || t.archived === filter.archived)
       .sort((a, b) => a.rank.localeCompare(b.rank))
       .map((t) => structuredClone(t));
   }
@@ -229,6 +230,21 @@ export class InMemoryWorkTracker implements WorkTracker {
       .get(ticket.id)
       ?.push(event(ticket, "question_answered", actor, at, answer, { questionId, via }));
     return structuredClone(answered);
+  }
+
+  async withdrawQuestion(questionId: string, actor: EventActor): Promise<Question> {
+    const question = this.questions.get(questionId);
+    if (!question) throw notFound("question", questionId);
+    if (question.status !== "open") {
+      throw new WorkTrackerError("conflict", `question is ${question.status}: ${questionId}`);
+    }
+    const withdrawn: Question = { ...question, status: "withdrawn" };
+    this.questions.set(questionId, withdrawn);
+    const ticket = this.requireTicket(question.projectId, question.ticketId);
+    this.events
+      .get(ticket.id)
+      ?.push(event(ticket, "question_withdrawn", actor, this.now(), null, { questionId }));
+    return structuredClone(withdrawn);
   }
 
   async getQuestion(questionId: string): Promise<Question | null> {

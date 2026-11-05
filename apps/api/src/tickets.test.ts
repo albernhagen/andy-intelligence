@@ -167,6 +167,24 @@ describe("ticket API", () => {
     expect(res.json.stage).toBe("done");
   });
 
+  it("GivenATicket_WhenCancelledThenArchived_ThenItIsHiddenUnlessArchivedIsAskedFor", async () => {
+    const t = await projectWithTicket();
+    const base = `/api/projects/ai/tickets/${t.id}`;
+    expect((await call("POST", `${base}/archive`, {})).status).toBe(422);
+    const cancelled = await call("POST", `${base}/cancel`, { reason: "dropped" });
+    expect(cancelled).toMatchObject({ status: 200, json: { stage: "cancelled", archived: false } });
+    expect((await call("POST", `${base}/archive`, {})).json.archived).toBe(true);
+    expect((await call("GET", "/api/projects/ai/tickets?archived=false")).json).toEqual([]);
+    expect((await call("GET", "/api/projects/ai/tickets?archived=true")).json).toHaveLength(1);
+    expect((await call("POST", `${base}/cancel`, {})).status).toBe(422);
+  });
+
+  it("GivenAPatchThatSetsArchived_WhenPatching_ThenItIsIgnored", async () => {
+    const t = await projectWithTicket();
+    const res = await call("PATCH", `/api/projects/ai/tickets/${t.id}`, { archived: true });
+    expect(res.json.archived).toBe(false);
+  });
+
   it("GivenAQuestion_WhenAskedAndAnswered_ThenNeedsYouInboxFillsAndClears", async () => {
     const t = await projectWithTicket(readyFields);
     const base = `/api/projects/ai/tickets/${t.id}`;
@@ -249,6 +267,8 @@ describe("ticket API", () => {
       expect.arrayContaining([
         "/api/projects/{projectId}/tickets",
         "/api/projects/{projectId}/tickets/{ticketId}/stage",
+        "/api/projects/{projectId}/tickets/{ticketId}/cancel",
+        "/api/projects/{projectId}/tickets/{ticketId}/archive",
         "/api/needs-you",
       ]),
     );
