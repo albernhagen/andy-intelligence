@@ -167,6 +167,52 @@ describe("run callbacks", () => {
     expect((await callback(`/runs/${run.id}/context`, claims)).status).toBe(409);
   });
 
+  it("GivenARefineRunAskedAQuestion_WhenAndyAnswersItOverTheApi_ThenItIsRecordedAndTheTicketIsReady", async () => {
+    const { run, claims, callback, call, tracker, project, ticket } = await dispatched();
+    await tracker.updateTicket(
+      project.id,
+      ticket.id,
+      {
+        fields: {
+          body: "Andy can't see tickets.",
+          acceptanceCriteria: ["When Andy opens the board, the system shall list tickets."],
+        },
+      },
+      "andy",
+    );
+    await callback(`/runs/${run.id}/report`, claims, {
+      method: "POST",
+      body: JSON.stringify(result),
+    });
+    const [question] = await tracker.listQuestions({ ticketId: ticket.id });
+    // AI-27: a run's question id is `<runId>-q<n>`, not a UUID.
+    expect(question?.id).toBe(`${run.id}-q1`);
+
+    const res = await call(`/api/questions/${question?.id}/answer`, {
+      method: "POST",
+      body: JSON.stringify({ answer: "Kanban" }),
+    });
+    expect(res.status).toBe(200);
+    expect(await res.json()).toMatchObject({ status: "answered", answer: "Kanban" });
+    expect(await tracker.getTicket(project.id, ticket.id)).toMatchObject({
+      stage: "ready",
+      needsAttention: false,
+    });
+  });
+
+  it("GivenAQuestionIdThatIsNotAnId_WhenAnswered_Then400", async () => {
+    const { call } = await dispatched();
+    const answer = (id: string) =>
+      call(`/api/questions/${id}/answer`, {
+        method: "POST",
+        body: JSON.stringify({ answer: "x" }),
+      });
+    expect((await answer("..%2F..%2Ftickets")).status).toBe(400);
+    expect((await answer("a.b")).status).toBe(400);
+    expect((await answer("x".repeat(65))).status).toBe(400);
+    expect((await answer("unknown-q1")).status).toBe(404);
+  });
+
   it("GivenAMalformedOrOversizedReport_WhenPosted_Then400Or413", async () => {
     const { run, claims, callback } = await dispatched();
     const post = (body: string) =>

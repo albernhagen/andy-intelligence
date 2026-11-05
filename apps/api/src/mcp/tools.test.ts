@@ -203,6 +203,25 @@ describe("answer_question", () => {
     expect((await ctx.call("list_needs_me")).data).toEqual({ questions: [], tickets: [] });
   });
 
+  it("GivenAQuestionAskedByARun_WhenAnswered_ThenRecordedAndTheTicketIsReady", async () => {
+    const ctx = await withProject();
+    const t = await ctx.service.create("ai", readyStory, "andy");
+    // AI-27: a run's question id is `<runId>-q<n>`, not a UUID.
+    const [q] = await ctx.tracker.askQuestions(
+      "ai",
+      t.id,
+      [{ text: "Which board?" }],
+      "agent:run7",
+      "run7",
+    );
+    expect(q?.id).toBe("run7-q1");
+
+    const res = await ctx.call("answer_question", { questionId: q?.id, answer: "Kanban" });
+    expect(res.isError).toBe(false);
+    expect(res.data.question).toMatchObject({ status: "answered", answeredVia: "mcp" });
+    expect(res.data.ticket).toMatchObject({ key: "AI-1", stage: "ready", needsAttention: false });
+  });
+
   it("GivenAnAnsweredOrUnknownQuestion_WhenAnswered_ThenAToolError", async () => {
     const ctx = await withProject();
     const t = await ctx.service.create("ai", readyStory, "andy");
