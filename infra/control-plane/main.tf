@@ -322,6 +322,16 @@ resource "google_cloud_run_v2_service" "control_plane" {
         name  = "PUBLIC_URL"
         value = local.public_url
       }
+      # Run watchdog (M1.6b: Claude Code executor: watchdog + retry): the queue each run's
+      # deadline check goes to, and the identity its OIDC token must be for (§9).
+      env {
+        name  = "WATCHDOG_QUEUE"
+        value = google_cloud_tasks_queue.run_watchdog.id
+      }
+      env {
+        name  = "WATCHDOG_INVOKER_EMAIL"
+        value = google_service_account.tasks_invoker.email
+      }
     }
   }
 

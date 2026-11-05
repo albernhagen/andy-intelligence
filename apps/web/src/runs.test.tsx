@@ -101,6 +101,34 @@ describe("runs UI", () => {
     ).toBe(false);
   });
 
+  it("GivenAnAutomaticRetry_WhenViewed_ThenItIsMarkedAsARetry", async () => {
+    const { open, runs, ticket } = await setup();
+    const first = await runs.create({
+      projectId: "ai",
+      ticketId: ticket.id,
+      step: "refine",
+      route: DEFAULT_ROUTE,
+      tier: null,
+      deadline: null,
+      prompt: "refine it",
+      maxTurns: 10,
+    });
+    await runs.create({
+      projectId: "ai",
+      ticketId: ticket.id,
+      step: "refine",
+      route: DEFAULT_ROUTE,
+      tier: null,
+      deadline: null,
+      prompt: "refine it",
+      maxTurns: 10,
+      attempt: 2,
+      retryOf: first.id,
+    });
+    const section = await open();
+    expect(await within(section).findByText("retry 2")).toBeTruthy();
+  });
+
   it("GivenALongSummary_WhenAndyClicksShowReport_ThenTheReportIsShown", async () => {
     const harness = await setup();
     const run = await harness.queueRun();
