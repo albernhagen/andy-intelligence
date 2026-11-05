@@ -10,7 +10,6 @@ const ready = {
   acceptanceCriteria: ["When Andy opens the app, the system shall show the project picker."],
   size: "M" as const,
   sizeReason: "A layout, routes and a CI job.",
-  tier: "strong" as const,
 };
 
 /**
@@ -27,11 +26,11 @@ export async function createFakeApp() {
   });
   await tracker.createProject({ name: "Ops", key: "OPS" });
 
-  const story = (title: string, body = "") => ({ type: "story" as const, title, body });
+  const feature = (title: string, body = "") => ({ type: "feature" as const, title, body });
   const shell = await service.create(
     "ai",
     {
-      ...story(
+      ...feature(
         "Design source and app shell",
         "Picking a project should feel like picking a tenant.",
       ),
@@ -57,19 +56,19 @@ export async function createFakeApp() {
   await service.move("ai", drop.id, "in_progress", "andy");
   await service.move("ai", drop.id, "ready_for_review", "andy");
 
-  const panel = await service.create("ai", story("Story side panel"), "andy");
+  const panel = await service.create("ai", feature("Story side panel"), "andy");
   await service.ask("ai", panel.id, { text: "Should Esc close the panel?" }, "agent");
-  await service.create("ai", { type: "task", title: "Command palette", body: "" }, "andy");
+  await service.create("ai", { type: "chore", title: "Command palette", body: "" }, "andy");
   const model = await service.create(
     "ai",
-    { ...story("Ticket model v2", "Shortcut-style types and fields."), ...ready },
+    { ...feature("Ticket model v2", "Shortcut-style types and fields."), ...ready },
     "andy",
   );
   await service.move("ai", model.id, "ready", "andy");
 
   const backups = await service.create(
     "ops",
-    { type: "task", title: "Nightly backups", body: "" },
+    { type: "chore", title: "Nightly backups", body: "" },
     "andy",
   );
   await service.ask("ops", backups.id, { text: "Keep backups for 7 or 30 days?" }, "agent");

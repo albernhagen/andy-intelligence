@@ -14,6 +14,7 @@ import {
   RunExecutor,
   RunStatus,
   RunStep,
+  ScopeList,
   Stage,
   Ticket,
   Timestamp,
@@ -57,22 +58,27 @@ export const NewProject = Project.pick({ name: true, key: true }).extend({
 });
 export type NewProject = z.input<typeof NewProject>;
 
-export const NewTicket = Ticket.pick({ type: true, title: true }).extend({
+/** A title alone is a valid ticket (ADR-0058); refine drafts the rest. */
+export const NewTicket = Ticket.pick({ title: true }).extend({
+  type: Ticket.shape.type.default(null),
   body: z.string().default(""),
   parentId: Id.nullable().default(null),
   acceptanceCriteria: z.array(z.string()).default([]),
   assumptions: z.array(z.string()).default([]),
   size: Ticket.shape.size.default(null),
   sizeReason: Ticket.shape.sizeReason.default(null),
-  tier: Ticket.shape.tier.default(null),
+  outOfScope: Ticket.shape.outOfScope,
+  touches: Ticket.shape.touches,
+  overrides: Ticket.shape.overrides.default({}),
   blockedBy: z.array(Id).default([]),
-  needsYou: z.boolean().default(false),
+  needsAttention: z.boolean().default(false),
   dorStatus: DorStatus.default("not_met"),
 });
 export type NewTicket = z.input<typeof NewTicket>;
 
 /** Fields a caller may edit directly. Stage moves go through `stage` so they get their own event. */
 export const TicketFields = Ticket.pick({
+  type: true,
   title: true,
   body: true,
   parentId: true,
@@ -80,14 +86,23 @@ export const TicketFields = Ticket.pick({
   assumptions: true,
   size: true,
   sizeReason: true,
-  tier: true,
+  outOfScope: true,
+  touches: true,
   overrides: true,
-  needsYou: true,
+  needsAttention: true,
   dorStatus: true,
   blockedBy: true,
   rank: true,
   archived: true,
-}).partial();
+})
+  .partial()
+  // Zod 4 applies defaults inside `.partial()`, which would turn "not given" into "reset":
+  // these fields are redeclared without their defaults.
+  .extend({
+    outOfScope: ScopeList.optional(),
+    touches: ScopeList.optional(),
+    archived: z.boolean().optional(),
+  });
 export type TicketFields = z.infer<typeof TicketFields>;
 
 export const TicketChange = z.object({
@@ -129,7 +144,7 @@ export type ProjectPatch = z.infer<typeof ProjectPatch>;
 
 export const TicketFilter = z.object({
   stage: Stage.optional(),
-  needsYou: z.boolean().optional(),
+  needsAttention: z.boolean().optional(),
   archived: z.boolean().optional(),
 });
 export type TicketFilter = z.infer<typeof TicketFilter>;

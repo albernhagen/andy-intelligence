@@ -99,11 +99,10 @@ export function renderApp(path = "/", opts: { githubConnected?: boolean } = {}) 
 
 /** A story that meets the Definition of Ready. */
 export const readyStory = {
-  type: "story" as const,
+  type: "feature" as const,
   title: "Board",
   body: "Andy can't see tickets.",
   acceptanceCriteria: ["WHEN Andy opens the board THE SYSTEM SHALL list tickets"],
   size: "S" as const,
   sizeReason: "one screen",
-  tier: "strong" as const,
 };

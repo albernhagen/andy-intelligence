@@ -2,8 +2,9 @@ import { execFileSync, spawnSync } from "node:child_process";
 import { mkdtempSync, readFileSync, readdirSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { DEFAULT_BUDGETS, check, globToRegExp, loadBudgets, measure } from "./context-budget.mjs";
+import { cleanGitEnv } from "./git-env.mjs";
 
 describe("globToRegExp", () => {
   it.each([
@@ -70,17 +71,45 @@ describe("loadBudgets", () => {
   });
 });
 
+/** A temp git repo holding `files` plus a CLAUDE.md symlink to AGENTS.md, all staged. */
+const repo = (files) => {
+  const dir = mkdtempSync(join(tmpdir(), "budget-repo-"));
+  const env = cleanGitEnv();
+  execFileSync("git", ["init", "-q"], { cwd: dir, env });
+  for (const [path, text] of Object.entries(files)) writeFileSync(join(dir, path), text);
+  symlinkSync("AGENTS.md", join(dir, "CLAUDE.md"));
+  execFileSync("git", ["add", "-A"], { cwd: dir, env });
+  return dir;
+};
+
+describe("repo helper", () => {
+  afterEach(() => vi.unstubAllEnvs());
+
+  // AI-20: git hooks export GIT_DIR / GIT_INDEX_FILE; inherited, they made `git add -A` in the
+  // temp dir overwrite the real repository's index on every push.
+  it("GivenGitHookEnvironment_WhenTempRepoCreated_ThenOuterRepositoryIndexUnchanged", () => {
+    const outer = mkdtempSync(join(tmpdir(), "budget-outer-"));
+    const clean = cleanGitEnv();
+    execFileSync("git", ["init", "-q"], { cwd: outer, env: clean });
+    writeFileSync(join(outer, "keep.txt"), "keep\n");
+    execFileSync("git", ["add", "keep.txt"], { cwd: outer, env: clean });
+    const index = join(outer, ".git", "index");
+    const before = readFileSync(index);
+
+    vi.stubEnv("GIT_DIR", join(outer, ".git"));
+    vi.stubEnv("GIT_INDEX_FILE", index);
+    repo({ "AGENTS.md": "a\nb\nc\n" });
+    vi.unstubAllEnvs();
+
+    expect(readFileSync(index).equals(before)).toBe(true);
+  });
+});
+
 describe("CLI", () => {
   const script = join(import.meta.dirname, "context-budget.mjs");
-  const repo = (files) => {
-    const dir = mkdtempSync(join(tmpdir(), "budget-repo-"));
-    execFileSync("git", ["init", "-q"], { cwd: dir });
-    for (const [path, text] of Object.entries(files)) writeFileSync(join(dir, path), text);
-    symlinkSync("AGENTS.md", join(dir, "CLAUDE.md"));
-    execFileSync("git", ["add", "-A"], { cwd: dir });
-    return dir;
-  };
-  const run = (dir) => spawnSync(process.execPath, [script, dir], { encoding: "utf8" });
+  // `git ls-files` in the CLI must read the temp repo, not a hook's GIT_DIR.
+  const run = (dir) =>
+    spawnSync(process.execPath, [script, dir], { encoding: "utf8", env: cleanGitEnv() });
 
   it("GivenSmallAgentsFile_WhenRun_ThenPassesAndSkipsSymlink", () => {
     const result = run(repo({ "AGENTS.md": "rules\n" }));

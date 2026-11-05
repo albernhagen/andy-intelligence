@@ -3,13 +3,12 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { DomainError, RECENT_EVENTS, TicketService, type RunCanceller } from "./tickets";
 
 const readyStory: NewTicket = {
-  type: "story",
+  type: "feature",
   title: "Board",
   body: "Andy can't see tickets.",
   acceptanceCriteria: ["WHEN Andy opens the board THE SYSTEM SHALL list tickets"],
   size: "S",
   sizeReason: "one screen",
-  tier: "strong",
 };
 
 describe("TicketService", () => {
@@ -28,21 +27,21 @@ describe("TicketService", () => {
 
   it("GivenACompleteStory_WhenCreated_ThenDorMet", async () => {
     expect((await service.create(projectId, readyStory, "andy")).dorStatus).toBe("met");
-    expect((await service.create(projectId, { type: "task", title: "x" }, "andy")).dorStatus).toBe(
+    expect((await service.create(projectId, { type: "chore", title: "x" }, "andy")).dorStatus).toBe(
       "not_met",
     );
   });
 
   it("GivenAnIncompleteStory_WhenMovedToReady_ThenRejectedWithGaps", async () => {
-    const t = await service.create(projectId, { type: "story", title: "x", body: "y" }, "andy");
+    const t = await service.create(projectId, { type: "feature", title: "x", body: "y" }, "andy");
     await expect(service.move(projectId, t.id, "ready", "andy")).rejects.toMatchObject({
       code: "dor_not_met",
-      details: expect.arrayContaining(["acceptance criteria", "tier"]),
+      details: expect.arrayContaining(["acceptance criteria", "size"]),
     });
   });
 
   it("GivenFieldsThatCompleteTheDor_WhenUpdated_ThenDorMetAndMoveSucceeds", async () => {
-    const t = await service.create(projectId, { type: "story", title: "x", body: "y" }, "andy");
+    const t = await service.create(projectId, { type: "feature", title: "x", body: "y" }, "andy");
     const updated = await service.update(projectId, t.id, readyStory, "andy");
     expect(updated.dorStatus).toBe("met");
     expect((await service.move(projectId, t.id, "ready", "andy")).stage).toBe("ready");
@@ -54,7 +53,7 @@ describe("TicketService", () => {
   });
 
   it("GivenAForcedMove_WhenByAndyWithAReason_ThenRecordedInHistory", async () => {
-    const t = await service.create(projectId, { type: "task", title: "x" }, "andy");
+    const t = await service.create(projectId, { type: "chore", title: "x" }, "andy");
     const moved = await service.move(projectId, t.id, "done", "andy", {
       force: true,
       reason: "done outside the system",
@@ -77,7 +76,7 @@ describe("TicketService", () => {
   });
 
   it("GivenAForcedMove_WhenByAndyWithoutAReason_ThenRecordedAsForcedWithNoBody", async () => {
-    const t = await service.create(projectId, { type: "task", title: "x" }, "andy");
+    const t = await service.create(projectId, { type: "chore", title: "x" }, "andy");
     const moved = await service.move(projectId, t.id, "done", "andy", { force: true });
     expect(moved.stage).toBe("done");
     expect((await service.history(projectId, t.id)).at(-1)).toMatchObject({
@@ -88,7 +87,7 @@ describe("TicketService", () => {
   });
 
   it("GivenAForcedMove_WhenTheReasonIsBlank_ThenStoredAsNoReason", async () => {
-    const t = await service.create(projectId, { type: "task", title: "x" }, "andy");
+    const t = await service.create(projectId, { type: "chore", title: "x" }, "andy");
     await service.move(projectId, t.id, "done", "andy", { force: true, reason: "  " });
     expect((await service.history(projectId, t.id)).at(-1)).toMatchObject({ body: null });
   });
@@ -97,7 +96,7 @@ describe("TicketService", () => {
     const t = await service.create(projectId, readyStory, "andy");
     const q = await service.ask(projectId, t.id, { text: "Which board?" }, "agent:r1");
     expect(await tracker.getTicket(projectId, t.id)).toMatchObject({
-      needsYou: true,
+      needsAttention: true,
       dorStatus: "not_met",
     });
     await rejects(service.move(projectId, t.id, "ready", "andy"), "dor_not_met");
@@ -112,7 +111,7 @@ describe("TicketService", () => {
     const q = await service.ask(projectId, t.id, { text: "Which board?" }, "agent:r1");
     await service.answer(q.id, "Kanban", "ui", "andy");
     expect(await tracker.getTicket(projectId, t.id)).toMatchObject({
-      needsYou: false,
+      needsAttention: false,
       dorStatus: "met",
     });
     expect(await service.needsYou()).toEqual({ questions: [], tickets: [] });
@@ -133,7 +132,7 @@ describe("TicketService", () => {
     await service.answer(q2!.id, "By rank", "mcp", "andy");
     expect(await tracker.getTicket(projectId, t.id)).toMatchObject({
       stage: "ready",
-      needsYou: false,
+      needsAttention: false,
       dorStatus: "met",
     });
     expect((await tracker.listEvents(projectId, t.id)).at(-1)).toMatchObject({
@@ -144,12 +143,12 @@ describe("TicketService", () => {
   });
 
   it("GivenTheDorIsNotMetOtherwise_WhenTheLastQuestionIsAnswered_ThenItStaysInBacklog", async () => {
-    const t = await service.create(projectId, { ...readyStory, tier: null }, "andy");
+    const t = await service.create(projectId, { ...readyStory, size: null }, "andy");
     const q = await service.ask(projectId, t.id, { text: "Which board?" }, "agent:r1");
     await service.answer(q.id, "Kanban", "mcp", "andy");
     expect(await tracker.getTicket(projectId, t.id)).toMatchObject({
       stage: "backlog",
-      needsYou: false,
+      needsAttention: false,
       dorStatus: "not_met",
     });
   });
@@ -201,7 +200,7 @@ describe("TicketService", () => {
     const q = await service.ask(projectId, t.id, { text: "Which board?" }, "agent:r1");
 
     const status = await service.status(t.key);
-    expect(status.ticket).toMatchObject({ key: t.key, needsYou: true });
+    expect(status.ticket).toMatchObject({ key: t.key, needsAttention: true });
     expect(status.readiness).toEqual({ met: false, missing: ["1 open question(s) answered"] });
     expect(status.questions.map((x) => x.id)).toEqual([q.id]);
     expect(status.recentEvents).toHaveLength(RECENT_EVENTS);
@@ -211,7 +210,7 @@ describe("TicketService", () => {
   it("GivenTicketsInSeveralStages_WhenTheOverviewIsRead_ThenCountsAreByProjectAndStage", async () => {
     await tracker.createProject({ name: "Other", key: "OT" });
     const t = await service.create(projectId, readyStory, "andy");
-    await service.create(projectId, { type: "task", title: "x" }, "andy");
+    await service.create(projectId, { type: "chore", title: "x" }, "andy");
     await service.move(projectId, t.id, "ready", "andy");
     await service.ask(projectId, t.id, { text: "Which board?" }, "agent:r1");
 
@@ -277,7 +276,7 @@ describe("TicketService", () => {
     it("GivenTheTicketChangesWhileItsRunsStop_WhenCancelled_ThenItIsStillCancelled", async () => {
       const t = await service.create(projectId, readyStory, "andy");
       canceller.cancelForTicket.mockImplementation(async () => {
-        await tracker.updateTicket(projectId, t.id, { fields: { needsYou: true } }, "system");
+        await tracker.updateTicket(projectId, t.id, { fields: { needsAttention: true } }, "system");
         return [];
       });
       expect((await service.cancel(projectId, t.id, "andy")).stage).toBe("cancelled");
@@ -291,7 +290,7 @@ describe("TicketService", () => {
       await service.ask(projectId, t.id, { text: "When?" }, "agent:r1");
 
       const result = await service.cancel(projectId, t.id, "andy");
-      expect(result).toMatchObject({ stage: "cancelled", needsYou: false });
+      expect(result).toMatchObject({ stage: "cancelled", needsAttention: false });
       const statuses = (await tracker.listQuestions({ ticketId: t.id })).map((q) => q.status);
       expect(statuses).toEqual(["withdrawn", "answered", "withdrawn"]);
       expect(await tracker.getQuestion(q1.id)).toMatchObject({ status: "withdrawn" });
@@ -306,7 +305,7 @@ describe("TicketService", () => {
       await service.cancel(projectId, t.id, "andy");
 
       const reopened = await service.move(projectId, t.id, "backlog", "andy");
-      expect(reopened.needsYou).toBe(false);
+      expect(reopened.needsAttention).toBe(false);
       expect(await tracker.listQuestions({ ticketId: t.id, status: "open" })).toEqual([]);
       expect(await service.needsYou()).toEqual({ questions: [], tickets: [] });
     });
@@ -315,10 +314,10 @@ describe("TicketService", () => {
       const t = await cancelled();
       // A question that landed between cancel's stage check and its withdraw step.
       const late = await tracker.askQuestion(projectId, t.id, { text: "Late?" }, "agent:r1");
-      await tracker.updateTicket(projectId, t.id, { fields: { needsYou: true } }, "system");
+      await tracker.updateTicket(projectId, t.id, { fields: { needsAttention: true } }, "system");
 
       const reopened = await service.move(projectId, t.id, "backlog", "andy");
-      expect(reopened).toMatchObject({ stage: "backlog", needsYou: false });
+      expect(reopened).toMatchObject({ stage: "backlog", needsAttention: false });
       expect(await tracker.getQuestion(late.id)).toMatchObject({ status: "withdrawn" });
       expect(await service.needsYou()).toEqual({ questions: [], tickets: [] });
     });
@@ -345,7 +344,7 @@ describe("TicketService", () => {
         "invalid_transition",
       );
       expect(await tracker.listQuestions({ ticketId: t.id })).toEqual([]);
-      expect((await tracker.getTicket(projectId, t.id))?.needsYou).toBe(false);
+      expect((await tracker.getTicket(projectId, t.id))?.needsAttention).toBe(false);
     });
 
     it("GivenWithdrawingFailsPartway_WhenTheTicketIsCancelled_ThenItIsCancelledAndOutOfTheInbox", async () => {
@@ -355,7 +354,7 @@ describe("TicketService", () => {
       await expect(service.cancel(projectId, t.id, "andy")).rejects.toThrow("store down");
       expect(await tracker.getTicket(projectId, t.id)).toMatchObject({
         stage: "cancelled",
-        needsYou: false,
+        needsAttention: false,
       });
       expect(await service.needsYou()).toEqual({ questions: [], tickets: [] });
     });
@@ -444,7 +443,7 @@ describe("TicketService", () => {
       const t = await service.create(projectId, readyStory, "andy");
       await service.move(projectId, t.id, "done", "andy", { force: true, reason: "shipped" });
       await service.ask(projectId, t.id, { text: "Still needed?" }, "agent:r1");
-      await service.create(projectId, { type: "task", title: "visible" }, "andy");
+      await service.create(projectId, { type: "chore", title: "visible" }, "andy");
       expect((await service.overview()).projects[0]?.ticketsByStage.done).toBe(1);
       expect((await service.needsYou()).tickets).toHaveLength(1);
 
@@ -476,21 +475,21 @@ describe("TicketService", () => {
   });
 
   it("GivenAnIncompleteStory_WhenMovedForwardToReady_ThenTheDorStillApplies", async () => {
-    const t = await service.create(projectId, { type: "story", title: "x" }, "andy");
+    const t = await service.create(projectId, { type: "feature", title: "x" }, "andy");
     await rejects(service.moveForward(t.key, "ready", "andy"), "dor_not_met");
   });
 
   it("GivenAFlaggedTicket_WhenUnflagged_ThenClearedUnlessAQuestionIsOpen", async () => {
     const t = await service.create(projectId, readyStory, "andy");
     await service.flag(projectId, t.id, "system");
-    expect((await service.unflag(projectId, t.id, "system")).needsYou).toBe(false);
+    expect((await service.unflag(projectId, t.id, "system")).needsAttention).toBe(false);
     await service.ask(projectId, t.id, { text: "Which?" }, "agent:r1");
-    expect((await service.unflag(projectId, t.id, "system")).needsYou).toBe(true);
+    expect((await service.unflag(projectId, t.id, "system")).needsAttention).toBe(true);
   });
 
   it("GivenATicket_WhenFlagged_ThenNeedsYou", async () => {
     const t = await service.create(projectId, readyStory, "andy");
-    expect((await service.flag(projectId, t.id, "system")).needsYou).toBe(true);
+    expect((await service.flag(projectId, t.id, "system")).needsAttention).toBe(true);
     expect((await service.needsYou()).tickets.map((x) => x.id)).toEqual([t.id]);
   });
 });

@@ -1,4 +1,4 @@
-import { useRef, useState, type MouseEvent, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { Link, useParams } from "@tanstack/react-router";
 import {
   DndContext,
@@ -10,6 +10,7 @@ import {
   useSensor,
   useSensors,
   type DragEndEvent,
+  type DragStartEvent,
 } from "@dnd-kit/core";
 import { Stage, type Ticket } from "@andy/contracts";
 import { TicketForm } from "@/components/TicketForm";
@@ -17,7 +18,14 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Loading, QueryError } from "@/components/Status";
 import { useBoardMove, useCreateTicket, useTickets } from "@/lib/queries";
-import { STAGE_LABELS, STAGES, dropMove, groupByStage, visibleTickets } from "@/lib/tickets";
+import {
+  STAGE_LABELS,
+  STAGES,
+  TYPE_LABELS,
+  dropMove,
+  groupByStage,
+  visibleTickets,
+} from "@/lib/tickets";
 
 /**
  * Tickets grouped by stage, one column each. Drag a card to another column to move it: an
@@ -77,8 +85,7 @@ function Columns({ tickets, projectId }: { tickets: Ticket[]; projectId: string 
   const move = useBoardMove(projectId);
   // One error per card, so a quick second drop can't hide the first one's failure.
   const [errors, setErrors] = useState<Record<string, Error>>({});
-  // A mouse drag ends with a click on the card's link; this swallows that one click.
-  const justDragged = useRef(false);
+  const suppressDropClick = useDropClickSuppression();
   const sensors = useSensors(
     useSensor(MouseSensor, { activationConstraint: { distance: 8 } }),
     useSensor(TouchSensor, { activationConstraint: { delay: 250, tolerance: 5 } }),
@@ -86,8 +93,6 @@ function Columns({ tickets, projectId }: { tickets: Ticket[]; projectId: string 
   );
 
   async function onDragEnd({ active, over }: DragEndEvent) {
-    justDragged.current = true;
-    setTimeout(() => (justDragged.current = false), 0);
     const ticket = tickets.find((t) => t.id === active.id);
     const to = Stage.safeParse(over?.id);
     if (!ticket || !to.success) return;
@@ -106,26 +111,52 @@ function Columns({ tickets, projectId }: { tickets: Ticket[]; projectId: string 
   return (
     <DndContext
       sensors={sensors}
+      onDragStart={({ activatorEvent }: DragStartEvent) => {
+        // A keyboard drag ends with Space, which never clicks the link.
+        if (!(activatorEvent instanceof KeyboardEvent)) suppressDropClick();
+      }}
       onDragEnd={(e) => void onDragEnd(e)}
-      onDragCancel={() => (justDragged.current = false)}
     >
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-7">
         {STAGES.map((stage) => (
           <Column key={stage} stage={stage} count={groups[stage].length}>
             {groups[stage].map((t) => (
-              <Card
-                key={t.id}
-                ticket={t}
-                projectId={projectId}
-                onClick={(e) => justDragged.current && e.preventDefault()}
-                error={errors[t.id] ?? null}
-              />
+              <Card key={t.id} ticket={t} projectId={projectId} error={errors[t.id] ?? null} />
             ))}
           </Column>
         ))}
       </div>
     </DndContext>
   );
+}
+
+/**
+ * A mouse or touch drag ends with a click on the card's link (AI-25). dnd-kit stops that click's
+ * propagation at the document, so a React onClick never sees it and the browser follows the
+ * href. A capture listener on window runs before dnd-kit's and cancels the click's default;
+ * TanStack's Link skips navigation for a default-prevented click too. The flag lasts until that
+ * click or the next pointer press, not a timer. Returns the function that arms it.
+ */
+function useDropClickSuppression() {
+  const armed = useRef(false);
+  useEffect(() => {
+    function onClick(e: globalThis.MouseEvent) {
+      if (!armed.current) return;
+      armed.current = false;
+      // detail 0 is Enter on the link (a touch drop leaves no click behind): let it open.
+      if (e.detail > 0) e.preventDefault();
+    }
+    function disarm() {
+      armed.current = false;
+    }
+    window.addEventListener("click", onClick, true);
+    window.addEventListener("pointerdown", disarm, true);
+    return () => {
+      window.removeEventListener("click", onClick, true);
+      window.removeEventListener("pointerdown", disarm, true);
+    };
+  }, []);
+  return () => (armed.current = true);
 }
 
 function Column({ stage, count, children }: { stage: Stage; count: number; children: ReactNode }) {
@@ -148,12 +179,10 @@ function Column({ stage, count, children }: { stage: Stage; count: number; child
 function Card({
   ticket: t,
   projectId,
-  onClick,
   error,
 }: {
   ticket: Ticket;
   projectId: string;
-  onClick: (e: MouseEvent) => void;
   error: Error | null;
 }) {
   const { setNodeRef, attributes, listeners, transform, isDragging } = useDraggable({
@@ -172,7 +201,6 @@ function Card({
         role="link"
         to="/p/$projectId/t/$ticketRef"
         params={{ projectId, ticketRef: t.key }}
-        onClick={onClick}
         style={style}
         data-ticket={t.key}
         className={`block space-y-1 rounded-md border border-border bg-background p-2 text-sm hover:border-foreground/30 ${
@@ -183,10 +211,10 @@ function Card({
           <span className="text-muted-foreground">{t.key}</span> {t.title}
         </span>
         <span className="flex flex-wrap gap-1">
-          <Badge>{t.type}</Badge>
+          {t.type && <Badge>{TYPE_LABELS[t.type]}</Badge>}
           {t.size && <Badge>{t.size}</Badge>}
           {t.dorStatus === "met" && <Badge variant="ok">DoR</Badge>}
-          {t.needsYou && <Badge variant="attention">needs you</Badge>}
+          {t.needsAttention && <Badge variant="attention">needs you</Badge>}
           {t.archived && <Badge>archived</Badge>}
         </span>
       </Link>

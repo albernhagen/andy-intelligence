@@ -80,7 +80,7 @@ export interface MoveOptions {
 
 /**
  * Ticket rules on top of a WorkTracker: stage machine, Definition of Ready, Needs-you flag.
- * Derived fields (dorStatus, needsYou) are written as a follow-up update by "system"; that
+ * Derived fields (dorStatus, needsAttention) are written as a follow-up update by "system"; that
  * second write isn't atomic with the first, which is acceptable for a single user and is
  * corrected by the next change to the ticket.
  */
@@ -167,7 +167,7 @@ export class TicketService {
       {
         fields: {
           ...(unarchive ? { archived: false } : {}),
-          ...(reopen ? { needsYou: false } : {}),
+          ...(reopen ? { needsAttention: false } : {}),
         },
         stage: { to, forced: force, reason: reason?.trim() || null },
         ifUpdatedAt: ticket.updatedAt,
@@ -194,14 +194,14 @@ export class TicketService {
     }
     const cancelled = (await this.runs?.cancelForTicket(projectId, ticketId)) ?? [];
     // Stage first, questions after: if withdrawing fails partway, the ticket is still cancelled
-    // and `needsYou()` already skips cancelled tickets. No `ifUpdatedAt`: cancel is valid from
+    // and `needsAttention()` already skips cancelled tickets. No `ifUpdatedAt`: cancel is valid from
     // any stage, so a write since the read (e.g. a run's report) mustn't fail it after the runs
     // are already stopped.
     const updated = await this.tracker.updateTicket(
       projectId,
       ticketId,
       {
-        fields: { needsYou: false },
+        fields: { needsAttention: false },
         stage: { to: "cancelled", forced: false, reason: reason?.trim() || null },
       },
       actor,
@@ -261,14 +261,19 @@ export class TicketService {
     return this.tracker.updateTicket(
       projectId,
       ticketId,
-      { fields: { needsYou: open > 0 } },
+      { fields: { needsAttention: open > 0 } },
       actor,
     );
   }
 
   /** Puts the ticket in the Needs-you inbox. */
   flag(projectId: string, ticketId: string, actor: EventActor): Promise<Ticket> {
-    return this.tracker.updateTicket(projectId, ticketId, { fields: { needsYou: true } }, actor);
+    return this.tracker.updateTicket(
+      projectId,
+      ticketId,
+      { fields: { needsAttention: true } },
+      actor,
+    );
   }
 
   comment(projectId: string, ticketId: string, body: string, actor: EventActor) {
@@ -294,7 +299,7 @@ export class TicketService {
     await this.tracker.updateTicket(
       projectId,
       ticketId,
-      { fields: { needsYou: true, dorStatus: "not_met" } },
+      { fields: { needsAttention: true, dorStatus: "not_met" } },
       "system",
     );
     return question;
@@ -319,7 +324,7 @@ export class TicketService {
     await this.tracker.updateTicket(
       ticket.projectId,
       ticket.id,
-      { fields: { needsYou: open > 0, dorStatus: met ? "met" : "not_met" } },
+      { fields: { needsAttention: open > 0, dorStatus: met ? "met" : "not_met" } },
       "system",
     );
     if (met && ticket.stage === "backlog") await this.promote(ticket);
@@ -355,7 +360,9 @@ export class TicketService {
     const [questions, flagged, archived, cancelled] = await Promise.all([
       this.tracker.listQuestions({ status: "open" }),
       Promise.all(
-        projects.map((p) => this.tracker.listTickets(p.id, { needsYou: true, archived: false })),
+        projects.map((p) =>
+          this.tracker.listTickets(p.id, { needsAttention: true, archived: false }),
+        ),
       ),
       Promise.all(projects.map((p) => this.tracker.listTickets(p.id, { archived: true }))),
       Promise.all(projects.map((p) => this.tracker.listTickets(p.id, { stage: "cancelled" }))),

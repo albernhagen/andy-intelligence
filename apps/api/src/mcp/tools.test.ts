@@ -27,13 +27,12 @@ const verifier: TokenVerifier = {
 };
 
 const readyStory: NewTicket = {
-  type: "story",
+  type: "feature",
   title: "Board",
   body: "Andy can't see tickets.",
   acceptanceCriteria: ["WHEN Andy opens the board THE SYSTEM SHALL list tickets"],
   size: "S",
   sizeReason: "one screen",
-  tier: "strong",
 };
 
 /**
@@ -96,7 +95,7 @@ afterEach(() => vi.restoreAllMocks());
 describe("create_ticket", () => {
   it("GivenAnIncompleteStory_WhenCreated_ThenItIsInBacklogWithDorGapsAndVisibleOverRest", async () => {
     const ctx = await withProject();
-    const res = await ctx.call("create_ticket", { project: "ai", type: "story", title: "Board" });
+    const res = await ctx.call("create_ticket", { project: "ai", type: "feature", title: "Board" });
     expect(res.isError).toBe(false);
     expect(res.data.ticket).toMatchObject({ key: "AI-1", stage: "backlog", dorStatus: "not_met" });
     expect(res.data.readiness.missing).toEqual(
@@ -109,29 +108,45 @@ describe("create_ticket", () => {
     expect(events[0]).toMatchObject({ kind: "created", actor: "andy" });
   });
 
+  it("GivenOnlyATitle_WhenCreated_ThenTheTicketHasNoTypeAndReadinessAsksForOne", async () => {
+    const ctx = await withProject();
+    const res = await ctx.call("create_ticket", { project: "AI", title: "Board" });
+    expect(res.isError).toBe(false);
+    expect(res.data.ticket).toMatchObject({ key: "AI-1", type: null, needsAttention: false });
+    expect(res.data.readiness.missing).toEqual(expect.arrayContaining(["type"]));
+  });
+
+  it("GivenScopeLists_WhenCreated_ThenTheyAreStored", async () => {
+    const ctx = await withProject();
+    const scope = { outOfScope: ["the UI"], touches: ["apps/api/**"] };
+    await ctx.call("create_ticket", { project: "AI", type: "chore", title: "x", ...scope });
+    expect((await ctx.tracker.listTickets("ai"))[0]).toMatchObject(scope);
+  });
+
   it("GivenDerivedFieldsInTheInput_WhenCreated_ThenTheDomainComputesThemInstead", async () => {
     const ctx = await withProject();
     const res = await ctx.call("create_ticket", {
       project: "AI",
       ...readyStory,
-      needsYou: true,
+      needsAttention: true,
       dorStatus: "not_met",
     });
-    expect(res.data.ticket).toMatchObject({ needsYou: false, dorStatus: "met" });
+    expect(res.data.ticket).toMatchObject({ needsAttention: false, dorStatus: "met" });
   });
 
   it("GivenAnUnknownProject_WhenCreating_ThenAToolErrorNamesIt", async () => {
     const ctx = await withProject();
-    const res = await ctx.call("create_ticket", { project: "ZZ", type: "task", title: "x" });
+    const res = await ctx.call("create_ticket", { project: "ZZ", type: "chore", title: "x" });
     expect(res).toMatchObject({ isError: true, text: "project not found: zz" });
   });
 
   it("GivenInvalidInput_WhenCreating_ThenAToolErrorAndNothingIsStored", async () => {
     const ctx = await withProject();
     for (const args of [
-      { project: "AI", type: "story" },
-      { project: "AI", type: "chore", title: "x" },
-      { project: "../x", type: "task", title: "x" },
+      { project: "AI", type: "feature" },
+      { project: "AI", type: "story", title: "x" },
+      { project: "AI", type: "task", title: "x" },
+      { project: "../x", type: "chore", title: "x" },
     ]) {
       expect((await ctx.call("create_ticket", args)).isError).toBe(true);
     }
@@ -165,7 +180,9 @@ describe("list_needs_me", () => {
         urgency: "high",
       }),
     ]);
-    expect(res.data.tickets).toEqual([expect.objectContaining({ key: "AI-1", needsYou: true })]);
+    expect(res.data.tickets).toEqual([
+      expect.objectContaining({ key: "AI-1", needsAttention: true }),
+    ]);
   });
 });
 
@@ -182,7 +199,7 @@ describe("answer_question", () => {
       answer: "Kanban",
       answeredVia: "mcp",
     });
-    expect(res.data.ticket).toMatchObject({ key: "AI-1", needsYou: false, dorStatus: "met" });
+    expect(res.data.ticket).toMatchObject({ key: "AI-1", needsAttention: false, dorStatus: "met" });
     expect((await ctx.call("list_needs_me")).data).toEqual({ questions: [], tickets: [] });
   });
 
@@ -209,7 +226,7 @@ describe("answer_question", () => {
 describe("status", () => {
   it("GivenNoTicket_WhenCalled_ThenAnOverviewOfProjectsStagesAndTheInbox", async () => {
     const ctx = await withProject();
-    await ctx.service.create("ai", { type: "task", title: "x" }, "andy");
+    await ctx.service.create("ai", { type: "chore", title: "x" }, "andy");
     const res = await ctx.call("status");
     expect(res.data).toEqual({
       signedInAs: "andy@example.com",
@@ -237,7 +254,7 @@ describe("status", () => {
     const t = await ctx.service.create("ai", readyStory, "andy");
     await ctx.service.ask("ai", t.id, { text: "Which board?" }, "agent:r1");
     const res = await ctx.call("status", { ticket: "AI-1" });
-    expect(res.data.ticket).toMatchObject({ key: "AI-1", stage: "backlog", needsYou: true });
+    expect(res.data.ticket).toMatchObject({ key: "AI-1", stage: "backlog", needsAttention: true });
     expect(res.data.readiness).toEqual({ met: false, missing: ["1 open question(s) answered"] });
     expect(res.data.questions).toHaveLength(1);
     expect(res.data.recentEvents.map((e: { kind: string }) => e.kind)).toEqual([
@@ -270,7 +287,7 @@ describe("status", () => {
 describe("refine tool", () => {
   it("GivenGitHubIsNotConnected_WhenRefineIsCalled_ThenAToolErrorSaysSo", async () => {
     const ctx = await withProject();
-    await ctx.call("create_ticket", { project: "AI", type: "story", title: "Board" });
+    await ctx.call("create_ticket", { project: "AI", type: "feature", title: "Board" });
     const result = await ctx.call("refine", { ticket: "AI-1" });
     expect(result).toMatchObject({
       isError: true,
@@ -308,7 +325,7 @@ describe("set_auto_refine tool", () => {
 describe("cancel_ticket and archive_ticket", () => {
   it("GivenATicket_WhenCancelledAndArchivedOverMcp_ThenStatusCountsLeaveItOut", async () => {
     const ctx = await withProject();
-    await ctx.call("create_ticket", { project: "AI", type: "task", title: "x" });
+    await ctx.call("create_ticket", { project: "AI", type: "chore", title: "x" });
     const cancelled = await ctx.call("cancel_ticket", { ticket: "AI-1", reason: "not needed" });
     expect(cancelled.data.ticket).toMatchObject({ stage: "cancelled", archived: false });
     const status = await ctx.call("status", { ticket: "AI-1" });
@@ -322,7 +339,7 @@ describe("cancel_ticket and archive_ticket", () => {
 
   it("GivenACancelledTicket_WhenMoveTicketReopensIt_ThenAToolErrorAndItStaysCancelled", async () => {
     const ctx = await withProject();
-    await ctx.call("create_ticket", { project: "AI", type: "task", title: "x" });
+    await ctx.call("create_ticket", { project: "AI", type: "chore", title: "x" });
     await ctx.call("cancel_ticket", { ticket: "AI-1" });
     const res = await ctx.call("move_ticket", { ticket: "AI-1", to: "backlog" });
     expect(res).toMatchObject({ isError: true, text: expect.stringMatching(/one step forward/) });
@@ -332,7 +349,7 @@ describe("cancel_ticket and archive_ticket", () => {
 
   it("GivenATicketNotDoneOrCancelled_WhenArchivedOverMcp_ThenAToolError", async () => {
     const ctx = await withProject();
-    await ctx.call("create_ticket", { project: "AI", type: "task", title: "x" });
+    await ctx.call("create_ticket", { project: "AI", type: "chore", title: "x" });
     const res = await ctx.call("archive_ticket", { ticket: "AI-1" });
     expect(res.isError).toBe(true);
     expect(res.text).toContain("only Done or Cancelled");
@@ -373,7 +390,7 @@ describe("move_ticket", () => {
 
   it("GivenAnIncompleteStory_WhenMovedToReady_ThenAToolErrorNamesTheDorGaps", async () => {
     const ctx = await withProject();
-    await ctx.service.create("ai", { type: "story", title: "x" }, "andy");
+    await ctx.service.create("ai", { type: "feature", title: "x" }, "andy");
     const res = await ctx.call("move_ticket", { ticket: "AI-1", to: "ready" });
     expect(res).toMatchObject({
       isError: true,
@@ -408,7 +425,7 @@ describe("M1 flow from Claude desktop", () => {
     });
     expect(answered.data.ticket).toMatchObject({
       stage: "ready",
-      needsYou: false,
+      needsAttention: false,
       dorStatus: "met",
     });
     expect((await ctx.call("status", { ticket: "AI-1" })).data.readiness).toEqual({

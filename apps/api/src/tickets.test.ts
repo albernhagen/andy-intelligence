@@ -21,7 +21,6 @@ const readyFields = {
   acceptanceCriteria: ["WHEN Andy opens the board THE SYSTEM SHALL list tickets"],
   size: "S",
   sizeReason: "one screen",
-  tier: "strong",
 };
 
 describe("ticket API", () => {
@@ -50,7 +49,7 @@ describe("ticket API", () => {
   async function projectWithTicket(fields: Record<string, unknown> = {}) {
     await call("POST", "/api/projects", { name: "AI", key: "AI" });
     const { json } = await call("POST", "/api/projects/ai/tickets", {
-      type: "story",
+      type: "feature",
       title: "Board",
       ...fields,
     });
@@ -106,19 +105,53 @@ describe("ticket API", () => {
     );
   });
 
+  it("GivenOnlyATitle_WhenCreatingATicket_ThenItIsCreatedWithNoType", async () => {
+    await call("POST", "/api/projects", { name: "AI", key: "AI" });
+    const res = await call("POST", "/api/projects/ai/tickets", { title: "Board" });
+    expect(res).toMatchObject({ status: 201, json: { type: null, outOfScope: [], touches: [] } });
+  });
+
+  it("GivenAnOldTypeName_WhenCreatingATicket_Then400", async () => {
+    await call("POST", "/api/projects", { name: "AI", key: "AI" });
+    for (const type of ["story", "task"]) {
+      expect((await call("POST", "/api/projects/ai/tickets", { type, title: "x" })).status).toBe(
+        400,
+      );
+    }
+  });
+
+  it("GivenATicketWithNoType_WhenPatchedWithTypeAndScope_ThenTheyAreSaved", async () => {
+    const t = await projectWithTicket({ type: undefined });
+    const fields = { type: "bug", outOfScope: ["billing"], touches: ["apps/web/**"] };
+    const res = await call("PATCH", `/api/projects/ai/tickets/${t.id}`, fields);
+    expect(res).toMatchObject({ status: 200, json: fields });
+    expect(
+      (await call("PATCH", `/api/projects/ai/tickets/${t.id}`, { touches: Array(21).fill("a") }))
+        .status,
+    ).toBe(400);
+  });
+
+  it("GivenFlaggedTickets_WhenListedByNeedsAttention_ThenOnlyFlaggedOnesAreReturned", async () => {
+    const t = await projectWithTicket();
+    await call("POST", "/api/projects/ai/tickets", { title: "Other" });
+    await call("POST", `/api/projects/ai/tickets/${t.id}/questions`, { text: "Which board?" });
+    const res = await call("GET", "/api/projects/ai/tickets?needsAttention=true");
+    expect(res.json.map((x) => (x as Ticket).key)).toEqual([t.key]);
+  });
+
   it("GivenAClientSetDorStatus_WhenCreating_ThenIgnoredAndComputed", async () => {
-    const ticket = await projectWithTicket({ dorStatus: "met", needsYou: true });
+    const ticket = await projectWithTicket({ dorStatus: "met", needsAttention: true });
     expect(ticket).toMatchObject({
       key: "AI-1",
       stage: "backlog",
       dorStatus: "not_met",
-      needsYou: false,
+      needsAttention: false,
     });
   });
 
   it("GivenAnUnknownProject_WhenCreatingOrListingTickets_Then404", async () => {
     expect(
-      (await call("POST", "/api/projects/zz/tickets", { type: "task", title: "x" })).status,
+      (await call("POST", "/api/projects/zz/tickets", { type: "chore", title: "x" })).status,
     ).toBe(404);
     expect((await call("GET", "/api/projects/zz/tickets")).status).toBe(404);
   });
@@ -129,7 +162,8 @@ describe("ticket API", () => {
 
     const blocked = await call("POST", `${base}/stage`, { to: "ready" });
     expect(blocked.status).toBe(422);
-    expect(blocked.json.details).toEqual(expect.arrayContaining(["tier"]));
+    expect(blocked.json.details).toEqual(expect.arrayContaining(["size"]));
+    expect(blocked.json.details).not.toContain("tier");
 
     const patched = await call("PATCH", base, readyFields);
     expect(patched.json).toMatchObject({ dorStatus: "met" });
@@ -209,7 +243,10 @@ describe("ticket API", () => {
       409,
     );
     expect((await call("GET", "/api/needs-you")).json).toEqual({ questions: [], tickets: [] });
-    expect((await call("GET", base)).json).toMatchObject({ needsYou: false, dorStatus: "met" });
+    expect((await call("GET", base)).json).toMatchObject({
+      needsAttention: false,
+      dorStatus: "met",
+    });
   });
 
   it("GivenACommentAndUnknownIds_WhenCalled_ThenCreatedOr404", async () => {
@@ -253,7 +290,7 @@ describe("ticket API", () => {
   it("GivenAnOversizedBody_WhenPosted_Then413", async () => {
     await call("POST", "/api/projects", { name: "AI", key: "AI" });
     const res = await call("POST", "/api/projects/ai/tickets", {
-      type: "task",
+      type: "chore",
       title: "big",
       body: "x".repeat(MAX_BODY_BYTES + 1),
     });

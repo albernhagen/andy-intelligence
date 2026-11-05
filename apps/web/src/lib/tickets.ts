@@ -1,4 +1,10 @@
-import { Stage, type Question, type Ticket, type TicketEvent } from "@andy/contracts";
+import {
+  Stage,
+  type Question,
+  type Ticket,
+  type TicketEvent,
+  type TicketType,
+} from "@andy/contracts";
 import { ARCHIVABLE_STAGES, TRANSITIONS } from "@andy/domain";
 
 /** Board columns, in workflow order (ARCHITECTURE §4.1). */
@@ -13,6 +19,19 @@ export const STAGE_LABELS: Record<Stage, string> = {
   done: "Done",
   cancelled: "Cancelled",
 };
+
+/** Ticket types (ADR-0058: Ticket model). */
+export const TYPE_LABELS: Record<TicketType, string> = {
+  feature: "Feature",
+  chore: "Chore",
+  bug: "Bug",
+  epic: "Epic",
+};
+
+/** A ticket's type for display; empty until Andy or refine sets one. */
+export function typeLabel(type: TicketType | null): string {
+  return type === null ? "No type" : TYPE_LABELS[type];
+}
 
 /** The board hides archived tickets unless Andy asks for them (AI-15: Cancel and archive tickets). */
 export function visibleTickets(tickets: readonly Ticket[], showArchived: boolean): Ticket[] {

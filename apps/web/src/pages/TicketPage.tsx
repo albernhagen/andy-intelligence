@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { Link, useNavigate, useParams } from "@tanstack/react-router";
 import { useQueryClient } from "@tanstack/react-query";
 import type { Ticket } from "@andy/contracts";
+import { tierFor } from "@andy/domain";
 import { AskQuestionForm } from "@/components/AskQuestionForm";
 import { History } from "@/components/History";
 import { CancelArchiveControls } from "@/components/CancelArchiveControls";
@@ -21,7 +22,7 @@ import {
   useTicketQuestions,
   useUpdateTicket,
 } from "@/lib/queries";
-import { STAGE_LABELS } from "@/lib/tickets";
+import { STAGE_LABELS, typeLabel } from "@/lib/tickets";
 
 /**
  * Ticket detail: fields (view/edit), Definition of Ready, moves, agent runs, questions and
@@ -68,8 +69,8 @@ export function TicketPage() {
           {t.key}: {t.title}
         </h2>
         <Badge>{STAGE_LABELS[t.stage]}</Badge>
-        <Badge>{t.type}</Badge>
-        {t.needsYou && <Badge variant="attention">needs you</Badge>}
+        <Badge>{typeLabel(t.type)}</Badge>
+        {t.needsAttention && <Badge variant="attention">needs you</Badge>}
         {t.archived && <Badge>archived</Badge>}
         {!editing && (
           <Button size="sm" variant="outline" className="ml-auto" onClick={() => setEditing(true)}>
@@ -114,7 +115,7 @@ function EditTicket({ ticket, onDone }: { ticket: Ticket; onDone: () => void }) 
         )
       }
       onCancel={onDone}
-      onSubmit={({ type: _type, ...fields }) =>
+      onSubmit={(fields) =>
         update.mutate({ ...fields, ifUpdatedAt: ticket.updatedAt }, { onSuccess: onDone })
       }
     />
@@ -139,8 +140,19 @@ function TicketFields({ ticket }: { ticket: Ticket }) {
         {ticket.size ?? "—"}
         {ticket.sizeReason && ` (${ticket.sizeReason})`}
       </dd>
+      <dt className="text-muted-foreground">Out of scope</dt>
+      <dd>
+        <List items={ticket.outOfScope} />
+      </dd>
+      <dt className="text-muted-foreground">Touches</dt>
+      <dd>
+        <List items={ticket.touches} />
+      </dd>
       <dt className="text-muted-foreground">Tier</dt>
-      <dd>{ticket.tier ?? "—"}</dd>
+      <dd>
+        {tierFor(ticket) ?? "—"}
+        {ticket.overrides.tier ? " (pinned)" : ticket.size ? " (from size)" : ""}
+      </dd>
     </dl>
   );
 }

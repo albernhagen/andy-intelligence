@@ -53,3 +53,23 @@ API reference: `$URL/openapi.json`.
 ## Restore from a backup
 
 Firestore console → **Disaster recovery** → **Backups** → pick a backup → **Restore** into a **new** database ID, check it, then point `GCP_PROJECT_ID`'s database at it or copy documents back. A restore never overwrites `(default)`.
+
+## Before a risky deploy: manual export
+
+ARCHITECTURE §10.4: run this before deploying a schema change (a `SCHEMA_VERSION` bump, e.g. AI-24: Ticket model v2). Backups only run on their daily schedule, so export instead. It needs a Cloud Storage bucket in the project (cents at this size); create it once, in the database's region:
+
+```bash
+gcloud storage buckets create "gs://$GCP_PROJECT_ID-firestore-exports" --location=<database region> --project="$GCP_PROJECT_ID"
+```
+
+```bash
+gcloud firestore export "gs://$GCP_PROJECT_ID-firestore-exports/$(date +%F)-pre-deploy" --project="$GCP_PROJECT_ID"
+```
+
+Undo: `gcloud firestore import gs://…/<that folder>`; it overwrites documents with the same ID and leaves newer ones.
+
+**When the refine result schema changes too** (`platform/procedures/refine.schema.json`, e.g. AI-24): the executor reads the schema from `main` at dispatch, while the API changes only when its deploy finishes, so a refine run that spans the switch reports in the wrong shape and fails (the ticket is flagged; nothing is lost). Avoid it:
+
+1. Before merging: MCP `set_auto_refine` off for each project, and wait until no refine run is `queued` or `running` (ticket → Runs, or `status`).
+2. Merge, and wait for the deploy to finish.
+3. Turn auto-refine back on. Re-run `refine` on any ticket a failed run flagged.

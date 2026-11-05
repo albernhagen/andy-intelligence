@@ -436,7 +436,7 @@ export interface paths {
             | "monitoring"
             | "done"
             | "cancelled";
-          needsYou?: "true" | "false";
+          needsAttention?: "true" | "false";
           archived?: "true" | "false";
         };
         header?: never;
@@ -457,8 +457,8 @@ export interface paths {
               id: string;
               projectId: string;
               key: string;
-              /** @enum {string} */
-              type: "epic" | "story" | "task" | "bug";
+              /** @enum {string|null} */
+              type: "epic" | "feature" | "chore" | "bug" | null;
               parentId: string | null;
               title: string;
               body: string;
@@ -477,8 +477,6 @@ export interface paths {
               /** @enum {string|null} */
               size: "S" | "M" | "L" | null;
               sizeReason: string | null;
-              /** @enum {string|null} */
-              tier: "frontier" | "strong" | "fast" | "cheap" | null;
               overrides: {
                 assignee?: "me" | ("claude-code" | "jules" | "opencode" | "direct");
                 /** @enum {string} */
@@ -495,12 +493,16 @@ export interface paths {
                 /** @enum {string} */
                 targetEnv?: "dev" | "prod";
               };
-              needsYou: boolean;
+              needsAttention: boolean;
               /** @enum {string} */
               dorStatus: "not_met" | "met";
               blockedBy: string[];
               /** @default false */
               archived: boolean;
+              /** @default [] */
+              outOfScope: string[];
+              /** @default [] */
+              touches: string[];
               /** Format: date-time */
               createdAt: string;
               /** Format: date-time */
@@ -571,9 +573,12 @@ export interface paths {
       requestBody: {
         content: {
           "application/json": {
-            /** @enum {string} */
-            type: "epic" | "story" | "task" | "bug";
             title: string;
+            /**
+             * @default null
+             * @enum {string|null}
+             */
+            type?: "epic" | "feature" | "chore" | "bug" | null;
             /** @default  */
             body?: string;
             /** @default null */
@@ -589,11 +594,27 @@ export interface paths {
             size?: "S" | "M" | "L" | null;
             /** @default null */
             sizeReason?: string | null;
-            /**
-             * @default null
-             * @enum {string|null}
-             */
-            tier?: "frontier" | "strong" | "fast" | "cheap" | null;
+            /** @default [] */
+            outOfScope?: string[];
+            /** @default [] */
+            touches?: string[];
+            /** @default {} */
+            overrides?: {
+              assignee?: "me" | ("claude-code" | "jules" | "opencode" | "direct");
+              /** @enum {string} */
+              tier?: "frontier" | "strong" | "fast" | "cheap";
+              modelPin?: {
+                /** @enum {string} */
+                harness: "claude-code" | "jules" | "opencode" | "direct";
+                /** @enum {string} */
+                provider: "claude-sub" | "google-sub" | "openrouter";
+                model: string;
+              };
+              /** @enum {string} */
+              autonomy?: "autonomous" | "gated" | "manual";
+              /** @enum {string} */
+              targetEnv?: "dev" | "prod";
+            };
             /** @default [] */
             blockedBy?: string[];
           };
@@ -610,8 +631,8 @@ export interface paths {
               id: string;
               projectId: string;
               key: string;
-              /** @enum {string} */
-              type: "epic" | "story" | "task" | "bug";
+              /** @enum {string|null} */
+              type: "epic" | "feature" | "chore" | "bug" | null;
               parentId: string | null;
               title: string;
               body: string;
@@ -630,8 +651,6 @@ export interface paths {
               /** @enum {string|null} */
               size: "S" | "M" | "L" | null;
               sizeReason: string | null;
-              /** @enum {string|null} */
-              tier: "frontier" | "strong" | "fast" | "cheap" | null;
               overrides: {
                 assignee?: "me" | ("claude-code" | "jules" | "opencode" | "direct");
                 /** @enum {string} */
@@ -648,12 +667,16 @@ export interface paths {
                 /** @enum {string} */
                 targetEnv?: "dev" | "prod";
               };
-              needsYou: boolean;
+              needsAttention: boolean;
               /** @enum {string} */
               dorStatus: "not_met" | "met";
               blockedBy: string[];
               /** @default false */
               archived: boolean;
+              /** @default [] */
+              outOfScope: string[];
+              /** @default [] */
+              touches: string[];
               /** Format: date-time */
               createdAt: string;
               /** Format: date-time */
@@ -746,8 +769,8 @@ export interface paths {
               id: string;
               projectId: string;
               key: string;
-              /** @enum {string} */
-              type: "epic" | "story" | "task" | "bug";
+              /** @enum {string|null} */
+              type: "epic" | "feature" | "chore" | "bug" | null;
               parentId: string | null;
               title: string;
               body: string;
@@ -766,8 +789,6 @@ export interface paths {
               /** @enum {string|null} */
               size: "S" | "M" | "L" | null;
               sizeReason: string | null;
-              /** @enum {string|null} */
-              tier: "frontier" | "strong" | "fast" | "cheap" | null;
               overrides: {
                 assignee?: "me" | ("claude-code" | "jules" | "opencode" | "direct");
                 /** @enum {string} */
@@ -784,12 +805,16 @@ export interface paths {
                 /** @enum {string} */
                 targetEnv?: "dev" | "prod";
               };
-              needsYou: boolean;
+              needsAttention: boolean;
               /** @enum {string} */
               dorStatus: "not_met" | "met";
               blockedBy: string[];
               /** @default false */
               archived: boolean;
+              /** @default [] */
+              outOfScope: string[];
+              /** @default [] */
+              touches: string[];
               /** Format: date-time */
               createdAt: string;
               /** Format: date-time */
@@ -865,6 +890,8 @@ export interface paths {
       requestBody: {
         content: {
           "application/json": {
+            /** @enum {string|null} */
+            type?: "epic" | "feature" | "chore" | "bug" | null;
             title?: string;
             body?: string;
             parentId?: string | null;
@@ -873,8 +900,8 @@ export interface paths {
             /** @enum {string|null} */
             size?: "S" | "M" | "L" | null;
             sizeReason?: string | null;
-            /** @enum {string|null} */
-            tier?: "frontier" | "strong" | "fast" | "cheap" | null;
+            outOfScope?: string[];
+            touches?: string[];
             overrides?: {
               assignee?: "me" | ("claude-code" | "jules" | "opencode" | "direct");
               /** @enum {string} */
@@ -891,7 +918,7 @@ export interface paths {
               /** @enum {string} */
               targetEnv?: "dev" | "prod";
             };
-            needsYou?: boolean;
+            needsAttention?: boolean;
             blockedBy?: string[];
             rank?: string;
             /** Format: date-time */
@@ -910,8 +937,8 @@ export interface paths {
               id: string;
               projectId: string;
               key: string;
-              /** @enum {string} */
-              type: "epic" | "story" | "task" | "bug";
+              /** @enum {string|null} */
+              type: "epic" | "feature" | "chore" | "bug" | null;
               parentId: string | null;
               title: string;
               body: string;
@@ -930,8 +957,6 @@ export interface paths {
               /** @enum {string|null} */
               size: "S" | "M" | "L" | null;
               sizeReason: string | null;
-              /** @enum {string|null} */
-              tier: "frontier" | "strong" | "fast" | "cheap" | null;
               overrides: {
                 assignee?: "me" | ("claude-code" | "jules" | "opencode" | "direct");
                 /** @enum {string} */
@@ -948,12 +973,16 @@ export interface paths {
                 /** @enum {string} */
                 targetEnv?: "dev" | "prod";
               };
-              needsYou: boolean;
+              needsAttention: boolean;
               /** @enum {string} */
               dorStatus: "not_met" | "met";
               blockedBy: string[];
               /** @default false */
               archived: boolean;
+              /** @default [] */
+              outOfScope: string[];
+              /** @default [] */
+              touches: string[];
               /** Format: date-time */
               createdAt: string;
               /** Format: date-time */
@@ -1041,8 +1070,8 @@ export interface paths {
               id: string;
               projectId: string;
               key: string;
-              /** @enum {string} */
-              type: "epic" | "story" | "task" | "bug";
+              /** @enum {string|null} */
+              type: "epic" | "feature" | "chore" | "bug" | null;
               parentId: string | null;
               title: string;
               body: string;
@@ -1061,8 +1090,6 @@ export interface paths {
               /** @enum {string|null} */
               size: "S" | "M" | "L" | null;
               sizeReason: string | null;
-              /** @enum {string|null} */
-              tier: "frontier" | "strong" | "fast" | "cheap" | null;
               overrides: {
                 assignee?: "me" | ("claude-code" | "jules" | "opencode" | "direct");
                 /** @enum {string} */
@@ -1079,12 +1106,16 @@ export interface paths {
                 /** @enum {string} */
                 targetEnv?: "dev" | "prod";
               };
-              needsYou: boolean;
+              needsAttention: boolean;
               /** @enum {string} */
               dorStatus: "not_met" | "met";
               blockedBy: string[];
               /** @default false */
               archived: boolean;
+              /** @default [] */
+              outOfScope: string[];
+              /** @default [] */
+              touches: string[];
               /** Format: date-time */
               createdAt: string;
               /** Format: date-time */
@@ -1288,8 +1319,8 @@ export interface paths {
               id: string;
               projectId: string;
               key: string;
-              /** @enum {string} */
-              type: "epic" | "story" | "task" | "bug";
+              /** @enum {string|null} */
+              type: "epic" | "feature" | "chore" | "bug" | null;
               parentId: string | null;
               title: string;
               body: string;
@@ -1308,8 +1339,6 @@ export interface paths {
               /** @enum {string|null} */
               size: "S" | "M" | "L" | null;
               sizeReason: string | null;
-              /** @enum {string|null} */
-              tier: "frontier" | "strong" | "fast" | "cheap" | null;
               overrides: {
                 assignee?: "me" | ("claude-code" | "jules" | "opencode" | "direct");
                 /** @enum {string} */
@@ -1326,12 +1355,16 @@ export interface paths {
                 /** @enum {string} */
                 targetEnv?: "dev" | "prod";
               };
-              needsYou: boolean;
+              needsAttention: boolean;
               /** @enum {string} */
               dorStatus: "not_met" | "met";
               blockedBy: string[];
               /** @default false */
               archived: boolean;
+              /** @default [] */
+              outOfScope: string[];
+              /** @default [] */
+              touches: string[];
               /** Format: date-time */
               createdAt: string;
               /** Format: date-time */
@@ -1433,8 +1466,8 @@ export interface paths {
               id: string;
               projectId: string;
               key: string;
-              /** @enum {string} */
-              type: "epic" | "story" | "task" | "bug";
+              /** @enum {string|null} */
+              type: "epic" | "feature" | "chore" | "bug" | null;
               parentId: string | null;
               title: string;
               body: string;
@@ -1453,8 +1486,6 @@ export interface paths {
               /** @enum {string|null} */
               size: "S" | "M" | "L" | null;
               sizeReason: string | null;
-              /** @enum {string|null} */
-              tier: "frontier" | "strong" | "fast" | "cheap" | null;
               overrides: {
                 assignee?: "me" | ("claude-code" | "jules" | "opencode" | "direct");
                 /** @enum {string} */
@@ -1471,12 +1502,16 @@ export interface paths {
                 /** @enum {string} */
                 targetEnv?: "dev" | "prod";
               };
-              needsYou: boolean;
+              needsAttention: boolean;
               /** @enum {string} */
               dorStatus: "not_met" | "met";
               blockedBy: string[];
               /** @default false */
               archived: boolean;
+              /** @default [] */
+              outOfScope: string[];
+              /** @default [] */
+              touches: string[];
               /** Format: date-time */
               createdAt: string;
               /** Format: date-time */
@@ -1578,8 +1613,8 @@ export interface paths {
               id: string;
               projectId: string;
               key: string;
-              /** @enum {string} */
-              type: "epic" | "story" | "task" | "bug";
+              /** @enum {string|null} */
+              type: "epic" | "feature" | "chore" | "bug" | null;
               parentId: string | null;
               title: string;
               body: string;
@@ -1598,8 +1633,6 @@ export interface paths {
               /** @enum {string|null} */
               size: "S" | "M" | "L" | null;
               sizeReason: string | null;
-              /** @enum {string|null} */
-              tier: "frontier" | "strong" | "fast" | "cheap" | null;
               overrides: {
                 assignee?: "me" | ("claude-code" | "jules" | "opencode" | "direct");
                 /** @enum {string} */
@@ -1616,12 +1649,16 @@ export interface paths {
                 /** @enum {string} */
                 targetEnv?: "dev" | "prod";
               };
-              needsYou: boolean;
+              needsAttention: boolean;
               /** @enum {string} */
               dorStatus: "not_met" | "met";
               blockedBy: string[];
               /** @default false */
               archived: boolean;
+              /** @default [] */
+              outOfScope: string[];
+              /** @default [] */
+              touches: string[];
               /** Format: date-time */
               createdAt: string;
               /** Format: date-time */
@@ -2283,8 +2320,8 @@ export interface paths {
                 id: string;
                 projectId: string;
                 key: string;
-                /** @enum {string} */
-                type: "epic" | "story" | "task" | "bug";
+                /** @enum {string|null} */
+                type: "epic" | "feature" | "chore" | "bug" | null;
                 parentId: string | null;
                 title: string;
                 body: string;
@@ -2303,8 +2340,6 @@ export interface paths {
                 /** @enum {string|null} */
                 size: "S" | "M" | "L" | null;
                 sizeReason: string | null;
-                /** @enum {string|null} */
-                tier: "frontier" | "strong" | "fast" | "cheap" | null;
                 overrides: {
                   assignee?: "me" | ("claude-code" | "jules" | "opencode" | "direct");
                   /** @enum {string} */
@@ -2321,12 +2356,16 @@ export interface paths {
                   /** @enum {string} */
                   targetEnv?: "dev" | "prod";
                 };
-                needsYou: boolean;
+                needsAttention: boolean;
                 /** @enum {string} */
                 dorStatus: "not_met" | "met";
                 blockedBy: string[];
                 /** @default false */
                 archived: boolean;
+                /** @default [] */
+                outOfScope: string[];
+                /** @default [] */
+                touches: string[];
                 /** Format: date-time */
                 createdAt: string;
                 /** Format: date-time */

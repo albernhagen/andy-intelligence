@@ -41,7 +41,7 @@ const TicketParams = ProjectParams.extend({ ticketId: z.uuid() });
 const QuestionParams = z.object({ questionId: z.uuid() });
 
 /** Callers can't set derived fields; the domain computes them. */
-const CreateTicket = NewTicket.omit({ dorStatus: true, needsYou: true });
+const CreateTicket = NewTicket.omit({ dorStatus: true, needsAttention: true });
 const PatchTicket = TicketFields.omit({ dorStatus: true, archived: true }).extend({
   ifUpdatedAt: Timestamp.optional(),
 });
@@ -60,7 +60,11 @@ const BoolQuery = z
   .enum(["true", "false"])
   .transform((v) => v === "true")
   .optional();
-const TicketQuery = z.object({ stage: Stage.optional(), needsYou: BoolQuery, archived: BoolQuery });
+const TicketQuery = z.object({
+  stage: Stage.optional(),
+  needsAttention: BoolQuery,
+  archived: BoolQuery,
+});
 
 const secured = { security: [{ bearer: [] }] };
 

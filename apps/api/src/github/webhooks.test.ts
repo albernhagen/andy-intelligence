@@ -142,7 +142,7 @@ describe("GitHub webhook receiver", () => {
     };
 
     async function inProgressTicket() {
-      const t = await tracker.createTicket("ai", { type: "task", title: "PR moves" }, "andy");
+      const t = await tracker.createTicket("ai", { type: "chore", title: "PR moves" }, "andy");
       return tracker.updateTicket(
         "ai",
         t.id,
@@ -182,13 +182,13 @@ describe("GitHub webhook receiver", () => {
       await deliver({ payload: keyed("closed", { state: "closed" }), id: "d-close" });
       expect(await tracker.getTicket("ai", t.id)).toMatchObject({
         stage: "in_progress",
-        needsYou: true,
+        needsAttention: true,
       });
     });
 
     it("GivenAKeyOfAnotherProject_WhenOpened_ThenNoTicketChanges", async () => {
       await tracker.createProject({ name: "Ops", key: "OPS" });
-      const other = await tracker.createTicket("ops", { type: "task", title: "x" }, "andy");
+      const other = await tracker.createTicket("ops", { type: "chore", title: "x" }, "andy");
       await deliver({ payload: keyed("opened", { body: "OPS-1" }) });
       expect((await tracker.listEvents("ops", other.id)).map((e) => e.kind)).toEqual(["created"]);
     });

@@ -21,7 +21,7 @@ Ticket: <!-- https://ai.andybernhagen.com/p/<project>/t/<KEY>; PR title: `<KEY>:
 <!-- Tick each box or mark it n/a. Unticked means not done. -->
 
 - [ ] `README.md` — commands, env vars, layout
-- [ ] `docs/architecture/ARCHITECTURE.md` — design/scope/plan
+- [ ] `docs/architecture/` — design/scope/plan: the topic file; `ARCHITECTURE.md` only if intent, components or milestones change
 - [ ] ADR added or status updated
 - [ ] Runbook — manual steps
 - [ ] `docs/build-log.md` — decisions, blockers; new entry file in `docs/build-log/`; ticket in project `AI` named in "Why"

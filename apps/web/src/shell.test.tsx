@@ -8,9 +8,9 @@ async function twoProjects(path = "/all/inbox") {
   const harness = renderApp(path);
   await harness.tracker.createProject({ name: "Andy Intelligence", key: "AI" });
   await harness.tracker.createProject({ name: "Ops", key: "OPS" });
-  const ai = await harness.service.create("ai", { type: "story", title: "Shell" }, "andy");
+  const ai = await harness.service.create("ai", { type: "feature", title: "Shell" }, "andy");
   await harness.service.ask("ai", ai.id, { text: "Which colour?" }, "andy");
-  const ops = await harness.service.create("ops", { type: "task", title: "Backups" }, "andy");
+  const ops = await harness.service.create("ops", { type: "chore", title: "Backups" }, "andy");
   await harness.service.ask("ops", ops.id, { text: "Daily?" }, "andy");
   await harness.router.invalidate();
   return harness;

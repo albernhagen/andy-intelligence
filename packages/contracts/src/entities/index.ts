@@ -54,16 +54,23 @@ export type DorStatus = z.infer<typeof DorStatus>;
 export const TicketKey = z.string().regex(/^[A-Z][A-Z0-9]{0,9}-\d+$/);
 export type TicketKey = z.infer<typeof TicketKey>;
 
+/** Caps on the scope lists (ADR-0028): refine drafts them, so they are untrusted agent text. */
+export const SCOPE_LIMITS = { maxItems: 20, item: 300 } as const;
+export const ScopeList = z
+  .array(z.string().trim().min(1).max(SCOPE_LIMITS.item))
+  .max(SCOPE_LIMITS.maxItems);
+
 /** The control plane is the system of record for tickets (ADR-0016). */
 export const Ticket = z.object({
   id: Id,
   projectId: Id,
   key: TicketKey,
-  type: TicketType,
+  /** Empty at capture; refine fills it (ADR-0058). Readiness needs one. */
+  type: TicketType.nullable(),
   parentId: Id.nullable(),
   title: z.string().min(1),
   body: z.string(),
-  /** EARS form: "WHEN … THE SYSTEM SHALL …" */
+  /** The checklist. Features: each in EARS form ("… shall …"); chores: any wording. */
   acceptanceCriteria: z.array(z.string()),
   assumptions: z.array(z.string()),
   stage: Stage,
@@ -71,9 +78,10 @@ export const Ticket = z.object({
   size: Size.nullable(),
   /** One-line justification for the size (Definition of Ready, ARCHITECTURE §4.2). */
   sizeReason: z.string().nullable(),
-  tier: TierKey.nullable(),
+  /** The build model tier is derived from size; `overrides.tier` pins one (ADR-0058). */
   overrides: TicketOverrides,
-  needsYou: z.boolean(),
+  /** Blocked on a human (open questions, a flag); a fact about the ticket (ADR-0058). */
+  needsAttention: z.boolean(),
   dorStatus: DorStatus,
   blockedBy: z.array(Id),
   /**
@@ -81,6 +89,10 @@ export const Ticket = z.object({
    * tickets (AI-15: Cancel and archive tickets). The default keeps older documents readable.
    */
   archived: z.boolean().default(false),
+  /** What the ticket must not change (ADR-0058). Defaults keep older documents readable. */
+  outOfScope: ScopeList.default([]),
+  /** Areas or path globs it expects to edit; empty means unknown, not "nothing". */
+  touches: ScopeList.default([]),
   createdAt: Timestamp,
   updatedAt: Timestamp,
 });
@@ -155,6 +167,8 @@ export const REFINE_LIMITS = {
   maxAssumptions: 5,
   assumption: 300,
   sizeReason: 300,
+  maxScopeItems: SCOPE_LIMITS.maxItems,
+  scopeItem: SCOPE_LIMITS.item,
 } as const;
 
 const capped = (max: number) => z.string().trim().min(1).max(max);
@@ -173,10 +187,12 @@ export type RefineQuestion = z.infer<typeof RefineQuestion>;
 
 export const RefineOutput = z.strictObject({
   summary: capped(REFINE_LIMITS.summary),
-  /** Refine's proposal; written only where the ticket has none, so Andy's values win. */
+  /** Refine's proposals; each written only where the ticket's field is empty, so Andy's values win. */
+  type: TicketType,
   size: Size,
   sizeReason: capped(REFINE_LIMITS.sizeReason),
-  tier: TierKey,
+  outOfScope: z.array(capped(REFINE_LIMITS.scopeItem)).max(REFINE_LIMITS.maxScopeItems),
+  touches: z.array(capped(REFINE_LIMITS.scopeItem)).max(REFINE_LIMITS.maxScopeItems),
   questions: z
     .array(RefineQuestion)
     .min(REFINE_LIMITS.minQuestions)
