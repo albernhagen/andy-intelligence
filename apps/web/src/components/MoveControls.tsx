@@ -8,7 +8,7 @@ import { STAGE_LABELS, moveOptions } from "@/lib/tickets";
 
 /**
  * Stage moves (ARCHITECTURE §4.1): one button per move the domain allows, plus Andy's forced
- * move to any other stage, with an optional reason (ADR-0054); history marks it forced.
+ * move to any other stage, with an optional reason (ADR-0057); history marks it forced.
  * The API enforces the rules (e.g. DoR for Backlog → Ready); its errors show here.
  */
 export function MoveControls({ ticket }: { ticket: Ticket }) {

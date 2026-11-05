@@ -4,7 +4,7 @@ date: 2026-11-04
 amends: ARCHITECTURE §4.1
 ---
 
-# 0054 — Forced stage moves no longer need a reason
+# 0057 — Forced stage moves no longer need a reason
 
 Decided by Andy, 2026-11-04, with AI-16: Board drag-and-drop; forced moves no longer need a reason.
 

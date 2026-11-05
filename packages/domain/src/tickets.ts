@@ -109,7 +109,7 @@ export class TicketService {
   ): Promise<Ticket> {
     const ticket = await this.require(projectId, ticketId);
     if (force) {
-      // ADR-0054: the reason is optional; `forced: true` in history is the audit trail.
+      // ADR-0057: the reason is optional; `forced: true` in history is the audit trail.
       if (actor !== "andy") throw new DomainError("forbidden", "only Andy can force a stage move");
     } else {
       if (!canTransition(ticket.stage, to)) {

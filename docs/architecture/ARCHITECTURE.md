@@ -103,7 +103,7 @@ Enterprise-shaped (durable state, policy, gates, least privilege, audit, contrac
 | **Monitoring** | CI deploys to dev; verification (smoke/e2e + verification agent) runs; Andy promotes to prod when ready | Dev verification passed (and, if released, prod deploy succeeded) |
 | **Done** | Summary included in rollups | — |
 
-**Stage moves** (`packages/domain`): forward one step, plus back for re-refine (ready → backlog), retry (in progress → ready) and rework (ready for review or monitoring → in progress). Backlog → ready requires the DoR. Andy can force any move, reason optional (ADR-0054); history marks it forced. Agents and the system can't force.
+**Stage moves** (`packages/domain`): forward one step, plus back for re-refine (ready → backlog), retry (in progress → ready) and rework (ready for review or monitoring → in progress). Backlog → ready requires the DoR. Andy can force any move, reason optional (ADR-0057); history marks it forced. Agents and the system can't force.
 
 **Needs-you is a flag, not a stage.** Flagged items stay in their stage and appear in the Needs-you inbox (UI + MCP).
 

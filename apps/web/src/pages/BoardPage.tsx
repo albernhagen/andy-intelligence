@@ -21,7 +21,7 @@ import { STAGE_LABELS, STAGES, dropMove, groupByStage } from "@/lib/tickets";
 
 /**
  * Tickets grouped by stage, one column each. Drag a card to another column to move it: an
- * allowed transition is a normal move, any other is a forced one (ADR-0054). The detail page's
+ * allowed transition is a normal move, any other is a forced one (ADR-0057). The detail page's
  * Move controls do the same with buttons.
  */
 export function BoardPage() {

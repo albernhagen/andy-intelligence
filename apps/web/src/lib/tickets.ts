@@ -35,7 +35,7 @@ export function moveOptions(stage: Stage): { allowed: Stage[]; forced: Stage[] }
 
 /**
  * What a board drop sends: a normal move when the domain allows `from → to`, else a forced one
- * (Andy only; ADR-0054). `null` when dropped back on its own column.
+ * (Andy only; ADR-0057). `null` when dropped back on its own column.
  */
 export function dropMove(from: Stage, to: Stage): { to: Stage; force: boolean } | null {
   if (from === to) return null;
