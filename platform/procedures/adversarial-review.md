@@ -36,14 +36,14 @@ When `.review/new-commits.diff` exists:
 
 ## Checklist
 
-| Area       | Look for                                                                                                                          |
-| ---------- | --------------------------------------------------------------------------------------------------------------------------------- |
-| Behavior   | Wrong results, off-by-one, wrong conditions, unhandled null/empty/duplicate/concurrent cases, error paths that hide failures      |
-| Tests      | New behavior without a test; tests that can't fail; assertions that don't check the claim; edge cases from your scenarios missing |
-| Contracts  | Port changes without fake and contract-suite updates (ADR-0023); vendor terms in the domain; Zod schema and type drift            |
-| Decisions  | Code that contradicts ARCHITECTURE.md or an ADR without a new ADR; cost caps missing on anything that scales (ADR-0028)           |
-| Simplicity | Abstractions with one caller, dead code, config nobody sets: only when it causes a concrete problem                               |
-| Docs       | Docs the change makes wrong (README commands, runbooks, ARCHITECTURE, threat model), per the table in `AGENTS.md`                 |
+| Area       | Look for                                                                                                                                             |
+| ---------- | ---------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Behavior   | Wrong results, off-by-one, wrong conditions, unhandled null/empty/duplicate/concurrent cases, error paths that hide failures                         |
+| Tests      | New behavior without a test; tests that can't fail; assertions that don't check the claim; edge cases from your scenarios missing                    |
+| Contracts  | Port changes without fake and contract-suite updates (ADR-0023); vendor terms in the domain; Zod schema and type drift                               |
+| Decisions  | Code that contradicts the architecture docs (`docs/architecture/`) or an ADR without a new ADR; cost caps missing on anything that scales (ADR-0028) |
+| Simplicity | Abstractions with one caller, dead code, config nobody sets: only when it causes a concrete problem                                                  |
+| Docs       | Docs the change makes wrong (README commands, runbooks, ARCHITECTURE, threat model), per the table in `AGENTS.md`                                    |
 
 ## Severity
 
