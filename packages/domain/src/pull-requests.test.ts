@@ -125,16 +125,62 @@ describe("PullRequestTickets", () => {
     expect((await reload(t)).stage).toBe("ready_for_review");
   });
 
-  it("GivenADraftOrABacklogTicket_WhenThePullRequestOpens_ThenLinkedOnly", async () => {
-    const draftTicket = await ticketAt("in_progress");
-    await prs.apply(prEvent("opened", { draft: true }), project);
-    expect((await reload(draftTicket)).stage).toBe("in_progress");
+  it("GivenADraftPullRequest_WhenItOpens_ThenLinkedOnly", async () => {
+    const t = await ticketAt("in_progress");
+    expect(await prs.apply(prEvent("opened", { draft: true }), project)).toMatchObject({
+      moves: [],
+    });
+    expect((await reload(t)).stage).toBe("in_progress");
+  });
 
-    const backlog = await service.create(project.id, readyStory, "andy");
-    const result = await prs.apply(prEvent("opened", { headRef: "AI-2" }), project);
-    expect(result).toMatchObject({ result: "linked", moves: [] });
-    expect((await reload(backlog)).stage).toBe("backlog");
-    expect((await systemEvents(backlog)).map((e) => e.kind)).toEqual(["pr_linked"]);
+  it("GivenABacklogTicketWithoutTheDor_WhenItsPullRequestOpens_ThenReadyForReview", async () => {
+    const t = await service.create(project.id, { type: "feature", title: "Bare" }, "andy");
+    const result = await prs.apply(prEvent("opened"), project);
+    expect(result.moves).toEqual(["ready", "in_progress", "ready_for_review"]);
+    expect((await reload(t)).stage).toBe("ready_for_review");
+  });
+
+  it("GivenABacklogTicketWithOpenQuestions_WhenItsPullRequestMerges_ThenDoneAndQuestionsWithdrawn", async () => {
+    const t = await ticketAt("backlog");
+    await service.ask(project.id, t.id, { text: "Which?" }, "agent:r1");
+    const result = await prs.apply(prEvent("closed", { state: "merged" }), project);
+    expect(result.moves).toEqual([
+      "ready",
+      "in_progress",
+      "ready_for_review",
+      "monitoring",
+      "done",
+    ]);
+    expect(await reload(t)).toMatchObject({ stage: "done", needsAttention: false });
+    expect(await tracker.listQuestions({ ticketId: t.id, status: "open" })).toEqual([]);
+    expect(await service.needsYou()).toEqual({ questions: [], tickets: [] });
+  });
+
+  it("GivenAFlagFromAnOldClose_WhenItsPullRequestMerges_ThenNeedsYouCleared", async () => {
+    const t = await ticketAt("ready_for_review");
+    await prs.apply(prEvent("closed", { number: 69, state: "closed" }), project);
+    await prs.apply(prEvent("closed", { state: "merged" }), project);
+    expect(await reload(t)).toMatchObject({ stage: "done", needsAttention: false });
+  });
+
+  it("GivenAnEpic_WhenItsPullRequestOpensMergesOrCloses_ThenLinkedOnly", async () => {
+    const epic = await service.create(project.id, { type: "epic", title: "M1" }, "andy");
+    await service.move(project.id, epic.id, "in_progress", "andy", { force: true });
+    for (const e of [
+      prEvent("opened"),
+      prEvent("closed", { state: "merged" }),
+      prEvent("closed", { state: "closed" }),
+    ]) {
+      expect(await prs.apply(e, project)).toMatchObject({ result: "linked", moves: [] });
+    }
+    expect(await reload(epic)).toMatchObject({ stage: "in_progress", needsAttention: false });
+  });
+
+  it("GivenAnInProgressTicket_WhenAPullRequestOpensIntoANonDefaultBranch_ThenLinkedOnly", async () => {
+    const t = await ticketAt("in_progress");
+    const opened = prEvent("opened", { baseRef: "feature", intoDefaultBranch: false });
+    expect(await prs.apply(opened, project)).toMatchObject({ result: "linked", moves: [] });
+    expect((await reload(t)).stage).toBe("in_progress");
   });
 
   it("GivenATicketAlreadyPastReview_WhenAnotherPullRequestOpens_ThenLinkedOnly", async () => {

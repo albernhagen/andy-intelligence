@@ -46,3 +46,20 @@ export function forwardPath(from: Stage, to: Stage): Stage[] {
   if (start < 0 || end <= start) return [];
   return PIPELINE.slice(start + 1, end + 1);
 }
+
+/** Where a pull request event moves a ticket to (ADR-0067). */
+export type PullRequestTarget = "ready_for_review" | "done";
+
+/**
+ * ADR-0067: the stages a PR event moves a ticket from. Opened: anything before review. Merged:
+ * anything not yet Done. Cancelled is never in either list.
+ */
+export const PULL_REQUEST_SOURCES: Readonly<Record<PullRequestTarget, readonly Stage[]>> = {
+  ready_for_review: ["backlog", "ready", "in_progress"],
+  done: ["backlog", "ready", "in_progress", "ready_for_review", "monitoring"],
+};
+
+/** The one-step moves a PR event makes, e.g. backlog → [ready, in_progress, ready_for_review]. */
+export function pullRequestPath(from: Stage, to: PullRequestTarget): Stage[] {
+  return PULL_REQUEST_SOURCES[to].includes(from) ? forwardPath(from, to) : [];
+}

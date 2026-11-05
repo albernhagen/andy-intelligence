@@ -15,7 +15,7 @@ import {
   type WorkTracker,
 } from "@andy/contracts";
 import { checkDor, type DorResult } from "./dor";
-import { canTransition, isForwardMove } from "./stages";
+import { canTransition, isForwardMove, pullRequestPath, type PullRequestTarget } from "./stages";
 
 function log(severity: "INFO" | "WARNING", message: string, fields: object = {}) {
   console.log(JSON.stringify({ severity, message, component: "tickets", ...fields }));
@@ -241,6 +241,44 @@ export class TicketService {
       { fields: { archived }, ifUpdatedAt: ticket.updatedAt },
       actor,
     );
+  }
+
+  /**
+   * ADR-0067: the named system move for a same-repo PR into the default branch. It walks the
+   * ticket forward one step at a time as "system", unforced, with the PR link as the reason, and
+   * skips only the Definition of Ready (the work exists). Epics, archived and Cancelled tickets
+   * never move. Reaching Done withdraws open questions and clears Needs-you, as cancel does.
+   * Returns the stages moved through.
+   */
+  async followPullRequest(
+    projectId: string,
+    ticketId: string,
+    to: PullRequestTarget,
+    reason: string,
+  ): Promise<Stage[]> {
+    let ticket = await this.require(projectId, ticketId);
+    if (ticket.type === "epic" || ticket.archived) return [];
+    const steps = pullRequestPath(ticket.stage, to);
+    for (const step of steps) {
+      ticket = await this.tracker.updateTicket(
+        projectId,
+        ticketId,
+        { stage: { to: step, forced: false, reason }, ifUpdatedAt: ticket.updatedAt },
+        "system",
+      );
+    }
+    if (to === "done" && steps.length > 0) {
+      await this.withdrawOpenQuestions(ticketId, "system");
+      if (ticket.needsAttention) {
+        await this.tracker.updateTicket(
+          projectId,
+          ticketId,
+          { fields: { needsAttention: false } },
+          "system",
+        );
+      }
+    }
+    return steps;
   }
 
   /** One step forward by ticket key, never forced (the MCP `move_ticket` tool). */
