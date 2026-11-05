@@ -1,5 +1,5 @@
 ---
-status: accepted
+status: accepted, amended by 0060 (single-project coordination moves to M2: Self-hosting)
 date: 2026-11-03
 ---
 

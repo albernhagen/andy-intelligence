@@ -1,5 +1,5 @@
 ---
-status: accepted (direction; sliced at M7 start)
+status: accepted (direction; sliced at M7 start), amended by 0060 (milestone order)
 date: 2026-11-04
 amends: 0050 (milestone order only)
 ---

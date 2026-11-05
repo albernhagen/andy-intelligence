@@ -10,7 +10,7 @@ import type {
 import { RunRequest as RunRequestSchema } from "@andy/contracts";
 
 /**
- * The repo whose `claude-executor.yml` the callbacks must come from. Until M2: Multi-project in
+ * The repo whose `claude-executor.yml` the callbacks must come from. Until M5: Multi-project in
  * parallel gives other repos a caller pinned to this repo, only this repo can run agents: its
  * `agent-run.yml` calls the executor locally, so the OIDC `job_workflow_ref` is this repo's
  * workflow on its default branch.
@@ -53,7 +53,7 @@ export class ClaudeCodeActionsExecutor implements Executor {
     const repo = await this.host.getRepo(parsed.projectRef);
     if (repo && (repo.fullName.toLowerCase() !== PLATFORM_REPO || repo.defaultBranch !== "main")) {
       throw new Error(
-        `agent runs work only on ${PLATFORM_REPO} (default branch main) until M2: Multi-project in parallel`,
+        `agent runs work only on ${PLATFORM_REPO} (default branch main) until M5: Multi-project in parallel`,
       );
     }
     const dispatch = await this.host.dispatchWorkflow(

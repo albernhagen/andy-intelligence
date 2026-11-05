@@ -8,28 +8,20 @@ Slice status lives in **tickets in project `AI`** (ADR-0047 phase 1). This page 
 - **Moving a ticket:** Andy, in the UI (drag on the board, or Move to …), any move; cancel and archive also over MCP `cancel_ticket` / `archive_ticket`. Sessions and agents: MCP `move_ticket`, one step forward. PRs move their ticket on their own (AI-14: Tickets move on PR events): name the key in the branch, or start the PR description with the ticket link; opened → Ready for review, merged → Done, closed unmerged → In progress + Needs-you. M1.8: Build + gate relies on this.
 - **Slice definitions:** ARCHITECTURE §12. A ticket's body names its row.
 
-## M1: First end-to-end flow: ticket → PR with Claude
+## Milestone map (ADR-0060: Milestones in completion order)
 
-Merged before the move to tickets: M1.0–M1.5, M1.10–M1.16, M1.19, M1.20 (list: [`build-log/2026-11-04-m1-slices-to-tickets.md`](build-log/2026-11-04-m1-slices-to-tickets.md)).
+Every ticket sits under a milestone. Milestones are epic tickets in project `AI`; until tickets can be re-parented (M3: New UI and MCP), this table is the map. Done: AI-1, AI-2, AI-4, AI-14, AI-15, AI-16 (M1); merged M1 slices: [`history/m1-merged-slices.md`](architecture/history/m1-merged-slices.md).
 
-| Ticket | Slice                                            | Blocked by |
-| ------ | ------------------------------------------------ | ---------- |
-| AI-1   | M1.6a: Claude Code executor: dispatch + callback | —          |
-| AI-2   | M1.7: Refinement                                 | AI-1       |
-| AI-3   | M1.8: Build + gate                               | AI-2       |
-| AI-4   | M1.6b: Claude Code executor: watchdog + retry    | AI-1       |
-| AI-5   | M1.9: Quota capture                              | AI-3       |
-| AI-6   | M1.17: Agent evals v1                            | AI-3       |
-
-**Waves (ADR-0050):** 1. AI-1 → 2. AI-2 → 3. AI-3 → 4. AI-4 ‖ AI-5 ‖ AI-6. M1.18: Plan step is folded into M1.8.
-
-**Before M2: Multi-project in parallel (ADR-0058: Ticket model, ADR-0059: UX foundation):** ticket model v2 (before AI-3: M1.8: Build + gate), then the app shell with a project switcher, board v2, story panel and command palette. Their tickets are created when the two ADRs merge; AI-17 (split ARCHITECTURE.md) runs first, alone.
+| Milestone                                          | Open tickets, in order                                                                                                                                                                                                                                   |
+| -------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| M1: First end-to-end flow: ticket → PR with Claude | AI-17: Split ARCHITECTURE.md (alone, first) → ticket model v2 (ADR-0058, to create) → AI-3: M1.8: Build + gate, as 8a build run then 8b gate (to create). Any time: AI-20: Context-budget test overwrites the git index; the board-drop bug (to create). |
+| M2: Self-hosting: andy-intelligence builds itself  | AI-5: M1.9: Quota capture; AI-6: M1.17: Agent evals v1; the rest at milestone start (ADR-0060 lists it).                                                                                                                                                 |
+| M3: New UI and MCP                                 | Design source and app shell (may start beside M1), board v2, story panel, command palette, MCP tools (all to create, ADR-0059); AI-19: One permission function.                                                                                          |
+| M8: Project members                                | AI-18: Project members.                                                                                                                                                                                                                                  |
 
 ## Pending decisions (Andy)
 
 - `blockedBy` holds ticket **keys** (`AI-1`); ARCHITECTURE §5 says ticket ids, and nothing reads the field yet. Keep keys (readable, unique across projects) and fix §5 in M1.8: Build + gate, where the dispatcher first reads it?
-- Email notifications for Needs-you (a `Notifier` adapter, S): move up from Later so the loop doesn't wait for an open tab?
-- Safe deploy path for the control plane (tagged no-traffic Cloud Run revision per PR + rollback runbook): project `AI` keeps `autoMerge: none` until it exists (ADR-0050, ADR-0047 phase 2).
 - Contract suites for ports with one adapter (`OAuthGrantStore`, `CodeHostConnectionStore`): keep the fakes, drop the shared suite?
 - Production monitoring (alerts, error budget per project) as part of "shipped" (brief): add to M6: Dev → prod releases at slicing.
 - Refine must ask at least one question (§4.3: 1–5). Allow zero for a ticket that is already clear?

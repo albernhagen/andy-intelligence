@@ -1,5 +1,5 @@
 ---
-status: accepted (direction; built by tickets in project AI before M2: Multi-project in parallel)
+status: accepted (direction; now M3: New UI and MCP, ADR-0060)
 date: 2026-11-04
 amends: 0045 (timing of design.md, tokens and screenshot checks)
 ---

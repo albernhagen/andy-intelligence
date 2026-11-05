@@ -1,6 +1,6 @@
 # Project brief — andy-intelligence (project `AI`)
 
-The project brief is the product and domain context agents read (ADR-0053: Project brief). This one was written by hand on 2026-11-04 from Andy's answers, since the onboarding interview isn't built yet (M2: Multi-project in parallel). Sections are short on purpose: [`ARCHITECTURE.md`](../architecture/ARCHITECTURE.md) is the detailed source and this file points at it rather than repeating it.
+The project brief is the product and domain context agents read (ADR-0053: Project brief). This one was written by hand on 2026-11-04 from Andy's answers, since the onboarding interview isn't built yet (M5: Multi-project in parallel). Sections are short on purpose: [`ARCHITECTURE.md`](../architecture/ARCHITECTURE.md) is the detailed source and this file points at it rather than repeating it.
 
 ## Idea
 
@@ -20,10 +20,10 @@ In about a year, Andy's side projects run in production with little keyboard tim
 
 Goals are ARCHITECTURE §1. Andy's emphasis, in order:
 
-1. Minimal keyboard time: autonomy by default, with policy gates he can tighten per project.
-2. Several projects in parallel, picked up as inspiration strikes (M2: Multi-project in parallel).
+1. Minimal keyboard time: autonomy by default, with policy gates he can tighten per project. First proof: the system builds itself while Andy is away (M2: Self-hosting: andy-intelligence builds itself).
+2. Several projects in parallel, picked up as inspiration strikes (M5: Multi-project in parallel).
 3. Quality a perfectionist staff engineer would ship (bar below).
-4. Spend optimized across providers as the market changes (M3: Add Jules + model routing, M4: Paid models + spend caps).
+4. Spend optimized across providers as the market changes (M9: Add Jules + model routing, M10: Paid models + spend caps).
 5. Everything reachable from the phone (M7: Mobile).
 
 Non-goals are ARCHITECTURE §1, plus: multi-tenant SaaS; hand review of agent code as the norm.

@@ -1,5 +1,5 @@
 ---
-status: accepted (direction; markdown kind designed by 0053; MCP and skill sources after M2)
+status: accepted (direction; markdown kind designed by 0053; MCP and skill sources after M5: Multi-project in parallel)
 date: 2026-11-01
 ---
 
