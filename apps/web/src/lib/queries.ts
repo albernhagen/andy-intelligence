@@ -1,6 +1,6 @@
 import { useEffect, useRef } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import type { Run, Stage } from "@andy/contracts";
+import type { Run, Size, Stage, TicketOverrides, TicketType } from "@andy/contracts";
 import { unwrap, useApi } from "./api";
 
 /** Query hooks over the generated API client. One user, small data: every write refetches all. */
@@ -154,18 +154,21 @@ export function useUpdateProject(projectId: string) {
 }
 
 export type TicketInput = {
+  type: TicketType | null;
   title: string;
   body: string;
   acceptanceCriteria: string[];
   assumptions: string[];
-  size: "S" | "M" | "L" | null;
+  size: Size | null;
   sizeReason: string | null;
-  tier: "frontier" | "strong" | "fast" | "cheap" | null;
+  outOfScope: string[];
+  touches: string[];
+  overrides: TicketOverrides;
 };
 
 export function useCreateTicket(projectId: string) {
   const api = useApi();
-  return useWrite(async (body: TicketInput & { type: "epic" | "story" | "task" | "bug" }) =>
+  return useWrite(async (body: TicketInput) =>
     unwrap(
       await api.POST("/api/projects/{projectId}/tickets", {
         params: { path: { projectId } },

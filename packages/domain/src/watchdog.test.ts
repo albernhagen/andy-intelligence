@@ -130,7 +130,7 @@ describe("RunService watchdog", () => {
     queue = new InMemoryWatchdogQueue();
     service = new RunService(tracker, runs, new WorkflowExecutor(host), () => now, queue);
     projectId = (await tracker.createProject({ name: "AI", key: "AI", repos: [REPO.fullName] })).id;
-    ticketId = (await tracker.createTicket(projectId, { type: "story", title: "Board" }, "andy"))
+    ticketId = (await tracker.createTicket(projectId, { type: "feature", title: "Board" }, "andy"))
       .id;
   });
 
@@ -181,7 +181,7 @@ describe("RunService watchdog", () => {
       error: expect.stringContaining("report never arrived"),
     });
     expect(host.workflowRuns.size).toBe(1);
-    expect((await ticket()).needsYou).toBe(false);
+    expect((await ticket()).needsAttention).toBe(false);
   });
 
   it("GivenAKilledWorkflow_WhenTheCheckArrives_ThenTheRunIsCancelledAndRetriedOnce", async () => {
@@ -228,7 +228,7 @@ describe("RunService watchdog", () => {
     expect(await service.checkDeadline(retry!.id)).toBe("flagged");
     expect(host.workflowRuns.size).toBe(2);
     expect(await runs.listActive(projectId)).toEqual([]);
-    expect((await ticket()).needsYou).toBe(true);
+    expect((await ticket()).needsAttention).toBe(true);
     expect(await lastComment()).toMatch(/^Needs you: The refine run failed without reporting/);
   });
 
@@ -246,7 +246,7 @@ describe("RunService watchdog", () => {
     const [retry] = await runs.listActive(projectId);
     await service.report(retry!.id, (await runs.get(retry!.id))!.executor!, failedReport);
     expect(await runs.listActive(projectId)).toEqual([]);
-    expect((await ticket()).needsYou).toBe(true);
+    expect((await ticket()).needsAttention).toBe(true);
   });
 
   it("GivenTheRetryCommentFails_WhenTheRetryIsDispatched_ThenRetriedAndNotFlagged", async () => {
@@ -259,7 +259,7 @@ describe("RunService watchdog", () => {
     };
     now = AFTER_DEADLINE;
     expect(await service.checkDeadline(run.id)).toBe("retried");
-    expect((await ticket()).needsYou).toBe(false);
+    expect((await ticket()).needsAttention).toBe(false);
   });
 
   it("GivenTheRetryCantStartAfterAReportedFailure_WhenReported_ThenStillRecordedAndFlagged", async () => {
@@ -268,7 +268,7 @@ describe("RunService watchdog", () => {
     const caller = (await runs.get(run.id))!.executor!;
     expect(await service.report(run.id, caller, failedReport)).toBe("recorded");
     expect((await runs.get(run.id))?.status).toBe("failed");
-    expect((await ticket()).needsYou).toBe(true);
+    expect((await ticket()).needsAttention).toBe(true);
   });
 
   it("GivenTheRetryCantStart_WhenTheCheckArrives_ThenNeedsYouWithTheReason", async () => {
@@ -277,7 +277,7 @@ describe("RunService watchdog", () => {
     host.failDispatch = new Error("Resource not accessible by integration");
     now = AFTER_DEADLINE;
     expect(await service.checkDeadline(run.id)).toBe("flagged");
-    expect((await ticket()).needsYou).toBe(true);
+    expect((await ticket()).needsAttention).toBe(true);
     expect(await lastComment()).toMatch(/the retry couldn't start: .*not accessible/);
   });
 
@@ -290,6 +290,6 @@ describe("RunService watchdog", () => {
       status: "failed",
       error: "the run couldn't be checked: no executor",
     });
-    expect((await ticket()).needsYou).toBe(true);
+    expect((await ticket()).needsAttention).toBe(true);
   });
 });

@@ -8,6 +8,7 @@ import {
   linesToList,
   moveOptions,
   sortQuestions,
+  typeLabel,
   visibleTickets,
 } from "./tickets";
 
@@ -136,5 +137,20 @@ describe("dropMove", () => {
 
   it("GivenATicket_WhenDroppedOnItsOwnColumn_ThenNoMove", () => {
     expect(dropMove("ready", "ready")).toBeNull();
+  });
+});
+
+describe("typeLabel", () => {
+  it("GivenEachType_WhenLabelled_ThenTheNewNamesAreShown", () => {
+    expect(["feature", "chore", "bug", "epic"].map((t) => typeLabel(t as Ticket["type"]))).toEqual([
+      "Feature",
+      "Chore",
+      "Bug",
+      "Epic",
+    ]);
+  });
+
+  it("GivenNoType_WhenLabelled_ThenNoType", () => {
+    expect(typeLabel(null)).toBe("No type");
   });
 });

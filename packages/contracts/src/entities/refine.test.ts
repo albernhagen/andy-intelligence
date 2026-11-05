@@ -1,6 +1,6 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
-import { REFINE_LIMITS, RefineOutput, Size, TierKey } from "./index";
+import { REFINE_LIMITS, RefineOutput, Size, TicketType } from "./index";
 
 // The schema the executor hands the agent (`--json-schema`). It must stay in step with
 // RefineOutput, which the control plane checks the result against.
@@ -12,7 +12,13 @@ const schema = JSON.parse(schemaText);
 const item = schema.properties.questions.items;
 
 const question = { text: "Which store?", options: ["Firestore"], suggestedAnswer: "Firestore" };
-const sizing = { size: "S", sizeReason: "one module", tier: "fast" };
+const sizing = {
+  type: "feature",
+  size: "S",
+  sizeReason: "one module",
+  outOfScope: ["the UI"],
+  touches: ["packages/domain/**"],
+};
 
 describe("RefineOutput", () => {
   it("GivenTheAgentSchemaFile_WhenComparedWithTheLimits_ThenTheyMatch", () => {
@@ -27,7 +33,11 @@ describe("RefineOutput", () => {
     expect(item.properties.assumptions.items.maxLength).toBe(REFINE_LIMITS.assumption);
     expect(schema.properties.sizeReason.maxLength).toBe(REFINE_LIMITS.sizeReason);
     expect(schema.properties.size.enum).toEqual(Size.options);
-    expect(schema.properties.tier.enum).toEqual(TierKey.options);
+    expect(schema.properties.type.enum).toEqual(TicketType.options);
+    for (const list of ["outOfScope", "touches"]) {
+      expect(schema.properties[list].maxItems).toBe(REFINE_LIMITS.maxScopeItems);
+      expect(schema.properties[list].items.maxLength).toBe(REFINE_LIMITS.scopeItem);
+    }
     expect([...schema.required].sort()).toEqual(Object.keys(RefineOutput.shape).sort());
     expect(Object.keys(item.properties).sort()).toEqual(
       ["assumptions", "options", "suggestedAnswer", "text", "urgency"].sort(),
@@ -47,7 +57,17 @@ describe("RefineOutput", () => {
 
   it.each([
     ["no questions", { summary: "s", ...sizing, questions: [] }],
-    ["no tier", { summary: "s", size: "S", sizeReason: "r", questions: [question] }],
+    ["no type", { summary: "s", ...sizing, type: undefined, questions: [question] }],
+    ["an old type name", { summary: "s", ...sizing, type: "story", questions: [question] }],
+    ["a tier", { summary: "s", ...sizing, tier: "fast", questions: [question] }],
+    [
+      "21 touches",
+      { summary: "s", ...sizing, touches: Array(21).fill("a"), questions: [question] },
+    ],
+    [
+      "a blank out-of-scope item",
+      { summary: "s", ...sizing, outOfScope: [" "], questions: [question] },
+    ],
     ["an unknown size", { summary: "s", ...sizing, size: "XL", questions: [question] }],
     ["six questions", { summary: "s", ...sizing, questions: Array(6).fill(question) }],
     ["a question too long", { summary: "s", ...sizing, questions: [{ text: "x".repeat(501) }] }],

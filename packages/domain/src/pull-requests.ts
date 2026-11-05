@@ -100,7 +100,7 @@ export class PullRequestTickets {
         const moves = pr.draft ? [] : await this.walk(ticket, "ready_for_review", reason);
         if (!flaggedByThisClose) return { ...base, moves };
         const after = await this.tickets.unflag(ticket.projectId, ticket.id, "system");
-        return { ...base, moves, unflagged: !after.needsYou };
+        return { ...base, moves, unflagged: !after.needsAttention };
       }
       case "merged":
         // Merge means Done until M6: Dev → prod releases (ADR-0056); other bases only link.
@@ -126,7 +126,7 @@ export class PullRequestTickets {
    * on reopen. Flags from questions or runs are left alone.
    */
   private async closedLast(ticket: Ticket, prNumber: number): Promise<boolean> {
-    if (!ticket.needsYou) return false;
+    if (!ticket.needsAttention) return false;
     const events = await this.tracker.listEvents(ticket.projectId, ticket.id);
     const last = events.findLast((e) => e.kind === "pr_linked" && e.data.number === prNumber);
     return last?.data.state === "closed";

@@ -8,6 +8,11 @@
       "maxLength": 4000,
       "description": "The refine report in markdown: Ask, Gaps, Files, Risks (procedure refine.md), at most 300 words."
     },
+    "type": {
+      "type": "string",
+      "enum": ["epic", "feature", "chore", "bug"],
+      "description": "Your type for the ticket. Used only if the ticket has none."
+    },
     "size": {
       "type": "string",
       "enum": ["S", "M", "L"],
@@ -19,10 +24,17 @@
       "maxLength": 300,
       "description": "One line: why that size, from the files you expect to change."
     },
-    "tier": {
-      "type": "string",
-      "enum": ["frontier", "strong", "fast", "cheap"],
-      "description": "Your model tier for building it. Used only if the ticket has none."
+    "outOfScope": {
+      "type": "array",
+      "maxItems": 20,
+      "description": "What the ticket must not change, one item each. Used only if the ticket has none.",
+      "items": { "type": "string", "minLength": 1, "maxLength": 300 }
+    },
+    "touches": {
+      "type": "array",
+      "maxItems": 20,
+      "description": "Areas or path globs the build is expected to edit. Used only if the ticket has none.",
+      "items": { "type": "string", "minLength": 1, "maxLength": 300 }
     },
     "questions": {
       "type": "array",
@@ -63,5 +75,5 @@
       }
     }
   },
-  "required": ["summary", "size", "sizeReason", "tier", "questions"]
+  "required": ["summary", "type", "size", "sizeReason", "outOfScope", "touches", "questions"]
 }

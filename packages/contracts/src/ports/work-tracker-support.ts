@@ -88,7 +88,6 @@ export function buildTicket(
     key: `${project.key}-${ticketNumber}`,
     stage: "backlog",
     rank: rankFor(ticketNumber),
-    overrides: {},
     archived: false,
     createdAt: now,
     updatedAt: now,

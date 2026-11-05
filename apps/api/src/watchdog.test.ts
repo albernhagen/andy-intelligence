@@ -73,7 +73,11 @@ describe("run watchdog endpoint", () => {
     );
     await t.connections.save({ ...createdApp, connectedAt: "2026-11-03T00:00:00Z" });
     const project = await t.tracker.createProject({ name: "AI", key: "AI", repos: [REPO] });
-    const ticket = await t.tracker.createTicket(project.id, { type: "story", title: "B" }, "andy");
+    const ticket = await t.tracker.createTicket(
+      project.id,
+      { type: "feature", title: "B" },
+      "andy",
+    );
     const res = await t.call(`/api/projects/${project.id}/tickets/${ticket.id}/runs`, {
       method: "POST",
       body: JSON.stringify({ step: "refine" }),

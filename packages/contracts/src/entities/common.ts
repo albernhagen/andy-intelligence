@@ -20,7 +20,8 @@ export const Stage = z.enum([
 ]);
 export type Stage = z.infer<typeof Stage>;
 
-export const TicketType = z.enum(["epic", "story", "task", "bug"]);
+/** ADR-0058: Ticket model. Type changes readiness, refine and build; an epic never runs. */
+export const TicketType = z.enum(["epic", "feature", "chore", "bug"]);
 export type TicketType = z.infer<typeof TicketType>;
 
 export const Size = z.enum(["S", "M", "L"]);

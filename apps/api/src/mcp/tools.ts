@@ -39,9 +39,12 @@ const ProjectKey = z
   .pipe(Project.shape.key)
   .describe('Project key, e.g. "AI". Call `status` with no ticket to list projects.');
 
-/** Callers can't set derived fields (dorStatus, needsYou), as in the REST API. */
-const CreateTicketInput = NewTicket.omit({ dorStatus: true, needsYou: true }).extend({
+/** Callers can't set derived fields (dorStatus, needsAttention), as in the REST API. */
+const CreateTicketInput = NewTicket.omit({ dorStatus: true, needsAttention: true }).extend({
   project: ProjectKey,
+  type: NewTicket.shape.type.describe(
+    "feature, chore, bug or epic (ADR-0058). Omit it: refine fills it, and the rest, from the title.",
+  ),
 }).shape;
 
 const AnswerInput = {
@@ -85,7 +88,7 @@ const summary = (t: Ticket) => ({
   type: t.type,
   stage: t.stage,
   dorStatus: t.dorStatus,
-  needsYou: t.needsYou,
+  needsAttention: t.needsAttention,
   archived: t.archived,
 });
 
@@ -96,7 +99,7 @@ export function registerTools(server: McpServer, deps: ToolDeps): void {
     "create_ticket",
     {
       description:
-        "Creates a ticket in a project's backlog. Returns its key and what the Definition of Ready still needs. With the project's auto-refine on (default), a refine run starts on its own and its questions arrive in `list_needs_me`.",
+        "Creates a ticket in a project's backlog; a title alone is enough. Returns its key and what the Definition of Ready still needs. With the project's auto-refine on (default), a refine run starts on its own and its questions arrive in `list_needs_me`.",
       inputSchema: CreateTicketInput,
       annotations: { destructiveHint: false, idempotentHint: false },
     },
@@ -157,7 +160,7 @@ export function registerTools(server: McpServer, deps: ToolDeps): void {
     "refine",
     {
       description:
-        "Starts a refine run on a Backlog ticket now: an agent reads the ticket and the repo, proposes size and tier, and asks 1-5 questions, which arrive in `list_needs_me` when the run ends (a few minutes). Answering the last one moves the ticket to Ready if its Definition of Ready is met. Only needed when auto-refine is off or a refine failed.",
+        "Starts a refine run on a Backlog ticket now: an agent reads the ticket and the repo, proposes type, size and scope for the fields still empty, and asks 1-5 questions, which arrive in `list_needs_me` when the run ends (a few minutes). Answering the last one moves the ticket to Ready if its Definition of Ready is met. Only needed when auto-refine is off or a refine failed.",
       inputSchema: RefineInput,
       annotations: { destructiveHint: false, idempotentHint: false, openWorldHint: true },
     },

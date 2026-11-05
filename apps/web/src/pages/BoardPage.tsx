@@ -18,7 +18,14 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Loading, QueryError } from "@/components/Status";
 import { useBoardMove, useCreateTicket, useTickets } from "@/lib/queries";
-import { STAGE_LABELS, STAGES, dropMove, groupByStage, visibleTickets } from "@/lib/tickets";
+import {
+  STAGE_LABELS,
+  STAGES,
+  TYPE_LABELS,
+  dropMove,
+  groupByStage,
+  visibleTickets,
+} from "@/lib/tickets";
 
 /**
  * Tickets grouped by stage, one column each. Drag a card to another column to move it: an
@@ -204,10 +211,10 @@ function Card({
           <span className="text-muted-foreground">{t.key}</span> {t.title}
         </span>
         <span className="flex flex-wrap gap-1">
-          <Badge>{t.type}</Badge>
+          {t.type && <Badge>{TYPE_LABELS[t.type]}</Badge>}
           {t.size && <Badge>{t.size}</Badge>}
           {t.dorStatus === "met" && <Badge variant="ok">DoR</Badge>}
-          {t.needsYou && <Badge variant="attention">needs you</Badge>}
+          {t.needsAttention && <Badge variant="attention">needs you</Badge>}
           {t.archived && <Badge>archived</Badge>}
         </span>
       </Link>

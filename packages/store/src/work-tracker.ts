@@ -52,6 +52,7 @@ export class FirestoreWorkTracker implements WorkTracker {
       this.db,
       collections.tickets.path(projectId),
       collections.tickets.schema,
+      collections.tickets.upgraders,
     );
   }
   private events(projectId: string, ticketId: string) {
@@ -122,13 +123,16 @@ export class FirestoreWorkTracker implements WorkTracker {
   async listTickets(projectId: string, filter: TicketFilter = {}): Promise<Ticket[]> {
     let query: Query<Ticket> = this.tickets(projectId);
     if (filter.stage !== undefined) query = query.where("stage", "==", filter.stage);
-    if (filter.needsYou !== undefined) query = query.where("needsYou", "==", filter.needsYou);
     // Older documents have no `archived` field (read as false), and an equality query on false
-    // would skip them, so `archived: false` filters in memory.
+    // would skip them, so `archived: false` filters in memory. `needsAttention` filters in memory
+    // too: v1 documents store it as `needsYou` until their next write (ticketV1toV2).
     if (filter.archived === true) query = query.where("archived", "==", true);
     const tickets = (await query.get()).docs
       .map((d) => d.data())
-      .filter((t) => filter.archived !== false || !t.archived);
+      .filter((t) => filter.archived !== false || !t.archived)
+      .filter(
+        (t) => filter.needsAttention === undefined || t.needsAttention === filter.needsAttention,
+      );
     return tickets.sort((a, b) => a.rank.localeCompare(b.rank));
   }
 

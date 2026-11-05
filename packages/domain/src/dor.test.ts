@@ -1,65 +1,114 @@
 import { describe, expect, it } from "vitest";
 import { checkDor, type DorInput } from "./dor";
 
-const ready: DorInput = {
-  type: "story",
+const feature: DorInput = {
+  type: "feature",
   body: "Users can't see their tickets.",
   acceptanceCriteria: ["WHEN Andy opens the board THE SYSTEM SHALL list tickets by stage"],
   size: "S",
   sizeReason: "One screen, existing API",
-  tier: "strong",
 };
+const bug: DorInput = {
+  ...feature,
+  type: "bug",
+  body: "1. Drop a card on Done. 2. Reload. Actual: it is back in Ready.",
+  acceptanceCriteria: ["A dropped card stays in its new column after a reload."],
+};
+const chore: DorInput = {
+  ...feature,
+  type: "chore",
+  body: "Bump Vite to 8.",
+  acceptanceCriteria: ["CI is green", "no lockfile drift"],
+};
+const bare = { body: " ", acceptanceCriteria: [] as string[], size: null, sizeReason: null };
 
 describe("checkDor", () => {
-  it("GivenACompleteStory_WhenChecked_ThenMet", () => {
-    expect(checkDor(ready, 0)).toEqual({ met: true, missing: [] });
+  it.each([
+    ["feature", feature],
+    ["bug", bug],
+    ["chore", chore],
+  ])("GivenACompleteTicketOfType%s_WhenChecked_ThenMetWithoutATier", (_, ticket) => {
+    expect(checkDor(ticket, 0)).toEqual({ met: true, missing: [] });
   });
 
   it("GivenOpenQuestions_WhenChecked_ThenNotMet", () => {
-    expect(checkDor(ready, 2)).toEqual({ met: false, missing: ["2 open question(s) answered"] });
+    expect(checkDor(feature, 2)).toEqual({ met: false, missing: ["2 open question(s) answered"] });
   });
 
-  it("GivenNonEarsCriteria_WhenChecked_ThenNotMet", () => {
-    const result = checkDor({ ...ready, acceptanceCriteria: ["it works"] }, 0);
-    expect(result.missing).toEqual(["1 acceptance criterion/criteria in EARS form"]);
+  it("GivenAFeatureWithACriterionWithoutShall_WhenChecked_ThenNotMet", () => {
+    const result = checkDor({ ...feature, acceptanceCriteria: ["it works"] }, 0);
+    expect(result.missing).toEqual(['1 acceptance criterion/criteria in EARS form ("… shall …")']);
   });
 
-  it("GivenOtherEarsPatterns_WhenChecked_ThenAccepted", () => {
+  it("GivenAFeatureWithShallAndAnySubject_WhenChecked_ThenAccepted", () => {
     const criteria = [
       "IF the token is invalid THEN THE SYSTEM SHALL return 401",
-      "WHILE a run is in progress the system shall show a spinner",
+      "WHILE a run is in progress the board shall show a spinner",
+      "When a card is dropped, the API shall persist its stage.",
     ];
-    expect(checkDor({ ...ready, acceptanceCriteria: criteria }, 0).met).toBe(true);
+    expect(checkDor({ ...feature, acceptanceCriteria: criteria }, 0).met).toBe(true);
   });
 
-  it("GivenABareStory_WhenChecked_ThenListsEveryGap", () => {
-    const bare: DorInput = {
-      type: "task",
-      body: " ",
-      acceptanceCriteria: [],
-      size: null,
-      sizeReason: null,
-      tier: null,
-    };
-    expect(checkDor(bare, 0).missing).toEqual([
+  it("GivenACriterionThatIsOnlyShall_WhenCheckedOnAFeature_ThenNotEars", () => {
+    expect(checkDor({ ...feature, acceptanceCriteria: ["shall"] }, 0).met).toBe(false);
+  });
+
+  it("GivenABareFeature_WhenChecked_ThenListsEveryGap", () => {
+    expect(checkDor({ type: "feature", ...bare }, 0).missing).toEqual([
       "problem/intent in the body",
       "acceptance criteria",
       "size",
       "size justification",
-      "tier",
+    ]);
+  });
+
+  it("GivenABareBug_WhenChecked_ThenAsksForReproStepsAndExpectedBehaviour", () => {
+    expect(checkDor({ type: "bug", ...bare }, 0).missing).toEqual([
+      "steps to reproduce and actual behaviour in the body",
+      "expected behaviour as an acceptance criterion",
+      "size",
+      "size justification",
+    ]);
+  });
+
+  it("GivenABugWithACriterionInAnyWording_WhenChecked_ThenMet", () => {
+    expect(checkDor({ ...bug, acceptanceCriteria: ["cards stay put"] }, 0).met).toBe(true);
+  });
+
+  it("GivenABareChore_WhenChecked_ThenAsksForADoneWhenChecklist", () => {
+    expect(checkDor({ type: "chore", ...bare }, 0).missing).toEqual([
+      "problem/intent in the body",
+      '"done when" checklist',
+      "size",
+      "size justification",
+    ]);
+  });
+
+  it("GivenAChoreChecklistWithoutShall_WhenChecked_ThenMet", () => {
+    expect(checkDor({ ...chore, acceptanceCriteria: ["tests pass"] }, 0).met).toBe(true);
+  });
+
+  it("GivenBlankCriteria_WhenChecked_ThenTheyDoNotCount", () => {
+    expect(checkDor({ ...chore, acceptanceCriteria: ["  "] }, 0).missing).toEqual([
+      '"done when" checklist',
+    ]);
+  });
+
+  it("GivenNoType_WhenChecked_ThenTypeIsMissingAlongTheSharedChecks", () => {
+    expect(checkDor({ ...feature, type: null }, 0)).toEqual({ met: false, missing: ["type"] });
+    expect(checkDor({ type: null, ...bare }, 1).missing).toEqual([
+      "type",
+      "problem/intent in the body",
+      "1 open question(s) answered",
+      "size",
+      "size justification",
     ]);
   });
 
   it("GivenAnEpicWithIntentOnly_WhenChecked_ThenMet", () => {
-    const epic: DorInput = {
-      type: "epic",
-      body: "Board",
-      acceptanceCriteria: [],
-      size: null,
-      sizeReason: null,
-      tier: null,
-    };
+    const epic: DorInput = { type: "epic", ...bare, body: "Board" };
     expect(checkDor(epic, 0).met).toBe(true);
     expect(checkDor(epic, 1).met).toBe(false);
+    expect(checkDor({ ...epic, body: "" }, 0).missing).toEqual(["problem/intent in the body"]);
   });
 });

@@ -52,7 +52,7 @@ export function workTrackerContract(name: string, make: () => Promise<WorkTracke
       const project = await tracker.createProject({ name: "Demo", key: uniqueKey() });
       const ticket = await tracker.createTicket(
         project.id,
-        { type: "story", title: "First" },
+        { type: "feature", title: "First" },
         "andy",
       );
       return { tracker, project, ticket };
@@ -102,12 +102,61 @@ export function workTrackerContract(name: string, make: () => Promise<WorkTracke
       for (const e of events) expect(TicketEvent.parse(e)).toEqual(e);
     });
 
+    it("GivenOnlyATitle_WhenATicketIsCreated_ThenTypeIsEmptyAndScopeListsAreEmpty", async () => {
+      const { tracker, project } = await setup();
+      const ticket = await tracker.createTicket(project.id, { title: "Just a title" }, "andy");
+      expect(ticket).toMatchObject({ type: null, outOfScope: [], touches: [] });
+      expect(await tracker.getTicket(project.id, ticket.id)).toEqual(ticket);
+    });
+
+    it("GivenATicket_WhenTypeAndScopeListsAreSet_ThenTheyAreStoredAndRecorded", async () => {
+      const { tracker, project } = await setup();
+      const ticket = await tracker.createTicket(project.id, { title: "Scope" }, "andy");
+      const fields = {
+        type: "chore" as const,
+        outOfScope: ["the UI"],
+        touches: ["packages/store/**"],
+      };
+      const updated = await tracker.updateTicket(project.id, ticket.id, { fields }, "andy");
+      expect(updated).toMatchObject(fields);
+      expect(await tracker.getTicket(project.id, ticket.id)).toEqual(updated);
+      const events = await tracker.listEvents(project.id, ticket.id);
+      expect(Object.keys(events[1]?.data.diff as object).sort()).toEqual([
+        "outOfScope",
+        "touches",
+        "type",
+      ]);
+    });
+
+    it("GivenAnArchivedTicketWithScope_WhenAnotherFieldIsEdited_ThenArchivedAndScopeStay", async () => {
+      const { tracker, project, ticket } = await setup();
+      const fields = { archived: true, outOfScope: ["the UI"], touches: ["apps/api/**"] };
+      await tracker.updateTicket(project.id, ticket.id, { fields }, "andy");
+      const edited = await tracker.updateTicket(
+        project.id,
+        ticket.id,
+        { fields: { title: "Renamed" } },
+        "andy",
+      );
+      expect(edited).toMatchObject({ ...fields, title: "Renamed" });
+    });
+
+    it("GivenTooManyOrTooLongScopeItems_WhenSet_ThenTheChangeIsRejected", async () => {
+      const { tracker, project, ticket } = await setup();
+      for (const touches of [Array(21).fill("a"), ["x".repeat(301)]]) {
+        await expect(
+          tracker.updateTicket(project.id, ticket.id, { fields: { touches } }, "andy"),
+        ).rejects.toThrow();
+      }
+      expect((await tracker.getTicket(project.id, ticket.id))?.touches).toEqual([]);
+    });
+
     it("GivenAnUnknownProjectOrTicket_WhenAccessed_ThenNullOrNotFound", async () => {
       const { tracker, project, ticket } = await setup();
       expect(await tracker.getTicket(project.id, "nope")).toBeNull();
       expect(await tracker.getTicket("other-project", ticket.id)).toBeNull();
       await rejectsWith(
-        tracker.createTicket("nope", { type: "task", title: "x" }, "andy"),
+        tracker.createTicket("nope", { type: "chore", title: "x" }, "andy"),
         "not_found",
       );
       await rejectsWith(
@@ -123,7 +172,11 @@ export function workTrackerContract(name: string, make: () => Promise<WorkTracke
 
     it("GivenTickets_WhenListed_ThenSortedByRankAndFilterable", async () => {
       const { tracker, project, ticket } = await setup();
-      const second = await tracker.createTicket(project.id, { type: "task", title: "Two" }, "andy");
+      const second = await tracker.createTicket(
+        project.id,
+        { type: "chore", title: "Two" },
+        "andy",
+      );
       await tracker.updateTicket(
         project.id,
         second.id,
@@ -137,16 +190,25 @@ export function workTrackerContract(name: string, make: () => Promise<WorkTracke
       expect((await tracker.listTickets(project.id, { stage: "ready" })).map((t) => t.id)).toEqual([
         second.id,
       ]);
-      await tracker.updateTicket(project.id, ticket.id, { fields: { needsYou: true } }, "system");
-      expect((await tracker.listTickets(project.id, { needsYou: true })).map((t) => t.id)).toEqual([
+      await tracker.updateTicket(
+        project.id,
         ticket.id,
-      ]);
+        { fields: { needsAttention: true } },
+        "system",
+      );
+      expect(
+        (await tracker.listTickets(project.id, { needsAttention: true })).map((t) => t.id),
+      ).toEqual([ticket.id]);
     });
 
     it("GivenAnArchivedTicket_WhenListedByArchived_ThenOnlyMatchingTicketsAreReturned", async () => {
       const { tracker, project, ticket } = await setup();
       expect(ticket.archived).toBe(false);
-      const second = await tracker.createTicket(project.id, { type: "task", title: "Two" }, "andy");
+      const second = await tracker.createTicket(
+        project.id,
+        { type: "chore", title: "Two" },
+        "andy",
+      );
       await tracker.updateTicket(project.id, second.id, { fields: { archived: true } }, "andy");
       const ids = async (archived?: boolean) =>
         (await tracker.listTickets(project.id, { archived })).map((t) => t.id);

@@ -12,13 +12,12 @@ import { PullRequestTickets, outcomeOf, ticketKeyFor } from "./pull-requests";
 import { TicketService } from "./tickets";
 
 const readyStory: NewTicket = {
-  type: "story",
+  type: "feature",
   title: "Board",
   body: "Andy can't see tickets.",
   acceptanceCriteria: ["WHEN Andy opens the board THE SYSTEM SHALL list tickets"],
   size: "S",
   sizeReason: "one screen",
-  tier: "strong",
 };
 
 type PrEvent = Extract<CodeHostEvent, { kind: "pull_request" }>;
@@ -155,7 +154,7 @@ describe("PullRequestTickets", () => {
     ]) {
       expect(await prs.apply(e, project)).toMatchObject({ result: "linked", moves: [] });
     }
-    expect(await reload(t)).toMatchObject({ stage: "cancelled", needsYou: false });
+    expect(await reload(t)).toMatchObject({ stage: "cancelled", needsAttention: false });
     expect(await service.needsYou()).toEqual({ questions: [], tickets: [] });
   });
 
@@ -191,7 +190,7 @@ describe("PullRequestTickets", () => {
     await prs.apply(prEvent("closed", { state: "closed" }), project);
     const result = await prs.apply(prEvent("reopened"), project);
     expect(result).toMatchObject({ moves: ["ready_for_review"], unflagged: true });
-    expect(await reload(t)).toMatchObject({ stage: "ready_for_review", needsYou: false });
+    expect(await reload(t)).toMatchObject({ stage: "ready_for_review", needsAttention: false });
   });
 
   it("GivenAnOpenQuestion_WhenTheClosedPullRequestIsReopened_ThenStillNeedsYou", async () => {
@@ -199,7 +198,7 @@ describe("PullRequestTickets", () => {
     await prs.apply(prEvent("closed", { state: "closed" }), project);
     await service.ask(project.id, t.id, { text: "Which?" }, "agent:r1");
     expect(await prs.apply(prEvent("reopened"), project)).toMatchObject({ unflagged: false });
-    expect((await reload(t)).needsYou).toBe(true);
+    expect((await reload(t)).needsAttention).toBe(true);
   });
 
   it("GivenAFlagFromSomethingElse_WhenAPullRequestOpens_ThenTheFlagStays", async () => {
@@ -208,28 +207,28 @@ describe("PullRequestTickets", () => {
     await prs.apply(prEvent("closed", { number: 69, state: "closed" }), project);
     const result = await prs.apply(prEvent("opened"), project);
     expect(result.unflagged).toBeUndefined();
-    expect(await reload(t)).toMatchObject({ stage: "ready_for_review", needsYou: true });
+    expect(await reload(t)).toMatchObject({ stage: "ready_for_review", needsAttention: true });
   });
 
   it("GivenATicketInReview_WhenItsPullRequestClosesUnmerged_ThenInProgressAndNeedsYou", async () => {
     const t = await ticketAt("ready_for_review");
     const result = await prs.apply(prEvent("closed", { state: "closed" }), project);
     expect(result).toMatchObject({ outcome: "closed", moves: ["in_progress"], flagged: true });
-    expect(await reload(t)).toMatchObject({ stage: "in_progress", needsYou: true });
+    expect(await reload(t)).toMatchObject({ stage: "in_progress", needsAttention: true });
   });
 
   it("GivenAnInProgressTicket_WhenADraftPullRequestCloses_ThenFlaggedWithoutAMove", async () => {
     const t = await ticketAt("in_progress");
     const result = await prs.apply(prEvent("closed", { state: "closed", draft: true }), project);
     expect(result).toMatchObject({ moves: [], flagged: true });
-    expect(await reload(t)).toMatchObject({ stage: "in_progress", needsYou: true });
+    expect(await reload(t)).toMatchObject({ stage: "in_progress", needsAttention: true });
   });
 
   it("GivenADoneTicket_WhenAnOldPullRequestCloses_ThenLinkedOnly", async () => {
     const t = await ticketAt("done");
     const result = await prs.apply(prEvent("closed", { state: "closed" }), project);
     expect(result).toMatchObject({ moves: [], flagged: false });
-    expect(await reload(t)).toMatchObject({ stage: "done", needsYou: false });
+    expect(await reload(t)).toMatchObject({ stage: "done", needsAttention: false });
   });
 
   it("GivenNoKeyOrAnUnknownTicketOrANoOpAction_WhenApplied_ThenIgnoredAndNothingWritten", async () => {

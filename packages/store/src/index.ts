@@ -22,6 +22,7 @@ import {
   Tier,
 } from "@andy/contracts";
 import type { z } from "zod";
+import { ticketV1toV2, upgrade, type Upgrader } from "./upgrade";
 
 /**
  * Firestore persistence (ADR-0017). Documents are validated with the same Zod schemas
@@ -29,12 +30,17 @@ import type { z } from "zod";
  * Each document carries `_v` (schema version) so readers can upgrade old shapes lazily.
  */
 
-export const SCHEMA_VERSION = 1;
+/** v2: ticket model v2 (ADR-0058), upgraded on read by `ticketV1toV2`. */
+export const SCHEMA_VERSION = 2;
 
 /** Collection layout. Tickets and their history live under their project. */
 export const collections = {
   projects: { path: () => "projects", schema: Project },
-  tickets: { path: (projectId: string) => `projects/${projectId}/tickets`, schema: Ticket },
+  tickets: {
+    path: (projectId: string) => `projects/${projectId}/tickets`,
+    schema: Ticket,
+    upgraders: { 1: ticketV1toV2 },
+  },
   ticketEvents: {
     path: (projectId: string, ticketId: string) =>
       `projects/${projectId}/tickets/${ticketId}/events`,
@@ -55,18 +61,21 @@ export const collections = {
   config: { path: () => "config" },
 } as const;
 
-/** Zod-validated converter: rejects malformed documents on read and write. */
+/**
+ * Zod-validated converter: rejects malformed documents on read and write. On read, older
+ * documents go through `upgraders` (by the version they upgrade from) before validation.
+ */
 export function zodConverter<S extends z.ZodType<DocumentData>>(
   schema: S,
+  upgraders: Partial<Record<number, Upgrader>> = {},
 ): FirestoreDataConverter<z.infer<S>> {
   return {
     toFirestore(value) {
       return { ...schema.parse(value), _v: SCHEMA_VERSION };
     },
     fromFirestore(snapshot: QueryDocumentSnapshot) {
-      // eslint-disable-next-line @typescript-eslint/no-unused-vars
       const { _v, ...data } = snapshot.data();
-      return schema.parse(data);
+      return schema.parse(upgrade(data, _v, upgraders));
     },
   };
 }
@@ -81,8 +90,9 @@ export function typedCollection<S extends z.ZodType<DocumentData>>(
   db: Firestore,
   path: string,
   schema: S,
+  upgraders: Partial<Record<number, Upgrader>> = {},
 ): CollectionReference<z.infer<S>> {
-  return db.collection(path).withConverter(zodConverter(schema));
+  return db.collection(path).withConverter(zodConverter(schema, upgraders));
 }
 
 export {
@@ -98,5 +108,6 @@ export {
 } from "./code-event-log";
 export { FirestoreOAuthGrantStore, OAUTH_GRANT_TTL_FIELD } from "./oauth-grant-store";
 export { FirestoreWorkTracker } from "./work-tracker";
+export { ticketV1toV2, upgrade, type Upgrader } from "./upgrade";
 export { FirestoreRunStore } from "./run-store";
 export { CloudTasksWatchdogQueue, watchdogUrl, type TaskCreator } from "./watchdog-queue";

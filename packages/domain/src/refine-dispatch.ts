@@ -44,7 +44,7 @@ export class RefineDispatcher {
 
     for (const ticket of await this.tracker.listTickets(projectId, { stage: "backlog" })) {
       // Backlog only, so cancelled tickets never qualify; archived ones are hidden, skip them too.
-      if (ticket.archived || ticket.needsYou || !(await this.waiting(ticket))) continue;
+      if (ticket.archived || ticket.needsAttention || !(await this.waiting(ticket))) continue;
       try {
         const run = await this.runs.start(projectId, ticket.id, "refine");
         log("INFO", "refine started on its own", { ticket: ticket.key, runId: run.id });
@@ -101,7 +101,7 @@ export class RefineDispatcher {
     await this.tracker.updateTicket(
       ticket.projectId,
       ticket.id,
-      { fields: { needsYou: true } },
+      { fields: { needsAttention: true } },
       "system",
     );
   }

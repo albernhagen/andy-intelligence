@@ -12,7 +12,7 @@ const REPO = "albernhagen/andy-intelligence";
 async function setup() {
   const harness = renderApp("/", { githubConnected: true });
   await harness.tracker.createProject({ name: "AI", key: "AI", repos: [REPO] });
-  const ticket = await harness.service.create("ai", { type: "story", title: "Board" }, "andy");
+  const ticket = await harness.service.create("ai", { type: "feature", title: "Board" }, "andy");
   const queueRun = (ticketId = ticket.id) =>
     harness.runs.create({
       projectId: "ai",
@@ -60,7 +60,7 @@ describe("runs UI", () => {
   it("GivenARunInFlightOnAnotherTicket_WhenAndyStartsARun_ThenTheConflictIsShown", async () => {
     const harness = await setup();
     await harness.queueRun();
-    const other = await harness.service.create("ai", { type: "task", title: "Other" }, "andy");
+    const other = await harness.service.create("ai", { type: "chore", title: "Other" }, "andy");
     const section = await harness.open(other.id);
 
     await harness.user.click(

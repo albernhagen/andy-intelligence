@@ -22,6 +22,37 @@ describe("tickets UI", () => {
     expect(within(backlog).getByText("AI-1")).toBeTruthy();
   });
 
+  it("GivenATitleOnlyTicket_WhenAndySetsTypeScopeAndPinsATier_ThenTheyAreSavedAndShown", async () => {
+    const harness = renderApp();
+    await harness.tracker.createProject({ name: "AI", key: "AI" });
+    const ticket = await harness.service.create("ai", { title: "Board" }, "andy");
+    expect(ticket.type).toBeNull();
+    await harness.router.navigate({ to: `/p/ai/t/${ticket.id}` });
+    const { user } = harness;
+    expect(await screen.findByText("No type")).toBeTruthy();
+
+    await user.click(await screen.findByRole("button", { name: "Edit" }));
+    await user.selectOptions(screen.getByLabelText("Type"), "Bug");
+    await user.selectOptions(screen.getByLabelText("Size"), "M");
+    expect(screen.getByRole("option", { name: "strong (from size)" })).toBeTruthy();
+    await user.selectOptions(screen.getByLabelText("Tier"), "frontier");
+    await user.type(screen.getByLabelText(/^Out of scope/), "billing");
+    await user.type(screen.getByLabelText(/^Touches/), "apps/web/**");
+    await user.click(screen.getByRole("button", { name: "Save" }));
+
+    await waitFor(async () =>
+      expect(await harness.tracker.getTicket("ai", ticket.id)).toMatchObject({
+        type: "bug",
+        size: "M",
+        overrides: { tier: "frontier" },
+        outOfScope: ["billing"],
+        touches: ["apps/web/**"],
+      }),
+    );
+    expect(await screen.findByText("frontier (pinned)")).toBeTruthy();
+    expect(screen.getByText("Bug")).toBeTruthy();
+  });
+
   it("GivenARepo_WhenAndyCreatesAProject_ThenTheProjectListsIt", async () => {
     const harness = renderApp("/projects", { githubConnected: true });
     await harness.user.type(await screen.findByLabelText("Name"), "Andy Intelligence");
@@ -51,7 +82,7 @@ describe("tickets UI", () => {
   it("GivenATicket_WhenAndyEditsIt_ThenFieldsAndHistoryUpdate", async () => {
     const harness = renderApp();
     await harness.tracker.createProject({ name: "AI", key: "AI" });
-    const ticket = await harness.service.create("ai", { type: "story", title: "Board" }, "andy");
+    const ticket = await harness.service.create("ai", { type: "feature", title: "Board" }, "andy");
     await harness.router.navigate({ to: `/p/ai/t/${ticket.id}` });
     const { user } = harness;
 
@@ -67,7 +98,7 @@ describe("tickets UI", () => {
   it("GivenATicketChangedElsewhere_WhenSavingAnEdit_ThenAConflictIsShown", async () => {
     const harness = renderApp();
     await harness.tracker.createProject({ name: "AI", key: "AI" });
-    const ticket = await harness.service.create("ai", { type: "story", title: "Board" }, "andy");
+    const ticket = await harness.service.create("ai", { type: "feature", title: "Board" }, "andy");
     await harness.router.navigate({ to: `/p/ai/t/${ticket.id}` });
     const { user } = harness;
 
@@ -83,7 +114,7 @@ describe("tickets UI", () => {
   it("GivenATicketMissingDoR_WhenMovedToReady_ThenTheMissingItemsAreShown", async () => {
     const harness = renderApp();
     await harness.tracker.createProject({ name: "AI", key: "AI" });
-    const ticket = await harness.service.create("ai", { type: "story", title: "Board" }, "andy");
+    const ticket = await harness.service.create("ai", { type: "feature", title: "Board" }, "andy");
     await harness.router.navigate({ to: `/p/ai/t/${ticket.id}` });
 
     const dor = await screen.findByRole("region", { name: "Definition of Ready" });
@@ -116,7 +147,7 @@ describe("tickets UI", () => {
   it("GivenATicket_WhenAndyForcesAMoveWithAReason_ThenHistoryRecordsTheReason", async () => {
     const harness = renderApp();
     await harness.tracker.createProject({ name: "AI", key: "AI" });
-    const ticket = await harness.service.create("ai", { type: "story", title: "Board" }, "andy");
+    const ticket = await harness.service.create("ai", { type: "feature", title: "Board" }, "andy");
     await harness.router.navigate({ to: `/p/ai/t/${ticket.id}` });
     const { user } = harness;
 
@@ -137,7 +168,7 @@ describe("tickets UI", () => {
   it("GivenATicketMissingDoR_WhenAndyForcesItToReadyWithNoReason_ThenItMovesAnyway", async () => {
     const harness = renderApp();
     await harness.tracker.createProject({ name: "AI", key: "AI" });
-    const ticket = await harness.service.create("ai", { type: "story", title: "Board" }, "andy");
+    const ticket = await harness.service.create("ai", { type: "feature", title: "Board" }, "andy");
     await harness.router.navigate({ to: `/p/ai/t/${ticket.id}` });
     const { user } = harness;
 
@@ -221,7 +252,7 @@ describe("Needs-you inbox", () => {
 
     expect(await screen.findByText("Nothing needs you.")).toBeTruthy();
     const after = await harness.tracker.getTicket("ai", ticket.id);
-    expect(after).toMatchObject({ needsYou: false, dorStatus: "met" });
+    expect(after).toMatchObject({ needsAttention: false, dorStatus: "met" });
     const [question] = await harness.tracker.listQuestions({ ticketId: ticket.id });
     expect(question).toMatchObject({ status: "answered", answer: "List", answeredVia: "ui" });
   });
@@ -241,7 +272,7 @@ describe("Needs-you inbox", () => {
     await user.click(screen.getByRole("link", { name: "Needs you" }));
     expect(await screen.findByRole("article", { name: "Question: Dark mode too?" })).toBeTruthy();
     await waitFor(async () =>
-      expect((await harness.tracker.getTicket("ai", ticket.id))?.needsYou).toBe(true),
+      expect((await harness.tracker.getTicket("ai", ticket.id))?.needsAttention).toBe(true),
     );
   });
 });
