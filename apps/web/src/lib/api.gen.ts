@@ -2328,6 +2328,10 @@ export interface paths {
                 ref: string;
                 externalId: string;
               } | null;
+              /** @default 1 */
+              attempt: number;
+              /** @default null */
+              retryOf: string | null;
             }[];
           };
         };
@@ -2432,6 +2436,10 @@ export interface paths {
                 ref: string;
                 externalId: string;
               } | null;
+              /** @default 1 */
+              attempt: number;
+              /** @default null */
+              retryOf: string | null;
             };
           };
         };

@@ -99,3 +99,4 @@ export {
 export { FirestoreOAuthGrantStore, OAUTH_GRANT_TTL_FIELD } from "./oauth-grant-store";
 export { FirestoreWorkTracker } from "./work-tracker";
 export { FirestoreRunStore } from "./run-store";
+export { CloudTasksWatchdogQueue, watchdogUrl, type TaskCreator } from "./watchdog-queue";

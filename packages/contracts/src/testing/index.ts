@@ -25,6 +25,7 @@ import {
   type NewRun,
   type RunRequest,
   type RunStore,
+  type WatchdogQueue,
   type WorkTracker,
 } from "../ports";
 
@@ -652,6 +653,28 @@ export function runStoreContract(name: string, make: () => Promise<RunStore>): v
         store.update(run.id, { status: "failed" }, ["queued"]),
       ]);
       expect(results.filter((r) => r.status === "fulfilled")).toHaveLength(1);
+    });
+  });
+}
+
+export function watchdogQueueContract(name: string, make: () => Promise<WatchdogQueue>): void {
+  describe(`WatchdogQueue contract: ${name}`, () => {
+    const runId = () => `run-${crypto.randomUUID()}`;
+    const at = "2026-11-04T13:00:00.000Z";
+
+    it("GivenANewRun_WhenScheduled_ThenScheduled", async () => {
+      expect(await (await make()).schedule({ runId: runId(), at })).toBe("scheduled");
+    });
+
+    it("GivenAScheduledRun_WhenScheduledAgain_ThenDuplicate", async () => {
+      const queue = await make();
+      const id = runId();
+      await queue.schedule({ runId: id, at });
+      expect(await queue.schedule({ runId: id, at: "2026-11-04T14:00:00.000Z" })).toBe("duplicate");
+    });
+
+    it("GivenAnInvalidRunId_WhenScheduled_ThenRejected", async () => {
+      await expect((await make()).schedule({ runId: "a/b", at })).rejects.toThrow();
     });
   });
 }
