@@ -42,7 +42,7 @@
 - **Every sandbox expectation held:** the three credential variables not set; `/proc/1/cmdline` the sandbox's own shell; `sudo -n true` fails ("no new privileges"); `curl https://example.com` fails (CONNECT 403); `curl https://registry.npmjs.org` succeeds.
 - **Failed:** `pnpm install --frozen-lockfile` downloaded the packages, then failed with `EROFS` writing `node_modules/.bin/eslint`; no checks ran.
 - **Diagnostic:** AI-53: Sandbox diagnostic: which mount makes node_modules/.bin read-only (build run `QBPqyF3j9fAJNjZQwp0s`, PR #95, closed unmerged): `node_modules` and `node_modules/.bin` are their own read-only bind mounts (mountinfo 578, 628), like `package.json` and the lockfiles; the repo root is writable. No profile rule covers them: Claude Code's own protected package-manager paths.
-- **Fix (AI-54: Build sandbox: pre-install dependencies before the agent (node_modules is read-only inside), ADR-0072, decided by Andy):** "Install dependencies (build)" runs `pnpm install --frozen-lockfile --ignore-scripts` outside the sandbox before the agent, store under runner temp; the build procedure says dependencies are installed and can't be changed.
+- **Fix (AI-54: Build sandbox: pre-install dependencies before the agent (node_modules is read-only inside), ADR-0072, decided by Andy):** "Install dependencies (build)" runs `pnpm install --frozen-lockfile --ignore-scripts --ignore-pnpmfile` outside the sandbox before the agent, store under runner temp; the build procedure says dependencies are installed and can't be changed.
 
 ## Next
 

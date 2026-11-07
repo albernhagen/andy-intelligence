@@ -317,12 +317,13 @@ jobs:
       # Build only (ADR-0072). Inside the sandbox node_modules and its .bin are read-only binds
       # (Claude Code's own protected package-manager paths), so dependencies are installed here,
       # outside the sandbox, before the agent: from the lockfile of the commit the agent starts
-      # from (the default branch), with lifecycle scripts off, so no package code runs in this job.
+      # from (the default branch), with lifecycle scripts and .pnpmfile.cjs hooks off, so no package
+      # or project code runs in this job (pnpm still reads the repo's .npmrc and workspace settings).
       # The store is under runner temp, which sandboxed commands can't read, so the agent can't
       # alter the files behind node_modules' hardlinks. A failed install fails the job.
       - name: Install dependencies (build)
         if: needs.context.outputs.step == 'build' && hashFiles('pnpm-lock.yaml') != ''
-        run: pnpm install --frozen-lockfile --ignore-scripts --store-dir "$RUNNER_TEMP/pnpm-store"
+        run: pnpm install --frozen-lockfile --ignore-scripts --ignore-pnpmfile --store-dir "$RUNNER_TEMP/pnpm-store"
 
       - name: Load the step's procedure and result schema
         id: procedure
