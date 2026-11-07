@@ -21,6 +21,13 @@
 - **Cause:** something outside the sandbox (the action or Claude Code; the profile write-denies `.git/info` for sandboxed Bash) changed a file in `.git/info` beyond the allowed `/.claude-pr/` line; the message didn't say which. Reproducing it locally wasn't possible.
 - **Fix (AI-48: Sandbox check fails on an unnamed change in .git/info):** `check-git` names the changed entries of a changed directory (names only), e.g. `info (attributes)`, and no longer compares `info/exclude` (a regular file or absent): it only lists ignored paths, can't make git run code or read another config, and the collect step uses the pre-agent `.git`. The rest of `info/` stays compared.
 
+## Fourth try (after AI-48, PR #90)
+
+- **Run:** AI-45 reached its cap of 4 build runs, so a new chore AI-49: Sandbox probe script (second chore) took over; build run `l0BVuy7PV1oKkAHhSK1h` (Actions run 42351361214).
+- **Passed, live for the first time:** the `.git` comparison, and every `verify-check` assertion: the exact command as the one Bash call (no error, no other tool), the nonce reaching it through env only, PID 1 not the runner's (own PID namespace), no credential variable names in `env`.
+- **Failed:** the clean-checkout check: `The sandbox check left the checkout changed: .gitmodules .npmrc .yarnrc .yarnrc.yml bunfig.toml package-lock.json yarn.lock`. Claude Code 2.1.312 leaves its empty placeholders after a normal exit too, not only when killed as its docs say.
+- **Fix (AI-50: Sandbox check fails on the placeholders the sandbox leaves in the checkout):** the verify step runs `executor-publish.mjs drop-placeholders` (listed, empty, regular, new since the manifest; each logged) before the clean-checkout check; anything else still fails. During the agent run the sandbox recreates them; pnpm ignores empty npm and yarn lockfiles and an empty `.npmrc`, and the collect step drops them again.
+
 ## Next
 
-After the fix merges, re-run §9 on AI-45 and record the result here. If it fails again, the message names the path.
+After the fix merges, start AI-49's build again and record the result here.

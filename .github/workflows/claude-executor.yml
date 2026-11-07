@@ -285,8 +285,12 @@ jobs:
             echo "::error title=claude-executor::Sandbox check failed (check step: $CHECK_OUTCOME): the exact check command didn't run cleanly in Claude Code's sandbox, or its facts (nonce, PID 1, env names) didn't show one. Refusing to run the agent; see runbook agent-runs.md §9."
             exit 1
           fi
-          # The agent starts from a clean checkout: anything the check left (e.g. sandbox
-          # placeholders) fails here with its name. git runs from the pre-agent copy of .git.
+          # The sandbox leaves its empty placeholders behind even after a normal exit (AI-50): drop
+          # those (listed, empty, regular, new since the manifest; each logged), then the agent
+          # starts from a clean checkout: anything else the check left fails here with its name.
+          # git runs from the pre-agent copy of .git.
+          WORKSPACE="$GITHUB_WORKSPACE" MANIFEST="$RUNNER_TEMP/workspace-before.manifest" \
+            node "$RUNNER_TEMP/platform/scripts/executor-publish.mjs" drop-placeholders || exit 1
           dirty=$(GIT_DIR="$RUNNER_TEMP/pristine.git" GIT_WORK_TREE="$GITHUB_WORKSPACE" GIT_CONFIG_NOSYSTEM=1 \
             GIT_CONFIG_GLOBAL=/dev/null git -c core.fsmonitor=false -c core.hooksPath=/dev/null \
             status --porcelain --untracked-files=all) || dirty="(git status failed)"
