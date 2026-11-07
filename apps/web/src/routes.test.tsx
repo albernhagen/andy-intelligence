@@ -22,7 +22,7 @@ describe("a URL for every page", () => {
   it.each([
     ["/all/inbox", "Which layout?"],
     ["/p/ai/inbox", "Which layout?"],
-    ["/p/ai", "Tickets"],
+    ["/p/ai", "Backlog"],
     ["/all/board", "A board shows one project. Pick one:"],
     ["/p/ai/t/AI-1", "AI-1: Board"],
     ["/projects", "Projects"],

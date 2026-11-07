@@ -165,11 +165,13 @@ describe("MCP OAuth flow (MCP SDK client)", () => {
     expect((await client.listTools()).tools.map((t) => t.name).sort()).toEqual([
       "answer_question",
       "archive_ticket",
+      "build",
       "cancel_ticket",
       "create_ticket",
       "list_needs_me",
       "move_ticket",
       "refine",
+      "set_auto_build",
       "set_auto_refine",
       "status",
     ]);

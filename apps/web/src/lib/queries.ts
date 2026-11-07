@@ -14,6 +14,22 @@ export function useProjects() {
   });
 }
 
+/**
+ * The board's tickets with their card status (AI-28: Board v2). Refetches every few seconds
+ * while a card has a run in flight, like the runs list, so the elapsed time and the run's end
+ * show up; otherwise only when something is written.
+ */
+export function useBoard(projectId: string) {
+  const api = useApi();
+  return useQuery({
+    queryKey: ["board", projectId],
+    queryFn: async () =>
+      unwrap(await api.GET("/api/projects/{projectId}/board", { params: { path: { projectId } } })),
+    refetchInterval: (q) =>
+      runsRefetchInterval(q.state.data?.flatMap((t) => (t.summary.run ? [t.summary.run] : []))),
+  });
+}
+
 export function useTickets(projectId: string) {
   const api = useApi();
   return useQuery({
@@ -157,11 +173,14 @@ export function useCreateProject() {
   );
 }
 
-/** Project settings (ADR-0054: autoRefine). */
+/** Project settings (ADR-0054: autoRefine; ADR-0063: autoBuild). */
 export function useUpdateProject(projectId: string) {
   const api = useApi();
-  return useWrite(async (body: { autoRefine: boolean }) =>
-    unwrap(await api.PATCH("/api/projects/{projectId}", { params: { path: { projectId } }, body })),
+  return useWrite(
+    async (body: { autoRefine?: boolean; autoBuild?: boolean; buildEnabled?: boolean }) =>
+      unwrap(
+        await api.PATCH("/api/projects/{projectId}", { params: { path: { projectId } }, body }),
+      ),
   );
 }
 
@@ -248,6 +267,32 @@ export function useBoardMove(projectId: string) {
   );
 }
 
+/** Sets a ticket's place in its lane (ADR-0058: order is priority); `rank` from `planDrop`. */
+export function useRankTicket(projectId: string) {
+  const api = useApi();
+  return useWrite(async ({ ticketId, rank }: { ticketId: string; rank: string }) =>
+    unwrap(
+      await api.PATCH("/api/projects/{projectId}/tickets/{ticketId}", {
+        params: { path: { projectId, ticketId } },
+        body: { rank },
+      }),
+    ),
+  );
+}
+
+/** Quick add: a title alone; refine drafts the rest (ADR-0058). */
+export function useQuickAdd(projectId: string) {
+  const api = useApi();
+  return useWrite(async (title: string) =>
+    unwrap(
+      await api.POST("/api/projects/{projectId}/tickets", {
+        params: { path: { projectId } },
+        body: { title },
+      }),
+    ),
+  );
+}
+
 export function useAddComment(path: TicketPath) {
   const api = useApi();
   return useWrite(async (body: { body: string }) =>
@@ -298,7 +343,7 @@ export function useAnswerQuestion(ticketId?: string) {
 
 export function useStartRun(path: TicketPath) {
   const api = useApi();
-  return useWrite(async (body: { step: "refine" }) =>
+  return useWrite(async (body: { step: "refine" | "build" }) =>
     unwrap(
       await api.POST("/api/projects/{projectId}/tickets/{ticketId}/runs", {
         params: { path },

@@ -81,6 +81,16 @@ export function workTrackerContract(name: string, make: () => Promise<WorkTracke
       });
     });
 
+    it("GivenAutoRefineOff_WhenAutoBuildIsTurnedOn_ThenAutoRefineStaysOffAndAutoBuildDefaultsOff", async () => {
+      const tracker = await make();
+      const created = await tracker.createProject({ name: "Build", key: uniqueKey() });
+      expect(created.autoBuild).toBe(false);
+      await tracker.updateProject(created.id, { autoRefine: false });
+      const updated = await tracker.updateProject(created.id, { autoBuild: true });
+      expect(updated).toEqual({ ...created, autoRefine: false, autoBuild: true });
+      expect(await tracker.getProject(created.id)).toEqual(updated);
+    });
+
     it("GivenAnExistingKey_WhenCreatingAProject_ThenConflict", async () => {
       const { tracker, project } = await setup();
       await rejectsWith(tracker.createProject({ name: "Again", key: project.key }), "conflict");
@@ -168,6 +178,24 @@ export function workTrackerContract(name: string, make: () => Promise<WorkTracke
         tracker.askQuestion(project.id, "nope", { text: "?" }, "andy"),
         "not_found",
       );
+    });
+
+    it("GivenFractionalRanks_WhenListed_ThenSortedByCodeUnitOrder", async () => {
+      // Board reorders (AI-28) write ranks such as "0000000001.5"; '.' sorts before digits.
+      const { tracker, project, ticket } = await setup();
+      const ids = [ticket.id];
+      for (const title of ["Two", "Three"]) {
+        ids.push((await tracker.createTicket(project.id, { title }, "andy")).id);
+      }
+      const ranks = ["0000000001.5", "0000000001", "0000000001.05"];
+      for (const [i, id] of ids.entries()) {
+        await tracker.updateTicket(project.id, id, { fields: { rank: ranks[i] } }, "andy");
+      }
+      expect((await tracker.listTickets(project.id)).map((t) => t.rank)).toEqual([
+        "0000000001",
+        "0000000001.05",
+        "0000000001.5",
+      ]);
     });
 
     it("GivenTickets_WhenListed_ThenSortedByRankAndFilterable", async () => {

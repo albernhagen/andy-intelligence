@@ -57,12 +57,26 @@ export function toRulePaths(pattern, root) {
   return [body, `${body}/**`];
 }
 
-/** Merges the base settings, the step's allow/deny rules and CODEOWNERS Edit denies. */
+/** Catch-all CODEOWNERS patterns: they request Andy's review on every PR, they protect nothing. */
+export const CATCH_ALL = new Set(["*", "/*", "**", "/**"]);
+
+/** Replaces `${ROOT}` in every string of a JSON value with the checkout's absolute path. */
+function withRoot(value, root) {
+  return JSON.parse(JSON.stringify(value).replaceAll("${ROOT}", resolve(root)));
+}
+
+/**
+ * Merges the base settings, the step's allow/deny rules, the step's sandbox and CODEOWNERS Edit
+ * denies (every owned pattern but the catch-all, ARCHITECTURE §4.5).
+ */
 export function buildProfile({ profile, step, codeowners = "", root }) {
   const stepRules = Object.hasOwn(profile.steps, step) ? profile.steps[step] : null;
   if (!stepRules) throw new Error(`unknown step "${step}"`);
   const settings = JSON.parse(JSON.stringify(profile.settings));
-  const ownedPaths = codeownersPatterns(codeowners).flatMap((p) => toRulePaths(p, root));
+  if (stepRules.sandbox) settings.sandbox = withRoot(stepRules.sandbox, root ?? process.cwd());
+  const ownedPaths = codeownersPatterns(codeowners)
+    .filter((p) => !CATCH_ALL.has(p))
+    .flatMap((p) => toRulePaths(p, root));
   const permissions = settings.permissions;
   permissions.allow = [...new Set([...(permissions.allow ?? []), ...stepRules.allow])];
   permissions.deny = [

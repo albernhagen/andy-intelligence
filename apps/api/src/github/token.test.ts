@@ -133,3 +133,34 @@ describe("actionsTokenVerifier", () => {
     await expect(verify(await sign({ repository: REPO }))).rejects.toThrow();
   });
 });
+
+describe("repo token endpoint: executor publish job (ADR-0063)", () => {
+  const executor = TOKEN_POLICY.find((p) => p.runGrant)!;
+  const claims = (extra: Partial<ActionsClaims> = {}): ActionsClaims => ({
+    repository: executor.repository,
+    workflow_ref: executor.workflow_ref,
+    job_workflow_ref: executor.job_workflow_ref,
+    run_id: "1",
+    ...extra,
+  });
+  const ask = async (c: ActionsClaims, body: unknown) => {
+    const t = githubApp({ verifyActionsToken: verify });
+    await t.connections.save({ ...createdApp, connectedAt: "2026-11-03T00:00:00Z" });
+    return t.call(TOKEN_PATH, { method: "POST", body: JSON.stringify(body) }, JSON.stringify(c));
+  };
+
+  it("GivenTheExecutorWithoutARunId_WhenAsking_Then403", async () => {
+    expect((await ask(claims(), {})).status).toBe(403);
+  });
+
+  it("GivenTheCallerWorkflowButAnotherReusableWorkflow_WhenAsking_Then403", async () => {
+    const other = claims({
+      job_workflow_ref: `${REPO}/.github/workflows/evil.yml@refs/heads/main`,
+    });
+    expect((await ask(other, { runId: "r1" })).status).toBe(403);
+  });
+
+  it("GivenAnUnknownRun_WhenAsking_Then404", async () => {
+    expect((await ask(claims(), { runId: "nope" })).status).toBe(404);
+  });
+});

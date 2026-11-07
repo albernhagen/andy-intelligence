@@ -321,6 +321,42 @@ describe("refine tool", () => {
   });
 });
 
+describe("build tool", () => {
+  it("GivenGitHubIsNotConnected_WhenBuildIsCalled_ThenAToolErrorSaysSo", async () => {
+    const ctx = await withProject();
+    await ctx.call("create_ticket", { project: "AI", type: "feature", title: "Board" });
+    const result = await ctx.call("build", { ticket: "AI-1" });
+    expect(result).toMatchObject({
+      isError: true,
+      text: expect.stringContaining("connect GitHub"),
+    });
+  });
+});
+
+describe("set_auto_build tool", () => {
+  it("GivenAProject_WhenAutoBuildIsTurnedOn_ThenItIsStoredAndAutoRefineIsUntouched", async () => {
+    const ctx = await withProject();
+    await ctx.call("set_auto_refine", { project: "AI", enabled: false });
+    expect(await ctx.call("set_auto_build", { project: "AI", enabled: true })).toMatchObject({
+      isError: true,
+      text: expect.stringContaining("builds are off"),
+    });
+    await ctx.rest("/api/projects/ai", {
+      method: "PATCH",
+      body: JSON.stringify({ buildEnabled: true }),
+    });
+    expect((await ctx.call("set_auto_build", { project: "AI", enabled: true })).data).toEqual({
+      project: "AI",
+      autoBuild: true,
+    });
+    const projects = (await (await ctx.rest("/api/projects")).json()) as {
+      autoRefine: boolean;
+      autoBuild: boolean;
+    }[];
+    expect(projects[0]).toMatchObject({ autoRefine: false, autoBuild: true });
+  });
+});
+
 describe("set_auto_refine tool", () => {
   it("GivenAProject_WhenAutoRefineIsTurnedOffThenOn_ThenTheSettingIsStored", async () => {
     const ctx = await withProject();

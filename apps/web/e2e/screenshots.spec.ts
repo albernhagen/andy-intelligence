@@ -29,9 +29,22 @@ test("shell: project picker open", async ({ page }) => {
   await expect(page).toHaveScreenshot("shell-picker-open.png");
 });
 
-test("board", async ({ page }) => {
-  await open(page, "/p/ai", "Dropping a card opens the ticket");
+/** The seed's clock (e2e/fake-api.ts), so a card's "Building · 12 min" never changes. */
+const SEED_NOW = new Date("2026-11-04T15:00:00.000Z");
+
+test("board: every card marker, Monitoring and Done as strips", async ({ page }) => {
+  await page.clock.setFixedTime(SEED_NOW);
+  await open(page, "/p/ai", "Building · 12 min");
   await expect(page).toHaveScreenshot("board.png", { fullPage: true });
+});
+
+test("board: Monitoring and Done expanded", async ({ page }) => {
+  await page.clock.setFixedTime(SEED_NOW);
+  await open(page, "/p/ai", "Building · 12 min");
+  await page.getByRole("button", { name: /^Show Monitoring/ }).click();
+  await page.getByRole("button", { name: /^Show Done/ }).click();
+  await expect(page.getByText("Ticket core")).toBeVisible();
+  await expect(page).toHaveScreenshot("board-expanded.png", { fullPage: true });
 });
 
 test("board under All projects asks for a project", async ({ page }) => {

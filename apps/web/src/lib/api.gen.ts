@@ -124,6 +124,17 @@ export interface paths {
               enabled: boolean;
               /** @default true */
               autoRefine: boolean;
+              /** @default false */
+              autoBuild: boolean;
+              /** @default false */
+              buildEnabled: boolean;
+              /** @default null */
+              buildEnabledBy: string | null;
+              /**
+               * Format: date-time
+               * @default null
+               */
+              buildEnabledAt: string | null;
             }[];
           };
         };
@@ -172,6 +183,17 @@ export interface paths {
               enabled: boolean;
               /** @default true */
               autoRefine: boolean;
+              /** @default false */
+              autoBuild: boolean;
+              /** @default false */
+              buildEnabled: boolean;
+              /** @default null */
+              buildEnabledBy: string | null;
+              /**
+               * Format: date-time
+               * @default null
+               */
+              buildEnabledAt: string | null;
             };
           };
         };
@@ -268,6 +290,17 @@ export interface paths {
               enabled: boolean;
               /** @default true */
               autoRefine: boolean;
+              /** @default false */
+              autoBuild: boolean;
+              /** @default false */
+              buildEnabled: boolean;
+              /** @default null */
+              buildEnabledBy: string | null;
+              /**
+               * Format: date-time
+               * @default null
+               */
+              buildEnabledAt: string | null;
             };
           };
         };
@@ -338,8 +371,9 @@ export interface paths {
       requestBody: {
         content: {
           "application/json": {
-            /** @default true */
             autoRefine?: boolean;
+            autoBuild?: boolean;
+            buildEnabled?: boolean;
           };
         };
       };
@@ -363,6 +397,17 @@ export interface paths {
               enabled: boolean;
               /** @default true */
               autoRefine: boolean;
+              /** @default false */
+              autoBuild: boolean;
+              /** @default false */
+              buildEnabled: boolean;
+              /** @default null */
+              buildEnabledBy: string | null;
+              /**
+               * Format: date-time
+               * @default null
+               */
+              buildEnabledAt: string | null;
             };
           };
         };
@@ -2384,6 +2429,145 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  "/api/projects/{projectId}/board": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get: {
+      parameters: {
+        query?: never;
+        header?: never;
+        path: {
+          projectId: string;
+        };
+        cookie?: never;
+      };
+      requestBody?: never;
+      responses: {
+        /** @description Tickets by rank, archived included, with card status */
+        200: {
+          headers: {
+            [name: string]: unknown;
+          };
+          content: {
+            "application/json": {
+              id: string;
+              projectId: string;
+              key: string;
+              /** @enum {string|null} */
+              type: "epic" | "feature" | "chore" | "bug" | null;
+              parentId: string | null;
+              title: string;
+              body: string;
+              acceptanceCriteria: string[];
+              assumptions: string[];
+              /** @enum {string} */
+              stage:
+                | "backlog"
+                | "ready"
+                | "in_progress"
+                | "ready_for_review"
+                | "monitoring"
+                | "done"
+                | "cancelled";
+              rank: string;
+              /** @enum {string|null} */
+              size: "S" | "M" | "L" | null;
+              sizeReason: string | null;
+              overrides: {
+                assignee?: "me" | ("claude-code" | "jules" | "opencode" | "direct");
+                /** @enum {string} */
+                tier?: "frontier" | "strong" | "fast" | "cheap";
+                modelPin?: {
+                  /** @enum {string} */
+                  harness: "claude-code" | "jules" | "opencode" | "direct";
+                  /** @enum {string} */
+                  provider: "claude-sub" | "google-sub" | "openrouter";
+                  model: string;
+                };
+                /** @enum {string} */
+                autonomy?: "autonomous" | "gated" | "manual";
+                /** @enum {string} */
+                targetEnv?: "dev" | "prod";
+              };
+              needsAttention: boolean;
+              /** @enum {string} */
+              dorStatus: "not_met" | "met";
+              blockedBy: string[];
+              /** @default false */
+              archived: boolean;
+              /** @default [] */
+              outOfScope: string[];
+              /** @default [] */
+              touches: string[];
+              /** Format: date-time */
+              createdAt: string;
+              /** Format: date-time */
+              updatedAt: string;
+              summary: {
+                openQuestions: number;
+                run: {
+                  id: string;
+                  /** @enum {string} */
+                  step: "refine" | "plan" | "build" | "review" | "verify" | "scout";
+                  /** @enum {string} */
+                  status: "queued" | "running" | "succeeded" | "failed" | "cancelled";
+                  /** Format: date-time */
+                  startedAt: string | null;
+                  /**
+                   * Format: date-time
+                   * @default null
+                   */
+                  createdAt: string | null;
+                } | null;
+                pullRequest: {
+                  number: number;
+                  /** Format: uri */
+                  url: string;
+                  /** @enum {string} */
+                  state: "open" | "closed" | "merged";
+                } | null;
+              };
+            }[];
+          };
+        };
+        /** @description Invalid request */
+        400: {
+          headers: {
+            [name: string]: unknown;
+          };
+          content: {
+            "application/json": {
+              error: string;
+              details?: string[];
+            };
+          };
+        };
+        /** @description Not found */
+        404: {
+          headers: {
+            [name: string]: unknown;
+          };
+          content: {
+            "application/json": {
+              error: string;
+              details?: string[];
+            };
+          };
+        };
+      };
+    };
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   "/api/projects/{projectId}/tickets/{ticketId}/runs": {
     parameters: {
       query?: never;
@@ -2474,6 +2658,23 @@ export interface paths {
               attempt: number;
               /** @default null */
               retryOf: string | null;
+              /** @default null */
+              plan: {
+                files: string[];
+                steps: string[];
+                tests: string[];
+                riskiestStep: string;
+                rejectedAlternatives: string[];
+              } | null;
+              /** @default null */
+              branch: string | null;
+              /** @default [] */
+              toolingFiles: string[];
+              /**
+               * Format: date-time
+               * @default null
+               */
+              pushGrantedAt: string | null;
             }[];
           };
         };
@@ -2506,7 +2707,7 @@ export interface paths {
         content: {
           "application/json": {
             /** @enum {string} */
-            step: "refine";
+            step: "refine" | "build";
           };
         };
       };
@@ -2582,6 +2783,23 @@ export interface paths {
               attempt: number;
               /** @default null */
               retryOf: string | null;
+              /** @default null */
+              plan: {
+                files: string[];
+                steps: string[];
+                tests: string[];
+                riskiestStep: string;
+                rejectedAlternatives: string[];
+              } | null;
+              /** @default null */
+              branch: string | null;
+              /** @default [] */
+              toolingFiles: string[];
+              /**
+               * Format: date-time
+               * @default null
+               */
+              pushGrantedAt: string | null;
             };
           };
         };

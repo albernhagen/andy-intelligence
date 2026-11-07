@@ -1,0 +1,118 @@
+{
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "summary": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 4000,
+      "description": "What you changed and why, in markdown, at most 300 words. It goes into the PR description."
+    },
+    "plan": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "The plan you wrote before your first edit (procedure build.md, step 1).",
+      "properties": {
+        "files": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 300
+          },
+          "maxItems": 50,
+          "description": "Files you planned to change or add, repo-relative paths.",
+          "minItems": 1
+        },
+        "steps": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 500
+          },
+          "maxItems": 20,
+          "description": "Order of work, one step each.",
+          "minItems": 1
+        },
+        "tests": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 500
+          },
+          "maxItems": 20,
+          "description": "Tests you planned to add or change, one each."
+        },
+        "riskiestStep": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 500,
+          "description": "The step most likely to go wrong, and why."
+        },
+        "rejectedAlternatives": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 500
+          },
+          "maxItems": 5,
+          "description": "Approaches you considered and rejected, each with the reason."
+        }
+      },
+      "required": ["files", "steps", "tests", "riskiestStep", "rejectedAlternatives"]
+    },
+    "deviations": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 500
+      },
+      "maxItems": 10,
+      "description": "Where the work differs from the plan, and why. Empty if none."
+    },
+    "verification": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "command": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200,
+            "description": "The check you ran, exactly as run."
+          },
+          "passed": {
+            "type": "boolean",
+            "description": "Whether it exited 0."
+          },
+          "output": {
+            "type": "string",
+            "minLength": 0,
+            "maxLength": 2000,
+            "description": "The last lines of its output."
+          }
+        },
+        "required": ["command", "passed", "output"]
+      },
+      "maxItems": 10,
+      "description": "Every check you ran last, after your final edit (procedure build.md, step 4).",
+      "minItems": 1
+    },
+    "failingTestFiles": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 300
+      },
+      "maxItems": 20,
+      "description": "Bug tickets only: the test files that fail before the fix. Empty otherwise."
+    }
+  },
+  "required": ["summary", "plan", "deviations", "verification", "failingTestFiles"]
+}
