@@ -1,5 +1,6 @@
 import {
   Stage,
+  compareRanks,
   type Question,
   type Run,
   type Ticket,
@@ -35,7 +36,10 @@ export function typeLabel(type: TicketType | null): string {
 }
 
 /** The board hides archived tickets unless Andy asks for them (AI-15: Cancel and archive tickets). */
-export function visibleTickets(tickets: readonly Ticket[], showArchived: boolean): Ticket[] {
+export function visibleTickets<T extends Ticket>(
+  tickets: readonly T[],
+  showArchived: boolean,
+): T[] {
   return showArchived ? [...tickets] : tickets.filter((t) => !t.archived);
 }
 
@@ -45,14 +49,10 @@ export function canArchive(ticket: Pick<Ticket, "stage">): boolean {
 }
 
 /** Groups tickets into every stage column (empty ones included), each sorted by rank. */
-export function groupByStage(tickets: readonly Ticket[]): Record<Stage, Ticket[]> {
-  const groups = Object.fromEntries(STAGES.map((s) => [s, [] as Ticket[]])) as Record<
-    Stage,
-    Ticket[]
-  >;
+export function groupByStage<T extends Ticket>(tickets: readonly T[]): Record<Stage, T[]> {
+  const groups = Object.fromEntries(STAGES.map((s) => [s, [] as T[]])) as Record<Stage, T[]>;
   for (const t of tickets) groups[t.stage].push(t);
-  for (const s of STAGES)
-    groups[s].sort((a, b) => (a.rank < b.rank ? -1 : a.rank > b.rank ? 1 : 0));
+  for (const s of STAGES) groups[s].sort((a, b) => compareRanks(a.rank, b.rank));
   return groups;
 }
 

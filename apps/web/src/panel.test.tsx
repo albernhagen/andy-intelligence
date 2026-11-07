@@ -96,7 +96,7 @@ describe("status line", () => {
       "queued",
     ]);
     await open();
-    await waitFor(() => expect(status().textContent).toBe("Refining · 1 min"));
+    await waitFor(() => expect(status().textContent).toBe("Refining · 0 min"));
   });
 
   it("GivenTheTopReadyTicket_WhenThePanelOpens_ThenItIsNextInTheQueue", async () => {

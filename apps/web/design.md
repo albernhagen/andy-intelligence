@@ -16,7 +16,7 @@ Stack: React, Tailwind v4, shadcn/ui components in `src/components/ui/`, icons f
 - One shell on every screen (`src/components/AppShell.tsx`): header with the project picker, navigation, and the "Needs you N" count. Pages render inside it and never draw their own header.
 - The picker is the global scope. Project screens live under `/p/<project>/…`, cross-project screens under `/all/…`. A new screen gets both forms, or says why it can't (the board needs one project).
 - Content is full width with `px-4 sm:px-6` and `py-4`. Forms and prose cap at `max-w-2xl`.
-- A ticket is a panel over the board (640px; full page under 900px), led by its status line. Prose renders through `Markdown`.
+- A ticket opens as a panel over the board, led by its status line; prose renders through `Markdown`.
 
 ## Type
 
@@ -57,18 +57,19 @@ Data-heavy screens favour density over air:
 
 ## Status markers
 
-One small set, reused everywhere (board, inbox, ticket page, picker). Build them from `Badge` (`src/components/ui/badge.tsx`).
+One small set, reused everywhere (board, inbox, panel, picker). Build them from `Badge` (`src/components/ui/badge.tsx`).
 
-| Marker          | Shows                       | Look                                                                                        |
-| --------------- | --------------------------- | ------------------------------------------------------------------------------------------- |
-| Type            | Story, bug, task, epic      | Lucide icon in `muted-foreground`, type name as its label                                   |
-| Size            | S, M, L                     | `Badge` default, the letter only                                                            |
-| Run in flight   | Step and elapsed time       | `Badge variant="running"`: "Refining · 3 min"                                               |
-| PR state        | Number and check state      | "PR #12" with `success` (passing, merged) or `destructive` (failing); neutral while pending |
-| Needs attention | The ticket waits on a human | `Badge variant="attention"`: "Needs you"                                                    |
-| Blocked         | Blocked by another ticket   | `Badge variant="danger"`: "Blocked"                                                         |
+| Marker          | Shows                        | Look                                                            |
+| --------------- | ---------------------------- | --------------------------------------------------------------- |
+| Type            | Feature, chore, bug, epic    | Lucide icon in `muted-foreground`, type name as its title       |
+| Size            | S, M, L                      | `Badge` default, the letter only                                |
+| Run in flight   | Step and elapsed time        | `Badge variant="running"`: "Refining · 3 min"                   |
+| PR state        | Number and state             | "PR #12 · open" neutral, `success` merged, `destructive` closed |
+| Needs attention | The ticket waits on a human  | `Badge variant="attention"`: "2 questions", else "Needs you"    |
+| Blocked         | An unfinished blocker        | `Badge variant="danger"`: "Blocked by AI-3"                     |
+| Queue           | Place in Ready; what is next | Number before the key; `Badge variant="success"`: "Next"        |
 
-No spinners or pulsing in markers: a running marker is static text, so screenshots are stable and nothing distracts.
+No spinners or pulsing in markers: static text keeps screenshots stable.
 
 ## Copy
 
@@ -91,4 +92,4 @@ No spinners or pulsing in markers: a running marker is static text, so screensho
 
 ## Checks
 
-Playwright screenshots (`apps/web/e2e/`) cover the shell, board and ticket page; CI fails on a diff. A deliberate change updates the stored images in the same PR (README: "Screenshot checks").
+Playwright screenshots (`apps/web/e2e/`) cover the shell, board and story panel; CI fails on a diff. A deliberate change updates them in the same PR.

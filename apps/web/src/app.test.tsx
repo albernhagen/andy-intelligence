@@ -13,9 +13,7 @@ describe("tickets UI", () => {
     await user.type(screen.getByLabelText(/^Key/), "ai");
     await user.click(screen.getByRole("button", { name: "Create project" }));
 
-    await user.click(await screen.findByRole("button", { name: "New ticket" }));
-    await user.type(screen.getByLabelText("Title"), "Ticket board");
-    await user.click(screen.getByRole("button", { name: "Create ticket" }));
+    await user.type(await screen.findByLabelText("Add a ticket"), "Ticket board{Enter}");
 
     const backlog = await screen.findByRole("region", { name: "Backlog" });
     expect(await within(backlog).findByText("Ticket board")).toBeTruthy();
@@ -64,7 +62,7 @@ describe("tickets UI", () => {
     await harness.user.type(screen.getByLabelText(/^GitHub repo/), "albernhagen/andy-intelligence");
     await harness.user.click(screen.getByRole("button", { name: "Create project" }));
 
-    await screen.findByRole("button", { name: "New ticket" });
+    await screen.findByLabelText("Add a ticket");
     expect((await harness.tracker.getProject("ai"))?.repos).toEqual([
       "albernhagen/andy-intelligence",
     ]);
@@ -218,9 +216,10 @@ describe("cancel and archive", () => {
     expect((await harness.tracker.getTicket("ai", ticket.id))?.archived).toBe(true);
 
     await harness.router.navigate({ to: "/p/ai" });
-    const cancelled = await screen.findByRole("region", { name: "Cancelled" });
-    expect(within(cancelled).queryByText(/Board/)).toBeNull();
-    await user.click(screen.getByLabelText("Show archived"));
+    await screen.findByRole("region", { name: "Backlog" });
+    expect(screen.queryByRole("region", { name: "Cancelled" })).toBeNull();
+    await user.click(screen.getByLabelText("Show cancelled and archived"));
+    const cancelled = screen.getByRole("region", { name: "Cancelled" });
     expect(await within(cancelled).findByText(/Board/)).toBeTruthy();
   });
 
@@ -281,7 +280,11 @@ describe("Needs-you inbox", () => {
     await user.type(screen.getByLabelText("Question"), "Dark mode too?");
     await user.click(screen.getByRole("button", { name: "Ask" }));
 
-    expect(await screen.findByText("needs you")).toBeTruthy();
+    await waitFor(() =>
+      expect(screen.getByRole("status", { name: "Status" }).textContent).toBe(
+        "Waiting for you: 1 question",
+      ),
+    );
     await user.click(await screen.findByRole("link", { name: "Needs you 1" }));
     expect(await screen.findByRole("article", { name: "Question: Dark mode too?" })).toBeTruthy();
     await waitFor(async () =>

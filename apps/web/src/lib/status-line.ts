@@ -1,4 +1,5 @@
-import type { PullRequestLink, Run, RunStep, Stage, Ticket, TicketEvent } from "@andy/contracts";
+import type { PullRequestLink, Stage, Ticket, TicketEvent, TicketSummary } from "@andy/contracts";
+import { openBlockers as openBlockerTickets, runLabel } from "./board";
 import { groupByStage } from "./tickets";
 
 /** The story panel's first line (ADR-0059): where the ticket is and what it waits for. */
@@ -11,23 +12,14 @@ export interface StatusInput {
   dorMet: boolean;
   openQuestions: number;
   /** The run in flight, if any. */
-  run: Pick<Run, "step" | "status" | "startedAt" | "createdAt"> | null;
+  run: TicketSummary["run"];
   /** The latest pull request linked to the ticket. */
   pr: Pick<PullRequestLink, "number" | "state"> | null;
   /** Keys of the blockers that are not Done or Cancelled yet. */
   blockedBy: string[];
-  /** 1-based place in the Ready lane; null outside Ready. */
+  /** 1-based place among the unblocked Ready tickets (1 = the board's "Next"); null otherwise. */
   queuePosition: number | null;
 }
-
-const STEP_VERBS: Record<RunStep, string> = {
-  refine: "Refining",
-  plan: "Planning",
-  build: "Building",
-  review: "Reviewing",
-  verify: "Verifying",
-  scout: "Scouting",
-};
 
 export function statusLine(s: StatusInput, now: Date): { text: string; tone: StatusTone } {
   const { text, tone } = mainStatus(s, now);
@@ -45,12 +37,8 @@ function mainStatus(s: StatusInput, now: Date): { text: string; tone: StatusTone
     return { text: `Waiting for you: ${n} question${n === 1 ? "" : "s"}`, tone: "attention" };
   }
   if (s.needsAttention) return { text: "Waiting for you", tone: "attention" };
-  if (s.run) {
-    const verb = STEP_VERBS[s.run.step];
-    const started = s.run.startedAt ?? s.run.createdAt;
-    const when = s.run.status === "queued" || !started ? "queued" : elapsed(new Date(started), now);
-    return { text: join(verb, when, pr), tone: "running" };
-  }
+  // The same words as the run marker on the board card (`runLabel`, lib/board.ts).
+  if (s.run) return { text: join(runLabel(s.run, now.getTime()), pr), tone: "running" };
   if (s.blockedBy.length > 0) return { text: `Blocked by ${list(s.blockedBy)}`, tone: "danger" };
 
   switch (s.stage) {
@@ -78,15 +66,6 @@ function mainStatus(s: StatusInput, now: Date): { text: string; tone: StatusTone
   }
 }
 
-/** "1 min" at least, so a run that just started never reads "0 min". */
-export function elapsed(from: Date, now: Date): string {
-  const minutes = Math.max(1, Math.floor((now.getTime() - from.getTime()) / 60_000));
-  if (minutes < 60) return `${minutes} min`;
-  const h = Math.floor(minutes / 60);
-  const m = minutes % 60;
-  return m === 0 ? `${h} h` : `${h} h ${m} min`;
-}
-
 function ordinal(n: number): string {
   const tens = n % 100;
   const suffix = tens >= 11 && tens <= 13 ? "th" : (["th", "st", "nd", "rd"][n % 10] ?? "th");
@@ -109,19 +88,21 @@ export function latestPullRequest(
   return state === "open" || state === "closed" || state === "merged" ? { number, state } : null;
 }
 
-/** Blockers not finished yet, by key; one outside the loaded tickets shows as "another ticket". */
+/** Keys of the blockers not finished yet (the board's rule: `openBlockers` in lib/board.ts). */
 export function openBlockers(ticket: Ticket, tickets: readonly Ticket[]): string[] {
-  return ticket.blockedBy.flatMap((id) => {
-    const b = tickets.find((t) => t.id === id);
-    if (!b) return ["another ticket"];
-    return b.stage === "done" || b.stage === "cancelled" ? [] : [b.key];
-  });
+  return openBlockerTickets(ticket, new Map(tickets.map((t) => [t.id, t]))).map((b) => b.key);
 }
 
-/** Place in the Ready lane by rank (ADR-0058: order is priority); null outside Ready. */
+/**
+ * Place among the unblocked Ready tickets by rank (ADR-0058: order is priority), so 1 is the
+ * card the board marks "Next" (`nextUp`). Null outside Ready or while blocked.
+ */
 export function queuePosition(ticket: Ticket, tickets: readonly Ticket[]): number | null {
   if (ticket.stage !== "ready") return null;
-  const lane = groupByStage(tickets.filter((t) => !t.archived)).ready;
-  const i = lane.findIndex((t) => t.id === ticket.id);
+  const byId = new Map(tickets.map((t) => [t.id, t]));
+  const queue = groupByStage(tickets.filter((t) => !t.archived)).ready.filter(
+    (t) => openBlockerTickets(t, byId).length === 0,
+  );
+  const i = queue.findIndex((t) => t.id === ticket.id);
   return i === -1 ? null : i + 1;
 }

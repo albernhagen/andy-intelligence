@@ -1,7 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { Ticket, TicketEvent } from "@andy/contracts";
 import {
-  elapsed,
   latestPullRequest,
   openBlockers,
   queuePosition,
@@ -39,7 +38,13 @@ describe("statusLine", () => {
   });
 
   it("GivenARefineRunStartedAMinuteAgo_WhenComputed_ThenItSaysRefiningOneMin", () => {
-    const run = { step: "refine", status: "running", startedAt: minutesAgo(1), createdAt: null };
+    const run = {
+      id: "r",
+      step: "refine",
+      status: "running",
+      startedAt: minutesAgo(1),
+      createdAt: null,
+    };
     expect(line({ run } as Partial<StatusInput>)).toEqual({
       text: "Refining · 1 min",
       tone: "running",
@@ -48,6 +53,7 @@ describe("statusLine", () => {
 
   it("GivenABuildRunWithAnOpenPr_WhenComputed_ThenItShowsStepTimeAndPr", () => {
     const run = {
+      id: "r",
       step: "build",
       status: "running",
       startedAt: minutesAgo(12),
@@ -58,14 +64,16 @@ describe("statusLine", () => {
     );
   });
 
-  it("GivenAQueuedRun_WhenComputed_ThenItSaysQueued", () => {
+  it("GivenAQueuedRun_WhenComputed_ThenItSaysQueuedLikeTheCard", () => {
     const run = {
+      id: "r",
       step: "refine",
       status: "queued",
       startedAt: null,
       createdAt: minutesAgo(3),
     } as const;
-    expect(line({ run }).text).toBe("Refining · queued");
+    // The board card's words (`runLabel`).
+    expect(line({ run }).text).toBe("Refine queued · 3 min");
   });
 
   it("GivenOpenBlockers_WhenComputed_ThenItNamesThem", () => {
@@ -121,6 +129,7 @@ describe("statusLine", () => {
 
   it("GivenQuestionsAndARun_WhenComputed_ThenQuestionsComeFirst", () => {
     const run = {
+      id: "r",
       step: "refine",
       status: "running",
       startedAt: minutesAgo(5),
@@ -130,15 +139,6 @@ describe("statusLine", () => {
       "Waiting for you: 1 question",
     );
     expect(line({ run, blockedBy: ["AI-3"] }).text).toBe("Refining · 5 min");
-  });
-});
-
-describe("elapsed", () => {
-  it("GivenDurations_WhenFormatted_ThenMinutesAndHoursRead", () => {
-    expect(elapsed(new Date(minutesAgo(0)), NOW)).toBe("1 min");
-    expect(elapsed(new Date(minutesAgo(59)), NOW)).toBe("59 min");
-    expect(elapsed(new Date(minutesAgo(60)), NOW)).toBe("1 h");
-    expect(elapsed(new Date(minutesAgo(125)), NOW)).toBe("2 h 5 min");
   });
 });
 
@@ -192,7 +192,8 @@ describe("status inputs", () => {
     const open = ticket({ id: "b1", key: "AI-3", stage: "in_progress" });
     const done = ticket({ id: "b2", key: "AI-4", stage: "done" });
     const t = ticket({ blockedBy: ["b1", "b2", "elsewhere"] });
-    expect(openBlockers(t, [open, done, t])).toEqual(["AI-3", "another ticket"]);
+    // As on the board: a blocker outside this project's tickets isn't counted.
+    expect(openBlockers(t, [open, done, t])).toEqual(["AI-3"]);
   });
 
   it("GivenTheReadyLane_WhenRead_ThenThePositionFollowsRank", () => {
@@ -202,5 +203,14 @@ describe("status inputs", () => {
     expect(queuePosition(a, [a, b, archived])).toBe(2);
     expect(queuePosition(b, [a, b, archived])).toBe(1);
     expect(queuePosition(ticket({}), [a, b])).toBeNull();
+  });
+
+  it("GivenABlockedTicketFirstInReady_WhenRead_ThenTheNextUnblockedOneIsFirstLikeTheBoardsNext", () => {
+    const blocker = ticket({ id: "x", stage: "in_progress" });
+    const blocked = ticket({ id: "a", stage: "ready", rank: "0001", blockedBy: ["x"] });
+    const free = ticket({ id: "b", stage: "ready", rank: "0002" });
+    const all = [blocker, blocked, free];
+    expect(queuePosition(free, all)).toBe(1);
+    expect(queuePosition(blocked, all)).toBeNull();
   });
 });

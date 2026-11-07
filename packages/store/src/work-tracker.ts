@@ -12,6 +12,7 @@ import {
   buildProject,
   buildQuestion,
   buildTicket,
+  compareRanks,
   event,
   notFound,
   type AnsweredVia,
@@ -133,7 +134,7 @@ export class FirestoreWorkTracker implements WorkTracker {
       .filter(
         (t) => filter.needsAttention === undefined || t.needsAttention === filter.needsAttention,
       );
-    return tickets.sort((a, b) => a.rank.localeCompare(b.rank));
+    return tickets.sort((a, b) => compareRanks(a.rank, b.rank));
   }
 
   async updateTicket(

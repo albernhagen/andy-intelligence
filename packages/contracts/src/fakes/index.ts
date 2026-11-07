@@ -51,6 +51,7 @@ import {
   buildProject,
   buildQuestion,
   buildTicket,
+  compareRanks,
   event,
   notFound,
 } from "../ports/work-tracker-support";
@@ -114,7 +115,7 @@ export class InMemoryWorkTracker implements WorkTracker {
         (t) => filter.needsAttention === undefined || t.needsAttention === filter.needsAttention,
       )
       .filter((t) => filter.archived === undefined || t.archived === filter.archived)
-      .sort((a, b) => a.rank.localeCompare(b.rank))
+      .sort((a, b) => compareRanks(a.rank, b.rank))
       .map((t) => structuredClone(t));
   }
 
