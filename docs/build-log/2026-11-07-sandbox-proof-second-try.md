@@ -36,6 +36,14 @@
 - **Cause:** Claude Code adds `Read` deny rules to the sandbox's `denyRead`, so the profile's `Read(//etc/**)` hid `/etc/ssl`; `blockReadsOutsideWorkingDirectories` hides `/home` from sandboxed commands, and pnpm was in `~/setup-pnpm`.
 - **Fix (AI-51: Build sandbox: no CA certificates and no pnpm for sandboxed commands):** sandbox `filesystem.allowRead` `/etc/ssl/certs`, `/etc/ssl/openssl.cnf` and `/etc/ca-certificates`, not `/etc/ssl/private` (narrower than the `/etc` deny, so it wins for sandboxed commands; the Read tool keeps `Read(//etc/**)`); `pnpm/action-setup` `dest` in the runner's tool cache (readable, not writable, in the sandbox); pnpm's cache and state dirs under `/tmp/agent` like its store (checked locally with pnpm 10.28.0: a `pnpm install` with `npm_config_cache_dir` and `npm_config_state_dir` wrote its metadata cache and state there).
 
+## Sixth try and a diagnostic (after AI-51, PR #93)
+
+- **Run:** AI-52: Sandbox probe script (third chore), build run `QBMjeWXF7FHNg74MRJZq` (Actions run 42393177078), probe PR #94 (closed unmerged).
+- **Every sandbox expectation held:** the three credential variables not set; `/proc/1/cmdline` the sandbox's own shell; `sudo -n true` fails ("no new privileges"); `curl https://example.com` fails (CONNECT 403); `curl https://registry.npmjs.org` succeeds.
+- **Failed:** `pnpm install --frozen-lockfile` downloaded the packages, then failed with `EROFS` writing `node_modules/.bin/eslint`; no checks ran.
+- **Diagnostic:** AI-53: Sandbox diagnostic: which mount makes node_modules/.bin read-only (build run `QBPqyF3j9fAJNjZQwp0s`, PR #95, closed unmerged): `node_modules` and `node_modules/.bin` are their own read-only bind mounts (mountinfo 578, 628), like `package.json` and the lockfiles; the repo root is writable. No profile rule covers them: Claude Code's own protected package-manager paths.
+- **Fix (AI-54: Build sandbox: pre-install dependencies before the agent (node_modules is read-only inside), ADR-0072, decided by Andy):** "Install dependencies (build)" runs `pnpm install --frozen-lockfile --ignore-scripts --ignore-pnpmfile` outside the sandbox before the agent, store under runner temp; the build procedure says dependencies are installed and can't be changed.
+
 ## Next
 
-After the fix merges, start a new probe chore (AI-49 is near its build cap) and record the result here; then the `.github/` denial chore.
+After the fix merges, start a new probe chore and record the result here; then the `.github/` denial chore.
