@@ -11,6 +11,7 @@
 //     variable. Deletes the marker either way.
 //   check-git (after the agent): env PRISTINE (the copy of .git taken before the agent), LIVE
 //     (the checkout's .git). Prints the sensitive .git paths that differ, one per line.
+import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import {
   closeSync,
@@ -157,6 +158,75 @@ export function fingerprint(path) {
   return "other";
 }
 
+/**
+ * What claude-code-action (pinned d70510b) writes to `.git` itself, outside the sandbox, before
+ * Claude starts (AI-47): `git config user.name`/`user.email` and `git remote set-url origin
+ * https://x-access-token:<token>@…` (src/github/operations/git-config.ts), and a `/.claude-pr/`
+ * line in `info/exclude` (restore-config.ts). check-git ignores exactly these (the remote URL only in the action's form of the same URL).
+ */
+const ACTION_CONFIG_KEYS = new Set(["user.name", "user.email"]);
+const ACTION_EXCLUDE_LINE = "/.claude-pr/";
+
+const sha256 = (data) => createHash("sha256").update(data).digest("hex");
+
+/**
+ * `.git/config` as git parses it (from the bytes read once, includes not followed), without the
+ * action's user entries and with the action's token userinfo stripped from the remote URL; any
+ * other key or value, or an unparseable file, changes it.
+ */
+export function configFingerprint(path) {
+  const r = readNoFollow(path);
+  if (r.code || !r.stat.isFile()) return fingerprint(path);
+  let entries;
+  try {
+    entries = execFileSync("git", ["config", "--file", "-", "--list", "--null", "--no-includes"], {
+      input: r.data,
+      encoding: "utf8",
+      env: { PATH: process.env.PATH, GIT_CONFIG_NOSYSTEM: "1", GIT_CONFIG_GLOBAL: "/dev/null" },
+    });
+  } catch {
+    return `config-unparseable:${sha256(r.data)}`;
+  }
+  const kept = entries
+    .split("\0")
+    .filter((e) => e !== "")
+    .filter((e) => !ACTION_CONFIG_KEYS.has(e.split("\n")[0]))
+    .map((e) => {
+      const [key, ...rest] = e.split("\n");
+      if (key !== "remote.origin.url") return e;
+      // The action's URL is the checkout's with its token as userinfo and `.git` appended; only
+      // that form compares equal to the pristine URL (another host, repo or scheme doesn't).
+      const url = rest
+        .join("\n")
+        .replace(/^https:\/\/x-access-token:[^@/]*@/, "https://")
+        .replace(/\.git$/, "");
+      return `${key}\n${url}`;
+    });
+  return `config:${r.stat.mode & 0o777}:${sha256(kept.join("\0"))}`;
+}
+
+/** `.git/info` like {@link fingerprint}, with the action's exclude line left out. */
+export function infoFingerprint(path) {
+  const r = readNoFollow(path);
+  if (r.code || !r.stat.isDirectory()) return fingerprint(path);
+  const names = readdirSync(path).sort();
+  return `dir:[${names
+    .map((n) => {
+      const child = join(path, n);
+      if (n !== "exclude") return `${n}=${fingerprint(child)}`;
+      const f = readNoFollow(child);
+      if (f.code || !f.stat.isFile()) return `${n}=${fingerprint(child)}`;
+      const lines = f.data
+        .toString("utf8")
+        .split("\n")
+        .filter((l) => l !== ACTION_EXCLUDE_LINE);
+      return `${n}=file:${f.stat.mode & 0o777}:${sha256(lines.join("\n").replace(/\n+$/, ""))}`;
+    })
+    .join(",")}]`;
+}
+
+const FINGERPRINTS = { config: configFingerprint, info: infoFingerprint };
+
 /** check-git: the sensitive paths that differ between the pristine and the live `.git`. */
 export function gitTampering({ pristine, live }) {
   let top;
@@ -166,7 +236,10 @@ export function gitTampering({ pristine, live }) {
     return [".git"];
   }
   if (!top.isDirectory()) return [".git"];
-  return GIT_SENSITIVE.filter((p) => fingerprint(join(pristine, p)) !== fingerprint(join(live, p)));
+  return GIT_SENSITIVE.filter((p) => {
+    const fp = FINGERPRINTS[p] ?? fingerprint;
+    return fp(join(pristine, p)) !== fp(join(live, p));
+  });
 }
 
 function main() {
