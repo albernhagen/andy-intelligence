@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useUnsavedDraft } from "@/components/InlineEdit";
 import { Button } from "@/components/ui/button";
 import { Field, Input, Textarea } from "@/components/ui/input";
 import { QueryError } from "@/components/Status";
@@ -15,6 +16,7 @@ export function AskQuestionForm(props: { projectId: string; ticketId: string }) 
   const [text, setText] = useState("");
   const [options, setOptions] = useState("");
   const [suggested, setSuggested] = useState("");
+  useUnsavedDraft(open && (text.trim() !== "" || options.trim() !== ""));
 
   if (!open)
     return (

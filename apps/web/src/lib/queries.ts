@@ -209,9 +209,16 @@ export function useCreateTicket(projectId: string) {
   );
 }
 
+/** One in-place edit: only the changed fields, plus the `updatedAt` it was read at (409 if stale). */
+export type TicketPatch = Partial<
+  TicketInput & { parentId: string | null; blockedBy: string[] }
+> & {
+  ifUpdatedAt: string;
+};
+
 export function useUpdateTicket(path: TicketPath) {
   const api = useApi();
-  return useWrite(async (body: TicketInput & { ifUpdatedAt: string }) =>
+  return useWrite(async (body: TicketPatch) =>
     unwrap(
       await api.PATCH("/api/projects/{projectId}/tickets/{ticketId}", { params: { path }, body }),
     ),

@@ -1,12 +1,16 @@
 import { useState } from "react";
 import type { Question } from "@andy/contracts";
+import { Markdown } from "@/components/Markdown";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { errorText } from "@/lib/api";
 import { useAnswerQuestion } from "@/lib/queries";
 
-/** An open question with its options and suggested answer; answered ones show the answer. */
+/**
+ * An open question with its options and suggested answer; answered ones show the answer. The
+ * text is untrusted (often agent-written): safe markdown only (`Markdown`).
+ */
 export function QuestionCard({
   question,
   heading,
@@ -24,7 +28,7 @@ export function QuestionCard({
     >
       {heading}
       <div className="flex items-start justify-between gap-2">
-        <p className="font-medium whitespace-pre-wrap">{question.text}</p>
+        <Markdown className="font-medium">{question.text}</Markdown>
         {question.urgency === "high" && <Badge variant="attention">urgent</Badge>}
       </div>
       {question.assumptions.length > 0 && (

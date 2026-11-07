@@ -1,40 +1,53 @@
-import { useEffect, useState } from "react";
-import { Link, useNavigate, useParams } from "@tanstack/react-router";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { Link, useBlocker, useNavigate, useParams } from "@tanstack/react-router";
 import { useQueryClient } from "@tanstack/react-query";
-import type { Ticket } from "@andy/contracts";
-import { tierFor } from "@andy/domain";
+import { X } from "lucide-react";
+import { Size, TicketType, TierKey, type Ticket } from "@andy/contracts";
+import { TIER_FOR_SIZE } from "@andy/domain";
+import { Activity } from "@/components/Activity";
 import { AskQuestionForm } from "@/components/AskQuestionForm";
-import { History } from "@/components/History";
 import { CancelArchiveControls } from "@/components/CancelArchiveControls";
+import {
+  EditableList,
+  InlineText,
+  MarkdownField,
+  UnsavedDrafts,
+  useTicketSave,
+} from "@/components/InlineEdit";
 import { MoveControls } from "@/components/MoveControls";
 import { QuestionCard } from "@/components/QuestionCard";
-import { Runs } from "@/components/Runs";
 import { Loading, QueryError } from "@/components/Status";
-import { TicketForm } from "@/components/TicketForm";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { ApiError } from "@/lib/api";
+import { Select } from "@/components/ui/input";
 import {
+  isActiveRun,
+  ticketQueryKey,
   useEvents,
   useReadiness,
-  ticketQueryKey,
+  useRuns,
   useTicketByRef,
   useTicketQuestions,
-  useUpdateTicket,
+  useTickets,
 } from "@/lib/queries";
-import { STAGE_LABELS, typeLabel } from "@/lib/tickets";
+import { latestPullRequest, openBlockers, queuePosition, statusLine } from "@/lib/status-line";
+import { STAGE_LABELS, TYPE_LABELS } from "@/lib/tickets";
 
 /**
- * Ticket detail: fields (view/edit), Definition of Ready, moves, agent runs, questions and
- * history. The URL holds the ticket key (`/p/ai/t/AI-2`); an older id link loads the ticket and
- * swaps in the key URL.
+ * The story panel (ADR-0059: UX foundation, row "Story panel"): the ticket over the board,
+ * rendered in the board route's `<Outlet />`. A status line, then one document (title,
+ * description, checklist, scope) beside a rail of facts, then questions and one activity
+ * timeline. Every field edits in place. Esc or Close goes back to the board.
+ *
+ * The URL holds the ticket key (`/p/ai/t/AI-2`); an older id link loads the ticket and swaps
+ * in the key URL.
  */
 export function TicketPage() {
   const { projectId, ticketRef } = useParams({ from: "/p/$projectId/t/$ticketRef" });
   const ticket = useTicketByRef(projectId, ticketRef);
   const navigate = useNavigate();
   const queryClient = useQueryClient();
-  const [editing, setEditing] = useState(false);
+  const panel = useRef<HTMLElement>(null);
   const loaded = ticket.data;
 
   // The canonical URL is the ticket's own project + key: an id link or a key under another
@@ -50,138 +63,360 @@ export function TicketPage() {
     });
   }, [loaded, ticketRef, projectId, navigate, queryClient]);
 
-  if (ticket.isPending) return <Loading />;
-  if (ticket.isError) return <QueryError error={ticket.error} />;
-  const t = ticket.data;
-  const path = { projectId: t.projectId, ticketId: t.id };
+  const close = useCallback(
+    () => void navigate({ to: "/p/$projectId", params: { projectId } }),
+    [navigate, projectId],
+  );
+  useEscapeToClose(close);
+  const drafts = useConfirmLeavingDrafts();
+  // Keyboard first: the panel takes focus when it opens or shows another ticket.
+  useEffect(() => panel.current?.focus({ preventScroll: true }), [ticketRef]);
 
   return (
-    <article className="space-y-6">
-      <Link
-        to="/p/$projectId"
-        params={{ projectId: path.projectId }}
-        className="text-sm text-muted-foreground hover:underline"
-      >
-        ← Tickets
-      </Link>
-      <header className="flex flex-wrap items-center gap-2">
-        <h2 className="text-lg font-medium">
-          {t.key}: {t.title}
-        </h2>
-        <Badge>{STAGE_LABELS[t.stage]}</Badge>
-        <Badge>{typeLabel(t.type)}</Badge>
-        {t.needsAttention && <Badge variant="attention">needs you</Badge>}
-        {t.archived && <Badge>archived</Badge>}
-        {!editing && (
-          <Button size="sm" variant="outline" className="ml-auto" onClick={() => setEditing(true)}>
-            Edit
-          </Button>
+    <aside
+      ref={panel}
+      tabIndex={-1}
+      role="dialog"
+      aria-modal="false"
+      aria-label={loaded ? `${loaded.key}: ${loaded.title}` : ticketRef}
+      className="fixed inset-x-0 top-12 bottom-0 z-30 overflow-y-auto bg-background shadow-lg outline-none min-[900px]:left-auto min-[900px]:w-[640px] min-[900px]:border-l min-[900px]:border-border"
+    >
+      <div className="sticky top-0 z-10 flex h-10 items-center gap-2 border-b border-border bg-background px-4 sm:px-6">
+        {loaded && <StatusLine ticket={loaded} />}
+        <Button
+          size="sm"
+          variant="ghost"
+          className="ml-auto px-1"
+          aria-label="Close"
+          title="Close (Esc)"
+          onClick={close}
+        >
+          <X aria-hidden className="size-4" />
+        </Button>
+      </div>
+      <div className="px-4 py-4 sm:px-6">
+        {ticket.isPending && <Loading />}
+        {ticket.isError && <QueryError error={ticket.error} />}
+        {loaded && (
+          // Keyed by ticket: another ticket starts with fresh editors, never this one's drafts.
+          <UnsavedDrafts.Provider value={drafts}>
+            <Story key={loaded.id} ticket={loaded} />
+          </UnsavedDrafts.Provider>
         )}
-      </header>
+      </div>
+    </aside>
+  );
+}
 
-      {editing ? (
-        <EditTicket ticket={t} onDone={() => setEditing(false)} />
-      ) : (
-        <TicketFields ticket={t} />
-      )}
-      <Readiness projectId={path.projectId} ticketId={path.ticketId} />
-      <MoveControls ticket={t} />
-      <CancelArchiveControls ticket={t} />
-      <Runs projectId={path.projectId} ticketId={path.ticketId} />
-      <Questions projectId={path.projectId} ticketId={path.ticketId} />
-      <Events projectId={path.projectId} ticketId={path.ticketId} />
+/**
+ * Leaving the ticket (Close, Esc, another card, a link, Back, a reload) with unsaved typing asks
+ * first; Cancel keeps the panel and the draft. Returns the set the editors register in.
+ */
+function useConfirmLeavingDrafts(): Set<string> {
+  const [drafts] = useState(() => new Set<string>());
+  useBlocker({
+    shouldBlockFn: ({ current, next }) =>
+      current.pathname !== next.pathname &&
+      drafts.size > 0 &&
+      !window.confirm("Discard your unsaved changes to this ticket?"),
+    enableBeforeUnload: () => drafts.size > 0,
+  });
+  return drafts;
+}
+
+/** Esc closes the panel, unless a field, an open editor or a menu took it first. */
+function useEscapeToClose(close: () => void) {
+  useEffect(() => {
+    function onKeyDown(e: KeyboardEvent) {
+      if (e.key !== "Escape" || e.defaultPrevented) return;
+      const target = e.target instanceof Element ? e.target : null;
+      if (target?.closest("input, textarea, select, [role=menu]")) return;
+      close();
+    }
+    document.addEventListener("keydown", onKeyDown);
+    return () => document.removeEventListener("keydown", onKeyDown);
+  }, [close]);
+}
+
+type TicketPath = { projectId: string; ticketId: string };
+const pathOf = (t: Ticket): TicketPath => ({ projectId: t.projectId, ticketId: t.id });
+
+/** "Waiting for you: 2 questions", "Refining · 1 min" … from data the API already returns. */
+function StatusLine({ ticket }: { ticket: Ticket }) {
+  const path = pathOf(ticket);
+  const tickets = useTickets(ticket.projectId).data ?? [];
+  const runs = useRuns(path).data ?? [];
+  const questions = useTicketQuestions(path).data ?? [];
+  const events = useEvents(path).data ?? [];
+  const { text, tone } = statusLine(
+    {
+      stage: ticket.stage,
+      archived: ticket.archived,
+      needsAttention: ticket.needsAttention,
+      dorMet: ticket.dorStatus === "met",
+      openQuestions: questions.filter((q) => q.status === "open").length,
+      run: runs.find(isActiveRun) ?? null,
+      pr: latestPullRequest(events),
+      blockedBy: openBlockers(ticket, tickets),
+      queuePosition: queuePosition(ticket, tickets),
+    },
+    new Date(),
+  );
+  return (
+    <p role="status" aria-label="Status" className="min-w-0 truncate">
+      <Badge variant={tone} className="text-sm">
+        {text}
+      </Badge>
+    </p>
+  );
+}
+
+function Story({ ticket: t }: { ticket: Ticket }) {
+  const title = useTicketSave(t);
+  const body = useTicketSave(t);
+  return (
+    <article className="space-y-6">
+      <InlineText
+        label="Title"
+        required
+        value={t.title}
+        onSave={(v, done) => title.save({ title: v }, done)}
+        pending={title.pending}
+        error={title.error}
+        wrap={(button) => (
+          <h2 className="text-lg font-medium">
+            <span className="text-muted-foreground tabular-nums">{t.key}:</span> {button}
+          </h2>
+        )}
+      />
+      <div className="grid gap-6 sm:grid-cols-[minmax(0,1fr)_11rem]">
+        <div className="min-w-0 space-y-6">
+          <MarkdownField
+            label="Description"
+            value={t.body}
+            onSave={(v, done) => body.save({ body: v }, done)}
+            pending={body.pending}
+            error={body.error}
+          />
+          <ListField
+            ticket={t}
+            field="acceptanceCriteria"
+            label={t.type === "chore" ? "Done when" : "Acceptance criteria"}
+          />
+          <ListField ticket={t} field="assumptions" label="Assumptions" />
+          <ListField ticket={t} field="outOfScope" label="Out of scope" />
+          <ListField ticket={t} field="touches" label="Touches" />
+        </div>
+        <Rail ticket={t} />
+      </div>
+      <Questions {...pathOf(t)} />
+      <Timeline {...pathOf(t)} />
     </article>
   );
 }
 
-function EditTicket({ ticket, onDone }: { ticket: Ticket; onDone: () => void }) {
-  const update = useUpdateTicket({ projectId: ticket.projectId, ticketId: ticket.id });
-  const conflict = update.error instanceof ApiError && update.error.status === 409;
+function ListField({
+  ticket,
+  field,
+  label,
+}: {
+  ticket: Ticket;
+  field: "acceptanceCriteria" | "assumptions" | "outOfScope" | "touches";
+  label: string;
+}) {
+  const s = useTicketSave(ticket);
   return (
-    <TicketForm
-      ticket={ticket}
-      submitLabel="Save"
-      pending={update.isPending}
-      error={
-        update.error && (
-          <div>
-            <QueryError error={update.error} />
-            {conflict && (
-              <p className="text-sm text-muted-foreground">
-                The ticket changed since you opened it. Cancel to see the latest, then edit again.
-              </p>
-            )}
-          </div>
-        )
-      }
-      onCancel={onDone}
-      onSubmit={(fields) =>
-        update.mutate({ ...fields, ifUpdatedAt: ticket.updatedAt }, { onSuccess: onDone })
-      }
+    <EditableList
+      label={label}
+      value={ticket[field]}
+      onSave={(v, done) => s.save({ [field]: v }, done)}
+      pending={s.pending}
+      error={s.error}
     />
   );
 }
 
-function TicketFields({ ticket }: { ticket: Ticket }) {
+/** Stage and moves, then the facts: type, size, tier, epic, blocked by; cancel and archive. */
+function Rail({ ticket: t }: { ticket: Ticket }) {
+  const tickets = useTickets(t.projectId).data ?? [];
+  const derived = t.size ? TIER_FOR_SIZE[t.size] : null;
+  const epics = tickets.filter((o) => o.type === "epic" && o.id !== t.id);
+  const sizeReason = useTicketSave(t);
+
   return (
-    <dl className="grid gap-3 text-sm sm:grid-cols-[12rem_1fr]">
-      <dt className="text-muted-foreground">Problem / intent</dt>
-      <dd className="whitespace-pre-wrap">{ticket.body || "—"}</dd>
-      <dt className="text-muted-foreground">Acceptance criteria</dt>
-      <dd>
-        <List items={ticket.acceptanceCriteria} />
-      </dd>
-      <dt className="text-muted-foreground">Assumptions</dt>
-      <dd>
-        <List items={ticket.assumptions} />
-      </dd>
-      <dt className="text-muted-foreground">Size</dt>
-      <dd>
-        {ticket.size ?? "—"}
-        {ticket.sizeReason && ` (${ticket.sizeReason})`}
-      </dd>
-      <dt className="text-muted-foreground">Out of scope</dt>
-      <dd>
-        <List items={ticket.outOfScope} />
-      </dd>
-      <dt className="text-muted-foreground">Touches</dt>
-      <dd>
-        <List items={ticket.touches} />
-      </dd>
-      <dt className="text-muted-foreground">Tier</dt>
-      <dd>
-        {tierFor(ticket) ?? "—"}
-        {ticket.overrides.tier ? " (pinned)" : ticket.size ? " (from size)" : ""}
-      </dd>
-    </dl>
+    <aside aria-label="Details" className="min-w-0 space-y-4">
+      <div className="space-y-2">
+        <p className="flex items-center gap-2">
+          <span className="text-xs text-muted-foreground">Stage</span>
+          <Badge>{STAGE_LABELS[t.stage]}</Badge>
+        </p>
+        <Readiness {...pathOf(t)} />
+        <MoveControls ticket={t} />
+      </div>
+      <SelectField
+        ticket={t}
+        label="Type"
+        value={t.type ?? ""}
+        options={[["", "No type"], ...TicketType.options.map((v) => [v, TYPE_LABELS[v]] as const)]}
+        patch={(v) => ({ type: v === "" ? null : TicketType.parse(v) })}
+      />
+      <div className="space-y-1">
+        <SelectField
+          ticket={t}
+          label="Size"
+          value={t.size ?? ""}
+          options={[["", "—"], ...Size.options.map((v) => [v, v] as const)]}
+          patch={(v) => ({ size: v === "" ? null : Size.parse(v) })}
+        />
+        <InlineText
+          label="Size reason"
+          placeholder="Why this size?"
+          value={t.sizeReason ?? ""}
+          onSave={(v, done) => sizeReason.save({ sizeReason: v || null }, done)}
+          pending={sizeReason.pending}
+          error={sizeReason.error}
+          className="text-xs"
+        />
+      </div>
+      <SelectField
+        ticket={t}
+        label="Tier"
+        value={t.overrides.tier ?? ""}
+        // Tier comes from size; choosing one pins it (`overrides.tier`, ADR-0058).
+        options={[
+          ["", derived ? `${derived} (from size)` : "from size"],
+          ...TierKey.options.map((v) => [v, `${v} (pinned)`] as const),
+        ]}
+        patch={(v) => {
+          const rest = { ...t.overrides };
+          delete rest.tier;
+          return { overrides: v === "" ? rest : { ...rest, tier: TierKey.parse(v) } };
+        }}
+      />
+      <SelectField
+        ticket={t}
+        label="Epic"
+        value={t.parentId ?? ""}
+        options={[["", "None"], ...epics.map((e) => [e.id, `${e.key}: ${e.title}`] as const)]}
+        patch={(v) => ({ parentId: v === "" ? null : v })}
+      />
+      <BlockedBy ticket={t} tickets={tickets} />
+      <CancelArchiveControls ticket={t} />
+    </aside>
   );
 }
 
-function List({ items }: { items: string[] }) {
-  if (items.length === 0) return <>—</>;
+/** A rail fact as a select that saves as soon as it changes. */
+function SelectField({
+  ticket,
+  label,
+  value,
+  options,
+  patch,
+}: {
+  ticket: Ticket;
+  label: string;
+  value: string;
+  options: (readonly [string, string])[];
+  patch: (value: string) => Parameters<ReturnType<typeof useTicketSave>["save"]>[0];
+}) {
+  const s = useTicketSave(ticket);
   return (
-    <ul className="list-disc space-y-1 pl-5">
-      {items.map((i, n) => (
-        <li key={n}>{i}</li>
-      ))}
-    </ul>
+    <div className="space-y-1">
+      <label className="block space-y-1">
+        <span className="text-xs text-muted-foreground">{label}</span>
+        <Select
+          className="h-8"
+          value={value}
+          disabled={s.pending}
+          onChange={(e) => s.save(patch(e.target.value))}
+        >
+          {options.map(([v, text]) => (
+            <option key={v} value={v}>
+              {text}
+            </option>
+          ))}
+        </Select>
+      </label>
+      {s.error}
+    </div>
   );
 }
 
-type TicketPath = { projectId: string; ticketId: string };
+function BlockedBy({ ticket: t, tickets }: { ticket: Ticket; tickets: Ticket[] }) {
+  const s = useTicketSave(t);
+  const byId = new Map(tickets.map((o) => [o.id, o]));
+  const candidates = tickets.filter(
+    (o) => o.id !== t.id && !o.archived && !t.blockedBy.includes(o.id),
+  );
+  return (
+    <section aria-label="Blocked by" className="space-y-1">
+      <span className="text-xs text-muted-foreground">Blocked by</span>
+      {t.blockedBy.length > 0 && (
+        <ul className="space-y-1">
+          {t.blockedBy.map((id) => {
+            const b = byId.get(id);
+            return (
+              <li key={id} className="flex items-center justify-between gap-1">
+                {b ? (
+                  <Link
+                    to="/p/$projectId/t/$ticketRef"
+                    params={{ projectId: b.projectId, ticketRef: b.key }}
+                    className="truncate underline"
+                  >
+                    {b.key}: {b.title}
+                  </Link>
+                ) : (
+                  <span className="text-muted-foreground">Another ticket</span>
+                )}
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  className="h-5 shrink-0 px-1 text-muted-foreground"
+                  aria-label={`Remove blocker: ${b?.key ?? id}`}
+                  disabled={s.pending}
+                  onClick={() => s.save({ blockedBy: t.blockedBy.filter((x) => x !== id) })}
+                >
+                  <X aria-hidden className="size-3.5" />
+                </Button>
+              </li>
+            );
+          })}
+        </ul>
+      )}
+      <Select
+        aria-label="Add a blocker"
+        className="h-8"
+        value=""
+        disabled={s.pending}
+        onChange={(e) => e.target.value && s.save({ blockedBy: [...t.blockedBy, e.target.value] })}
+      >
+        <option value="">Add a blocker…</option>
+        {candidates.map((o) => (
+          <option key={o.id} value={o.id}>
+            {o.key}: {o.title}
+          </option>
+        ))}
+      </Select>
+      {s.error}
+    </section>
+  );
+}
 
 function Readiness(path: TicketPath) {
   const dor = useReadiness(path);
   return (
-    <section aria-label="Definition of Ready" className="space-y-1">
-      <h3 className="text-sm font-medium">Definition of Ready</h3>
-      {dor.isPending && <Loading />}
+    <section aria-label="Definition of Ready" className="space-y-1 text-xs">
       {dor.isError && <QueryError error={dor.error} />}
-      {dor.data?.met && <p className="text-sm">Met.</p>}
+      {dor.data?.met && <p className="text-muted-foreground">Definition of Ready: met.</p>}
       {dor.data && !dor.data.met && (
         <>
-          <p className="text-sm text-muted-foreground">Not met. Missing:</p>
-          <List items={dor.data.missing} />
+          <p className="text-muted-foreground">Definition of Ready missing:</p>
+          <ul className="list-disc pl-4">
+            {dor.data.missing.map((m) => (
+              <li key={m}>{m}</li>
+            ))}
+          </ul>
         </>
       )}
     </section>
@@ -190,12 +425,16 @@ function Readiness(path: TicketPath) {
 
 function Questions(path: TicketPath) {
   const questions = useTicketQuestions(path);
+  // Open questions first: they are what the ticket waits for.
+  const sorted = [...(questions.data ?? [])].sort(
+    (a, b) => Number(b.status === "open") - Number(a.status === "open"),
+  );
   return (
     <section aria-label="Questions" className="space-y-2">
       <h3 className="text-sm font-medium">Questions</h3>
       {questions.isPending && <Loading />}
       {questions.isError && <QueryError error={questions.error} />}
-      {questions.data?.map((q) => (
+      {sorted.map((q) => (
         <QuestionCard key={q.id} question={q} />
       ))}
       <AskQuestionForm {...path} />
@@ -203,9 +442,11 @@ function Questions(path: TicketPath) {
   );
 }
 
-function Events(path: TicketPath) {
+function Timeline(path: TicketPath) {
   const events = useEvents(path);
-  if (events.isPending) return <Loading />;
+  const runs = useRuns(path);
+  if (events.isPending || runs.isPending) return <Loading />;
   if (events.isError) return <QueryError error={events.error} />;
-  return <History {...path} events={events.data} />;
+  if (runs.isError) return <QueryError error={runs.error} />;
+  return <Activity {...path} events={events.data} runs={runs.data} />;
 }

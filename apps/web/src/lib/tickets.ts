@@ -2,6 +2,7 @@ import {
   Stage,
   compareRanks,
   type Question,
+  type Run,
   type Ticket,
   type TicketEvent,
   type TicketType,
@@ -132,4 +133,26 @@ export function sortQuestions(questions: readonly Question[]): Question[] {
   return [...questions].sort(
     (a, b) => weight[a.urgency] - weight[b.urgency] || a.createdAt.localeCompare(b.createdAt),
   );
+}
+
+/** One entry in the story panel's activity timeline (ADR-0059). */
+export type TimelineItem =
+  { kind: "event"; at: string; event: TicketEvent } | { kind: "run"; at: string; run: Run };
+
+/**
+ * History events and runs in one list, oldest first. `run_linked` events are dropped: the run
+ * shows itself. A run with no timestamp yet goes last.
+ */
+export function timeline(events: readonly TicketEvent[], runs: readonly Run[]): TimelineItem[] {
+  const items: TimelineItem[] = [
+    ...events
+      .filter((e) => e.kind !== "run_linked")
+      .map((event) => ({ kind: "event" as const, at: event.createdAt, event })),
+    ...runs.map((run) => ({
+      kind: "run" as const,
+      at: run.createdAt ?? run.startedAt ?? "￿",
+      run,
+    })),
+  ];
+  return items.sort((a, b) => (a.at < b.at ? -1 : a.at > b.at ? 1 : 0));
 }

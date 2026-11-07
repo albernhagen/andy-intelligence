@@ -24,7 +24,8 @@ describe("a URL for every page", () => {
     ["/p/ai/inbox", "Which layout?"],
     ["/p/ai", "Backlog"],
     ["/all/board", "A board shows one project. Pick one:"],
-    ["/p/ai/t/AI-1", "AI-1: Board"],
+    // The story panel (AI-29): its heading splits key and title, so check the description.
+    ["/p/ai/t/AI-1", "Andy can't see tickets."],
     ["/projects", "Projects"],
     ["/settings/github", "GitHub"],
   ])("GivenTheUrl %s_WhenLoadedDirectly_ThenItsScreenOpensThere", async (path, text) => {

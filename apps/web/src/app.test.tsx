@@ -20,23 +20,26 @@ describe("tickets UI", () => {
     expect(within(backlog).getByText("AI-1")).toBeTruthy();
   });
 
-  it("GivenATitleOnlyTicket_WhenAndySetsTypeScopeAndPinsATier_ThenTheyAreSavedAndShown", async () => {
+  it("GivenATitleOnlyTicket_WhenAndySetsTypeScopeAndPinsATierInPlace_ThenTheyAreSavedAndShown", async () => {
     const harness = renderApp();
     await harness.tracker.createProject({ name: "AI", key: "AI" });
     const ticket = await harness.service.create("ai", { title: "Board" }, "andy");
     expect(ticket.type).toBeNull();
     await harness.router.navigate({ to: `/p/ai/t/${ticket.id}` });
     const { user } = harness;
-    expect(await screen.findByText("No type")).toBeTruthy();
+    const type = (await screen.findByLabelText("Type")) as HTMLSelectElement;
+    expect(type.value).toBe("");
 
-    await user.click(await screen.findByRole("button", { name: "Edit" }));
-    await user.selectOptions(screen.getByLabelText("Type"), "Bug");
+    // Each rail field saves as soon as it changes; no Save button, no page change.
+    await user.selectOptions(type, "Bug");
+    await waitFor(() => expect(type.disabled).toBe(false));
     await user.selectOptions(screen.getByLabelText("Size"), "M");
-    expect(screen.getByRole("option", { name: "strong (from size)" })).toBeTruthy();
-    await user.selectOptions(screen.getByLabelText("Tier"), "frontier");
-    await user.type(screen.getByLabelText(/^Out of scope/), "billing");
-    await user.type(screen.getByLabelText(/^Touches/), "apps/web/**");
-    await user.click(screen.getByRole("button", { name: "Save" }));
+    const tier = screen.getByLabelText("Tier") as HTMLSelectElement;
+    expect(await within(tier).findByRole("option", { name: "strong (from size)" })).toBeTruthy();
+    await user.selectOptions(tier, "frontier");
+    await user.type(screen.getByLabelText("Add to out of scope"), "billing{Enter}");
+    await screen.findByRole("button", { name: "Remove: billing" });
+    await user.type(screen.getByLabelText("Add to touches"), "apps/web/**{Enter}");
 
     await waitFor(async () =>
       expect(await harness.tracker.getTicket("ai", ticket.id)).toMatchObject({
@@ -47,8 +50,9 @@ describe("tickets UI", () => {
         touches: ["apps/web/**"],
       }),
     );
-    expect(await screen.findByText("frontier (pinned)")).toBeTruthy();
-    expect(screen.getByText("Bug")).toBeTruthy();
+    await waitFor(() => expect(tier.value).toBe("frontier"));
+    expect(type.value).toBe("bug");
+    expect(harness.router.state.location.pathname).toBe("/p/ai/t/AI-1");
   });
 
   it("GivenARepo_WhenAndyCreatesAProject_ThenTheProjectListsIt", async () => {
@@ -77,36 +81,45 @@ describe("tickets UI", () => {
     );
   });
 
-  it("GivenATicket_WhenAndyEditsIt_ThenFieldsAndHistoryUpdate", async () => {
+  it("GivenATicket_WhenAndyEditsTheDescription_ThenItIsSavedAndTheActivityRecordsIt", async () => {
     const harness = renderApp();
     await harness.tracker.createProject({ name: "AI", key: "AI" });
     const ticket = await harness.service.create("ai", { type: "feature", title: "Board" }, "andy");
     await harness.router.navigate({ to: `/p/ai/t/${ticket.id}` });
     const { user } = harness;
 
-    await user.click(await screen.findByRole("button", { name: "Edit" }));
-    await user.type(screen.getByLabelText("Problem / intent"), "Andy can't see tickets.");
+    await user.click(await screen.findByRole("button", { name: "Edit description" }));
+    await user.type(screen.getByLabelText("Description"), "Andy can't see tickets.");
     await user.click(screen.getByRole("button", { name: "Save" }));
 
     expect(await screen.findByText("Andy can't see tickets.")).toBeTruthy();
-    const history = screen.getByRole("region", { name: "History" });
-    expect(await within(history).findByText(/changed body/)).toBeTruthy();
+    const activity = screen.getByRole("region", { name: "Activity" });
+    expect(await within(activity).findByText(/changed body/)).toBeTruthy();
   });
 
-  it("GivenATicketChangedElsewhere_WhenSavingAnEdit_ThenAConflictIsShown", async () => {
+  it("GivenATicketChangedElsewhere_WhenSavingAnEdit_ThenAConflictAsksForAReloadAndTheDraftSurvives", async () => {
     const harness = renderApp();
     await harness.tracker.createProject({ name: "AI", key: "AI" });
     const ticket = await harness.service.create("ai", { type: "feature", title: "Board" }, "andy");
     await harness.router.navigate({ to: `/p/ai/t/${ticket.id}` });
     const { user } = harness;
 
-    await user.click(await screen.findByRole("button", { name: "Edit" }));
+    await user.click(await screen.findByRole("button", { name: "Edit description" }));
     await harness.service.update("ai", ticket.id, { title: "Renamed elsewhere" }, "andy");
-    await user.type(screen.getByLabelText("Problem / intent"), "x");
+    await user.type(screen.getByLabelText("Description"), "x");
     await user.click(screen.getByRole("button", { name: "Save" }));
 
     expect(await screen.findByText(/changed since it was read/)).toBeTruthy();
-    expect(screen.getByText(/Cancel to see the latest/)).toBeTruthy();
+    expect(screen.getByText(/Reload to see the latest/)).toBeTruthy();
+
+    // Reload fetches the latest; the draft is still there and now saves.
+    await user.click(screen.getByRole("button", { name: "Reload" }));
+    expect(await screen.findByRole("heading", { name: "AI-1: Renamed elsewhere" })).toBeTruthy();
+    expect((screen.getByLabelText("Description") as HTMLTextAreaElement).value).toBe("x");
+    await user.click(screen.getByRole("button", { name: "Save" }));
+    await waitFor(async () =>
+      expect((await harness.tracker.getTicket("ai", ticket.id))?.body).toBe("x"),
+    );
   });
 
   it("GivenATicketMissingDoR_WhenMovedToReady_ThenTheMissingItemsAreShown", async () => {
@@ -132,13 +145,13 @@ describe("tickets UI", () => {
     await harness.router.navigate({ to: `/p/ai/t/${ticket.id}` });
 
     const dor = await screen.findByRole("region", { name: "Definition of Ready" });
-    expect(await within(dor).findByText("Met.")).toBeTruthy();
+    expect(await within(dor).findByText("Definition of Ready: met.")).toBeTruthy();
     await harness.user.click(screen.getByRole("button", { name: "Move to Ready" }));
 
     // From Ready the domain allows In progress and back to Backlog.
     expect(await screen.findByRole("button", { name: "Move to In progress" })).toBeTruthy();
     expect(screen.getByRole("button", { name: "Move to Backlog" })).toBeTruthy();
-    const history = screen.getByRole("region", { name: "History" });
+    const history = screen.getByRole("region", { name: "Activity" });
     expect(await within(history).findByText(/moved Backlog → Ready/)).toBeTruthy();
   });
 
@@ -157,7 +170,7 @@ describe("tickets UI", () => {
     await user.type(screen.getByLabelText("Reason (optional)"), "shipped by hand");
     await user.click(submit);
 
-    const history = screen.getByRole("region", { name: "History" });
+    const history = screen.getByRole("region", { name: "Activity" });
     expect(await within(history).findByText(/force-moved Backlog → Done/)).toBeTruthy();
     expect(within(history).getByText("shipped by hand")).toBeTruthy();
     expect((await harness.tracker.getTicket("ai", ticket.id))?.stage).toBe("done");
@@ -174,7 +187,7 @@ describe("tickets UI", () => {
     await user.selectOptions(screen.getByLabelText("Force to"), "Ready");
     await user.click(screen.getByRole("button", { name: "Force move" }));
 
-    const history = screen.getByRole("region", { name: "History" });
+    const history = screen.getByRole("region", { name: "Activity" });
     expect(await within(history).findByText(/force-moved Backlog → Ready/)).toBeTruthy();
     expect((await harness.tracker.getTicket("ai", ticket.id))?.stage).toBe("ready");
   });
@@ -193,7 +206,7 @@ describe("cancel and archive", () => {
     await user.type(screen.getByLabelText("Why cancel (optional)"), "not needed");
     await user.click(screen.getByRole("button", { name: "Cancel ticket" }));
 
-    const history = screen.getByRole("region", { name: "History" });
+    const history = screen.getByRole("region", { name: "Activity" });
     expect(await within(history).findByText(/moved Backlog → Cancelled/)).toBeTruthy();
     expect(within(history).getByText("not needed")).toBeTruthy();
     expect(screen.getByRole("button", { name: "Move to Backlog" })).toBeTruthy();
@@ -265,7 +278,11 @@ describe("Needs-you inbox", () => {
     await user.type(screen.getByLabelText("Question"), "Dark mode too?");
     await user.click(screen.getByRole("button", { name: "Ask" }));
 
-    expect(await screen.findByText("needs you")).toBeTruthy();
+    await waitFor(() =>
+      expect(screen.getByRole("status", { name: "Status" }).textContent).toBe(
+        "Waiting for you: 1 question",
+      ),
+    );
     await user.click(await screen.findByRole("link", { name: "Needs you 1" }));
     expect(await screen.findByRole("listitem", { name: "Question: Dark mode too?" })).toBeTruthy();
     await waitFor(async () =>

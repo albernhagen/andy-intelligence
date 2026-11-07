@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { Question, Ticket, TicketEvent } from "@andy/contracts";
+import type { Question, Run, Ticket, TicketEvent } from "@andy/contracts";
 import {
   canArchive,
   describeEvent,
@@ -8,6 +8,7 @@ import {
   linesToList,
   moveOptions,
   sortQuestions,
+  timeline,
   typeLabel,
   visibleTickets,
 } from "./tickets";
@@ -152,5 +153,33 @@ describe("typeLabel", () => {
 
   it("GivenNoType_WhenLabelled_ThenNoType", () => {
     expect(typeLabel(null)).toBe("No type");
+  });
+});
+
+describe("timeline", () => {
+  const at = (m: number) => `2026-11-05T12:${String(m).padStart(2, "0")}:00.000Z`;
+  const run = (over: Partial<Run>) =>
+    ({ id: "r", createdAt: null, startedAt: null, ...over }) as Run;
+
+  it("GivenEventsAndRuns_WhenMerged_ThenTheyAreInTimeOrderWithoutRunLinkedEvents", () => {
+    const items = timeline(
+      [
+        event({ id: "created", createdAt: at(0) }),
+        event({ id: "linked", kind: "run_linked", createdAt: at(1) }),
+        event({ id: "comment", kind: "comment", createdAt: at(3) }),
+      ],
+      [run({ id: "r1", createdAt: at(1) }), run({ id: "r2", startedAt: at(4) })],
+    );
+    expect(items.map((i) => (i.kind === "run" ? i.run.id : i.event.id))).toEqual([
+      "created",
+      "r1",
+      "comment",
+      "r2",
+    ]);
+  });
+
+  it("GivenARunWithNoTimestamp_WhenMerged_ThenItGoesLast", () => {
+    const items = timeline([event({ id: "e", createdAt: at(9) })], [run({ id: "new" })]);
+    expect(items.map((i) => i.kind)).toEqual(["event", "run"]);
   });
 });
