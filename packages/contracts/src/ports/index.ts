@@ -354,8 +354,9 @@ export interface RunStore {
   /** Runs in `queued` or `running` for the project. */
   listActive(projectId: string): Promise<Run[]>;
   /**
-   * Applies the patch atomically, only if the run's status is one of `from`;
-   * `conflict` otherwise, `not_found` when there is no such run.
+   * Applies the patch atomically, only if the run's status is one of `from` and, for a patch
+   * that sets `planDecision`, the run has none yet; `conflict` otherwise, `not_found` when there
+   * is no such run.
    */
   update(runId: string, patch: RunPatch, from: readonly RunStatus[]): Promise<Run>;
 }

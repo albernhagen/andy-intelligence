@@ -182,6 +182,8 @@ describe("plan approval", () => {
       ANDY,
     );
     expect(result).toMatchObject({ build: null, buildError: expect.stringContaining("in flight") });
+    // Still in Needs-you until the build starts.
+    expect((await ticketOf(ticket.id)).needsAttention).toBe(true);
     await runs.cancelForTicket(projectId, other.id);
     expect(await runs.start(projectId, ticket.id, "build")).toMatchObject({
       step: "build",
@@ -247,6 +249,25 @@ describe("plan approval", () => {
       expect((await runStore.get(plan.id))!.planDecision).toBeNull();
     },
   );
+
+  it("GivenTwoConcurrentDecisions_WhenBothRace_ThenOneWinsAndTheOtherIsRefused", async () => {
+    const { ticket, plan } = await planned();
+    const results = await Promise.allSettled([
+      runs.decidePlan(projectId, ticket.id, plan.id, { decision: "approved" }, ANDY),
+      runs.decidePlan(projectId, ticket.id, plan.id, { decision: "rejected", reason: "no" }, ANDY),
+    ]);
+    const won = results.filter((r) => r.status === "fulfilled");
+    const lost = results.filter((r) => r.status === "rejected");
+    expect(won).toHaveLength(1);
+    expect(lost).toHaveLength(1);
+    expect((lost[0] as PromiseRejectedResult).reason).toMatchObject({ code: "plan_not_decidable" });
+    const stored = (await runStore.get(plan.id))!.planDecision!;
+    const winner = (won[0] as PromiseFulfilledResult<{ run: Run; build: Run | null }>).value;
+    expect(stored).toEqual(winner.run.planDecision);
+    // An approval that won started its build; a rejection that won started nothing.
+    const builds = (await runsOf(ticket.id)).filter((r) => r.step === "build");
+    expect(builds).toHaveLength(stored.decision === "approved" ? 1 : 0);
+  });
 
   it("GivenADecidedPlan_WhenDecidedAgain_ThenItIsRefused", async () => {
     const { ticket, plan } = await planned();

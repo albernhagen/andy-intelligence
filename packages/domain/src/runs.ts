@@ -551,26 +551,39 @@ export class RunService {
         "the ticket or the project's plan approval changed since it was planned, or the plan is over 72 hours old",
       ]);
     }
-    const decided = await this.runs.update(
-      run.id,
-      {
-        planDecision: {
-          decision: input.decision,
-          reason,
-          by: decider.email,
-          at: this.now().toISOString(),
+    let decided: Run;
+    try {
+      // Write-once in the store: of two racing decisions (a double click, UI and MCP), one wins.
+      decided = await this.runs.update(
+        run.id,
+        {
+          planDecision: {
+            decision: input.decision,
+            reason,
+            by: decider.email,
+            at: this.now().toISOString(),
+          },
         },
-      },
-      ["succeeded"],
-    );
+        ["succeeded"],
+      );
+    } catch (err) {
+      if (err instanceof WorkTrackerError && err.code === "conflict") {
+        throw new DomainError("plan_not_decidable", "this plan was already decided");
+      }
+      throw err;
+    }
     log("INFO", "plan decided", { runId, ticket: ticket.key, decision: input.decision });
     const approved = input.decision === "approved";
-    await this.tracker.updateTicket(
-      projectId,
-      ticketId,
-      { fields: { needsAttention: !approved } },
-      "andy",
-    );
+    // Rejecting keeps the ticket flagged. Approving leaves the flag as it is: the build's start
+    // clears it (markInProgress), so a build that can't start yet stays in Needs-you.
+    if (!approved) {
+      await this.tracker.updateTicket(
+        projectId,
+        ticketId,
+        { fields: { needsAttention: true } },
+        "andy",
+      );
+    }
     await this.tracker.addComment(
       projectId,
       ticketId,
@@ -592,7 +605,7 @@ export class RunService {
       await this.tracker.addComment(
         projectId,
         ticketId,
-        `The build didn't start yet: ${err.message}. It starts with the approved plan on the next start (the dispatcher, or Start build).`,
+        `Needs you: the plan is approved, but the build didn't start yet: ${err.message}. Start it from the ticket when the project is free (auto-build starts it on its own once the flag is cleared).`,
         "system",
       );
       return { run: decided, build: null, buildError: err.message };
