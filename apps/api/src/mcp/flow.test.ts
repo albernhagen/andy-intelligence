@@ -164,6 +164,7 @@ describe("MCP OAuth flow (MCP SDK client)", () => {
     expect(result.structuredContent).toMatchObject({ signedInAs: "andy@example.com" });
     expect((await client.listTools()).tools.map((t) => t.name).sort()).toEqual([
       "answer_question",
+      "approve_plan",
       "archive_ticket",
       "build",
       "cancel_ticket",
@@ -171,8 +172,10 @@ describe("MCP OAuth flow (MCP SDK client)", () => {
       "list_needs_me",
       "move_ticket",
       "refine",
+      "reject_plan",
       "set_auto_build",
       "set_auto_refine",
+      "set_plan_approval",
       "status",
     ]);
   });

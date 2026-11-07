@@ -135,6 +135,7 @@ const DOMAIN_STATUS = {
   executor_unavailable: 503,
   dispatch_failed: 502,
   cancel_failed: 502,
+  plan_not_decidable: 409,
 } as const;
 
 export function createApp(deps: AppDeps) {

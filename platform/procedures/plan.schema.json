@@ -1,0 +1,69 @@
+{
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "summary": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 4000,
+      "description": "The approach in markdown, at most 300 words: what you will change and why, open risks, and how it answers any earlier rejection. Andy reads it before approving."
+    },
+    "plan": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Your plan for the build, written read-only (procedure plan.md).",
+      "properties": {
+        "files": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 300
+          },
+          "maxItems": 50,
+          "description": "Files you planned to change or add, repo-relative paths.",
+          "minItems": 1
+        },
+        "steps": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 500
+          },
+          "maxItems": 20,
+          "description": "Order of work, one step each.",
+          "minItems": 1
+        },
+        "tests": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 500
+          },
+          "maxItems": 20,
+          "description": "Tests you planned to add or change, one each."
+        },
+        "riskiestStep": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 500,
+          "description": "The step most likely to go wrong, and why."
+        },
+        "rejectedAlternatives": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 500
+          },
+          "maxItems": 5,
+          "description": "Approaches you considered and rejected, each with the reason."
+        }
+      },
+      "required": ["files", "steps", "tests", "riskiestStep", "rejectedAlternatives"]
+    }
+  },
+  "required": ["summary", "plan"]
+}

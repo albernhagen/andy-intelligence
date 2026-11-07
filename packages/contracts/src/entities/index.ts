@@ -22,6 +22,13 @@ export * from "./common";
 export const AutonomyLevel = z.enum(["autonomous", "gated", "manual"]);
 export type AutonomyLevel = z.infer<typeof AutonomyLevel>;
 
+/**
+ * Which tickets need Andy's approval of a read-only plan before their build (ADR-0050): none,
+ * M and L tickets, or all. Default `none`.
+ */
+export const PlanApproval = z.enum(["none", "m-and-l", "all"]);
+export type PlanApproval = z.infer<typeof PlanApproval>;
+
 export const Project = z.object({
   id: Id,
   name: z.string().min(1),
@@ -47,6 +54,8 @@ export const Project = z.object({
   buildEnabled: z.boolean().default(false),
   buildEnabledBy: z.string().max(320).nullable().default(null),
   buildEnabledAt: Timestamp.nullable().default(null),
+  /** Builds of these tickets wait for Andy to approve a plan run first (ADR-0050). */
+  planApproval: PlanApproval.default("none"),
 });
 export type Project = z.infer<typeof Project>;
 
@@ -258,6 +267,30 @@ export const BuildOutput = z.strictObject({
 });
 export type BuildOutput = z.infer<typeof BuildOutput>;
 
+/**
+ * What a plan run returns (ADR-0050): the build plan, written read-only, for Andy to approve
+ * before the build. Same caps as BuildOutput; `platform/procedures/plan.schema.json` is the
+ * agent's copy.
+ */
+export const PlanOutput = z.strictObject({
+  summary: capped(BUILD_LIMITS.summary),
+  plan: BuildPlan,
+});
+export type PlanOutput = z.infer<typeof PlanOutput>;
+
+/** Cap on a plan rejection's reason (ADR-0028); it goes into the next plan run's prompt. */
+export const PLAN_REASON_MAX = 2000;
+
+/** Andy's decision on a plan run: who (signed-in email) and when are recorded. */
+export const PlanDecision = z.strictObject({
+  decision: z.enum(["approved", "rejected"]),
+  /** Required to reject; optional to approve. */
+  reason: z.string().max(PLAN_REASON_MAX).nullable(),
+  by: z.string().max(320),
+  at: Timestamp,
+});
+export type PlanDecision = z.infer<typeof PlanDecision>;
+
 export const RunStatus = z.enum(["queued", "running", "succeeded", "failed", "cancelled"]);
 export type RunStatus = z.infer<typeof RunStatus>;
 
@@ -329,6 +362,11 @@ export const Run = z.object({
   toolingFiles: z.array(z.string().max(300)).max(50).default([]),
   /** When the run's one repo token was issued to its publish job; null until then. */
   pushGrantedAt: Timestamp.nullable().default(null),
+  // Added in M1.8a: Plan approval (ADR-0050).
+  /** A plan run's decision; null while it awaits Andy (or for other steps). */
+  planDecision: PlanDecision.nullable().default(null),
+  /** A build run's approved plan run, whose plan is in its prompt; null without one. */
+  planRunId: Id.nullable().default(null),
 });
 export type Run = z.infer<typeof Run>;
 

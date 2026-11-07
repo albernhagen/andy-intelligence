@@ -3,7 +3,7 @@ import type { Run, RunStatus } from "@andy/contracts";
 import { Loading, QueryError } from "@/components/Status";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { isActiveRun, useRuns, useStartRun } from "@/lib/queries";
+import { isActiveRun, useDecidePlan, useRuns, useStartRun } from "@/lib/queries";
 
 type TicketPath = { projectId: string; ticketId: string };
 
@@ -21,7 +21,8 @@ const STATUS_VARIANT: Record<RunStatus, "default" | "attention" | "ok"> = {
 
 /**
  * Agent runs on this ticket (M1.6a: Claude Code executor): start a refine or build run (M1.8a:
- * Build run) and follow it; a build shows its branch and PR.
+ * Build run) and follow it; a build shows its branch and PR. The latest plan run, while it awaits
+ * Andy, has Approve and Reject buttons (M1.8a: Plan approval, ADR-0050).
  * The list polls while a run is in flight; when one ends, every query refreshes, so a refine
  * run's questions appear (M1.7: Refinement). Agent text is untrusted: it renders as plain text.
  */
@@ -56,7 +57,12 @@ export function Runs(path: TicketPath) {
       {runs.data && runs.data.length > 0 && (
         <ol className="space-y-2">
           {runs.data.map((r) => (
-            <RunItem key={r.id} run={r} />
+            <RunItem
+              key={r.id}
+              run={r}
+              decidable={r.id === runs.data.find((p) => p.step === "plan")?.id}
+              path={path}
+            />
           ))}
         </ol>
       )}
@@ -64,7 +70,7 @@ export function Runs(path: TicketPath) {
   );
 }
 
-function RunItem({ run }: { run: Run }) {
+function RunItem({ run, decidable, path }: { run: Run; decidable: boolean; path: TicketPath }) {
   const created = run.createdAt ?? run.startedAt;
   return (
     <li className="space-y-1 rounded-md border border-border p-3 text-sm">
@@ -109,7 +115,50 @@ function RunItem({ run }: { run: Run }) {
       )}
       {run.error && <p className="whitespace-pre-wrap text-destructive">{run.error}</p>}
       {run.summary && <Summary text={run.summary} />}
+      {run.planDecision && (
+        <p className="text-muted-foreground">
+          Plan {run.planDecision.decision} by {run.planDecision.by}
+          {run.planDecision.reason && `: ${run.planDecision.reason}`}{" "}
+          <Time label="at" iso={run.planDecision.at} />
+        </p>
+      )}
+      {decidable && run.status === "succeeded" && run.plan && !run.planDecision && (
+        <PlanDecision runId={run.id} path={path} />
+      )}
     </li>
+  );
+}
+
+/** Approve, or reject with a reason (required: the next plan run sees it). */
+function PlanDecision({ runId, path }: { runId: string; path: TicketPath }) {
+  const decide = useDecidePlan(path);
+  const [reason, setReason] = useState("");
+  return (
+    <div className="flex flex-wrap items-center gap-2">
+      <Button
+        size="sm"
+        disabled={decide.isPending}
+        onClick={() => decide.mutate({ runId, decision: "approved" })}
+      >
+        Approve plan
+      </Button>
+      <input
+        aria-label="Reason to reject"
+        placeholder="Reason to reject"
+        className="min-w-48 flex-1 rounded border border-border bg-background px-2 py-1"
+        value={reason}
+        onChange={(e) => setReason(e.target.value)}
+      />
+      <Button
+        size="sm"
+        variant="outline"
+        disabled={decide.isPending || reason.trim() === ""}
+        onClick={() => decide.mutate({ runId, decision: "rejected", reason })}
+      >
+        Reject plan
+      </Button>
+      {decide.error && <QueryError error={decide.error} />}
+    </div>
   );
 }
 

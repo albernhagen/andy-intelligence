@@ -14,7 +14,7 @@ Procedure for the build step (ARCHITECTURE §4.1 In progress, ADR-0050, ADR-0063
 
 ## Steps
 
-1. **Plan, read-only.** Before your first edit, read `AGENTS.md`, the ticket, and only the code you need. Write the plan: the files you will change, the order of work, the tests you will add, the riskiest step, and the alternatives you rejected with the reason. It goes in the PR as written: don't rewrite it afterwards; record changes in `deviations`.
+1. **Plan, read-only.** Before your first edit, read `AGENTS.md`, the ticket, and only the code you need. Write the plan: the files you will change, the order of work, the tests you will add, the riskiest step, and the alternatives you rejected with the reason. It goes in the PR as written: don't rewrite it afterwards; record changes in `deviations`. **If the prompt has an `<approved-plan>`, Andy approved that plan (ADR-0050): don't write a new one. Follow it, return it unchanged as `plan`, and record every departure from it, with the reason, in `deviations`.**
 2. **Bug tickets: a failing test first.** Write the test that shows the bug and run it to see it fail, before you touch the fix. List its files in `failingTestFiles`: the executor commits them first, alone.
 3. **Implement** the plan in small steps, running the relevant tests as you go. Update the docs the repo's rules ask for in the same change.
 4. **Verify.** Install dependencies from the lockfile if needed, then run the project's checks (for this repo: `pnpm lint && pnpm typecheck && pnpm test && pnpm build`, and `pnpm context:check` when docs changed). Fix what fails. Record each check you ran last, after your final edit, in `verification`: the exact command, whether it passed, and the last lines of its output. Never report a check you didn't run.

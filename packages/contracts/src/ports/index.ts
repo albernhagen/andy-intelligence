@@ -10,6 +10,7 @@ import {
   QuestionStatus,
   QuotaReading,
   Route,
+  PlanApproval,
   Run,
   RunExecutor,
   RunStatus,
@@ -149,6 +150,7 @@ export const ProjectPatch = z.strictObject({
   buildEnabled: z.boolean().optional(),
   buildEnabledBy: z.string().max(320).nullable().optional(),
   buildEnabledAt: Timestamp.nullable().optional(),
+  planApproval: PlanApproval.optional(),
 });
 export type ProjectPatch = z.infer<typeof ProjectPatch>;
 
@@ -157,6 +159,7 @@ export const ProjectSettings = ProjectPatch.pick({
   autoRefine: true,
   autoBuild: true,
   buildEnabled: true,
+  planApproval: true,
 });
 export type ProjectSettings = z.infer<typeof ProjectSettings>;
 
@@ -294,6 +297,7 @@ export const NewRun = Run.pick({
   maxTurns: true,
   attempt: true,
   retryOf: true,
+  planRunId: true,
 });
 export type NewRun = z.input<typeof NewRun>;
 
@@ -314,6 +318,7 @@ export const RunPatch = Run.pick({
   branch: true,
   toolingFiles: true,
   pushGrantedAt: true,
+  planDecision: true,
 }).partial();
 export type RunPatch = z.input<typeof RunPatch>;
 

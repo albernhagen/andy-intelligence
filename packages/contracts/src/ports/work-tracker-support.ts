@@ -32,6 +32,7 @@ export function buildProject(input: NewProject): Project {
     buildEnabled: false,
     buildEnabledBy: null,
     buildEnabledAt: null,
+    planApproval: "none",
   };
 }
 

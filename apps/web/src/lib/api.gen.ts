@@ -135,6 +135,11 @@ export interface paths {
                * @default null
                */
               buildEnabledAt: string | null;
+              /**
+               * @default none
+               * @enum {string}
+               */
+              planApproval: "none" | "m-and-l" | "all";
             }[];
           };
         };
@@ -194,6 +199,11 @@ export interface paths {
                * @default null
                */
               buildEnabledAt: string | null;
+              /**
+               * @default none
+               * @enum {string}
+               */
+              planApproval: "none" | "m-and-l" | "all";
             };
           };
         };
@@ -301,6 +311,11 @@ export interface paths {
                * @default null
                */
               buildEnabledAt: string | null;
+              /**
+               * @default none
+               * @enum {string}
+               */
+              planApproval: "none" | "m-and-l" | "all";
             };
           };
         };
@@ -374,6 +389,8 @@ export interface paths {
             autoRefine?: boolean;
             autoBuild?: boolean;
             buildEnabled?: boolean;
+            /** @enum {string} */
+            planApproval?: "none" | "m-and-l" | "all";
           };
         };
       };
@@ -408,6 +425,11 @@ export interface paths {
                * @default null
                */
               buildEnabledAt: string | null;
+              /**
+               * @default none
+               * @enum {string}
+               */
+              planApproval: "none" | "m-and-l" | "all";
             };
           };
         };
@@ -2536,6 +2558,17 @@ export interface paths {
                * @default null
                */
               pushGrantedAt: string | null;
+              /** @default null */
+              planDecision: {
+                /** @enum {string} */
+                decision: "approved" | "rejected";
+                reason: string | null;
+                by: string;
+                /** Format: date-time */
+                at: string;
+              } | null;
+              /** @default null */
+              planRunId: string | null;
             }[];
           };
         };
@@ -2568,7 +2601,7 @@ export interface paths {
         content: {
           "application/json": {
             /** @enum {string} */
-            step: "refine" | "build";
+            step: "refine" | "plan" | "build";
           };
         };
       };
@@ -2661,6 +2694,17 @@ export interface paths {
                * @default null
                */
               pushGrantedAt: string | null;
+              /** @default null */
+              planDecision: {
+                /** @enum {string} */
+                decision: "approved" | "rejected";
+                reason: string | null;
+                by: string;
+                /** Format: date-time */
+                at: string;
+              } | null;
+              /** @default null */
+              planRunId: string | null;
             };
           };
         };
@@ -2726,6 +2770,291 @@ export interface paths {
         };
         /** @description No executor (GitHub not connected) */
         503: {
+          headers: {
+            [name: string]: unknown;
+          };
+          content: {
+            "application/json": {
+              error: string;
+              details?: string[];
+            };
+          };
+        };
+      };
+    };
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/projects/{projectId}/tickets/{ticketId}/runs/{runId}/plan-decision": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    post: {
+      parameters: {
+        query?: never;
+        header?: never;
+        path: {
+          projectId: string;
+          ticketId: string;
+          runId: string;
+        };
+        cookie?: never;
+      };
+      requestBody: {
+        content: {
+          "application/json": {
+            /** @enum {string} */
+            decision: "approved" | "rejected";
+            reason?: string | null;
+          };
+        };
+      };
+      responses: {
+        /** @description Decided; on approval, the build started if it could */
+        200: {
+          headers: {
+            [name: string]: unknown;
+          };
+          content: {
+            "application/json": {
+              run: {
+                id: string;
+                projectId: string;
+                ticketId: string | null;
+                /** @enum {string} */
+                step: "refine" | "plan" | "build" | "review" | "verify" | "scout";
+                route: {
+                  /** @enum {string} */
+                  harness: "claude-code" | "jules" | "opencode" | "direct";
+                  /** @enum {string} */
+                  provider: "claude-sub" | "google-sub" | "openrouter";
+                  model: string;
+                };
+                /** @enum {string|null} */
+                tier: "frontier" | "strong" | "fast" | "cheap" | null;
+                /** @enum {string} */
+                status: "queued" | "running" | "succeeded" | "failed" | "cancelled";
+                /** Format: date-time */
+                startedAt: string | null;
+                /** Format: date-time */
+                endedAt: string | null;
+                tokensIn: number | null;
+                tokensOut: number | null;
+                costUsd: number | null;
+                costIsEstimate: boolean;
+                quotaSnapshot: {
+                  [key: string]: unknown;
+                } | null;
+                links: {
+                  /** Format: uri */
+                  executorRun?: string;
+                  /** Format: uri */
+                  pullRequest?: string;
+                };
+                /** @enum {string|null} */
+                outcome: "merged_clean" | "reworked" | "reverted" | "failed" | null;
+                wouldAutoMerge: boolean | null;
+                /**
+                 * Format: date-time
+                 * @default null
+                 */
+                createdAt: string | null;
+                /**
+                 * Format: date-time
+                 * @default null
+                 */
+                deadline: string | null;
+                /** @default null */
+                prompt: string | null;
+                /** @default null */
+                maxTurns: number | null;
+                /** @default null */
+                summary: string | null;
+                /** @default null */
+                error: string | null;
+                /** @default null */
+                executor: {
+                  repo: string;
+                  ref: string;
+                  externalId: string;
+                } | null;
+                /** @default 1 */
+                attempt: number;
+                /** @default null */
+                retryOf: string | null;
+                /** @default null */
+                plan: {
+                  files: string[];
+                  steps: string[];
+                  tests: string[];
+                  riskiestStep: string;
+                  rejectedAlternatives: string[];
+                } | null;
+                /** @default null */
+                branch: string | null;
+                /** @default [] */
+                toolingFiles: string[];
+                /**
+                 * Format: date-time
+                 * @default null
+                 */
+                pushGrantedAt: string | null;
+                /** @default null */
+                planDecision: {
+                  /** @enum {string} */
+                  decision: "approved" | "rejected";
+                  reason: string | null;
+                  by: string;
+                  /** Format: date-time */
+                  at: string;
+                } | null;
+                /** @default null */
+                planRunId: string | null;
+              };
+              build: {
+                id: string;
+                projectId: string;
+                ticketId: string | null;
+                /** @enum {string} */
+                step: "refine" | "plan" | "build" | "review" | "verify" | "scout";
+                route: {
+                  /** @enum {string} */
+                  harness: "claude-code" | "jules" | "opencode" | "direct";
+                  /** @enum {string} */
+                  provider: "claude-sub" | "google-sub" | "openrouter";
+                  model: string;
+                };
+                /** @enum {string|null} */
+                tier: "frontier" | "strong" | "fast" | "cheap" | null;
+                /** @enum {string} */
+                status: "queued" | "running" | "succeeded" | "failed" | "cancelled";
+                /** Format: date-time */
+                startedAt: string | null;
+                /** Format: date-time */
+                endedAt: string | null;
+                tokensIn: number | null;
+                tokensOut: number | null;
+                costUsd: number | null;
+                costIsEstimate: boolean;
+                quotaSnapshot: {
+                  [key: string]: unknown;
+                } | null;
+                links: {
+                  /** Format: uri */
+                  executorRun?: string;
+                  /** Format: uri */
+                  pullRequest?: string;
+                };
+                /** @enum {string|null} */
+                outcome: "merged_clean" | "reworked" | "reverted" | "failed" | null;
+                wouldAutoMerge: boolean | null;
+                /**
+                 * Format: date-time
+                 * @default null
+                 */
+                createdAt: string | null;
+                /**
+                 * Format: date-time
+                 * @default null
+                 */
+                deadline: string | null;
+                /** @default null */
+                prompt: string | null;
+                /** @default null */
+                maxTurns: number | null;
+                /** @default null */
+                summary: string | null;
+                /** @default null */
+                error: string | null;
+                /** @default null */
+                executor: {
+                  repo: string;
+                  ref: string;
+                  externalId: string;
+                } | null;
+                /** @default 1 */
+                attempt: number;
+                /** @default null */
+                retryOf: string | null;
+                /** @default null */
+                plan: {
+                  files: string[];
+                  steps: string[];
+                  tests: string[];
+                  riskiestStep: string;
+                  rejectedAlternatives: string[];
+                } | null;
+                /** @default null */
+                branch: string | null;
+                /** @default [] */
+                toolingFiles: string[];
+                /**
+                 * Format: date-time
+                 * @default null
+                 */
+                pushGrantedAt: string | null;
+                /** @default null */
+                planDecision: {
+                  /** @enum {string} */
+                  decision: "approved" | "rejected";
+                  reason: string | null;
+                  by: string;
+                  /** Format: date-time */
+                  at: string;
+                } | null;
+                /** @default null */
+                planRunId: string | null;
+              } | null;
+              buildError: string | null;
+            };
+          };
+        };
+        /** @description Invalid request */
+        400: {
+          headers: {
+            [name: string]: unknown;
+          };
+          content: {
+            "application/json": {
+              error: string;
+              details?: string[];
+            };
+          };
+        };
+        /** @description Only Andy decides plans */
+        403: {
+          headers: {
+            [name: string]: unknown;
+          };
+          content: {
+            "application/json": {
+              error: string;
+              details?: string[];
+            };
+          };
+        };
+        /** @description Not found */
+        404: {
+          headers: {
+            [name: string]: unknown;
+          };
+          content: {
+            "application/json": {
+              error: string;
+              details?: string[];
+            };
+          };
+        };
+        /** @description Not the latest plan, already decided, stale, or no reason */
+        409: {
           headers: {
             [name: string]: unknown;
           };
