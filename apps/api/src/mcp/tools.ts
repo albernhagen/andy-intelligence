@@ -20,7 +20,8 @@ import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import { z } from "zod";
 
 /**
- * MCP core tools (M1.4: MCP core tools; `refine` from M1.7: Refinement). Thin adapters over
+ * MCP core tools (M1.4: MCP core tools; `refine` from M1.7: Refinement; `build` and
+ * `set_auto_build` from M1.8a: Build run). Thin adapters over
  * TicketService and RunService, the same rules the REST API and UI use. Every caller is Andy (allow-list), so actor = "andy", and answers are
  * recorded with answeredVia = "mcp".
  */
@@ -57,6 +58,19 @@ const RefineInput = {
   ticket: TicketKey.describe(
     'Ticket key, e.g. "AI-42". Must be in Backlog with no open questions.',
   ),
+};
+
+const BuildInput = {
+  ticket: TicketKey.describe(
+    'Ticket key, e.g. "AI-42". Must be Ready (or In progress, to restart) and meet the Definition of Ready.',
+  ),
+};
+
+const AutoBuildInput = {
+  project: ProjectKey,
+  enabled: z
+    .boolean()
+    .describe("true: Ready tickets are built on their own, top of the order first. Default off."),
 };
 
 const AutoRefineInput = {
@@ -183,6 +197,50 @@ export function registerTools(server: McpServer, deps: ToolDeps): void {
   );
 
   server.registerTool(
+    "build",
+    {
+      description:
+        "Starts a build run on a ticket now: an agent plans read-only, implements the ticket, runs the project's checks and opens a PR titled `<KEY>: <title>` (about 15-60 minutes). The ticket moves to In progress, then Ready for review when the PR opens. One run per project at a time. Only needed when auto-build is off or a build failed.",
+      inputSchema: BuildInput,
+      annotations: { destructiveHint: false, idempotentHint: false, openWorldHint: true },
+    },
+    ({ ticket }) =>
+      run(async () => {
+        const found = await service.findByKey(ticket);
+        const started = await deps.runs.start(found.projectId, found.id, "build");
+        return {
+          run: {
+            id: started.id,
+            step: started.step,
+            status: started.status,
+            model: started.route.model,
+            deadline: started.deadline,
+            link: started.links.executorRun ?? null,
+          },
+        };
+      }),
+  );
+
+  server.registerTool(
+    "set_auto_build",
+    {
+      description:
+        "Turns a project's auto-build on or off (default off). On: when a ticket reaches Ready or a run ends, the top waiting Ready ticket is built (one run per project; it pauses while 3 tickets are In progress or Ready for review).",
+      inputSchema: AutoBuildInput,
+      annotations: { destructiveHint: false, idempotentHint: true, openWorldHint: true },
+    },
+    ({ project, enabled }) =>
+      run(async () => {
+        const updated = await deps.projects.update(
+          project.toLowerCase(),
+          { autoBuild: enabled },
+          deps.email,
+        );
+        return { project: updated.key, autoBuild: updated.autoBuild };
+      }),
+  );
+
+  server.registerTool(
     "cancel_ticket",
     {
       description:
@@ -225,7 +283,11 @@ export function registerTools(server: McpServer, deps: ToolDeps): void {
     },
     ({ project, enabled }) =>
       run(async () => {
-        const updated = await deps.projects.update(project.toLowerCase(), { autoRefine: enabled });
+        const updated = await deps.projects.update(
+          project.toLowerCase(),
+          { autoRefine: enabled },
+          deps.email,
+        );
         return { project: updated.key, autoRefine: updated.autoRefine };
       }),
   );

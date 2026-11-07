@@ -1,5 +1,5 @@
 {
-  "$comment": "Executor permission profile (ADR-0040, ARCHITECTURE §7.2). scripts/executor-profile.mjs merges `settings` + one entry of `steps` + CODEOWNERS Edit denies into /etc/claude-code/managed-settings.json, the top-precedence Claude Code settings source, so nothing in the project's .claude/ can loosen it. Paths: `//` = filesystem root, `~/` = home, `//**/x` = x anywhere (https://code.claude.com/docs/en/permissions#read-and-edit). A Read deny also blocks Edit/Write of that path.",
+  "$comment": "Executor permission profile (ADR-0040, ARCHITECTURE §7.2). scripts/executor-profile.mjs merges `settings` + one entry of `steps` + CODEOWNERS Edit denies into /etc/claude-code/managed-settings.json, the top-precedence Claude Code settings source, so nothing in the project's .claude/ can loosen it. Paths: `//` = filesystem root, `~/` = home, `//**/x` = x anywhere (https://code.claude.com/docs/en/permissions#read-and-edit). A Read deny also blocks Edit/Write of that path. A step's `sandbox` becomes the top-level `sandbox` (Claude Code's Bash sandbox: bubblewrap + network proxy, https://code.claude.com/docs/en/sandboxing); `${ROOT}` is the checkout. A catch-all CODEOWNERS `*` line is not a protected path (ARCHITECTURE §4.5), so it adds no Edit deny. `.github/`, `platform/actions/`, `scripts/review-*.mjs` and `.mcp.json` are denied because PR review jobs run them while holding the Claude token, and `infra/` and `.terraform-version` because `terraform-plan` runs them with GCP credentials and secrets (threat model R2, R5, ADR-0063); the build's publish job refuses a patch touching any of these Edit-denied paths.",
   "settings": {
     "allowManagedPermissionRulesOnly": true,
     "allowManagedHooksOnly": true,
@@ -39,10 +39,16 @@
         "Read(//etc/**)",
         "Read(//home/runner/work/_temp/**)",
         "Read(//home/runner/.config/**)",
-        "Edit(//**/.github/workflows/**)",
+        "Edit(//**/.github/**)",
         "Edit(//**/CODEOWNERS)",
         "Edit(//**/platform/executor/**)",
+        "Edit(//**/platform/actions/**)",
+        "Edit(//**/scripts/review-*.mjs)",
+        "Edit(//**/infra/**)",
+        "Edit(//**/.terraform-version)",
+        "Edit(//**/.mcp.json)",
         "Edit(//**/.claude/**)",
+        "Edit(//**/.git/**)",
         "Edit(//etc/claude-code/**)"
       ]
     }
@@ -61,9 +67,72 @@
       "deny": ["Bash", "Edit", "Write", "MultiEdit", "NotebookEdit", "WebFetch", "WebSearch"]
     },
     "build": {
-      "$comment": "Bash allow rules for the project's own commands (lint, test, build) come in M1.8: Build + gate. Until then Bash is not allowed, so a headless run can't use it.",
-      "allow": ["Read", "Glob", "Grep", "Edit", "Write", "MultiEdit"],
-      "deny": ["NotebookEdit", "WebFetch", "WebSearch"]
+      "$comment": "ADR-0063: Bash runs only inside the sandbox (no unsandboxed retry), with the model and GitHub credentials unset, writes limited to the checkout and /tmp/agent, and network to the package registry only. The workflow also sets CLAUDE_CODE_SUBPROCESS_ENV_SCRUB=1 (credential scrub + PID namespace).",
+      "allow": ["Read", "Glob", "Grep", "Edit", "Write", "MultiEdit", "Bash"],
+      "deny": ["NotebookEdit", "WebFetch", "WebSearch"],
+      "sandbox": {
+        "enabled": true,
+        "failIfUnavailable": true,
+        "allowUnsandboxedCommands": false,
+        "autoAllowBashIfSandboxed": true,
+        "excludedCommands": [],
+        "network": {
+          "allowedDomains": ["registry.npmjs.org"],
+          "strictAllowlist": true,
+          "allowManagedDomainsOnly": true
+        },
+        "filesystem": {
+          "allowWrite": ["/tmp/agent"],
+          "denyWrite": ["${ROOT}/.git"],
+          "denyRead": [
+            "~/.claude",
+            "~/.ssh",
+            "~/.config",
+            "/home/runner/work/_temp",
+            "/etc/claude-code"
+          ]
+        },
+        "credentials": {
+          "envVars": [
+            {
+              "name": "CLAUDE_CODE_OAUTH_TOKEN",
+              "mode": "deny"
+            },
+            {
+              "name": "ANTHROPIC_API_KEY",
+              "mode": "deny"
+            },
+            {
+              "name": "GITHUB_TOKEN",
+              "mode": "deny"
+            },
+            {
+              "name": "GH_TOKEN",
+              "mode": "deny"
+            },
+            {
+              "name": "ACTIONS_RUNTIME_TOKEN",
+              "mode": "deny"
+            },
+            {
+              "name": "ACTIONS_ID_TOKEN_REQUEST_TOKEN",
+              "mode": "deny"
+            },
+            {
+              "name": "ACTIONS_ID_TOKEN_REQUEST_URL",
+              "mode": "deny"
+            },
+            {
+              "name": "ACTIONS_RESULTS_URL",
+              "mode": "deny"
+            },
+            {
+              "name": "ACTIONS_CACHE_URL",
+              "mode": "deny"
+            }
+          ]
+        }
+      }
     }
   }
 }

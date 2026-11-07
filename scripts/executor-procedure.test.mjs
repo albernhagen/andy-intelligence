@@ -21,7 +21,13 @@ describe("executor-procedure", () => {
   });
 
   it("GivenAStepWithoutFiles_WhenLoaded_ThenBothAreNull", () => {
-    expect(loadStep(PROCEDURES, "build")).toEqual({ procedure: null, schema: null });
+    expect(loadStep(PROCEDURES, "verify")).toEqual({ procedure: null, schema: null });
+  });
+
+  it("GivenTheBuildStep_WhenLoaded_ThenItsProcedureAndSchemaArePassedToTheAgent", () => {
+    const files = loadStep(PROCEDURES, "build");
+    expect(files.procedure).toContain("# /build");
+    expect(outputs(files, "ticket")).toContain("schema_args=--json-schema '{");
   });
 
   it.each([

@@ -81,6 +81,16 @@ export function workTrackerContract(name: string, make: () => Promise<WorkTracke
       });
     });
 
+    it("GivenAutoRefineOff_WhenAutoBuildIsTurnedOn_ThenAutoRefineStaysOffAndAutoBuildDefaultsOff", async () => {
+      const tracker = await make();
+      const created = await tracker.createProject({ name: "Build", key: uniqueKey() });
+      expect(created.autoBuild).toBe(false);
+      await tracker.updateProject(created.id, { autoRefine: false });
+      const updated = await tracker.updateProject(created.id, { autoBuild: true });
+      expect(updated).toEqual({ ...created, autoRefine: false, autoBuild: true });
+      expect(await tracker.getProject(created.id)).toEqual(updated);
+    });
+
     it("GivenAnExistingKey_WhenCreatingAProject_ThenConflict", async () => {
       const { tracker, project } = await setup();
       await rejectsWith(tracker.createProject({ name: "Again", key: project.key }), "conflict");

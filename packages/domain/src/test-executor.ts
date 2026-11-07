@@ -37,3 +37,18 @@ export class WorkflowExecutor extends InMemoryExecutor {
     };
   }
 }
+
+/** A valid build run result (BuildOutput), as the agent returns it. */
+export const buildOutput = {
+  summary: "Adds the board.",
+  plan: {
+    files: ["apps/web/src/pages/BoardPage.tsx"],
+    steps: ["Write the page", "Test it"],
+    tests: ["GivenTickets_WhenTheBoardOpens_ThenTheyShow"],
+    riskiestStep: "Ordering by rank",
+    rejectedAlternatives: ["A table: the board is the design"],
+  },
+  deviations: [],
+  verification: [{ command: "pnpm test", passed: true, output: "12 passed" }],
+  failingTestFiles: [],
+};

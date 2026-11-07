@@ -1,7 +1,7 @@
 import { useState } from "react";
 import type { Run, TicketEvent } from "@andy/contracts";
 import { Markdown } from "@/components/Markdown";
-import { RunItem, StartRefineRun } from "@/components/Runs";
+import { RunItem, StartRuns } from "@/components/Runs";
 import { useUnsavedDraft } from "@/components/InlineEdit";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/input";
@@ -14,7 +14,7 @@ const MARKDOWN_BODIES = new Set<TicketEvent["kind"]>(["comment", "question_asked
 
 /**
  * The ticket's one activity timeline (ADR-0059): history events, comments and runs, oldest
- * first, with the comment box and the refine button.
+ * first, with the comment box and the buttons that start a run.
  */
 export function Activity(props: {
   projectId: string;
@@ -31,7 +31,7 @@ export function Activity(props: {
     <section aria-label="Activity" className="space-y-3">
       <div className="flex items-center justify-between gap-2">
         <h3 className="text-sm font-medium">Activity</h3>
-        <StartRefineRun path={path} runs={props.runs} />
+        <StartRuns path={path} runs={props.runs} />
       </div>
       <ol className="space-y-2">
         {timeline(props.events, props.runs).map((item) =>

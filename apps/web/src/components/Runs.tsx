@@ -21,23 +21,29 @@ const STATUS_VARIANT: Record<RunStatus, "default" | "running" | "success" | "dan
 };
 
 /**
- * Starts a refine run on the ticket (M1.6a: Claude Code executor); off while one is in flight.
- * The runs themselves show in the activity timeline (`RunItem`); `useRuns` polls while one is in
- * flight and refetches everything when it ends, so a refine run's questions appear (M1.7).
+ * Starts a refine or build run on the ticket (M1.6a: Claude Code executor; M1.8a: Build run);
+ * off while one is in flight. The runs themselves show in the activity timeline (`RunItem`,
+ * with a build's branch and PR); `useRuns` polls while one is in flight and refetches
+ * everything when it ends, so a refine run's questions appear (M1.7: Refinement).
  */
-export function StartRefineRun({ path, runs }: { path: TicketPath; runs: Run[] | undefined }) {
+export function StartRuns({ path, runs }: { path: TicketPath; runs: Run[] | undefined }) {
   const start = useStartRun(path);
   const inFlight = runs?.some(isActiveRun) ?? false;
   return (
     <div className="space-y-1">
-      <Button
-        size="sm"
-        variant="outline"
-        disabled={start.isPending || inFlight}
-        onClick={() => start.mutate({ step: "refine" })}
-      >
-        Start refine run
-      </Button>
+      <div className="flex flex-wrap gap-2">
+        {(["refine", "build"] as const).map((step) => (
+          <Button
+            key={step}
+            size="sm"
+            variant="outline"
+            disabled={start.isPending || inFlight}
+            onClick={() => start.mutate({ step })}
+          >
+            Start {step} run
+          </Button>
+        ))}
+      </div>
       {start.error && <QueryError error={start.error} />}
     </div>
   );
@@ -69,6 +75,22 @@ export function RunItem({ run }: { run: Run }) {
       {(run.tokensIn !== null || run.tokensOut !== null || run.costUsd !== null) && (
         <p className="text-muted-foreground">
           {formatTokens(run)} · {formatCost(run)}
+        </p>
+      )}
+      {(run.links.pullRequest || run.branch) && (
+        <p className="text-muted-foreground">
+          {run.links.pullRequest && (
+            <a
+              href={run.links.pullRequest}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="underline"
+            >
+              Pull request
+            </a>
+          )}
+          {run.links.pullRequest && run.branch && " · "}
+          {run.branch && <span>branch {run.branch}</span>}
         </p>
       )}
       {run.error && <p className="whitespace-pre-wrap text-destructive">{run.error}</p>}
