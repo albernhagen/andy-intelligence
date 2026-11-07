@@ -215,15 +215,20 @@ jobs:
           cp -a .git "$RUNNER_TEMP/pristine.git"
           # The files there before the agent: collection drops only new empty sandbox placeholders.
           git ls-files -z --cached --others --exclude-standard > "$RUNNER_TEMP/workspace-before.manifest"
-          echo "nonce=$(openssl rand -hex 16)" >> "$GITHUB_OUTPUT"
+          # The one command the sandbox check must run, unchanged (single-quoted: the variables
+          # expand inside the sandbox, not here).
+          nonce=$(openssl rand -hex 16)
+          # shellcheck disable=SC2016
+          check='git update-index -q --refresh && git status --porcelain > /dev/null && test -z "${CLAUDE_CODE_OAUTH_TOKEN:-}${ANTHROPIC_API_KEY:-}${GITHUB_TOKEN:-}${GH_TOKEN:-}" && printf %s '"$nonce"' > .executor-sandbox-check'
+          { echo "nonce=$nonce"; echo "check_command=$check"; } >> "$GITHUB_OUTPUT"
           echo "bubblewrap $(bwrap --version) can make its namespaces."
 
       # Build only (ADR-0071). One Bash call through Claude Code's own sandbox, under the same
       # managed settings, env and checkout the agent gets: git must write .git (update-index takes
-      # index.lock), the credentials must be unset, and the command writes sha256(nonce) into the
-      # checkout. Only a Bash call that ran can write that hash, so a model that answers without
-      # running it fails the check. Capped (ADR-0028): Haiku, 3 turns, 5 minutes. Fixed prompt;
-      # no ticket text.
+      # index.lock), the credentials must be unset, and the command writes the nonce into the
+      # checkout. The verify step reads the execution log: that exact command, one Bash call, no
+      # error, no other tool, and the marker on disk. Capped (ADR-0028): Haiku, 3 turns,
+      # 5 minutes. Fixed prompt; no ticket text.
       - name: Check the sandbox (build)
         id: sandbox_check
         if: needs.context.outputs.step == 'build'
@@ -242,7 +247,7 @@ jobs:
           prompt: |
             This is a sandbox check. Use the Bash tool exactly once to run this exact command, unchanged, and use no other tool. Then reply with its exit code and nothing else. If it fails, don't retry it or try anything else.
 
-            git update-index -q --refresh && git status --porcelain > /dev/null && test -z "${CLAUDE_CODE_OAUTH_TOKEN:-}${ANTHROPIC_API_KEY:-}${GITHUB_TOKEN:-}${GH_TOKEN:-}" && printf %s ${{ steps.prepare.outputs.nonce }} | sha256sum | cut -d' ' -f1 > .executor-sandbox-check
+            ${{ steps.prepare.outputs.check_command }}
           claude_args: |
             --model haiku
             --max-turns 3
@@ -251,19 +256,20 @@ jobs:
         id: sandbox_verify
         if: needs.context.outputs.step == 'build' && steps.prepare.outcome == 'success'
         env:
+          EXECUTION_FILE: ${{ steps.sandbox_check.outputs.execution_file }}
+          COMMAND: ${{ steps.prepare.outputs.check_command }}
           NONCE: ${{ steps.prepare.outputs.nonce }}
           CHECK_OUTCOME: ${{ steps.sandbox_check.outcome }}
         run: |
-          marker="$GITHUB_WORKSPACE/.executor-sandbox-check"
-          expected=$(printf %s "$NONCE" | sha256sum | cut -d' ' -f1)
-          if [ -f "$marker" ] && [ ! -L "$marker" ] && [ "$(head -c 64 "$marker")" = "$expected" ]; then
-            rm -f "$marker"
-            echo "Sandbox ready: a sandboxed Bash call wrote the checkout and .git with credentials unset."
-          else
-            rm -f "$marker"
-            echo "::error title=claude-executor::Sandbox check failed (check step: $CHECK_OUTCOME): a Bash call in Claude Code's sandbox couldn't write the checkout and .git with credentials unset. Refusing to run the agent; see the step's log and runbook agent-runs.md §9."
+          if ! MARKER="$GITHUB_WORKSPACE/.executor-sandbox-check" \
+            node "$RUNNER_TEMP/platform/scripts/executor-sandbox.mjs" verify-check; then
+            echo "::error title=claude-executor::Sandbox check failed (check step: $CHECK_OUTCOME): the exact check command didn't run cleanly in Claude Code's sandbox (git writing .git, credentials unset, a file written in the checkout). Refusing to run the agent; see runbook agent-runs.md §9."
             exit 1
           fi
+          # The check's own placeholders mustn't change what the agent's installs see.
+          WORKSPACE="$GITHUB_WORKSPACE" MANIFEST="$RUNNER_TEMP/workspace-before.manifest" \
+            node "$RUNNER_TEMP/platform/scripts/executor-publish.mjs" drop-placeholders
+          echo "Sandbox ready: one sandboxed Bash call ran git against .git, found the credentials unset and wrote the checkout."
 
       # The project's toolchain, from the platform's pinned actions (not the project's code).
       - name: Set up pnpm (build)
@@ -336,6 +342,15 @@ jobs:
           }
           echo "base_sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
           mkdir -p "$RUNNER_TEMP/change"
+          # The agent could write .git (ADR-0071). A change to a path that steers git (config,
+          # hooks, commondir, info, alternates, ...) fails the run; either way the checkout gets
+          # the pristine .git back before anything else (checkout's post step) runs git there.
+          tampered=$(PRISTINE="$GIT_DIR" LIVE="$GITHUB_WORKSPACE/.git" \
+            node "$RUNNER_TEMP/platform/scripts/executor-sandbox.mjs" check-git) || tampered="(check failed)"
+          if ! { rm -rf "$GITHUB_WORKSPACE/.git" && cp -a "$GIT_DIR" "$GITHUB_WORKSPACE/.git"; }; then
+            fail "Couldn't restore the checkout's .git after the agent."
+          fi
+          [ -z "$tampered" ] || fail "The agent changed .git: $(tr '\n' ' ' <<<"$tampered")(refusing to publish)."
           # Empty files the sandbox left at its protected paths are not the agent's change (AI-42).
           WORKSPACE="$GITHUB_WORKSPACE" MANIFEST="$RUNNER_TEMP/workspace-before.manifest" \
             node "$RUNNER_TEMP/platform/scripts/executor-publish.mjs" drop-placeholders \

@@ -400,6 +400,17 @@ describe("sandbox placeholders", () => {
     ]);
   });
 
+  it("GivenDotClaudeIsASymlinkToAnOutsideDir_WhenPlaceholdersAreDropped_ThenTheFileThereSurvives", () => {
+    const root = mkdtempSync(join(tmpdir(), "placeholders-"));
+    const outside = mkdtempSync(join(tmpdir(), "outside-"));
+    writeFileSync(join(outside, "settings.json"), "");
+    symlinkSync(outside, join(root, ".claude"));
+    const manifest = join(root, "..", `${basename(root)}.manifest`);
+    writeFileSync(manifest, "");
+    expect(dropSandboxPlaceholders({ root, manifest, emit: () => {} })).toEqual([]);
+    expect(existsSync(join(outside, "settings.json"))).toBe(true);
+  });
+
   it("GivenNoManifest_WhenPlaceholdersAreDropped_ThenItRefuses", () => {
     const root = mkdtempSync(join(tmpdir(), "placeholders-"));
     expect(() =>
