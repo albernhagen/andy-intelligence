@@ -90,7 +90,11 @@ describe("buildProfile", () => {
   it("GivenBuild_WhenBuilt_ThenSandboxedCommandsCanReadTheCaCertificatesButTheReadToolCantReadEtc", () => {
     // Read denies become sandbox denyReads; Read(//etc/**) hid /etc/ssl from curl (AI-51).
     const settings = build("build");
-    expect(settings.sandbox.filesystem.allowRead).toEqual(["/etc/ssl", "/etc/ca-certificates"]);
+    expect(settings.sandbox.filesystem.allowRead).toEqual([
+      "/etc/ssl/certs",
+      "/etc/ssl/openssl.cnf",
+      "/etc/ca-certificates",
+    ]);
     expect(settings.permissions.deny).toContain("Read(//etc/**)");
   });
 
