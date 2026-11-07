@@ -7,16 +7,17 @@ import {
   type Ticket,
   type WorkTracker,
 } from "@andy/contracts";
-import { forwardPath } from "./stages";
+import type { PullRequestTarget } from "./stages";
 import type { TicketService } from "./tickets";
 
 /**
- * Tickets follow their pull requests (AI-14, ARCHITECTURE §4.1): opened → Ready for review,
- * merged → Done, closed unmerged → In progress + Needs-you. The ticket key comes from the PR's
- * head branch or the first line of its description. PR text is untrusted data: it only ever
- * selects a ticket of the repo's own project; nothing in it is executed or followed. PRs from
- * forks are ignored: on a public repo anyone can open one.
- * Moves are by "system", one allowed step at a time, never forced.
+ * Tickets follow their pull requests (AI-14, AI-31, docs/architecture/workflow.md §4.1): opened
+ * into the default branch → Ready for review from Backlog, Ready or In progress; merged into it →
+ * Done from any open stage (ADR-0067); closed unmerged → In progress + Needs-you. The ticket key
+ * comes from the PR's head branch or the first line of its description. PR text is untrusted
+ * data: it only ever selects a ticket of the repo's own project; nothing in it is executed or
+ * followed. PRs from forks are ignored: on a public repo anyone can open one. Epics only get the
+ * link. Moves are by "system", one step at a time, never forced.
  */
 
 /** A ticket key inside other text, e.g. "AI-14" in "ai-14/x", "AI-14-foo" or ".../t/AI-14". */
@@ -94,31 +95,27 @@ export class PullRequestTickets {
     );
     const reason = `PR #${pr.number} ${outcome}: ${pr.url}`;
     const base = { result: "linked" as const, ticket: key, outcome };
+    // An epic never runs, so a PR naming one is a mistake or a reference: link only.
+    if (ticket.type === "epic") return { ...base, moves: [] };
+    // Only PRs into the default branch move tickets (ADR-0056, ADR-0067); others only link.
+    const follow = (to: PullRequestTarget) =>
+      pr.intoDefaultBranch
+        ? this.tickets.followPullRequest(ticket.projectId, ticket.id, to, reason)
+        : Promise.resolve([]);
 
     switch (outcome) {
       case "opened": {
-        const moves = pr.draft ? [] : await this.walk(ticket, "ready_for_review", reason);
+        const moves = pr.draft ? [] : await follow("ready_for_review");
         if (!flaggedByThisClose) return { ...base, moves };
         const after = await this.tickets.unflag(ticket.projectId, ticket.id, "system");
         return { ...base, moves, unflagged: !after.needsAttention };
       }
       case "merged":
-        // Merge means Done until M6: Dev → prod releases (ADR-0056); other bases only link.
-        if (!pr.intoDefaultBranch) return { ...base, moves: [] };
-        return { ...base, moves: await this.walk(ticket, "done", reason) };
+        // Merge means Done until M6: Dev → prod releases (ADR-0056).
+        return { ...base, moves: await follow("done") };
       case "closed":
         return this.rework(ticket, reason, base);
     }
-  }
-
-  /** Steps forward from Ready or later; Backlog tickets (DoR not checked) only get the link. */
-  private async walk(ticket: Ticket, to: Stage, reason: string): Promise<Stage[]> {
-    if (ticket.stage === "backlog") return [];
-    const steps = forwardPath(ticket.stage, to);
-    for (const step of steps) {
-      await this.tickets.move(ticket.projectId, ticket.id, step, "system", { reason });
-    }
-    return steps;
   }
 
   /**
