@@ -124,6 +124,17 @@ export interface paths {
               enabled: boolean;
               /** @default true */
               autoRefine: boolean;
+              /** @default false */
+              autoBuild: boolean;
+              /** @default false */
+              buildEnabled: boolean;
+              /** @default null */
+              buildEnabledBy: string | null;
+              /**
+               * Format: date-time
+               * @default null
+               */
+              buildEnabledAt: string | null;
             }[];
           };
         };
@@ -172,6 +183,17 @@ export interface paths {
               enabled: boolean;
               /** @default true */
               autoRefine: boolean;
+              /** @default false */
+              autoBuild: boolean;
+              /** @default false */
+              buildEnabled: boolean;
+              /** @default null */
+              buildEnabledBy: string | null;
+              /**
+               * Format: date-time
+               * @default null
+               */
+              buildEnabledAt: string | null;
             };
           };
         };
@@ -268,6 +290,17 @@ export interface paths {
               enabled: boolean;
               /** @default true */
               autoRefine: boolean;
+              /** @default false */
+              autoBuild: boolean;
+              /** @default false */
+              buildEnabled: boolean;
+              /** @default null */
+              buildEnabledBy: string | null;
+              /**
+               * Format: date-time
+               * @default null
+               */
+              buildEnabledAt: string | null;
             };
           };
         };
@@ -338,8 +371,9 @@ export interface paths {
       requestBody: {
         content: {
           "application/json": {
-            /** @default true */
             autoRefine?: boolean;
+            autoBuild?: boolean;
+            buildEnabled?: boolean;
           };
         };
       };
@@ -363,6 +397,17 @@ export interface paths {
               enabled: boolean;
               /** @default true */
               autoRefine: boolean;
+              /** @default false */
+              autoBuild: boolean;
+              /** @default false */
+              buildEnabled: boolean;
+              /** @default null */
+              buildEnabledBy: string | null;
+              /**
+               * Format: date-time
+               * @default null
+               */
+              buildEnabledAt: string | null;
             };
           };
         };
@@ -2474,6 +2519,23 @@ export interface paths {
               attempt: number;
               /** @default null */
               retryOf: string | null;
+              /** @default null */
+              plan: {
+                files: string[];
+                steps: string[];
+                tests: string[];
+                riskiestStep: string;
+                rejectedAlternatives: string[];
+              } | null;
+              /** @default null */
+              branch: string | null;
+              /** @default [] */
+              toolingFiles: string[];
+              /**
+               * Format: date-time
+               * @default null
+               */
+              pushGrantedAt: string | null;
             }[];
           };
         };
@@ -2506,7 +2568,7 @@ export interface paths {
         content: {
           "application/json": {
             /** @enum {string} */
-            step: "refine";
+            step: "refine" | "build";
           };
         };
       };
@@ -2582,6 +2644,23 @@ export interface paths {
               attempt: number;
               /** @default null */
               retryOf: string | null;
+              /** @default null */
+              plan: {
+                files: string[];
+                steps: string[];
+                tests: string[];
+                riskiestStep: string;
+                rejectedAlternatives: string[];
+              } | null;
+              /** @default null */
+              branch: string | null;
+              /** @default [] */
+              toolingFiles: string[];
+              /**
+               * Format: date-time
+               * @default null
+               */
+              pushGrantedAt: string | null;
             };
           };
         };

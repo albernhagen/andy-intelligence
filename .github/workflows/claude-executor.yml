@@ -6,11 +6,13 @@ name: Claude Code executor
 # The control plane accepts the callbacks only from this file on main: it checks the Actions OIDC
 # token's `job_workflow_ref` (ADR-0019: Agent callbacks authenticated with GitHub Actions OIDC).
 #
-# Three jobs so the agent's job never holds an OIDC token (as ADR-0043 does for the system
-# review): `context` and `report` talk to the control plane; `agent` only has the model
-# credential and a read-only repo token, and never runs before the profile is installed.
+# Separate jobs so the agent's job never holds an OIDC token or a write token (as ADR-0043 does
+# for the system review): `context` and `report` talk to the control plane; `agent` only has the
+# model credential and a read-only repo token, and never runs before the profile is installed;
+# for build runs (ADR-0063) `publish` checks the agent's change, pushes it with a 1-hour App
+# token and opens the PR, running none of the change's code.
 # The prompt is ticket text: untrusted data. It travels in env, job outputs and the action's
-# `prompt` input, never inside a `run:` script.
+# `prompt` input, never inside a `run:` script. So do the ticket title and the agent's output.
 
 on:
   workflow_call:
@@ -47,6 +49,10 @@ jobs:
       max_turns: ${{ steps.context.outputs.max_turns }}
       read_only: ${{ steps.context.outputs.read_only }}
       prompt: ${{ steps.context.outputs.prompt }}
+      ticket_key: ${{ steps.context.outputs.ticket_key }}
+      ticket_title: ${{ steps.context.outputs.ticket_title }}
+      project_id: ${{ steps.context.outputs.project_id }}
+      branch: ${{ steps.context.outputs.branch }}
       platform_sha: ${{ steps.context.outputs.platform_sha }}
       error: ${{ steps.context.outputs.error }}
     steps:
@@ -94,6 +100,11 @@ jobs:
             and (.model | type == "string" and test("^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$"))
             and (.maxTurns | type == "number" and . == floor and . >= 1 and . <= $cap)
             and (.prompt | type == "string" and length > 0 and length <= $max)
+            and (.step != "build" or (
+              (.ticket.key | type == "string" and test("^[A-Z][A-Z0-9]{0,9}-[0-9]{1,9}$"))
+              and (.ticket.projectId | type == "string" and test("^[a-z][a-z0-9]{0,9}$"))
+              and (.ticket.title | type == "string" and length > 0 and length <= 500)
+              and (.branch == "agent/\(.ticket.key)/\($id)")))
           ' "$body" > /dev/null || fail "GET /runs/$RUN_ID/context: unexpected response shape"
 
           step=$(jq -r .step "$body")
@@ -104,6 +115,11 @@ jobs:
             echo "max_turns=$(jq -r .maxTurns "$body")"
             echo "read_only=$read_only"
             echo "platform_sha=$platform_sha"
+            echo "ticket_key=$(jq -r '.ticket.key // ""' "$body")"
+            echo "project_id=$(jq -r '.ticket.projectId // ""' "$body")"
+            echo "branch=$(jq -r '.branch // ""' "$body")"
+            # One line: the title can't hold a newline here, and the delimiter is random.
+            echo "ticket_title=$(jq -r '.ticket.title // "" | gsub("[\\r\\n]+"; " ")' "$body")"
             delimiter="PROMPT_$(openssl rand -hex 16)"
             echo "prompt<<$delimiter"
             jq -r .prompt "$body"
@@ -112,16 +128,23 @@ jobs:
           rm -f "$body"
           echo "Run $RUN_ID: step $step, read-only $read_only."
 
-  # Holds the model credential. It runs no project code itself: the project is checked out from
-  # its default branch (not a PR) and only read by the agent, whose tools the profile limits.
+  # Holds the model credential. The project is checked out from its default branch (not a PR).
+  # Read-only steps only read it. A build run's agent edits it and runs its commands, but only
+  # through Bash inside Claude Code's sandbox (ADR-0063): credentials unset and scrubbed, its own
+  # PID namespace, writes limited to the checkout, network to the package registry only. The
+  # job's own steps after the agent treat the checkout as hostile: git runs from a copy of .git
+  # taken before the agent started, and nothing from the checkout is executed.
   agent:
     needs: context
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: ${{ needs.context.outputs.step == 'build' && 65 || 30 }}
     permissions:
       contents: read
     outputs:
       report: ${{ steps.report.outputs.report }}
+      base_sha: ${{ steps.change.outputs.base_sha }}
+      has_change: ${{ steps.change.outputs.has_change }}
+      change_error: ${{ steps.change.outputs.change_error }}
     steps:
       - name: Check out the project
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -168,6 +191,38 @@ jobs:
       # The step's procedure (platform/procedures/<step>.md, ADR-0032) and result schema
       # (<step>.schema.json) come from the platform commit too (ADR-0054). The procedure goes
       # first, so the prompt prefix is stable for caching; the run's prompt (ticket text) follows.
+      # Build only: the sandbox's tools and a fail-closed check that bubblewrap can make its
+      # namespaces on this runner (Ubuntu 24.04 restricts unprivileged user namespaces; this
+      # AppArmor profile lifts it for bwrap alone). `failIfUnavailable` also stops Claude Code
+      # if its sandbox can't start, rather than running Bash unsandboxed.
+      - name: Prepare the sandbox (build)
+        if: needs.context.outputs.step == 'build'
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq bubblewrap socat > /dev/null
+          if [ "$(sysctl -n kernel.apparmor_restrict_unprivileged_userns 2>/dev/null)" = 1 ]; then
+            printf '%s\n' 'abi <abi/4.0>,' 'include <tunables/global>' \
+              'profile bwrap /usr/bin/bwrap flags=(unconfined) {' '  userns,' '}' \
+              | sudo tee /etc/apparmor.d/bwrap > /dev/null
+            sudo apparmor_parser -r /etc/apparmor.d/bwrap
+          fi
+          bwrap --ro-bind / / --dev /dev --proc /proc --unshare-all --die-with-parent --new-session true \
+            || { echo "::error title=claude-executor::bubblewrap can't isolate on this runner; refusing to run Bash"; exit 1; }
+          mkdir -p /tmp/agent
+          # git runs after the agent from this copy, never from the checkout's own .git.
+          cp -a .git "$RUNNER_TEMP/pristine.git"
+          echo "Sandbox ready: bubblewrap $(bwrap --version)."
+
+      # The project's toolchain, from the platform's pinned actions (not the project's code).
+      - name: Set up pnpm (build)
+        if: needs.context.outputs.step == 'build' && hashFiles('pnpm-lock.yaml') != ''
+        uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+      - name: Set up Node (build)
+        if: needs.context.outputs.step == 'build' && hashFiles('.nvmrc') != ''
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: .nvmrc
+
       - name: Load the step's procedure and result schema
         id: procedure
         env:
@@ -179,8 +234,15 @@ jobs:
       - name: Claude Code
         id: claude
         continue-on-error: true # a failed agent is reported as a failed run, not a crashed job
-        timeout-minutes: 25
+        timeout-minutes: ${{ needs.context.outputs.step == 'build' && 55 || 25 }}
         uses: anthropics/claude-code-action@d70510b174a1244958df0b03166a54912811f3e6 # v1.0.264
+        env:
+          # Build: strip credentials from every subprocess and give Bash its own PID namespace,
+          # so `cat /proc/<pid>/environ` can't reach the model credential (ADR-0063).
+          CLAUDE_CODE_SUBPROCESS_ENV_SCRUB: ${{ needs.context.outputs.step == 'build' && '1' || '0' }}
+          # Inside the sandbox's writable paths (profile: filesystem.allowWrite).
+          TMPDIR: ${{ needs.context.outputs.step == 'build' && '/tmp/agent' || '' }}
+          npm_config_store_dir: ${{ needs.context.outputs.step == 'build' && '/tmp/agent/pnpm-store' || '' }}
         with:
           claude_code_oauth_token: ${{ inputs.credential == 'subscription' && secrets.CLAUDE_CODE_OAUTH_TOKEN || '' }}
           anthropic_api_key: ${{ inputs.credential == 'api_key' && secrets.ANTHROPIC_API_KEY || '' }}
@@ -201,6 +263,49 @@ jobs:
             ${{ steps.procedure.outputs.schema_args }}
             ${{ needs.context.outputs.read_only == 'true' && '--allowedTools "Read,Glob,Grep" --disallowedTools "Bash,Edit,Write,MultiEdit,NotebookEdit,WebFetch,WebSearch"' || '' }}
 
+      # Build only. The checkout is hostile now: git reads the copy of .git taken before the agent
+      # (no hooks, fsmonitor or filters the agent could plant), and the change leaves as a patch.
+      - name: Collect the change (build)
+        id: change
+        if: always() && needs.context.outputs.step == 'build' && steps.claude.outcome != 'skipped'
+        env:
+          MAX_PATCH_BYTES: 5242880
+        run: |
+          export GIT_DIR="$RUNNER_TEMP/pristine.git" GIT_WORK_TREE="$GITHUB_WORKSPACE"
+          export GIT_CONFIG_NOSYSTEM=1 GIT_CONFIG_GLOBAL=/dev/null
+          git() { command git -c core.fsmonitor=false -c core.hooksPath=/dev/null -c core.untrackedCache=false "$@"; }
+          # A change that can't be collected or is over the cap fails the run with the reason
+          # (the report job reads change_error), never reads as "no change".
+          fail() {
+            echo "has_change=false" >> "$GITHUB_OUTPUT"
+            echo "change_error=$1" >> "$GITHUB_OUTPUT"
+            echo "::error title=claude-executor::$1"
+            exit 0
+          }
+          echo "base_sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+          mkdir -p "$RUNNER_TEMP/change"
+          git add -A || fail "Couldn't collect the change (git add failed)."
+          git diff --cached --binary --no-ext-diff --no-textconv --no-renames > "$RUNNER_TEMP/change/change.patch" \
+            || fail "Couldn't collect the change (git diff failed)."
+          size=$(stat -c %s "$RUNNER_TEMP/change/change.patch")
+          if [ "$size" -eq 0 ]; then
+            echo "has_change=false" >> "$GITHUB_OUTPUT"; echo "No change."
+          elif [ "$size" -gt "$MAX_PATCH_BYTES" ]; then
+            fail "The change is $size bytes; the cap is $MAX_PATCH_BYTES (a missing .gitignore entry, e.g. node_modules?)."
+          else
+            echo "has_change=true" >> "$GITHUB_OUTPUT"
+            git diff --cached --stat --no-ext-diff | tail -n 30
+          fi
+
+      - name: Upload the change (build)
+        if: always() && steps.change.outputs.has_change == 'true'
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: change-${{ inputs.run_id }}
+          path: ${{ runner.temp }}/change/change.patch
+          retention-days: 7
+          if-no-files-found: error
+
       - name: Build the run report
         id: report
         if: always()
@@ -214,8 +319,79 @@ jobs:
           delimiter="REPORT_$(openssl rand -hex 16)"
           printf 'report<<%s\n%s\n%s\n' "$delimiter" "$report" "$delimiter" >> "$GITHUB_OUTPUT"
 
-  report:
+  # Build only. Holds the one App repo token of this run (contents + pull requests write, 1 hour,
+  # from POST /github/token: the control plane gives one per build run, ADR-0063). It runs no code
+  # from the change: it checks the patch's paths, applies it to the commit the agent started from,
+  # commits, pushes `agent/<KEY>/<run>` and, if the agent succeeded, opens the PR. A failed agent's
+  # partial work is still pushed (no PR) so Andy can inspect it.
+  publish:
     needs: [context, agent]
+    if: always() && needs.context.outputs.step == 'build' && needs.agent.outputs.has_change == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read # checkout; the push uses the App token
+      id-token: write # Actions OIDC token for POST /github/token
+    outputs:
+      branch: ${{ steps.push.outputs.branch }}
+      pull_request: ${{ steps.push.outputs.pull_request }}
+      tooling_files: ${{ steps.push.outputs.tooling_files }}
+    steps:
+      - name: Check out the agent's base commit
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ needs.agent.outputs.base_sha }}
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Check out the platform
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: albernhagen/andy-intelligence
+          ref: ${{ needs.context.outputs.platform_sha || 'main' }}
+          path: .executor-platform
+          fetch-depth: 1
+          persist-credentials: false
+          sparse-checkout: |
+            scripts
+            platform/executor
+
+      - name: Download the change
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: change-${{ inputs.run_id }}
+          path: ${{ runner.temp }}/change
+
+      # Thin caller: scripts/executor-publish.mjs from the platform checkout (at platform_sha, a
+      # separate directory the agent never wrote) does apply, check, commit, token, push and PR.
+      # Safety (holds a write token): the project checkout is the agent's base commit, the
+      # change is applied as data and checked, and nothing from it runs here. The script passes
+      # agent text only as arguments, files or JSON bodies, never through a shell, and never
+      # prints the token, the report or the title. Keep `set -x` out of this step.
+      - name: Publish the change
+        id: push
+        env:
+          PATCH: ${{ runner.temp }}/change/change.patch
+          RUN_ID: ${{ inputs.run_id }}
+          BRANCH: ${{ needs.context.outputs.branch }}
+          REPO: ${{ github.repository }}
+          BASE: ${{ github.event.repository.default_branch }}
+          PROJECT_ID: ${{ needs.context.outputs.project_id }}
+          TICKET_KEY: ${{ needs.context.outputs.ticket_key }}
+          TICKET_TITLE: ${{ needs.context.outputs.ticket_title }}
+          MODEL: ${{ needs.context.outputs.model }}
+          REPORT: ${{ needs.agent.outputs.report }}
+        run: |
+          mv .executor-platform "$RUNNER_TEMP/platform"
+          codeowners=""
+          for f in .github/CODEOWNERS CODEOWNERS docs/CODEOWNERS; do
+            if [ -f "$f" ]; then codeowners="$f"; break; fi
+          done
+          PROFILE="$RUNNER_TEMP/platform/platform/executor/profile.json" CODEOWNERS="$codeowners" \
+            node "$RUNNER_TEMP/platform/scripts/executor-publish.mjs" publish
+
+  report:
+    needs: [context, agent, publish]
     if: always()
     runs-on: ubuntu-latest
     timeout-minutes: 5
@@ -229,6 +405,11 @@ jobs:
           CONTEXT_RESULT: ${{ needs.context.result }}
           CONTEXT_ERROR: ${{ needs.context.outputs.error }}
           AGENT_RESULT: ${{ needs.agent.result }}
+          PUBLISH_RESULT: ${{ needs.publish.result }}
+          CHANGE_ERROR: ${{ needs.agent.outputs.change_error }}
+          BRANCH: ${{ needs.publish.outputs.branch }}
+          PULL_REQUEST: ${{ needs.publish.outputs.pull_request }}
+          TOOLING_FILES: ${{ needs.publish.outputs.tooling_files }}
         run: |
           if ! [[ "$RUN_ID" =~ ^[A-Za-z0-9-]{1,64}$ ]]; then
             echo "::error title=claude-executor::Invalid run_id; nothing to report to."
@@ -245,6 +426,14 @@ jobs:
             fi
             jq -cn --arg s "$reason" '{status: "failed", summary: $s, tokensIn: null, tokensOut: null, costUsd: null}' > "$body"
           fi
+          # Build: the publish job's branch and PR go with the report; a publish that failed after
+          # a successful agent fails the run (the control plane retries it once).
+          if [ -n "$CHANGE_ERROR" ]; then
+            jq -c '.status = "failed" | .summary = (env.CHANGE_ERROR + "\n\n" + (.summary // ""))' "$body" > "$body.tmp" && mv "$body.tmp" "$body"
+          elif [ "$PUBLISH_RESULT" = failure ] || [ "$PUBLISH_RESULT" = cancelled ]; then
+            jq -c '.status = "failed" | .summary = ("The publish job " + env.PUBLISH_RESULT + ": the change was not pushed or no PR was opened.\n\n" + (.summary // ""))' "$body" > "$body.tmp" && mv "$body.tmp" "$body"
+          fi
+          jq -c '. + {branch: (if env.BRANCH == "" then null else env.BRANCH end), pullRequest: (if env.PULL_REQUEST == "" then null else env.PULL_REQUEST end), toolingFiles: ((env.TOOLING_FILES | try fromjson catch []) // [] | if type == "array" then .[:50] else [] end)}' "$body" > "$body.tmp" && mv "$body.tmp" "$body"
           echo "Reporting status: $(jq -r .status "$body")"
 
           response="$RUNNER_TEMP/report-response.txt"

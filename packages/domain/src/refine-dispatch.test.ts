@@ -215,25 +215,25 @@ describe("RefineDispatcher", () => {
 
   it("GivenCancelledAndArchivedTickets_WhenAutoRefineTurnsOn_ThenNeitherIsRefined", async () => {
     const { tickets, projects } = wire();
-    await projects.update(projectId, { autoRefine: false });
+    await projects.update(projectId, { autoRefine: false }, "andy@example.com");
     const cancelled = await tickets.create(projectId, { type: "feature", title: "One" }, "andy");
     await tickets.cancel(projectId, cancelled.id, "andy");
     const archived = await tickets.create(projectId, { type: "feature", title: "Two" }, "andy");
     // Archived while in Backlog (e.g. reopened after archiving): still hidden, still skipped.
     await tracker.updateTicket(projectId, archived.id, { fields: { archived: true } }, "andy");
 
-    await projects.update(projectId, { autoRefine: true });
+    await projects.update(projectId, { autoRefine: true }, "andy@example.com");
     expect(await refines(cancelled.id)).toEqual([]);
     expect(await refines(archived.id)).toEqual([]);
   });
 
   it("GivenAutoRefineOff_WhenATicketIsCreated_ThenNoRunStartsUntilItIsTurnedOn", async () => {
     const { tickets, projects } = wire();
-    await projects.update(projectId, { autoRefine: false });
+    await projects.update(projectId, { autoRefine: false }, "andy@example.com");
     const ticket = await tickets.create(projectId, { type: "feature", title: "Board" }, "andy");
     expect(await refines(ticket.id)).toEqual([]);
 
-    await projects.update(projectId, { autoRefine: true });
+    await projects.update(projectId, { autoRefine: true }, "andy@example.com");
     expect(await refines(ticket.id)).toHaveLength(1);
   });
 

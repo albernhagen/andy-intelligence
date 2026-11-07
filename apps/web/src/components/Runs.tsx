@@ -20,7 +20,8 @@ const STATUS_VARIANT: Record<RunStatus, "default" | "attention" | "ok"> = {
 };
 
 /**
- * Agent runs on this ticket (M1.6a: Claude Code executor): start a refine run and follow it.
+ * Agent runs on this ticket (M1.6a: Claude Code executor): start a refine or build run (M1.8a:
+ * Build run) and follow it; a build shows its branch and PR.
  * The list polls while a run is in flight; when one ends, every query refreshes, so a refine
  * run's questions appear (M1.7: Refinement). Agent text is untrusted: it renders as plain text.
  */
@@ -39,6 +40,14 @@ export function Runs(path: TicketPath) {
         onClick={() => start.mutate({ step: "refine" })}
       >
         Start refine run
+      </Button>{" "}
+      <Button
+        size="sm"
+        variant="outline"
+        disabled={start.isPending || inFlight}
+        onClick={() => start.mutate({ step: "build" })}
+      >
+        Start build run
       </Button>
       {start.error && <QueryError error={start.error} />}
       {runs.isPending && <Loading />}
@@ -80,6 +89,22 @@ function RunItem({ run }: { run: Run }) {
       {(run.tokensIn !== null || run.tokensOut !== null || run.costUsd !== null) && (
         <p className="text-muted-foreground">
           {formatTokens(run)} · {formatCost(run)}
+        </p>
+      )}
+      {(run.links.pullRequest || run.branch) && (
+        <p className="text-muted-foreground">
+          {run.links.pullRequest && (
+            <a
+              href={run.links.pullRequest}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="underline"
+            >
+              Pull request
+            </a>
+          )}
+          {run.links.pullRequest && run.branch && " · "}
+          {run.branch && <span>branch {run.branch}</span>}
         </p>
       )}
       {run.error && <p className="whitespace-pre-wrap text-destructive">{run.error}</p>}

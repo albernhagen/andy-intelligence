@@ -2,7 +2,7 @@ import { createRoute, z, type OpenAPIHono } from "@hono/zod-openapi";
 import {
   NewProject,
   NewQuestion,
-  ProjectPatch,
+  ProjectSettings,
   NewTicket,
   Project,
   Question,
@@ -95,7 +95,7 @@ const routes = {
     ...secured,
     method: "patch",
     path: "/api/projects/{projectId}",
-    request: { params: ProjectParams, ...body(ProjectPatch) },
+    request: { params: ProjectParams, ...body(ProjectSettings) },
     responses: { 200: ok(Project, "Updated"), ...errors },
   }),
   listTickets: createRoute({
@@ -223,9 +223,17 @@ export function registerTicketRoutes(
     return project ? c.json(project, 200) : c.json(notFound("project"), 404);
   });
 
-  // Settings (ADR-0054: autoRefine). An unknown project is a WorkTracker not_found → 404.
+  // Settings (ADR-0054: autoRefine; ADR-0063: autoBuild, buildEnabled, recorded with the
+  // signed-in email). An unknown project is a WorkTracker not_found → 404.
   app.openapi(routes.patchProject, async (c) =>
-    c.json(await projects.update(c.req.valid("param").projectId, c.req.valid("json")), 200),
+    c.json(
+      await projects.update(
+        c.req.valid("param").projectId,
+        c.req.valid("json"),
+        c.get("identity").email,
+      ),
+      200,
+    ),
   );
 
   app.openapi(routes.listTickets, async (c) => {
