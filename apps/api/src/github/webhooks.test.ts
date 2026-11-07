@@ -4,6 +4,7 @@ import {
   InMemoryCodeHostConnectionStore,
   InMemoryWorkTracker,
   InMemoryRunStore,
+  type Stage,
 } from "@andy/contracts";
 import { sign } from "@octokit/webhooks-methods";
 import { beforeEach, describe, expect, it } from "vitest";
@@ -200,6 +201,116 @@ describe("GitHub webhook receiver", () => {
         result: "recorded",
       });
       expect(await systemKinds(t.id)).toEqual([]);
+    });
+
+    describe("from any open stage, whoever wrote the PR (AI-31, ADR-0067)", () => {
+      const merged = () => keyed("closed", { state: "closed", merged: true });
+
+      /** AI-1 at `stage`, set up directly in the store. */
+      async function ticketAt(stage: Stage, type: "chore" | "epic" = "chore") {
+        const t = await tracker.createTicket("ai", { type, title: "PR moves" }, "andy");
+        if (stage === "backlog") return t;
+        return tracker.updateTicket(
+          "ai",
+          t.id,
+          { stage: { to: stage, forced: true, reason: "setup" } },
+          "andy",
+        );
+      }
+      const stageMoves = async (id: string) =>
+        (await tracker.listEvents("ai", id))
+          .filter((e) => e.actor === "system" && e.kind === "stage_changed")
+          .map((e) => ({ to: e.data.to, forced: e.data.forced, reason: e.body }));
+
+      it("GivenABacklogTicket_WhenItsPullRequestOpens_ThenReadyForReviewThroughEveryStage", async () => {
+        const t = await ticketAt("backlog");
+        await deliver({ payload: keyed("opened") });
+        expect((await tracker.getTicket("ai", t.id))?.stage).toBe("ready_for_review");
+        const moves = await stageMoves(t.id);
+        expect(moves.map((m) => m.to)).toEqual(["ready", "in_progress", "ready_for_review"]);
+        expect(moves.every((m) => !m.forced && m.reason?.includes("/pull/31"))).toBe(true);
+      });
+
+      const mergeFrom = {
+        Backlog: "backlog",
+        Ready: "ready",
+        InProgress: "in_progress",
+        ReadyForReview: "ready_for_review",
+      } as const;
+      for (const [name, stage] of Object.entries(mergeFrom)) {
+        it(`GivenA${name}Ticket_WhenItsPullRequestMerges_ThenDoneThroughMonitoring`, async () => {
+          const t = await ticketAt(stage);
+          await deliver({ payload: merged() });
+          expect((await tracker.getTicket("ai", t.id))?.stage).toBe("done");
+          const moves = await stageMoves(t.id);
+          expect(moves.at(-2)?.to).toBe("monitoring");
+          expect(moves.every((m) => !m.forced && m.reason?.includes("/pull/31"))).toBe(true);
+        });
+      }
+
+      it("GivenOpenQuestions_WhenItsPullRequestMerges_ThenWithdrawnAndNeedsYouCleared", async () => {
+        const t = await ticketAt("backlog");
+        await tracker.askQuestion("ai", t.id, { text: "Which?" }, "agent:r1");
+        await tracker.updateTicket("ai", t.id, { fields: { needsAttention: true } }, "system");
+        await deliver({ payload: merged() });
+        expect(await tracker.getTicket("ai", t.id)).toMatchObject({
+          stage: "done",
+          needsAttention: false,
+        });
+        expect(await tracker.listQuestions({ ticketId: t.id, status: "open" })).toEqual([]);
+        expect(await tracker.listQuestions({ ticketId: t.id, status: "withdrawn" })).toHaveLength(
+          1,
+        );
+      });
+
+      it("GivenACancelledTicket_WhenItsPullRequestOpensOrMerges_ThenLinkedOnly", async () => {
+        const t = await ticketAt("cancelled");
+        await deliver({ payload: keyed("opened"), id: "d-open" });
+        await deliver({ payload: merged(), id: "d-merge" });
+        expect((await tracker.getTicket("ai", t.id))?.stage).toBe("cancelled");
+        expect(await systemKinds(t.id)).toEqual(["pr_linked", "pr_linked"]);
+      });
+
+      it("GivenAnArchivedTicket_WhenItsPullRequestMerges_ThenLinkedOnly", async () => {
+        const t = await ticketAt("cancelled");
+        await tracker.updateTicket("ai", t.id, { fields: { archived: true } }, "andy");
+        await deliver({ payload: merged() });
+        expect(await tracker.getTicket("ai", t.id)).toMatchObject({
+          stage: "cancelled",
+          archived: true,
+        });
+        expect(await systemKinds(t.id)).toEqual(["pr_linked"]);
+      });
+
+      it("GivenAnEpic_WhenItsPullRequestOpensOrMerges_ThenLinkedOnly", async () => {
+        const t = await ticketAt("in_progress", "epic");
+        await deliver({ payload: keyed("opened"), id: "d-open" });
+        await deliver({ payload: merged(), id: "d-merge" });
+        expect((await tracker.getTicket("ai", t.id))?.stage).toBe("in_progress");
+        expect(await systemKinds(t.id)).toEqual(["pr_linked", "pr_linked"]);
+      });
+
+      it("GivenAMergedDelivery_WhenReplayed_ThenTheTicketIsCompletedOnce", async () => {
+        const t = await ticketAt("backlog");
+        await deliver({ payload: merged() });
+        const before = await tracker.listEvents("ai", t.id);
+        expect(await (await deliver({ payload: merged() })).json()).toEqual({
+          result: "duplicate",
+        });
+        expect(await tracker.listEvents("ai", t.id)).toEqual(before);
+      });
+
+      it("GivenAPullRequestIntoANonDefaultBranch_WhenOpenedOrMerged_ThenLinkedOnly", async () => {
+        const t = await ticketAt("in_progress");
+        const base = { ref: "feature" };
+        await deliver({ payload: keyed("opened", { base }), id: "d-open" });
+        await deliver({
+          payload: keyed("closed", { state: "closed", merged: true, base }),
+          id: "d-merge",
+        });
+        expect((await tracker.getTicket("ai", t.id))?.stage).toBe("in_progress");
+        expect(await systemKinds(t.id)).toEqual(["pr_linked", "pr_linked"]);
+      });
     });
 
     it("GivenTheTicketUpdateFails_WhenDelivered_ThenTheDeliveryIsStillRecorded", async () => {

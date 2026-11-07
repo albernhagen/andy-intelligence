@@ -7,7 +7,7 @@ import {
   type Project,
   type WorkTracker,
 } from "@andy/contracts";
-import { PullRequestTickets, TicketService, projectForRepo } from "@andy/domain";
+import { PullRequestTickets, projectForRepo, type TicketService } from "@andy/domain";
 import {
   WebhookPayloadError,
   isRecordedEvent,
@@ -39,6 +39,8 @@ export interface WebhookDeps {
   secret: () => Promise<string | null>;
   events: CodeEventLog;
   tracker: WorkTracker;
+  /** The app's ticket rules, with its run canceller (a merge stops the ticket's runs). */
+  tickets: TicketService;
   now?: () => Date;
 }
 
@@ -73,7 +75,7 @@ export function registerGitHubWebhook(app: Hono<AuthEnv>, deps: WebhookDeps): vo
   const now = deps.now ?? (() => new Date());
   const limiter = new FixedWindowLimiter(WEBHOOK_RATE_LIMIT, 60_000, () => now().getTime());
   const repos = new RepoIndex(deps.tracker, () => now().getTime());
-  const prTickets = new PullRequestTickets(new TicketService(deps.tracker), deps.tracker);
+  const prTickets = new PullRequestTickets(deps.tickets, deps.tracker);
 
   /**
    * The delivery is already recorded, so a failure here is logged, not retried: a redelivery

@@ -15,7 +15,7 @@ import {
   type WorkTracker,
 } from "@andy/contracts";
 import { checkDor, type DorResult } from "./dor";
-import { canTransition, isForwardMove } from "./stages";
+import { canTransition, isForwardMove, pullRequestPath, type PullRequestTarget } from "./stages";
 
 function log(severity: "INFO" | "WARNING", message: string, fields: object = {}) {
   console.log(JSON.stringify({ severity, message, component: "tickets", ...fields }));
@@ -68,6 +68,9 @@ export const RECENT_EVENTS = 5;
 
 /** Stages a ticket can be archived in (AI-15: Cancel and archive tickets). */
 export const ARCHIVABLE_STAGES: readonly Stage[] = ["done", "cancelled"];
+
+/** How many concurrent writes a PR walk re-reads past before it gives up (ADR-0067). */
+export const PULL_REQUEST_CONFLICT_RETRIES = 3;
 
 /** Stops a ticket's runs in flight before it is cancelled; RunService implements it. */
 export interface RunCanceller {
@@ -211,17 +214,27 @@ export class TicketService {
       actor,
     );
     await this.withdrawOpenQuestions(ticketId, actor);
+    await this.reportCancelledRuns(projectId, ticketId, cancelled, "with the ticket");
+    return updated;
+  }
+
+  /** A comment per cancelled run; a cancelled run frees the run slot, so the next refine starts. */
+  private async reportCancelledRuns(
+    projectId: string,
+    ticketId: string,
+    cancelled: Run[],
+    why: string,
+  ): Promise<void> {
     for (const run of cancelled) {
       await this.tracker.addComment(
         projectId,
         ticketId,
-        `Cancelled the ${run.step} run ${run.links.executorRun ?? run.id} with the ticket.`,
+        `Cancelled the ${run.step} run ${run.links.executorRun ?? run.id} ${why}.`,
         "system",
       );
     }
     // A cancelled run frees the project's run slot: the next waiting run can start.
     if (cancelled.length > 0) await this.dispatchNext?.(projectId);
-    return updated;
   }
 
   /** Andy archives (hides) a Done or Cancelled ticket, or unarchives any ticket. */
@@ -245,6 +258,58 @@ export class TicketService {
       { fields: { archived }, ifUpdatedAt: ticket.updatedAt },
       actor,
     );
+  }
+
+  /**
+   * ADR-0067: the named system move for a same-repo PR into the default branch. It walks the
+   * ticket forward one step at a time as "system", unforced, with the PR link as the reason, and
+   * skips only the Definition of Ready (the work exists). Epics, archived and Cancelled tickets
+   * never move. A write that lands mid-walk (`conflict`) re-reads the ticket and carries on from
+   * where it is, a few times at most: the delivery is recorded once, so nothing retries it later.
+   * Reaching Done stops the ticket's runs, withdraws open questions and clears Needs-you, as
+   * cancel does. Returns the stages moved through.
+   */
+  async followPullRequest(
+    projectId: string,
+    ticketId: string,
+    to: PullRequestTarget,
+    reason: string,
+  ): Promise<Stage[]> {
+    const moved: Stage[] = [];
+    let ticket = await this.require(projectId, ticketId);
+    for (let conflicts = 0; ;) {
+      if (ticket.type === "epic" || ticket.archived) break;
+      const next = pullRequestPath(ticket.stage, to)[0];
+      if (!next) break;
+      try {
+        ticket = await this.tracker.updateTicket(
+          projectId,
+          ticketId,
+          { stage: { to: next, forced: false, reason }, ifUpdatedAt: ticket.updatedAt },
+          "system",
+        );
+        moved.push(next);
+      } catch (err) {
+        const conflict = err instanceof WorkTrackerError && err.code === "conflict";
+        if (!conflict || ++conflicts > PULL_REQUEST_CONFLICT_RETRIES) throw err;
+        ticket = await this.require(projectId, ticketId);
+      }
+    }
+    if (to === "done" && moved.includes("done")) await this.completeByPullRequest(ticket);
+    return moved;
+  }
+
+  /** After a merge reached Done: what cancel does to runs, questions and Needs-you. */
+  private async completeByPullRequest(ticket: Ticket): Promise<void> {
+    const runs = (await this.runs?.cancelForTicket(ticket.projectId, ticket.id)) ?? [];
+    await this.withdrawOpenQuestions(ticket.id, "system");
+    await this.tracker.updateTicket(
+      ticket.projectId,
+      ticket.id,
+      { fields: { needsAttention: false } },
+      "system",
+    );
+    await this.reportCancelledRuns(ticket.projectId, ticket.id, runs, "when its PR merged");
   }
 
   /** One step forward by ticket key, never forced (the MCP `move_ticket` tool). */

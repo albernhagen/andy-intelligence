@@ -4,10 +4,11 @@ import {
   type NewTicket,
   type Project,
   type PullRequest,
+  type Run,
   type Stage,
   type Ticket,
 } from "@andy/contracts";
-import { beforeEach, describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { PullRequestTickets, outcomeOf, ticketKeyFor } from "./pull-requests";
 import { TicketService } from "./tickets";
 
@@ -87,7 +88,9 @@ describe("PullRequestTickets", () => {
   let project: Project;
 
   beforeEach(async () => {
-    tracker = new InMemoryWorkTracker();
+    // A ticking clock, so a write that lands mid-walk changes `updatedAt` (a real conflict).
+    let tick = Date.parse("2026-11-05T12:00:00.000Z");
+    tracker = new InMemoryWorkTracker(() => new Date((tick += 1000)));
     service = new TicketService(tracker);
     prs = new PullRequestTickets(service, tracker);
     project = await tracker.createProject({ name: "AI", key: "AI" });
@@ -125,16 +128,113 @@ describe("PullRequestTickets", () => {
     expect((await reload(t)).stage).toBe("ready_for_review");
   });
 
-  it("GivenADraftOrABacklogTicket_WhenThePullRequestOpens_ThenLinkedOnly", async () => {
-    const draftTicket = await ticketAt("in_progress");
-    await prs.apply(prEvent("opened", { draft: true }), project);
-    expect((await reload(draftTicket)).stage).toBe("in_progress");
+  it("GivenADraftPullRequest_WhenItOpens_ThenLinkedOnly", async () => {
+    const t = await ticketAt("in_progress");
+    expect(await prs.apply(prEvent("opened", { draft: true }), project)).toMatchObject({
+      moves: [],
+    });
+    expect((await reload(t)).stage).toBe("in_progress");
+  });
 
-    const backlog = await service.create(project.id, readyStory, "andy");
-    const result = await prs.apply(prEvent("opened", { headRef: "AI-2" }), project);
-    expect(result).toMatchObject({ result: "linked", moves: [] });
-    expect((await reload(backlog)).stage).toBe("backlog");
-    expect((await systemEvents(backlog)).map((e) => e.kind)).toEqual(["pr_linked"]);
+  it("GivenABacklogTicketWithoutTheDor_WhenItsPullRequestOpens_ThenReadyForReview", async () => {
+    const t = await service.create(project.id, { type: "feature", title: "Bare" }, "andy");
+    const result = await prs.apply(prEvent("opened"), project);
+    expect(result.moves).toEqual(["ready", "in_progress", "ready_for_review"]);
+    expect((await reload(t)).stage).toBe("ready_for_review");
+  });
+
+  it("GivenABacklogTicketWithOpenQuestions_WhenItsPullRequestMerges_ThenDoneAndQuestionsWithdrawn", async () => {
+    const t = await ticketAt("backlog");
+    await service.ask(project.id, t.id, { text: "Which?" }, "agent:r1");
+    const result = await prs.apply(prEvent("closed", { state: "merged" }), project);
+    expect(result.moves).toEqual([
+      "ready",
+      "in_progress",
+      "ready_for_review",
+      "monitoring",
+      "done",
+    ]);
+    expect(await reload(t)).toMatchObject({ stage: "done", needsAttention: false });
+    expect(await tracker.listQuestions({ ticketId: t.id, status: "open" })).toEqual([]);
+    expect(await service.needsYou()).toEqual({ questions: [], tickets: [] });
+  });
+
+  it("GivenAFlagFromAnOldClose_WhenItsPullRequestMerges_ThenNeedsYouCleared", async () => {
+    const t = await ticketAt("ready_for_review");
+    await prs.apply(prEvent("closed", { number: 69, state: "closed" }), project);
+    await prs.apply(prEvent("closed", { state: "merged" }), project);
+    expect(await reload(t)).toMatchObject({ stage: "done", needsAttention: false });
+  });
+
+  it("GivenARunInFlight_WhenItsPullRequestMerges_ThenTheRunIsCancelledAndCommented", async () => {
+    const run = { id: "r1", step: "refine", links: {} } as Run;
+    const cancelForTicket = vi.fn(async () => [run]);
+    const refineNext = vi.fn(async () => undefined);
+    service = new TicketService(tracker, { cancelForTicket }, refineNext);
+    prs = new PullRequestTickets(service, tracker);
+    const t = await ticketAt("backlog");
+    await prs.apply(prEvent("closed", { state: "merged" }), project);
+    expect(cancelForTicket).toHaveBeenCalledWith(project.id, t.id);
+    expect(refineNext).toHaveBeenCalledWith(project.id);
+    const last = (await tracker.listEvents(project.id, t.id)).at(-1);
+    expect(last).toMatchObject({ kind: "comment", actor: "system" });
+    expect(last?.body).toContain("r1");
+    expect((await reload(t)).stage).toBe("done");
+  });
+
+  it("GivenAWriteLandsMidWalk_WhenItsPullRequestMerges_ThenTheWalkStillReachesDone", async () => {
+    const t = await ticketAt("backlog");
+    const update = tracker.updateTicket.bind(tracker);
+    let stageWrites = 0;
+    tracker.updateTicket = async (projectId, ticketId, change, actor) => {
+      if (change.stage && ++stageWrites === 2) {
+        // A run report lands between the first and second step.
+        await update(projectId, ticketId, { fields: { needsAttention: true } }, "system");
+      }
+      return update(projectId, ticketId, change, actor);
+    };
+    const result = await prs.apply(prEvent("closed", { state: "merged" }), project);
+    expect(result.moves).toEqual([
+      "ready",
+      "in_progress",
+      "ready_for_review",
+      "monitoring",
+      "done",
+    ]);
+    expect(await reload(t)).toMatchObject({ stage: "done", needsAttention: false });
+  });
+
+  it("GivenWritesKeepLandingMidWalk_WhenItsPullRequestMerges_ThenItGivesUpWithAConflict", async () => {
+    await ticketAt("backlog");
+    const update = tracker.updateTicket.bind(tracker);
+    tracker.updateTicket = async (projectId, ticketId, change, actor) => {
+      if (change.stage)
+        await update(projectId, ticketId, { fields: { title: `x${Math.random()}` } }, "andy");
+      return update(projectId, ticketId, change, actor);
+    };
+    await expect(prs.apply(prEvent("closed", { state: "merged" }), project)).rejects.toMatchObject({
+      code: "conflict",
+    });
+  });
+
+  it("GivenAnEpic_WhenItsPullRequestOpensMergesOrCloses_ThenLinkedOnly", async () => {
+    const epic = await service.create(project.id, { type: "epic", title: "M1" }, "andy");
+    await service.move(project.id, epic.id, "in_progress", "andy", { force: true });
+    for (const e of [
+      prEvent("opened"),
+      prEvent("closed", { state: "merged" }),
+      prEvent("closed", { state: "closed" }),
+    ]) {
+      expect(await prs.apply(e, project)).toMatchObject({ result: "linked", moves: [] });
+    }
+    expect(await reload(epic)).toMatchObject({ stage: "in_progress", needsAttention: false });
+  });
+
+  it("GivenAnInProgressTicket_WhenAPullRequestOpensIntoANonDefaultBranch_ThenLinkedOnly", async () => {
+    const t = await ticketAt("in_progress");
+    const opened = prEvent("opened", { baseRef: "feature", intoDefaultBranch: false });
+    expect(await prs.apply(opened, project)).toMatchObject({ result: "linked", moves: [] });
+    expect((await reload(t)).stage).toBe("in_progress");
   });
 
   it("GivenATicketAlreadyPastReview_WhenAnotherPullRequestOpens_ThenLinkedOnly", async () => {

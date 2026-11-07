@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { canTransition, forwardPath, isForwardMove } from "./stages";
+import { canTransition, forwardPath, isForwardMove, pullRequestPath } from "./stages";
 
 describe("canTransition", () => {
   it("GivenEachStage_WhenMovingForwardOneStep_ThenAllowed", () => {
@@ -60,5 +60,28 @@ describe("forwardPath", () => {
   it("GivenAStageBehindOrTheSame_WhenWalked_ThenEmpty", () => {
     expect(forwardPath("done", "ready_for_review")).toEqual([]);
     expect(forwardPath("in_progress", "in_progress")).toEqual([]);
+  });
+});
+
+describe("pullRequestPath", () => {
+  it("GivenAnyStageBeforeReview_WhenAPullRequestOpens_ThenEveryStepToReview", () => {
+    expect(pullRequestPath("backlog", "ready_for_review")).toEqual([
+      "ready",
+      "in_progress",
+      "ready_for_review",
+    ]);
+    expect(pullRequestPath("in_progress", "ready_for_review")).toEqual(["ready_for_review"]);
+  });
+
+  it("GivenAnyStageBeforeDone_WhenAPullRequestMerges_ThenEveryStepToDone", () => {
+    expect(pullRequestPath("backlog", "done")).toHaveLength(5);
+    expect(pullRequestPath("monitoring", "done")).toEqual(["done"]);
+  });
+
+  it("GivenDoneCancelledOrPastReview_WhenAPullRequestEvent_ThenNoMove", () => {
+    expect(pullRequestPath("done", "done")).toEqual([]);
+    expect(pullRequestPath("cancelled", "done")).toEqual([]);
+    expect(pullRequestPath("cancelled", "ready_for_review")).toEqual([]);
+    expect(pullRequestPath("monitoring", "ready_for_review")).toEqual([]);
   });
 });
