@@ -473,14 +473,7 @@ export interface paths {
     get: {
       parameters: {
         query?: {
-          stage?:
-            | "backlog"
-            | "ready"
-            | "in_progress"
-            | "ready_for_review"
-            | "monitoring"
-            | "done"
-            | "cancelled";
+          stage?: "backlog" | "ready" | "in_progress" | "ready_for_review" | "done" | "cancelled";
           needsAttention?: "true" | "false";
           archived?: "true" | "false";
         };
@@ -511,13 +504,7 @@ export interface paths {
               assumptions: string[];
               /** @enum {string} */
               stage:
-                | "backlog"
-                | "ready"
-                | "in_progress"
-                | "ready_for_review"
-                | "monitoring"
-                | "done"
-                | "cancelled";
+                "backlog" | "ready" | "in_progress" | "ready_for_review" | "done" | "cancelled";
               rank: string;
               /** @enum {string|null} */
               size: "S" | "M" | "L" | null;
@@ -685,13 +672,7 @@ export interface paths {
               assumptions: string[];
               /** @enum {string} */
               stage:
-                | "backlog"
-                | "ready"
-                | "in_progress"
-                | "ready_for_review"
-                | "monitoring"
-                | "done"
-                | "cancelled";
+                "backlog" | "ready" | "in_progress" | "ready_for_review" | "done" | "cancelled";
               rank: string;
               /** @enum {string|null} */
               size: "S" | "M" | "L" | null;
@@ -823,13 +804,7 @@ export interface paths {
               assumptions: string[];
               /** @enum {string} */
               stage:
-                | "backlog"
-                | "ready"
-                | "in_progress"
-                | "ready_for_review"
-                | "monitoring"
-                | "done"
-                | "cancelled";
+                "backlog" | "ready" | "in_progress" | "ready_for_review" | "done" | "cancelled";
               rank: string;
               /** @enum {string|null} */
               size: "S" | "M" | "L" | null;
@@ -991,13 +966,7 @@ export interface paths {
               assumptions: string[];
               /** @enum {string} */
               stage:
-                | "backlog"
-                | "ready"
-                | "in_progress"
-                | "ready_for_review"
-                | "monitoring"
-                | "done"
-                | "cancelled";
+                "backlog" | "ready" | "in_progress" | "ready_for_review" | "done" | "cancelled";
               rank: string;
               /** @enum {string|null} */
               size: "S" | "M" | "L" | null;
@@ -1124,13 +1093,7 @@ export interface paths {
               assumptions: string[];
               /** @enum {string} */
               stage:
-                | "backlog"
-                | "ready"
-                | "in_progress"
-                | "ready_for_review"
-                | "monitoring"
-                | "done"
-                | "cancelled";
+                "backlog" | "ready" | "in_progress" | "ready_for_review" | "done" | "cancelled";
               rank: string;
               /** @enum {string|null} */
               size: "S" | "M" | "L" | null;
@@ -1338,14 +1301,7 @@ export interface paths {
         content: {
           "application/json": {
             /** @enum {string} */
-            to:
-              | "backlog"
-              | "ready"
-              | "in_progress"
-              | "ready_for_review"
-              | "monitoring"
-              | "done"
-              | "cancelled";
+            to: "backlog" | "ready" | "in_progress" | "ready_for_review" | "done" | "cancelled";
             /** @default false */
             force?: boolean;
             /** @default null */
@@ -1373,13 +1329,7 @@ export interface paths {
               assumptions: string[];
               /** @enum {string} */
               stage:
-                | "backlog"
-                | "ready"
-                | "in_progress"
-                | "ready_for_review"
-                | "monitoring"
-                | "done"
-                | "cancelled";
+                "backlog" | "ready" | "in_progress" | "ready_for_review" | "done" | "cancelled";
               rank: string;
               /** @enum {string|null} */
               size: "S" | "M" | "L" | null;
@@ -1520,13 +1470,7 @@ export interface paths {
               assumptions: string[];
               /** @enum {string} */
               stage:
-                | "backlog"
-                | "ready"
-                | "in_progress"
-                | "ready_for_review"
-                | "monitoring"
-                | "done"
-                | "cancelled";
+                "backlog" | "ready" | "in_progress" | "ready_for_review" | "done" | "cancelled";
               rank: string;
               /** @enum {string|null} */
               size: "S" | "M" | "L" | null;
@@ -1667,13 +1611,7 @@ export interface paths {
               assumptions: string[];
               /** @enum {string} */
               stage:
-                | "backlog"
-                | "ready"
-                | "in_progress"
-                | "ready_for_review"
-                | "monitoring"
-                | "done"
-                | "cancelled";
+                "backlog" | "ready" | "in_progress" | "ready_for_review" | "done" | "cancelled";
               rank: string;
               /** @enum {string|null} */
               size: "S" | "M" | "L" | null;
@@ -2374,13 +2312,7 @@ export interface paths {
                 assumptions: string[];
                 /** @enum {string} */
                 stage:
-                  | "backlog"
-                  | "ready"
-                  | "in_progress"
-                  | "ready_for_review"
-                  | "monitoring"
-                  | "done"
-                  | "cancelled";
+                  "backlog" | "ready" | "in_progress" | "ready_for_review" | "done" | "cancelled";
                 rank: string;
                 /** @enum {string|null} */
                 size: "S" | "M" | "L" | null;
@@ -2466,13 +2398,7 @@ export interface paths {
               assumptions: string[];
               /** @enum {string} */
               stage:
-                | "backlog"
-                | "ready"
-                | "in_progress"
-                | "ready_for_review"
-                | "monitoring"
-                | "done"
-                | "cancelled";
+                "backlog" | "ready" | "in_progress" | "ready_for_review" | "done" | "cancelled";
               rank: string;
               /** @enum {string|null} */
               size: "S" | "M" | "L" | null;

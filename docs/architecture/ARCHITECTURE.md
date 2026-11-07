@@ -97,7 +97,7 @@ Enterprise-shaped (durable state, policy, gates, least privilege, audit, contrac
 
 ## 4. Workflow
 
-A ticket moves Backlog → Ready → In progress → Ready for review → Monitoring → Done (or Cancelled); refinement gets it to the Definition of Ready, a run builds it, a rule-based gate merges it. Detail: [`workflow.md`](workflow.md).
+A ticket moves Backlog → Ready → In progress → Ready for review → Done (or Cancelled; no Monitoring until M6, ADR-0069); refinement gets it to the Definition of Ready, a run builds it, a rule-based gate merges it. Detail: [`workflow.md`](workflow.md).
 
 ### 4.1 Stages (`ticket.stage`, shown as columns/groups in the UI)
 

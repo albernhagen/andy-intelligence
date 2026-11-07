@@ -109,13 +109,10 @@ describe("statusLine", () => {
     expect(line({ stage: "ready_for_review", pr: { number: 12, state: "open" } }).text).toBe(
       "Ready for review · PR #12 open",
     );
-    expect(line({ stage: "monitoring", pr: { number: 12, state: "merged" } })).toEqual({
-      text: "Monitoring · PR #12 merged",
+    expect(line({ stage: "done", pr: { number: 12, state: "merged" } })).toEqual({
+      text: "Done · PR #12 merged",
       tone: "success",
     });
-    expect(line({ stage: "done", pr: { number: 12, state: "merged" } }).text).toBe(
-      "Done · PR #12 merged",
-    );
   });
 
   it("GivenCancelledOrDone_WhenQuestionsAreOpen_ThenTheStageWins", () => {

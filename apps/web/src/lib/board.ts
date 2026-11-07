@@ -7,7 +7,7 @@ import { rankBetween } from "@andy/domain";
  */
 
 /** Lanes that start as a narrow strip with a count; a click expands them. */
-export const COLLAPSED_STAGES: readonly Stage[] = ["monitoring", "done"];
+export const COLLAPSED_STAGES: readonly Stage[] = ["done"];
 
 /** Where a dragged card lands and the rank that puts it there; `rank` null keeps its rank. */
 export interface DropPlan {

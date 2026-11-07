@@ -32,7 +32,6 @@ describe("groupByStage", () => {
       "ready",
       "in_progress",
       "ready_for_review",
-      "monitoring",
       "done",
       "cancelled",
     ]);
@@ -46,7 +45,7 @@ describe("moveOptions", () => {
   it("GivenReady_WhenListingMoves_ThenDomainMovesAreAllowedAndEveryOtherStageCanBeForced", () => {
     expect(moveOptions("ready")).toEqual({
       allowed: ["in_progress", "backlog"],
-      forced: ["backlog", "in_progress", "ready_for_review", "monitoring", "done"],
+      forced: ["backlog", "in_progress", "ready_for_review", "done"],
     });
   });
 
@@ -54,7 +53,7 @@ describe("moveOptions", () => {
     const { allowed, forced } = moveOptions("done");
     expect(allowed).toEqual([]);
     expect(forced).not.toContain("done");
-    expect(forced).toHaveLength(5);
+    expect(forced).toHaveLength(4);
   });
 
   it("GivenCancelled_WhenListingMoves_ThenReopenToBacklogIsAllowedAndCancelledIsNeverForced", () => {
@@ -73,7 +72,7 @@ describe("visibleTickets and canArchive", () => {
   it("GivenEachStage_WhenCheckingArchive_ThenOnlyDoneAndCancelledCanBeArchived", () => {
     expect(canArchive({ stage: "done" })).toBe(true);
     expect(canArchive({ stage: "cancelled" })).toBe(true);
-    expect(canArchive({ stage: "monitoring" })).toBe(false);
+    expect(canArchive({ stage: "ready_for_review" })).toBe(false);
   });
 });
 

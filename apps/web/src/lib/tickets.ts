@@ -17,7 +17,6 @@ export const STAGE_LABELS: Record<Stage, string> = {
   ready: "Ready",
   in_progress: "In progress",
   ready_for_review: "Ready for review",
-  monitoring: "Monitoring",
   done: "Done",
   cancelled: "Cancelled",
 };

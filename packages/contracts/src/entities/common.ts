@@ -16,14 +16,14 @@ export const Timestamp = z.iso.datetime({ offset: true });
 
 /**
  * Workflow stages (ARCHITECTURE §4.1). Needs-you is a flag, not a stage. Done and Cancelled are
- * terminal; only Andy cancels, and a cancelled ticket reopens to Backlog.
+ * terminal; only Andy cancels, and a cancelled ticket reopens to Backlog. No stage between Ready
+ * for review and Done until M6: Dev → prod releases adds one (ADR-0069).
  */
 export const Stage = z.enum([
   "backlog",
   "ready",
   "in_progress",
   "ready_for_review",
-  "monitoring",
   "done",
   "cancelled",
 ]);

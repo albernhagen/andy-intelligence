@@ -258,7 +258,6 @@ describe("status", () => {
             ready: 0,
             in_progress: 0,
             ready_for_review: 0,
-            monitoring: 0,
             done: 0,
             cancelled: 0,
           },
@@ -441,6 +440,23 @@ describe("move_ticket", () => {
       expect(res).toMatchObject({ isError: true, text: expect.stringMatching(/one step forward/) });
     }
     expect((await ctx.tracker.getTicket("ai", t.id))?.stage).toBe("ready");
+  });
+
+  it("GivenATicketInReview_WhenMovedToMonitoring_ThenAToolErrorAndTheTicketIsUnchanged", async () => {
+    const ctx = await withProject();
+    const t = await ctx.service.create("ai", readyStory, "andy");
+    await ctx.service.move("ai", t.id, "ready_for_review", "andy", { force: true });
+    const res = await ctx.call("move_ticket", { ticket: "AI-1", to: "monitoring" });
+    expect(res.isError).toBe(true);
+    expect((await ctx.tracker.getTicket("ai", t.id))?.stage).toBe("ready_for_review");
+  });
+
+  it("GivenATicketInReview_WhenMovedToDone_ThenDoneInOneStep", async () => {
+    const ctx = await withProject();
+    const t = await ctx.service.create("ai", readyStory, "andy");
+    await ctx.service.move("ai", t.id, "ready_for_review", "andy", { force: true });
+    const res = await ctx.call("move_ticket", { ticket: "AI-1", to: "done" });
+    expect(res).toMatchObject({ isError: false, data: { ticket: { stage: "done" } } });
   });
 
   it("GivenAnIncompleteStory_WhenMovedToReady_ThenAToolErrorNamesTheDorGaps", async () => {
