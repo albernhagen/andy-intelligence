@@ -1,7 +1,7 @@
 import { useState } from "react";
 import type { Run, TicketEvent } from "@andy/contracts";
 import { Markdown } from "@/components/Markdown";
-import { RunItem, StartRuns } from "@/components/Runs";
+import { RunItem, StartRuns, latestPlanId } from "@/components/Runs";
 import { useUnsavedDraft } from "@/components/InlineEdit";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/input";
@@ -23,6 +23,7 @@ export function Activity(props: {
   runs: Run[];
 }) {
   const path = { projectId: props.projectId, ticketId: props.ticketId };
+  const planId = latestPlanId(props.runs);
   const comment = useAddComment(path);
   const [body, setBody] = useState("");
   useUnsavedDraft(body.trim() !== "");
@@ -36,7 +37,12 @@ export function Activity(props: {
       <ol className="space-y-2">
         {timeline(props.events, props.runs).map((item) =>
           item.kind === "run" ? (
-            <RunItem key={item.run.id} run={item.run} />
+            <RunItem
+              key={item.run.id}
+              run={item.run}
+              path={path}
+              decidable={item.run.id === planId}
+            />
           ) : (
             <EventItem key={item.event.id} event={item.event} />
           ),

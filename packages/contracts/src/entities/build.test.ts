@@ -1,6 +1,6 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
-import { BUILD_LIMITS, BuildCheck, BuildOutput, BuildPlan } from "./index";
+import { BUILD_LIMITS, BuildCheck, BuildOutput, BuildPlan, PlanOutput } from "./index";
 
 // The schema the executor hands the build agent (`--json-schema`). It must stay in step with
 // BuildOutput, which the control plane checks the result against.
@@ -60,5 +60,31 @@ describe("BuildOutput", () => {
 
   it("GivenAnUnknownField_WhenParsed_ThenItIsRejected", () => {
     expect(BuildOutput.safeParse({ ...validBuildOutput, merge: true }).success).toBe(false);
+  });
+});
+
+describe("PlanOutput", () => {
+  // The plan run's schema (`plan.schema.json`) shares the build plan's shape and caps.
+  const planSchemaText = readFileSync(
+    new URL("../../../../platform/procedures/plan.schema.json", import.meta.url),
+    "utf8",
+  );
+  const planSchema = JSON.parse(planSchemaText);
+
+  it("GivenThePlanSchemaFile_WhenComparedWithTheBuildSchema_ThenThePlanMatches", () => {
+    // Same shape and caps; only the description differs.
+    expect({ ...planSchema.properties.plan, description: null }).toEqual({
+      ...plan,
+      description: null,
+    });
+    expect(planSchema.properties.summary.maxLength).toBe(BUILD_LIMITS.summary);
+    expect([...planSchema.required].sort()).toEqual(Object.keys(PlanOutput.shape).sort());
+    expect(planSchemaText).not.toContain("'");
+  });
+
+  it("GivenAValidPlan_WhenParsed_ThenItIsAcceptedAndExtraFieldsAreNot", () => {
+    const valid = { summary: "Adds the board.", plan: validBuildOutput.plan };
+    expect(PlanOutput.parse(valid)).toEqual(valid);
+    expect(PlanOutput.safeParse({ ...valid, verification: [] }).success).toBe(false);
   });
 });

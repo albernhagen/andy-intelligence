@@ -1,5 +1,7 @@
 import {
   NewTicket,
+  PLAN_REASON_MAX,
+  PlanApproval,
   Project,
   QuestionId,
   Stage,
@@ -21,7 +23,8 @@ import { z } from "zod";
 
 /**
  * MCP core tools (M1.4: MCP core tools; `refine` from M1.7: Refinement; `build` and
- * `set_auto_build` from M1.8a: Build run). Thin adapters over
+ * `set_auto_build` from M1.8a: Build run; `approve_plan`, `reject_plan` and `set_plan_approval`
+ * from M1.8a: Plan approval). Thin adapters over
  * TicketService and RunService, the same rules the REST API and UI use. Every caller is Andy (allow-list), so actor = "andy", and answers are
  * recorded with answeredVia = "mcp".
  */
@@ -73,6 +76,22 @@ const AutoBuildInput = {
     .describe("true: Ready tickets are built on their own, top of the order first. Default off."),
 };
 
+const PlanInput = {
+  ticket: TicketKey.describe('Ticket key, e.g. "AI-42". Its latest plan run is decided.'),
+};
+
+const RejectPlanInput = {
+  ...PlanInput,
+  reason: z.string().trim().min(1).max(PLAN_REASON_MAX).describe("Why: the next plan run sees it."),
+};
+
+const PlanApprovalInput = {
+  project: ProjectKey,
+  policy: PlanApproval.describe(
+    "none: builds start without a plan. m-and-l: M and L tickets need an approved plan first. all: every ticket does.",
+  ),
+};
+
 const AutoRefineInput = {
   project: ProjectKey,
   enabled: z.boolean().describe("true: refine starts on its own for new and answered tickets."),
@@ -109,6 +128,33 @@ const summary = (t: Ticket) => ({
 
 export function registerTools(server: McpServer, deps: ToolDeps): void {
   const { tracker, service } = deps;
+
+  /** Decides the ticket's latest plan run as Andy (owner-only, ADR-0050). */
+  const decide = async (key: string, decision: "approved" | "rejected", reason: string | null) => {
+    const found = await service.findByKey(key);
+    const state = await deps.runs.planStateOf(found);
+    if (state.kind === "none") {
+      throw new DomainError("plan_not_decidable", `${found.key} has no plan to decide`);
+    }
+    const result = await deps.runs.decidePlan(
+      found.projectId,
+      found.id,
+      state.run.id,
+      { decision, reason },
+      { actor: "andy", email: deps.email },
+    );
+    return {
+      plan: { id: result.run.id, decision: result.run.planDecision },
+      build: result.build
+        ? {
+            id: result.build.id,
+            status: result.build.status,
+            link: result.build.links.executorRun ?? null,
+          }
+        : null,
+      buildError: result.buildError,
+    };
+  };
 
   server.registerTool(
     "create_ticket",
@@ -200,7 +246,7 @@ export function registerTools(server: McpServer, deps: ToolDeps): void {
     "build",
     {
       description:
-        "Starts a build run on a ticket now: an agent plans read-only, implements the ticket, runs the project's checks and opens a PR titled `<KEY>: <title>` (about 15-60 minutes). The ticket moves to In progress, then Ready for review when the PR opens. One run per project at a time. Only needed when auto-build is off or a build failed.",
+        "Starts a build run on a ticket now: an agent plans read-only, implements the ticket, runs the project's checks and opens a PR titled `<KEY>: <title>` (about 15-60 minutes). The ticket moves to In progress, then Ready for review when the PR opens. When the project's plan approval covers the ticket, a read-only plan run starts instead and waits for `approve_plan` or `reject_plan`. One run per project at a time. Only needed when auto-build is off or a build failed.",
       inputSchema: BuildInput,
       annotations: { destructiveHint: false, idempotentHint: false, openWorldHint: true },
     },
@@ -237,6 +283,47 @@ export function registerTools(server: McpServer, deps: ToolDeps): void {
           deps.email,
         );
         return { project: updated.key, autoBuild: updated.autoBuild };
+      }),
+  );
+
+  server.registerTool(
+    "approve_plan",
+    {
+      description:
+        "Approves a ticket's latest plan run (projects with plan approval on) and starts its build with that plan in the prompt. Andy only. Refused if the plan is stale (the ticket or the project's plan approval changed, or it is over 72 hours old): start `build` again to re-plan.",
+      inputSchema: PlanInput,
+      annotations: { destructiveHint: false, idempotentHint: false, openWorldHint: true },
+    },
+    ({ ticket }) => run(async () => decide(ticket, "approved", null)),
+  );
+
+  server.registerTool(
+    "reject_plan",
+    {
+      description:
+        "Rejects a ticket's latest plan run with a reason. Andy only. Nothing starts; the ticket stays flagged until Andy starts `build` again, and the new plan run sees the reason.",
+      inputSchema: RejectPlanInput,
+      annotations: { destructiveHint: false, idempotentHint: false },
+    },
+    ({ ticket, reason }) => run(async () => decide(ticket, "rejected", reason)),
+  );
+
+  server.registerTool(
+    "set_plan_approval",
+    {
+      description:
+        "Sets which tickets need Andy's approval of a read-only plan before their build: none (default), m-and-l or all.",
+      inputSchema: PlanApprovalInput,
+      annotations: { destructiveHint: false, idempotentHint: true },
+    },
+    ({ project, policy }) =>
+      run(async () => {
+        const updated = await deps.projects.update(
+          project.toLowerCase(),
+          { planApproval: policy },
+          deps.email,
+        );
+        return { project: updated.key, planApproval: updated.planApproval };
       }),
   );
 

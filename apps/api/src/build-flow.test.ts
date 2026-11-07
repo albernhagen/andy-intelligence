@@ -44,6 +44,7 @@ interface RunBody {
   toolingFiles: string[];
   costUsd: number | null;
   costIsEstimate: boolean;
+  planDecision: unknown;
 }
 
 describe("build run flow", () => {
@@ -187,5 +188,160 @@ describe("build run flow", () => {
     });
     expect(hook.status).toBe(200);
     expect((await json<{ stage: string }>(t.call(ticketPath))).stage).toBe("ready_for_review");
+  });
+
+  it("GivenPlanApprovalAll_WhenAndyRejectsThenApprovesAPlan_ThenTheBuildFollowsTheApprovedPlanToAPr", async () => {
+    const t = githubApp({ verifyActionsToken: verify });
+    await t.connections.save({ ...createdApp, connectedAt: "2026-11-03T00:00:00Z" });
+    const json = async <T>(res: Response | Promise<Response>) => (await (await res).json()) as T;
+    const send = (path: string, method: string, body: unknown) =>
+      t.call(path, { method, body: JSON.stringify(body) });
+    const claimsOf = (externalId: string): ActionsClaims => ({
+      repository: REPO,
+      workflow_ref: `${REPO}/.github/workflows/agent-run.yml@refs/heads/main`,
+      job_workflow_ref: CLAUDE_EXECUTOR_REF,
+      run_id: externalId,
+    });
+    /** The executor run dispatched last, acting as itself. */
+    const lastExecutor = () => {
+      const externalId = [...t.host.workflowRuns.keys()].at(-1)!;
+      return (path: string, init: RequestInit = {}) =>
+        t.call(path, init, JSON.stringify(claimsOf(externalId)));
+    };
+    const reportPlan = async (runId: string, summary: string) => {
+      const asExecutor = lastExecutor();
+      const context = await json<{ step: string; prompt: string }>(
+        asExecutor(`/runs/${runId}/context`),
+      );
+      const res = await asExecutor(`/runs/${runId}/report`, {
+        method: "POST",
+        body: JSON.stringify({
+          status: "succeeded",
+          summary: "planned",
+          tokensIn: 9_000,
+          tokensOut: 1_000,
+          costUsd: 0.2,
+          output: { summary, plan: output.plan },
+        }),
+      });
+      expect(await res.json()).toEqual({ result: "recorded" });
+      return context;
+    };
+
+    // Andy: builds on, auto-build on, and every ticket's plan needs his approval.
+    const project = await json<{ id: string }>(
+      send("/api/projects", "POST", { name: "AI", key: "AI", repos: [REPO] }),
+    );
+    const projectPath = `/api/projects/${project.id}`;
+    await send(projectPath, "PATCH", { autoRefine: false, buildEnabled: true });
+    expect(
+      await json<{ planApproval: string }>(
+        send(projectPath, "PATCH", { autoBuild: true, planApproval: "all" }),
+      ),
+    ).toMatchObject({ planApproval: "all" });
+    const newTicket = async (title: string) => {
+      const ticket = await json<{ id: string; key: string }>(
+        send(`${projectPath}/tickets`, "POST", {
+          type: "feature",
+          title,
+          body: "Andy can't see his tickets.",
+          acceptanceCriteria: ["WHEN Andy opens the board THE SYSTEM SHALL list his tickets"],
+          size: "S",
+          sizeReason: "one screen",
+        }),
+      );
+      return { ...ticket, path: `${projectPath}/tickets/${ticket.id}` };
+    };
+    const board = await newTicket("Board");
+    expect((await send(`${board.path}/stage`, "POST", { to: "ready" })).status).toBe(200);
+
+    // The dispatcher starts a read-only plan run, not the build; the ticket stays Ready.
+    const [plan] = await json<RunBody[]>(t.call(`${board.path}/runs`));
+    expect(plan).toMatchObject({ step: "plan", status: "queued" });
+    const planContext = await reportPlan(plan!.id, "First approach.");
+    expect(planContext).toMatchObject({ step: "plan" });
+    expect(planContext.prompt).toContain("You are the plan step");
+
+    // Recorded: the plan is on the run, the ticket is flagged, nothing else started.
+    const [planned] = await json<RunBody[]>(t.call(`${board.path}/runs`));
+    expect(planned).toMatchObject({ status: "succeeded", plan: output.plan, planDecision: null });
+    expect(
+      await json<{ stage: string; needsAttention: boolean }>(t.call(board.path)),
+    ).toMatchObject({ stage: "ready", needsAttention: true });
+    expect(t.host.workflowRuns.size).toBe(1);
+
+    // While the plan waits, the dispatcher skips the ticket even unflagged: the next one plans.
+    expect((await send(board.path, "PATCH", { needsAttention: false })).status).toBe(200);
+    const other = await newTicket("Other");
+    expect((await send(`${other.path}/stage`, "POST", { to: "ready" })).status).toBe(200);
+    expect(await json<RunBody[]>(t.call(`${board.path}/runs`))).toHaveLength(1);
+    const [otherPlan] = await json<RunBody[]>(t.call(`${other.path}/runs`));
+    expect(otherPlan).toMatchObject({ step: "plan" });
+    expect((await send(`${other.path}/cancel`, "POST", {})).status).toBe(200);
+
+    // Andy rejects with a reason: recorded, still flagged, no build.
+    const decision = (runId: string) => `${board.path}/runs/${runId}/plan-decision`;
+    expect((await send(decision(plan!.id), "POST", { decision: "rejected" })).status).toBe(409);
+    const rejected = await json<{ run: RunBody; build: unknown }>(
+      send(decision(plan!.id), "POST", { decision: "rejected", reason: "Reuse the list view." }),
+    );
+    expect(rejected).toMatchObject({
+      build: null,
+      run: {
+        planDecision: {
+          decision: "rejected",
+          reason: "Reuse the list view.",
+          by: "andy@example.com",
+        },
+      },
+    });
+    expect(await json<{ needsAttention: boolean }>(t.call(board.path))).toMatchObject({
+      needsAttention: true,
+    });
+
+    // Andy starts it again: a new plan run, which sees his reason.
+    const replan = await json<RunBody>(send(`${board.path}/runs`, "POST", { step: "build" }));
+    expect(replan.step).toBe("plan");
+    const replanContext = await reportPlan(replan.id, "Reuses the list view.");
+    expect(replanContext.prompt).toContain("Reuse the list view.");
+
+    // Andy approves: the build starts with the approved plan in its prompt.
+    const approved = await json<{ run: RunBody; build: RunBody & { planRunId: string } }>(
+      send(decision(replan.id), "POST", { decision: "approved" }),
+    );
+    expect(approved.run.planDecision).toMatchObject({ decision: "approved" });
+    expect(approved.build).toMatchObject({ step: "build", planRunId: replan.id });
+    expect(
+      await json<{ stage: string; needsAttention: boolean }>(t.call(board.path)),
+    ).toMatchObject({ stage: "in_progress", needsAttention: false });
+    const asBuilder = lastExecutor();
+    const context = await json<{ step: string; branch: string; prompt: string }>(
+      asBuilder(`/runs/${approved.build.id}/context`),
+    );
+    expect(context.step).toBe("build");
+    expect(context.prompt).toContain("<approved-plan>");
+
+    // The build reports its PR, as without plan approval.
+    const prUrl = `https://github.com/${REPO}/pull/41`;
+    const report = await asBuilder(`/runs/${approved.build.id}/report`, {
+      method: "POST",
+      body: JSON.stringify({
+        status: "succeeded",
+        summary: "done",
+        tokensIn: 50_000,
+        tokensOut: 8_000,
+        costUsd: 1.25,
+        output,
+        branch: context.branch,
+        pullRequest: prUrl,
+      }),
+    });
+    expect(await report.json()).toEqual({ result: "recorded" });
+    const [built] = await json<RunBody[]>(t.call(`${board.path}/runs`));
+    expect(built).toMatchObject({
+      step: "build",
+      status: "succeeded",
+      links: { pullRequest: prUrl },
+    });
   });
 });

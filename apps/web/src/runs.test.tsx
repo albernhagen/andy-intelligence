@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { act, screen, waitFor, within } from "@testing-library/react";
-import { DEFAULT_ROUTE } from "@andy/domain";
+import { DEFAULT_ROUTE, ticketSnapshot } from "@andy/domain";
 import { renderApp } from "@/test/harness";
 import { RUN_POLL_MS, runsRefetchInterval } from "@/lib/queries";
 import { formatCost } from "@/components/Runs";
@@ -8,6 +8,13 @@ import { formatCost } from "@/components/Runs";
 /** Story panel → runs in the activity timeline (M1.6a: Claude Code executor), in-process API. */
 
 const REPO = "albernhagen/andy-intelligence";
+const plan = {
+  files: ["apps/web/src/pages/BoardPage.tsx"],
+  steps: ["Write the page"],
+  tests: [],
+  riskiestStep: "Ordering by rank",
+  rejectedAlternatives: [],
+};
 
 async function setup() {
   const harness = renderApp("/", { githubConnected: true });
@@ -97,6 +104,42 @@ describe("runs UI", () => {
     expect(
       within(section).getByRole("button", { name: "Start refine run" }).hasAttribute("disabled"),
     ).toBe(false);
+  });
+
+  it("GivenAPlanAwaitingAndy_WhenHeRejectsItWithAReason_ThenTheDecisionIsShownAndTheButtonsGo", async () => {
+    const harness = await setup();
+    const ticket = await harness.tracker.getTicket("ai", harness.ticket.id);
+    const run = await harness.runs.create({
+      projectId: "ai",
+      ticketId: harness.ticket.id,
+      step: "plan",
+      route: DEFAULT_ROUTE,
+      tier: "fast",
+      deadline: null,
+      prompt: ticketSnapshot(ticket!, []),
+      maxTurns: 10,
+    });
+    await harness.runs.update(
+      run.id,
+      { status: "succeeded", endedAt: new Date().toISOString(), plan, summary: "The plan." },
+      ["queued"],
+    );
+    const section = await harness.open();
+
+    const reject = await within(section).findByRole("button", { name: "Reject plan" });
+    expect(reject.hasAttribute("disabled")).toBe(true);
+    expect(within(section).getByRole("button", { name: "Approve plan" })).toBeTruthy();
+    await harness.user.type(
+      within(section).getByRole("textbox", { name: "Reason to reject" }),
+      "Reuse the list view.",
+    );
+    await harness.user.click(reject);
+
+    expect(
+      await within(section).findByText(/Plan rejected by .*: Reuse the list view\./),
+    ).toBeTruthy();
+    expect(within(section).queryByRole("button", { name: "Approve plan" })).toBeNull();
+    expect((await harness.runs.get(run.id))!.planDecision).toMatchObject({ decision: "rejected" });
   });
 
   it("GivenAnAutomaticRetry_WhenViewed_ThenItIsMarkedAsARetry", async () => {

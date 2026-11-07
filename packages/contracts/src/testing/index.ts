@@ -802,6 +802,30 @@ export function runStoreContract(name: string, make: () => Promise<RunStore>): v
       );
     });
 
+    it("GivenTwoConcurrentPlanDecisions_WhenApplied_ThenExactlyOneWinsAndIsKept", async () => {
+      const store = await make();
+      const run = await store.create({ ...newRun(project()), step: "plan" });
+      await store.update(run.id, { status: "succeeded" }, ["queued"]);
+      const decision = (d: "approved" | "rejected") => ({
+        decision: d,
+        reason: d === "rejected" ? "no" : null,
+        by: "andy@example.com",
+        at: "2026-11-06T12:00:00.000Z",
+      });
+      const results = await Promise.allSettled([
+        store.update(run.id, { planDecision: decision("approved") }, ["succeeded"]),
+        store.update(run.id, { planDecision: decision("rejected") }, ["succeeded"]),
+      ]);
+      const won = results.filter((r) => r.status === "fulfilled");
+      expect(won).toHaveLength(1);
+      const kept = (won[0] as PromiseFulfilledResult<Run>).value.planDecision;
+      expect((await store.get(run.id))!.planDecision).toEqual(kept);
+      await rejectsWith(
+        store.update(run.id, { planDecision: decision("rejected") }, ["succeeded"]),
+        "conflict",
+      );
+    });
+
     it("GivenTwoConcurrentUpdatesFromQueued_WhenApplied_ThenExactlyOneWins", async () => {
       const store = await make();
       const run = await store.create(newRun(project()));

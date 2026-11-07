@@ -1,5 +1,5 @@
 import { createRoute, z, type OpenAPIHono } from "@hono/zod-openapi";
-import { Run, type RunExecutor } from "@andy/contracts";
+import { PLAN_REASON_MAX, Run, type RunExecutor } from "@andy/contracts";
 import { STARTABLE_STEPS, type RunService } from "@andy/domain";
 import { bodyLimit } from "hono/body-limit";
 import type { AuthEnv } from "./auth";
@@ -22,6 +22,18 @@ const TicketParams = z.object({
   ticketId: z.uuid(),
 });
 const StartRun = z.object({ step: z.enum(STARTABLE_STEPS) });
+const PlanRunParams = TicketParams.extend({ runId: z.string().regex(/^[A-Za-z0-9-]{1,64}$/) });
+const PlanDecisionBody = z.object({
+  decision: z.enum(["approved", "rejected"]),
+  /** Required to reject: the next plan run sees it. */
+  reason: z.string().max(PLAN_REASON_MAX).nullable().optional(),
+});
+const PlanDecisionResult = z.object({
+  run: Run,
+  /** The build the approval started; null when it couldn't start now (see buildError). */
+  build: Run.nullable(),
+  buildError: z.string().nullable(),
+});
 const secured = { security: [{ bearer: [] }] };
 
 const routes = {
@@ -50,6 +62,22 @@ const routes = {
       503: ok(ErrorBody, "No executor (GitHub not connected)"),
     },
   }),
+  decidePlan: createRoute({
+    ...secured,
+    method: "post",
+    path: "/api/projects/{projectId}/tickets/{ticketId}/runs/{runId}/plan-decision",
+    request: {
+      params: PlanRunParams,
+      body: { content: { "application/json": { schema: PlanDecisionBody } }, required: true },
+    },
+    responses: {
+      200: ok(PlanDecisionResult, "Decided; on approval, the build started if it could"),
+      400: ok(ErrorBody, "Invalid request"),
+      403: ok(ErrorBody, "Only Andy decides plans"),
+      404: ok(ErrorBody, "Not found"),
+      409: ok(ErrorBody, "Not the latest plan, already decided, stale, or no reason"),
+    },
+  }),
 };
 
 export function registerRunRoutes(app: OpenAPIHono<AuthEnv>, runs: RunService): void {
@@ -61,6 +89,17 @@ export function registerRunRoutes(app: OpenAPIHono<AuthEnv>, runs: RunService): 
   app.openapi(routes.startRun, async (c) => {
     const { projectId, ticketId } = c.req.valid("param");
     return c.json(await runs.start(projectId, ticketId, c.req.valid("json").step), 201);
+  });
+
+  // Owner-only (ADR-0050): every /api caller is the signed-in, allow-listed user, so the actor is
+  // "andy" and the decision records the email; RunService refuses any other actor.
+  app.openapi(routes.decidePlan, async (c) => {
+    const { projectId, ticketId, runId } = c.req.valid("param");
+    const result = await runs.decidePlan(projectId, ticketId, runId, c.req.valid("json"), {
+      actor: "andy",
+      email: c.get("identity").email,
+    });
+    return c.json(result, 200);
   });
 }
 

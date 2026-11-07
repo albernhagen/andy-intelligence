@@ -37,7 +37,8 @@ export class DomainError extends Error {
       | "run_finished"
       | "executor_unavailable"
       | "dispatch_failed"
-      | "cancel_failed",
+      | "cancel_failed"
+      | "plan_not_decidable",
     message: string,
     readonly details: string[] = [],
   ) {
