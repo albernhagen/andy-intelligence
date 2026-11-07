@@ -2,9 +2,9 @@ import { existsSync, mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync 
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import { checkRunProblem, gitTampering, verifyCheck } from "./executor-sandbox.mjs";
+import { checkRunProblem, factsProblem, gitTampering, verifyCheck } from "./executor-sandbox.mjs";
 
-const COMMAND = "git update-index -q --refresh && printf %s abc > .executor-sandbox-check";
+const COMMAND = "git update-index -q --refresh && env | cut -d= -f1 > .executor-sandbox-check";
 const use = (name, input, id = "t1") => ({
   type: "assistant",
   message: { content: [{ type: "tool_use", id, name, input }] },
@@ -24,7 +24,7 @@ describe("sandbox check run", () => {
 
   it("GivenTheModelDroppedAClause_WhenChecked_ThenItFails", () => {
     const messages = [
-      use("Bash", { command: "printf %s abc > .executor-sandbox-check" }),
+      use("Bash", { command: "env | cut -d= -f1 > .executor-sandbox-check" }),
       result(),
     ];
     expect(checkRunProblem(messages, COMMAND)).toBe("the check ran a different command");
@@ -58,18 +58,51 @@ describe("sandbox check run", () => {
   it("GivenNoExecutionLog_WhenChecked_ThenItFails", () => {
     expect(checkRunProblem(null, COMMAND)).toBe("no execution log");
   });
+});
 
-  it("GivenAPassingRun_WhenTheMarkerIsWrongOrMissing_ThenItFailsAndTheMarkerIsGone", () => {
+const HOST_PID1 = "/sbin/init splash ";
+const facts = (over = {}) =>
+  [
+    `nonce=${over.nonce ?? "n0nce"}`,
+    `uid=${over.uid ?? "1001"}`,
+    `pid1=${over.pid1 ?? "bwrap --new-session bash "}`,
+    ...(over.env ?? ["PATH", "HOME", "TMPDIR"]).map((n) => `env=${n}`),
+    "",
+  ].join("\n");
+const opts = { nonce: "n0nce", hostPid1: HOST_PID1 };
+
+describe("sandbox check facts", () => {
+  it("GivenTheNonceANonRootUidItsOwnPid1AndNoCredentials_WhenChecked_ThenItPasses", () => {
+    expect(factsProblem(facts(), opts)).toBe(null);
+  });
+
+  it("GivenACredentialVariableReachedTheSandbox_WhenChecked_ThenItFailsNamingIt", () => {
+    const text = facts({ env: ["PATH", "GITHUB_TOKEN", "CLAUDE_CODE_OAUTH_TOKEN"] });
+    expect(factsProblem(text, opts)).toBe(
+      "credential variables reached the sandbox: CLAUDE_CODE_OAUTH_TOKEN, GITHUB_TOKEN",
+    );
+  });
+
+  it("GivenTheRunnersOwnPid1OrRoot_WhenChecked_ThenItFails", () => {
+    expect(factsProblem(facts({ pid1: HOST_PID1 }), opts)).toMatch(/runner's own/);
+    expect(factsProblem(facts({ uid: "0" }), opts)).toBe("uid is 0");
+  });
+
+  it("GivenAWrongNonceNoFileOrNoEnvNames_WhenChecked_ThenItFails", () => {
+    expect(factsProblem(facts({ nonce: "guess" }), opts)).toBe("the nonce is missing or wrong");
+    expect(factsProblem(null, opts)).toBe("the command wrote no facts file");
+    expect(factsProblem(facts({ env: [] }), opts)).toBe("no environment names");
+  });
+
+  it("GivenAPassingRun_WhenTheFactsFileIsGoodOrMissing_ThenTheResultFollowsAndTheMarkerIsGone", () => {
     const dir = mkdtempSync(join(tmpdir(), "check-"));
     const marker = join(dir, ".executor-sandbox-check");
     const messages = [use("Bash", { command: COMMAND }), result()];
-    writeFileSync(marker, "abc");
-    expect(verifyCheck({ messages, command: COMMAND, marker, nonce: "abc" })).toBe(null);
+    const args = { messages, command: COMMAND, marker, ...opts };
+    writeFileSync(marker, facts());
+    expect(verifyCheck(args)).toBe(null);
     expect(existsSync(marker)).toBe(false);
-    writeFileSync(marker, "xyz");
-    expect(verifyCheck({ messages, command: COMMAND, marker, nonce: "abc" })).toMatch(/marker/);
-    expect(existsSync(marker)).toBe(false);
-    expect(verifyCheck({ messages, command: COMMAND, marker, nonce: "abc" })).toMatch(/marker/);
+    expect(verifyCheck(args)).toBe("the command wrote no facts file");
   });
 });
 

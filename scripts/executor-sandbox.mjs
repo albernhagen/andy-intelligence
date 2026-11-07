@@ -4,9 +4,11 @@
 //
 // Usage: executor-sandbox.mjs verify-check | check-git
 //   verify-check (before the agent): env EXECUTION_FILE (the check run's SDK message log),
-//     COMMAND (the exact command the check had to run), MARKER (file it writes), NONCE. Passes
-//     only if the log shows that command, unchanged, run once through Bash without error, no
-//     other tool, and the marker holds the nonce. Deletes the marker either way.
+//     COMMAND (the exact command the check had to run), MARKER (the facts file it writes),
+//     NONCE (given to the command only through its environment). Passes only if the log shows
+//     that command, unchanged, run once through Bash without error and no other tool, and the
+//     facts show the nonce, a non-root uid, a PID 1 that isn't the runner's, and no credential
+//     variable. Deletes the marker either way.
 //   check-git (after the agent): env PRISTINE (the copy of .git taken before the agent), LIVE
 //     (the checkout's .git). Prints the sensitive .git paths that differ, one per line.
 import { createHash } from "node:crypto";
@@ -40,8 +42,41 @@ export function checkRunProblem(messages, command) {
   return null;
 }
 
+/** Variables that must not reach a sandboxed command (the profile's credential denies). */
+export const CREDENTIAL_VARS = [
+  "CLAUDE_CODE_OAUTH_TOKEN",
+  "ANTHROPIC_API_KEY",
+  "GITHUB_TOKEN",
+  "GH_TOKEN",
+  "ACTIONS_RUNTIME_TOKEN",
+  "ACTIONS_ID_TOKEN_REQUEST_TOKEN",
+];
+
+/**
+ * Why the facts the check command wrote don't show a sandbox; null when they do. The file has
+ * `nonce=`, `uid=`, `pid1=` lines and one `env=<NAME>` line per variable. The nonce reaches the
+ * command only through its environment (never the prompt), so the model can't write it.
+ */
+export function factsProblem(text, { nonce, hostPid1 }) {
+  if (typeof text !== "string") return "the command wrote no facts file";
+  const lines = text.split("\n");
+  const value = (key) => lines.find((l) => l.startsWith(`${key}=`))?.slice(key.length + 1);
+  if (!nonce || value("nonce") !== nonce) return "the nonce is missing or wrong";
+  const uid = value("uid");
+  if (uid === undefined || !/^\d+$/.test(uid) || uid === "0") return `uid is ${uid ?? "missing"}`;
+  const pid1 = value("pid1");
+  if (!pid1) return "PID 1 is missing";
+  if (pid1.trim() === String(hostPid1).trim())
+    return "PID 1 is the runner's own (no PID namespace)";
+  const names = new Set(lines.filter((l) => l.startsWith("env=")).map((l) => l.slice(4)));
+  if (names.size === 0) return "no environment names";
+  const leaked = CREDENTIAL_VARS.filter((n) => names.has(n));
+  if (leaked.length > 0) return `credential variables reached the sandbox: ${leaked.join(", ")}`;
+  return null;
+}
+
 /** verify-check: null when the sandbox check passed, else the reason. Deletes the marker. */
-export function verifyCheck({ messages, command, marker, nonce }) {
+export function verifyCheck({ messages, command, marker, nonce, hostPid1 }) {
   let written = null;
   try {
     if (lstatSync(marker).isFile()) written = readFileSync(marker, "utf8");
@@ -49,10 +84,7 @@ export function verifyCheck({ messages, command, marker, nonce }) {
     written = null;
   }
   rmSync(marker, { force: true });
-  const problem = checkRunProblem(messages, command);
-  if (problem) return problem;
-  if (written !== nonce) return "the command's marker file is missing or wrong";
-  return null;
+  return checkRunProblem(messages, command) ?? factsProblem(written, { nonce, hostPid1 });
 }
 
 /**
@@ -114,6 +146,7 @@ function main() {
       command: env.COMMAND,
       marker: env.MARKER,
       nonce: env.NONCE,
+      hostPid1: readFileSync("/proc/1/cmdline", "utf8").replaceAll("\0", " "),
     });
     if (problem) {
       process.stdout.write(`Sandbox check failed: ${problem}.\n`);
