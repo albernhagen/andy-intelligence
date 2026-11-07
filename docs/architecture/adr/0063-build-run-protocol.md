@@ -1,5 +1,5 @@
 ---
-status: accepted, amended by 0071 (Bash containment, sandbox check)
+status: accepted, amended by 0071 (Bash containment, sandbox check), 0072 (dependencies)
 date: 2026-11-05
 amends: 0051 (permission profile, token policy)
 ---
