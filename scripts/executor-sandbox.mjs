@@ -12,7 +12,17 @@
 //   check-git (after the agent): env PRISTINE (the copy of .git taken before the agent), LIVE
 //     (the checkout's .git). Prints the sensitive .git paths that differ, one per line.
 import { createHash } from "node:crypto";
-import { lstatSync, readdirSync, readFileSync, readlinkSync, rmSync } from "node:fs";
+import {
+  closeSync,
+  constants,
+  fstatSync,
+  lstatSync,
+  openSync,
+  readdirSync,
+  readFileSync,
+  readlinkSync,
+  rmSync,
+} from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { readMessages } from "./executor-report.mjs";
@@ -75,14 +85,30 @@ export function factsProblem(text, { nonce, hostPid1 }) {
   return null;
 }
 
+/**
+ * Opens `path` once without following a symlink (or blocking on a FIFO) and reads it through
+ * that descriptor, so a swap between a check and the read can't redirect it. Returns
+ * `{ stat, data }` (data only for a regular file) or `{ code }` (e.g. ENOENT, ELOOP: a symlink).
+ */
+function readNoFollow(path) {
+  let fd;
+  try {
+    fd = openSync(path, constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK);
+  } catch (err) {
+    return { code: err.code ?? "EIO" };
+  }
+  try {
+    const stat = fstatSync(fd);
+    return { stat, data: stat.isFile() ? readFileSync(fd) : null };
+  } finally {
+    closeSync(fd);
+  }
+}
+
 /** verify-check: null when the sandbox check passed, else the reason. Deletes the marker. */
 export function verifyCheck({ messages, command, marker, nonce, hostPid1 }) {
-  let written = null;
-  try {
-    if (lstatSync(marker).isFile()) written = readFileSync(marker, "utf8");
-  } catch {
-    written = null;
-  }
+  const read = readNoFollow(marker);
+  const written = read.data ? read.data.toString("utf8") : null;
   rmSync(marker, { force: true });
   return checkRunProblem(messages, command) ?? factsProblem(written, { nonce, hostPid1 });
 }
@@ -108,17 +134,20 @@ export const GIT_SENSITIVE = [
 
 /** A fingerprint of a path (never followed if it is a symlink): "" when absent. */
 export function fingerprint(path) {
-  let s;
-  try {
-    s = lstatSync(path);
-  } catch {
-    return "";
+  const r = readNoFollow(path);
+  if (r.code === "ENOENT") return "";
+  if (r.code === "ELOOP") {
+    try {
+      return `link:${readlinkSync(path)}`;
+    } catch {
+      return "link:?";
+    }
   }
-  if (s.isSymbolicLink()) return `link:${readlinkSync(path)}`;
-  if (s.isFile()) {
-    return `file:${s.mode & 0o777}:${createHash("sha256").update(readFileSync(path)).digest("hex")}`;
+  if (r.code) return `unreadable:${r.code}`;
+  if (r.stat.isFile()) {
+    return `file:${r.stat.mode & 0o777}:${createHash("sha256").update(r.data).digest("hex")}`;
   }
-  if (s.isDirectory()) {
+  if (r.stat.isDirectory()) {
     const names = readdirSync(path).sort();
     return `dir:[${names.map((n) => `${n}=${fingerprint(join(path, n))}`).join(",")}]`;
   }

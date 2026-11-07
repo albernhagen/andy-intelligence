@@ -106,6 +106,22 @@ describe("sandbox check facts", () => {
   });
 });
 
+describe("sandbox check marker", () => {
+  it("GivenTheMarkerIsASymlinkToGoodFacts_WhenVerified_ThenItIsNotFollowed", () => {
+    const dir = mkdtempSync(join(tmpdir(), "check-"));
+    const target = join(dir, "elsewhere");
+    writeFileSync(target, facts());
+    const marker = join(dir, ".executor-sandbox-check");
+    symlinkSync(target, marker);
+    const messages = [use("Bash", { command: COMMAND }), result()];
+    expect(verifyCheck({ messages, command: COMMAND, marker, ...opts })).toBe(
+      "the command wrote no facts file",
+    );
+    expect(existsSync(marker)).toBe(false);
+    expect(existsSync(target)).toBe(true);
+  });
+});
+
 describe("git tampering", () => {
   const repo = () => {
     const root = mkdtempSync(join(tmpdir(), "git-"));
