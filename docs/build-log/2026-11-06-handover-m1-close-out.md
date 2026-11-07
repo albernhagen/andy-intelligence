@@ -18,7 +18,7 @@ The first coordinating session (2026-11-04 to 2026-11-06) hands over per `platfo
 - AI-33: M1.8a: Plan approval (session running; brief in `2026-11-05-build-run.md`, decisions on the ticket's answered questions).
 - AI-36: Drop the Monitoring stage (session running; ADR-0069 reserved). AI-34: M1.8b follows both; it is the last M1 ticket.
 - AI-35: Docs at their word caps: run alone between batches.
-- ADR numbers handed out: 0068 (AI-33, if needed), 0069 (AI-36). Next free after those: 0070.
+- ADR numbers handed out: 0068 (AI-33, if needed), 0069 (AI-36), 0070 (UX direction, this handover). Next free: 0071.
 
 ## Waiting on Andy
 
@@ -31,7 +31,7 @@ The first coordinating session (2026-11-04 to 2026-11-06) hands over per `platfo
 
 - Hands-on work: the dispatcher never builds a ticket assigned to Andy (built in PR #83); AI-32 adds the project default and the "Mine" marker.
 - Monitoring stage dropped until M6 (AI-36). Refine becomes the gate into the queue with Ideas vs. Up next, zero questions allowed, assumptions first-class (AI-39, replaces AI-38). Refine scores risk and confidence (AI-37, after AI-39).
-- UX direction (2026-11-06): Shortcut's simplicity as the starting point, not a clone; a modern, minimalist design biased toward deciding, not operating (brief, `design.md`).
+- UX direction (2026-11-06): Shortcut's simplicity as the starting point, not a clone; a modern, minimalist design biased toward deciding, not operating (ADR-0070, brief, `design.md`).
 - Grouping (Andy, 2026-11-06): a board with 100 tickets in Backlog is not usable; tickets need grouping, by epic or similar. AI-39's Ideas / Up next split takes the volume out of the lanes first; epic grouping on the board is in M4: Epics + story board. Carry the idea into both briefs.
 - Auto-archive sessions on PR close is on; the coordinator is pinned; a long session's MCP tool list goes stale, so start fresh per milestone.
 

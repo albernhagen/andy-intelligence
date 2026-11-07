@@ -1,5 +1,5 @@
 ---
-status: accepted (direction; now M3: New UI and MCP, ADR-0060)
+status: accepted (direction; now M3: New UI and MCP, ADR-0060), amended by 0070 (direction: not a Shortcut clone)
 date: 2026-11-04
 amends: 0045 (timing of design.md, tokens and screenshot checks)
 ---

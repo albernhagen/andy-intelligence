@@ -24,6 +24,7 @@ Every ticket sits under a milestone. Milestones are epic tickets in project `AI`
 - `blockedBy` holds ticket **keys** (`AI-1`); ARCHITECTURE §5 says ticket ids, and nothing reads the field yet. Keep keys (readable, unique across projects) and fix §5 in M1.8: Build + gate, where the dispatcher first reads it?
 - Contract suites for ports with one adapter (`OAuthGrantStore`, `CodeHostConnectionStore`): keep the fakes, drop the shared suite?
 - Production monitoring (alerts, error budget per project) as part of "shipped" (brief): add to M6: Dev → prod releases at slicing.
+- Refine may ask zero questions when it is confident: decided (AI-39: Refine as the gate into the queue, 2026-11-06). `workflow.md` §4.3 still says 1–5 until AI-39 lands and updates it.
 - Local mode design (open question 11); due after M1: First end-to-end flow.
 - Context sources design (open question 12); due after M1: First end-to-end flow.
 
