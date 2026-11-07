@@ -75,7 +75,16 @@ describe("buildProfile", () => {
       allowUnsandboxedCommands: false,
       network: { allowedDomains: ["registry.npmjs.org"], strictAllowlist: true },
     });
-    expect(settings.sandbox.filesystem.denyWrite).toEqual(["/work/proj/.git"]);
+  });
+
+  it("GivenBuild_WhenBuilt_ThenTheCheckoutAndItsGitDirStayWritableInTheSandbox", () => {
+    // A denyWrite on .git made every Bash call fail (AI-42): Claude Code's sandbox protects
+    // .git/config and .git/hooks itself, and git needs .git/index and its lock files.
+    const { filesystem } = build("build").sandbox;
+    expect(filesystem.denyWrite ?? []).not.toEqual(
+      expect.arrayContaining([expect.stringMatching(/^\/work\/proj(\/\.git)?$/)]),
+    );
+    expect(filesystem.allowWrite).toEqual(["/tmp/agent"]);
   });
 
   it("GivenBuild_WhenBuilt_ThenModelAndGitHubCredentialsAreUnsetForBash", () => {
