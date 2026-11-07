@@ -18,3 +18,5 @@ pnpm-lock.yaml
 /.profile
 /.ripgreprc
 /.mcp.json
+/.vscode
+/.idea

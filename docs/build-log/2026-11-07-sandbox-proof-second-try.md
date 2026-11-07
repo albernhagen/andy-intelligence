@@ -51,6 +51,13 @@
 - **Failed:** `pnpm lint` (prettier: `Unable to read file ".bash_profile": EACCES`) and one test (`lockfile-sources` CLI on this repo): both read the empty, unreadable placeholders the sandbox binds at the repo root.
 - **Fix (AI-56: Checks fail in the build sandbox on its unreadable placeholder files):** `.prettierignore` (this repo and the managed-project starter) lists the placeholder names the repo lacks, kept in sync with `SANDBOX_PLACEHOLDERS` by a test; `lockfile-sources.mjs` skips a zero-byte lockfile (no packages; `stat` needs no read permission), and a non-empty one is still checked.
 
+## Eighth try, and a local test bed (after AI-56, PR #98)
+
+- **Run:** AI-57: Sandbox probe script (fifth chore), build run `uCrqqf6HDwNgdSBHwkbG` (Actions run 42402463545), probe PR #99 (closed unmerged). Every sandbox expectation held; `pnpm typecheck`, `pnpm test` (1051) and `pnpm build` passed in the sandbox. `pnpm lint` failed on `.vscode` (EACCES), and Bash couldn't write `scripts/`.
+- **Test bed (AI-58: Build sandbox: local test bed; Bash can't write scripts/ and lint can't read .vscode, decided by Andy):** after eight live tries, each a PR and a 30–40 minute cycle, `scripts/sandbox-lab/` reproduces a build run in Docker in about 30 seconds (runbook §9a). It reproduced the AI-57 result exactly.
+- **Found with it:** `.vscode` and `.idea` are protected directories the sandbox binds unreadable (fix: `.prettierignore`); `/usr/bin/awk` and other `/etc/alternatives` links don't resolve, because `Read(//etc/**)` hides `/etc` from sandboxed commands (fix: `allowRead` `/etc/alternatives`); `scripts/` stays read-only to sandboxed Bash with no profile rule, hook or `package.json` reference naming it, so it is Claude Code's own protection, not the `scripts/review-*.mjs` deny as first diagnosed (Andy: accept the limit; the agent writes there with Edit and Write, and the build procedure says so).
+- **Result in the bed:** all 23 expectations hold, with lint, typecheck, test and build.
+
 ## Next
 
-After the fix merges, start a new probe chore and record the result here; then the `.github/` denial chore.
+After the fix merges, one live §9 run on a new probe chore to confirm, then the `.github/` denial chore.

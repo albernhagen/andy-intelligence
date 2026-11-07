@@ -62,7 +62,8 @@ pnpm lint
 pnpm build
 pnpm format      # prettier --write
 pnpm context:check   # agent-loaded docs within their size budgets (ADR-0046)
-pnpm test:firestore  # Firestore adapter suites on the emulator (needs Java 21+ on PATH; CI runs them when the adapters change, ADR-0048)
+pnpm test:firestore  # Firestore adapters on the emulator (Java 21+; CI runs them on adapter changes, ADR-0048)
+scripts/sandbox-lab/run.sh  # build sandbox in Docker (runbook agent-runs.md §9a)
 ```
 
 ### Quality gates (ADR-0027)
@@ -74,7 +75,7 @@ pnpm test:firestore  # Firestore adapter suites on the emulator (needs Java 21+ 
 | pre-commit | `prettier --check`, `eslint`, `terraform fmt -check`, actionlint (skipped if absent) |
 | pre-push   | `pnpm typecheck`, `pnpm test` (whole repo)                                           |
 
-Claude Code runs `scripts/format-edited-file.mjs` after each Edit/Write (`.claude/settings.json`): Prettier + ESLint `--fix` on that file; unfixable lint errors go back to the agent. CI runs the same checks plus build and actionlint. Formatting failure on commit: `pnpm format`, re-stage. `--no-verify` is for emergencies only.
+Claude Code runs `scripts/format-edited-file.mjs` after each Edit/Write (`.claude/settings.json`): Prettier + ESLint `--fix` on that file; unfixable lint errors go to the agent. CI runs these plus build and actionlint. Format failure on commit: `pnpm format`, re-stage. `--no-verify` is for emergencies only.
 
 ### Security checks on PRs (ADR-0025, ADR-0030)
 
