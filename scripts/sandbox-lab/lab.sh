@@ -57,11 +57,13 @@ as_runner bash -c "
 "
 
 echo "== Claude Code (one Haiku call; its one Bash call runs probe.sh in the sandbox)"
+# The credential file (run.sh mounts it read-only) goes only into this one command's environment.
 cred=()
-[ -n "${CLAUDE_CODE_OAUTH_TOKEN:-}" ] && cred+=("CLAUDE_CODE_OAUTH_TOKEN=$CLAUDE_CODE_OAUTH_TOKEN")
-[ -n "${ANTHROPIC_API_KEY:-}" ] && cred+=("ANTHROPIC_API_KEY=$ANTHROPIC_API_KEY")
+while IFS= read -r line; do
+  case "$line" in CLAUDE_CODE_OAUTH_TOKEN=?* | ANTHROPIC_API_KEY=?*) cred+=("$line") ;; esac
+done < <(cat /run/lab-cred 2>/dev/null)
 if [ "${#cred[@]}" -eq 0 ]; then
-  echo "FAIL no model credential: set CLAUDE_CODE_OAUTH_TOKEN or ANTHROPIC_API_KEY on the host" >&2
+  echo "FAIL no model credential in /run/lab-cred: see runbook agent-runs.md §9a" >&2
   exit 2
 fi
 prompt="This is a sandbox test. Use the Bash tool exactly once to run this exact command, unchanged, and use no other tool: bash scripts/sandbox-lab/probe.sh — then reply with its exit code and nothing else."

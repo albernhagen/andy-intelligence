@@ -119,7 +119,8 @@ Expect in the PR's Verification: all three variables unset; PID 1 is the sandbox
 
 Before a live §9 run, check a sandbox change in Docker in about 30 seconds: `scripts/sandbox-lab/run.sh` builds an image like the runner (Ubuntu 24.04, user `runner`, the runner's paths, bubblewrap, the pinned Claude Code), runs your working tree through the build run's steps (managed settings, `.git` prepare, dependency install, the action's own git writes), makes one Haiku call whose single Bash call runs `scripts/sandbox-lab/probe.sh` in the sandbox, then the collect step's checks, and prints PASS or FAIL for each §9 expectation (exit 1 on any FAIL). Logs per check land in `$TMPDIR/sandbox-lab-out/report/`; `mounts.log` shows which checkout paths the sandbox binds read-only.
 
-- **Credential (once):** a token from `claude setup-token` in a private file outside the repo; `run.sh` reads it only when neither variable is set: `mkdir -p ~/.config/andy-intelligence && (umask 077; read -rs "t?Paste token: " && printf 'CLAUDE_CODE_OAUTH_TOKEN=%s\n' "$t" > ~/.config/andy-intelligence/sandbox-lab.env)`.
+- **Credential (once):** a token from `claude setup-token` in a private file outside the repo; `run.sh` uses it when neither variable is set: `mkdir -p ~/.config/andy-intelligence && (umask 077; read -rs "t?Paste token: " && printf 'CLAUDE_CODE_OAUTH_TOKEN=%s\n' "$t" > ~/.config/andy-intelligence/sandbox-lab.env)`.
+- **Trusted code only:** run it on your own working tree. The container runs with seccomp, AppArmor and systempaths unconfined (bubblewrap needs them), and the credential is mounted into it as a read-only file for the `claude` call.
 - **Faster:** `LAB_CHECKS=fast` skips `pnpm test` and `pnpm build`.
 - **Not covered:** the runner's AppArmor rule, the real `claude-code-action` (its git writes are copied in `lab.sh`) and GitHub's tokens; §9 stays the proof. `lab.sh` copies the workflow's steps, so change both together.
 
