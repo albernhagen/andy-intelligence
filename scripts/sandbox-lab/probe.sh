@@ -29,6 +29,9 @@ run write.github touch .github/.sandbox-lab-touch
 run write.git-config sh -c ': >> .git/config'
 run write.git-hooks touch .git/hooks/sandbox-lab
 rm -f .sandbox-lab-touch scripts/.sandbox-lab-touch
+# The sandbox's mounts inside the checkout: which paths are read-only binds, and why a write failed.
+awk -v root="$PWD" '$5 == root || index($5, root "/") == 1 { print $5, $6 }' /proc/self/mountinfo > "$out/mounts.log" 2>&1
+fact mounts.lines "$(wc -l < "$out/mounts.log" | tr -d ' ')"
 run pnpm.lint pnpm lint
 run pnpm.typecheck pnpm typecheck
 if [ "${LAB_CHECKS:-all}" = all ]; then

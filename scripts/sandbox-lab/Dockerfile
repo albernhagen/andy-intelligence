@@ -13,7 +13,7 @@ ARG CLAUDE_CODE_VERSION=2.1.312
 
 RUN apt-get update -qq \
   && DEBIAN_FRONTEND=noninteractive apt-get install -y -qq --no-install-recommends \
-    bubblewrap socat git curl ca-certificates sudo xz-utils util-linux jq \
+    bubblewrap socat git curl ca-certificates sudo xz-utils util-linux jq gawk \
   && rm -rf /var/lib/apt/lists/*
 
 RUN set -eu; \

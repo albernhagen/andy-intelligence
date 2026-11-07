@@ -99,7 +99,9 @@ check "example.com blocked" nonzero "$(nonzero curl.example)"
 check "registry reachable" 0 "$(get curl.registry)"
 check "git writes .git/index" 0 "$(get git.update-index)"
 check "write checkout root" 0 "$(get write.root)"
-check "write scripts/" 0 "$(get write.scripts)"
+# Claude Code itself binds scripts/ read-only for sandboxed commands (no profile rule needed;
+# AI-58): the agent writes there with the Write and Edit tools. Fails here if that ever changes.
+check "scripts/ read-only" nonzero "$(nonzero write.scripts)"
 check "review script denied" nonzero "$(nonzero write.review-script)"
 check ".github denied" nonzero "$(nonzero write.github)"
 check ".git/config denied" nonzero "$(nonzero write.git-config)"

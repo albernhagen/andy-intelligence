@@ -1,5 +1,5 @@
 import { spawnSync } from "node:child_process";
-import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
@@ -94,6 +94,7 @@ describe("buildProfile", () => {
       "/etc/ssl/certs",
       "/etc/ssl/openssl.cnf",
       "/etc/ca-certificates",
+      "/etc/alternatives",
     ]);
     expect(settings.permissions.deny).toContain("Read(//etc/**)");
   });
@@ -153,29 +154,12 @@ describe("buildProfile", () => {
     expect(settings.allowedMcpServers).toEqual([]);
   });
 
-  it("GivenBuildInACheckoutWithReviewScripts_WhenBuilt_ThenEachExistingOneIsDeniedByItsExactPath", () => {
-    // On Linux a wildcard Edit deny made all of scripts/ read-only to sandboxed Bash (AI-58).
-    const root = mkdtempSync(join(tmpdir(), "profile-root-"));
-    mkdirSync(join(root, "scripts"));
-    for (const f of ["review-gate.mjs", "review-scope.mjs", "other.mjs"]) {
-      writeFileSync(join(root, "scripts", f), "");
-    }
-    const { deny } = buildProfile({ profile, step: "build", root }).permissions;
-    expect(deny).toContain(`Edit(/${root}/scripts/review-gate.mjs)`);
-    expect(deny).toContain(`Edit(/${root}/scripts/review-scope.mjs)`);
-    expect(deny).not.toContain("Edit(//**/scripts/review-*.mjs)");
-    expect(deny.some((r) => r.includes("other.mjs"))).toBe(false);
-  });
-
-  it("GivenAReadOnlyStep_WhenBuilt_ThenTheWildcardEditDenyStays", () => {
-    expect(build("refine").permissions.deny).toContain("Edit(//**/scripts/review-*.mjs)");
-  });
-
   it("GivenAnyStep_WhenBuilt_ThenTrustAnchorEditsAreDenied", () => {
     const { deny } = build("build").permissions;
     for (const rule of [
       "Edit(//**/.github/**)",
       "Edit(//**/platform/actions/**)",
+      "Edit(//**/scripts/review-*.mjs)",
       "Edit(//**/CODEOWNERS)",
       "Edit(//**/platform/executor/**)",
       "Edit(//**/.claude/**)",
