@@ -4,3 +4,20 @@ pnpm-lock.yaml
 infra/**/.terraform
 *.tfstate*
 docs/architecture/*.md
+# Claude Code's build sandbox binds empty, unreadable placeholders at these paths when the repo
+# lacks them (SANDBOX_PLACEHOLDERS in scripts/executor-publish.mjs; AI-56).
+/.gitmodules
+/.npmrc
+/.yarnrc
+/.yarnrc.yml
+/bunfig.toml
+/package-lock.json
+/yarn.lock
+/.gitconfig
+/.bashrc
+/.bash_profile
+/.zshrc
+/.zprofile
+/.profile
+/.ripgreprc
+/.mcp.json
