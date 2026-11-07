@@ -1,5 +1,5 @@
 import { spawnSync } from "node:child_process";
-import { mkdtempSync, writeFileSync } from "node:fs";
+import { chmodSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
@@ -72,6 +72,30 @@ describe("CLI", () => {
       encoding: "utf8",
     });
     expect(result.status).toBe(0);
+  });
+
+  it("GivenAnEmptyUnreadablePackageLockBesideAGoodPnpmLock_WhenRun_ThenItIsSkippedAndPasses", () => {
+    // The build sandbox binds an empty, unreadable placeholder at package-lock.json (AI-56).
+    const dir = mkdtempSync(join(tmpdir(), "lock-"));
+    writeFileSync(
+      join(dir, "pnpm-lock.yaml"),
+      "  zod@4.1.0:\n    resolution: {integrity: sha512-abc==}\n",
+    );
+    writeFileSync(join(dir, "package-lock.json"), "");
+    chmodSync(join(dir, "package-lock.json"), 0o000);
+    const result = spawnSync(process.execPath, [script, dir], { encoding: "utf8" });
+    expect(result.status).toBe(0);
+    expect(result.stdout).toContain("ok   pnpm-lock.yaml");
+    expect(result.stdout).toContain("skip package-lock.json: empty");
+  });
+
+  it("GivenAnEmptyLockfileBesideABadOne_WhenRun_ThenTheBadOneStillFails", () => {
+    const result = run({
+      "package-lock.json": "",
+      "pnpm-lock.yaml": "  a@1.0.0:\n    resolution: {tarball: https://evil.example/a.tgz}\n",
+    });
+    expect(result.status).toBe(1);
+    expect(result.stdout).toContain("FAIL pnpm-lock.yaml");
   });
 
   it("GivenTarballInPnpmLock_WhenRun_ThenExitsOne", () => {

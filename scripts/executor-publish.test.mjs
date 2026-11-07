@@ -24,6 +24,7 @@ import {
   checkChange,
   dropSandboxPlaceholders,
   sandboxPlaceholders,
+  SANDBOX_PLACEHOLDERS,
   globToRegExp,
   neutralize,
   parseRaw,
@@ -416,5 +417,19 @@ describe("sandbox placeholders", () => {
     expect(() =>
       dropSandboxPlaceholders({ root, manifest: join(root, "missing"), emit: () => {} }),
     ).toThrow(/manifest/);
+  });
+});
+
+describe("sandbox placeholders and prettier", () => {
+  it("GivenTheSandboxPlaceholderNames_WhenPrettierIgnoreIsRead_ThenEachOneThisRepoLacksIsIgnored", () => {
+    // In the build sandbox they are empty, unreadable binds; prettier --check . fails on them
+    // (AI-56). The .claude settings files are real here and stay formatted.
+    const real = new Set([".claude/settings.json", ".claude/settings.local.json"]);
+    const ignored = readFileSync(join(import.meta.dirname, "..", ".prettierignore"), "utf8")
+      .split("\n")
+      .map((l) => l.trim());
+    for (const name of SANDBOX_PLACEHOLDERS.filter((n) => !real.has(n))) {
+      expect(ignored).toContain(`/${name}`);
+    }
   });
 });
