@@ -28,6 +28,14 @@
 - **Failed:** the clean-checkout check: `The sandbox check left the checkout changed: .gitmodules .npmrc .yarnrc .yarnrc.yml bunfig.toml package-lock.json yarn.lock`. Claude Code 2.1.312 leaves its empty placeholders after a normal exit too, not only when killed as its docs say.
 - **Fix (AI-50: Sandbox check fails on the placeholders the sandbox leaves in the checkout):** the verify step runs `executor-publish.mjs drop-placeholders` (listed, empty, regular, new since the manifest; each logged) before the clean-checkout check; anything else still fails. During the agent run the sandbox recreates them; pnpm ignores empty npm and yarn lockfiles and an empty `.npmrc`, and the collect step drops them again.
 
+## Fifth try (after AI-50, PR #91)
+
+- **Run:** AI-49, build run `Lyo8l6e9Nzr4aUzy6vTu` (Actions run 42387853332), probe PR #92 (closed unmerged). All four jobs succeeded.
+- **Proven live:** the sandbox check passed; the seven placeholders were dropped and logged; the agent ran inside the sandbox (7 turns, 0 permission denials) and wrote `scripts/sandbox-probe.mjs`; collection dropped the placeholders again and the PR changed only that file. Probe output: `CLAUDE_CODE_OAUTH_TOKEN`, `ANTHROPIC_API_KEY`, `GITHUB_TOKEN` not set; `/proc/1/cmdline` the sandbox's own shell; `sudo -n true` failed (exit 1); `curl https://example.com` failed (exit 56, proxy).
+- **Failed:** `curl https://registry.npmjs.org` exit 77 (can't read CA certificates), and `pnpm: command not found`, so the project's checks didn't run. The `.github/` denial chore wasn't started (§9: stop after a failed expectation).
+- **Cause:** Claude Code adds `Read` deny rules to the sandbox's `denyRead`, so the profile's `Read(//etc/**)` hid `/etc/ssl`; `blockReadsOutsideWorkingDirectories` hides `/home` from sandboxed commands, and pnpm was in `~/setup-pnpm`.
+- **Fix (AI-51: Build sandbox: no CA certificates and no pnpm for sandboxed commands):** sandbox `filesystem.allowRead` `/etc/ssl/certs`, `/etc/ssl/openssl.cnf` and `/etc/ca-certificates`, not `/etc/ssl/private` (narrower than the `/etc` deny, so it wins for sandboxed commands; the Read tool keeps `Read(//etc/**)`); `pnpm/action-setup` `dest` in the runner's tool cache (readable, not writable, in the sandbox); pnpm's cache and state dirs under `/tmp/agent` like its store (checked locally with pnpm 10.28.0: a `pnpm install` with `npm_config_cache_dir` and `npm_config_state_dir` wrote its metadata cache and state there).
+
 ## Next
 
-After the fix merges, start AI-49's build again and record the result here.
+After the fix merges, start a new probe chore (AI-49 is near its build cap) and record the result here; then the `.github/` denial chore.
