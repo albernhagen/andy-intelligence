@@ -427,7 +427,7 @@ export class RunService {
           : "";
       const kept = status === "failed" && built?.branch ? `\n\nBranch kept: ${built.branch}` : "";
       const decide = planned
-        ? "\n\nNeeds you: approve or reject this plan in the ticket's Runs (or MCP approve_plan / reject_plan). The build starts when you approve."
+        ? "\n\nNeeds you: approve or reject this plan in the ticket's Activity (or MCP approve_plan / reject_plan). The build starts when you approve."
         : "";
       const body =
         status === "succeeded"
@@ -1101,7 +1101,7 @@ export function buildGate(
   if (plan.kind === "approved") return { step: "build", approved: plan.run };
   if (plan.kind === "awaiting" || plan.kind === "planning") {
     throw new DomainError("not_buildable", `${ticket.key}'s plan awaits Andy's decision`, [
-      "approve or reject it in the ticket's Runs (or MCP approve_plan / reject_plan)",
+      "approve or reject it in the ticket's Activity (or MCP approve_plan / reject_plan)",
     ]);
   }
   if (!required) return { step: "build", approved: null };

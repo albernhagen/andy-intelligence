@@ -124,6 +124,26 @@ export const PullRequestLink = z.object({
 });
 export type PullRequestLink = z.infer<typeof PullRequestLink>;
 
+/** What a board card shows besides the ticket itself (AI-28: Board v2). A read model, never stored. */
+export const TicketSummary = z.object({
+  openQuestions: z.number().int().nonnegative(),
+  /** The newest run queued or running; null when none is in flight. */
+  run: Run.pick({
+    id: true,
+    step: true,
+    status: true,
+    startedAt: true,
+    createdAt: true,
+  }).nullable(),
+  /** The latest `pr_linked` event's pull request; null when none (or not looked up). */
+  pullRequest: PullRequestLink.nullable(),
+});
+export type TicketSummary = z.infer<typeof TicketSummary>;
+
+/** A ticket as the board shows it. */
+export const BoardTicket = Ticket.extend({ summary: TicketSummary });
+export type BoardTicket = z.infer<typeof BoardTicket>;
+
 export const NewQuestion = Question.pick({ text: true }).extend({
   options: z.array(z.string()).default([]),
   suggestedAnswer: z.string().nullable().default(null),

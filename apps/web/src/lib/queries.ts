@@ -1,7 +1,8 @@
 import { useEffect, useRef } from "react";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { type QueryClient, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { PlanApproval, Run, Size, Stage, TicketOverrides, TicketType } from "@andy/contracts";
 import { unwrap, useApi } from "./api";
+import { withoutQuestion, type NeedsYou } from "./needs-you";
 
 /** Query hooks over the generated API client. One user, small data: every write refetches all. */
 
@@ -10,6 +11,22 @@ export function useProjects() {
   return useQuery({
     queryKey: ["projects"],
     queryFn: async () => unwrap(await api.GET("/api/projects")),
+  });
+}
+
+/**
+ * The board's tickets with their card status (AI-28: Board v2). Refetches every few seconds
+ * while a card has a run in flight, like the runs list, so the elapsed time and the run's end
+ * show up; otherwise only when something is written.
+ */
+export function useBoard(projectId: string) {
+  const api = useApi();
+  return useQuery({
+    queryKey: ["board", projectId],
+    queryFn: async () =>
+      unwrap(await api.GET("/api/projects/{projectId}/board", { params: { path: { projectId } } })),
+    refetchInterval: (q) =>
+      runsRefetchInterval(q.state.data?.flatMap((t) => (t.summary.run ? [t.summary.run] : []))),
   });
 }
 
@@ -129,12 +146,23 @@ export function useNeedsYou() {
   });
 }
 
-/** A mutation that refetches everything on success, so the board, detail and inbox agree. */
-function useWrite<V, R>(fn: (vars: V) => Promise<R>) {
+/**
+ * A mutation that refetches everything on success, so the board, detail and inbox agree.
+ * `applied` patches the cache first, so a screen can change before the refetch lands.
+ */
+function useWrite<V, R>(
+  fn: (vars: V) => Promise<R>,
+  applied?: (queryClient: QueryClient, vars: V) => void,
+  mutationKey?: readonly unknown[],
+) {
   const queryClient = useQueryClient();
   return useMutation({
+    mutationKey,
     mutationFn: fn,
-    onSuccess: () => queryClient.invalidateQueries(),
+    onSuccess: (_data, vars) => {
+      applied?.(queryClient, vars);
+      return queryClient.invalidateQueries();
+    },
   });
 }
 
@@ -186,9 +214,16 @@ export function useCreateTicket(projectId: string) {
   );
 }
 
+/** One in-place edit: only the changed fields, plus the `updatedAt` it was read at (409 if stale). */
+export type TicketPatch = Partial<
+  TicketInput & { parentId: string | null; blockedBy: string[] }
+> & {
+  ifUpdatedAt: string;
+};
+
 export function useUpdateTicket(path: TicketPath) {
   const api = useApi();
-  return useWrite(async (body: TicketInput & { ifUpdatedAt: string }) =>
+  return useWrite(async (body: TicketPatch) =>
     unwrap(
       await api.PATCH("/api/projects/{projectId}/tickets/{ticketId}", { params: { path }, body }),
     ),
@@ -244,6 +279,32 @@ export function useBoardMove(projectId: string) {
   );
 }
 
+/** Sets a ticket's place in its lane (ADR-0058: order is priority); `rank` from `planDrop`. */
+export function useRankTicket(projectId: string) {
+  const api = useApi();
+  return useWrite(async ({ ticketId, rank }: { ticketId: string; rank: string }) =>
+    unwrap(
+      await api.PATCH("/api/projects/{projectId}/tickets/{ticketId}", {
+        params: { path: { projectId, ticketId } },
+        body: { rank },
+      }),
+    ),
+  );
+}
+
+/** Quick add: a title alone; refine drafts the rest (ADR-0058). */
+export function useQuickAdd(projectId: string) {
+  const api = useApi();
+  return useWrite(async (title: string) =>
+    unwrap(
+      await api.POST("/api/projects/{projectId}/tickets", {
+        params: { path: { projectId } },
+        body: { title },
+      }),
+    ),
+  );
+}
+
 export function useAddComment(path: TicketPath) {
   const api = useApi();
   return useWrite(async (body: { body: string }) =>
@@ -269,15 +330,26 @@ export function useAskQuestion(path: TicketPath) {
   );
 }
 
-export function useAnswerQuestion() {
+/** Key of answers in flight on one ticket, so its inbox card can lock while any runs. */
+export const answerKey = (ticketId: string) => ["answer", ticketId] as const;
+
+/** An answered question leaves the inbox (and the header count) as soon as the API confirms it. */
+export function useAnswerQuestion(ticketId?: string) {
   const api = useApi();
-  return useWrite(async ({ questionId, answer }: { questionId: string; answer: string }) =>
-    unwrap(
-      await api.POST("/api/questions/{questionId}/answer", {
-        params: { path: { questionId } },
-        body: { answer },
-      }),
-    ),
+  return useWrite(
+    async ({ questionId, answer }: { questionId: string; answer: string }) =>
+      unwrap(
+        await api.POST("/api/questions/{questionId}/answer", {
+          params: { path: { questionId } },
+          body: { answer },
+        }),
+      ),
+    (queryClient, { questionId }) =>
+      queryClient.setQueryData<NeedsYou>(
+        ["needs-you"],
+        (data) => data && withoutQuestion(data, questionId),
+      ),
+    ticketId ? answerKey(ticketId) : undefined,
   );
 }
 

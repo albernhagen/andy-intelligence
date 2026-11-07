@@ -41,6 +41,14 @@ export function rankFor(ticketNumber: number): string {
   return String(ticketNumber).padStart(10, "0");
 }
 
+/**
+ * Rank order: plain code-unit comparison, never `localeCompare`, whose order depends on the
+ * locale. Every place that sorts tickets uses this, so the board, the API and storage agree.
+ */
+export function compareRanks(a: string, b: string): number {
+  return a < b ? -1 : a > b ? 1 : 0;
+}
+
 let lastMs = 0;
 let sameMsSeq = 0;
 

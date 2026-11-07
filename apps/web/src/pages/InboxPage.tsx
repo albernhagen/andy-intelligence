@@ -1,74 +1,76 @@
-import { Link, useParams } from "@tanstack/react-router";
-import type { Ticket } from "@andy/contracts";
-import { QuestionCard } from "@/components/QuestionCard";
+import { useParams } from "@tanstack/react-router";
+import type { Project } from "@andy/contracts";
+import { InboxTicketCard } from "@/components/inbox/InboxTicketCard";
 import { Loading, QueryError } from "@/components/Status";
-import { inboxItems } from "@/lib/needs-you";
-import { useNeedsYou } from "@/lib/queries";
-import { sortQuestions } from "@/lib/tickets";
+import { cardCount, inboxCards, type InboxCard } from "@/lib/needs-you";
+import { useNeedsYou, useProjects } from "@/lib/queries";
 
 /**
- * Needs-you inbox, the home screen (ARCHITECTURE §7.5): open questions, then flagged tickets.
- * Under `/p/<project>/inbox` only that project's; under `/all/inbox` every project's.
+ * Needs-you inbox, the home screen (ARCHITECTURE §7.5): one card per ticket with its open
+ * questions, most unblocking first; Done, Cancelled and archived tickets last under "Stale".
+ * Under `/p/<project>/inbox` only that project's; under `/all/inbox` grouped by project.
  */
 export function InboxPage() {
   const { projectId } = useParams({ strict: false });
   const needsYou = useNeedsYou();
+  const projects = useProjects();
   if (needsYou.isPending) return <Loading />;
   if (needsYou.isError) return <QueryError error={needsYou.error} />;
 
-  const byId = new Map(needsYou.data.tickets.map((t) => [t.id, t]));
-  const { questions, flagged: otherFlagged } = inboxItems(needsYou.data, projectId);
+  const { active, stale } = inboxCards(needsYou.data, projectId);
+  const total = sum([...active, ...stale]);
 
   return (
-    <section className="space-y-6">
-      <h2 className="text-lg font-medium">Needs you</h2>
-      {questions.length === 0 && otherFlagged.length === 0 && (
-        <p className="text-muted-foreground">Nothing needs you.</p>
+    <section className="space-y-4">
+      <h2 className="text-lg font-medium">
+        Needs you <span className="text-muted-foreground tabular-nums">{total}</span>
+      </h2>
+      {total === 0 && <p className="text-muted-foreground">Nothing needs you.</p>}
+      {projectId ? (
+        <Cards cards={active} />
+      ) : (
+        byProject(active, projects.data ?? []).map(({ id, name, cards }) => (
+          <Group key={id} title={name} cards={cards} />
+        ))
       )}
-
-      {questions.length > 0 && (
-        <div className="space-y-3">
-          <h3 className="text-sm font-medium text-muted-foreground">Open questions</h3>
-          {sortQuestions(questions).map((q) => (
-            <QuestionCard
-              key={q.id}
-              question={q}
-              heading={
-                <TicketLink
-                  projectId={q.projectId}
-                  ticketId={q.ticketId}
-                  ticket={byId.get(q.ticketId)}
-                />
-              }
-            />
-          ))}
-        </div>
-      )}
-
-      {otherFlagged.length > 0 && (
-        <div className="space-y-2">
-          <h3 className="text-sm font-medium text-muted-foreground">Flagged tickets</h3>
-          <ul className="space-y-1">
-            {otherFlagged.map((t) => (
-              <li key={t.id}>
-                <TicketLink projectId={t.projectId} ticketId={t.id} ticket={t} />
-              </li>
-            ))}
-          </ul>
-        </div>
-      )}
+      {stale.length > 0 && <Group title="Stale" cards={stale} />}
     </section>
   );
 }
 
-function TicketLink(props: { projectId: string; ticketId: string; ticket: Ticket | undefined }) {
+const sum = (cards: InboxCard[]) => cards.reduce((n, c) => n + cardCount(c), 0);
+
+function Group({ title, cards }: { title: string; cards: InboxCard[] }) {
   return (
-    <Link
-      to="/p/$projectId/t/$ticketRef"
-      params={{ projectId: props.projectId, ticketRef: props.ticket?.key ?? props.ticketId }}
-      className="text-sm underline-offset-2 hover:underline"
-    >
-      {props.ticket ? `${props.ticket.key}: ${props.ticket.title}` : "Open ticket"}
-    </Link>
+    <section aria-label={title} className="space-y-2">
+      <h3 className="text-sm font-medium">
+        {title} <span className="text-muted-foreground tabular-nums">{sum(cards)}</span>
+      </h3>
+      <Cards cards={cards} />
+    </section>
   );
+}
+
+function Cards({ cards }: { cards: InboxCard[] }) {
+  return (
+    <div className="space-y-2">
+      {cards.map((c) => (
+        <InboxTicketCard key={c.ticketId} card={c} />
+      ))}
+    </div>
+  );
+}
+
+/** Cards under a heading per project, projects in the picker's order (cards keep theirs). */
+function byProject(cards: InboxCard[], projects: Project[]) {
+  const order = [...projects.map((p) => p.id), ...cards.map((c) => c.projectId)];
+  const ids = [...new Set(order)].filter((id) => cards.some((c) => c.projectId === id));
+  return ids.map((id) => {
+    const project = projects.find((p) => p.id === id);
+    return {
+      id,
+      name: project ? `${project.key}: ${project.name}` : id.toUpperCase(),
+      cards: cards.filter((c) => c.projectId === id),
+    };
+  });
 }
