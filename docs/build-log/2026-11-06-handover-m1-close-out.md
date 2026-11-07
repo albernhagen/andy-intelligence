@@ -32,6 +32,7 @@ The first coordinating session (2026-11-04 to 2026-11-06) hands over per `platfo
 - Hands-on work: the dispatcher never builds a ticket assigned to Andy (built in PR #83); AI-32 adds the project default and the "Mine" marker.
 - Monitoring stage dropped until M6 (AI-36). Refine becomes the gate into the queue with Ideas vs. Up next, zero questions allowed, assumptions first-class (AI-39, replaces AI-38). Refine scores risk and confidence (AI-37, after AI-39).
 - UX direction (2026-11-06): Shortcut's simplicity as the starting point, not a clone; a modern, minimalist design biased toward deciding, not operating (brief, `design.md`).
+- Grouping (Andy, 2026-11-06): a board with 100 tickets in Backlog is not usable; tickets need grouping, by epic or similar. AI-39's Ideas / Up next split takes the volume out of the lanes first; epic grouping on the board is in M4: Epics + story board. Carry the idea into both briefs.
 - Auto-archive sessions on PR close is on; the coordinator is pinned; a long session's MCP tool list goes stale, so start fresh per milestone.
 
 ## Next batch, suggested
