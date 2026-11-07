@@ -10,7 +10,8 @@
 //     facts show the nonce, a PID 1 that isn't the runner's, and no credential
 //     variable. Deletes the marker either way.
 //   check-git (after the agent): env PRISTINE (the copy of .git taken before the agent), LIVE
-//     (the checkout's .git). Prints the sensitive .git paths that differ, one per line.
+//     (the checkout's .git). Prints the sensitive .git paths that differ, one per line, a
+//     changed directory with the names of its changed entries.
 import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import {
@@ -162,10 +163,9 @@ export function fingerprint(path) {
  * What claude-code-action (pinned d70510b) writes to `.git` itself, outside the sandbox, before
  * Claude starts (AI-47): `git config user.name`/`user.email` and `git remote set-url origin
  * https://x-access-token:<token>@…` (src/github/operations/git-config.ts), and a `/.claude-pr/`
- * line in `info/exclude` (restore-config.ts). check-git ignores exactly these (the remote URL only in the action's form of the same URL).
+ * line in `info/exclude` (restore-config.ts). check-git ignores the user entries and the remote URL in the action's form of the same URL; `info/exclude` isn't compared at all (see entries()).
  */
 const ACTION_CONFIG_KEYS = new Set(["user.name", "user.email"]);
-const ACTION_EXCLUDE_LINE = "/.claude-pr/";
 
 const sha256 = (data) => createHash("sha256").update(data).digest("hex");
 
@@ -205,24 +205,32 @@ export function configFingerprint(path) {
   return `config:${r.stat.mode & 0o777}:${sha256(kept.join("\0"))}`;
 }
 
-/** `.git/info` like {@link fingerprint}, with the action's exclude line left out. */
-export function infoFingerprint(path) {
+/**
+ * The entries of a directory under `.git`, each with its fingerprint (a Map, sorted by name), or
+ * null when `path` isn't a directory. In `info/`, a regular (or absent) `exclude` is left out: it
+ * only lists ignored paths, can't make git run code or read another config, and the collect step
+ * reads the pre-agent `.git`, so it can't hide or add a file (AI-48; the action writes it too).
+ */
+function entries(path, sensitive) {
   const r = readNoFollow(path);
-  if (r.code || !r.stat.isDirectory()) return fingerprint(path);
-  const names = readdirSync(path).sort();
-  return `dir:[${names
-    .map((n) => {
-      const child = join(path, n);
-      if (n !== "exclude") return `${n}=${fingerprint(child)}`;
+  if (r.code || !r.stat.isDirectory()) return null;
+  const out = new Map();
+  for (const n of readdirSync(path).sort()) {
+    const child = join(path, n);
+    if (sensitive === "info" && n === "exclude") {
       const f = readNoFollow(child);
-      if (f.code || !f.stat.isFile()) return `${n}=${fingerprint(child)}`;
-      const lines = f.data
-        .toString("utf8")
-        .split("\n")
-        .filter((l) => l !== ACTION_EXCLUDE_LINE);
-      return `${n}=file:${f.stat.mode & 0o777}:${sha256(lines.join("\n").replace(/\n+$/, ""))}`;
-    })
-    .join(",")}]`;
+      if (f.code === "ENOENT" || (!f.code && f.stat.isFile())) continue;
+    }
+    out.set(n, fingerprint(child));
+  }
+  return out;
+}
+
+/** `.git/info` like {@link fingerprint}, without its `exclude` file. */
+export function infoFingerprint(path) {
+  const e = entries(path, "info");
+  if (!e) return fingerprint(path);
+  return `dir:[${[...e].map(([n, fp]) => `${n}=${fp}`).join(",")}]`;
 }
 
 const FINGERPRINTS = { config: configFingerprint, info: infoFingerprint };
@@ -242,6 +250,21 @@ export function gitTampering({ pristine, live }) {
   });
 }
 
+/**
+ * {@link gitTampering} for the log: a changed directory names its added, removed or changed
+ * entries, e.g. `info (attributes)`. Names only, never contents.
+ */
+export function describeTampering({ pristine, live }) {
+  return gitTampering({ pristine, live }).map((p) => {
+    const before = entries(join(pristine, p), p);
+    const after = entries(join(live, p), p);
+    if (!before || !after) return p;
+    const names = [...new Set([...before.keys(), ...after.keys()])].sort();
+    const changed = names.filter((n) => before.get(n) !== after.get(n));
+    return changed.length > 0 ? `${p} (${changed.join(", ")})` : p;
+  });
+}
+
 function main() {
   const [command] = process.argv.slice(2);
   const env = process.env;
@@ -258,7 +281,7 @@ function main() {
       process.exitCode = 1;
     }
   } else if (command === "check-git") {
-    for (const p of gitTampering({ pristine: env.PRISTINE, live: env.LIVE })) {
+    for (const p of describeTampering({ pristine: env.PRISTINE, live: env.LIVE })) {
       process.stdout.write(`${p}\n`);
     }
   } else {
