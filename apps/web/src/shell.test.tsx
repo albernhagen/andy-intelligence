@@ -28,14 +28,14 @@ describe("app shell", () => {
 
   it("GivenAllProjects_WhenTheInboxOpens_ThenItListsEveryProjectsQuestions", async () => {
     await twoProjects("/all/inbox");
-    expect(await screen.findByRole("article", { name: "Question: Which colour?" })).toBeTruthy();
-    expect(screen.getByRole("article", { name: "Question: Daily?" })).toBeTruthy();
+    expect(await screen.findByRole("listitem", { name: "Question: Which colour?" })).toBeTruthy();
+    expect(screen.getByRole("listitem", { name: "Question: Daily?" })).toBeTruthy();
   });
 
   it("GivenAProjectScope_WhenTheInboxOpens_ThenItListsOnlyThatProject", async () => {
     await twoProjects("/p/ops/inbox");
-    expect(await screen.findByRole("article", { name: "Question: Daily?" })).toBeTruthy();
-    expect(screen.queryByRole("article", { name: "Question: Which colour?" })).toBeNull();
+    expect(await screen.findByRole("listitem", { name: "Question: Daily?" })).toBeTruthy();
+    expect(screen.queryByRole("listitem", { name: "Question: Which colour?" })).toBeNull();
   });
 
   it("GivenThePicker_WhenAndyPicksAProject_ThenTheSameScreenShowsThatProject", async () => {

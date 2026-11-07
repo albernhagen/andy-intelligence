@@ -19,7 +19,7 @@ v1.x screens:
 **Design (ADR-0045; M3, ADR-0059):** `apps/web/design.md` + shadcn theme tokens are the design source of truth agents and design skills read; Playwright screenshot checks. M4: design skills, pluggable per project (custom-skill context source, §7.6); Hallmark trial first; `sloplint --render` (non-blocking).
 
 **Built in M1.3: UI: tickets + inbox:**
-- Routes: `/` Needs-you inbox; `/projects`; `/p/:projectId` board; `/p/:projectId/t/:ticketRef` ticket panel (ref = key, e.g. `AI-2`; an id or wrong project switches to the canonical URL).
+- Routes: `/projects`; `/p/:projectId` board; `/p/:projectId/t/:ticketRef` ticket panel (ref = key, e.g. `AI-2`; an id or wrong project switches to the canonical URL).
 - Moves: one button per move in `TRANSITIONS` (`packages/domain`), plus "Force move…" (recorded). Cancel (optional reason), Archive/Unarchive. The API enforces rules; errors show inline.
 - Client: `openapi-fetch` typed by `src/lib/api.gen.ts`, generated from `createApp`'s OpenAPI document (`gen:api`; a test fails when stale). Every write refetches all queries.
 - Tests render the UI against the in-process API (`createApp` + fakes).
@@ -28,7 +28,10 @@ v1.x screens:
 **Built in AI-26: Design source and app shell (M3, ADR-0059):**
 - `apps/web/design.md` and the tokens in `index.css` (status roles `attention`, `running`, `success`; a `Badge` variant per marker).
 - One shell (`AppShell.tsx`, the router's root): project picker (key + name, each project's waiting count, All projects, Add project), Board / Inbox / Settings, "Needs you N" across projects.
-- Scope in the URL: `/p/:projectId/…` or `/all/…`; added `/p/:projectId/inbox`, `/all/inbox`, `/all/board` (asks for a project). Last scope in `localStorage`; `/` opens its inbox.
+- Scope in the URL: `/p/:projectId/…` or `/all/…` (`/all/board` asks for a project). Last scope in `localStorage`; `/` redirects (replace) to its inbox. Every screen the shell reaches has its own URL; `routes.test.tsx` loads each directly.
+- Inbox (AI-30): one card per ticket (type, key, linked title, stage) holding its open questions, or "Flagged for you" when it has none; under All projects, a heading per project with its count.
+  - Order (`inboxCards`, `lib/needs-you.ts`): Backlog tickets whose only Definition of Ready gap is their questions, then tickets past Backlog, then other Backlog; ties by rank, then the most urgent question. Done, Cancelled and archived tickets last under "Stale".
+  - Answers: suggested first and marked "Suggested"; one click answers; free text stays. "Accept all suggested" answers a card's questions in sequence and stops at the first error. An answer drops the question from the cached inbox at once, so every count updates without a reload.
 - Screenshot checks: Playwright over the API with seeded fakes (`apps/web/e2e/`), CI job `ui-screenshots` (§8.1).
 
 **Built in AI-28: Board v2 (M3, ADR-0059 row "Board"):**
@@ -38,10 +41,10 @@ v1.x screens:
 - Quick add at the top of Backlog (title only). Monitoring and Done start as strips with counts; Cancelled and archived only with the toggle.
 
 **Built in AI-29: Story panel (M3, ADR-0059):**
-- `/p/:projectId/t/:ticketRef` is a child of the board route, in its `<Outlet />`: a 640px panel over the board, full page under 900px. Esc (outside an editor) or Close returns to the board.
-- Status line first (`lib/status-line.ts`): stage, open questions, run in flight and minutes, latest PR state, open blockers, place in the Ready queue. E.g. "Waiting for you: 2 questions", "Refining · 1 min", "Ready · next in the queue".
-- One document: title, markdown description (Write / Preview), checklist ("Done when" for a chore), assumptions, out of scope, touches. Rail: stage, moves, Definition of Ready, type, size, tier (choosing one pins `overrides.tier`), epic, blockers, cancel, archive. Then questions and one timeline of history, comments and runs, with the comment box and the start-run buttons.
-- Edit in place: each field saves itself with `ifUpdatedAt`; saves queue per ticket and send the latest cached `updatedAt`, so quick edits don't conflict. A 409 offers Reload and keeps the draft. Leaving with unsaved typing asks first.
-- Markdown (`components/Markdown.tsx`, `react-markdown` pinned) for descriptions, comments and questions (untrusted): no `rehype-raw` (HTML shows as text); only http, https, mailto URLs; images never load (a link with the alt text); links open in a new tab, `noopener noreferrer nofollow`, host shown. Other text stays plain.
+- The ticket route is the board's child (`<Outlet />`): a 640px panel, full page under 900px; Esc or Close returns.
+- Status line (`lib/status-line.ts`, board rules from `lib/board.ts`): "Waiting for you: 2 questions", "Refining · 1 min", "Ready · next in the queue".
+- One document (markdown description with Write / Preview, checklist, scope lists), a rail of moves and facts, questions, one timeline of history, comments and runs.
+- Fields save in place, queued per ticket with the latest `updatedAt`; a 409 offers Reload; leaving with unsaved typing asks first.
+- Descriptions, comments and questions render as safe markdown (`components/Markdown.tsx`; rules in the threat model's SPA line).
 
 **Built in M1.19: GitHub App setup from the UI:** `/settings/github` (connect, install link, installed repos) and `/settings/github/callback`; the new-project form suggests installed repos.

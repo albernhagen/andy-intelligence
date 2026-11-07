@@ -90,12 +90,83 @@ export async function createFakeApp() {
 
   await seedBoardMarkers(service, tracker, runs, { panel: panel.id, palette: palette.id, model });
 
+  // OPS: a busy inbox (AI-30): four tickets, five questions, one stale.
   const backups = await service.create(
     "ops",
     { type: "chore", title: "Nightly backups", body: "" },
     "andy",
   );
-  await service.ask("ops", backups.id, { text: "Keep backups for 7 or 30 days?" }, "agent");
+  await service.ask(
+    "ops",
+    backups.id,
+    {
+      text: "Keep backups for 7 or 30 days?",
+      options: ["7 days", "30 days"],
+      suggestedAnswer: "30 days",
+      assumptions: ["Backups go to the bucket used today."],
+    },
+    "agent",
+  );
+  const key = await service.create(
+    "ops",
+    {
+      type: "chore",
+      title: "Rotate the deploy key",
+      body: "The deploy key has never been rotated.",
+      acceptanceCriteria: ["Done when the key rotates on a schedule."],
+      size: "S",
+      sizeReason: "One scheduled job.",
+    },
+    "andy",
+  );
+  await service.ask(
+    "ops",
+    key.id,
+    {
+      text: "Rotate every 90 days or on every release?",
+      options: ["Every 90 days", "Every release"],
+      suggestedAnswer: "Every 90 days",
+      assumptions: ["Only CI uses the key."],
+      urgency: "high",
+    },
+    "agent",
+  );
+  await service.ask(
+    "ops",
+    key.id,
+    {
+      text: "Who gets the alert when a rotation fails?",
+      options: ["Andy", "Nobody"],
+      suggestedAnswer: "Andy",
+    },
+    "agent",
+  );
+  const alerts = await service.create(
+    "ops",
+    {
+      type: "bug",
+      title: "Alert e-mails arrive twice",
+      body: "Every alert sends two e-mails.",
+      ...ready,
+      size: "S",
+    },
+    "andy",
+  );
+  await service.move("ops", alerts.id, "ready", "andy");
+  await service.move("ops", alerts.id, "in_progress", "andy");
+  await service.ask(
+    "ops",
+    alerts.id,
+    { text: "Can the old alert rule be deleted?", options: ["Yes", "No"] },
+    "agent",
+  );
+  const logs = await service.create(
+    "ops",
+    { type: "chore", title: "Move logs to the new bucket", body: "" },
+    "andy",
+  );
+  await service.move("ops", logs.id, "done", "andy", { force: true });
+  await service.ask("ops", logs.id, { text: "Delete the old bucket too?" }, "agent");
 
   return createApp({
     verifier: {

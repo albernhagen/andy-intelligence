@@ -18,7 +18,14 @@ import { makeRouter } from "@/router";
  * Renders the UI against the real API running in-process (createApp + in-memory tracker), so
  * every UI test also exercises the API contract, auth middleware and domain rules.
  */
-export function renderApp(path = "/", opts: { githubConnected?: boolean } = {}) {
+export function renderApp(
+  path = "/",
+  opts: {
+    githubConnected?: boolean;
+    /** Runs before each API request reaches the app; a test can hold one here. */
+    beforeFetch?: (request: Request) => Promise<void>;
+  } = {},
+) {
   const tracker = new InMemoryWorkTracker();
   const runs = new InMemoryRunStore();
   // GitHub fakes (ADR-0043): one installed repo; any manifest code "connects" this App.
@@ -73,7 +80,10 @@ export function renderApp(path = "/", opts: { githubConnected?: boolean } = {}) 
   const api = createApi({
     baseUrl: "http://localhost",
     getToken: async () => "andy-token",
-    fetch: async (request) => app.fetch(request),
+    fetch: async (request) => {
+      await opts.beforeFetch?.(request);
+      return app.fetch(request);
+    },
   });
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   const router = makeRouter(createMemoryHistory({ initialEntries: [path] }));
@@ -89,6 +99,7 @@ export function renderApp(path = "/", opts: { githubConnected?: boolean } = {}) 
   return {
     user,
     router,
+    queryClient,
     tracker,
     runs,
     codeHost,
