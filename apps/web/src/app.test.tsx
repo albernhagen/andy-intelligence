@@ -242,12 +242,10 @@ describe("Needs-you inbox", () => {
     await harness.router.navigate({ to: "/" });
     const { user } = harness;
 
-    const card = await screen.findByRole("article", { name: "Question: Which layout?" });
+    const card = await screen.findByRole("article", { name: "AI-1: Board" });
     expect(within(card).getByRole("link", { name: "AI-1: Board" })).toBeTruthy();
-    // The suggested answer is pre-filled; picking an option replaces it.
-    expect((within(card).getByLabelText("Answer") as HTMLInputElement).value).toBe("Columns");
+    // One click on an option answers it.
     await user.click(within(card).getByRole("button", { name: "List" }));
-    await user.click(within(card).getByRole("button", { name: "Answer" }));
 
     expect(await screen.findByText("Nothing needs you.")).toBeTruthy();
     const after = await harness.tracker.getTicket("ai", ticket.id);
@@ -269,7 +267,7 @@ describe("Needs-you inbox", () => {
 
     expect(await screen.findByText("needs you")).toBeTruthy();
     await user.click(await screen.findByRole("link", { name: "Needs you 1" }));
-    expect(await screen.findByRole("article", { name: "Question: Dark mode too?" })).toBeTruthy();
+    expect(await screen.findByRole("listitem", { name: "Question: Dark mode too?" })).toBeTruthy();
     await waitFor(async () =>
       expect((await harness.tracker.getTicket("ai", ticket.id))?.needsAttention).toBe(true),
     );

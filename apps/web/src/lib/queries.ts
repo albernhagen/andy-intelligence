@@ -1,7 +1,8 @@
 import { useEffect, useRef } from "react";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { type QueryClient, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { Run, Size, Stage, TicketOverrides, TicketType } from "@andy/contracts";
 import { unwrap, useApi } from "./api";
+import { withoutQuestion, type NeedsYou } from "./needs-you";
 
 /** Query hooks over the generated API client. One user, small data: every write refetches all. */
 
@@ -145,12 +146,23 @@ export function useNeedsYou() {
   });
 }
 
-/** A mutation that refetches everything on success, so the board, detail and inbox agree. */
-function useWrite<V, R>(fn: (vars: V) => Promise<R>) {
+/**
+ * A mutation that refetches everything on success, so the board, detail and inbox agree.
+ * `applied` patches the cache first, so a screen can change before the refetch lands.
+ */
+function useWrite<V, R>(
+  fn: (vars: V) => Promise<R>,
+  applied?: (queryClient: QueryClient, vars: V) => void,
+  mutationKey?: readonly unknown[],
+) {
   const queryClient = useQueryClient();
   return useMutation({
+    mutationKey,
     mutationFn: fn,
-    onSuccess: () => queryClient.invalidateQueries(),
+    onSuccess: (_data, vars) => {
+      applied?.(queryClient, vars);
+      return queryClient.invalidateQueries();
+    },
   });
 }
 
@@ -306,15 +318,26 @@ export function useAskQuestion(path: TicketPath) {
   );
 }
 
-export function useAnswerQuestion() {
+/** Key of answers in flight on one ticket, so its inbox card can lock while any runs. */
+export const answerKey = (ticketId: string) => ["answer", ticketId] as const;
+
+/** An answered question leaves the inbox (and the header count) as soon as the API confirms it. */
+export function useAnswerQuestion(ticketId?: string) {
   const api = useApi();
-  return useWrite(async ({ questionId, answer }: { questionId: string; answer: string }) =>
-    unwrap(
-      await api.POST("/api/questions/{questionId}/answer", {
-        params: { path: { questionId } },
-        body: { answer },
-      }),
-    ),
+  return useWrite(
+    async ({ questionId, answer }: { questionId: string; answer: string }) =>
+      unwrap(
+        await api.POST("/api/questions/{questionId}/answer", {
+          params: { path: { questionId } },
+          body: { answer },
+        }),
+      ),
+    (queryClient, { questionId }) =>
+      queryClient.setQueryData<NeedsYou>(
+        ["needs-you"],
+        (data) => data && withoutQuestion(data, questionId),
+      ),
+    ticketId ? answerKey(ticketId) : undefined,
   );
 }
 

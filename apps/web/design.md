@@ -91,4 +91,4 @@ No spinners or pulsing in markers: a running marker is static text, so screensho
 
 ## Checks
 
-Playwright screenshots (`apps/web/e2e/`) cover the shell, board and ticket page; CI fails on a diff. A deliberate change updates the stored images in the same PR (README: "Screenshot checks").
+Playwright screenshots (`apps/web/e2e/`) cover the shell, board, ticket page and inbox; CI fails on a diff. A deliberate change updates the stored images in the same PR (README: "Screenshot checks").
