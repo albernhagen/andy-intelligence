@@ -7,14 +7,16 @@
 // shell, and are never printed. The token is masked, kept in memory and passed to git through
 // GIT_CONFIG_* env (not argv).
 //
-// Usage: executor-publish.mjs publish
-//   Env: PATCH, PROFILE, CODEOWNERS (path or empty), RUN_ID, BRANCH, REPO, BASE, PROJECT_ID,
+// Usage: executor-publish.mjs publish | drop-placeholders
+//   drop-placeholders (agent job, before the change is collected): env WORKSPACE, MANIFEST.
+//   publish env: PATCH, PROFILE, CODEOWNERS (path or empty), RUN_ID, BRANCH, REPO, BASE, PROJECT_ID,
 //   TICKET_KEY, TICKET_TITLE, MODEL, REPORT (the agent's report JSON), CONTROL_PLANE_URL,
 //   ACTIONS_ID_TOKEN_REQUEST_URL, ACTIONS_ID_TOKEN_REQUEST_TOKEN, GITHUB_OUTPUT.
 //   Writes outputs `branch`, `tooling_files` (JSON array) and, when a PR opened, `pull_request`.
 import { Buffer } from "node:buffer";
 import { execFileSync } from "node:child_process";
-import { appendFileSync, readFileSync } from "node:fs";
+import { appendFileSync, lstatSync, readFileSync, realpathSync, unlinkSync } from "node:fs";
+import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { codeownersPatterns } from "./executor-profile.mjs";
 
@@ -140,6 +142,80 @@ export function toolingFiles(entries) {
 function expandBraces(glob) {
   const m = /^(.*)\{([^}]+)\}(.*)$/.exec(glob);
   return m ? m[2].split(",").map((alt) => `${m[1]}${alt}${m[3]}`) : [glob];
+}
+
+/**
+ * Files Claude Code's sandbox write-protects in the checkout (AI-42, ADR-0071). On Linux it holds a
+ * denial on a missing file by binding a 0-byte read-only placeholder there and is meant to remove
+ * it afterwards; the 2026-11-06 proof left the first seven behind. The rest are the documented
+ * protected files (code.claude.com/docs/en/sandboxing#protected-paths). Repo-relative.
+ */
+export const SANDBOX_PLACEHOLDERS = [
+  ".gitmodules",
+  ".npmrc",
+  ".yarnrc",
+  ".yarnrc.yml",
+  "bunfig.toml",
+  "package-lock.json",
+  "yarn.lock",
+  ".gitconfig",
+  ".bashrc",
+  ".bash_profile",
+  ".zshrc",
+  ".zprofile",
+  ".profile",
+  ".ripgreprc",
+  ".mcp.json",
+  ".claude/settings.json",
+  ".claude/settings.local.json",
+];
+
+/**
+ * The sandbox placeholders to drop before the change is collected: listed paths that are empty
+ * regular files and weren't in the workspace before the agent. `stat(path)` returns
+ * `{ file, size }` or null; `before` is the set of paths that existed before the agent.
+ */
+export function sandboxPlaceholders({ before, stat }) {
+  return SANDBOX_PLACEHOLDERS.filter((path) => {
+    if (before.has(path)) return false;
+    const s = stat(path);
+    return s !== null && s.file && s.size === 0;
+  }).sort();
+}
+
+/**
+ * Deletes the sandbox placeholders from the (hostile) checkout `root` and logs each one.
+ * `manifest` is the NUL-separated file list taken before the agent ran; without it nothing is
+ * dropped and this throws, so the step fails rather than guess. Symlinks and paths below a
+ * symlinked directory are never followed or deleted.
+ */
+export function dropSandboxPlaceholders({ root, manifest, emit }) {
+  let listed;
+  try {
+    listed = readFileSync(manifest, "utf8");
+  } catch (err) {
+    throw new Error(`No pre-agent workspace manifest at ${manifest}: ${err.message}`, {
+      cause: err,
+    });
+  }
+  const before = new Set(listed.split("\0").filter((p) => p !== ""));
+  const base = realpathSync(root);
+  const stat = (path) => {
+    const abs = join(base, path);
+    try {
+      if (realpathSync(dirname(abs)) !== resolve(base, dirname(path))) return null;
+      const s = lstatSync(abs);
+      return { file: s.isFile(), size: s.size };
+    } catch {
+      return null;
+    }
+  };
+  const dropped = sandboxPlaceholders({ before, stat });
+  for (const path of dropped) {
+    unlinkSync(join(base, path));
+    emit(`Dropped sandbox placeholder ${path} (empty, not there before the agent).`);
+  }
+  return dropped;
 }
 
 const strings = (v) => Array.isArray(v) && v.every((x) => typeof x === "string");
@@ -438,8 +514,24 @@ export async function publish({ env, git, fetch: fetchImpl = globalThis.fetch, e
 
 async function main() {
   const [command] = process.argv.slice(2);
-  if (command !== "publish") throw new Error("usage: executor-publish.mjs publish");
   const env = process.env;
+  if (command === "drop-placeholders") {
+    // The agent job's collect step, before `git add -A` (env WORKSPACE, MANIFEST).
+    try {
+      dropSandboxPlaceholders({
+        root: env.WORKSPACE,
+        manifest: env.MANIFEST,
+        emit: (line) => process.stdout.write(`${line}\n`),
+      });
+    } catch (err) {
+      process.stdout.write(`::error title=claude-executor::${oneLine(err.message)}\n`);
+      process.exitCode = 1;
+    }
+    return;
+  }
+  if (command !== "publish") {
+    throw new Error("usage: executor-publish.mjs publish | drop-placeholders");
+  }
   try {
     await publish({
       env,

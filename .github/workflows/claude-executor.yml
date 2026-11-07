@@ -194,8 +194,10 @@ jobs:
       # Build only: the sandbox's tools and a fail-closed check that bubblewrap can make its
       # namespaces on this runner (Ubuntu 24.04 restricts unprivileged user namespaces; this
       # AppArmor profile lifts it for bwrap alone). `failIfUnavailable` also stops Claude Code
-      # if its sandbox can't start, rather than running Bash unsandboxed.
+      # if its sandbox can't start, rather than running Bash unsandboxed. This bwrap call only
+      # diagnoses the runner: "Check the sandbox" below proves Claude Code's own sandbox works.
       - name: Prepare the sandbox (build)
+        id: prepare
         if: needs.context.outputs.step == 'build'
         run: |
           sudo apt-get update -qq
@@ -211,7 +213,57 @@ jobs:
           mkdir -p /tmp/agent
           # git runs after the agent from this copy, never from the checkout's own .git.
           cp -a .git "$RUNNER_TEMP/pristine.git"
-          echo "Sandbox ready: bubblewrap $(bwrap --version)."
+          # The files there before the agent: collection drops only new empty sandbox placeholders.
+          git ls-files -z --cached --others --exclude-standard > "$RUNNER_TEMP/workspace-before.manifest"
+          echo "nonce=$(openssl rand -hex 16)" >> "$GITHUB_OUTPUT"
+          echo "bubblewrap $(bwrap --version) can make its namespaces."
+
+      # Build only (ADR-0071). One Bash call through Claude Code's own sandbox, under the same
+      # managed settings, env and checkout the agent gets: git must write .git (update-index takes
+      # index.lock), the credentials must be unset, and the command writes sha256(nonce) into the
+      # checkout. Only a Bash call that ran can write that hash, so a model that answers without
+      # running it fails the check. Capped (ADR-0028): Haiku, 3 turns, 5 minutes. Fixed prompt;
+      # no ticket text.
+      - name: Check the sandbox (build)
+        id: sandbox_check
+        if: needs.context.outputs.step == 'build'
+        continue-on-error: true # the next step fails the job with the reason
+        timeout-minutes: 5
+        uses: anthropics/claude-code-action@d70510b174a1244958df0b03166a54912811f3e6 # v1.0.264
+        env:
+          CLAUDE_CODE_SUBPROCESS_ENV_SCRUB: "1"
+          TMPDIR: /tmp/agent
+        with:
+          claude_code_oauth_token: ${{ inputs.credential == 'subscription' && secrets.CLAUDE_CODE_OAUTH_TOKEN || '' }}
+          anthropic_api_key: ${{ inputs.credential == 'api_key' && secrets.ANTHROPIC_API_KEY || '' }}
+          github_token: ${{ github.token }}
+          allowed_bots: andy-intelligence-control
+          settings: '{"disableAllHooks": true}'
+          prompt: |
+            This is a sandbox check. Use the Bash tool exactly once to run this exact command, unchanged, and use no other tool. Then reply with its exit code and nothing else. If it fails, don't retry it or try anything else.
+
+            git update-index -q --refresh && git status --porcelain > /dev/null && test -z "${CLAUDE_CODE_OAUTH_TOKEN:-}${ANTHROPIC_API_KEY:-}${GITHUB_TOKEN:-}${GH_TOKEN:-}" && printf %s ${{ steps.prepare.outputs.nonce }} | sha256sum | cut -d' ' -f1 > .executor-sandbox-check
+          claude_args: |
+            --model haiku
+            --max-turns 3
+
+      - name: Verify the sandbox check (build)
+        id: sandbox_verify
+        if: needs.context.outputs.step == 'build' && steps.prepare.outcome == 'success'
+        env:
+          NONCE: ${{ steps.prepare.outputs.nonce }}
+          CHECK_OUTCOME: ${{ steps.sandbox_check.outcome }}
+        run: |
+          marker="$GITHUB_WORKSPACE/.executor-sandbox-check"
+          expected=$(printf %s "$NONCE" | sha256sum | cut -d' ' -f1)
+          if [ -f "$marker" ] && [ ! -L "$marker" ] && [ "$(head -c 64 "$marker")" = "$expected" ]; then
+            rm -f "$marker"
+            echo "Sandbox ready: a sandboxed Bash call wrote the checkout and .git with credentials unset."
+          else
+            rm -f "$marker"
+            echo "::error title=claude-executor::Sandbox check failed (check step: $CHECK_OUTCOME): a Bash call in Claude Code's sandbox couldn't write the checkout and .git with credentials unset. Refusing to run the agent; see the step's log and runbook agent-runs.md §9."
+            exit 1
+          fi
 
       # The project's toolchain, from the platform's pinned actions (not the project's code).
       - name: Set up pnpm (build)
@@ -284,6 +336,10 @@ jobs:
           }
           echo "base_sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
           mkdir -p "$RUNNER_TEMP/change"
+          # Empty files the sandbox left at its protected paths are not the agent's change (AI-42).
+          WORKSPACE="$GITHUB_WORKSPACE" MANIFEST="$RUNNER_TEMP/workspace-before.manifest" \
+            node "$RUNNER_TEMP/platform/scripts/executor-publish.mjs" drop-placeholders \
+            || fail "Couldn't collect the change (dropping sandbox placeholders failed)."
           git add -A || fail "Couldn't collect the change (git add failed)."
           git diff --cached --binary --no-ext-diff --no-textconv --no-renames > "$RUNNER_TEMP/change/change.patch" \
             || fail "Couldn't collect the change (git diff failed)."
@@ -312,7 +368,7 @@ jobs:
         env:
           OUTCOME: ${{ steps.claude.outcome }}
           EXECUTION_FILE: ${{ steps.claude.outputs.execution_file }}
-          REASON: ${{ steps.claude.outcome == 'skipped' && 'Executor setup failed before the agent ran' || '' }}
+          REASON: ${{ steps.sandbox_verify.outcome == 'failure' && 'The sandbox check failed, so the agent did not run (a sandboxed Bash call could not write the checkout and .git with credentials unset)' || (steps.claude.outcome == 'skipped' && 'Executor setup failed before the agent ran' || '') }}
         run: |
           report=$(node "$RUNNER_TEMP/platform/scripts/executor-report.mjs")
           echo "status: $(jq -r .status <<<"$report")"
