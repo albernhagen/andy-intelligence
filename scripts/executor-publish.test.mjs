@@ -1,7 +1,14 @@
 import { Buffer } from "node:buffer";
-import { mkdtempSync, readFileSync } from "node:fs";
+import {
+  existsSync,
+  lstatSync,
+  mkdtempSync,
+  readFileSync,
+  symlinkSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { basename, join } from "node:path";
 import { URL } from "node:url";
 import { describe, expect, it } from "vitest";
 import { DEFAULT_PROFILE } from "./executor-profile.mjs";
@@ -15,6 +22,8 @@ import {
   toolingFiles,
   MAX_CHANGED_FILES,
   checkChange,
+  dropSandboxPlaceholders,
+  sandboxPlaceholders,
   globToRegExp,
   neutralize,
   parseRaw,
@@ -328,5 +337,84 @@ describe("executor publish job", () => {
       "src/config.ts",
     ];
     expect(toolingFiles(paths.map((p) => entry(p)))).toEqual(paths.slice(0, 6));
+  });
+});
+
+describe("sandbox placeholders", () => {
+  const sizes = (files) => (path) => (path in files ? { file: true, size: files[path] } : null);
+
+  it("GivenZeroByteYarnLockAndNpmrcTheSandboxCreated_WhenCollected_ThenBothAreDropped", () => {
+    const stat = sizes({ "yarn.lock": 0, ".npmrc": 0, "scripts/probe.mjs": 120 });
+    expect(sandboxPlaceholders({ before: new Set(), stat })).toEqual([".npmrc", "yarn.lock"]);
+  });
+
+  it("GivenARealYarnLockTheAgentWrote_WhenCollected_ThenItIsKept", () => {
+    const stat = sizes({ "yarn.lock": 2048 });
+    expect(sandboxPlaceholders({ before: new Set(), stat })).toEqual([]);
+  });
+
+  it("GivenAnEmptyListedFileThatExistedBeforeTheAgent_WhenCollected_ThenItIsKept", () => {
+    const stat = sizes({ ".npmrc": 0 });
+    expect(sandboxPlaceholders({ before: new Set([".npmrc"]), stat })).toEqual([]);
+  });
+
+  it("GivenAnEmptyFileNotOnTheSandboxList_WhenCollected_ThenItIsKept", () => {
+    const stat = sizes({ "src/empty.ts": 0, ".gitkeep": 0 });
+    expect(sandboxPlaceholders({ before: new Set(), stat })).toEqual([]);
+  });
+
+  it("GivenTheSevenPlaceholdersOfTheFailedProof_WhenCollected_ThenAllAreDropped", () => {
+    const seen = [
+      ".gitmodules",
+      ".npmrc",
+      ".yarnrc",
+      ".yarnrc.yml",
+      "bunfig.toml",
+      "package-lock.json",
+      "yarn.lock",
+    ];
+    const stat = sizes(Object.fromEntries(seen.map((p) => [p, 0])));
+    expect(sandboxPlaceholders({ before: new Set(), stat }).sort()).toEqual([...seen].sort());
+  });
+
+  it("GivenAWorkspace_WhenPlaceholdersAreDropped_ThenOnlyTheNewEmptyListedFilesAreDeletedAndLogged", () => {
+    const root = mkdtempSync(join(tmpdir(), "placeholders-"));
+    writeFileSync(join(root, "yarn.lock"), "");
+    writeFileSync(join(root, ".npmrc"), "");
+    writeFileSync(join(root, "package-lock.json"), '{"lockfileVersion":3}');
+    writeFileSync(join(root, ".yarnrc"), "");
+    symlinkSync("/etc/hostname", join(root, "bunfig.toml"));
+    const manifest = join(root, "..", `${basename(root)}.manifest`);
+    writeFileSync(manifest, ".yarnrc\0README.md\0");
+    const lines = [];
+    const dropped = dropSandboxPlaceholders({ root, manifest, emit: (l) => lines.push(l) });
+    expect(dropped).toEqual([".npmrc", "yarn.lock"]);
+    expect(existsSync(join(root, "yarn.lock"))).toBe(false);
+    expect(existsSync(join(root, ".npmrc"))).toBe(false);
+    expect(existsSync(join(root, "package-lock.json"))).toBe(true);
+    expect(existsSync(join(root, ".yarnrc"))).toBe(true);
+    expect(lstatSync(join(root, "bunfig.toml")).isSymbolicLink()).toBe(true);
+    expect(lines).toEqual([
+      "Dropped sandbox placeholder .npmrc (empty, not there before the agent).",
+      "Dropped sandbox placeholder yarn.lock (empty, not there before the agent).",
+    ]);
+  });
+
+  it("GivenDotClaudeIsASymlinkToAnOutsideDir_WhenPlaceholdersAreDropped_ThenTheFileThereSurvives", () => {
+    const root = mkdtempSync(join(tmpdir(), "placeholders-"));
+    const outside = mkdtempSync(join(tmpdir(), "outside-"));
+    writeFileSync(join(outside, "settings.json"), "");
+    symlinkSync(outside, join(root, ".claude"));
+    const manifest = join(root, "..", `${basename(root)}.manifest`);
+    writeFileSync(manifest, "");
+    expect(dropSandboxPlaceholders({ root, manifest, emit: () => {} })).toEqual([]);
+    expect(existsSync(join(outside, "settings.json"))).toBe(true);
+  });
+
+  it("GivenNoManifest_WhenPlaceholdersAreDropped_ThenItRefuses", () => {
+    const root = mkdtempSync(join(tmpdir(), "placeholders-"));
+    expect(() =>
+      dropSandboxPlaceholders({ root, manifest: join(root, "missing"), emit: () => {} }),
+    ).toThrow(/manifest/);
   });
 });

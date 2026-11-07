@@ -75,7 +75,37 @@ describe("buildProfile", () => {
       allowUnsandboxedCommands: false,
       network: { allowedDomains: ["registry.npmjs.org"], strictAllowlist: true },
     });
-    expect(settings.sandbox.filesystem.denyWrite).toEqual(["/work/proj/.git"]);
+  });
+
+  it("GivenBuild_WhenBuilt_ThenTheCheckoutAndItsGitDirStayWritableInTheSandbox", () => {
+    // A denyWrite on .git made every Bash call fail (AI-42): Claude Code's sandbox protects
+    // .git/config and .git/hooks itself, and git needs .git/index and its lock files.
+    const { filesystem } = build("build").sandbox;
+    expect(filesystem.denyWrite ?? []).not.toEqual(
+      expect.arrayContaining([expect.stringMatching(/^\/work\/proj(\/\.git)?$/)]),
+    );
+    expect(filesystem.allowWrite).toEqual(["/tmp/agent"]);
+  });
+
+  it("GivenBuild_WhenBuilt_ThenThePathsThatSteerGitAreWriteDeniedAndGitsWorkingFilesAreNot", () => {
+    const { denyWrite } = build("build").sandbox.filesystem;
+    const git = "/work/proj/.git";
+    expect(denyWrite).toEqual(
+      [
+        "commondir",
+        "config.worktree",
+        "HEAD",
+        "packed-refs",
+        "refs",
+        "info",
+        "objects/info",
+        "modules",
+        "worktrees",
+      ].map((p) => `${git}/${p}`),
+    );
+    for (const writable of ["index", "index.lock", "objects", "logs"]) {
+      expect(denyWrite.some((d) => `${git}/${writable}`.startsWith(d))).toBe(false);
+    }
   });
 
   it("GivenBuild_WhenBuilt_ThenModelAndGitHubCredentialsAreUnsetForBash", () => {

@@ -194,8 +194,10 @@ jobs:
       # Build only: the sandbox's tools and a fail-closed check that bubblewrap can make its
       # namespaces on this runner (Ubuntu 24.04 restricts unprivileged user namespaces; this
       # AppArmor profile lifts it for bwrap alone). `failIfUnavailable` also stops Claude Code
-      # if its sandbox can't start, rather than running Bash unsandboxed.
+      # if its sandbox can't start, rather than running Bash unsandboxed. This bwrap call only
+      # diagnoses the runner: "Check the sandbox" below proves Claude Code's own sandbox works.
       - name: Prepare the sandbox (build)
+        id: prepare
         if: needs.context.outputs.step == 'build'
         run: |
           sudo apt-get update -qq
@@ -209,9 +211,90 @@ jobs:
           bwrap --ro-bind / / --dev /dev --proc /proc --unshare-all --die-with-parent --new-session true \
             || { echo "::error title=claude-executor::bubblewrap can't isolate on this runner; refusing to run Bash"; exit 1; }
           mkdir -p /tmp/agent
+          # The profile write-denies the .git paths that steer git (ADR-0071). Each must exist
+          # first, so the sandbox binds it read-only instead of an empty placeholder (git refuses
+          # an empty commondir). "." keeps commondir pointing at .git itself.
+          mkdir -p .git/refs .git/info .git/objects/info .git/modules .git/worktrees
+          [ -e .git/commondir ] || printf '.\n' > .git/commondir
+          [ -e .git/config.worktree ] || : > .git/config.worktree
+          [ -e .git/packed-refs ] || : > .git/packed-refs
+          git status --porcelain > /dev/null
           # git runs after the agent from this copy, never from the checkout's own .git.
           cp -a .git "$RUNNER_TEMP/pristine.git"
-          echo "Sandbox ready: bubblewrap $(bwrap --version)."
+          # The files there before the agent: collection drops only new empty sandbox placeholders.
+          git ls-files -z --cached --others --exclude-standard > "$RUNNER_TEMP/workspace-before.manifest"
+          # The one command the sandbox check must run, unchanged (single-quoted: it expands inside
+          # the sandbox). It writes facts the verify step asserts; the nonce reaches it only through
+          # its environment, never the prompt.
+          # shellcheck disable=SC2016
+          check='git update-index -q --refresh && git status --porcelain > /dev/null && { printf "nonce=%s\npid1=%s\n" "$SANDBOX_CHECK_NONCE" "$(tr "\0" " " < /proc/1/cmdline)"; env | cut -d= -f1 | sed "s/^/env=/"; } > .executor-sandbox-check'
+          { echo "nonce=$(openssl rand -hex 16)"; echo "check_command=$check"; } >> "$GITHUB_OUTPUT"
+          echo "bubblewrap $(bwrap --version) can make its namespaces."
+
+      # Build only (ADR-0071). One Bash call through Claude Code's own sandbox, under the same
+      # managed settings, env and checkout the agent gets: git must write .git (update-index takes
+      # index.lock), then the command writes facts (nonce, PID 1, env names) into the
+      # checkout. The workflow judges: the verify step requires that exact command in the
+      # execution log (one Bash call, no error, no other tool) and asserts the facts. Capped
+      # (ADR-0028): Haiku, 3 turns, 5 minutes. Fixed prompt: no ticket text, no nonce.
+      - name: Check the sandbox (build)
+        id: sandbox_check
+        if: needs.context.outputs.step == 'build'
+        continue-on-error: true # the next step fails the job with the reason
+        timeout-minutes: 5
+        uses: anthropics/claude-code-action@d70510b174a1244958df0b03166a54912811f3e6 # v1.0.264
+        env:
+          CLAUDE_CODE_SUBPROCESS_ENV_SCRUB: "1"
+          TMPDIR: /tmp/agent
+          SANDBOX_CHECK_NONCE: ${{ steps.prepare.outputs.nonce }}
+        with:
+          claude_code_oauth_token: ${{ inputs.credential == 'subscription' && secrets.CLAUDE_CODE_OAUTH_TOKEN || '' }}
+          anthropic_api_key: ${{ inputs.credential == 'api_key' && secrets.ANTHROPIC_API_KEY || '' }}
+          github_token: ${{ github.token }}
+          allowed_bots: andy-intelligence-control
+          settings: '{"disableAllHooks": true}'
+          prompt: |
+            This is a sandbox check. Don't read any file. Use the Bash tool exactly once to run this exact command, unchanged, and use no other tool. Then reply with its exit code and nothing else. If it fails, don't retry it or try anything else.
+
+            ${{ steps.prepare.outputs.check_command }}
+          claude_args: |
+            --model haiku
+            --max-turns 3
+
+      - name: Verify the sandbox check (build)
+        id: sandbox_verify
+        if: always() && needs.context.outputs.step == 'build' && steps.prepare.outcome == 'success'
+        env:
+          EXECUTION_FILE: ${{ steps.sandbox_check.outputs.execution_file }}
+          COMMAND: ${{ steps.prepare.outputs.check_command }}
+          NONCE: ${{ steps.prepare.outputs.nonce }}
+          CHECK_OUTCOME: ${{ steps.sandbox_check.outcome }}
+        run: |
+          # Whatever the check did, the checkout gets the pristine .git back first; a changed path
+          # that steers git fails the job.
+          tampered=$(PRISTINE="$RUNNER_TEMP/pristine.git" LIVE="$GITHUB_WORKSPACE/.git" \
+            node "$RUNNER_TEMP/platform/scripts/executor-sandbox.mjs" check-git) || tampered="(check failed)"
+          rm -rf "$GITHUB_WORKSPACE/.git"
+          cp -a "$RUNNER_TEMP/pristine.git" "$GITHUB_WORKSPACE/.git"
+          if [ -n "$tampered" ]; then
+            echo "::error title=claude-executor::The sandbox check changed .git: $(tr '\n' ' ' <<<"$tampered")"
+            exit 1
+          fi
+          if ! MARKER="$GITHUB_WORKSPACE/.executor-sandbox-check" \
+            node "$RUNNER_TEMP/platform/scripts/executor-sandbox.mjs" verify-check; then
+            echo "::error title=claude-executor::Sandbox check failed (check step: $CHECK_OUTCOME): the exact check command didn't run cleanly in Claude Code's sandbox, or its facts (nonce, PID 1, env names) didn't show one. Refusing to run the agent; see runbook agent-runs.md §9."
+            exit 1
+          fi
+          # The agent starts from a clean checkout: anything the check left (e.g. sandbox
+          # placeholders) fails here with its name. git runs from the pre-agent copy of .git.
+          dirty=$(GIT_DIR="$RUNNER_TEMP/pristine.git" GIT_WORK_TREE="$GITHUB_WORKSPACE" GIT_CONFIG_NOSYSTEM=1 \
+            GIT_CONFIG_GLOBAL=/dev/null git -c core.fsmonitor=false -c core.hooksPath=/dev/null \
+            status --porcelain --untracked-files=all) || dirty="(git status failed)"
+          if [ -n "$dirty" ]; then
+            echo "::error title=claude-executor::The sandbox check left the checkout changed: $(cut -c4- <<<"$dirty" | head -n 20 | tr '\n' ' ')"
+            exit 1
+          fi
+          echo "Sandbox ready: one sandboxed Bash call wrote .git and the checkout, in its own PID namespace, with no credential variables."
 
       # The project's toolchain, from the platform's pinned actions (not the project's code).
       - name: Set up pnpm (build)
@@ -284,6 +367,19 @@ jobs:
           }
           echo "base_sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
           mkdir -p "$RUNNER_TEMP/change"
+          # The agent could write .git (ADR-0071). A change to a path that steers git (config,
+          # hooks, commondir, info, alternates, ...) fails the run; either way the checkout gets
+          # the pristine .git back before anything else (checkout's post step) runs git there.
+          tampered=$(PRISTINE="$GIT_DIR" LIVE="$GITHUB_WORKSPACE/.git" \
+            node "$RUNNER_TEMP/platform/scripts/executor-sandbox.mjs" check-git) || tampered="(check failed)"
+          if ! { rm -rf "$GITHUB_WORKSPACE/.git" && cp -a "$GIT_DIR" "$GITHUB_WORKSPACE/.git"; }; then
+            fail "Couldn't restore the checkout's .git after the agent."
+          fi
+          [ -z "$tampered" ] || fail "The agent changed .git: $(tr '\n' ' ' <<<"$tampered")(refusing to publish)."
+          # Empty files the sandbox left at its protected paths are not the agent's change (AI-42).
+          WORKSPACE="$GITHUB_WORKSPACE" MANIFEST="$RUNNER_TEMP/workspace-before.manifest" \
+            node "$RUNNER_TEMP/platform/scripts/executor-publish.mjs" drop-placeholders \
+            || fail "Couldn't collect the change (dropping sandbox placeholders failed)."
           git add -A || fail "Couldn't collect the change (git add failed)."
           git diff --cached --binary --no-ext-diff --no-textconv --no-renames > "$RUNNER_TEMP/change/change.patch" \
             || fail "Couldn't collect the change (git diff failed)."
@@ -312,7 +408,7 @@ jobs:
         env:
           OUTCOME: ${{ steps.claude.outcome }}
           EXECUTION_FILE: ${{ steps.claude.outputs.execution_file }}
-          REASON: ${{ steps.claude.outcome == 'skipped' && 'Executor setup failed before the agent ran' || '' }}
+          REASON: ${{ steps.sandbox_verify.outcome == 'failure' && 'The sandbox check failed, so the agent did not run (a sandboxed Bash call could not write the checkout and .git with credentials unset)' || (steps.claude.outcome == 'skipped' && 'Executor setup failed before the agent ran' || '') }}
         run: |
           report=$(node "$RUNNER_TEMP/platform/scripts/executor-report.mjs")
           echo "status: $(jq -r .status <<<"$report")"
