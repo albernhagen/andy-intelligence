@@ -22,7 +22,7 @@ Overview and reading map: [ARCHITECTURE.md](ARCHITECTURE.md). Section numbers ma
 
 **Built (M1.8a, ADR-0063): Ready → In progress.** With a project's `buildEnabled` (recorded) and `autoBuild` on (both default off), the build dispatcher starts, on events only, the top Ready ticket by rank (never an epic or one assigned to Andy) whose DoR is met and blockers Done; one run per project, paused at 3 tickets In progress or Ready for review, ≤ 4 builds per ticket. Dispatch moves it to In progress; one retry, then Needs-you, branch kept.
 
-**Built (M1.8a): plan approval (ADR-0050).** If `planApproval` (`none`, `m-and-l`, `all`) covers the ticket, a build start runs a read-only `plan` run first, then flags. Approve: the build gets the plan. Reject (with a reason): flagged until Andy re-plans; the next plan sees the reason. The dispatcher skips running, awaiting and rejected plans. Stale plans (ticket changed, > 72 h) re-plan; ≤ 3 per ticket.
+**Built (M1.8a): plan approval (ADR-0050).** If `planApproval` (`none`, `m-and-l`, `all`) covers the ticket, a build start runs a read-only `plan` run first, then flags. Approve: the build gets the plan. Reject (with a reason): flagged until Andy re-plans; the next plan sees the reason. The dispatcher skips running, awaiting and rejected plans. Stale plans (ticket or policy changed, > 72 h) re-plan; ≤ 3 per ticket.
 
 **Needs-you is a flag, not a stage:** flagged items stay put and appear in the Needs-you inbox (UI + MCP).
 

@@ -367,6 +367,8 @@ export const Run = z.object({
   planDecision: PlanDecision.nullable().default(null),
   /** A build run's approved plan run, whose plan is in its prompt; null without one. */
   planRunId: Id.nullable().default(null),
+  /** A plan run's project policy when it started; a change makes the plan stale. */
+  planPolicy: PlanApproval.nullable().default(null),
 });
 export type Run = z.infer<typeof Run>;
 

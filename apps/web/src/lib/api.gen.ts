@@ -2708,6 +2708,11 @@ export interface paths {
               } | null;
               /** @default null */
               planRunId: string | null;
+              /**
+               * @default null
+               * @enum {string|null}
+               */
+              planPolicy: "none" | "m-and-l" | "all" | null;
             }[];
           };
         };
@@ -2844,6 +2849,11 @@ export interface paths {
               } | null;
               /** @default null */
               planRunId: string | null;
+              /**
+               * @default null
+               * @enum {string|null}
+               */
+              planPolicy: "none" | "m-and-l" | "all" | null;
             };
           };
         };
@@ -3057,6 +3067,11 @@ export interface paths {
                 } | null;
                 /** @default null */
                 planRunId: string | null;
+                /**
+                 * @default null
+                 * @enum {string|null}
+                 */
+                planPolicy: "none" | "m-and-l" | "all" | null;
               };
               build: {
                 id: string;
@@ -3151,6 +3166,11 @@ export interface paths {
                 } | null;
                 /** @default null */
                 planRunId: string | null;
+                /**
+                 * @default null
+                 * @enum {string|null}
+                 */
+                planPolicy: "none" | "m-and-l" | "all" | null;
               } | null;
               buildError: string | null;
             };

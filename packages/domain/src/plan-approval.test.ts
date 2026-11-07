@@ -173,7 +173,6 @@ describe("plan approval", () => {
   it("GivenAnApprovedPlan_WhenItsBuildCantStartNow_ThenTheApprovalStandsForTheNextStart", async () => {
     const { ticket, plan } = await planned();
     const other = await inReady({ title: "Other" });
-    await policy("none");
     await runs.start(projectId, other.id, "build");
     const result = await runs.decidePlan(
       projectId,
@@ -184,7 +183,6 @@ describe("plan approval", () => {
     );
     expect(result).toMatchObject({ build: null, buildError: expect.stringContaining("in flight") });
     await runs.cancelForTicket(projectId, other.id);
-    await policy("all");
     expect(await runs.start(projectId, ticket.id, "build")).toMatchObject({
       step: "build",
       planRunId: plan.id,
@@ -274,6 +272,31 @@ describe("plan approval", () => {
     );
     // Rejecting a stale plan is still allowed, and so is a new plan run.
     expect((await runs.start(projectId, ticket.id, "build")).step).toBe("plan");
+  });
+
+  it("GivenThePolicyChangedToNone_WhenAPlanAwaits_ThenItIsStaleAndTheBuildStartsWithoutIt", async () => {
+    const { ticket, plan } = await planned();
+    expect(plan.planPolicy).toBe("all");
+    await policy("none");
+    await rejects(
+      runs.decidePlan(projectId, ticket.id, plan.id, { decision: "approved" }, ANDY),
+      "plan_not_decidable",
+    );
+    expect(await runs.start(projectId, ticket.id, "build")).toMatchObject({
+      step: "build",
+      planRunId: null,
+    });
+  });
+
+  it("GivenAReportedPlanFailure_WhenItsRetryFailsToo_ThenTheTicketIsFlaggedAndNoBuildStarts", async () => {
+    const ticket = await inReady();
+    const plan = await runs.start(projectId, ticket.id, "build");
+    await report(plan, { status: "failed" });
+    const [retry] = await runsOf(ticket.id);
+    expect(retry).toMatchObject({ step: "plan", attempt: 2 });
+    await report(retry!, { status: "failed" });
+    expect((await ticketOf(ticket.id)).needsAttention).toBe(true);
+    expect((await runsOf(ticket.id)).every((r) => r.step === "plan")).toBe(true);
   });
 
   it("GivenAFlagOrRankChangeOnly_WhenAndyApproves_ThenThePlanIsStillFresh", async () => {

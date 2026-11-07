@@ -28,8 +28,9 @@ export function planRequired(policy: PlanApproval, ticket: Pick<Ticket, "size">)
 
 /**
  * Where a ticket's latest plan run stands. `none`: never planned, or the last plan run failed.
- * `stale`: the plan was for a different ticket (its snapshot isn't in the plan run's prompt) or
- * is older than MAX_PLAN_AGE_HOURS; it must be re-planned. A rejection stands until a new plan.
+ * `stale`: the plan was for a different ticket (its snapshot isn't in the plan run's prompt), under
+ * a different project policy, or is older than MAX_PLAN_AGE_HOURS; it must be re-planned. A
+ * rejection stands until a new plan.
  */
 export type PlanState =
   | { kind: "none" }
@@ -39,14 +40,24 @@ export type PlanState =
   | { kind: "rejected"; run: Run }
   | { kind: "stale"; run: Run };
 
-/** `runs`: the ticket's runs, newest first. `snapshot`: `ticketSnapshot` of the ticket now. */
-export function planState(runs: readonly Run[], snapshot: string, now: Date): PlanState {
+/**
+ * `runs`: the ticket's runs, newest first. `snapshot`: `ticketSnapshot` of the ticket now.
+ * `policy`: the project's `planApproval` now.
+ */
+export function planState(
+  runs: readonly Run[],
+  snapshot: string,
+  policy: PlanApproval,
+  now: Date,
+): PlanState {
   const run = runs.find((r) => r.step === "plan");
   if (!run) return { kind: "none" };
   if (run.status === "queued" || run.status === "running") return { kind: "planning", run };
   if (run.status !== "succeeded" || !run.plan) return { kind: "none" };
   if (run.planDecision?.decision === "rejected") return { kind: "rejected", run };
-  if (isStale(run, snapshot, now)) return { kind: "stale", run };
+  if (isStale(run, snapshot, now) || (run.planPolicy !== null && run.planPolicy !== policy)) {
+    return { kind: "stale", run };
+  }
   return run.planDecision ? { kind: "approved", run } : { kind: "awaiting", run };
 }
 

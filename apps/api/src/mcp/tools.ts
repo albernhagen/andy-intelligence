@@ -290,7 +290,7 @@ export function registerTools(server: McpServer, deps: ToolDeps): void {
     "approve_plan",
     {
       description:
-        "Approves a ticket's latest plan run (projects with plan approval on) and starts its build with that plan in the prompt. Andy only. Refused if the plan is stale (the ticket changed, or it is over 72 hours old): start `build` again to re-plan.",
+        "Approves a ticket's latest plan run (projects with plan approval on) and starts its build with that plan in the prompt. Andy only. Refused if the plan is stale (the ticket or the project's plan approval changed, or it is over 72 hours old): start `build` again to re-plan.",
       inputSchema: PlanInput,
       annotations: { destructiveHint: false, idempotentHint: false, openWorldHint: true },
     },

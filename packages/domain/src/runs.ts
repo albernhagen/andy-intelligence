@@ -10,6 +10,7 @@ import {
   type BillingType,
   type EventActor,
   type Executor,
+  type PlanApproval,
   type ProviderKey,
   type Question,
   type Route,
@@ -194,7 +195,7 @@ export class RunService {
         ]);
       }
       await this.checkBuildable(ticket);
-      const plan = await this.planStateOf(ticket, questions);
+      const plan = await this.planStateOf(ticket, questions, project.planApproval);
       if (startable === "build") {
         const gate = buildGate(planRequired(project.planApproval, ticket), plan, ticket, retryOf);
         approved = gate.approved;
@@ -228,6 +229,7 @@ export class RunService {
       attempt: retryOf ? retryOf.attempt + 1 : 1,
       retryOf: retryOf?.id ?? null,
       planRunId: approved?.id ?? null,
+      planPolicy: startable === "plan" ? project.planApproval : null,
     });
 
     // Check again now that this run exists: two concurrent starts both pass the first check,
@@ -546,7 +548,7 @@ export class RunService {
     }
     if (state.kind === "stale" && input.decision === "approved") {
       throw new DomainError("plan_not_decidable", "this plan is stale: start a new plan run", [
-        "the ticket changed since it was planned, or the plan is over 72 hours old",
+        "the ticket or the project's plan approval changed since it was planned, or the plan is over 72 hours old",
       ]);
     }
     const decided = await this.runs.update(
@@ -597,12 +599,18 @@ export class RunService {
     }
   }
 
-  /** Where the ticket's latest plan run stands, against the ticket as it is now. */
-  async planStateOf(ticket: Ticket, answered?: Question[]): Promise<PlanState> {
+  /** Where the ticket's latest plan run stands, against the ticket and project policy now. */
+  async planStateOf(
+    ticket: Ticket,
+    answered?: Question[],
+    policy?: PlanApproval,
+  ): Promise<PlanState> {
     const questions =
       answered ?? (await this.tracker.listQuestions({ ticketId: ticket.id, status: "answered" }));
+    const current =
+      policy ?? (await this.tracker.getProject(ticket.projectId))?.planApproval ?? "none";
     const runs = await this.runs.listForTicket(ticket.projectId, ticket.id);
-    return planState(runs, ticketSnapshot(ticket, questions), this.now());
+    return planState(runs, ticketSnapshot(ticket, questions), current, this.now());
   }
 
   /** At most MAX_PLAN_RUNS_PER_TICKET plan runs; none while one is in flight. */

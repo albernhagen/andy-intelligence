@@ -68,47 +68,53 @@ describe("planRequired", () => {
 
 describe("planState", () => {
   it("GivenNoPlanRun_WhenChecked_ThenNone", () => {
-    expect(planState([], snapshot, NOW).kind).toBe("none");
+    expect(planState([], snapshot, "all", NOW).kind).toBe("none");
   });
 
   it("GivenAPlanRunInFlight_WhenChecked_ThenPlanning", () => {
-    expect(planState([planRun({ status: "running" })], snapshot, NOW).kind).toBe("planning");
+    expect(planState([planRun({ status: "running" })], snapshot, "all", NOW).kind).toBe("planning");
   });
 
   it("GivenAnUndecidedPlan_WhenChecked_ThenAwaiting", () => {
-    expect(planState([planRun()], snapshot, NOW).kind).toBe("awaiting");
+    expect(planState([planRun()], snapshot, "all", NOW).kind).toBe("awaiting");
   });
 
   it("GivenAnApprovedPlan_WhenChecked_ThenApproved", () => {
     const run = planRun({ planDecision: decided("approved") });
-    expect(planState([run], snapshot, NOW)).toEqual({ kind: "approved", run });
+    expect(planState([run], snapshot, "all", NOW)).toEqual({ kind: "approved", run });
   });
 
   it("GivenARejectedPlan_WhenChecked_ThenRejected", () => {
     const run = planRun({ planDecision: decided("rejected") });
-    expect(planState([run], snapshot, NOW).kind).toBe("rejected");
+    expect(planState([run], snapshot, "all", NOW).kind).toBe("rejected");
   });
 
   it("GivenTheLatestPlanRunFailed_WhenChecked_ThenNone", () => {
     const older = planRun({ planDecision: decided("approved") });
     const failed = planRun({ id: "p2", status: "failed", plan: null });
-    expect(planState([failed, older], snapshot, NOW).kind).toBe("none");
+    expect(planState([failed, older], snapshot, "all", NOW).kind).toBe("none");
   });
 
   it("GivenTheTicketChangedSinceThePlan_WhenChecked_ThenStale", () => {
     const run = planRun({ planDecision: decided("approved") });
     const changed = ticketSnapshot({ ...ticket, body: "Something else." }, []);
-    expect(planState([run], changed, NOW).kind).toBe("stale");
+    expect(planState([run], changed, "all", NOW).kind).toBe("stale");
   });
 
   it("GivenAPlanOlderThanItsMaxAge_WhenChecked_ThenStale", () => {
     const later = new Date(Date.parse("2026-11-06T11:00:00.000Z") + MAX_PLAN_AGE_HOURS * 3_600_001);
-    expect(planState([planRun()], snapshot, later).kind).toBe("stale");
+    expect(planState([planRun()], snapshot, "all", later).kind).toBe("stale");
+  });
+
+  it("GivenThePolicyChangedSinceThePlan_WhenChecked_ThenStale", () => {
+    const run = planRun({ planPolicy: "all", planDecision: decided("approved") });
+    expect(planState([run], snapshot, "m-and-l", NOW).kind).toBe("stale");
+    expect(planState([run], snapshot, "all", NOW).kind).toBe("approved");
   });
 
   it("GivenOtherStepsBeforeThePlan_WhenChecked_ThenOnlyThePlanCounts", () => {
     const build = planRun({ id: "b1", step: "build", status: "failed" });
-    expect(planState([build, planRun()], snapshot, NOW).kind).toBe("awaiting");
+    expect(planState([build, planRun()], snapshot, "all", NOW).kind).toBe("awaiting");
   });
 });
 

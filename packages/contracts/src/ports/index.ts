@@ -318,6 +318,7 @@ export const NewRun = Run.pick({
   attempt: true,
   retryOf: true,
   planRunId: true,
+  planPolicy: true,
 });
 export type NewRun = z.input<typeof NewRun>;
 

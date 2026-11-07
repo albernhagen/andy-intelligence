@@ -113,7 +113,7 @@ export class BuildDispatcher {
 
   /** Whether the ticket's plan lets a start go ahead now (a build, or a plan run first). */
   private async planAllows(ticket: Ticket, policy: PlanApproval): Promise<boolean> {
-    const plan = await this.runs.planStateOf(ticket);
+    const plan = await this.runs.planStateOf(ticket, undefined, policy);
     if (plan.kind === "approved") return true;
     if (plan.kind === "awaiting" || plan.kind === "planning") return false;
     if (!planRequired(policy, ticket)) return true;
