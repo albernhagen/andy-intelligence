@@ -15,6 +15,7 @@ import {
   ProjectService,
   RefineDispatcher,
   RunService,
+  BoardReader,
   TicketService,
 } from "@andy/domain";
 import { bodyLimit } from "hono/body-limit";
@@ -22,6 +23,7 @@ import { requireAllowedUser, type AuthEnv, type TokenVerifier } from "./auth";
 import { registerMcp, type ClientMetadataResolver } from "./mcp";
 import { registerRunCallbacks, registerRunRoutes } from "./runs";
 import { registerTicketRoutes } from "./tickets";
+import { registerBoardRoutes } from "./board";
 import {
   ConnectedCodeHost,
   GitHubConnection,
@@ -265,6 +267,7 @@ export function createApp(deps: AppDeps) {
     now,
   );
   registerTicketRoutes(app, deps.tracker, service, projects);
+  registerBoardRoutes(app, new BoardReader(deps.tracker, deps.runs));
 
   registerRunRoutes(app, runs);
 

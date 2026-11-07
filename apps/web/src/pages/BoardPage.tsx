@@ -1,78 +1,60 @@
-import { useEffect, useRef, useState, type ReactNode } from "react";
-import { Link, useParams } from "@tanstack/react-router";
+import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
+import { Outlet, useParams } from "@tanstack/react-router";
 import {
   DndContext,
   KeyboardSensor,
   MouseSensor,
   TouchSensor,
-  useDraggable,
-  useDroppable,
   useSensor,
   useSensors,
   type DragEndEvent,
+  type DragOverEvent,
   type DragStartEvent,
 } from "@dnd-kit/core";
-import { Stage, type Ticket } from "@andy/contracts";
-import { TicketForm } from "@/components/TicketForm";
-import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
+import { Stage, type BoardTicket } from "@andy/contracts";
+import { BoardCard } from "@/components/board/BoardCard";
+import { Lane } from "@/components/board/Lane";
 import { Loading, QueryError } from "@/components/Status";
-import { useBoardMove, useCreateTicket, useTickets } from "@/lib/queries";
-import {
-  STAGE_LABELS,
-  STAGES,
-  TYPE_LABELS,
-  dropMove,
-  groupByStage,
-  visibleTickets,
-} from "@/lib/tickets";
+import { COLLAPSED_STAGES, nextUp, openBlockers, planDrop } from "@/lib/board";
+import { useBoard, useBoardMove, useQuickAdd, useRankTicket } from "@/lib/queries";
+import { STAGES, dropMove, groupByStage, visibleTickets } from "@/lib/tickets";
 
 /**
- * Tickets grouped by stage, one column each. Drag a card to another column to move it: an
- * allowed transition is a normal move, any other is a forced one (ADR-0057). The detail page's
- * Move controls do the same with buttons.
+ * Board v2 (AI-28; ADR-0059 row "Board"): one swim lane per stage, cards with status markers,
+ * Ready as a numbered queue with the next card marked. Drag within a lane to reorder (the order
+ * is the priority, ADR-0058), across lanes to move: an allowed transition is a normal move, any
+ * other a forced one (ADR-0057). Moves and reorders show at once and roll back with the API's
+ * message on the card. Child routes (the ticket panel) render in the Outlet.
  */
 export function BoardPage() {
   const { projectId } = useParams({ from: "/p/$projectId" });
-  const tickets = useTickets(projectId);
-  const create = useCreateTicket(projectId);
-  const [creating, setCreating] = useState(false);
+  const board = useBoard(projectId);
   const [showArchived, setShowArchived] = useState(false);
 
   return (
     <section className="space-y-4">
       <div className="flex items-center justify-between">
-        <h2 className="text-lg font-medium">Tickets</h2>
-        <div className="flex items-center gap-3">
-          <label className="flex items-center gap-1 text-sm">
-            <input
-              type="checkbox"
-              checked={showArchived}
-              onChange={(e) => setShowArchived(e.target.checked)}
-            />
-            Show archived
-          </label>
-          {!creating && <Button onClick={() => setCreating(true)}>New ticket</Button>}
-        </div>
+        <h2 className="text-lg font-medium">Board</h2>
+        <label className="flex items-center gap-1 text-sm">
+          <input
+            type="checkbox"
+            checked={showArchived}
+            onChange={(e) => setShowArchived(e.target.checked)}
+          />
+          Show cancelled and archived
+        </label>
       </div>
 
-      {creating && (
-        <div className="rounded-md border border-border p-3">
-          <TicketForm
-            submitLabel="Create ticket"
-            pending={create.isPending}
-            error={create.error && <QueryError error={create.error} />}
-            onCancel={() => setCreating(false)}
-            onSubmit={(values) => create.mutate(values, { onSuccess: () => setCreating(false) })}
-          />
-        </div>
+      {board.isPending && <Loading />}
+      {board.isError && <QueryError error={board.error} />}
+      {board.data && (
+        <Lanes
+          tickets={visibleTickets(board.data, showArchived)}
+          showCancelled={showArchived}
+          projectId={projectId}
+        />
       )}
-
-      {tickets.isPending && <Loading />}
-      {tickets.isError && <QueryError error={tickets.error} />}
-      {tickets.data && (
-        <Columns tickets={visibleTickets(tickets.data, showArchived)} projectId={projectId} />
-      )}
+      <Outlet />
     </section>
   );
 }
@@ -80,11 +62,23 @@ export function BoardPage() {
 /** Space picks a card up and drops it; Enter stays free to open the ticket link. */
 const KEYBOARD_CODES = { start: ["Space"], cancel: ["Escape"], end: ["Space"] };
 
-function Columns({ tickets, projectId }: { tickets: Ticket[]; projectId: string }) {
-  const groups = groupByStage(tickets);
+function Lanes({
+  tickets,
+  showCancelled,
+  projectId,
+}: {
+  tickets: BoardTicket[];
+  showCancelled: boolean;
+  projectId: string;
+}) {
   const move = useBoardMove(projectId);
+  const rank = useRankTicket(projectId);
+  // A drop shows at once: the card's new stage and rank until the API answers.
+  const [pending, setPending] = useState<Record<string, { stage: Stage; rank: string }>>({});
   // One error per card, so a quick second drop can't hide the first one's failure.
   const [errors, setErrors] = useState<Record<string, Error>>({});
+  const [expanded, setExpanded] = useState<Stage[]>([]);
+  const [overLane, setOverLane] = useState<Stage | null>(null);
   const suppressDropClick = useDropClickSuppression();
   const sensors = useSensors(
     useSensor(MouseSensor, { activationConstraint: { distance: 8 } }),
@@ -92,19 +86,43 @@ function Columns({ tickets, projectId }: { tickets: Ticket[]; projectId: string 
     useSensor(KeyboardSensor, { keyboardCodes: KEYBOARD_CODES }),
   );
 
+  const shown = useMemo(
+    () => tickets.map((t) => (pending[t.id] ? { ...t, ...pending[t.id] } : t)),
+    [tickets, pending],
+  );
+  const lanes = groupByStage(shown);
+  const byId = useMemo(() => new Map(shown.map((t) => [t.id, t])), [shown]);
+  const next = nextUp(lanes.ready, byId);
+  const now = Date.now();
+  const stages = STAGES.filter((s) => s !== "cancelled" || showCancelled);
+
+  function laneOf(id: string | number | undefined): Stage | null {
+    const stage = Stage.safeParse(id);
+    return stage.success ? stage.data : (byId.get(String(id))?.stage ?? null);
+  }
+
   async function onDragEnd({ active, over }: DragEndEvent) {
-    const ticket = tickets.find((t) => t.id === active.id);
-    const to = Stage.safeParse(over?.id);
-    if (!ticket || !to.success) return;
-    const next = dropMove(ticket.stage, to.data);
-    if (!next) return;
-    setErrors(({ [ticket.id]: _, ...rest }) => rest);
-    // No optimistic update: the card stays in its column until the API accepts the move.
-    // mutateAsync, not mutate's per-call callbacks: those only fire for the latest call.
+    setOverLane(null);
+    const ticket = byId.get(String(active.id));
+    if (!ticket || !over) return;
+    const plan = planDrop(lanes, ticket, String(over.id));
+    if (!plan) return;
+    const stageMove = plan.to === ticket.stage ? null : dropMove(ticket.stage, plan.to);
+    if (plan.to !== ticket.stage && !stageMove) return;
+
+    const id = ticket.id;
+    setErrors(({ [id]: _, ...rest }) => rest);
+    setPending((p) => ({ ...p, [id]: { stage: plan.to, rank: plan.rank ?? ticket.rank } }));
+    // mutateAsync, not mutate's per-call callbacks: those only fire for the latest call. Each
+    // write refetches the board before it resolves, so dropping the pending entry shows the
+    // API's state: the new place, or the old one after a refusal.
     try {
-      await move.mutateAsync({ ticketId: ticket.id, ...next });
+      if (stageMove) await move.mutateAsync({ ticketId: id, ...stageMove });
+      if (plan.rank) await rank.mutateAsync({ ticketId: id, rank: plan.rank });
     } catch (error) {
-      setErrors((e) => ({ ...e, [ticket.id]: error as Error }));
+      setErrors((e) => ({ ...e, [id]: error as Error }));
+    } finally {
+      setPending(({ [id]: _, ...rest }) => rest);
     }
   }
 
@@ -115,18 +133,71 @@ function Columns({ tickets, projectId }: { tickets: Ticket[]; projectId: string 
         // A keyboard drag ends with Space, which never clicks the link.
         if (!(activatorEvent instanceof KeyboardEvent)) suppressDropClick();
       }}
+      onDragOver={({ over }: DragOverEvent) => setOverLane(laneOf(over?.id))}
+      onDragCancel={() => setOverLane(null)}
       onDragEnd={(e) => void onDragEnd(e)}
     >
-      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-7">
-        {STAGES.map((stage) => (
-          <Column key={stage} stage={stage} count={groups[stage].length}>
-            {groups[stage].map((t) => (
-              <Card key={t.id} ticket={t} projectId={projectId} error={errors[t.id] ?? null} />
-            ))}
-          </Column>
-        ))}
+      <div className="flex items-stretch gap-3 overflow-x-auto pb-2">
+        {stages.map((stage) => {
+          const collapsible = COLLAPSED_STAGES.includes(stage);
+          const collapsed = collapsible && !expanded.includes(stage);
+          const toggle = () =>
+            setExpanded((e) => (e.includes(stage) ? e.filter((s) => s !== stage) : [...e, stage]));
+          return (
+            <Lane
+              key={stage}
+              stage={stage}
+              ids={lanes[stage].map((t) => t.id)}
+              collapsed={collapsed}
+              onToggle={collapsible ? toggle : undefined}
+              highlight={overLane === stage}
+              top={stage === "backlog" ? <QuickAdd projectId={projectId} /> : undefined}
+            >
+              {!collapsed &&
+                lanes[stage].map((t, i) => (
+                  <BoardCard
+                    key={t.id}
+                    ticket={t}
+                    projectId={projectId}
+                    blockers={openBlockers(t, byId)}
+                    position={stage === "ready" ? i + 1 : null}
+                    next={t.id === next?.id}
+                    now={now}
+                    error={errors[t.id] ?? null}
+                  />
+                ))}
+            </Lane>
+          );
+        })}
       </div>
     </DndContext>
+  );
+}
+
+/** Type a title, press Enter: the ticket lands in Backlog with no type; refine drafts the rest. */
+function QuickAdd({ projectId }: { projectId: string }) {
+  const add = useQuickAdd(projectId);
+  const [title, setTitle] = useState("");
+
+  function submit(e: FormEvent) {
+    e.preventDefault();
+    const t = title.trim();
+    if (!t || add.isPending) return;
+    add.mutate(t, { onSuccess: () => setTitle("") });
+  }
+
+  return (
+    <form onSubmit={submit} className="space-y-1">
+      <input
+        aria-label="Add a ticket"
+        placeholder="Add a ticket"
+        value={title}
+        onChange={(e) => setTitle(e.target.value)}
+        disabled={add.isPending}
+        className="h-8 w-full rounded-md border border-border bg-background px-2 text-sm placeholder:text-muted-foreground focus-visible:outline-2 focus-visible:outline-ring"
+      />
+      {add.error && <QueryError error={add.error} />}
+    </form>
   );
 }
 
@@ -157,68 +228,4 @@ function useDropClickSuppression() {
     };
   }, []);
   return () => (armed.current = true);
-}
-
-function Column({ stage, count, children }: { stage: Stage; count: number; children: ReactNode }) {
-  const { setNodeRef, isOver } = useDroppable({ id: stage });
-  return (
-    <section
-      ref={setNodeRef}
-      aria-label={STAGE_LABELS[stage]}
-      data-stage={stage}
-      className={`space-y-2 rounded-md p-2 ${isOver ? "bg-foreground/15" : "bg-foreground/5"}`}
-    >
-      <h3 className="text-sm font-medium">
-        {STAGE_LABELS[stage]} <span className="text-muted-foreground">{count}</span>
-      </h3>
-      {children}
-    </section>
-  );
-}
-
-function Card({
-  ticket: t,
-  projectId,
-  error,
-}: {
-  ticket: Ticket;
-  projectId: string;
-  error: Error | null;
-}) {
-  const { setNodeRef, attributes, listeners, transform, isDragging } = useDraggable({
-    id: t.id,
-  });
-  const style = transform
-    ? { transform: `translate3d(${transform.x}px, ${transform.y}px, 0)` }
-    : undefined;
-  return (
-    <div className="space-y-1">
-      <Link
-        ref={setNodeRef}
-        {...listeners}
-        {...attributes}
-        // dnd-kit's attributes make it a "button"; it is still the ticket's link.
-        role="link"
-        to="/p/$projectId/t/$ticketRef"
-        params={{ projectId, ticketRef: t.key }}
-        style={style}
-        data-ticket={t.key}
-        className={`block space-y-1 rounded-md border border-border bg-background p-2 text-sm hover:border-foreground/30 ${
-          isDragging ? "relative z-10 shadow-lg" : ""
-        }`}
-      >
-        <span className="block">
-          <span className="text-muted-foreground">{t.key}</span> {t.title}
-        </span>
-        <span className="flex flex-wrap gap-1">
-          {t.type && <Badge>{TYPE_LABELS[t.type]}</Badge>}
-          {t.size && <Badge>{t.size}</Badge>}
-          {t.dorStatus === "met" && <Badge variant="ok">DoR</Badge>}
-          {t.needsAttention && <Badge variant="attention">needs you</Badge>}
-          {t.archived && <Badge>archived</Badge>}
-        </span>
-      </Link>
-      {error && <QueryError error={error} />}
-    </div>
-  );
 }

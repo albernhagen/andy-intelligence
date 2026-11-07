@@ -131,7 +131,7 @@ Design rules: [`apps/web/design.md`](apps/web/design.md). One header on every sc
 | `/all/board`                        | Asks for a project                                                                                 |
 | `/projects`                         | Project list and "new project" (picker → Add project)                                              |
 | `/settings/github`                  | Connect the GitHub App, install link, installed repos                                              |
-| `/p/:projectId`                     | Board: one column per stage, "new ticket", drag to move                                            |
+| `/p/:projectId`                     | Board: lanes with status on cards, quick add, drag to reorder or move                              |
 | `/p/:projectId/t/:ticketRef`        | Ticket detail (ref = key, e.g. `AI-2`): edit, Definition of Ready, moves, runs, questions, history |
 
 - API client: `openapi-fetch` typed by `apps/web/src/lib/api.gen.ts`, generated from the API's OpenAPI document. After changing an API route, run `pnpm --filter @andy/web gen:api` and commit the file; a test fails while it is stale.
