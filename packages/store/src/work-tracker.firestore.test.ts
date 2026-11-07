@@ -1,3 +1,4 @@
+import { Stage } from "@andy/contracts";
 import { workTrackerContract } from "@andy/contracts/testing";
 import { describe, expect, it } from "vitest";
 import { SCHEMA_VERSION, collections, createFirestore } from "./index";
@@ -81,6 +82,41 @@ if (process.env.FIRESTORE_EMULATOR_HOST) {
 
       await tracker.updateTicket(project.id, fresh.id, { fields: { body: "shipped" } }, "andy");
       expect((await raw.get()).data()).toMatchObject({ _v: 3, stage: "done" });
+    });
+
+    it("GivenAStoredV2TicketInMonitoring_WhenListedByStage_ThenOnlyTheDoneFilterReturnsIt", async () => {
+      const tracker = new FirestoreWorkTracker(db);
+      const key = `S${crypto
+        .randomUUID()
+        .slice(0, 6)
+        .toUpperCase()
+        .replace(/[^A-Z0-9]/g, "X")}`;
+      const project = await tracker.createProject({ name: "Stage filter", key });
+      const legacy = await tracker.createTicket(project.id, { title: "Legacy" }, "andy");
+      await db
+        .collection(collections.tickets.path(project.id))
+        .doc(legacy.id)
+        .set({ ...legacy, stage: "monitoring", _v: 2 });
+      const done = await tracker.createTicket(project.id, { title: "Done" }, "andy");
+      await tracker.updateTicket(
+        project.id,
+        done.id,
+        { stage: { to: "done", forced: true, reason: null } },
+        "andy",
+      );
+
+      const listed = await tracker.listTickets(project.id, { stage: "done" });
+      expect(listed.map((t) => [t.id, t.stage])).toEqual(
+        expect.arrayContaining([
+          [legacy.id, "done"],
+          [done.id, "done"],
+        ]),
+      );
+      expect(listed).toHaveLength(2);
+      for (const stage of Stage.options.filter((s) => s !== "done")) {
+        const ids = (await tracker.listTickets(project.id, { stage })).map((t) => t.id);
+        expect(ids).not.toContain(legacy.id);
+      }
     });
   });
 } else {
