@@ -430,7 +430,12 @@ describe("sandbox placeholders and prettier", () => {
       const ignored = readFileSync(join(import.meta.dirname, "..", file), "utf8")
         .split("\n")
         .map((l) => l.trim());
-      for (const name of SANDBOX_PLACEHOLDERS.filter((n) => !real.has(n))) {
+      // Plus the protected directories it binds unreadable (prettier reads them, AI-58).
+      for (const name of [
+        ...SANDBOX_PLACEHOLDERS.filter((n) => !real.has(n)),
+        ".vscode",
+        ".idea",
+      ]) {
         expect(ignored, file).toContain(`/${name}`);
       }
     }
