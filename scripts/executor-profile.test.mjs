@@ -87,6 +87,27 @@ describe("buildProfile", () => {
     expect(filesystem.allowWrite).toEqual(["/tmp/agent"]);
   });
 
+  it("GivenBuild_WhenBuilt_ThenThePathsThatSteerGitAreWriteDeniedAndGitsWorkingFilesAreNot", () => {
+    const { denyWrite } = build("build").sandbox.filesystem;
+    const git = "/work/proj/.git";
+    expect(denyWrite).toEqual(
+      [
+        "commondir",
+        "config.worktree",
+        "HEAD",
+        "packed-refs",
+        "refs",
+        "info",
+        "objects/info",
+        "modules",
+        "worktrees",
+      ].map((p) => `${git}/${p}`),
+    );
+    for (const writable of ["index", "index.lock", "objects", "logs"]) {
+      expect(denyWrite.some((d) => `${git}/${writable}`.startsWith(d))).toBe(false);
+    }
+  });
+
   it("GivenBuild_WhenBuilt_ThenModelAndGitHubCredentialsAreUnsetForBash", () => {
     const names = build("build").sandbox.credentials.envVars.map((v) => `${v.name}:${v.mode}`);
     for (const name of ["CLAUDE_CODE_OAUTH_TOKEN", "ANTHROPIC_API_KEY", "GITHUB_TOKEN"]) {

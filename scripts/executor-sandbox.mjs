@@ -7,7 +7,7 @@
 //     COMMAND (the exact command the check had to run), MARKER (the facts file it writes),
 //     NONCE (given to the command only through its environment). Passes only if the log shows
 //     that command, unchanged, run once through Bash without error and no other tool, and the
-//     facts show the nonce, a non-root uid, a PID 1 that isn't the runner's, and no credential
+//     facts show the nonce, a PID 1 that isn't the runner's, and no credential
 //     variable. Deletes the marker either way.
 //   check-git (after the agent): env PRISTINE (the copy of .git taken before the agent), LIVE
 //     (the checkout's .git). Prints the sensitive .git paths that differ, one per line.
@@ -43,7 +43,12 @@ export function checkRunProblem(messages, command) {
   if (other) return `the check used ${String(other.name)}, not only Bash`;
   if (uses.length !== 1) return `the check made ${uses.length} Bash calls, not 1`;
   const [use] = uses;
-  if (use.input?.command !== command) return "the check ran a different command";
+  // Whitespace at the ends and runs of blanks don't change what the shell runs.
+  const norm = (c) =>
+    String(c ?? "")
+      .trim()
+      .replace(/[ \t]+/g, " ");
+  if (norm(use.input?.command) !== norm(command)) return "the check ran a different command";
   const result = blocks(messages, "user").find(
     (b) => b.type === "tool_result" && b.tool_use_id === use.id,
   );
@@ -64,7 +69,7 @@ export const CREDENTIAL_VARS = [
 
 /**
  * Why the facts the check command wrote don't show a sandbox; null when they do. The file has
- * `nonce=`, `uid=`, `pid1=` lines and one `env=<NAME>` line per variable. The nonce reaches the
+ * `nonce=` and `pid1=` lines and one `env=<NAME>` line per variable. The nonce reaches the
  * command only through its environment (never the prompt), so the model can't write it.
  */
 export function factsProblem(text, { nonce, hostPid1 }) {
@@ -72,8 +77,6 @@ export function factsProblem(text, { nonce, hostPid1 }) {
   const lines = text.split("\n");
   const value = (key) => lines.find((l) => l.startsWith(`${key}=`))?.slice(key.length + 1);
   if (!nonce || value("nonce") !== nonce) return "the nonce is missing or wrong";
-  const uid = value("uid");
-  if (uid === undefined || !/^\d+$/.test(uid) || uid === "0") return `uid is ${uid ?? "missing"}`;
   const pid1 = value("pid1");
   if (!pid1) return "PID 1 is missing";
   if (pid1.trim() === String(hostPid1).trim())

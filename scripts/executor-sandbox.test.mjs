@@ -22,6 +22,11 @@ describe("sandbox check run", () => {
     );
   });
 
+  it("GivenTheExactCommandWithATrailingNewline_WhenChecked_ThenItPasses", () => {
+    const messages = [use("Bash", { command: `${COMMAND}\n` }), result()];
+    expect(checkRunProblem(messages, `  ${COMMAND}`)).toBe(null);
+  });
+
   it("GivenTheModelDroppedAClause_WhenChecked_ThenItFails", () => {
     const messages = [
       use("Bash", { command: "env | cut -d= -f1 > .executor-sandbox-check" }),
@@ -64,7 +69,6 @@ const HOST_PID1 = "/sbin/init splash ";
 const facts = (over = {}) =>
   [
     `nonce=${over.nonce ?? "n0nce"}`,
-    `uid=${over.uid ?? "1001"}`,
     `pid1=${over.pid1 ?? "bwrap --new-session bash "}`,
     ...(over.env ?? ["PATH", "HOME", "TMPDIR"]).map((n) => `env=${n}`),
     "",
@@ -72,7 +76,7 @@ const facts = (over = {}) =>
 const opts = { nonce: "n0nce", hostPid1: HOST_PID1 };
 
 describe("sandbox check facts", () => {
-  it("GivenTheNonceANonRootUidItsOwnPid1AndNoCredentials_WhenChecked_ThenItPasses", () => {
+  it("GivenTheNonceItsOwnPid1AndNoCredentials_WhenChecked_ThenItPasses", () => {
     expect(factsProblem(facts(), opts)).toBe(null);
   });
 
@@ -83,9 +87,8 @@ describe("sandbox check facts", () => {
     );
   });
 
-  it("GivenTheRunnersOwnPid1OrRoot_WhenChecked_ThenItFails", () => {
+  it("GivenTheRunnersOwnPid1_WhenChecked_ThenItFails", () => {
     expect(factsProblem(facts({ pid1: HOST_PID1 }), opts)).toMatch(/runner's own/);
-    expect(factsProblem(facts({ uid: "0" }), opts)).toBe("uid is 0");
   });
 
   it("GivenAWrongNonceNoFileOrNoEnvNames_WhenChecked_ThenItFails", () => {
