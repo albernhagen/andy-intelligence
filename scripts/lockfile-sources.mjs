@@ -6,7 +6,7 @@
 //
 // Usage: node scripts/lockfile-sources.mjs [repo-dir]. Checks pnpm-lock.yaml, package-lock.json
 // and yarn.lock where present. Exit 1 on a non-registry source.
-import { existsSync, readFileSync, statSync } from "node:fs";
+import { closeSync, openSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -49,19 +49,40 @@ const CHECKS = {
   "yarn.lock": yarnOffenders,
 };
 
+/**
+ * A lockfile's text, read through one descriptor; null when it doesn't exist. The build sandbox
+ * binds empty, unreadable placeholders at package-lock.json and yarn.lock (AI-56): one that
+ * can't be opened but is empty reads as "" (nothing to check); any other error is thrown.
+ */
+export function readLockfile(path) {
+  let fd;
+  try {
+    fd = openSync(path, "r");
+  } catch (err) {
+    if (err.code === "ENOENT") return null;
+    if (err.code === "EACCES" && statSync(path).size === 0) return "";
+    throw err;
+  }
+  try {
+    return readFileSync(fd, "utf8");
+  } finally {
+    closeSync(fd);
+  }
+}
+
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
   const dir = process.argv[2] ?? ".";
   let failed = false;
   for (const [file, check] of Object.entries(CHECKS)) {
     const path = join(dir, file);
-    if (!existsSync(path)) continue;
-    // An empty lockfile lists no packages. The build sandbox binds empty, unreadable
-    // placeholders at package-lock.json and yarn.lock (AI-56); stat needs no read permission.
-    if (statSync(path).size === 0) {
+    const text = readLockfile(path);
+    if (text === null) continue;
+    // An empty lockfile lists no packages.
+    if (text === "") {
       process.stdout.write(`skip ${file}: empty\n`);
       continue;
     }
-    const offenders = check(readFileSync(path, "utf8"));
+    const offenders = check(text);
     if (offenders.length === 0) {
       process.stdout.write(`ok   ${file}: every package from the npm registry with integrity\n`);
       continue;
