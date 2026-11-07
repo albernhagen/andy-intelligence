@@ -87,7 +87,7 @@ describe("run routes", () => {
 
   it("GivenAStepNotBuiltYet_WhenStarted_Then400", async () => {
     const { call, runsPath } = await setup();
-    const res = await call(runsPath, { method: "POST", body: JSON.stringify({ step: "build" }) });
+    const res = await call(runsPath, { method: "POST", body: JSON.stringify({ step: "review" }) });
     expect(res.status).toBe(400);
   });
 

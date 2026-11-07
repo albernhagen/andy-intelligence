@@ -28,6 +28,10 @@ export function buildProject(input: NewProject): Project {
     monthlyBudgetUsd: null,
     enabled: true,
     autoRefine: true,
+    autoBuild: false,
+    buildEnabled: false,
+    buildEnabledBy: null,
+    buildEnabledAt: null,
   };
 }
 

@@ -67,7 +67,7 @@ describe("RunService", () => {
   });
 
   it("GivenAStepThatIsNotBuiltYet_WhenStarted_ThenInvalidStep", async () => {
-    await rejects(service.start(projectId, ticketId, "build"), "invalid_step");
+    await rejects(service.start(projectId, ticketId, "review"), "invalid_step");
   });
 
   it("GivenNoExecutor_WhenStarted_ThenExecutorUnavailable", async () => {

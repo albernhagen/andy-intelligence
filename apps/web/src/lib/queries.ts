@@ -161,11 +161,14 @@ export function useCreateProject() {
   );
 }
 
-/** Project settings (ADR-0054: autoRefine). */
+/** Project settings (ADR-0054: autoRefine; ADR-0063: autoBuild). */
 export function useUpdateProject(projectId: string) {
   const api = useApi();
-  return useWrite(async (body: { autoRefine: boolean }) =>
-    unwrap(await api.PATCH("/api/projects/{projectId}", { params: { path: { projectId } }, body })),
+  return useWrite(
+    async (body: { autoRefine?: boolean; autoBuild?: boolean; buildEnabled?: boolean }) =>
+      unwrap(
+        await api.PATCH("/api/projects/{projectId}", { params: { path: { projectId } }, body }),
+      ),
   );
 }
 
@@ -317,7 +320,7 @@ export function useAnswerQuestion() {
 
 export function useStartRun(path: TicketPath) {
   const api = useApi();
-  return useWrite(async (body: { step: "refine" }) =>
+  return useWrite(async (body: { step: "refine" | "build" }) =>
     unwrap(
       await api.POST("/api/projects/{projectId}/tickets/{ticketId}/runs", {
         params: { path },

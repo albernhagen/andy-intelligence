@@ -18,7 +18,9 @@ Overview and reading map: [ARCHITECTURE.md](ARCHITECTURE.md). Section numbers ma
 
 **Stage moves** (`packages/domain`): forward one step, plus back for re-refine (ready → backlog), retry (in progress → ready) and rework (ready for review or monitoring → in progress). Backlog → ready requires the DoR. Only Andy forces (reason optional, ADR-0057; history marks it), cancels (not a move), reopens, archives; MCP `move_ticket` moves one step forward. **Archived** (Done/Cancelled only) hides it from board, inbox, counts.
 
-**Same-repo PRs move tickets:** key from the PR's head branch, else its description's first line (first `KEY-n` of the repo's project); the webhook records `pr_linked`, then moves it as `system`, stepwise from Ready: opened (not draft) → Ready for review; merged into the default branch → Done (via Monitoring, ADR-0056); closed unmerged → In progress + Needs-you.
+**Same-repo PRs move tickets:** key from the PR's head branch, else its description's first line (first `KEY-n` of the repo's project); the webhook records `pr_linked`, then moves it as `system`, every step in order, skipping only the DoR (ADR-0067): opened (not draft) into the default branch → Ready for review from Backlog, Ready or In progress; merged into it → Done via Monitoring from any stage but Done or Cancelled, withdrawing open questions (ADR-0056); closed unmerged → In progress + Needs-you. Epics, archived and Cancelled tickets only get the link.
+
+**Built (M1.8a, ADR-0063): Ready → In progress.** With a project's `buildEnabled` (recorded) and `autoBuild` on (both default off), the build dispatcher starts, on events only, the top Ready ticket by rank (never an epic or one assigned to Andy) whose DoR is met and blockers Done; one run per project, paused at 3 tickets In progress or Ready for review, ≤ 4 builds per ticket. Dispatch moves it to In progress; one retry, then Needs-you, branch kept. `planApproval` is next.
 
 **Needs-you is a flag, not a stage.** Flagged items stay in their stage and appear in the Needs-you inbox (UI + MCP).
 

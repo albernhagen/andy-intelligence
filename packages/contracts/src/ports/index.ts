@@ -159,8 +159,26 @@ export const QuestionFilter = z.object({
 export type QuestionFilter = z.infer<typeof QuestionFilter>;
 
 /** Project settings Andy can change after registration. */
-export const ProjectPatch = Project.pick({ autoRefine: true }).partial();
+/**
+ * Project settings a patch may change. Declared without defaults: Zod's `.partial()` keeps
+ * field defaults, so a patch of one switch would reset the others.
+ */
+export const ProjectPatch = z.strictObject({
+  autoRefine: z.boolean().optional(),
+  autoBuild: z.boolean().optional(),
+  buildEnabled: z.boolean().optional(),
+  buildEnabledBy: z.string().max(320).nullable().optional(),
+  buildEnabledAt: Timestamp.nullable().optional(),
+});
 export type ProjectPatch = z.infer<typeof ProjectPatch>;
+
+/** The settings a caller may change; who and when (`buildEnabledBy/At`) are set by the domain. */
+export const ProjectSettings = ProjectPatch.pick({
+  autoRefine: true,
+  autoBuild: true,
+  buildEnabled: true,
+});
+export type ProjectSettings = z.infer<typeof ProjectSettings>;
 
 export const TicketFilter = z.object({
   stage: Stage.optional(),
@@ -312,6 +330,10 @@ export const RunPatch = Run.pick({
   summary: true,
   error: true,
   executor: true,
+  plan: true,
+  branch: true,
+  toolingFiles: true,
+  pushGrantedAt: true,
 }).partial();
 export type RunPatch = z.input<typeof RunPatch>;
 
