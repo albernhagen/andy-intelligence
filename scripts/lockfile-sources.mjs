@@ -6,7 +6,7 @@
 //
 // Usage: node scripts/lockfile-sources.mjs [repo-dir]. Checks pnpm-lock.yaml, package-lock.json
 // and yarn.lock where present. Exit 1 on a non-registry source.
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -55,6 +55,12 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
   for (const [file, check] of Object.entries(CHECKS)) {
     const path = join(dir, file);
     if (!existsSync(path)) continue;
+    // An empty lockfile lists no packages. The build sandbox binds empty, unreadable
+    // placeholders at package-lock.json and yarn.lock (AI-56); stat needs no read permission.
+    if (statSync(path).size === 0) {
+      process.stdout.write(`skip ${file}: empty\n`);
+      continue;
+    }
     const offenders = check(readFileSync(path, "utf8"));
     if (offenders.length === 0) {
       process.stdout.write(`ok   ${file}: every package from the npm registry with integrity\n`);

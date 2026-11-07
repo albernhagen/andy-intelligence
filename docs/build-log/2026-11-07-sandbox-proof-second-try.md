@@ -44,6 +44,13 @@
 - **Diagnostic:** AI-53: Sandbox diagnostic: which mount makes node_modules/.bin read-only (build run `QBPqyF3j9fAJNjZQwp0s`, PR #95, closed unmerged): `node_modules` and `node_modules/.bin` are their own read-only bind mounts (mountinfo 578, 628), like `package.json` and the lockfiles; the repo root is writable. No profile rule covers them: Claude Code's own protected package-manager paths.
 - **Fix (AI-54: Build sandbox: pre-install dependencies before the agent (node_modules is read-only inside), ADR-0072, decided by Andy):** "Install dependencies (build)" runs `pnpm install --frozen-lockfile --ignore-scripts --ignore-pnpmfile` outside the sandbox before the agent, store under runner temp; the build procedure says dependencies are installed and can't be changed.
 
+## Seventh try (after AI-54, PR #96)
+
+- **Run:** AI-55: Sandbox probe script (fourth chore), build run `bOQtmWnY4J0TJ8AgOOH5` (Actions run 42401097154), probe PR #97 (closed unmerged).
+- **The project's checks ran in the sandbox for the first time**, against the pre-installed dependencies: `pnpm typecheck` and `pnpm build` passed; `pnpm test` 1047 of 1048. Probe: credentials not set, `sudo` fails, `example.com` blocked, registry reachable.
+- **Failed:** `pnpm lint` (prettier: `Unable to read file ".bash_profile": EACCES`) and one test (`lockfile-sources` CLI on this repo): both read the empty, unreadable placeholders the sandbox binds at the repo root.
+- **Fix (AI-56: Checks fail in the build sandbox on its unreadable placeholder files):** `.prettierignore` (this repo and the managed-project starter) lists the placeholder names the repo lacks, kept in sync with `SANDBOX_PLACEHOLDERS` by a test; `lockfile-sources.mjs` skips a zero-byte lockfile (no packages; `stat` needs no read permission), and a non-empty one is still checked.
+
 ## Next
 
 After the fix merges, start a new probe chore and record the result here; then the `.github/` denial chore.

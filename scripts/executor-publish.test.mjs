@@ -425,11 +425,14 @@ describe("sandbox placeholders and prettier", () => {
     // In the build sandbox they are empty, unreadable binds; prettier --check . fails on them
     // (AI-56). The .claude settings files are real here and stay formatted.
     const real = new Set([".claude/settings.json", ".claude/settings.local.json"]);
-    const ignored = readFileSync(join(import.meta.dirname, "..", ".prettierignore"), "utf8")
-      .split("\n")
-      .map((l) => l.trim());
-    for (const name of SANDBOX_PLACEHOLDERS.filter((n) => !real.has(n))) {
-      expect(ignored).toContain(`/${name}`);
+    // Both this repo's file and the starter managed projects get (platform/baseline/manifest.json).
+    for (const file of [".prettierignore", "template/starter/.prettierignore"]) {
+      const ignored = readFileSync(join(import.meta.dirname, "..", file), "utf8")
+        .split("\n")
+        .map((l) => l.trim());
+      for (const name of SANDBOX_PLACEHOLDERS.filter((n) => !real.has(n))) {
+        expect(ignored, file).toContain(`/${name}`);
+      }
     }
   });
 });
