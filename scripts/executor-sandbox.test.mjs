@@ -12,7 +12,13 @@ import {
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import { checkRunProblem, factsProblem, gitTampering, verifyCheck } from "./executor-sandbox.mjs";
+import {
+  checkRunProblem,
+  describeTampering,
+  factsProblem,
+  gitTampering,
+  verifyCheck,
+} from "./executor-sandbox.mjs";
 
 const COMMAND = "git update-index -q --refresh && env | cut -d= -f1 > .executor-sandbox-check";
 const use = (name, input, id = "t1") => ({
@@ -245,14 +251,35 @@ describe("git tampering with claude-code-action's own writes", () => {
     }
   });
 
-  it("GivenAnotherExcludeLineOrAnAttributesFile_WhenChecked_ThenInfoIsReported", () => {
+  it("GivenAnyChangeToTheExcludeFile_WhenChecked_ThenNothingIsReported", () => {
     const c = checkout();
     actionWrites(c.git);
     appendFileSync(join(c.live, "info", "exclude"), "src/\n");
-    expect(gitTampering(c)).toEqual(["info"]);
+    expect(gitTampering(c)).toEqual([]);
     const d = checkout();
-    actionWrites(d.git);
-    writeFileSync(join(d.live, "info", "attributes"), "* filter=x\n");
-    expect(gitTampering(d)).toEqual(["info"]);
+    rmSync(join(d.live, "info", "exclude"));
+    expect(gitTampering(d)).toEqual([]);
+  });
+
+  it("GivenTheExcludeFileReplacedBySymlink_WhenChecked_ThenInfoIsReported", () => {
+    const c = checkout();
+    rmSync(join(c.live, "info", "exclude"));
+    symlinkSync("/dev/zero", join(c.live, "info", "exclude"));
+    expect(describeTampering(c)).toEqual(["info (exclude)"]);
+  });
+
+  it("GivenAnAttributesFileBesideTheActionsWrites_WhenChecked_ThenInfoIsReportedNamingIt", () => {
+    const c = checkout();
+    actionWrites(c.git);
+    writeFileSync(join(c.live, "info", "attributes"), "* filter=x\n");
+    expect(gitTampering(c)).toEqual(["info"]);
+    expect(describeTampering(c)).toEqual(["info (attributes)"]);
+  });
+
+  it("GivenAChangedFileAndAChangedDirectory_WhenDescribed_ThenTheFileAndTheChangedEntriesAreNamed", () => {
+    const c = checkout();
+    writeFileSync(join(c.live, "commondir"), "/tmp/agent/evil\n");
+    writeFileSync(join(c.live, "hooks", "post-checkout"), "#!/bin/sh\n");
+    expect(describeTampering(c)).toEqual(["commondir", "hooks (post-checkout)"]);
   });
 });
