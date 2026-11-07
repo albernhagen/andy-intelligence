@@ -1,12 +1,16 @@
 import {
   ACTIVE_RUN_STATUSES,
   BuildOutput,
+  PLAN_REASON_MAX,
+  PlanOutput,
   RUN_SUMMARY_MAX,
   RefineOutput,
   WorkTrackerError,
   notFound,
   type BillingType,
+  type EventActor,
   type Executor,
+  type PlanApproval,
   type ProviderKey,
   type Question,
   type Route,
@@ -29,8 +33,17 @@ import {
   buildRoute,
   isAndysWork,
   isPullRequestOf,
+  ticketSnapshot,
   unfinishedBlockers,
 } from "./builds";
+import {
+  MAX_PLAN_RUNS_PER_TICKET,
+  planPrompt,
+  planRequired,
+  planState,
+  renderPlan,
+  type PlanState,
+} from "./plans";
 import { checkDor } from "./dor";
 import { DomainError } from "./tickets";
 import { TIER_ROUTES } from "./tiers";
@@ -42,8 +55,12 @@ import { afterFailure, deadlineAction, MAX_RUN_ATTEMPTS } from "./watchdog";
  * proving on every call that it is the run that was dispatched.
  */
 
-/** Steps that can be started. Refine is read-only; build edits, runs checks and opens a PR (ADR-0063). */
-export const STARTABLE_STEPS = ["refine", "build"] as const satisfies readonly RunStep[];
+/**
+ * Steps that can be started. Refine and plan are read-only; build edits, runs checks and opens a
+ * PR (ADR-0063). A plan run goes before a build when the project's `planApproval` covers the
+ * ticket (ADR-0050).
+ */
+export const STARTABLE_STEPS = ["refine", "plan", "build"] as const satisfies readonly RunStep[];
 export type StartableStep = (typeof STARTABLE_STEPS)[number];
 
 /**
@@ -67,6 +84,8 @@ export const PROVIDER_BILLING: Record<ProviderKey, BillingType> = {
 export const STEP_LIMITS: Record<StartableStep, { maxTurns: number; timeoutMinutes: number }> = {
   // Above the workflow's own worst case: context 5 + agent 30 + report 5 minutes.
   refine: { maxTurns: 30, timeoutMinutes: 45 },
+  // Read-only like refine, with more to read: the agent job's 30 minutes bound it first.
+  plan: { maxTurns: 50, timeoutMinutes: 45 },
   // context 5 + agent 60 + publish 10 + report 5 minutes, plus queueing.
   build: { maxTurns: 150, timeoutMinutes: 90 },
 };
@@ -146,14 +165,17 @@ export class RunService {
     return this.runs.listForTicket(projectId, ticketId);
   }
 
-  /** `retryOf`: the failed run this one retries (the watchdog's automatic retry). */
+  /**
+   * `retryOf`: the failed run this one retries (the watchdog's automatic retry). A build start
+   * on a ticket that needs an approved plan (ADR-0050) starts a plan run instead and returns it.
+   */
   async start(projectId: string, ticketId: string, step: string, retryOf?: Run): Promise<Run> {
     if (!STARTABLE_STEPS.includes(step as StartableStep)) {
       throw new DomainError("invalid_step", `can't start a ${step} run yet`, [
         `startable steps: ${STARTABLE_STEPS.join(", ")}`,
       ]);
     }
-    const startable = step as StartableStep;
+    let startable = step as StartableStep;
     if (!this.executor) {
       throw new DomainError("executor_unavailable", "no executor: connect GitHub first");
     }
@@ -163,6 +185,8 @@ export class RunService {
     if (ticket.stage === "cancelled") {
       throw new DomainError("invalid_transition", `${ticket.key} is cancelled; reopen it first`);
     }
+    const questions = await this.tracker.listQuestions({ ticketId, status: "answered" });
+    let approved: Run | null = null;
     if (startable === "refine") await this.checkRefinable(ticket);
     else {
       if (!project.buildEnabled) {
@@ -171,6 +195,13 @@ export class RunService {
         ]);
       }
       await this.checkBuildable(ticket);
+      const plan = await this.planStateOf(ticket, questions, project.planApproval);
+      if (startable === "build") {
+        const gate = buildGate(planRequired(project.planApproval, ticket), plan, ticket, retryOf);
+        approved = gate.approved;
+        startable = gate.step;
+      }
+      if (startable === "plan") await this.checkPlannable(ticket, plan);
     }
     const repo = project.repos[0];
     if (!repo) throw new DomainError("invalid_repo", `project ${project.key} has no repo`);
@@ -182,13 +213,10 @@ export class RunService {
       ]);
     }
 
-    const questions = await this.tracker.listQuestions({ ticketId, status: "answered" });
     const limits = STEP_LIMITS[startable];
-    const build = startable === "build" ? buildRoute(ticket) : null;
-    const prompt =
-      startable === "build"
-        ? buildPrompt(ticket, repo, questions)
-        : refinePrompt(ticket, repo, questions);
+    // A plan run is routed like the build it plans: the same model reads the same code.
+    const build = startable === "refine" ? null : buildRoute(ticket);
+    const prompt = await this.promptFor(startable, ticket, repo, questions, approved);
     const run = await this.runs.create({
       projectId,
       ticketId,
@@ -200,6 +228,8 @@ export class RunService {
       maxTurns: limits.maxTurns,
       attempt: retryOf ? retryOf.attempt + 1 : 1,
       retryOf: retryOf?.id ?? null,
+      planRunId: approved?.id ?? null,
+      planPolicy: startable === "plan" ? project.planApproval : null,
     });
 
     // Check again now that this run exists: two concurrent starts both pass the first check,
@@ -319,6 +349,7 @@ export class RunService {
     let error: string | null = null;
     let asked = 0;
     let built: BuildRecord | null = null;
+    let planned: PlanOutput | null = null;
     // Questions are written before the run is closed: the write is idempotent per run, so a
     // report replayed after a crash here finishes the job instead of duplicating it.
     if (run.step === "refine" && status === "succeeded") {
@@ -329,6 +360,17 @@ export class RunService {
       } else {
         summary = refined.summary;
         asked = refined.asked;
+      }
+    }
+    if (run.step === "plan" && status === "succeeded") {
+      const parsed = PlanOutput.safeParse(result.output);
+      if (parsed.success) {
+        planned = parsed.data;
+        summary = renderPlan(parsed.data).slice(0, RUN_SUMMARY_MAX);
+      } else {
+        status = "failed";
+        error = `Its result was rejected (${issuesOf(parsed.error)}); no plan was recorded.`;
+        log("WARNING", "plan result rejected", { runId: run.id, error });
       }
     }
     if (run.step === "build") {
@@ -354,6 +396,7 @@ export class RunService {
           costUsd: result.costUsd,
           // On a subscription the reported cost is the API-equivalent estimate.
           costIsEstimate: PROVIDER_BILLING[run.route.provider] === "subscription",
+          ...(planned ? { plan: planned.plan } : {}),
           ...(built
             ? {
                 plan: built.plan,
@@ -385,9 +428,12 @@ export class RunService {
           ? `\n\nChanges tooling or dependency files (review before running the branch locally): ${built.toolingFiles.join(", ")}`
           : "";
       const kept = status === "failed" && built?.branch ? `\n\nBranch kept: ${built.branch}` : "";
+      const decide = planned
+        ? "\n\nNeeds you: approve or reject this plan in the ticket's Activity (or MCP approve_plan / reject_plan). The build starts when you approve."
+        : "";
       const body =
         status === "succeeded"
-          ? `${summary ?? "The run finished without a summary."}${asks}${pr}${tooling}`
+          ? `${summary ?? "The run finished without a summary."}${asks}${pr}${tooling}${decide}`
           : `The ${done.step} run failed.${error ? ` ${error}` : ""}${summary ? `\n\n${summary}` : ""}${kept}`;
       await this.tracker.addComment(done.projectId, done.ticketId, body, `agent:${run.id}`);
     }
@@ -395,7 +441,10 @@ export class RunService {
     // the control plane rejected is flagged at once: retrying the same agent rarely fixes it.
     if (result.status === "failed") await this.retryOrFlag(done, "reported a failure");
     else if (done.step === "refine" && status === "failed") await this.flagFailedRefine(done);
-    else if (done.step === "build" && status === "failed") await this.flagFailedBuild(done);
+    else if (done.step === "build" && status === "failed") await this.flagTicket(done);
+    // A plan waits for Andy (ADR-0050): the ticket is flagged and nothing starts. A rejected
+    // plan result is flagged at once, like a rejected build.
+    else if (done.step === "plan") await this.flagTicket(done);
     // After the retry, so a retry keeps the project's run slot.
     await this.runEnded(done);
     return "recorded";
@@ -446,6 +495,163 @@ export class RunService {
     ]);
     log("INFO", "push token granted", { runId, repo: caller.repo });
     return granted;
+  }
+
+  /**
+   * Andy's decision on a plan run (ADR-0050). Owner-only: any actor but `andy` (the signed-in,
+   * allow-listed user through the API or MCP) is refused. Only the ticket's latest plan run, once
+   * succeeded and undecided, can be decided; a stale plan can be rejected but not approved.
+   * Approving clears the flag and starts the build with the plan in its prompt; if the build
+   * can't start now (a run in flight, builds off), the approval stands and the build starts
+   * later (the dispatcher, or Andy's next start). Rejecting needs a reason, keeps the ticket
+   * flagged and starts nothing: the next plan run, started by Andy, sees the reason.
+   */
+  async decidePlan(
+    projectId: string,
+    ticketId: string,
+    runId: string,
+    input: { decision: "approved" | "rejected"; reason?: string | null },
+    decider: { actor: EventActor; email: string },
+  ): Promise<{ run: Run; build: Run | null; buildError: string | null }> {
+    if (decider.actor !== "andy") {
+      log("WARNING", "plan decision refused: not the owner", { runId, actor: decider.actor });
+      throw new DomainError("forbidden", "only Andy approves or rejects a plan");
+    }
+    const reason = input.reason?.trim() || null;
+    if (input.decision === "rejected" && !reason) {
+      throw new DomainError("plan_not_decidable", "a rejection needs a reason", [
+        "the next plan run sees it",
+      ]);
+    }
+    if (reason && reason.length > PLAN_REASON_MAX) {
+      throw new DomainError(
+        "plan_not_decidable",
+        `the reason is over ${PLAN_REASON_MAX} characters`,
+      );
+    }
+    const ticket = await this.requireTicket(projectId, ticketId);
+    const run = await this.runs.get(runId);
+    if (!run || run.projectId !== projectId || run.ticketId !== ticketId || run.step !== "plan") {
+      throw notFound("plan run", runId);
+    }
+    const questions = await this.tracker.listQuestions({ ticketId, status: "answered" });
+    const state = await this.planStateOf(ticket, questions);
+    const latest = state.kind === "none" ? null : state.run;
+    if (latest?.id !== run.id) {
+      throw new DomainError("plan_not_decidable", `run ${runId} isn't ${ticket.key}'s latest plan`);
+    }
+    if (state.kind === "approved" || state.kind === "rejected") {
+      throw new DomainError("plan_not_decidable", `this plan was already ${state.kind}`);
+    }
+    if (state.kind === "planning") {
+      throw new DomainError("plan_not_decidable", "the plan run hasn't finished");
+    }
+    if (state.kind === "stale" && input.decision === "approved") {
+      throw new DomainError("plan_not_decidable", "this plan is stale: start a new plan run", [
+        "the ticket or the project's plan approval changed since it was planned, or the plan is over 72 hours old",
+      ]);
+    }
+    let decided: Run;
+    try {
+      // Write-once in the store: of two racing decisions (a double click, UI and MCP), one wins.
+      decided = await this.runs.update(
+        run.id,
+        {
+          planDecision: {
+            decision: input.decision,
+            reason,
+            by: decider.email,
+            at: this.now().toISOString(),
+          },
+        },
+        ["succeeded"],
+      );
+    } catch (err) {
+      if (err instanceof WorkTrackerError && err.code === "conflict") {
+        throw new DomainError("plan_not_decidable", "this plan was already decided");
+      }
+      throw err;
+    }
+    log("INFO", "plan decided", { runId, ticket: ticket.key, decision: input.decision });
+    const approved = input.decision === "approved";
+    // Rejecting keeps the ticket flagged. Approving leaves the flag as it is: the build's start
+    // clears it (markInProgress), so a build that can't start yet stays in Needs-you.
+    if (!approved) {
+      await this.tracker.updateTicket(
+        projectId,
+        ticketId,
+        { fields: { needsAttention: true } },
+        "andy",
+      );
+    }
+    await this.tracker.addComment(
+      projectId,
+      ticketId,
+      approved
+        ? `Plan approved (${run.id})${reason ? `: ${reason}` : "."}`
+        : `Plan rejected (${run.id}): ${reason}`,
+      "andy",
+    );
+    if (!approved) return { run: decided, build: null, buildError: null };
+    try {
+      return {
+        run: decided,
+        build: await this.start(projectId, ticketId, "build"),
+        buildError: null,
+      };
+    } catch (err) {
+      if (!(err instanceof DomainError)) throw err;
+      log("WARNING", "build not started after plan approval", { runId, error: err.message });
+      await this.tracker.addComment(
+        projectId,
+        ticketId,
+        `Needs you: the plan is approved, but the build didn't start yet: ${err.message}. Start it from the ticket when the project is free (auto-build starts it on its own once the flag is cleared).`,
+        "system",
+      );
+      return { run: decided, build: null, buildError: err.message };
+    }
+  }
+
+  /** Where the ticket's latest plan run stands, against the ticket and project policy now. */
+  async planStateOf(
+    ticket: Ticket,
+    answered?: Question[],
+    policy?: PlanApproval,
+  ): Promise<PlanState> {
+    const questions =
+      answered ?? (await this.tracker.listQuestions({ ticketId: ticket.id, status: "answered" }));
+    const current =
+      policy ?? (await this.tracker.getProject(ticket.projectId))?.planApproval ?? "none";
+    const runs = await this.runs.listForTicket(ticket.projectId, ticket.id);
+    return planState(runs, ticketSnapshot(ticket, questions), current, this.now());
+  }
+
+  /** At most MAX_PLAN_RUNS_PER_TICKET plan runs; none while one is in flight. */
+  private async checkPlannable(ticket: Ticket, state: PlanState): Promise<void> {
+    if (state.kind === "planning") {
+      throw new DomainError("run_limit", `${ticket.key} already has a plan run in flight`);
+    }
+    const plans = (await this.runs.listForTicket(ticket.projectId, ticket.id)).filter(
+      (r) => r.step === "plan" && r.executor !== null,
+    );
+    if (plans.length >= MAX_PLAN_RUNS_PER_TICKET) {
+      throw new DomainError("run_limit", `${ticket.key} has had ${plans.length} plan runs`, [
+        `limit: ${MAX_PLAN_RUNS_PER_TICKET} per ticket; finish it by hand or set planApproval to none`,
+      ]);
+    }
+  }
+
+  private async promptFor(
+    step: StartableStep,
+    ticket: Ticket,
+    repo: string,
+    questions: Question[],
+    approved: Run | null,
+  ): Promise<string> {
+    if (step === "build") return buildPrompt(ticket, repo, questions, approved?.plan ?? null);
+    if (step === "refine") return refinePrompt(ticket, repo, questions);
+    const runs = await this.runs.listForTicket(ticket.projectId, ticket.id);
+    return planPrompt(ticket, repo, questions, runs);
   }
 
   /**
@@ -576,8 +782,11 @@ export class RunService {
     return { plan, branch, pullRequest, summary, error, toolingFiles };
   }
 
-  /** A build the control plane rejected flags its ticket: retrying the same agent rarely fixes it. */
-  private async flagFailedBuild(run: Run): Promise<void> {
+  /**
+   * Flags the run's ticket Needs-you: a build or plan result the control plane rejected (retrying
+   * the same agent rarely fixes it), or a plan waiting for Andy's decision.
+   */
+  private async flagTicket(run: Run): Promise<void> {
     if (!run.ticketId) return;
     await this.tracker.updateTicket(
       run.projectId,
@@ -896,6 +1105,41 @@ export class RunService {
     if (!ticket) throw notFound("ticket", ticketId);
     return ticket;
   }
+}
+
+/**
+ * What a build start runs, from the plan policy and the ticket's plan (ADR-0050). An approved,
+ * fresh plan goes into the build's prompt whatever the policy. A plan awaiting Andy (or still
+ * running) blocks the build. Otherwise, when the policy needs a plan, a plan run goes first;
+ * an automatic retry of a build never turns into a plan run, it stops instead.
+ */
+export function buildGate(
+  required: boolean,
+  plan: PlanState,
+  ticket: Pick<Ticket, "key">,
+  retryOf?: Run,
+): { step: "build" | "plan"; approved: Run | null } {
+  if (plan.kind === "approved") return { step: "build", approved: plan.run };
+  if (plan.kind === "awaiting" || plan.kind === "planning") {
+    throw new DomainError("not_buildable", `${ticket.key}'s plan awaits Andy's decision`, [
+      "approve or reject it in the ticket's Activity (or MCP approve_plan / reject_plan)",
+    ]);
+  }
+  if (!required) return { step: "build", approved: null };
+  if (retryOf) {
+    throw new DomainError("not_buildable", `${ticket.key}'s approved plan is no longer valid`, [
+      "start the build again: a new plan run goes first",
+    ]);
+  }
+  return { step: "plan", approved: null };
+}
+
+/** Up to five schema issues, one line. */
+function issuesOf(error: { issues: readonly { path: PropertyKey[]; message: string }[] }): string {
+  return error.issues
+    .slice(0, 5)
+    .map((i) => `${i.path.join(".") || "result"}: ${i.message}`)
+    .join("; ");
 }
 
 /** What a build report leaves on its Run once checked. */

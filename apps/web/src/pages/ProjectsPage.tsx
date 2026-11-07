@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Link, useNavigate } from "@tanstack/react-router";
-import type { Project } from "@andy/contracts";
+import { PlanApproval, type Project } from "@andy/contracts";
 import { Button } from "@/components/ui/button";
 import { Field, Input } from "@/components/ui/input";
 import { Loading, QueryError } from "@/components/Status";
@@ -38,6 +38,7 @@ export function ProjectsPage() {
             <AutoRefineToggle project={p} />
             <BuildsEnabledToggle project={p} />
             <AutoBuildToggle project={p} />
+            <PlanApprovalSelect project={p} />
           </li>
         ))}
       </ul>
@@ -146,6 +147,35 @@ function AutoBuildToggle({ project }: { project: Project }) {
         onChange={(e) => update.mutate({ autoBuild: e.target.checked })}
       />
       Auto-build
+      {update.error && <QueryError error={update.error} />}
+    </label>
+  );
+}
+
+const PLAN_APPROVAL_LABELS: Record<PlanApproval, string> = {
+  none: "none",
+  "m-and-l": "M and L tickets",
+  all: "all tickets",
+};
+
+/** Which tickets wait for Andy to approve a read-only plan before their build (ADR-0050). */
+function PlanApprovalSelect({ project }: { project: Project }) {
+  const update = useUpdateProject(project.id);
+  return (
+    <label className="ml-3 inline-flex items-center gap-1 text-sm text-muted-foreground">
+      Plan approval
+      <select
+        className="rounded border border-border bg-background px-1"
+        value={project.planApproval}
+        disabled={update.isPending}
+        onChange={(e) => update.mutate({ planApproval: e.target.value as PlanApproval })}
+      >
+        {PlanApproval.options.map((o) => (
+          <option key={o} value={o}>
+            {PLAN_APPROVAL_LABELS[o]}
+          </option>
+        ))}
+      </select>
       {update.error && <QueryError error={update.error} />}
     </label>
   );

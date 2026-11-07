@@ -1,6 +1,6 @@
 import { useEffect, useRef } from "react";
 import { type QueryClient, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import type { Run, Size, Stage, TicketOverrides, TicketType } from "@andy/contracts";
+import type { PlanApproval, Run, Size, Stage, TicketOverrides, TicketType } from "@andy/contracts";
 import { unwrap, useApi } from "./api";
 import { withoutQuestion, type NeedsYou } from "./needs-you";
 
@@ -173,11 +173,16 @@ export function useCreateProject() {
   );
 }
 
-/** Project settings (ADR-0054: autoRefine; ADR-0063: autoBuild). */
+/** Project settings (ADR-0054: autoRefine; ADR-0063: autoBuild; ADR-0050: planApproval). */
 export function useUpdateProject(projectId: string) {
   const api = useApi();
   return useWrite(
-    async (body: { autoRefine?: boolean; autoBuild?: boolean; buildEnabled?: boolean }) =>
+    async (body: {
+      autoRefine?: boolean;
+      autoBuild?: boolean;
+      buildEnabled?: boolean;
+      planApproval?: PlanApproval;
+    }) =>
       unwrap(
         await api.PATCH("/api/projects/{projectId}", { params: { path: { projectId } }, body }),
       ),
@@ -350,13 +355,34 @@ export function useAnswerQuestion(ticketId?: string) {
 
 export function useStartRun(path: TicketPath) {
   const api = useApi();
-  return useWrite(async (body: { step: "refine" | "build" }) =>
+  return useWrite(async (body: { step: "refine" | "plan" | "build" }) =>
     unwrap(
       await api.POST("/api/projects/{projectId}/tickets/{ticketId}/runs", {
         params: { path },
         body,
       }),
     ),
+  );
+}
+
+/** Andy's decision on a plan run (ADR-0050); approving starts the build when it can. */
+export function useDecidePlan(path: TicketPath) {
+  const api = useApi();
+  return useWrite(
+    async ({
+      runId,
+      ...body
+    }: {
+      runId: string;
+      decision: "approved" | "rejected";
+      reason?: string;
+    }) =>
+      unwrap(
+        await api.POST("/api/projects/{projectId}/tickets/{ticketId}/runs/{runId}/plan-decision", {
+          params: { path: { ...path, runId } },
+          body,
+        }),
+      ),
   );
 }
 

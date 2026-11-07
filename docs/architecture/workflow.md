@@ -9,8 +9,8 @@ Overview and reading map: [ARCHITECTURE.md](ARCHITECTURE.md). Section numbers ma
 | Stage | What happens | Exit criteria (automatic unless overridden) |
 |---|---|---|
 | **Backlog** | Refinement agent enriches; splits epics into stories (child tickets with dependencies); sizes; assigns tier; **asks Andy questions** | **Definition of Ready (DoR)** met |
-| **Ready** | Waits for dependencies, agent assignee, quota/budget availability | Dispatcher starts a run |
-| **In progress** | The executor's build run starts read-only and writes a plan into its summary, then implements it (ADR-0050). If the project's `planApproval` policy applies (`none` by default; `m-and-l` or `all`), the run stops after the plan, the ticket is flagged Needs-you, and build starts when Andy approves. One automatic retry, then flags Needs-you | PR opened with structured run summary (plan, deviations, verification output) |
+| **Ready** | Waits for dependencies, assignee, quota/budget | Dispatcher starts a run |
+| **In progress** | Build run: plans read-only, then implements (ADR-0050; plan approval below). One automatic retry, then flags Needs-you | PR opened with structured run summary (plan, deviations, verification output) |
 | **Ready for review** | Rule-based gate decides auto-merge vs. Andy | Merged. No stage after it until M6: Dev → prod releases adds one for dev verification (ADR-0069) |
 | **Done** | Summary included in rollups | — |
 | **Cancelled** | Andy cancelled it; runs stop, questions withdrawn | Andy reopens it to Backlog |
@@ -19,9 +19,11 @@ Overview and reading map: [ARCHITECTURE.md](ARCHITECTURE.md). Section numbers ma
 
 **Same-repo PRs move tickets:** key from the PR's head branch, else its description's first line (first `KEY-n` of the repo's project); the webhook records `pr_linked`, then moves it as `system`, every step in order, skipping only the DoR (ADR-0067): opened (not draft) into the default branch → Ready for review from Backlog, Ready or In progress; merged into it → Done from any stage but Done or Cancelled, withdrawing open questions (ADR-0056, ADR-0069); closed unmerged → In progress + Needs-you. Epics, archived and Cancelled tickets only get the link.
 
-**Built (M1.8a, ADR-0063): Ready → In progress.** With a project's `buildEnabled` (recorded) and `autoBuild` on (both default off), the build dispatcher starts, on events only, the top Ready ticket by rank (never an epic or one assigned to Andy) whose DoR is met and blockers Done; one run per project, paused at 3 tickets In progress or Ready for review, ≤ 4 builds per ticket. Dispatch moves it to In progress; one retry, then Needs-you, branch kept. `planApproval` is next.
+**Built (M1.8a, ADR-0063): Ready → In progress.** With a project's `buildEnabled` (recorded) and `autoBuild` on (both default off), the build dispatcher starts, on events only, the top Ready ticket by rank (never an epic or one assigned to Andy) whose DoR is met and blockers Done; one run per project, paused at 3 tickets In progress or Ready for review, ≤ 4 builds per ticket. Dispatch moves it to In progress; one retry, then Needs-you, branch kept.
 
-**Needs-you is a flag, not a stage.** Flagged items stay in their stage and appear in the Needs-you inbox (UI + MCP).
+**Built (M1.8a): plan approval (ADR-0050).** If `planApproval` (`none`, `m-and-l`, `all`) covers the ticket, a build start runs a read-only `plan` run first, then flags. Approve: the build gets the plan. Reject (with a reason): flagged until Andy re-plans; the next plan sees the reason. The dispatcher skips running, awaiting and rejected plans. Stale plans (ticket or policy changed, > 72 h) re-plan; ≤ 3 per ticket.
+
+**Needs-you is a flag, not a stage:** flagged items stay put and appear in the Needs-you inbox (UI + MCP).
 
 ### 4.2 Definition of Ready (per type, ADR-0058)
 - **Type** set: feature, chore, bug or epic. A title alone is a valid ticket; refine fills the type.
@@ -45,7 +47,7 @@ Overview and reading map: [ARCHITECTURE.md](ARCHITECTURE.md). Section numbers ma
 ### 4.4 Epics
 - Ticket types (Epic / Feature / Chore / Bug, ADR-0058) + **child tickets** (`parent_id`).
 - Epic refinement produces stories with `depends_on`. Stories are vertical slices, independently mergeable behind feature flags; merge to `main`, no long-lived epic branches. Exception: an **overnight run** (ADR-0049) merges its stories into a one-night branch `epic/<key>`, reviewed by Andy as one PR the next morning.
-- **Just-in-time re-planning:** when a story unblocks, a short plan pass re-reads the current codebase before execution. (Single tickets get it as the plan section of every build run, M1.8: Build + gate, ADR-0050.)
+- **Just-in-time re-planning:** when a story unblocks, a short plan pass re-reads the current codebase before execution.
 - Epic status, cost, and progress roll up from children. Overrides on an epic cascade to its stories.
 
 ### 4.5 Review gate (v1.x: rules only)

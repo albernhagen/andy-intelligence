@@ -10,24 +10,24 @@ Slice status lives in **tickets in project `AI`** (ADR-0047 phase 1). This page 
 
 ## Milestone map (ADR-0060: Milestones in completion order)
 
-Every ticket sits under a milestone. Milestones are epic tickets in project `AI` (AI-21: M1, AI-22: M2, AI-23: M3); until tickets can be re-parented (M3: New UI and MCP), this table is the map. Done: AI-1, AI-2, AI-4, AI-14, AI-15, AI-16, AI-17, AI-20, AI-24, AI-25, AI-27 (M1); AI-26 (M3); merged M1 slices: [`history/m1-merged-slices.md`](architecture/history/m1-merged-slices.md).
+Every ticket sits under a milestone. Milestones are epic tickets in project `AI` (AI-21: M1, AI-22: M2, AI-23: M3); until tickets can be re-parented (M3: New UI and MCP), this table is the map. Done: AI-1, AI-2, AI-3 (8a, PR #83), AI-4, AI-14, AI-15, AI-16, AI-17, AI-20, AI-24, AI-25, AI-27, AI-31 (M1); AI-26, AI-28, AI-29, AI-30 (M3). Cancelled: AI-12, AI-38. Merged M1 slices: [`history/m1-merged-slices.md`](architecture/history/m1-merged-slices.md).
 
-| Milestone                                          | Open tickets, in order                                                                                                                                                                                                                                                                                                          |
-| -------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| M1: First end-to-end flow: ticket → PR with Claude | AI-3: M1.8: Build + gate: 8a build run (in progress), then 8b gate (to create). AI-31: A merged PR completes its ticket from any stage.                                                                                                                                                                                         |
-| M2: Self-hosting: andy-intelligence builds itself  | AI-5: M1.9: Quota capture; AI-6: M1.17: Agent evals v1; refine asks less and later (to create); the rest at milestone start (ADR-0060 lists it).                                                                                                                                                                                |
-| M3: New UI and MCP                                 | In progress: AI-28: Board v2, AI-29: Story panel, AI-30: Inbox v2. Then AI-32: Who does the work (after AI-3 and AI-28), AI-19: One permission function, MCP tools and command palette (to create, ADR-0059). AI-8: Agent sessions keep tickets current and AI-9: Live UI updates: fold into the MCP and UI tickets at slicing. |
-| M8: Project members                                | AI-18: Project members.                                                                                                                                                                                                                                                                                                         |
+| Milestone                                          | Open tickets, in order                                                                                                                                                                                                       |
+| -------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| M1: First end-to-end flow: ticket → PR with Claude | In progress: AI-33: M1.8a: Plan approval; AI-36: Drop the Monitoring stage. Then AI-34: M1.8b: Gate and auto-merge (after both), AI-35: Docs at their word caps (alone). M1 closes when AI-34 merges.                        |
+| M2: Self-hosting: andy-intelligence builds itself  | AI-39: Refine as the gate into the queue (first: it decides when refine speaks); AI-5: M1.9: Quota capture; AI-6: M1.17: Agent evals v1; the rest at milestone start (ADR-0060 lists it).                                    |
+| M3: New UI and MCP                                 | AI-32: Who does the work (after AI-34); AI-37: Refine scores (after AI-39); AI-19: One permission function; MCP tools and command palette (to create, ADR-0059). AI-8 and AI-9: fold into the MCP and UI tickets at slicing. |
+| M8: Project members                                | AI-18: Project members.                                                                                                                                                                                                      |
 
 ## Pending decisions (Andy)
 
 - `blockedBy` holds ticket **keys** (`AI-1`); ARCHITECTURE §5 says ticket ids, and nothing reads the field yet. Keep keys (readable, unique across projects) and fix §5 in M1.8: Build + gate, where the dispatcher first reads it?
 - Contract suites for ports with one adapter (`OAuthGrantStore`, `CodeHostConnectionStore`): keep the fakes, drop the shared suite?
 - Production monitoring (alerts, error budget per project) as part of "shipped" (brief): add to M6: Dev → prod releases at slicing.
-- Refine must ask at least one question (§4.3: 1–5). Allow zero for a ticket that is already clear?
+- Refine may ask zero questions when it is confident: decided (AI-39: Refine as the gate into the queue, 2026-11-06). `workflow.md` §4.3 still says 1–5 until AI-39 lands and updates it.
 - Local mode design (open question 11); due after M1: First end-to-end flow.
 - Context sources design (open question 12); due after M1: First end-to-end flow.
 
 ## Blocked on Andy
 
-- AI-1: M1.6a: Claude Code executor: after PR #51 merges, give the GitHub App Actions write and run the demos (runbook `agent-runs.md` §1, §3, §5).
+- Builds on project `AI`: run the live sandbox proof (runbook `agent-runs.md` §9), then switch on Builds; move AI-20, AI-24, AI-25 and AI-26 out of Ready first (their work is merged). Auto-build stays off until the first explicit build has run clean.

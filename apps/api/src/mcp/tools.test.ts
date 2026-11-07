@@ -356,6 +356,41 @@ describe("set_auto_build tool", () => {
   });
 });
 
+describe("plan approval tools", () => {
+  it("GivenAProject_WhenPlanApprovalIsSet_ThenItIsStoredAndShownOverRest", async () => {
+    const ctx = await withProject();
+    expect(
+      (await ctx.call("set_plan_approval", { project: "ai", policy: "m-and-l" })).data,
+    ).toEqual({ project: "AI", planApproval: "m-and-l" });
+    const projects = (await (await ctx.rest("/api/projects")).json()) as { planApproval: string }[];
+    expect(projects[0]!.planApproval).toBe("m-and-l");
+    expect(await ctx.call("set_plan_approval", { project: "AI", policy: "some" })).toMatchObject({
+      isError: true,
+    });
+  });
+
+  it("GivenATicketWithoutAPlan_WhenApproveOrRejectIsCalled_ThenAToolErrorSaysSo", async () => {
+    const ctx = await withProject();
+    const created = await ctx.call("create_ticket", { project: "AI", title: "Board" });
+    const key = (created.data as { ticket: { key: string } }).ticket.key;
+    expect(await ctx.call("approve_plan", { ticket: key })).toMatchObject({
+      isError: true,
+      text: expect.stringContaining("no plan to decide"),
+    });
+    expect(await ctx.call("reject_plan", { ticket: key, reason: "too big" })).toMatchObject({
+      isError: true,
+      text: expect.stringContaining("no plan to decide"),
+    });
+  });
+
+  it("GivenNoReason_WhenRejectPlanIsCalled_ThenItIsRefusedByTheSchema", async () => {
+    const ctx = await withProject();
+    expect(await ctx.call("reject_plan", { ticket: "AI-1", reason: "  " })).toMatchObject({
+      isError: true,
+    });
+  });
+});
+
 describe("set_auto_refine tool", () => {
   it("GivenAProject_WhenAutoRefineIsTurnedOffThenOn_ThenTheSettingIsStored", async () => {
     const ctx = await withProject();

@@ -1,8 +1,8 @@
 # Design source — control-plane UI
 
-Every UI change, by a person or an agent, follows this file (ADR-0059: UX foundation; ADR-0045: UI design system). The model is Shortcut: simple swim lanes, never complicated. A screen that needs a rule this file lacks adds it here in the same PR.
+Every UI change follows this file (ADR-0059: UX foundation; ADR-0045: UI design system). Shortcut's simplicity is the starting point, not the look (ADR-0070): a modern, minimalist design of our own, biased toward deciding (answer, approve, watch). A screen needing a rule this file lacks adds it here.
 
-Stack: React, Tailwind v4, shadcn/ui components in `src/components/ui/`, icons from `lucide-react`. Tokens live in `src/index.css`; use them through Tailwind classes (`bg-muted`, `text-attention`), never raw colours or hex values.
+Stack: React, Tailwind v4, shadcn/ui components in `src/components/ui/`, icons from `lucide-react`. Tokens live in `src/index.css`; use them through Tailwind classes (`bg-muted`, `text-attention`), never raw colours.
 
 ## Principles
 

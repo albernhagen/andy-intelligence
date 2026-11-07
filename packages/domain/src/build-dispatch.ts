@@ -1,4 +1,4 @@
-import type { Run, RunStore, Ticket, WorkTracker } from "@andy/contracts";
+import type { PlanApproval, Run, RunStore, Ticket, WorkTracker } from "@andy/contracts";
 import {
   MAX_BUILD_RUNS_PER_TICKET,
   MAX_TICKETS_IN_FLIGHT,
@@ -6,6 +6,7 @@ import {
   unfinishedBlockers,
 } from "./builds";
 import { checkDor } from "./dor";
+import { MAX_PLAN_RUNS_PER_TICKET, planRequired } from "./plans";
 import type { RunService } from "./runs";
 import { DomainError } from "./tickets";
 
@@ -21,7 +22,9 @@ function log(severity: "INFO" | "WARNING" | "ERROR", message: string, fields: ob
  * is priority, ADR-0058).
  *
  * A Ready ticket waits when it isn't an epic, assigned to Andy (`overrides.assignee: "me"`), archived or flagged Needs-you, meets the Definition of Ready,
- * has every `blockedBy` ticket Done and is under its build-run cap. The project's
+ * has every `blockedBy` ticket Done and is under its build-run cap. With plan approval
+ * (ADR-0050), a ticket whose plan awaits Andy, is still being planned or was rejected waits for
+ * Andy (only he re-plans a rejected plan); one that needs a plan gets a plan run first. The project's
  * one-run-in-flight cap (ADR-0028) queues the rest; MAX_TICKETS_IN_FLIGHT stops dispatch while
  * too many built tickets wait for review.
  */
@@ -62,7 +65,7 @@ export class BuildDispatcher {
       // An epic never runs (ADR-0058); refine can leave one in Ready. Andy's own work never builds.
       if (ticket.type === "epic" || isAndysWork(ticket)) continue;
       if (ticket.archived || ticket.needsAttention) continue;
-      if (!(await this.waiting(ticket))) continue;
+      if (!(await this.waiting(ticket, project.planApproval))) continue;
       try {
         const run = await this.runs.start(projectId, ticket.id, "build");
         log("INFO", "build started on its own", { ticket: ticket.key, runId: run.id });
@@ -91,7 +94,7 @@ export class BuildDispatcher {
     );
   }
 
-  private async waiting(ticket: Ticket): Promise<boolean> {
+  private async waiting(ticket: Ticket, policy: PlanApproval): Promise<boolean> {
     const open = await this.tracker.listQuestions({ ticketId: ticket.id, status: "open" });
     if (!checkDor(ticket, open.length).met) return false;
     if (unfinishedBlockers(ticket, await this.runs.blockerStages(ticket)).length > 0) return false;
@@ -102,6 +105,26 @@ export class BuildDispatcher {
       await this.flag(
         ticket,
         `Build ran ${builds.length} times without a merged change. Finish the ticket by hand.`,
+      );
+      return false;
+    }
+    return this.planAllows(ticket, policy);
+  }
+
+  /** Whether the ticket's plan lets a start go ahead now (a build, or a plan run first). */
+  private async planAllows(ticket: Ticket, policy: PlanApproval): Promise<boolean> {
+    const plan = await this.runs.planStateOf(ticket, undefined, policy);
+    if (plan.kind === "approved") return true;
+    if (plan.kind === "awaiting" || plan.kind === "planning") return false;
+    if (!planRequired(policy, ticket)) return true;
+    if (plan.kind === "rejected") return false;
+    const plans = (await this.runStore.listForTicket(ticket.projectId, ticket.id)).filter(
+      (r) => r.step === "plan" && r.executor !== null,
+    );
+    if (plans.length >= MAX_PLAN_RUNS_PER_TICKET) {
+      await this.flag(
+        ticket,
+        `Plan ran ${plans.length} times without an approved plan. Finish the ticket by hand or set the project's plan approval to none.`,
       );
       return false;
     }
