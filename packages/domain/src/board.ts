@@ -10,7 +10,7 @@ import {
 } from "@andy/contracts";
 
 /** Stages whose cards show a pull request; Backlog, Ready and Done ones skip the history read. */
-export const PR_STAGES: readonly Stage[] = ["in_progress", "ready_for_review", "monitoring"];
+export const PR_STAGES: readonly Stage[] = ["in_progress", "ready_for_review"];
 
 /**
  * Cap on history reads per board request (ADR-0028): one per card in `PR_STAGES`. Cards past it

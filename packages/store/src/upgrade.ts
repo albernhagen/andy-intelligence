@@ -23,6 +23,24 @@ export const ticketV1toV2: Upgrader = (data) => {
   return out;
 };
 
+/** ADR-0069: the Monitoring stage is gone until M6: Dev → prod releases; it reads as Done. */
+const stageV3 = (stage: unknown): unknown => (stage === "monitoring" ? "done" : stage);
+
+/** Ticket v2 → v3 (ADR-0069): a ticket stored in Monitoring is Done. */
+export const ticketV2toV3: Upgrader = (data) => ({ ...data, stage: stageV3(data.stage) });
+
+/**
+ * Ticket event v2 → v3 (ADR-0069): a `stage_changed` event's `from` and `to` read Monitoring as
+ * Done, so history shows only stages that exist. Other kinds pass through.
+ */
+export const ticketEventV2toV3: Upgrader = (data) => {
+  if (data.kind !== "stage_changed" || typeof data.data !== "object" || data.data === null) {
+    return data;
+  }
+  const { from, to } = data.data as { from?: unknown; to?: unknown };
+  return { ...data, data: { ...data.data, from: stageV3(from), to: stageV3(to) } };
+};
+
 /** Upgraders by the version they upgrade from. A document without `_v` is version 1. */
 export function upgrade(
   data: DocumentData,

@@ -147,13 +147,7 @@ describe("PullRequestTickets", () => {
     const t = await ticketAt("backlog");
     await service.ask(project.id, t.id, { text: "Which?" }, "agent:r1");
     const result = await prs.apply(prEvent("closed", { state: "merged" }), project);
-    expect(result.moves).toEqual([
-      "ready",
-      "in_progress",
-      "ready_for_review",
-      "monitoring",
-      "done",
-    ]);
+    expect(result.moves).toEqual(["ready", "in_progress", "ready_for_review", "done"]);
     expect(await reload(t)).toMatchObject({ stage: "done", needsAttention: false });
     expect(await tracker.listQuestions({ ticketId: t.id, status: "open" })).toEqual([]);
     expect(await service.needsYou()).toEqual({ questions: [], tickets: [] });
@@ -194,13 +188,7 @@ describe("PullRequestTickets", () => {
       return update(projectId, ticketId, change, actor);
     };
     const result = await prs.apply(prEvent("closed", { state: "merged" }), project);
-    expect(result.moves).toEqual([
-      "ready",
-      "in_progress",
-      "ready_for_review",
-      "monitoring",
-      "done",
-    ]);
+    expect(result.moves).toEqual(["ready", "in_progress", "ready_for_review", "done"]);
     expect(await reload(t)).toMatchObject({ stage: "done", needsAttention: false });
   });
 
@@ -258,6 +246,13 @@ describe("PullRequestTickets", () => {
     expect(await service.needsYou()).toEqual({ questions: [], tickets: [] });
   });
 
+  it("GivenADoneTicket_WhenAnotherPullRequestMerges_ThenItStaysDoneWithNoMove", async () => {
+    const t = await ticketAt("done");
+    const result = await prs.apply(prEvent("closed", { state: "merged" }), project);
+    expect(result).toMatchObject({ result: "linked", moves: [] });
+    expect((await reload(t)).stage).toBe("done");
+  });
+
   it("GivenAnArchivedDoneTicket_WhenAnotherPullRequestOpens_ThenItStaysArchivedAndDone", async () => {
     const t = await ticketAt("done");
     await service.archive(project.id, t.id, true, "andy");
@@ -265,11 +260,18 @@ describe("PullRequestTickets", () => {
     expect(await reload(t)).toMatchObject({ stage: "done", archived: true });
   });
 
-  it("GivenATicketInReview_WhenItsPullRequestMerges_ThenDoneThroughMonitoring", async () => {
+  it("GivenATicketInReview_WhenItsPullRequestMerges_ThenStraightToDoneWithOneStageEvent", async () => {
     const t = await ticketAt("ready_for_review");
+    const before = (await tracker.listEvents(project.id, t.id)).length;
     const result = await prs.apply(prEvent("closed", { state: "merged" }), project);
-    expect(result).toMatchObject({ outcome: "merged", moves: ["monitoring", "done"] });
+    expect(result).toMatchObject({ outcome: "merged", moves: ["done"] });
     expect((await reload(t)).stage).toBe("done");
+    const stageEvents = (await tracker.listEvents(project.id, t.id))
+      .slice(before)
+      .filter((e) => e.kind === "stage_changed");
+    expect(stageEvents.map((e) => e.data)).toEqual([
+      expect.objectContaining({ from: "ready_for_review", to: "done" }),
+    ]);
     const linked = (await systemEvents(t)).find((e) => e.kind === "pr_linked");
     expect(linked?.data).toMatchObject({ state: "merged", url: expect.stringContaining("/70") });
   });

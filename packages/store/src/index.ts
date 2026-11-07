@@ -22,7 +22,7 @@ import {
   Tier,
 } from "@andy/contracts";
 import type { z } from "zod";
-import { ticketV1toV2, upgrade, type Upgrader } from "./upgrade";
+import { ticketEventV2toV3, ticketV1toV2, ticketV2toV3, upgrade, type Upgrader } from "./upgrade";
 
 /**
  * Firestore persistence (ADR-0017). Documents are validated with the same Zod schemas
@@ -30,8 +30,12 @@ import { ticketV1toV2, upgrade, type Upgrader } from "./upgrade";
  * Each document carries `_v` (schema version) so readers can upgrade old shapes lazily.
  */
 
-/** v2: ticket model v2 (ADR-0058), upgraded on read by `ticketV1toV2`. */
-export const SCHEMA_VERSION = 2;
+/**
+ * v2: ticket model v2 (ADR-0058), upgraded on read by `ticketV1toV2`. v3: no Monitoring stage
+ * (ADR-0069): tickets and their `stage_changed` events read it as Done (`ticketV2toV3`,
+ * `ticketEventV2toV3`). Other collections have nothing to upgrade.
+ */
+export const SCHEMA_VERSION = 3;
 
 /** Collection layout. Tickets and their history live under their project. */
 export const collections = {
@@ -39,12 +43,14 @@ export const collections = {
   tickets: {
     path: (projectId: string) => `projects/${projectId}/tickets`,
     schema: Ticket,
-    upgraders: { 1: ticketV1toV2 },
+    upgraders: { 1: ticketV1toV2, 2: ticketV2toV3 },
   },
   ticketEvents: {
     path: (projectId: string, ticketId: string) =>
       `projects/${projectId}/tickets/${ticketId}/events`,
     schema: TicketEvent,
+    // Events never changed shape before v3, so a v1 event upgrades straight through.
+    upgraders: { 1: (data: DocumentData) => data, 2: ticketEventV2toV3 },
   },
   questions: { path: () => "questions", schema: Question },
   runs: { path: () => "runs", schema: Run },
@@ -108,6 +114,6 @@ export {
 } from "./code-event-log";
 export { FirestoreOAuthGrantStore, OAUTH_GRANT_TTL_FIELD } from "./oauth-grant-store";
 export { FirestoreWorkTracker } from "./work-tracker";
-export { ticketV1toV2, upgrade, type Upgrader } from "./upgrade";
+export { ticketEventV2toV3, ticketV1toV2, ticketV2toV3, upgrade, type Upgrader } from "./upgrade";
 export { FirestoreRunStore } from "./run-store";
 export { CloudTasksWatchdogQueue, watchdogUrl, type TaskCreator } from "./watchdog-queue";

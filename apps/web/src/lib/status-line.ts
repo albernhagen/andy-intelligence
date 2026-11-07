@@ -61,8 +61,6 @@ function mainStatus(s: StatusInput, now: Date): { text: string; tone: StatusTone
       return { text: join("In progress", pr ?? "no run in flight"), tone: "default" };
     case "ready_for_review":
       return { text: join("Ready for review", pr), tone: "default" };
-    case "monitoring":
-      return { text: join("Monitoring", pr), tone: "success" };
   }
 }
 

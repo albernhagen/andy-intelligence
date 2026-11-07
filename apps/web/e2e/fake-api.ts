@@ -189,7 +189,7 @@ const route = { harness: "claude-code", provider: "claude-sub", model: "sonnet" 
 /**
  * AI-28: Board v2: tickets that put every card marker on the board: no type, a run in flight
  * (refine and build), a PR in each state, a blocked Ready card ranked above the next one, and
- * Monitoring and Done for the strips. Nothing here flags a ticket or asks a question, so the
+ * two Done tickets for the strip (no Monitoring stage until M6, ADR-0069). Nothing here flags a ticket or asks a question, so the
  * inbox and ticket page screenshots don't change.
  */
 async function seedBoardMarkers(
@@ -241,7 +241,7 @@ async function seedBoardMarkers(
   await pr(scroll.id, 61, "closed");
   await pr(scroll.id, 62, "open");
 
-  const auto = await at("monitoring", {
+  const auto = await at("done", {
     ...ready,
     type: "chore",
     title: "Refine starts on its own",

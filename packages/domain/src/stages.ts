@@ -10,8 +10,7 @@ export const TRANSITIONS: Readonly<Record<Stage, readonly Stage[]>> = {
   backlog: ["ready"],
   ready: ["in_progress", "backlog"],
   in_progress: ["ready_for_review", "ready"],
-  ready_for_review: ["monitoring", "in_progress"],
-  monitoring: ["done", "in_progress"],
+  ready_for_review: ["done", "in_progress"],
   done: [],
   cancelled: ["backlog"],
 };
@@ -26,7 +25,6 @@ export const PIPELINE: readonly Stage[] = [
   "ready",
   "in_progress",
   "ready_for_review",
-  "monitoring",
   "done",
 ];
 
@@ -56,7 +54,7 @@ export type PullRequestTarget = "ready_for_review" | "done";
  */
 export const PULL_REQUEST_SOURCES: Readonly<Record<PullRequestTarget, readonly Stage[]>> = {
   ready_for_review: ["backlog", "ready", "in_progress"],
-  done: ["backlog", "ready", "in_progress", "ready_for_review", "monitoring"],
+  done: ["backlog", "ready", "in_progress", "ready_for_review"],
 };
 
 /** The one-step moves a PR event makes, e.g. backlog → [ready, in_progress, ready_for_review]. */

@@ -96,19 +96,88 @@ describe("zodConverter", () => {
     expect(conv.fromFirestore(snap(unversioned))).toEqual(ticket);
   });
 
-  it("GivenAV1Ticket_WhenReadAndWrittenBack_ThenItIsStoredInTheV2Shape", () => {
+  it("GivenAV1Ticket_WhenReadAndWrittenBack_ThenItIsStoredInTheCurrentShape", () => {
     const written = conv.toFirestore(conv.fromFirestore(snap(v1())));
-    expect(written).toMatchObject({ _v: 2, type: "feature", needsAttention: false });
+    expect(written).toMatchObject({ _v: SCHEMA_VERSION, type: "feature", needsAttention: false });
     expect(written).not.toHaveProperty("needsYou");
     expect(written).not.toHaveProperty("tier");
   });
 
-  it("GivenAV2Ticket_WhenUpgraded_ThenItIsUnchanged", () => {
+  it("GivenAV3Ticket_WhenUpgraded_ThenItIsUnchanged", () => {
     const stored = { ...ticket, type: "chore" };
-    expect(upgrade(stored, 2, collections.tickets.upgraders)).toBe(stored);
+    expect(upgrade(stored, 3, collections.tickets.upgraders)).toBe(stored);
+  });
+
+  it("GivenAStoredV2TicketInMonitoring_WhenRead_ThenItIsDone", () => {
+    const read = conv.fromFirestore(snap({ ...ticket, stage: "monitoring", _v: 2 }));
+    expect(read).toEqual({ ...ticket, stage: "done" });
+  });
+
+  it("GivenAStoredV1TicketInMonitoring_WhenRead_ThenItIsDone", () => {
+    expect(conv.fromFirestore(snap(v1({ stage: "monitoring" })))).toMatchObject({ stage: "done" });
+  });
+
+  it("GivenAStoredV2TicketInAnotherStage_WhenRead_ThenTheStageIsKept", () => {
+    expect(conv.fromFirestore(snap({ ...ticket, stage: "in_progress", _v: 2 }))).toEqual({
+      ...ticket,
+      stage: "in_progress",
+    });
+  });
+
+  it("GivenMonitoringInACurrentTicket_WhenWritten_ThenRejected", () => {
+    expect(() =>
+      conv.toFirestore({ ...ticket, stage: "monitoring" } as unknown as Ticket),
+    ).toThrow();
   });
 
   it("nests ticket history under the ticket", () => {
     expect(collections.ticketEvents.path("p1", "t1")).toBe("projects/p1/tickets/t1/events");
+  });
+});
+
+describe("ticket event upgrade (ADR-0069)", () => {
+  const conv = zodConverter(collections.ticketEvents.schema, collections.ticketEvents.upgraders);
+  const event = {
+    id: "e1",
+    ticketId: "t1",
+    kind: "stage_changed",
+    actor: "system",
+    runId: null,
+    body: null,
+    createdAt: "2026-11-05T00:00:00Z",
+  };
+
+  it("GivenAStoredV2StageEventWithMonitoring_WhenRead_ThenMonitoringReadsAsDone", () => {
+    const stored = {
+      ...event,
+      data: { from: "ready_for_review", to: "monitoring", forced: false },
+    };
+    expect(conv.fromFirestore(snap({ ...stored, _v: 2 }))).toEqual({
+      ...event,
+      data: { from: "ready_for_review", to: "done", forced: false },
+    });
+    const next = { ...event, data: { from: "monitoring", to: "done", forced: false } };
+    expect(conv.fromFirestore(snap({ ...next, _v: 2 })).data).toMatchObject({
+      from: "done",
+      to: "done",
+    });
+  });
+
+  it("GivenAStoredV1StageEventWithMonitoring_WhenRead_ThenMonitoringReadsAsDone", () => {
+    const stored = { ...event, data: { from: "monitoring", to: "in_progress" }, _v: 1 };
+    expect(conv.fromFirestore(snap(stored)).data).toEqual({ from: "done", to: "in_progress" });
+  });
+
+  it("GivenAStoredV2EventOfAnotherKind_WhenRead_ThenItIsUnchanged", () => {
+    const stored = { ...event, kind: "comment", body: "monitoring", data: { to: "monitoring" } };
+    expect(conv.fromFirestore(snap({ ...stored, _v: 2 }))).toEqual(stored);
+  });
+
+  it("GivenAnEventRead_WhenWrittenBack_ThenItIsStampedV3", () => {
+    const stored = { ...event, data: { from: "ready_for_review", to: "monitoring" }, _v: 2 };
+    expect(conv.toFirestore(conv.fromFirestore(snap(stored)))).toMatchObject({
+      _v: 3,
+      data: { to: "done" },
+    });
   });
 });

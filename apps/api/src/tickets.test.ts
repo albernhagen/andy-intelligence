@@ -201,6 +201,17 @@ describe("ticket API", () => {
     expect(res.json.stage).toBe("done");
   });
 
+  it("GivenMonitoring_WhenAMoveOrFilterAsksForIt_ThenRejectedAndTheTicketIsUnchanged", async () => {
+    const t = await projectWithTicket();
+    const res = await call("POST", `/api/projects/ai/tickets/${t.id}/stage`, {
+      to: "monitoring",
+      force: true,
+    });
+    expect(res.status).toBe(400);
+    expect((await call("GET", "/api/projects/ai/tickets?stage=monitoring")).status).toBe(400);
+    expect((await call("GET", `/api/projects/ai/tickets/${t.id}`)).json.stage).toBe("backlog");
+  });
+
   it("GivenATicket_WhenCancelledThenArchived_ThenItIsHiddenUnlessArchivedIsAskedFor", async () => {
     const t = await projectWithTicket();
     const base = `/api/projects/ai/tickets/${t.id}`;

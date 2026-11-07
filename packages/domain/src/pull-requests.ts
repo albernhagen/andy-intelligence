@@ -111,7 +111,7 @@ export class PullRequestTickets {
         return { ...base, moves, unflagged: !after.needsAttention };
       }
       case "merged":
-        // Merge means Done until M6: Dev → prod releases (ADR-0056).
+        // Merge means Done until M6: Dev → prod releases (ADR-0056, ADR-0069).
         return { ...base, moves: await follow("done") };
       case "closed":
         return this.rework(ticket, reason, base);
@@ -129,13 +129,13 @@ export class PullRequestTickets {
     return last?.data.state === "closed";
   }
 
-  /** Closed unmerged: back to In progress (rework) and Needs-you, from review or later. */
+  /** Closed unmerged: back to In progress (rework) and Needs-you, from review. */
   private async rework(
     ticket: Ticket,
     reason: string,
     base: PullRequestTicketResult,
   ): Promise<PullRequestTicketResult> {
-    const rework = ticket.stage === "ready_for_review" || ticket.stage === "monitoring";
+    const rework = ticket.stage === "ready_for_review";
     if (!rework && ticket.stage !== "in_progress") return { ...base, moves: [], flagged: false };
     if (rework) {
       await this.tickets.move(ticket.projectId, ticket.id, "in_progress", "system", { reason });

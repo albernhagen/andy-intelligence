@@ -45,7 +45,7 @@ async function drag(
   await user.keyboard(" ");
 }
 
-/** Done and Monitoring start as strips; this expands one and returns its lane. */
+/** Done starts as a strip; this expands it and returns its lane. */
 async function expand(user: ReturnType<typeof renderApp>["user"], name: string) {
   await user.click(screen.getByRole("button", { name: new RegExp(`^Show ${name}`) }));
   return screen.getByRole("region", { name });
@@ -78,7 +78,7 @@ describe("board drag-and-drop", () => {
   it("GivenABacklogTicket_WhenDraggedToDone_ThenAForcedMoveWithNoReasonIsRecorded", async () => {
     const { harness, ticket } = await boardWith({ type: "chore", title: "Spike" });
 
-    await drag(harness.user, ticket.key, 5);
+    await drag(harness.user, ticket.key, 4);
 
     const done = await expand(harness.user, "Done");
     expect(await within(done).findByText(ticket.key)).toBeTruthy();
@@ -186,7 +186,7 @@ describe("board drop keeps the board in view (AI-25)", () => {
   it("GivenABacklogTicket_WhenKeyboardDroppedOnDone_ThenTheBoardStaysInView", async () => {
     const { harness, ticket } = await boardWith({ type: "chore", title: "Spike" });
 
-    await drag(harness.user, ticket.key, 5);
+    await drag(harness.user, ticket.key, 4);
 
     const done = await expand(harness.user, "Done");
     expect(await within(done).findByText(ticket.key)).toBeTruthy();
@@ -364,6 +364,15 @@ describe("board v2", () => {
     expect(within(screen.getByRole("region", { name: "Done" })).getByText("Shipped")).toBeTruthy();
     await harness.user.click(screen.getByRole("button", { name: "Collapse Done" }));
     expect(screen.queryByText("Shipped")).toBeNull();
+  });
+
+  it("GivenTheBoard_WhenItRenders_ThenThereIsNoMonitoringLaneOrStrip", async () => {
+    const harness = await project();
+    await harness.router.navigate({ to: "/p/ai" });
+    await screen.findByRole("region", { name: "Ready for review" });
+    expect(screen.queryByRole("region", { name: "Monitoring" })).toBeNull();
+    expect(screen.queryByRole("button", { name: /Monitoring/ })).toBeNull();
+    expect(screen.queryByText("Monitoring")).toBeNull();
   });
 
   it("GivenACancelledTicket_WhenTheToggleIsOff_ThenTheCancelledLaneIsHidden", async () => {

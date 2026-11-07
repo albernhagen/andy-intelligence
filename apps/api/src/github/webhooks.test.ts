@@ -238,15 +238,36 @@ describe("GitHub webhook receiver", () => {
         ReadyForReview: "ready_for_review",
       } as const;
       for (const [name, stage] of Object.entries(mergeFrom)) {
-        it(`GivenA${name}Ticket_WhenItsPullRequestMerges_ThenDoneThroughMonitoring`, async () => {
+        it(`GivenA${name}Ticket_WhenItsPullRequestMerges_ThenDoneWithNoMonitoringStep`, async () => {
           const t = await ticketAt(stage);
           await deliver({ payload: merged() });
           expect((await tracker.getTicket("ai", t.id))?.stage).toBe("done");
           const moves = await stageMoves(t.id);
-          expect(moves.at(-2)?.to).toBe("monitoring");
+          expect(moves.map((m) => m.to)).not.toContain("monitoring");
+          expect(moves.at(-1)?.to).toBe("done");
           expect(moves.every((m) => !m.forced && m.reason?.includes("/pull/31"))).toBe(true);
         });
       }
+
+      it("GivenAReadyForReviewTicket_WhenASignedMergeDeliveryArrives_ThenDoneWithExactlyOneStageEvent", async () => {
+        const t = await ticketAt("ready_for_review");
+        const before = (await tracker.listEvents("ai", t.id)).length;
+        const res = await deliver({ payload: merged() });
+        expect(res.status).toBe(200);
+        expect((await tracker.getTicket("ai", t.id))?.stage).toBe("done");
+        const stageEvents = (await tracker.listEvents("ai", t.id))
+          .slice(before)
+          .filter((e) => e.kind === "stage_changed");
+        expect(stageEvents).toHaveLength(1);
+        expect(stageEvents[0]?.data).toMatchObject({ from: "ready_for_review", to: "done" });
+      });
+
+      it("GivenADoneTicket_WhenItsPullRequestMerges_ThenLinkedOnlyAndStillDone", async () => {
+        const t = await ticketAt("done");
+        await deliver({ payload: merged() });
+        expect((await tracker.getTicket("ai", t.id))?.stage).toBe("done");
+        expect(await systemKinds(t.id)).toEqual(["pr_linked"]);
+      });
 
       it("GivenOpenQuestions_WhenItsPullRequestMerges_ThenWithdrawnAndNeedsYouCleared", async () => {
         const t = await ticketAt("backlog");

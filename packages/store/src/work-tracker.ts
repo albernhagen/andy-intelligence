@@ -31,6 +31,9 @@ import {
 } from "@andy/contracts";
 import { collections, typedCollection } from "./index";
 
+/** Stored stage values that read as Done: `monitoring` until ADR-0069's upgrader rewrites it. */
+const STORED_AS_DONE = ["done", "monitoring"];
+
 /** gRPC ALREADY_EXISTS, returned by `create()` on an existing document. */
 const ALREADY_EXISTS = 6;
 
@@ -61,6 +64,7 @@ export class FirestoreWorkTracker implements WorkTracker {
       this.db,
       collections.ticketEvents.path(projectId, ticketId),
       collections.ticketEvents.schema,
+      collections.ticketEvents.upgraders,
     );
   }
   private questions() {
@@ -123,7 +127,14 @@ export class FirestoreWorkTracker implements WorkTracker {
 
   async listTickets(projectId: string, filter: TicketFilter = {}): Promise<Ticket[]> {
     let query: Query<Ticket> = this.tickets(projectId);
-    if (filter.stage !== undefined) query = query.where("stage", "==", filter.stage);
+    // v2 documents may still store `monitoring` for Done until their next write (ticketV2toV3),
+    // so a Done filter matches both stored values; the converter returns them as Done.
+    if (filter.stage !== undefined) {
+      query =
+        filter.stage === "done"
+          ? query.where("stage", "in", STORED_AS_DONE)
+          : query.where("stage", "==", filter.stage);
+    }
     // Older documents have no `archived` field (read as false), and an equality query on false
     // would skip them, so `archived: false` filters in memory. `needsAttention` filters in memory
     // too: v1 documents store it as `needsYou` until their next write (ticketV1toV2).
