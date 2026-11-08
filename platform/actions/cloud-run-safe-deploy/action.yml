@@ -1,0 +1,121 @@
+name: Baseline — Cloud Run safe deploy
+description: >-
+  Deploys an already-pushed image as a no-traffic revision tagged `candidate`, smoke tests it, then
+  moves all traffic to it and checks the public URL. A failure before promotion leaves traffic
+  alone; the job summary names the revisions and the rollback command (ADR-0076). The caller
+  authenticates to GCP first and holds credentials only on push to main or workflow_dispatch.
+
+inputs:
+  service:
+    description: Cloud Run service name.
+    required: true
+  region:
+    description: Cloud Run region.
+    required: true
+  image:
+    description: Full image reference to deploy.
+    required: true
+
+runs:
+  using: composite
+  steps:
+    - name: Record the serving revision
+      id: before
+      shell: bash
+      env:
+        SERVICE: ${{ inputs.service }}
+        REGION: ${{ inputs.region }}
+      run: |
+        gcloud run services describe "$SERVICE" --region "$REGION" --format=json |
+          node "$GITHUB_ACTION_PATH/../../../scripts/cloud-run-deploy.mjs" serving
+
+    - name: Deploy the candidate with no traffic
+      id: deploy
+      uses: google-github-actions/deploy-cloudrun@2028e2d7d30a78c6910e0632e48dd561b064884d # v3.0.1
+      with:
+        service: ${{ inputs.service }}
+        region: ${{ inputs.region }}
+        image: ${{ inputs.image }}
+        no_traffic: "true"
+        tag: candidate
+
+    - name: Identify the candidate
+      id: candidate
+      shell: bash
+      env:
+        SERVICE: ${{ inputs.service }}
+        REGION: ${{ inputs.region }}
+      run: |
+        gcloud run services describe "$SERVICE" --region "$REGION" --format=json |
+          node "$GITHUB_ACTION_PATH/../../../scripts/cloud-run-deploy.mjs" candidate
+
+    - name: Smoke test the candidate
+      id: smoke
+      shell: bash
+      env:
+        TAGGED_URL: ${{ steps.candidate.outputs.tagged_url }}
+        PUBLIC_URL: ${{ steps.candidate.outputs.public_url }}
+      run: node "$GITHUB_ACTION_PATH/../../../scripts/cloud-run-deploy.mjs" smoke-candidate
+
+    # --to-latest, not --to-revisions: traffic stays on LATEST, so a later Terraform apply that
+    # changes the template still goes live, as it always has (ADR-0076).
+    - name: Move traffic to the candidate
+      id: promote
+      shell: bash
+      env:
+        SERVICE: ${{ inputs.service }}
+        REGION: ${{ inputs.region }}
+        CANDIDATE: ${{ steps.candidate.outputs.revision }}
+      run: |
+        gcloud run services describe "$SERVICE" --region "$REGION" --format=json |
+          node "$GITHUB_ACTION_PATH/../../../scripts/cloud-run-deploy.mjs" assert-latest "$CANDIDATE"
+        gcloud run services update-traffic "$SERVICE" --region "$REGION" --to-latest --remove-tags=candidate --quiet
+
+    - name: Check the candidate serves all traffic
+      id: verify
+      shell: bash
+      env:
+        SERVICE: ${{ inputs.service }}
+        REGION: ${{ inputs.region }}
+        CANDIDATE: ${{ steps.candidate.outputs.revision }}
+      run: |
+        gcloud run services describe "$SERVICE" --region "$REGION" --format=json |
+          node "$GITHUB_ACTION_PATH/../../../scripts/cloud-run-deploy.mjs" assert-promoted "$CANDIDATE"
+
+    - name: Smoke test the public URL
+      id: public-smoke
+      shell: bash
+      env:
+        PUBLIC_URL: ${{ steps.candidate.outputs.public_url }}
+        RUN_URL: ${{ steps.candidate.outputs.run_url }}
+      run: node "$GITHUB_ACTION_PATH/../../../scripts/cloud-run-deploy.mjs" smoke-public
+
+    - name: Read the serving revision
+      id: after
+      if: always()
+      continue-on-error: true
+      shell: bash
+      env:
+        SERVICE: ${{ inputs.service }}
+        REGION: ${{ inputs.region }}
+      run: |
+        gcloud run services describe "$SERVICE" --region "$REGION" --format=json |
+          node "$GITHUB_ACTION_PATH/../../../scripts/cloud-run-deploy.mjs" after
+
+    - name: Write the job summary
+      if: always()
+      shell: bash
+      env:
+        SERVICE: ${{ inputs.service }}
+        REGION: ${{ inputs.region }}
+        BEFORE: ${{ steps.before.outputs.serving }}
+        CANDIDATE: ${{ steps.candidate.outputs.revision }}
+        AFTER: ${{ steps.after.outputs.serving }}
+        OUTCOME_BEFORE: ${{ steps.before.outcome }}
+        OUTCOME_DEPLOY: ${{ steps.deploy.outcome }}
+        OUTCOME_CANDIDATE: ${{ steps.candidate.outcome }}
+        OUTCOME_SMOKE: ${{ steps.smoke.outcome }}
+        OUTCOME_PROMOTE: ${{ steps.promote.outcome }}
+        OUTCOME_VERIFY: ${{ steps.verify.outcome }}
+        OUTCOME_PUBLIC_SMOKE: ${{ steps.public-smoke.outcome }}
+      run: node "$GITHUB_ACTION_PATH/../../../scripts/cloud-run-deploy.mjs" summary
