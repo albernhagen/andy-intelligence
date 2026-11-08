@@ -532,7 +532,7 @@ describe("RunService", () => {
       expect((await tracker.getTicket(projectId, ticketId))?.stage).toBe("backlog");
     });
 
-    it("GivenTheTicketLeftBacklogDuringTheRun_WhenReported_ThenNoQuestionsAreWritten", async () => {
+    it("GivenTheTicketLeftBacklogDuringTheRun_WhenReported_ThenTheRunSucceedsAndWritesNothing", async () => {
       const run = await service.start(projectId, ticketId, "refine");
       await tracker.updateTicket(
         projectId,
@@ -541,11 +541,42 @@ describe("RunService", () => {
         "andy",
       );
       await service.report(run.id, await callerOf(run.id), refined(good));
+      const finished = await runs.get(run.id);
+      expect(finished).toMatchObject({ status: "succeeded", summary: good.summary });
+      expect(finished?.error ?? null).toBeNull();
+      expect(await tracker.listQuestions({ ticketId })).toEqual([]);
+      const ticket = await tracker.getTicket(projectId, ticketId);
+      expect(ticket).toMatchObject({ stage: "ready", needsAttention: false });
+      expect(ticket?.type).not.toBe(good.type);
+      expect(ticket?.size).not.toBe(good.size);
+    });
+
+    it("GivenTheTicketLeftBacklogDuringTheRun_WhenReported_ThenTheCommentQuotesTheUnaskedQuestions", async () => {
+      const run = await service.start(projectId, ticketId, "refine");
+      await tracker.updateTicket(
+        projectId,
+        ticketId,
+        { stage: { to: "ready", reason: "x" } },
+        "andy",
+      );
+      await service.report(run.id, await callerOf(run.id), refined(good));
+      const comment = (await tracker.listEvents(projectId, ticketId)).findLast(
+        (e) => e.kind === "comment",
+      );
+      expect(comment?.body).toContain("moved to ready before refine finished");
+      expect(comment?.body).toContain("- A?\n- B?");
+      expect(comment?.body).not.toContain("failed");
+    });
+
+    it("GivenTheTicketIsGone_WhenReported_ThenTheRunFails", async () => {
+      const run = await service.start(projectId, ticketId, "refine");
+      const caller = await callerOf(run.id);
+      vi.spyOn(tracker, "getTicket").mockResolvedValue(null);
+      await service.report(run.id, caller, refined(good)).catch(() => undefined);
       expect(await runs.get(run.id)).toMatchObject({
         status: "failed",
-        error: expect.stringContaining("moved to ready"),
+        error: expect.stringContaining("is gone"),
       });
-      expect(await tracker.listQuestions({ ticketId })).toEqual([]);
     });
 
     it("GivenATicketPastBacklog_WhenRefineIsStarted_ThenNotRefinable", async () => {

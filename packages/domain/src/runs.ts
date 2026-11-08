@@ -348,6 +348,7 @@ export class RunService {
     let summary = result.summary ? result.summary.slice(0, RUN_SUMMARY_MAX) : null;
     let error: string | null = null;
     let asked = 0;
+    let lateRefine = "";
     let built: BuildRecord | null = null;
     let planned: PlanOutput | null = null;
     // Questions are written before the run is closed: the write is idempotent per run, so a
@@ -360,6 +361,7 @@ export class RunService {
       } else {
         summary = refined.summary;
         asked = refined.asked;
+        lateRefine = refined.lateNotice ? `\n\n${refined.lateNotice}` : "";
       }
     }
     if (run.step === "plan" && status === "succeeded") {
@@ -433,7 +435,7 @@ export class RunService {
         : "";
       const body =
         status === "succeeded"
-          ? `${summary ?? "The run finished without a summary."}${asks}${pr}${tooling}${decide}`
+          ? `${summary ?? "The run finished without a summary."}${asks}${lateRefine}${pr}${tooling}${decide}`
           : `The ${done.step} run failed.${error ? ` ${error}` : ""}${summary ? `\n\n${summary}` : ""}${kept}`;
       await this.tracker.addComment(done.projectId, done.ticketId, body, `agent:${run.id}`);
     }
@@ -824,12 +826,14 @@ export class RunService {
 
   /**
    * Checks a refine run's result and writes its questions to the ticket (Needs-you), all or
-   * none. Returns the reason instead when the result is malformed or the ticket left Backlog.
+   * none. Returns the reason instead when the result is malformed or the ticket is gone. A ticket
+   * that left Backlog during the run gets nothing written; the notice quotes what went unasked
+   * (ADR-0073).
    */
   private async writeRefineQuestions(
     run: Run,
     output: unknown,
-  ): Promise<{ summary: string; asked: number } | { error: string }> {
+  ): Promise<{ summary: string; asked: number; lateNotice?: string } | { error: string }> {
     const parsed = RefineOutput.safeParse(output);
     if (!parsed.success) {
       const issues = parsed.error.issues
@@ -853,9 +857,18 @@ export class RunService {
       return { summary: parsed.data.summary, asked: written.length };
     }
     const ticket = run.ticketId ? await this.tracker.getTicket(run.projectId, run.ticketId) : null;
-    if (!ticket || ticket.stage !== "backlog") {
+    if (!ticket) return { error: "The ticket is gone; no questions were written." };
+    if (ticket.stage !== "backlog") {
+      log("INFO", "refine finished after its ticket left Backlog", {
+        runId: run.id,
+        stage: ticket.stage,
+        dropped: parsed.data.questions.length,
+      });
+      const unasked = parsed.data.questions.map((q) => `- ${q.text}`).join("\n");
       return {
-        error: `The ticket ${ticket ? `moved to ${ticket.stage}` : "is gone"}; no questions were written.`,
+        summary: parsed.data.summary,
+        asked: 0,
+        lateNotice: `The ticket moved to ${ticket.stage} before refine finished, so these questions were not asked:\n${unasked}`,
       };
     }
     const questions = await this.tracker.askQuestions(

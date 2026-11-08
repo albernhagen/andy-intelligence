@@ -42,7 +42,7 @@ Overview and reading map: [ARCHITECTURE.md](ARCHITECTURE.md). Section numbers ma
 - Questions are **structured records** (§5 Question).
 - Andy answers in UI or MCP. A `/refine` skill in Claude desktop batches pending questions across projects into one conversation.
 - Answering re-checks the DoR; the last answer moves a Backlog ticket that meets it to Ready (`system`, `ifUpdatedAt`).
-- **Built (M1.7, ADR-0054):** refine starts on events (ticket created, last answer leaving the DoR unmet, run ended), oldest ticket first, unless `autoRefine` is off. ≤ 3 runs per ticket; output written once per run; type, size, out of scope and touches only where empty (it asks to change a set field); failures flag Needs-you.
+- **Built (M1.7, ADR-0054):** refine starts on events (ticket created, last answer leaving the DoR unmet, run ended), oldest ticket first, unless `autoRefine` is off. ≤ 3 runs per ticket; output written once per run; type, size, out of scope and touches only where empty (it asks to change a set field); failures flag Needs-you. If the ticket leaves Backlog mid-run, nothing is written; a comment quotes the questions (ADR-0073).
 
 ### 4.4 Epics
 - Ticket types (Epic / Feature / Chore / Bug, ADR-0058) + **child tickets** (`parent_id`).
