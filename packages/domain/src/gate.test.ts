@@ -50,6 +50,22 @@ describe("protected paths", () => {
     "pnpm-lock.yaml",
     "apps/web/vite.config.ts",
     ".GITHUB/workflows/ci.yml",
+    ".claude/settings.json",
+    ".vscode/tasks.json",
+    ".devcontainer/devcontainer.json",
+    "docs/BUILD-PROMPT.md",
+    "docs/security/threat-model.md",
+    "docs/architecture/adr/0001-x.md",
+    "context-budget.json",
+    "packages/github/src/code-host.ts",
+    "packages/contracts/src/ports/index.ts",
+    "packages/domain/src/build-dispatch.ts",
+    "apps/api/src/app.ts",
+    "apps/api/src/oauth/token.ts",
+    "apps/api/src/authz.ts",
+    "src/permission/check.ts",
+    "db/migration/001.ts",
+    "db/schema.sql",
   ])("GivenPath_%s_WhenMatched_ThenItIsProtected", (path) => {
     expect(protectedFiles([file(path)], [])).toEqual([path]);
   });
@@ -216,6 +232,18 @@ describe("decideGate", () => {
       complete: true,
     };
     expect(decideGate(facts({ checks })).reasons).toEqual(["checks_pending"]);
+  });
+
+  it("GivenAReviewCheckFromAnotherReporter_WhenTheRulesOmitIt_ThenItDoesNotCount", () => {
+    const rules = [{ name: "check", sourceId: "15368" }];
+    const fake = { ...check("security-review"), sourceId: "999" };
+    const checks = { items: [check("check"), check("adversarial-review"), fake], complete: true };
+    expect(decideGate(facts({ required: rules, checks })).reasons).toEqual(["checks_pending"]);
+  });
+
+  it("GivenNoReporterInTheRules_WhenDecided_ThenAReviewCheckCannotPass", () => {
+    const rules = [{ name: "check", sourceId: null }];
+    expect(decideGate(facts({ required: rules })).reasons).toEqual(["checks_pending"]);
   });
 
   it("GivenDraftOrOtherBase_WhenDecided_ThenVetoed", () => {

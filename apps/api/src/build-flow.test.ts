@@ -643,6 +643,21 @@ describe("build run flow", () => {
       expect(f.t.host.merges).toEqual([]);
     });
 
+    it("GivenAMergeRefusedForAMovedHead_WhenANewHeadPasses_ThenItMergesOnce", async () => {
+      const f = await builtPr("none");
+      await f.t.call(f.ticketPath.split("/tickets")[0]!, {
+        method: "PATCH",
+        body: JSON.stringify({ autoMerge: "s-and-m" }),
+      });
+      f.t.host.failMerge = new Error("head moved");
+      await f.checkHook();
+      f.t.host.failMerge = null;
+      f.t.host.pullRequests.get(50)!.pullRequest.headSha = "head2";
+      await f.checkHook();
+      await f.checkHook();
+      expect(f.t.host.merges).toEqual([{ fullName: REPO, number: 50, sha: "head2" }]);
+    });
+
     it("GivenAndysCommitOnThePr_WhenMerged_ThenReworked", async () => {
       const f = await builtPr("none");
       f.t.host.pullRequests.get(50)!.commits.items.push({ sha: "x", author: "albernhagen" });

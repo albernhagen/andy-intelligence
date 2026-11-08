@@ -421,8 +421,8 @@ export const Run = z.object({
   protectedFiles: z.array(z.string().max(300)).max(50).default([]),
   /** When the gate flagged the ticket for a protected path or missing output; flags once. */
   gateFlaggedAt: Timestamp.nullable().default(null),
-  /** Set once, before the merge call: a PR gets one merge attempt and no retry. */
-  mergeAttemptedAt: Timestamp.nullable().default(null),
+  /** The head commit of the last merge attempt, set before the call: one attempt per head. */
+  mergeAttemptedSha: z.string().max(64).nullable().default(null),
   /** Why the merge call failed. */
   mergeError: z.string().max(2000).nullable().default(null),
   metrics: RunMetrics.nullable().default(null),

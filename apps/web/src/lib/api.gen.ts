@@ -2686,11 +2686,8 @@ export interface paths {
                * @default null
                */
               gateFlaggedAt: string | null;
-              /**
-               * Format: date-time
-               * @default null
-               */
-              mergeAttemptedAt: string | null;
+              /** @default null */
+              mergeAttemptedSha: string | null;
               /** @default null */
               mergeError: string | null;
               /** @default null */
@@ -2868,11 +2865,8 @@ export interface paths {
                * @default null
                */
               gateFlaggedAt: string | null;
-              /**
-               * Format: date-time
-               * @default null
-               */
-              mergeAttemptedAt: string | null;
+              /** @default null */
+              mergeAttemptedSha: string | null;
               /** @default null */
               mergeError: string | null;
               /** @default null */
@@ -3127,11 +3121,8 @@ export interface paths {
                  * @default null
                  */
                 gateFlaggedAt: string | null;
-                /**
-                 * Format: date-time
-                 * @default null
-                 */
-                mergeAttemptedAt: string | null;
+                /** @default null */
+                mergeAttemptedSha: string | null;
                 /** @default null */
                 mergeError: string | null;
                 /** @default null */
@@ -3267,11 +3258,8 @@ export interface paths {
                  * @default null
                  */
                 gateFlaggedAt: string | null;
-                /**
-                 * Format: date-time
-                 * @default null
-                 */
-                mergeAttemptedAt: string | null;
+                /** @default null */
+                mergeAttemptedSha: string | null;
                 /** @default null */
                 mergeError: string | null;
                 /** @default null */

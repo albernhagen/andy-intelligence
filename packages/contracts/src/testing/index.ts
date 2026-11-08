@@ -813,16 +813,17 @@ export function runStoreContract(name: string, make: () => Promise<RunStore>): v
       );
     });
 
-    it("GivenTwoConcurrentMergeClaims_WhenApplied_ThenExactlyOneWins", async () => {
+    it("GivenTwoConcurrentMergeClaimsOnOneHead_WhenApplied_ThenOneWinsAndANewHeadCanClaim", async () => {
       const store = await make();
       const run = await store.create(newRun(project()));
       await store.update(run.id, { status: "succeeded" }, ["queued"]);
-      const at = "2026-11-08T12:00:00.000Z";
       const results = await Promise.allSettled([
-        store.update(run.id, { mergeAttemptedAt: at }, ["succeeded"]),
-        store.update(run.id, { mergeAttemptedAt: at }, ["succeeded"]),
+        store.update(run.id, { mergeAttemptedSha: "a" }, ["succeeded"]),
+        store.update(run.id, { mergeAttemptedSha: "a" }, ["succeeded"]),
       ]);
       expect(results.filter((r) => r.status === "fulfilled")).toHaveLength(1);
+      const next = await store.update(run.id, { mergeAttemptedSha: "b" }, ["succeeded"]);
+      expect(next.mergeAttemptedSha).toBe("b");
     });
 
     it("GivenTwoConcurrentPlanDecisions_WhenApplied_ThenExactlyOneWinsAndIsKept", async () => {

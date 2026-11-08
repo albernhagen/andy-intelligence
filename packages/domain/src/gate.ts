@@ -43,26 +43,53 @@ export const TOOLING_GLOBS = [
  * migration code by its usual names.
  */
 export const PROTECTED_GLOBS = [
+  // CI, deploy, infrastructure and the scripts that hold credentials.
   "**/.github/**",
   "**/CODEOWNERS",
   "platform/**",
   "scripts/**",
   "infra/**",
   ".terraform-version",
+  // Config that runs commands on Andy's machine or steers agents.
   ".mcp.json",
+  "**/.claude/**",
+  "**/.vscode/**",
+  "**/.devcontainer/**",
+  "**/.husky/**",
   "**/AGENTS.md",
   "**/CLAUDE.md",
-  "firestore.rules",
+  "docs/BUILD-PROMPT.md",
+  "docs/security/**",
+  "docs/architecture/adr/**",
+  "context-budget.json",
+  // Data rules and the schemas the executor reads.
+  "**/firestore.rules",
+  "packages/store/src/index.ts",
+  "packages/contracts/**",
+  // The gate, the dispatchers, the code host and the API's entry points and setters.
   "apps/api/src/github/**",
+  "apps/api/src/app.ts",
+  "apps/api/src/mcp/**",
+  "packages/github/**",
   "packages/domain/src/gate*",
+  "packages/domain/src/*-dispatch*",
+  "packages/domain/src/projects*",
+  // Auth, permission, payment and migration code by its usual names, as files or directories.
   "**/auth/**",
   "**/auth.*",
+  "**/authn*",
+  "**/authn*/**",
+  "**/authz*",
+  "**/authz*/**",
   "**/oauth*",
-  "**/OAuth*",
-  "**/permissions/**",
+  "**/oauth*/**",
   "**/permission*",
-  "**/payments/**",
-  "**/migrations/**",
+  "**/permission*/**",
+  "**/payment*",
+  "**/payment*/**",
+  "**/migration*",
+  "**/migration*/**",
+  "**/*.sql",
 ];
 
 /** Where the code host looks for CODEOWNERS. */
@@ -81,8 +108,14 @@ const FLAGGED_REASONS: readonly GateReason[] = [
 const MAX_CODEOWNERS_LINES = 1000;
 
 function expandBraces(glob: string): string[] {
-  const m = /^(.*)\{([^}]+)\}(.*)$/.exec(glob);
-  return m ? m[2]!.split(",").map((alt) => `${m[1]}${alt}${m[3]}`) : [glob];
+  const open = glob.indexOf("{");
+  const close = glob.indexOf("}", open);
+  if (open < 0 || close < 0) return [glob];
+  const [before, after] = [glob.slice(0, open), glob.slice(close + 1)];
+  return glob
+    .slice(open + 1, close)
+    .split(",")
+    .map((alt) => `${before}${alt}${after}`);
 }
 
 /** `*` within a segment, `**` across them, `**\/` for any leading directories. Case-insensitive. */
@@ -187,11 +220,13 @@ function assessChecks(required: RequiredCheck[], checks: Listing<HeadCheck>) {
   const reasons: GateReason[] = [];
   if (!checks.complete) reasons.push("checks_incomplete");
   if (required.length === 0) reasons.push("no_required_checks");
+  // A review check must come from the reporter the branch rules trust; none known means no pass.
+  const reporter = required.find((r) => r.sourceId !== null)?.sourceId ?? null;
   const wanted: RequiredCheck[] = [
-    ...required,
-    ...REVIEW_CHECKS.filter((n) => !required.some((r) => r.name === n)).map((name) => ({
+    ...required.filter((r) => !REVIEW_CHECKS.includes(r.name)),
+    ...REVIEW_CHECKS.map((name) => ({
       name,
-      sourceId: null,
+      sourceId: required.find((r) => r.name === name)?.sourceId ?? reporter,
     })),
   ];
   let failing = false;
@@ -203,7 +238,11 @@ function assessChecks(required: RequiredCheck[], checks: Listing<HeadCheck>) {
     const passes = isReview ? reviewPasses : hostPasses;
     // A check of the right name from another reporter doesn't count; it can't be trusted to run.
     const found = checks.items.filter(
-      (c) => c.name === want.name && (want.sourceId === null || c.sourceId === want.sourceId),
+      (c) =>
+        c.name === want.name &&
+        (isReview
+          ? c.sourceId === want.sourceId && c.sourceId !== null
+          : want.sourceId === null || c.sourceId === want.sourceId),
     );
     if (found.length === 0 || found.some((c) => c.status !== "completed")) {
       pending = true;
@@ -219,7 +258,11 @@ function assessChecks(required: RequiredCheck[], checks: Listing<HeadCheck>) {
   return { reasons, ciFailed, failedReviews };
 }
 
-/** What the gate says about a PR's current head. Missing information never counts as a pass. */
+/**
+ * What the gate says about a PR's current head. `verification` is the agent's own report, so it
+ * is an advisory signal (a report with no output is a veto); CI and the reviews are the proof.
+ * Missing information never counts as a pass.
+ */
 export function decideGate(facts: GateFacts): GateDecision {
   const reasons: GateReason[] = [];
   if (facts.verification.length === 0 || facts.verification.some((c) => !c.output.trim())) {

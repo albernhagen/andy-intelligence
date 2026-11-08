@@ -355,7 +355,7 @@ export const RunPatch = Run.pick({
   gateReasons: true,
   protectedFiles: true,
   gateFlaggedAt: true,
-  mergeAttemptedAt: true,
+  mergeAttemptedSha: true,
   mergeError: true,
   metrics: true,
 }).partial();
@@ -373,7 +373,8 @@ export interface RunStore {
   listActive(projectId: string): Promise<Run[]>;
   /**
    * Applies the patch atomically, only if the run's status is one of `from` and, for a patch
-   * that sets `planDecision` or `mergeAttemptedAt`, the run has none yet; `conflict` otherwise, `not_found` when there
+   * that sets `planDecision`, the run has none yet, and for one that sets `mergeAttemptedSha`, it
+   * isn't already that value; `conflict` otherwise, `not_found` when there
    * is no such run.
    */
   update(runId: string, patch: RunPatch, from: readonly RunStatus[]): Promise<Run>;

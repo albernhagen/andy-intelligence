@@ -110,7 +110,10 @@ export class PullRequestGate {
     return this.merge(repo, pr, run, agent.ticket);
   }
 
-  /** One attempt per run, ever: the claim is atomic, and a failure is left to Andy (no retry). */
+  /**
+   * One attempt per head commit: the claim is atomic, and a failure is left to Andy (no retry). A
+   * new commit is a new head, assessed afresh.
+   */
   private async merge(
     repo: string,
     pr: PullRequest,
@@ -118,9 +121,9 @@ export class PullRequestGate {
     ticket: Ticket,
   ): Promise<GateResult> {
     const base = { pr: pr.number, runId: run.id };
-    if (run.mergeAttemptedAt) return { result: "assessed", ...base };
+    if (run.mergeAttemptedSha === pr.headSha) return { result: "assessed", ...base };
     try {
-      await this.runs.update(run.id, { mergeAttemptedAt: this.now().toISOString() }, ["succeeded"]);
+      await this.runs.update(run.id, { mergeAttemptedSha: pr.headSha }, ["succeeded"]);
     } catch (err) {
       if (err instanceof WorkTrackerError && err.code === "conflict") {
         return { result: "assessed", ...base };
