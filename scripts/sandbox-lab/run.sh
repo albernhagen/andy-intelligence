@@ -5,6 +5,7 @@
 # (CLAUDE_CODE_OAUTH_TOKEN from `claude setup-token`, or ANTHROPIC_API_KEY); never printed.
 #   scripts/sandbox-lab/run.sh            all checks (lint, typecheck, test, build)
 #   LAB_CHECKS=fast scripts/sandbox-lab/run.sh   skip test and build
+#   LAB_MODEL=stub scripts/sandbox-lab/run.sh    no model, no credential (as the CI self-test)
 set -euo pipefail
 # The credential reaches the container as a read-only file that lab.sh loads only into the
 # claude call's environment, never as a container-wide variable. Its source: the environment,
@@ -20,7 +21,8 @@ if [ -n "${CLAUDE_CODE_OAUTH_TOKEN:-}${ANTHROPIC_API_KEY:-}" ]; then
     [ -n "${ANTHROPIC_API_KEY:-}" ] && printf 'ANTHROPIC_API_KEY=%s\n' "$ANTHROPIC_API_KEY"
   } > "$cred_file"
 fi
-[ -f "$cred_file" ] || { echo "No model credential: see runbook agent-runs.md §9a" >&2; exit 2; }
+if [ "${LAB_MODEL:-}" = stub ]; then cred_file=/dev/null; fi
+[ -e "$cred_file" ] || { echo "No model credential: see runbook agent-runs.md §9a" >&2; exit 2; }
 here=$(cd "$(dirname "$0")" && pwd)
 repo=$(cd "$here/../.." && pwd)
 out="${TMPDIR:-/tmp}/sandbox-lab-out"
@@ -35,5 +37,5 @@ docker build -q -t andy-intelligence-sandbox-lab "$here" > /dev/null
 docker run --rm \
   --security-opt seccomp=unconfined --security-opt apparmor=unconfined --security-opt systempaths=unconfined \
   -v "$in:/in:ro" -v "$out:/out" -v "$cred_file:/run/lab-cred:ro" \
-  -e LAB_CHECKS \
+  -e LAB_CHECKS -e LAB_MODEL \
   andy-intelligence-sandbox-lab
