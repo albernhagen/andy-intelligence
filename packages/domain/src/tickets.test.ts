@@ -118,7 +118,7 @@ describe("TicketService", () => {
   });
 
   it("GivenTwoOpenQuestionsAndTheDorOtherwiseMet_WhenBothAreAnswered_ThenTheLastAnswerMovesItToReady", async () => {
-    const t = await service.create(projectId, readyStory, "andy");
+    const t = await service.create(projectId, readyStory, "andy", { upNext: true });
     const [q1, q2] = await tracker.askQuestions(
       projectId,
       t.id,
@@ -159,7 +159,7 @@ describe("TicketService", () => {
     tracker = new InMemoryWorkTracker(() => new Date(ms++));
     service = new TicketService(tracker);
     projectId = (await tracker.createProject({ name: "AI2", key: "AJ" })).id;
-    const t = await service.create(projectId, readyStory, "andy");
+    const t = await service.create(projectId, readyStory, "andy", { upNext: true });
     const q = await service.ask(projectId, t.id, { text: "Which board?" }, "agent:r1");
     const original = tracker.updateTicket.bind(tracker);
     tracker.updateTicket = async (p, id, change, actor) => {

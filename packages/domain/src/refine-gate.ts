@@ -174,14 +174,23 @@ export class RefineGate {
     const existing = (await this.tracker.listTickets(ticket.projectId)).filter(
       (t) => t.createdAt >= since && t.parentId === ticket.parentId,
     );
+    const actor = `agent:${run.id}`;
+    // A replay finds what this run already created, by its own `created` event; a same-titled
+    // ticket Andy made meanwhile isn't adopted. Taken from the pool so duplicate titles both stay.
+    const pool: Ticket[] = [];
+    for (const t of existing) {
+      const [created] = await this.tracker.listEvents(t.projectId, t.id);
+      if (created?.actor === actor) pool.push(t);
+    }
     const keys: string[] = [];
     for (const child of output.children) {
+      const at = pool.findIndex((t) => t.title === child.title);
       const made =
-        existing.find((t) => t.title === child.title) ??
+        (at >= 0 ? pool.splice(at, 1)[0] : undefined) ??
         (await this.tracker.createTicket(
           ticket.projectId,
           { title: child.title, body: child.body, parentId: ticket.parentId },
-          `agent:${run.id}`,
+          actor,
         ));
       keys.push(made.key);
     }

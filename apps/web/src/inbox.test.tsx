@@ -41,7 +41,7 @@ async function open(h: Harness, path: string) {
 async function twoTickets(path = "/p/ai/inbox", more?: (h: Harness) => Promise<void>) {
   const h = renderApp("/projects");
   await h.tracker.createProject({ name: "Andy Intelligence", key: "AI" });
-  const board = await h.service.create("ai", readyStory, "andy");
+  const board = await h.service.create("ai", readyStory, "andy", { upNext: true });
   const panel = await h.service.create("ai", { type: "feature", title: "Panel" }, "andy");
   // Created first, so it sorts first by age: the readiness rule must still put AI-1 on top.
   await askAsRun(h, panel.id, "run2", [noSuggestion]);

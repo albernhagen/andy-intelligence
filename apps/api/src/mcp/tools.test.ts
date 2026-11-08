@@ -205,7 +205,7 @@ describe("answer_question", () => {
 
   it("GivenAQuestionAskedByARun_WhenAnswered_ThenRecordedAndTheTicketIsReady", async () => {
     const ctx = await withProject();
-    const t = await ctx.service.create("ai", readyStory, "andy");
+    const t = await ctx.service.create("ai", readyStory, "andy", { upNext: true });
     // AI-27: a run's question id is `<runId>-q<n>`, not a UUID.
     const [q] = await ctx.tracker.askQuestions(
       "ai",
@@ -580,7 +580,11 @@ describe("move_ticket", () => {
 describe("M1 flow from Claude desktop", () => {
   it("GivenATicketCreatedOverMcp_WhenAnAgentAsksAndAndyAnswersOverMcp_ThenItMovesToReady", async () => {
     const ctx = await withProject();
-    const created = await ctx.call("create_ticket", { project: "AI", ...readyStory });
+    const created = await ctx.call("create_ticket", {
+      project: "AI",
+      ...readyStory,
+      upNext: true,
+    });
     const id = (await ctx.service.findByKey(created.data.ticket.key)).id;
     await ctx.service.ask("ai", id, { text: "Which board?" }, "agent:r1");
 

@@ -574,8 +574,13 @@ export class TicketService {
       },
       "system",
     );
-    if (met && !promotedGap && ticket.stage === "backlog") await this.promote(ticket);
-    else if (open === 0 && ticket.stage === "backlog") await this.dispatchNext?.(ticket.projectId);
+    // Only Up next goes to Ready on an answer: an Idea hasn't passed the gate. Any answered gap,
+    // not just this one, still needs its re-refine first.
+    const gapWaiting = promotedGap || ticket.refineAssumptions.some((a) => a.status === "answered");
+    if (met && !gapWaiting && ticket.upNextRank !== null && ticket.stage === "backlog") {
+      await this.promote(ticket);
+    } else if (open === 0 && ticket.stage === "backlog")
+      await this.dispatchNext?.(ticket.projectId);
     return question;
   }
 

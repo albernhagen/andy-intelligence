@@ -306,6 +306,68 @@ describe("refine gate flow", () => {
     ]);
   });
 
+  it("GivenAnIdeaWithAnOpenQuestion_WhenAnswered_ThenItStaysAnIdea", async () => {
+    const t = await setup();
+    const created = await t.create({
+      type: "chore",
+      body: "b",
+      acceptanceCriteria: ["done"],
+      size: "S",
+      sizeReason: "r",
+    });
+    const asked = await t.json<Question>(
+      t.post(`${t.path(created.id)}/questions`, { text: "Old?" }),
+    );
+    await t.answer(asked.id);
+    expect(await t.ticket(created.id)).toMatchObject({
+      stage: "backlog",
+      upNextRank: null,
+      needsAttention: false,
+    });
+    expect(await t.runs(created.id)).toEqual([]);
+  });
+
+  it("GivenAPromotedGapAnsweredBeforeAnotherQuestion_WhenTheLastIsAnswered_ThenTheGapIsReRefinedBeforeReady", async () => {
+    const t = await setup();
+    const created = await t.create({ upNext: true });
+    await t.report(created.id, output({ gaps: [gap("Q1?"), cheap("A?")] }));
+    const [assumption] = (await t.ticket(created.id)).refineAssumptions;
+    await t.post(`${t.path(created.id)}/assumptions/${assumption!.id}/promote`);
+    const open = await t.questions(created.id);
+    const promoted = open.find((q) => q.text === "A?")!;
+    const other = open.find((q) => q.text === "Q1?")!;
+
+    await t.answer(promoted.id, "the promoted answer");
+    await t.answer(other.id);
+
+    expect((await t.ticket(created.id)).stage).toBe("backlog");
+    const runs = await t.runs(created.id);
+    expect(runs).toHaveLength(2);
+    expect(runs[0]!.prompt).toContain("the promoted answer");
+  });
+
+  it("GivenASameTitledTicketMadeDuringARun_WhenSplit_ThenItIsNotAdoptedAndDuplicateTitlesBothExist", async () => {
+    const t = await setup();
+    const created = await t.create({ upNext: true });
+    const andys = await t.create({ title: "Lanes" });
+    await t.report(
+      created.id,
+      output({
+        outcome: "split",
+        reason: "Too big",
+        children: [
+          { title: "Lanes", body: "One" },
+          { title: "Lanes", body: "Two" },
+        ],
+      }),
+    );
+    const lanes = (await t.json<Ticket[]>(t.call(`${t.base}/tickets`))).filter(
+      (x) => x.title === "Lanes",
+    );
+    expect(lanes).toHaveLength(3);
+    expect(lanes.find((x) => x.id === andys.id)?.body).toBe("");
+  });
+
   it("GivenAPromotedAssumption_WhenTheTicketGoesBackToIdeas_ThenTheQuestionIsWithdrawn", async () => {
     const t = await setup();
     const created = await t.create({ upNext: true });
