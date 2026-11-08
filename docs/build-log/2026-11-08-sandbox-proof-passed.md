@@ -25,4 +25,4 @@ Build run `sXxku3T3VClwALfzHCS7` (Actions run 42491207548). The Edit tool refuse
 
 - Builds stays on for project `AI`; Auto-build is still off and is Andy's call (runbook §8 step 3).
 - Known limits, accepted: a build can't add or change dependencies (ADR-0072), and Bash can't write `scripts/` (the agent uses Edit and Write there).
-- Leftover proof tickets: AI-45, AI-49, AI-52, AI-53, AI-55, AI-57, AI-59 and AI-60 (In progress or flagged); none merged anything.
+- Proof tickets AI-45, AI-49, AI-52, AI-53, AI-55, AI-57, AI-59 and AI-60 are cancelled (Andy, 2026-11-08); none merged anything.
