@@ -1,11 +1,17 @@
 import {
+  ChangedFile,
+  HeadCheck,
+  PullRequest,
+  PullRequestCommit,
   Repo,
   RepoName,
   RepoToken,
   WorkflowDispatch,
+  RequiredCheck,
   WorkflowRun,
   type CheckConclusion,
   type CodeHost,
+  type Listing,
 } from "@andy/contracts";
 import { createAppAuth } from "@octokit/auth-app";
 import { Octokit } from "@octokit/core";
@@ -37,6 +43,9 @@ const toConclusion = (c: string): CheckConclusion =>
 /** Caps on listing (ADR-0028): installations scanned and repos returned. */
 const MAX_INSTALLATIONS = 10;
 const MAX_REPOS = 100;
+/** Caps on the gate's reads (ADR-0028); a longer listing comes back `complete: false`. */
+const PER_PAGE = 100;
+const MAX_FILE_PAGES = 3;
 
 type GitHubRepo = { full_name: string; default_branch: string; private: boolean; html_url: string };
 
@@ -186,6 +195,150 @@ export class GitHubCodeHost implements CodeHost {
       // 409: the run finished in the meantime.
       if ((err as { status?: number }).status !== 409) throw err;
     }
+  }
+
+  async getPullRequest(fullName: string, number: number): Promise<PullRequest | null> {
+    const client = await this.repoClient(fullName);
+    if (!client) return null;
+    const res = await this.notFoundAsNull(() =>
+      client.octokit.request("GET /repos/{owner}/{repo}/pulls/{pull_number}", {
+        ...client.repo,
+        pull_number: number,
+      }),
+    );
+    if (!res) return null;
+    const pr = res.data;
+    return PullRequest.parse({
+      number: pr.number,
+      state: pr.merged ? "merged" : pr.state === "open" ? "open" : "closed",
+      draft: pr.draft ?? false,
+      title: pr.title.slice(0, 256),
+      bodyFirstLine: (pr.body ?? "").split(/\r?\n/, 1)[0]?.trim().slice(0, 256) ?? "",
+      fromFork: pr.head.repo?.full_name !== pr.base.repo.full_name,
+      intoDefaultBranch: pr.base.ref === pr.base.repo.default_branch,
+      headRef: pr.head.ref,
+      headSha: pr.head.sha,
+      baseRef: pr.base.ref,
+      url: pr.html_url,
+    });
+  }
+
+  async listChangedFiles(fullName: string, number: number): Promise<Listing<ChangedFile>> {
+    const client = await this.repoClient(fullName);
+    if (!client) return { items: [], complete: true };
+    const items: ChangedFile[] = [];
+    for (let page = 1; page <= MAX_FILE_PAGES; page++) {
+      const res = await client.octokit.request(
+        "GET /repos/{owner}/{repo}/pulls/{pull_number}/files",
+        { ...client.repo, pull_number: number, per_page: PER_PAGE, page },
+      );
+      items.push(
+        ...res.data.map((f) =>
+          ChangedFile.parse({ path: f.filename, previousPath: f.previous_filename ?? null }),
+        ),
+      );
+      if (res.data.length < PER_PAGE) return { items, complete: true };
+    }
+    return { items, complete: false };
+  }
+
+  async listHeadChecks(fullName: string, sha: string): Promise<Listing<HeadCheck>> {
+    const client = await this.repoClient(fullName);
+    if (!client) return { items: [], complete: true };
+    const res = await client.octokit.request("GET /repos/{owner}/{repo}/commits/{ref}/check-runs", {
+      ...client.repo,
+      ref: sha,
+      filter: "latest",
+      per_page: PER_PAGE,
+    });
+    return {
+      complete: res.data.total_count <= res.data.check_runs.length,
+      items: res.data.check_runs.map((c) =>
+        HeadCheck.parse({
+          name: c.name.slice(0, 256),
+          status: c.status === "completed" || c.status === "in_progress" ? c.status : "queued",
+          conclusion: c.conclusion ? toConclusion(c.conclusion) : null,
+          sourceId: c.app ? String(c.app.id) : null,
+        }),
+      ),
+    };
+  }
+
+  async listRequiredChecks(fullName: string, branch: string): Promise<RequiredCheck[]> {
+    const client = await this.repoClient(fullName);
+    if (!client) return [];
+    const res = await client.octokit.request("GET /repos/{owner}/{repo}/rules/branches/{branch}", {
+      ...client.repo,
+      branch,
+      per_page: PER_PAGE,
+    });
+    return res.data.flatMap((rule) =>
+      rule.type === "required_status_checks"
+        ? rule.parameters!.required_status_checks.map((c) =>
+            RequiredCheck.parse({
+              name: c.context,
+              sourceId: c.integration_id === undefined ? null : String(c.integration_id),
+            }),
+          )
+        : [],
+    );
+  }
+
+  async listPullRequestCommits(
+    fullName: string,
+    number: number,
+  ): Promise<Listing<PullRequestCommit>> {
+    const client = await this.repoClient(fullName);
+    if (!client) return { items: [], complete: true };
+    const res = await client.octokit.request(
+      "GET /repos/{owner}/{repo}/pulls/{pull_number}/commits",
+      { ...client.repo, pull_number: number, per_page: PER_PAGE },
+    );
+    return {
+      complete: res.data.length < PER_PAGE,
+      items: res.data.map((c) =>
+        PullRequestCommit.parse({
+          sha: c.sha,
+          // Commits by the publish job's git identity have no linked account: the name says it.
+          author: c.author?.login ?? c.commit.author?.name ?? null,
+        }),
+      ),
+    };
+  }
+
+  async readFile(fullName: string, path: string, ref: string): Promise<string | null> {
+    const client = await this.repoClient(fullName);
+    if (!client) return null;
+    const res = await this.notFoundAsNull(() =>
+      client.octokit.request("GET /repos/{owner}/{repo}/contents/{path}", {
+        ...client.repo,
+        path,
+        ref,
+      }),
+    );
+    if (!res || Array.isArray(res.data) || res.data.type !== "file") return null;
+    // GitHub leaves `content` empty above 1 MB: throw, so the caller doesn't read that as "empty".
+    if (res.data.size > 0 && !res.data.content) throw new Error(`${path} is too large to read`);
+    return Buffer.from(res.data.content, "base64").toString("utf8");
+  }
+
+  async mergePullRequest(fullName: string, number: number, expectedHeadSha: string): Promise<void> {
+    const client = await this.repoClient(fullName);
+    if (!client) throw new Error(`the App isn't installed on ${fullName}`);
+    await client.octokit.request("PUT /repos/{owner}/{repo}/pulls/{pull_number}/merge", {
+      ...client.repo,
+      pull_number: number,
+      sha: expectedHeadSha,
+      merge_method: "squash",
+    });
+  }
+
+  /** An installation client and owner/repo; null when the App isn't installed. */
+  private async repoClient(fullName: string) {
+    const installationId = await this.installationFor(fullName);
+    if (installationId === null) return null;
+    const [owner, repo] = fullName.split("/") as [string, string];
+    return { octokit: await this.asInstallation(installationId), repo: { owner, repo } };
   }
 
   private async installationFor(fullName: string): Promise<number | null> {

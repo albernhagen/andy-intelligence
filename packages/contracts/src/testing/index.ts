@@ -581,6 +581,17 @@ export function codeHostContract(
       expect(await host.getWorkflowRun(knownRepo, "999999999999")).toBeNull();
       expect(await host.getWorkflowRun(unknownRepo, "1")).toBeNull();
     });
+
+    it("GivenAnUnknownPullRequest_WhenRead_ThenNull", async () => {
+      const { host, knownRepo, unknownRepo } = await make();
+      expect(await host.getPullRequest(knownRepo, 999_999_999)).toBeNull();
+      expect(await host.getPullRequest(unknownRepo, 1)).toBeNull();
+    });
+
+    it("GivenAMissingFile_WhenRead_ThenNull", async () => {
+      const { host, knownRepo } = await make();
+      expect(await host.readFile(knownRepo, "no/such/file.txt", "main")).toBeNull();
+    });
   });
 }
 
@@ -800,6 +811,18 @@ export function runStoreContract(name: string, make: () => Promise<RunStore>): v
         store.update(crypto.randomUUID(), { status: "failed" }, ["queued"]),
         "not_found",
       );
+    });
+
+    it("GivenTwoConcurrentMergeClaims_WhenApplied_ThenExactlyOneWins", async () => {
+      const store = await make();
+      const run = await store.create(newRun(project()));
+      await store.update(run.id, { status: "succeeded" }, ["queued"]);
+      const at = "2026-11-08T12:00:00.000Z";
+      const results = await Promise.allSettled([
+        store.update(run.id, { mergeAttemptedAt: at }, ["succeeded"]),
+        store.update(run.id, { mergeAttemptedAt: at }, ["succeeded"]),
+      ]);
+      expect(results.filter((r) => r.status === "fulfilled")).toHaveLength(1);
     });
 
     it("GivenTwoConcurrentPlanDecisions_WhenApplied_ThenExactlyOneWinsAndIsKept", async () => {

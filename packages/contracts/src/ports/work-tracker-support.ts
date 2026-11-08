@@ -33,6 +33,7 @@ export function buildProject(input: NewProject): Project {
     buildEnabledBy: null,
     buildEnabledAt: null,
     planApproval: "none",
+    autoMerge: "s-and-m",
   };
 }
 

@@ -28,7 +28,8 @@ export function buildRun(input: NewRun, id: string, now: Date): Run {
 
 /**
  * The patched run, or `conflict` when its status isn't one of `from`, or when the patch sets a
- * plan decision on a run that already has one (written once, so racing decisions can't both win).
+ * plan decision or merge attempt on a run that already has one (written once, so racing writers
+ * can't both win).
  */
 export function applyRunPatch(current: Run, patch: RunPatch, from: readonly RunStatus[]): Run {
   if (!from.includes(current.status)) {
@@ -39,6 +40,9 @@ export function applyRunPatch(current: Run, patch: RunPatch, from: readonly RunS
   }
   if (patch.planDecision !== undefined && current.planDecision !== null) {
     throw new WorkTrackerError("conflict", `run ${current.id}'s plan is already decided`);
+  }
+  if (patch.mergeAttemptedAt !== undefined && current.mergeAttemptedAt !== null) {
+    throw new WorkTrackerError("conflict", `run ${current.id} already had its merge attempt`);
   }
   // Not RunPatch.parse: its defaulted fields would turn "absent" into null and wipe values.
   const set = Object.fromEntries(Object.entries(patch).filter(([, v]) => v !== undefined));

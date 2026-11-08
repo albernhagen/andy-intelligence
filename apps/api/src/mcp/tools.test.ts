@@ -369,6 +369,19 @@ describe("plan approval tools", () => {
     });
   });
 
+  it("GivenAProject_WhenSetAutoMergeIsCalled_ThenThePolicyIsSavedAndBadValuesRefused", async () => {
+    const ctx = await withProject();
+    expect((await ctx.call("set_auto_merge", { project: "ai", policy: "none" })).data).toEqual({
+      project: "AI",
+      autoMerge: "none",
+    });
+    const projects = (await (await ctx.rest("/api/projects")).json()) as { autoMerge: string }[];
+    expect(projects[0]!.autoMerge).toBe("none");
+    expect(await ctx.call("set_auto_merge", { project: "AI", policy: "some" })).toMatchObject({
+      isError: true,
+    });
+  });
+
   it("GivenATicketWithoutAPlan_WhenApproveOrRejectIsCalled_ThenAToolErrorSaysSo", async () => {
     const ctx = await withProject();
     const created = await ctx.call("create_ticket", { project: "AI", title: "Board" });

@@ -110,7 +110,8 @@ const list = (items) =>
 
 /**
  * Tooling and dependency files: they run in CI and on Andy's machine when he checks out the
- * branch. Allowed, but flagged on the PR and the Run (8b treats them as protected paths).
+ * branch. Allowed, but flagged on the PR and the Run. The gate treats them as protected paths and
+ * keeps its own copy (`TOOLING_GLOBS` in packages/domain/src/gate.ts): a test holds the two equal.
  */
 export const TOOLING_GLOBS = [
   "**/package.json",
