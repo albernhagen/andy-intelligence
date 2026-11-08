@@ -6,3 +6,5 @@
 - **Same check:** the check command is read from `claude-executor.yml` and judged by `executor-sandbox.mjs verify-check`, then `probe.sh` gathers the §9 facts and `expectations.mjs` asserts them.
 - **Gate:** the whole PR's diff (merge commit against its base), so a later doc-only push can't skip the test. That means proving the skip needed a doc-only PR based on this branch, closed unmerged.
 - **Required check:** Andy adds `sandbox-self-test` to the `protect-main` ruleset once the job is proven.
+
+<!-- AI-63 skip proof: throwaway -->
