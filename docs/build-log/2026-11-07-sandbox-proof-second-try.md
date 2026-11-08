@@ -60,4 +60,4 @@
 
 ## Next
 
-After the fix merges, one live §9 run on a new probe chore to confirm, then the `.github/` denial chore.
+Passed on the next live run: `2026-11-08-sandbox-proof-passed.md`.
