@@ -20,7 +20,7 @@ Runs on push to `main` (not docs-only or `infra/`-only pushes, not bot merges) o
 | Move traffic to the candidate                                                                                                              | Check the summary: traffic may have moved.                                  |
 | Check it serves 100 percent; smoke test the public URL: `/health` 200, `/api/me` 401, and on the run.app host `/health` 200, `/api/me` 404 | **The candidate is serving: roll back (§3).** Nothing rolls back by itself. |
 
-`/api/me` 401 needs the public host, which only reaches a revision with traffic, so it runs after the move.
+`/api/me` 401 needs the public host, which only reaches a revision with traffic, so it runs after the move. **A revision with broken auth therefore serves until you roll back.**
 
 ## 2. Read the job summary
 
@@ -28,12 +28,12 @@ Actions → _Deploy control plane_ → the run → Summary: one verdict line, th
 
 **First deploy after this ships:** expect "Deployed.", _Serving before_ `<old>=100`, _Serving after_ `<candidate>=100`, and the site working.
 
-| Verdict                | Do                                                                                                              |
-| ---------------------- | --------------------------------------------------------------------------------------------------------------- |
-| Deployed.              | Nothing.                                                                                                        |
-| Traffic did not move   | Read the failed step's log, fix forward with a new PR. The candidate tag stays until the next deploy reuses it. |
-| Traffic may have moved | Compare _Serving after_ with _Serving before_; if different, §3.                                                |
-| It is serving traffic  | §3 now, then fix forward.                                                                                       |
+| Verdict                | Do                                                                                                                                  |
+| ---------------------- | ----------------------------------------------------------------------------------------------------------------------------------- |
+| Deployed.              | Nothing.                                                                                                                            |
+| Traffic did not move   | Read the failed step's log, fix forward with a new PR. The job removes the candidate tag; its revision stays listed for inspection. |
+| Traffic may have moved | Compare _Serving after_ with _Serving before_; if different, §3.                                                                    |
+| It is serving traffic  | §3 now, then fix forward.                                                                                                           |
 
 ## 3. Roll back
 

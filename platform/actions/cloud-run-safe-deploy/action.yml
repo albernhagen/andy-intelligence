@@ -90,6 +90,16 @@ runs:
         RUN_URL: ${{ steps.candidate.outputs.run_url }}
       run: node "$GITHUB_ACTION_PATH/../../../scripts/cloud-run-deploy.mjs" smoke-public
 
+    # A failed candidate must not stay reachable on its tagged URL (ADR-0076).
+    - name: Remove the candidate tag after a failed deploy
+      if: always() && steps.deploy.outcome != 'skipped' && steps.promote.outcome != 'success'
+      continue-on-error: true
+      shell: bash
+      env:
+        SERVICE: ${{ inputs.service }}
+        REGION: ${{ inputs.region }}
+      run: gcloud run services update-traffic "$SERVICE" --region "$REGION" --remove-tags=candidate --quiet
+
     - name: Read the serving revision
       id: after
       if: always()

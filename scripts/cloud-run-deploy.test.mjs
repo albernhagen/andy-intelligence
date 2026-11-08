@@ -105,6 +105,11 @@ describe("assertions before and after promotion", () => {
     ).not.toThrow();
   });
 
+  it("GivenLatestEntryAfterToLatest_WhenAssertPromoted_ThenPasses", () => {
+    const traffic = [{ revisionName: "new", percent: 100, latestRevision: true }];
+    expect(() => assertPromoted(service(traffic), "new")).not.toThrow();
+  });
+
   it("GivenTrafficStillOnOld_WhenAssertPromoted_ThenThrows", () => {
     expect(() => assertPromoted(service(afterDeploy), "new")).toThrow("serving old=100");
   });
@@ -222,6 +227,13 @@ describe("job summary", () => {
 
 describe("cloud-run-safe-deploy action", () => {
   const action = readFileSync("platform/actions/cloud-run-safe-deploy/action.yml", "utf8");
+
+  it("GivenPromotionDidNotSucceed_WhenRead_ThenTagRemovalRunsBeforeTheSummary", () => {
+    const step = action.indexOf("Remove the candidate tag after a failed deploy");
+    expect(step).toBeGreaterThan(action.indexOf("smoke-public"));
+    expect(action.indexOf("Write the job summary")).toBeGreaterThan(step);
+    expect(action).toContain("steps.promote.outcome != 'success'");
+  });
 
   it("GivenTheAction_WhenRead_ThenNoTrafficDeployPrecedesSmokeTestPrecedesPromotion", () => {
     const order = [

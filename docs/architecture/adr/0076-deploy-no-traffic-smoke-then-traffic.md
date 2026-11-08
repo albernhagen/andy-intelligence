@@ -20,7 +20,7 @@ Built in AI-62: Safe deploy path. First piece of ADR-0060 §M2 "Safe to merge it
 | Post-traffic checks    | Public URL: `/health` 200, `/api/me` 401; run.app host: `/health` 200, `/api/me` 404.                                                                                                                                                                                         |
 | Failure after the move | The job fails and the summary gives the command. No automatic rollback: Andy decides (AI-62's assumption).                                                                                                                                                                    |
 | Promotion              | `update-traffic --to-latest`, after checking the latest ready revision is the candidate; then a check that it holds 100 percent. Rejected `--to-revisions=<candidate>=100`: it pins traffic, so later Terraform applies that change the service would silently never go live. |
-| Candidate tag          | Removed on promotion. After a failure it stays for inspection and the next deploy reassigns it. The tagged URL is public but answers only `/health`.                                                                                                                          |
+| Candidate tag          | Removed on promotion and after any failed deploy, so a bad revision has no lasting URL. The tagged URL is public while a deploy runs; the host rule is its only guard.                                                                                                        |
 | Who owns what          | CI owns image, revision labels and traffic (`ignore_changes` in `infra/control-plane`); Terraform owns the rest of the template.                                                                                                                                              |
 | Credentials            | Unchanged: `push` to `main` and `workflow_dispatch` only; the deployer identity is bound to `refs/heads/main`. `roles/run.developer` already covers traffic moves.                                                                                                            |
 | Caps (ADR-0028)        | Smoke tests retry at most 12 times per URL, 5 s apart, 10 s per request. The candidate scales to zero with the same instance cap.                                                                                                                                             |
@@ -28,5 +28,5 @@ Built in AI-62: Safe deploy path. First piece of ADR-0060 §M2 "Safe to merge it
 
 ### Consequences
 
-- Good: a revision that doesn't start or breaks the host rule never serves. Rollback is one printed command.
+- Good: a revision that doesn't start or breaks the host rule never serves (any other regression, such as broken auth, can). Rollback is one printed command.
 - Bad: a revision with broken auth passes the pre-traffic check and serves until the post-traffic check fails and Andy rolls back. After a rollback or failed deploy, traffic is pinned, so Terraform changes to the service wait for the next deploy (runbook `deploy-and-rollback.md` §5).
