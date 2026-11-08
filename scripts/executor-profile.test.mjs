@@ -94,6 +94,7 @@ describe("buildProfile", () => {
       "/etc/ssl/certs",
       "/etc/ssl/openssl.cnf",
       "/etc/ca-certificates",
+      "/etc/alternatives",
     ]);
     expect(settings.permissions.deny).toContain("Read(//etc/**)");
   });
