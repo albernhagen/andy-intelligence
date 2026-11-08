@@ -29,7 +29,7 @@ Severity: `critical` (exploitable now, big blast radius) · `high` (exploitable 
 
 ## Area detail
 
-Trust boundaries, entry points and credentials, moved by area (ADR-0046). PRs that change an area update its file; the weekly system review edits only this file. The per-PR security review gets only this file from the base branch; area files come from the PR's own tree.
+Trust boundaries, entry points and credentials, moved by area (ADR-0046). PRs that change an area update its file; the weekly system review edits only this file. The per-PR security review reads this file and the area files from the base branch.
 
 | Area                         | File                                                                 |
 | ---------------------------- | -------------------------------------------------------------------- |

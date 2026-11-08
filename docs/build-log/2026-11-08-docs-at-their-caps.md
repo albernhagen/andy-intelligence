@@ -10,4 +10,4 @@ Three always-loaded docs sat within a few words of their budgets, so every PR ha
 
 New budgets: `docs/features.md` 1,500; `docs/security/*.md` 900 each.
 
-Open: the per-PR security review gets only the main threat-model file from the base branch; area files come from the PR's own tree (noted in `platform/procedures/security-review.md`). Passing them from the base needs a workflow change Andy approves.
+Keeping the trust-boundary and credential tables in the main file would not fit the target (register 1,730 + header 101 + tables 1,339 = 3,170 words, target 2,880), so `security-review.yml` now passes the four area files from the base branch as well (`context-files`), keeping the review's trusted anchor. Workflow change, so Andy merges.
