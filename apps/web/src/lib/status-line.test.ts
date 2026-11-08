@@ -14,10 +14,6 @@ const minutesAgo = (m: number) => new Date(NOW.getTime() - m * 60_000).toISOStri
 const base: StatusInput = {
   stage: "backlog",
   archived: false,
-  upNextRank: null,
-  upNextAt: null,
-  sentBackReason: null,
-  refineAssumptions: [],
   needsAttention: false,
   dorMet: false,
   openQuestions: 0,
