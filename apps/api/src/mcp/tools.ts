@@ -50,7 +50,16 @@ const CreateTicketInput = NewTicket.omit({ dorStatus: true, needsAttention: true
   type: NewTicket.shape.type.describe(
     "feature, chore, bug or epic (ADR-0058). Omit it: refine fills it, and the rest, from the title.",
   ),
+  upNext: z
+    .boolean()
+    .default(false)
+    .describe("true: skip Ideas and go straight to Up next, which starts refine. Default false."),
 }).shape;
+
+const PromoteAssumptionInput = {
+  ticket: TicketKey.describe('Ticket key, e.g. "AI-42".'),
+  assumptionId: z.string().min(1).max(80).describe("An `id` from the ticket's refineAssumptions."),
+};
 
 const AnswerInput = {
   questionId: QuestionId.describe("Question id from `list_needs_me`."),
@@ -59,7 +68,7 @@ const AnswerInput = {
 
 const RefineInput = {
   ticket: TicketKey.describe(
-    'Ticket key, e.g. "AI-42". Must be in Backlog with no open questions.',
+    'Ticket key, e.g. "AI-42". Must be in Up next with no open questions.',
   ),
 };
 
@@ -94,7 +103,9 @@ const PlanApprovalInput = {
 
 const AutoRefineInput = {
   project: ProjectKey,
-  enabled: z.boolean().describe("true: refine starts on its own for new and answered tickets."),
+  enabled: z
+    .boolean()
+    .describe("true: refine starts on its own for tickets entering Up next and answered ones."),
 };
 
 const StatusInput = {
@@ -160,16 +171,30 @@ export function registerTools(server: McpServer, deps: ToolDeps): void {
     "create_ticket",
     {
       description:
-        "Creates a ticket in a project's backlog; a title alone is enough. Returns its key and what the Definition of Ready still needs. With the project's auto-refine on (default), a refine run starts on its own and its questions arrive in `list_needs_me`.",
+        "Creates a ticket in Ideas (the unordered part of the Backlog); a title alone is enough and nothing runs. Returns its key and what the Definition of Ready still needs. With `upNext: true` it goes straight to Up next, where refine starts on its own if the project's auto-refine is on.",
       inputSchema: CreateTicketInput,
       annotations: { destructiveHint: false, idempotentHint: false },
     },
-    ({ project, ...input }) =>
+    ({ project, upNext, ...input }) =>
       run(async () => {
-        const ticket = await service.create(project.toLowerCase(), input, "andy");
+        const ticket = await service.create(project.toLowerCase(), input, "andy", { upNext });
         const readiness = await service.readiness(ticket.projectId, ticket.id);
         return { ticket: summary(ticket), readiness };
       }),
+  );
+
+  server.registerTool(
+    "promote_assumption",
+    {
+      description:
+        "Turns one of refine's assumptions (`refineAssumptions` in `status`) into an open question. A Ready ticket goes back to Up next. Answering it re-refines only that gap.",
+      inputSchema: PromoteAssumptionInput,
+      annotations: { destructiveHint: false, idempotentHint: false },
+    },
+    ({ ticket, assumptionId }) =>
+      run(async () => ({
+        question: await service.promoteAssumptionByKey(ticket, assumptionId, "andy"),
+      })),
   );
 
   server.registerTool(
@@ -221,7 +246,7 @@ export function registerTools(server: McpServer, deps: ToolDeps): void {
     "refine",
     {
       description:
-        "Starts a refine run on a Backlog ticket now: an agent reads the ticket and the repo, proposes type, size and scope for the fields still empty, and asks 1-5 questions, which arrive in `list_needs_me` when the run ends (a few minutes). Answering the last one moves the ticket to Ready if its Definition of Ready is met. Only needed when auto-refine is off or a refine failed.",
+        "Starts a refine run on an Up-next ticket now: an agent reads the ticket and the repo, proposes values for the fields still empty, and records assumptions or asks up to 3 questions, which arrive in `list_needs_me` when the run ends (a few minutes). With nothing to ask, the ticket moves to Ready. Only needed when auto-refine is off or a refine failed.",
       inputSchema: RefineInput,
       annotations: { destructiveHint: false, idempotentHint: false, openWorldHint: true },
     },

@@ -179,6 +179,7 @@ export function useUpdateProject(projectId: string) {
   return useWrite(
     async (body: {
       autoRefine?: boolean;
+      dailyQuestionCap?: number;
       autoBuild?: boolean;
       buildEnabled?: boolean;
       planApproval?: PlanApproval;
@@ -288,6 +289,41 @@ export function useRankTicket(projectId: string) {
         params: { path: { projectId, ticketId } },
         body: { rank },
       }),
+    ),
+  );
+}
+
+/** Moves a ticket between Ideas and Up next, or reorders Up next (ADR-0075). */
+export function useSetUpNext(projectId: string) {
+  const api = useApi();
+  return useWrite(
+    async ({
+      ticketId,
+      upNext,
+      rank,
+    }: {
+      ticketId: string;
+      upNext: boolean;
+      rank?: string | null;
+    }) =>
+      unwrap(
+        await api.POST("/api/projects/{projectId}/tickets/{ticketId}/up-next", {
+          params: { path: { projectId, ticketId } },
+          body: { upNext, rank: rank ?? null },
+        }),
+      ),
+  );
+}
+
+/** Turns one of refine's assumptions into an open question (ADR-0075). */
+export function usePromoteAssumption(path: TicketPath) {
+  const api = useApi();
+  return useWrite(async (assumptionId: string) =>
+    unwrap(
+      await api.POST(
+        "/api/projects/{projectId}/tickets/{ticketId}/assumptions/{assumptionId}/promote",
+        { params: { path: { ...path, assumptionId } } },
+      ),
     ),
   );
 }

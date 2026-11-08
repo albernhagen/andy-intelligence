@@ -138,6 +138,7 @@ const DOMAIN_STATUS = {
   dispatch_failed: 502,
   cancel_failed: 502,
   plan_not_decidable: 409,
+  not_promotable: 409,
 } as const;
 
 export function createApp(deps: AppDeps) {

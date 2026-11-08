@@ -19,6 +19,12 @@ async function setup(connected = true) {
     { type: "feature", title: "Board" },
     "andy",
   );
+  await t.tracker.updateTicket(
+    project.id,
+    ticket.id,
+    { fields: { upNextRank: "0000000001" } },
+    "andy",
+  );
   const runsPath = `/api/projects/${project.id}/tickets/${ticket.id}/runs`;
   const start = () =>
     t.call(runsPath, { method: "POST", body: JSON.stringify({ step: "refine" }) });
@@ -47,7 +53,22 @@ const result = {
     sizeReason: "one screen",
     outOfScope: [],
     touches: [],
-    questions: [{ text: "Kanban or list?" }],
+    body: null,
+    acceptanceCriteria: [],
+    outcome: "ready",
+    reason: null,
+    children: [],
+    gaps: [
+      {
+        question: "Kanban or list?",
+        assumption: "Kanban",
+        options: [],
+        suggestedAnswer: null,
+        cost: "direction",
+        confidence: "unsure",
+        urgency: "normal",
+      },
+    ],
   },
 };
 

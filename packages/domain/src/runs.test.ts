@@ -45,6 +45,12 @@ describe("RunService", () => {
     service = make(new WorkflowExecutor(host));
     projectId = (await tracker.createProject({ name: "AI", key: "AI", repos: [REPO.fullName] })).id;
     ticketId = (await tracker.createTicket(projectId, { title: "Board" }, "andy")).id;
+    await tracker.updateTicket(
+      projectId,
+      ticketId,
+      { fields: { upNextRank: "0000000001" } },
+      "andy",
+    );
   });
 
   it("GivenATicket_WhenARefineRunIsStarted_ThenItIsDispatchedWithADeadlineAndTheTicketSaysSo", async () => {
@@ -169,6 +175,12 @@ describe("RunService", () => {
 
   it("GivenARunOnAnotherTicketOrNone_WhenATicketsRunsAreCancelled_ThenOnlyItsRunsAreTouched", async () => {
     const other = await tracker.createTicket(projectId, { type: "chore", title: "Other" }, "andy");
+    await tracker.updateTicket(
+      projectId,
+      other.id,
+      { fields: { upNextRank: "0000000002" } },
+      "andy",
+    );
     const run = await service.start(projectId, other.id, "refine");
     expect(await service.cancelForTicket(projectId, ticketId)).toEqual([]);
     expect((await runs.get(run.id))?.status).toBe("queued");
@@ -237,7 +249,22 @@ describe("RunService", () => {
         sizeReason: "one screen",
         outOfScope: [],
         touches: [],
-        questions: [{ text: "Kanban or list?" }],
+        body: null,
+        acceptanceCriteria: [],
+        outcome: "ready",
+        reason: null,
+        children: [],
+        gaps: [
+          {
+            question: "Kanban or list?",
+            assumption: "Kanban",
+            options: [],
+            suggestedAnswer: null,
+            cost: "direction",
+            confidence: "unsure",
+            urgency: "normal",
+          },
+        ],
       },
     };
     expect(await service.report(run.id, caller, result)).toBe("recorded");
@@ -298,10 +325,12 @@ describe("RunService", () => {
 
   describe("refine", () => {
     const question = (text: string) => ({
-      text,
+      question: text,
+      assumption: `Assume ${text}`,
       options: ["yes", "no"],
       suggestedAnswer: "yes",
-      assumptions: [],
+      cost: "direction",
+      confidence: "unsure",
       urgency: "normal",
     });
     const refined = (output: unknown) => ({
@@ -328,7 +357,12 @@ describe("RunService", () => {
     const good = {
       summary: "**Ask**: a board",
       ...sizing,
-      questions: [question("A?"), question("B?")],
+      body: null,
+      acceptanceCriteria: [],
+      outcome: "ready",
+      reason: null,
+      children: [],
+      gaps: [question("A?"), question("B?")],
     };
 
     it("GivenAValidResult_WhenReported_ThenItsQuestionsAreOpenOnTheTicketWhichNeedsYou", async () => {
@@ -423,12 +457,8 @@ describe("RunService", () => {
 
     it.each([
       ["no output", undefined],
-      ["no questions", { ...good, questions: [] }],
-      [
-        "six questions",
-        { ...good, questions: Array.from({ length: 6 }, (_, i) => question(`Q${i}?`)) },
-      ],
-      ["an oversized question", { ...good, questions: [question("x".repeat(501))] }],
+      ["eleven gaps", { ...good, gaps: Array.from({ length: 11 }, (_, i) => question(`Q${i}?`)) }],
+      ["an oversized gap", { ...good, gaps: [question("x".repeat(501))] }],
       ["no type", { ...good, type: undefined }],
       ["a tier", { ...good, tier: "fast" }],
       ["21 touches", { ...good, touches: Array.from({ length: 21 }, (_, i) => `p${i}/**`) }],

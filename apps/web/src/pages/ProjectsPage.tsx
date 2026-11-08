@@ -36,6 +36,7 @@ export function ProjectsPage() {
               <span className="text-muted-foreground"> ({p.repos.join(", ")})</span>
             )}
             <AutoRefineToggle project={p} />
+            <DailyQuestionCap project={p} />
             <BuildsEnabledToggle project={p} />
             <AutoBuildToggle project={p} />
             <PlanApprovalSelect project={p} />
@@ -90,7 +91,33 @@ export function ProjectsPage() {
   );
 }
 
-/** On: refine starts on its own for new and answered Backlog tickets (ADR-0054). */
+/** Refine questions the project takes per rolling 24 hours; extras become assumptions (ADR-0075). */
+function DailyQuestionCap({ project }: { project: Project }) {
+  const update = useUpdateProject(project.id);
+  return (
+    <label className="ml-3 inline-flex items-center gap-1 text-sm text-muted-foreground">
+      Questions per day
+      <input
+        type="number"
+        min={0}
+        max={50}
+        aria-label="Questions per day"
+        className="w-14 rounded-md border border-border bg-background px-1"
+        defaultValue={project.dailyQuestionCap}
+        disabled={update.isPending}
+        onBlur={(e) => {
+          const value = Number(e.target.value);
+          if (Number.isInteger(value) && value !== project.dailyQuestionCap) {
+            update.mutate({ dailyQuestionCap: value });
+          }
+        }}
+      />
+      {update.error && <QueryError error={update.error} />}
+    </label>
+  );
+}
+
+/** On: refine starts on its own for tickets entering Up next and answered ones (ADR-0075). */
 function AutoRefineToggle({ project }: { project: Project }) {
   const update = useUpdateProject(project.id);
   return (

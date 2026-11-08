@@ -305,7 +305,12 @@ describe("status", () => {
 describe("refine tool", () => {
   it("GivenGitHubIsNotConnected_WhenRefineIsCalled_ThenAToolErrorSaysSo", async () => {
     const ctx = await withProject();
-    await ctx.call("create_ticket", { project: "AI", type: "feature", title: "Board" });
+    await ctx.call("create_ticket", {
+      project: "AI",
+      type: "feature",
+      title: "Board",
+      upNext: true,
+    });
     const result = await ctx.call("refine", { ticket: "AI-1" });
     expect(result).toMatchObject({
       isError: true,
@@ -329,6 +334,61 @@ describe("build tool", () => {
       isError: true,
       text: expect.stringContaining("connect GitHub"),
     });
+  });
+});
+
+describe("Up next and assumptions", () => {
+  const ratedResult = {
+    assumptions: [
+      {
+        id: "r1-a1",
+        text: "Assume kanban",
+        question: "Kanban?",
+        options: [],
+        cost: "reversible",
+        confidence: "sure",
+        demotedBy: null,
+        runId: "r1",
+        status: "assumed",
+        questionId: null,
+        answeredAt: null,
+        settledBy: null,
+        createdAt: "2026-11-08T00:00:00.000Z",
+      },
+    ],
+  };
+
+  it("GivenNoFlag_WhenCreated_ThenTheTicketIsAnIdea", async () => {
+    const ctx = await withProject();
+    await ctx.call("create_ticket", { project: "AI", title: "Board" });
+    expect((await ctx.tracker.listTickets("ai"))[0]?.upNextRank).toBeNull();
+  });
+
+  it("GivenTheFlag_WhenCreated_ThenTheTicketIsUpNext", async () => {
+    const ctx = await withProject();
+    await ctx.call("create_ticket", { project: "AI", title: "Board", upNext: true });
+    expect((await ctx.tracker.listTickets("ai"))[0]?.upNextRank).not.toBeNull();
+  });
+
+  it("GivenAnAssumption_WhenPromotedAndReadOverStatus_ThenItIsAnOpenQuestion", async () => {
+    const ctx = await withProject();
+    await ctx.call("create_ticket", { project: "AI", title: "Board", upNext: true });
+    const [t] = await ctx.tracker.listTickets("ai");
+    await ctx.tracker.updateTicket(
+      "ai",
+      t!.id,
+      { fields: { refineAssumptions: ratedResult.assumptions as never } },
+      "system",
+    );
+    const before = await ctx.call("status", { ticket: "AI-1" });
+    expect(before.text).toContain("Assume kanban");
+
+    const res = await ctx.call("promote_assumption", { ticket: "AI-1", assumptionId: "r1-a1" });
+    expect(res.isError).toBeFalsy();
+    expect(await ctx.tracker.listQuestions({ ticketId: t!.id, status: "open" })).toHaveLength(1);
+    expect(
+      (await ctx.call("promote_assumption", { ticket: "AI-1", assumptionId: "r1-a1" })).isError,
+    ).toBe(true);
   });
 });
 

@@ -5,6 +5,22 @@ import { ChevronsLeftRight, ChevronsRightLeft } from "lucide-react";
 import type { Stage } from "@andy/contracts";
 import { STAGE_LABELS } from "@/lib/tickets";
 
+/** A labelled part of a lane (Backlog's Up next and Ideas); a drop on it lands in that part. */
+export function LaneZone({ id, label, count }: { id: string; label: string; count: number }) {
+  const { setNodeRef, isOver } = useDroppable({ id });
+  return (
+    <li
+      ref={setNodeRef}
+      data-zone={id}
+      className={`flex h-7 items-center gap-1 rounded-md px-1 text-xs font-medium text-muted-foreground ${
+        isOver ? "bg-foreground/15" : "border-b border-border"
+      }`}
+    >
+      {label} <span className="tabular-nums">{count}</span>
+    </li>
+  );
+}
+
 /**
  * One swim lane per stage: a header with the count, then the cards in rank order (the order is
  * the priority, ADR-0058). A collapsed lane is a narrow strip with its count; it still takes

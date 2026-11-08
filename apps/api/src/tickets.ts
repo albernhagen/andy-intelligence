@@ -43,14 +43,35 @@ const TicketParams = ProjectParams.extend({ ticketId: z.uuid() });
 const QuestionParams = z.object({ questionId: QuestionId });
 
 /** Callers can't set derived fields; the domain computes them. */
-const CreateTicket = NewTicket.omit({ dorStatus: true, needsAttention: true });
-const PatchTicket = TicketFields.omit({ dorStatus: true, archived: true }).extend({
+const CreateTicket = NewTicket.omit({ dorStatus: true, needsAttention: true }).extend({
+  /** Skip Ideas: this also starts refine (ADR-0075). */
+  upNext: z.boolean().default(false),
+});
+const PatchTicket = TicketFields.omit({
+  dorStatus: true,
+  archived: true,
+  upNextRank: true,
+  upNextAt: true,
+  sentBackReason: true,
+  refineAssumptions: true,
+}).extend({
   ifUpdatedAt: Timestamp.optional(),
 });
 const MoveStage = z.object({
   to: Stage,
   force: z.boolean().default(false),
   reason: z.string().nullable().default(null),
+});
+const UpNext = z.object({
+  upNext: z.boolean(),
+  rank: z
+    .string()
+    .regex(/^\d{10}(\.\d*[1-9])?$/)
+    .nullable()
+    .default(null),
+});
+const AssumptionParams = TicketParams.extend({
+  assumptionId: z.string().regex(/^[A-Za-z0-9_-]{1,80}$/),
 });
 const CancelTicket = z.object({ reason: z.string().nullable().default(null) });
 const ArchiveTicket = z.object({ archived: z.boolean().default(true) });
@@ -146,6 +167,20 @@ const routes = {
     path: "/api/projects/{projectId}/tickets/{ticketId}/stage",
     request: { params: TicketParams, ...body(MoveStage) },
     responses: { 200: ok(Ticket, "Moved"), ...errors },
+  }),
+  setUpNext: createRoute({
+    ...secured,
+    method: "post",
+    path: "/api/projects/{projectId}/tickets/{ticketId}/up-next",
+    request: { params: TicketParams, ...body(UpNext) },
+    responses: { 200: ok(Ticket, "Moved between Ideas and Up next, or reordered"), ...errors },
+  }),
+  promoteAssumption: createRoute({
+    ...secured,
+    method: "post",
+    path: "/api/projects/{projectId}/tickets/{ticketId}/assumptions/{assumptionId}/promote",
+    request: { params: AssumptionParams },
+    responses: { 201: ok(Question, "The assumption is now an open question"), ...errors },
   }),
   cancelTicket: createRoute({
     ...secured,
@@ -244,7 +279,8 @@ export function registerTicketRoutes(
 
   app.openapi(routes.createTicket, async (c) => {
     const { projectId } = c.req.valid("param");
-    return c.json(await service.create(projectId, c.req.valid("json"), "andy"), 201);
+    const { upNext, ...input } = c.req.valid("json");
+    return c.json(await service.create(projectId, input, "andy", { upNext }), 201);
   });
 
   app.openapi(routes.getTicket, async (c) => {
@@ -274,6 +310,16 @@ export function registerTicketRoutes(
     const { projectId, ticketId } = c.req.valid("param");
     const { to, force, reason } = c.req.valid("json");
     return c.json(await service.move(projectId, ticketId, to, "andy", { force, reason }), 200);
+  });
+
+  app.openapi(routes.setUpNext, async (c) => {
+    const { projectId, ticketId } = c.req.valid("param");
+    return c.json(await service.setUpNext(projectId, ticketId, c.req.valid("json"), "andy"), 200);
+  });
+
+  app.openapi(routes.promoteAssumption, async (c) => {
+    const { projectId, ticketId, assumptionId } = c.req.valid("param");
+    return c.json(await service.promoteAssumption(projectId, ticketId, assumptionId, "andy"), 201);
   });
 
   app.openapi(routes.cancelTicket, async (c) => {

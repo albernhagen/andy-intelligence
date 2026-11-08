@@ -180,6 +180,31 @@ export function workTrackerContract(name: string, make: () => Promise<WorkTracke
       );
     });
 
+    it("GivenAnUpNextTicket_WhenItLeavesBacklog_ThenItsUpNextPlaceIsCleared", async () => {
+      const { tracker, project: p, ticket: t } = await setup();
+      expect(t.upNextRank).toBeNull();
+      await tracker.updateTicket(p.id, t.id, { fields: { upNextRank: "0000000001" } }, "andy");
+      const moved = await tracker.updateTicket(
+        p.id,
+        t.id,
+        { stage: { to: "ready", forced: false, reason: null } },
+        "system",
+      );
+      expect(moved).toMatchObject({ stage: "ready", upNextRank: null, upNextAt: null });
+    });
+
+    it("GivenAFlaggedTicket_WhenItReachesDone_ThenTheFlagIsCleared", async () => {
+      const { tracker, project: p, ticket: t } = await setup();
+      await tracker.updateTicket(p.id, t.id, { fields: { needsAttention: true } }, "andy");
+      const done = await tracker.updateTicket(
+        p.id,
+        t.id,
+        { stage: { to: "done", forced: true, reason: null } },
+        "andy",
+      );
+      expect(done.needsAttention).toBe(false);
+    });
+
     it("GivenFractionalRanks_WhenListed_ThenSortedByCodeUnitOrder", async () => {
       // Board reorders (AI-28) write ranks such as "0000000001.5"; '.' sorts before digits.
       const { tracker, project, ticket } = await setup();
