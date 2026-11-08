@@ -6,6 +6,15 @@ import { withoutQuestion, type NeedsYou } from "./needs-you";
 
 /** Query hooks over the generated API client. One user, small data: every write refetches all. */
 
+/** Subscription quota for the header gauge and banner; refetched on focus, no polling. */
+export function useQuota() {
+  const api = useApi();
+  return useQuery({
+    queryKey: ["quota"],
+    queryFn: async () => unwrap(await api.GET("/api/quota")),
+  });
+}
+
 export function useProjects() {
   const api = useApi();
   return useQuery({

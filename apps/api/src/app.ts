@@ -7,6 +7,7 @@ import {
   type RunStore,
   type WatchdogQueue,
   type WorkTracker,
+  type QuotaStore,
 } from "@andy/contracts";
 import { ClaudeCodeActionsExecutor, exchangeManifestCode, type CreatedApp } from "@andy/github";
 import {
@@ -21,6 +22,7 @@ import {
 import { bodyLimit } from "hono/body-limit";
 import { requireAllowedUser, type AuthEnv, type TokenVerifier } from "./auth";
 import { registerMcp, type ClientMetadataResolver } from "./mcp";
+import { registerQuotaRoutes } from "./quota";
 import { registerRunCallbacks, registerRunRoutes } from "./runs";
 import { registerTicketRoutes } from "./tickets";
 import { registerBoardRoutes } from "./board";
@@ -57,6 +59,8 @@ export interface AppDeps {
   tracker: WorkTracker;
   /** Agent run records (M1.6a: Claude Code executor). */
   runs: RunStore;
+  /** Subscription quota readings (M1.9). Without it every window reads unknown. */
+  quota?: QuotaStore;
   /**
    * The only host served (ADR-0044), e.g. `ai.andybernhagen.com`. Requests for any other host
    * (the default run.app URLs) get 404, except /health for monitoring. Unset: every host (local dev).
@@ -244,7 +248,7 @@ export function createApp(deps: AppDeps) {
       claimRunGrant: (runId, caller) => runs.claimPushGrant(runId, caller),
       now,
     });
-    registerRunCallbacks(app, { runs, verify: verifyActionsToken, now });
+    registerRunCallbacks(app, { runs, verify: verifyActionsToken, now, quota: deps.quota });
   }
 
   app.use("/api/*", requireAllowedUser(deps.verifier, deps.allowedEmails));
@@ -271,6 +275,7 @@ export function createApp(deps: AppDeps) {
   registerBoardRoutes(app, new BoardReader(deps.tracker, deps.runs));
 
   registerRunRoutes(app, runs);
+  registerQuotaRoutes(app, deps.quota ?? null, now);
 
   if (github && connection) {
     registerGitHubSetup(app, {

@@ -388,6 +388,11 @@ export interface QuotaSource {
   latest(provider: ProviderKey): Promise<QuotaReading[]>;
 }
 
+export interface QuotaStore extends QuotaSource {
+  /** Replaces the stored reading for each reading's provider and window. */
+  save(readings: QuotaReading[]): Promise<void>;
+}
+
 // ── OAuthGrantStore ──────────────────────────────────────────────────────────
 // Short-lived credentials issued by the MCP OAuth server (ADR-0039: MCP OAuth facade):
 // authorization codes, access tokens and refresh tokens. Callers key each grant by a hash

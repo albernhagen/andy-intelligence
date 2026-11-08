@@ -45,9 +45,21 @@ export function structuredOutput(result) {
   return size <= MAX_OUTPUT_BYTES ? output : null;
 }
 
+/**
+ * The fields the quota gauge needs from the last `rate_limit_event` (subscription runs; Claude Code
+ * emits one when a window moves), or null when the run had none. The control plane validates them.
+ */
+export function rateLimits(messages) {
+  if (!Array.isArray(messages)) return null;
+  const info = messages.findLast((m) => m?.type === "rate_limit_event")?.rate_limit_info;
+  if (!info || typeof info !== "object") return null;
+  const { unifiedWindows, rateLimitType, utilization, resetsAt } = info;
+  return { unifiedWindows, rateLimitType, utilization, resetsAt };
+}
+
 const intOrNull = (n) => (Number.isFinite(n) ? Math.trunc(n) : null);
 
-/** Builds { status, summary, tokensIn, tokensOut, costUsd } for the control plane. */
+/** Builds { status, summary, tokensIn, tokensOut, costUsd, output?, rateLimits? } for the control plane. */
 export function buildReport({ outcome, messages, reason }) {
   const result = Array.isArray(messages)
     ? messages.findLast((m) => m && typeof m === "object" && m.type === "result")
@@ -78,7 +90,12 @@ export function buildReport({ outcome, messages, reason }) {
     tokensOut: intOrNull(usage.output_tokens),
     costUsd: Number.isFinite(result?.total_cost_usd) ? result.total_cost_usd : null,
   };
-  return output === null ? report : { ...report, output };
+  const limits = rateLimits(messages);
+  return {
+    ...report,
+    ...(output === null ? {} : { output }),
+    ...(limits === null ? {} : { rateLimits: limits }),
+  };
 }
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
