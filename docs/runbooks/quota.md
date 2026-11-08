@@ -17,4 +17,8 @@ Claude subscription only, best-effort. **Dispatch does not act on readings yet**
 
 ## Check it works
 
-After a subscription run ends, open the app: the header gauge should show the 5-hour and weekly percentages. Still unknown means no `rate_limit_event` with window data reached the report. Look for `quota reading discarded` or `quota reading not saved` in the API logs (component `run-callback`).
+After a subscription run ends, open the app: the header gauge should show the 5-hour and weekly percentages. Still unknown means no `rate_limit_event` with window data reached the report. Look for `quota reading discarded` or `quota reading not saved` in the API logs (component `run-callback`). Compare the percentages with Claude's own usage page: the units (`utilization` as a fraction, `resetsAt` in seconds) come from the CLI's schema, not a live event. Record the result in the build log.
+
+## Trust
+
+Readings are advisory. Any verified run report can write them, so a compromised run could show a false level. Before M2: Self-hosting gates dispatch on them, confirm the units above and add sanity checks (reject older readings, limit drops in usage before a window resets).

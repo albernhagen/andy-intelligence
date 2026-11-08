@@ -18,7 +18,7 @@ AI-5: M1.9: Quota capture shipped the plumbing, gauge and banner. Whether real r
 - **A real event.** The local probe failed authentication (the OAuth session had expired), so no event was observed, and CI job logs don't print the messages (0 matches in the latest `adversarial-review` and `agent-run` logs).
 - **The action's bundled CLI version** may be older than 2.1.301 and lack `unifiedWindows`.
 
-To check after merge: `GET /api/quota` after one subscription run. Still unknown means no event arrived or it had no window data.
+To check after merge: `GET /api/quota` after one subscription run. Still unknown means no event arrived or it had no window data. Also compare the percentages with Claude's usage page, to confirm the units, before M2: Self-hosting gates on them.
 
 ## Decisions
 
