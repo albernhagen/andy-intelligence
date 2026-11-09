@@ -1,12 +1,20 @@
-import type { PlanApproval, Run, RunStore, Ticket, WorkTracker } from "@andy/contracts";
-import {
-  MAX_BUILD_RUNS_PER_TICKET,
-  MAX_TICKETS_IN_FLIGHT,
-  isAndysWork,
-  unfinishedBlockers,
-} from "./builds";
+import type {
+  DispatchDecision,
+  DispatchIdleReason,
+  PlanApproval,
+  Project,
+  QuotaLevel,
+  QuotaStore,
+  Run,
+  RunStore,
+  Ticket,
+  WorkTracker,
+} from "@andy/contracts";
+import { MAX_BUILD_RUNS_PER_TICKET, isAndysWork, unfinishedBlockers } from "./builds";
+import { mayDispatch } from "./dispatch-caps";
 import { checkDor } from "./dor";
 import { MAX_PLAN_RUNS_PER_TICKET, planRequired } from "./plans";
+import { quotaStatus } from "./quota";
 import type { RunService } from "./runs";
 import { DomainError } from "./tickets";
 
@@ -18,15 +26,13 @@ function log(severity: "INFO" | "WARNING" | "ERROR", message: string, fields: ob
  * Starts build runs without Andy (ARCHITECTURE §4.1 Ready, ADR-0063), only in projects with
  * `autoBuild` on (default off). Event-driven, no polling: called when a ticket reaches Ready,
  * when a run ends (report or watchdog), when a cancel frees the run slot, and when `autoBuild`
- * is turned on. Each call starts at most one run: the first waiting Ready ticket by rank (order
- * is priority, ADR-0058).
+ * or the dial is changed. Each call takes waiting Ready tickets by rank (order is priority,
+ * ADR-0058) while `mayDispatch` says start, and stores its last decision on the project (ADR-0079).
  *
  * A Ready ticket waits when it isn't an epic, assigned to Andy (`overrides.assignee: "me"`), archived or flagged Needs-you, meets the Definition of Ready,
  * has every `blockedBy` ticket Done and is under its build-run cap. With plan approval
  * (ADR-0050), a ticket whose plan awaits Andy, is still being planned or was rejected waits for
- * Andy (only he re-plans a rejected plan); one that needs a plan gets a plan run first. The project's
- * one-run-in-flight cap (ADR-0028) queues the rest; MAX_TICKETS_IN_FLIGHT stops dispatch while
- * too many built tickets wait for review.
+ * Andy (only he re-plans a rejected plan); one that needs a plan gets a plan run first.
  */
 export class BuildDispatcher {
   constructor(
@@ -34,9 +40,11 @@ export class BuildDispatcher {
     private readonly runStore: RunStore,
     private readonly runs: RunService,
     private readonly now: () => Date = () => new Date(),
+    /** Null when no readings are kept: quota then reads unknown, which doesn't stop dispatch. */
+    private readonly quota: QuotaStore | null = null,
   ) {}
 
-  /** Starts the next waiting build in the project; null when nothing started. Never throws. */
+  /** Starts waiting builds in the project up to the caps; the first run, or null. Never throws. */
   async next(projectId: string): Promise<Run | null> {
     try {
       return await this.dispatch(projectId);
@@ -46,22 +54,44 @@ export class BuildDispatcher {
     }
   }
 
+  /**
+   * Gives projects idle on the global cap another go when a run may have ended elsewhere, since
+   * a run ending wakes only its own project. Never throws.
+   */
+  async wakeGlobalCapWaiters(exceptProjectId: string): Promise<void> {
+    try {
+      for (const p of await this.tracker.listProjects()) {
+        if (p.id !== exceptProjectId && p.lastDispatch?.decision === "global_cap") {
+          await this.next(p.id);
+        }
+      }
+    } catch (err) {
+      log("ERROR", "waking projects at the global cap failed", { error: String(err) });
+    }
+  }
+
   private async dispatch(projectId: string): Promise<Run | null> {
     if (!this.runs.canDispatch) return null;
     const project = await this.tracker.getProject(projectId);
     if (!project?.autoBuild || !project.buildEnabled) return null;
-    if (await this.busy(projectId)) return null;
     const tickets = await this.tracker.listTickets(projectId, { archived: false });
-    const inFlight = tickets.filter(
-      (t) => t.stage === "in_progress" || t.stage === "ready_for_review",
-    ).length;
-    if (inFlight >= MAX_TICKETS_IN_FLIGHT) {
-      log("INFO", "build dispatch paused: tickets waiting for review", { projectId, inFlight });
-      return null;
-    }
+    const prsWaiting = await this.prsWaiting(tickets);
+    const quotaLevel = await this.quotaLevel();
+    const check = async (): Promise<"start" | DispatchIdleReason> => {
+      const active = await this.runs.activeCounts(projectId);
+      return mayDispatch(project, {
+        projectActive: active.project,
+        globalActive: active.global,
+        prsWaiting,
+        quotaLevel,
+      });
+    };
 
+    let first: Run | null = null;
+    let verdict = await check();
     // listTickets is sorted by rank: the first waiting ticket is the top of the order.
     for (const ticket of tickets.filter((t) => t.stage === "ready")) {
+      if (verdict !== "start") break;
       // An epic never runs (ADR-0058); refine can leave one in Ready. Andy's own work never builds.
       if (ticket.type === "epic" || isAndysWork(ticket)) continue;
       if (ticket.archived || ticket.needsAttention) continue;
@@ -69,7 +99,7 @@ export class BuildDispatcher {
       try {
         const run = await this.runs.start(projectId, ticket.id, "build");
         log("INFO", "build started on its own", { ticket: ticket.key, runId: run.id });
-        return run;
+        first ??= run;
       } catch (err) {
         if (!(err instanceof DomainError)) throw err;
         // run_limit: another start won the race. not_buildable: the ticket changed meanwhile.
@@ -80,18 +110,45 @@ export class BuildDispatcher {
             `Build couldn't start: ${err.message}. Start it again from the ticket.`,
           );
         }
-        return null;
+        return first;
       }
+      verdict = await check();
     }
-    return null;
+    await this.record(
+      project,
+      verdict === "start" ? (first ? "started" : "nothing_ready") : verdict,
+    );
+    return first;
   }
 
-  /** A run in flight that is still within its deadline (as RunService counts them). */
-  private async busy(projectId: string): Promise<boolean> {
-    const nowMs = this.now().getTime();
-    return (await this.runStore.listActive(projectId)).some(
-      (r) => !r.deadline || Date.parse(r.deadline) > nowMs,
+  /** Stores the decision when it changed, so `at` says since when and repeats cost no write. */
+  private async record(project: Project, decision: DispatchDecision): Promise<void> {
+    if (decision !== "started" && decision !== "nothing_ready") {
+      log("INFO", "build dispatch idle", { projectId: project.id, reason: decision });
+    }
+    if (project.lastDispatch?.decision === decision) return;
+    await this.tracker.updateProject(project.id, {
+      lastDispatch: { decision, at: this.now().toISOString() },
+    });
+  }
+
+  /** Tickets in Ready for review (an open PR, by the stage rules) whose PR a build run opened. */
+  private async prsWaiting(tickets: Ticket[]): Promise<number> {
+    const waiting = await Promise.all(
+      tickets
+        .filter((t) => t.stage === "ready_for_review")
+        .map(async (t) =>
+          (await this.runStore.listForTicket(t.projectId, t.id)).some(
+            (r) => r.step === "build" && r.links.pullRequest,
+          ),
+        ),
     );
+    return waiting.filter(Boolean).length;
+  }
+
+  private async quotaLevel(): Promise<QuotaLevel> {
+    if (!this.quota) return "unknown";
+    return quotaStatus("claude-sub", await this.quota.latest("claude-sub"), this.now()).level;
   }
 
   private async waiting(ticket: Ticket, policy: PlanApproval): Promise<boolean> {

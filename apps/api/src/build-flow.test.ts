@@ -1,7 +1,7 @@
 import { CLAUDE_EXECUTOR_REF } from "@andy/github";
 import { sign } from "@octokit/webhooks-methods";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { REPO, createdApp, githubApp } from "./github/test-app";
+import { REPO, createdApp, githubApp, repo } from "./github/test-app";
 import { TOKEN_PATH, type ActionsClaims } from "./github/token";
 import { WEBHOOK_PATH } from "./github/webhooks";
 
@@ -732,6 +732,125 @@ describe("build run flow", () => {
       f.t.host.pullRequests.get(50)!.pullRequest.headRef = "m1.8/some-branch";
       await f.checkHook();
       expect(f.t.host.merges).toEqual([]);
+    });
+  });
+
+  describe("dispatch caps (ADR-0079)", () => {
+    const setup = async () => {
+      const t = githubApp({ verifyActionsToken: verify });
+      await t.connections.save({ ...createdApp, connectedAt: "2026-11-03T00:00:00Z" });
+      t.host.install(repo(`${REPO}-b`));
+      const json = async <T>(res: Response | Promise<Response>) => (await (await res).json()) as T;
+      const send = (path: string, method: string, body: unknown) =>
+        t.call(path, { method, body: JSON.stringify(body) });
+      const project = async (key: string, repoName: string, settings: object) => {
+        const { id } = await json<{ id: string }>(
+          send("/api/projects", "POST", { name: key, key, repos: [repoName] }),
+        );
+        await send(`/api/projects/${id}`, "PATCH", { autoRefine: false, buildEnabled: true });
+        const patched = await send(`/api/projects/${id}`, "PATCH", {
+          autoBuild: true,
+          ...settings,
+        });
+        expect(patched.status).toBe(200);
+        return id;
+      };
+      const ready = async (projectId: string, title: string) => {
+        const ticket = await json<{ id: string }>(
+          send(`/api/projects/${projectId}/tickets`, "POST", {
+            type: "feature",
+            title,
+            body: "Andy can't see his tickets.",
+            acceptanceCriteria: ["WHEN Andy opens the board THE SYSTEM SHALL list his tickets"],
+            size: "S",
+            sizeReason: "one screen",
+          }),
+        );
+        const moved = await send(`/api/projects/${projectId}/tickets/${ticket.id}/stage`, "POST", {
+          to: "ready",
+        });
+        expect(moved.status).toBe(200);
+        return ticket.id;
+      };
+      const runsOf = (projectId: string, ticketId: string) =>
+        json<RunBody[]>(t.call(`/api/projects/${projectId}/tickets/${ticketId}/runs`));
+      const decision = async (projectId: string) =>
+        (
+          await json<{ lastDispatch: { decision: string } | null }>(
+            t.call(`/api/projects/${projectId}`),
+          )
+        ).lastDispatch?.decision;
+      /** The executor reports the run succeeded, as the workflow run that was dispatched. */
+      const finish = async (runId: string, repoName: string) => {
+        const [externalId] = [...t.host.workflowRuns.entries()].find(
+          ([, r]) => r.inputs.run_id === runId,
+        )!;
+        const claims: ActionsClaims = {
+          repository: repoName,
+          workflow_ref: `${repoName}/.github/workflows/agent-run.yml@refs/heads/main`,
+          job_workflow_ref: CLAUDE_EXECUTOR_REF,
+          run_id: externalId,
+        };
+        const report = await t.call(
+          `/runs/${runId}/report`,
+          {
+            method: "POST",
+            body: JSON.stringify({
+              status: "succeeded",
+              summary: "done",
+              tokensIn: 1,
+              tokensOut: 1,
+              costUsd: 0.01,
+              output,
+            }),
+          },
+          JSON.stringify(claims),
+        );
+        expect(report.status).toBe(200);
+      };
+      return { t, json, send, project, ready, runsOf, decision, finish };
+    };
+
+    it("GivenADialOfOneAndTwoReadyTickets_WhenTheFirstCompletes_ThenTheSecondStartsOnlyThen", async () => {
+      const f = await setup();
+      const p = await f.project("AI", REPO, { runsAtOnce: 1 });
+      const first = await f.ready(p, "First");
+      const second = await f.ready(p, "Second");
+      const [run] = await f.runsOf(p, first);
+      expect(run).toBeDefined();
+      expect(await f.runsOf(p, second)).toEqual([]);
+      expect(await f.decision(p)).toBe("project_cap");
+
+      await f.finish(run!.id, REPO);
+      expect(await f.runsOf(p, second)).toHaveLength(1);
+    });
+
+    it("GivenAPausedProject_WhenATicketReachesReady_ThenNoRunAndTheReasonReadsBackOverTheApi", async () => {
+      const f = await setup();
+      const p = await f.project("AI", REPO, { paused: true });
+      const ticket = await f.ready(p, "First");
+      expect(await f.runsOf(p, ticket)).toEqual([]);
+      expect(await f.decision(p)).toBe("paused");
+
+      // A client can't write the decision itself.
+      expect((await f.send(`/api/projects/${p}`, "PATCH", { lastDispatch: null })).status).toBe(
+        400,
+      );
+    });
+
+    it("GivenTheGlobalCapIsFull_WhenARunEnds_ThenTheOtherProjectGetsTheSlot", async () => {
+      const f = await setup();
+      const a = await f.project("AI", REPO, { runsAtOnce: 4 });
+      const b = await f.project("BB", `${REPO}-b`, {});
+      const tickets = [];
+      for (const title of ["1", "2", "3", "4"]) tickets.push(await f.ready(a, title));
+      const waiting = await f.ready(b, "Other project");
+      expect(await f.runsOf(b, waiting)).toEqual([]);
+      expect(await f.decision(b)).toBe("global_cap");
+
+      const [run] = await f.runsOf(a, tickets[0]!);
+      await f.finish(run!.id, REPO);
+      expect(await f.runsOf(b, waiting)).toHaveLength(1);
     });
   });
 });

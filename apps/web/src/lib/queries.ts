@@ -201,6 +201,8 @@ export function useUpdateProject(projectId: string) {
       buildEnabled?: boolean;
       planApproval?: PlanApproval;
       autoMerge?: AutoMerge;
+      runsAtOnce?: number;
+      paused?: boolean;
     }) =>
       unwrap(
         await api.PATCH("/api/projects/{projectId}", { params: { path: { projectId } }, body }),

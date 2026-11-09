@@ -1,6 +1,6 @@
 # Architecture decision records — index
 
-One line per ADR (MADR, bodies immutable). Read this index, then open only the ADRs you need (ADR-0046). Add a line in the same PR as a new ADR or status change; a test fails if one is missing. Milestone numbers before ADR-0060 are older; 0060 maps them.
+One line per ADR (MADR, bodies immutable). Read this, then open only what you need (ADR-0046). Add a line in the ADR's PR; a test checks it. Milestone numbers before ADR-0060 are older; 0060 maps them.
 
 | ADR                                                               | Decision                                                                                                                                 | Status                                                                                                          |
 | ----------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------- |
@@ -76,3 +76,4 @@ One line per ADR (MADR, bodies immutable). Read this index, then open only the A
 | [0075](0075-ideas-and-up-next.md)                                 | Ideas and Up next; refine asks only when needed                                                                                          | accepted                                                                                                        |
 | [0076](0076-deploy-no-traffic-smoke-then-traffic.md)              | Control-plane deploy: no-traffic revision, smoke test, then traffic                                                                      | accepted                                                                                                        |
 | [0078](0078-coordinator-merges-low-risk-prs.md)                   | Coordinator merges low-risk PRs; medium and high stay with Andy                                                                          | accepted, amends 0047                                                                                           |
+| [0079](0079-dispatch-caps.md)                                     | Dispatch caps and pause                                                                                                                  | accepted, amends 0063, 0028                                                                                     |

@@ -45,7 +45,7 @@ export class RefineDispatcher {
   private async dispatch(projectId: string): Promise<Run | null> {
     if (!this.runs.canDispatch) return null;
     const project = await this.tracker.getProject(projectId);
-    if (!project?.autoRefine) return null;
+    if (!project?.autoRefine || project.paused) return null;
     if (await this.busy(projectId)) return null;
 
     const upNext = (await this.tracker.listTickets(projectId, { stage: "backlog" }))

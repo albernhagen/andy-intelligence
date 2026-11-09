@@ -105,6 +105,15 @@ describe("RefineDispatcher", () => {
     projectId = (await tracker.createProject({ name: "AI", key: "AI", repos: [REPO.fullName] })).id;
   });
 
+  it("GivenAPausedProject_WhenATicketEntersUpNext_ThenNoRefineStarts", async () => {
+    await tracker.updateProject(projectId, { paused: true });
+    const { tickets } = wire();
+    const ticket = await tickets.create(projectId, { type: "feature", title: "Board" }, "andy", {
+      upNext: true,
+    });
+    expect(await refines(ticket.id)).toEqual([]);
+  });
+
   it("GivenAutoRefineOn_WhenATicketEntersUpNext_ThenARefineRunStartsWithoutAndy", async () => {
     const { tickets } = wire();
     const ticket = await tickets.create(projectId, { type: "feature", title: "Board" }, "andy", {

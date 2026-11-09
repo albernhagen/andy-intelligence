@@ -1,5 +1,5 @@
 import type { EventActor, Project, Question, Ticket, TicketEvent } from "../entities";
-import { QuestionId } from "../entities";
+import { QuestionId, RUNS_AT_ONCE_DEFAULT } from "../entities";
 import {
   NewProject,
   NewQuestion,
@@ -35,6 +35,9 @@ export function buildProject(input: NewProject): Project {
     planApproval: "none",
     dailyQuestionCap: 5,
     autoMerge: "s-and-m",
+    runsAtOnce: RUNS_AT_ONCE_DEFAULT,
+    paused: false,
+    lastDispatch: null,
   };
 }
 

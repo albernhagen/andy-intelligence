@@ -17,6 +17,8 @@ What is built on `main` now. Target design: [ARCHITECTURE.md](docs/architecture/
 
 **Working:** tickets on a board (Backlog split into Up next and Ideas; only Up next gets refined) with a Needs-you inbox; a Claude connector (MCP); GitHub PRs that move tickets; Refine and Build agent runs on GitHub Actions; PR checks and review agents; the merge gate (an agent PR merges itself when every required check and both review agents pass on its head, no veto applies, and the project's `autoMerge` policy covers the ticket's size; project `AI` stays `none`); Dependabot; the project baseline; cost guardrails. Feature by feature, with how to use each: [`docs/features.md`](docs/features.md). A header gauge and persistent banner show Claude quota from run reports (unknown until a run reports it).
 
+**Dispatch:** with auto-build on, Ready tickets start from the top, up to the project's "Runs at once" dial (default 2, max 4), 4 runs across projects and 5 agent PRs waiting for Andy; "Paused" stops new starts, and so does the quota reserve. `/projects`, the board and MCP `status` show why dispatch is idle; set with `set_runs_at_once` and `set_paused` (ADR-0079).
+
 **Not built yet:** Needs you has no push notification. Next: M1.8: Build + gate (ARCHITECTURE §12).
 
 ## Docs

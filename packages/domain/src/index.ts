@@ -16,3 +16,4 @@ export * from "./refine-gate";
 export * from "./gate";
 export * from "./gate-service";
 export * from "./quota";
+export * from "./dispatch-caps";

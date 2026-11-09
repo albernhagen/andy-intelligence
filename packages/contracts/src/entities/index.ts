@@ -14,8 +14,10 @@ import {
   Timestamp,
   Urgency,
 } from "./common";
+import { projectDispatchFields } from "./dispatch-caps";
 
 export * from "./common";
+export * from "./dispatch-caps";
 
 /** ARCHITECTURE §5 — domain model. Vendor concepts must not appear here. */
 
@@ -70,6 +72,7 @@ export const Project = z.object({
    * than the field, such as project AI, which stays `none` until M2: Self-hosting.
    */
   autoMerge: AutoMerge.default("none"),
+  ...projectDispatchFields,
 });
 export type Project = z.infer<typeof Project>;
 

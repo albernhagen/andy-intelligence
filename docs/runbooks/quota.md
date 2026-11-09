@@ -2,7 +2,7 @@
 
 M1.9: Quota capture. Design: ARCHITECTURE §5 and [observability-and-cost.md](../architecture/observability-and-cost.md) §10.5. What headless Claude Code exposes: `docs/build-log/2026-11-08-quota-capture.md`.
 
-Claude subscription only, best-effort. **Dispatch does not act on readings yet**: pausing at the reserve is M2: Self-hosting.
+Claude subscription only, best-effort. A fresh reading at the pause level stops dispatch (ADR-0079); stale or missing readings don't.
 
 | Step      | What                                                                                                                                                                                                                  |
 | --------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -21,4 +21,4 @@ After a subscription run ends, open the app: the header gauge should show the 5-
 
 ## Trust
 
-Readings are advisory. Any verified run report can write them, so a compromised run could show a false level. Before M2: Self-hosting gates dispatch on them, confirm the units above and add sanity checks (reject older readings, limit drops in usage before a window resets).
+Any verified run report can write readings, so a compromised run could show a false level and idle dispatch or hide the reserve. Still to do: confirm the units above and add sanity checks (reject older readings, limit drops in usage before a window resets).

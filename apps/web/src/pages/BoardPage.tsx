@@ -13,6 +13,7 @@ import {
 } from "@dnd-kit/core";
 import { Stage, type BoardTicket } from "@andy/contracts";
 import { BoardCard } from "@/components/board/BoardCard";
+import { BoardDispatchStatus } from "@/components/DispatchControls";
 import { Lane, LaneZone } from "@/components/board/Lane";
 import { Loading, QueryError } from "@/components/Status";
 import {
@@ -44,7 +45,9 @@ export function BoardPage() {
   return (
     <section className="space-y-4">
       <div className="flex items-center justify-between">
-        <h2 className="text-lg font-medium">Board</h2>
+        <h2 className="text-lg font-medium">
+          Board <BoardDispatchStatus projectId={projectId} />
+        </h2>
         <label className="flex items-center gap-1 text-sm">
           <input
             type="checkbox"

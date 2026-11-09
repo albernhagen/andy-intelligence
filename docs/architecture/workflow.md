@@ -19,6 +19,8 @@ Overview and reading map: [ARCHITECTURE.md](ARCHITECTURE.md). Section numbers ma
 
 As built (PR events, build dispatch, plan approval): [`history/workflow-as-built.md`](history/workflow-as-built.md).
 
+**Dispatch caps (ADR-0079):** the build dispatcher takes Ready tickets from the top while `mayDispatch` says start. It stops on pause, the project's `runsAtOnce` dial, the global cap, the cap on agent PRs waiting for Andy, or the quota reserve, and stores the reason on the project. This replaces the one-run rule in the as-built notes.
+
 **Needs-you is a flag, not a stage:** flagged items stay put and appear in the Needs-you inbox (UI + MCP).
 
 ### 4.2 Definition of Ready (per type, ADR-0058)

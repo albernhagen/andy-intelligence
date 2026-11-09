@@ -261,6 +261,7 @@ describe("status", () => {
             done: 0,
             cancelled: 0,
           },
+          dispatch: { runsAtOnce: 2, paused: false, lastDispatch: null },
         },
       ],
       needsYou: { questions: 0, tickets: 0 },
@@ -440,6 +441,39 @@ describe("plan approval tools", () => {
     expect(await ctx.call("set_auto_merge", { project: "AI", policy: "some" })).toMatchObject({
       isError: true,
     });
+  });
+
+  it("GivenAStoredDispatchDecision_WhenStatusOverview_ThenItShowsTheReason", async () => {
+    const ctx = await withProject();
+    const lastDispatch = { decision: "global_cap", at: "2026-11-09T12:00:00.000Z" } as const;
+    await ctx.tracker.updateProject("ai", { lastDispatch });
+    const overview = await ctx.call("status");
+    expect(overview.data.projects[0].dispatch).toEqual({
+      runsAtOnce: 2,
+      paused: false,
+      lastDispatch,
+    });
+  });
+
+  it("GivenTheDialAndPauseTools_WhenCalled_ThenTheProjectStoresThem", async () => {
+    const ctx = await withProject();
+    expect((await ctx.call("set_runs_at_once", { project: "ai", runs: 3 })).data).toEqual({
+      project: "AI",
+      runsAtOnce: 3,
+    });
+    expect((await ctx.call("set_paused", { project: "ai", paused: true })).data).toEqual({
+      project: "AI",
+      paused: true,
+    });
+    expect(await ctx.tracker.getProject("ai")).toMatchObject({ runsAtOnce: 3, paused: true });
+  });
+
+  it("GivenADialOverTheMaximum_WhenSet_ThenAToolError", async () => {
+    const ctx = await withProject();
+    expect(await ctx.call("set_runs_at_once", { project: "AI", runs: 5 })).toMatchObject({
+      isError: true,
+    });
+    expect(await ctx.tracker.getProject("ai")).toMatchObject({ runsAtOnce: 2 });
   });
 
   it("GivenATicketWithoutAPlan_WhenApproveOrRejectIsCalled_ThenAToolErrorSaysSo", async () => {

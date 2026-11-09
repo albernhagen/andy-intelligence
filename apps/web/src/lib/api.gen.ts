@@ -147,6 +147,24 @@ export interface paths {
                * @enum {string}
                */
               autoMerge: "none" | "s" | "s-and-m" | "all";
+              /** @default 2 */
+              runsAtOnce: number;
+              /** @default false */
+              paused: boolean;
+              /** @default null */
+              lastDispatch: {
+                /** @enum {string} */
+                decision:
+                  | "paused"
+                  | "project_cap"
+                  | "global_cap"
+                  | "prs_waiting_cap"
+                  | "quota_reserve"
+                  | "started"
+                  | "nothing_ready";
+                /** Format: date-time */
+                at: string;
+              } | null;
             }[];
           };
         };
@@ -218,6 +236,24 @@ export interface paths {
                * @enum {string}
                */
               autoMerge: "none" | "s" | "s-and-m" | "all";
+              /** @default 2 */
+              runsAtOnce: number;
+              /** @default false */
+              paused: boolean;
+              /** @default null */
+              lastDispatch: {
+                /** @enum {string} */
+                decision:
+                  | "paused"
+                  | "project_cap"
+                  | "global_cap"
+                  | "prs_waiting_cap"
+                  | "quota_reserve"
+                  | "started"
+                  | "nothing_ready";
+                /** Format: date-time */
+                at: string;
+              } | null;
             };
           };
         };
@@ -337,6 +373,24 @@ export interface paths {
                * @enum {string}
                */
               autoMerge: "none" | "s" | "s-and-m" | "all";
+              /** @default 2 */
+              runsAtOnce: number;
+              /** @default false */
+              paused: boolean;
+              /** @default null */
+              lastDispatch: {
+                /** @enum {string} */
+                decision:
+                  | "paused"
+                  | "project_cap"
+                  | "global_cap"
+                  | "prs_waiting_cap"
+                  | "quota_reserve"
+                  | "started"
+                  | "nothing_ready";
+                /** Format: date-time */
+                at: string;
+              } | null;
             };
           };
         };
@@ -415,6 +469,8 @@ export interface paths {
             dailyQuestionCap?: number;
             /** @enum {string} */
             autoMerge?: "none" | "s" | "s-and-m" | "all";
+            runsAtOnce?: number;
+            paused?: boolean;
           };
         };
       };
@@ -461,6 +517,24 @@ export interface paths {
                * @enum {string}
                */
               autoMerge: "none" | "s" | "s-and-m" | "all";
+              /** @default 2 */
+              runsAtOnce: number;
+              /** @default false */
+              paused: boolean;
+              /** @default null */
+              lastDispatch: {
+                /** @enum {string} */
+                decision:
+                  | "paused"
+                  | "project_cap"
+                  | "global_cap"
+                  | "prs_waiting_cap"
+                  | "quota_reserve"
+                  | "started"
+                  | "nothing_ready";
+                /** Format: date-time */
+                at: string;
+              } | null;
             };
           };
         };
