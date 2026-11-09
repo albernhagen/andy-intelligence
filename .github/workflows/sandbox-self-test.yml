@@ -1,0 +1,28 @@
+name: Sandbox self-test
+
+# Runs the build sandbox check when a PR changes an executor path, and passes without running
+# otherwise, so the job can be a required check (AI-63; runbook agent-runs.md §9a). The steps run
+# the PR's code, so this job must never hold a secret: a stub answers for the model, every
+# credential the test bed sets is a fake, and the token is read-only (threat model R5).
+
+on:
+  pull_request:
+
+permissions: {}
+
+concurrency:
+  group: sandbox-self-test-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  sandbox-self-test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 2
+          persist-credentials: false
+      - uses: ./platform/actions/sandbox-self-test

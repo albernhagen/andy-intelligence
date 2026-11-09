@@ -49,7 +49,7 @@ pnpm build
 pnpm format      # prettier --write
 pnpm context:check   # agent-loaded docs within their size budgets (ADR-0046)
 pnpm test:firestore  # Firestore adapters on the emulator (Java 21+; CI runs them on adapter changes, ADR-0048)
-scripts/sandbox-lab/run.sh  # build sandbox in Docker (runbook agent-runs.md §9a)
+scripts/sandbox-lab/run.sh  # build sandbox in Docker; CI job sandbox-self-test runs it on executor changes (runbook agent-runs.md §9a)
 ```
 
 ### Quality gates (ADR-0027)
