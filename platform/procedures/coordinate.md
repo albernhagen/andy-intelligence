@@ -1,6 +1,6 @@
 # /coordinate — run several tickets in parallel worker sessions
 
-Procedure for a **coordinator**: one agent session that hands tickets to **worker** sessions (one ticket each), watches their pull requests, and keeps them from colliding. It is the manual form of the control plane's dispatcher (ADR-0047: Coordinating parallel work; M2: Self-hosting).
+Procedure for a **coordinator**: one session that hands tickets to **worker** sessions (one ticket each), watches their PRs and keeps them from colliding. It is the manual form of the control plane's dispatcher (ADR-0047: Coordinating parallel work; M2: Self-hosting).
 
 **Your job is to keep `main` green and tickets true while several things are built at once.** You don't write the workers' code. The owner merges, except what §7 allows.
 
@@ -15,8 +15,8 @@ Procedure for a **coordinator**: one agent session that hands tickets to **worke
 ## 1. Pick a batch
 
 - Only tickets whose dependencies have merged, in milestone order. A later milestone's ticket may join if it depends on nothing unfinished and touches different packages.
-- **Two workers never own the same file.** Name each worker's files in its brief. Where two must touch one file (a router, an index), one owns it and the other gets a single named line.
-- Shared documents (the ADR index, the milestone map, a budgeted overview) belong to the coordinator or to one worker.
+- **Two workers never own the same file.** Name each worker's files in its brief. Where two must touch one file, one owns it and the other gets a single named line.
+- Shared documents (the ADR index, the milestone map) belong to the coordinator or to one worker.
 - Reserve what collides: each worker's ADR number, and which worker regenerates which screenshots.
 - Keep the batch to what the owner can review.
 
@@ -46,7 +46,7 @@ Create or update the ticket first, under its milestone's epic, with spec and acc
 
 - **One PR at a time.** After each merge the remaining PRs merge the default branch and rerun before they are mergeable again. Two green PRs can break `main` together.
 - Check the default branch's own checks after every merge; red comes before anything else.
-- Changes the owner applies by hand (infrastructure, a deploy sequence, a backup) are stated before the merge, with the expected result.
+- Changes the owner applies by hand (infrastructure, a deploy, a backup) are stated before the merge, with the expected result.
 
 ## 5. After a merge
 
@@ -56,8 +56,8 @@ Create or update the ticket first, under its milestone's epic, with spec and acc
 
 ## 6. Hand over
 
-Hand over between batches, never during one (workers report to the coordinator that started them). Write a log entry: what merged, what is open and why, decisions waiting on the owner, the next batch. The next coordinator starts from it, the milestone map and this procedure; start one per milestone, or sooner once your context is summarized.
+Hand over between batches, never during one. Write a log entry: what merged, what is open and why, decisions waiting on the owner, the next batch. The next coordinator starts from it, the milestone map and this procedure; start one per milestone, or sooner once your context is summarized.
 
 ## 7. Merging low-risk PRs yourself
 
-Only where the owner has decided it in a decision record (here: ADR-0078, runbook `coordinating-sessions.md` §5). Low risk means all of: checks green on the head commit; both review checks pass there with no open blocker, should-fix, high or critical finding (a fix clears it, a reply does not) and no accepted-label override; the default branch merged in and rerun; a diff confined to UI, domain logic, read paths, or the few docs the decision record lists; no schema bump, migration, new entry point or credential; size S or M. Everything else, and anything you are unsure of, the owner merges; never merge a change to your own authority. Squash, one at a time (§4); tell every open worker; record each merge (PR, ticket, class, who, verdicts) in the digest.
+Only where the owner decided it in a decision record (here ADR-0078, runbook `coordinating-sessions.md` §5). Low risk means all of: checks green on the head commit; both review agents ran on that head and posted a verdict with no open blocker, should-fix, high or critical finding (a neutral or skipped check does not count: where agents skip docs-only PRs, read the whole diff yourself and record it; a fix clears a finding, a reply does not) and no accepted-label override; the default branch merged in and rerun; a diff confined to UI, domain logic, read paths, or the few docs the decision record lists; no schema bump, migration, new entry point or credential; size S or M. Everything else, and anything you are unsure of, the owner merges; never merge a change to your own authority. Squash, one at a time (§4); tell every open worker; record each merge (PR, ticket, class, who, verdicts) in the digest.
