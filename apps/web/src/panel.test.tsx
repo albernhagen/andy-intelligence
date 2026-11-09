@@ -172,6 +172,7 @@ describe("one document, edited in place", () => {
 
   it("GivenAnAnswerableQuestion_WhenAndyAnswersInThePanel_ThenTheStatusMovesOn", async () => {
     const { open, service, ticket, user } = await seeded(readyStory);
+    await service.setUpNext("ai", ticket.id, { upNext: true }, "andy");
     await service.ask(
       "ai",
       ticket.id,

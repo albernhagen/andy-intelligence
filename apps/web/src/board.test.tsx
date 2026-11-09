@@ -272,15 +272,35 @@ describe("board v2", () => {
 
   it("GivenThreeCardsInALane_WhenTheLastIsDraggedToTheTop_ThenTheOrderIsStoredAndShown", async () => {
     const harness = await project();
-    for (const title of ["A", "B", "C"]) await harness.service.create("ai", { title }, "andy");
+    for (const title of ["A", "B", "C"]) {
+      await harness.service.create("ai", { title }, "andy", { upNext: true });
+    }
     await openBoard(harness, "AI-3");
 
     await drag(harness.user, "AI-3", 0, -2);
 
     await waitFor(() => expect(titlesIn("Backlog")).toEqual(["AI-3", "AI-1", "AI-2"]));
     // A reload reads the stored order.
-    const stored = await harness.tracker.listTickets("ai");
-    expect(stored.map((t) => t.key)).toEqual(["AI-3", "AI-1", "AI-2"]);
+    await waitFor(async () => {
+      const stored = (await harness.tracker.listTickets("ai")).sort((a, b) =>
+        a.upNextRank! < b.upNextRank! ? -1 : 1,
+      );
+      expect(stored.map((t) => t.key)).toEqual(["AI-3", "AI-1", "AI-2"]);
+    });
+  });
+
+  it("GivenAnIdea_WhenMovedToUpNext_ThenTheBoardSplitsAndItEntersUpNext", async () => {
+    const harness = await project();
+    await harness.service.create("ai", { title: "A" }, "andy");
+    await openBoard(harness, "AI-1");
+    expect(screen.getByText("Ideas")).toBeTruthy();
+
+    await harness.router.navigate({ to: "/p/ai/t/AI-1" });
+    await harness.user.click(await screen.findByRole("button", { name: "Move to Up next" }));
+
+    await waitFor(async () =>
+      expect((await harness.tracker.listTickets("ai"))[0]?.upNextRank).not.toBeNull(),
+    );
   });
 
   it("GivenAReorderTheApiRefuses_WhenDropped_ThenTheCardGoesBackAndShowsWhy", async () => {

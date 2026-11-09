@@ -1,0 +1,432 @@
+import { CLAUDE_EXECUTOR_REF } from "@andy/github";
+import type { Assumption, Question, Ticket } from "@andy/contracts";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+import { REPO, createdApp, githubApp } from "./github/test-app";
+import type { ActionsClaims } from "./github/token";
+
+/**
+ * AI-39: Refine as the gate into the queue, end to end in-process (ADR-0075): the real API, domain
+ * and dispatcher with only GitHub faked. Tickets start as Ideas; only Up next runs refine.
+ */
+
+const verify = async (jwt: string): Promise<ActionsClaims> => JSON.parse(jwt) as ActionsClaims;
+
+const gap = (question: string, over: object = {}) => ({
+  question,
+  assumption: `Assume ${question}`,
+  options: [],
+  suggestedAnswer: "yes",
+  cost: "direction",
+  confidence: "unsure",
+  urgency: "normal",
+  ...over,
+});
+const cheap = (q: string) => gap(q, { cost: "reversible", confidence: "sure" });
+const output = (over: object) => ({
+  summary: "**Ask**: a board",
+  type: "feature",
+  size: "S",
+  sizeReason: "one screen",
+  outOfScope: [],
+  touches: [],
+  body: "Andy can't see his tickets.",
+  acceptanceCriteria: ["WHEN Andy opens the board THE SYSTEM SHALL list tickets"],
+  outcome: "ready",
+  reason: null,
+  children: [],
+  gaps: [],
+  ...over,
+});
+
+interface RunBody {
+  id: string;
+  step: string;
+  status: string;
+  prompt: string | null;
+  executor: { externalId: string } | null;
+}
+
+async function setup() {
+  const t = githubApp({ verifyActionsToken: verify });
+  await t.connections.save({ ...createdApp, connectedAt: "2026-11-03T00:00:00Z" });
+  const project = await t.tracker.createProject({ name: "AI", key: "AI", repos: [REPO] });
+  const base = `/api/projects/${project.id}`;
+  const json = async <T>(res: Response | Promise<Response>) => (await (await res).json()) as T;
+  const post = (path: string, body: unknown = {}) =>
+    t.call(path, { method: "POST", body: JSON.stringify(body) });
+  const path = (id: string) => `${base}/tickets/${id}`;
+  const create = (body: object = {}) =>
+    json<Ticket>(post(`${base}/tickets`, { title: "Board", ...body }));
+  const ticket = (id: string) => json<Ticket>(t.call(path(id)));
+  const runs = async (id: string) =>
+    (await json<RunBody[]>(t.call(`${path(id)}/runs`))).filter((r) => r.step === "refine");
+  const toUpNext = (id: string) => post(`${path(id)}/up-next`, { upNext: true });
+  const inbox = () => json<{ questions: Question[]; tickets: Ticket[] }>(t.call("/api/needs-you"));
+  const questions = (id: string) => json<Question[]>(t.call(`${path(id)}/questions`));
+
+  /** The executor's callback for the ticket's newest refine run. */
+  async function report(id: string, result: object) {
+    const [run] = await runs(id);
+    const claims = {
+      repository: REPO,
+      workflow_ref: `${REPO}/.github/workflows/agent-run.yml@refs/heads/main`,
+      job_workflow_ref: CLAUDE_EXECUTOR_REF,
+      run_id: run!.executor!.externalId,
+    } satisfies ActionsClaims;
+    const res = await t.call(
+      `/runs/${run!.id}/report`,
+      {
+        method: "POST",
+        body: JSON.stringify({
+          status: "succeeded",
+          summary: "{}",
+          tokensIn: 1,
+          tokensOut: 1,
+          costUsd: 0,
+          output: result,
+        }),
+      },
+      JSON.stringify(claims),
+    );
+    expect(res.status).toBe(200);
+  }
+  const comments = async (id: string) =>
+    (await json<{ kind: string; body: string | null }[]>(t.call(`${path(id)}/events`)))
+      .filter((e) => e.kind === "comment")
+      .map((e) => e.body ?? "");
+  const answer = (id: string, text = "yes") =>
+    post(`/api/questions/${id}/answer`, { answer: text });
+
+  return {
+    ...t,
+    project,
+    base,
+    json,
+    post,
+    path,
+    create,
+    ticket,
+    runs,
+    toUpNext,
+    inbox,
+    questions,
+    report,
+    comments,
+    answer,
+  };
+}
+
+describe("refine gate flow", () => {
+  beforeEach(() => {
+    vi.spyOn(console, "log").mockImplementation(() => {});
+  });
+
+  it("GivenANewTicket_WhenCreated_ThenItIsAnIdeaAndNoRefineStarts", async () => {
+    const t = await setup();
+    const created = await t.create();
+    expect(created).toMatchObject({ stage: "backlog", upNextRank: null });
+    expect(await t.runs(created.id)).toEqual([]);
+  });
+
+  it("GivenAnIdea_WhenRefineIsStartedByHand_ThenItIsRefused", async () => {
+    const t = await setup();
+    const created = await t.create();
+    const res = await t.post(`${t.path(created.id)}/runs`, { step: "refine" });
+    expect(res.status).toBe(422);
+    expect(await t.runs(created.id)).toEqual([]);
+  });
+
+  it("GivenATicketCreatedWithUpNext_WhenCreated_ThenExactlyOneRefineStarts", async () => {
+    const t = await setup();
+    const created = await t.create({ upNext: true });
+    expect((await t.ticket(created.id)).upNextRank).not.toBeNull();
+    expect(await t.runs(created.id)).toHaveLength(1);
+  });
+
+  it("GivenAnIdea_WhenMovedToUpNextTwice_ThenExactlyOneRefineStarts", async () => {
+    const t = await setup();
+    const created = await t.create();
+    await t.toUpNext(created.id);
+    await t.toUpNext(created.id);
+    expect(await t.runs(created.id)).toHaveLength(1);
+  });
+
+  it("GivenARefineWithOnlyCheapGaps_WhenReported_ThenReadyNoInboxAndAssumptionsReadable", async () => {
+    const t = await setup();
+    const created = await t.create({ upNext: true });
+    await t.report(created.id, output({ gaps: [cheap("A?"), cheap("B?")] }));
+
+    const done = await t.ticket(created.id);
+    expect(done).toMatchObject({ stage: "ready", needsAttention: false, upNextRank: null });
+    expect(done.refineAssumptions.map((a: Assumption) => a.text)).toEqual([
+      "Assume A?",
+      "Assume B?",
+    ]);
+    expect(await t.inbox()).toEqual({ questions: [], tickets: [] });
+  });
+
+  it("GivenARefineWithTwoQuestions_WhenReported_ThenWaitsInUpNextAndTheLastAnswerMovesItToReady", async () => {
+    const t = await setup();
+    const created = await t.create({ upNext: true });
+    await t.report(created.id, output({ gaps: [gap("A?"), gap("B?")] }));
+
+    expect(await t.ticket(created.id)).toMatchObject({ stage: "backlog", needsAttention: true });
+    const { questions } = await t.inbox();
+    expect(questions.map((q) => q.text)).toEqual(["A?", "B?"]);
+    expect(questions[0]?.suggestedAnswer).toBe("yes");
+
+    await t.answer(questions[0]!.id);
+    expect((await t.ticket(created.id)).stage).toBe("backlog");
+    await t.answer(questions[1]!.id);
+    expect((await t.ticket(created.id)).stage).toBe("ready");
+    expect(await t.runs(created.id)).toHaveLength(1);
+  });
+
+  it("GivenATooVagueReport_WhenReported_ThenBackToIdeasWithTheReasonAndNothingElse", async () => {
+    const t = await setup();
+    const created = await t.create({ upNext: true });
+    await t.report(
+      created.id,
+      output({ outcome: "send_back", reason: "Which board?", gaps: [gap("A?")] }),
+    );
+    const back = await t.ticket(created.id);
+    expect(back).toMatchObject({
+      stage: "backlog",
+      upNextRank: null,
+      needsAttention: false,
+      sentBackReason: "Which board?",
+      size: null,
+      body: "",
+      refineAssumptions: [],
+    });
+    expect(await t.questions(created.id)).toEqual([]);
+    expect((await t.comments(created.id)).join()).toContain("Back to Ideas: Which board?");
+    expect(await t.runs(created.id)).toHaveLength(1);
+  });
+
+  it("GivenASentBackTicket_WhenItReentersUpNext_ThenRefineRunsAgainAndTheMarkerClears", async () => {
+    const t = await setup();
+    const created = await t.create({ upNext: true });
+    await t.report(created.id, output({ outcome: "send_back", reason: "Vague" }));
+    await t.toUpNext(created.id);
+    expect(await t.runs(created.id)).toHaveLength(2);
+    expect((await t.ticket(created.id)).sentBackReason).toBeNull();
+  });
+
+  it("GivenASplitReport_WhenReported_ThenChildrenAreIdeasUnderTheEpicAndTheParentLinksThem", async () => {
+    const t = await setup();
+    const epic = await t.create({ type: "epic", title: "Boards" });
+    const created = await t.create({ parentId: epic.id, upNext: true });
+    await t.report(
+      created.id,
+      output({
+        outcome: "split",
+        reason: "Two features",
+        children: [
+          { title: "Lanes", body: "Show lanes" },
+          { title: "Drag", body: "Drag cards" },
+        ],
+      }),
+    );
+    const all = await t.json<Ticket[]>(t.call(`${t.base}/tickets`));
+    const kids = all.filter((x) => ["Lanes", "Drag"].includes(x.title));
+    expect(kids).toHaveLength(2);
+    for (const kid of kids) {
+      expect(kid).toMatchObject({ stage: "backlog", upNextRank: null, parentId: epic.id });
+    }
+    expect((await t.ticket(created.id)).upNextRank).toBeNull();
+    const links = (await t.comments(created.id)).join();
+    for (const kid of kids) expect(links).toContain(kid.key);
+    // Children cost nothing: no refine ran on them.
+    expect(await t.runs(kids[0]!.id)).toEqual([]);
+  });
+
+  it("GivenAProjectAtItsDailyCap_WhenARefineHasQuestions_ThenTheyBecomeAssumptionsAndTheTicketSaysSo", async () => {
+    const t = await setup();
+    await t.call(t.base, { method: "PATCH", body: JSON.stringify({ dailyQuestionCap: 1 }) });
+    const first = await t.create({ upNext: true });
+    await t.report(first.id, output({ gaps: [gap("A?")] }));
+    const second = await t.create({ upNext: true });
+    const [q] = await t.questions(first.id);
+    await t.answer(q!.id);
+    await t.report(second.id, output({ gaps: [gap("B?")] }));
+
+    const capped = await t.ticket(second.id);
+    expect(await t.questions(second.id)).toEqual([]);
+    expect(capped).toMatchObject({ stage: "ready" });
+    expect(capped.refineAssumptions[0]).toMatchObject({
+      demotedBy: "daily_cap",
+      cost: "direction",
+    });
+    expect((await t.comments(second.id)).join()).toContain("daily question cap");
+  });
+
+  it("GivenFourCostlyGaps_WhenReported_ThenThreeQuestionsAndOneAssumption", async () => {
+    const t = await setup();
+    const created = await t.create({ upNext: true });
+    await t.report(created.id, output({ gaps: ["A?", "B?", "C?", "D?"].map((q) => gap(q)) }));
+    expect(await t.questions(created.id)).toHaveLength(3);
+    expect((await t.ticket(created.id)).refineAssumptions[0]).toMatchObject({
+      demotedBy: "ticket_cap",
+    });
+  });
+
+  it("GivenAnAssumption_WhenPromotedAndAnswered_ThenOneQuestionThenOnlyThatGapIsReRefined", async () => {
+    const t = await setup();
+    const created = await t.create({ upNext: true });
+    await t.report(created.id, output({ gaps: [cheap("A?"), cheap("B?")] }));
+    const [first] = (await t.ticket(created.id)).refineAssumptions;
+
+    const res = await t.post(`${t.path(created.id)}/assumptions/${first!.id}/promote`);
+    expect(res.status).toBe(201);
+    const promoted = await t.ticket(created.id);
+    expect(promoted).toMatchObject({ stage: "backlog", needsAttention: true });
+    expect(promoted.upNextRank).not.toBeNull();
+    const open = await t.questions(created.id);
+    expect(open.map((q) => q.text)).toEqual(["A?"]);
+    expect(await t.runs(created.id)).toHaveLength(1);
+
+    await t.answer(open[0]!.id, "No, the other way");
+    const runs = await t.runs(created.id);
+    expect(runs).toHaveLength(2);
+    // Runs can share a millisecond, so find the re-refine by its prompt, not its list position.
+    const reRefine = runs.find((r) => r.prompt?.includes("No, the other way"));
+    expect(reRefine?.prompt).toContain('"focusGaps"');
+
+    // The re-refine may not touch anything else, even if the agent tries.
+    await t.report(
+      created.id,
+      output({ outcome: "send_back", reason: "x", gaps: [cheap("New?"), cheap("Other?")] }),
+    );
+    const after = await t.ticket(created.id);
+    expect(after.stage).toBe("ready");
+    expect(after.refineAssumptions.map((a) => [a.text, a.status])).toEqual([
+      ["Assume A?", "settled"],
+      ["Assume B?", "assumed"],
+      ["Assume New?", "assumed"],
+    ]);
+  });
+
+  it("GivenAnIdeaWithAnOpenQuestion_WhenAnswered_ThenItStaysAnIdea", async () => {
+    const t = await setup();
+    const created = await t.create({
+      type: "chore",
+      body: "b",
+      acceptanceCriteria: ["done"],
+      size: "S",
+      sizeReason: "r",
+    });
+    const asked = await t.json<Question>(
+      t.post(`${t.path(created.id)}/questions`, { text: "Old?" }),
+    );
+    await t.answer(asked.id);
+    expect(await t.ticket(created.id)).toMatchObject({
+      stage: "backlog",
+      upNextRank: null,
+      needsAttention: false,
+    });
+    expect(await t.runs(created.id)).toEqual([]);
+  });
+
+  it("GivenAPromotedGapAnsweredBeforeAnotherQuestion_WhenTheLastIsAnswered_ThenTheGapIsReRefinedBeforeReady", async () => {
+    const t = await setup();
+    const created = await t.create({ upNext: true });
+    await t.report(created.id, output({ gaps: [gap("Q1?"), cheap("A?")] }));
+    const [assumption] = (await t.ticket(created.id)).refineAssumptions;
+    await t.post(`${t.path(created.id)}/assumptions/${assumption!.id}/promote`);
+    const open = await t.questions(created.id);
+    const promoted = open.find((q) => q.text === "A?")!;
+    const other = open.find((q) => q.text === "Q1?")!;
+
+    await t.answer(promoted.id, "the promoted answer");
+    await t.answer(other.id);
+
+    expect((await t.ticket(created.id)).stage).toBe("backlog");
+    const runs = await t.runs(created.id);
+    expect(runs).toHaveLength(2);
+    // Runs can share a millisecond, so don't rely on list order: only the re-refine sees the answer.
+    expect(runs.filter((r) => r.prompt?.includes("the promoted answer"))).toHaveLength(1);
+  });
+
+  it("GivenASameTitledTicketMadeDuringARun_WhenSplit_ThenItIsNotAdoptedAndDuplicateTitlesBothExist", async () => {
+    const t = await setup();
+    const created = await t.create({ upNext: true });
+    const andys = await t.create({ title: "Lanes" });
+    await t.report(
+      created.id,
+      output({
+        outcome: "split",
+        reason: "Too big",
+        children: [
+          { title: "Lanes", body: "One" },
+          { title: "Lanes", body: "Two" },
+        ],
+      }),
+    );
+    const lanes = (await t.json<Ticket[]>(t.call(`${t.base}/tickets`))).filter(
+      (x) => x.title === "Lanes",
+    );
+    expect(lanes).toHaveLength(3);
+    expect(lanes.find((x) => x.id === andys.id)?.body).toBe("");
+  });
+
+  it("GivenAPromotedAssumption_WhenTheTicketGoesBackToIdeas_ThenTheQuestionIsWithdrawn", async () => {
+    const t = await setup();
+    const created = await t.create({ upNext: true });
+    await t.report(created.id, output({ gaps: [gap("A?"), cheap("B?")] }));
+    await t.post(`${t.path(created.id)}/up-next`, { upNext: false });
+    expect((await t.questions(created.id))[0]?.status).toBe("withdrawn");
+    expect(await t.ticket(created.id)).toMatchObject({ needsAttention: false, upNextRank: null });
+  });
+
+  it("GivenABuildStarted_WhenAnAssumptionIsPromoted_ThenRefused", async () => {
+    const t = await setup();
+    const created = await t.create({ upNext: true });
+    await t.report(created.id, output({ gaps: [cheap("A?")] }));
+    const [first] = (await t.ticket(created.id)).refineAssumptions;
+    await t.post(`${t.path(created.id)}/stage`, { to: "in_progress" });
+    const res = await t.post(`${t.path(created.id)}/assumptions/${first!.id}/promote`);
+    expect(res.status).toBe(409);
+  });
+
+  it("GivenADoneTicket_WhenMovedToUpNextOrRefined_ThenRefusedAndNoRunStarts", async () => {
+    const t = await setup();
+    const created = await t.create();
+    await t.post(`${t.path(created.id)}/stage`, { to: "done", force: true });
+    expect((await t.toUpNext(created.id)).status).toBe(422);
+    expect((await t.post(`${t.path(created.id)}/runs`, { step: "refine" })).status).toBe(422);
+    expect(await t.runs(created.id)).toEqual([]);
+  });
+
+  it("GivenAFlagLeftOnADoneTicket_WhenTheInboxIsRead_ThenItIsNotListed", async () => {
+    const t = await setup();
+    const created = await t.create();
+    await t.tracker.updateTicket(
+      t.project.id,
+      created.id,
+      { fields: { needsAttention: true } },
+      "andy",
+    );
+    await t.post(`${t.path(created.id)}/stage`, { to: "done", force: true });
+    expect((await t.inbox()).tickets).toEqual([]);
+    expect((await t.ticket(created.id)).needsAttention).toBe(false);
+  });
+
+  it("GivenAnEpic_WhenMovedToUpNext_ThenRefused", async () => {
+    const t = await setup();
+    const epic = await t.create({ type: "epic" });
+    expect((await t.toUpNext(epic.id)).status).toBe(422);
+    expect(await t.runs(epic.id)).toEqual([]);
+  });
+
+  it("GivenARankInTheBody_WhenPatchingATicket_ThenUpNextFieldsCantBeSetThatWay", async () => {
+    const t = await setup();
+    const created = await t.create();
+    await t.call(t.path(created.id), {
+      method: "PATCH",
+      body: JSON.stringify({ upNextRank: "0000000001" }),
+    });
+    expect((await t.ticket(created.id)).upNextRank).toBeNull();
+    expect(await t.runs(created.id)).toEqual([]);
+  });
+});

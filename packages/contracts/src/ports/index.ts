@@ -1,5 +1,6 @@
 import { z } from "zod";
 import {
+  Assumption,
   AutoMerge,
   BillingType,
   DorStatus,
@@ -102,6 +103,10 @@ export const TicketFields = Ticket.pick({
   blockedBy: true,
   rank: true,
   archived: true,
+  upNextRank: true,
+  upNextAt: true,
+  sentBackReason: true,
+  refineAssumptions: true,
 })
   .partial()
   // Zod 4 applies defaults inside `.partial()`, which would turn "not given" into "reset":
@@ -110,6 +115,10 @@ export const TicketFields = Ticket.pick({
     outOfScope: ScopeList.optional(),
     touches: ScopeList.optional(),
     archived: z.boolean().optional(),
+    upNextRank: z.string().min(1).nullable().optional(),
+    upNextAt: Timestamp.nullable().optional(),
+    sentBackReason: z.string().max(300).nullable().optional(),
+    refineAssumptions: z.array(Assumption).optional(),
   });
 export type TicketFields = z.infer<typeof TicketFields>;
 
@@ -178,6 +187,7 @@ export const ProjectPatch = z.strictObject({
   buildEnabledBy: z.string().max(320).nullable().optional(),
   buildEnabledAt: Timestamp.nullable().optional(),
   planApproval: PlanApproval.optional(),
+  dailyQuestionCap: Project.shape.dailyQuestionCap.unwrap().optional(),
   autoMerge: AutoMerge.optional(),
 });
 export type ProjectPatch = z.infer<typeof ProjectPatch>;
@@ -188,6 +198,7 @@ export const ProjectSettings = ProjectPatch.pick({
   autoBuild: true,
   buildEnabled: true,
   planApproval: true,
+  dailyQuestionCap: true,
   autoMerge: true,
 });
 export type ProjectSettings = z.infer<typeof ProjectSettings>;

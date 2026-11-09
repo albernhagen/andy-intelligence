@@ -16,6 +16,7 @@ import {
 } from "@/components/InlineEdit";
 import { MoveControls } from "@/components/MoveControls";
 import { QuestionCard } from "@/components/QuestionCard";
+import { Markdown } from "@/components/Markdown";
 import { Loading, QueryError } from "@/components/Status";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -24,6 +25,7 @@ import {
   isActiveRun,
   ticketQueryKey,
   useEvents,
+  usePromoteAssumption,
   useReadiness,
   useRuns,
   useTicketByRef,
@@ -210,6 +212,7 @@ function Story({ ticket: t }: { ticket: Ticket }) {
         <Rail ticket={t} />
       </div>
       <Questions {...pathOf(t)} />
+      <Assumptions ticket={t} />
       <Timeline {...pathOf(t)} />
     </article>
   );
@@ -438,6 +441,41 @@ function Questions(path: TicketPath) {
         <QuestionCard key={q.id} question={q} />
       ))}
       <AskQuestionForm {...path} />
+    </section>
+  );
+}
+
+/** What refine decided without asking (ADR-0075): one click makes any of them a question. */
+function Assumptions({ ticket }: { ticket: Ticket }) {
+  const promote = usePromoteAssumption(pathOf(ticket));
+  const canPromote = ticket.stage === "backlog" || ticket.stage === "ready";
+  if (ticket.refineAssumptions.length === 0) return null;
+  return (
+    <section aria-label="Assumptions" className="space-y-2">
+      <h3 className="text-sm font-medium">Assumptions</h3>
+      {promote.error && <QueryError error={promote.error} />}
+      <ul className="space-y-2">
+        {ticket.refineAssumptions.map((a) => (
+          <li key={a.id} className="space-y-1 rounded-md border border-border p-3 text-sm">
+            <Markdown>{a.text}</Markdown>
+            <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+              <span>{a.question}</span>
+              {a.demotedBy && <Badge variant="attention">Over the question cap</Badge>}
+              {a.status !== "assumed" && <Badge>{a.status}</Badge>}
+              {a.status === "assumed" && canPromote && (
+                <Button
+                  size="sm"
+                  variant="outline"
+                  disabled={promote.isPending}
+                  onClick={() => promote.mutate(a.id)}
+                >
+                  Ask me instead
+                </Button>
+              )}
+            </div>
+          </li>
+        ))}
+      </ul>
     </section>
   );
 }

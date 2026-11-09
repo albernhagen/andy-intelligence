@@ -28,34 +28,100 @@
       "type": "array",
       "maxItems": 20,
       "description": "What the ticket must not change, one item each. Used only if the ticket has none.",
-      "items": { "type": "string", "minLength": 1, "maxLength": 300 }
+      "items": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 300
+      }
     },
     "touches": {
       "type": "array",
       "maxItems": 20,
       "description": "Areas or path globs the build is expected to edit. Used only if the ticket has none.",
-      "items": { "type": "string", "minLength": 1, "maxLength": 300 }
+      "items": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 300
+      }
     },
-    "questions": {
+    "body": {
+      "type": ["string", "null"],
+      "minLength": 1,
+      "maxLength": 4000,
+      "description": "The problem and who has it, when the ticket has no body. Used only if the ticket has none; else null."
+    },
+    "acceptanceCriteria": {
       "type": "array",
-      "minItems": 1,
+      "maxItems": 20,
+      "description": "Testable criteria (EARS for features). Used only if the ticket has none.",
+      "items": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 500
+      }
+    },
+    "outcome": {
+      "type": "string",
+      "enum": ["ready", "send_back", "split"],
+      "description": "ready: use the gaps. send_back: too vague to build. split: too big for one ticket."
+    },
+    "reason": {
+      "type": ["string", "null"],
+      "minLength": 1,
+      "maxLength": 300,
+      "description": "One line for Andy. Required for send_back and split; otherwise null."
+    },
+    "children": {
+      "type": "array",
       "maxItems": 5,
-      "description": "1 to 5 questions for Andy, highest-impact ambiguity first.",
+      "description": "For split: at most 5 smaller tickets. Empty otherwise.",
       "items": {
         "type": "object",
         "additionalProperties": false,
         "properties": {
-          "text": {
+          "title": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200
+          },
+          "body": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 4000
+          }
+        },
+        "required": ["title", "body"]
+      }
+    },
+    "gaps": {
+      "type": "array",
+      "maxItems": 10,
+      "description": "What you would have to guess, highest-impact first. Empty is valid. The control plane decides which become questions.",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "question": {
             "type": "string",
             "minLength": 1,
             "maxLength": 500,
-            "description": "One question, answerable without reading the code."
+            "description": "The decision, as one question answerable without reading the code."
+          },
+          "assumption": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 300,
+            "description": "The default you would go with."
           },
           "options": {
             "type": "array",
             "maxItems": 5,
             "description": "Choices when the answer is one of a few; empty for an open question.",
-            "items": { "type": "string", "minLength": 1, "maxLength": 200 }
+            "items": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200
+            }
           },
           "suggestedAnswer": {
             "type": ["string", "null"],
@@ -63,17 +129,45 @@
             "maxLength": 200,
             "description": "The answer you would pick and why in a few words, or null."
           },
-          "assumptions": {
-            "type": "array",
-            "maxItems": 5,
-            "description": "What you would assume if the question went unanswered.",
-            "items": { "type": "string", "minLength": 1, "maxLength": 300 }
+          "cost": {
+            "type": "string",
+            "enum": ["reversible", "direction", "scope", "trust", "spend"],
+            "description": "What a wrong guess would cost: a reversible detail, or the direction, scope, trust or spend of the ticket."
           },
-          "urgency": { "type": "string", "enum": ["low", "normal", "high"] }
+          "confidence": {
+            "type": "string",
+            "enum": ["sure", "unsure"],
+            "description": "How sure you are of the default."
+          },
+          "urgency": {
+            "type": "string",
+            "enum": ["low", "normal", "high"]
+          }
         },
-        "required": ["text", "options", "suggestedAnswer", "assumptions", "urgency"]
+        "required": [
+          "question",
+          "assumption",
+          "options",
+          "suggestedAnswer",
+          "cost",
+          "confidence",
+          "urgency"
+        ]
       }
     }
   },
-  "required": ["summary", "type", "size", "sizeReason", "outOfScope", "touches", "questions"]
+  "required": [
+    "summary",
+    "type",
+    "size",
+    "sizeReason",
+    "outOfScope",
+    "touches",
+    "body",
+    "acceptanceCriteria",
+    "outcome",
+    "reason",
+    "children",
+    "gaps"
+  ]
 }

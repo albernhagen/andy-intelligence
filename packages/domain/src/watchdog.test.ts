@@ -132,6 +132,12 @@ describe("RunService watchdog", () => {
     projectId = (await tracker.createProject({ name: "AI", key: "AI", repos: [REPO.fullName] })).id;
     ticketId = (await tracker.createTicket(projectId, { type: "feature", title: "Board" }, "andy"))
       .id;
+    await tracker.updateTicket(
+      projectId,
+      ticketId,
+      { fields: { upNextRank: "0000000001" } },
+      "andy",
+    );
   });
 
   it("GivenADispatchedRun_WhenStarted_ThenOneCheckIsQueuedAtItsDeadline", async () => {

@@ -49,6 +49,10 @@ const full = (id: string, fields: Partial<Ticket>) =>
     stage: "backlog",
     rank: "0001",
     archived: false,
+    upNextRank: null,
+    upNextAt: null,
+    sentBackReason: null,
+    refineAssumptions: [],
     ...fields,
   }) as Ticket;
 const ask = (

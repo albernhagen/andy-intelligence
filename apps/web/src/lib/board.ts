@@ -1,4 +1,4 @@
-import { Stage, type BoardTicket, type RunStep, type Ticket } from "@andy/contracts";
+import { Stage, compareRanks, type BoardTicket, type RunStep, type Ticket } from "@andy/contracts";
 import { rankBetween } from "@andy/domain";
 
 /**
@@ -47,6 +47,62 @@ export function planDrop(
   } catch {
     // A rank we can't place between (not made by rankFor or rankBetween): move without one.
     return { to, rank: null };
+  }
+}
+
+/** Drop targets for the two parts of Backlog (ADR-0075). */
+export const UP_NEXT_ZONE = "zone:up-next";
+export const IDEAS_ZONE = "zone:ideas";
+
+export function isBacklogZone(id: string): boolean {
+  return id === UP_NEXT_ZONE || id === IDEAS_ZONE;
+}
+
+/** Backlog's two parts: Up next in its own order, then Ideas. */
+export function splitBacklog<T extends Ticket>(backlog: readonly T[]): { upNext: T[]; ideas: T[] } {
+  return {
+    upNext: backlog
+      .filter((t) => t.upNextRank !== null)
+      .sort((a, b) => compareRanks(a.upNextRank!, b.upNextRank!)),
+    ideas: backlog.filter((t) => t.upNextRank === null),
+  };
+}
+
+/** What a drop means for Up next; `rank` null lets the API put it at the end. */
+export interface UpNextPlan {
+  upNext: boolean;
+  rank: string | null;
+}
+
+/**
+ * A drop on Backlog's parts: into or within Up next, or back out to Ideas. Null when Up next isn't
+ * involved (reordering Ideas, or a drop elsewhere): the ordinary lane rules apply.
+ */
+export function planUpNextDrop(
+  backlog: readonly Ticket[],
+  ticket: Ticket,
+  overId: string,
+): UpNextPlan | null {
+  const { upNext, ideas } = splitBacklog(backlog);
+  const overUpNext = upNext.find((t) => t.id === overId);
+  const wasUpNext = ticket.stage === "backlog" && ticket.upNextRank !== null;
+  if (overId === IDEAS_ZONE || ideas.some((t) => t.id === overId)) {
+    return wasUpNext ? { upNext: false, rank: null } : null;
+  }
+  if (overId !== UP_NEXT_ZONE && !overUpNext) return null;
+  if (overUpNext?.id === ticket.id) return null;
+
+  const order = upNext.filter((t) => t.id !== ticket.id);
+  // A card already in Up next dropped on the header goes to the top; a new one joins the end.
+  const index = overUpNext ? upNext.indexOf(overUpNext) : wasUpNext ? 0 : order.length;
+  order.splice(index, 0, ticket);
+  try {
+    return {
+      upNext: true,
+      rank: rankBetween(order[index - 1]?.upNextRank ?? null, order[index + 1]?.upNextRank ?? null),
+    };
+  } catch {
+    return { upNext: true, rank: null };
   }
 }
 

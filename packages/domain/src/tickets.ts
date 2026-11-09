@@ -1,6 +1,8 @@
 import {
   NewTicket,
+  REFINE_LIMITS,
   Stage,
+  compareRanks,
   TicketKey,
   WorkTrackerError,
   notFound,
@@ -15,6 +17,8 @@ import {
   type WorkTracker,
 } from "@andy/contracts";
 import { checkDor, type DorResult } from "./dor";
+import { MAX_OPEN_QUESTIONS_PER_TICKET } from "./refine-gate";
+import { rankBetween } from "./ranks";
 import { canTransition, isForwardMove, pullRequestPath, type PullRequestTarget } from "./stages";
 
 function log(severity: "INFO" | "WARNING", message: string, fields: object = {}) {
@@ -38,7 +42,8 @@ export class DomainError extends Error {
       | "executor_unavailable"
       | "dispatch_failed"
       | "cancel_failed"
-      | "plan_not_decidable",
+      | "plan_not_decidable"
+      | "not_promotable",
     message: string,
     readonly details: string[] = [],
   ) {
@@ -95,18 +100,174 @@ export class TicketService {
     private readonly runs: RunCanceller | null = null,
     /**
      * Starts the next waiting run when one may be waiting (the build and refine dispatchers,
-     * ADR-0063, ADR-0054): after a create, after a ticket's last open question is answered, after
-     * a ticket reaches Ready, and after a cancel stops a run. It never throws.
+     * ADR-0063, ADR-0075): after a ticket enters Up next, after its last open question is
+     * answered, after a ticket reaches Ready, and after a cancel stops a run. It never throws.
      */
     private readonly dispatchNext: ((projectId: string) => Promise<unknown>) | null = null,
+    private readonly now: () => Date = () => new Date(),
   ) {}
 
-  async create(projectId: string, input: NewTicket, actor: EventActor): Promise<Ticket> {
+  /** A new ticket lands in Ideas and costs nothing, unless `upNext` pulls it forward (ADR-0075). */
+  async create(
+    projectId: string,
+    input: NewTicket,
+    actor: EventActor,
+    { upNext = false }: { upNext?: boolean } = {},
+  ): Promise<Ticket> {
     const parsed = NewTicket.parse(input);
+    if (upNext && parsed.type === "epic") {
+      throw new DomainError("invalid_transition", "epics are never refined, so never Up next");
+    }
     const dorStatus = checkDor(parsed, 0).met ? "met" : "not_met";
     const ticket = await this.tracker.createTicket(projectId, { ...parsed, dorStatus }, actor);
+    return upNext ? this.setUpNext(projectId, ticket.id, { upNext: true }, actor) : ticket;
+  }
+
+  /**
+   * Moves a Backlog ticket between Ideas and Up next, or reorders it in Up next (ADR-0075).
+   * Entering is the refine trigger. Leaving withdraws its open questions: refine asks afresh on
+   * the next entry, and a promoted assumption goes back to being an assumption.
+   */
+  async setUpNext(
+    projectId: string,
+    ticketId: string,
+    { upNext, rank = null }: { upNext: boolean; rank?: string | null },
+    actor: EventActor,
+  ): Promise<Ticket> {
+    const ticket = await this.require(projectId, ticketId);
+    if (ticket.stage !== "backlog") {
+      throw new DomainError("invalid_transition", `${ticket.key} is not in Backlog`);
+    }
+    if (ticket.type === "epic") {
+      throw new DomainError("invalid_transition", "epics are never refined, so never Up next");
+    }
+    const inUpNext = ticket.upNextRank !== null;
+    if (!upNext) {
+      if (!inUpNext) return ticket;
+      await this.withdrawOpenQuestions(ticketId, actor);
+      return this.tracker.updateTicket(
+        projectId,
+        ticketId,
+        {
+          fields: {
+            upNextRank: null,
+            upNextAt: null,
+            needsAttention: false,
+            refineAssumptions: ticket.refineAssumptions.map((a) =>
+              a.status === "promoted" ? { ...a, status: "assumed", questionId: null } : a,
+            ),
+          },
+          ifUpdatedAt: ticket.updatedAt,
+        },
+        actor,
+      );
+    }
+    if (inUpNext) {
+      if (!rank) return ticket;
+      return this.tracker.updateTicket(
+        projectId,
+        ticketId,
+        { fields: { upNextRank: rank }, ifUpdatedAt: ticket.updatedAt },
+        actor,
+      );
+    }
+    const open = await this.openQuestionCount(ticketId);
+    const entered = await this.tracker.updateTicket(
+      projectId,
+      ticketId,
+      {
+        fields: {
+          upNextRank: rank ?? (await this.endOfUpNext(projectId)),
+          upNextAt: this.now().toISOString(),
+          sentBackReason: null,
+          // Pulling it forward is Andy's decision, so an old flag doesn't hold it back.
+          needsAttention: open > 0,
+        },
+        ifUpdatedAt: ticket.updatedAt,
+      },
+      actor,
+    );
     await this.dispatchNext?.(projectId);
-    return ticket;
+    return entered;
+  }
+
+  private async endOfUpNext(projectId: string): Promise<string> {
+    const ranks = (await this.tracker.listTickets(projectId, { stage: "backlog" }))
+      .flatMap((t) => t.upNextRank ?? [])
+      .sort(compareRanks);
+    return rankBetween(ranks.at(-1) ?? null, null);
+  }
+
+  /**
+   * Andy turns one of refine's assumptions into a question (ADR-0075). A Ready ticket goes back
+   * to Up next, so it can't be built around the open question; once a build has started, it's too
+   * late. Promoted questions don't count against the daily cap: Andy is spending his own time.
+   */
+  async promoteAssumption(
+    projectId: string,
+    ticketId: string,
+    assumptionId: string,
+    actor: EventActor,
+  ): Promise<Question> {
+    const ticket = await this.require(projectId, ticketId);
+    const assumption = ticket.refineAssumptions.find((a) => a.id === assumptionId);
+    if (!assumption) throw notFound("assumption", assumptionId);
+    if (assumption.status !== "assumed") {
+      throw new DomainError("not_promotable", `that assumption is already ${assumption.status}`);
+    }
+    if (ticket.stage !== "backlog" && ticket.stage !== "ready") {
+      throw new DomainError("not_promotable", `${ticket.key} is already ${ticket.stage}`);
+    }
+    const open = await this.openQuestionCount(ticketId);
+    if (open >= MAX_OPEN_QUESTIONS_PER_TICKET) {
+      throw new DomainError("not_promotable", `${ticket.key} has ${open} open questions`, [
+        "answer one first",
+      ]);
+    }
+    const question = await this.tracker.askQuestion(
+      projectId,
+      ticketId,
+      {
+        text: assumption.question,
+        options: assumption.options,
+        suggestedAnswer: assumption.text.slice(0, REFINE_LIMITS.option),
+        assumptions: [assumption.text],
+      },
+      actor,
+    );
+    try {
+      await this.tracker.updateTicket(
+        projectId,
+        ticketId,
+        {
+          fields: {
+            needsAttention: true,
+            dorStatus: "not_met",
+            refineAssumptions: ticket.refineAssumptions.map((a) =>
+              a.id === assumptionId ? { ...a, status: "promoted", questionId: question.id } : a,
+            ),
+            ...(ticket.upNextRank === null
+              ? { upNextRank: await this.endOfUpNext(projectId) }
+              : {}),
+          },
+          ...(ticket.stage === "ready"
+            ? { stage: { to: "backlog" as const, forced: false, reason: "Assumption promoted" } }
+            : {}),
+          ifUpdatedAt: ticket.updatedAt,
+        },
+        "system",
+      );
+    } catch (err) {
+      await this.tracker.withdrawQuestion(question.id, "system");
+      throw err;
+    }
+    return question;
+  }
+
+  /** The MCP form of `promoteAssumption`. */
+  async promoteAssumptionByKey(key: string, assumptionId: string, actor: EventActor) {
+    const ticket = await this.findByKey(key);
+    return this.promoteAssumption(ticket.projectId, ticket.id, assumptionId, actor);
   }
 
   async update(
@@ -391,14 +552,35 @@ export class TicketService {
     const ticket = await this.require(question.projectId, question.ticketId);
     const open = await this.openQuestionCount(ticket.id);
     const met = checkDor(ticket, open).met;
+    // A promoted assumption's answer needs its own small re-refine before Ready (ADR-0075).
+    const promotedGap = ticket.refineAssumptions.some((a) => a.questionId === question.id);
     await this.tracker.updateTicket(
       ticket.projectId,
       ticket.id,
-      { fields: { needsAttention: open > 0, dorStatus: met ? "met" : "not_met" } },
+      {
+        fields: {
+          needsAttention: open > 0,
+          dorStatus: met ? "met" : "not_met",
+          ...(promotedGap
+            ? {
+                refineAssumptions: ticket.refineAssumptions.map((a) =>
+                  a.questionId === question.id
+                    ? { ...a, status: "answered", answeredAt: question.answeredAt }
+                    : a,
+                ),
+              }
+            : {}),
+        },
+      },
       "system",
     );
-    if (met && ticket.stage === "backlog") await this.promote(ticket);
-    else if (open === 0 && ticket.stage === "backlog") await this.dispatchNext?.(ticket.projectId);
+    // Only Up next goes to Ready on an answer: an Idea hasn't passed the gate. Any answered gap,
+    // not just this one, still needs its re-refine first.
+    const gapWaiting = promotedGap || ticket.refineAssumptions.some((a) => a.status === "answered");
+    if (met && !gapWaiting && ticket.upNextRank !== null && ticket.stage === "backlog") {
+      await this.promote(ticket);
+    } else if (open === 0 && ticket.stage === "backlog")
+      await this.dispatchNext?.(ticket.projectId);
     return question;
   }
 
@@ -440,7 +622,14 @@ export class TicketService {
     const hidden = new Set([...archived.flat(), ...cancelled.flat()].map((t) => t.id));
     return {
       questions: questions.filter((q) => !hidden.has(q.ticketId)),
-      tickets: flagged.flat().filter((t) => !hidden.has(t.id)),
+      // A flag left on a finished ticket (AI-2) isn't waiting on anyone, unless a question is open
+      // (the inbox lists those under Stale).
+      tickets: flagged
+        .flat()
+        .filter(
+          (t) =>
+            !hidden.has(t.id) && (t.stage !== "done" || questions.some((q) => q.ticketId === t.id)),
+        ),
     };
   }
 

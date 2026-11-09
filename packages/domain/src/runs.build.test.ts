@@ -101,6 +101,12 @@ describe("RunService build runs", () => {
       message: expect.stringContaining("assigned to Andy"),
     });
     const backlog = await ticketIn("backlog", { overrides: { assignee: "me" } });
+    await tracker.updateTicket(
+      projectId,
+      backlog.id,
+      { fields: { upNextRank: "0000000001" } },
+      "andy",
+    );
     expect((await service.start(projectId, backlog.id, "refine")).step).toBe("refine");
   });
 
@@ -221,6 +227,7 @@ describe("RunService build runs", () => {
 
   it("GivenARefineRun_WhenAPushGrantIsClaimed_ThenForbidden", async () => {
     const t = await ticketIn("backlog");
+    await tracker.updateTicket(projectId, t.id, { fields: { upNextRank: "0000000001" } }, "andy");
     const run = await service.start(projectId, t.id, "refine");
     await service.context(run.id, run.executor!);
     await rejects(service.claimPushGrant(run.id, run.executor!), "forbidden");
