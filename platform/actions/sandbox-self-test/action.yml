@@ -1,0 +1,73 @@
+name: Baseline — sandbox self-test
+description: >-
+  Runs the build sandbox check on this runner with a stub model and asserts the runbook §9
+  expectations (AI-63), when the PR changes an executor path; otherwise reports a pass without
+  running. Run after actions/checkout with fetch-depth 2 on a pull_request event (HEAD is the
+  merge commit). The caller's job must hold no model token, OIDC permission or cloud credential.
+
+runs:
+  using: composite
+  steps:
+    - name: Does this PR change an executor path?
+      id: paths
+      shell: bash
+      # The whole PR's change (the merge commit against its base), so a later doc-only push can't
+      # skip the test. If the diff can't be read, run the test.
+      run: |
+        if ! run=$(git diff --name-only --no-renames -z HEAD^1 HEAD | node "$GITHUB_ACTION_PATH/../../../scripts/sandbox-lab/executor-paths.mjs"); then
+          run=run=true
+        fi
+        echo "$run" >> "$GITHUB_OUTPUT"
+        if [ "$run" = run=false ]; then echo "skipped: no executor paths"; fi
+
+    - if: steps.paths.outputs.run == 'true'
+      uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+      with:
+        dest: ${{ runner.tool_cache }}/setup-pnpm
+    - if: steps.paths.outputs.run == 'true'
+      uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+      with:
+        node-version-file: .nvmrc
+
+    # A copy of claude-executor.yml's bubblewrap setup, and Claude Code at the test bed's pinned
+    # version, outside /home like on the executor's runner.
+    - name: Prepare the runner
+      if: steps.paths.outputs.run == 'true'
+      shell: bash
+      run: |
+        sudo apt-get update -qq
+        sudo apt-get install -y -qq bubblewrap socat > /dev/null
+        if [ "$(sysctl -n kernel.apparmor_restrict_unprivileged_userns 2>/dev/null)" = 1 ]; then
+          printf '%s\n' 'abi <abi/4.0>,' 'include <tunables/global>' \
+            'profile bwrap /usr/bin/bwrap flags=(unconfined) {' '  userns,' '}' \
+            | sudo tee /etc/apparmor.d/bwrap > /dev/null
+          sudo apparmor_parser -r /etc/apparmor.d/bwrap
+        fi
+        version=$(sed -n 's/^ARG CLAUDE_CODE_VERSION=//p' scripts/sandbox-lab/Dockerfile)
+        npm install --silent -g "@anthropic-ai/claude-code@$version"
+
+    - name: Run the sandbox test bed (stub model)
+      if: steps.paths.outputs.run == 'true'
+      shell: bash
+      env:
+        LAB_ON_RUNNER: "1"
+        LAB_MODEL: stub
+      # A copy of the tree, so the test bed's own git history and .git rewrites stay off the checkout.
+      run: |
+        export LAB_IN="$RUNNER_TEMP/lab-in" LAB_OUT="$RUNNER_TEMP/lab-out" LAB_TEMP="$RUNNER_TEMP"
+        export LAB_WS="$HOME/work/sandbox-lab/andy-intelligence"
+        mkdir -p "$LAB_IN" "$LAB_OUT"
+        git ls-files -z -co --exclude-standard | tar --null -T - -cf "$LAB_IN/src.tar"
+        if ! bash scripts/sandbox-lab/lab.sh; then
+          echo "::error title=sandbox-self-test::The sandbox self-test failed: the FAIL lines above name each expectation; a failure before them is in the named step. See runbook agent-runs.md §9a."
+          exit 1
+        fi
+
+    - name: Upload the check logs
+      if: failure() && steps.paths.outputs.run == 'true'
+      uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+      with:
+        name: sandbox-self-test-logs
+        path: ${{ runner.temp }}/lab-out/report
+        retention-days: 7
+        if-no-files-found: ignore

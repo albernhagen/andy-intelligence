@@ -14,7 +14,7 @@ run() { # name, command...: exit code as a fact, output to <name>.log
   fact "$name" "$?"
 }
 
-for v in CLAUDE_CODE_OAUTH_TOKEN ANTHROPIC_API_KEY GITHUB_TOKEN GH_TOKEN ACTIONS_RUNTIME_TOKEN; do
+for v in CLAUDE_CODE_OAUTH_TOKEN ANTHROPIC_API_KEY GITHUB_TOKEN GH_TOKEN ACTIONS_RUNTIME_TOKEN ACTIONS_ID_TOKEN_REQUEST_TOKEN; do
   if printenv "$v" > /dev/null; then fact "env.$v" set; else fact "env.$v" unset; fi
 done
 fact pid1 "$(tr '\0' ' ' < /proc/1/cmdline | cut -c1-80)"
@@ -38,4 +38,6 @@ if [ "${LAB_CHECKS:-all}" = all ]; then
   run pnpm.test pnpm test
   run pnpm.build pnpm build
 fi
+# The one change the collect step must find (after the checks, so lint never sees it).
+printf 'sandbox lab\n' > sandbox-lab-change.txt
 fact done yes
