@@ -19,7 +19,7 @@ What is built on `main` now. Target design: [ARCHITECTURE.md](docs/architecture/
 
 **Dispatch:** with auto-build on, Ready tickets start from the top, up to the project's "Runs at once" dial (default 2, max 4), 4 runs across projects and 5 agent PRs waiting for Andy; "Paused" stops new starts, and so does the quota reserve. `/projects`, the board and MCP `status` show why dispatch is idle; set with `set_runs_at_once` and `set_paused` (ADR-0079).
 
-**Not built yet:** Needs you has no push notification. Next: M1.8: Build + gate (ARCHITECTURE §12).
+**Not built yet:** Needs you has no push or email notification; one run at a time per ticket, no conflict-aware dispatch; no daily digest. Next: M2 wave 2 (ARCHITECTURE §12, `docs/build-log.md`).
 
 ## Docs
 
