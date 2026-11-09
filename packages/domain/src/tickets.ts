@@ -18,7 +18,7 @@ import {
 } from "@andy/contracts";
 import { checkDor, type DorResult } from "./dor";
 import { inboxCards } from "./inbox-order";
-import { parentProblem, reorderRank, type ReorderAnchor } from "./ticket-edits";
+import { blockerProblem, parentProblem, reorderRank, type ReorderAnchor } from "./ticket-edits";
 import { MAX_OPEN_QUESTIONS_PER_TICKET } from "./refine-gate";
 import { rankBetween } from "./ranks";
 import { canTransition, isForwardMove, pullRequestPath, type PullRequestTarget } from "./stages";
@@ -284,6 +284,11 @@ export class TicketService {
     if (fields.parentId && fields.parentId !== current.parentId) {
       const tickets = await this.tracker.listTickets(projectId);
       const problem = parentProblem(current, fields.parentId, tickets);
+      if (problem) throw new DomainError("invalid_reference", problem);
+    }
+    if (fields.blockedBy?.some((id) => !current.blockedBy.includes(id))) {
+      const tickets = await this.tracker.listTickets(projectId);
+      const problem = blockerProblem(current, fields.blockedBy, tickets);
       if (problem) throw new DomainError("invalid_reference", problem);
     }
     const merged = { ...current, ...stripUndefined(fields) };

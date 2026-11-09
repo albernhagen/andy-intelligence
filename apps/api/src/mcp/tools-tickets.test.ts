@@ -158,6 +158,22 @@ describe("edit_ticket", () => {
     expect(res).toMatchObject({ isError: true, text: "OPS-1 is not in this project" });
   });
 
+  it("GivenABlockerCycle_WhenEdited_ThenRefusedOverMcpAndRest", async () => {
+    const ctx = await setup();
+    const a = await ctx.service.create("ai", { title: "A" }, "andy");
+    const b = await ctx.service.create("ai", { title: "B" }, "andy");
+    await ctx.call("edit_ticket", { ticket: a.key, blockedBy: [b.key] });
+
+    const res = await ctx.call("edit_ticket", { ticket: b.key, blockedBy: [a.key] });
+    expect(res).toMatchObject({ isError: true, text: "AI-1 is already waiting on AI-2" });
+    const patched = await ctx.rest(`/api/projects/ai/tickets/${b.id}`, {
+      method: "PATCH",
+      body: JSON.stringify({ blockedBy: [a.id] }),
+    });
+    expect(patched.status).toBe(422);
+    expect((await ctx.tracker.getTicket("ai", b.id))?.blockedBy).toEqual([]);
+  });
+
   it("GivenNoFieldsOrAStaleTimestamp_WhenEdited_ThenRefused", async () => {
     const ctx = await setup();
     const a = await ctx.service.create("ai", { title: "A" }, "andy");

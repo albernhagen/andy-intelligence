@@ -23,6 +23,29 @@ export function parentProblem(
   return null;
 }
 
+/** Why these blockers can't be set on the ticket (one would end up blocking itself), or null. */
+export function blockerProblem(
+  ticket: Ticket,
+  blockedBy: readonly string[],
+  tickets: readonly Ticket[],
+): string | null {
+  const byId = new Map(tickets.map((t) => [t.id, t]));
+  for (const id of blockedBy) {
+    if (ticket.blockedBy.includes(id)) continue;
+    const seen = new Set<string>();
+    const pending = [id];
+    while (pending.length > 0) {
+      const next = pending.pop()!;
+      if (next === ticket.id)
+        return `${byId.get(id)?.key ?? id} is already waiting on ${ticket.key}`;
+      if (seen.has(next)) continue;
+      seen.add(next);
+      pending.push(...(byId.get(next)?.blockedBy ?? []));
+    }
+  }
+  return null;
+}
+
 type Lane = "up_next" | "ideas" | "stage";
 
 const laneOf = (t: Ticket): Lane =>
