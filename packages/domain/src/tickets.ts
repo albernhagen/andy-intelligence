@@ -9,11 +9,15 @@ import {
   type AnsweredVia,
   type EventActor,
   type NewQuestion,
+  type Project,
   type Question,
   type Run,
   type Ticket,
   type TicketEvent,
   type TicketFields,
+  type Worker,
+  type WorkerChoice,
+  type WorkerView,
   type WorkTracker,
 } from "@andy/contracts";
 import { checkDor, type DorResult } from "./dor";
@@ -21,6 +25,7 @@ import { inboxCards } from "./inbox-order";
 import { blockerProblem, parentProblem, reorderRank, type ReorderAnchor } from "./ticket-edits";
 import { MAX_OPEN_QUESTIONS_PER_TICKET } from "./refine-gate";
 import { rankBetween } from "./ranks";
+import { isDispatchable, resolveWorker, workerView } from "./worker";
 import { canTransition, isForwardMove, pullRequestPath, type PullRequestTarget } from "./stages";
 
 function log(severity: "INFO" | "WARNING", message: string, fields: object = {}) {
@@ -64,6 +69,7 @@ export interface TicketStatus {
   readiness: DorResult;
   questions: Question[];
   recentEvents: TicketEvent[];
+  worker: Worker;
 }
 
 /** Every project with its unarchived ticket count per stage, plus the size of the Needs-you inbox. */
@@ -299,6 +305,55 @@ export class TicketService {
       { fields: { ...fields, dorStatus: dor.met ? "met" : "not_met" }, ifUpdatedAt },
       actor,
     );
+  }
+
+  /** Who does the ticket's work (ADR-0082). */
+  async worker(projectId: string, ticketId: string): Promise<WorkerView> {
+    const [ticket, project] = await Promise.all([
+      this.require(projectId, ticketId),
+      this.requireProject(projectId),
+    ]);
+    return workerView(ticket, project);
+  }
+
+  /** The resolved worker of each ticket, by id; reads each project once. */
+  async workersFor(tickets: Ticket[]): Promise<Map<string, Worker>> {
+    const ids = [...new Set(tickets.map((t) => t.projectId))];
+    const projects = new Map(
+      await Promise.all(ids.map(async (id) => [id, await this.requireProject(id)] as const)),
+    );
+    return new Map(tickets.map((t) => [t.id, resolveWorker(t, projects.get(t.projectId)!)]));
+  }
+
+  /**
+   * Stores the ticket's own pick, or clears it (null). A switch to an agent may free the ticket
+   * for the dispatcher. A run already in flight is left alone (out of scope, ADR-0082).
+   */
+  async setWorker(
+    projectId: string,
+    ticketId: string,
+    worker: WorkerChoice | null,
+    actor: EventActor,
+  ): Promise<WorkerView> {
+    const [ticket, project] = await Promise.all([
+      this.require(projectId, ticketId),
+      this.requireProject(projectId),
+    ]);
+    const overrides = { ...ticket.overrides };
+    // A harness pin (e.g. `jules`) already is an agent: picking "agent" must not erase which one.
+    const pinned = worker === "agent" && workerView(ticket, project).override === "agent";
+    if (!pinned) {
+      delete overrides.assignee;
+      if (worker) overrides.assignee = worker;
+    }
+    const updated = await this.tracker.updateTicket(
+      projectId,
+      ticketId,
+      { fields: { overrides }, ifUpdatedAt: ticket.updatedAt },
+      actor,
+    );
+    if (isDispatchable(updated, project)) await this.dispatchNext?.(projectId);
+    return workerView(updated, project);
   }
 
   /** Re-parents by key: `parent` is an epic's key in the same project, or null for none. */
@@ -680,6 +735,12 @@ export class TicketService {
     return ticket;
   }
 
+  private async requireProject(projectId: string): Promise<Project> {
+    const project = await this.tracker.getProject(projectId);
+    if (!project) throw notFound("project", projectId);
+    return project;
+  }
+
   async status(key: string): Promise<TicketStatus> {
     const ticket = await this.findByKey(key);
     const [questions, events] = await Promise.all([
@@ -692,6 +753,7 @@ export class TicketService {
       readiness: checkDor(ticket, open),
       questions,
       recentEvents: events.slice(-RECENT_EVENTS),
+      worker: resolveWorker(ticket, await this.requireProject(ticket.projectId)),
     };
   }
 

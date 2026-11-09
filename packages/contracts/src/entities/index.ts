@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { Worker } from "./worker";
 import {
   Actor,
   HarnessKey,
@@ -74,11 +75,13 @@ export const Project = z.object({
    * than the field, such as project AI, which stays `none` until M2: Self-hosting.
    */
   autoMerge: AutoMerge.default("none"),
+  /** Who does a ticket's work when it has no pick of its own (ADR-0082). */
+  defaultWorker: Worker.default("agent"),
 });
 export type Project = z.infer<typeof Project>;
 
 export const TicketOverrides = z.object({
-  assignee: z.union([z.literal("me"), HarnessKey]).optional(),
+  assignee: z.union([z.literal("me"), z.literal("agent"), HarnessKey]).optional(),
   tier: TierKey.optional(),
   modelPin: Route.optional(),
   autonomy: AutonomyLevel.optional(),
@@ -825,3 +828,5 @@ export const CodeHostEvent = z.discriminatedUnion("kind", [
   CodeHostEventBase.extend({ kind: z.literal("workflow_run"), workflowRun: WorkflowRun }),
 ]);
 export type CodeHostEvent = z.infer<typeof CodeHostEvent>;
+
+export * from "./worker";

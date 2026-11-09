@@ -111,7 +111,10 @@ function Lanes({
   );
   const lanes = groupByStage(shown);
   const byId = useMemo(() => new Map(shown.map((t) => [t.id, t])), [shown]);
-  const next = nextUp(lanes.ready, byId);
+  const next = nextUp(
+    lanes.ready.filter((t) => t.summary.worker === "agent"),
+    byId,
+  );
   // A view only: `lanes.ready` stays the queue, for drops, card numbers and the Next marker.
   const readyShown = sortedByScore ? sortByStartScore(lanes.ready) : lanes.ready;
   const shownIn = (stage: Stage) => (stage === "ready" ? readyShown : lanes[stage]);

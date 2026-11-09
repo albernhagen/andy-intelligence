@@ -147,6 +147,11 @@ export interface paths {
                * @enum {string}
                */
               autoMerge: "none" | "s" | "s-and-m" | "all";
+              /**
+               * @default agent
+               * @enum {string}
+               */
+              defaultWorker: "agent" | "me" | "ask";
             }[];
           };
         };
@@ -218,6 +223,11 @@ export interface paths {
                * @enum {string}
                */
               autoMerge: "none" | "s" | "s-and-m" | "all";
+              /**
+               * @default agent
+               * @enum {string}
+               */
+              defaultWorker: "agent" | "me" | "ask";
             };
           };
         };
@@ -337,6 +347,11 @@ export interface paths {
                * @enum {string}
                */
               autoMerge: "none" | "s" | "s-and-m" | "all";
+              /**
+               * @default agent
+               * @enum {string}
+               */
+              defaultWorker: "agent" | "me" | "ask";
             };
           };
         };
@@ -415,6 +430,8 @@ export interface paths {
             dailyQuestionCap?: number;
             /** @enum {string} */
             autoMerge?: "none" | "s" | "s-and-m" | "all";
+            /** @enum {string} */
+            defaultWorker?: "agent" | "me" | "ask";
           };
         };
       };
@@ -461,6 +478,11 @@ export interface paths {
                * @enum {string}
                */
               autoMerge: "none" | "s" | "s-and-m" | "all";
+              /**
+               * @default agent
+               * @enum {string}
+               */
+              defaultWorker: "agent" | "me" | "ask";
             };
           };
         };
@@ -563,7 +585,7 @@ export interface paths {
               size: "S" | "M" | "L" | null;
               sizeReason: string | null;
               overrides: {
-                assignee?: "me" | ("claude-code" | "jules" | "opencode" | "direct");
+                assignee?: "me" | "agent" | ("claude-code" | "jules" | "opencode" | "direct");
                 /** @enum {string} */
                 tier?: "frontier" | "strong" | "fast" | "cheap";
                 modelPin?: {
@@ -742,7 +764,7 @@ export interface paths {
             touches?: string[];
             /** @default {} */
             overrides?: {
-              assignee?: "me" | ("claude-code" | "jules" | "opencode" | "direct");
+              assignee?: "me" | "agent" | ("claude-code" | "jules" | "opencode" | "direct");
               /** @enum {string} */
               tier?: "frontier" | "strong" | "fast" | "cheap";
               modelPin?: {
@@ -790,7 +812,7 @@ export interface paths {
               size: "S" | "M" | "L" | null;
               sizeReason: string | null;
               overrides: {
-                assignee?: "me" | ("claude-code" | "jules" | "opencode" | "direct");
+                assignee?: "me" | "agent" | ("claude-code" | "jules" | "opencode" | "direct");
                 /** @enum {string} */
                 tier?: "frontier" | "strong" | "fast" | "cheap";
                 modelPin?: {
@@ -979,7 +1001,7 @@ export interface paths {
               size: "S" | "M" | "L" | null;
               sizeReason: string | null;
               overrides: {
-                assignee?: "me" | ("claude-code" | "jules" | "opencode" | "direct");
+                assignee?: "me" | "agent" | ("claude-code" | "jules" | "opencode" | "direct");
                 /** @enum {string} */
                 tier?: "frontier" | "strong" | "fast" | "cheap";
                 modelPin?: {
@@ -1158,7 +1180,7 @@ export interface paths {
             outOfScope?: string[];
             touches?: string[];
             overrides?: {
-              assignee?: "me" | ("claude-code" | "jules" | "opencode" | "direct");
+              assignee?: "me" | "agent" | ("claude-code" | "jules" | "opencode" | "direct");
               /** @enum {string} */
               tier?: "frontier" | "strong" | "fast" | "cheap";
               modelPin?: {
@@ -1213,7 +1235,7 @@ export interface paths {
               size: "S" | "M" | "L" | null;
               sizeReason: string | null;
               overrides: {
-                assignee?: "me" | ("claude-code" | "jules" | "opencode" | "direct");
+                assignee?: "me" | "agent" | ("claude-code" | "jules" | "opencode" | "direct");
                 /** @enum {string} */
                 tier?: "frontier" | "strong" | "fast" | "cheap";
                 modelPin?: {
@@ -1397,7 +1419,7 @@ export interface paths {
               size: "S" | "M" | "L" | null;
               sizeReason: string | null;
               overrides: {
-                assignee?: "me" | ("claude-code" | "jules" | "opencode" | "direct");
+                assignee?: "me" | "agent" | ("claude-code" | "jules" | "opencode" | "direct");
                 /** @enum {string} */
                 tier?: "frontier" | "strong" | "fast" | "cheap";
                 modelPin?: {
@@ -1699,7 +1721,7 @@ export interface paths {
               size: "S" | "M" | "L" | null;
               sizeReason: string | null;
               overrides: {
-                assignee?: "me" | ("claude-code" | "jules" | "opencode" | "direct");
+                assignee?: "me" | "agent" | ("claude-code" | "jules" | "opencode" | "direct");
                 /** @enum {string} */
                 tier?: "frontier" | "strong" | "fast" | "cheap";
                 modelPin?: {
@@ -1898,7 +1920,7 @@ export interface paths {
               size: "S" | "M" | "L" | null;
               sizeReason: string | null;
               overrides: {
-                assignee?: "me" | ("claude-code" | "jules" | "opencode" | "direct");
+                assignee?: "me" | "agent" | ("claude-code" | "jules" | "opencode" | "direct");
                 /** @enum {string} */
                 tier?: "frontier" | "strong" | "fast" | "cheap";
                 modelPin?: {
@@ -2204,7 +2226,7 @@ export interface paths {
               size: "S" | "M" | "L" | null;
               sizeReason: string | null;
               overrides: {
-                assignee?: "me" | ("claude-code" | "jules" | "opencode" | "direct");
+                assignee?: "me" | "agent" | ("claude-code" | "jules" | "opencode" | "direct");
                 /** @enum {string} */
                 tier?: "frontier" | "strong" | "fast" | "cheap";
                 modelPin?: {
@@ -2402,7 +2424,7 @@ export interface paths {
               size: "S" | "M" | "L" | null;
               sizeReason: string | null;
               overrides: {
-                assignee?: "me" | ("claude-code" | "jules" | "opencode" | "direct");
+                assignee?: "me" | "agent" | ("claude-code" | "jules" | "opencode" | "direct");
                 /** @enum {string} */
                 tier?: "frontier" | "strong" | "fast" | "cheap";
                 modelPin?: {
@@ -3160,7 +3182,7 @@ export interface paths {
                 size: "S" | "M" | "L" | null;
                 sizeReason: string | null;
                 overrides: {
-                  assignee?: "me" | ("claude-code" | "jules" | "opencode" | "direct");
+                  assignee?: "me" | "agent" | ("claude-code" | "jules" | "opencode" | "direct");
                   /** @enum {string} */
                   tier?: "frontier" | "strong" | "fast" | "cheap";
                   modelPin?: {
@@ -3260,6 +3282,159 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  "/api/projects/{projectId}/tickets/{ticketId}/worker": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get: {
+      parameters: {
+        query?: never;
+        header?: never;
+        path: {
+          projectId: string;
+          ticketId: string;
+        };
+        cookie?: never;
+      };
+      requestBody?: never;
+      responses: {
+        /** @description The ticket's resolved worker */
+        200: {
+          headers: {
+            [name: string]: unknown;
+          };
+          content: {
+            "application/json": {
+              /** @enum {string} */
+              worker: "agent" | "me" | "ask";
+              /** @enum {string|null} */
+              override: "agent" | "me" | null;
+              /** @enum {string} */
+              projectDefault: "agent" | "me" | "ask";
+            };
+          };
+        };
+        /** @description Invalid request */
+        400: {
+          headers: {
+            [name: string]: unknown;
+          };
+          content: {
+            "application/json": {
+              error: string;
+              details?: string[];
+            };
+          };
+        };
+        /** @description Not found */
+        404: {
+          headers: {
+            [name: string]: unknown;
+          };
+          content: {
+            "application/json": {
+              error: string;
+              details?: string[];
+            };
+          };
+        };
+        /** @description Conflict */
+        409: {
+          headers: {
+            [name: string]: unknown;
+          };
+          content: {
+            "application/json": {
+              error: string;
+              details?: string[];
+            };
+          };
+        };
+      };
+    };
+    put: {
+      parameters: {
+        query?: never;
+        header?: never;
+        path: {
+          projectId: string;
+          ticketId: string;
+        };
+        cookie?: never;
+      };
+      requestBody: {
+        content: {
+          "application/json": {
+            /** @enum {string|null} */
+            worker: "agent" | "me" | null;
+          };
+        };
+      };
+      responses: {
+        /** @description Stored; an agent ticket may start building */
+        200: {
+          headers: {
+            [name: string]: unknown;
+          };
+          content: {
+            "application/json": {
+              /** @enum {string} */
+              worker: "agent" | "me" | "ask";
+              /** @enum {string|null} */
+              override: "agent" | "me" | null;
+              /** @enum {string} */
+              projectDefault: "agent" | "me" | "ask";
+            };
+          };
+        };
+        /** @description Invalid request */
+        400: {
+          headers: {
+            [name: string]: unknown;
+          };
+          content: {
+            "application/json": {
+              error: string;
+              details?: string[];
+            };
+          };
+        };
+        /** @description Not found */
+        404: {
+          headers: {
+            [name: string]: unknown;
+          };
+          content: {
+            "application/json": {
+              error: string;
+              details?: string[];
+            };
+          };
+        };
+        /** @description Conflict */
+        409: {
+          headers: {
+            [name: string]: unknown;
+          };
+          content: {
+            "application/json": {
+              error: string;
+              details?: string[];
+            };
+          };
+        };
+      };
+    };
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   "/api/projects/{projectId}/board": {
     parameters: {
       query?: never;
@@ -3303,7 +3478,7 @@ export interface paths {
               size: "S" | "M" | "L" | null;
               sizeReason: string | null;
               overrides: {
-                assignee?: "me" | ("claude-code" | "jules" | "opencode" | "direct");
+                assignee?: "me" | "agent" | ("claude-code" | "jules" | "opencode" | "direct");
                 /** @enum {string} */
                 tier?: "frontier" | "strong" | "fast" | "cheap";
                 modelPin?: {
@@ -3412,6 +3587,8 @@ export interface paths {
                   /** @enum {string} */
                   state: "open" | "closed" | "merged";
                 } | null;
+                /** @enum {string} */
+                worker: "agent" | "me" | "ask";
               };
             }[];
           };

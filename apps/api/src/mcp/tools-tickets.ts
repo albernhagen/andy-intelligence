@@ -1,4 +1,4 @@
-import { TicketFields, TicketKey, Timestamp, type Ticket } from "@andy/contracts";
+import { TicketFields, TicketKey, Timestamp, type Ticket, type Worker } from "@andy/contracts";
 import {
   DomainError,
   inboxCards,
@@ -61,7 +61,7 @@ export async function statusLineOf<S extends TicketStatus>(deps: ToolDeps, statu
   const { ticket, questions } = status;
   const tickets = await deps.tracker.listTickets(ticket.projectId);
   const open = questions.filter((q) => q.status === "open").length;
-  return { ...status, statusLine: await lineFor(deps, ticket, tickets, open) };
+  return { ...status, statusLine: await lineFor(deps, ticket, tickets, open, status.worker) };
 }
 
 async function lineFor(
@@ -69,12 +69,13 @@ async function lineFor(
   ticket: Ticket,
   tickets: readonly Ticket[],
   openQuestions: number,
+  worker?: Worker,
 ) {
   const [runs, events] = await Promise.all([
     deps.runs.list(ticket.projectId, ticket.id),
     deps.tracker.listEvents(ticket.projectId, ticket.id),
   ]);
-  return ticketStatusLine(ticket, { tickets, runs, events, openQuestions }, new Date());
+  return ticketStatusLine(ticket, { tickets, runs, events, openQuestions, worker }, new Date());
 }
 
 /** The plan a flagged ticket waits on, if any: `stale` can only be rejected or re-planned. */
@@ -111,7 +112,7 @@ export async function listNeedsMe(deps: ToolDeps) {
   return {
     cards,
     questions: cards.flatMap((c) => c.questions),
-    tickets: inbox.tickets.map(summary),
+    tickets: await withWorkers(deps, inbox.tickets),
   };
 }
 
@@ -209,4 +210,10 @@ export function registerTicketTools(server: McpServer, deps: ToolDeps): void {
         return { ticket: summary(await service.reorderByKey(ticket, anchor, "andy")) };
       }),
   );
+}
+
+/** Flagged tickets with their resolved worker (ADR-0082). */
+async function withWorkers(deps: ToolDeps, tickets: Ticket[]) {
+  const workers = await deps.service.workersFor(tickets);
+  return tickets.map((t) => ({ ...summary(t), worker: workers.get(t.id) }));
 }

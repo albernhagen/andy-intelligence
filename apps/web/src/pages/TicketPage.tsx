@@ -14,6 +14,7 @@ import {
   UnsavedDrafts,
   useTicketSave,
 } from "@/components/InlineEdit";
+import { WorkerControl } from "@/components/WorkerControls";
 import { MoveControls } from "@/components/MoveControls";
 import { QuestionCard } from "@/components/QuestionCard";
 import { ScoreReasons } from "@/components/ScoreReasons";
@@ -31,6 +32,7 @@ import {
   useRuns,
   useTicketByRef,
   useTicketQuestions,
+  useWorker,
   useTickets,
 } from "@/lib/queries";
 import { STAGE_LABELS, TYPE_LABELS } from "@/lib/tickets";
@@ -150,9 +152,16 @@ function StatusLine({ ticket }: { ticket: Ticket }) {
   const runs = useRuns(path).data ?? [];
   const questions = useTicketQuestions(path).data ?? [];
   const events = useEvents(path).data ?? [];
+  const worker = useWorker(path).data?.worker;
   const { text, tone } = ticketStatusLine(
     ticket,
-    { tickets, runs, events, openQuestions: questions.filter((q) => q.status === "open").length },
+    {
+      tickets,
+      runs,
+      events,
+      openQuestions: questions.filter((q) => q.status === "open").length,
+      worker,
+    },
     new Date(),
   );
   return (
@@ -249,6 +258,7 @@ function Rail({ ticket: t }: { ticket: Ticket }) {
         <Readiness {...pathOf(t)} />
         <MoveControls ticket={t} />
       </div>
+      <WorkerControl ticket={t} />
       <SelectField
         ticket={t}
         label="Type"
