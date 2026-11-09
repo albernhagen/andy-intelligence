@@ -58,9 +58,13 @@ export function InFlightPanel({ projectId }: { projectId: string }) {
                   </>
                 )}
               </p>
-              <p className="break-words text-muted-foreground">
-                Touches: {r.touches.length ? r.touches.join(", ") : "unknown (overlaps every run)"}
-              </p>
+              {r.step === "build" && (
+                // Only builds edit files, so only they block overlapping tickets (ADR-0080).
+                <p className="break-words text-muted-foreground">
+                  Touches:{" "}
+                  {r.touches.length ? r.touches.join(", ") : "unknown (blocks every ticket)"}
+                </p>
+              )}
             </li>
           );
         })}

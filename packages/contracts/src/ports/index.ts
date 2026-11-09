@@ -232,6 +232,11 @@ export interface WorkTracker {
   listProjects(): Promise<Project[]>;
   /** `not_found` for an unknown project. */
   updateProject(projectId: string, patch: ProjectPatch): Promise<Project>;
+  /**
+   * Reserves the project's next ADR number atomically: one above both `atLeast` (the highest in
+   * the repo's index) and every number reserved before. Never hands out a number twice (ADR-0080).
+   */
+  reserveAdrNumber(projectId: string, atLeast: number): Promise<number>;
 
   /** Allocates the next key (e.g. "AI-7") and appends a `created` event. */
   createTicket(projectId: string, input: NewTicket, actor: EventActor): Promise<Ticket>;
@@ -401,8 +406,6 @@ export interface RunStore {
   listForTicket(projectId: string, ticketId: string): Promise<Run[]>;
   /** Runs in `queued` or `running` for the project. */
   listActive(projectId: string): Promise<Run[]>;
-  /** The highest `reservedAdr` of any run in the project, finished ones too; null if none (ADR-0080). */
-  highestReservedAdr(projectId: string): Promise<number | null>;
   /**
    * Applies the patch atomically, only if the run's status is one of `from` and, for a patch
    * that sets `planDecision`, the run has none yet, and for one that sets `mergeAttemptedSha`, it

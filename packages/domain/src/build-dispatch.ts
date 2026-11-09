@@ -115,7 +115,9 @@ export class BuildDispatcher {
       }
       if (!(await this.waiting(ticket, project.planApproval))) continue;
       try {
-        const run = await this.runs.start(projectId, ticket.id, "build");
+        const run = await this.runs.start(projectId, ticket.id, "build", undefined, {
+          avoidOverlap: true,
+        });
         log("INFO", "build started on its own", { ticket: ticket.key, runId: run.id });
         first ??= run;
         inFlight.push(...editingRuns([run], this.now()));

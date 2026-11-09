@@ -69,6 +69,20 @@ export function workTrackerContract(name: string, make: () => Promise<WorkTracke
       expect(await tracker.getProject("does-not-exist")).toBeNull();
     });
 
+    it("GivenAdrReservations_WhenReserved_ThenEachIsAboveTheIndexAndEveryEarlierOneAndConcurrentOnesNeverRepeat", async () => {
+      const { tracker, project } = await setup();
+      const other = await tracker.createProject({ name: "Other", key: uniqueKey() });
+      expect(await tracker.reserveAdrNumber(project.id, 82)).toBe(83);
+      expect(await tracker.reserveAdrNumber(project.id, 82)).toBe(84);
+      expect(await tracker.reserveAdrNumber(project.id, 90)).toBe(91);
+      expect(await tracker.reserveAdrNumber(other.id, 1)).toBe(2);
+      const concurrent = await Promise.all(
+        [1, 2, 3].map(() => tracker.reserveAdrNumber(project.id, 82)),
+      );
+      expect([...concurrent].sort()).toEqual([92, 93, 94]);
+      await rejectsWith(tracker.reserveAdrNumber("does-not-exist", 1), "not_found");
+    });
+
     it("GivenAProject_WhenAutoRefineIsTurnedOff_ThenItIsStoredAndDefaultsOnForNewProjects", async () => {
       const tracker = await make();
       const created = await tracker.createProject({ name: "Settings", key: uniqueKey() });
@@ -847,24 +861,6 @@ export function runStoreContract(name: string, make: () => Promise<RunStore>): v
       const done = await store.create(newRun(p));
       await store.update(done.id, { status: "succeeded" }, ["queued"]);
       expect((await store.listActive(p)).map((r) => r.id)).toEqual([queued.id]);
-    });
-
-    it("GivenReservedAdrNumbers_WhenAskedForTheHighest_ThenFinishedRunsCountAndOtherProjectsDont", async () => {
-      const store = await make();
-      const [p, other] = [project(), project()];
-      expect(await store.highestReservedAdr(p)).toBeNull();
-      const done = await store.create({
-        ...newRun(p),
-        step: "build",
-        reservedAdr: 81,
-        touches: ["a/**"],
-      });
-      await store.update(done.id, { status: "failed" }, ["queued"]);
-      await store.create({ ...newRun(p), step: "build", reservedAdr: 80 });
-      await store.create(newRun(p));
-      await store.create({ ...newRun(other), step: "build", reservedAdr: 99 });
-      expect(await store.highestReservedAdr(p)).toBe(81);
-      expect((await store.get(done.id))?.touches).toEqual(["a/**"]);
     });
 
     it("GivenAQueuedRun_WhenUpdatedFromQueued_ThenOnlyThePatchedFieldsChange", async () => {

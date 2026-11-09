@@ -300,6 +300,31 @@ describe("BuildDispatcher", () => {
       expect(await builds(b.id)).toHaveLength(1);
     });
 
+    it("GivenTwoConcurrentStartsOfOverlappingTickets_WhenBothAvoidOverlap_ThenOnlyTheOlderBuilds", async () => {
+      const { runs } = wire();
+      const a = await inReady("A", { touches: ["packages/domain/**"] });
+      const b = await inReady("B", { touches: ["packages/domain/src/runs.ts"] });
+      const results = await Promise.allSettled([
+        runs.start(projectId, a.id, "build", undefined, { avoidOverlap: true }),
+        runs.start(projectId, b.id, "build", undefined, { avoidOverlap: true }),
+      ]);
+      expect(results.map((r) => r.status)).toEqual(["fulfilled", "rejected"]);
+      expect((await builds(b.id))[0]).toMatchObject({ status: "failed" });
+      expect((await runs.inFlight(projectId)).map((r) => r.ticketKey)).toEqual([a.key]);
+    });
+
+    it("GivenABuildPastItsDeadline_WhenTheViewIsRead_ThenItIsLeftOutAsTheDispatcherIgnoresIt", async () => {
+      const { dispatcher, runs } = wire();
+      const late = await inReady("Late", { touches: ["packages/domain/**"] });
+      await dispatcher.next(projectId);
+      expect((await runs.inFlight(projectId)).map((r) => r.ticketKey)).toEqual([late.key]);
+      ms += 24 * 60 * 60_000; // past every step's deadline
+      expect(await runs.inFlight(projectId)).toEqual([]);
+      const next = await inReady("Next", { touches: ["packages/domain/src/x.ts"] });
+      await dispatcher.next(projectId);
+      expect(await builds(next.id)).toHaveLength(1);
+    });
+
     it("GivenAnAdrIndex_WhenTwoBuildsStart_ThenEachReservesTheNextNumberAndThePromptSaysSo", async () => {
       host.files.set(
         "docs/architecture/adr/README.md",

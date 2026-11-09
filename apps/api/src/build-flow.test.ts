@@ -902,6 +902,8 @@ describe("build run flow", () => {
       );
       const p = await f.project("AI", REPO, { runsAtOnce: 3 });
       // A sibling build already in flight, holding ADR-0085 and touching only the runbooks.
+      const siblingAdr = await f.t.tracker.reserveAdrNumber(p, 84);
+      expect(siblingAdr).toBe(85);
       await f.t.runs.create({
         projectId: p,
         ticketId: "sibling",
@@ -912,7 +914,7 @@ describe("build run flow", () => {
         prompt: "x",
         maxTurns: 1,
         touches: ["docs/runbooks/**"],
-        reservedAdr: 85,
+        reservedAdr: siblingAdr,
       });
 
       const first = await f.ready(p, "First", ["packages/domain/**"]);

@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   MAX_ACTIVE_RUNS_GLOBAL,
   MAX_PRS_WAITING_PER_PROJECT,
+  isInFlight,
   mayDispatch,
   type DispatchCounts,
 } from "./dispatch-caps";
@@ -77,4 +78,17 @@ describe("mayDispatch", () => {
       expect(mayDispatch(project, { ...idle, quotaLevel })).toBe("start");
     },
   );
+});
+
+describe("isInFlight", () => {
+  const now = new Date("2026-11-09T12:00:00.000Z");
+
+  it("GivenRunsOfEveryStatusAndDeadline_WhenAsked_ThenOnlyQueuedOrRunningBeforeTheirDeadline", () => {
+    expect(isInFlight({ status: "queued", deadline: null }, now)).toBe(true);
+    expect(isInFlight({ status: "running", deadline: "2026-11-09T13:00:00.000Z" }, now)).toBe(true);
+    expect(isInFlight({ status: "running", deadline: "2026-11-09T11:00:00.000Z" }, now)).toBe(
+      false,
+    );
+    expect(isInFlight({ status: "succeeded", deadline: null }, now)).toBe(false);
+  });
 });

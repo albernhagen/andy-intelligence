@@ -29,8 +29,8 @@ import {
   type WatchdogQueue,
   type WorkTracker,
 } from "@andy/contracts";
-import { MAX_ACTIVE_RUNS_GLOBAL } from "./dispatch-caps";
-import { highestAdrInIndex, nextAdrNumber, runTouches } from "./dispatch-conflicts";
+import { MAX_ACTIVE_RUNS_GLOBAL, isInFlight } from "./dispatch-caps";
+import { blockingRun, editingRuns, highestAdrInIndex, runTouches } from "./dispatch-conflicts";
 import { isDispatchable, resolveWorker } from "./worker";
 import { runCost } from "./cost";
 import {
@@ -76,6 +76,11 @@ export type StartableStep = (typeof STARTABLE_STEPS)[number];
  * (`buildRoute`, ADR-0063), from the one tier policy in `tiers.ts`.
  */
 export const DEFAULT_ROUTE: Route = TIER_ROUTES.fast;
+
+/** Oldest first, ties by id, so every caller orders runs the same way. */
+function oldestFirst(a: Run, b: Run): number {
+  return (a.createdAt ?? "").localeCompare(b.createdAt ?? "") || a.id.localeCompare(b.id);
+}
 
 /** Where a repo keeps its ADR index; build runs' ADR numbers are reserved above it (ADR-0080). */
 export const ADR_INDEX_PATH = "docs/architecture/adr/README.md";
@@ -181,8 +186,16 @@ export class RunService {
   /**
    * `retryOf`: the failed run this one retries (the watchdog's automatic retry). A build start
    * on a ticket that needs an approved plan (ADR-0050) starts a plan run instead and returns it.
+   * `avoidOverlap` (the dispatcher's starts, ADR-0080): a build whose touches overlap an older
+   * build in flight fails like a lost race, so concurrent dispatches can't start both.
    */
-  async start(projectId: string, ticketId: string, step: string, retryOf?: Run): Promise<Run> {
+  async start(
+    projectId: string,
+    ticketId: string,
+    step: string,
+    retryOf?: Run,
+    opts: { avoidOverlap?: boolean } = {},
+  ): Promise<Run> {
     if (!STARTABLE_STEPS.includes(step as StartableStep)) {
       throw new DomainError("invalid_step", `can't start a ${step} run yet`, [
         `startable steps: ${STARTABLE_STEPS.join(", ")}`,
@@ -270,9 +283,23 @@ export class RunService {
     const won =
       after.slice(0, MAX_ACTIVE_RUNS_GLOBAL).some((r) => r.id === run.id) &&
       inProject.slice(0, project.runsAtOnce).some((r) => r.id === run.id) &&
-      inProject.find((r) => r.ticketId === ticketId)?.id === run.id &&
-      // Two concurrent starts may reserve the same ADR number: the older run keeps it.
-      (reservedAdr === null || inProject.find((r) => r.reservedAdr === reservedAdr)?.id === run.id);
+      inProject.find((r) => r.ticketId === ticketId)?.id === run.id;
+    // ADR-0080: the overlap check, repeated against the runs that got in first.
+    const older = inProject.slice(
+      0,
+      Math.max(
+        0,
+        inProject.findIndex((r) => r.id === run.id),
+      ),
+    );
+    const overlapped =
+      opts.avoidOverlap === true &&
+      run.step === "build" &&
+      blockingRun({ id: ticketId, touches: run.touches }, editingRuns(older, this.now())) !== null;
+    if (overlapped) {
+      await this.fail(run.id, "another build touching the same files started at the same time");
+      throw new DomainError("run_limit", `${ticket.key} overlaps a build that just started`);
+    }
     if (!won) {
       await this.fail(run.id, "another run started at the same time");
       throw new DomainError("run_limit", `project ${project.key} has no free run slot`, [
@@ -1047,9 +1074,9 @@ export class RunService {
   }
 
   /**
-   * The next ADR number for a build run (ADR-0080): above the index on the default branch and
-   * every number a run in the project reserved. Null, never a guess, when the repo has no index
-   * or it can't be read.
+   * The next ADR number for a build run (ADR-0080), reserved atomically on the project's counter:
+   * above the index on the default branch and every number reserved before. Null, never a
+   * guess, when the repo has no index or it can't be read.
    */
   private async reserveAdr(projectId: string, repo: string): Promise<number | null> {
     if (!this.codeHost) return null;
@@ -1060,7 +1087,8 @@ export class RunService {
         : null;
       const highest = index === null ? null : highestAdrInIndex(index);
       if (highest === null) return null;
-      const next = nextAdrNumber(highest, await this.runs.highestReservedAdr(projectId));
+      if (highest >= ADR_NUMBER_MAX) return null;
+      const next = await this.tracker.reserveAdrNumber(projectId, highest);
       return next <= ADR_NUMBER_MAX ? next : null;
     } catch (err) {
       log("WARNING", "ADR number not reserved", { projectId, repo, error: String(err) });
@@ -1068,7 +1096,10 @@ export class RunService {
     }
   }
 
-  /** The project's runs in flight with what they touch, oldest first (ADR-0080 in-flight view). */
+  /**
+   * The project's runs in flight (`isInFlight`, as the dispatcher counts them) with what they
+   * touch, oldest first (ADR-0080 in-flight view).
+   */
   async inFlight(projectId: string): Promise<InFlightRun[]> {
     if (!(await this.tracker.getProject(projectId))) throw notFound("project", projectId);
     const [active, tickets] = await Promise.all([
@@ -1076,8 +1107,10 @@ export class RunService {
       this.tracker.listTickets(projectId),
     ]);
     const byId = new Map(tickets.map((t) => [t.id, t]));
+    const now = this.now();
     return active
-      .sort((a, b) => (a.createdAt ?? "").localeCompare(b.createdAt ?? ""))
+      .filter((r) => isInFlight(r, now))
+      .sort(oldestFirst)
       .map((r) => {
         const ticket = r.ticketId ? byId.get(r.ticketId) : undefined;
         return {
@@ -1110,15 +1143,13 @@ export class RunService {
    * project until the watchdog (M1.6b) settles it.
    */
   private async inFlightEverywhere(): Promise<Run[]> {
-    const nowMs = this.now().getTime();
+    const now = this.now();
     const projects = await this.tracker.listProjects();
     const active = await Promise.all(projects.map((p) => this.runs.listActive(p.id)));
     return active
       .flat()
-      .filter((r) => !r.deadline || Date.parse(r.deadline) > nowMs)
-      .sort(
-        (a, b) => (a.createdAt ?? "").localeCompare(b.createdAt ?? "") || a.id.localeCompare(b.id),
-      );
+      .filter((r) => isInFlight(r, now))
+      .sort(oldestFirst);
   }
 
   /** Marks a queued run failed; logs (doesn't throw) if that write fails too. */

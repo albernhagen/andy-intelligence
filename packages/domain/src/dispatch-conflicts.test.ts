@@ -4,8 +4,8 @@ import {
   adrLabel,
   blockingRun,
   editingRuns,
+  globMatches,
   highestAdrInIndex,
-  nextAdrNumber,
   overlappingKey,
   overlaps,
   runTouches,
@@ -53,6 +53,49 @@ describe("overlaps", () => {
   it("GivenAnEmptyTouchesList_WhenCompared_ThenItOverlapsEverything", () => {
     expect(overlaps([], ["docs/x.md"])).toBe(true);
     expect(overlaps(["docs/x.md"], [])).toBe(true);
+  });
+});
+
+describe("untrusted touches (safe subset, no regular expressions)", () => {
+  it.each([
+    ["more stars than the limit", "*a*a*a*a*a*a*a*a*a*b"],
+    ["a question mark", "src/?.ts"],
+    ["a character class", "src/[ab].ts"],
+    ["braces", "src/{a,b}.ts"],
+    ["a space", "src/a b.ts"],
+    ["too long", `src/${"a".repeat(300)}`],
+    ["too deep", Array(40).fill("d").join("/")],
+  ])("GivenAGlobWith_%s_WhenCompared_ThenTheListIsUnknownAndOverlaps", (_, glob) => {
+    expect(overlaps([glob], ["elsewhere/x.ts"])).toBe(true);
+  });
+
+  it("GivenMoreEntriesThanTheCap_WhenCompared_ThenTheListIsUnknown", () => {
+    expect(
+      overlaps(
+        Array.from({ length: 101 }, (_, i) => `a/${i}.ts`),
+        ["b/x.ts"],
+      ),
+    ).toBe(true);
+  });
+
+  it("GivenAHostileGlobAtTheLimits_WhenMatchedAgainstALongPath_ThenItAnswersFast", () => {
+    const glob = "**/*a*a*a*a*a*a*a*b";
+    const path = `x/${"a".repeat(290)}`;
+    const started = performance.now();
+    expect(globMatches(glob, path)).toBe(false);
+    overlaps([glob, glob, glob], [path, path, path]);
+    expect(globMatches(`**/**/**/**/**/**/**/**/**/**/x`, Array(31).fill("d").join("/"))).toBe(
+      false,
+    );
+    expect(performance.now() - started).toBeLessThan(100);
+  });
+
+  it("GivenSegmentGlobs_WhenMatched_ThenStarStaysInASegmentAndDoubleStarCrossesThem", () => {
+    expect(globMatches("a/*.ts", "a/b.ts")).toBe(true);
+    expect(globMatches("a/*.ts", "a/b/c.ts")).toBe(false);
+    expect(globMatches("a/**/c.ts", "a/c.ts")).toBe(true);
+    expect(globMatches("a/**/c.ts", "a/b/b/c.ts")).toBe(true);
+    expect(globMatches("a/b*d*.ts", "a/bxdy.ts")).toBe(true);
   });
 });
 
@@ -126,12 +169,6 @@ describe("ADR numbers", () => {
   it("GivenAnIndex_WhenRead_ThenTheHighestRowNumber", () => {
     expect(highestAdrInIndex(index)).toBe(82);
     expect(highestAdrInIndex("no rows")).toBeNull();
-  });
-
-  it("GivenReservationsAboveTheIndex_WhenReserving_ThenOneAboveTheHighestOfBoth", () => {
-    expect(nextAdrNumber(82, null)).toBe(83);
-    expect(nextAdrNumber(82, 84)).toBe(85);
-    expect(nextAdrNumber(82, 70)).toBe(83);
   });
 
   it("GivenANumber_WhenLabelled_ThenFourDigits", () => {

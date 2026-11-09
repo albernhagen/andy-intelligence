@@ -1,4 +1,4 @@
-import type { DispatchIdleReason, Project, QuotaLevel } from "@andy/contracts";
+import type { DispatchIdleReason, Project, QuotaLevel, Run } from "@andy/contracts";
 
 /** Dispatch caps (ADR-0079, ADR-0028). Pure: `BuildDispatcher` gathers the counts. */
 
@@ -33,4 +33,16 @@ export function mayDispatch(
   }
   if (counts.quotaLevel === "pause") return "quota_reserve";
   return "start";
+}
+
+/**
+ * The one definition of a run in flight (ADR-0079, ADR-0080): queued or running and not past its
+ * deadline, so a lost report can't hold a slot or block a ticket until the watchdog settles it.
+ * The caps, the overlap check, the in-flight view and the status line all use it.
+ */
+export function isInFlight(run: Pick<Run, "status" | "deadline">, now: Date): boolean {
+  return (
+    (run.status === "queued" || run.status === "running") &&
+    (!run.deadline || Date.parse(run.deadline) > now.getTime())
+  );
 }
