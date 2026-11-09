@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Link, useNavigate } from "@tanstack/react-router";
-import { PlanApproval, type Project } from "@andy/contracts";
+import { AutoMerge, PlanApproval, type Project } from "@andy/contracts";
 import { Button } from "@/components/ui/button";
 import { Field, Input } from "@/components/ui/input";
 import { Loading, QueryError } from "@/components/Status";
@@ -40,6 +40,7 @@ export function ProjectsPage() {
             <BuildsEnabledToggle project={p} />
             <AutoBuildToggle project={p} />
             <PlanApprovalSelect project={p} />
+            <AutoMergeSelect project={p} />
           </li>
         ))}
       </ul>
@@ -200,6 +201,36 @@ function PlanApprovalSelect({ project }: { project: Project }) {
         {PlanApproval.options.map((o) => (
           <option key={o} value={o}>
             {PLAN_APPROVAL_LABELS[o]}
+          </option>
+        ))}
+      </select>
+      {update.error && <QueryError error={update.error} />}
+    </label>
+  );
+}
+
+const AUTO_MERGE_LABELS: Record<AutoMerge, string> = {
+  none: "none",
+  s: "S tickets",
+  "s-and-m": "S and M tickets",
+  all: "all tickets",
+};
+
+/** Which tickets' agent PRs merge on their own once the gate passes (ADR-0050). */
+function AutoMergeSelect({ project }: { project: Project }) {
+  const update = useUpdateProject(project.id);
+  return (
+    <label className="ml-3 inline-flex items-center gap-1 text-sm text-muted-foreground">
+      Auto-merge
+      <select
+        className="rounded border border-border bg-background px-1"
+        value={project.autoMerge}
+        disabled={update.isPending}
+        onChange={(e) => update.mutate({ autoMerge: e.target.value as AutoMerge })}
+      >
+        {AutoMerge.options.map((o) => (
+          <option key={o} value={o}>
+            {AUTO_MERGE_LABELS[o]}
           </option>
         ))}
       </select>

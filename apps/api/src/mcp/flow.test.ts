@@ -175,6 +175,7 @@ describe("MCP OAuth flow (MCP SDK client)", () => {
       "refine",
       "reject_plan",
       "set_auto_build",
+      "set_auto_merge",
       "set_auto_refine",
       "set_plan_approval",
       "status",

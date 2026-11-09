@@ -403,6 +403,7 @@ export class RunService {
                 plan: built.plan,
                 branch: built.branch,
                 toolingFiles: built.toolingFiles,
+                verification: built.verification,
                 links: { ...run.links, pullRequest: built.pullRequest ?? undefined },
               }
             : {}),
@@ -780,7 +781,8 @@ export class RunService {
     const toolingFiles = (result.toolingFiles ?? [])
       .filter((f) => typeof f === "string" && f.length > 0 && f.length <= 300)
       .slice(0, 50);
-    return { plan, branch, pullRequest, summary, error, toolingFiles };
+    const verification = parsed.success ? parsed.data.verification : [];
+    return { plan, branch, pullRequest, summary, error, toolingFiles, verification };
   }
 
   /**
@@ -1090,6 +1092,7 @@ interface BuildRecord {
   /** Why a reported success counts as a failure; null when it stands. */
   error: string | null;
   toolingFiles: string[];
+  verification: Run["verification"];
 }
 
 /** The executor handle a dispatched run was recorded with; null if it never got one. */

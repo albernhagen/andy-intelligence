@@ -142,6 +142,11 @@ export interface paths {
               planApproval: "none" | "m-and-l" | "all";
               /** @default 5 */
               dailyQuestionCap: number;
+              /**
+               * @default none
+               * @enum {string}
+               */
+              autoMerge: "none" | "s" | "s-and-m" | "all";
             }[];
           };
         };
@@ -208,6 +213,11 @@ export interface paths {
               planApproval: "none" | "m-and-l" | "all";
               /** @default 5 */
               dailyQuestionCap: number;
+              /**
+               * @default none
+               * @enum {string}
+               */
+              autoMerge: "none" | "s" | "s-and-m" | "all";
             };
           };
         };
@@ -322,6 +332,11 @@ export interface paths {
               planApproval: "none" | "m-and-l" | "all";
               /** @default 5 */
               dailyQuestionCap: number;
+              /**
+               * @default none
+               * @enum {string}
+               */
+              autoMerge: "none" | "s" | "s-and-m" | "all";
             };
           };
         };
@@ -398,6 +413,8 @@ export interface paths {
             /** @enum {string} */
             planApproval?: "none" | "m-and-l" | "all";
             dailyQuestionCap?: number;
+            /** @enum {string} */
+            autoMerge?: "none" | "s" | "s-and-m" | "all";
           };
         };
       };
@@ -439,6 +456,11 @@ export interface paths {
               planApproval: "none" | "m-and-l" | "all";
               /** @default 5 */
               dailyQuestionCap: number;
+              /**
+               * @default none
+               * @enum {string}
+               */
+              autoMerge: "none" | "s" | "s-and-m" | "all";
             };
           };
         };
@@ -3373,6 +3395,44 @@ export interface paths {
                * @enum {string|null}
                */
               planPolicy: "none" | "m-and-l" | "all" | null;
+              /** @default [] */
+              verification: {
+                command: string;
+                passed: boolean;
+                output: string;
+              }[];
+              /** @default [] */
+              gateReasons: (
+                | "no_verification_output"
+                | "protected_path"
+                | "files_incomplete"
+                | "checks_incomplete"
+                | "no_required_checks"
+                | "checks_failed"
+                | "checks_pending"
+                | "draft"
+                | "not_default_branch"
+              )[];
+              /** @default [] */
+              protectedFiles: string[];
+              /**
+               * Format: date-time
+               * @default null
+               */
+              gateFlaggedAt: string | null;
+              /** @default null */
+              mergeAttemptedSha: string | null;
+              /** @default null */
+              mergeError: string | null;
+              /** @default null */
+              metrics: {
+                ciGreenFirstTry: boolean | null;
+                reviewFailures: string[];
+                reviewBlockers: number | null;
+                andyCommits: number | null;
+                reworks: number | null;
+                costEstimateUsd: number | null;
+              } | null;
             }[];
           };
         };
@@ -3514,6 +3574,44 @@ export interface paths {
                * @enum {string|null}
                */
               planPolicy: "none" | "m-and-l" | "all" | null;
+              /** @default [] */
+              verification: {
+                command: string;
+                passed: boolean;
+                output: string;
+              }[];
+              /** @default [] */
+              gateReasons: (
+                | "no_verification_output"
+                | "protected_path"
+                | "files_incomplete"
+                | "checks_incomplete"
+                | "no_required_checks"
+                | "checks_failed"
+                | "checks_pending"
+                | "draft"
+                | "not_default_branch"
+              )[];
+              /** @default [] */
+              protectedFiles: string[];
+              /**
+               * Format: date-time
+               * @default null
+               */
+              gateFlaggedAt: string | null;
+              /** @default null */
+              mergeAttemptedSha: string | null;
+              /** @default null */
+              mergeError: string | null;
+              /** @default null */
+              metrics: {
+                ciGreenFirstTry: boolean | null;
+                reviewFailures: string[];
+                reviewBlockers: number | null;
+                andyCommits: number | null;
+                reworks: number | null;
+                costEstimateUsd: number | null;
+              } | null;
             };
           };
         };
@@ -3732,6 +3830,44 @@ export interface paths {
                  * @enum {string|null}
                  */
                 planPolicy: "none" | "m-and-l" | "all" | null;
+                /** @default [] */
+                verification: {
+                  command: string;
+                  passed: boolean;
+                  output: string;
+                }[];
+                /** @default [] */
+                gateReasons: (
+                  | "no_verification_output"
+                  | "protected_path"
+                  | "files_incomplete"
+                  | "checks_incomplete"
+                  | "no_required_checks"
+                  | "checks_failed"
+                  | "checks_pending"
+                  | "draft"
+                  | "not_default_branch"
+                )[];
+                /** @default [] */
+                protectedFiles: string[];
+                /**
+                 * Format: date-time
+                 * @default null
+                 */
+                gateFlaggedAt: string | null;
+                /** @default null */
+                mergeAttemptedSha: string | null;
+                /** @default null */
+                mergeError: string | null;
+                /** @default null */
+                metrics: {
+                  ciGreenFirstTry: boolean | null;
+                  reviewFailures: string[];
+                  reviewBlockers: number | null;
+                  andyCommits: number | null;
+                  reworks: number | null;
+                  costEstimateUsd: number | null;
+                } | null;
               };
               build: {
                 id: string;
@@ -3831,6 +3967,44 @@ export interface paths {
                  * @enum {string|null}
                  */
                 planPolicy: "none" | "m-and-l" | "all" | null;
+                /** @default [] */
+                verification: {
+                  command: string;
+                  passed: boolean;
+                  output: string;
+                }[];
+                /** @default [] */
+                gateReasons: (
+                  | "no_verification_output"
+                  | "protected_path"
+                  | "files_incomplete"
+                  | "checks_incomplete"
+                  | "no_required_checks"
+                  | "checks_failed"
+                  | "checks_pending"
+                  | "draft"
+                  | "not_default_branch"
+                )[];
+                /** @default [] */
+                protectedFiles: string[];
+                /**
+                 * Format: date-time
+                 * @default null
+                 */
+                gateFlaggedAt: string | null;
+                /** @default null */
+                mergeAttemptedSha: string | null;
+                /** @default null */
+                mergeError: string | null;
+                /** @default null */
+                metrics: {
+                  ciGreenFirstTry: boolean | null;
+                  reviewFailures: string[];
+                  reviewBlockers: number | null;
+                  andyCommits: number | null;
+                  reworks: number | null;
+                  costEstimateUsd: number | null;
+                } | null;
               } | null;
               buildError: string | null;
             };

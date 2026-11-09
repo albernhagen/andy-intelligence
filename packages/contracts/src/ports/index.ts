@@ -1,6 +1,7 @@
 import { z } from "zod";
 import {
   Assumption,
+  AutoMerge,
   BillingType,
   DorStatus,
   EventActor,
@@ -23,9 +24,15 @@ import {
   Urgency,
   type AnsweredVia,
   type CodeHostConnection,
+  type ChangedFile,
   type CodeHostEvent,
+  type HeadCheck,
+  type Listing,
+  type PullRequest,
+  type PullRequestCommit,
   type Repo,
   type RepoToken,
+  type RequiredCheck,
   type TicketEvent,
   type WorkflowDispatch,
   type WorkflowRun,
@@ -181,6 +188,7 @@ export const ProjectPatch = z.strictObject({
   buildEnabledAt: Timestamp.nullable().optional(),
   planApproval: PlanApproval.optional(),
   dailyQuestionCap: Project.shape.dailyQuestionCap.unwrap().optional(),
+  autoMerge: AutoMerge.optional(),
 });
 export type ProjectPatch = z.infer<typeof ProjectPatch>;
 
@@ -191,6 +199,7 @@ export const ProjectSettings = ProjectPatch.pick({
   buildEnabled: true,
   planApproval: true,
   dailyQuestionCap: true,
+  autoMerge: true,
 });
 export type ProjectSettings = z.infer<typeof ProjectSettings>;
 
@@ -351,6 +360,15 @@ export const RunPatch = Run.pick({
   toolingFiles: true,
   pushGrantedAt: true,
   planDecision: true,
+  outcome: true,
+  wouldAutoMerge: true,
+  verification: true,
+  gateReasons: true,
+  protectedFiles: true,
+  gateFlaggedAt: true,
+  mergeAttemptedSha: true,
+  mergeError: true,
+  metrics: true,
 }).partial();
 export type RunPatch = z.input<typeof RunPatch>;
 
@@ -366,7 +384,8 @@ export interface RunStore {
   listActive(projectId: string): Promise<Run[]>;
   /**
    * Applies the patch atomically, only if the run's status is one of `from` and, for a patch
-   * that sets `planDecision`, the run has none yet; `conflict` otherwise, `not_found` when there
+   * that sets `planDecision`, the run has none yet, and for one that sets `mergeAttemptedSha`, it
+   * isn't already that value; `conflict` otherwise, `not_found` when there
    * is no such run.
    */
   update(runId: string, patch: RunPatch, from: readonly RunStatus[]): Promise<Run>;
@@ -462,6 +481,22 @@ export interface CodeHost {
   getWorkflowRun(fullName: string, runId: string): Promise<WorkflowRun | null>;
   /** Asks the code host to stop the run; a finished or unknown run is a no-op. */
   cancelWorkflowRun(fullName: string, runId: string): Promise<void>;
+  /** Null when the pull request or the repo isn't known. */
+  getPullRequest(fullName: string, number: number): Promise<PullRequest | null>;
+  /** Empty and complete when the repo isn't known. */
+  listChangedFiles(fullName: string, number: number): Promise<Listing<ChangedFile>>;
+  /** The latest result per check on a commit. */
+  listHeadChecks(fullName: string, sha: string): Promise<Listing<HeadCheck>>;
+  /** The checks `branch` requires before a merge; empty when none are configured. */
+  listRequiredChecks(fullName: string, branch: string): Promise<RequiredCheck[]>;
+  listPullRequestCommits(fullName: string, number: number): Promise<Listing<PullRequestCommit>>;
+  /** The file's text at `ref`; null when there is no such file. */
+  readFile(fullName: string, path: string, ref: string): Promise<string | null>;
+  /**
+   * Squash-merges with the App's identity, only if the head is still `expectedHeadSha`. Throws
+   * when the host refuses (conflict, branch rules, a moved head).
+   */
+  mergePullRequest(fullName: string, number: number, expectedHeadSha: string): Promise<void>;
 }
 
 // ── CodeHostConnectionStore ──────────────────────────────────────────────────

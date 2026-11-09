@@ -237,6 +237,8 @@ export function createApp(deps: AppDeps) {
       events: github.events,
       tracker: deps.tracker,
       tickets: service,
+      codeHost: new ConnectedCodeHost(connection),
+      runs: deps.runs,
       now,
     });
     registerGitHubToken(app, {

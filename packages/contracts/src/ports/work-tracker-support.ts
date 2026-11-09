@@ -34,6 +34,7 @@ export function buildProject(input: NewProject): Project {
     buildEnabledAt: null,
     planApproval: "none",
     dailyQuestionCap: 5,
+    autoMerge: "s-and-m",
   };
 }
 

@@ -29,6 +29,13 @@ export type AutonomyLevel = z.infer<typeof AutonomyLevel>;
 export const PlanApproval = z.enum(["none", "m-and-l", "all"]);
 export type PlanApproval = z.infer<typeof PlanApproval>;
 
+/**
+ * Which tickets' agent PRs the control plane merges on its own when the gate passes (ADR-0050):
+ * none, S, S and M, or all. The gate's vetoes apply under every policy.
+ */
+export const AutoMerge = z.enum(["none", "s", "s-and-m", "all"]);
+export type AutoMerge = z.infer<typeof AutoMerge>;
+
 export const Project = z.object({
   id: Id,
   name: z.string().min(1),
@@ -58,6 +65,11 @@ export const Project = z.object({
   planApproval: PlanApproval.default("none"),
   /** Refine questions the project takes per rolling 24 hours; extras become assumptions (ADR-0075). */
   dailyQuestionCap: z.number().int().min(0).max(50).default(5),
+  /**
+   * New projects are created with `s-and-m` (ADR-0050). This default only covers documents older
+   * than the field, such as project AI, which stays `none` until M2: Self-hosting.
+   */
+  autoMerge: AutoMerge.default("none"),
 });
 export type Project = z.infer<typeof Project>;
 
@@ -378,6 +390,37 @@ export type RunStatus = z.infer<typeof RunStatus>;
 export const RunOutcome = z.enum(["merged_clean", "reworked", "reverted", "failed"]);
 export type RunOutcome = z.infer<typeof RunOutcome>;
 
+/** Why the gate would not merge a PR (workflow.md §4.5). Recorded on the Run. */
+export const GateReason = z.enum([
+  "no_verification_output",
+  "protected_path",
+  "files_incomplete",
+  "checks_incomplete",
+  "no_required_checks",
+  "checks_failed",
+  "checks_pending",
+  "draft",
+  "not_default_branch",
+]);
+export type GateReason = z.infer<typeof GateReason>;
+
+/** ADR-0040's run metrics; kept current by the gate and completed when the PR closes. */
+export const RunMetrics = z.object({
+  /** False once a required non-review check failed; null until the PR closes without one. */
+  ciGreenFirstTry: z.boolean().nullable(),
+  /** Review checks that failed, as "name@headSha", once each. */
+  reviewFailures: z.array(z.string().max(300)).max(50),
+  /** `reviewFailures.length` when the PR closed; null before. */
+  reviewBlockers: z.number().int().nonnegative().nullable(),
+  /** Commits on the PR not made by a bot; null before close or when they couldn't be read. */
+  andyCommits: z.number().int().nonnegative().nullable(),
+  /** Moves of the ticket from review back to In progress since the run began; null before close. */
+  reworks: z.number().int().nonnegative().nullable(),
+  /** The run's own cost, copied at close; an estimate on a subscription (`costIsEstimate`). */
+  costEstimateUsd: z.number().nonnegative().nullable(),
+});
+export type RunMetrics = z.infer<typeof RunMetrics>;
+
 /** Caps on run text (ADR-0028). */
 export const RUN_PROMPT_MAX = 100_000;
 export const RUN_SUMMARY_MAX = 20_000;
@@ -450,6 +493,20 @@ export const Run = z.object({
   planRunId: Id.nullable().default(null),
   /** A plan run's project policy when it started; a change makes the plan stale. */
   planPolicy: PlanApproval.nullable().default(null),
+  // Added in M1.8b: Gate and auto-merge.
+  /** A build's own checks, from its result; the gate vetoes when empty or without output. */
+  verification: z.array(BuildCheck).max(BUILD_LIMITS.maxChecks).default([]),
+  /** Empty when `wouldAutoMerge` is true or the gate hasn't run. */
+  gateReasons: z.array(GateReason).max(GateReason.options.length).default([]),
+  /** Changed paths the gate found protected, capped. */
+  protectedFiles: z.array(z.string().max(300)).max(50).default([]),
+  /** When the gate flagged the ticket for a protected path or missing output; flags once. */
+  gateFlaggedAt: Timestamp.nullable().default(null),
+  /** The head commit of the last merge attempt, set before the call: one attempt per head. */
+  mergeAttemptedSha: z.string().max(64).nullable().default(null),
+  /** Why the merge call failed. */
+  mergeError: z.string().max(2000).nullable().default(null),
+  metrics: RunMetrics.nullable().default(null),
 });
 export type Run = z.infer<typeof Run>;
 
@@ -614,6 +671,42 @@ export const CheckRun = z.object({
   pullRequestNumbers: z.array(z.number().int().positive()),
 });
 export type CheckRun = z.infer<typeof CheckRun>;
+
+/** One path a pull request changes; `previousPath` is set for a rename. Untrusted names. */
+export const ChangedFile = z.object({
+  path: z.string().min(1),
+  previousPath: z.string().min(1).nullable(),
+});
+export type ChangedFile = z.infer<typeof ChangedFile>;
+
+/** The latest result of one named check on a commit. `sourceId`: the app that reported it. */
+export const HeadCheck = z.object({
+  name: z.string().min(1).max(256),
+  status: CheckStatus,
+  conclusion: CheckConclusion.nullable(),
+  sourceId: z.string().nullable(),
+});
+export type HeadCheck = z.infer<typeof HeadCheck>;
+
+/** A check a branch requires; `sourceId` null means any reporter counts. */
+export const RequiredCheck = z.object({
+  name: z.string().min(1).max(256),
+  sourceId: z.string().nullable(),
+});
+export type RequiredCheck = z.infer<typeof RequiredCheck>;
+
+/** A commit on a pull request; `author` is the host login, else the git author name. */
+export const PullRequestCommit = z.object({
+  sha: z.string().min(1),
+  author: z.string().nullable(),
+});
+export type PullRequestCommit = z.infer<typeof PullRequestCommit>;
+
+/** A capped listing. `complete` false means more exist, so a caller must not assume none match. */
+export interface Listing<T> {
+  items: T[];
+  complete: boolean;
+}
 
 /** A CI workflow run (GitHub Actions in v1.x); M1.6 correlates these with Runs. */
 export const WorkflowRun = z.object({
