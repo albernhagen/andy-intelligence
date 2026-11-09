@@ -157,7 +157,11 @@ describe("create_ticket", () => {
 describe("list_needs_me", () => {
   it("GivenNothingOpen_WhenListed_ThenTheInboxIsEmpty", async () => {
     const ctx = await withProject();
-    expect((await ctx.call("list_needs_me")).data).toEqual({ questions: [], tickets: [] });
+    expect((await ctx.call("list_needs_me")).data).toEqual({
+      cards: [],
+      questions: [],
+      tickets: [],
+    });
   });
 
   it("GivenAnAgentQuestion_WhenListed_ThenItShowsWithItsTicketKeyAndTheTicketIsFlagged", async () => {
@@ -200,7 +204,11 @@ describe("answer_question", () => {
       answeredVia: "mcp",
     });
     expect(res.data.ticket).toMatchObject({ key: "AI-1", needsAttention: false, dorStatus: "met" });
-    expect((await ctx.call("list_needs_me")).data).toEqual({ questions: [], tickets: [] });
+    expect((await ctx.call("list_needs_me")).data).toEqual({
+      cards: [],
+      questions: [],
+      tickets: [],
+    });
   });
 
   it("GivenAQuestionAskedByARun_WhenAnswered_ThenRecordedAndTheTicketIsReady", async () => {

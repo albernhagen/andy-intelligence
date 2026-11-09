@@ -1,6 +1,14 @@
-import type { PullRequestLink, Stage, Ticket, TicketEvent, TicketSummary } from "@andy/contracts";
-import { openBlockers as openBlockerTickets, runLabel } from "./board";
-import { groupByStage } from "./tickets";
+import {
+  ACTIVE_RUN_STATUSES,
+  compareRanks,
+  type PullRequestLink,
+  type Run,
+  type RunStep,
+  type Stage,
+  type Ticket,
+  type TicketEvent,
+  type TicketSummary,
+} from "@andy/contracts";
 
 /** The story panel's first line (ADR-0059): where the ticket is and what it waits for. */
 export type StatusTone = "default" | "attention" | "running" | "success" | "danger";
@@ -37,7 +45,7 @@ function mainStatus(s: StatusInput, now: Date): { text: string; tone: StatusTone
     return { text: `Waiting for you: ${n} question${n === 1 ? "" : "s"}`, tone: "attention" };
   }
   if (s.needsAttention) return { text: "Waiting for you", tone: "attention" };
-  // The same words as the run marker on the board card (`runLabel`, lib/board.ts).
+  // The same words as the run marker on the board card (`runLabel`).
   if (s.run) return { text: join(runLabel(s.run, now.getTime()), pr), tone: "running" };
   if (s.blockedBy.length > 0) return { text: `Blocked by ${list(s.blockedBy)}`, tone: "danger" };
 
@@ -86,21 +94,77 @@ export function latestPullRequest(
   return state === "open" || state === "closed" || state === "merged" ? { number, state } : null;
 }
 
-/** Keys of the blockers not finished yet (the board's rule: `openBlockers` in lib/board.ts). */
-export function openBlockers(ticket: Ticket, tickets: readonly Ticket[]): string[] {
-  return openBlockerTickets(ticket, new Map(tickets.map((t) => [t.id, t]))).map((b) => b.key);
+/** Blockers that are not finished yet (Done or Cancelled), as tickets on this board. */
+export function openBlockers(ticket: Ticket, byId: ReadonlyMap<string, Ticket>): Ticket[] {
+  return ticket.blockedBy
+    .map((id) => byId.get(id))
+    .filter((t): t is Ticket => !!t && t.stage !== "done" && t.stage !== "cancelled");
+}
+
+/** Keys of the blockers not finished yet. */
+export function openBlockerKeys(ticket: Ticket, tickets: readonly Ticket[]): string[] {
+  return openBlockers(ticket, new Map(tickets.map((t) => [t.id, t]))).map((b) => b.key);
 }
 
 /**
  * Place among the unblocked Ready tickets by rank (ADR-0058: order is priority), so 1 is the
- * card the board marks "Next" (`nextUp`). Null outside Ready or while blocked.
+ * card the board marks "Next". Null outside Ready or while blocked.
  */
 export function queuePosition(ticket: Ticket, tickets: readonly Ticket[]): number | null {
   if (ticket.stage !== "ready") return null;
   const byId = new Map(tickets.map((t) => [t.id, t]));
-  const queue = groupByStage(tickets.filter((t) => !t.archived)).ready.filter(
-    (t) => openBlockerTickets(t, byId).length === 0,
-  );
+  const queue = tickets
+    .filter((t) => t.stage === "ready" && !t.archived && openBlockers(t, byId).length === 0)
+    .sort((a, b) => compareRanks(a.rank, b.rank));
   const i = queue.findIndex((t) => t.id === ticket.id);
   return i === -1 ? null : i + 1;
+}
+
+const RUN_VERBS: Record<RunStep, string> = {
+  refine: "Refining",
+  plan: "Planning",
+  build: "Building",
+  review: "Reviewing",
+  verify: "Verifying",
+  scout: "Scouting",
+};
+
+/** "Refining · 3 min" while running; "Refine queued · 1 min" before it starts. */
+export function runLabel(run: NonNullable<TicketSummary["run"]>, now: number): string {
+  const since = run.startedAt ?? run.createdAt;
+  const min = since ? Math.max(0, Math.floor((now - Date.parse(since)) / 60_000)) : null;
+  const what =
+    run.status === "queued"
+      ? `${run.step[0]!.toUpperCase()}${run.step.slice(1)} queued`
+      : RUN_VERBS[run.step];
+  return min === null ? what : `${what} · ${min} min`;
+}
+
+/** What a ticket's status line is computed from; the UI and MCP read the same four things. */
+export interface TicketFacts {
+  /** The ticket's project, for blockers and its place in the queue. */
+  tickets: readonly Ticket[];
+  openQuestions: number;
+  /** The ticket's runs, newest first. */
+  runs: readonly Run[];
+  /** The ticket's history, oldest first. */
+  events: readonly TicketEvent[];
+}
+
+/** One ticket's status line: the UI's story panel and MCP `status` both call this (AI-40). */
+export function ticketStatusLine(ticket: Ticket, facts: TicketFacts, now: Date) {
+  return statusLine(
+    {
+      stage: ticket.stage,
+      archived: ticket.archived,
+      needsAttention: ticket.needsAttention,
+      dorMet: ticket.dorStatus === "met",
+      openQuestions: facts.openQuestions,
+      run: facts.runs.find((r) => ACTIVE_RUN_STATUSES.includes(r.status)) ?? null,
+      pr: latestPullRequest(facts.events),
+      blockedBy: openBlockerKeys(ticket, facts.tickets),
+      queuePosition: queuePosition(ticket, facts.tickets),
+    },
+    now,
+  );
 }
