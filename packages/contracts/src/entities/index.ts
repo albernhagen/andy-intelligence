@@ -14,9 +14,11 @@ import {
   Timestamp,
   Urgency,
 } from "./common";
+import { RunCostFields } from "./cost";
 import { RefineScores, TicketScores } from "./scores";
 
 export * from "./common";
+export * from "./cost";
 export * from "./scores";
 
 /** ARCHITECTURE §5 — domain model. Vendor concepts must not appear here. */
@@ -511,6 +513,7 @@ export const Run = z.object({
   /** Why the merge call failed. */
   mergeError: z.string().max(2000).nullable().default(null),
   metrics: RunMetrics.nullable().default(null),
+  ...RunCostFields,
 });
 export type Run = z.infer<typeof Run>;
 

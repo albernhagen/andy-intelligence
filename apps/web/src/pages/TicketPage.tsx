@@ -3,7 +3,7 @@ import { Link, useBlocker, useNavigate, useParams } from "@tanstack/react-router
 import { useQueryClient } from "@tanstack/react-query";
 import { X } from "lucide-react";
 import { Size, TicketType, TierKey, type Ticket } from "@andy/contracts";
-import { TIER_FOR_SIZE } from "@andy/domain";
+import { TIER_FOR_SIZE, ticketStatusLine } from "@andy/domain";
 import { Activity } from "@/components/Activity";
 import { AskQuestionForm } from "@/components/AskQuestionForm";
 import { CancelArchiveControls } from "@/components/CancelArchiveControls";
@@ -17,13 +17,13 @@ import {
 import { MoveControls } from "@/components/MoveControls";
 import { QuestionCard } from "@/components/QuestionCard";
 import { ScoreReasons } from "@/components/ScoreReasons";
+import { TicketCostLine } from "@/components/TicketCostLine";
 import { Markdown } from "@/components/Markdown";
 import { Loading, QueryError } from "@/components/Status";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Select } from "@/components/ui/input";
 import {
-  isActiveRun,
   ticketQueryKey,
   useEvents,
   usePromoteAssumption,
@@ -33,7 +33,6 @@ import {
   useTicketQuestions,
   useTickets,
 } from "@/lib/queries";
-import { latestPullRequest, openBlockers, queuePosition, statusLine } from "@/lib/status-line";
 import { STAGE_LABELS, TYPE_LABELS } from "@/lib/tickets";
 
 /**
@@ -151,18 +150,9 @@ function StatusLine({ ticket }: { ticket: Ticket }) {
   const runs = useRuns(path).data ?? [];
   const questions = useTicketQuestions(path).data ?? [];
   const events = useEvents(path).data ?? [];
-  const { text, tone } = statusLine(
-    {
-      stage: ticket.stage,
-      archived: ticket.archived,
-      needsAttention: ticket.needsAttention,
-      dorMet: ticket.dorStatus === "met",
-      openQuestions: questions.filter((q) => q.status === "open").length,
-      run: runs.find(isActiveRun) ?? null,
-      pr: latestPullRequest(events),
-      blockedBy: openBlockers(ticket, tickets),
-      queuePosition: queuePosition(ticket, tickets),
-    },
+  const { text, tone } = ticketStatusLine(
+    ticket,
+    { tickets, runs, events, openQuestions: questions.filter((q) => q.status === "open").length },
     new Date(),
   );
   return (
@@ -179,6 +169,7 @@ function Story({ ticket: t }: { ticket: Ticket }) {
   const body = useTicketSave(t);
   return (
     <article className="space-y-6">
+      <TicketCostLine {...pathOf(t)} />
       <InlineText
         label="Title"
         required

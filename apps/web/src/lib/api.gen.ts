@@ -954,7 +954,7 @@ export interface paths {
       };
       requestBody?: never;
       responses: {
-        /** @description Ticket */
+        /** @description Ticket with its cost totals */
         200: {
           headers: {
             [name: string]: unknown;
@@ -1065,6 +1065,15 @@ export interface paths {
               createdAt: string;
               /** Format: date-time */
               updatedAt: string;
+              cost: {
+                estimatedCostUsd: number;
+                quotaDelta: {
+                  "5h": number | null;
+                  weekly: number | null;
+                };
+                completedRuns: number;
+                unknownRuns: number;
+              };
             };
           };
         };
@@ -1363,7 +1372,7 @@ export interface paths {
       };
       requestBody?: never;
       responses: {
-        /** @description Ticket */
+        /** @description Ticket with its cost totals */
         200: {
           headers: {
             [name: string]: unknown;
@@ -1474,6 +1483,15 @@ export interface paths {
               createdAt: string;
               /** Format: date-time */
               updatedAt: string;
+              cost: {
+                estimatedCostUsd: number;
+                quotaDelta: {
+                  "5h": number | null;
+                  weekly: number | null;
+                };
+                completedRuns: number;
+                unknownRuns: number;
+              };
             };
           };
         };
@@ -3593,6 +3611,20 @@ export interface paths {
                 reworks: number | null;
                 costEstimateUsd: number | null;
               } | null;
+              /** @default null */
+              usage: {
+                inputTokens: number;
+                outputTokens: number;
+                cacheReadTokens: number;
+                cacheWriteTokens: number;
+                turns: number | null;
+                wallMs: number | null;
+              } | null;
+              /** @default null */
+              quotaDelta: {
+                "5h": number | null;
+                weekly: number | null;
+              } | null;
             }[];
           };
         };
@@ -3771,6 +3803,20 @@ export interface paths {
                 andyCommits: number | null;
                 reworks: number | null;
                 costEstimateUsd: number | null;
+              } | null;
+              /** @default null */
+              usage: {
+                inputTokens: number;
+                outputTokens: number;
+                cacheReadTokens: number;
+                cacheWriteTokens: number;
+                turns: number | null;
+                wallMs: number | null;
+              } | null;
+              /** @default null */
+              quotaDelta: {
+                "5h": number | null;
+                weekly: number | null;
               } | null;
             };
           };
@@ -4028,6 +4074,20 @@ export interface paths {
                   reworks: number | null;
                   costEstimateUsd: number | null;
                 } | null;
+                /** @default null */
+                usage: {
+                  inputTokens: number;
+                  outputTokens: number;
+                  cacheReadTokens: number;
+                  cacheWriteTokens: number;
+                  turns: number | null;
+                  wallMs: number | null;
+                } | null;
+                /** @default null */
+                quotaDelta: {
+                  "5h": number | null;
+                  weekly: number | null;
+                } | null;
               };
               build: {
                 id: string;
@@ -4164,6 +4224,20 @@ export interface paths {
                   andyCommits: number | null;
                   reworks: number | null;
                   costEstimateUsd: number | null;
+                } | null;
+                /** @default null */
+                usage: {
+                  inputTokens: number;
+                  outputTokens: number;
+                  cacheReadTokens: number;
+                  cacheWriteTokens: number;
+                  turns: number | null;
+                  wallMs: number | null;
+                } | null;
+                /** @default null */
+                quotaDelta: {
+                  "5h": number | null;
+                  weekly: number | null;
                 } | null;
               } | null;
               buildError: string | null;

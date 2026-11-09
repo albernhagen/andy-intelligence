@@ -1,13 +1,14 @@
 import {
   Stage,
   compareRanks,
-  type Question,
   type Run,
   type Ticket,
   type TicketEvent,
   type TicketType,
 } from "@andy/contracts";
 import { ARCHIVABLE_STAGES, TRANSITIONS } from "@andy/domain";
+
+export { sortQuestions } from "@andy/domain";
 
 /** Board columns, in workflow order (ARCHITECTURE §4.1). */
 export const STAGES: readonly Stage[] = Stage.options;
@@ -124,14 +125,6 @@ function label(stage: unknown): string {
   return typeof stage === "string" && stage in STAGE_LABELS
     ? STAGE_LABELS[stage as Stage]
     : String(stage);
-}
-
-/** Inbox order: high urgency first, then oldest first. */
-export function sortQuestions(questions: readonly Question[]): Question[] {
-  const weight = { high: 0, normal: 1, low: 2 } as const;
-  return [...questions].sort(
-    (a, b) => weight[a.urgency] - weight[b.urgency] || a.createdAt.localeCompare(b.createdAt),
-  );
 }
 
 /** One entry in the story panel's activity timeline (ADR-0059). */

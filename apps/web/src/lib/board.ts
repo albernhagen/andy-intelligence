@@ -1,5 +1,7 @@
-import { Stage, compareRanks, type BoardTicket, type RunStep, type Ticket } from "@andy/contracts";
-import { rankBetween } from "@andy/domain";
+import { Stage, compareRanks, type Ticket } from "@andy/contracts";
+import { openBlockers, rankBetween } from "@andy/domain";
+
+export { openBlockers, runLabel } from "@andy/domain";
 
 /**
  * Board v2 (AI-28) rules that need no React: what a drop does, the Ready queue, and the words
@@ -106,36 +108,9 @@ export function planUpNextDrop(
   }
 }
 
-/** Blockers that are not finished yet (Done or Cancelled), as tickets on this board. */
-export function openBlockers(ticket: Ticket, byId: ReadonlyMap<string, Ticket>): Ticket[] {
-  return ticket.blockedBy
-    .map((id) => byId.get(id))
-    .filter((t): t is Ticket => !!t && t.stage !== "done" && t.stage !== "cancelled");
-}
-
 /** The Ready card to build next: the highest-ranked one with no open blocker. */
 export function nextUp(ready: readonly Ticket[], byId: ReadonlyMap<string, Ticket>): Ticket | null {
   return ready.find((t) => openBlockers(t, byId).length === 0) ?? null;
-}
-
-const RUN_VERBS: Record<RunStep, string> = {
-  refine: "Refining",
-  plan: "Planning",
-  build: "Building",
-  review: "Reviewing",
-  verify: "Verifying",
-  scout: "Scouting",
-};
-
-/** "Refining · 3 min" while running; "Refine queued · 1 min" before it starts. */
-export function runLabel(run: NonNullable<BoardTicket["summary"]["run"]>, now: number): string {
-  const since = run.startedAt ?? run.createdAt;
-  const min = since ? Math.max(0, Math.floor((now - Date.parse(since)) / 60_000)) : null;
-  const what =
-    run.status === "queued"
-      ? `${run.step[0]!.toUpperCase()}${run.step.slice(1)} queued`
-      : RUN_VERBS[run.step];
-  return min === null ? what : `${what} · ${min} min`;
 }
 
 export const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? "" : "s"}`;

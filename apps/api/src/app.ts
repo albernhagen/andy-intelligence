@@ -143,6 +143,7 @@ const DOMAIN_STATUS = {
   cancel_failed: 502,
   plan_not_decidable: 409,
   not_promotable: 409,
+  invalid_reference: 422,
 } as const;
 
 export function createApp(deps: AppDeps) {
@@ -274,7 +275,7 @@ export function createApp(deps: AppDeps) {
     dispatchNext,
     now,
   );
-  registerTicketRoutes(app, deps.tracker, service, projects);
+  registerTicketRoutes(app, deps.tracker, service, projects, runs);
   registerBoardRoutes(app, new BoardReader(deps.tracker, deps.runs));
 
   registerRunRoutes(app, runs);
