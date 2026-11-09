@@ -86,6 +86,21 @@ describe("TicketService.setWorker", () => {
     expect((await tracker.getTicket("ai", created.id))?.overrides).toEqual({ tier: "strong" });
   });
 
+  it("GivenAHarnessPin_WhenAgentIsPicked_ThenThePinStays", async () => {
+    const { tracker, service, created } = await setup();
+    await tracker.updateTicket(
+      "ai",
+      created.id,
+      { fields: { overrides: { assignee: "jules" } } },
+      "andy",
+    );
+
+    const view = await service.setWorker("ai", created.id, "agent", "andy");
+
+    expect(view).toMatchObject({ worker: "agent", override: "agent" });
+    expect((await tracker.getTicket("ai", created.id))?.overrides.assignee).toBe("jules");
+  });
+
   it("GivenASwitch_WhenTheResultIsAnAgent_ThenOnlyThatDispatches", async () => {
     const { service, created, dispatchNext } = await setup();
 

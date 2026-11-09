@@ -112,6 +112,21 @@ describe("worker flow", () => {
     expect((await s.send<{ stage: string }>(path, "GET")).body.stage).toBe("in_progress");
   });
 
+  it.each(["me", "ask"] as const)(
+    "GivenADefaultOf%s_WhenTheDefaultBecomesAgent_ThenTheWaitingReadyTicketStarts",
+    async (from) => {
+      const s = await setup();
+      const { path } = await readyTicket(s, from);
+      expect((await s.send<unknown[]>(`${path}/runs`, "GET")).body).toEqual([]);
+
+      await s.tool("set_default_worker", { project: "AI", worker: "agent" });
+
+      expect((await s.send<unknown[]>(`${path}/runs`, "GET")).body).toMatchObject([
+        { step: "build" },
+      ]);
+    },
+  );
+
   it("GivenAnAskProject_WhenATicketIsReady_ThenNothingStartsAndClearingAPickFollowsTheDefault", async () => {
     const s = await setup();
     const { key, path } = await readyTicket(s, "ask");

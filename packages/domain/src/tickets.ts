@@ -327,8 +327,12 @@ export class TicketService {
       this.requireProject(projectId),
     ]);
     const overrides = { ...ticket.overrides };
-    delete overrides.assignee;
-    if (worker) overrides.assignee = worker;
+    // A harness pin (e.g. `jules`) already is an agent: picking "agent" must not erase which one.
+    const pinned = worker === "agent" && workerView(ticket, project).override === "agent";
+    if (!pinned) {
+      delete overrides.assignee;
+      if (worker) overrides.assignee = worker;
+    }
     const updated = await this.tracker.updateTicket(
       projectId,
       ticketId,
