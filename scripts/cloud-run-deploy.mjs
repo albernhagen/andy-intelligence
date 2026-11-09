@@ -136,6 +136,12 @@ export function renderSummary({ service, region, before, candidate, after, outco
     `| Candidate | \`${candidate || "none"}\` |`,
     `| Serving after | \`${after || "unknown"}\` |`,
   ];
+  if (outcomes.untag === "failure") {
+    lines.push(
+      "",
+      `**Warning:** the \`${CANDIDATE_TAG}\` tag could not be removed, so its public URL still reaches the candidate. Remove it: \`gcloud run services update-traffic ${service} --region ${region} --remove-tags=${CANDIDATE_TAG}\``,
+    );
+  }
   if (before) {
     lines.push(
       "",
@@ -196,6 +202,7 @@ async function main([command, argument]) {
             promote: env.OUTCOME_PROMOTE,
             verify: env.OUTCOME_VERIFY,
             publicSmoke: env.OUTCOME_PUBLIC_SMOKE,
+            untag: env.OUTCOME_UNTAG,
           },
         }),
       );

@@ -201,6 +201,13 @@ describe("job summary", () => {
     );
   });
 
+  it("GivenTagRemovalFails_WhenRendered_ThenWarnsWithTheCommand", () => {
+    const outcomes = { ...SKIPPED_AFTER_SMOKE, untag: "failure" };
+    const text = renderSummary({ ...args, after: "old=100", outcomes });
+    expect(text).toContain("**Warning:**");
+    expect(text).toContain("--remove-tags=candidate");
+  });
+
   it("GivenBeforeUnknown_WhenRendered_ThenOmitsTheRollbackCommand", () => {
     const text = renderSummary({
       ...args,

@@ -92,6 +92,7 @@ runs:
 
     # A failed candidate must not stay reachable on its tagged URL (ADR-0076).
     - name: Remove the candidate tag after a failed deploy
+      id: untag
       if: always() && steps.deploy.outcome != 'skipped' && steps.promote.outcome != 'success'
       continue-on-error: true
       shell: bash
@@ -128,4 +129,5 @@ runs:
         OUTCOME_PROMOTE: ${{ steps.promote.outcome }}
         OUTCOME_VERIFY: ${{ steps.verify.outcome }}
         OUTCOME_PUBLIC_SMOKE: ${{ steps.public-smoke.outcome }}
+        OUTCOME_UNTAG: ${{ steps.untag.outcome }}
       run: node "$GITHUB_ACTION_PATH/../../../scripts/cloud-run-deploy.mjs" summary
