@@ -1,4 +1,7 @@
+import { spawn } from "node:child_process";
 import { readFileSync } from "node:fs";
+import { setTimeout as sleep } from "node:timers/promises";
+import { fileURLToPath, URL } from "node:url";
 import { describe, expect, it } from "vitest";
 import {
   assertLatest,
@@ -229,6 +232,65 @@ describe("job summary", () => {
     ["publicSmoke", "run the command below now"],
   ])("GivenStepFails_%s_WhenVerdict_ThenSays_%s", (step, expected) => {
     expect(deployVerdict({ ...OK, [step]: "failure" })).toContain(expected);
+  });
+});
+
+describe("the script reading gcloud's output from stdin", () => {
+  const script = fileURLToPath(new URL("./cloud-run-deploy.mjs", import.meta.url));
+  const promoted = service([{ revisionName: "new", percent: 100 }]);
+
+  // Runs the real script. Its stdin stays open and empty for 200 ms, then the input arrives in
+  // two parts split inside a token, as a slow gcloud would send it. GITHUB_OUTPUT is cleared so a
+  // CI run of this test cannot write to the job's real outputs.
+  async function runScript(args, input) {
+    const child = spawn(process.execPath, [script, ...args], {
+      env: { ...process.env, GITHUB_OUTPUT: "" },
+      stdio: ["pipe", "pipe", "pipe"],
+    });
+    let stdout = "";
+    let stderr = "";
+    child.stdout.on("data", (chunk) => (stdout += chunk));
+    child.stderr.on("data", (chunk) => (stderr += chunk));
+    const closed = new Promise((resolve, reject) => {
+      child.on("error", reject);
+      child.on("close", (code) => resolve(code));
+    });
+    await sleep(200);
+    const middle = Math.floor(input.length / 2);
+    child.stdin.write(input.slice(0, middle));
+    await sleep(50);
+    child.stdin.end(input.slice(middle));
+    return { code: await closed, stdout, stderr };
+  }
+
+  it.each([
+    ["serving", [], promoted, "serving=new=100\n"],
+    ["after", [], promoted, "serving=new=100\n"],
+    ["candidate", [], service(afterDeploy), "revision=new\n"],
+    ["assert-latest", ["new"], service(afterDeploy), ""],
+    ["assert-promoted", ["new"], promoted, ""],
+  ])("GivenLateStdin_When_%s_ThenParsesAllOfIt", async (command, args, json, expected) => {
+    const { code, stdout, stderr } = await runScript([command, ...args], JSON.stringify(json));
+    expect(stderr).toBe("");
+    expect(code).toBe(0);
+    expect(stdout).toContain(expected);
+  });
+
+  it("GivenLateStdinAndAFailedAssertion_WhenAssertPromoted_ThenExitsNonZero", async () => {
+    const input = JSON.stringify(service(afterDeploy));
+    const { code, stderr } = await runScript(["assert-promoted", "new"], input);
+    expect(code).toBe(1);
+    expect(stderr).toContain("serving old=100");
+  });
+
+  it.each([
+    ["", "::error::serving: expected the service JSON on stdin, got nothing"],
+    ['{"private-value', "::error::serving: expected the service JSON on stdin, got 15 unparsable"],
+  ])("GivenBadStdin_%j_WhenServing_ThenExitsNonZeroNamingTheCommand", async (input, message) => {
+    const { code, stderr } = await runScript(["serving"], input);
+    expect(code).toBe(1);
+    expect(stderr).toContain(message);
+    expect(stderr).not.toContain("private-value");
   });
 });
 
