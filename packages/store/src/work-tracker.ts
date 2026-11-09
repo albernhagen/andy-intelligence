@@ -109,15 +109,13 @@ export class FirestoreWorkTracker implements WorkTracker {
   }
 
   async reserveAdrNumber(projectId: string, atLeast: number): Promise<number> {
-    // One counter document per project, like ticket keys: one read per build start (ADR-0080).
+    if (!(await this.projects().doc(projectId).get()).exists) throw notFound("project", projectId);
+    // One counter document per project, like ticket keys (ADR-0080). The transaction holds only
+    // that document, so it never contends with writes to the project (the dispatcher's).
     const ref = this.db.collection("counters").doc(`adr-${projectId}`);
     return this.db.runTransaction(async (tx) => {
-      const [project, counter] = await Promise.all([
-        tx.get(this.projects().doc(projectId)),
-        tx.get(ref),
-      ]);
-      if (!project.exists) throw notFound("project", projectId);
-      const next = Math.max(atLeast, (counter.get("last") as number | undefined) ?? 0) + 1;
+      const last = ((await tx.get(ref)).get("last") as number | undefined) ?? 0;
+      const next = Math.max(atLeast, last) + 1;
       tx.set(ref, { last: next });
       return next;
     });

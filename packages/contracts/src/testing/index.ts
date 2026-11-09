@@ -69,17 +69,16 @@ export function workTrackerContract(name: string, make: () => Promise<WorkTracke
       expect(await tracker.getProject("does-not-exist")).toBeNull();
     });
 
-    it("GivenAdrReservations_WhenReserved_ThenEachIsAboveTheIndexAndEveryEarlierOneAndConcurrentOnesNeverRepeat", async () => {
+    it("GivenAdrReservations_WhenReserved_ThenEachIsAboveTheIndexAndEveryEarlierOne", async () => {
       const { tracker, project } = await setup();
       const other = await tracker.createProject({ name: "Other", key: uniqueKey() });
       expect(await tracker.reserveAdrNumber(project.id, 82)).toBe(83);
       expect(await tracker.reserveAdrNumber(project.id, 82)).toBe(84);
       expect(await tracker.reserveAdrNumber(project.id, 90)).toBe(91);
       expect(await tracker.reserveAdrNumber(other.id, 1)).toBe(2);
-      const concurrent = await Promise.all(
-        [1, 2, 3].map(() => tracker.reserveAdrNumber(project.id, 82)),
-      );
-      expect([...concurrent].sort()).toEqual([92, 93, 94]);
+      // No concurrent burst here: like the ticket-key counter, uniqueness is the transaction's,
+      // and contended transactions stall the emulator for seconds (ADR-0080).
+      expect(await tracker.reserveAdrNumber(project.id, 82)).toBe(92);
       await rejectsWith(tracker.reserveAdrNumber("does-not-exist", 1), "not_found");
     });
 

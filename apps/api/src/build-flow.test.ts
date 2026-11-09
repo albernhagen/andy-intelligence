@@ -934,8 +934,10 @@ describe("build run flow", () => {
       const view = await f.json<{ ticketKey: string | null; touches: string[]; branch: string }[]>(
         f.t.call(`/api/projects/${p}/in-flight`),
       );
-      expect(view.map((r) => r.ticketKey)).toEqual([null, "AI-1", "AI-3"]);
-      expect(view[1]).toMatchObject({
+      // Runs created in the same instant may come in either order.
+      expect(view).toHaveLength(3);
+      expect(view.map((r) => r.ticketKey)).toEqual(expect.arrayContaining([null, "AI-1", "AI-3"]));
+      expect(view.find((r) => r.ticketKey === "AI-1")).toMatchObject({
         touches: ["packages/domain/**"],
         branch: expect.stringContaining("AI-1"),
       });

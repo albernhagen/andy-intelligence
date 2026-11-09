@@ -1108,9 +1108,11 @@ export class RunService {
     ]);
     const byId = new Map(tickets.map((t) => [t.id, t]));
     const now = this.now();
+    // By start time, as the view shows it; runs created in the same instant still order stably.
+    const since = (r: Run) => r.startedAt ?? r.createdAt ?? "";
     return active
       .filter((r) => isInFlight(r, now))
-      .sort(oldestFirst)
+      .sort((a, b) => since(a).localeCompare(since(b)) || a.id.localeCompare(b.id))
       .map((r) => {
         const ticket = r.ticketId ? byId.get(r.ticketId) : undefined;
         return {
