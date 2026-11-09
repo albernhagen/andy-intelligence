@@ -14,7 +14,7 @@ import { MAX_BUILD_RUNS_PER_TICKET, isAndysWork, unfinishedBlockers } from "./bu
 import { mayDispatch } from "./dispatch-caps";
 import { checkDor } from "./dor";
 import { MAX_PLAN_RUNS_PER_TICKET, planRequired } from "./plans";
-import { quotaStatus } from "./quota";
+import { quotaStatus, readingsForDispatch } from "./quota";
 import type { RunService } from "./runs";
 import { DomainError } from "./tickets";
 
@@ -55,16 +55,15 @@ export class BuildDispatcher {
   }
 
   /**
-   * Gives projects idle on the global cap another go when a run may have ended elsewhere, since
-   * a run ending wakes only its own project. Never throws.
+   * Gives projects idle on the global cap a turn, longest wait first, before the project that
+   * freed a slot can refill it (ADR-0079). Never throws.
    */
   async wakeGlobalCapWaiters(exceptProjectId: string): Promise<void> {
     try {
-      for (const p of await this.tracker.listProjects()) {
-        if (p.id !== exceptProjectId && p.lastDispatch?.decision === "global_cap") {
-          await this.next(p.id);
-        }
-      }
+      const waiting = (await this.tracker.listProjects())
+        .filter((p) => p.id !== exceptProjectId && p.lastDispatch?.decision === "global_cap")
+        .sort((a, b) => a.lastDispatch!.at.localeCompare(b.lastDispatch!.at));
+      for (const p of waiting) await this.next(p.id);
     } catch (err) {
       log("ERROR", "waking projects at the global cap failed", { error: String(err) });
     }
@@ -117,16 +116,24 @@ export class BuildDispatcher {
     await this.record(
       project,
       verdict === "start" ? (first ? "started" : "nothing_ready") : verdict,
+      first !== null,
     );
     return first;
   }
 
-  /** Stores the decision when it changed, so `at` says since when and repeats cost no write. */
-  private async record(project: Project, decision: DispatchDecision): Promise<void> {
+  /**
+   * Stores the decision when it changed or a run started: `at` says since when, repeats cost no
+   * write, and a project that just took a slot goes behind the others waiting for one.
+   */
+  private async record(
+    project: Project,
+    decision: DispatchDecision,
+    startedRun: boolean,
+  ): Promise<void> {
     if (decision !== "started" && decision !== "nothing_ready") {
       log("INFO", "build dispatch idle", { projectId: project.id, reason: decision });
     }
-    if (project.lastDispatch?.decision === decision) return;
+    if (project.lastDispatch?.decision === decision && !startedRun) return;
     await this.tracker.updateProject(project.id, {
       lastDispatch: { decision, at: this.now().toISOString() },
     });
@@ -148,7 +155,9 @@ export class BuildDispatcher {
 
   private async quotaLevel(): Promise<QuotaLevel> {
     if (!this.quota) return "unknown";
-    return quotaStatus("claude-sub", await this.quota.latest("claude-sub"), this.now()).level;
+    const now = this.now();
+    const readings = readingsForDispatch(await this.quota.latest("claude-sub"), now);
+    return quotaStatus("claude-sub", readings, now).level;
   }
 
   private async waiting(ticket: Ticket, policy: PlanApproval): Promise<boolean> {

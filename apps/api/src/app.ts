@@ -205,8 +205,8 @@ export function createApp(deps: AppDeps) {
   // Runs dispatch through the GitHub App; without it, starting a run is refused (503).
   // The dispatchers start the next waiting run after each report or watchdog end, ticket
   // create, last answer, move to Ready and switch turned on: a build first (ADR-0063, projects
-  // with autoBuild), else a refine (ADR-0054). Builds start up to the caps (ADR-0079), then
-  // projects waiting on the global cap get their turn. `next` and `wakeGlobalCapWaiters` never throw.
+  // with autoBuild), else a refine (ADR-0054). Projects waiting on the global cap go first,
+  // then builds start up to the caps (ADR-0079). `next` and `wakeGlobalCapWaiters` never throw.
   const runs = new RunService(
     deps.tracker,
     deps.runs,
@@ -218,9 +218,8 @@ export function createApp(deps: AppDeps) {
   const refiner = new RefineDispatcher(deps.tracker, deps.runs, runs, now);
   const builder = new BuildDispatcher(deps.tracker, deps.runs, runs, now, deps.quota ?? null);
   const dispatchNext = async (projectId: string) => {
-    const started = (await builder.next(projectId)) ?? (await refiner.next(projectId));
     await builder.wakeGlobalCapWaiters(projectId);
-    return started;
+    return (await builder.next(projectId)) ?? (await refiner.next(projectId));
   };
   // One TicketService for REST, MCP and webhooks: all get the same ticket rules (packages/domain).
   const service = new TicketService(deps.tracker, runs, dispatchNext);

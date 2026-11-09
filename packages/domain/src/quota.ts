@@ -11,7 +11,7 @@ import {
 
 /**
  * Subscription quota (ARCHITECTURE §5, M1.9: Quota capture): turns what a run reports into
- * readings and readings into what the UI shows. Nothing here gates dispatch yet (M2).
+ * readings and readings into what the UI shows. The dispatcher stops at the pause level (ADR-0079).
  */
 
 export const QUOTA_MAX_AGE_MS = 6 * 60 * 60 * 1000;
@@ -63,6 +63,53 @@ export function parseRateLimits(raw: unknown, now: Date): ParsedRateLimits {
     confidence: "high",
   }));
   return { ok: true, readings };
+}
+
+/** How long a window can run, so a report can't claim a reset further off than that. */
+const WINDOW_MS: Record<QuotaWindow, number> = {
+  "5h": 5 * 60 * 60 * 1000,
+  weekly: 7 * 24 * 60 * 60 * 1000,
+  daily_tasks: 24 * 60 * 60 * 1000,
+};
+/** Clock and rounding slack when comparing reset times. */
+const RESET_TOLERANCE_MS = 5 * 60 * 1000;
+/** Usage within one window only rises; this much slack covers rounding between events. */
+export const QUOTA_MAX_DROP_PCT = 5;
+
+export type QuotaRejection = "reset_too_far" | "window_mismatch" | "usage_drop";
+
+/** Why a reported reading can't be believed, or null (threat model R24: reports are untrusted). */
+export function quotaRejection(
+  incoming: QuotaReading,
+  stored: QuotaReading | undefined,
+  now: Date,
+): QuotaRejection | null {
+  const nowMs = now.getTime();
+  const incomingReset = incoming.resetsAt ? Date.parse(incoming.resetsAt) : null;
+  if (incomingReset && incomingReset > nowMs + WINDOW_MS[incoming.window] + RESET_TOLERANCE_MS) {
+    return "reset_too_far";
+  }
+  // An old stored reading can't veto a new one, so a false high can't lock itself in.
+  if (!stored || !isRecent(stored, nowMs)) return null;
+  const storedReset = stored.resetsAt ? Date.parse(stored.resetsAt) : null;
+  if (storedReset && storedReset <= nowMs) return null; // That window is over.
+  if (storedReset && incomingReset && Math.abs(storedReset - incomingReset) > RESET_TOLERANCE_MS) {
+    return "window_mismatch";
+  }
+  return incoming.usedPct < stored.usedPct - QUOTA_MAX_DROP_PCT ? "usage_drop" : null;
+}
+
+function isRecent(reading: QuotaReading, nowMs: number): boolean {
+  return nowMs - Date.parse(reading.takenAt) <= QUOTA_MAX_AGE_MS;
+}
+
+/**
+ * The readings dispatch may act on: taken in the last 6 hours (ADR-0079). No run reports while
+ * dispatch is idle, so without this limit one false high on the weekly window would stop dispatch
+ * for a week; with it, the next run after 6 hours brings a new reading.
+ */
+export function readingsForDispatch(readings: QuotaReading[], now: Date): QuotaReading[] {
+  return readings.filter((r) => isRecent(r, now.getTime()));
 }
 
 /** Fresh until the window's reset passes; with no reset time, for 6 hours after it was taken. */

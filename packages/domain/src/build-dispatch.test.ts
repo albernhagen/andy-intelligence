@@ -321,6 +321,25 @@ describe("BuildDispatcher", () => {
     expect(await decision()).toBe("quota_reserve");
   });
 
+  it("GivenAPauseLevelReadingOverSixHoursOld_WhenNext_ThenDispatchStarts", async () => {
+    const quota = new InMemoryQuotaStore();
+    await quota.save([
+      {
+        provider: "claude-sub",
+        window: "weekly",
+        usedPct: 99,
+        resetsAt: new Date(ms + 6 * 86_400_000).toISOString(),
+        source: "test",
+        takenAt: new Date(ms - 7 * 3_600_000).toISOString(),
+        confidence: "high",
+      },
+    ]);
+    const { runs } = wire();
+    const dispatcher = new BuildDispatcher(tracker, runStore, runs, now, quota);
+    await inReady("A");
+    expect(await dispatcher.next(projectId)).not.toBeNull();
+  });
+
   it("GivenTheSameIdleDecision_WhenNextRunsAgain_ThenItsTimeStaysWhenItBegan", async () => {
     await tracker.updateProject(projectId, { paused: true });
     const { dispatcher } = wire();

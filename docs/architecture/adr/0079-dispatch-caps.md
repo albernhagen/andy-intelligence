@@ -25,13 +25,16 @@ ADR-0060 "Andy's controls" (M2: Self-hosting) asks for parallel runs under Andy'
 - **The PR cap counts runs in flight as PRs to come**, so it can't be overshot. A waiting PR is a ticket in Ready for review with a build run that opened a PR; PRs Andy opened himself don't count. It replaces `MAX_TICKETS_IN_FLIGHT`, which would have stopped a dial above 3.
 - **`RunService.start` enforces the dial and the global cap too**, for starts by hand as well, and re-checks after creating the run; the oldest run wins a race. It also allows one run per ticket: above a dial of 1, two concurrent dispatches could otherwise build one ticket twice.
 - **Pause stops the build and refine dispatchers.** Runs in flight finish, a start by hand still works (it is Andy's decision), and a failed run's one automatic retry still goes.
-- **Quota:** only a fresh reading at `pause` stops dispatch. Stale or missing reads `unknown` and doesn't: M1.9 capture is best-effort, and a missing reading mustn't halt the system.
+- **Quota:** only a fresh reading at `pause`, taken in the last 6 hours, stops dispatch. Stale or missing reads `unknown` and doesn't: M1.9 capture is best-effort, and a missing reading mustn't halt the system. No run reports while dispatch is idle, so the 6-hour limit lets one run through to bring a new reading and stops a false high from idling dispatch for a whole weekly window.
+- **Readings are checked when written** (threat model R24): a reset further off than the window, a different window before the recent one has reset, and a drop of over 5 points inside a window are rejected and logged. A reading over 6 hours old can't veto a new one.
+- **Default dial of 2** is ADR-0060's decision. Existing projects get it through the schema default on deploy; Andy can lower it per project to 1 with `set_runs_at_once` or on `/projects`.
 - **Last decision** is stored on the project (`lastDispatch`: decision and since when; also `started`, `nothing_ready`), written only when it changes, and shown on `/projects`, the board and MCP `status`. Clients can't write it.
-- **Wake-ups:** a run ending, a cancel, a ticket reaching Ready, a PR leaving review and a settings change all dispatch again. A project idle on `global_cap` is woken when any other project dispatches.
+- **Wake-ups:** a run ending, a cancel, a ticket reaching Ready, a PR leaving review and a settings change all dispatch again. Projects idle on `global_cap` are woken first, longest wait first, before the project that freed the slot can refill it; a project that just started a run goes to the back.
 
 ### Consequences
+
+- Until M5: Multi-project in parallel the executor runs only this repo, so in production the global cap can only be reached by this project's own runs; it is tested across projects in-process.
 
 - Good: Andy sees why nothing runs; the caps hold under concurrent starts.
 - Bad: counting all projects' runs reads every project on each start and check; fine at this project count, revisit at M5: Multi-project in parallel.
 - Bad: the refine dispatcher still waits for an empty project, so a long Ready queue delays auto-refine until it drains.
-- Open: the reading sanity checks in `docs/runbooks/quota.md` aren't built, so a false reading from a compromised run can idle dispatch (threat model R24).

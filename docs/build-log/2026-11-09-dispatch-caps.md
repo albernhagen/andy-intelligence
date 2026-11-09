@@ -4,4 +4,5 @@ The one-run-per-project rule is gone. The build dispatcher now starts Ready tick
 
 - Added: `runsAtOnce` (default 2, max 4), `paused`, `lastDispatch` on Project; global cap 4; 5 agent PRs waiting; MCP `set_runs_at_once` and `set_paused`; controls on `/projects`, a status line on the board and in MCP `status`.
 - Beyond the brief, needed for it to hold: one run per ticket in `RunService.start` (concurrent dispatches could double-build above a dial of 1); a wake for projects idle on the global cap; a dispatch when a PR leaves review; `MAX_TICKETS_IN_FLIGHT` removed (it would have blocked a dial above 3); pause also stops auto-refine.
-- For Andy: dispatch now reads quota readings, but the sanity checks in `docs/runbooks/quota.md` aren't built (threat model R24). Auto-refine still waits for an empty project, so a long Ready queue delays it.
+- Reviews: quota readings are now checked when written and only those under 6 hours old can stop dispatch (threat model R24); projects waiting on the global cap go before the one that freed the slot.
+- For Andy: the quota units still need a live check (`docs/runbooks/quota.md`). Auto-refine still waits for an empty project, so a long Ready queue delays it.

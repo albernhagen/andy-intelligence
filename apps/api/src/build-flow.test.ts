@@ -838,19 +838,44 @@ describe("build run flow", () => {
       );
     });
 
-    it("GivenTheGlobalCapIsFull_WhenARunEnds_ThenTheOtherProjectGetsTheSlot", async () => {
+    // The executor only runs this repo until M5, so the other project's runs are put in the
+    // store directly and the waiting project is the one on the real repo.
+    it("GivenTheGlobalCapIsFullElsewhere_WhenASlotFrees_ThenTheWaitingProjectTakesItBeforeTheFreeingProjectRefills", async () => {
       const f = await setup();
-      const a = await f.project("AI", REPO, { runsAtOnce: 4 });
-      const b = await f.project("BB", `${REPO}-b`, {});
-      const tickets = [];
-      for (const title of ["1", "2", "3", "4"]) tickets.push(await f.ready(a, title));
-      const waiting = await f.ready(b, "Other project");
-      expect(await f.runsOf(b, waiting)).toEqual([]);
-      expect(await f.decision(b)).toBe("global_cap");
+      const waitingProject = await f.project("AI", REPO, {});
+      const other = await f.project("BB", `${REPO}-b`, { runsAtOnce: 4 });
+      const held = [];
+      for (let i = 0; i < 4; i++) {
+        held.push(
+          await f.t.runs.create({
+            projectId: other,
+            ticketId: `held${i}`,
+            step: "build",
+            route: { harness: "claude-code", provider: "claude-sub", model: "sonnet" },
+            tier: "fast",
+            deadline: null,
+            prompt: "x",
+            maxTurns: 1,
+          }),
+        );
+      }
+      const queuedElsewhere = await f.ready(other, "Queued in the other project");
+      const waiting = await f.ready(waitingProject, "Waiting");
+      expect(await f.runsOf(waitingProject, waiting)).toEqual([]);
+      expect(await f.decision(waitingProject)).toBe("global_cap");
 
-      const [run] = await f.runsOf(a, tickets[0]!);
-      await f.finish(run!.id, REPO);
-      expect(await f.runsOf(b, waiting)).toHaveLength(1);
+      await f.t.runs.update(
+        held[0]!.id,
+        { status: "succeeded", endedAt: new Date().toISOString() },
+        ["queued"],
+      );
+      // Any dispatch in the project that freed the slot; a run report ends the same way.
+      await f.send(`/api/projects/${other}`, "PATCH", { runsAtOnce: 4 });
+
+      const [started] = await f.runsOf(waitingProject, waiting);
+      expect(started).toMatchObject({ status: "queued", step: "build" });
+      expect(await f.runsOf(other, queuedElsewhere)).toEqual([]);
+      expect(await f.decision(other)).toBe("global_cap");
     });
   });
 });
