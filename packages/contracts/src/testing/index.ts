@@ -808,6 +808,23 @@ export function runStoreContract(name: string, make: () => Promise<RunStore>): v
       expect(await store.get(run.id)).toEqual(run);
     });
 
+    it("GivenACostPatch_WhenUpdated_ThenUsageAndQuotaDeltaAreStored", async () => {
+      const store = await make();
+      const run = await store.create(newRun(project()));
+      expect(run.usage).toBeNull();
+      const usage = {
+        inputTokens: 1,
+        outputTokens: 2,
+        cacheReadTokens: 3,
+        cacheWriteTokens: 4,
+        turns: 5,
+        wallMs: 6,
+      };
+      const quotaDelta = { "5h": 1.5, weekly: null };
+      await store.update(run.id, { status: "succeeded", usage, quotaDelta }, ["queued"]);
+      expect(await store.get(run.id)).toMatchObject({ usage, quotaDelta });
+    });
+
     it("GivenAnUnknownId_WhenRead_ThenNull", async () => {
       expect(await (await make()).get(crypto.randomUUID())).toBeNull();
     });

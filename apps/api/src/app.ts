@@ -274,7 +274,7 @@ export function createApp(deps: AppDeps) {
     dispatchNext,
     now,
   );
-  registerTicketRoutes(app, deps.tracker, service, projects);
+  registerTicketRoutes(app, deps.tracker, service, projects, runs);
   registerBoardRoutes(app, new BoardReader(deps.tracker, deps.runs));
 
   registerRunRoutes(app, runs);

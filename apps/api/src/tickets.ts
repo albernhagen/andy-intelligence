@@ -10,13 +10,15 @@ import {
   Stage,
   Ticket,
   TicketEvent,
+  TicketCost,
   TicketKey,
   TicketFields,
   Timestamp,
 } from "@andy/contracts";
-import type { ProjectService, TicketService } from "@andy/domain";
+import type { ProjectService, RunService, TicketService } from "@andy/domain";
 import type { WorkTracker } from "@andy/contracts";
 import type { AuthEnv } from "./auth";
+import { costOfTicket } from "./ticket-cost";
 
 /** Ticket core REST API (M1.2: Ticket core). Every caller here is Andy (allow-list), so actor = "andy". */
 
@@ -89,6 +91,8 @@ const TicketQuery = z.object({
   archived: BoolQuery,
 });
 
+const TicketWithCost = Ticket.extend({ cost: TicketCost });
+
 const secured = { security: [{ bearer: [] }] };
 
 const routes = {
@@ -138,14 +142,14 @@ const routes = {
     method: "get",
     path: "/api/projects/{projectId}/tickets/{ticketId}",
     request: { params: TicketParams },
-    responses: { 200: ok(Ticket, "Ticket"), ...errors },
+    responses: { 200: ok(TicketWithCost, "Ticket with its cost totals"), ...errors },
   }),
   getTicketByKey: createRoute({
     ...secured,
     method: "get",
     path: "/api/tickets/{key}",
     request: { params: z.object({ key: TicketKey }) },
-    responses: { 200: ok(Ticket, "Ticket"), ...errors },
+    responses: { 200: ok(TicketWithCost, "Ticket with its cost totals"), ...errors },
   }),
   patchTicket: createRoute({
     ...secured,
@@ -246,7 +250,10 @@ export function registerTicketRoutes(
   tracker: WorkTracker,
   service: TicketService,
   projects: ProjectService,
+  runs: RunService,
 ): void {
+  const withCost = async (t: Ticket) => ({ ...t, cost: await costOfTicket(runs, t) });
+
   app.openapi(routes.listProjects, async (c) => c.json(await tracker.listProjects(), 200));
 
   app.openapi(routes.createProject, async (c) =>
@@ -286,13 +293,13 @@ export function registerTicketRoutes(
   app.openapi(routes.getTicket, async (c) => {
     const { projectId, ticketId } = c.req.valid("param");
     const ticket = await tracker.getTicket(projectId, ticketId);
-    return ticket ? c.json(ticket, 200) : c.json(notFound("ticket"), 404);
+    return ticket ? c.json(await withCost(ticket), 200) : c.json(notFound("ticket"), 404);
   });
 
   // Readable links (AI-7): the UI routes by key, e.g. /p/ai/t/AI-2. Reads the project's
   // tickets, like MCP `status` (cost note: ARCHITECTURE §7.1).
   app.openapi(routes.getTicketByKey, async (c) =>
-    c.json(await service.findByKey(c.req.valid("param").key), 200),
+    c.json(await withCost(await service.findByKey(c.req.valid("param").key)), 200),
   );
 
   app.openapi(routes.patchTicket, async (c) => {

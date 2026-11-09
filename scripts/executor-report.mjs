@@ -59,7 +59,23 @@ export function rateLimits(messages) {
 
 const intOrNull = (n) => (Number.isFinite(n) ? Math.trunc(n) : null);
 
-/** Builds { status, summary, tokensIn, tokensOut, costUsd, output?, rateLimits? } for the control plane. */
+/** What the run consumed, or null without input and output counts (its cost is then unknown). */
+export function runUsage(result) {
+  const usage = result?.usage ?? {};
+  const inputTokens = intOrNull(usage.input_tokens);
+  const outputTokens = intOrNull(usage.output_tokens);
+  if (inputTokens === null || outputTokens === null) return null;
+  return {
+    inputTokens,
+    outputTokens,
+    cacheReadTokens: intOrNull(usage.cache_read_input_tokens) ?? 0,
+    cacheWriteTokens: intOrNull(usage.cache_creation_input_tokens) ?? 0,
+    turns: intOrNull(result.num_turns),
+    wallMs: intOrNull(result.duration_ms),
+  };
+}
+
+/** Builds { status, summary, tokensIn, tokensOut, costUsd, usage?, output?, rateLimits? } for the control plane. */
 export function buildReport({ outcome, messages, reason }) {
   const result = Array.isArray(messages)
     ? messages.findLast((m) => m && typeof m === "object" && m.type === "result")
@@ -91,8 +107,10 @@ export function buildReport({ outcome, messages, reason }) {
     costUsd: Number.isFinite(result?.total_cost_usd) ? result.total_cost_usd : null,
   };
   const limits = rateLimits(messages);
+  const consumed = runUsage(result);
   return {
     ...report,
+    ...(consumed === null ? {} : { usage: consumed }),
     ...(output === null ? {} : { output }),
     ...(limits === null ? {} : { rateLimits: limits }),
   };

@@ -142,6 +142,14 @@ describe("build run flow", () => {
         tokensIn: 50_000,
         tokensOut: 8_000,
         costUsd: 1.25,
+        usage: {
+          inputTokens: 50_000,
+          outputTokens: 8_000,
+          cacheReadTokens: 0,
+          cacheWriteTokens: 0,
+          turns: 5,
+          wallMs: 1000,
+        },
         output,
         branch: context.branch,
         pullRequest: prUrl,
@@ -156,7 +164,7 @@ describe("build run flow", () => {
       plan: output.plan,
       links: { pullRequest: prUrl },
       toolingFiles: ["package.json"],
-      costUsd: 1.25,
+      costUsd: 0.36,
       costIsEstimate: true,
     });
 
@@ -331,6 +339,14 @@ describe("build run flow", () => {
         tokensIn: 50_000,
         tokensOut: 8_000,
         costUsd: 1.25,
+        usage: {
+          inputTokens: 50_000,
+          outputTokens: 8_000,
+          cacheReadTokens: 0,
+          cacheWriteTokens: 0,
+          turns: 5,
+          wallMs: 1000,
+        },
         output,
         branch: context.branch,
         pullRequest: prUrl,
@@ -407,6 +423,14 @@ describe("build run flow", () => {
           tokensIn: 50_000,
           tokensOut: 8_000,
           costUsd: 1.25,
+          usage: {
+            inputTokens: 50_000,
+            outputTokens: 8_000,
+            cacheReadTokens: 0,
+            cacheWriteTokens: 0,
+            turns: 5,
+            wallMs: 1000,
+          },
           output: { ...output, verification },
           branch: context.branch,
           pullRequest: url,
@@ -524,7 +548,7 @@ describe("build run flow", () => {
           reviewBlockers: 0,
           andyCommits: 0,
           reworks: 0,
-          costEstimateUsd: 1.25,
+          costEstimateUsd: 0.36,
         },
       });
     });
