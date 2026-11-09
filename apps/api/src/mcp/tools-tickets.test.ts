@@ -130,6 +130,7 @@ describe("the inbox from any harness (real path)", () => {
       new Date(),
     );
     expect(status.data.statusLine).toEqual(line);
+    expect(status.data).toHaveProperty("cost");
   });
 });
 

@@ -16,6 +16,7 @@ import {
 } from "@/components/InlineEdit";
 import { MoveControls } from "@/components/MoveControls";
 import { QuestionCard } from "@/components/QuestionCard";
+import { TicketCostLine } from "@/components/TicketCostLine";
 import { Markdown } from "@/components/Markdown";
 import { Loading, QueryError } from "@/components/Status";
 import { Badge } from "@/components/ui/badge";
@@ -167,6 +168,7 @@ function Story({ ticket: t }: { ticket: Ticket }) {
   const body = useTicketSave(t);
   return (
     <article className="space-y-6">
+      <TicketCostLine {...pathOf(t)} />
       <InlineText
         label="Title"
         required

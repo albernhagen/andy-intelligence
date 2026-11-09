@@ -57,7 +57,7 @@ const ReorderInput = {
 };
 
 /** `status` for a ticket with the status line the UI shows. */
-export async function statusLineOf(deps: ToolDeps, status: TicketStatus) {
+export async function statusLineOf<S extends TicketStatus>(deps: ToolDeps, status: S) {
   const { ticket, questions } = status;
   const tickets = await deps.tracker.listTickets(ticket.projectId);
   const open = questions.filter((q) => q.status === "open").length;

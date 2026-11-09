@@ -351,6 +351,8 @@ export const RunPatch = Run.pick({
   tokensOut: true,
   costUsd: true,
   costIsEstimate: true,
+  usage: true,
+  quotaDelta: true,
   links: true,
   summary: true,
   error: true,

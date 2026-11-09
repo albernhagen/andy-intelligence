@@ -1,3 +1,4 @@
+import { costOfTicket } from "../ticket-cost";
 import {
   NewTicket,
   PLAN_REASON_MAX,
@@ -436,10 +437,15 @@ export function registerTools(server: McpServer, deps: ToolDeps): void {
     ({ ticket }) =>
       run(async () =>
         ticket
-          ? await statusLineOf(deps, await service.status(ticket))
+          ? await statusLineOf(deps, await statusWithCost(service, deps.runs, ticket))
           : { signedInAs: deps.email, ...(await service.overview()) },
       ),
   );
+}
+
+async function statusWithCost(service: TicketService, runs: RunService, key: string) {
+  const status = await service.status(key);
+  return { ...status, cost: await costOfTicket(runs, status.ticket) };
 }
 
 /**

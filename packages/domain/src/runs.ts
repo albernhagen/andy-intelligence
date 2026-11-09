@@ -10,6 +10,8 @@ import {
   type EventActor,
   type Executor,
   type PlanApproval,
+  type QuotaDelta,
+  type RunUsage,
   type ProviderKey,
   type Question,
   type Route,
@@ -23,6 +25,7 @@ import {
   type WatchdogQueue,
   type WorkTracker,
 } from "@andy/contracts";
+import { runCost } from "./cost";
 import {
   BUILDABLE_STAGES,
   MAX_BUILD_RUNS_PER_TICKET,
@@ -126,6 +129,9 @@ export interface RunResult {
   tokensIn: number | null;
   tokensOut: number | null;
   costUsd: number | null;
+  /** Null or absent: the run's cost is stored as unknown. */
+  usage?: RunUsage | null;
+  quotaDelta?: QuotaDelta | null;
   /** Build: the branch the publish job pushed (also after a failure), if any. */
   branch?: string | null;
   /** Build: the pull request the publish job opened, if any. */
@@ -382,6 +388,9 @@ export class RunService {
       }
       if (built.summary) summary = built.summary;
     }
+    const usage = result.usage ?? null;
+    const billing = PROVIDER_BILLING[run.route.provider];
+    const cost = runCost(run.route.model, billing, usage, result.costUsd);
     let done: Run;
     try {
       done = await this.runs.update(
@@ -394,9 +403,9 @@ export class RunService {
           summary,
           tokensIn: result.tokensIn,
           tokensOut: result.tokensOut,
-          costUsd: result.costUsd,
-          // On a subscription the reported cost is the API-equivalent estimate.
-          costIsEstimate: PROVIDER_BILLING[run.route.provider] === "subscription",
+          ...cost,
+          usage,
+          quotaDelta: result.quotaDelta ?? null,
           ...(planned ? { plan: planned.plan } : {}),
           ...(built
             ? {
@@ -420,7 +429,7 @@ export class RunService {
       questions: asked,
       tokensIn: result.tokensIn,
       tokensOut: result.tokensOut,
-      costUsd: result.costUsd,
+      costUsd: cost.costUsd,
     });
     if (done.ticketId) {
       const asks = asked > 0 ? `\n\nAsked ${asked} question(s): answer them in Needs you.` : "";

@@ -25,5 +25,19 @@
     "typescript": "^6.0.3",
     "typescript-eslint": "^8.0.0",
     "vitest": "^5.0.5"
+  },
+  "//pnpm.overrides": {
+    "@grpc/grpc-js@<1.13.6": "GHSA-m9gg-hp2v-232j (high), GHSA-f596-whhp-79r4 (low). @firebase/firestore 4.19 (via firebase) pins ~1.9.0. Remove when it allows >=1.13.6.",
+    "glob@>=9.0.0 <14.0.2": "GHSA-3g3m-2fjr-6pw4. rimraf 5 (via gaxios 7.1 and google-gax 5, from gcp-metadata 8 and @google-cloud/firestore-api) needs ^10. Remove when those parents drop rimraf 5.",
+    "minimatch@>=7.0.0 <11.0.1": "GHSA-g3hv-75wg-m249. eslint, @eslint/config-array and @typescript-eslint/typescript-estree need ^10; glob 10 needed ^9. Remove when those parents allow >=11.0.1.",
+    "glob>minimatch": "Keeps glob on the same minimatch as the override above (11.0.5 is still inside the 7-day cooldown, ADR-0042). Remove with it."
+  },
+  "pnpm": {
+    "overrides": {
+      "@grpc/grpc-js@<1.13.6": "1.14.6",
+      "glob@>=9.0.0 <14.0.2": "14.0.3",
+      "minimatch@>=7.0.0 <11.0.1": "11.0.4",
+      "glob>minimatch": "11.0.4"
+    }
   }
 }
