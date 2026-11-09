@@ -166,14 +166,14 @@ function setOutputs(outputs) {
 
 // Asynchronous on purpose: readFileSync(0) throws EAGAIN on a non-blocking pipe when gcloud's
 // output has not arrived yet (AI-64). The error omits the input: job logs are public.
-async function stdinService() {
+async function stdinService(command) {
   const input = await text(process.stdin);
-  if (!input.trim()) throw new Error("expected the service JSON on stdin, got nothing");
+  if (!input.trim()) throw new Error(`${command}: expected the service JSON on stdin, got nothing`);
   try {
     return JSON.parse(input);
   } catch {
     throw new Error(
-      `expected the service JSON on stdin, got ${input.length} unparsable characters`,
+      `${command}: expected the service JSON on stdin, got ${input.length} unparsable characters`,
     );
   }
 }
@@ -182,18 +182,18 @@ async function main([command, argument]) {
   const env = process.env;
   switch (command) {
     case "serving": {
-      const serving = servingRevisions(await stdinService());
+      const serving = servingRevisions(await stdinService(command));
       if (!serving) throw new Error("service reports no serving revision");
       return setOutputs({ serving });
     }
     case "after":
-      return setOutputs({ serving: servingRevisions(await stdinService()) });
+      return setOutputs({ serving: servingRevisions(await stdinService(command)) });
     case "candidate":
-      return setOutputs(readCandidate(await stdinService()));
+      return setOutputs(readCandidate(await stdinService(command)));
     case "assert-latest":
-      return assertLatest(await stdinService(), argument);
+      return assertLatest(await stdinService(command), argument);
     case "assert-promoted":
-      return assertPromoted(await stdinService(), argument);
+      return assertPromoted(await stdinService(command), argument);
     case "smoke-candidate":
       return runChecks(candidateChecks({ taggedUrl: env.TAGGED_URL, publicUrl: env.PUBLIC_URL }));
     case "smoke-public":

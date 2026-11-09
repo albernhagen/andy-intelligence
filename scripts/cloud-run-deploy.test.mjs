@@ -283,16 +283,13 @@ describe("the script reading gcloud's output from stdin", () => {
     expect(stderr).toContain("serving old=100");
   });
 
-  it("GivenEmptyStdin_WhenServing_ThenExitsNonZeroWithAClearError", async () => {
-    const { code, stderr } = await runScript(["serving"], "");
+  it.each([
+    ["", "::error::serving: expected the service JSON on stdin, got nothing"],
+    ['{"private-value', "::error::serving: expected the service JSON on stdin, got 15 unparsable"],
+  ])("GivenBadStdin_%j_WhenServing_ThenExitsNonZeroNamingTheCommand", async (input, message) => {
+    const { code, stderr } = await runScript(["serving"], input);
     expect(code).toBe(1);
-    expect(stderr).toContain("::error::expected the service JSON on stdin, got nothing");
-  });
-
-  it("GivenInvalidJson_WhenServing_ThenFailsWithoutEchoingTheInput", async () => {
-    const { code, stderr } = await runScript(["serving"], '{"private-value');
-    expect(code).toBe(1);
-    expect(stderr).toContain("15 unparsable characters");
+    expect(stderr).toContain(message);
     expect(stderr).not.toContain("private-value");
   });
 });
