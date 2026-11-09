@@ -13,17 +13,27 @@ import {
 } from "@dnd-kit/core";
 import { Stage, type BoardTicket } from "@andy/contracts";
 import { BoardCard } from "@/components/board/BoardCard";
-import { Lane } from "@/components/board/Lane";
+import { Lane, LaneZone } from "@/components/board/Lane";
 import { Loading, QueryError } from "@/components/Status";
-import { COLLAPSED_STAGES, nextUp, openBlockers, planDrop } from "@/lib/board";
-import { useBoard, useBoardMove, useQuickAdd, useRankTicket } from "@/lib/queries";
+import {
+  COLLAPSED_STAGES,
+  IDEAS_ZONE,
+  UP_NEXT_ZONE,
+  isBacklogZone,
+  nextUp,
+  openBlockers,
+  planDrop,
+  planUpNextDrop,
+  splitBacklog,
+} from "@/lib/board";
+import { useBoard, useBoardMove, useQuickAdd, useRankTicket, useSetUpNext } from "@/lib/queries";
 import { STAGES, dropMove, groupByStage, visibleTickets } from "@/lib/tickets";
 
 /**
  * Board v2 (AI-28; ADR-0059 row "Board"): one swim lane per stage, cards with status markers,
  * Ready as a numbered queue with the next card marked. Drag within a lane to reorder (the order
  * is the priority, ADR-0058), across lanes to move: an allowed transition is a normal move, any
- * other a forced one (ADR-0057). Moves and reorders show at once and roll back with the API's
+ * other a forced one (ADR-0057). Backlog has two parts (ADR-0075): a drop into Up next starts refine, Ideas costs nothing. Moves and reorders show at once and roll back with the API's
  * message on the card. Child routes (the ticket panel) render in the Outlet.
  */
 export function BoardPage() {
@@ -73,8 +83,11 @@ function Lanes({
 }) {
   const move = useBoardMove(projectId);
   const rank = useRankTicket(projectId);
+  const setUpNext = useSetUpNext(projectId);
   // A drop shows at once: the card's new stage and rank until the API answers.
-  const [pending, setPending] = useState<Record<string, { stage: Stage; rank: string }>>({});
+  const [pending, setPending] = useState<
+    Record<string, { stage: Stage; rank: string; upNextRank: string | null }>
+  >({});
   // One error per card, so a quick second drop can't hide the first one's failure.
   const [errors, setErrors] = useState<Record<string, Error>>({});
   const [expanded, setExpanded] = useState<Stage[]>([]);
@@ -97,6 +110,7 @@ function Lanes({
   const stages = STAGES.filter((s) => s !== "cancelled" || showCancelled);
 
   function laneOf(id: string | number | undefined): Stage | null {
+    if (typeof id === "string" && isBacklogZone(id)) return "backlog";
     const stage = Stage.safeParse(id);
     return stage.success ? stage.data : (byId.get(String(id))?.stage ?? null);
   }
@@ -105,20 +119,47 @@ function Lanes({
     setOverLane(null);
     const ticket = byId.get(String(active.id));
     if (!ticket || !over) return;
-    const plan = planDrop(lanes, ticket, String(over.id));
-    if (!plan) return;
+    const overId = String(over.id);
+    const upNextPlan = planUpNextDrop(lanes.backlog, ticket, overId);
+    // Ideas keep their own order: Up-next cards never count as neighbours.
+    const ideas = splitBacklog(lanes.backlog).ideas;
+    const ideaLanes = { ...lanes, backlog: ideas };
+    const zoneTarget = overId === IDEAS_ZONE ? ideas[0]?.id : undefined;
+    const lanePlan = zoneTarget
+      ? planDrop(ideaLanes, ticket, zoneTarget)
+      : isBacklogZone(overId)
+        ? { to: "backlog" as const, rank: null }
+        : planDrop(ideaLanes, ticket, overId);
+    if (!lanePlan && !upNextPlan) return;
+    // Up next has its own order; the lane rank is left alone by a drop there.
+    const plan = upNextPlan ? { to: "backlog" as const, rank: null } : lanePlan!;
+    if (plan.to === ticket.stage && !plan.rank && !upNextPlan) return;
     const stageMove = plan.to === ticket.stage ? null : dropMove(ticket.stage, plan.to);
     if (plan.to !== ticket.stage && !stageMove) return;
 
     const id = ticket.id;
     setErrors(({ [id]: _, ...rest }) => rest);
-    setPending((p) => ({ ...p, [id]: { stage: plan.to, rank: plan.rank ?? ticket.rank } }));
+    setPending((p) => ({
+      ...p,
+      [id]: {
+        stage: plan.to,
+        rank: plan.rank ?? ticket.rank,
+        upNextRank: upNextPlan
+          ? upNextPlan.upNext
+            ? (upNextPlan.rank ?? "9999999999")
+            : null
+          : plan.to === "backlog"
+            ? ticket.upNextRank
+            : null,
+      },
+    }));
     // mutateAsync, not mutate's per-call callbacks: those only fire for the latest call. Each
     // write refetches the board before it resolves, so dropping the pending entry shows the
     // API's state: the new place, or the old one after a refusal.
     try {
       if (stageMove) await move.mutateAsync({ ticketId: id, ...stageMove });
       if (plan.rank) await rank.mutateAsync({ ticketId: id, rank: plan.rank });
+      if (upNextPlan) await setUpNext.mutateAsync({ ticketId: id, ...upNextPlan });
     } catch (error) {
       setErrors((e) => ({ ...e, [id]: error as Error }));
     } finally {
@@ -143,29 +184,39 @@ function Lanes({
           const collapsed = collapsible && !expanded.includes(stage);
           const toggle = () =>
             setExpanded((e) => (e.includes(stage) ? e.filter((s) => s !== stage) : [...e, stage]));
+          const card = (t: BoardTicket, i: number) => (
+            <BoardCard
+              key={t.id}
+              ticket={t}
+              projectId={projectId}
+              blockers={openBlockers(t, byId)}
+              position={stage === "ready" ? i + 1 : null}
+              next={t.id === next?.id}
+              now={now}
+              error={errors[t.id] ?? null}
+            />
+          );
+          const backlog = stage === "backlog" ? splitBacklog(lanes.backlog) : null;
+          const ordered = backlog ? [...backlog.upNext, ...backlog.ideas] : lanes[stage];
           return (
             <Lane
               key={stage}
               stage={stage}
-              ids={lanes[stage].map((t) => t.id)}
+              ids={ordered.map((t) => t.id)}
               collapsed={collapsed}
               onToggle={collapsible ? toggle : undefined}
               highlight={overLane === stage}
               top={stage === "backlog" ? <QuickAdd projectId={projectId} /> : undefined}
             >
-              {!collapsed &&
-                lanes[stage].map((t, i) => (
-                  <BoardCard
-                    key={t.id}
-                    ticket={t}
-                    projectId={projectId}
-                    blockers={openBlockers(t, byId)}
-                    position={stage === "ready" ? i + 1 : null}
-                    next={t.id === next?.id}
-                    now={now}
-                    error={errors[t.id] ?? null}
-                  />
-                ))}
+              {!collapsed && backlog && (
+                <>
+                  <LaneZone id={UP_NEXT_ZONE} label="Up next" count={backlog.upNext.length} />
+                  {backlog.upNext.map(card)}
+                  <LaneZone id={IDEAS_ZONE} label="Ideas" count={backlog.ideas.length} />
+                  {backlog.ideas.map(card)}
+                </>
+              )}
+              {!collapsed && !backlog && lanes[stage].map(card)}
             </Lane>
           );
         })}
@@ -174,7 +225,7 @@ function Lanes({
   );
 }
 
-/** Type a title, press Enter: the ticket lands in Backlog with no type; refine drafts the rest. */
+/** Type a title, press Enter: the ticket lands in Ideas; nothing runs until it moves to Up next. */
 function QuickAdd({ projectId }: { projectId: string }) {
   const add = useQuickAdd(projectId);
   const [title, setTitle] = useState("");

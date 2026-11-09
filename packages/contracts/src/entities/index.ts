@@ -47,7 +47,7 @@ export const Project = z.object({
   autonomy: AutonomyLevel,
   monthlyBudgetUsd: z.number().nonnegative().nullable(),
   enabled: z.boolean(),
-  /** Refine starts on its own for new and answered Backlog tickets (ADR-0054); default on. */
+  /** Refine starts on its own for tickets entering Up next and answered ones (ADR-0075); default on. */
   autoRefine: z.boolean().default(true),
   /**
    * The build dispatcher takes Ready tickets on its own, top of the order first (ADR-0063);
@@ -63,6 +63,8 @@ export const Project = z.object({
   buildEnabledAt: Timestamp.nullable().default(null),
   /** Builds of these tickets wait for Andy to approve a plan run first (ADR-0050). */
   planApproval: PlanApproval.default("none"),
+  /** Refine questions the project takes per rolling 24 hours; extras become assumptions (ADR-0075). */
+  dailyQuestionCap: z.number().int().min(0).max(50).default(5),
   /**
    * New projects are created with `s-and-m` (ADR-0050). This default only covers documents older
    * than the field, such as project AI, which stays `none` until M2: Self-hosting.
@@ -92,6 +94,45 @@ export const SCOPE_LIMITS = { maxItems: 20, item: 300 } as const;
 export const ScopeList = z
   .array(z.string().trim().min(1).max(SCOPE_LIMITS.item))
   .max(SCOPE_LIMITS.maxItems);
+
+const REFINE_REASON_MAX = 300;
+
+/** What a wrong guess would cost (ADR-0075). Anything but `reversible` is worth asking Andy. */
+export const GapCost = z.enum(["reversible", "direction", "scope", "trust", "spend"]);
+export type GapCost = z.infer<typeof GapCost>;
+
+export const GapConfidence = z.enum(["sure", "unsure"]);
+export type GapConfidence = z.infer<typeof GapConfidence>;
+
+/**
+ * `assumed`: refine's default stands. `promoted`: Andy turned it into a question. `answered`: he
+ * answered it and that gap waits for a re-refine. `settled`: the re-refine ran (ADR-0075).
+ */
+export const AssumptionStatus = z.enum(["assumed", "promoted", "answered", "settled"]);
+export type AssumptionStatus = z.infer<typeof AssumptionStatus>;
+
+/** A gap refine decided by itself, visible and reversible (ADR-0075). Untrusted agent text. */
+export const Assumption = z.object({
+  /** `<runId>-a<n>`: writing the same run's assumptions twice hits the same ids. */
+  id: Id,
+  /** What refine assumed. */
+  text: z.string().min(1),
+  /** The decision behind it, phrased as the question it becomes if promoted. */
+  question: z.string().min(1),
+  options: z.array(z.string()).default([]),
+  cost: GapCost,
+  confidence: GapConfidence,
+  /** Set when a cap turned what should have been a question into this assumption. */
+  demotedBy: z.enum(["ticket_cap", "daily_cap"]).nullable().default(null),
+  runId: Id,
+  status: AssumptionStatus.default("assumed"),
+  questionId: Id.nullable().default(null),
+  answeredAt: Timestamp.nullable().default(null),
+  /** The re-refine run that covered this gap. */
+  settledBy: Id.nullable().default(null),
+  createdAt: Timestamp,
+});
+export type Assumption = z.infer<typeof Assumption>;
 
 /** The control plane is the system of record for tickets (ADR-0016). */
 export const Ticket = z.object({
@@ -126,6 +167,17 @@ export const Ticket = z.object({
   outOfScope: ScopeList.default([]),
   /** Areas or path globs it expects to edit; empty means unknown, not "nothing". */
   touches: ScopeList.default([]),
+  /**
+   * Place in Up next (ADR-0075); null means Ideas, so older documents read as Ideas. Only a
+   * Backlog ticket has one: leaving Backlog clears it.
+   */
+  upNextRank: z.string().min(1).nullable().default(null),
+  /** When it last entered Up next; each entry runs refine once. */
+  upNextAt: Timestamp.nullable().default(null),
+  /** Refine's one line when it sent the ticket back to Ideas; cleared on the next entry. */
+  sentBackReason: z.string().max(REFINE_REASON_MAX).nullable().default(null),
+  /** What refine assumed instead of asking (ADR-0075). */
+  refineAssumptions: z.array(Assumption).default([]),
   createdAt: Timestamp,
   updatedAt: Timestamp,
 });
@@ -186,13 +238,18 @@ export const Question = z.object({
 export type Question = z.infer<typeof Question>;
 
 /**
- * What a refine run returns (M1.7: Refinement, ARCHITECTURE §4.3): a short report and 1–5
- * questions. Untrusted agent output, so every field is capped (ADR-0028). The executor hands the
+ * What a refine run returns (ARCHITECTURE §4.3, ADR-0075): a short report, an outcome, and the
+ * gaps it found, each rated so the control plane (not the model) decides what becomes a question. Untrusted agent output, so every field is capped (ADR-0028). The executor hands the
  * agent the same shape as `platform/procedures/refine.schema.json`; this schema is the check.
  */
 export const REFINE_LIMITS = {
-  minQuestions: 1,
-  maxQuestions: 5,
+  maxGaps: 10,
+  maxChildren: 5,
+  title: 200,
+  reason: REFINE_REASON_MAX,
+  body: 4000,
+  maxCriteria: 20,
+  criterion: 500,
   summary: 4000,
   text: 500,
   maxOptions: 5,
@@ -206,31 +263,55 @@ export const REFINE_LIMITS = {
 
 const capped = (max: number) => z.string().trim().min(1).max(max);
 
-export const RefineQuestion = z.strictObject({
-  text: capped(REFINE_LIMITS.text),
+export const RefineGap = z.strictObject({
+  /** The decision, phrased as a question Andy could answer without reading the code. */
+  question: capped(REFINE_LIMITS.text),
+  /** The default refine would go with. Recorded if the gap becomes an assumption. */
+  assumption: capped(REFINE_LIMITS.assumption),
   options: z.array(capped(REFINE_LIMITS.option)).max(REFINE_LIMITS.maxOptions).default([]),
   suggestedAnswer: capped(REFINE_LIMITS.option).nullable().default(null),
-  assumptions: z
-    .array(capped(REFINE_LIMITS.assumption))
-    .max(REFINE_LIMITS.maxAssumptions)
-    .default([]),
+  cost: GapCost,
+  confidence: GapConfidence,
   urgency: Urgency.default("normal"),
 });
-export type RefineQuestion = z.infer<typeof RefineQuestion>;
+export type RefineGap = z.infer<typeof RefineGap>;
 
-export const RefineOutput = z.strictObject({
-  summary: capped(REFINE_LIMITS.summary),
-  /** Refine's proposals; each written only where the ticket's field is empty, so Andy's values win. */
-  type: TicketType,
-  size: Size,
-  sizeReason: capped(REFINE_LIMITS.sizeReason),
-  outOfScope: z.array(capped(REFINE_LIMITS.scopeItem)).max(REFINE_LIMITS.maxScopeItems),
-  touches: z.array(capped(REFINE_LIMITS.scopeItem)).max(REFINE_LIMITS.maxScopeItems),
-  questions: z
-    .array(RefineQuestion)
-    .min(REFINE_LIMITS.minQuestions)
-    .max(REFINE_LIMITS.maxQuestions),
+export const RefineChild = z.strictObject({
+  title: capped(REFINE_LIMITS.title),
+  body: capped(REFINE_LIMITS.body),
 });
+export type RefineChild = z.infer<typeof RefineChild>;
+
+/** `ready`: use the gaps. `send_back`: too vague, needs `reason`. `split`: too big, needs `children`. */
+export const RefineOutcome = z.enum(["ready", "send_back", "split"]);
+export type RefineOutcome = z.infer<typeof RefineOutcome>;
+
+export const RefineOutput = z
+  .strictObject({
+    summary: capped(REFINE_LIMITS.summary),
+    /** Refine's proposals; each written only where the ticket's field is empty, so Andy's values win. */
+    type: TicketType,
+    size: Size,
+    sizeReason: capped(REFINE_LIMITS.sizeReason),
+    outOfScope: z.array(capped(REFINE_LIMITS.scopeItem)).max(REFINE_LIMITS.maxScopeItems),
+    touches: z.array(capped(REFINE_LIMITS.scopeItem)).max(REFINE_LIMITS.maxScopeItems),
+    /** Written only where the ticket has none, like the proposals above. */
+    body: capped(REFINE_LIMITS.body).nullable(),
+    acceptanceCriteria: z.array(capped(REFINE_LIMITS.criterion)).max(REFINE_LIMITS.maxCriteria),
+    outcome: RefineOutcome,
+    /** One line for Andy: why it went back, or why it was split. */
+    reason: capped(REFINE_LIMITS.reason).nullable(),
+    children: z.array(RefineChild).max(REFINE_LIMITS.maxChildren),
+    gaps: z.array(RefineGap).max(REFINE_LIMITS.maxGaps),
+  })
+  .superRefine((o, ctx) => {
+    if (o.outcome !== "ready" && !o.reason) {
+      ctx.addIssue({ code: "custom", path: ["reason"], message: `${o.outcome} needs a reason` });
+    }
+    if (o.outcome === "split" && o.children.length === 0) {
+      ctx.addIssue({ code: "custom", path: ["children"], message: "split needs children" });
+    }
+  });
 export type RefineOutput = z.infer<typeof RefineOutput>;
 
 /**

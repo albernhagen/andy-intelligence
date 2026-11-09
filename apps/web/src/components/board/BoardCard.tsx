@@ -91,6 +91,7 @@ export function BoardCard({
           pullRequest={pullRequest}
           blockers={blockers}
           archived={t.archived}
+          sentBack={t.upNextRank === null ? t.sentBackReason : null}
         />
         <span className="sr-only">{typeLabel(t.type)}</span>
       </Link>
@@ -107,6 +108,7 @@ function Markers({
   pullRequest,
   blockers,
   archived,
+  sentBack,
 }: {
   size: Ticket["size"];
   openQuestions: number;
@@ -115,6 +117,7 @@ function Markers({
   pullRequest: BoardTicket["summary"]["pullRequest"];
   blockers: Ticket[];
   archived: boolean;
+  sentBack: string | null;
 }) {
   const markers = [
     size && <Badge key="size">{size}</Badge>,
@@ -155,6 +158,11 @@ function Markers({
       </Badge>
     ),
     archived && <Badge key="archived">Archived</Badge>,
+    sentBack && (
+      <Badge key="sent-back" variant="attention" title={sentBack}>
+        Sent back
+      </Badge>
+    ),
   ].filter(Boolean);
   return markers.length > 0 ? <span className="flex flex-wrap gap-1">{markers}</span> : null;
 }

@@ -78,6 +78,12 @@ describe("run watchdog endpoint", () => {
       { type: "feature", title: "B" },
       "andy",
     );
+    await t.tracker.updateTicket(
+      project.id,
+      ticket.id,
+      { fields: { upNextRank: "0000000001" } },
+      "andy",
+    );
     const res = await t.call(`/api/projects/${project.id}/tickets/${ticket.id}/runs`, {
       method: "POST",
       body: JSON.stringify({ step: "refine" }),

@@ -3,7 +3,7 @@ import type { Stage, Ticket } from "@andy/contracts";
 import { Button } from "@/components/ui/button";
 import { Field, Input, Select } from "@/components/ui/input";
 import { QueryError } from "@/components/Status";
-import { useMoveTicket } from "@/lib/queries";
+import { useMoveTicket, useSetUpNext } from "@/lib/queries";
 import { STAGE_LABELS, moveOptions } from "@/lib/tickets";
 
 /**
@@ -13,6 +13,8 @@ import { STAGE_LABELS, moveOptions } from "@/lib/tickets";
  */
 export function MoveControls({ ticket }: { ticket: Ticket }) {
   const move = useMoveTicket({ projectId: ticket.projectId, ticketId: ticket.id });
+  const upNext = useSetUpNext(ticket.projectId);
+  const inUpNext = ticket.upNextRank !== null;
   const { allowed, forced } = moveOptions(ticket.stage);
   const [forcing, setForcing] = useState(false);
   const [to, setTo] = useState<Stage | "">("");
@@ -33,6 +35,16 @@ export function MoveControls({ ticket }: { ticket: Ticket }) {
             Move to {STAGE_LABELS[s]}
           </Button>
         ))}
+        {ticket.stage === "backlog" && ticket.type !== "epic" && (
+          <Button
+            size="sm"
+            variant="outline"
+            disabled={upNext.isPending}
+            onClick={() => upNext.mutate({ ticketId: ticket.id, upNext: !inUpNext })}
+          >
+            {inUpNext ? "Back to Ideas" : "Move to Up next"}
+          </Button>
+        )}
         {!forcing && (
           <Button size="sm" variant="ghost" onClick={() => setForcing(true)}>
             Force move…
@@ -40,6 +52,7 @@ export function MoveControls({ ticket }: { ticket: Ticket }) {
         )}
       </div>
 
+      {upNext.error && <QueryError error={upNext.error} />}
       {forcing && (
         <form
           className="space-y-2 rounded-md border border-border p-3"

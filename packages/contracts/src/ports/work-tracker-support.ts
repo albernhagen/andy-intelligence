@@ -33,6 +33,7 @@ export function buildProject(input: NewProject): Project {
     buildEnabledBy: null,
     buildEnabledAt: null,
     planApproval: "none",
+    dailyQuestionCap: 5,
     autoMerge: "s-and-m",
   };
 }
@@ -104,6 +105,10 @@ export function buildTicket(
     stage: "backlog",
     rank: rankFor(ticketNumber),
     archived: false,
+    upNextRank: null,
+    upNextAt: null,
+    sentBackReason: null,
+    refineAssumptions: [],
     createdAt: now,
     updatedAt: now,
   };
@@ -124,15 +129,23 @@ export function applyTicketChange(
     throw new WorkTrackerError("conflict", `ticket ${current.key} changed since it was read`);
   }
 
+  // Stage rules every write path shares (ADR-0075): only Backlog has an Up-next place, and a Done
+  // ticket can't wait on Andy.
+  const fields: TicketFields = { ...change.fields };
+  if (change.stage && change.stage.to !== current.stage) {
+    if (change.stage.to !== "backlog") Object.assign(fields, { upNextRank: null, upNextAt: null });
+    if (change.stage.to === "done") fields.needsAttention = false;
+  }
+
   const diff: Record<string, { from: unknown; to: unknown }> = {};
-  for (const [field, to] of Object.entries(change.fields) as [keyof TicketFields, unknown][]) {
+  for (const [field, to] of Object.entries(fields) as [keyof TicketFields, unknown][]) {
     if (to !== undefined && !same(current[field], to)) diff[field] = { from: current[field], to };
   }
 
   const events: TicketEvent[] = [];
   let next: Ticket = { ...current };
   if (Object.keys(diff).length > 0) {
-    next = { ...next, ...change.fields };
+    next = { ...next, ...fields };
     events.push(event(current, "fields_changed", actor, at, null, { diff }));
   }
   if (change.stage && change.stage.to !== current.stage) {

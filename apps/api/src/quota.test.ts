@@ -43,6 +43,12 @@ async function setup() {
       { type: "feature", title: "B" },
       "andy",
     );
+    await t.tracker.updateTicket(
+      project.id,
+      ticket.id,
+      { fields: { upNextRank: "0000000001" } },
+      "andy",
+    );
     const runsPath = `/api/projects/${project.id}/tickets/${ticket.id}/runs`;
     const started = await t.call(runsPath, {
       method: "POST",

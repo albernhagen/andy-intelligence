@@ -22,6 +22,10 @@ const ticket: Ticket = {
   dorStatus: "not_met",
   blockedBy: [],
   archived: false,
+  upNextRank: null,
+  upNextAt: null,
+  sentBackReason: null,
+  refineAssumptions: [],
   outOfScope: [],
   touches: [],
   createdAt: "2026-10-21T00:00:00Z",
@@ -35,7 +39,17 @@ const snap = (data: Record<string, unknown>) =>
 const v1 = (fields: Record<string, unknown> = {}) => {
   const old: Record<string, unknown> = { ...ticket, type: "story", tier: "strong" };
   old.needsYou = old.needsAttention;
-  for (const added of ["needsAttention", "outOfScope", "touches", "archived"]) delete old[added];
+  for (const added of [
+    "needsAttention",
+    "outOfScope",
+    "touches",
+    "archived",
+    "upNextRank",
+    "upNextAt",
+    "sentBackReason",
+    "refineAssumptions",
+  ])
+    delete old[added];
   return { ...old, ...fields, _v: 1 };
 };
 
