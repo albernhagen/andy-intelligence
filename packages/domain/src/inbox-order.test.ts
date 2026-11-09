@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { Question, Ticket } from "@andy/contracts";
-import { inboxCards, inboxItems, waitingCounts, withoutQuestion } from "./needs-you";
+import { inboxCards, inboxItems, waitingCounts, withoutQuestion } from "./inbox-order";
 
 const ticket = (id: string, projectId: string) => ({ id, projectId }) as Ticket;
 const question = (id: string, ticketId: string, projectId: string) =>

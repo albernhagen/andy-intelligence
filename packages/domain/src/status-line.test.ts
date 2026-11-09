@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import type { Ticket, TicketEvent } from "@andy/contracts";
 import {
   latestPullRequest,
-  openBlockers,
+  openBlockerKeys as openBlockers,
   queuePosition,
   statusLine,
   type StatusInput,

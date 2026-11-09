@@ -17,6 +17,8 @@ import {
   type WorkTracker,
 } from "@andy/contracts";
 import { checkDor, type DorResult } from "./dor";
+import { inboxCards } from "./inbox-order";
+import { blockerProblem, parentProblem, reorderRank, type ReorderAnchor } from "./ticket-edits";
 import { MAX_OPEN_QUESTIONS_PER_TICKET } from "./refine-gate";
 import { rankBetween } from "./ranks";
 import { canTransition, isForwardMove, pullRequestPath, type PullRequestTarget } from "./stages";
@@ -43,7 +45,8 @@ export class DomainError extends Error {
       | "dispatch_failed"
       | "cancel_failed"
       | "plan_not_decidable"
-      | "not_promotable",
+      | "not_promotable"
+      | "invalid_reference",
     message: string,
     readonly details: string[] = [],
   ) {
@@ -278,6 +281,16 @@ export class TicketService {
     ifUpdatedAt?: string,
   ): Promise<Ticket> {
     const current = await this.require(projectId, ticketId);
+    if (fields.parentId && fields.parentId !== current.parentId) {
+      const tickets = await this.tracker.listTickets(projectId);
+      const problem = parentProblem(current, fields.parentId, tickets);
+      if (problem) throw new DomainError("invalid_reference", problem);
+    }
+    if (fields.blockedBy?.some((id) => !current.blockedBy.includes(id))) {
+      const tickets = await this.tracker.listTickets(projectId);
+      const problem = blockerProblem(current, fields.blockedBy, tickets);
+      if (problem) throw new DomainError("invalid_reference", problem);
+    }
     const merged = { ...current, ...stripUndefined(fields) };
     const dor = checkDor(merged, await this.openQuestionCount(ticketId));
     return this.tracker.updateTicket(
@@ -286,6 +299,30 @@ export class TicketService {
       { fields: { ...fields, dorStatus: dor.met ? "met" : "not_met" }, ifUpdatedAt },
       actor,
     );
+  }
+
+  /** Re-parents by key: `parent` is an epic's key in the same project, or null for none. */
+  async reparentByKey(key: string, parent: string | null, actor: EventActor): Promise<Ticket> {
+    const ticket = await this.findByKey(key);
+    let parentId: string | null = null;
+    if (parent !== null) {
+      const tickets = await this.tracker.listTickets(ticket.projectId);
+      const found = tickets.find((t) => t.key === parent);
+      if (!found) throw new DomainError("invalid_reference", `${parent} is not in this project`);
+      parentId = found.id;
+    }
+    return this.update(ticket.projectId, ticket.id, { parentId }, actor, ticket.updatedAt);
+  }
+
+  /** Places a ticket next to another in its lane; order is priority (ADR-0058). */
+  async reorderByKey(key: string, anchor: ReorderAnchor, actor: EventActor): Promise<Ticket> {
+    const ticket = await this.findByKey(key);
+    const tickets = await this.tracker.listTickets(ticket.projectId);
+    const placed = reorderRank(ticket, anchor, tickets);
+    if (typeof placed === "string") throw new DomainError("invalid_reference", placed);
+    return placed.lane === "up_next"
+      ? this.setUpNext(ticket.projectId, ticket.id, { upNext: true, rank: placed.rank }, actor)
+      : this.update(ticket.projectId, ticket.id, { rank: placed.rank }, actor, ticket.updatedAt);
   }
 
   async readiness(projectId: string, ticketId: string): Promise<DorResult> {
@@ -620,17 +657,18 @@ export class TicketService {
       Promise.all(projects.map((p) => this.tracker.listTickets(p.id, { stage: "cancelled" }))),
     ]);
     const hidden = new Set([...archived.flat(), ...cancelled.flat()].map((t) => t.id));
-    return {
-      questions: questions.filter((q) => !hidden.has(q.ticketId)),
-      // A flag left on a finished ticket (AI-2) isn't waiting on anyone, unless a question is open
-      // (the inbox lists those under Stale).
-      tickets: flagged
-        .flat()
-        .filter(
-          (t) =>
-            !hidden.has(t.id) && (t.stage !== "done" || questions.some((q) => q.ticketId === t.id)),
-        ),
-    };
+    const visible = questions.filter((q) => !hidden.has(q.ticketId));
+    // A flag left on a finished ticket (AI-2) isn't waiting on anyone, unless a question is open
+    // (the inbox lists those under Stale).
+    const tickets = flagged
+      .flat()
+      .filter(
+        (t) =>
+          !hidden.has(t.id) && (t.stage !== "done" || questions.some((q) => q.ticketId === t.id)),
+      );
+    // Every reader gets the inbox's order (AI-40).
+    const { active, stale } = inboxCards({ questions: visible, tickets });
+    return { questions: [...active, ...stale].flatMap((c) => c.questions), tickets };
   }
 
   /** "AI-42" → the ticket. A project's id is its key lowercased (WorkTracker contract). */
