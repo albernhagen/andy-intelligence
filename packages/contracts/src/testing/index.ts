@@ -863,11 +863,12 @@ export function runStoreContract(name: string, make: () => Promise<RunStore>): v
       await store.create(newRun(p));
       const from = "2026-11-04T00:00:00.000Z";
       const to = "2026-11-05T00:00:00.000Z";
-      expect((await store.listEndedBetween(p, from, to, 10)).map((r) => r.id)).toEqual(
-        expect.arrayContaining([early.id, late.id]),
-      );
-      expect(await store.listEndedBetween(p, from, to, 10)).toHaveLength(2);
-      expect(await store.listEndedBetween(p, from, to, 1)).toHaveLength(1);
+      const all = await store.listEndedBetween(p, from, to, 10);
+      expect(all.runs.map((r) => r.id)).toEqual([late.id, early.id]);
+      expect(all.complete).toBe(true);
+      const capped = await store.listEndedBetween(p, from, to, 1);
+      expect(capped.runs.length).toBeLessThanOrEqual(1);
+      expect(capped.complete).toBe(false);
     });
 
     it("GivenAQueuedRun_WhenUpdatedFromQueued_ThenOnlyThePatchedFieldsChange", async () => {

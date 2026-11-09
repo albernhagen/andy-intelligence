@@ -4673,7 +4673,7 @@ export interface paths {
                 /** Format: date-time */
                 mergedAt: string;
                 /** @enum {string} */
-                mergedBy: "gate" | "andy";
+                mergedBy: "gate" | "andy" | "unknown";
                 gate: {
                   wouldAutoMerge: boolean | null;
                   reasons: (
@@ -4689,7 +4689,7 @@ export interface paths {
                   )[];
                   /** @enum {string|null} */
                   outcome: "merged_clean" | "reworked" | "reverted" | "failed" | null;
-                };
+                } | null;
                 costUsd: number;
                 unknownCostRuns: number;
               }[];

@@ -48,13 +48,19 @@ export const DigestMerged = z.object({
   prNumber: z.number().int().positive(),
   prUrl: z.url(),
   mergedAt: Timestamp,
-  /** `gate`: the control plane merged it (auto-merge); `andy`: merged by hand. */
-  mergedBy: z.enum(["gate", "andy"]),
-  gate: z.object({
-    wouldAutoMerge: z.boolean().nullable(),
-    reasons: z.array(GateReason),
-    outcome: RunOutcome.nullable(),
-  }),
+  /**
+   * `gate`: the control plane merged it (auto-merge); `andy`: merged by hand; `unknown`: no run
+   * links to this PR, so nothing says who merged it.
+   */
+  mergedBy: z.enum(["gate", "andy", "unknown"]),
+  /** The gate's record on the run that opened the PR; null when no run links to it. */
+  gate: z
+    .object({
+      wouldAutoMerge: z.boolean().nullable(),
+      reasons: z.array(GateReason),
+      outcome: RunOutcome.nullable(),
+    })
+    .nullable(),
   /** The ticket's estimated cost over all its finished runs (AI-67). */
   costUsd: z.number().nonnegative(),
   unknownCostRuns: z.number().int().nonnegative(),
@@ -92,7 +98,7 @@ export type DigestTotals = z.infer<typeof DigestTotals>;
 export const Digest = z.object({
   projectKey: z.string(),
   window: z.object({ from: Timestamp, to: Timestamp }),
-  /** True when nothing happened: every section is empty and `text` is one line. */
+  /** True when nothing happened and every read was complete: `text` is one line. */
   quiet: z.boolean(),
   exceptions: z.array(DigestException),
   merged: z.array(DigestMerged),
@@ -101,7 +107,7 @@ export const Digest = z.object({
     readyForReview: z.array(DigestReview),
   }),
   totals: DigestTotals,
-  /** True when more tickets changed than one digest reads (ADR-0028); some may be missing. */
+  /** True when a read cap was reached (ADR-0028): tickets or runs may be missing. */
   truncated: z.boolean(),
   /** The same digest as plain text, for Claude desktop and chat. */
   text: z.string(),

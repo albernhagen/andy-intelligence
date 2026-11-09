@@ -309,6 +309,46 @@ describe("buildDigest", () => {
     expect(d.merged[0]?.mergedBy).toBe("gate");
   });
 
+  it("GivenAMergedPrNoRunLinksTo_WhenBuilt_ThenMergerAndGateUnknownNotAnotherRuns", () => {
+    const other = run({
+      links: { pullRequest: "https://github.com/o/r/pull/99" },
+      mergeAttemptedSha: "abc",
+      wouldAutoMerge: true,
+    });
+    const d = buildDigest(
+      WINDOW,
+      data({
+        tickets: [ticket(1, { stage: "done" })],
+        ticketEvents: new Map([["t1", [prEvent("t1", 5, "merged")]]]),
+        ticketRuns: new Map([["t1", [other]]]),
+      }),
+    );
+    expect(d.merged[0]).toMatchObject({ mergedBy: "unknown", gate: null });
+    expect(d.text).toContain("PR #5 · merger unknown · gate unknown");
+  });
+
+  it("GivenTheSamePrNumberInTwoRepos_WhenBuilt_ThenBothAreListed", () => {
+    const event = (ticketId: string, repo: string): TicketEvent => ({
+      ...prEvent(ticketId, 4, "merged"),
+      id: `e-${repo}`,
+      data: { number: 4, url: `https://github.com/o/${repo}/pull/4`, state: "merged" },
+    });
+    const d = buildDigest(
+      WINDOW,
+      data({
+        tickets: [ticket(1, { stage: "done" }), ticket(2, { stage: "done" })],
+        ticketEvents: new Map([
+          ["t1", [event("t1", "api")]],
+          ["t2", [event("t2", "web")]],
+        ]),
+      }),
+    );
+    expect(d.merged.map((m) => m.prUrl)).toEqual([
+      "https://github.com/o/api/pull/4",
+      "https://github.com/o/web/pull/4",
+    ]);
+  });
+
   it("GivenEverySection_WhenRendered_ThenExceptionsMergedInProgressTotalsInOrder", () => {
     const active = run({ id: "r9", ticketId: "t2", status: "running", startedAt: IN });
     const d = buildDigest(
@@ -348,7 +388,7 @@ describe("buildDigest", () => {
 
   it("GivenTruncatedReads_WhenRendered_ThenTheTextSaysSomeMayBeMissing", () => {
     const d = buildDigest(WINDOW, data({ truncated: true, project: { ...project, paused: true } }));
-    expect(d.text).toContain("some may be missing");
+    expect(d.text).toContain("some tickets or runs may be missing");
   });
 });
 
@@ -392,5 +432,22 @@ describe("DigestReader", () => {
     await expect(reader.digest("zz", digestWindow(new Date()))).rejects.toMatchObject({
       code: "not_found",
     });
+  });
+});
+
+describe("DigestReader caps", () => {
+  it("GivenMoreEndedRunsThanTheCap_WhenRead_ThenTruncated", async () => {
+    const tracker = new InMemoryWorkTracker();
+    const p = await tracker.createProject({ name: "AI", key: "AI", repos: [] });
+    const runs = new InMemoryRunStore();
+    const capped = {
+      ...runs,
+      listActive: (id: string) => runs.listActive(id),
+      listForTicket: (id: string, t: string) => runs.listForTicket(id, t),
+      listEndedBetween: async () => ({ runs: [], complete: false }),
+    } as unknown as InMemoryRunStore;
+    const d = await new DigestReader(tracker, capped, null).digest(p.id, digestWindow(new Date()));
+    expect(d.truncated).toBe(true);
+    expect(d.text).toContain("A read cap was reached");
   });
 });

@@ -1,6 +1,7 @@
 import { useState, type ReactNode } from "react";
 import { Link, useParams } from "@tanstack/react-router";
 import type { Digest } from "@andy/contracts";
+import { MERGED_BY, gateText } from "@andy/domain";
 import { Loading, QueryError } from "@/components/Status";
 import { Button } from "@/components/ui/button";
 import { useDigest } from "@/lib/queries";
@@ -74,13 +75,8 @@ function DigestBody({ digest, projectId }: { digest: Digest; projectId: string }
             <a href={m.prUrl} className="underline-offset-2 hover:underline">
               PR #{m.prNumber}
             </a>{" "}
-            · {m.mergedBy === "gate" ? "auto-merged" : "merged by Andy"} ·{" "}
-            {m.gate.wouldAutoMerge === null
-              ? "gate not run"
-              : m.gate.wouldAutoMerge
-                ? "gate passed"
-                : `gate held${m.gate.reasons.length ? ` (${m.gate.reasons.join(", ")})` : ""}`}{" "}
-            · <span className="tabular-nums">{usd(m.costUsd)}</span>
+            · {MERGED_BY[m.mergedBy]} · {gateText(m)} ·{" "}
+            <span className="tabular-nums">{usd(m.costUsd)}</span>
           </li>
         ))}
       </Section>
@@ -106,7 +102,7 @@ function DigestBody({ digest, projectId }: { digest: Digest; projectId: string }
       </section>
       {digest.truncated && (
         <p className="text-sm text-muted-foreground">
-          More tickets changed than one digest reads: some may be missing.
+          A read cap was reached: some tickets or runs may be missing.
         </p>
       )}
     </>

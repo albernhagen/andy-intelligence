@@ -51,7 +51,7 @@ export interface DigestData {
   /** History (oldest first) of the tickets that changed in the window, by ticket id. */
   ticketEvents: ReadonlyMap<string, readonly TicketEvent[]>;
   quota: readonly QuotaReading[];
-  /** More tickets changed than one digest reads (`MAX_DIGEST_TICKET_READS`). */
+  /** A read cap was reached (`MAX_DIGEST_TICKET_READS` tickets or `MAX_DIGEST_RUNS` runs). */
   truncated: boolean;
   now: Date;
 }
@@ -104,7 +104,8 @@ export function buildDigest(window: DigestWindow, data: DigestData): Digest {
     merged.length === 0 &&
     inFlight.length === 0 &&
     readyForReview.length === 0 &&
-    totals.runs === 0;
+    totals.runs === 0 &&
+    !data.truncated;
   const digest: Omit<Digest, "text"> = {
     projectKey: data.project.key,
     window: { from, to },
@@ -147,23 +148,26 @@ interface PrInWindow {
   url: string;
   state: "open" | "closed" | "merged";
   at: string;
-  /** The run that opened the PR, if it can be found. */
+  /** The run that links to this PR; undefined when none does. */
   run: Run | undefined;
 }
 
-/** Each PR's last link event inside the window, per ticket read. */
+/**
+ * Each PR's last link event inside the window, per ticket read. Keyed by URL, which names the
+ * repo and the number, so two repos in one project can't collide.
+ */
 function pullRequestsInWindow(
   data: DigestData,
   inWindow: (iso: string | null) => boolean,
 ): PrInWindow[] {
-  const found = new Map<number, PrInWindow>();
+  const found = new Map<string, PrInWindow>();
   for (const ticket of data.tickets) {
     for (const e of data.ticketEvents.get(ticket.id) ?? []) {
       if (e.kind !== "pr_linked" || !inWindow(e.createdAt)) continue;
       const { number, url, state } = e.data;
       if (typeof number !== "number" || typeof url !== "string") continue;
       if (state !== "open" && state !== "closed" && state !== "merged") continue;
-      found.set(number, { ticket, number, url, state, at: e.createdAt, run: undefined });
+      found.set(url, { ticket, number, url, state, at: e.createdAt, run: undefined });
     }
   }
   return [...found.values()]
@@ -171,9 +175,9 @@ function pullRequestsInWindow(
     .sort((a, b) => a.at.localeCompare(b.at));
 }
 
-/** The run whose PR this is; else the ticket's newest build run (runs are newest first). */
+/** The run that links to this PR. No guessing: a PR no run links to has an unknown run. */
 function runForPr(runs: readonly Run[], url: string): Run | undefined {
-  return runs.find((r) => r.links.pullRequest === url) ?? runs.find((r) => r.step === "build");
+  return runs.find((r) => r.links.pullRequest === url);
 }
 
 function prClosed(p: PrInWindow): DigestException {
@@ -288,20 +292,19 @@ function quotaAtReserve(data: DigestData): DigestException[] {
 
 function mergedItem(p: PrInWindow, data: DigestData): DigestMerged {
   const cost = ticketCost(data.ticketRuns.get(p.ticket.id) ?? []);
+  const { run } = p;
   // The control plane records a merge attempt per head; a clean one means the gate merged it.
-  const byGate = !!p.run?.mergeAttemptedSha && !p.run.mergeError;
+  const mergedBy = !run ? "unknown" : run.mergeAttemptedSha && !run.mergeError ? "gate" : "andy";
   return {
     ticketKey: p.ticket.key,
     title: p.ticket.title,
     prNumber: p.number,
     prUrl: p.url,
     mergedAt: p.at,
-    mergedBy: byGate ? "gate" : "andy",
-    gate: {
-      wouldAutoMerge: p.run?.wouldAutoMerge ?? null,
-      reasons: p.run?.gateReasons ?? [],
-      outcome: p.run?.outcome ?? null,
-    },
+    mergedBy,
+    gate: run
+      ? { wouldAutoMerge: run.wouldAutoMerge, reasons: run.gateReasons, outcome: run.outcome }
+      : null,
     costUsd: cost.estimatedCostUsd,
     unknownCostRuns: cost.unknownRuns,
   };
@@ -341,6 +344,12 @@ function totalsOf(endedRuns: readonly Run[], merged: number): DigestTotals {
 // ── Plain text ───────────────────────────────────────────────────────────────
 
 const usd = (n: number) => `$${n.toFixed(2)}`;
+/** How the text and the page name who merged a PR. */
+export const MERGED_BY: Record<DigestMerged["mergedBy"], string> = {
+  gate: "auto-merged",
+  andy: "merged by Andy",
+  unknown: "merger unknown",
+};
 const day = (iso: string) => `${iso.slice(0, 16).replace("T", " ")} UTC`;
 
 function windowText(d: Pick<Digest, "window">, live: boolean): string {
@@ -351,7 +360,8 @@ function windowText(d: Pick<Digest, "window">, live: boolean): string {
 const who = (x: { ticketKey: string | null; title: string | null }) =>
   x.ticketKey ? `${x.ticketKey}: ${x.title}` : "Project";
 
-function gateText(m: DigestMerged): string {
+export function gateText(m: DigestMerged): string {
+  if (!m.gate) return "gate unknown";
   const { wouldAutoMerge, reasons, outcome } = m.gate;
   const gate =
     wouldAutoMerge === null
@@ -386,7 +396,7 @@ export function renderDigestText(d: Omit<Digest, "text">, live: boolean): string
     "Merged",
     d.merged.map((m) => {
       const unknown = m.unknownCostRuns ? ` (+${plural(m.unknownCostRuns, "run")} unknown)` : "";
-      const by = m.mergedBy === "gate" ? "auto-merged" : "merged by Andy";
+      const by = MERGED_BY[m.mergedBy];
       return `${who(m)} · PR #${m.prNumber} · ${by} · ${gateText(m)} · ${usd(m.costUsd)}${unknown}`;
     }),
   );
@@ -405,7 +415,7 @@ export function renderDigestText(d: Omit<Digest, "text">, live: boolean): string
   ].filter(Boolean);
   lines.push("", "Totals", `- ${totals.join(" · ")}`);
   if (d.truncated) {
-    lines.push("", `More than ${MAX_DIGEST_TICKET_READS} tickets changed: some may be missing.`);
+    lines.push("", "A read cap was reached: some tickets or runs may be missing.");
   }
   return lines.join("\n");
 }
@@ -430,7 +440,7 @@ export class DigestReader {
     if (!project) throw notFound("project", projectId);
     const from = window.from.toISOString();
     const to = window.to.toISOString();
-    const [tickets, questions, activeRuns, endedRuns, quota] = await Promise.all([
+    const [tickets, questions, activeRuns, ended, quota] = await Promise.all([
       this.tracker.listTickets(projectId),
       this.tracker.listQuestions({ projectId, status: "open" }),
       this.runs.listActive(projectId),
@@ -461,11 +471,11 @@ export class DigestReader {
       tickets,
       openQuestions,
       activeRuns,
-      endedRuns,
+      endedRuns: ended.runs,
       ticketRuns: new Map(histories.map((h) => [h.id, h.runs])),
       ticketEvents: new Map(histories.map((h) => [h.id, h.events])),
       quota,
-      truncated: toRead.length > read.length,
+      truncated: toRead.length > read.length || !ended.complete,
       now: this.now(),
     });
   }

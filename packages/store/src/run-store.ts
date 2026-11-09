@@ -59,14 +59,18 @@ export class FirestoreRunStore implements RunStore {
   }
 
   async listEndedBetween(projectId: string, from: string, to: string, limit: number) {
-    // A range on one field uses its automatic index; the project filter runs in memory, since an
-    // equality plus a range would need a composite index. Callers bound the window (AI-70).
-    const snap = await this.runs().where("endedAt", ">=", from).where("endedAt", "<=", to).get();
-    return snap.docs
-      .map((d) => d.data())
-      .filter((r) => r.projectId === projectId)
-      .sort(newestFirst)
-      .slice(0, limit);
+    // Bounded in the query: at most `limit` documents, newest first, on `endedAt`'s automatic
+    // single-field index. The project filter runs in memory because an equality plus a range
+    // would need a composite index (a Terraform change); other projects' runs count toward the
+    // cap, and `complete` says when it was reached (AI-70, ADR-0081).
+    const snap = await this.runs()
+      .where("endedAt", ">=", from)
+      .where("endedAt", "<=", to)
+      .orderBy("endedAt", "desc")
+      .limit(limit)
+      .get();
+    const runs = snap.docs.map((d) => d.data()).filter((r) => r.projectId === projectId);
+    return { runs, complete: snap.size < limit };
   }
 
   async update(runId: string, patch: RunPatch, from: readonly RunStatus[]): Promise<Run> {
