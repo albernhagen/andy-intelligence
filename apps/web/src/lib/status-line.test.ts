@@ -166,6 +166,10 @@ const ticket = (over: Partial<Ticket>): Ticket => ({
   touches: [],
   createdAt: NOW.toISOString(),
   updatedAt: NOW.toISOString(),
+  risk: null,
+  riskReason: null,
+  confidence: null,
+  confidenceReason: null,
   ...over,
 });
 

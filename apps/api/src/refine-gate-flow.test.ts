@@ -425,6 +425,8 @@ describe("refine gate flow", () => {
     ).toMatchObject({ risk: { from: null, to: "low" }, confidence: { from: null, to: "high" } });
 
     await t.post(`${t.path(created.id)}/stage`, { to: "backlog" });
+    // One refine per entry is judged by timestamp: the new entry must land in a later millisecond.
+    await new Promise((resolve) => setTimeout(resolve, 2));
     await t.toUpNext(created.id);
     expect(await t.runs(created.id)).toHaveLength(2);
     await t.report(
