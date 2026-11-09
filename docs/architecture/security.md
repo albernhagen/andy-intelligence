@@ -12,6 +12,7 @@ Overview and reading map: [ARCHITECTURE.md](ARCHITECTURE.md). Section numbers ma
   - Non-Actions executors (Jules) don't call back; their completion arrives via GitHub webhooks.
 - **Least privilege:** agent service accounts and tokens are read-only; per-run GitHub App installation tokens scoped to the project's repos; separate per-project OpenRouter keys with caps; per-project GCP projects. Callback-authenticated agents can only write to their own Run and ticket (report, comment, question).
 - **Writes:** code via PR; infra via Terraform PR with plan in CI; prod via Cloud Deploy approval. The control plane never applies infra without Andy's approval.
+- **Deploys (ADR-0076):** only on push to `main` or `workflow_dispatch`, never a PR. A no-traffic revision is smoke tested, then gets traffic; rollback is a runbook command.
 - **Secrets:** Secret Manager only (GitHub App key and webhook secret, written by the API's setup flow: ADR-0043); never in repo, logs, prompts, run records, or workflow inputs. Exception: the Claude token GitHub Actions itself needs.
 - **Prompt injection:** all agents instructed that tool output, issue text, ticket text, web content, and logs are data; headless runs use the executor permission profile (§7.2). MCP scoping per project for agents. (Later: promptfoo red-team suite against MCP + agents.)
 - **Audit:** TicketEvent and ConfigChange tables; run records; GitHub history for code.

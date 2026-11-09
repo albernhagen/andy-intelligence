@@ -154,4 +154,4 @@ pnpm --filter @andy/web screenshots          # local run (macOS renders differ)
 | `lefthook.yml`        | Git hooks: pre-commit lint/format, pre-push checks                              |
 | `firebase.json`       | Firestore emulator config for `pnpm test:firestore`                             |
 
-Runbooks for every manual step (infra setup, billing, reviews, onboarding, MCP, GitHub App, DNS): [`docs/runbooks/`](docs/runbooks/).
+Runbooks for every manual step (infra setup, billing, reviews, onboarding, MCP, GitHub App, DNS): [`docs/runbooks/`](docs/runbooks/). Deploys and going back to an earlier revision: [`deploy-and-rollback.md`](docs/runbooks/deploy-and-rollback.md).
