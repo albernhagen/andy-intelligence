@@ -6,6 +6,7 @@ import {
   InMemoryCodeEventLog,
   InMemoryCodeHost,
   InMemoryCodeHostConnectionStore,
+  InMemoryQuotaStore,
   InMemoryRunStore,
   InMemoryWorkTracker,
 } from "@andy/contracts";
@@ -28,6 +29,7 @@ export function renderApp(
 ) {
   const tracker = new InMemoryWorkTracker();
   const runs = new InMemoryRunStore();
+  const quota = new InMemoryQuotaStore();
   // GitHub fakes (ADR-0043): one installed repo; any manifest code "connects" this App.
   const connections = new InMemoryCodeHostConnectionStore();
   const codeHost = new InMemoryCodeHost([
@@ -50,6 +52,7 @@ export function renderApp(
     webConfig: { firebaseApiKey: "k", firebaseAuthDomain: "d", projectId: "p" },
     tracker,
     runs,
+    quota,
     github: {
       publicUrl: "http://localhost",
       connections,
@@ -102,6 +105,7 @@ export function renderApp(
     queryClient,
     tracker,
     runs,
+    quota,
     codeHost,
     connections,
     service: new TicketService(tracker),

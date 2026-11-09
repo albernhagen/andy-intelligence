@@ -21,7 +21,7 @@ import {
   type CodeHostConnectionStore,
   type Executor,
   type OAuthGrantStore,
-  type QuotaSource,
+  type QuotaStore,
   type NewRun,
   type RunRequest,
   type RunStore,
@@ -434,16 +434,41 @@ export function executorContract(
   });
 }
 
-export function quotaSourceContract(
-  name: string,
-  make: () => Promise<{ source: QuotaSource; seed?: () => Promise<void> }>,
-): void {
-  describe(`QuotaSource contract: ${name}`, () => {
-    it("returns schema-valid readings (possibly empty = unknown)", async () => {
-      const { source, seed } = await make();
-      await seed?.();
-      const readings = await source.latest("claude-sub");
-      for (const r of readings) expect(QuotaReading.parse(r)).toEqual(r);
+export function quotaStoreContract(name: string, make: () => Promise<QuotaStore>): void {
+  describe(`QuotaStore contract: ${name}`, () => {
+    const reading = (window: "5h" | "weekly", usedPct: number): QuotaReading => ({
+      provider: "claude-sub",
+      window,
+      usedPct,
+      resetsAt: "2026-11-08T17:00:00.000Z",
+      source: "contract",
+      takenAt: "2026-11-08T12:00:00.000Z",
+      confidence: "high",
+    });
+    const byWindow = (a: QuotaReading, b: QuotaReading) => a.window.localeCompare(b.window);
+
+    it("GivenTwoWindowsSaved_WhenLatestIsRead_ThenBothComeBackSchemaValid", async () => {
+      const store = await make();
+      const saved = [reading("5h", 10), reading("weekly", 20)];
+      await store.save(saved);
+      const latest = (await store.latest("claude-sub")).sort(byWindow);
+      expect(latest).toEqual(saved);
+      for (const r of latest) expect(QuotaReading.parse(r)).toEqual(r);
+    });
+
+    it("GivenAWindowIsSavedAgain_WhenLatestIsRead_ThenOnlyTheNewReadingRemains", async () => {
+      const store = await make();
+      await store.save([reading("5h", 10)]);
+      await store.save([reading("5h", 55)]);
+      const latest = await store.latest("claude-sub");
+      expect(latest.find((r) => r.window === "5h")?.usedPct).toBe(55);
+      expect(latest.filter((r) => r.window === "5h")).toHaveLength(1);
+    });
+
+    it("GivenReadingsForOneProvider_WhenAnotherIsRead_ThenItIsEmpty", async () => {
+      const store = await make();
+      await store.save([reading("5h", 10)]);
+      expect(await store.latest("google-sub")).toEqual([]);
     });
   });
 }

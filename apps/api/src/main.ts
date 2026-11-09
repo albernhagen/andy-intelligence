@@ -5,6 +5,7 @@ import {
   GcpCodeHostConnectionStore,
   SecretManagerVersions,
   FirestoreOAuthGrantStore,
+  FirestoreQuotaStore,
   FirestoreRunStore,
   FirestoreWorkTracker,
   CloudTasksWatchdogQueue,
@@ -59,6 +60,7 @@ async function main() {
     },
     tracker: new FirestoreWorkTracker(db),
     runs: new FirestoreRunStore(db),
+    quota: new FirestoreQuotaStore(db),
     // Serve only the public URL's host; the run.app URLs answer /health alone (ADR-0044).
     publicHost: publicUrl ? new URL(publicUrl).host : undefined,
     watchdog,

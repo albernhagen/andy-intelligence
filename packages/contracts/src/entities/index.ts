@@ -493,6 +493,52 @@ export const QuotaReading = z.object({
 });
 export type QuotaReading = z.infer<typeof QuotaReading>;
 
+// Far enough for any real reset, and small enough that new Date() stays valid.
+const EpochSeconds = z.number().int().positive().max(4_102_444_800);
+// A fraction of the window. Above 1 is legitimate: usage can run past a window's cap.
+const Utilization = z.number().min(0).max(100);
+const WindowUsage = z.object({ utilization: Utilization, resetsAt: EpochSeconds });
+
+/** Rate-limit data a run reports: the agent's last rate-limit event, in the harness's own names. */
+export const RateLimitReport = z.object({
+  unifiedWindows: z
+    .object({ five_hour: WindowUsage.optional(), seven_day: WindowUsage.optional() })
+    .optional(),
+  rateLimitType: z.string().optional(),
+  utilization: Utilization.optional(),
+  resetsAt: EpochSeconds.optional(),
+});
+export type RateLimitReport = z.infer<typeof RateLimitReport>;
+
+/** fresh: usable. stale: past its window's reset or too old. unknown: never read. */
+export const QuotaFreshness = z.enum(["fresh", "stale", "unknown"]);
+export type QuotaFreshness = z.infer<typeof QuotaFreshness>;
+
+export const QuotaLevel = z.enum(["ok", "unknown", "warn", "pause"]);
+export type QuotaLevel = z.infer<typeof QuotaLevel>;
+
+/** One window as the UI sees it. `usedPct` is null unless fresh: never assume headroom. */
+export const QuotaWindowStatus = z.object({
+  window: QuotaWindow,
+  freshness: QuotaFreshness,
+  level: QuotaLevel,
+  usedPct: z.number().min(0).max(100).nullable(),
+  resetsAt: Timestamp.nullable(),
+  takenAt: Timestamp.nullable(),
+  source: z.string().nullable(),
+});
+export type QuotaWindowStatus = z.infer<typeof QuotaWindowStatus>;
+
+export const QuotaStatus = z.object({
+  provider: ProviderKey,
+  warnPct: z.number().min(0).max(100),
+  pausePct: z.number().min(0).max(100),
+  /** The worst window: pause, then warn, then unknown, then ok. */
+  level: QuotaLevel,
+  windows: z.array(QuotaWindowStatus),
+});
+export type QuotaStatus = z.infer<typeof QuotaStatus>;
+
 export const ConfigChangeStatus = z.enum(["pending", "applied", "reverted", "rejected"]);
 
 export const ConfigChange = z.object({
