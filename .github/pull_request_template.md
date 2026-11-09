@@ -25,5 +25,5 @@ Ticket: <!-- https://ai.andybernhagen.com/p/<project>/t/<KEY>; PR title: `<KEY>:
 - [ ] ADR added or status updated
 - [ ] Runbook — manual steps
 - [ ] `docs/build-log.md` — decisions, blockers; new entry file in `docs/build-log/`; ticket in project `AI` named in "Why"
-- [ ] `docs/security/threat-model.md` — trust boundary / IAM / credentials changed
+- [ ] `docs/security/threat-model.md` and its area file — trust boundary / IAM / credentials changed
 - [ ] `AGENTS.md` / `docs/BUILD-PROMPT.md` — agent rules
