@@ -1,6 +1,14 @@
 import { useEffect, useRef } from "react";
 import { type QueryClient, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import type { PlanApproval, Run, Size, Stage, TicketOverrides, TicketType } from "@andy/contracts";
+import type {
+  AutoMerge,
+  PlanApproval,
+  Run,
+  Size,
+  Stage,
+  TicketOverrides,
+  TicketType,
+} from "@andy/contracts";
 import { unwrap, useApi } from "./api";
 import { withoutQuestion, type NeedsYou } from "./needs-you";
 
@@ -191,6 +199,7 @@ export function useUpdateProject(projectId: string) {
       autoBuild?: boolean;
       buildEnabled?: boolean;
       planApproval?: PlanApproval;
+      autoMerge?: AutoMerge;
     }) =>
       unwrap(
         await api.PATCH("/api/projects/{projectId}", { params: { path: { projectId } }, body }),

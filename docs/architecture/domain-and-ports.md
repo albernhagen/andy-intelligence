@@ -10,7 +10,7 @@ All records carry `project_id` where applicable. Documents are validated with th
 
 | Entity | Key fields |
 |---|---|
-| **Project** | name, repos, GCP dev/prod project IDs, policy overrides, budget allocation, autonomy level, enabled, `autoRefine` (default on), `autoBuild` (default off, ADR-0063), `planApproval` (default `none`, ADR-0050) |
+| **Project** | name, repos, GCP dev/prod project IDs, policy overrides, budget allocation, autonomy level, enabled, `autoRefine` (default on), `autoBuild` (default off, ADR-0063), `planApproval` (default `none`, ADR-0050), `autoMerge` (`s-and-m` for new projects; documents older than the field read as `none`, ADR-0050) |
 | **Ticket** (system of record) | key (e.g. `AI-42`), title, body, acceptance criteria (the checklist; EARS for features), assumptions, type (epic/feature/chore/bug, empty at capture; ADR-0058), parent, stage, size, size reason, overrides (assignee agent/me, tier, model pin, autonomy, target env), needs_attention (blocked on a human), DoR status, rank, blocked_by (ticket ids), archived, out_of_scope, touches (areas or path globs; ≤ 20 × 300 chars each). No stored tier: derived from size (ADR-0062) |
 | **TicketEvent** | ticket, kind (comment / stage_change / field_change / run_linked / pr_linked …), actor (andy / agent:<run> / system), body/diff, timestamp — the ticket's full history |
 | **Question** | ticket, text, options, suggested_answer, assumptions, urgency, status, answer, answered_via, run (if an agent asked), timestamps |

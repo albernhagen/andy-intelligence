@@ -187,4 +187,144 @@ describe("GitHubCodeHost", () => {
     const run = await host(fetch).getWorkflowRun("albernhagen/andy-intelligence", "123");
     expect(run).toMatchObject({ id: "123", status: "completed", conclusion: "success" });
   });
+
+  describe("gate reads and merge", () => {
+    const R = "/repos/albernhagen/andy-intelligence";
+    it("GivenAnOpenPr_WhenRead_ThenItMapsToTheDomainShape", async () => {
+      const fetch = fakeGitHub({
+        ...installed,
+        [`GET ${R}/pulls/5`]: () =>
+          json(200, {
+            number: 5,
+            state: "open",
+            merged: false,
+            draft: false,
+            title: "AI-1: x",
+            body: "first\nsecond",
+            head: { ref: "agent/AI-1/r", sha: "abc", repo: { full_name: "a/b" } },
+            base: { ref: "main", repo: { full_name: "a/b", default_branch: "main" } },
+            html_url: "https://github.com/a/b/pull/5",
+          }),
+      });
+      expect(await host(fetch).getPullRequest("albernhagen/andy-intelligence", 5)).toMatchObject({
+        state: "open",
+        bodyFirstLine: "first",
+        fromFork: false,
+        intoDefaultBranch: true,
+        headSha: "abc",
+      });
+    });
+
+    it("GivenAThreePageFileList_WhenListed_ThenRenamesKeptAndMarkedIncomplete", async () => {
+      const full = Array.from({ length: 100 }, (_, i) => ({
+        filename: `f${i}`,
+        previous_filename: i === 0 ? "old" : undefined,
+      }));
+      const fetch = fakeGitHub({ ...installed, [`GET ${R}/pulls/5/files`]: () => json(200, full) });
+      const files = await host(fetch).listChangedFiles("albernhagen/andy-intelligence", 5);
+      expect(files.complete).toBe(false);
+      expect(files.items[0]).toEqual({ path: "f0", previousPath: "old" });
+      expect(files.items).toHaveLength(300);
+    });
+
+    it("GivenMoreChecksThanOnePage_WhenListed_ThenIncomplete", async () => {
+      const fetch = fakeGitHub({
+        ...installed,
+        [`GET ${R}/commits/abc/check-runs`]: () =>
+          json(200, {
+            total_count: 101,
+            check_runs: [
+              { name: "check", status: "completed", conclusion: "success", app: { id: 15368 } },
+            ],
+          }),
+      });
+      expect(await host(fetch).listHeadChecks("albernhagen/andy-intelligence", "abc")).toEqual({
+        complete: false,
+        items: [{ name: "check", status: "completed", conclusion: "success", sourceId: "15368" }],
+      });
+    });
+
+    it("GivenBranchRules_WhenRequiredChecksRead_ThenOnlyStatusChecksReturn", async () => {
+      const fetch = fakeGitHub({
+        ...installed,
+        [`GET ${R}/rules/branches/main`]: () =>
+          json(200, [
+            { type: "deletion" },
+            {
+              type: "required_status_checks",
+              parameters: {
+                required_status_checks: [
+                  { context: "check", integration_id: 15368 },
+                  { context: "x" },
+                ],
+              },
+            },
+          ]),
+      });
+      expect(await host(fetch).listRequiredChecks("albernhagen/andy-intelligence", "main")).toEqual(
+        [
+          { name: "check", sourceId: "15368" },
+          { name: "x", sourceId: null },
+        ],
+      );
+    });
+
+    it("GivenBotAndHumanCommits_WhenListed_ThenLoginWinsElseGitName", async () => {
+      const fetch = fakeGitHub({
+        ...installed,
+        [`GET ${R}/pulls/5/commits`]: () =>
+          json(200, [
+            { sha: "a", author: null, commit: { author: { name: "x-control[bot]" } } },
+            { sha: "b", author: { login: "albernhagen" }, commit: { author: { name: "Andy" } } },
+          ]),
+      });
+      const { items } = await host(fetch).listPullRequestCommits(
+        "albernhagen/andy-intelligence",
+        5,
+      );
+      expect(items.map((c) => c.author)).toEqual(["x-control[bot]", "albernhagen"]);
+    });
+
+    it("GivenAFile_WhenRead_ThenDecodedAndAnOversizedOneThrows", async () => {
+      const good = fakeGitHub({
+        ...installed,
+        [`GET ${R}/contents/CODEOWNERS`]: () =>
+          json(200, {
+            type: "file",
+            size: 3,
+            content: Buffer.from("hi\n").toString("base64"),
+          }),
+      });
+      expect(await host(good).readFile("albernhagen/andy-intelligence", "CODEOWNERS", "main")).toBe(
+        "hi\n",
+      );
+      const big = fakeGitHub({
+        ...installed,
+        [`GET ${R}/contents/CODEOWNERS`]: () => json(200, { type: "file", size: 9e6, content: "" }),
+      });
+      await expect(
+        host(big).readFile("albernhagen/andy-intelligence", "CODEOWNERS", "main"),
+      ).rejects.toThrow(/too large/);
+    });
+
+    it("GivenAMerge_WhenCalled_ThenItSquashesPinnedToTheHeadSha", async () => {
+      const put = vi.fn((_init?: RequestInit) => json(200, { merged: true }));
+      const fetch = fakeGitHub({ ...installed, [`PUT ${R}/pulls/5/merge`]: put });
+      await host(fetch).mergePullRequest("albernhagen/andy-intelligence", 5, "abc");
+      expect(JSON.parse(String(put.mock.calls[0]![0]!.body))).toMatchObject({
+        merge_method: "squash",
+        sha: "abc",
+      });
+    });
+
+    it("GivenTheHostRefuses_WhenMerging_ThenItThrows", async () => {
+      const fetch = fakeGitHub({
+        ...installed,
+        [`PUT ${R}/pulls/5/merge`]: () => json(405, { message: "not mergeable" }),
+      });
+      await expect(
+        host(fetch).mergePullRequest("albernhagen/andy-intelligence", 5, "abc"),
+      ).rejects.toThrow(/not mergeable/);
+    });
+  });
 });

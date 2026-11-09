@@ -3,7 +3,13 @@ import {
   CodeHostEvent,
   Repo,
   RepoName,
+  type ChangedFile,
+  type HeadCheck,
+  type Listing,
+  type PullRequest,
+  type PullRequestCommit,
   type RepoToken,
+  type RequiredCheck,
   type Run,
   type RunStatus,
   type WorkflowDispatch,
@@ -431,6 +437,15 @@ export class InMemoryCodeHost implements CodeHost {
   >();
   /** Test seam: make the next dispatches fail. */
   failDispatch: Error | null = null;
+  /** Test seam: pull requests and what the host knows about them, by number. */
+  readonly pullRequests = new Map<number, FakePullRequest>();
+  requiredChecks: RequiredCheck[] = [];
+  /** Test seam: file text by path (any ref). */
+  readonly files = new Map<string, string>();
+  /** Merge calls that went through, in order. */
+  readonly merges: { fullName: string; number: number; sha: string }[] = [];
+  /** Test seam: make merge calls fail. */
+  failMerge: Error | null = null;
 
   constructor(
     repos: Repo[] = [],
@@ -508,6 +523,53 @@ export class InMemoryCodeHost implements CodeHost {
     if (!run || run.status === "completed") return;
     this.workflowRuns.get(runId)!.run = { ...run, status: "completed", conclusion: "cancelled" };
   }
+
+  async getPullRequest(fullName: string, number: number): Promise<PullRequest | null> {
+    if (!(await this.getRepo(fullName))) return null;
+    const pr = this.pullRequests.get(number);
+    return pr ? structuredClone(pr.pullRequest) : null;
+  }
+
+  async listChangedFiles(_fullName: string, number: number): Promise<Listing<ChangedFile>> {
+    return structuredClone(this.pullRequests.get(number)?.files ?? { items: [], complete: true });
+  }
+
+  async listHeadChecks(_fullName: string, sha: string): Promise<Listing<HeadCheck>> {
+    const pr = [...this.pullRequests.values()].find((p) => p.pullRequest.headSha === sha);
+    return structuredClone(pr?.checks ?? { items: [], complete: true });
+  }
+
+  async listRequiredChecks(fullName: string): Promise<RequiredCheck[]> {
+    return (await this.getRepo(fullName)) ? structuredClone(this.requiredChecks) : [];
+  }
+
+  async listPullRequestCommits(
+    _fullName: string,
+    number: number,
+  ): Promise<Listing<PullRequestCommit>> {
+    return structuredClone(this.pullRequests.get(number)?.commits ?? { items: [], complete: true });
+  }
+
+  async readFile(fullName: string, path: string): Promise<string | null> {
+    if (!(await this.getRepo(fullName))) return null;
+    return this.files.get(path) ?? null;
+  }
+
+  async mergePullRequest(fullName: string, number: number, expectedHeadSha: string): Promise<void> {
+    if (this.failMerge) throw this.failMerge;
+    const pr = this.pullRequests.get(number);
+    if (!pr || pr.pullRequest.state !== "open") throw new Error("not mergeable");
+    if (pr.pullRequest.headSha !== expectedHeadSha) throw new Error("head moved");
+    pr.pullRequest.state = "merged";
+    this.merges.push({ fullName, number, sha: expectedHeadSha });
+  }
+}
+
+export interface FakePullRequest {
+  pullRequest: PullRequest;
+  files: Listing<ChangedFile>;
+  checks: Listing<HeadCheck>;
+  commits: Listing<PullRequestCommit>;
 }
 
 /** In-memory CodeHostConnectionStore. */

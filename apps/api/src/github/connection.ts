@@ -48,6 +48,8 @@ export class GitHubConnection {
   }
 }
 
+const EMPTY_LISTING = { items: [], complete: true };
+
 /** CodeHost that follows the connection; before GitHub is connected it knows no repos. */
 export class ConnectedCodeHost implements CodeHost {
   constructor(private readonly connection: GitHubConnection) {}
@@ -74,5 +76,37 @@ export class ConnectedCodeHost implements CodeHost {
 
   async cancelWorkflowRun(fullName: string, runId: string) {
     await (await this.connection.codeHost())?.cancelWorkflowRun(fullName, runId);
+  }
+
+  async getPullRequest(fullName: string, number: number) {
+    return (await this.connection.codeHost())?.getPullRequest(fullName, number) ?? null;
+  }
+
+  async listChangedFiles(fullName: string, number: number) {
+    return (await this.connection.codeHost())?.listChangedFiles(fullName, number) ?? EMPTY_LISTING;
+  }
+
+  async listHeadChecks(fullName: string, sha: string) {
+    return (await this.connection.codeHost())?.listHeadChecks(fullName, sha) ?? EMPTY_LISTING;
+  }
+
+  async listRequiredChecks(fullName: string, branch: string) {
+    return (await this.connection.codeHost())?.listRequiredChecks(fullName, branch) ?? [];
+  }
+
+  async listPullRequestCommits(fullName: string, number: number) {
+    return (
+      (await this.connection.codeHost())?.listPullRequestCommits(fullName, number) ?? EMPTY_LISTING
+    );
+  }
+
+  async readFile(fullName: string, path: string, ref: string) {
+    return (await this.connection.codeHost())?.readFile(fullName, path, ref) ?? null;
+  }
+
+  async mergePullRequest(fullName: string, number: number, expectedHeadSha: string) {
+    const host = await this.connection.codeHost();
+    if (!host) throw new Error("GitHub is not connected");
+    await host.mergePullRequest(fullName, number, expectedHeadSha);
   }
 }
