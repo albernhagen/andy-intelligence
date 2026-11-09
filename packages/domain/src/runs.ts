@@ -26,6 +26,7 @@ import {
   type WatchdogQueue,
   type WorkTracker,
 } from "@andy/contracts";
+import { MAX_ACTIVE_RUNS_GLOBAL } from "./dispatch-caps";
 import { isDispatchable, resolveWorker } from "./worker";
 import { runCost } from "./cost";
 import {
@@ -92,9 +93,6 @@ export const STEP_LIMITS: Record<StartableStep, { maxTurns: number; timeoutMinut
   // context 5 + agent 60 + publish 10 + report 5 minutes, plus queueing.
   build: { maxTurns: 150, timeoutMinutes: 90 },
 };
-
-/** Runs in flight per project (ADR-0028). One until M5: Multi-project in parallel. */
-export const MAX_ACTIVE_RUNS_PER_PROJECT = 1;
 
 /**
  * Refine runs per ticket, counting every run that reached the executor (ADR-0028: each one
@@ -211,11 +209,20 @@ export class RunService {
     }
     const repo = project.repos[0];
     if (!repo) throw new DomainError("invalid_repo", `project ${project.key} has no repo`);
-    const active = await this.inFlight(projectId);
-    if (active.length >= MAX_ACTIVE_RUNS_PER_PROJECT) {
-      throw new DomainError("run_limit", `project ${project.key} already has a run in flight`, [
-        `limit: ${MAX_ACTIVE_RUNS_PER_PROJECT}`,
+    const everywhere = await this.inFlightEverywhere();
+    const active = everywhere.filter((r) => r.projectId === projectId);
+    if (active.some((r) => r.ticketId === ticketId)) {
+      throw new DomainError("run_limit", `${ticket.key} already has a run in flight`);
+    }
+    if (active.length >= project.runsAtOnce) {
+      throw new DomainError("run_limit", `project ${project.key} is at its runs-at-once dial`, [
+        `limit: ${project.runsAtOnce}`,
         ...active.map((r) => `run ${r.id} (${r.status})`),
+      ]);
+    }
+    if (everywhere.length >= MAX_ACTIVE_RUNS_GLOBAL) {
+      throw new DomainError("run_limit", "the cap on runs across all projects is reached", [
+        `limit: ${MAX_ACTIVE_RUNS_GLOBAL}`,
       ]);
     }
 
@@ -239,12 +246,19 @@ export class RunService {
     });
 
     // Check again now that this run exists: two concurrent starts both pass the first check,
-    // and both see each other here, so the oldest wins and the newer one fails (ADR-0028 cap).
-    const winners = (await this.inFlight(projectId)).slice(0, MAX_ACTIVE_RUNS_PER_PROJECT);
-    if (!winners.some((r) => r.id === run.id)) {
+    // and both see each other here, so the oldest wins and the newer one fails (ADR-0079). The
+    // same goes for one ticket: two runs under the dial must not build it twice.
+    const after = await this.inFlightEverywhere();
+    const inProject = after.filter((r) => r.projectId === projectId);
+    const won =
+      after.slice(0, MAX_ACTIVE_RUNS_GLOBAL).some((r) => r.id === run.id) &&
+      inProject.slice(0, project.runsAtOnce).some((r) => r.id === run.id) &&
+      inProject.find((r) => r.ticketId === ticketId)?.id === run.id;
+    if (!won) {
       await this.fail(run.id, "another run started at the same time");
-      throw new DomainError("run_limit", `project ${project.key} already has a run in flight`, [
-        `limit: ${MAX_ACTIVE_RUNS_PER_PROJECT}`,
+      throw new DomainError("run_limit", `project ${project.key} has no free run slot`, [
+        `dial: ${project.runsAtOnce}`,
+        `global cap: ${MAX_ACTIVE_RUNS_GLOBAL}`,
       ]);
     }
 
@@ -1010,14 +1024,26 @@ export class RunService {
     return "flagged";
   }
 
+  /** Runs in flight in the project and across all projects, of any step (ADR-0079). */
+  async activeCounts(projectId: string): Promise<{ project: number; global: number }> {
+    const runs = await this.inFlightEverywhere();
+    return {
+      project: runs.filter((r) => r.projectId === projectId).length,
+      global: runs.length,
+    };
+  }
+
   /**
-   * Runs in flight, oldest first (ties by id, so every caller orders them the same way). A run
-   * past its deadline no longer counts, so a lost report can't block the project until the
-   * watchdog (M1.6b) settles it.
+   * Runs in flight across all projects, oldest first (ties by id, so every caller orders them
+   * the same way). A run past its deadline no longer counts, so a lost report can't block a
+   * project until the watchdog (M1.6b) settles it.
    */
-  private async inFlight(projectId: string): Promise<Run[]> {
+  private async inFlightEverywhere(): Promise<Run[]> {
     const nowMs = this.now().getTime();
-    return (await this.runs.listActive(projectId))
+    const projects = await this.tracker.listProjects();
+    const active = await Promise.all(projects.map((p) => this.runs.listActive(p.id)));
+    return active
+      .flat()
       .filter((r) => !r.deadline || Date.parse(r.deadline) > nowMs)
       .sort(
         (a, b) => (a.createdAt ?? "").localeCompare(b.createdAt ?? "") || a.id.localeCompare(b.id),

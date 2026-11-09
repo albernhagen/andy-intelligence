@@ -15,6 +15,10 @@ import {
   Timestamp,
   Urgency,
 } from "./common";
+import { projectDispatchFields } from "./dispatch-caps";
+
+export * from "./common";
+export * from "./dispatch-caps";
 import { RunCostFields } from "./cost";
 import { RefineScores, TicketScores } from "./scores";
 
@@ -75,6 +79,7 @@ export const Project = z.object({
    * than the field, such as project AI, which stays `none` until M2: Self-hosting.
    */
   autoMerge: AutoMerge.default("none"),
+  ...projectDispatchFields,
   /** Who does a ticket's work when it has no pick of its own (ADR-0082). */
   defaultWorker: Worker.default("agent"),
 });

@@ -1,7 +1,7 @@
 import { CLAUDE_EXECUTOR_REF } from "@andy/github";
 import { sign } from "@octokit/webhooks-methods";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { REPO, createdApp, githubApp } from "./github/test-app";
+import { REPO, createdApp, githubApp, repo } from "./github/test-app";
 import { TOKEN_PATH, type ActionsClaims } from "./github/token";
 import { WEBHOOK_PATH } from "./github/webhooks";
 
@@ -756,6 +756,180 @@ describe("build run flow", () => {
       f.t.host.pullRequests.get(50)!.pullRequest.headRef = "m1.8/some-branch";
       await f.checkHook();
       expect(f.t.host.merges).toEqual([]);
+    });
+  });
+
+  describe("dispatch caps (ADR-0079)", () => {
+    const setup = async () => {
+      const t = githubApp({ verifyActionsToken: verify });
+      await t.connections.save({ ...createdApp, connectedAt: "2026-11-03T00:00:00Z" });
+      t.host.install(repo(`${REPO}-b`));
+      const json = async <T>(res: Response | Promise<Response>) => (await (await res).json()) as T;
+      const send = (path: string, method: string, body: unknown) =>
+        t.call(path, { method, body: JSON.stringify(body) });
+      const project = async (key: string, repoName: string, settings: object) => {
+        const { id } = await json<{ id: string }>(
+          send("/api/projects", "POST", { name: key, key, repos: [repoName] }),
+        );
+        await send(`/api/projects/${id}`, "PATCH", { autoRefine: false, buildEnabled: true });
+        const patched = await send(`/api/projects/${id}`, "PATCH", {
+          autoBuild: true,
+          ...settings,
+        });
+        expect(patched.status).toBe(200);
+        return id;
+      };
+      const ready = async (projectId: string, title: string) => {
+        const ticket = await json<{ id: string }>(
+          send(`/api/projects/${projectId}/tickets`, "POST", {
+            type: "feature",
+            title,
+            body: "Andy can't see his tickets.",
+            acceptanceCriteria: ["WHEN Andy opens the board THE SYSTEM SHALL list his tickets"],
+            size: "S",
+            sizeReason: "one screen",
+          }),
+        );
+        const moved = await send(`/api/projects/${projectId}/tickets/${ticket.id}/stage`, "POST", {
+          to: "ready",
+        });
+        expect(moved.status).toBe(200);
+        return ticket.id;
+      };
+      const runsOf = (projectId: string, ticketId: string) =>
+        json<RunBody[]>(t.call(`/api/projects/${projectId}/tickets/${ticketId}/runs`));
+      const decision = async (projectId: string) =>
+        (
+          await json<{ lastDispatch: { decision: string } | null }>(
+            t.call(`/api/projects/${projectId}`),
+          )
+        ).lastDispatch?.decision;
+      /** The executor reports the run succeeded, as the workflow run that was dispatched. */
+      const finish = async (runId: string, repoName: string) => {
+        const [externalId] = [...t.host.workflowRuns.entries()].find(
+          ([, r]) => r.inputs.run_id === runId,
+        )!;
+        const claims: ActionsClaims = {
+          repository: repoName,
+          workflow_ref: `${repoName}/.github/workflows/agent-run.yml@refs/heads/main`,
+          job_workflow_ref: CLAUDE_EXECUTOR_REF,
+          run_id: externalId,
+        };
+        const report = await t.call(
+          `/runs/${runId}/report`,
+          {
+            method: "POST",
+            body: JSON.stringify({
+              status: "succeeded",
+              summary: "done",
+              tokensIn: 1,
+              tokensOut: 1,
+              costUsd: 0.01,
+              output,
+            }),
+          },
+          JSON.stringify(claims),
+        );
+        expect(report.status).toBe(200);
+      };
+      return { t, json, send, project, ready, runsOf, decision, finish };
+    };
+
+    it("GivenADialOfOneAndTwoReadyTickets_WhenTheFirstCompletes_ThenTheSecondStartsOnlyThen", async () => {
+      const f = await setup();
+      const p = await f.project("AI", REPO, { runsAtOnce: 1 });
+      const first = await f.ready(p, "First");
+      const second = await f.ready(p, "Second");
+      const [run] = await f.runsOf(p, first);
+      expect(run).toBeDefined();
+      expect(await f.runsOf(p, second)).toEqual([]);
+      expect(await f.decision(p)).toBe("project_cap");
+
+      await f.finish(run!.id, REPO);
+      expect(await f.runsOf(p, second)).toHaveLength(1);
+    });
+
+    it("GivenADialOfOneAndAndysTicketOnTop_WhenTicketsReachReady_ThenOnlyTheAgentsTicketStarts", async () => {
+      const f = await setup();
+      const p = await f.project("AI", REPO, { runsAtOnce: 1 });
+      const mine = await f.json<{ id: string }>(
+        f.send(`/api/projects/${p}/tickets`, "POST", {
+          type: "chore",
+          title: "Mine",
+          body: "Andy does this one.",
+          acceptanceCriteria: ["WHEN Andy does it THE SYSTEM SHALL record it"],
+          size: "S",
+          sizeReason: "small",
+        }),
+      );
+      const picked = await f.send(`/api/projects/${p}/tickets/${mine.id}/worker`, "PUT", {
+        worker: "me",
+      });
+      expect(picked.status).toBe(200);
+      expect(
+        (await f.send(`/api/projects/${p}/tickets/${mine.id}/stage`, "POST", { to: "ready" }))
+          .status,
+      ).toBe(200);
+      const agents = await f.ready(p, "Agent's");
+
+      expect(await f.runsOf(p, mine.id)).toEqual([]);
+      const [run] = await f.runsOf(p, agents);
+      expect(run).toMatchObject({ step: "build", status: "queued" });
+      await f.finish(run!.id, REPO);
+      expect(await f.runsOf(p, mine.id)).toEqual([]);
+    });
+
+    it("GivenAPausedProject_WhenATicketReachesReady_ThenNoRunAndTheReasonReadsBackOverTheApi", async () => {
+      const f = await setup();
+      const p = await f.project("AI", REPO, { paused: true });
+      const ticket = await f.ready(p, "First");
+      expect(await f.runsOf(p, ticket)).toEqual([]);
+      expect(await f.decision(p)).toBe("paused");
+
+      // A client can't write the decision itself.
+      expect((await f.send(`/api/projects/${p}`, "PATCH", { lastDispatch: null })).status).toBe(
+        400,
+      );
+    });
+
+    // The executor only runs this repo until M5, so the other project's runs are put in the
+    // store directly and the waiting project is the one on the real repo.
+    it("GivenTheGlobalCapIsFullElsewhere_WhenASlotFrees_ThenTheWaitingProjectTakesItBeforeTheFreeingProjectRefills", async () => {
+      const f = await setup();
+      const waitingProject = await f.project("AI", REPO, {});
+      const other = await f.project("BB", `${REPO}-b`, { runsAtOnce: 4 });
+      const held = [];
+      for (let i = 0; i < 4; i++) {
+        held.push(
+          await f.t.runs.create({
+            projectId: other,
+            ticketId: `held${i}`,
+            step: "build",
+            route: { harness: "claude-code", provider: "claude-sub", model: "sonnet" },
+            tier: "fast",
+            deadline: null,
+            prompt: "x",
+            maxTurns: 1,
+          }),
+        );
+      }
+      const queuedElsewhere = await f.ready(other, "Queued in the other project");
+      const waiting = await f.ready(waitingProject, "Waiting");
+      expect(await f.runsOf(waitingProject, waiting)).toEqual([]);
+      expect(await f.decision(waitingProject)).toBe("global_cap");
+
+      await f.t.runs.update(
+        held[0]!.id,
+        { status: "succeeded", endedAt: new Date().toISOString() },
+        ["queued"],
+      );
+      // Any dispatch in the project that freed the slot; a run report ends the same way.
+      await f.send(`/api/projects/${other}`, "PATCH", { runsAtOnce: 4 });
+
+      const [started] = await f.runsOf(waitingProject, waiting);
+      expect(started).toMatchObject({ status: "queued", step: "build" });
+      expect(await f.runsOf(other, queuedElsewhere)).toEqual([]);
+      expect(await f.decision(other)).toBe("global_cap");
     });
   });
 });

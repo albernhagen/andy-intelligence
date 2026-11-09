@@ -81,6 +81,33 @@ describe("tickets UI", () => {
     );
   });
 
+  it("GivenAProject_WhenAndyPausesItAndSetsTheDial_ThenTheProjectStoresBoth", async () => {
+    const harness = renderApp("/projects");
+    await harness.tracker.createProject({ name: "AI", key: "AI" });
+    await harness.router.invalidate();
+    await harness.user.click(await screen.findByRole("checkbox", { name: "Paused" }));
+    await waitFor(async () => expect((await harness.tracker.getProject("ai"))?.paused).toBe(true));
+
+    const dial = await screen.findByRole("spinbutton", { name: "Runs at once" });
+    await waitFor(() => expect((dial as HTMLInputElement).disabled).toBe(false));
+    await harness.user.clear(dial);
+    await harness.user.type(dial, "3");
+    await harness.user.tab();
+    await waitFor(async () => expect((await harness.tracker.getProject("ai"))?.runsAtOnce).toBe(3));
+  });
+
+  it("GivenAnIdleDecision_WhenTheProjectsPageOpens_ThenTheReasonIsShown", async () => {
+    const harness = renderApp("/projects");
+    await harness.tracker.createProject({ name: "AI", key: "AI" });
+    await harness.tracker.updateProject("ai", {
+      autoBuild: true,
+      buildEnabled: true,
+      lastDispatch: { decision: "prs_waiting_cap", at: "2026-11-09T12:00:00.000Z" },
+    });
+    await harness.router.invalidate();
+    expect(await screen.findByText(/too many agent PRs are waiting/)).toBeTruthy();
+  });
+
   it("GivenATicket_WhenAndyEditsTheDescription_ThenItIsSavedAndTheActivityRecordsIt", async () => {
     const harness = renderApp();
     await harness.tracker.createProject({ name: "AI", key: "AI" });

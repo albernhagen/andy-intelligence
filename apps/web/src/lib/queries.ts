@@ -226,6 +226,8 @@ export function useUpdateProject(projectId: string) {
       buildEnabled?: boolean;
       planApproval?: PlanApproval;
       autoMerge?: AutoMerge;
+      runsAtOnce?: number;
+      paused?: boolean;
       defaultWorker?: Worker;
     }) =>
       unwrap(

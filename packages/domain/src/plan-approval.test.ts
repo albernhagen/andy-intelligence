@@ -171,6 +171,7 @@ describe("plan approval", () => {
   });
 
   it("GivenAnApprovedPlan_WhenItsBuildCantStartNow_ThenTheApprovalStandsForTheNextStart", async () => {
+    await tracker.updateProject(projectId, { runsAtOnce: 1 });
     const { ticket, plan } = await planned();
     const other = await inReady({ title: "Other" });
     await runs.start(projectId, other.id, "build");
@@ -181,7 +182,7 @@ describe("plan approval", () => {
       { decision: "approved" },
       ANDY,
     );
-    expect(result).toMatchObject({ build: null, buildError: expect.stringContaining("in flight") });
+    expect(result).toMatchObject({ build: null, buildError: expect.stringContaining("dial") });
     // Still in Needs-you until the build starts.
     expect((await ticketOf(ticket.id)).needsAttention).toBe(true);
     await runs.cancelForTicket(projectId, other.id);

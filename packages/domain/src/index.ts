@@ -17,6 +17,7 @@ export * from "./scores";
 export * from "./gate";
 export * from "./gate-service";
 export * from "./quota";
+export * from "./dispatch-caps";
 export * from "./cost";
 export * from "./inbox-order";
 export * from "./status-line";

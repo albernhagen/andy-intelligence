@@ -21,6 +21,7 @@ import {
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import { z } from "zod";
+import { registerDispatchTools } from "./tools-dispatch";
 import { registerWorkerTools } from "./tools-worker";
 import { listNeedsMe, registerTicketTools, statusLineOf } from "./tools-tickets";
 import { registerScoreTools, withStartScore } from "./tools-scores";
@@ -150,6 +151,7 @@ export const summary = (t: Ticket) => ({
 
 export function registerTools(server: McpServer, deps: ToolDeps): void {
   const { tracker, service } = deps;
+  registerDispatchTools(server, deps, run);
   registerWorkerTools(server, deps, run);
   registerTicketTools(server, deps);
 
@@ -265,7 +267,7 @@ export function registerTools(server: McpServer, deps: ToolDeps): void {
     "build",
     {
       description:
-        "Starts a build run on a ticket now: an agent plans read-only, implements the ticket, runs the project's checks and opens a PR titled `<KEY>: <title>` (about 15-60 minutes). The ticket moves to In progress, then Ready for review when the PR opens. When the project's plan approval covers the ticket, a read-only plan run starts instead and waits for `approve_plan` or `reject_plan`. One run per project at a time. Only needed when auto-build is off or a build failed.",
+        "Starts a build run on a ticket now: an agent plans read-only, implements the ticket, runs the project's checks and opens a PR titled `<KEY>: <title>` (about 15-60 minutes). The ticket moves to In progress, then Ready for review when the PR opens. When the project's plan approval covers the ticket, a read-only plan run starts instead and waits for `approve_plan` or `reject_plan`. Refused while the project is at its runs-at-once dial. Only needed when auto-build is off or a build failed.",
       inputSchema: BuildInput,
       annotations: { destructiveHint: false, idempotentHint: false, openWorldHint: true },
     },
@@ -290,7 +292,7 @@ export function registerTools(server: McpServer, deps: ToolDeps): void {
     "set_auto_build",
     {
       description:
-        "Turns a project's auto-build on or off (default off). On: when a ticket reaches Ready or a run ends, the top waiting Ready ticket is built (one run per project; it pauses while 3 tickets are In progress or Ready for review).",
+        "Turns a project's auto-build on or off (default off). On: when a ticket reaches Ready or a run ends, waiting Ready tickets are built from the top, up to the project's runs-at-once dial and the caps (`status` shows why dispatch is idle).",
       inputSchema: AutoBuildInput,
       annotations: { destructiveHint: false, idempotentHint: true, openWorldHint: true },
     },
@@ -433,7 +435,7 @@ export function registerTools(server: McpServer, deps: ToolDeps): void {
     "status",
     {
       description:
-        "With a ticket key: its stage, Definition of Ready gaps, questions and recent history. Without: every project's ticket counts by stage and the Needs-you count.",
+        "With a ticket key: its stage, Definition of Ready gaps, questions and recent history. Without: every project's ticket counts by stage, its dispatch dial, pause switch and last dispatch decision (why nothing is running), and the Needs-you count.",
       inputSchema: StatusInput,
       annotations: { readOnlyHint: true },
     },

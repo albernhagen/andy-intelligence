@@ -7,12 +7,8 @@ import {
   type RunExecutor,
 } from "@andy/contracts";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import {
-  MAX_ACTIVE_RUNS_PER_PROJECT,
-  MAX_REFINE_RUNS_PER_TICKET,
-  RunService,
-  refinePrompt,
-} from "./runs";
+import { DEFAULT_ROUTE, MAX_REFINE_RUNS_PER_TICKET, RunService, refinePrompt } from "./runs";
+import { MAX_ACTIVE_RUNS_GLOBAL } from "./dispatch-caps";
 import { WorkflowExecutor } from "./test-executor";
 import { TicketService, type DomainError } from "./tickets";
 
@@ -80,10 +76,55 @@ describe("RunService", () => {
     await rejects(make(null).start(projectId, ticketId, "refine"), "executor_unavailable");
   });
 
-  it("GivenARunInFlight_WhenAnotherIsStarted_ThenRunLimit", async () => {
-    for (let i = 0; i < MAX_ACTIVE_RUNS_PER_PROJECT; i++)
-      await service.start(projectId, ticketId, "refine");
+  it("GivenARunInFlightOnTheTicket_WhenAnotherIsStarted_ThenRunLimit", async () => {
+    await service.start(projectId, ticketId, "refine");
     await rejects(service.start(projectId, ticketId, "refine"), "run_limit");
+  });
+
+  it("GivenTwoStartsOfOneTicketAtOnce_WhenBothRun_ThenOnlyOneStays", async () => {
+    await tracker.updateProject(projectId, { runsAtOnce: 4 });
+    const results = await Promise.allSettled([
+      service.start(projectId, ticketId, "refine"),
+      service.start(projectId, ticketId, "refine"),
+    ]);
+    expect(results.filter((r) => r.status === "fulfilled")).toHaveLength(1);
+    expect(await runs.listActive(projectId)).toHaveLength(1);
+  });
+
+  it("GivenTheDialIsFull_WhenARunStartsOnAnotherTicket_ThenRunLimit", async () => {
+    await tracker.updateProject(projectId, { runsAtOnce: 1 });
+    await service.start(projectId, ticketId, "refine");
+    const other = await new TicketService(tracker).create(
+      projectId,
+      { type: "chore", title: "Other" },
+      "andy",
+      { upNext: true },
+    );
+    await rejects(service.start(projectId, other.id, "refine"), "run_limit");
+  });
+
+  it("GivenTheGlobalCapIsFull_WhenARunStartsInAnotherProject_ThenRunLimit", async () => {
+    await tracker.updateProject(projectId, { runsAtOnce: 4 });
+    for (let i = 0; i < MAX_ACTIVE_RUNS_GLOBAL; i++) {
+      await runs.create({
+        projectId,
+        ticketId: `t${i}`,
+        step: "build",
+        route: DEFAULT_ROUTE,
+        tier: null,
+        deadline: null,
+        prompt: "x",
+        maxTurns: 1,
+      });
+    }
+    const second = await tracker.createProject({ name: "B", key: "B", repos: ["o/b"] });
+    const t = await new TicketService(tracker).create(
+      second.id,
+      { type: "chore", title: "T" },
+      "andy",
+      { upNext: true },
+    );
+    await rejects(service.start(second.id, t.id, "refine"), "run_limit");
   });
 
   it("GivenARunPastItsDeadline_WhenAnotherIsStarted_ThenItIsAllowed", async () => {
@@ -174,7 +215,12 @@ describe("RunService", () => {
   });
 
   it("GivenARunOnAnotherTicketOrNone_WhenATicketsRunsAreCancelled_ThenOnlyItsRunsAreTouched", async () => {
-    const other = await tracker.createTicket(projectId, { type: "chore", title: "Other" }, "andy");
+    const other = await new TicketService(tracker).create(
+      projectId,
+      { type: "chore", title: "Other" },
+      "andy",
+      { upNext: true },
+    );
     await tracker.updateTicket(
       projectId,
       other.id,

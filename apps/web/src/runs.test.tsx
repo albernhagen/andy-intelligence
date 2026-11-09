@@ -66,6 +66,7 @@ describe("runs UI", () => {
 
   it("GivenARunInFlightOnAnotherTicket_WhenAndyStartsARun_ThenTheConflictIsShown", async () => {
     const harness = await setup();
+    await harness.tracker.updateProject("ai", { runsAtOnce: 1 });
     await harness.queueRun();
     const other = await harness.service.create("ai", { type: "chore", title: "Other" }, "andy", {
       upNext: true,
@@ -76,9 +77,7 @@ describe("runs UI", () => {
       await within(section).findByRole("button", { name: "Start refine run" }),
     );
 
-    expect((await within(section).findByRole("alert")).textContent).toMatch(
-      /already has a run in flight/,
-    );
+    expect((await within(section).findByRole("alert")).textContent).toMatch(/runs-at-once dial/);
   });
 
   it("GivenASucceededRunWithHtmlInItsSummary_WhenViewed_ThenTheSummaryRendersAsPlainText", async () => {

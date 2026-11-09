@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { Link, useNavigate } from "@tanstack/react-router";
 import { AutoMerge, PlanApproval, type Project } from "@andy/contracts";
+import { DispatchControls } from "@/components/DispatchControls";
 import { Button } from "@/components/ui/button";
 import { Field, Input } from "@/components/ui/input";
 import { Loading, QueryError } from "@/components/Status";
@@ -40,6 +41,7 @@ export function ProjectsPage() {
             <DailyQuestionCap project={p} />
             <BuildsEnabledToggle project={p} />
             <AutoBuildToggle project={p} />
+            <DispatchControls project={p} />
             <PlanApprovalSelect project={p} />
             <AutoMergeSelect project={p} />
             <DefaultWorkerSelect project={p} />

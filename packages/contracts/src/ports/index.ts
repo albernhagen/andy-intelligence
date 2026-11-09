@@ -38,6 +38,7 @@ import {
   type TicketEvent,
   type WorkflowDispatch,
   type WorkflowRun,
+  projectDispatchPatch,
 } from "../entities";
 
 /**
@@ -198,6 +199,7 @@ export const ProjectPatch = z.strictObject({
   planApproval: PlanApproval.optional(),
   dailyQuestionCap: Project.shape.dailyQuestionCap.unwrap().optional(),
   autoMerge: AutoMerge.optional(),
+  ...projectDispatchPatch,
   defaultWorker: Worker.optional(),
 });
 export type ProjectPatch = z.infer<typeof ProjectPatch>;
@@ -210,6 +212,8 @@ export const ProjectSettings = ProjectPatch.pick({
   planApproval: true,
   dailyQuestionCap: true,
   autoMerge: true,
+  runsAtOnce: true,
+  paused: true,
   defaultWorker: true,
 });
 export type ProjectSettings = z.infer<typeof ProjectSettings>;

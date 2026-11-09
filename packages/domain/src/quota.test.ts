@@ -1,6 +1,7 @@
 import type { QuotaReading } from "@andy/contracts";
 import { describe, expect, it } from "vitest";
 import {
+  quotaRejection,
   QUOTA_MAX_AGE_MS,
   parseRateLimits,
   quotaFreshness,
@@ -135,5 +136,70 @@ describe("quotaStatus", () => {
   it("GivenBothWindowsOk_WhenSummarised_ThenOk", () => {
     const readings = [reading(), reading({ window: "weekly" })];
     expect(quotaStatus("claude-sub", readings, now).level).toBe("ok");
+  });
+});
+
+describe("quotaRejection", () => {
+  const at = new Date("2026-11-09T12:00:00.000Z");
+  const hours = (h: number) => new Date(at.getTime() + h * 3_600_000).toISOString();
+  const reading = (extra: Partial<QuotaReading> = {}): QuotaReading => ({
+    provider: "claude-sub",
+    window: "5h",
+    usedPct: 50,
+    resetsAt: hours(3),
+    source: "test",
+    takenAt: at.toISOString(),
+    confidence: "high",
+    ...extra,
+  });
+  const stored = reading({ takenAt: hours(-1) });
+
+  it("GivenNothingStored_WhenAPlausibleReadingArrives_ThenItIsBelieved", () => {
+    expect(quotaRejection(reading(), undefined, at)).toBeNull();
+  });
+
+  it("GivenAResetFurtherOffThanTheWindow_WhenChecked_ThenRejected", () => {
+    expect(quotaRejection(reading({ resetsAt: hours(6) }), undefined, at)).toBe("reset_too_far");
+  });
+
+  it("GivenAWeeklyResetInSixDays_WhenChecked_ThenBelieved", () => {
+    expect(
+      quotaRejection(reading({ window: "weekly", resetsAt: hours(144) }), undefined, at),
+    ).toBeNull();
+  });
+
+  it("GivenARecentReading_WhenUsageRisesInTheSameWindow_ThenBelieved", () => {
+    expect(quotaRejection(reading({ usedPct: 70 }), stored, at)).toBeNull();
+  });
+
+  it("GivenARecentReading_WhenUsageDropsPastTheSlack_ThenRejected", () => {
+    expect(quotaRejection(reading({ usedPct: 44 }), stored, at)).toBe("usage_drop");
+  });
+
+  it("GivenARecentReading_WhenUsageDropsWithinTheSlack_ThenBelieved", () => {
+    expect(quotaRejection(reading({ usedPct: 45 }), stored, at)).toBeNull();
+  });
+
+  it("GivenARecentReading_WhenANewWindowIsClaimedBeforeItsReset_ThenRejected", () => {
+    expect(quotaRejection(reading({ usedPct: 1, resetsAt: hours(4) }), stored, at)).toBe(
+      "window_mismatch",
+    );
+  });
+
+  it("GivenTheStoredWindowIsOver_WhenALowerReadingArrives_ThenBelieved", () => {
+    const over = reading({ usedPct: 90, resetsAt: hours(-0.5), takenAt: hours(-1) });
+    expect(quotaRejection(reading({ usedPct: 1 }), over, at)).toBeNull();
+  });
+
+  it("GivenAStoredReadingOverSixHoursOld_WhenALowerReadingArrives_ThenAFalseHighCantLockItselfIn", () => {
+    const old = reading({
+      window: "weekly",
+      usedPct: 99,
+      resetsAt: hours(100),
+      takenAt: hours(-7),
+    });
+    expect(
+      quotaRejection(reading({ window: "weekly", usedPct: 20, resetsAt: hours(50) }), old, at),
+    ).toBeNull();
   });
 });

@@ -74,7 +74,12 @@ export interface TicketStatus {
 
 /** Every project with its unarchived ticket count per stage, plus the size of the Needs-you inbox. */
 export interface Overview {
-  projects: { key: string; name: string; ticketsByStage: Record<Stage, number> }[];
+  projects: {
+    key: string;
+    name: string;
+    ticketsByStage: Record<Stage, number>;
+    dispatch: Pick<Project, "runsAtOnce" | "paused" | "lastDispatch">;
+  }[];
   needsYou: { questions: number; tickets: number };
 }
 
@@ -432,8 +437,11 @@ export class TicketService {
       },
       actor,
     );
-    // A ticket reaching Ready may be the next build (ADR-0063).
-    if (to === "ready") await this.dispatchNext?.(projectId);
+    // A ticket reaching Ready may be the next build (ADR-0063); a PR that stopped waiting frees
+    // room under the cap on PRs waiting for Andy (ADR-0079).
+    if (to === "ready" || ticket.stage === "ready_for_review") {
+      await this.dispatchNext?.(projectId);
+    }
     return moved;
   }
 
@@ -768,7 +776,13 @@ export class TicketService {
         for (const t of await this.tracker.listTickets(p.id, { archived: false })) {
           ticketsByStage[t.stage]++;
         }
-        return { key: p.key, name: p.name, ticketsByStage };
+        const { runsAtOnce, paused, lastDispatch } = p;
+        return {
+          key: p.key,
+          name: p.name,
+          ticketsByStage,
+          dispatch: { runsAtOnce, paused, lastDispatch },
+        };
       }),
     );
     return {

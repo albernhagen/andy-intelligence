@@ -15,13 +15,6 @@ export const BUILDABLE_STAGES: readonly Stage[] = ["ready", "in_progress"];
  */
 export const MAX_BUILD_RUNS_PER_TICKET = 4;
 
-/**
- * Tickets a project may have between dispatch and merge (In progress + Ready for review) before
- * the dispatcher stops taking more (ADR-0028). PRs wait for Andy while `autoMerge` is off, and
- * each one is built from `main` without the others.
- */
-export const MAX_TICKETS_IN_FLIGHT = 3;
-
 /** Andy does the work himself (`overrides.assignee: "me"`): no build run, ever; refine still runs. */
 export function isAndysWork(ticket: Pick<Ticket, "overrides">): boolean {
   return ticket.overrides.assignee === "me";

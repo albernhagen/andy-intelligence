@@ -12,6 +12,7 @@ import {
   STARTABLE_STEPS,
   parseRateLimits,
   quotaDelta,
+  quotaRejection,
   type ParsedRateLimits,
   type RunService,
 } from "@andy/domain";
@@ -189,7 +190,18 @@ export function registerRunCallbacks(app: OpenAPIHono<AuthEnv>, deps: RunCallbac
     }
     if (parsed.readings.length === 0) return;
     try {
-      await deps.quota.save(parsed.readings);
+      const stored = await deps.quota.latest("claude-sub");
+      const believed = parsed.readings.filter((reading) => {
+        const reason = quotaRejection(
+          reading,
+          stored.find((r) => r.window === reading.window),
+          now(),
+        );
+        if (reason)
+          log("WARNING", "quota reading rejected", { runId, window: reading.window, reason });
+        return reason === null;
+      });
+      await deps.quota.save(believed);
     } catch (err) {
       log("ERROR", "quota reading not saved", { runId, error: String(err) });
     }

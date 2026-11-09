@@ -1,5 +1,6 @@
 import {
   InMemoryCodeHost,
+  InMemoryQuotaStore,
   InMemoryRunStore,
   InMemoryWorkTracker,
   type Executor,
@@ -8,7 +9,8 @@ import {
 } from "@andy/contracts";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { BuildDispatcher } from "./build-dispatch";
-import { MAX_BUILD_RUNS_PER_TICKET, MAX_TICKETS_IN_FLIGHT, branchFor } from "./builds";
+import { MAX_BUILD_RUNS_PER_TICKET, branchFor } from "./builds";
+import { MAX_ACTIVE_RUNS_GLOBAL, MAX_PRS_WAITING_PER_PROJECT } from "./dispatch-caps";
 import { ProjectService } from "./projects";
 import { RunService, type RunResult } from "./runs";
 import { WorkflowExecutor, buildOutput } from "./test-executor";
@@ -109,6 +111,7 @@ describe("BuildDispatcher", () => {
   });
 
   it("GivenSeveralReadyTickets_WhenNext_ThenTheTopOfTheOrderStartsFirst", async () => {
+    await tracker.updateProject(projectId, { runsAtOnce: 1 });
     const { dispatcher } = wire();
     const first = await inReady("First");
     const second = await inReady("Second");
@@ -204,19 +207,179 @@ describe("BuildDispatcher", () => {
     expect(await builds(t.id)).toEqual([]);
   });
 
-  it("GivenTooManyTicketsWaitingForReview_WhenNext_ThenDispatchPauses", async () => {
+  const decision = async (p = projectId) => (await tracker.getProject(p))?.lastDispatch?.decision;
+
+  /** A ticket in Ready for review; `agent`: a build run opened its PR. */
+  const inReview = async (title: string, agent: boolean) => {
+    const t = await tracker.createTicket(projectId, ready(title), "andy");
+    await tracker.updateTicket(
+      projectId,
+      t.id,
+      { stage: { to: "ready_for_review", forced: true, reason: null } },
+      "andy",
+    );
+    if (!agent) return;
+    const run = await runStore.create({
+      projectId,
+      ticketId: t.id,
+      step: "build",
+      route: { harness: "claude-code", provider: "claude-sub", model: "sonnet" },
+      tier: "fast",
+      deadline: null,
+    });
+    await runStore.update(
+      run.id,
+      {
+        status: "succeeded",
+        endedAt: new Date(ms).toISOString(),
+        links: { pullRequest: `https://github.com/${REPO.fullName}/pull/1` },
+      },
+      ["queued"],
+    );
+  };
+
+  it("GivenADialOfTwoAndThreeReadyTickets_WhenNext_ThenTheTopTwoStartAndTheDecisionIsTheCap", async () => {
     const { dispatcher } = wire();
-    for (let i = 0; i < MAX_TICKETS_IN_FLIGHT; i++) {
-      const t = await tracker.createTicket(projectId, ready(`Built ${i}`), "andy");
-      await tracker.updateTicket(
-        projectId,
-        t.id,
-        { stage: { to: "ready_for_review", forced: true, reason: null } },
-        "andy",
-      );
-    }
+    const [a, b, c] = [await inReady("A"), await inReady("B"), await inReady("C")];
+    await dispatcher.next(projectId);
+    expect(await builds(a.id)).toHaveLength(1);
+    expect(await builds(b.id)).toHaveLength(1);
+    expect(await builds(c.id)).toEqual([]);
+    expect(await decision()).toBe("project_cap");
+  });
+
+  it("GivenPaused_WhenNext_ThenNothingStartsAndPausedIsRecorded", async () => {
+    await tracker.updateProject(projectId, { paused: true });
+    const { dispatcher } = wire();
+    const t = await inReady("A");
+    expect(await dispatcher.next(projectId)).toBeNull();
+    expect(await builds(t.id)).toEqual([]);
+    expect(await decision()).toBe("paused");
+  });
+
+  it("GivenPaused_WhenAndyResumes_ThenTheWaitingTicketStarts", async () => {
+    await tracker.updateProject(projectId, { paused: true });
+    const { projects } = wire();
+    const t = await inReady("A");
+    await projects.update(projectId, { paused: false }, "andy@example.com");
+    expect(await builds(t.id)).toHaveLength(1);
+    expect(await decision()).toBe("started");
+  });
+
+  it("GivenTheDialIsFull_WhenAndyRaisesIt_ThenTheNextTicketStarts", async () => {
+    await tracker.updateProject(projectId, { runsAtOnce: 1 });
+    const { dispatcher, projects } = wire();
+    await inReady("A");
+    const b = await inReady("B");
+    await dispatcher.next(projectId);
+    expect(await builds(b.id)).toEqual([]);
+    await projects.update(projectId, { runsAtOnce: 2 }, "andy@example.com");
+    expect(await builds(b.id)).toHaveLength(1);
+  });
+
+  it("GivenAgentPrsWaitingAtTheCap_WhenNext_ThenNothingStartsAndTheReasonIsRecorded", async () => {
+    const { dispatcher } = wire();
+    for (let i = 0; i < MAX_PRS_WAITING_PER_PROJECT; i++) await inReview(`Built ${i}`, true);
     await inReady("Waiting");
     expect(await dispatcher.next(projectId)).toBeNull();
+    expect(await decision()).toBe("prs_waiting_cap");
+  });
+
+  it("GivenPrsAndyOpenedHimself_WhenNext_ThenTheyDontCountTowardTheCap", async () => {
+    const { dispatcher } = wire();
+    for (let i = 0; i < MAX_PRS_WAITING_PER_PROJECT; i++) await inReview(`Own ${i}`, false);
+    await inReady("Waiting");
+    expect(await dispatcher.next(projectId)).not.toBeNull();
+  });
+
+  it("GivenAWaitingPrLeavesReview_WhenItMerges_ThenDispatchRunsAgain", async () => {
+    const { tickets } = wire();
+    for (let i = 0; i < MAX_PRS_WAITING_PER_PROJECT; i++) await inReview(`Built ${i}`, true);
+    const waiting = await inReady("Waiting");
+    const [first] = await tracker.listTickets(projectId, { stage: "ready_for_review" });
+    await tickets.move(projectId, first!.id, "done", "andy");
+    expect(await builds(waiting.id)).toHaveLength(1);
+  });
+
+  it("GivenQuotaAtThePauseLevel_WhenNext_ThenNothingStartsAndTheReserveIsRecorded", async () => {
+    const quota = new InMemoryQuotaStore();
+    await quota.save([
+      {
+        provider: "claude-sub",
+        window: "5h",
+        usedPct: 90,
+        resetsAt: new Date(ms + 3_600_000).toISOString(),
+        source: "test",
+        takenAt: new Date(ms).toISOString(),
+        confidence: "high",
+      },
+    ]);
+    const { runs } = wire();
+    const dispatcher = new BuildDispatcher(tracker, runStore, runs, now, quota);
+    await inReady("A");
+    expect(await dispatcher.next(projectId)).toBeNull();
+    expect(await decision()).toBe("quota_reserve");
+  });
+
+  it("GivenAPauseLevelReadingOverSixHoursOld_WhenNext_ThenDispatchStarts", async () => {
+    const quota = new InMemoryQuotaStore();
+    await quota.save([
+      {
+        provider: "claude-sub",
+        window: "weekly",
+        usedPct: 99,
+        resetsAt: new Date(ms + 6 * 86_400_000).toISOString(),
+        source: "test",
+        takenAt: new Date(ms - 7 * 3_600_000).toISOString(),
+        confidence: "high",
+      },
+    ]);
+    const { runs } = wire();
+    const dispatcher = new BuildDispatcher(tracker, runStore, runs, now, quota);
+    await inReady("A");
+    expect(await dispatcher.next(projectId)).not.toBeNull();
+  });
+
+  it("GivenTheSameIdleDecision_WhenNextRunsAgain_ThenItsTimeStaysWhenItBegan", async () => {
+    await tracker.updateProject(projectId, { paused: true });
+    const { dispatcher } = wire();
+    await dispatcher.next(projectId);
+    const first = (await tracker.getProject(projectId))!.lastDispatch;
+    await dispatcher.next(projectId);
+    expect((await tracker.getProject(projectId))!.lastDispatch).toEqual(first);
+  });
+
+  it("GivenNoReadyTicket_WhenNext_ThenNothingReadyIsRecorded", async () => {
+    const { dispatcher } = wire();
+    await dispatcher.next(projectId);
+    expect(await decision()).toBe("nothing_ready");
+  });
+
+  it("GivenTheGlobalCapIsFull_WhenARunEndsElsewhere_ThenTheWaitingProjectStarts", async () => {
+    await tracker.updateProject(projectId, { runsAtOnce: MAX_ACTIVE_RUNS_GLOBAL });
+    host = new InMemoryCodeHost([REPO, { ...REPO, fullName: "albernhagen/b" }]);
+    const { dispatcher, runs } = wire();
+    const started: Run[] = [];
+    for (let i = 0; i < MAX_ACTIVE_RUNS_GLOBAL; i++) await inReady(`A${i}`);
+    await dispatcher.next(projectId);
+    for (const r of await runStore.listActive(projectId)) started.push(r);
+    expect(started).toHaveLength(MAX_ACTIVE_RUNS_GLOBAL);
+
+    const b = await tracker.createProject({ name: "B", key: "B", repos: ["albernhagen/b"] });
+    await tracker.updateProject(b.id, { autoBuild: true, buildEnabled: true });
+    const t = await tracker.createTicket(b.id, ready("B1"), "andy");
+    await tracker.updateTicket(
+      b.id,
+      t.id,
+      { stage: { to: "ready", forced: false, reason: null } },
+      "andy",
+    );
+    expect(await dispatcher.next(b.id)).toBeNull();
+    expect(await decision(b.id)).toBe("global_cap");
+
+    await succeed(runs, started[0]!);
+    await dispatcher.wakeGlobalCapWaiters(projectId);
+    expect(await runStore.listActive(b.id)).toHaveLength(1);
   });
 
   it("GivenATicketAtItsBuildCap_WhenNext_ThenItIsFlaggedNotStarted", async () => {
