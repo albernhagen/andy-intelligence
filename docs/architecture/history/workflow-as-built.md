@@ -12,4 +12,4 @@ As-built notes for finished slices, moved out of [`workflow.md`](../workflow.md)
 
 ## §4.3 Refinement and questions
 
-- **Built (M1.7, ADR-0054):** refine starts on events (ticket created, last answer leaving the DoR unmet, run ended), oldest ticket first, unless `autoRefine` is off. ≤ 3 runs per ticket; output written once per run; type, size, out of scope and touches only where empty (it asks to change a set field); failures flag Needs-you. If the ticket leaves Backlog mid-run, nothing is written; a comment quotes the questions (ADR-0073).
+- **Built (M1.7, ADR-0054; trigger amended by ADR-0075):** refine starts on events (ticket entered Up next, last answer leaving the DoR unmet, run ended), top of Up next first, unless `autoRefine` is off. ≤ 3 runs per ticket; output written once per run; type, size, out of scope and touches only where empty (it asks to change a set field); failures flag Needs-you. If the ticket leaves Backlog mid-run, nothing is written; a comment quotes the questions (ADR-0073).

@@ -34,10 +34,10 @@ As built (PR events, build dispatch, plan approval): [`history/workflow-as-built
 - Checked in `packages/domain` (`checkDor`); `dorStatus` is computed on every change, never set by callers.
 
 ### 4.3 Refinement and questions
-- Every ticket receives a refinement pass: the agent drafts the ticket, lists assumptions, and asks **1–5 targeted questions** (highest-impact ambiguities first; multiple choice with a suggested default where possible).
+- Backlog has **Ideas** (no agent spend) and **Up next**; entering Up next starts a refinement pass (ADR-0075). The agent drafts the ticket, or sends it back, or splits it. Each gap is rated; the control plane makes it a question only if the agent is unsure or a wrong guess is costly to reverse, else an assumption Andy can promote. Zero questions is allowed; at most 3 open per ticket and `dailyQuestionCap` per project per 24 hours.
 - Questions are **structured records** (§5 Question).
 - Andy answers in UI or MCP. A `/refine` skill in Claude desktop batches pending questions across projects into one conversation.
-- Answering re-checks the DoR; the last answer moves a Backlog ticket that meets it to Ready (`system`, `ifUpdatedAt`).
+- Answering re-checks the DoR; the last answer moves an Up-next ticket that meets it to Ready (`system`, `ifUpdatedAt`).
 - As built (refine dispatch): [`history/workflow-as-built.md`](history/workflow-as-built.md).
 
 ### 4.4 Epics
