@@ -15,9 +15,11 @@ import {
   Urgency,
 } from "./common";
 import { RunCostFields } from "./cost";
+import { RefineScores, TicketScores } from "./scores";
 
 export * from "./common";
 export * from "./cost";
+export * from "./scores";
 
 /** ARCHITECTURE §5 — domain model. Vendor concepts must not appear here. */
 
@@ -180,6 +182,7 @@ export const Ticket = z.object({
   sentBackReason: z.string().max(REFINE_REASON_MAX).nullable().default(null),
   /** What refine assumed instead of asking (ADR-0075). */
   refineAssumptions: z.array(Assumption).default([]),
+  ...TicketScores,
   createdAt: Timestamp,
   updatedAt: Timestamp,
 });
@@ -295,6 +298,7 @@ export const RefineOutput = z
     type: TicketType,
     size: Size,
     sizeReason: capped(REFINE_LIMITS.sizeReason),
+    ...RefineScores,
     outOfScope: z.array(capped(REFINE_LIMITS.scopeItem)).max(REFINE_LIMITS.maxScopeItems),
     touches: z.array(capped(REFINE_LIMITS.scopeItem)).max(REFINE_LIMITS.maxScopeItems),
     /** Written only where the ticket has none, like the proposals above. */

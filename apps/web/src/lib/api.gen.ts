@@ -631,6 +631,20 @@ export interface paths {
                 /** Format: date-time */
                 createdAt: string;
               }[];
+              /**
+               * @default null
+               * @enum {string|null}
+               */
+              risk: "low" | "medium" | "high" | null;
+              /** @default null */
+              riskReason: string | null;
+              /**
+               * @default null
+               * @enum {string|null}
+               */
+              confidence: "high" | "medium" | "low" | null;
+              /** @default null */
+              confidenceReason: string | null;
               /** Format: date-time */
               createdAt: string;
               /** Format: date-time */
@@ -844,6 +858,20 @@ export interface paths {
                 /** Format: date-time */
                 createdAt: string;
               }[];
+              /**
+               * @default null
+               * @enum {string|null}
+               */
+              risk: "low" | "medium" | "high" | null;
+              /** @default null */
+              riskReason: string | null;
+              /**
+               * @default null
+               * @enum {string|null}
+               */
+              confidence: "high" | "medium" | "low" | null;
+              /** @default null */
+              confidenceReason: string | null;
               /** Format: date-time */
               createdAt: string;
               /** Format: date-time */
@@ -1019,6 +1047,20 @@ export interface paths {
                 /** Format: date-time */
                 createdAt: string;
               }[];
+              /**
+               * @default null
+               * @enum {string|null}
+               */
+              risk: "low" | "medium" | "high" | null;
+              /** @default null */
+              riskReason: string | null;
+              /**
+               * @default null
+               * @enum {string|null}
+               */
+              confidence: "high" | "medium" | "low" | null;
+              /** @default null */
+              confidenceReason: string | null;
               /** Format: date-time */
               createdAt: string;
               /** Format: date-time */
@@ -1134,6 +1176,12 @@ export interface paths {
             needsAttention?: boolean;
             blockedBy?: string[];
             rank?: string;
+            /** @enum {string|null} */
+            risk?: "low" | "medium" | "high" | null;
+            riskReason?: string | null;
+            /** @enum {string|null} */
+            confidence?: "high" | "medium" | "low" | null;
+            confidenceReason?: string | null;
             /** Format: date-time */
             ifUpdatedAt?: string;
           };
@@ -1233,6 +1281,20 @@ export interface paths {
                 /** Format: date-time */
                 createdAt: string;
               }[];
+              /**
+               * @default null
+               * @enum {string|null}
+               */
+              risk: "low" | "medium" | "high" | null;
+              /** @default null */
+              riskReason: string | null;
+              /**
+               * @default null
+               * @enum {string|null}
+               */
+              confidence: "high" | "medium" | "low" | null;
+              /** @default null */
+              confidenceReason: string | null;
               /** Format: date-time */
               createdAt: string;
               /** Format: date-time */
@@ -1403,6 +1465,20 @@ export interface paths {
                 /** Format: date-time */
                 createdAt: string;
               }[];
+              /**
+               * @default null
+               * @enum {string|null}
+               */
+              risk: "low" | "medium" | "high" | null;
+              /** @default null */
+              riskReason: string | null;
+              /**
+               * @default null
+               * @enum {string|null}
+               */
+              confidence: "high" | "medium" | "low" | null;
+              /** @default null */
+              confidenceReason: string | null;
               /** Format: date-time */
               createdAt: string;
               /** Format: date-time */
@@ -1691,6 +1767,20 @@ export interface paths {
                 /** Format: date-time */
                 createdAt: string;
               }[];
+              /**
+               * @default null
+               * @enum {string|null}
+               */
+              risk: "low" | "medium" | "high" | null;
+              /** @default null */
+              riskReason: string | null;
+              /**
+               * @default null
+               * @enum {string|null}
+               */
+              confidence: "high" | "medium" | "low" | null;
+              /** @default null */
+              confidenceReason: string | null;
               /** Format: date-time */
               createdAt: string;
               /** Format: date-time */
@@ -1876,6 +1966,20 @@ export interface paths {
                 /** Format: date-time */
                 createdAt: string;
               }[];
+              /**
+               * @default null
+               * @enum {string|null}
+               */
+              risk: "low" | "medium" | "high" | null;
+              /** @default null */
+              riskReason: string | null;
+              /**
+               * @default null
+               * @enum {string|null}
+               */
+              confidence: "high" | "medium" | "low" | null;
+              /** @default null */
+              confidenceReason: string | null;
               /** Format: date-time */
               createdAt: string;
               /** Format: date-time */
@@ -2168,6 +2272,20 @@ export interface paths {
                 /** Format: date-time */
                 createdAt: string;
               }[];
+              /**
+               * @default null
+               * @enum {string|null}
+               */
+              risk: "low" | "medium" | "high" | null;
+              /** @default null */
+              riskReason: string | null;
+              /**
+               * @default null
+               * @enum {string|null}
+               */
+              confidence: "high" | "medium" | "low" | null;
+              /** @default null */
+              confidenceReason: string | null;
               /** Format: date-time */
               createdAt: string;
               /** Format: date-time */
@@ -2352,6 +2470,20 @@ export interface paths {
                 /** Format: date-time */
                 createdAt: string;
               }[];
+              /**
+               * @default null
+               * @enum {string|null}
+               */
+              risk: "low" | "medium" | "high" | null;
+              /** @default null */
+              riskReason: string | null;
+              /**
+               * @default null
+               * @enum {string|null}
+               */
+              confidence: "high" | "medium" | "low" | null;
+              /** @default null */
+              confidenceReason: string | null;
               /** Format: date-time */
               createdAt: string;
               /** Format: date-time */
@@ -3096,6 +3228,20 @@ export interface paths {
                   /** Format: date-time */
                   createdAt: string;
                 }[];
+                /**
+                 * @default null
+                 * @enum {string|null}
+                 */
+                risk: "low" | "medium" | "high" | null;
+                /** @default null */
+                riskReason: string | null;
+                /**
+                 * @default null
+                 * @enum {string|null}
+                 */
+                confidence: "high" | "medium" | "low" | null;
+                /** @default null */
+                confidenceReason: string | null;
                 /** Format: date-time */
                 createdAt: string;
                 /** Format: date-time */
@@ -3225,6 +3371,20 @@ export interface paths {
                 /** Format: date-time */
                 createdAt: string;
               }[];
+              /**
+               * @default null
+               * @enum {string|null}
+               */
+              risk: "low" | "medium" | "high" | null;
+              /** @default null */
+              riskReason: string | null;
+              /**
+               * @default null
+               * @enum {string|null}
+               */
+              confidence: "high" | "medium" | "low" | null;
+              /** @default null */
+              confidenceReason: string | null;
               /** Format: date-time */
               createdAt: string;
               /** Format: date-time */

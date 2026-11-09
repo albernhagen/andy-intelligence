@@ -109,6 +109,10 @@ export function buildTicket(
     upNextAt: null,
     sentBackReason: null,
     refineAssumptions: [],
+    risk: null,
+    riskReason: null,
+    confidence: null,
+    confidenceReason: null,
     createdAt: now,
     updatedAt: now,
   };

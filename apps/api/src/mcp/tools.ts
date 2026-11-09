@@ -22,6 +22,7 @@ import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import { z } from "zod";
 import { listNeedsMe, registerTicketTools, statusLineOf } from "./tools-tickets";
+import { registerScoreTools, withStartScore } from "./tools-scores";
 
 /**
  * MCP core tools (M1.4: MCP core tools; `refine` from M1.7: Refinement; `build` and
@@ -437,10 +438,14 @@ export function registerTools(server: McpServer, deps: ToolDeps): void {
     ({ ticket }) =>
       run(async () =>
         ticket
-          ? await statusLineOf(deps, await statusWithCost(service, deps.runs, ticket))
+          ? withStartScore(
+              await statusLineOf(deps, await statusWithCost(service, deps.runs, ticket)),
+            )
           : { signedInAs: deps.email, ...(await service.overview()) },
       ),
   );
+
+  registerScoreTools(server, tracker, run);
 }
 
 async function statusWithCost(service: TicketService, runs: RunService, key: string) {
