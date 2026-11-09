@@ -28,6 +28,7 @@ Every ticket sits under a milestone. Milestones are epic tickets in project `AI`
 - AI-6: M1.17: Agent evals v1: who pays for the model calls in CI: an API key with a hard cap, the subscription token through the executor, or recorded replays. Recommendation: the subscription token through the executor, with capped cases and turns.
 - AI-9: Live UI updates: Firestore realtime listeners need Firebase Auth custom tokens and read-only Firestore rules for the owner's UID (IAM and rules), the alternative is SSE from Cloud Run. Recommendation: Firestore listeners, read-only rules for the owner only.
 - AI-35 follow-up: widen the weekly system review's Edit allowlist to `docs/security/*.md` (a workflow change; the split keeps the register in the main file meanwhile).
+- AI-39 low security finding: a costly (non-reversible) refine gap demoted by the ticket or daily question cap becomes an assumption and the ticket can still reach Ready. Should such a gap hold the ticket in Up next instead? Recommendation: yes, as a small follow-up ticket; not a blocker for PR #111.
 - Local mode design (open question 11): AI-44 slice 1 is the design ADR. Context sources design (open question 12): after M1.
 
 ## Blocked on Andy
