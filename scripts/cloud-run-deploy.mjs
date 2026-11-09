@@ -1,8 +1,9 @@
 // Logic for platform/actions/cloud-run-safe-deploy (ADR-0076). gcloud stays in the action; this
 // reads `gcloud run services describe --format=json` from stdin, checks URLs and writes the summary.
 /* global fetch, AbortSignal */
-import { appendFileSync, readFileSync } from "node:fs";
+import { appendFileSync } from "node:fs";
 import process from "node:process";
+import { text } from "node:stream/consumers";
 import { setTimeout as sleep } from "node:timers/promises";
 import { fileURLToPath } from "node:url";
 
@@ -163,24 +164,36 @@ function setOutputs(outputs) {
   if (process.env.GITHUB_OUTPUT) appendFileSync(process.env.GITHUB_OUTPUT, text);
 }
 
-const stdinService = () => JSON.parse(readFileSync(0, "utf8"));
+// Asynchronous on purpose: readFileSync(0) throws EAGAIN on a non-blocking pipe when gcloud's
+// output has not arrived yet (AI-64). The error omits the input: job logs are public.
+async function stdinService(command) {
+  const input = await text(process.stdin);
+  if (!input.trim()) throw new Error(`${command}: expected the service JSON on stdin, got nothing`);
+  try {
+    return JSON.parse(input);
+  } catch {
+    throw new Error(
+      `${command}: expected the service JSON on stdin, got ${input.length} unparsable characters`,
+    );
+  }
+}
 
 async function main([command, argument]) {
   const env = process.env;
   switch (command) {
     case "serving": {
-      const serving = servingRevisions(stdinService());
+      const serving = servingRevisions(await stdinService(command));
       if (!serving) throw new Error("service reports no serving revision");
       return setOutputs({ serving });
     }
     case "after":
-      return setOutputs({ serving: servingRevisions(stdinService()) });
+      return setOutputs({ serving: servingRevisions(await stdinService(command)) });
     case "candidate":
-      return setOutputs(readCandidate(stdinService()));
+      return setOutputs(readCandidate(await stdinService(command)));
     case "assert-latest":
-      return assertLatest(stdinService(), argument);
+      return assertLatest(await stdinService(command), argument);
     case "assert-promoted":
-      return assertPromoted(stdinService(), argument);
+      return assertPromoted(await stdinService(command), argument);
     case "smoke-candidate":
       return runChecks(candidateChecks({ taggedUrl: env.TAGGED_URL, publicUrl: env.PUBLIC_URL }));
     case "smoke-public":
