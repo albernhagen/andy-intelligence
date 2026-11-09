@@ -24,12 +24,12 @@ Update these in the **same PR** as the code:
 | If you changed…                                | Update                                                                                                                                       |
 | ---------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------- |
 | Commands, env vars, packages/apps, layout      | `README.md`                                                                                                                                  |
-| A feature, component, or how to use the system | `README.md` "How it works today" (keep it one screen)                                                                                        |
+| A feature, component, or how to use the system | `README.md` "How it works today" (one screen); its row in `docs/features.md`                                                                 |
 | Design, components, data model, scope, plan    | The topic file in `docs/architecture/`; `ARCHITECTURE.md` only if design intent, components or milestones change (ADR-0061)                  |
 | A decision, or deviated from ARCHITECTURE.md   | New ADR + its line in `adr/README.md`; update the old ADR's status                                                                           |
 | Any step Andy runs by hand                     | `docs/runbooks/*.md`                                                                                                                         |
 | Slice status, pending decisions, blockers      | Ticket in project `AI` (Andy moves it); `docs/build-log.md` (decisions, blockers); what happened → new `docs/build-log/YYYY-MM-DD-<slug>.md` |
-| Trust boundary, entry point, credential, IAM   | `docs/security/threat-model.md`                                                                                                              |
+| Trust boundary, entry point, credential, IAM   | `docs/security/threat-model.md` and its area file in `docs/security/`                                                                        |
 | Agent rules or this table                      | `AGENTS.md` (root or nested), `docs/BUILD-PROMPT.md`                                                                                         |
 | A quality, security, cost or scaling guardrail | ARCHITECTURE §8.1 project baseline inventory (ADR-0031)                                                                                      |
 
@@ -47,7 +47,7 @@ If code and the architecture docs disagree, ask which is wrong — don't silentl
 ## Security (ADR-0025, ARCHITECTURE §9.1)
 
 - Every PR gets security scans and a security-review agent (`platform/procedures/security-review.md`); fix high/critical findings or ask Andy to label `security-accepted` (removed on every push).
-- Changed a trust boundary, entry point, credential, or IAM grant? Update `docs/security/threat-model.md` in the same PR.
+- Changed a trust boundary, entry point, credential, or IAM grant? Update `docs/security/threat-model.md` and its area file in the same PR.
 - Answer every adversarial-review finding on your PR: fixed (commit) or why not (ADR-0026). Only a fix clears a `blocker`; if you disagree, say why and ask Andy for `review-accepted`. Never argue a reviewer out of a finding (`docs/runbooks/adversarial-review.md`).
 - Anything that can scale or spend (instances, queues, jobs, API calls) needs an explicit cap (ADR-0028).
 - Built a guardrail (check, hook, scan, cap, alert, repo setting)? Record in ARCHITECTURE §8.1 how managed projects get it (ADR-0031), and build it so it can be carried: composite action in `platform/actions/`, a file in `platform/baseline/manifest.json`, GitHub config in `platform/baseline/github/`, or a Terraform module (ADR-0038).
