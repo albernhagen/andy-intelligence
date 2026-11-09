@@ -12,3 +12,5 @@ export * from "./board";
 export * from "./builds";
 export * from "./build-dispatch";
 export * from "./plans";
+export * from "./gate";
+export * from "./gate-service";

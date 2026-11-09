@@ -2,6 +2,7 @@ import {
   NewTicket,
   PLAN_REASON_MAX,
   PlanApproval,
+  AutoMerge,
   Project,
   QuestionId,
   Stage,
@@ -89,6 +90,13 @@ const PlanApprovalInput = {
   project: ProjectKey,
   policy: PlanApproval.describe(
     "none: builds start without a plan. m-and-l: M and L tickets need an approved plan first. all: every ticket does.",
+  ),
+};
+
+const AutoMergeInput = {
+  project: ProjectKey,
+  policy: AutoMerge.describe(
+    "Which ticket sizes' agent PRs merge on their own once the gate passes: none, s, s-and-m or all. Vetoed PRs always wait for Andy.",
   ),
 };
 
@@ -324,6 +332,25 @@ export function registerTools(server: McpServer, deps: ToolDeps): void {
           deps.email,
         );
         return { project: updated.key, planApproval: updated.planApproval };
+      }),
+  );
+
+  server.registerTool(
+    "set_auto_merge",
+    {
+      description:
+        "Sets which ticket sizes' agent PRs the control plane merges on its own once the gate passes: none, s, s-and-m (default for new projects) or all. Andy only.",
+      inputSchema: AutoMergeInput,
+      annotations: { destructiveHint: false, idempotentHint: true },
+    },
+    ({ project, policy }) =>
+      run(async () => {
+        const updated = await deps.projects.update(
+          project.toLowerCase(),
+          { autoMerge: policy },
+          deps.email,
+        );
+        return { project: updated.key, autoMerge: updated.autoMerge };
       }),
   );
 
