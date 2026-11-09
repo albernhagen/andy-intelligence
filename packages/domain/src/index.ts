@@ -13,6 +13,7 @@ export * from "./builds";
 export * from "./build-dispatch";
 export * from "./plans";
 export * from "./refine-gate";
+export * from "./scores";
 export * from "./gate";
 export * from "./gate-service";
 export * from "./quota";

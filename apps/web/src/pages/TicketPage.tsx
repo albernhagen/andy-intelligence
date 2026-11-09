@@ -16,6 +16,7 @@ import {
 } from "@/components/InlineEdit";
 import { MoveControls } from "@/components/MoveControls";
 import { QuestionCard } from "@/components/QuestionCard";
+import { ScoreReasons } from "@/components/ScoreReasons";
 import { Markdown } from "@/components/Markdown";
 import { Loading, QueryError } from "@/components/Status";
 import { Badge } from "@/components/ui/badge";
@@ -66,7 +67,7 @@ export function TicketPage() {
   }, [loaded, ticketRef, projectId, navigate, queryClient]);
 
   const close = useCallback(
-    () => void navigate({ to: "/p/$projectId", params: { projectId } }),
+    () => void navigate({ to: "/p/$projectId", params: { projectId }, search: true }),
     [navigate, projectId],
   );
   useEscapeToClose(close);
@@ -211,6 +212,7 @@ function Story({ ticket: t }: { ticket: Ticket }) {
         </div>
         <Rail ticket={t} />
       </div>
+      <ScoreReasons ticket={t} />
       <Questions {...pathOf(t)} />
       <Assumptions ticket={t} />
       <Timeline {...pathOf(t)} />

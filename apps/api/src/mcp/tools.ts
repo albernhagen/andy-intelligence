@@ -21,6 +21,7 @@ import {
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import { z } from "zod";
+import { registerScoreTools, withStartScore } from "./tools-scores";
 
 /**
  * MCP core tools (M1.4: MCP core tools; `refine` from M1.7: Refinement; `build` and
@@ -454,10 +455,12 @@ export function registerTools(server: McpServer, deps: ToolDeps): void {
     ({ ticket }) =>
       run(async () =>
         ticket
-          ? await service.status(ticket)
+          ? withStartScore(await service.status(ticket))
           : { signedInAs: deps.email, ...(await service.overview()) },
       ),
   );
+
+  registerScoreTools(server, tracker, run);
 }
 
 /** Ticket keys for the inbox's questions; flagged tickets cover most, the rest are read. */

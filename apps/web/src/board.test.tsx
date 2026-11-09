@@ -62,6 +62,28 @@ async function boardWith(fields: Parameters<ReturnType<typeof renderApp>["servic
 }
 
 describe("board drag-and-drop", () => {
+  it("GivenReadySortedByScore_WhenACardIsDraggedWithinIt_ThenNoRankChanges", async () => {
+    const harness = renderApp();
+    await harness.tracker.createProject({ name: "AI", key: "AI" });
+    for (const size of ["L", "S"] as const) {
+      const t = await harness.service.create("ai", { ...readyStory, size }, "andy");
+      await harness.service.move("ai", t.id, "ready", "andy");
+    }
+    await harness.router.navigate({
+      to: "/p/$projectId",
+      params: { projectId: "ai" },
+      search: { sort: "score" },
+    });
+    await screen.findByText("AI-2");
+    const before = (await harness.tracker.listTickets("ai", { stage: "ready" })).map((t) => t.rank);
+
+    await drag(harness.user, "AI-2", 0, 1);
+
+    const after = await harness.tracker.listTickets("ai", { stage: "ready" });
+    expect(after.map((t) => t.rank)).toEqual(before);
+    expect(after.map((t) => t.key)).toEqual(["AI-1", "AI-2"]);
+  });
+
   it("GivenAReadyStoryInBacklog_WhenDraggedToReady_ThenItMovesWithoutForce", async () => {
     const { harness, ticket } = await boardWith(readyStory);
 

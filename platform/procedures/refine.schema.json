@@ -24,6 +24,28 @@
       "maxLength": 300,
       "description": "One line: why that size, from the files you expect to change."
     },
+    "risk": {
+      "type": "string",
+      "enum": ["low", "medium", "high"],
+      "description": "How much a bad change could break, by the rubric in refine.md. Used only if the ticket has none."
+    },
+    "riskReason": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 300,
+      "description": "One line: the concrete thing that sets the risk."
+    },
+    "confidence": {
+      "type": "string",
+      "enum": ["high", "medium", "low"],
+      "description": "How sure you are that the ticket is understood and the plan is safe, by the rubric in refine.md. Used only if the ticket has none."
+    },
+    "confidenceReason": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 300,
+      "description": "One line: what you checked, or what you could not settle."
+    },
     "outOfScope": {
       "type": "array",
       "maxItems": 20,
@@ -161,6 +183,10 @@
     "type",
     "size",
     "sizeReason",
+    "risk",
+    "riskReason",
+    "confidence",
+    "confidenceReason",
     "outOfScope",
     "touches",
     "body",

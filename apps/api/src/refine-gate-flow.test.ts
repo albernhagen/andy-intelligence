@@ -27,6 +27,10 @@ const output = (over: object) => ({
   type: "feature",
   size: "S",
   sizeReason: "one screen",
+  risk: "low",
+  riskReason: "one screen, no data",
+  confidence: "high",
+  confidenceReason: "the code answers it",
   outOfScope: [],
   touches: [],
   body: "Andy can't see his tickets.",
@@ -66,7 +70,9 @@ async function setup() {
 
   /** The executor's callback for the ticket's newest refine run. */
   async function report(id: string, result: object) {
-    const [run] = await runs(id);
+    // Newest unfinished run: runs can share a millisecond, so list order can't say.
+    const all = await runs(id);
+    const run = all.find((r) => r.status !== "succeeded") ?? all[0];
     const claims = {
       repository: REPO,
       workflow_ref: `${REPO}/.github/workflows/agent-run.yml@refs/heads/main`,
@@ -396,6 +402,54 @@ describe("refine gate flow", () => {
     expect((await t.toUpNext(created.id)).status).toBe(422);
     expect((await t.post(`${t.path(created.id)}/runs`, { step: "refine" })).status).toBe(422);
     expect(await t.runs(created.id)).toEqual([]);
+  });
+
+  it("GivenARefineWithScores_WhenASecondRunDisagrees_ThenTheFirstScoresAndReasonsStayAndHistoryShowsThem", async () => {
+    const t = await setup();
+    const created = await t.create({ upNext: true });
+    await t.report(created.id, output({}));
+
+    const scored = await t.ticket(created.id);
+    expect(scored).toMatchObject({
+      stage: "ready",
+      risk: "low",
+      riskReason: "one screen, no data",
+      confidence: "high",
+      confidenceReason: "the code answers it",
+    });
+    const events = await t.json<{ kind: string; data: { diff?: Record<string, unknown> } }[]>(
+      t.call(`${t.path(created.id)}/events`),
+    );
+    expect(
+      events.find((e) => e.kind === "fields_changed" && e.data.diff?.risk)?.data.diff,
+    ).toMatchObject({ risk: { from: null, to: "low" }, confidence: { from: null, to: "high" } });
+
+    await t.post(`${t.path(created.id)}/stage`, { to: "backlog" });
+    await t.toUpNext(created.id);
+    expect(await t.runs(created.id)).toHaveLength(2);
+    await t.report(
+      created.id,
+      output({
+        risk: "high",
+        riskReason: "second opinion",
+        confidence: "low",
+        confidenceReason: "second opinion",
+      }),
+    );
+    expect(await t.ticket(created.id)).toMatchObject({
+      stage: "ready",
+      risk: "low",
+      riskReason: "one screen, no data",
+      confidence: "high",
+      confidenceReason: "the code answers it",
+    });
+  });
+
+  it("GivenARefineWithoutRisk_WhenReported_ThenTheResultIsRejectedAndNothingIsWritten", async () => {
+    const t = await setup();
+    const created = await t.create({ upNext: true });
+    await t.report(created.id, output({ risk: undefined }));
+    expect(await t.ticket(created.id)).toMatchObject({ risk: null, size: null, stage: "backlog" });
   });
 
   it("GivenAFlagLeftOnADoneTicket_WhenTheInboxIsRead_ThenItIsNotListed", async () => {

@@ -21,6 +21,20 @@ export function LaneZone({ id, label, count }: { id: string; label: string; coun
   );
 }
 
+/** Ready's view switch: queue order, or easiest first by score. The URL holds it (`?sort=score`). */
+export function ReadySortToggle({ sorted, onToggle }: { sorted: boolean; onToggle: () => void }) {
+  return (
+    <button
+      type="button"
+      aria-pressed={sorted}
+      onClick={onToggle}
+      className="rounded-md px-1 text-left text-xs text-muted-foreground hover:bg-foreground/10"
+    >
+      {sorted ? "Sorted by score · show queue order" : "Sort by score"}
+    </button>
+  );
+}
+
 /**
  * One swim lane per stage: a header with the count, then the cards in rank order (the order is
  * the priority, ADR-0058). A collapsed lane is a narrow strip with its count; it still takes
