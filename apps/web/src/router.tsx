@@ -23,6 +23,9 @@ const boardRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/p/$projectId",
   component: BoardPage,
+  // The Ready lane's view (AI-37); anything else in the URL reads as queue order.
+  validateSearch: (search: Record<string, unknown>): { sort?: "score" } =>
+    search.sort === "score" ? { sort: "score" } : {},
 });
 
 /** URLs carry the picker's scope (lib/scope.ts): `/p/<project>/…` or `/all/…`. */

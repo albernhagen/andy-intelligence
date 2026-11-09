@@ -3,7 +3,7 @@ import { Link, useBlocker, useNavigate, useParams } from "@tanstack/react-router
 import { useQueryClient } from "@tanstack/react-query";
 import { X } from "lucide-react";
 import { Size, TicketType, TierKey, type Ticket } from "@andy/contracts";
-import { TIER_FOR_SIZE } from "@andy/domain";
+import { TIER_FOR_SIZE, ticketStatusLine } from "@andy/domain";
 import { Activity } from "@/components/Activity";
 import { AskQuestionForm } from "@/components/AskQuestionForm";
 import { CancelArchiveControls } from "@/components/CancelArchiveControls";
@@ -17,13 +17,14 @@ import {
 import { WorkerControl } from "@/components/WorkerControls";
 import { MoveControls } from "@/components/MoveControls";
 import { QuestionCard } from "@/components/QuestionCard";
+import { ScoreReasons } from "@/components/ScoreReasons";
+import { TicketCostLine } from "@/components/TicketCostLine";
 import { Markdown } from "@/components/Markdown";
 import { Loading, QueryError } from "@/components/Status";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Select } from "@/components/ui/input";
 import {
-  isActiveRun,
   ticketQueryKey,
   useEvents,
   usePromoteAssumption,
@@ -34,7 +35,6 @@ import {
   useWorker,
   useTickets,
 } from "@/lib/queries";
-import { latestPullRequest, openBlockers, queuePosition, statusLine } from "@/lib/status-line";
 import { STAGE_LABELS, TYPE_LABELS } from "@/lib/tickets";
 
 /**
@@ -68,7 +68,7 @@ export function TicketPage() {
   }, [loaded, ticketRef, projectId, navigate, queryClient]);
 
   const close = useCallback(
-    () => void navigate({ to: "/p/$projectId", params: { projectId } }),
+    () => void navigate({ to: "/p/$projectId", params: { projectId }, search: true }),
     [navigate, projectId],
   );
   useEscapeToClose(close);
@@ -153,17 +153,13 @@ function StatusLine({ ticket }: { ticket: Ticket }) {
   const questions = useTicketQuestions(path).data ?? [];
   const events = useEvents(path).data ?? [];
   const worker = useWorker(path).data?.worker;
-  const { text, tone } = statusLine(
+  const { text, tone } = ticketStatusLine(
+    ticket,
     {
-      stage: ticket.stage,
-      archived: ticket.archived,
-      needsAttention: ticket.needsAttention,
-      dorMet: ticket.dorStatus === "met",
+      tickets,
+      runs,
+      events,
       openQuestions: questions.filter((q) => q.status === "open").length,
-      run: runs.find(isActiveRun) ?? null,
-      pr: latestPullRequest(events),
-      blockedBy: openBlockers(ticket, tickets),
-      queuePosition: queuePosition(ticket, tickets),
       worker,
     },
     new Date(),
@@ -182,6 +178,7 @@ function Story({ ticket: t }: { ticket: Ticket }) {
   const body = useTicketSave(t);
   return (
     <article className="space-y-6">
+      <TicketCostLine {...pathOf(t)} />
       <InlineText
         label="Title"
         required
@@ -215,6 +212,7 @@ function Story({ ticket: t }: { ticket: Ticket }) {
         </div>
         <Rail ticket={t} />
       </div>
+      <ScoreReasons ticket={t} />
       <Questions {...pathOf(t)} />
       <Assumptions ticket={t} />
       <Timeline {...pathOf(t)} />

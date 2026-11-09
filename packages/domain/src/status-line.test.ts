@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import type { Ticket, TicketEvent } from "@andy/contracts";
 import {
   latestPullRequest,
-  openBlockers,
+  openBlockerKeys as openBlockers,
   queuePosition,
   statusLine,
   type StatusInput,
@@ -166,6 +166,10 @@ const ticket = (over: Partial<Ticket>): Ticket => ({
   touches: [],
   createdAt: NOW.toISOString(),
   updatedAt: NOW.toISOString(),
+  risk: null,
+  riskReason: null,
+  confidence: null,
+  confidenceReason: null,
   ...over,
 });
 

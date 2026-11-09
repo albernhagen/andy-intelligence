@@ -161,7 +161,7 @@ describe("RunService build runs", () => {
       branch,
       links: { pullRequest: `${REPO.url}/pull/9` },
       tokensIn: 1000,
-      costUsd: 0.42,
+      costUsd: null,
       costIsEstimate: true,
       summary: "Adds the board.",
     });

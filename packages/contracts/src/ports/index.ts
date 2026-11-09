@@ -21,6 +21,7 @@ import {
   ScopeList,
   Stage,
   Ticket,
+  TicketScoreFields,
   Timestamp,
   Urgency,
   type AnsweredVia,
@@ -108,6 +109,10 @@ export const TicketFields = Ticket.pick({
   upNextAt: true,
   sentBackReason: true,
   refineAssumptions: true,
+  risk: true,
+  riskReason: true,
+  confidence: true,
+  confidenceReason: true,
 })
   .partial()
   // Zod 4 applies defaults inside `.partial()`, which would turn "not given" into "reset":
@@ -120,6 +125,7 @@ export const TicketFields = Ticket.pick({
     upNextAt: Timestamp.nullable().optional(),
     sentBackReason: z.string().max(300).nullable().optional(),
     refineAssumptions: z.array(Assumption).optional(),
+    ...TicketScoreFields,
   });
 export type TicketFields = z.infer<typeof TicketFields>;
 
@@ -356,6 +362,8 @@ export const RunPatch = Run.pick({
   tokensOut: true,
   costUsd: true,
   costIsEstimate: true,
+  usage: true,
+  quotaDelta: true,
   links: true,
   summary: true,
   error: true,

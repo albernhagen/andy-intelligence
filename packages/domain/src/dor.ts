@@ -19,7 +19,7 @@ const EARS = /\S\s+shall\s+\S/i;
  * - bug: at least one criterion stating the expected behaviour (any wording);
  * - chore: a "done when" checklist (any wording).
  * A ticket with no type yet gets the shared checks plus "type". Tier is not checked: it is
- * derived from size (`tierFor`). Dependencies and assumptions can't be checked mechanically;
+ * derived from size (`tierFor`). Risk and confidence are optional and never checked. Dependencies and assumptions can't be checked mechanically;
  * refinement owns them.
  */
 export function checkDor(ticket: DorInput, openQuestions: number): DorResult {

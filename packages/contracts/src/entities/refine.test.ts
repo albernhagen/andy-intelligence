@@ -1,6 +1,16 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
-import { GapConfidence, GapCost, REFINE_LIMITS, RefineOutput, Size, TicketType } from "./index";
+import {
+  Confidence,
+  GapConfidence,
+  GapCost,
+  REFINE_LIMITS,
+  RefineOutput,
+  Risk,
+  SCORE_REASON_MAX,
+  Size,
+  TicketType,
+} from "./index";
 
 // The schema the executor hands the agent (`--json-schema`). It must stay in step with
 // RefineOutput, which the control plane checks the result against.
@@ -24,6 +34,10 @@ const base = {
   type: "feature",
   size: "S",
   sizeReason: "one module",
+  risk: "low",
+  riskReason: "one package, no data",
+  confidence: "high",
+  confidenceReason: "the code answers every question",
   outOfScope: ["the UI"],
   touches: ["packages/domain/**"],
   body: null,
@@ -50,6 +64,10 @@ describe("RefineOutput", () => {
     expect(schema.properties.sizeReason.maxLength).toBe(REFINE_LIMITS.sizeReason);
     expect(schema.properties.size.enum).toEqual(Size.options);
     expect(schema.properties.type.enum).toEqual(TicketType.options);
+    expect(schema.properties.risk.enum).toEqual(Risk.options);
+    expect(schema.properties.confidence.enum).toEqual(Confidence.options);
+    expect(schema.properties.riskReason.maxLength).toBe(SCORE_REASON_MAX);
+    expect(schema.properties.confidenceReason.maxLength).toBe(SCORE_REASON_MAX);
     for (const list of ["outOfScope", "touches"]) {
       expect(schema.properties[list].maxItems).toBe(REFINE_LIMITS.maxScopeItems);
       expect(schema.properties[list].items.maxLength).toBe(REFINE_LIMITS.scopeItem);

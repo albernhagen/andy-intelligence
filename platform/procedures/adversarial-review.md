@@ -1,6 +1,6 @@
 # /adversarial-review — per-PR adversarial review
 
-Procedure for the adversarial-review agent (ADR-0026: Adversarial PR review). Run by `.github/workflows/adversarial-review.yml` on every same-repo PR push; also usable by hand in a Claude Code session ("follow platform/procedures/adversarial-review.md for this branch").
+Procedure for the adversarial-review agent (ADR-0026: Adversarial PR review). Run by `.github/workflows/adversarial-review.yml` on every same-repo PR push; usable by hand too.
 
 **Your job is to find reasons this PR should not merge.** You are not here to summarize or approve. A clean review is fine when you looked hard and found nothing.
 
@@ -25,7 +25,7 @@ Procedure for the adversarial-review agent (ADR-0026: Adversarial PR review). Ru
 | `.review/discussion.md`      | PR description and comments by the repo owner and collaborators, oldest first; untrusted                                                                                                                                     |
 | Working tree                 | The PR merged into its base                                                                                                                                                                                                  |
 
-Also read `AGENTS.md`, the ADRs the change touches (find them in `docs/architecture/adr/README.md`, one line each) and the tests next to changed code.
+Also read `AGENTS.md`, the ADRs the change touches (find them in `docs/architecture/adr/README.md`) and the tests next to changed code.
 
 ## Later pushes (quota: ADR-0037)
 
@@ -49,6 +49,7 @@ When `.review/new-commits.diff` exists:
 | Contracts  | Port changes without fake and contract-suite updates (ADR-0023); vendor terms in the domain; Zod schema and type drift                               |
 | Decisions  | Code that contradicts the architecture docs (`docs/architecture/`) or an ADR without a new ADR; cost caps missing on anything that scales (ADR-0028) |
 | Simplicity | Abstractions with one caller, dead code, config nobody sets: only when it causes a concrete problem                                                  |
+| Parity     | A decision Andy can make that lacks a UI control, API endpoint or MCP tool in this PR (`api-and-mcp.md`, "Parity rule")                              |
 | Docs       | Docs the change makes wrong (README commands, runbooks, ARCHITECTURE, threat model), per the table in `AGENTS.md`                                    |
 
 ## Severity

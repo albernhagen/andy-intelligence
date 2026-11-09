@@ -157,7 +157,11 @@ describe("create_ticket", () => {
 describe("list_needs_me", () => {
   it("GivenNothingOpen_WhenListed_ThenTheInboxIsEmpty", async () => {
     const ctx = await withProject();
-    expect((await ctx.call("list_needs_me")).data).toEqual({ questions: [], tickets: [] });
+    expect((await ctx.call("list_needs_me")).data).toEqual({
+      cards: [],
+      questions: [],
+      tickets: [],
+    });
   });
 
   it("GivenAnAgentQuestion_WhenListed_ThenItShowsWithItsTicketKeyAndTheTicketIsFlagged", async () => {
@@ -200,7 +204,11 @@ describe("answer_question", () => {
       answeredVia: "mcp",
     });
     expect(res.data.ticket).toMatchObject({ key: "AI-1", needsAttention: false, dorStatus: "met" });
-    expect((await ctx.call("list_needs_me")).data).toEqual({ questions: [], tickets: [] });
+    expect((await ctx.call("list_needs_me")).data).toEqual({
+      cards: [],
+      questions: [],
+      tickets: [],
+    });
   });
 
   it("GivenAQuestionAskedByARun_WhenAnswered_ThenRecordedAndTheTicketIsReady", async () => {
@@ -615,5 +623,80 @@ describe("M1 flow from Claude desktop", () => {
       met: true,
       missing: [],
     });
+  });
+});
+
+describe("list_ready", () => {
+  /** Three Ready tickets in rank order, then one left in Backlog. */
+  async function withQueue() {
+    const ctx = await withProject();
+    const add = async (title: string, stage: "ready" | "backlog", fields: object) => {
+      const t = await ctx.service.create("ai", { ...readyStory, title }, "andy");
+      await ctx.tracker.updateTicket(
+        "ai",
+        t.id,
+        { fields, stage: { to: stage, forced: false, reason: null } },
+        "system",
+      );
+      return t;
+    };
+    const lowHigh = {
+      risk: "low",
+      riskReason: "small",
+      confidence: "high",
+      confidenceReason: "ok",
+    };
+    await add("Risky", "ready", { ...lowHigh, risk: "high", riskReason: "auth" });
+    await add("Easy", "ready", lowHigh);
+    await add("Old", "ready", {});
+    await add("Parked", "backlog", lowHigh);
+    return ctx;
+  }
+
+  it("GivenReadyTickets_WhenListed_ThenBoardRankOrderWithScoresAndNothingElse", async () => {
+    const ctx = await withQueue();
+    const res = await ctx.call("list_ready", { project: "ai" });
+    expect(res.data.total).toBe(3);
+    expect(res.data.tickets.map((t: { title: string }) => t.title)).toEqual([
+      "Risky",
+      "Easy",
+      "Old",
+    ]);
+    expect(res.data.tickets[1]).toMatchObject({
+      key: "AI-2",
+      score: "S · low risk · confident",
+      size: "S",
+      risk: "low",
+      riskReason: "small",
+      confidence: "high",
+      confidenceReason: "ok",
+    });
+    expect(res.data.tickets[2]).toMatchObject({ score: "S", risk: null, confidence: null });
+  });
+
+  it("GivenFilters_WhenListed_ThenOnlyMatchingTicketsAndUnscoredOnesDontMatch", async () => {
+    const ctx = await withQueue();
+    const res = await ctx.call("list_ready", {
+      project: "ai",
+      size: "S",
+      risk: "low",
+      confidence: "high",
+    });
+    expect(res.data.tickets.map((t: { title: string }) => t.title)).toEqual(["Easy"]);
+    const none = await ctx.call("list_ready", { project: "ai", size: "L" });
+    expect(none.data).toEqual({ total: 0, tickets: [] });
+  });
+
+  it("GivenAnUnknownProject_WhenListed_ThenAToolError", async () => {
+    const ctx = await withProject();
+    const res = await ctx.call("list_ready", { project: "NOPE" });
+    expect(res).toMatchObject({ isError: true, text: "project NOPE not found" });
+  });
+
+  it("GivenAScoredTicket_WhenStatusIsRead_ThenItCarriesTheFieldsAndTheLabel", async () => {
+    const ctx = await withQueue();
+    const res = await ctx.call("status", { ticket: "AI-2" });
+    expect(res.data.score).toBe("S · low risk · confident");
+    expect(res.data.ticket).toMatchObject({ risk: "low", riskReason: "small", confidence: "high" });
   });
 });

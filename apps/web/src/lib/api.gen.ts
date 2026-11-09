@@ -653,6 +653,20 @@ export interface paths {
                 /** Format: date-time */
                 createdAt: string;
               }[];
+              /**
+               * @default null
+               * @enum {string|null}
+               */
+              risk: "low" | "medium" | "high" | null;
+              /** @default null */
+              riskReason: string | null;
+              /**
+               * @default null
+               * @enum {string|null}
+               */
+              confidence: "high" | "medium" | "low" | null;
+              /** @default null */
+              confidenceReason: string | null;
               /** Format: date-time */
               createdAt: string;
               /** Format: date-time */
@@ -866,6 +880,20 @@ export interface paths {
                 /** Format: date-time */
                 createdAt: string;
               }[];
+              /**
+               * @default null
+               * @enum {string|null}
+               */
+              risk: "low" | "medium" | "high" | null;
+              /** @default null */
+              riskReason: string | null;
+              /**
+               * @default null
+               * @enum {string|null}
+               */
+              confidence: "high" | "medium" | "low" | null;
+              /** @default null */
+              confidenceReason: string | null;
               /** Format: date-time */
               createdAt: string;
               /** Format: date-time */
@@ -948,7 +976,7 @@ export interface paths {
       };
       requestBody?: never;
       responses: {
-        /** @description Ticket */
+        /** @description Ticket with its cost totals */
         200: {
           headers: {
             [name: string]: unknown;
@@ -1041,10 +1069,33 @@ export interface paths {
                 /** Format: date-time */
                 createdAt: string;
               }[];
+              /**
+               * @default null
+               * @enum {string|null}
+               */
+              risk: "low" | "medium" | "high" | null;
+              /** @default null */
+              riskReason: string | null;
+              /**
+               * @default null
+               * @enum {string|null}
+               */
+              confidence: "high" | "medium" | "low" | null;
+              /** @default null */
+              confidenceReason: string | null;
               /** Format: date-time */
               createdAt: string;
               /** Format: date-time */
               updatedAt: string;
+              cost: {
+                estimatedCostUsd: number;
+                quotaDelta: {
+                  "5h": number | null;
+                  weekly: number | null;
+                };
+                completedRuns: number;
+                unknownRuns: number;
+              };
             };
           };
         };
@@ -1147,6 +1198,12 @@ export interface paths {
             needsAttention?: boolean;
             blockedBy?: string[];
             rank?: string;
+            /** @enum {string|null} */
+            risk?: "low" | "medium" | "high" | null;
+            riskReason?: string | null;
+            /** @enum {string|null} */
+            confidence?: "high" | "medium" | "low" | null;
+            confidenceReason?: string | null;
             /** Format: date-time */
             ifUpdatedAt?: string;
           };
@@ -1246,6 +1303,20 @@ export interface paths {
                 /** Format: date-time */
                 createdAt: string;
               }[];
+              /**
+               * @default null
+               * @enum {string|null}
+               */
+              risk: "low" | "medium" | "high" | null;
+              /** @default null */
+              riskReason: string | null;
+              /**
+               * @default null
+               * @enum {string|null}
+               */
+              confidence: "high" | "medium" | "low" | null;
+              /** @default null */
+              confidenceReason: string | null;
               /** Format: date-time */
               createdAt: string;
               /** Format: date-time */
@@ -1323,7 +1394,7 @@ export interface paths {
       };
       requestBody?: never;
       responses: {
-        /** @description Ticket */
+        /** @description Ticket with its cost totals */
         200: {
           headers: {
             [name: string]: unknown;
@@ -1416,10 +1487,33 @@ export interface paths {
                 /** Format: date-time */
                 createdAt: string;
               }[];
+              /**
+               * @default null
+               * @enum {string|null}
+               */
+              risk: "low" | "medium" | "high" | null;
+              /** @default null */
+              riskReason: string | null;
+              /**
+               * @default null
+               * @enum {string|null}
+               */
+              confidence: "high" | "medium" | "low" | null;
+              /** @default null */
+              confidenceReason: string | null;
               /** Format: date-time */
               createdAt: string;
               /** Format: date-time */
               updatedAt: string;
+              cost: {
+                estimatedCostUsd: number;
+                quotaDelta: {
+                  "5h": number | null;
+                  weekly: number | null;
+                };
+                completedRuns: number;
+                unknownRuns: number;
+              };
             };
           };
         };
@@ -1695,6 +1789,20 @@ export interface paths {
                 /** Format: date-time */
                 createdAt: string;
               }[];
+              /**
+               * @default null
+               * @enum {string|null}
+               */
+              risk: "low" | "medium" | "high" | null;
+              /** @default null */
+              riskReason: string | null;
+              /**
+               * @default null
+               * @enum {string|null}
+               */
+              confidence: "high" | "medium" | "low" | null;
+              /** @default null */
+              confidenceReason: string | null;
               /** Format: date-time */
               createdAt: string;
               /** Format: date-time */
@@ -1880,6 +1988,20 @@ export interface paths {
                 /** Format: date-time */
                 createdAt: string;
               }[];
+              /**
+               * @default null
+               * @enum {string|null}
+               */
+              risk: "low" | "medium" | "high" | null;
+              /** @default null */
+              riskReason: string | null;
+              /**
+               * @default null
+               * @enum {string|null}
+               */
+              confidence: "high" | "medium" | "low" | null;
+              /** @default null */
+              confidenceReason: string | null;
               /** Format: date-time */
               createdAt: string;
               /** Format: date-time */
@@ -2172,6 +2294,20 @@ export interface paths {
                 /** Format: date-time */
                 createdAt: string;
               }[];
+              /**
+               * @default null
+               * @enum {string|null}
+               */
+              risk: "low" | "medium" | "high" | null;
+              /** @default null */
+              riskReason: string | null;
+              /**
+               * @default null
+               * @enum {string|null}
+               */
+              confidence: "high" | "medium" | "low" | null;
+              /** @default null */
+              confidenceReason: string | null;
               /** Format: date-time */
               createdAt: string;
               /** Format: date-time */
@@ -2356,6 +2492,20 @@ export interface paths {
                 /** Format: date-time */
                 createdAt: string;
               }[];
+              /**
+               * @default null
+               * @enum {string|null}
+               */
+              risk: "low" | "medium" | "high" | null;
+              /** @default null */
+              riskReason: string | null;
+              /**
+               * @default null
+               * @enum {string|null}
+               */
+              confidence: "high" | "medium" | "low" | null;
+              /** @default null */
+              confidenceReason: string | null;
               /** Format: date-time */
               createdAt: string;
               /** Format: date-time */
@@ -3100,6 +3250,20 @@ export interface paths {
                   /** Format: date-time */
                   createdAt: string;
                 }[];
+                /**
+                 * @default null
+                 * @enum {string|null}
+                 */
+                risk: "low" | "medium" | "high" | null;
+                /** @default null */
+                riskReason: string | null;
+                /**
+                 * @default null
+                 * @enum {string|null}
+                 */
+                confidence: "high" | "medium" | "low" | null;
+                /** @default null */
+                confidenceReason: string | null;
                 /** Format: date-time */
                 createdAt: string;
                 /** Format: date-time */
@@ -3382,6 +3546,20 @@ export interface paths {
                 /** Format: date-time */
                 createdAt: string;
               }[];
+              /**
+               * @default null
+               * @enum {string|null}
+               */
+              risk: "low" | "medium" | "high" | null;
+              /** @default null */
+              riskReason: string | null;
+              /**
+               * @default null
+               * @enum {string|null}
+               */
+              confidence: "high" | "medium" | "low" | null;
+              /** @default null */
+              confidenceReason: string | null;
               /** Format: date-time */
               createdAt: string;
               /** Format: date-time */
@@ -3610,6 +3788,20 @@ export interface paths {
                 reworks: number | null;
                 costEstimateUsd: number | null;
               } | null;
+              /** @default null */
+              usage: {
+                inputTokens: number;
+                outputTokens: number;
+                cacheReadTokens: number;
+                cacheWriteTokens: number;
+                turns: number | null;
+                wallMs: number | null;
+              } | null;
+              /** @default null */
+              quotaDelta: {
+                "5h": number | null;
+                weekly: number | null;
+              } | null;
             }[];
           };
         };
@@ -3788,6 +3980,20 @@ export interface paths {
                 andyCommits: number | null;
                 reworks: number | null;
                 costEstimateUsd: number | null;
+              } | null;
+              /** @default null */
+              usage: {
+                inputTokens: number;
+                outputTokens: number;
+                cacheReadTokens: number;
+                cacheWriteTokens: number;
+                turns: number | null;
+                wallMs: number | null;
+              } | null;
+              /** @default null */
+              quotaDelta: {
+                "5h": number | null;
+                weekly: number | null;
               } | null;
             };
           };
@@ -4045,6 +4251,20 @@ export interface paths {
                   reworks: number | null;
                   costEstimateUsd: number | null;
                 } | null;
+                /** @default null */
+                usage: {
+                  inputTokens: number;
+                  outputTokens: number;
+                  cacheReadTokens: number;
+                  cacheWriteTokens: number;
+                  turns: number | null;
+                  wallMs: number | null;
+                } | null;
+                /** @default null */
+                quotaDelta: {
+                  "5h": number | null;
+                  weekly: number | null;
+                } | null;
               };
               build: {
                 id: string;
@@ -4181,6 +4401,20 @@ export interface paths {
                   andyCommits: number | null;
                   reworks: number | null;
                   costEstimateUsd: number | null;
+                } | null;
+                /** @default null */
+                usage: {
+                  inputTokens: number;
+                  outputTokens: number;
+                  cacheReadTokens: number;
+                  cacheWriteTokens: number;
+                  turns: number | null;
+                  wallMs: number | null;
+                } | null;
+                /** @default null */
+                quotaDelta: {
+                  "5h": number | null;
+                  weekly: number | null;
                 } | null;
               } | null;
               buildError: string | null;

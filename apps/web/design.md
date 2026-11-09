@@ -62,7 +62,7 @@ One small set, reused everywhere (board, inbox, panel, picker). Build them from 
 | Marker          | Shows                        | Look                                                            |
 | --------------- | ---------------------------- | --------------------------------------------------------------- |
 | Type            | Feature, chore, bug, epic    | Lucide icon in `muted-foreground`, type name as its title       |
-| Size            | S, M, L                      | `Badge` default, the letter only                                |
+| Size, score     | "S", "low risk"              | `Badge`; high risk `danger`                                     |
 | Run in flight   | Step and elapsed time        | `Badge variant="running"`: "Refining · 3 min"                   |
 | PR state        | Number and state             | "PR #12 · open" neutral, `success` merged, `destructive` closed |
 | Needs attention | The ticket waits on a human  | `Badge variant="attention"`: "2 questions", else "Needs you"    |
