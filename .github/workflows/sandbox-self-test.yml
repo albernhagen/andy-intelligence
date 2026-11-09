@@ -10,6 +10,10 @@ on:
 
 permissions: {}
 
+concurrency:
+  group: sandbox-self-test-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   sandbox-self-test:
     runs-on: ubuntu-latest
