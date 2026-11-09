@@ -4066,6 +4066,62 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  "/api/quota": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get: {
+      parameters: {
+        query?: never;
+        header?: never;
+        path?: never;
+        cookie?: never;
+      };
+      requestBody?: never;
+      responses: {
+        /** @description Claude subscription quota: latest reading per window, with freshness and level */
+        200: {
+          headers: {
+            [name: string]: unknown;
+          };
+          content: {
+            "application/json": {
+              /** @enum {string} */
+              provider: "claude-sub" | "google-sub" | "openrouter";
+              warnPct: number;
+              pausePct: number;
+              /** @enum {string} */
+              level: "ok" | "unknown" | "warn" | "pause";
+              windows: {
+                /** @enum {string} */
+                window: "5h" | "weekly" | "daily_tasks";
+                /** @enum {string} */
+                freshness: "fresh" | "stale" | "unknown";
+                /** @enum {string} */
+                level: "ok" | "unknown" | "warn" | "pause";
+                usedPct: number | null;
+                /** Format: date-time */
+                resetsAt: string | null;
+                /** Format: date-time */
+                takenAt: string | null;
+                source: string | null;
+              }[];
+            };
+          };
+        };
+      };
+    };
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   "/api/github": {
     parameters: {
       query?: never;

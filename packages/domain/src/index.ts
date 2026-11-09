@@ -15,3 +15,4 @@ export * from "./plans";
 export * from "./refine-gate";
 export * from "./gate";
 export * from "./gate-service";
+export * from "./quota";

@@ -8,7 +8,7 @@ Overview and reading map: [ARCHITECTURE.md](ARCHITECTURE.md). Section numbers ma
 v1.x screens:
 - **Needs-you inbox** (questions, gate reviews, pending config changes, quota warnings) — home screen.
 - **Phone** (M7: Mobile, ADR-0052): the SPA installed from Safari as a web app, phone layout for the inbox, ticket detail, releases and the quota banner; push notifications deep-link to the item; answer, approve plan or PR, promote, pause dispatch from the phone.
-- **Quota & spend** (per provider gauges with reset times; paid spend vs caps; persistent banner on warn/pause).
+- **Quota & spend** (per provider gauges with reset times; paid spend vs caps; persistent banner on warn/pause/unknown; built: header gauge, banner).
 - **Projects** (list, config, policy overrides).
 - **Tickets** — M1: board, ticket detail with history and linked runs/PRs/cost. M3 (ADR-0059): status on cards, story panel, command palette. M5: filter and group by project. M4: epic grouping, overrides editing.
 - **Run detail** — M1: run summary inside ticket detail. M4: dedicated screen (metadata, cost, outcome, links to Action log / Jules session / PR).
@@ -38,7 +38,7 @@ v1.x screens:
 - One read, `GET /api/projects/:id/board`: tickets with open question count, run in flight and latest PR (PR only for In progress and Ready for review; ≤ 50 history reads, ADR-0028). Refetches every 5 s only while a run is in flight.
 - Cards: type icon, key, title, then markers (size, questions, run step and minutes, PR state, "Blocked by"). Ready is numbered; the first unblocked card says "Next".
 - Drag (mouse, touch, keyboard) within a lane sets `rank` through the ticket PATCH (`rankBetween`, `packages/domain`); across lanes moves (forced if not allowed, not onto Cancelled), then ranks at the drop. Optimistic; a refusal rolls back with the API's message on the card. A drop never opens the ticket (AI-25).
-- Quick add at the top of Backlog (title only). Up next above Ideas (ADR-0075). Done starts as a strip with a count; Cancelled and archived only with the toggle.
+- Quick add atop Backlog (title only). Up next above Ideas (ADR-0075). Done starts as a counted strip; Cancelled and archived only with the toggle.
 
 **Built in AI-29: Story panel (M3, ADR-0059):**
 - The ticket route is the board's child (`<Outlet />`): a 640px panel, full page under 900px; Esc or Close returns.
