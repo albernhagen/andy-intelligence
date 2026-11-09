@@ -84,13 +84,13 @@ In Claude desktop with the `andy-intelligence` connector (`mcp-connector.md`), w
 3. `list_needs_me`, then `answer_question` for each (`askedByRun` names the run that asked).
 4. Expect: the last answer returns the ticket with `stage: "ready"`; History shows `stage_changed` by `system`. If the Definition of Ready is still unmet, a second refine starts instead (`status` shows it); answer its questions too.
 
-Off switch: untick "Auto-refine" on `/projects` or `set_auto_refine` `enabled: false`; new tickets then wait until you start refine (ticket → Runs, or MCP `refine`).
+Off switch: untick "Auto-refine" in Project settings (`/p/ai/settings`) or `set_auto_refine` `enabled: false`; new tickets then wait until you start refine (ticket → Runs, or MCP `refine`).
 
 ## 8. Build a ticket (M1.8a: Build run demo)
 
 Nothing to apply: no Terraform, secret or App permission changes (the App already has Contents and Pull requests write, ADR-0043, and keeps no `workflows` permission). After this slice merges and deploys:
 
-0. On `/projects`, tick **Builds** for the project (recorded: who and when). Until then every build start is refused with "builds are off", and Auto-build can't be ticked. Do §9 first.
+0. In Project settings (header link, `/p/ai/settings`), tick **Builds** for the project (recorded: who and when). Until then every build start is refused with "builds are off", and Auto-build can't be ticked. Do §9 first.
 1. Pick a small, Ready S ticket in project `AI` (Definition of Ready met, blockers Done). Ticket → **Activity** → **Start build run** (or MCP `build`).
 2. Expect: the ticket moves to **In progress** at once; the run is `queued` → `running` on `sonnet` (Opus for M and L); in about 15–60 minutes a PR `<KEY>: <title>` on branch `agent/<KEY>/<run id>` whose description starts with the ticket link, then Summary, Plan, Deviations, Verification. The ticket moves to **Ready for review**; the run shows the PR link, branch, tokens and `~$… (estimate)`. The PR waits for you (`autoMerge: none`).
 3. Auto-build: first clear Ready of tickets whose work already merged (on 2026-11-05: AI-20, AI-24, AI-25, AI-26; PR events only move tickets that were In progress) and of anything you'll do yourself (set assignee `me`: never built). Epics in Ready are skipped. Then tick **Auto-build** on `/projects` (or `set_auto_build` `enabled: true`). The top Ready ticket by order starts when a ticket reaches Ready or a run ends. Untick it to stop new builds; a build in flight finishes.
@@ -100,9 +100,9 @@ Don't tick Auto-build on any project until §9 has passed. If §9 fails, untick 
 
 ## 8a. Approve a plan before the build (M1.8a: Plan approval)
 
-Nothing to apply. On `/projects`, set **Plan approval** (or MCP `set_plan_approval`): `none` (default) builds at once; `M and L tickets` or `all tickets` makes a build start (yours or auto-build's) run a read-only **plan** run first.
+Nothing to apply. In Project settings, set **Plan approval** (or MCP `set_plan_approval`): `none` (default) builds at once; `M and L tickets` or `all tickets` makes a build start (yours or auto-build's) run a read-only **plan** run first.
 
-**Auto-merge:** nothing to apply. On `/projects`, set **Auto-merge** (or MCP `set_auto_merge`): `none`, `S tickets`, `S and M tickets` (new projects) or `all tickets`. Project AI stays `none` until M2: Self-hosting. A vetoed PR, or one whose merge failed, flags the ticket with the reason in its history; the Run records `wouldAutoMerge` and `gateReasons` either way. The gate runs inside the webhook: if a read fails on the last check, nothing is retried and the PR waits for the next event or for you (`webhook gate failed` in the logs).
+**Auto-merge:** nothing to apply. In Project settings, set **Auto-merge** (or MCP `set_auto_merge`): `none`, `S tickets`, `S and M tickets` (new projects) or `all tickets`. Project AI stays `none` until M2: Self-hosting. A vetoed PR, or one whose merge failed, flags the ticket with the reason in its history; the Run records `wouldAutoMerge` and `gateReasons` either way. The gate runs inside the webhook: if a read fails on the last check, nothing is retried and the PR waits for the next event or for you (`webhook gate failed` in the logs).
 
 1. Expect: a `plan` run (Sonnet for S, Opus for M and L, a few minutes); the ticket stays **Ready** and is flagged Needs you. The run's report lists the summary, files, steps, tests, riskiest step and rejected alternatives; the ticket gets the same as a comment.
 2. Approve: ticket → **Activity** → the plan run → **Approve plan** (or MCP `approve_plan`). The build starts with the plan in its prompt, the ticket moves to **In progress**, and the PR's Plan is the approved one, with departures under Deviations. If another run is in flight, the approval stands and the ticket stays flagged with a comment: start the build when the project is free (or clear the flag and auto-build starts it).
