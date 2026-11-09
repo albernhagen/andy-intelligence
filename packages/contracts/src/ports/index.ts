@@ -399,6 +399,8 @@ export interface RunStore {
   listForTicket(projectId: string, ticketId: string): Promise<Run[]>;
   /** Runs in `queued` or `running` for the project. */
   listActive(projectId: string): Promise<Run[]>;
+  /** The project's runs whose `endedAt` is within [from, to], newest first, at most `limit` (AI-70). */
+  listEndedBetween(projectId: string, from: string, to: string, limit: number): Promise<Run[]>;
   /**
    * Applies the patch atomically, only if the run's status is one of `from` and, for a patch
    * that sets `planDecision`, the run has none yet, and for one that sets `mergeAttemptedSha`, it
@@ -589,3 +591,5 @@ export interface CostEvent {
 export interface Telemetry {
   recordCost(event: CostEvent): void;
 }
+
+export * from "./digest";

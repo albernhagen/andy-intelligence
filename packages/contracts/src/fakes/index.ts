@@ -358,6 +358,15 @@ export class InMemoryRunStore implements RunStore {
       .map((r) => structuredClone(r));
   }
 
+  async listEndedBetween(projectId: string, from: string, to: string, limit: number) {
+    const within = (r: Run) => !!r.endedAt && r.endedAt >= from && r.endedAt <= to;
+    return [...this.runs.values()]
+      .filter((r) => r.projectId === projectId && within(r))
+      .sort(newestFirst)
+      .slice(0, limit)
+      .map((r) => structuredClone(r));
+  }
+
   async update(runId: string, patch: RunPatch, from: readonly RunStatus[]): Promise<Run> {
     const current = this.runs.get(runId);
     if (!current) throw notFound("run", runId);

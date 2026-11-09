@@ -57,6 +57,14 @@ export function AppShell() {
           <NavLink to={scopePath(scope, "inbox")} current={section === "inbox"}>
             Inbox
           </NavLink>
+          {scope.kind === "project" && (
+            <NavLink
+              to={`/p/${encodeURIComponent(scope.projectId)}/digest`}
+              current={/\/digest\/?$/.test(pathname)}
+            >
+              Digest
+            </NavLink>
+          )}
           <NavLink to="/settings/github" current={pathname.startsWith("/settings")}>
             Settings
           </NavLink>

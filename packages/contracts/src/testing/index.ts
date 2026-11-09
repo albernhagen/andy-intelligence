@@ -849,6 +849,27 @@ export function runStoreContract(name: string, make: () => Promise<RunStore>): v
       expect((await store.listActive(p)).map((r) => r.id)).toEqual([queued.id]);
     });
 
+    it("GivenRunsEndedInAndOutOfAWindow_WhenListingEndedBetween_ThenOnlyThoseInsideAndCapped", async () => {
+      const store = await make();
+      const p = project();
+      const end = async (endedAt: string, projectId = p) => {
+        const run = await store.create(newRun(projectId));
+        return store.update(run.id, { status: "failed", endedAt }, ["queued"]);
+      };
+      await end("2026-11-03T23:59:59.000Z");
+      const early = await end("2026-11-04T01:00:00.000Z");
+      const late = await end("2026-11-04T02:00:00.000Z");
+      await end("2026-11-04T01:30:00.000Z", project());
+      await store.create(newRun(p));
+      const from = "2026-11-04T00:00:00.000Z";
+      const to = "2026-11-05T00:00:00.000Z";
+      expect((await store.listEndedBetween(p, from, to, 10)).map((r) => r.id)).toEqual(
+        expect.arrayContaining([early.id, late.id]),
+      );
+      expect(await store.listEndedBetween(p, from, to, 10)).toHaveLength(2);
+      expect(await store.listEndedBetween(p, from, to, 1)).toHaveLength(1);
+    });
+
     it("GivenAQueuedRun_WhenUpdatedFromQueued_ThenOnlyThePatchedFieldsChange", async () => {
       const store = await make();
       const run = await store.create(newRun(project()));

@@ -1,5 +1,5 @@
 import type { OAuthGrantStore, WorkTracker } from "@andy/contracts";
-import type { ProjectService, RunService, TicketService } from "@andy/domain";
+import type { DigestReader, ProjectService, RunService, TicketService } from "@andy/domain";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { WebStandardStreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js";
 import type { Hono, MiddlewareHandler } from "hono";
@@ -23,6 +23,7 @@ export interface McpEndpointDeps {
   service: TicketService;
   runs: RunService;
   projects: ProjectService;
+  digest: DigestReader;
 }
 
 /**
@@ -76,6 +77,7 @@ export function registerMcpEndpoint(app: Hono<AuthEnv>, deps: McpEndpointDeps) {
       service: deps.service,
       runs: deps.runs,
       projects: deps.projects,
+      digest: deps.digest,
       email,
     });
     const transport = new WebStandardStreamableHTTPServerTransport({

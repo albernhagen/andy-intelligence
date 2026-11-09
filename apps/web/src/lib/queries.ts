@@ -25,6 +25,20 @@ export function useQuota() {
   });
 }
 
+/** A project's digest for the last `hours` (AI-70); computed on read, refetched on focus. */
+export function useDigest(projectId: string, hours: number) {
+  const api = useApi();
+  return useQuery({
+    queryKey: ["digest", projectId, hours],
+    queryFn: async () =>
+      unwrap(
+        await api.GET("/api/projects/{projectId}/digest", {
+          params: { path: { projectId }, query: { hours } },
+        }),
+      ),
+  });
+}
+
 export function useProjects() {
   const api = useApi();
   return useQuery({

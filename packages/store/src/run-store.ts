@@ -58,6 +58,17 @@ export class FirestoreRunStore implements RunStore {
     return snaps.flatMap((s) => s.docs.map((d) => d.data())).sort(newestFirst);
   }
 
+  async listEndedBetween(projectId: string, from: string, to: string, limit: number) {
+    // A range on one field uses its automatic index; the project filter runs in memory, since an
+    // equality plus a range would need a composite index. Callers bound the window (AI-70).
+    const snap = await this.runs().where("endedAt", ">=", from).where("endedAt", "<=", to).get();
+    return snap.docs
+      .map((d) => d.data())
+      .filter((r) => r.projectId === projectId)
+      .sort(newestFirst)
+      .slice(0, limit);
+  }
+
   async update(runId: string, patch: RunPatch, from: readonly RunStatus[]): Promise<Run> {
     const ref = this.runs().doc(runId);
     return this.db.runTransaction(async (tx) => {

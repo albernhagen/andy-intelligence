@@ -8,6 +8,7 @@ import {
 import { AppShell } from "@/components/AppShell";
 import { loadScope, scopePath } from "@/lib/scope";
 import { BoardPage } from "@/pages/BoardPage";
+import { DigestPage } from "@/pages/DigestPage";
 import { PickProjectPage } from "@/pages/PickProjectPage";
 import { GitHubCallbackPage, GitHubPage } from "@/pages/GitHubPage";
 import { InboxPage } from "@/pages/InboxPage";
@@ -56,6 +57,11 @@ const routeTree = rootRoute.addChildren([
     getParentRoute: () => rootRoute,
     path: "/p/$projectId/inbox",
     component: InboxPage,
+  }),
+  createRoute({
+    getParentRoute: () => rootRoute,
+    path: "/p/$projectId/digest",
+    component: DigestPage,
   }),
   createRoute({ getParentRoute: () => rootRoute, path: "/settings/github", component: GitHubPage }),
   createRoute({
