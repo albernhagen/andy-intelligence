@@ -26,7 +26,7 @@ A coordinator session may merge a PR itself only when **all** of these hold (the
 
 Never low risk, so Andy merges: `.github/`, `platform/**` (procedures, actions, baseline, executor), `scripts/executor-*`, `infra/`; auth or permissions; the dispatcher or gate; `packages/contracts` schemas the executor reads; Firestore rules or `SCHEMA_VERSION`; deploy or release paths; anything needing `terraform apply`; the agent rule files (`AGENTS.md`, `CLAUDE.md`, `docs/BUILD-PROMPT.md`, `.claude/**`), `context-budget.json`, `CODEOWNERS`, and every other file under `docs/`: `docs/security/**`, ADRs, `docs/architecture/*.md` (the design source of truth), `docs/runbooks/**` (steps Andy runs by hand), including `platform/procedures/coordinate.md` and the coordinating runbook: **the coordinator never merges a change to its own authority**. Any PR where a reviewer or the coordinator is unsure. When unsure, it is medium.
 
-Enforcement today is procedural (this record, the procedure and the runbook), plus branch protection's required checks (CI, both review agents) and CODEOWNERS on protected paths; the product's gate (AI-34) makes the protected-path and review conditions mechanical. The threat model carries the row for this authority.
+Enforcement today is procedural (this record, the procedure and the runbook), plus the `protect-main` ruleset's required checks (CI, both review agents; squash only) and CODEOWNERS requesting Andy's review on every PR; the product's gate (AI-34) makes the protected-path and review conditions mechanical. The threat model carries this authority as risk R23 and a boundary row in `docs/security/agents-and-executors.md`.
 
 Mechanics: squash merge, one PR at a time, the remaining PRs re-sync and rerun before they are next; `main`'s checks after every merge; every merge recorded in the milestone digest (`docs/build-log/<date>-digest-<milestone>.md`: PR, ticket, class, who merged, review verdicts).
 
@@ -35,4 +35,4 @@ The product builds the same classification (AI-34: `would_auto_merge`, vetoes, p
 ## Consequences
 
 - Good: docs and UI PRs no longer wait on Andy; the batch keeps moving while he reviews the medium and high ones.
-- Bad: a wrongly classified PR reaches `main` without a human. The exclusions, "when unsure, medium" and the digest table bound and audit it. The threat model records that a compromised coordinator can merge only this class (row added once AI-35's split of `docs/security/threat-model.md` lands).
+- Bad: a wrongly classified PR reaches `main` without a human. The exclusions, "when unsure, medium" and the digest table bound and audit it. The threat model records that a compromised coordinator can merge only this class.
