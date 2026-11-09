@@ -26,6 +26,7 @@ import { registerQuotaRoutes } from "./quota";
 import { registerRunCallbacks, registerRunRoutes } from "./runs";
 import { registerTicketRoutes } from "./tickets";
 import { registerBoardRoutes } from "./board";
+import { registerInFlightRoutes } from "./in-flight";
 import {
   ConnectedCodeHost,
   GitHubConnection,
@@ -215,6 +216,7 @@ export function createApp(deps: AppDeps) {
     now,
     deps.watchdog?.queue ?? null,
     async (projectId) => void (await dispatchNext(projectId)),
+    connection ? new ConnectedCodeHost(connection) : null,
   );
   const refiner = new RefineDispatcher(deps.tracker, deps.runs, runs, now);
   const builder = new BuildDispatcher(deps.tracker, deps.runs, runs, now, deps.quota ?? null);
@@ -281,6 +283,7 @@ export function createApp(deps: AppDeps) {
   registerBoardRoutes(app, new BoardReader(deps.tracker, deps.runs));
 
   registerRunRoutes(app, runs);
+  registerInFlightRoutes(app, runs);
   registerQuotaRoutes(app, deps.quota ?? null, now);
 
   if (github && connection) {

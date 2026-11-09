@@ -23,3 +23,4 @@ export * from "./inbox-order";
 export * from "./status-line";
 export * from "./ticket-edits";
 export * from "./worker";
+export * from "./dispatch-conflicts";

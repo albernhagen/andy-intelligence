@@ -1,5 +1,6 @@
 import {
   ACTIVE_RUN_STATUSES,
+  ADR_NUMBER_MAX,
   BuildOutput,
   PLAN_REASON_MAX,
   PlanOutput,
@@ -7,6 +8,8 @@ import {
   WorkTrackerError,
   notFound,
   type BillingType,
+  type CodeHost,
+  type InFlightRun,
   type EventActor,
   type Executor,
   type PlanApproval,
@@ -27,6 +30,7 @@ import {
   type WorkTracker,
 } from "@andy/contracts";
 import { MAX_ACTIVE_RUNS_GLOBAL } from "./dispatch-caps";
+import { highestAdrInIndex, nextAdrNumber, runTouches } from "./dispatch-conflicts";
 import { isDispatchable, resolveWorker } from "./worker";
 import { runCost } from "./cost";
 import {
@@ -72,6 +76,9 @@ export type StartableStep = (typeof STARTABLE_STEPS)[number];
  * (`buildRoute`, ADR-0063), from the one tier policy in `tiers.ts`.
  */
 export const DEFAULT_ROUTE: Route = TIER_ROUTES.fast;
+
+/** Where a repo keeps its ADR index; build runs' ADR numbers are reserved above it (ADR-0080). */
+export const ADR_INDEX_PATH = "docs/architecture/adr/README.md";
 
 /**
  * How each provider is billed (ARCHITECTURE §5 Provider). The executor takes the run's
@@ -157,6 +164,8 @@ export class RunService {
      * waiting ticket can start (the refine dispatcher, ADR-0054). Its errors are logged only.
      */
     private readonly onRunEnded: ((projectId: string) => Promise<void>) | null = null,
+    /** Reads the repo's ADR index to reserve build runs' ADR numbers (ADR-0080); null: none. */
+    private readonly codeHost: Pick<CodeHost, "getRepo" | "readFile"> | null = null,
   ) {}
 
   /** Whether runs can be dispatched at all (an executor is configured). */
@@ -229,7 +238,13 @@ export class RunService {
     const limits = STEP_LIMITS[startable];
     // A plan run is routed like the build it plans: the same model reads the same code.
     const build = startable === "refine" ? null : buildRoute(ticket);
-    const prompt = await this.promptFor(startable, ticket, repo, questions, approved);
+    // ADR-0080: what the run may edit, and a build's ADR number (a retry keeps its run's).
+    const touches = runTouches(ticket.touches, approved?.plan?.files);
+    const reservedAdr =
+      startable === "build"
+        ? (retryOf?.reservedAdr ?? (await this.reserveAdr(projectId, repo)))
+        : null;
+    const prompt = await this.promptFor(startable, ticket, repo, questions, approved, reservedAdr);
     const run = await this.runs.create({
       projectId,
       ticketId,
@@ -243,6 +258,8 @@ export class RunService {
       retryOf: retryOf?.id ?? null,
       planRunId: approved?.id ?? null,
       planPolicy: startable === "plan" ? project.planApproval : null,
+      touches,
+      reservedAdr,
     });
 
     // Check again now that this run exists: two concurrent starts both pass the first check,
@@ -253,7 +270,9 @@ export class RunService {
     const won =
       after.slice(0, MAX_ACTIVE_RUNS_GLOBAL).some((r) => r.id === run.id) &&
       inProject.slice(0, project.runsAtOnce).some((r) => r.id === run.id) &&
-      inProject.find((r) => r.ticketId === ticketId)?.id === run.id;
+      inProject.find((r) => r.ticketId === ticketId)?.id === run.id &&
+      // Two concurrent starts may reserve the same ADR number: the older run keeps it.
+      (reservedAdr === null || inProject.find((r) => r.reservedAdr === reservedAdr)?.id === run.id);
     if (!won) {
       await this.fail(run.id, "another run started at the same time");
       throw new DomainError("run_limit", `project ${project.key} has no free run slot`, [
@@ -673,8 +692,11 @@ export class RunService {
     repo: string,
     questions: Question[],
     approved: Run | null,
+    reservedAdr: number | null,
   ): Promise<string> {
-    if (step === "build") return buildPrompt(ticket, repo, questions, approved?.plan ?? null);
+    if (step === "build") {
+      return buildPrompt(ticket, repo, questions, approved?.plan ?? null, reservedAdr);
+    }
     if (step === "refine") return refinePrompt(ticket, repo, questions);
     const runs = await this.runs.listForTicket(ticket.projectId, ticket.id);
     return planPrompt(ticket, repo, questions, runs);
@@ -1022,6 +1044,55 @@ export class RunService {
       log("ERROR", "couldn't flag the ticket Needs-you", { runId: run.id, error: String(err) });
     }
     return "flagged";
+  }
+
+  /**
+   * The next ADR number for a build run (ADR-0080): above the index on the default branch and
+   * every number a run in the project reserved. Null, never a guess, when the repo has no index
+   * or it can't be read.
+   */
+  private async reserveAdr(projectId: string, repo: string): Promise<number | null> {
+    if (!this.codeHost) return null;
+    try {
+      const info = await this.codeHost.getRepo(repo);
+      const index = info
+        ? await this.codeHost.readFile(repo, ADR_INDEX_PATH, info.defaultBranch)
+        : null;
+      const highest = index === null ? null : highestAdrInIndex(index);
+      if (highest === null) return null;
+      const next = nextAdrNumber(highest, await this.runs.highestReservedAdr(projectId));
+      return next <= ADR_NUMBER_MAX ? next : null;
+    } catch (err) {
+      log("WARNING", "ADR number not reserved", { projectId, repo, error: String(err) });
+      return null;
+    }
+  }
+
+  /** The project's runs in flight with what they touch, oldest first (ADR-0080 in-flight view). */
+  async inFlight(projectId: string): Promise<InFlightRun[]> {
+    if (!(await this.tracker.getProject(projectId))) throw notFound("project", projectId);
+    const [active, tickets] = await Promise.all([
+      this.runs.listActive(projectId),
+      this.tracker.listTickets(projectId),
+    ]);
+    const byId = new Map(tickets.map((t) => [t.id, t]));
+    return active
+      .sort((a, b) => (a.createdAt ?? "").localeCompare(b.createdAt ?? ""))
+      .map((r) => {
+        const ticket = r.ticketId ? byId.get(r.ticketId) : undefined;
+        return {
+          runId: r.id,
+          ticketKey: ticket?.key ?? null,
+          ticketTitle: ticket?.title ?? null,
+          step: r.step,
+          status: r.status === "queued" ? "queued" : "running",
+          branch: r.branch ?? (ticket && r.step === "build" ? branchFor(ticket.key, r.id) : null),
+          pullRequest: r.links.pullRequest ?? null,
+          startedAt: r.startedAt ?? r.createdAt,
+          touches: r.touches,
+          reservedAdr: r.reservedAdr,
+        };
+      });
   }
 
   /** Runs in flight in the project and across all projects, of any step (ADR-0079). */

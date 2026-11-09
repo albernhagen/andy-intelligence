@@ -849,6 +849,24 @@ export function runStoreContract(name: string, make: () => Promise<RunStore>): v
       expect((await store.listActive(p)).map((r) => r.id)).toEqual([queued.id]);
     });
 
+    it("GivenReservedAdrNumbers_WhenAskedForTheHighest_ThenFinishedRunsCountAndOtherProjectsDont", async () => {
+      const store = await make();
+      const [p, other] = [project(), project()];
+      expect(await store.highestReservedAdr(p)).toBeNull();
+      const done = await store.create({
+        ...newRun(p),
+        step: "build",
+        reservedAdr: 81,
+        touches: ["a/**"],
+      });
+      await store.update(done.id, { status: "failed" }, ["queued"]);
+      await store.create({ ...newRun(p), step: "build", reservedAdr: 80 });
+      await store.create(newRun(p));
+      await store.create({ ...newRun(other), step: "build", reservedAdr: 99 });
+      expect(await store.highestReservedAdr(p)).toBe(81);
+      expect((await store.get(done.id))?.touches).toEqual(["a/**"]);
+    });
+
     it("GivenAQueuedRun_WhenUpdatedFromQueued_ThenOnlyThePatchedFieldsChange", async () => {
       const store = await make();
       const run = await store.create(newRun(project()));

@@ -41,13 +41,14 @@ const readyStory: NewTicket = {
  */
 async function setup(tracker: WorkTracker = new InMemoryWorkTracker()) {
   const grants = new InMemoryOAuthGrantStore();
+  const runs = new InMemoryRunStore();
   const app = createApp({
     verifier,
     allowedEmails: parseAllowList("andy@example.com"),
     version: "test",
     webConfig: { firebaseApiKey: "k", firebaseAuthDomain: "d", projectId: "p" },
     tracker,
-    runs: new InMemoryRunStore(),
+    runs,
     mcp: { publicUrl: PUBLIC_URL, grants, clients: new ClientMetadataResolver() },
   });
   const token = newToken();
@@ -81,7 +82,7 @@ async function setup(tracker: WorkTracker = new InMemoryWorkTracker()) {
       ...init,
       headers: { authorization: "Bearer andy", "content-type": "application/json" },
     });
-  return { tracker, service: new TicketService(tracker), call, rest };
+  return { tracker, runs, service: new TicketService(tracker), call, rest };
 }
 
 async function withProject() {
@@ -732,5 +733,55 @@ describe("list_ready", () => {
     const res = await ctx.call("status", { ticket: "AI-2" });
     expect(res.data.score).toBe("S · low risk · confident");
     expect(res.data.ticket).toMatchObject({ risk: "low", riskReason: "small", confidence: "high" });
+  });
+});
+
+describe("list_in_flight", () => {
+  it("GivenABuildInFlightOverlappingAReadyTicket_WhenListed_ThenItShowsAndTheTicketsStatusSaysWhy", async () => {
+    const ctx = await withProject();
+    const add = async (title: string, touches: string[]) => {
+      const t = await ctx.service.create("ai", { ...readyStory, title, touches }, "andy");
+      await ctx.tracker.updateTicket(
+        "ai",
+        t.id,
+        { stage: { to: "ready", forced: false, reason: null } },
+        "system",
+      );
+      return t;
+    };
+    const building = await add("Building", ["packages/domain/**"]);
+    await add("Waiting", ["packages/domain/src/runs.ts"]);
+    await ctx.runs.create({
+      projectId: "ai",
+      ticketId: building.id,
+      step: "build",
+      route: { harness: "claude-code", provider: "claude-sub", model: "sonnet" },
+      tier: "fast",
+      deadline: null,
+      prompt: "x",
+      maxTurns: 1,
+      touches: ["packages/domain/**"],
+      reservedAdr: 83,
+    });
+
+    const res = await ctx.call("list_in_flight", { project: "ai" });
+    expect(res.data.runs).toEqual([
+      expect.objectContaining({
+        ticketKey: "AI-1",
+        step: "build",
+        status: "queued",
+        touches: ["packages/domain/**"],
+        reservedAdr: 83,
+        pullRequest: null,
+      }),
+    ]);
+    const status = await ctx.call("status", { ticket: "AI-2" });
+    expect(status.data.statusLine.text).toBe("Waiting: overlaps AI-1 in flight");
+  });
+
+  it("GivenAnUnknownProject_WhenListed_ThenAToolError", async () => {
+    const ctx = await withProject();
+    const res = await ctx.call("list_in_flight", { project: "NOPE" });
+    expect(res).toMatchObject({ isError: true, text: "project NOPE not found" });
   });
 });

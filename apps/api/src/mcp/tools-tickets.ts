@@ -71,11 +71,13 @@ async function lineFor(
   openQuestions: number,
   worker?: Worker,
 ) {
-  const [runs, events] = await Promise.all([
+  const [runs, events, inFlight] = await Promise.all([
     deps.runs.list(ticket.projectId, ticket.id),
     deps.tracker.listEvents(ticket.projectId, ticket.id),
+    deps.runs.inFlight(ticket.projectId),
   ]);
-  return ticketStatusLine(ticket, { tickets, runs, events, openQuestions, worker }, new Date());
+  const facts = { tickets, runs, events, openQuestions, worker, inFlight };
+  return ticketStatusLine(ticket, facts, new Date());
 }
 
 /** The plan a flagged ticket waits on, if any: `stale` can only be rejected or re-planned. */

@@ -12,6 +12,7 @@ import type {
 } from "@andy/contracts";
 import { MAX_BUILD_RUNS_PER_TICKET, isAndysWork, unfinishedBlockers } from "./builds";
 import { mayDispatch } from "./dispatch-caps";
+import { blockingRun, editingRuns } from "./dispatch-conflicts";
 import { checkDor } from "./dor";
 import { MAX_PLAN_RUNS_PER_TICKET, planRequired } from "./plans";
 import { quotaStatus, readingsForDispatch } from "./quota";
@@ -31,7 +32,9 @@ function log(severity: "INFO" | "WARNING" | "ERROR", message: string, fields: ob
  * ADR-0058) while `mayDispatch` says start, and stores its last decision on the project (ADR-0079).
  *
  * A Ready ticket waits when it isn't an epic, assigned to Andy (`overrides.assignee: "me"`), archived or flagged Needs-you, meets the Definition of Ready,
- * has every `blockedBy` ticket Done and is under its build-run cap. With plan approval
+ * has every `blockedBy` ticket Done and is under its build-run cap. A ticket whose `touches`
+ * overlap a build run in flight in the project is skipped for the next one in rank order
+ * (ADR-0080); with nothing else started, the decision is `touches_overlap`. With plan approval
  * (ADR-0050), a ticket whose plan awaits Andy, is still being planned or was rejected waits for
  * Andy (only he re-plans a rejected plan); one that needs a plan gets a plan run first.
  */
@@ -88,6 +91,9 @@ export class BuildDispatcher {
     };
 
     let first: Run | null = null;
+    let overlapSkipped = false;
+    // Build runs in flight here, kept current as this call starts more (ADR-0080).
+    const inFlight = editingRuns(await this.runStore.listActive(projectId), this.now());
     let verdict = await check();
     // listTickets is sorted by rank: the first waiting ticket is the top of the order.
     for (const ticket of tickets.filter((t) => t.stage === "ready")) {
@@ -96,11 +102,23 @@ export class BuildDispatcher {
       if (ticket.type === "epic" || isAndysWork(ticket)) continue;
       if (!isDispatchable(ticket, project)) continue; // AI-32: Who does the work (ADR-0082).
       if (ticket.archived || ticket.needsAttention) continue;
+      const blocker = blockingRun(ticket, inFlight);
+      if (blocker) {
+        overlapSkipped = true;
+        log("INFO", "build waits: touches overlap a run in flight", {
+          ticket: ticket.key,
+          reason: "touches_overlap",
+          blockingTicket: tickets.find((t) => t.id === blocker.ticketId)?.key ?? null,
+          blockingRunId: blocker.id,
+        });
+        continue;
+      }
       if (!(await this.waiting(ticket, project.planApproval))) continue;
       try {
         const run = await this.runs.start(projectId, ticket.id, "build");
         log("INFO", "build started on its own", { ticket: ticket.key, runId: run.id });
         first ??= run;
+        inFlight.push(...editingRuns([run], this.now()));
       } catch (err) {
         if (!(err instanceof DomainError)) throw err;
         // run_limit: another start won the race. not_buildable: the ticket changed meanwhile.
@@ -115,11 +133,15 @@ export class BuildDispatcher {
       }
       verdict = await check();
     }
-    await this.record(
-      project,
-      verdict === "start" ? (first ? "started" : "nothing_ready") : verdict,
-      first !== null,
-    );
+    const decision =
+      verdict !== "start"
+        ? verdict
+        : first
+          ? "started"
+          : overlapSkipped
+            ? "touches_overlap"
+            : "nothing_ready";
+    await this.record(project, decision, first !== null);
     return first;
   }
 

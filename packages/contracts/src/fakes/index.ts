@@ -358,6 +358,13 @@ export class InMemoryRunStore implements RunStore {
       .map((r) => structuredClone(r));
   }
 
+  async highestReservedAdr(projectId: string): Promise<number | null> {
+    const reserved = [...this.runs.values()]
+      .filter((r) => r.projectId === projectId && r.reservedAdr !== null)
+      .map((r) => r.reservedAdr!);
+    return reserved.length ? Math.max(...reserved) : null;
+  }
+
   async update(runId: string, patch: RunPatch, from: readonly RunStatus[]): Promise<Run> {
     const current = this.runs.get(runId);
     if (!current) throw notFound("run", runId);

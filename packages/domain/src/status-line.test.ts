@@ -93,6 +93,12 @@ describe("statusLine", () => {
     expect(line({ stage: "ready", queuePosition: null }).text).toBe("Ready");
   });
 
+  it("GivenAReadyTicketOverlappingARunInFlight_WhenComputed_ThenItSaysWhichOne", () => {
+    expect(line({ stage: "ready", queuePosition: 1, overlaps: "AI-12" }).text).toBe(
+      "Waiting: overlaps AI-12 in flight",
+    );
+  });
+
   it("GivenBacklog_WhenComputed_ThenItSaysWhetherItIsReadyToMove", () => {
     expect(line({}).text).toBe("Backlog · needs refining");
     expect(line({ dorMet: true }).text).toBe("Backlog · ready to move to Ready");

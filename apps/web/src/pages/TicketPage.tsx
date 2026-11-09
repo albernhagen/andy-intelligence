@@ -15,6 +15,7 @@ import {
   useTicketSave,
 } from "@/components/InlineEdit";
 import { WorkerControl } from "@/components/WorkerControls";
+import { useInFlight } from "@/components/InFlightPanel";
 import { MoveControls } from "@/components/MoveControls";
 import { QuestionCard } from "@/components/QuestionCard";
 import { ScoreReasons } from "@/components/ScoreReasons";
@@ -153,6 +154,7 @@ function StatusLine({ ticket }: { ticket: Ticket }) {
   const questions = useTicketQuestions(path).data ?? [];
   const events = useEvents(path).data ?? [];
   const worker = useWorker(path).data?.worker;
+  const inFlight = useInFlight(ticket.projectId).data;
   const { text, tone } = ticketStatusLine(
     ticket,
     {
@@ -161,6 +163,7 @@ function StatusLine({ ticket }: { ticket: Ticket }) {
       events,
       openQuestions: questions.filter((q) => q.status === "open").length,
       worker,
+      inFlight,
     },
     new Date(),
   );

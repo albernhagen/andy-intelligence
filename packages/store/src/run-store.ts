@@ -58,6 +58,19 @@ export class FirestoreRunStore implements RunStore {
     return snaps.flatMap((s) => s.docs.map((d) => d.data())).sort(newestFirst);
   }
 
+  async highestReservedAdr(projectId: string): Promise<number | null> {
+    // Reads only the one field (ADR-0080): an equality filter plus orderBy would need a composite index.
+    const snap = await this.db
+      .collection(collections.runs.path())
+      .where("projectId", "==", projectId)
+      .select("reservedAdr")
+      .get();
+    const reserved = snap.docs
+      .map((d) => d.get("reservedAdr") as unknown)
+      .filter((n): n is number => typeof n === "number");
+    return reserved.length ? Math.max(...reserved) : null;
+  }
+
   async update(runId: string, patch: RunPatch, from: readonly RunStatus[]): Promise<Run> {
     const ref = this.runs().doc(runId);
     return this.db.runTransaction(async (tx) => {

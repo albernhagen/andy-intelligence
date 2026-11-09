@@ -779,7 +779,7 @@ describe("build run flow", () => {
         expect(patched.status).toBe(200);
         return id;
       };
-      const ready = async (projectId: string, title: string) => {
+      const ready = async (projectId: string, title: string, touches: string[] = []) => {
         const ticket = await json<{ id: string }>(
           send(`/api/projects/${projectId}/tickets`, "POST", {
             type: "feature",
@@ -788,6 +788,7 @@ describe("build run flow", () => {
             acceptanceCriteria: ["WHEN Andy opens the board THE SYSTEM SHALL list his tickets"],
             size: "S",
             sizeReason: "one screen",
+            touches,
           }),
         );
         const moved = await send(`/api/projects/${projectId}/tickets/${ticket.id}/stage`, "POST", {
@@ -890,6 +891,58 @@ describe("build run flow", () => {
       expect((await f.send(`/api/projects/${p}`, "PATCH", { lastDispatch: null })).status).toBe(
         400,
       );
+    });
+
+    // AI-69: Conflict-aware dispatch (ADR-0080).
+    it("GivenOverlappingReadyTickets_WhenDispatched_ThenOnlyTheFirstStartsTheInFlightViewShowsItAndEachBuildReservesTheNextAdrNumber", async () => {
+      const f = await setup();
+      f.t.host.files.set(
+        "docs/architecture/adr/README.md",
+        "| [0079](0079-dispatch-caps.md) | Dispatch caps | accepted |\n| [0082](0082-worker-role.md) | Worker role | accepted |",
+      );
+      const p = await f.project("AI", REPO, { runsAtOnce: 3 });
+      // A sibling build already in flight, holding ADR-0085 and touching only the runbooks.
+      await f.t.runs.create({
+        projectId: p,
+        ticketId: "sibling",
+        step: "build",
+        route: { harness: "claude-code", provider: "claude-sub", model: "sonnet" },
+        tier: "fast",
+        deadline: null,
+        prompt: "x",
+        maxTurns: 1,
+        touches: ["docs/runbooks/**"],
+        reservedAdr: 85,
+      });
+
+      const first = await f.ready(p, "First", ["packages/domain/**"]);
+      const second = await f.ready(p, "Second", ["packages/domain/src/runs.ts"]);
+      expect(await f.runsOf(p, second)).toEqual([]);
+      expect(await f.decision(p)).toBe("touches_overlap");
+      const third = await f.ready(p, "Third", ["apps/web/**"]);
+
+      const [firstRun] = await f.runsOf(p, first);
+      const [thirdRun] = await f.runsOf(p, third);
+      expect(await f.runsOf(p, second)).toEqual([]);
+      expect(firstRun).toMatchObject({ step: "build", touches: ["packages/domain/**"] });
+      // One above the index (0082) and above the sibling's reservation (0085), never shared.
+      expect((firstRun as RunBody & { reservedAdr: number }).reservedAdr).toBe(86);
+      expect((thirdRun as RunBody & { reservedAdr: number }).reservedAdr).toBe(87);
+
+      const view = await f.json<{ ticketKey: string | null; touches: string[]; branch: string }[]>(
+        f.t.call(`/api/projects/${p}/in-flight`),
+      );
+      expect(view.map((r) => r.ticketKey)).toEqual([null, "AI-1", "AI-3"]);
+      expect(view[1]).toMatchObject({
+        touches: ["packages/domain/**"],
+        branch: expect.stringContaining("AI-1"),
+      });
+      expect((await f.t.call(`/api/projects/nope/in-flight`)).status).toBe(404);
+
+      // When the first build ends, the skipped ticket starts.
+      await f.finish(firstRun!.id, REPO);
+      const [secondRun] = await f.runsOf(p, second);
+      expect((secondRun as RunBody & { reservedAdr: number }).reservedAdr).toBe(88);
     });
 
     // The executor only runs this repo until M5, so the other project's runs are put in the

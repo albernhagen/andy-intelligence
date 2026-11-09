@@ -354,6 +354,8 @@ export const NewRun = Run.pick({
   retryOf: true,
   planRunId: true,
   planPolicy: true,
+  touches: true,
+  reservedAdr: true,
 });
 export type NewRun = z.input<typeof NewRun>;
 
@@ -399,6 +401,8 @@ export interface RunStore {
   listForTicket(projectId: string, ticketId: string): Promise<Run[]>;
   /** Runs in `queued` or `running` for the project. */
   listActive(projectId: string): Promise<Run[]>;
+  /** The highest `reservedAdr` of any run in the project, finished ones too; null if none (ADR-0080). */
+  highestReservedAdr(projectId: string): Promise<number | null>;
   /**
    * Applies the patch atomically, only if the run's status is one of `from` and, for a patch
    * that sets `planDecision`, the run has none yet, and for one that sets `mergeAttemptedSha`, it
