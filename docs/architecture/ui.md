@@ -8,7 +8,7 @@ Overview and reading map: [ARCHITECTURE.md](ARCHITECTURE.md). Section numbers ma
 v1.x screens:
 - **Needs-you inbox** (questions, gate reviews, pending config changes, quota warnings) — home screen.
 - **Phone** (M7: Mobile, ADR-0052): the SPA installed from Safari as a web app, phone layout for the inbox, ticket detail, releases and the quota banner; push notifications deep-link to the item; answer, approve plan or PR, promote, pause dispatch from the phone.
-- **Quota & spend** (per provider gauges with reset times; paid spend vs caps; persistent banner on warn/pause).
+- **Quota & spend** (per provider gauges with reset times; paid spend vs caps; persistent banner on warn/pause/unknown; built: header gauge, banner).
 - **Projects** (list, config, policy overrides).
 - **Tickets** — M1: board, ticket detail with history and linked runs/PRs/cost. M3 (ADR-0059): status on cards, story panel, command palette. M5: filter and group by project. M4: epic grouping, overrides editing.
 - **Run detail** — M1: run summary inside ticket detail. M4: dedicated screen (metadata, cost, outcome, links to Action log / Jules session / PR).

@@ -1,6 +1,6 @@
 import { createRoute, z, type OpenAPIHono } from "@hono/zod-openapi";
-import { PLAN_REASON_MAX, Run, type RunExecutor } from "@andy/contracts";
-import { STARTABLE_STEPS, type RunService } from "@andy/domain";
+import { PLAN_REASON_MAX, Run, type QuotaStore, type RunExecutor } from "@andy/contracts";
+import { STARTABLE_STEPS, parseRateLimits, type RunService } from "@andy/domain";
 import { bodyLimit } from "hono/body-limit";
 import type { AuthEnv } from "./auth";
 import { FixedWindowLimiter } from "./mcp/rate-limit";
@@ -127,9 +127,15 @@ const Report = z.object({
   pullRequest: z.string().max(500).nullable().optional(),
   /** Build: tooling or dependency files the change touches (flagged on the PR). */
   toolingFiles: z.array(z.string().max(300)).max(50).optional(),
+  /** The agent's last rate-limit event; parseRateLimits checks it, so a bad one can't lose the report. */
+  rateLimits: z.unknown().optional(),
 });
 
-function log(severity: "INFO" | "WARNING", message: string, fields: Record<string, unknown> = {}) {
+function log(
+  severity: "INFO" | "WARNING" | "ERROR",
+  message: string,
+  fields: Record<string, unknown> = {},
+) {
   console.log(JSON.stringify({ severity, message, component: "run-callback", ...fields }));
 }
 
@@ -137,6 +143,7 @@ export interface RunCallbackDeps {
   runs: RunService;
   verify: ActionsTokenVerifier;
   now?: () => Date;
+  quota?: QuotaStore;
 }
 
 export function registerRunCallbacks(app: OpenAPIHono<AuthEnv>, deps: RunCallbackDeps): void {
@@ -154,6 +161,22 @@ export function registerRunCallbacks(app: OpenAPIHono<AuthEnv>, deps: RunCallbac
     } catch {
       log("WARNING", "run callback token rejected");
       return null;
+    }
+  };
+
+  /** Best effort: the run is already recorded, and a lost reading only leaves the gauge unknown. */
+  const captureQuota = async (runId: string, rateLimits: unknown): Promise<void> => {
+    if (!deps.quota) return;
+    const parsed = parseRateLimits(rateLimits, now());
+    if (!parsed.ok) {
+      log("WARNING", "quota reading discarded", { runId, issues: parsed.issues });
+      return;
+    }
+    if (parsed.readings.length === 0) return;
+    try {
+      await deps.quota.save(parsed.readings);
+    } catch (err) {
+      log("ERROR", "quota reading not saved", { runId, error: String(err) });
     }
   };
 
@@ -186,7 +209,10 @@ export function registerRunCallbacks(app: OpenAPIHono<AuthEnv>, deps: RunCallbac
         const details = body.error.issues.map((i) => `${i.path.join(".")}: ${i.message}`);
         return c.json({ error: "invalid request", details }, 400);
       }
-      const result = await deps.runs.report(runId.data, caller, body.data);
+      const { rateLimits, ...report } = body.data;
+      const result = await deps.runs.report(runId.data, caller, report);
+      // A replayed report carries an old reading; it must not refresh takenAt.
+      if (result === "recorded") await captureQuota(runId.data, rateLimits);
       return c.json({ result }, 200);
     },
   );

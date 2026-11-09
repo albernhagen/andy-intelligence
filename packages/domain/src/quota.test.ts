@@ -1,0 +1,139 @@
+import type { QuotaReading } from "@andy/contracts";
+import { describe, expect, it } from "vitest";
+import {
+  QUOTA_MAX_AGE_MS,
+  parseRateLimits,
+  quotaFreshness,
+  quotaLevel,
+  quotaStatus,
+} from "./quota";
+
+const now = new Date("2026-11-08T12:00:00.000Z");
+const epoch = (iso: string) => new Date(iso).getTime() / 1000;
+const RESET = "2026-11-08T15:00:00.000Z";
+const thresholds = { warnPct: 70, pausePct: 80 };
+const reading = (over: Partial<QuotaReading> = {}): QuotaReading => ({
+  provider: "claude-sub",
+  window: "5h",
+  usedPct: 10,
+  resetsAt: RESET,
+  source: "test",
+  takenAt: now.toISOString(),
+  confidence: "high",
+  ...over,
+});
+const windows = (five: number, seven: number) => ({
+  unifiedWindows: {
+    five_hour: { utilization: five, resetsAt: epoch(RESET) },
+    seven_day: { utilization: seven, resetsAt: epoch(RESET) },
+  },
+});
+
+describe("parseRateLimits", () => {
+  it("GivenBothWindows_WhenParsed_ThenOneReadingPerWindowInPercent", () => {
+    const parsed = parseRateLimits(windows(0.423, 0.1), now);
+    expect(parsed).toEqual({
+      ok: true,
+      readings: [
+        expect.objectContaining({ window: "5h", usedPct: 42.3, resetsAt: RESET }),
+        expect.objectContaining({ window: "weekly", usedPct: 10, takenAt: now.toISOString() }),
+      ],
+    });
+  });
+
+  it("GivenUsagePastTheCap_WhenParsed_ThenItIsCappedAt100", () => {
+    const parsed = parseRateLimits(windows(1.3, 0), now);
+    expect(parsed.ok && parsed.readings[0]?.usedPct).toBe(100);
+  });
+
+  it("GivenOnlyTheLimitingWindow_WhenParsed_ThenItBecomesOneReading", () => {
+    const parsed = parseRateLimits({ rateLimitType: "seven_day", utilization: 0.9 }, now);
+    expect(parsed).toEqual({
+      ok: true,
+      readings: [expect.objectContaining({ window: "weekly", usedPct: 90, resetsAt: null })],
+    });
+  });
+
+  it.each([[undefined], [null], [{}], [{ rateLimitType: "overage", utilization: 0.5 }]])(
+    "GivenNoUsableWindow_WhenParsed_ThenNoReadings %#",
+    (raw) => {
+      expect(parseRateLimits(raw, now)).toEqual({ ok: true, readings: [] });
+    },
+  );
+
+  it.each([
+    ["not an object", "garbage"],
+    ["a string usage", { unifiedWindows: { five_hour: { utilization: "lots", resetsAt: 1 } } }],
+    ["negative usage", windows(-1, 0)],
+    ["a reset Date can't hold", { resetsAt: 1e20 }],
+  ])("GivenMalformedData_WhenParsed_ThenIssuesWithoutThePayload: %s", (_name, raw) => {
+    const parsed = parseRateLimits(raw, now);
+    expect(parsed.ok).toBe(false);
+    if (!parsed.ok) expect(parsed.issues.join()).not.toContain("lots");
+  });
+});
+
+describe("quotaFreshness", () => {
+  it("GivenNoReading_WhenChecked_ThenUnknown", () => {
+    expect(quotaFreshness(undefined, now)).toBe("unknown");
+  });
+
+  it("GivenAResetTime_WhenChecked_ThenFreshExactlyUntilItPasses", () => {
+    const r = reading({ takenAt: "2026-11-01T00:00:00.000Z" });
+    expect(quotaFreshness(r, new Date(RESET))).toBe("fresh");
+    expect(quotaFreshness(r, new Date(new Date(RESET).getTime() + 1))).toBe("stale");
+  });
+
+  it("GivenNoResetTime_WhenChecked_ThenFreshFor6Hours", () => {
+    const r = reading({ resetsAt: null });
+    expect(quotaFreshness(r, new Date(now.getTime() + QUOTA_MAX_AGE_MS))).toBe("fresh");
+    expect(quotaFreshness(r, new Date(now.getTime() + QUOTA_MAX_AGE_MS + 1))).toBe("stale");
+  });
+});
+
+describe("quotaLevel", () => {
+  it.each([
+    [69.9, "ok"],
+    [70, "warn"],
+    [79.9, "warn"],
+    [80, "pause"],
+    [100, "pause"],
+  ])("GivenUsedPct%s_WhenLevelled_Then%s", (pct, level) => {
+    expect(quotaLevel(pct, thresholds)).toBe(level);
+  });
+});
+
+describe("quotaStatus", () => {
+  it("GivenNoReadings_WhenSummarised_ThenEveryWindowIsUnknownWithNoNumber", () => {
+    const status = quotaStatus("claude-sub", [], now);
+    expect(status.level).toBe("unknown");
+    expect(status.windows.map((w) => [w.window, w.freshness, w.usedPct])).toEqual([
+      ["5h", "unknown", null],
+      ["weekly", "unknown", null],
+    ]);
+  });
+
+  it("GivenAStaleReading_WhenSummarised_ThenItHidesTheOldNumber", () => {
+    const old = reading({ usedPct: 5, resetsAt: "2026-11-08T11:00:00.000Z" });
+    const [five] = quotaStatus("claude-sub", [old], now).windows;
+    expect(five).toMatchObject({ freshness: "stale", level: "unknown", usedPct: null });
+  });
+
+  it("GivenAWarnAndAnUnknownWindow_WhenSummarised_ThenTheWorstLevelIsWarn", () => {
+    expect(quotaStatus("claude-sub", [reading({ usedPct: 75 })], now).level).toBe("warn");
+  });
+
+  it("GivenAWarnAndAPauseWindow_WhenSummarised_ThenTheWorstLevelIsPause", () => {
+    const readings = [reading({ usedPct: 75 }), reading({ window: "weekly", usedPct: 85 })];
+    expect(quotaStatus("claude-sub", readings, now).level).toBe("pause");
+  });
+
+  it("GivenOneOkAndOneUnknownWindow_WhenSummarised_ThenTheLevelIsUnknownNotOk", () => {
+    expect(quotaStatus("claude-sub", [reading()], now).level).toBe("unknown");
+  });
+
+  it("GivenBothWindowsOk_WhenSummarised_ThenOk", () => {
+    const readings = [reading(), reading({ window: "weekly" })];
+    expect(quotaStatus("claude-sub", readings, now).level).toBe("ok");
+  });
+});
