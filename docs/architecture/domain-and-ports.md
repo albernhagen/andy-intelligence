@@ -52,7 +52,7 @@ Contracts are defined in `packages/contracts` (Zod schemas + TypeScript interfac
 | `Executor` | RunRequest, RunStatus, RunResult, CompletionSignal, Artifact links | **Claude Code via Actions**, **Jules REST API**, **OpenCode via Actions** | Cloud Run Jobs, Agent SDK, Replicas |
 | `RunStore` | Run (status changes conditional on the current status, so a late callback can't undo a finished run) | **Firestore** (M1.6a) | Local store (ADR-0032) |
 | `ModelGateway` | Completion, Usage, Cost | OpenRouter (direct single-call steps) | LiteLLM, direct providers |
-| `QuotaSource` | QuotaReading | Claude statusline/`rate_limits` capture from runs, Jules task counter | Official APIs when available |
+| `QuotaSource` (`QuotaStore` adds `save`) | QuotaReading | Claude `rate_limit_event` capture from run reports (§10.5), Jules task counter | Official APIs when available |
 | `Notifier` | Notice, Urgency | UI (banner + Needs-you inbox) | Email (pending S slice), Web Push + `PushSubscriptionStore` (M7: Mobile, ADR-0052), Slack |
 | `Deployer` | Release, Promotion, Rollback | Cloud Deploy | — |
 | `Evaluator` | Suite, Case, Score | Agent evals (M1.17: Agent evals v1: procedure/prompt regression suite, tool chosen in the slice); Ori Eval for scout smoke tests | promptfoo, Inspect AI |

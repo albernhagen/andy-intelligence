@@ -4,7 +4,7 @@ import {
   codeHostContract,
   executorContract,
   oauthGrantStoreContract,
-  quotaSourceContract,
+  quotaStoreContract,
   runStoreContract,
   watchdogQueueContract,
   workTrackerContract,
@@ -15,7 +15,7 @@ import {
   InMemoryCodeHostConnectionStore,
   InMemoryExecutor,
   InMemoryOAuthGrantStore,
-  InMemoryQuotaSource,
+  InMemoryQuotaStore,
   InMemoryRunStore,
   InMemoryWatchdogQueue,
   InMemoryWorkTracker,
@@ -36,24 +36,7 @@ executorContract("in-memory", async () => ({
   }),
 }));
 
-quotaSourceContract("in-memory", async () => {
-  const source = new InMemoryQuotaSource();
-  return {
-    source,
-    seed: async () =>
-      source.set("claude-sub", [
-        {
-          provider: "claude-sub",
-          window: "5h",
-          usedPct: 42,
-          resetsAt: "2026-10-21T23:00:00Z",
-          source: "test",
-          takenAt: "2026-10-21T20:00:00Z",
-          confidence: "high",
-        },
-      ]),
-  };
-});
+quotaStoreContract("in-memory", async () => new InMemoryQuotaStore());
 
 oauthGrantStoreContract("in-memory", async (now) => new InMemoryOAuthGrantStore(now));
 
