@@ -289,8 +289,9 @@ describe("refine gate flow", () => {
     await t.answer(open[0]!.id, "No, the other way");
     const runs = await t.runs(created.id);
     expect(runs).toHaveLength(2);
-    expect(runs[0]!.prompt).toContain('"focusGaps"');
-    expect(runs[0]!.prompt).toContain("No, the other way");
+    // Runs can share a millisecond, so find the re-refine by its prompt, not its list position.
+    const reRefine = runs.find((r) => r.prompt?.includes("No, the other way"));
+    expect(reRefine?.prompt).toContain('"focusGaps"');
 
     // The re-refine may not touch anything else, even if the agent tries.
     await t.report(
@@ -343,7 +344,8 @@ describe("refine gate flow", () => {
     expect((await t.ticket(created.id)).stage).toBe("backlog");
     const runs = await t.runs(created.id);
     expect(runs).toHaveLength(2);
-    expect(runs[0]!.prompt).toContain("the promoted answer");
+    // Runs can share a millisecond, so don't rely on list order: only the re-refine sees the answer.
+    expect(runs.filter((r) => r.prompt?.includes("the promoted answer"))).toHaveLength(1);
   });
 
   it("GivenASameTitledTicketMadeDuringARun_WhenSplit_ThenItIsNotAdoptedAndDuplicateTitlesBothExist", async () => {

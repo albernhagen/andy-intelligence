@@ -19,17 +19,17 @@ specs/NNN-name/{design.md, tech-design.md, tasks.md, stories/*.md, mockups/}
 CODEOWNERS                        # `*` requests Andy's review (ADR-0042); further lines = always-gated paths
 infra/                            # Terraform: dev/prod Cloud Run, Cloud Deploy pipeline, read-only agent SAs
 ```
-**Required CI checks** on `main`: tests, lint, typecheck, protected-path check, secret scan, security scans and security-review agent (§9.1), "PR references a ticket" (ticket key in branch name or PR body, verified against the control-plane API). These enforce rules for every agent regardless of harness.
+**Required CI checks** on `main`: tests, lint, typecheck, protected-path check, secret scan, security scans and security-review agent (§9.1), "PR references a ticket" (ticket key in branch name or PR body, verified against the control-plane API).
 
 Onboarding a project = UI/MCP "Add project" → onboarding interview → brief PR (ADR-0053) → bootstrap (applies the project baseline, §8.1; until then `platform/baseline/baseline.mjs onboard`, runbook `docs/runbooks/onboard-a-repo.md`: branch ruleset, repo settings, labels, template files, secrets refs, App install check, Terraform PR for GCP) → Andy approves Terraform PR.
 
 ### 8.1 Project baseline (ADR-0031)
 
-Every guardrail built in this repo is packaged so each managed project gets it the same way, and this repo is configured from the same baseline. **Every slice that adds or changes a guardrail updates this table in the same PR.**
+Every guardrail built here reaches each managed project the same way; this repo uses the same baseline. **Every slice that adds or changes a guardrail updates this table in the same PR.**
 
-Carried by (ADR-0038): **A** = composite action in `platform/actions/`; managed repos get this repo's caller workflow with the action pinned to a commit SHA · **M** = managed file (kept identical; listed in `platform/baseline/manifest.json`) · **S** = seed file, copied once from `template/` · **G** = GitHub config in `platform/baseline/github/`, applied by `platform/baseline/baseline.mjs` · **TF** = Terraform module in `infra/modules/` · **RB** = runbook step (secrets).
+Carried by (ADR-0038): **A** = composite action in `platform/actions/`; managed repos get the caller workflow with the action pinned by SHA · **M** = managed file (kept identical; listed in `platform/baseline/manifest.json`) · **S** = seed file, copied once from `template/` · **G** = GitHub config in `platform/baseline/github/`, applied by `platform/baseline/baseline.mjs` · **TF** = Terraform module in `infra/modules/` · **RB** = runbook step (secrets).
 
-Third-party action pins inside `platform/actions/` are bumped by this repo's Dependabot (`/platform/actions/*`); managed repos get them through the baseline pin. Drift: `baseline.mjs check <repo>` (Andy, local, everything); the weekly system security review checks labels and ruleset (its token can't read the rest).
+This repo's Dependabot bumps third-party pins in `platform/actions/`; managed repos get them through the baseline pin. Drift: `baseline.mjs check <repo>` (Andy, local, everything); the weekly system security review checks labels and ruleset (its token can't read the rest).
 
 | Guardrail | ADR | Source in this repo | Carried by | Status |
 |---|---|---|---|---|
@@ -75,3 +75,4 @@ Third-party action pins inside `platform/actions/` are bumped by this repo's Dep
 | Build runs: `autoBuild` switch (default off); `planApproval` (default none): an approved read-only plan first, owner-only decision, ≤ 3 plan runs, stale after a ticket or policy change or 72 h; Bash only in the sandbox (registry-only network, credentials unset and scrubbed), live-checked by one sandboxed Bash call before the agent (Haiku, 3 turns); `.git` paths that steer git checked and `.git` restored after it; sandbox placeholders dropped; publish job refuses protected paths, symlinks, > 200 files or > 5 MB; one App token per build run; ≤ 4 builds per ticket, dispatch paused at 3 tickets awaiting review | 0028, 0063, 0071 | `packages/domain/src/build{s,-dispatch}.ts`, `profile.json` `steps.build`, `claude-executor.yml` (`publish`), `scripts/executor-{publish,sandbox}.mjs`, `apps/api/src/github/token.ts`, `packages/domain/src/plans.ts` | — | built (M1.8a); managed repos with the reusable workflow (M5) |
 | Webhook caps (1 MB body, 300 signed deliveries/minute per instance) + HMAC + 30-day TTL on records | 0028, 0041 | `apps/api/src/webhooks.ts`, `infra/control-plane` | — | control plane only (managed repos send webhooks; they don't receive them) |
 | Bot-opened PRs run their checks (repo token from the control plane via Actions OIDC; agent job holds no write credential) | 0041, 0043 | `system-security-review.yml` (`publish` job), `apps/api/src/github/token.ts` | — | not yet carried (the system review itself isn't carried until M6: Dev → prod releases) |
+| Sandbox self-test on executor changes | 0071 | `platform/actions/sandbox-self-test` | A | platform only; a project hosting an executor pins the action |
