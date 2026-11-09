@@ -34,6 +34,7 @@ export function buildProject(input: NewProject): Project {
     buildEnabledAt: null,
     planApproval: "none",
     dailyQuestionCap: 5,
+    defaultWorker: "agent",
     autoMerge: "s-and-m",
     runsAtOnce: RUNS_AT_ONCE_DEFAULT,
     paused: false,
@@ -112,6 +113,10 @@ export function buildTicket(
     upNextAt: null,
     sentBackReason: null,
     refineAssumptions: [],
+    risk: null,
+    riskReason: null,
+    confidence: null,
+    confidenceReason: null,
     createdAt: now,
     updatedAt: now,
   };

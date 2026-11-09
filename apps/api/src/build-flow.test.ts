@@ -142,6 +142,14 @@ describe("build run flow", () => {
         tokensIn: 50_000,
         tokensOut: 8_000,
         costUsd: 1.25,
+        usage: {
+          inputTokens: 50_000,
+          outputTokens: 8_000,
+          cacheReadTokens: 0,
+          cacheWriteTokens: 0,
+          turns: 5,
+          wallMs: 1000,
+        },
         output,
         branch: context.branch,
         pullRequest: prUrl,
@@ -156,7 +164,7 @@ describe("build run flow", () => {
       plan: output.plan,
       links: { pullRequest: prUrl },
       toolingFiles: ["package.json"],
-      costUsd: 1.25,
+      costUsd: 0.36,
       costIsEstimate: true,
     });
 
@@ -331,6 +339,14 @@ describe("build run flow", () => {
         tokensIn: 50_000,
         tokensOut: 8_000,
         costUsd: 1.25,
+        usage: {
+          inputTokens: 50_000,
+          outputTokens: 8_000,
+          cacheReadTokens: 0,
+          cacheWriteTokens: 0,
+          turns: 5,
+          wallMs: 1000,
+        },
         output,
         branch: context.branch,
         pullRequest: prUrl,
@@ -407,6 +423,14 @@ describe("build run flow", () => {
           tokensIn: 50_000,
           tokensOut: 8_000,
           costUsd: 1.25,
+          usage: {
+            inputTokens: 50_000,
+            outputTokens: 8_000,
+            cacheReadTokens: 0,
+            cacheWriteTokens: 0,
+            turns: 5,
+            wallMs: 1000,
+          },
           output: { ...output, verification },
           branch: context.branch,
           pullRequest: url,
@@ -524,7 +548,7 @@ describe("build run flow", () => {
           reviewBlockers: 0,
           andyCommits: 0,
           reworks: 0,
-          costEstimateUsd: 1.25,
+          costEstimateUsd: 0.36,
         },
       });
     });
@@ -823,6 +847,36 @@ describe("build run flow", () => {
 
       await f.finish(run!.id, REPO);
       expect(await f.runsOf(p, second)).toHaveLength(1);
+    });
+
+    it("GivenADialOfOneAndAndysTicketOnTop_WhenTicketsReachReady_ThenOnlyTheAgentsTicketStarts", async () => {
+      const f = await setup();
+      const p = await f.project("AI", REPO, { runsAtOnce: 1 });
+      const mine = await f.json<{ id: string }>(
+        f.send(`/api/projects/${p}/tickets`, "POST", {
+          type: "chore",
+          title: "Mine",
+          body: "Andy does this one.",
+          acceptanceCriteria: ["WHEN Andy does it THE SYSTEM SHALL record it"],
+          size: "S",
+          sizeReason: "small",
+        }),
+      );
+      const picked = await f.send(`/api/projects/${p}/tickets/${mine.id}/worker`, "PUT", {
+        worker: "me",
+      });
+      expect(picked.status).toBe(200);
+      expect(
+        (await f.send(`/api/projects/${p}/tickets/${mine.id}/stage`, "POST", { to: "ready" }))
+          .status,
+      ).toBe(200);
+      const agents = await f.ready(p, "Agent's");
+
+      expect(await f.runsOf(p, mine.id)).toEqual([]);
+      const [run] = await f.runsOf(p, agents);
+      expect(run).toMatchObject({ step: "build", status: "queued" });
+      await f.finish(run!.id, REPO);
+      expect(await f.runsOf(p, mine.id)).toEqual([]);
     });
 
     it("GivenAPausedProject_WhenATicketReachesReady_ThenNoRunAndTheReasonReadsBackOverTheApi", async () => {

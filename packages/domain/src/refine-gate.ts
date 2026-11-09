@@ -65,12 +65,16 @@ export function planGaps(gaps: readonly RefineGap[], room: CapRoom): GapPlan {
 
 /**
  * The fields refine fills: only those the ticket has empty, so a value Andy set is never
- * overwritten; to change one, refine asks (ADR-0058). `sizeReason` goes with the size it explains.
+ * overwritten; to change one, refine asks (ADR-0058). Each reason goes with the score it explains.
  */
 export function refineFills(ticket: Ticket, output: RefineOutput): TicketFields {
   return {
     ...(ticket.type === null ? { type: output.type } : {}),
     ...(ticket.size === null ? { size: output.size, sizeReason: output.sizeReason } : {}),
+    ...(ticket.risk === null ? { risk: output.risk, riskReason: output.riskReason } : {}),
+    ...(ticket.confidence === null
+      ? { confidence: output.confidence, confidenceReason: output.confidenceReason }
+      : {}),
     ...(ticket.outOfScope.length === 0 ? { outOfScope: output.outOfScope } : {}),
     ...(ticket.touches.length === 0 ? { touches: output.touches } : {}),
     ...(ticket.body.trim() === "" && output.body ? { body: output.body } : {}),

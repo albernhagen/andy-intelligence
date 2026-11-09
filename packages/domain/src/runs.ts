@@ -10,6 +10,9 @@ import {
   type EventActor,
   type Executor,
   type PlanApproval,
+  type Project,
+  type QuotaDelta,
+  type RunUsage,
   type ProviderKey,
   type Question,
   type Route,
@@ -24,13 +27,14 @@ import {
   type WorkTracker,
 } from "@andy/contracts";
 import { MAX_ACTIVE_RUNS_GLOBAL } from "./dispatch-caps";
+import { isDispatchable, resolveWorker } from "./worker";
+import { runCost } from "./cost";
 import {
   BUILDABLE_STAGES,
   MAX_BUILD_RUNS_PER_TICKET,
   branchFor,
   buildPrompt,
   buildRoute,
-  isAndysWork,
   isPullRequestOf,
   ticketSnapshot,
   unfinishedBlockers,
@@ -124,6 +128,9 @@ export interface RunResult {
   tokensIn: number | null;
   tokensOut: number | null;
   costUsd: number | null;
+  /** Null or absent: the run's cost is stored as unknown. */
+  usage?: RunUsage | null;
+  quotaDelta?: QuotaDelta | null;
   /** Build: the branch the publish job pushed (also after a failure), if any. */
   branch?: string | null;
   /** Build: the pull request the publish job opened, if any. */
@@ -191,7 +198,7 @@ export class RunService {
           "Andy turns them on in /projects after the live sandbox proof (runbook agent-runs.md §9)",
         ]);
       }
-      await this.checkBuildable(ticket);
+      await this.checkBuildable(ticket, project);
       const plan = await this.planStateOf(ticket, questions, project.planApproval);
       if (startable === "build") {
         const gate = buildGate(planRequired(project.planApproval, ticket), plan, ticket, retryOf);
@@ -396,6 +403,9 @@ export class RunService {
       }
       if (built.summary) summary = built.summary;
     }
+    const usage = result.usage ?? null;
+    const billing = PROVIDER_BILLING[run.route.provider];
+    const cost = runCost(run.route.model, billing, usage, result.costUsd);
     let done: Run;
     try {
       done = await this.runs.update(
@@ -408,9 +418,9 @@ export class RunService {
           summary,
           tokensIn: result.tokensIn,
           tokensOut: result.tokensOut,
-          costUsd: result.costUsd,
-          // On a subscription the reported cost is the API-equivalent estimate.
-          costIsEstimate: PROVIDER_BILLING[run.route.provider] === "subscription",
+          ...cost,
+          usage,
+          quotaDelta: result.quotaDelta ?? null,
           ...(planned ? { plan: planned.plan } : {}),
           ...(built
             ? {
@@ -434,7 +444,7 @@ export class RunService {
       questions: asked,
       tokensIn: result.tokensIn,
       tokensOut: result.tokensOut,
-      costUsd: result.costUsd,
+      costUsd: cost.costUsd,
     });
     if (done.ticketId) {
       const asks = asked > 0 ? `\n\nAsked ${asked} question(s): answer them in Needs you.` : "";
@@ -674,11 +684,14 @@ export class RunService {
    * Builds run on a Ready or In progress ticket that meets the Definition of Ready, whose
    * blockers are Done, at most MAX_BUILD_RUNS_PER_TICKET times.
    */
-  private async checkBuildable(ticket: Ticket): Promise<void> {
-    if (isAndysWork(ticket)) {
-      throw new DomainError("not_buildable", `${ticket.key} is assigned to Andy`, [
-        'overrides.assignee is "me": Andy does this one; clear it to let an agent build',
-      ]);
+  private async checkBuildable(ticket: Ticket, project: Project): Promise<void> {
+    if (!isDispatchable(ticket, project)) {
+      const mine = resolveWorker(ticket, project) === "me";
+      throw new DomainError(
+        "not_buildable",
+        `${ticket.key} ${mine ? "is assigned to Andy" : "has no worker yet"}`,
+        [mine ? "switch its worker to agent to let an agent build" : "pick a worker first"],
+      );
     }
     if (ticket.type === "epic") {
       throw new DomainError("not_buildable", `${ticket.key} is an epic`, [

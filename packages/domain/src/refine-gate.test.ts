@@ -1,6 +1,6 @@
-import type { RefineGap } from "@andy/contracts";
+import type { RefineGap, RefineOutput, Ticket } from "@andy/contracts";
 import { describe, expect, it } from "vitest";
-import { MAX_OPEN_QUESTIONS_PER_TICKET, planGaps, shouldAsk } from "./refine-gate";
+import { MAX_OPEN_QUESTIONS_PER_TICKET, planGaps, refineFills, shouldAsk } from "./refine-gate";
 
 const gap = (question: string, over: Partial<RefineGap> = {}): RefineGap => ({
   question,
@@ -62,5 +62,48 @@ describe("planGaps", () => {
     const unsure = (q: string) => gap(q, { confidence: "unsure" });
     const plan = planGaps([unsure("cheap"), costly("big")], { ...room, dailyCap: 1 });
     expect(plan.questions.map((q) => q.question)).toEqual(["big"]);
+  });
+});
+
+describe("refineFills scores", () => {
+  const empty = {
+    type: "feature",
+    size: "S",
+    body: "b",
+    outOfScope: ["x"],
+    touches: ["y"],
+    acceptanceCriteria: ["z"],
+    risk: null,
+    riskReason: null,
+    confidence: null,
+    confidenceReason: null,
+  } as unknown as Ticket;
+  const output = {
+    risk: "high",
+    riskReason: "touches auth",
+    confidence: "medium",
+    confidenceReason: "one guess",
+  } as RefineOutput;
+
+  it("GivenNoScores_WhenFilled_ThenRiskAndConfidenceComeWithTheirReasons", () => {
+    expect(refineFills(empty, output)).toMatchObject({
+      risk: "high",
+      riskReason: "touches auth",
+      confidence: "medium",
+      confidenceReason: "one guess",
+    });
+  });
+
+  it("GivenASetRisk_WhenFilled_ThenRiskAndItsReasonStayAndConfidenceIsStillFilled", () => {
+    const fills = refineFills({ ...empty, risk: "low", riskReason: "mine" }, output);
+    expect(fills).not.toHaveProperty("risk");
+    expect(fills).not.toHaveProperty("riskReason");
+    expect(fills).toMatchObject({ confidence: "medium" });
+  });
+
+  it("GivenASetConfidence_WhenFilled_ThenConfidenceAndItsReasonStay", () => {
+    const fills = refineFills({ ...empty, confidence: "high", confidenceReason: "mine" }, output);
+    expect(fills).not.toHaveProperty("confidence");
+    expect(fills).not.toHaveProperty("confidenceReason");
   });
 });

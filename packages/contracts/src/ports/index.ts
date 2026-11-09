@@ -7,6 +7,7 @@ import {
   EventActor,
   Id,
   Project,
+  Worker,
   ProviderKey,
   Question,
   QuestionStatus,
@@ -20,6 +21,7 @@ import {
   ScopeList,
   Stage,
   Ticket,
+  TicketScoreFields,
   Timestamp,
   Urgency,
   type AnsweredVia,
@@ -108,6 +110,10 @@ export const TicketFields = Ticket.pick({
   upNextAt: true,
   sentBackReason: true,
   refineAssumptions: true,
+  risk: true,
+  riskReason: true,
+  confidence: true,
+  confidenceReason: true,
 })
   .partial()
   // Zod 4 applies defaults inside `.partial()`, which would turn "not given" into "reset":
@@ -120,6 +126,7 @@ export const TicketFields = Ticket.pick({
     upNextAt: Timestamp.nullable().optional(),
     sentBackReason: z.string().max(300).nullable().optional(),
     refineAssumptions: z.array(Assumption).optional(),
+    ...TicketScoreFields,
   });
 export type TicketFields = z.infer<typeof TicketFields>;
 
@@ -154,6 +161,8 @@ export const TicketSummary = z.object({
   }).nullable(),
   /** The latest `pr_linked` event's pull request; null when none (or not looked up). */
   pullRequest: PullRequestLink.nullable(),
+  /** Resolved at read time (ADR-0082). */
+  worker: Worker,
 });
 export type TicketSummary = z.infer<typeof TicketSummary>;
 
@@ -191,6 +200,7 @@ export const ProjectPatch = z.strictObject({
   dailyQuestionCap: Project.shape.dailyQuestionCap.unwrap().optional(),
   autoMerge: AutoMerge.optional(),
   ...projectDispatchPatch,
+  defaultWorker: Worker.optional(),
 });
 export type ProjectPatch = z.infer<typeof ProjectPatch>;
 
@@ -204,6 +214,7 @@ export const ProjectSettings = ProjectPatch.pick({
   autoMerge: true,
   runsAtOnce: true,
   paused: true,
+  defaultWorker: true,
 });
 export type ProjectSettings = z.infer<typeof ProjectSettings>;
 
@@ -355,6 +366,8 @@ export const RunPatch = Run.pick({
   tokensOut: true,
   costUsd: true,
   costIsEstimate: true,
+  usage: true,
+  quotaDelta: true,
   links: true,
   summary: true,
   error: true,

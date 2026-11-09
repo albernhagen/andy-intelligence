@@ -5,6 +5,7 @@ import { DispatchControls } from "@/components/DispatchControls";
 import { Button } from "@/components/ui/button";
 import { Field, Input } from "@/components/ui/input";
 import { Loading, QueryError } from "@/components/Status";
+import { DefaultWorkerSelect } from "@/components/WorkerControls";
 import { useCreateProject, useGitHub, useProjects, useUpdateProject } from "@/lib/queries";
 
 /** Project picker; each project opens its ticket board. M5: Multi-project in parallel adds filtering across projects. */
@@ -43,6 +44,7 @@ export function ProjectsPage() {
             <DispatchControls project={p} />
             <PlanApprovalSelect project={p} />
             <AutoMergeSelect project={p} />
+            <DefaultWorkerSelect project={p} />
           </li>
         ))}
       </ul>

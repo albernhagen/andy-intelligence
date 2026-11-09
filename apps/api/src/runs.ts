@@ -1,6 +1,21 @@
 import { createRoute, z, type OpenAPIHono } from "@hono/zod-openapi";
-import { PLAN_REASON_MAX, Run, type QuotaStore, type RunExecutor } from "@andy/contracts";
-import { STARTABLE_STEPS, parseRateLimits, quotaRejection, type RunService } from "@andy/domain";
+import {
+  PLAN_REASON_MAX,
+  Run,
+  RunUsage,
+  type QuotaDelta,
+  type QuotaReading,
+  type QuotaStore,
+  type RunExecutor,
+} from "@andy/contracts";
+import {
+  STARTABLE_STEPS,
+  parseRateLimits,
+  quotaDelta,
+  quotaRejection,
+  type ParsedRateLimits,
+  type RunService,
+} from "@andy/domain";
 import { bodyLimit } from "hono/body-limit";
 import type { AuthEnv } from "./auth";
 import { FixedWindowLimiter } from "./mcp/rate-limit";
@@ -129,6 +144,8 @@ const Report = z.object({
   toolingFiles: z.array(z.string().max(300)).max(50).optional(),
   /** The agent's last rate-limit event; parseRateLimits checks it, so a bad one can't lose the report. */
   rateLimits: z.unknown().optional(),
+  /** Checked by parseUsage, so a bad one leaves the cost unknown instead of losing the report. */
+  usage: z.unknown().optional(),
 });
 
 function log(
@@ -165,9 +182,8 @@ export function registerRunCallbacks(app: OpenAPIHono<AuthEnv>, deps: RunCallbac
   };
 
   /** Best effort: the run is already recorded, and a lost reading only leaves the gauge unknown. */
-  const captureQuota = async (runId: string, rateLimits: unknown): Promise<void> => {
+  const captureQuota = async (runId: string, parsed: ParsedRateLimits): Promise<void> => {
     if (!deps.quota) return;
-    const parsed = parseRateLimits(rateLimits, now());
     if (!parsed.ok) {
       log("WARNING", "quota reading discarded", { runId, issues: parsed.issues });
       return;
@@ -189,6 +205,31 @@ export function registerRunCallbacks(app: OpenAPIHono<AuthEnv>, deps: RunCallbac
     } catch (err) {
       log("ERROR", "quota reading not saved", { runId, error: String(err) });
     }
+  };
+
+  const parseUsage = (runId: string, raw: unknown): RunUsage | null => {
+    if (raw === undefined || raw === null) return null;
+    const parsed = RunUsage.safeParse(raw);
+    if (parsed.success) return parsed.data;
+    const issues = parsed.error.issues.map((i) => `${i.path.join(".")}: ${i.code}`);
+    log("WARNING", "run usage discarded", { runId, issues });
+    return null;
+  };
+
+  /** Against the readings stored before this report's. Best effort, like captureQuota. */
+  const measureQuota = async (
+    runId: string,
+    parsed: ParsedRateLimits,
+  ): Promise<QuotaDelta | null> => {
+    if (!deps.quota || !parsed.ok || parsed.readings.length === 0) return null;
+    let before: QuotaReading[];
+    try {
+      before = await deps.quota.latest("claude-sub");
+    } catch (err) {
+      log("ERROR", "quota reading not read", { runId, error: String(err) });
+      return null;
+    }
+    return quotaDelta(before, parsed.readings);
   };
 
   app.get(RUN_CONTEXT_PATH, async (c) => {
@@ -220,10 +261,15 @@ export function registerRunCallbacks(app: OpenAPIHono<AuthEnv>, deps: RunCallbac
         const details = body.error.issues.map((i) => `${i.path.join(".")}: ${i.message}`);
         return c.json({ error: "invalid request", details }, 400);
       }
-      const { rateLimits, ...report } = body.data;
-      const result = await deps.runs.report(runId.data, caller, report);
+      const { rateLimits, usage, ...report } = body.data;
+      const limits = parseRateLimits(rateLimits, now());
+      const result = await deps.runs.report(runId.data, caller, {
+        ...report,
+        usage: parseUsage(runId.data, usage),
+        quotaDelta: await measureQuota(runId.data, limits),
+      });
       // A replayed report carries an old reading; it must not refresh takenAt.
-      if (result === "recorded") await captureQuota(runId.data, rateLimits);
+      if (result === "recorded") await captureQuota(runId.data, limits);
       return c.json({ result }, 200);
     },
   );

@@ -9,7 +9,7 @@ Overview and reading map: [ARCHITECTURE.md](ARCHITECTURE.md). Section numbers ma
 | Stage | What happens | Exit criteria (automatic unless overridden) |
 |---|---|---|
 | **Backlog** | Refinement agent enriches; splits epics into stories (child tickets with dependencies); sizes; assigns tier; **asks Andy questions** | **Definition of Ready (DoR)** met |
-| **Ready** | Waits for dependencies, assignee, quota/budget | Dispatcher starts a run |
+| **Ready** | Waits for dependencies, a worker that is an agent (ADR-0082), quota/budget | Dispatcher starts a run |
 | **In progress** | Build run: plans read-only, then implements (ADR-0050; plan approval below). One automatic retry, then flags Needs-you | PR opened with structured run summary (plan, deviations, verification output) |
 | **Ready for review** | Rule-based gate decides auto-merge vs. Andy | Merged. No stage after it until M6: Dev → prod releases adds one for dev verification (ADR-0069) |
 | **Done** | Summary included in rollups | — |
@@ -19,7 +19,7 @@ Overview and reading map: [ARCHITECTURE.md](ARCHITECTURE.md). Section numbers ma
 
 As built (PR events, build dispatch, plan approval): [`history/workflow-as-built.md`](history/workflow-as-built.md).
 
-**Dispatch caps (ADR-0079):** the build dispatcher takes Ready tickets from the top while `mayDispatch` says start. It stops on pause, the project's `runsAtOnce` dial, the global cap, the cap on agent PRs waiting for Andy, or the quota reserve, and stores the reason on the project. This replaces the one-run rule in the as-built notes.
+**Dispatch caps (ADR-0079):** the build dispatcher takes Ready tickets from the top while `mayDispatch` says start (pause, dial, global and PR caps, quota) and stores why it stopped; this replaces the as-built one-run rule.
 
 **Needs-you is a flag, not a stage:** flagged items stay put and appear in the Needs-you inbox (UI + MCP).
 
@@ -37,6 +37,7 @@ As built (PR events, build dispatch, plan approval): [`history/workflow-as-built
 
 ### 4.3 Refinement and questions
 - Backlog has **Ideas** (no agent spend) and **Up next**; entering Up next starts a refinement pass (ADR-0075). The agent drafts the ticket, or sends it back, or splits it. Each gap is rated; the control plane makes it a question only if the agent is unsure or a wrong guess is costly to reverse, else an assumption Andy can promote. Zero questions is allowed; at most 3 open per ticket and `dailyQuestionCap` per project per 24 hours.
+- Refine also scores the ticket (AI-37): `risk` (low, medium, high: how much a bad change could break) and `confidence` (high, medium, low: how sure it is of the ticket and plan), each with a one-line reason, by the rubric in `platform/procedures/refine.md`. Filled only when empty; optional, never part of the DoR; the dispatcher ignores them. `startScore` in `packages/domain/src/scores.ts` gives the one label the board and MCP share ("S · low risk · confident"), and sorting the Ready lane by score (`?sort=score`: size, risk, confidence; missing last; ties by rank) is a view that writes no rank.
 - Questions are **structured records** (§5 Question).
 - Andy answers in UI or MCP. A `/refine` skill in Claude desktop batches pending questions across projects into one conversation.
 - Answering re-checks the DoR; the last answer moves an Up-next ticket that meets it to Ready (`system`, `ifUpdatedAt`).

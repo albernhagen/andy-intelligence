@@ -9,6 +9,8 @@ import {
   type WorkTracker,
 } from "@andy/contracts";
 
+import { resolveWorker } from "./worker";
+
 /** Stages whose cards show a pull request; Backlog, Ready and Done ones skip the history read. */
 export const PR_STAGES: readonly Stage[] = ["in_progress", "ready_for_review"];
 
@@ -31,7 +33,8 @@ export class BoardReader {
   ) {}
 
   async tickets(projectId: string): Promise<BoardTicket[]> {
-    if (!(await this.tracker.getProject(projectId))) throw notFound("project", projectId);
+    const project = await this.tracker.getProject(projectId);
+    if (!project) throw notFound("project", projectId);
     const [tickets, questions, active] = await Promise.all([
       this.tracker.listTickets(projectId),
       this.tracker.listQuestions({ projectId, status: "open" }),
@@ -69,6 +72,7 @@ export class BoardReader {
               }
             : null,
           pullRequest: prs.get(t.id) ?? null,
+          worker: resolveWorker(t, project),
         },
       };
     });

@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
-import { Outlet, useParams } from "@tanstack/react-router";
+import { Outlet, useNavigate, useParams, useSearch } from "@tanstack/react-router";
 import {
   DndContext,
   KeyboardSensor,
@@ -12,9 +12,10 @@ import {
   type DragStartEvent,
 } from "@dnd-kit/core";
 import { Stage, type BoardTicket } from "@andy/contracts";
+import { sortByStartScore } from "@andy/domain";
 import { BoardCard } from "@/components/board/BoardCard";
 import { BoardDispatchStatus } from "@/components/DispatchControls";
-import { Lane, LaneZone } from "@/components/board/Lane";
+import { Lane, LaneZone, ReadySortToggle } from "@/components/board/Lane";
 import { Loading, QueryError } from "@/components/Status";
 import {
   COLLAPSED_STAGES,
@@ -41,6 +42,7 @@ export function BoardPage() {
   const { projectId } = useParams({ from: "/p/$projectId" });
   const board = useBoard(projectId);
   const [showArchived, setShowArchived] = useState(false);
+  const { sort } = useSearch({ from: "/p/$projectId" });
 
   return (
     <section className="space-y-4">
@@ -65,6 +67,7 @@ export function BoardPage() {
           tickets={visibleTickets(board.data, showArchived)}
           showCancelled={showArchived}
           projectId={projectId}
+          sortedByScore={sort === "score"}
         />
       )}
       <Outlet />
@@ -79,11 +82,14 @@ function Lanes({
   tickets,
   showCancelled,
   projectId,
+  sortedByScore,
 }: {
   tickets: BoardTicket[];
   showCancelled: boolean;
   projectId: string;
+  sortedByScore: boolean;
 }) {
+  const navigate = useNavigate({ from: "/p/$projectId" });
   const move = useBoardMove(projectId);
   const rank = useRankTicket(projectId);
   const setUpNext = useSetUpNext(projectId);
@@ -108,7 +114,13 @@ function Lanes({
   );
   const lanes = groupByStage(shown);
   const byId = useMemo(() => new Map(shown.map((t) => [t.id, t])), [shown]);
-  const next = nextUp(lanes.ready, byId);
+  const next = nextUp(
+    lanes.ready.filter((t) => t.summary.worker === "agent"),
+    byId,
+  );
+  // A view only: `lanes.ready` stays the queue, for drops, card numbers and the Next marker.
+  const readyShown = sortedByScore ? sortByStartScore(lanes.ready) : lanes.ready;
+  const shownIn = (stage: Stage) => (stage === "ready" ? readyShown : lanes[stage]);
   const now = Date.now();
   const stages = STAGES.filter((s) => s !== "cancelled" || showCancelled);
 
@@ -122,7 +134,9 @@ function Lanes({
     setOverLane(null);
     const ticket = byId.get(String(active.id));
     if (!ticket || !over) return;
-    const overId = String(over.id);
+    // Sorted by score, a card's place isn't its queue place: a drop on Ready means the lane (the
+    // end of the queue, or nothing for a card already there) and never reorders it.
+    const overId = sortedByScore && laneOf(over.id) === "ready" ? "ready" : String(over.id);
     const upNextPlan = planUpNextDrop(lanes.backlog, ticket, overId);
     // Ideas keep their own order: Up-next cards never count as neighbours.
     const ideas = splitBacklog(lanes.backlog).ideas;
@@ -187,20 +201,20 @@ function Lanes({
           const collapsed = collapsible && !expanded.includes(stage);
           const toggle = () =>
             setExpanded((e) => (e.includes(stage) ? e.filter((s) => s !== stage) : [...e, stage]));
-          const card = (t: BoardTicket, i: number) => (
+          const card = (t: BoardTicket) => (
             <BoardCard
               key={t.id}
               ticket={t}
               projectId={projectId}
               blockers={openBlockers(t, byId)}
-              position={stage === "ready" ? i + 1 : null}
+              position={stage === "ready" ? lanes.ready.indexOf(t) + 1 : null}
               next={t.id === next?.id}
               now={now}
               error={errors[t.id] ?? null}
             />
           );
           const backlog = stage === "backlog" ? splitBacklog(lanes.backlog) : null;
-          const ordered = backlog ? [...backlog.upNext, ...backlog.ideas] : lanes[stage];
+          const ordered = backlog ? [...backlog.upNext, ...backlog.ideas] : shownIn(stage);
           return (
             <Lane
               key={stage}
@@ -209,7 +223,18 @@ function Lanes({
               collapsed={collapsed}
               onToggle={collapsible ? toggle : undefined}
               highlight={overLane === stage}
-              top={stage === "backlog" ? <QuickAdd projectId={projectId} /> : undefined}
+              top={
+                stage === "backlog" ? (
+                  <QuickAdd projectId={projectId} />
+                ) : stage === "ready" ? (
+                  <ReadySortToggle
+                    sorted={sortedByScore}
+                    onToggle={() =>
+                      void navigate({ search: { sort: sortedByScore ? undefined : "score" } })
+                    }
+                  />
+                ) : undefined
+              }
             >
               {!collapsed && backlog && (
                 <>
@@ -219,7 +244,7 @@ function Lanes({
                   {backlog.ideas.map(card)}
                 </>
               )}
-              {!collapsed && !backlog && lanes[stage].map(card)}
+              {!collapsed && !backlog && shownIn(stage).map(card)}
             </Lane>
           );
         })}

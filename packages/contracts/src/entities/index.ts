@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { Worker } from "./worker";
 import {
   Actor,
   HarnessKey,
@@ -18,6 +19,12 @@ import { projectDispatchFields } from "./dispatch-caps";
 
 export * from "./common";
 export * from "./dispatch-caps";
+import { RunCostFields } from "./cost";
+import { RefineScores, TicketScores } from "./scores";
+
+export * from "./common";
+export * from "./cost";
+export * from "./scores";
 
 /** ARCHITECTURE §5 — domain model. Vendor concepts must not appear here. */
 
@@ -73,11 +80,13 @@ export const Project = z.object({
    */
   autoMerge: AutoMerge.default("none"),
   ...projectDispatchFields,
+  /** Who does a ticket's work when it has no pick of its own (ADR-0082). */
+  defaultWorker: Worker.default("agent"),
 });
 export type Project = z.infer<typeof Project>;
 
 export const TicketOverrides = z.object({
-  assignee: z.union([z.literal("me"), HarnessKey]).optional(),
+  assignee: z.union([z.literal("me"), z.literal("agent"), HarnessKey]).optional(),
   tier: TierKey.optional(),
   modelPin: Route.optional(),
   autonomy: AutonomyLevel.optional(),
@@ -181,6 +190,7 @@ export const Ticket = z.object({
   sentBackReason: z.string().max(REFINE_REASON_MAX).nullable().default(null),
   /** What refine assumed instead of asking (ADR-0075). */
   refineAssumptions: z.array(Assumption).default([]),
+  ...TicketScores,
   createdAt: Timestamp,
   updatedAt: Timestamp,
 });
@@ -296,6 +306,7 @@ export const RefineOutput = z
     type: TicketType,
     size: Size,
     sizeReason: capped(REFINE_LIMITS.sizeReason),
+    ...RefineScores,
     outOfScope: z.array(capped(REFINE_LIMITS.scopeItem)).max(REFINE_LIMITS.maxScopeItems),
     touches: z.array(capped(REFINE_LIMITS.scopeItem)).max(REFINE_LIMITS.maxScopeItems),
     /** Written only where the ticket has none, like the proposals above. */
@@ -510,6 +521,7 @@ export const Run = z.object({
   /** Why the merge call failed. */
   mergeError: z.string().max(2000).nullable().default(null),
   metrics: RunMetrics.nullable().default(null),
+  ...RunCostFields,
 });
 export type Run = z.infer<typeof Run>;
 
@@ -821,3 +833,5 @@ export const CodeHostEvent = z.discriminatedUnion("kind", [
   CodeHostEventBase.extend({ kind: z.literal("workflow_run"), workflowRun: WorkflowRun }),
 ]);
 export type CodeHostEvent = z.infer<typeof CodeHostEvent>;
+
+export * from "./worker";

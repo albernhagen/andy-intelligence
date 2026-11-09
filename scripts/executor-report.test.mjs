@@ -18,6 +18,8 @@ const resultMessage = (extra = {}) => ({
   is_error: false,
   result: "Refined the ticket.",
   total_cost_usd: 0.42,
+  num_turns: 7,
+  duration_ms: 65000,
   usage: {
     input_tokens: 100,
     cache_read_input_tokens: 1000,
@@ -56,6 +58,39 @@ describe("buildReport", () => {
       tokensIn: 1150,
       tokensOut: 200,
       costUsd: 0.42,
+      usage: {
+        inputTokens: 100,
+        outputTokens: 200,
+        cacheReadTokens: 1000,
+        cacheWriteTokens: 50,
+        turns: 7,
+        wallMs: 65000,
+      },
+    });
+  });
+
+  it("GivenAResultWithoutUsage_WhenBuilt_ThenTheUsageFieldIsAbsent", () => {
+    expect(
+      buildReport({ outcome: "success", messages: messages({ usage: undefined }) }),
+    ).not.toHaveProperty("usage");
+  });
+
+  it("GivenPartialUsage_WhenBuilt_ThenCacheDefaultsToZeroAndMissingCountsAreNull", () => {
+    const report = buildReport({
+      outcome: "success",
+      messages: messages({
+        usage: { input_tokens: 5, output_tokens: 6 },
+        num_turns: undefined,
+        duration_ms: undefined,
+      }),
+    });
+    expect(report.usage).toEqual({
+      inputTokens: 5,
+      outputTokens: 6,
+      cacheReadTokens: 0,
+      cacheWriteTokens: 0,
+      turns: null,
+      wallMs: null,
     });
   });
 

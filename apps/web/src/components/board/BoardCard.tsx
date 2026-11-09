@@ -1,10 +1,13 @@
 import { Link } from "@tanstack/react-router";
 import { useSortable } from "@dnd-kit/sortable";
 import { Bug, CircleDashed, Lightbulb, Mountain, Wrench, type LucideIcon } from "lucide-react";
-import type { BoardTicket, Ticket, TicketType } from "@andy/contracts";
+import type { BoardTicket, Stage, Ticket, TicketType, Worker } from "@andy/contracts";
+import { scoreMarkers, startScore } from "@andy/domain";
 import { Badge } from "@/components/ui/badge";
 import { QueryError } from "@/components/Status";
+import { WorkerBadges } from "@/components/WorkerControls";
 import { plural, runLabel } from "@/lib/board";
+import { workerStatus } from "@/lib/needs-you";
 import { typeLabel } from "@/lib/tickets";
 
 const TYPE_ICONS: Record<TicketType, LucideIcon> = {
@@ -60,6 +63,8 @@ export function BoardCard({
         role="link"
         to="/p/$projectId/t/$ticketRef"
         params={{ projectId, ticketRef: t.key }}
+        // Opening a ticket keeps the board's view (the Ready sort).
+        search={true}
         style={style}
         data-ticket={t.key}
         className={`flex flex-col gap-1 rounded-md border border-border bg-background p-2 text-sm hover:border-foreground/30 focus-visible:outline-2 focus-visible:outline-ring ${
@@ -84,13 +89,16 @@ export function BoardCard({
         </span>{" "}
         <span>{t.title}</span>
         <Markers
-          size={t.size}
+          ticket={t}
           openQuestions={openQuestions}
           needsAttention={t.needsAttention}
           run={run ? runLabel(run, now) : null}
           pullRequest={pullRequest}
           blockers={blockers}
           archived={t.archived}
+          worker={t.summary.worker}
+          stage={t.stage}
+          type={t.type}
           sentBack={t.upNextRank === null ? t.sentBackReason : null}
         />
         <span className="sr-only">{typeLabel(t.type)}</span>
@@ -101,7 +109,7 @@ export function BoardCard({
 }
 
 function Markers({
-  size,
+  ticket,
   openQuestions,
   needsAttention,
   run,
@@ -109,8 +117,11 @@ function Markers({
   blockers,
   archived,
   sentBack,
+  worker,
+  stage,
+  type,
 }: {
-  size: Ticket["size"];
+  ticket: Ticket;
   openQuestions: number;
   needsAttention: boolean;
   run: string | null;
@@ -118,9 +129,36 @@ function Markers({
   blockers: Ticket[];
   archived: boolean;
   sentBack: string | null;
+  worker: Worker;
+  stage: Stage;
+  type: TicketType | null;
 }) {
+  const { mine, needsWorker } = workerStatus(worker, stage, type);
+  const score = scoreMarkers(ticket);
+  const label = startScore(ticket);
   const markers = [
-    size && <Badge key="size">{size}</Badge>,
+    score.size && (
+      <Badge key="size" title={label}>
+        {score.size}
+      </Badge>
+    ),
+    score.risk && (
+      <Badge key="risk" title={label} variant={ticket.risk === "high" ? "danger" : "default"}>
+        {score.risk}
+      </Badge>
+    ),
+    score.confidence && (
+      <Badge
+        key="confidence"
+        title={label}
+        variant={ticket.confidence === "low" ? "attention" : "default"}
+      >
+        {score.confidence}
+      </Badge>
+    ),
+    (mine || needsWorker) && (
+      <WorkerBadges key="worker" worker={worker} stage={stage} type={type} />
+    ),
     openQuestions > 0 ? (
       <Badge key="q" variant="attention">
         {plural(openQuestions, "question")}
