@@ -13,9 +13,7 @@ concurrency:
   group: deploy-control-plane
   cancel-in-progress: false
 
-permissions:
-  contents: read
-  id-token: write # OIDC → Workload Identity Federation
+permissions: {}
 
 env:
   REGION: us-central1
@@ -24,6 +22,9 @@ env:
 jobs:
   deploy:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write # OIDC → Workload Identity Federation; never on a pull_request trigger
     # Skip until infra exists and the repo variables are set (see docs/runbooks/m0-setup.md).
     # Merges made by a bot (Dependabot auto-merge, ADR-0042) never deploy; Andy's next merge does.
     if: >-
@@ -54,25 +55,9 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
-      - uses: google-github-actions/deploy-cloudrun@2028e2d7d30a78c6910e0632e48dd561b064884d # v3.0.1
+      # No-traffic revision, smoke test, then traffic; rollback in the job summary (ADR-0076).
+      - uses: ./platform/actions/cloud-run-safe-deploy
         with:
           service: ${{ env.SERVICE }}
           region: ${{ env.REGION }}
           image: ${{ vars.GCP_IMAGE_REPO }}/control-plane:${{ github.sha }}
-
-      # Tests the URL the service itself serves (PUBLIC_URL, ADR-0044), so it works before and
-      # after the custom-domain cutover. Any other host (run.app) must answer only /health.
-      - name: Smoke test
-        run: |
-          svc=$(gcloud run services describe "$SERVICE" --region "$REGION" --format=json)
-          url=$(jq -r '.spec.template.spec.containers[0].env[] | select(.name == "PUBLIC_URL") | .value' <<< "$svc")
-          run_url=$(jq -r '.status.url' <<< "$svc")
-          url=${url:-$run_url}
-          curl -fsS "$url/health"
-          code=$(curl -s -o /dev/null -w '%{http_code}' "$url/api/me")
-          test "$code" = "401"
-          if [ "$url" != "$run_url" ]; then
-            curl -fsS "$run_url/health"
-            code=$(curl -s -o /dev/null -w '%{http_code}' "$run_url/api/me")
-            test "$code" = "404"
-          fi
