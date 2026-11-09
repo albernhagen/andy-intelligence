@@ -5,7 +5,7 @@ Always loaded (`CLAUDE.md` is a symlink to this file). Full operating rules: [`d
 ## Every session
 
 1. Read `docs/build-log.md` (pending decisions, blockers) and your slice's ticket in project `AI` (MCP `status`, ADR-0047); work on exactly one slice, on a branch `m<N>.<slice>/<short-name>` cut from the latest `main`. No stacked PRs: if a dependency hasn't merged, the slice isn't ready.
-2. Stop and ask before anything that costs money, touches cloud resources, IAM, secrets, external accounts, or `main`, or deviates from ARCHITECTURE.md.
+2. Stop and ask before anything that costs money, touches cloud resources, IAM, secrets, external accounts, or `main` (a coordinator may merge low-risk PRs, ADR-0078), or deviates from ARCHITECTURE.md.
 3. The repo is public: no secrets, tokens, personal emails, `*.tfvars`, `.env*`, or Terraform state — ever (ADR-0015).
 4. Talking to Andy (chat, PRs, docs): be brief, and never use a bare ID. Write `ID: title`: "M1.2: Ticket core", "M0: Foundations: repo, sign-in, GCP infra", "ADR-0019: Actions OIDC callbacks", "PR #1: Foundations". Milestone titles: ARCHITECTURE §12.
 
