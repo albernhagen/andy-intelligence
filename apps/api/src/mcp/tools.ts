@@ -21,6 +21,7 @@ import {
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import { z } from "zod";
+import { registerWorkerTools } from "./tools-worker";
 
 /**
  * MCP core tools (M1.4: MCP core tools; `refine` from M1.7: Refinement; `build` and
@@ -147,6 +148,7 @@ const summary = (t: Ticket) => ({
 
 export function registerTools(server: McpServer, deps: ToolDeps): void {
   const { tracker, service } = deps;
+  registerWorkerTools(server, deps, run);
 
   /** Decides the ticket's latest plan run as Andy (owner-only, ADR-0050). */
   const decide = async (key: string, decision: "approved" | "rejected", reason: string | null) => {
@@ -216,6 +218,7 @@ export function registerTools(server: McpServer, deps: ToolDeps): void {
       run(async () => {
         const inbox = await service.needsYou();
         const keys = await ticketKeys(tracker, inbox.questions, inbox.tickets);
+        const workers = await service.workersFor(inbox.tickets);
         return {
           questions: inbox.questions.map((q) => ({
             id: q.id,
@@ -229,7 +232,7 @@ export function registerTools(server: McpServer, deps: ToolDeps): void {
             askedByRun: q.runId,
             createdAt: q.createdAt,
           })),
-          tickets: inbox.tickets.map(summary),
+          tickets: inbox.tickets.map((t) => ({ ...summary(t), worker: workers.get(t.id) })),
         };
       }),
   );

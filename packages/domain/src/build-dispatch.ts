@@ -8,6 +8,7 @@ import {
 import { checkDor } from "./dor";
 import { MAX_PLAN_RUNS_PER_TICKET, planRequired } from "./plans";
 import type { RunService } from "./runs";
+import { isDispatchable } from "./worker";
 import { DomainError } from "./tickets";
 
 function log(severity: "INFO" | "WARNING" | "ERROR", message: string, fields: object = {}) {
@@ -64,6 +65,7 @@ export class BuildDispatcher {
     for (const ticket of tickets.filter((t) => t.stage === "ready")) {
       // An epic never runs (ADR-0058); refine can leave one in Ready. Andy's own work never builds.
       if (ticket.type === "epic" || isAndysWork(ticket)) continue;
+      if (!isDispatchable(ticket, project)) continue; // AI-32: Who does the work (ADR-0082).
       if (ticket.archived || ticket.needsAttention) continue;
       if (!(await this.waiting(ticket, project.planApproval))) continue;
       try {

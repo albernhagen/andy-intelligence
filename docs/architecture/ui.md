@@ -36,7 +36,8 @@ v1.x screens:
 
 **Built in AI-28: Board v2 (M3, ADR-0059 row "Board"):**
 - One read, `GET /api/projects/:id/board`: tickets with open question count, run in flight and latest PR (PR only for In progress and Ready for review; ≤ 50 history reads, ADR-0028). Refetches every 5 s only while a run is in flight.
-- Cards: type icon, key, title, then markers (size, questions, run step and minutes, PR state, "Blocked by"). Ready is numbered; the first unblocked card says "Next".
+- Cards: type icon, key, title, then markers (size, worker, questions, run step and minutes, PR state, "Blocked by"). Ready is numbered; the first unblocked card an agent can take says "Next".
+- Worker (ADR-0082): "Mine", plus "Waiting on you" in Ready or In progress; "Needs a worker" on `ask` tickets. Never inbox items. One-click switch in the ticket rail; default on `/projects`.
 - Drag (mouse, touch, keyboard) within a lane sets `rank` through the ticket PATCH (`rankBetween`, `packages/domain`); across lanes moves (forced if not allowed, not onto Cancelled), then ranks at the drop. Optimistic; a refusal rolls back with the API's message on the card. A drop never opens the ticket (AI-25).
 - Quick add atop Backlog (title only). Up next above Ideas (ADR-0075). Done starts as a counted strip; Cancelled and archived only with the toggle.
 

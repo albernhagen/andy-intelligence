@@ -105,7 +105,10 @@ function Lanes({
   );
   const lanes = groupByStage(shown);
   const byId = useMemo(() => new Map(shown.map((t) => [t.id, t])), [shown]);
-  const next = nextUp(lanes.ready, byId);
+  const next = nextUp(
+    lanes.ready.filter((t) => t.summary.worker === "agent"),
+    byId,
+  );
   const now = Date.now();
   const stages = STAGES.filter((s) => s !== "cancelled" || showCancelled);
 

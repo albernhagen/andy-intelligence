@@ -24,6 +24,7 @@ describe("BoardReader", () => {
     await tracker.createTicket("ai", { title: "Quiet" }, "andy");
 
     expect((await board.tickets("ai"))[0]?.summary).toEqual({
+      worker: "agent",
       openQuestions: 0,
       run: null,
       pullRequest: null,

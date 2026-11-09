@@ -14,6 +14,7 @@ import {
   UnsavedDrafts,
   useTicketSave,
 } from "@/components/InlineEdit";
+import { WorkerControl } from "@/components/WorkerControls";
 import { MoveControls } from "@/components/MoveControls";
 import { QuestionCard } from "@/components/QuestionCard";
 import { Markdown } from "@/components/Markdown";
@@ -30,6 +31,7 @@ import {
   useRuns,
   useTicketByRef,
   useTicketQuestions,
+  useWorker,
   useTickets,
 } from "@/lib/queries";
 import { latestPullRequest, openBlockers, queuePosition, statusLine } from "@/lib/status-line";
@@ -150,6 +152,7 @@ function StatusLine({ ticket }: { ticket: Ticket }) {
   const runs = useRuns(path).data ?? [];
   const questions = useTicketQuestions(path).data ?? [];
   const events = useEvents(path).data ?? [];
+  const worker = useWorker(path).data?.worker;
   const { text, tone } = statusLine(
     {
       stage: ticket.stage,
@@ -161,6 +164,7 @@ function StatusLine({ ticket }: { ticket: Ticket }) {
       pr: latestPullRequest(events),
       blockedBy: openBlockers(ticket, tickets),
       queuePosition: queuePosition(ticket, tickets),
+      worker,
     },
     new Date(),
   );
@@ -256,6 +260,7 @@ function Rail({ ticket: t }: { ticket: Ticket }) {
         <Readiness {...pathOf(t)} />
         <MoveControls ticket={t} />
       </div>
+      <WorkerControl ticket={t} />
       <SelectField
         ticket={t}
         label="Type"

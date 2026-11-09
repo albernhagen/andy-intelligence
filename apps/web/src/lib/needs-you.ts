@@ -1,4 +1,4 @@
-import type { Question, Ticket } from "@andy/contracts";
+import type { Question, Stage, Ticket, TicketType, Worker } from "@andy/contracts";
 import { checkDor } from "@andy/domain";
 import { STAGES, sortQuestions } from "./tickets";
 
@@ -114,5 +114,19 @@ export function withoutQuestion(data: NeedsYou, questionId: string): NeedsYou {
   return {
     questions,
     tickets: stillOpen ? data.tickets : data.tickets.filter((t) => t.id !== answered.ticketId),
+  };
+}
+
+/**
+ * What a ticket's worker means on screen (ADR-0082). Deliberately not an inbox item: these tickets
+ * wait on Andy's own time, and only `needsAttention` and open questions reach the inbox.
+ */
+export function workerStatus(worker: Worker, stage: Stage, type: TicketType | null) {
+  const open = stage !== "done" && stage !== "cancelled";
+  return {
+    mine: open && worker === "me",
+    waiting: worker === "me" && (stage === "ready" || stage === "in_progress"),
+    // An epic never runs (ADR-0058), so it never needs a worker.
+    needsWorker: open && worker === "ask" && type !== "epic",
   };
 }

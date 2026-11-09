@@ -1,4 +1,11 @@
-import type { PullRequestLink, Stage, Ticket, TicketEvent, TicketSummary } from "@andy/contracts";
+import type {
+  PullRequestLink,
+  Stage,
+  Ticket,
+  TicketEvent,
+  TicketSummary,
+  Worker,
+} from "@andy/contracts";
 import { openBlockers as openBlockerTickets, runLabel } from "./board";
 import { groupByStage } from "./tickets";
 
@@ -19,6 +26,8 @@ export interface StatusInput {
   blockedBy: string[];
   /** 1-based place among the unblocked Ready tickets (1 = the board's "Next"); null otherwise. */
   queuePosition: number | null;
+  /** Who does the work (ADR-0082); undefined until it loads. */
+  worker?: Worker;
 }
 
 export function statusLine(s: StatusInput, now: Date): { text: string; tone: StatusTone } {
@@ -40,6 +49,13 @@ function mainStatus(s: StatusInput, now: Date): { text: string; tone: StatusTone
   // The same words as the run marker on the board card (`runLabel`, lib/board.ts).
   if (s.run) return { text: join(runLabel(s.run, now.getTime()), pr), tone: "running" };
   if (s.blockedBy.length > 0) return { text: `Blocked by ${list(s.blockedBy)}`, tone: "danger" };
+
+  if (s.worker === "me" && (s.stage === "ready" || s.stage === "in_progress")) {
+    return { text: "Mine · waiting on you", tone: "attention" };
+  }
+  if (s.worker === "ask" && (s.stage === "ready" || s.stage === "in_progress")) {
+    return { text: "Needs a worker", tone: "attention" };
+  }
 
   switch (s.stage) {
     case "backlog":

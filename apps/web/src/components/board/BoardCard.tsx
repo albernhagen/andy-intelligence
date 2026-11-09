@@ -1,10 +1,12 @@
 import { Link } from "@tanstack/react-router";
 import { useSortable } from "@dnd-kit/sortable";
 import { Bug, CircleDashed, Lightbulb, Mountain, Wrench, type LucideIcon } from "lucide-react";
-import type { BoardTicket, Ticket, TicketType } from "@andy/contracts";
+import type { BoardTicket, Stage, Ticket, TicketType, Worker } from "@andy/contracts";
 import { Badge } from "@/components/ui/badge";
 import { QueryError } from "@/components/Status";
+import { WorkerBadges } from "@/components/WorkerControls";
 import { plural, runLabel } from "@/lib/board";
+import { workerStatus } from "@/lib/needs-you";
 import { typeLabel } from "@/lib/tickets";
 
 const TYPE_ICONS: Record<TicketType, LucideIcon> = {
@@ -91,6 +93,9 @@ export function BoardCard({
           pullRequest={pullRequest}
           blockers={blockers}
           archived={t.archived}
+          worker={t.summary.worker}
+          stage={t.stage}
+          type={t.type}
           sentBack={t.upNextRank === null ? t.sentBackReason : null}
         />
         <span className="sr-only">{typeLabel(t.type)}</span>
@@ -109,6 +114,9 @@ function Markers({
   blockers,
   archived,
   sentBack,
+  worker,
+  stage,
+  type,
 }: {
   size: Ticket["size"];
   openQuestions: number;
@@ -118,9 +126,16 @@ function Markers({
   blockers: Ticket[];
   archived: boolean;
   sentBack: string | null;
+  worker: Worker;
+  stage: Stage;
+  type: TicketType | null;
 }) {
+  const { mine, needsWorker } = workerStatus(worker, stage, type);
   const markers = [
     size && <Badge key="size">{size}</Badge>,
+    (mine || needsWorker) && (
+      <WorkerBadges key="worker" worker={worker} stage={stage} type={type} />
+    ),
     openQuestions > 0 ? (
       <Badge key="q" variant="attention">
         {plural(openQuestions, "question")}

@@ -8,6 +8,8 @@ import type {
   Stage,
   TicketOverrides,
   TicketType,
+  Worker,
+  WorkerChoice,
 } from "@andy/contracts";
 import { unwrap, useApi } from "./api";
 import { withoutQuestion, type NeedsYou } from "./needs-you";
@@ -117,6 +119,29 @@ export function useTicketQuestions(path: TicketPath) {
   });
 }
 
+export function useWorker(path: TicketPath) {
+  const api = useApi();
+  return useQuery({
+    queryKey: ["worker", path],
+    queryFn: async () =>
+      unwrap(
+        await api.GET("/api/projects/{projectId}/tickets/{ticketId}/worker", { params: { path } }),
+      ),
+  });
+}
+
+export function useSetWorker(path: TicketPath) {
+  const api = useApi();
+  return useWrite(async (body: { worker: WorkerChoice | null }) =>
+    unwrap(
+      await api.PUT("/api/projects/{projectId}/tickets/{ticketId}/worker", {
+        params: { path },
+        body,
+      }),
+    ),
+  );
+}
+
 /** How often the runs list refetches while a run is queued or running. */
 export const RUN_POLL_MS = 5_000;
 
@@ -201,6 +226,7 @@ export function useUpdateProject(projectId: string) {
       buildEnabled?: boolean;
       planApproval?: PlanApproval;
       autoMerge?: AutoMerge;
+      defaultWorker?: Worker;
     }) =>
       unwrap(
         await api.PATCH("/api/projects/{projectId}", { params: { path: { projectId } }, body }),

@@ -7,6 +7,7 @@ import {
   EventActor,
   Id,
   Project,
+  Worker,
   ProviderKey,
   Question,
   QuestionStatus,
@@ -153,6 +154,8 @@ export const TicketSummary = z.object({
   }).nullable(),
   /** The latest `pr_linked` event's pull request; null when none (or not looked up). */
   pullRequest: PullRequestLink.nullable(),
+  /** Resolved at read time (ADR-0082). */
+  worker: Worker,
 });
 export type TicketSummary = z.infer<typeof TicketSummary>;
 
@@ -189,6 +192,7 @@ export const ProjectPatch = z.strictObject({
   planApproval: PlanApproval.optional(),
   dailyQuestionCap: Project.shape.dailyQuestionCap.unwrap().optional(),
   autoMerge: AutoMerge.optional(),
+  defaultWorker: Worker.optional(),
 });
 export type ProjectPatch = z.infer<typeof ProjectPatch>;
 
@@ -200,6 +204,7 @@ export const ProjectSettings = ProjectPatch.pick({
   planApproval: true,
   dailyQuestionCap: true,
   autoMerge: true,
+  defaultWorker: true,
 });
 export type ProjectSettings = z.infer<typeof ProjectSettings>;
 

@@ -17,6 +17,7 @@ import {
 import type { ProjectService, TicketService } from "@andy/domain";
 import type { WorkTracker } from "@andy/contracts";
 import type { AuthEnv } from "./auth";
+import { registerWorkerRoutes } from "./worker";
 
 /** Ticket core REST API (M1.2: Ticket core). Every caller here is Andy (allow-list), so actor = "andy". */
 
@@ -366,4 +367,5 @@ export function registerTicketRoutes(
   });
 
   app.openapi(routes.needsYou, async (c) => c.json(await service.needsYou(), 200));
+  registerWorkerRoutes(app, service);
 }
