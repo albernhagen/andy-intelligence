@@ -101,6 +101,7 @@ export function typedCollection<S extends z.ZodType<DocumentData>>(
   return db.collection(path).withConverter(zodConverter(schema, upgraders));
 }
 
+export { FirestoreQuotaStore } from "./quota-store";
 export {
   CODE_HOST_SECRETS,
   GcpCodeHostConnectionStore,

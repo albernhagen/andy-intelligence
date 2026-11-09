@@ -29,6 +29,26 @@ const resultMessage = (extra = {}) => ({
 const messages = (extra) => [{ type: "system" }, { type: "assistant" }, resultMessage(extra)];
 
 describe("buildReport", () => {
+  it("GivenRateLimitEvents_WhenBuilt_ThenTheLastOnesWindowsAreForwarded", () => {
+    const unifiedWindows = { five_hour: { utilization: 0.4, resetsAt: 1800000000 } };
+    const report = buildReport({
+      outcome: "success",
+      messages: [
+        { type: "rate_limit_event", rate_limit_info: { unifiedWindows: {} } },
+        { type: "rate_limit_event", rate_limit_info: { status: "allowed", unifiedWindows } },
+        resultMessage(),
+      ],
+    });
+    expect(report.rateLimits.unifiedWindows).toEqual(unifiedWindows);
+    expect(report.rateLimits.status).toBeUndefined();
+  });
+
+  it("GivenNoRateLimitEvent_WhenBuilt_ThenTheFieldIsAbsent", () => {
+    expect(buildReport({ outcome: "success", messages: messages() })).not.toHaveProperty(
+      "rateLimits",
+    );
+  });
+
   it("GivenSuccessWithUsage_WhenBuilt_ThenSucceededWithTokensAndCost", () => {
     expect(buildReport({ outcome: "success", messages: messages() })).toEqual({
       status: "succeeded",

@@ -38,7 +38,7 @@ import {
   type OAuthGrant,
   type OAuthGrantStore,
   type QuestionFilter,
-  type QuotaSource,
+  type QuotaStore,
   type RecordResult,
   type RunHandle,
   type RunPatch,
@@ -387,15 +387,15 @@ export class InMemoryWatchdogQueue implements WatchdogQueue {
   }
 }
 
-export class InMemoryQuotaSource implements QuotaSource {
-  private readonly readings = new Map<ProviderKey, QuotaReading[]>();
+export class InMemoryQuotaStore implements QuotaStore {
+  private readonly readings = new Map<string, QuotaReading>();
 
-  set(provider: ProviderKey, readings: QuotaReading[]): void {
-    this.readings.set(provider, readings);
+  async save(readings: QuotaReading[]): Promise<void> {
+    for (const r of readings) this.readings.set(`${r.provider}_${r.window}`, structuredClone(r));
   }
 
   async latest(provider: ProviderKey): Promise<QuotaReading[]> {
-    return structuredClone(this.readings.get(provider) ?? []);
+    return structuredClone([...this.readings.values()].filter((r) => r.provider === provider));
   }
 }
 
