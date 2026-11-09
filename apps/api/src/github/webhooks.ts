@@ -3,11 +3,18 @@ import { bodyLimit } from "hono/body-limit";
 import {
   DeliveryId,
   type CodeEventLog,
+  type CodeHost,
   type CodeHostEvent,
   type Project,
+  type RunStore,
   type WorkTracker,
 } from "@andy/contracts";
-import { PullRequestTickets, projectForRepo, type TicketService } from "@andy/domain";
+import {
+  PullRequestGate,
+  PullRequestTickets,
+  projectForRepo,
+  type TicketService,
+} from "@andy/domain";
 import {
   WebhookPayloadError,
   isRecordedEvent,
@@ -41,6 +48,9 @@ export interface WebhookDeps {
   tracker: WorkTracker;
   /** The app's ticket rules, with its run canceller (a merge stops the ticket's runs). */
   tickets: TicketService;
+  /** For the review gate (AI-34): reads PRs and checks, merges with the App's identity. */
+  codeHost: CodeHost;
+  runs: RunStore;
   now?: () => Date;
 }
 
@@ -76,6 +86,7 @@ export function registerGitHubWebhook(app: Hono<AuthEnv>, deps: WebhookDeps): vo
   const limiter = new FixedWindowLimiter(WEBHOOK_RATE_LIMIT, 60_000, () => now().getTime());
   const repos = new RepoIndex(deps.tracker, () => now().getTime());
   const prTickets = new PullRequestTickets(deps.tickets, deps.tracker);
+  const gate = new PullRequestGate(deps.codeHost, deps.tracker, deps.runs, deps.tickets, now);
 
   /**
    * The delivery is already recorded, so a failure here is logged, not retried: a redelivery
@@ -90,6 +101,17 @@ export function registerGitHubWebhook(app: Hono<AuthEnv>, deps: WebhookDeps): vo
     } catch (err) {
       const error = err instanceof Error ? err : new Error(String(err));
       log("ERROR", "webhook ticket update failed", { ...fields, error: error.message });
+    }
+  }
+
+  /** As above: logged, never retried. Any error leaves the PR unmerged, for Andy. */
+  async function applyGate(record: CodeHostEvent, project: Project) {
+    try {
+      const results = await gate.apply(record, project);
+      if (results.length) log("INFO", "webhook gate", { deliveryId: record.deliveryId, results });
+    } catch (err) {
+      const error = err instanceof Error ? err : new Error(String(err));
+      log("ERROR", "webhook gate failed", { deliveryId: record.deliveryId, error: error.message });
     }
   }
 
@@ -153,7 +175,10 @@ export function registerGitHubWebhook(app: Hono<AuthEnv>, deps: WebhookDeps): vo
           projectId: project.id,
           result,
         });
-        if (result === "recorded") await moveTicket(record, project);
+        if (result === "recorded") {
+          await moveTicket(record, project);
+          await applyGate(record, project);
+        }
         return c.json({ result }, 200);
       } catch (err) {
         if (!(err instanceof WebhookPayloadError)) throw err;
