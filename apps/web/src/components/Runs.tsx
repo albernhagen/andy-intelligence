@@ -3,6 +3,7 @@ import type { Run, RunStatus } from "@andy/contracts";
 import { QueryError } from "@/components/Status";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { formatQuotaDelta } from "@/components/TicketCostLine";
 import { isActiveRun, useDecidePlan, useStartRun } from "@/lib/queries";
 
 type TicketPath = { projectId: string; ticketId: string };
@@ -92,6 +93,10 @@ export function RunItem({
         <p className="text-muted-foreground">
           {formatTokens(run)} · {formatCost(run)}
         </p>
+      )}
+      {formatUsage(run) && <p className="text-muted-foreground">{formatUsage(run)}</p>}
+      {!isActiveRun(run) && run.tokensIn === null && run.costUsd === null && (
+        <p className="text-muted-foreground">Cost unknown</p>
       )}
       {(run.links.pullRequest || run.branch) && (
         <p className="text-muted-foreground">
@@ -186,6 +191,21 @@ function Summary({ text }: { text: string }) {
 export function formatTokens(run: Pick<Run, "tokensIn" | "tokensOut">): string {
   const n = (v: number | null) => (v === null ? "—" : v.toLocaleString());
   return `${n(run.tokensIn)} in / ${n(run.tokensOut)} out tokens`;
+}
+
+/** Cache, turns, wall time and quota used; empty for a run without them. */
+export function formatUsage(run: Pick<Run, "usage" | "quotaDelta">): string {
+  const u = run.usage;
+  const quota = run.quotaDelta && formatQuotaDelta(run.quotaDelta);
+  return [
+    u && `${u.cacheReadTokens.toLocaleString()} cache read`,
+    u && `${u.cacheWriteTokens.toLocaleString()} cache write`,
+    u && u.turns !== null && `${u.turns} turns`,
+    u && u.wallMs !== null && `${Math.round(u.wallMs / 1000)}s`,
+    quota && `quota ${quota}`,
+  ]
+    .filter(Boolean)
+    .join(" · ");
 }
 
 export function formatCost(run: Pick<Run, "costUsd" | "costIsEstimate">): string {

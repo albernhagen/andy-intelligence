@@ -272,7 +272,7 @@ describe("RunService", () => {
       status: "succeeded",
       summary: "**Ask**: a board",
       tokensIn: 1200,
-      costUsd: 0.02,
+      costUsd: null,
       costIsEstimate: true,
       endedAt: NOW.toISOString(),
     });

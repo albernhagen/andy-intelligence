@@ -218,6 +218,53 @@ describe("runsRefetchInterval", () => {
   });
 });
 
+describe("ticket cost line", () => {
+  it("GivenFinishedRuns_WhenTheStoryPanelOpens_ThenTheTotalAndEachRunsNumbersShow", async () => {
+    const { open, runs, queueRun } = await setup();
+    const priced = await queueRun();
+    await runs.update(
+      priced.id,
+      {
+        status: "succeeded",
+        tokensIn: 1_500,
+        tokensOut: 200,
+        costUsd: 1.25,
+        costIsEstimate: true,
+        usage: {
+          inputTokens: 500,
+          outputTokens: 200,
+          cacheReadTokens: 900,
+          cacheWriteTokens: 100,
+          turns: 4,
+          wallMs: 62_000,
+        },
+        quotaDelta: { "5h": 3.5, weekly: 0.5 },
+      },
+      ["queued"],
+    );
+    const unknown = await queueRun();
+    await runs.update(unknown.id, { status: "failed" }, ["queued"]);
+
+    const section = await open();
+
+    expect((await screen.findByLabelText("Ticket cost")).textContent).toBe(
+      "Cost ~$1.25 (estimate) · quota 5h +3.5%, weekly +0.5% · 1 run unknown",
+    );
+    await within(section).findByText(
+      "900 cache read · 100 cache write · 4 turns · 62s · quota 5h +3.5%, weekly +0.5%",
+    );
+    within(section).getByText("Cost unknown");
+  });
+
+  it("GivenOnlyAnActiveRun_WhenTheStoryPanelOpens_ThenNoCostLine", async () => {
+    const { open, queueRun } = await setup();
+    await queueRun();
+    await open();
+    await screen.findByText("queued");
+    expect(screen.queryByLabelText("Ticket cost")).toBeNull();
+  });
+});
+
 describe("formatCost", () => {
   it("GivenAnEstimatedCost_WhenFormatted_ThenItIsMarkedAsAnEstimate", () => {
     expect(formatCost({ costUsd: 0.02, costIsEstimate: true })).toBe("~$0.02 (estimate)");
