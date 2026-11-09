@@ -256,6 +256,20 @@ describe("ticket cost line", () => {
     within(section).getByText("Cost unknown");
   });
 
+  it("GivenTokensButNoCost_WhenTheStoryPanelOpens_ThenTheRunAndTheTotalBothSayUnknown", async () => {
+    const { open, runs, queueRun } = await setup();
+    const run = await queueRun();
+    await runs.update(run.id, { status: "succeeded", tokensIn: 10, tokensOut: 2 }, ["queued"]);
+
+    const section = await open();
+
+    expect((await screen.findByLabelText("Ticket cost")).textContent).toBe(
+      "Cost unknown · 1 run unknown",
+    );
+    await within(section).findByText("Cost unknown");
+    expect(within(section).queryByText(/cost —/)).toBeNull();
+  });
+
   it("GivenOnlyAnActiveRun_WhenTheStoryPanelOpens_ThenNoCostLine", async () => {
     const { open, queueRun } = await setup();
     await queueRun();

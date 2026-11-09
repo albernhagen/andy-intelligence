@@ -112,8 +112,8 @@ function windowDelta(
 
 /**
  * Quota used since the last stored reading, per window; null when no window can be compared.
- * Each run is measured from the reading before it, so runs on other projects can blur which run
- * used what, but the sum across runs never counts the same usage twice.
+ * Each run is measured from the reading stored before its report, so it is approximate: reports
+ * that overlap can read the same earlier reading and count the same usage twice.
  */
 export function quotaDelta(before: QuotaReading[], after: QuotaReading[]): QuotaDelta | null {
   const delta = {

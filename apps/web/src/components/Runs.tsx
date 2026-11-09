@@ -91,11 +91,12 @@ export function RunItem({
       </p>
       {(run.tokensIn !== null || run.tokensOut !== null || run.costUsd !== null) && (
         <p className="text-muted-foreground">
-          {formatTokens(run)} · {formatCost(run)}
+          {formatTokens(run)}
+          {run.costUsd !== null && ` · ${formatCost(run)}`}
         </p>
       )}
       {formatUsage(run) && <p className="text-muted-foreground">{formatUsage(run)}</p>}
-      {!isActiveRun(run) && run.tokensIn === null && run.costUsd === null && (
+      {!isActiveRun(run) && run.costUsd === null && (
         <p className="text-muted-foreground">Cost unknown</p>
       )}
       {(run.links.pullRequest || run.branch) && (
