@@ -794,11 +794,28 @@ export function codeEventLogContract(name: string, make: () => Promise<CodeEvent
   });
 }
 
+/** Options for a RunStore adapter's contract run. */
+export interface RunStoreContractOptions {
+  /**
+   * Timeout (ms) for each case that races two updates on one run. Unset: the test runner's
+   * default. An adapter whose store resolves contention slowly sets it, with a comment giving the
+   * measured cause (AI-71).
+   */
+  raceTimeoutMs?: number;
+}
+
 /**
  * RunStore suite. Every test makes runs under a random project id, so it can share a store
  * (e.g. the Firestore emulator).
  */
-export function runStoreContract(name: string, make: () => Promise<RunStore>): void {
+export function runStoreContract(
+  name: string,
+  make: () => Promise<RunStore>,
+  options: RunStoreContractOptions = {},
+): void {
+  /** A case that races two updates on one run: gets the adapter's race timeout. */
+  const itRaces = (title: string, fn: () => Promise<void>) => it(title, fn, options.raceTimeoutMs);
+
   describe(`RunStore contract: ${name}`, () => {
     const newRun = (projectId: string, ticketId = "t1"): NewRun => ({
       projectId,
@@ -915,20 +932,23 @@ export function runStoreContract(name: string, make: () => Promise<RunStore>): v
       );
     });
 
-    it("GivenTwoConcurrentMergeClaimsOnOneHead_WhenApplied_ThenOneWinsAndANewHeadCanClaim", async () => {
-      const store = await make();
-      const run = await store.create(newRun(project()));
-      await store.update(run.id, { status: "succeeded" }, ["queued"]);
-      const results = await Promise.allSettled([
-        store.update(run.id, { mergeAttemptedSha: "a" }, ["succeeded"]),
-        store.update(run.id, { mergeAttemptedSha: "a" }, ["succeeded"]),
-      ]);
-      expect(results.filter((r) => r.status === "fulfilled")).toHaveLength(1);
-      const next = await store.update(run.id, { mergeAttemptedSha: "b" }, ["succeeded"]);
-      expect(next.mergeAttemptedSha).toBe("b");
-    });
+    itRaces(
+      "GivenTwoConcurrentMergeClaimsOnOneHead_WhenApplied_ThenOneWinsAndANewHeadCanClaim",
+      async () => {
+        const store = await make();
+        const run = await store.create(newRun(project()));
+        await store.update(run.id, { status: "succeeded" }, ["queued"]);
+        const results = await Promise.allSettled([
+          store.update(run.id, { mergeAttemptedSha: "a" }, ["succeeded"]),
+          store.update(run.id, { mergeAttemptedSha: "a" }, ["succeeded"]),
+        ]);
+        expect(results.filter((r) => r.status === "fulfilled")).toHaveLength(1);
+        const next = await store.update(run.id, { mergeAttemptedSha: "b" }, ["succeeded"]);
+        expect(next.mergeAttemptedSha).toBe("b");
+      },
+    );
 
-    it("GivenTwoConcurrentPlanDecisions_WhenApplied_ThenExactlyOneWinsAndIsKept", async () => {
+    itRaces("GivenTwoConcurrentPlanDecisions_WhenApplied_ThenExactlyOneWinsAndIsKept", async () => {
       const store = await make();
       const run = await store.create({ ...newRun(project()), step: "plan" });
       await store.update(run.id, { status: "succeeded" }, ["queued"]);
@@ -952,7 +972,7 @@ export function runStoreContract(name: string, make: () => Promise<RunStore>): v
       );
     });
 
-    it("GivenTwoConcurrentUpdatesFromQueued_WhenApplied_ThenExactlyOneWins", async () => {
+    itRaces("GivenTwoConcurrentUpdatesFromQueued_WhenApplied_ThenExactlyOneWins", async () => {
       const store = await make();
       const run = await store.create(newRun(project()));
       const results = await Promise.allSettled([
