@@ -161,7 +161,8 @@ export interface paths {
                   | "prs_waiting_cap"
                   | "quota_reserve"
                   | "started"
-                  | "nothing_ready";
+                  | "nothing_ready"
+                  | "touches_overlap";
                 /** Format: date-time */
                 at: string;
               } | null;
@@ -255,7 +256,8 @@ export interface paths {
                   | "prs_waiting_cap"
                   | "quota_reserve"
                   | "started"
-                  | "nothing_ready";
+                  | "nothing_ready"
+                  | "touches_overlap";
                 /** Format: date-time */
                 at: string;
               } | null;
@@ -397,7 +399,8 @@ export interface paths {
                   | "prs_waiting_cap"
                   | "quota_reserve"
                   | "started"
-                  | "nothing_ready";
+                  | "nothing_ready"
+                  | "touches_overlap";
                 /** Format: date-time */
                 at: string;
               } | null;
@@ -548,7 +551,8 @@ export interface paths {
                   | "prs_waiting_cap"
                   | "quota_reserve"
                   | "started"
-                  | "nothing_ready";
+                  | "nothing_ready"
+                  | "touches_overlap";
                 /** Format: date-time */
                 at: string;
               } | null;
@@ -3643,7 +3647,7 @@ export interface paths {
                 run: {
                   id: string;
                   /** @enum {string} */
-                  step: "refine" | "plan" | "build" | "review" | "verify" | "scout";
+                  step: "refine" | "plan" | "build" | "review" | "verify" | "scout" | "sync";
                   /** @enum {string} */
                   status: "queued" | "running" | "succeeded" | "failed" | "cancelled";
                   /** Format: date-time */
@@ -3731,7 +3735,7 @@ export interface paths {
               projectId: string;
               ticketId: string | null;
               /** @enum {string} */
-              step: "refine" | "plan" | "build" | "review" | "verify" | "scout";
+              step: "refine" | "plan" | "build" | "review" | "verify" | "scout" | "sync";
               route: {
                 /** @enum {string} */
                 harness: "claude-code" | "jules" | "opencode" | "direct";
@@ -3841,6 +3845,7 @@ export interface paths {
                 | "checks_pending"
                 | "draft"
                 | "not_default_branch"
+                | "sync_pending"
               )[];
               /** @default [] */
               protectedFiles: string[];
@@ -3875,6 +3880,48 @@ export interface paths {
               quotaDelta: {
                 "5h": number | null;
                 weekly: number | null;
+              } | null;
+              /** @default [] */
+              touches: string[];
+              /** @default null */
+              reservedAdr: number | null;
+              /** @default null */
+              syncRun: {
+                buildRunId: string;
+                /** Format: uri */
+                pullRequest: string;
+                number: number;
+                branch: string;
+                headSha: string;
+                /** @enum {string|null} */
+                outcome:
+                  "synced" | "already_current" | "conflict_unresolved" | "checks_failed" | null;
+                pushedSha: string | null;
+                conflictFiles: string[];
+                reason: string | null;
+              } | null;
+              /** @default null */
+              prSync: {
+                /** Format: date-time */
+                pendingSince: string | null;
+                /** @enum {string|null} */
+                waiting:
+                  | "paused"
+                  | "global_cap"
+                  | "quota_reserve"
+                  | "daily_cap"
+                  | "ticket_busy"
+                  | "builds_off"
+                  | "pr_cap"
+                  | null;
+                stoppedHeadSha: string | null;
+                stoppedReason: string | null;
+                capFlaggedDay: string | null;
+                /**
+                 * Format: date-time
+                 * @default null
+                 */
+                checkedAt: string | null;
               } | null;
             }[];
           };
@@ -3924,7 +3971,7 @@ export interface paths {
               projectId: string;
               ticketId: string | null;
               /** @enum {string} */
-              step: "refine" | "plan" | "build" | "review" | "verify" | "scout";
+              step: "refine" | "plan" | "build" | "review" | "verify" | "scout" | "sync";
               route: {
                 /** @enum {string} */
                 harness: "claude-code" | "jules" | "opencode" | "direct";
@@ -4034,6 +4081,7 @@ export interface paths {
                 | "checks_pending"
                 | "draft"
                 | "not_default_branch"
+                | "sync_pending"
               )[];
               /** @default [] */
               protectedFiles: string[];
@@ -4068,6 +4116,48 @@ export interface paths {
               quotaDelta: {
                 "5h": number | null;
                 weekly: number | null;
+              } | null;
+              /** @default [] */
+              touches: string[];
+              /** @default null */
+              reservedAdr: number | null;
+              /** @default null */
+              syncRun: {
+                buildRunId: string;
+                /** Format: uri */
+                pullRequest: string;
+                number: number;
+                branch: string;
+                headSha: string;
+                /** @enum {string|null} */
+                outcome:
+                  "synced" | "already_current" | "conflict_unresolved" | "checks_failed" | null;
+                pushedSha: string | null;
+                conflictFiles: string[];
+                reason: string | null;
+              } | null;
+              /** @default null */
+              prSync: {
+                /** Format: date-time */
+                pendingSince: string | null;
+                /** @enum {string|null} */
+                waiting:
+                  | "paused"
+                  | "global_cap"
+                  | "quota_reserve"
+                  | "daily_cap"
+                  | "ticket_busy"
+                  | "builds_off"
+                  | "pr_cap"
+                  | null;
+                stoppedHeadSha: string | null;
+                stoppedReason: string | null;
+                capFlaggedDay: string | null;
+                /**
+                 * Format: date-time
+                 * @default null
+                 */
+                checkedAt: string | null;
               } | null;
             };
           };
@@ -4194,7 +4284,7 @@ export interface paths {
                 projectId: string;
                 ticketId: string | null;
                 /** @enum {string} */
-                step: "refine" | "plan" | "build" | "review" | "verify" | "scout";
+                step: "refine" | "plan" | "build" | "review" | "verify" | "scout" | "sync";
                 route: {
                   /** @enum {string} */
                   harness: "claude-code" | "jules" | "opencode" | "direct";
@@ -4304,6 +4394,7 @@ export interface paths {
                   | "checks_pending"
                   | "draft"
                   | "not_default_branch"
+                  | "sync_pending"
                 )[];
                 /** @default [] */
                 protectedFiles: string[];
@@ -4338,6 +4429,48 @@ export interface paths {
                 quotaDelta: {
                   "5h": number | null;
                   weekly: number | null;
+                } | null;
+                /** @default [] */
+                touches: string[];
+                /** @default null */
+                reservedAdr: number | null;
+                /** @default null */
+                syncRun: {
+                  buildRunId: string;
+                  /** Format: uri */
+                  pullRequest: string;
+                  number: number;
+                  branch: string;
+                  headSha: string;
+                  /** @enum {string|null} */
+                  outcome:
+                    "synced" | "already_current" | "conflict_unresolved" | "checks_failed" | null;
+                  pushedSha: string | null;
+                  conflictFiles: string[];
+                  reason: string | null;
+                } | null;
+                /** @default null */
+                prSync: {
+                  /** Format: date-time */
+                  pendingSince: string | null;
+                  /** @enum {string|null} */
+                  waiting:
+                    | "paused"
+                    | "global_cap"
+                    | "quota_reserve"
+                    | "daily_cap"
+                    | "ticket_busy"
+                    | "builds_off"
+                    | "pr_cap"
+                    | null;
+                  stoppedHeadSha: string | null;
+                  stoppedReason: string | null;
+                  capFlaggedDay: string | null;
+                  /**
+                   * Format: date-time
+                   * @default null
+                   */
+                  checkedAt: string | null;
                 } | null;
               };
               build: {
@@ -4345,7 +4478,7 @@ export interface paths {
                 projectId: string;
                 ticketId: string | null;
                 /** @enum {string} */
-                step: "refine" | "plan" | "build" | "review" | "verify" | "scout";
+                step: "refine" | "plan" | "build" | "review" | "verify" | "scout" | "sync";
                 route: {
                   /** @enum {string} */
                   harness: "claude-code" | "jules" | "opencode" | "direct";
@@ -4455,6 +4588,7 @@ export interface paths {
                   | "checks_pending"
                   | "draft"
                   | "not_default_branch"
+                  | "sync_pending"
                 )[];
                 /** @default [] */
                 protectedFiles: string[];
@@ -4489,6 +4623,48 @@ export interface paths {
                 quotaDelta: {
                   "5h": number | null;
                   weekly: number | null;
+                } | null;
+                /** @default [] */
+                touches: string[];
+                /** @default null */
+                reservedAdr: number | null;
+                /** @default null */
+                syncRun: {
+                  buildRunId: string;
+                  /** Format: uri */
+                  pullRequest: string;
+                  number: number;
+                  branch: string;
+                  headSha: string;
+                  /** @enum {string|null} */
+                  outcome:
+                    "synced" | "already_current" | "conflict_unresolved" | "checks_failed" | null;
+                  pushedSha: string | null;
+                  conflictFiles: string[];
+                  reason: string | null;
+                } | null;
+                /** @default null */
+                prSync: {
+                  /** Format: date-time */
+                  pendingSince: string | null;
+                  /** @enum {string|null} */
+                  waiting:
+                    | "paused"
+                    | "global_cap"
+                    | "quota_reserve"
+                    | "daily_cap"
+                    | "ticket_busy"
+                    | "builds_off"
+                    | "pr_cap"
+                    | null;
+                  stoppedHeadSha: string | null;
+                  stoppedReason: string | null;
+                  capFlaggedDay: string | null;
+                  /**
+                   * Format: date-time
+                   * @default null
+                   */
+                  checkedAt: string | null;
                 } | null;
               } | null;
               buildError: string | null;
@@ -4551,6 +4727,81 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  "/api/projects/{projectId}/in-flight": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get: {
+      parameters: {
+        query?: never;
+        header?: never;
+        path: {
+          projectId: string;
+        };
+        cookie?: never;
+      };
+      requestBody?: never;
+      responses: {
+        /** @description Runs in flight, oldest first, with their touched files */
+        200: {
+          headers: {
+            [name: string]: unknown;
+          };
+          content: {
+            "application/json": {
+              runId: string;
+              ticketKey: string | null;
+              ticketTitle: string | null;
+              /** @enum {string} */
+              step: "refine" | "plan" | "build" | "review" | "verify" | "scout" | "sync";
+              /** @enum {string} */
+              status: "queued" | "running";
+              branch: string | null;
+              pullRequest: string | null;
+              /** Format: date-time */
+              startedAt: string | null;
+              touches: string[];
+              reservedAdr: number | null;
+            }[];
+          };
+        };
+        /** @description Invalid request */
+        400: {
+          headers: {
+            [name: string]: unknown;
+          };
+          content: {
+            "application/json": {
+              error: string;
+              details?: string[];
+            };
+          };
+        };
+        /** @description Not found */
+        404: {
+          headers: {
+            [name: string]: unknown;
+          };
+          content: {
+            "application/json": {
+              error: string;
+              details?: string[];
+            };
+          };
+        };
+      };
+    };
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   "/api/quota": {
     parameters: {
       query?: never;
@@ -4594,6 +4845,161 @@ export interface paths {
                 takenAt: string | null;
                 source: string | null;
               }[];
+            };
+          };
+        };
+      };
+    };
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/projects/{projectId}/digest": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get: {
+      parameters: {
+        query?: {
+          /** @description Hours the digest covers, 1 to 168. Default 24. */
+          hours?: number;
+          /** @description End of the window (ISO date-time). Default now; a later time reads as now. */
+          until?: string;
+        };
+        header?: never;
+        path: {
+          projectId: string;
+        };
+        cookie?: never;
+      };
+      requestBody?: never;
+      responses: {
+        /** @description Exceptions, merged, in progress and totals for the window, plus plain text */
+        200: {
+          headers: {
+            [name: string]: unknown;
+          };
+          content: {
+            "application/json": {
+              projectKey: string;
+              window: {
+                /** Format: date-time */
+                from: string;
+                /** Format: date-time */
+                to: string;
+              };
+              quiet: boolean;
+              exceptions: {
+                /** @enum {string} */
+                kind:
+                  | "run_failed"
+                  | "pr_closed"
+                  | "reworked"
+                  | "reverted"
+                  | "review_blocker"
+                  | "waiting_on_andy"
+                  | "blocked"
+                  | "dispatch_idle"
+                  | "quota_reserve"
+                  | "sync_stopped"
+                  | "sync_waiting";
+                ticketKey: string | null;
+                title: string | null;
+                prNumber: number | null;
+                reason: string;
+                /** Format: date-time */
+                at: string | null;
+              }[];
+              merged: {
+                ticketKey: string;
+                title: string;
+                prNumber: number;
+                /** Format: uri */
+                prUrl: string;
+                /** Format: date-time */
+                mergedAt: string;
+                /** @enum {string} */
+                mergedBy: "gate" | "andy" | "unknown";
+                gate: {
+                  wouldAutoMerge: boolean | null;
+                  reasons: (
+                    | "no_verification_output"
+                    | "protected_path"
+                    | "files_incomplete"
+                    | "checks_incomplete"
+                    | "no_required_checks"
+                    | "checks_failed"
+                    | "checks_pending"
+                    | "draft"
+                    | "not_default_branch"
+                    | "sync_pending"
+                  )[];
+                  /** @enum {string|null} */
+                  outcome: "merged_clean" | "reworked" | "reverted" | "failed" | null;
+                } | null;
+                costUsd: number;
+                unknownCostRuns: number;
+              }[];
+              inProgress: {
+                inFlight: {
+                  ticketKey: string | null;
+                  title: string | null;
+                  /** @enum {string} */
+                  step: "refine" | "plan" | "build" | "review" | "verify" | "scout" | "sync";
+                  /** @enum {string} */
+                  status: "queued" | "running" | "succeeded" | "failed" | "cancelled";
+                  label: string;
+                }[];
+                readyForReview: {
+                  ticketKey: string;
+                  title: string;
+                  prNumber: number | null;
+                }[];
+              };
+              totals: {
+                runs: number;
+                failedRuns: number;
+                costUsd: number;
+                unknownCostRuns: number;
+                quotaDelta: {
+                  "5h": number | null;
+                  weekly: number | null;
+                };
+                merged: number;
+              };
+              truncated: boolean;
+              text: string;
+            };
+          };
+        };
+        /** @description Invalid request */
+        400: {
+          headers: {
+            [name: string]: unknown;
+          };
+          content: {
+            "application/json": {
+              error: string;
+              details?: string[];
+            };
+          };
+        };
+        /** @description Not found */
+        404: {
+          headers: {
+            [name: string]: unknown;
+          };
+          content: {
+            "application/json": {
+              error: string;
+              details?: string[];
             };
           };
         };

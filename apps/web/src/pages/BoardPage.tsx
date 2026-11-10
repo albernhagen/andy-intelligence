@@ -15,6 +15,7 @@ import { Stage, type BoardTicket } from "@andy/contracts";
 import { sortByStartScore } from "@andy/domain";
 import { BoardCard } from "@/components/board/BoardCard";
 import { BoardDispatchStatus } from "@/components/DispatchControls";
+import { InFlightPanel } from "@/components/InFlightPanel";
 import { Lane, LaneZone, ReadySortToggle } from "@/components/board/Lane";
 import { Loading, QueryError } from "@/components/Status";
 import {
@@ -60,6 +61,7 @@ export function BoardPage() {
         </label>
       </div>
 
+      <InFlightPanel projectId={projectId} />
       {board.isPending && <Loading />}
       {board.isError && <QueryError error={board.error} />}
       {board.data && (

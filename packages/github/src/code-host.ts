@@ -333,6 +333,22 @@ export class GitHubCodeHost implements CodeHost {
     });
   }
 
+  async headContains(fullName: string, head: string, base: string): Promise<boolean | null> {
+    const client = await this.repoClient(fullName);
+    if (!client) return null;
+    // Compare base...head: "ahead" or "identical" means head already has every commit of base.
+    // per_page 1 keeps the response small; `status` doesn't depend on the commit list.
+    const res = await this.notFoundAsNull(() =>
+      client.octokit.request("GET /repos/{owner}/{repo}/compare/{basehead}", {
+        ...client.repo,
+        basehead: `${base}...${head}`,
+        per_page: 1,
+      }),
+    );
+    if (!res) return null;
+    return res.data.status === "ahead" || res.data.status === "identical";
+  }
+
   /** An installation client and owner/repo; null when the App isn't installed. */
   private async repoClient(fullName: string) {
     const installationId = await this.installationFor(fullName);

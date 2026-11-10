@@ -1,11 +1,13 @@
 import { describe, expect, it } from "vitest";
-import type { Ticket, TicketEvent } from "@andy/contracts";
+import type { Run, Ticket, TicketEvent } from "@andy/contracts";
 import {
   latestPullRequest,
   openBlockerKeys as openBlockers,
   queuePosition,
   statusLine,
   type StatusInput,
+  syncStopped,
+  syncWaiting,
 } from "./status-line";
 
 const NOW = new Date("2026-11-05T12:00:00.000Z");
@@ -25,6 +27,15 @@ const base: StatusInput = {
 const line = (s: Partial<StatusInput>) => statusLine({ ...base, ...s }, NOW);
 
 describe("statusLine", () => {
+  it("GivenASyncThatStopped_WhenTheTicketWaitsForAndy_ThenTheLineSaysWhyAndWhere", () => {
+    expect(
+      line({ needsAttention: true, syncStopped: "sync with main stopped on a conflict in a.ts" }),
+    ).toEqual({
+      text: "Waiting for you: sync with main stopped on a conflict in a.ts",
+      tone: "attention",
+    });
+  });
+
   it("GivenOpenQuestions_WhenComputed_ThenItWaitsForAndy", () => {
     expect(line({ openQuestions: 2, needsAttention: true })).toEqual({
       text: "Waiting for you: 2 questions",
@@ -91,6 +102,12 @@ describe("statusLine", () => {
     expect(line({ stage: "ready", queuePosition: 2 }).text).toBe("Ready · 2nd in the queue");
     expect(line({ stage: "ready", queuePosition: 13 }).text).toBe("Ready · 13th in the queue");
     expect(line({ stage: "ready", queuePosition: null }).text).toBe("Ready");
+  });
+
+  it("GivenAReadyTicketOverlappingARunInFlight_WhenComputed_ThenItSaysWhichOne", () => {
+    expect(line({ stage: "ready", queuePosition: 1, overlaps: "AI-12" }).text).toBe(
+      "Waiting: overlaps AI-12 in flight",
+    );
   });
 
   it("GivenBacklog_WhenComputed_ThenItSaysWhetherItIsReadyToMove", () => {
@@ -217,5 +234,53 @@ describe("status inputs", () => {
     const all = [blocker, blocked, free];
     expect(queuePosition(free, all)).toBe(1);
     expect(queuePosition(blocked, all)).toBeNull();
+  });
+});
+
+describe("syncStopped", () => {
+  const sync = (outcome: string, buildRunId = "b1", files = ["a.ts", "b.ts", "c.ts", "d.ts"]) =>
+    ({ step: "sync", syncRun: { outcome, buildRunId, conflictFiles: files } }) as unknown as Run;
+  const build = (id: string) => ({ step: "build", id }) as unknown as Run;
+
+  it("GivenTheNewestSyncStopped_WhenRead_ThenItNamesTheOutcomeAndUpToThreeFiles", () => {
+    expect(syncStopped([sync("conflict_unresolved"), build("b1")])).toBe(
+      "sync with main stopped on a conflict in a.ts, b.ts, c.ts, …",
+    );
+    expect(syncStopped([sync("checks_failed", "b1", []), build("b1")])).toBe(
+      "sync with main stopped: checks failed after the merge",
+    );
+  });
+
+  it("GivenASyncedRunOrAStopOnAnOlderPr_WhenRead_ThenNull", () => {
+    expect(syncStopped([sync("synced"), build("b1")])).toBeNull();
+    expect(syncStopped([build("b2"), sync("conflict_unresolved", "b1")])).toBeNull();
+    expect(syncStopped([])).toBeNull();
+  });
+});
+
+describe("syncWaiting", () => {
+  const build = (prSync: object | null) =>
+    ({
+      step: "build",
+      id: "b1",
+      links: { pullRequest: "https://github.com/a/b/pull/7" },
+      prSync,
+    }) as unknown as Run;
+
+  it("GivenAPendingSyncThatWaits_WhenRead_ThenItSaysWhyAndTheReviewLineShowsIt", () => {
+    const runs = [build({ pendingSince: "2026-11-10T00:00:00Z", waiting: "paused" })];
+    expect(syncWaiting(runs)).toBe("dispatch is paused");
+    // Unchecked and builds-off waits hold no veto (no pendingSince) but still show.
+    expect(syncWaiting([build({ pendingSince: null, waiting: "pr_cap" })])).toBe(
+      "not checked yet (more open PRs than one check covers); next in line",
+    );
+    expect(syncWaiting([build({ pendingSince: null, waiting: "builds_off" })])).toBe(
+      "builds are off, so no sync runs",
+    );
+    expect(syncWaiting([build({ pendingSince: null, waiting: "global_cap" })])).toBeNull();
+    expect(syncWaiting([build({ pendingSince: null, waiting: null })])).toBeNull();
+    expect(line({ stage: "ready_for_review", syncWaiting: "dispatch is paused" }).text).toBe(
+      "Ready for review · sync with main waits: dispatch is paused",
+    );
   });
 });

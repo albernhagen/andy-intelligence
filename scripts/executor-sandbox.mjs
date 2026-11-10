@@ -119,6 +119,24 @@ export function verifyCheck({ messages, command, marker, nonce, hostPid1 }) {
 }
 
 /**
+ * verify-checks (sync runs, AI-72): null when the executor's own run of the project's checks
+ * passed, else the reason. The log must show exactly that command as the one Bash call, without
+ * error, and the marker (written only after every check succeeded) must hold this step's nonce,
+ * which the agent never saw. Reads the marker without following a symlink, then deletes it.
+ */
+export function verifyChecks({ messages, command, marker, nonce }) {
+  const read = readNoFollow(marker);
+  const written = read.data ? read.data.toString("utf8") : null;
+  rmSync(marker, { force: true });
+  const ran = checkRunProblem(messages, command);
+  if (ran) return ran;
+  if (!nonce || written?.trim() !== `nonce=${nonce}`) {
+    return "the checks didn't all pass (no success marker with this run's nonce)";
+  }
+  return null;
+}
+
+/**
  * `.git` paths whose change could make git run code or read another repository's config:
  * config and hooks (the sandbox also protects them), commondir/gitdir (switch to another
  * repository's config), config.worktree, info (attributes), alternates, modules and worktrees.
@@ -280,12 +298,23 @@ function main() {
       process.stdout.write(`Sandbox check failed: ${problem}.\n`);
       process.exitCode = 1;
     }
+  } else if (command === "verify-checks") {
+    const problem = verifyChecks({
+      messages: readMessages(env.EXECUTION_FILE),
+      command: env.COMMAND,
+      marker: env.MARKER,
+      nonce: env.NONCE,
+    });
+    if (problem) {
+      process.stdout.write(`${problem}\n`);
+      process.exitCode = 1;
+    }
   } else if (command === "check-git") {
     for (const p of describeTampering({ pristine: env.PRISTINE, live: env.LIVE })) {
       process.stdout.write(`${p}\n`);
     }
   } else {
-    throw new Error("usage: executor-sandbox.mjs verify-check | check-git");
+    throw new Error("usage: executor-sandbox.mjs verify-check | verify-checks | check-git");
   }
 }
 

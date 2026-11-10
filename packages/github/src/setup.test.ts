@@ -10,7 +10,7 @@ describe("appManifest", () => {
     expect(m.redirect_url).toBe(`${URL_}/settings/github/callback`);
     expect(m.setup_url).toBe(`${URL_}/settings/github`);
     expect(m.public).toBe(false);
-    expect(m.default_events.sort()).toEqual(["check_run", "pull_request", "workflow_run"]);
+    expect(m.default_events.sort()).toEqual(["check_run", "pull_request", "push", "workflow_run"]);
   });
 
   it("GivenTheApp_WhenBuilt_ThenItCanNotEditWorkflowsOrAdministerRepos", () => {

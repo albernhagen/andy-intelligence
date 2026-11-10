@@ -12,11 +12,13 @@ import {
 import { ClaudeCodeActionsExecutor, exchangeManifestCode, type CreatedApp } from "@andy/github";
 import {
   BuildDispatcher,
+  SyncRuns,
   DomainError,
   ProjectService,
   RefineDispatcher,
   RunService,
   BoardReader,
+  DigestReader,
   TicketService,
 } from "@andy/domain";
 import { bodyLimit } from "hono/body-limit";
@@ -26,6 +28,8 @@ import { registerQuotaRoutes } from "./quota";
 import { registerRunCallbacks, registerRunRoutes } from "./runs";
 import { registerTicketRoutes } from "./tickets";
 import { registerBoardRoutes } from "./board";
+import { registerInFlightRoutes } from "./in-flight";
+import { registerDigestRoutes } from "./digest";
 import {
   ConnectedCodeHost,
   GitHubConnection,
@@ -215,10 +219,21 @@ export function createApp(deps: AppDeps) {
     now,
     deps.watchdog?.queue ?? null,
     async (projectId) => void (await dispatchNext(projectId)),
+    connection ? new ConnectedCodeHost(connection) : null,
   );
   const refiner = new RefineDispatcher(deps.tracker, deps.runs, runs, now);
   const builder = new BuildDispatcher(deps.tracker, deps.runs, runs, now, deps.quota ?? null);
+  // AI-72 (ADR-0083): queued sync runs go first, so open PRs catch up with main before new work.
+  const syncer = new SyncRuns(
+    deps.tracker,
+    deps.runs,
+    runs,
+    connection ? new ConnectedCodeHost(connection) : null,
+    now,
+    deps.quota ?? null,
+  );
   const dispatchNext = async (projectId: string) => {
+    await syncer.next(projectId);
     await builder.wakeGlobalCapWaiters(projectId);
     return (await builder.next(projectId)) ?? (await refiner.next(projectId));
   };
@@ -246,6 +261,7 @@ export function createApp(deps: AppDeps) {
       tickets: service,
       codeHost: new ConnectedCodeHost(connection),
       runs: deps.runs,
+      onDefaultBranchMoved: (projectId) => syncer.defaultBranchMoved(projectId),
       now,
     });
     registerGitHubToken(app, {
@@ -281,7 +297,10 @@ export function createApp(deps: AppDeps) {
   registerBoardRoutes(app, new BoardReader(deps.tracker, deps.runs));
 
   registerRunRoutes(app, runs);
+  registerInFlightRoutes(app, runs);
   registerQuotaRoutes(app, deps.quota ?? null, now);
+  const digest = new DigestReader(deps.tracker, deps.runs, deps.quota ?? null, now);
+  registerDigestRoutes(app, digest, now);
 
   if (github && connection) {
     registerGitHubSetup(app, {
@@ -302,6 +321,7 @@ export function createApp(deps: AppDeps) {
       service,
       runs,
       projects,
+      digest,
     });
   }
 

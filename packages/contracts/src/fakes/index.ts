@@ -70,6 +70,7 @@ export class InMemoryWorkTracker implements WorkTracker {
   private readonly events = new Map<string, TicketEvent[]>();
   private readonly questions = new Map<string, Question>();
   private readonly counters = new Map<string, number>();
+  private readonly adrCounters = new Map<string, number>();
   constructor(private readonly now: () => Date = () => new Date()) {}
 
   async createProject(input: NewProject): Promise<Project> {
@@ -95,6 +96,13 @@ export class InMemoryWorkTracker implements WorkTracker {
     const updated = { ...project, ...ProjectPatch.parse(patch) };
     this.projects.set(projectId, updated);
     return structuredClone(updated);
+  }
+
+  async reserveAdrNumber(projectId: string, atLeast: number): Promise<number> {
+    if (!this.projects.has(projectId)) throw notFound("project", projectId);
+    const next = Math.max(atLeast, this.adrCounters.get(projectId) ?? 0) + 1;
+    this.adrCounters.set(projectId, next);
+    return next;
   }
 
   async createTicket(projectId: string, input: NewTicket, actor: EventActor): Promise<Ticket> {
@@ -358,6 +366,17 @@ export class InMemoryRunStore implements RunStore {
       .map((r) => structuredClone(r));
   }
 
+  async listEndedBetween(projectId: string, from: string, to: string, limit: number) {
+    const within = (r: Run) => !!r.endedAt && r.endedAt >= from && r.endedAt <= to;
+    const found = [...this.runs.values()]
+      .filter((r) => r.projectId === projectId && within(r))
+      .sort((a, b) => (b.endedAt ?? "").localeCompare(a.endedAt ?? ""));
+    return {
+      runs: found.slice(0, limit).map((r) => structuredClone(r)),
+      complete: found.length <= limit,
+    };
+  }
+
   async update(runId: string, patch: RunPatch, from: readonly RunStatus[]): Promise<Run> {
     const current = this.runs.get(runId);
     if (!current) throw notFound("run", runId);
@@ -446,6 +465,8 @@ export class InMemoryCodeHost implements CodeHost {
   readonly merges: { fullName: string; number: number; sha: string }[] = [];
   /** Test seam: make merge calls fail. */
   failMerge: Error | null = null;
+  /** Test seam: head commits that don't contain the default branch yet (others do). */
+  readonly behindDefault = new Set<string>();
 
   constructor(
     repos: Repo[] = [],
@@ -562,6 +583,11 @@ export class InMemoryCodeHost implements CodeHost {
     if (pr.pullRequest.headSha !== expectedHeadSha) throw new Error("head moved");
     pr.pullRequest.state = "merged";
     this.merges.push({ fullName, number, sha: expectedHeadSha });
+  }
+
+  async headContains(fullName: string, head: string): Promise<boolean | null> {
+    if (!(await this.getRepo(fullName))) return null;
+    return !this.behindDefault.has(head);
   }
 }
 

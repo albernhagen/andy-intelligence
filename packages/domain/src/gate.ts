@@ -195,6 +195,8 @@ export interface GateFacts {
   codeowners: string[];
   required: RequiredCheck[];
   checks: Listing<HeadCheck>;
+  /** A sync run is queued or running for the PR (AI-72): its head is about to change. */
+  syncPending?: boolean;
 }
 
 export interface GateDecision {
@@ -273,6 +275,7 @@ export function decideGate(facts: GateFacts): GateDecision {
   if (!facts.files.complete) reasons.push("files_incomplete");
   if (facts.draft) reasons.push("draft");
   if (!facts.intoDefaultBranch) reasons.push("not_default_branch");
+  if (facts.syncPending) reasons.push("sync_pending");
   const checks = assessChecks(facts.required, facts.checks);
   reasons.push(...checks.reasons);
   return {

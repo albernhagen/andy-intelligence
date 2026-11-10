@@ -204,7 +204,11 @@ async function seedBoardMarkers(
 ) {
   const startRun = async (ticketId: string, step: "refine" | "build", minutes: number) => {
     const run = await runs.create({ projectId: "ai", ticketId, step, route, tier: null });
-    await runs.update(run.id, { status: "running", startedAt: minutesAgo(minutes) }, ["queued"]);
+    // A fixed branch: the real one ends in the run's random id, which would change the screenshots.
+    const branch = step === "build" ? "agent/AI-7/seeded-run" : null;
+    await runs.update(run.id, { status: "running", startedAt: minutesAgo(minutes), branch }, [
+      "queued",
+    ]);
   };
   const at = async (stage: Stage, fields: NewTicket) => {
     const t = await service.create("ai", fields, "andy");

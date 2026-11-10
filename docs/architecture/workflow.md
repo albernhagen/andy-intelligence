@@ -19,7 +19,7 @@ Overview and reading map: [ARCHITECTURE.md](ARCHITECTURE.md). Section numbers ma
 
 As built (PR events, build dispatch, plan approval): [`history/workflow-as-built.md`](history/workflow-as-built.md).
 
-**Dispatch caps (ADR-0079):** the build dispatcher takes Ready tickets from the top while `mayDispatch` says start (pause, dial, global and PR caps, quota) and stores why it stopped; this replaces the as-built one-run rule.
+**Dispatch (ADR-0079, ADR-0080):** the build dispatcher takes Ready tickets from the top while `mayDispatch` says start (pause, dial, global and PR caps, quota) and stores why it stopped. A ticket whose `touches` overlap a build in flight (empty overlaps any) is skipped. Builds record their touches and a reserved ADR number, shown by MCP `list_in_flight` and the board. **Sync runs (ADR-0083):** when `main` moves, each open agent PR behind it gets a run that merges `main`, resolves conflicts, runs the checks and pushes; global cap, not the dial; a conflict or failing check flags Needs-you.
 
 **Needs-you is a flag, not a stage:** flagged items stay put and appear in the Needs-you inbox (UI + MCP).
 
@@ -37,7 +37,7 @@ As built (PR events, build dispatch, plan approval): [`history/workflow-as-built
 
 ### 4.3 Refinement and questions
 - Backlog has **Ideas** (no agent spend) and **Up next**; entering Up next starts a refinement pass (ADR-0075). The agent drafts the ticket, or sends it back, or splits it. Each gap is rated; the control plane makes it a question only if the agent is unsure or a wrong guess is costly to reverse, else an assumption Andy can promote. Zero questions is allowed; at most 3 open per ticket and `dailyQuestionCap` per project per 24 hours.
-- Refine also scores the ticket (AI-37): `risk` (low, medium, high: how much a bad change could break) and `confidence` (high, medium, low: how sure it is of the ticket and plan), each with a one-line reason, by the rubric in `platform/procedures/refine.md`. Filled only when empty; optional, never part of the DoR; the dispatcher ignores them. `startScore` in `packages/domain/src/scores.ts` gives the one label the board and MCP share ("S · low risk · confident"), and sorting the Ready lane by score (`?sort=score`: size, risk, confidence; missing last; ties by rank) is a view that writes no rank.
+- Refine also scores the ticket (AI-37): `risk` (low, medium, high: how much a bad change could break) and `confidence` (high, medium, low: how sure it is of the ticket and plan), each with a one-line reason, by the rubric in `platform/procedures/refine.md`. Filled only when empty; optional, never part of the DoR; the dispatcher ignores them. `startScore` (`packages/domain/src/scores.ts`) is the one label board and MCP share; sorting Ready by score (`?sort=score`: size, risk, confidence) writes no rank.
 - Questions are **structured records** (§5 Question).
 - Andy answers in UI or MCP. A `/refine` skill in Claude desktop batches pending questions across projects into one conversation.
 - Answering re-checks the DoR; the last answer moves an Up-next ticket that meets it to Ready (`system`, `ifUpdatedAt`).
@@ -52,15 +52,14 @@ As built (PR events, build dispatch, plan approval): [`history/workflow-as-built
 ### 4.5 Review gate (v1.x: rules only)
 - **Hard vetoes → Andy reviews:** protected paths (CODEOWNERS: auth, payments, migrations, infra), dependency changes, CI not green, new behavior without new tests, no verification output in the run summary (ADR-0040), diff > N lines, any agent-raised concern.
 - **Otherwise:** agent PRs merge on their own once every required check and both review agents pass (from M1.8: Build + gate, ADR-0050), per the project's `autoMerge` policy: `none` / `s` / `s-and-m` (default) / `all`.
-- **Built (M1.8: Build + gate):** vetoes for no verification output, protected or tooling path, and a required or review check not passing; diff size and new-behaviour-without-tests are a follow-up. Facts come from the host on each PR or finished-check webhook, never PR text. `wouldAutoMerge` is the gate's answer alone, recorded with `gateReasons` under every policy; the policy only decides whether the control plane merges. Merge: squash with the App token, pinned to the assessed head, one attempt per head; a failure flags the ticket. Outcome and metrics come from the close webhook, on the Run.
-- **Dependabot** (ADR-0042): npm patches and minors of 1.0+ packages auto-merge once every required check passes, and deploy only with Andy's next merge; majors, 0.x minors, GitHub Actions and Terraform providers go to Andy. CODEOWNERS (`* @albernhagen`) requests Andy's review on every PR he didn't author; paths listed after `*` are the protected paths above.
-- From M1: First end-to-end flow onward, **record what the gate *would* have decided** to build the dataset for later model-based scoring.
+- **Built (M1.8: Build + gate):** vetoes for no verification output, protected or tooling path, and a required or review check not passing; diff size and new-behaviour-without-tests are a follow-up. Facts come from the host on each PR or finished-check webhook, never PR text. `wouldAutoMerge` is the gate's answer alone, recorded with `gateReasons` under every policy; the policy only decides whether the control plane merges. Merge: squash with the App token, pinned to the assessed head, one attempt per head; a failure flags the ticket; no merge while a sync is pending (`sync_pending`). Outcome and metrics come from the close webhook, on the Run.
+- **Dependabot** (ADR-0042): npm patches and 1.0+ minors auto-merge once checks pass, deploying with Andy's next merge; the rest go to Andy. CODEOWNERS (`* @albernhagen`) requests Andy's review on every PR he didn't author; paths listed after `*` are the protected paths above.
 - **Adversarial review** on every PR (ADR-0026): a fresh reviewer session tries to find reasons the PR should not merge, with a concrete failing scenario for each finding. Three passes: bugs and logic, plus (from M1.8: Build + gate) compliance with the ticket's acceptance criteria and approved plan; nits capped at 5 (ADR-0040). The implementer answers every finding. Unresolved `blocker` findings are a hard veto unless Andy labels `review-accepted`. From M9 the reviewer is a different vendor than the implementer.
 - Security review on every PR (§9.1). A high/critical security finding is a hard veto unless Andy marks it `security-accepted`.
 
 ### 4.6 Environments and release
-- Per project: separate GCP projects `<app>-dev` and `<app>-prod`.
+- Per project: GCP projects `<app>-dev` and `<app>-prod`.
 - **Build once, promote the same image digest** via **Cloud Deploy** (dev → prod, approval required for prod, one-click rollback).
-- On merge: deploy to dev → run smoke/e2e (Playwright + API tests) → verification agent summarizes results and logs onto the ticket.
-- **Release:** "Promote to prod" from UI or MCP → Cloud Deploy approval → deploy. Release notes generated from tickets in the release.
-- Agent write policy: dev writes allowed by project policy; prod is read-only for agents.
+- On merge: deploy to dev → smoke/e2e (Playwright + API) → a verification agent logs the results on the ticket.
+- **Release:** "Promote to prod" from UI or MCP → Cloud Deploy approval → deploy. Release notes come from its tickets.
+- Agent write policy: dev writes per project policy; prod read-only.

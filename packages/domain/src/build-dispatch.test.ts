@@ -23,7 +23,7 @@ const REPO = {
   url: "https://github.com/albernhagen/andy-intelligence",
 };
 
-/** A ticket that meets the Definition of Ready. */
+/** A ticket that meets the Definition of Ready; its touches are its own area (no overlaps). */
 const ready = (title: string, extra: Partial<NewTicket> = {}): NewTicket => ({
   type: "feature",
   title,
@@ -31,6 +31,7 @@ const ready = (title: string, extra: Partial<NewTicket> = {}): NewTicket => ({
   acceptanceCriteria: ["WHEN Andy opens the board THE SYSTEM SHALL list his tickets"],
   size: "S",
   sizeReason: "one screen",
+  touches: [`areas/${title}/**`],
   ...extra,
 });
 
@@ -43,9 +44,17 @@ describe("BuildDispatcher", () => {
   const now = () => new Date((ms += 1000));
 
   function wire(executor: Executor | null = new WorkflowExecutor(host)) {
-    const runs: RunService = new RunService(tracker, runStore, executor, now, null, async (p) => {
-      await dispatcher.next(p);
-    });
+    const runs: RunService = new RunService(
+      tracker,
+      runStore,
+      executor,
+      now,
+      null,
+      async (p) => {
+        await dispatcher.next(p);
+      },
+      host,
+    );
     const dispatcher = new BuildDispatcher(tracker, runStore, runs, now);
     const next = (p: string) => dispatcher.next(p);
     return {
@@ -246,6 +255,98 @@ describe("BuildDispatcher", () => {
     expect(await builds(b.id)).toHaveLength(1);
     expect(await builds(c.id)).toEqual([]);
     expect(await decision()).toBe("project_cap");
+  });
+
+  describe("conflict-aware dispatch (ADR-0080)", () => {
+    it("GivenTwoReadyTicketsWithOverlappingTouches_WhenNext_ThenOnlyTheFirstStartsAndTheNextDisjointOneDoes", async () => {
+      const { dispatcher } = wire();
+      const a = await inReady("A", { touches: ["packages/domain/**"] });
+      const b = await inReady("B", { touches: ["packages/domain/src/runs.ts"] });
+      const c = await inReady("C", { touches: ["apps/web/**"] });
+      await dispatcher.next(projectId);
+      expect(await builds(a.id)).toHaveLength(1);
+      expect(await builds(b.id)).toEqual([]);
+      expect(await builds(c.id)).toHaveLength(1);
+      expect((await builds(a.id))[0]!.touches).toEqual(["packages/domain/**"]);
+    });
+
+    it("GivenOnlyOverlappingTicketsWait_WhenNext_ThenTheDecisionIsTouchesOverlap", async () => {
+      const { dispatcher } = wire();
+      await inReady("A", { touches: ["packages/domain/**"] });
+      await dispatcher.next(projectId);
+      const b = await inReady("B", { touches: ["packages/domain/src/x.ts"] });
+      await dispatcher.next(projectId);
+      expect(await builds(b.id)).toEqual([]);
+      expect(await decision()).toBe("touches_overlap");
+    });
+
+    it("GivenATicketWithNoTouches_WhenARunIsInFlight_ThenItWaitsAndWhenNoneIs_ThenItStarts", async () => {
+      const { dispatcher, runs } = wire();
+      const a = await inReady("A");
+      await dispatcher.next(projectId);
+      const unknown = await inReady("Unknown", { touches: [] });
+      await dispatcher.next(projectId);
+      expect(await builds(unknown.id)).toEqual([]);
+      await succeed(runs, (await builds(a.id))[0]!);
+      expect(await builds(unknown.id)).toHaveLength(1);
+    });
+
+    it("GivenTheBlockingRunEnds_WhenItReports_ThenTheSkippedTicketStarts", async () => {
+      const { dispatcher, runs } = wire();
+      const a = await inReady("A", { touches: ["packages/domain/**"] });
+      await dispatcher.next(projectId);
+      const b = await inReady("B", { touches: ["packages/domain/src/x.ts"] });
+      await succeed(runs, (await builds(a.id))[0]!);
+      expect(await builds(b.id)).toHaveLength(1);
+    });
+
+    it("GivenTwoConcurrentStartsOfOverlappingTickets_WhenBothAvoidOverlap_ThenOnlyTheOlderBuilds", async () => {
+      const { runs } = wire();
+      const a = await inReady("A", { touches: ["packages/domain/**"] });
+      const b = await inReady("B", { touches: ["packages/domain/src/runs.ts"] });
+      const results = await Promise.allSettled([
+        runs.start(projectId, a.id, "build", undefined, { avoidOverlap: true }),
+        runs.start(projectId, b.id, "build", undefined, { avoidOverlap: true }),
+      ]);
+      expect(results.map((r) => r.status)).toEqual(["fulfilled", "rejected"]);
+      expect((await builds(b.id))[0]).toMatchObject({ status: "failed" });
+      expect((await runs.inFlight(projectId)).map((r) => r.ticketKey)).toEqual([a.key]);
+    });
+
+    it("GivenABuildPastItsDeadline_WhenTheViewIsRead_ThenItIsLeftOutAsTheDispatcherIgnoresIt", async () => {
+      const { dispatcher, runs } = wire();
+      const late = await inReady("Late", { touches: ["packages/domain/**"] });
+      await dispatcher.next(projectId);
+      expect((await runs.inFlight(projectId)).map((r) => r.ticketKey)).toEqual([late.key]);
+      ms += 24 * 60 * 60_000; // past every step's deadline
+      expect(await runs.inFlight(projectId)).toEqual([]);
+      const next = await inReady("Next", { touches: ["packages/domain/src/x.ts"] });
+      await dispatcher.next(projectId);
+      expect(await builds(next.id)).toHaveLength(1);
+    });
+
+    it("GivenAnAdrIndex_WhenTwoBuildsStart_ThenEachReservesTheNextNumberAndThePromptSaysSo", async () => {
+      host.files.set(
+        "docs/architecture/adr/README.md",
+        "| [0079](0079-x.md) | x | accepted |\n| [0082](0082-y.md) | y | accepted |",
+      );
+      const { dispatcher } = wire();
+      const [a, b] = [await inReady("A"), await inReady("B")];
+      await dispatcher.next(projectId);
+      const [runA, runB] = [(await builds(a.id))[0]!, (await builds(b.id))[0]!];
+      expect([runA.reservedAdr, runB.reservedAdr]).toEqual([83, 84]);
+      expect(runA.prompt).toContain("Your ADR number, if you need one: ADR-0083");
+      expect(runA.prompt).toContain(`risk IDs carry the ticket key: R-${a.key} `);
+    });
+
+    it("GivenNoAdrIndex_WhenABuildStarts_ThenNoNumberIsReserved", async () => {
+      const { dispatcher } = wire();
+      const a = await inReady("A");
+      await dispatcher.next(projectId);
+      const run = (await builds(a.id))[0]!;
+      expect(run.reservedAdr).toBeNull();
+      expect(run.prompt).toContain("No ADR number is reserved");
+    });
   });
 
   it("GivenPaused_WhenNext_ThenNothingStartsAndPausedIsRecorded", async () => {

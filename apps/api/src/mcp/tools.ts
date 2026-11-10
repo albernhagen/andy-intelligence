@@ -14,6 +14,7 @@ import {
 } from "@andy/contracts";
 import {
   DomainError,
+  type DigestReader,
   type ProjectService,
   type RunService,
   type TicketService,
@@ -22,9 +23,12 @@ import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import { z } from "zod";
 import { registerDispatchTools } from "./tools-dispatch";
+import { registerInFlightTools } from "./tools-inflight";
 import { registerWorkerTools } from "./tools-worker";
 import { listNeedsMe, registerTicketTools, statusLineOf } from "./tools-tickets";
 import { registerScoreTools, withStartScore } from "./tools-scores";
+import { registerSettingsTools } from "./tools-settings";
+import { registerDigestTools } from "./tools-digest";
 
 /**
  * MCP core tools (M1.4: MCP core tools; `refine` from M1.7: Refinement; `build` and
@@ -39,6 +43,8 @@ export interface ToolDeps {
   service: TicketService;
   runs: RunService;
   projects: ProjectService;
+  /** The daily digest (AI-70); the app always passes it, unit tests may not. */
+  digest?: DigestReader;
   /** Signed-in email, shown by `status` so it doubles as the connection check. */
   email: string;
 }
@@ -152,8 +158,10 @@ export const summary = (t: Ticket) => ({
 export function registerTools(server: McpServer, deps: ToolDeps): void {
   const { tracker, service } = deps;
   registerDispatchTools(server, deps, run);
+  registerInFlightTools(server, deps, run);
   registerWorkerTools(server, deps, run);
   registerTicketTools(server, deps);
+  registerDigestTools(server, deps, run);
 
   /** Decides the ticket's latest plan run as Andy (owner-only, ADR-0050). */
   const decide = async (key: string, decision: "approved" | "rejected", reason: string | null) => {
@@ -450,6 +458,7 @@ export function registerTools(server: McpServer, deps: ToolDeps): void {
   );
 
   registerScoreTools(server, tracker, run);
+  registerSettingsTools(server, tracker, run);
 }
 
 async function statusWithCost(service: TicketService, runs: RunService, key: string) {

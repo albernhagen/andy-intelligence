@@ -1,3 +1,4 @@
+import { adrLabel } from "./dispatch-conflicts";
 import type { BuildPlan, Question, Route, Stage, Ticket, TierKey } from "@andy/contracts";
 import { TIER_ROUTES, tierFor } from "./tiers";
 
@@ -106,6 +107,7 @@ export function buildPrompt(
   repo: string,
   answered: Question[],
   approvedPlan: BuildPlan | null = null,
+  reservedAdr: number | null = null,
 ): string {
   return [
     "You are the build step of andy-intelligence, running headless in a sandboxed checkout of the ticket's repository.",
@@ -121,6 +123,10 @@ export function buildPrompt(
       : []),
     "",
     `Repository: ${repo}`,
+    // After the fixed text, so the cached prefix stays the same (ADR-0046). ADR-0080.
+    reservedAdr === null
+      ? "No ADR number is reserved for this run: if you need an ADR, say so in your summary instead of writing one."
+      : `Your ADR number, if you need one: ${adrLabel(reservedAdr)}. New threat-model risk IDs carry the ticket key: R-${ticket.key} (R-${ticket.key}-2 for a second).`,
     "<ticket>",
     ticketSnapshot(ticket, answered),
     "</ticket>",

@@ -10,6 +10,7 @@ const DECISION_TEXT: Record<DispatchDecision, string> = {
   quota_reserve: "subscription quota is at its reserve",
   started: "started a run",
   nothing_ready: "no Ready ticket can start",
+  touches_overlap: "Ready tickets overlap runs in flight",
 };
 
 /** Why dispatch last did what it did (ADR-0079); nothing while auto-build is off. */

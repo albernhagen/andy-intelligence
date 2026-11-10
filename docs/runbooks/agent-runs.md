@@ -84,25 +84,25 @@ In Claude desktop with the `andy-intelligence` connector (`mcp-connector.md`), w
 3. `list_needs_me`, then `answer_question` for each (`askedByRun` names the run that asked).
 4. Expect: the last answer returns the ticket with `stage: "ready"`; History shows `stage_changed` by `system`. If the Definition of Ready is still unmet, a second refine starts instead (`status` shows it); answer its questions too.
 
-Off switch: untick "Auto-refine" on `/projects` or `set_auto_refine` `enabled: false`; new tickets then wait until you start refine (ticket → Runs, or MCP `refine`).
+Off switch: untick "Auto-refine" in Project settings (`/p/ai/settings`) or `set_auto_refine` `enabled: false`; new tickets then wait until you start refine (ticket → Runs, or MCP `refine`).
 
 ## 8. Build a ticket (M1.8a: Build run demo)
 
 Nothing to apply: no Terraform, secret or App permission changes (the App already has Contents and Pull requests write, ADR-0043, and keeps no `workflows` permission). After this slice merges and deploys:
 
-0. On `/projects`, tick **Builds** for the project (recorded: who and when). Until then every build start is refused with "builds are off", and Auto-build can't be ticked. Do §9 first.
+0. In Project settings (header link, `/p/ai/settings`), tick **Builds** for the project (recorded: who and when). Until then every build start is refused with "builds are off", and Auto-build can't be ticked. Do §9 first.
 1. Pick a small, Ready S ticket in project `AI` (Definition of Ready met, blockers Done). Ticket → **Activity** → **Start build run** (or MCP `build`).
 2. Expect: the ticket moves to **In progress** at once; the run is `queued` → `running` on `sonnet` (Opus for M and L); in about 15–60 minutes a PR `<KEY>: <title>` on branch `agent/<KEY>/<run id>` whose description starts with the ticket link, then Summary, Plan, Deviations, Verification. The ticket moves to **Ready for review**; the run shows the PR link, branch, tokens and `~$… (estimate)`. The PR waits for you (`autoMerge: none`).
-3. Auto-build: first clear Ready of tickets whose work already merged (on 2026-11-05: AI-20, AI-24, AI-25, AI-26; PR events only move tickets that were In progress) and of anything you'll do yourself (set assignee `me`: never built). Epics in Ready are skipped. Then tick **Auto-build** on `/projects` (or `set_auto_build` `enabled: true`). The top Ready ticket by order starts when a ticket reaches Ready or a run ends. Untick it to stop new builds; a build in flight finishes.
+3. Auto-build: first clear Ready of tickets whose work already merged (on 2026-11-05: AI-20, AI-24, AI-25, AI-26; PR events only move tickets that were In progress) and of anything you'll do yourself (set assignee `me`: never built). Epics in Ready are skipped. Then tick **Auto-build** in Project settings (or `set_auto_build` `enabled: true`). The top Ready ticket by order starts when a ticket reaches Ready or a run ends. Untick it to stop new builds; a build in flight finishes.
 4. A failed build retries once, then the ticket is flagged Needs you with the branch named in the comment: inspect it, then fix the ticket and start again, or finish by hand. Agent branches are untrusted code: read the diff on GitHub, or check out with `pnpm install --ignore-scripts` and don't run its hooks or scripts on your machine.
 
 Don't tick Auto-build on any project until §9 has passed. If §9 fails, untick **Builds**: that stops every start, by hand or automatic, and turns Auto-build off.
 
 ## 8a. Approve a plan before the build (M1.8a: Plan approval)
 
-Nothing to apply. On `/projects`, set **Plan approval** (or MCP `set_plan_approval`): `none` (default) builds at once; `M and L tickets` or `all tickets` makes a build start (yours or auto-build's) run a read-only **plan** run first.
+Nothing to apply. In Project settings, set **Plan approval** (or MCP `set_plan_approval`): `none` (default) builds at once; `M and L tickets` or `all tickets` makes a build start (yours or auto-build's) run a read-only **plan** run first.
 
-**Auto-merge:** nothing to apply. On `/projects`, set **Auto-merge** (or MCP `set_auto_merge`): `none`, `S tickets`, `S and M tickets` (new projects) or `all tickets`. Project AI stays `none` until M2: Self-hosting. A vetoed PR, or one whose merge failed, flags the ticket with the reason in its history; the Run records `wouldAutoMerge` and `gateReasons` either way. The gate runs inside the webhook: if a read fails on the last check, nothing is retried and the PR waits for the next event or for you (`webhook gate failed` in the logs).
+**Auto-merge:** nothing to apply. In Project settings, set **Auto-merge** (or MCP `set_auto_merge`): `none`, `S tickets`, `S and M tickets` (new projects) or `all tickets`. Project AI stays `none` until M2: Self-hosting. A vetoed PR, or one whose merge failed, flags the ticket with the reason in its history; the Run records `wouldAutoMerge` and `gateReasons` either way. The gate runs inside the webhook: if a read fails on the last check, nothing is retried and the PR waits for the next event or for you (`webhook gate failed` in the logs).
 
 1. Expect: a `plan` run (Sonnet for S, Opus for M and L, a few minutes); the ticket stays **Ready** and is flagged Needs you. The run's report lists the summary, files, steps, tests, riskiest step and rejected alternatives; the ticket gets the same as a comment.
 2. Approve: ticket → **Activity** → the plan run → **Approve plan** (or MCP `approve_plan`). The build starts with the plan in its prompt, the ticket moves to **In progress**, and the PR's Plan is the approved one, with departures under Deviations. If another run is in flight, the approval stands and the ticket stays flagged with a comment: start the build when the project is free (or clear the flag and auto-build starts it).
@@ -127,6 +127,24 @@ Before a live §9 run, check a sandbox change in Docker in about 30 seconds: `sc
 - **No model (AI-63):** `LAB_MODEL=stub` needs no credential: `scripts/sandbox-lab/stub-model.mjs` answers for the model with the one Bash call, so the real Claude Code and its sandbox run.
 - **In CI:** `sandbox-self-test` (`.github/workflows/sandbox-self-test.yml`, action `platform/actions/sandbox-self-test`) runs this test bed on the runner with the stub, when a PR changes `platform/executor/**`, `scripts/executor-*.mjs`, `scripts/sandbox-lab/**`, `claude-executor.yml`, `agent-run.yml` or the job itself; otherwise it logs "skipped: no executor paths" and passes. It runs the workflow's exact check command through `verify-check`, then the probe; each FAIL (and annotation) names the expectation. The logs are the job's `sandbox-self-test-logs` artifact. Reproduce a failure with `LAB_MODEL=stub scripts/sandbox-lab/run.sh`. It catches accidents, not a hostile PR: the job runs the PR's own gate and test bed, so a PR could edit them (Andy reviews these paths; threat-model R5). It holds no Claude token, OIDC or GCP credential, and covers the runner's AppArmor rule but not a real model or `claude-code-action`.
 - **Not covered locally:** the runner's AppArmor rule, the real `claude-code-action` (its git writes are copied in `lab.sh`) and GitHub's tokens; §9 stays the proof. `lab.sh` copies the workflow's steps, so change both together.
+
+## 10. Sync runs: open agent PRs keep up with `main` (AI-72)
+
+What it does (ADR-0083): when `main` moves, every open agent PR whose head lacks it gets one sync run that merges `main` into the PR branch, resolves conflicts, runs the checks and pushes the merge. Needs **Builds** on (§8 step 0); it ignores Auto-build. No Terraform, secret or App permission change.
+
+1. **Once: subscribe the App to `push`.** GitHub → Settings → Developer settings → GitHub Apps → the control-plane App → Permissions & events → Subscribe to events → tick **Push** → Save. (Apps created from the UI after AI-72 already have it.) Until then only PRs merged into `main` start syncs, not direct pushes.
+2. Expect after a merge to `main`: each stale agent PR's ticket shows "Syncing with main" and a comment "Started a sync run: merging main into PR #…"; then "Merged main into PR #… and pushed …". The PR's checks and both review agents rerun on the new head. A PR that already contains `main` gets nothing.
+3. Why a sync waits: the ticket's status line ("sync with main waits: …"), the digest (`sync_waiting`) and the PR's build run (`prSync.waiting`): `paused`, `global_cap`, `quota_reserve`, `daily_cap` (3 a day; the ticket is flagged), `ticket_busy`, `builds_off` (no sync runs and the gate doesn't wait for one; tick **Builds** to resume) or `pr_cap` (over 20 open agent PRs: not checked yet, next in line on the next tick). It starts by itself on the next tick: a run ending, `main` moving, a settings change.
+4. A webhook delivery answered 500 "sync queueing failed": the host failed mid-tick (logged as `sync tick after main moved failed`). Redeliver it from the App's Advanced tab, or wait for the next tick.
+
+**On `conflict_unresolved` or `checks_failed`** (ticket in Needs you, "Waiting for you: sync with main stopped …", digest exception `sync_stopped`): the comment names the files and the reason; nothing was pushed.
+
+1. Read the comment and the sync run's log. Decide which side's intent wins, or how to combine them.
+2. On your machine: `git fetch origin && git switch <agent branch> && git merge origin/main`, resolve, run `pnpm lint && pnpm typecheck && pnpm test && pnpm build`, commit and push (never force). Agent branches are untrusted code: install with `pnpm install --ignore-scripts`.
+3. Clear the ticket's Needs-you flag. The new head lifts the stop: the next move of `main` syncs it again if needed.
+4. Or, if the PR is no longer worth it, close it and send the ticket back (rework) or cancel it.
+
+`checks_failed` also comes from the executor: "The PR changes dependency or toolchain files" (a sync never installs from files a PR changed: merge by hand), or "The executor ran the project's checks after the agent and they did not pass" (the agent said synced; nothing was pushed). A sync that failed without an outcome (push refused, setup failed) is flagged the same way. "GitHub refused the push" with workflow files in `main`'s change: the App has no `workflows` permission by design; merge `main` by hand as above.
 
 ## Troubleshooting
 

@@ -4,7 +4,13 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { URL } from "node:url";
 import { describe, expect, it } from "vitest";
-import { buildPrompt, loadStep, outputs, schemaArgs } from "./executor-procedure.mjs";
+import {
+  buildPrompt,
+  loadStep,
+  outputs,
+  schemaArgs,
+  withConflicts,
+} from "./executor-procedure.mjs";
 
 const PROCEDURES = new URL("../platform/procedures/", import.meta.url).pathname;
 
@@ -62,5 +68,15 @@ describe("executor-procedure", () => {
     const written = readFileSync(out, "utf8");
     expect(written).toMatch(/^prompt<<PROMPT_[0-9a-f]{32}\n# \/refine/);
     expect(written).toMatch(/\n---\n\nticket\nPROMPT_[0-9a-f]{32}\nschema_args=--json-schema '/);
+  });
+
+  it("GivenConflictedPaths_WhenTheSyncPromptIsBuilt_ThenTheyAreListedOnePerLineWithoutControlCharacters", () => {
+    const prompt = withConflicts("RUN", "a.ts\0dir/b\nevil.md\0");
+    expect(prompt).toBe(
+      "RUN\n\nFiles with conflict markers after the merge:\n- a.ts\n- dir/bevil.md",
+    );
+    expect(withConflicts("RUN", "")).toBe("RUN\n\nThe merge left no conflicts.");
+    const many = Array.from({ length: 60 }, (_, i) => `f${i}`).join("\0");
+    expect(withConflicts("RUN", many)).toContain("- … and 10 more");
   });
 });

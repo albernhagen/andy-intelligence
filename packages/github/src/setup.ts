@@ -17,8 +17,12 @@ export const APP_PERMISSIONS = {
   actions: "write",
 } as const;
 
-/** Webhook events (installation events are always sent to Apps). */
-export const APP_EVENTS = ["pull_request", "check_run", "workflow_run"] as const;
+/**
+ * Webhook events (installation events are always sent to Apps). `push` (AI-72): the default
+ * branch moving queues sync runs; an App made before it needs the event ticked by hand
+ * (runbook agent-runs.md).
+ */
+export const APP_EVENTS = ["pull_request", "check_run", "workflow_run", "push"] as const;
 
 /**
  * Suggested App name. App names are global on GitHub and can't match an existing account

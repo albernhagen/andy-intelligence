@@ -2,6 +2,7 @@ import { sign } from "@octokit/webhooks-methods";
 import { describe, expect, it } from "vitest";
 import {
   WebhookPayloadError,
+  isBranchPush,
   isRecordedEvent,
   toCodeHostEvent,
   verifySignature,
@@ -181,6 +182,36 @@ describe("toCodeHostEvent", () => {
     });
   });
 
+  it("GivenAPushToTheDefaultBranch_WhenMapped_ThenItNamesTheBranchAndHead", () => {
+    const sha = "a".repeat(40);
+    const payload = {
+      ref: "refs/heads/main",
+      after: sha,
+      repository: { ...repository, default_branch: "main" },
+    };
+    expect(isBranchPush(payload)).toBe(true);
+    expect(toCodeHostEvent(meta("push"), payload)).toMatchObject({
+      kind: "push",
+      action: "pushed",
+      push: { branch: "main", headSha: sha, defaultBranch: true },
+    });
+  });
+
+  it("GivenATagPushOrABranchDeletion_WhenChecked_ThenItIsNotABranchPush", () => {
+    const sha = "b".repeat(40);
+    expect(isBranchPush({ ref: "refs/tags/v1", after: sha, repository })).toBe(false);
+    expect(
+      isBranchPush({ ref: "refs/heads/x", after: "0".repeat(40), deleted: true, repository }),
+    ).toBe(false);
+    expect(
+      toCodeHostEvent(meta("push"), {
+        ref: "refs/heads/feature",
+        after: sha,
+        repository: { ...repository, default_branch: "main" },
+      }),
+    ).toMatchObject({ push: { branch: "feature", defaultBranch: false } });
+  });
+
   it("GivenAPayloadWithoutARepository_WhenMapped_ThenItThrows", () => {
     const { pull_request } = pullRequest();
     expect(() => toCodeHostEvent(meta("pull_request"), { action: "opened", pull_request })).toThrow(
@@ -196,7 +227,8 @@ describe("toCodeHostEvent", () => {
 describe("helpers", () => {
   it("GivenEventNames_WhenChecked_ThenOnlyRecordedOnesMatch", () => {
     expect(isRecordedEvent("pull_request")).toBe(true);
-    expect(isRecordedEvent("push")).toBe(false);
+    expect(isRecordedEvent("push")).toBe(true);
+    expect(isRecordedEvent("issues")).toBe(false);
   });
 
   it("GivenPayloads_WhenAskedForTheRepo_ThenFullNameOrNull", () => {

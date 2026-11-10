@@ -69,6 +69,19 @@ export function workTrackerContract(name: string, make: () => Promise<WorkTracke
       expect(await tracker.getProject("does-not-exist")).toBeNull();
     });
 
+    it("GivenAdrReservations_WhenReserved_ThenEachIsAboveTheIndexAndEveryEarlierOne", async () => {
+      const { tracker, project } = await setup();
+      const other = await tracker.createProject({ name: "Other", key: uniqueKey() });
+      expect(await tracker.reserveAdrNumber(project.id, 82)).toBe(83);
+      expect(await tracker.reserveAdrNumber(project.id, 82)).toBe(84);
+      expect(await tracker.reserveAdrNumber(project.id, 90)).toBe(91);
+      expect(await tracker.reserveAdrNumber(other.id, 1)).toBe(2);
+      // No concurrent burst here: like the ticket-key counter, uniqueness is the transaction's,
+      // and contended transactions stall the emulator for seconds (ADR-0080).
+      expect(await tracker.reserveAdrNumber(project.id, 82)).toBe(92);
+      await rejectsWith(tracker.reserveAdrNumber("does-not-exist", 1), "not_found");
+    });
+
     it("GivenAProject_WhenAutoRefineIsTurnedOff_ThenItIsStoredAndDefaultsOnForNewProjects", async () => {
       const tracker = await make();
       const created = await tracker.createProject({ name: "Settings", key: uniqueKey() });
@@ -781,11 +794,28 @@ export function codeEventLogContract(name: string, make: () => Promise<CodeEvent
   });
 }
 
+/** Options for a RunStore adapter's contract run. */
+export interface RunStoreContractOptions {
+  /**
+   * Timeout (ms) for each case that races two updates on one run. Unset: the test runner's
+   * default. An adapter whose store resolves contention slowly sets it, with a comment giving the
+   * measured cause (AI-71).
+   */
+  raceTimeoutMs?: number;
+}
+
 /**
  * RunStore suite. Every test makes runs under a random project id, so it can share a store
  * (e.g. the Firestore emulator).
  */
-export function runStoreContract(name: string, make: () => Promise<RunStore>): void {
+export function runStoreContract(
+  name: string,
+  make: () => Promise<RunStore>,
+  options: RunStoreContractOptions = {},
+): void {
+  /** A case that races two updates on one run: gets the adapter's race timeout. */
+  const itRaces = (title: string, fn: () => Promise<void>) => it(title, fn, options.raceTimeoutMs);
+
   describe(`RunStore contract: ${name}`, () => {
     const newRun = (projectId: string, ticketId = "t1"): NewRun => ({
       projectId,
@@ -849,6 +879,28 @@ export function runStoreContract(name: string, make: () => Promise<RunStore>): v
       expect((await store.listActive(p)).map((r) => r.id)).toEqual([queued.id]);
     });
 
+    it("GivenRunsEndedInAndOutOfAWindow_WhenListingEndedBetween_ThenOnlyThoseInsideAndCapped", async () => {
+      const store = await make();
+      const p = project();
+      const end = async (endedAt: string, projectId = p) => {
+        const run = await store.create(newRun(projectId));
+        return store.update(run.id, { status: "failed", endedAt }, ["queued"]);
+      };
+      await end("2026-11-03T23:59:59.000Z");
+      const early = await end("2026-11-04T01:00:00.000Z");
+      const late = await end("2026-11-04T02:00:00.000Z");
+      await end("2026-11-04T01:30:00.000Z", project());
+      await store.create(newRun(p));
+      const from = "2026-11-04T00:00:00.000Z";
+      const to = "2026-11-05T00:00:00.000Z";
+      const all = await store.listEndedBetween(p, from, to, 10);
+      expect(all.runs.map((r) => r.id)).toEqual([late.id, early.id]);
+      expect(all.complete).toBe(true);
+      const capped = await store.listEndedBetween(p, from, to, 1);
+      expect(capped.runs.length).toBeLessThanOrEqual(1);
+      expect(capped.complete).toBe(false);
+    });
+
     it("GivenAQueuedRun_WhenUpdatedFromQueued_ThenOnlyThePatchedFieldsChange", async () => {
       const store = await make();
       const run = await store.create(newRun(project()));
@@ -880,20 +932,23 @@ export function runStoreContract(name: string, make: () => Promise<RunStore>): v
       );
     });
 
-    it("GivenTwoConcurrentMergeClaimsOnOneHead_WhenApplied_ThenOneWinsAndANewHeadCanClaim", async () => {
-      const store = await make();
-      const run = await store.create(newRun(project()));
-      await store.update(run.id, { status: "succeeded" }, ["queued"]);
-      const results = await Promise.allSettled([
-        store.update(run.id, { mergeAttemptedSha: "a" }, ["succeeded"]),
-        store.update(run.id, { mergeAttemptedSha: "a" }, ["succeeded"]),
-      ]);
-      expect(results.filter((r) => r.status === "fulfilled")).toHaveLength(1);
-      const next = await store.update(run.id, { mergeAttemptedSha: "b" }, ["succeeded"]);
-      expect(next.mergeAttemptedSha).toBe("b");
-    });
+    itRaces(
+      "GivenTwoConcurrentMergeClaimsOnOneHead_WhenApplied_ThenOneWinsAndANewHeadCanClaim",
+      async () => {
+        const store = await make();
+        const run = await store.create(newRun(project()));
+        await store.update(run.id, { status: "succeeded" }, ["queued"]);
+        const results = await Promise.allSettled([
+          store.update(run.id, { mergeAttemptedSha: "a" }, ["succeeded"]),
+          store.update(run.id, { mergeAttemptedSha: "a" }, ["succeeded"]),
+        ]);
+        expect(results.filter((r) => r.status === "fulfilled")).toHaveLength(1);
+        const next = await store.update(run.id, { mergeAttemptedSha: "b" }, ["succeeded"]);
+        expect(next.mergeAttemptedSha).toBe("b");
+      },
+    );
 
-    it("GivenTwoConcurrentPlanDecisions_WhenApplied_ThenExactlyOneWinsAndIsKept", async () => {
+    itRaces("GivenTwoConcurrentPlanDecisions_WhenApplied_ThenExactlyOneWinsAndIsKept", async () => {
       const store = await make();
       const run = await store.create({ ...newRun(project()), step: "plan" });
       await store.update(run.id, { status: "succeeded" }, ["queued"]);
@@ -917,7 +972,7 @@ export function runStoreContract(name: string, make: () => Promise<RunStore>): v
       );
     });
 
-    it("GivenTwoConcurrentUpdatesFromQueued_WhenApplied_ThenExactlyOneWins", async () => {
+    itRaces("GivenTwoConcurrentUpdatesFromQueued_WhenApplied_ThenExactlyOneWins", async () => {
       const store = await make();
       const run = await store.create(newRun(project()));
       const results = await Promise.allSettled([

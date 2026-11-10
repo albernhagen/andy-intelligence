@@ -232,6 +232,11 @@ export interface WorkTracker {
   listProjects(): Promise<Project[]>;
   /** `not_found` for an unknown project. */
   updateProject(projectId: string, patch: ProjectPatch): Promise<Project>;
+  /**
+   * Reserves the project's next ADR number atomically: one above both `atLeast` (the highest in
+   * the repo's index) and every number reserved before. Never hands out a number twice (ADR-0080).
+   */
+  reserveAdrNumber(projectId: string, atLeast: number): Promise<number>;
 
   /** Allocates the next key (e.g. "AI-7") and appends a `created` event. */
   createTicket(projectId: string, input: NewTicket, actor: EventActor): Promise<Ticket>;
@@ -354,6 +359,9 @@ export const NewRun = Run.pick({
   retryOf: true,
   planRunId: true,
   planPolicy: true,
+  touches: true,
+  reservedAdr: true,
+  syncRun: true,
 });
 export type NewRun = z.input<typeof NewRun>;
 
@@ -386,6 +394,8 @@ export const RunPatch = Run.pick({
   mergeAttemptedSha: true,
   mergeError: true,
   metrics: true,
+  syncRun: true,
+  prSync: true,
 }).partial();
 export type RunPatch = z.input<typeof RunPatch>;
 
@@ -399,6 +409,17 @@ export interface RunStore {
   listForTicket(projectId: string, ticketId: string): Promise<Run[]>;
   /** Runs in `queued` or `running` for the project. */
   listActive(projectId: string): Promise<Run[]>;
+  /**
+   * The project's runs whose `endedAt` is within [from, to], newest first (AI-70). Reads at most
+   * `limit` runs; an adapter may count other projects' runs toward it. `complete` is false when
+   * the cap was reached, so some runs may be missing.
+   */
+  listEndedBetween(
+    projectId: string,
+    from: string,
+    to: string,
+    limit: number,
+  ): Promise<{ runs: Run[]; complete: boolean }>;
   /**
    * Applies the patch atomically, only if the run's status is one of `from` and, for a patch
    * that sets `planDecision`, the run has none yet, and for one that sets `mergeAttemptedSha`, it
@@ -519,6 +540,11 @@ export interface CodeHost {
    * when the host refuses (conflict, branch rules, a moved head).
    */
   mergePullRequest(fullName: string, number: number, expectedHeadSha: string): Promise<void>;
+  /**
+   * Whether commit `head` already contains `base` (a branch or commit): true when `head` is
+   * ahead of it or the same. Null when the repo or a ref isn't known.
+   */
+  headContains(fullName: string, head: string, base: string): Promise<boolean | null>;
 }
 
 // ── CodeHostConnectionStore ──────────────────────────────────────────────────
@@ -589,3 +615,5 @@ export interface CostEvent {
 export interface Telemetry {
   recordCost(event: CostEvent): void;
 }
+
+export * from "./digest";

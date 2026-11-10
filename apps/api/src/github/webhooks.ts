@@ -17,6 +17,7 @@ import {
 } from "@andy/domain";
 import {
   WebhookPayloadError,
+  isBranchPush,
   isRecordedEvent,
   toCodeHostEvent,
   verifySignature,
@@ -51,6 +52,12 @@ export interface WebhookDeps {
   /** For the review gate (AI-34): reads PRs and checks, merges with the App's identity. */
   codeHost: CodeHost;
   runs: RunStore;
+  /**
+   * The default branch of the project's repo moved (AI-72): queue sync runs for open agent PRs.
+   * Called after a default-branch push and after a PR merges into it, on a redelivery too.
+   * Resolves false when the tick failed (it logs why). Must not throw.
+   */
+  onDefaultBranchMoved?: (projectId: string) => Promise<boolean>;
   now?: () => Date;
 }
 
@@ -115,6 +122,27 @@ export function registerGitHubWebhook(app: Hono<AuthEnv>, deps: WebhookDeps): vo
     }
   }
 
+  /**
+   * Main moved: a push to the default branch, or a PR merged into it (the same move, and the only
+   * one an App without the push event sees). Runs on redeliveries too: the tick is idempotent,
+   * so a failed one (answered 500, logged) can be redelivered from GitHub; any later tick (a run
+   * ending) also catches up, because each tick derives the stale PRs from the host again.
+   */
+  async function syncOnMove(record: CodeHostEvent, project: Project): Promise<boolean> {
+    const moved =
+      (record.kind === "push" && record.push.defaultBranch) ||
+      (record.kind === "pull_request" &&
+        record.action === "closed" &&
+        record.pullRequest.state === "merged" &&
+        record.pullRequest.intoDefaultBranch);
+    if (!moved || !deps.onDefaultBranchMoved) return true;
+    log("INFO", "default branch moved: syncing open agent PRs", {
+      deliveryId: record.deliveryId,
+      projectId: project.id,
+    });
+    return deps.onDefaultBranchMoved(project.id);
+  }
+
   app.post(
     WEBHOOK_PATH,
     bodyLimit({
@@ -154,6 +182,10 @@ export function registerGitHubWebhook(app: Hono<AuthEnv>, deps: WebhookDeps): vo
       } catch {
         return c.json({ error: "body is not JSON" }, 400);
       }
+      // Only branch moves are worth a record: tag pushes and deletions are dropped.
+      if (event === "push" && !isBranchPush(payload)) {
+        return c.json({ result: "ignored", reason: "ref" }, 202);
+      }
       const repo = webhookRepo(payload);
       const project = repo ? await repos.projectFor(repo) : null;
       if (!project) {
@@ -166,6 +198,10 @@ export function registerGitHubWebhook(app: Hono<AuthEnv>, deps: WebhookDeps): vo
           { event, deliveryId, projectId: project.id, receivedAt: now().toISOString() },
           payload,
         );
+        // Pushes to other branches (every agent push) aren't stored: only main moving matters.
+        if (record.kind === "push" && !record.push.defaultBranch) {
+          return c.json({ result: "ignored", reason: "branch" }, 202);
+        }
         const result = await deps.events.record(record);
         log("INFO", "webhook recorded", {
           event,
@@ -178,6 +214,9 @@ export function registerGitHubWebhook(app: Hono<AuthEnv>, deps: WebhookDeps): vo
         if (result === "recorded") {
           await moveTicket(record, project);
           await applyGate(record, project);
+        }
+        if (!(await syncOnMove(record, project))) {
+          return c.json({ error: "sync queueing failed; redeliver to retry" }, 500);
         }
         return c.json({ result }, 200);
       } catch (err) {

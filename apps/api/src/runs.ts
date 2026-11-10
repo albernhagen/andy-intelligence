@@ -142,6 +142,14 @@ const Report = z.object({
   pullRequest: z.string().max(500).nullable().optional(),
   /** Build: tooling or dependency files the change touches (flagged on the PR). */
   toolingFiles: z.array(z.string().max(300)).max(50).optional(),
+  /** Sync: the PR already contained the default branch, so the agent didn't run (AI-72). */
+  alreadyCurrent: z.boolean().optional(),
+  /** Sync: the merge commit the publish job pushed; RunService checks it went to the run's branch. */
+  headSha: z
+    .string()
+    .regex(/^[0-9a-f]{40}$/)
+    .nullable()
+    .optional(),
   /** The agent's last rate-limit event; parseRateLimits checks it, so a bad one can't lose the report. */
   rateLimits: z.unknown().optional(),
   /** Checked by parseUsage, so a bad one leaves the cost unknown instead of losing the report. */

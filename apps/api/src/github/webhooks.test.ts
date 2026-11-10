@@ -372,7 +372,7 @@ describe("GitHub webhook receiver", () => {
   });
 
   it("GivenAnEventWeDontRecord_WhenDelivered_Then202Ignored", async () => {
-    const res = await deliver({ event: "push" });
+    const res = await deliver({ event: "issues" });
     expect(res.status).toBe(202);
     expect(await res.json()).toEqual({ result: "ignored", reason: "event" });
   });

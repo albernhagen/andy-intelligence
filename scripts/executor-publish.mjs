@@ -7,8 +7,13 @@
 // shell, and are never printed. The token is masked, kept in memory and passed to git through
 // GIT_CONFIG_* env (not argv).
 //
-// Usage: executor-publish.mjs publish | drop-placeholders
+// Usage: executor-publish.mjs publish | sync | install-drift | drop-placeholders
+//   install-drift (sync merge step): NUL-separated paths on stdin; prints the install inputs among them.
 //   drop-placeholders (agent job, before the change is collected): env WORKSPACE, MANIFEST.
+//   sync (AI-72, ADR-0083; checkout at the PR head with history): env PATCH (may be absent),
+//   PROFILE, CODEOWNERS, RUN_ID, BRANCH, REPO, HEAD_SHA, MAIN_SHA, MERGE_TREE, CONTROL_PLANE_URL,
+//   the two ACTIONS_ID_TOKEN_* variables, RUNNER_TEMP, GITHUB_OUTPUT. Writes outputs `branch`,
+//   `head_sha` and `tooling_files` (JSON array).
 //   publish env: PATCH, PROFILE, CODEOWNERS (path or empty), RUN_ID, BRANCH, REPO, BASE, PROJECT_ID,
 //   TICKET_KEY, TICKET_TITLE, MODEL, REPORT (the agent's report JSON), CONTROL_PLANE_URL,
 //   ACTIONS_ID_TOKEN_REQUEST_URL, ACTIONS_ID_TOKEN_REQUEST_TOKEN, GITHUB_OUTPUT.
@@ -16,6 +21,7 @@
 import { Buffer } from "node:buffer";
 import { execFileSync } from "node:child_process";
 import { appendFileSync, lstatSync, readFileSync, realpathSync, unlinkSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { codeownersPatterns } from "./executor-profile.mjs";
@@ -143,6 +149,30 @@ export function toolingFiles(entries) {
 function expandBraces(glob) {
   const m = /^(.*)\{([^}]+)\}(.*)$/.exec(glob);
   return m ? m[2].split(",").map((alt) => `${m[1]}${alt}${m[3]}`) : [glob];
+}
+
+/**
+ * Files the dependency install (outside the sandbox) and the toolchain setup read (AI-72). A sync
+ * run installs from the merged tree, so these must be exactly as on the default branch: then the
+ * install sees only files a person merged, as a build run's does. Repo-relative globs.
+ */
+export const INSTALL_INPUT_GLOBS = [
+  "**/package.json",
+  "**/pnpm-lock.yaml",
+  "**/pnpm-workspace.yaml",
+  "**/.pnpmfile.cjs",
+  "**/.npmrc",
+  "**/.yarnrc*",
+  "**/package-lock.json",
+  "**/yarn.lock",
+  "**/.nvmrc",
+  "**/.node-version",
+];
+
+/** The changed paths (vs the default branch) that the install or toolchain setup reads. */
+export function installDrift(paths) {
+  const patterns = INSTALL_INPUT_GLOBS.map(globToRegExp);
+  return [...new Set(paths)].filter((p) => patterns.some((re) => re.test(p))).sort();
 }
 
 /**
@@ -398,6 +428,166 @@ async function json(res, what) {
   return res.json();
 }
 
+/** The run's one repo token from the control plane (ADR-0063), masked in the log. */
+async function repoToken({ env, fetchImpl, emit }) {
+  const audience = encodeURIComponent(env.CONTROL_PLANE_URL);
+  const oidc = (
+    await json(
+      await fetchImpl(`${env.ACTIONS_ID_TOKEN_REQUEST_URL}&audience=${audience}`, {
+        headers: { authorization: `bearer ${env.ACTIONS_ID_TOKEN_REQUEST_TOKEN}` },
+      }),
+      "the Actions OIDC token request",
+    )
+  ).value;
+  emit(`::add-mask::${oidc}`);
+  const { token } = await json(
+    await fetchImpl(`${env.CONTROL_PLANE_URL}/github/token`, {
+      method: "POST",
+      headers: { authorization: `Bearer ${oidc}`, "content-type": "application/json" },
+      body: JSON.stringify({ runId: env.RUN_ID }),
+    }),
+    "POST /github/token",
+  );
+  if (typeof token !== "string" || token === "")
+    throw new Error("POST /github/token gave no token");
+  emit(`::add-mask::${token}`);
+  return token;
+}
+
+/**
+ * Pushes `source` to the run's branch. Never forced: GitHub refuses a push that isn't a fast
+ * forward, so a branch that moved meanwhile is never overwritten. The credential goes to git
+ * through GIT_CONFIG_* env, not argv.
+ */
+function pushRef({ env, git, emit, token, source }) {
+  const basic = Buffer.from(`x-access-token:${token}`).toString("base64");
+  emit(`::add-mask::${basic}`);
+  git(
+    ["push", "--quiet", `https://github.com/${env.REPO}.git`, `${source}:refs/heads/${env.BRANCH}`],
+    {
+      GIT_CONFIG_COUNT: "1",
+      GIT_CONFIG_KEY_0: "http.https://github.com/.extraheader",
+      GIT_CONFIG_VALUE_0: `AUTHORIZATION: basic ${basic}`,
+    },
+  );
+}
+
+const SHA = /^[0-9a-f]{40}$/;
+
+/** Lines git writes around a conflict; a resolved file has none left at the start of a line. */
+const CONFLICT_MARKER = /^(<{7}|>{7})( |$)/m;
+
+/** Files of `paths` whose staged text still holds a conflict marker. */
+export function unresolvedFiles(paths, stagedText) {
+  return paths.filter((p) => {
+    const text = stagedText(p);
+    return text !== null && CONFLICT_MARKER.test(text);
+  });
+}
+
+/**
+ * A sync run's publish (AI-72, ADR-0083). In the project checkout at the PR head (with history),
+ * it repeats the executor's merge of the default branch commit, proves the result is the tree the
+ * agent started from (MERGE_TREE), applies the agent's patch (its conflict resolutions and fixes
+ * only) with the same path checks as a build, refuses leftover conflict markers, commits the merge
+ * with both parents and pushes it as a fast forward of the PR branch. Never rebases or forces.
+ */
+export async function publishSync({ env, git, fetch: fetchImpl = globalThis.fetch, emit, output }) {
+  const reasons = [];
+  if (!BRANCH.test(env.BRANCH ?? "")) reasons.push("unexpected branch name");
+  if (!RUN_ID.test(env.RUN_ID ?? "")) reasons.push("unexpected run id");
+  if (!REPO.test(env.REPO ?? "")) reasons.push("unexpected repository");
+  for (const name of ["HEAD_SHA", "MAIN_SHA", "MERGE_TREE"]) {
+    if (!SHA.test(env[name] ?? "")) reasons.push(`unexpected ${name}`);
+  }
+  if (reasons.length > 0) throw new PublishRefused(reasons);
+  if (git(["rev-parse", "HEAD"]).trim() !== env.HEAD_SHA) {
+    throw new PublishRefused(["the checkout isn't the PR head the run started from"]);
+  }
+
+  git(["config", "user.name", "andy-intelligence-control[bot]"]);
+  git(["config", "user.email", "andy-intelligence-control[bot]@users.noreply.github.com"]);
+  try {
+    git(["-c", "core.hooksPath=/dev/null", "merge", "--no-ff", "--no-commit", env.MAIN_SHA]);
+  } catch (err) {
+    // Exit 1 with conflicts is expected; anything else leaves no merge in progress.
+    if (!(err instanceof GitError)) throw err;
+  }
+  try {
+    git(["rev-parse", "-q", "--verify", "MERGE_HEAD"]);
+  } catch {
+    throw new PublishRefused(["git couldn't start the merge of the default branch"]);
+  }
+  const conflicted = git(["diff", "--name-only", "--diff-filter=U", "-z"])
+    .split("\0")
+    .filter((p) => p !== "");
+  git(["add", "-A"]);
+  const base = git(["write-tree"]).trim();
+  if (base !== env.MERGE_TREE) {
+    throw new PublishRefused(["the merge didn't reproduce the tree the agent started from"]);
+  }
+
+  // Check before anything is applied: the patch goes into a scratch index seeded with the merge
+  // tree (never the checkout or the real index), and its paths, modes and the conflicted files'
+  // final text are judged there. Only a patch that passes is applied for real.
+  const scratch = {
+    GIT_INDEX_FILE: join(env.RUNNER_TEMP || tmpdir(), `sync-check-${env.RUN_ID}.index`),
+  };
+  git(["read-tree", base], scratch);
+  if (env.PATCH) git(["apply", "--cached", "--binary", env.PATCH], scratch);
+  const entries = parseRaw(
+    git(["diff-index", "--cached", "--raw", "-z", "--no-renames", base], scratch),
+  );
+  const profile = JSON.parse(readFileSync(env.PROFILE, "utf8"));
+  let owners;
+  try {
+    owners = env.CODEOWNERS ? readFileSync(env.CODEOWNERS, "utf8") : "";
+  } catch {
+    owners = "";
+  }
+  // The agent's own edits meet the build's path checks; an empty change (a clean merge) is fine.
+  const refused = checkChange(entries, protectedGlobs(profile, owners)).filter(
+    (r) => r !== "the change is empty",
+  );
+  const stagedText = (path) => {
+    try {
+      return git(["show", `:${path}`], scratch);
+    } catch {
+      return null; // deleted in the resolution
+    }
+  };
+  for (const path of unresolvedFiles(conflicted, stagedText)) {
+    refused.push(`${path}: conflict markers left`);
+  }
+  if (refused.length > 0) throw new PublishRefused(refused);
+  // Allowed but flagged, as for a build (ADR-0063): the run records them and the gate vetoes them.
+  const tooling = toolingFiles(entries);
+  if (env.PATCH) git(["apply", "--index", "--binary", env.PATCH]);
+
+  const tree = git(["write-tree"]).trim();
+  const commit = git([
+    "commit-tree",
+    tree,
+    "-p",
+    env.HEAD_SHA,
+    "-p",
+    env.MAIN_SHA,
+    "-m",
+    `Merge the default branch into ${env.BRANCH}`,
+    "-m",
+    `Agent-Run: ${env.RUN_ID}`,
+  ]).trim();
+  const token = await repoToken({ env, fetchImpl, emit });
+  pushRef({ env, git, emit, token, source: commit });
+  output("branch", env.BRANCH);
+  output("head_sha", commit);
+  output("tooling_files", JSON.stringify(tooling));
+  emit(
+    `Pushed the merge to ${env.BRANCH}${conflicted.length ? ` (${conflicted.length} conflicted file(s) resolved)` : ""}.`,
+  );
+  return { branch: env.BRANCH, headSha: commit, conflicted, tooling };
+}
+
 /**
  * The whole publish job. `git` and `fetch` are injectable for tests; `emit` writes a workflow
  * command or log line; `output` a step output.
@@ -449,34 +639,8 @@ export async function publish({ env, git, fetch: fetchImpl = globalThis.fetch, e
   }
   if (staged()) git(["commit", "-q", "-m", message, "-m", trailer]);
 
-  const audience = encodeURIComponent(env.CONTROL_PLANE_URL);
-  const oidc = (
-    await json(
-      await fetchImpl(`${env.ACTIONS_ID_TOKEN_REQUEST_URL}&audience=${audience}`, {
-        headers: { authorization: `bearer ${env.ACTIONS_ID_TOKEN_REQUEST_TOKEN}` },
-      }),
-      "the Actions OIDC token request",
-    )
-  ).value;
-  emit(`::add-mask::${oidc}`);
-  const { token } = await json(
-    await fetchImpl(`${env.CONTROL_PLANE_URL}/github/token`, {
-      method: "POST",
-      headers: { authorization: `Bearer ${oidc}`, "content-type": "application/json" },
-      body: JSON.stringify({ runId: env.RUN_ID }),
-    }),
-    "POST /github/token",
-  );
-  if (typeof token !== "string" || token === "")
-    throw new Error("POST /github/token gave no token");
-  emit(`::add-mask::${token}`);
-  const basic = Buffer.from(`x-access-token:${token}`).toString("base64");
-  emit(`::add-mask::${basic}`);
-  git(["push", "--quiet", `https://github.com/${env.REPO}.git`, `HEAD:refs/heads/${env.BRANCH}`], {
-    GIT_CONFIG_COUNT: "1",
-    GIT_CONFIG_KEY_0: "http.https://github.com/.extraheader",
-    GIT_CONFIG_VALUE_0: `AUTHORIZATION: basic ${basic}`,
-  });
+  const token = await repoToken({ env, fetchImpl, emit });
+  pushRef({ env, git, emit, token, source: "HEAD" });
   output("branch", env.BRANCH);
   output("tooling_files", JSON.stringify(tooling));
   emit(`Pushed ${env.BRANCH}.`);
@@ -516,6 +680,15 @@ export async function publish({ env, git, fetch: fetchImpl = globalThis.fetch, e
 async function main() {
   const [command] = process.argv.slice(2);
   const env = process.env;
+  if (command === "install-drift") {
+    // The sync merge step (AI-72): NUL-separated paths on stdin (git diff -z against the default
+    // branch); prints the install inputs among them as a JSON array.
+    const paths = readFileSync(0, "utf8")
+      .split("\0")
+      .filter((p) => p !== "");
+    process.stdout.write(`${JSON.stringify(installDrift(paths))}\n`);
+    return;
+  }
   if (command === "drop-placeholders") {
     // The agent job's collect step, before `git add -A` (env WORKSPACE, MANIFEST).
     try {
@@ -530,11 +703,13 @@ async function main() {
     }
     return;
   }
-  if (command !== "publish") {
-    throw new Error("usage: executor-publish.mjs publish | drop-placeholders");
+  if (command !== "publish" && command !== "sync") {
+    throw new Error(
+      "usage: executor-publish.mjs publish | sync | install-drift | drop-placeholders",
+    );
   }
   try {
-    await publish({
+    await (command === "sync" ? publishSync : publish)({
       env,
       git: gitRunner(process.cwd()),
       emit: (line) => process.stdout.write(`${line}\n`),
@@ -547,6 +722,10 @@ async function main() {
   }
 }
 
-if (process.argv[1] === fileURLToPath(import.meta.url)) {
+// Real paths on both sides: a checkout under a symlinked temp directory still runs main().
+if (
+  process.argv[1] &&
+  realpathSync(process.argv[1]) === realpathSync(fileURLToPath(import.meta.url))
+) {
   main();
 }

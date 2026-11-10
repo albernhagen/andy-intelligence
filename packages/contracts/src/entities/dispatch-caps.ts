@@ -21,7 +21,13 @@ export const DispatchIdleReason = z.enum([
 export type DispatchIdleReason = z.infer<typeof DispatchIdleReason>;
 
 /** The dispatcher's last decision for a project: an idle reason, or what it found under the caps. */
-export const DispatchDecision = z.enum([...DispatchIdleReason.options, "started", "nothing_ready"]);
+export const DispatchDecision = z.enum([
+  ...DispatchIdleReason.options,
+  "started",
+  "nothing_ready",
+  // Ready tickets wait only because their touches overlap a run in flight (ADR-0080).
+  "touches_overlap",
+]);
 export type DispatchDecision = z.infer<typeof DispatchDecision>;
 
 export const LastDispatch = z.object({
