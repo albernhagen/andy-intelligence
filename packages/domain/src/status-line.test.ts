@@ -268,8 +268,16 @@ describe("syncWaiting", () => {
     }) as unknown as Run;
 
   it("GivenAPendingSyncThatWaits_WhenRead_ThenItSaysWhyAndTheReviewLineShowsIt", () => {
-    const runs = [build({ pendingSince: "2026-11-10T00:00:00Z", waiting: "pr_cap" })];
-    expect(syncWaiting(runs)).toBe("more open PRs than one check covers; next in line");
+    const runs = [build({ pendingSince: "2026-11-10T00:00:00Z", waiting: "paused" })];
+    expect(syncWaiting(runs)).toBe("dispatch is paused");
+    // Unchecked and builds-off waits hold no veto (no pendingSince) but still show.
+    expect(syncWaiting([build({ pendingSince: null, waiting: "pr_cap" })])).toBe(
+      "not checked yet (more open PRs than one check covers); next in line",
+    );
+    expect(syncWaiting([build({ pendingSince: null, waiting: "builds_off" })])).toBe(
+      "builds are off, so no sync runs",
+    );
+    expect(syncWaiting([build({ pendingSince: null, waiting: "global_cap" })])).toBeNull();
     expect(syncWaiting([build({ pendingSince: null, waiting: null })])).toBeNull();
     expect(line({ stage: "ready_for_review", syncWaiting: "dispatch is paused" }).text).toBe(
       "Ready for review · sync with main waits: dispatch is paused",

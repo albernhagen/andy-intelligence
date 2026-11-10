@@ -109,8 +109,8 @@ export const SYNC_WAIT_WORDS: Record<SyncWaitReason, string> = {
   quota_reserve: "quota is at the reserve",
   daily_cap: "3 syncs in 24 hours",
   ticket_busy: "another run of the ticket is in flight",
-  builds_off: "builds are off",
-  pr_cap: "more open PRs than one check covers; next in line",
+  builds_off: "builds are off, so no sync runs",
+  pr_cap: "not checked yet (more open PRs than one check covers); next in line",
 };
 
 /**
@@ -120,7 +120,10 @@ export const SYNC_WAIT_WORDS: Record<SyncWaitReason, string> = {
 export function syncWaiting(runs: readonly Run[]): string | null {
   const build = runs.find((r) => r.step === "build" && r.links.pullRequest);
   const state = build?.prSync;
-  return state?.pendingSince && state.waiting ? SYNC_WAIT_WORDS[state.waiting] : null;
+  if (!state?.waiting) return null;
+  // Unchecked (past the per-tick cap) and builds-off waits hold no veto, but are still news.
+  const shown = state.pendingSince || state.waiting === "pr_cap" || state.waiting === "builds_off";
+  return shown ? SYNC_WAIT_WORDS[state.waiting] : null;
 }
 
 function ordinal(n: number): string {

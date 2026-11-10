@@ -17,6 +17,7 @@ import {
   syncPendingFor,
   syncsInLastDay,
 } from "./sync-runs";
+import { syncWaiting } from "./status-line";
 import { WorkflowExecutor, buildOutput } from "./test-executor";
 
 const REPO = {
@@ -375,24 +376,53 @@ describe("SyncRuns", () => {
     expect((await runs.start(projectId, next.id, "build")).step).toBe("build");
   });
 
-  it("GivenMoreOpenPrsThanATickChecks_WhenMainMoves_ThenTheRestWaitVisiblyAndComeFirstNextTick", async () => {
+  it("Given25OpenPrsAndThe21stIsCurrent_WhenMainMoves_ThenThoseNotCheckedWaitVisiblyWithoutAVetoAndAreCheckedNext", async () => {
     await tracker.updateProject(projectId, { paused: true });
-    const prs = [];
-    for (let i = 0; i <= MAX_SYNC_PRS_PER_TICK; i++) {
-      const pr = await agentPr(100 + i, sha("a"));
-      prs.push(pr);
-    }
+    const prs: Awaited<ReturnType<typeof agentPr>>[] = [];
+    for (let i = 0; i < 25; i++) prs.push(await agentPr(100 + i, sha(i === 20 ? "b" : "a")));
     host.behindDefault.add(sha("a"));
-    expect(await sync.defaultBranchMoved(projectId)).toBe(true);
-    const states = await Promise.all(prs.map(async (p) => (await store.get(p.build.id))!.prSync));
-    expect(states.filter((st) => st?.waiting === "pr_cap")).toHaveLength(1);
-    expect(states.filter((st) => st?.waiting === "paused")).toHaveLength(MAX_SYNC_PRS_PER_TICK);
-    const capped = prs[states.findIndex((st) => st?.waiting === "pr_cap")]!;
-    expect((await store.get(capped.build.id))!.prSync?.pendingSince).not.toBeNull();
+    const state = async (i: number) => (await store.get(prs[i]!.build.id))!;
 
-    // Next tick: the PR past the cap is checked first (never checked before).
+    expect(await sync.defaultBranchMoved(projectId)).toBe(true);
+    for (let i = 0; i < MAX_SYNC_PRS_PER_TICK; i++) {
+      expect((await state(i)).prSync).toMatchObject({ waiting: "paused" });
+    }
+    // Past the cap: not checked, so no veto (the 21st is current), but the wait is visible.
+    for (let i = MAX_SYNC_PRS_PER_TICK; i < 25; i++) {
+      const run = await state(i);
+      expect(run.prSync).toMatchObject({ waiting: "pr_cap", pendingSince: null });
+      expect(syncPendingFor(run, [], now)).toBe(false);
+    }
+
+    // Next tick: the unchecked PRs go first; the current one clears, the others queue (paused).
     await sync.next(projectId);
-    expect((await store.get(capped.build.id))!.prSync).toMatchObject({ waiting: "paused" });
+    expect((await state(20)).prSync).toMatchObject({ waiting: null, pendingSince: null });
+    for (const i of [21, 22, 23, 24]) {
+      const run = await state(i);
+      expect(run.prSync).toMatchObject({ waiting: "paused" });
+      expect(syncPendingFor(run, [], now)).toBe(true);
+    }
+  });
+
+  it("GivenBuildsTurnedOffWithASyncQueued_WhenATickRuns_ThenTheReasonIsRecordedShownAndTheVetoDropped", async () => {
+    const pr = await agentPr(40, sha("a"));
+    host.behindDefault.add(sha("a"));
+    await tracker.updateProject(projectId, { paused: true });
+    await sync.defaultBranchMoved(projectId);
+    expect(syncPendingFor((await store.get(pr.build.id))!, [], now)).toBe(true);
+
+    await tracker.updateProject(projectId, { buildEnabled: false, paused: false });
+    await sync.next(projectId);
+    const build = (await store.get(pr.build.id))!;
+    expect(build.prSync).toMatchObject({ waiting: "builds_off", pendingSince: null });
+    expect(syncPendingFor(build, [], now)).toBe(false);
+    expect(syncWaiting([build])).toBe("builds are off, so no sync runs");
+    expect(await syncRunsOf(pr.ticket.id)).toEqual([]);
+
+    // Builds back on: the next tick checks it again and starts the sync.
+    await tracker.updateProject(projectId, { buildEnabled: true });
+    await sync.next(projectId);
+    expect(await syncRunsOf(pr.ticket.id)).toHaveLength(1);
   });
 
   it("GivenTheHostFailsDuringATick_WhenMainMoves_ThenItReportsFailureAndTheNextTickStartsTheSync", async () => {

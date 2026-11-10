@@ -182,7 +182,11 @@ export class SyncRuns {
     if (!this.host) return null;
     const project = await this.tracker.getProject(projectId);
     const repo = project?.repos[0];
-    if (!project?.buildEnabled || !repo) return null;
+    if (!project || !repo) return null;
+    if (!project.buildEnabled) {
+      await this.buildsOff(project);
+      return null;
+    }
     const all = await this.agentRuns(project);
     const rotate = all.length > MAX_SYNC_PRS_PER_TICK;
     const ordered = rotate
@@ -190,14 +194,13 @@ export class SyncRuns {
           (a.run.prSync?.checkedAt ?? "").localeCompare(b.run.prSync?.checkedAt ?? ""),
         )
       : all;
+    // Past the cap: not checked this tick, so not known to lack main. Recorded as unchecked
+    // (visible), with no new veto: only a veto from an earlier check that found it behind stays.
     for (const { run, ticket } of ordered.slice(MAX_SYNC_PRS_PER_TICK)) {
       const state = run.prSync ?? PR_SYNC_EMPTY;
       if (state.waiting !== "pr_cap") {
         log("INFO", "sync waits", { ticket: ticket.key, reason: "pr_cap" });
-        await this.setState(run, {
-          pendingSince: state.pendingSince ?? this.now().toISOString(),
-          waiting: "pr_cap",
-        });
+        await this.setState(run, { waiting: "pr_cap" });
       }
     }
     let quotaLevel: QuotaLevel | null = null;
@@ -254,6 +257,22 @@ export class SyncRuns {
     return first;
   }
 
+  /**
+   * Builds are off: no sync can start (a sync runs in the build sandbox), so none is wanted and
+   * the gate's veto is dropped; PRs that had a sync queued or waiting show `builds_off` until
+   * builds are back on, when the next tick checks them again. No host reads.
+   */
+  private async buildsOff(project: Project): Promise<void> {
+    for (const { run, ticket } of await this.agentRuns(project)) {
+      const state = run.prSync;
+      if (!state || (!state.pendingSince && (!state.waiting || state.waiting === "builds_off"))) {
+        continue;
+      }
+      log("INFO", "sync waits", { ticket: ticket.key, reason: "builds_off" });
+      await this.setState(run, { pendingSince: null, waiting: "builds_off" });
+    }
+  }
+
   /** Records why the PR's sync waits (once per change); the daily cap flags Andy once a day. */
   private async wait(
     run: Run,
@@ -265,9 +284,19 @@ export class SyncRuns {
     log("INFO", "sync waits", { ticket: ticket.key, reason });
     const today = this.now().toISOString().slice(0, 10);
     const flag = reason === "daily_cap" && state.capFlaggedDay !== today;
-    if (state.waiting === reason && state.pendingSince && !flag && !checked.checkedAt) return;
+    // A sync that can't come while builds are off mustn't hold the gate's veto (see buildsOff).
+    const pendingSince =
+      reason === "builds_off" ? null : (state.pendingSince ?? this.now().toISOString());
+    if (
+      state.waiting === reason &&
+      state.pendingSince === pendingSince &&
+      !flag &&
+      !checked.checkedAt
+    ) {
+      return;
+    }
     await this.setState(run, {
-      pendingSince: state.pendingSince ?? this.now().toISOString(),
+      pendingSince,
       waiting: reason,
       ...checked,
       ...(flag ? { capFlaggedDay: today } : {}),

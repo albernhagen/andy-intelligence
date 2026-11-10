@@ -291,6 +291,20 @@ describe("sync run flow", () => {
     expect(w.t.host.merges).toEqual([]);
   });
 
+  it("GivenASyncQueued_WhenAndyTurnsBuildsOff_ThenTheVetoDropsAndTheReasonIsRecorded", async () => {
+    const w = await world("all");
+    const pr = await w.agentPr(50, sha("a"));
+    w.t.host.behindDefault.add(sha("a"));
+    await w.send(w.projectPath, "PATCH", { paused: true });
+    await w.pushMain(sha("1"));
+    expect((await pr.build()).prSync).toMatchObject({ waiting: "paused" });
+
+    await w.send(w.projectPath, "PATCH", { buildEnabled: false });
+    expect((await pr.build()).prSync).toMatchObject({ waiting: "builds_off", pendingSince: null });
+    await pr.prHook("opened");
+    expect((await pr.build()).gateReasons).not.toContain("sync_pending");
+  });
+
   it("GivenThreeSyncsInADay_WhenMainMovesAgain_ThenNoFourthStartsAndAndyIsFlagged", async () => {
     const w = await world();
     const pr = await w.agentPr(40, sha("a"));
