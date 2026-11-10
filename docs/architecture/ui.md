@@ -7,9 +7,10 @@ Overview and reading map: [ARCHITECTURE.md](ARCHITECTURE.md). Section numbers ma
 ### 7.5 UI (React + Vite + shadcn/ui + Tailwind, TanStack Router/Query/Table, dnd-kit, shadcn charts)
 v1.x screens:
 - **Needs-you inbox** (questions, gate reviews, pending config changes, quota warnings) — home screen.
-- **Phone** (M7: Mobile, ADR-0052): the SPA installed from Safari as a web app, phone layout for the inbox, ticket detail, releases and the quota banner; push notifications deep-link to the item; answer, approve plan or PR, promote, pause dispatch from the phone.
+- **Phone** (M7: Mobile, ADR-0052): the SPA installed from Safari, phone layout for the inbox, ticket detail, releases and quota banner; push deep-links to the item; answer, approve, promote, pause from the phone.
 - **Quota & spend** (per provider gauges with reset times; paid spend vs caps; banner on warn/pause/unknown; built: header gauge, banner).
 - **Project settings** (AI-46, built): `/p/:projectId/settings`, a header link; each switch explained, saved by the project PATCH. `/projects` opens the current project's; `/projects/new` adds one.
+- **Digest** (AI-70, ADR-0081): `/p/:projectId/digest`, header link in a project scope.
 - **Tickets** — M1: board, ticket detail with history and linked runs/PRs/cost. M3 (ADR-0059): status on cards, story panel, command palette. M5: filter and group by project. M4: epic grouping, overrides editing.
 - **Run detail** — M1: inside ticket detail. M4: own screen (metadata, cost, outcome, links to Action log / Jules session / PR).
 - **Config** (providers, harnesses, models, tiers, policies; audit log with revert; pending approvals).
@@ -23,7 +24,7 @@ v1.x screens:
 - Moves: one button per move in `TRANSITIONS` (`packages/domain`), plus "Force move…" (recorded). Cancel (optional reason), Archive/Unarchive. The API enforces rules; errors show inline.
 - Client: `openapi-fetch` typed by `src/lib/api.gen.ts`, generated from `createApp`'s OpenAPI document (`gen:api`; a test fails when stale). Every write refetches all queries.
 - Tests render the UI against the in-process API.
-- Not yet: cost panels, kill switch item.
+- Not yet: the kill switch item.
 
 **Built in AI-26: Design source and app shell (M3, ADR-0059):**
 - `apps/web/design.md` and the tokens in `index.css` (status roles `attention`, `running`, `success`; a `Badge` variant per marker).
