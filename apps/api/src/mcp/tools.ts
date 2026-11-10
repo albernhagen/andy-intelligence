@@ -25,6 +25,7 @@ import { registerDispatchTools } from "./tools-dispatch";
 import { registerWorkerTools } from "./tools-worker";
 import { listNeedsMe, registerTicketTools, statusLineOf } from "./tools-tickets";
 import { registerScoreTools, withStartScore } from "./tools-scores";
+import { registerSettingsTools } from "./tools-settings";
 
 /**
  * MCP core tools (M1.4: MCP core tools; `refine` from M1.7: Refinement; `build` and
@@ -450,6 +451,7 @@ export function registerTools(server: McpServer, deps: ToolDeps): void {
   );
 
   registerScoreTools(server, tracker, run);
+  registerSettingsTools(server, tracker, run);
 }
 
 async function statusWithCost(service: TicketService, runs: RunService, key: string) {

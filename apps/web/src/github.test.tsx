@@ -49,7 +49,7 @@ describe("GitHub settings UI", () => {
     sessionStorage.setItem(STATE_KEY, "s1");
     const { router } = renderApp("/settings/github/callback?code=abc123&state=s1");
     await screen.findByText("Installed on");
-    await router.navigate({ to: "/projects" });
+    await router.navigate({ to: "/projects/new" });
     await waitFor(() =>
       expect(
         document.querySelector('#installed-repos option[value="albernhagen/andy-intelligence"]'),

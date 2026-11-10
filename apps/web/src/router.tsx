@@ -11,7 +11,8 @@ import { BoardPage } from "@/pages/BoardPage";
 import { PickProjectPage } from "@/pages/PickProjectPage";
 import { GitHubCallbackPage, GitHubPage } from "@/pages/GitHubPage";
 import { InboxPage } from "@/pages/InboxPage";
-import { ProjectsPage } from "@/pages/ProjectsPage";
+import { NewProjectPage, ProjectsPage } from "@/pages/ProjectsPage";
+import { ProjectSettingsPage } from "@/pages/ProjectSettingsPage";
 import { TicketPage } from "@/pages/TicketPage";
 
 const rootRoute = createRootRoute({
@@ -47,7 +48,13 @@ const routeTree = rootRoute.addChildren([
   }),
   createRoute({ getParentRoute: () => rootRoute, path: "/all/inbox", component: InboxPage }),
   createRoute({ getParentRoute: () => rootRoute, path: "/all/board", component: PickProjectPage }),
+  // `/projects` opens the current project's settings, or offers a first project (AI-46).
   createRoute({ getParentRoute: () => rootRoute, path: "/projects", component: ProjectsPage }),
+  createRoute({
+    getParentRoute: () => rootRoute,
+    path: "/projects/new",
+    component: NewProjectPage,
+  }),
   boardRoute.addChildren([
     // The story panel opens over the board, in its <Outlet /> (ADR-0059: UX foundation).
     createRoute({ getParentRoute: () => boardRoute, path: "t/$ticketRef", component: TicketPage }),
@@ -56,6 +63,11 @@ const routeTree = rootRoute.addChildren([
     getParentRoute: () => rootRoute,
     path: "/p/$projectId/inbox",
     component: InboxPage,
+  }),
+  createRoute({
+    getParentRoute: () => rootRoute,
+    path: "/p/$projectId/settings",
+    component: ProjectSettingsPage,
   }),
   createRoute({ getParentRoute: () => rootRoute, path: "/settings/github", component: GitHubPage }),
   createRoute({
