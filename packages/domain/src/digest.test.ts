@@ -111,6 +111,34 @@ describe("buildDigest", () => {
     expect(d.totals).toMatchObject({ runs: 1, failedRuns: 1 });
   });
 
+  it("GivenASyncRunThatStoppedOnAConflict_WhenBuilt_ThenASyncStoppedExceptionNamesThePrAndFiles", () => {
+    const stopped = run({
+      step: "sync",
+      status: "succeeded",
+      endedAt: IN,
+      syncRun: {
+        buildRunId: "b1",
+        pullRequest: "https://github.com/albernhagen/andy-intelligence/pull/7",
+        number: 7,
+        branch: "agent/AI-1/b1",
+        headSha: "a".repeat(40),
+        outcome: "conflict_unresolved",
+        pushedSha: null,
+        conflictFiles: ["a.ts", "b.ts"],
+        reason: "both change the order",
+      },
+    });
+    const d = buildDigest(WINDOW, data({ tickets: [ticket(1)], endedRuns: [stopped] }));
+    expect(d.exceptions).toContainEqual(
+      expect.objectContaining({
+        kind: "sync_stopped",
+        ticketKey: "AI-1",
+        prNumber: 7,
+        reason: "Sync with main stopped on PR #7 (a conflict it couldn't resolve): a.ts, b.ts",
+      }),
+    );
+  });
+
   it("GivenAPrClosedUnmerged_WhenBuilt_ThenPrClosedException", () => {
     const d = buildDigest(
       WINDOW,

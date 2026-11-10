@@ -87,6 +87,7 @@ export function buildDigest(window: DigestWindow, data: DigestData): Digest {
   const prs = pullRequestsInWindow(data, inWindow);
   const exceptions: DigestException[] = [
     ...failedRuns(data, byId),
+    ...syncStops(data, byId),
     ...prs.filter((p) => p.state === "closed").map((p) => prClosed(p)),
     ...outcomes(prs),
     ...reviewBlockers(data, byId, inWindow, live),
@@ -146,6 +147,29 @@ function failedRuns(data: DigestData, byId: Map<string, Ticket>): DigestExceptio
         at: r.endedAt,
       };
     });
+}
+
+/** Sync runs that ended in the window on a conflict or failing checks (AI-72, ADR-0083). */
+function syncStops(data: DigestData, byId: Map<string, Ticket>): DigestException[] {
+  return data.endedRuns.flatMap((r): DigestException[] => {
+    const outcome = r.syncRun?.outcome;
+    if (r.step !== "sync" || (outcome !== "conflict_unresolved" && outcome !== "checks_failed")) {
+      return [];
+    }
+    const files = r.syncRun!.conflictFiles;
+    const named = files.length > 0 ? `: ${clip(files.join(", "))}` : "";
+    const why =
+      outcome === "conflict_unresolved" ? "a conflict it couldn't resolve" : "checks failed";
+    return [
+      {
+        kind: "sync_stopped",
+        ...label(r.ticketId ? byId.get(r.ticketId) : undefined),
+        prNumber: r.syncRun!.number,
+        reason: `Sync with main stopped on PR #${r.syncRun!.number} (${why})${named}`,
+        at: r.endedAt,
+      },
+    ];
+  });
 }
 
 interface PrInWindow {

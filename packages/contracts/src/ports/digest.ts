@@ -28,6 +28,8 @@ export const DigestExceptionKind = z.enum([
   "blocked",
   "dispatch_idle",
   "quota_reserve",
+  // A sync run stopped on a conflict or failing checks (AI-72, ADR-0083).
+  "sync_stopped",
 ]);
 export type DigestExceptionKind = z.infer<typeof DigestExceptionKind>;
 

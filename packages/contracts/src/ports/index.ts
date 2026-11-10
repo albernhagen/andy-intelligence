@@ -361,6 +361,7 @@ export const NewRun = Run.pick({
   planPolicy: true,
   touches: true,
   reservedAdr: true,
+  syncRun: true,
 });
 export type NewRun = z.input<typeof NewRun>;
 
@@ -393,6 +394,8 @@ export const RunPatch = Run.pick({
   mergeAttemptedSha: true,
   mergeError: true,
   metrics: true,
+  syncRun: true,
+  prSync: true,
 }).partial();
 export type RunPatch = z.input<typeof RunPatch>;
 
@@ -537,6 +540,11 @@ export interface CodeHost {
    * when the host refuses (conflict, branch rules, a moved head).
    */
   mergePullRequest(fullName: string, number: number, expectedHeadSha: string): Promise<void>;
+  /**
+   * Whether commit `head` already contains `base` (a branch or commit): true when `head` is
+   * ahead of it or the same. Null when the repo or a ref isn't known.
+   */
+  headContains(fullName: string, head: string, base: string): Promise<boolean | null>;
 }
 
 // ── CodeHostConnectionStore ──────────────────────────────────────────────────

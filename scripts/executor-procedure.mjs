@@ -4,7 +4,8 @@
 // prompt, and the `--json-schema` argument from <step>.schema.json when there is one.
 //
 // Env: STEP (validated by the context job), RUN_PROMPT (the run's prompt; untrusted ticket text),
-// PROCEDURES_DIR, GITHUB_OUTPUT. Appends `prompt` and, with a schema, `schema_args` outputs.
+// PROCEDURES_DIR, GITHUB_OUTPUT, and for sync runs SYNC_CONFLICTS_FILE (a file of NUL-separated
+// paths the executor's merge left conflicted; AI-72). Appends `prompt` and, with a schema, `schema_args` outputs.
 import { randomBytes } from "node:crypto";
 import { appendFileSync, existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
@@ -36,6 +37,26 @@ export function schemaArgs(schemaText) {
   return `--json-schema '${compact}'`;
 }
 
+/** Most conflicted paths named in a sync prompt; the agent finds the rest with git grep. */
+export const MAX_LISTED_CONFLICTS = 50;
+
+/**
+ * A sync run's prompt with the files the executor's merge left conflicted (AI-72). Paths are repo
+ * data: one per line, control characters dropped, capped in count and length.
+ */
+export function withConflicts(runPrompt, conflicts) {
+  const paths = (conflicts ?? "")
+    .split("\0")
+    .map((p) => [...p].filter((c) => c.charCodeAt(0) > 0x1f && c !== "\u007f").join(""))
+    .map((p) => p.slice(0, 300))
+    .filter((p) => p !== "");
+  if (paths.length === 0) return `${runPrompt}\n\nThe merge left no conflicts.`;
+  const listed = paths.slice(0, MAX_LISTED_CONFLICTS).map((p) => `- ${p}`);
+  if (paths.length > MAX_LISTED_CONFLICTS)
+    listed.push(`- … and ${paths.length - MAX_LISTED_CONFLICTS} more`);
+  return `${runPrompt}\n\nFiles with conflict markers after the merge:\n${listed.join("\n")}`;
+}
+
 /** Reads the step's files; null where a file doesn't exist. */
 export function loadStep(dir, step) {
   if (!STEP.test(step)) throw new Error(`invalid step "${step}"`);
@@ -61,9 +82,19 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
   const step = process.env.STEP ?? "";
   try {
     const files = loadStep(process.env.PROCEDURES_DIR ?? "", step);
+    const runPrompt = process.env.RUN_PROMPT ?? "";
+    const conflictsFile = process.env.SYNC_CONFLICTS_FILE ?? "";
     appendFileSync(
       process.env.GITHUB_OUTPUT ?? "/dev/stdout",
-      outputs(files, process.env.RUN_PROMPT ?? ""),
+      outputs(
+        files,
+        step === "sync"
+          ? withConflicts(
+              runPrompt,
+              conflictsFile && existsSync(conflictsFile) ? readFileSync(conflictsFile, "utf8") : "",
+            )
+          : runPrompt,
+      ),
     );
     process.stdout.write(
       `Step ${step}: procedure ${files.procedure === null ? "no" : "yes"}, schema ${files.schema === null ? "no" : "yes"}.\n`,

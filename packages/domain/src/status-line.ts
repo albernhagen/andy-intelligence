@@ -34,6 +34,8 @@ export interface StatusInput {
   worker?: Worker;
   /** The in-flight ticket whose touches a Ready ticket overlaps (ADR-0080); null or absent: none. */
   overlaps?: string | null;
+  /** Why the last sync run stopped (AI-72), shown while the ticket waits for Andy; null: none. */
+  syncStopped?: string | null;
 }
 
 export function statusLine(s: StatusInput, now: Date): { text: string; tone: StatusTone } {
@@ -51,7 +53,12 @@ function mainStatus(s: StatusInput, now: Date): { text: string; tone: StatusTone
     const n = s.openQuestions;
     return { text: `Waiting for you: ${n} question${n === 1 ? "" : "s"}`, tone: "attention" };
   }
-  if (s.needsAttention) return { text: "Waiting for you", tone: "attention" };
+  if (s.needsAttention) {
+    return {
+      text: s.syncStopped ? `Waiting for you: ${s.syncStopped}` : "Waiting for you",
+      tone: "attention",
+    };
+  }
   // The same words as the run marker on the board card (`runLabel`).
   if (s.run) return { text: join(runLabel(s.run, now.getTime()), pr), tone: "running" };
   if (s.blockedBy.length > 0) return { text: `Blocked by ${list(s.blockedBy)}`, tone: "danger" };
@@ -142,6 +149,7 @@ const RUN_VERBS: Record<RunStep, string> = {
   review: "Reviewing",
   verify: "Verifying",
   scout: "Scouting",
+  sync: "Syncing with main",
 };
 
 /** "Refining · 3 min" while running; "Refine queued · 1 min" before it starts. */
@@ -170,6 +178,29 @@ export interface TicketFacts {
   inFlight?: readonly InFlightRun[];
 }
 
+const SYNC_STOP_FILES = 3;
+
+/**
+ * "sync with main stopped on a conflict in a.ts, b.ts" when the newest sync run of the ticket's
+ * newest build stopped (AI-72); null otherwise. `runs` is newest first.
+ */
+export function syncStopped(runs: readonly Run[]): string | null {
+  const sync = runs.find((r) => r.step === "sync" && r.syncRun?.outcome != null);
+  const outcome = sync?.syncRun?.outcome;
+  if (outcome !== "conflict_unresolved" && outcome !== "checks_failed") return null;
+  // A newer build (a rework) opened another PR: that stop belongs to the old one.
+  const build = runs.find((r) => r.step === "build");
+  if (build && build.id !== sync!.syncRun!.buildRunId) return null;
+  const files = sync!.syncRun!.conflictFiles;
+  const named =
+    files.length === 0
+      ? ""
+      : ` in ${files.slice(0, SYNC_STOP_FILES).join(", ")}${files.length > SYNC_STOP_FILES ? ", …" : ""}`;
+  return outcome === "conflict_unresolved"
+    ? `sync with main stopped on a conflict${named}`
+    : `sync with main stopped: checks failed after the merge${named}`;
+}
+
 /** One ticket's status line: the UI's story panel and MCP `status` both call this (AI-40). */
 export function ticketStatusLine(ticket: Ticket, facts: TicketFacts, now: Date) {
   return statusLine(
@@ -185,6 +216,7 @@ export function ticketStatusLine(ticket: Ticket, facts: TicketFacts, now: Date) 
       queuePosition: queuePosition(ticket, facts.tickets),
       worker: facts.worker,
       overlaps: ticket.stage === "ready" ? overlappingKey(ticket, facts.inFlight ?? []) : null,
+      syncStopped: syncStopped(facts.runs),
     },
     now,
   );

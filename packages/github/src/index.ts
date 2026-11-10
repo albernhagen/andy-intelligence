@@ -19,6 +19,7 @@ export {
 export {
   RECORDED_EVENTS,
   WebhookPayloadError,
+  isBranchPush,
   isRecordedEvent,
   toCodeHostEvent,
   verifySignature,

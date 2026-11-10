@@ -1,0 +1,59 @@
+{
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "outcome": {
+      "type": "string",
+      "enum": ["synced", "conflict_unresolved", "checks_failed"],
+      "description": "synced: every conflict resolved and the checks pass. Otherwise why you stopped."
+    },
+    "summary": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 4000,
+      "description": "What conflicted and how you resolved it, markdown, at most 150 words."
+    },
+    "conflictFiles": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 300
+      },
+      "maxItems": 50,
+      "description": "Every file that had conflict markers, resolved or not, repo-relative."
+    },
+    "reason": {
+      "type": "string",
+      "maxLength": 2000,
+      "description": "Empty when synced; else what clashes or what fails, for Andy."
+    },
+    "verification": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "command": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200,
+            "description": "The exact command you ran."
+          },
+          "passed": {
+            "type": "boolean"
+          },
+          "output": {
+            "type": "string",
+            "maxLength": 2000,
+            "description": "The last lines of its output."
+          }
+        },
+        "required": ["command", "passed", "output"]
+      },
+      "maxItems": 10,
+      "description": "The checks you ran last, after your final edit."
+    }
+  },
+  "required": ["outcome", "summary", "conflictFiles", "reason", "verification"]
+}

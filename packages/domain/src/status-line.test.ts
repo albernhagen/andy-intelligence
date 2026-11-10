@@ -1,11 +1,12 @@
 import { describe, expect, it } from "vitest";
-import type { Ticket, TicketEvent } from "@andy/contracts";
+import type { Run, Ticket, TicketEvent } from "@andy/contracts";
 import {
   latestPullRequest,
   openBlockerKeys as openBlockers,
   queuePosition,
   statusLine,
   type StatusInput,
+  syncStopped,
 } from "./status-line";
 
 const NOW = new Date("2026-11-05T12:00:00.000Z");
@@ -25,6 +26,15 @@ const base: StatusInput = {
 const line = (s: Partial<StatusInput>) => statusLine({ ...base, ...s }, NOW);
 
 describe("statusLine", () => {
+  it("GivenASyncThatStopped_WhenTheTicketWaitsForAndy_ThenTheLineSaysWhyAndWhere", () => {
+    expect(
+      line({ needsAttention: true, syncStopped: "sync with main stopped on a conflict in a.ts" }),
+    ).toEqual({
+      text: "Waiting for you: sync with main stopped on a conflict in a.ts",
+      tone: "attention",
+    });
+  });
+
   it("GivenOpenQuestions_WhenComputed_ThenItWaitsForAndy", () => {
     expect(line({ openQuestions: 2, needsAttention: true })).toEqual({
       text: "Waiting for you: 2 questions",
@@ -223,5 +233,26 @@ describe("status inputs", () => {
     const all = [blocker, blocked, free];
     expect(queuePosition(free, all)).toBe(1);
     expect(queuePosition(blocked, all)).toBeNull();
+  });
+});
+
+describe("syncStopped", () => {
+  const sync = (outcome: string, buildRunId = "b1", files = ["a.ts", "b.ts", "c.ts", "d.ts"]) =>
+    ({ step: "sync", syncRun: { outcome, buildRunId, conflictFiles: files } }) as unknown as Run;
+  const build = (id: string) => ({ step: "build", id }) as unknown as Run;
+
+  it("GivenTheNewestSyncStopped_WhenRead_ThenItNamesTheOutcomeAndUpToThreeFiles", () => {
+    expect(syncStopped([sync("conflict_unresolved"), build("b1")])).toBe(
+      "sync with main stopped on a conflict in a.ts, b.ts, c.ts, …",
+    );
+    expect(syncStopped([sync("checks_failed", "b1", []), build("b1")])).toBe(
+      "sync with main stopped: checks failed after the merge",
+    );
+  });
+
+  it("GivenASyncedRunOrAStopOnAnOlderPr_WhenRead_ThenNull", () => {
+    expect(syncStopped([sync("synced"), build("b1")])).toBeNull();
+    expect(syncStopped([build("b2"), sync("conflict_unresolved", "b1")])).toBeNull();
+    expect(syncStopped([])).toBeNull();
   });
 });

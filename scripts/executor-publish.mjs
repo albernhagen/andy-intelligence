@@ -7,8 +7,11 @@
 // shell, and are never printed. The token is masked, kept in memory and passed to git through
 // GIT_CONFIG_* env (not argv).
 //
-// Usage: executor-publish.mjs publish | drop-placeholders
+// Usage: executor-publish.mjs publish | sync | drop-placeholders
 //   drop-placeholders (agent job, before the change is collected): env WORKSPACE, MANIFEST.
+//   sync (AI-72, ADR-0083; checkout at the PR head with history): env PATCH (may be absent),
+//   PROFILE, CODEOWNERS, RUN_ID, BRANCH, REPO, HEAD_SHA, MAIN_SHA, MERGE_TREE, CONTROL_PLANE_URL,
+//   the two ACTIONS_ID_TOKEN_* variables, GITHUB_OUTPUT. Writes outputs `branch` and `head_sha`.
 //   publish env: PATCH, PROFILE, CODEOWNERS (path or empty), RUN_ID, BRANCH, REPO, BASE, PROJECT_ID,
 //   TICKET_KEY, TICKET_TITLE, MODEL, REPORT (the agent's report JSON), CONTROL_PLANE_URL,
 //   ACTIONS_ID_TOKEN_REQUEST_URL, ACTIONS_ID_TOKEN_REQUEST_TOKEN, GITHUB_OUTPUT.
@@ -398,6 +401,156 @@ async function json(res, what) {
   return res.json();
 }
 
+/** The run's one repo token from the control plane (ADR-0063), masked in the log. */
+async function repoToken({ env, fetchImpl, emit }) {
+  const audience = encodeURIComponent(env.CONTROL_PLANE_URL);
+  const oidc = (
+    await json(
+      await fetchImpl(`${env.ACTIONS_ID_TOKEN_REQUEST_URL}&audience=${audience}`, {
+        headers: { authorization: `bearer ${env.ACTIONS_ID_TOKEN_REQUEST_TOKEN}` },
+      }),
+      "the Actions OIDC token request",
+    )
+  ).value;
+  emit(`::add-mask::${oidc}`);
+  const { token } = await json(
+    await fetchImpl(`${env.CONTROL_PLANE_URL}/github/token`, {
+      method: "POST",
+      headers: { authorization: `Bearer ${oidc}`, "content-type": "application/json" },
+      body: JSON.stringify({ runId: env.RUN_ID }),
+    }),
+    "POST /github/token",
+  );
+  if (typeof token !== "string" || token === "")
+    throw new Error("POST /github/token gave no token");
+  emit(`::add-mask::${token}`);
+  return token;
+}
+
+/**
+ * Pushes `source` to the run's branch. Never forced: GitHub refuses a push that isn't a fast
+ * forward, so a branch that moved meanwhile is never overwritten. The credential goes to git
+ * through GIT_CONFIG_* env, not argv.
+ */
+function pushRef({ env, git, emit, token, source }) {
+  const basic = Buffer.from(`x-access-token:${token}`).toString("base64");
+  emit(`::add-mask::${basic}`);
+  git(
+    ["push", "--quiet", `https://github.com/${env.REPO}.git`, `${source}:refs/heads/${env.BRANCH}`],
+    {
+      GIT_CONFIG_COUNT: "1",
+      GIT_CONFIG_KEY_0: "http.https://github.com/.extraheader",
+      GIT_CONFIG_VALUE_0: `AUTHORIZATION: basic ${basic}`,
+    },
+  );
+}
+
+const SHA = /^[0-9a-f]{40}$/;
+
+/** Lines git writes around a conflict; a resolved file has none left at the start of a line. */
+const CONFLICT_MARKER = /^(<{7}|>{7})( |$)/m;
+
+/** Files of `paths` whose staged text still holds a conflict marker. */
+export function unresolvedFiles(paths, stagedText) {
+  return paths.filter((p) => {
+    const text = stagedText(p);
+    return text !== null && CONFLICT_MARKER.test(text);
+  });
+}
+
+/**
+ * A sync run's publish (AI-72, ADR-0083). In the project checkout at the PR head (with history),
+ * it repeats the executor's merge of the default branch commit, proves the result is the tree the
+ * agent started from (MERGE_TREE), applies the agent's patch (its conflict resolutions and fixes
+ * only) with the same path checks as a build, refuses leftover conflict markers, commits the merge
+ * with both parents and pushes it as a fast forward of the PR branch. Never rebases or forces.
+ */
+export async function publishSync({ env, git, fetch: fetchImpl = globalThis.fetch, emit, output }) {
+  const reasons = [];
+  if (!BRANCH.test(env.BRANCH ?? "")) reasons.push("unexpected branch name");
+  if (!RUN_ID.test(env.RUN_ID ?? "")) reasons.push("unexpected run id");
+  if (!REPO.test(env.REPO ?? "")) reasons.push("unexpected repository");
+  for (const name of ["HEAD_SHA", "MAIN_SHA", "MERGE_TREE"]) {
+    if (!SHA.test(env[name] ?? "")) reasons.push(`unexpected ${name}`);
+  }
+  if (reasons.length > 0) throw new PublishRefused(reasons);
+  if (git(["rev-parse", "HEAD"]).trim() !== env.HEAD_SHA) {
+    throw new PublishRefused(["the checkout isn't the PR head the run started from"]);
+  }
+
+  git(["config", "user.name", "andy-intelligence-control[bot]"]);
+  git(["config", "user.email", "andy-intelligence-control[bot]@users.noreply.github.com"]);
+  try {
+    git(["-c", "core.hooksPath=/dev/null", "merge", "--no-ff", "--no-commit", env.MAIN_SHA]);
+  } catch (err) {
+    // Exit 1 with conflicts is expected; anything else leaves no merge in progress.
+    if (!(err instanceof GitError)) throw err;
+  }
+  try {
+    git(["rev-parse", "-q", "--verify", "MERGE_HEAD"]);
+  } catch {
+    throw new PublishRefused(["git couldn't start the merge of the default branch"]);
+  }
+  const conflicted = git(["diff", "--name-only", "--diff-filter=U", "-z"])
+    .split("\0")
+    .filter((p) => p !== "");
+  git(["add", "-A"]);
+  const base = git(["write-tree"]).trim();
+  if (base !== env.MERGE_TREE) {
+    throw new PublishRefused(["the merge didn't reproduce the tree the agent started from"]);
+  }
+
+  let entries = [];
+  if (env.PATCH) {
+    git(["apply", "--index", "--binary", env.PATCH]);
+    entries = parseRaw(git(["diff-index", "--cached", "--raw", "-z", "--no-renames", base]));
+  }
+  const profile = JSON.parse(readFileSync(env.PROFILE, "utf8"));
+  let owners;
+  try {
+    owners = env.CODEOWNERS ? readFileSync(env.CODEOWNERS, "utf8") : "";
+  } catch {
+    owners = "";
+  }
+  // The agent's own edits meet the build's path checks; an empty change (a clean merge) is fine.
+  const refused = checkChange(entries, protectedGlobs(profile, owners)).filter(
+    (r) => r !== "the change is empty",
+  );
+  const stagedText = (path) => {
+    try {
+      return git(["show", `:${path}`]);
+    } catch {
+      return null; // deleted in the resolution
+    }
+  };
+  for (const path of unresolvedFiles(conflicted, stagedText)) {
+    refused.push(`${path}: conflict markers left`);
+  }
+  if (refused.length > 0) throw new PublishRefused(refused);
+
+  const tree = git(["write-tree"]).trim();
+  const commit = git([
+    "commit-tree",
+    tree,
+    "-p",
+    env.HEAD_SHA,
+    "-p",
+    env.MAIN_SHA,
+    "-m",
+    `Merge the default branch into ${env.BRANCH}`,
+    "-m",
+    `Agent-Run: ${env.RUN_ID}`,
+  ]).trim();
+  const token = await repoToken({ env, fetchImpl, emit });
+  pushRef({ env, git, emit, token, source: commit });
+  output("branch", env.BRANCH);
+  output("head_sha", commit);
+  emit(
+    `Pushed the merge to ${env.BRANCH}${conflicted.length ? ` (${conflicted.length} conflicted file(s) resolved)` : ""}.`,
+  );
+  return { branch: env.BRANCH, headSha: commit, conflicted };
+}
+
 /**
  * The whole publish job. `git` and `fetch` are injectable for tests; `emit` writes a workflow
  * command or log line; `output` a step output.
@@ -449,34 +602,8 @@ export async function publish({ env, git, fetch: fetchImpl = globalThis.fetch, e
   }
   if (staged()) git(["commit", "-q", "-m", message, "-m", trailer]);
 
-  const audience = encodeURIComponent(env.CONTROL_PLANE_URL);
-  const oidc = (
-    await json(
-      await fetchImpl(`${env.ACTIONS_ID_TOKEN_REQUEST_URL}&audience=${audience}`, {
-        headers: { authorization: `bearer ${env.ACTIONS_ID_TOKEN_REQUEST_TOKEN}` },
-      }),
-      "the Actions OIDC token request",
-    )
-  ).value;
-  emit(`::add-mask::${oidc}`);
-  const { token } = await json(
-    await fetchImpl(`${env.CONTROL_PLANE_URL}/github/token`, {
-      method: "POST",
-      headers: { authorization: `Bearer ${oidc}`, "content-type": "application/json" },
-      body: JSON.stringify({ runId: env.RUN_ID }),
-    }),
-    "POST /github/token",
-  );
-  if (typeof token !== "string" || token === "")
-    throw new Error("POST /github/token gave no token");
-  emit(`::add-mask::${token}`);
-  const basic = Buffer.from(`x-access-token:${token}`).toString("base64");
-  emit(`::add-mask::${basic}`);
-  git(["push", "--quiet", `https://github.com/${env.REPO}.git`, `HEAD:refs/heads/${env.BRANCH}`], {
-    GIT_CONFIG_COUNT: "1",
-    GIT_CONFIG_KEY_0: "http.https://github.com/.extraheader",
-    GIT_CONFIG_VALUE_0: `AUTHORIZATION: basic ${basic}`,
-  });
+  const token = await repoToken({ env, fetchImpl, emit });
+  pushRef({ env, git, emit, token, source: "HEAD" });
   output("branch", env.BRANCH);
   output("tooling_files", JSON.stringify(tooling));
   emit(`Pushed ${env.BRANCH}.`);
@@ -530,11 +657,11 @@ async function main() {
     }
     return;
   }
-  if (command !== "publish") {
-    throw new Error("usage: executor-publish.mjs publish | drop-placeholders");
+  if (command !== "publish" && command !== "sync") {
+    throw new Error("usage: executor-publish.mjs publish | sync | drop-placeholders");
   }
   try {
-    await publish({
+    await (command === "sync" ? publishSync : publish)({
       env,
       git: gitRunner(process.cwd()),
       emit: (line) => process.stdout.write(`${line}\n`),

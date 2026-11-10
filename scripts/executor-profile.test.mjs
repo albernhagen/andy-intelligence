@@ -15,6 +15,12 @@ const ROOT = "/work/proj";
 const build = (step, codeowners = "") => buildProfile({ profile, step, codeowners, root: ROOT });
 
 describe("buildProfile", () => {
+  it("GivenTheSyncStep_WhenBuilt_ThenItGetsExactlyTheBuildsToolsAndSandbox", () => {
+    const codeowners = "* @andy\n/infra/ @andy\n";
+    expect(build("sync", codeowners)).toEqual(build("build", codeowners));
+    expect(build("sync").sandbox).toMatchObject({ enabled: true, failIfUnavailable: true });
+  });
+
   it("GivenAnyStep_WhenBuilt_ThenEnvFileReadsAreDenied", () => {
     for (const step of Object.keys(profile.steps)) {
       const { deny } = build(step).permissions;
