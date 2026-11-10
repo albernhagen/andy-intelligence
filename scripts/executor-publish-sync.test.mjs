@@ -12,6 +12,12 @@ import { PublishRefused, gitRunner, publishSync, unresolvedFiles } from "./execu
  * the publish job commits the merge with both parents. Only `push` is intercepted.
  */
 
+// Git hooks run tests with GIT_DIR, GIT_INDEX_FILE and the like set for the outer repo: every git
+// call here must act on its own temporary repo only, so none of them is inherited.
+for (const key of Object.keys(process.env)) {
+  if (key.startsWith("GIT_")) delete process.env[key];
+}
+
 const GIT_ENV = {
   GIT_CONFIG_NOSYSTEM: "1",
   GIT_CONFIG_GLOBAL: "/dev/null",
