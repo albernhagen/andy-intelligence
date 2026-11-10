@@ -1283,7 +1283,7 @@ export class RunService {
             r.branch ??
             r.syncRun?.branch ??
             (ticket && r.step === "build" ? branchFor(ticket.key, r.id) : null),
-          pullRequest: r.links.pullRequest ?? null,
+          pullRequest: r.links.pullRequest ?? r.syncRun?.pullRequest ?? null,
           startedAt: r.startedAt ?? r.createdAt,
           touches: r.touches,
           reservedAdr: r.reservedAdr,

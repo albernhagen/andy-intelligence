@@ -182,6 +182,12 @@ describe("SyncRuns", () => {
       sync: { pullRequest: 40, headSha: sha("a") },
     });
     expect(context.prompt).toContain("sync step");
+    const [inFlight] = await runs.inFlight(projectId);
+    expect(inFlight).toMatchObject({
+      step: "sync",
+      branch: stale.build.branch,
+      pullRequest: `${REPO.url}/pull/40`,
+    });
   });
 
   it("GivenASyncInFlight_WhenMainMovesAgain_ThenTheNewerPushCoalescesAndRunsOnceItEnds", async () => {
