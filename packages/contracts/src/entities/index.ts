@@ -20,10 +20,12 @@ import { projectDispatchFields } from "./dispatch-caps";
 export * from "./common";
 export * from "./dispatch-caps";
 import { RunCostFields } from "./cost";
+import { runInFlightFields } from "./in-flight";
 import { RefineScores, TicketScores } from "./scores";
 
 export * from "./common";
 export * from "./cost";
+export * from "./in-flight";
 export * from "./scores";
 
 /** ARCHITECTURE §5 — domain model. Vendor concepts must not appear here. */
@@ -522,6 +524,7 @@ export const Run = z.object({
   mergeError: z.string().max(2000).nullable().default(null),
   metrics: RunMetrics.nullable().default(null),
   ...RunCostFields,
+  ...runInFlightFields,
 });
 export type Run = z.infer<typeof Run>;
 

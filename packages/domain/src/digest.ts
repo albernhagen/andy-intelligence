@@ -20,7 +20,7 @@ import {
   type WorkTracker,
 } from "@andy/contracts";
 import { ticketCost } from "./cost";
-import { MAX_ACTIVE_RUNS_GLOBAL, MAX_PRS_WAITING_PER_PROJECT } from "./dispatch-caps";
+import { MAX_ACTIVE_RUNS_GLOBAL, MAX_PRS_WAITING_PER_PROJECT, isInFlight } from "./dispatch-caps";
 import { quotaStatus } from "./quota";
 import { openBlockerKeys, runLabel, ticketStatusLine } from "./status-line";
 import { resolveWorker } from "./worker";
@@ -95,7 +95,13 @@ export function buildDigest(window: DigestWindow, data: DigestData): Digest {
     ...(live ? quotaAtReserve(data) : []),
   ];
   const merged = prs.filter((p) => p.state === "merged").map((p) => mergedItem(p, data));
-  const inFlight = live ? data.activeRuns.map((r) => inFlightItem(r, byId, data.now)) : [];
+  // In flight as the dispatcher and the in-flight view count it (ADR-0080): a run past its
+  // deadline is waiting for the watchdog, not in flight.
+  const inFlight = live
+    ? data.activeRuns
+        .filter((r) => isInFlight(r, data.now))
+        .map((r) => inFlightItem(r, byId, data.now))
+    : [];
   const readyForReview = live ? inReview(data) : [];
   const totals = totalsOf(data.endedRuns, merged.length);
 

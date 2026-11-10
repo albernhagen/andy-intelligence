@@ -1,6 +1,7 @@
 import {
   ACTIVE_RUN_STATUSES,
   compareRanks,
+  type InFlightRun,
   type PullRequestLink,
   type Run,
   type RunStep,
@@ -10,6 +11,7 @@ import {
   type TicketSummary,
   type Worker,
 } from "@andy/contracts";
+import { overlappingKey } from "./dispatch-conflicts";
 
 /** The story panel's first line (ADR-0059): where the ticket is and what it waits for. */
 export type StatusTone = "default" | "attention" | "running" | "success" | "danger";
@@ -30,6 +32,8 @@ export interface StatusInput {
   queuePosition: number | null;
   /** Who does the work (ADR-0082); undefined until it loads. */
   worker?: Worker;
+  /** The in-flight ticket whose touches a Ready ticket overlaps (ADR-0080); null or absent: none. */
+  overlaps?: string | null;
 }
 
 export function statusLine(s: StatusInput, now: Date): { text: string; tone: StatusTone } {
@@ -66,6 +70,7 @@ function mainStatus(s: StatusInput, now: Date): { text: string; tone: StatusTone
         tone: "default",
       };
     case "ready":
+      if (s.overlaps) return { text: `Waiting: overlaps ${s.overlaps} in flight`, tone: "default" };
       return {
         text:
           s.queuePosition === null
@@ -161,6 +166,8 @@ export interface TicketFacts {
   events: readonly TicketEvent[];
   /** Who does the work (ADR-0082); undefined until it loads. */
   worker?: Worker;
+  /** The project's in-flight view (ADR-0080); undefined until it loads. */
+  inFlight?: readonly InFlightRun[];
 }
 
 /** One ticket's status line: the UI's story panel and MCP `status` both call this (AI-40). */
@@ -177,6 +184,7 @@ export function ticketStatusLine(ticket: Ticket, facts: TicketFacts, now: Date) 
       blockedBy: openBlockerKeys(ticket, facts.tickets),
       queuePosition: queuePosition(ticket, facts.tickets),
       worker: facts.worker,
+      overlaps: ticket.stage === "ready" ? overlappingKey(ticket, facts.inFlight ?? []) : null,
     },
     now,
   );

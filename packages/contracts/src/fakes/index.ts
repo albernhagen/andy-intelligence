@@ -70,6 +70,7 @@ export class InMemoryWorkTracker implements WorkTracker {
   private readonly events = new Map<string, TicketEvent[]>();
   private readonly questions = new Map<string, Question>();
   private readonly counters = new Map<string, number>();
+  private readonly adrCounters = new Map<string, number>();
   constructor(private readonly now: () => Date = () => new Date()) {}
 
   async createProject(input: NewProject): Promise<Project> {
@@ -95,6 +96,13 @@ export class InMemoryWorkTracker implements WorkTracker {
     const updated = { ...project, ...ProjectPatch.parse(patch) };
     this.projects.set(projectId, updated);
     return structuredClone(updated);
+  }
+
+  async reserveAdrNumber(projectId: string, atLeast: number): Promise<number> {
+    if (!this.projects.has(projectId)) throw notFound("project", projectId);
+    const next = Math.max(atLeast, this.adrCounters.get(projectId) ?? 0) + 1;
+    this.adrCounters.set(projectId, next);
+    return next;
   }
 
   async createTicket(projectId: string, input: NewTicket, actor: EventActor): Promise<Ticket> {

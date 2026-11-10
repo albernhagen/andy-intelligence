@@ -19,7 +19,7 @@ Overview and reading map: [ARCHITECTURE.md](ARCHITECTURE.md). Section numbers ma
 
 As built (PR events, build dispatch, plan approval): [`history/workflow-as-built.md`](history/workflow-as-built.md).
 
-**Dispatch caps (ADR-0079):** the build dispatcher takes Ready tickets from the top while `mayDispatch` says start (pause, dial, global and PR caps, quota) and stores why it stopped; this replaces the as-built one-run rule.
+**Dispatch (ADR-0079, ADR-0080):** the build dispatcher takes Ready tickets from the top while `mayDispatch` says start (pause, dial, global and PR caps, quota) and stores why it stopped. A ticket whose `touches` overlap a build in flight (empty overlaps any) is skipped. Builds record their touches and a reserved ADR number, shown by MCP `list_in_flight` and the board.
 
 **Needs-you is a flag, not a stage:** flagged items stay put and appear in the Needs-you inbox (UI + MCP).
 
@@ -37,7 +37,7 @@ As built (PR events, build dispatch, plan approval): [`history/workflow-as-built
 
 ### 4.3 Refinement and questions
 - Backlog has **Ideas** (no agent spend) and **Up next**; entering Up next starts a refinement pass (ADR-0075). The agent drafts the ticket, or sends it back, or splits it. Each gap is rated; the control plane makes it a question only if the agent is unsure or a wrong guess is costly to reverse, else an assumption Andy can promote. Zero questions is allowed; at most 3 open per ticket and `dailyQuestionCap` per project per 24 hours.
-- Refine also scores the ticket (AI-37): `risk` (low, medium, high: how much a bad change could break) and `confidence` (high, medium, low: how sure it is of the ticket and plan), each with a one-line reason, by the rubric in `platform/procedures/refine.md`. Filled only when empty; optional, never part of the DoR; the dispatcher ignores them. `startScore` in `packages/domain/src/scores.ts` gives the one label the board and MCP share ("S · low risk · confident"), and sorting the Ready lane by score (`?sort=score`: size, risk, confidence; missing last; ties by rank) is a view that writes no rank.
+- Refine also scores the ticket (AI-37): `risk` (low, medium, high: how much a bad change could break) and `confidence` (high, medium, low: how sure it is of the ticket and plan), each with a one-line reason, by the rubric in `platform/procedures/refine.md`. Filled only when empty; optional, never part of the DoR; the dispatcher ignores them. `startScore` (`packages/domain/src/scores.ts`) is the one label board and MCP share; sorting Ready by score (`?sort=score`: size, risk, confidence) writes no rank.
 - Questions are **structured records** (§5 Question).
 - Andy answers in UI or MCP. A `/refine` skill in Claude desktop batches pending questions across projects into one conversation.
 - Answering re-checks the DoR; the last answer moves an Up-next ticket that meets it to Ready (`system`, `ifUpdatedAt`).

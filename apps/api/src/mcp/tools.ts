@@ -23,6 +23,7 @@ import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import { z } from "zod";
 import { registerDispatchTools } from "./tools-dispatch";
+import { registerInFlightTools } from "./tools-inflight";
 import { registerWorkerTools } from "./tools-worker";
 import { listNeedsMe, registerTicketTools, statusLineOf } from "./tools-tickets";
 import { registerScoreTools, withStartScore } from "./tools-scores";
@@ -157,6 +158,7 @@ export const summary = (t: Ticket) => ({
 export function registerTools(server: McpServer, deps: ToolDeps): void {
   const { tracker, service } = deps;
   registerDispatchTools(server, deps, run);
+  registerInFlightTools(server, deps, run);
   registerWorkerTools(server, deps, run);
   registerTicketTools(server, deps);
   registerDigestTools(server, deps, run);

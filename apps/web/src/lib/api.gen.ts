@@ -161,7 +161,8 @@ export interface paths {
                   | "prs_waiting_cap"
                   | "quota_reserve"
                   | "started"
-                  | "nothing_ready";
+                  | "nothing_ready"
+                  | "touches_overlap";
                 /** Format: date-time */
                 at: string;
               } | null;
@@ -255,7 +256,8 @@ export interface paths {
                   | "prs_waiting_cap"
                   | "quota_reserve"
                   | "started"
-                  | "nothing_ready";
+                  | "nothing_ready"
+                  | "touches_overlap";
                 /** Format: date-time */
                 at: string;
               } | null;
@@ -397,7 +399,8 @@ export interface paths {
                   | "prs_waiting_cap"
                   | "quota_reserve"
                   | "started"
-                  | "nothing_ready";
+                  | "nothing_ready"
+                  | "touches_overlap";
                 /** Format: date-time */
                 at: string;
               } | null;
@@ -548,7 +551,8 @@ export interface paths {
                   | "prs_waiting_cap"
                   | "quota_reserve"
                   | "started"
-                  | "nothing_ready";
+                  | "nothing_ready"
+                  | "touches_overlap";
                 /** Format: date-time */
                 at: string;
               } | null;
@@ -3876,6 +3880,10 @@ export interface paths {
                 "5h": number | null;
                 weekly: number | null;
               } | null;
+              /** @default [] */
+              touches: string[];
+              /** @default null */
+              reservedAdr: number | null;
             }[];
           };
         };
@@ -4069,6 +4077,10 @@ export interface paths {
                 "5h": number | null;
                 weekly: number | null;
               } | null;
+              /** @default [] */
+              touches: string[];
+              /** @default null */
+              reservedAdr: number | null;
             };
           };
         };
@@ -4339,6 +4351,10 @@ export interface paths {
                   "5h": number | null;
                   weekly: number | null;
                 } | null;
+                /** @default [] */
+                touches: string[];
+                /** @default null */
+                reservedAdr: number | null;
               };
               build: {
                 id: string;
@@ -4490,6 +4506,10 @@ export interface paths {
                   "5h": number | null;
                   weekly: number | null;
                 } | null;
+                /** @default [] */
+                touches: string[];
+                /** @default null */
+                reservedAdr: number | null;
               } | null;
               buildError: string | null;
             };
@@ -4545,6 +4565,81 @@ export interface paths {
         };
       };
     };
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/projects/{projectId}/in-flight": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get: {
+      parameters: {
+        query?: never;
+        header?: never;
+        path: {
+          projectId: string;
+        };
+        cookie?: never;
+      };
+      requestBody?: never;
+      responses: {
+        /** @description Runs in flight, oldest first, with their touched files */
+        200: {
+          headers: {
+            [name: string]: unknown;
+          };
+          content: {
+            "application/json": {
+              runId: string;
+              ticketKey: string | null;
+              ticketTitle: string | null;
+              /** @enum {string} */
+              step: "refine" | "plan" | "build" | "review" | "verify" | "scout";
+              /** @enum {string} */
+              status: "queued" | "running";
+              branch: string | null;
+              pullRequest: string | null;
+              /** Format: date-time */
+              startedAt: string | null;
+              touches: string[];
+              reservedAdr: number | null;
+            }[];
+          };
+        };
+        /** @description Invalid request */
+        400: {
+          headers: {
+            [name: string]: unknown;
+          };
+          content: {
+            "application/json": {
+              error: string;
+              details?: string[];
+            };
+          };
+        };
+        /** @description Not found */
+        404: {
+          headers: {
+            [name: string]: unknown;
+          };
+          content: {
+            "application/json": {
+              error: string;
+              details?: string[];
+            };
+          };
+        };
+      };
+    };
+    put?: never;
+    post?: never;
     delete?: never;
     options?: never;
     head?: never;

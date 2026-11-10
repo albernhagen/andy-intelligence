@@ -232,6 +232,11 @@ export interface WorkTracker {
   listProjects(): Promise<Project[]>;
   /** `not_found` for an unknown project. */
   updateProject(projectId: string, patch: ProjectPatch): Promise<Project>;
+  /**
+   * Reserves the project's next ADR number atomically: one above both `atLeast` (the highest in
+   * the repo's index) and every number reserved before. Never hands out a number twice (ADR-0080).
+   */
+  reserveAdrNumber(projectId: string, atLeast: number): Promise<number>;
 
   /** Allocates the next key (e.g. "AI-7") and appends a `created` event. */
   createTicket(projectId: string, input: NewTicket, actor: EventActor): Promise<Ticket>;
@@ -354,6 +359,8 @@ export const NewRun = Run.pick({
   retryOf: true,
   planRunId: true,
   planPolicy: true,
+  touches: true,
+  reservedAdr: true,
 });
 export type NewRun = z.input<typeof NewRun>;
 
