@@ -20,6 +20,11 @@ jobs:
   firestore-suite:
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    # TEMPORARY (AI-71): 20 independent runs to measure the concurrent tests; removed before ready.
+    strategy:
+      fail-fast: false
+      matrix:
+        iteration: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20]
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
