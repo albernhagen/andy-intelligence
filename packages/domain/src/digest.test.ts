@@ -371,6 +371,22 @@ describe("buildDigest", () => {
     });
   });
 
+  it("GivenARunPastItsDeadline_WhenBuilt_ThenItIsNotListedInFlight", () => {
+    const live = run({ id: "r8", ticketId: "t1", status: "running", startedAt: IN });
+    const late = run({
+      id: "r9",
+      ticketId: "t2",
+      status: "running",
+      startedAt: IN,
+      deadline: new Date(NOW.getTime() - 60_000).toISOString(),
+    });
+    const d = buildDigest(
+      WINDOW,
+      data({ tickets: [ticket(1), ticket(2)], activeRuns: [live, late] }),
+    );
+    expect(d.inProgress.inFlight.map((r) => r.ticketKey)).toEqual(["AI-1"]);
+  });
+
   it("GivenAPastWindow_WhenBuilt_ThenCurrentStateIsLeftOut", () => {
     const past = digestWindow(NOW, 24, "2026-11-01T00:00:00.000Z");
     const d = buildDigest(
