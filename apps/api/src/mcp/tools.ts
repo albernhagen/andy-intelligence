@@ -14,6 +14,7 @@ import {
 } from "@andy/contracts";
 import {
   DomainError,
+  type DigestReader,
   type ProjectService,
   type RunService,
   type TicketService,
@@ -26,6 +27,8 @@ import { registerInFlightTools } from "./tools-inflight";
 import { registerWorkerTools } from "./tools-worker";
 import { listNeedsMe, registerTicketTools, statusLineOf } from "./tools-tickets";
 import { registerScoreTools, withStartScore } from "./tools-scores";
+import { registerSettingsTools } from "./tools-settings";
+import { registerDigestTools } from "./tools-digest";
 
 /**
  * MCP core tools (M1.4: MCP core tools; `refine` from M1.7: Refinement; `build` and
@@ -40,6 +43,8 @@ export interface ToolDeps {
   service: TicketService;
   runs: RunService;
   projects: ProjectService;
+  /** The daily digest (AI-70); the app always passes it, unit tests may not. */
+  digest?: DigestReader;
   /** Signed-in email, shown by `status` so it doubles as the connection check. */
   email: string;
 }
@@ -156,6 +161,7 @@ export function registerTools(server: McpServer, deps: ToolDeps): void {
   registerInFlightTools(server, deps, run);
   registerWorkerTools(server, deps, run);
   registerTicketTools(server, deps);
+  registerDigestTools(server, deps, run);
 
   /** Decides the ticket's latest plan run as Andy (owner-only, ADR-0050). */
   const decide = async (key: string, decision: "approved" | "rejected", reason: string | null) => {
@@ -452,6 +458,7 @@ export function registerTools(server: McpServer, deps: ToolDeps): void {
   );
 
   registerScoreTools(server, tracker, run);
+  registerSettingsTools(server, tracker, run);
 }
 
 async function statusWithCost(service: TicketService, runs: RunService, key: string) {

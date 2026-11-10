@@ -4702,6 +4702,158 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  "/api/projects/{projectId}/digest": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get: {
+      parameters: {
+        query?: {
+          /** @description Hours the digest covers, 1 to 168. Default 24. */
+          hours?: number;
+          /** @description End of the window (ISO date-time). Default now; a later time reads as now. */
+          until?: string;
+        };
+        header?: never;
+        path: {
+          projectId: string;
+        };
+        cookie?: never;
+      };
+      requestBody?: never;
+      responses: {
+        /** @description Exceptions, merged, in progress and totals for the window, plus plain text */
+        200: {
+          headers: {
+            [name: string]: unknown;
+          };
+          content: {
+            "application/json": {
+              projectKey: string;
+              window: {
+                /** Format: date-time */
+                from: string;
+                /** Format: date-time */
+                to: string;
+              };
+              quiet: boolean;
+              exceptions: {
+                /** @enum {string} */
+                kind:
+                  | "run_failed"
+                  | "pr_closed"
+                  | "reworked"
+                  | "reverted"
+                  | "review_blocker"
+                  | "waiting_on_andy"
+                  | "blocked"
+                  | "dispatch_idle"
+                  | "quota_reserve";
+                ticketKey: string | null;
+                title: string | null;
+                prNumber: number | null;
+                reason: string;
+                /** Format: date-time */
+                at: string | null;
+              }[];
+              merged: {
+                ticketKey: string;
+                title: string;
+                prNumber: number;
+                /** Format: uri */
+                prUrl: string;
+                /** Format: date-time */
+                mergedAt: string;
+                /** @enum {string} */
+                mergedBy: "gate" | "andy" | "unknown";
+                gate: {
+                  wouldAutoMerge: boolean | null;
+                  reasons: (
+                    | "no_verification_output"
+                    | "protected_path"
+                    | "files_incomplete"
+                    | "checks_incomplete"
+                    | "no_required_checks"
+                    | "checks_failed"
+                    | "checks_pending"
+                    | "draft"
+                    | "not_default_branch"
+                  )[];
+                  /** @enum {string|null} */
+                  outcome: "merged_clean" | "reworked" | "reverted" | "failed" | null;
+                } | null;
+                costUsd: number;
+                unknownCostRuns: number;
+              }[];
+              inProgress: {
+                inFlight: {
+                  ticketKey: string | null;
+                  title: string | null;
+                  /** @enum {string} */
+                  step: "refine" | "plan" | "build" | "review" | "verify" | "scout";
+                  /** @enum {string} */
+                  status: "queued" | "running" | "succeeded" | "failed" | "cancelled";
+                  label: string;
+                }[];
+                readyForReview: {
+                  ticketKey: string;
+                  title: string;
+                  prNumber: number | null;
+                }[];
+              };
+              totals: {
+                runs: number;
+                failedRuns: number;
+                costUsd: number;
+                unknownCostRuns: number;
+                quotaDelta: {
+                  "5h": number | null;
+                  weekly: number | null;
+                };
+                merged: number;
+              };
+              truncated: boolean;
+              text: string;
+            };
+          };
+        };
+        /** @description Invalid request */
+        400: {
+          headers: {
+            [name: string]: unknown;
+          };
+          content: {
+            "application/json": {
+              error: string;
+              details?: string[];
+            };
+          };
+        };
+        /** @description Not found */
+        404: {
+          headers: {
+            [name: string]: unknown;
+          };
+          content: {
+            "application/json": {
+              error: string;
+              details?: string[];
+            };
+          };
+        };
+      };
+    };
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   "/api/github": {
     parameters: {
       query?: never;

@@ -18,6 +18,7 @@ import { useNeedsYou, useProjects } from "@/lib/queries";
 import {
   ALL,
   loadScope,
+  projectSettingsPath,
   saveScope,
   scopeFromPath,
   scopeKey,
@@ -57,6 +58,22 @@ export function AppShell() {
           <NavLink to={scopePath(scope, "inbox")} current={section === "inbox"}>
             Inbox
           </NavLink>
+          {scope.kind === "project" && (
+            <NavLink
+              to={projectSettingsPath(scope.projectId)}
+              current={pathname === projectSettingsPath(scope.projectId)}
+            >
+              Project settings
+            </NavLink>
+          )}
+          {scope.kind === "project" && (
+            <NavLink
+              to={`/p/${encodeURIComponent(scope.projectId)}/digest`}
+              current={/\/digest\/?$/.test(pathname)}
+            >
+              Digest
+            </NavLink>
+          )}
           <NavLink to="/settings/github" current={pathname.startsWith("/settings")}>
             Settings
           </NavLink>
@@ -145,7 +162,7 @@ function ProjectPicker({ scope, section }: { scope: Scope; section: Section }) {
           <Layers aria-hidden className="size-4 text-muted-foreground" />
           All projects
         </PickerItem>
-        <DropdownMenuItem onSelect={() => void navigate({ to: "/projects" })}>
+        <DropdownMenuItem onSelect={() => void navigate({ to: "/projects/new" })}>
           <Plus aria-hidden className="size-4 text-muted-foreground" />
           Add project
         </DropdownMenuItem>

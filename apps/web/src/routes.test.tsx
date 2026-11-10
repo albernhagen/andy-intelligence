@@ -26,7 +26,8 @@ describe("a URL for every page", () => {
     ["/all/board", "A board shows one project. Pick one:"],
     // The story panel (AI-29): its heading splits key and title, so check the description.
     ["/p/ai/t/AI-1", "Andy can't see tickets."],
-    ["/projects", "Projects"],
+    ["/p/ai/settings", "AI: Andy Intelligence settings"],
+    ["/projects/new", "Add project"],
     ["/settings/github", "GitHub"],
   ])("GivenTheUrl %s_WhenLoadedDirectly_ThenItsScreenOpensThere", async (path, text) => {
     const h = await load(path);

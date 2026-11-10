@@ -17,6 +17,7 @@ import {
   RefineDispatcher,
   RunService,
   BoardReader,
+  DigestReader,
   TicketService,
 } from "@andy/domain";
 import { bodyLimit } from "hono/body-limit";
@@ -27,6 +28,7 @@ import { registerRunCallbacks, registerRunRoutes } from "./runs";
 import { registerTicketRoutes } from "./tickets";
 import { registerBoardRoutes } from "./board";
 import { registerInFlightRoutes } from "./in-flight";
+import { registerDigestRoutes } from "./digest";
 import {
   ConnectedCodeHost,
   GitHubConnection,
@@ -285,6 +287,8 @@ export function createApp(deps: AppDeps) {
   registerRunRoutes(app, runs);
   registerInFlightRoutes(app, runs);
   registerQuotaRoutes(app, deps.quota ?? null, now);
+  const digest = new DigestReader(deps.tracker, deps.runs, deps.quota ?? null, now);
+  registerDigestRoutes(app, digest, now);
 
   if (github && connection) {
     registerGitHubSetup(app, {
@@ -305,6 +309,7 @@ export function createApp(deps: AppDeps) {
       service,
       runs,
       projects,
+      digest,
     });
   }
 

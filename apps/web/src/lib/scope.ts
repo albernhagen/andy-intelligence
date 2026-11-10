@@ -31,6 +31,8 @@ function decode(segment: string): string {
 
 /** The section a path shows: the ticket page belongs to the board, everything else unscoped. */
 export function sectionFromPath(pathname: string): Section | null {
+  if (/^\/p\/[^/]+\/settings\/?$/.test(pathname)) return null;
+  if (/^\/p\/[^/]+\/digest\/?$/.test(pathname)) return null; // The digest (AI-70) is its own page.
   if (/^\/(all|p\/[^/]+)\/inbox\/?$/.test(pathname)) return "inbox";
   if (/^\/(all\/board|p\/[^/]+)(\/|$)/.test(pathname)) return "board";
   return null;
@@ -42,6 +44,10 @@ export function scopePath(scope: Scope, section: Section): string {
   const base = `/p/${encodeURIComponent(scope.projectId)}`;
   return section === "board" ? base : `${base}/inbox`;
 }
+
+/** A project's settings page (AI-46), linked from the header while a project is in scope. */
+export const projectSettingsPath = (projectId: string) =>
+  `/p/${encodeURIComponent(projectId)}/settings`;
 
 /** "all" or "p:<project>": the stored form, also handy as a React key. */
 export const scopeKey = (scope: Scope) => (scope.kind === "all" ? "all" : `p:${scope.projectId}`);
