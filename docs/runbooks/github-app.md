@@ -39,7 +39,7 @@ On Settings → GitHub: **Install on repos** → **Only select repositories** �
 
 ## 4. Register project #1
 
-UI → `/projects`: Name `andy-intelligence`, Key `AI`, GitHub repo `albernhagen/andy-intelligence` (suggested from the installed repos) → Create project.
+UI → picker → Add project (`/projects/new`): Name `andy-intelligence`, Key `AI`, GitHub repo `albernhagen/andy-intelligence` (suggested from the installed repos) → Create project.
 
 - `422 … not found, GitHub isn't connected, or the GitHub App isn't installed` → step 2 or 3.
 - `409 … already belongs to project` → registered already.

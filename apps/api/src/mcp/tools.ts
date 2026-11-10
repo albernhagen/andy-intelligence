@@ -26,6 +26,7 @@ import { registerDispatchTools } from "./tools-dispatch";
 import { registerWorkerTools } from "./tools-worker";
 import { listNeedsMe, registerTicketTools, statusLineOf } from "./tools-tickets";
 import { registerScoreTools, withStartScore } from "./tools-scores";
+import { registerSettingsTools } from "./tools-settings";
 import { registerDigestTools } from "./tools-digest";
 
 /**
@@ -455,6 +456,7 @@ export function registerTools(server: McpServer, deps: ToolDeps): void {
   );
 
   registerScoreTools(server, tracker, run);
+  registerSettingsTools(server, tracker, run);
 }
 
 async function statusWithCost(service: TicketService, runs: RunService, key: string) {

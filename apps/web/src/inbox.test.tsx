@@ -39,7 +39,7 @@ async function open(h: Harness, path: string) {
 
 /** AI-1 (ready apart from its questions) has two questions, AI-2 (no size yet) one. */
 async function twoTickets(path = "/p/ai/inbox", more?: (h: Harness) => Promise<void>) {
-  const h = renderApp("/projects");
+  const h = renderApp("/all/board");
   await h.tracker.createProject({ name: "Andy Intelligence", key: "AI" });
   const board = await h.service.create("ai", readyStory, "andy", { upNext: true });
   const panel = await h.service.create("ai", { type: "feature", title: "Panel" }, "andy");
@@ -141,7 +141,7 @@ describe("inbox v2", () => {
   });
 
   it("GivenOneAnswerFails_WhenAndyAcceptsAll_ThenItStopsAndShowsTheError", async () => {
-    const h = renderApp("/projects");
+    const h = renderApp("/all/board");
     await h.tracker.createProject({ name: "Andy Intelligence", key: "AI" });
     const t = await h.service.create("ai", readyStory, "andy");
     const [, second] = await askAsRun(h, t.id, "run1", [
@@ -170,7 +170,7 @@ describe("inbox v2", () => {
     // Holds answer requests until released, so the test sees the card mid-answer.
     let release = () => {};
     const held = new Promise<void>((r) => (release = r));
-    const h = renderApp("/projects", {
+    const h = renderApp("/all/board", {
       beforeFetch: async (req) => {
         if (req.url.endsWith("/answer")) await held;
       },
@@ -207,7 +207,7 @@ describe("inbox v2", () => {
   });
 
   it("GivenAFlaggedTicketWithoutQuestions_WhenTheInboxOpens_ThenItsCardSaysItIsFlagged", async () => {
-    const h = renderApp("/projects");
+    const h = renderApp("/all/board");
     await h.tracker.createProject({ name: "Andy Intelligence", key: "AI" });
     const t = await h.service.create("ai", readyStory, "andy");
     await h.service.flag("ai", t.id, "andy");
