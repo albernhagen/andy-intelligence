@@ -326,5 +326,36 @@ describe("GitHubCodeHost", () => {
         host(fetch).mergePullRequest("albernhagen/andy-intelligence", 5, "abc"),
       ).rejects.toThrow(/not mergeable/);
     });
+
+    it.each([
+      ["ahead", true],
+      ["identical", true],
+      ["behind", false],
+      ["diverged", false],
+    ])(
+      "GivenACompareStatus%s_WhenAskedIfTheHeadContainsMain_ThenItAnswers%s",
+      async (status, expected) => {
+        const fetch = fakeGitHub({
+          ...installed,
+          [`GET ${R}/compare/main...abc`]: () => json(200, { status }),
+        });
+        const contains = await host(fetch).headContains(
+          "albernhagen/andy-intelligence",
+          "abc",
+          "main",
+        );
+        expect(contains).toBe(expected);
+      },
+    );
+
+    it("GivenAnUnknownRef_WhenAskedIfTheHeadContainsMain_ThenNull", async () => {
+      const fetch = fakeGitHub({
+        ...installed,
+        [`GET ${R}/compare/main...abc`]: () => json(404, { message: "Not Found" }),
+      });
+      expect(await host(fetch).headContains("albernhagen/andy-intelligence", "abc", "main")).toBe(
+        null,
+      );
+    });
   });
 });

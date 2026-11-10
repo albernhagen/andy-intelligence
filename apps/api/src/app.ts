@@ -12,6 +12,7 @@ import {
 import { ClaudeCodeActionsExecutor, exchangeManifestCode, type CreatedApp } from "@andy/github";
 import {
   BuildDispatcher,
+  SyncRuns,
   DomainError,
   ProjectService,
   RefineDispatcher,
@@ -222,7 +223,17 @@ export function createApp(deps: AppDeps) {
   );
   const refiner = new RefineDispatcher(deps.tracker, deps.runs, runs, now);
   const builder = new BuildDispatcher(deps.tracker, deps.runs, runs, now, deps.quota ?? null);
+  // AI-72 (ADR-0083): queued sync runs go first, so open PRs catch up with main before new work.
+  const syncer = new SyncRuns(
+    deps.tracker,
+    deps.runs,
+    runs,
+    connection ? new ConnectedCodeHost(connection) : null,
+    now,
+    deps.quota ?? null,
+  );
   const dispatchNext = async (projectId: string) => {
+    await syncer.next(projectId);
     await builder.wakeGlobalCapWaiters(projectId);
     return (await builder.next(projectId)) ?? (await refiner.next(projectId));
   };
@@ -250,6 +261,7 @@ export function createApp(deps: AppDeps) {
       tickets: service,
       codeHost: new ConnectedCodeHost(connection),
       runs: deps.runs,
+      onDefaultBranchMoved: (projectId) => syncer.defaultBranchMoved(projectId),
       now,
     });
     registerGitHubToken(app, {

@@ -465,6 +465,8 @@ export class InMemoryCodeHost implements CodeHost {
   readonly merges: { fullName: string; number: number; sha: string }[] = [];
   /** Test seam: make merge calls fail. */
   failMerge: Error | null = null;
+  /** Test seam: head commits that don't contain the default branch yet (others do). */
+  readonly behindDefault = new Set<string>();
 
   constructor(
     repos: Repo[] = [],
@@ -581,6 +583,11 @@ export class InMemoryCodeHost implements CodeHost {
     if (pr.pullRequest.headSha !== expectedHeadSha) throw new Error("head moved");
     pr.pullRequest.state = "merged";
     this.merges.push({ fullName, number, sha: expectedHeadSha });
+  }
+
+  async headContains(fullName: string, head: string): Promise<boolean | null> {
+    if (!(await this.getRepo(fullName))) return null;
+    return !this.behindDefault.has(head);
   }
 }
 

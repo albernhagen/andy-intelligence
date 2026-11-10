@@ -69,8 +69,15 @@ function withRoot(value, root) {
  * Merges the base settings, the step's allow/deny rules, the step's sandbox and CODEOWNERS Edit
  * denies (every owned pattern but the catch-all, ARCHITECTURE §4.5).
  */
+/**
+ * Steps that run under another step's rules. A sync run (AI-72, ADR-0083) merges main and runs the
+ * project's checks: exactly the build's tools and sandbox, so it can't drift from them.
+ */
+export const STEP_ALIASES = { sync: "build" };
+
 export function buildProfile({ profile, step, codeowners = "", root }) {
-  const stepRules = Object.hasOwn(profile.steps, step) ? profile.steps[step] : null;
+  const rulesFor = Object.hasOwn(STEP_ALIASES, step) ? STEP_ALIASES[step] : step;
+  const stepRules = Object.hasOwn(profile.steps, rulesFor) ? profile.steps[rulesFor] : null;
   if (!stepRules) throw new Error(`unknown step "${step}"`);
   const settings = JSON.parse(JSON.stringify(profile.settings));
   if (stepRules.sandbox) settings.sandbox = withRoot(stepRules.sandbox, root ?? process.cwd());

@@ -59,7 +59,16 @@ export class ProjectService {
     if (patch.buildEnabled !== undefined) {
       log("INFO", "project builds switched", { projectId, buildEnabled: patch.buildEnabled, by });
     }
-    if (project.autoRefine || project.autoBuild) await this.dispatchNext?.(projectId);
+    // With builds on, queued sync runs (AI-72) may start too, e.g. once pause is lifted; turning
+    // builds off lets the sync dispatcher drop its gate vetoes and say why.
+    if (
+      project.autoRefine ||
+      project.autoBuild ||
+      project.buildEnabled ||
+      patch.buildEnabled !== undefined
+    ) {
+      await this.dispatchNext?.(projectId);
+    }
     return project;
   }
 

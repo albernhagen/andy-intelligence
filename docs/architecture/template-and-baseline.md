@@ -48,7 +48,7 @@ This repo's Dependabot bumps third-party pins in `platform/actions/`; managed re
 | PR template (docs + security checklist) | 0022, 0025 | `template/.github/pull_request_template.md` | M | carried (M1.16) |
 | Agent rules; docs ship with the change | 0022 | `template/AGENTS.md.template` | S | carried (M1.16) |
 | Threat model seed | 0025 | `template/docs/security/threat-model.md` | S | carried (M1.16) |
-| Dispatch caps, pause | 0079 | `dispatch-caps.ts` | — | control plane; applies to every project |
+| Dispatch, sync caps, pause | 0079, 0083 | `dispatch-caps.ts`, `sync-runs.ts` | — | control plane |
 | Public-repo hygiene (`.gitignore`: tfvars, state, `.env*`) | 0015 | `template/gitignore.lines` | M (lines) | carried (M1.16) |
 | `main` ruleset: PR required (squash), no force push/deletion, required checks, code scanning (CodeQL, high or higher) | 0025 | `github/ruleset-main.json` | G | carried (M1.16) |
 | Merge settings: squash only, delete branch on merge, auto-merge allowed (Dependabot; agent PRs through the review gate) | 0022, 0042, 0050 | `github/repo.json` | G | carried (M1.16; auto-merge from ADR-0042) |

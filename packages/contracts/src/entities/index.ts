@@ -21,11 +21,13 @@ export * from "./common";
 export * from "./dispatch-caps";
 import { RunCostFields } from "./cost";
 import { runInFlightFields } from "./in-flight";
+import { runSyncFields } from "./sync";
 import { RefineScores, TicketScores } from "./scores";
 
 export * from "./common";
 export * from "./cost";
 export * from "./in-flight";
+export * from "./sync";
 export * from "./scores";
 
 /** ARCHITECTURE §5 — domain model. Vendor concepts must not appear here. */
@@ -417,6 +419,8 @@ export const GateReason = z.enum([
   "checks_pending",
   "draft",
   "not_default_branch",
+  // A sync run is queued or running for the PR (AI-72, ADR-0083).
+  "sync_pending",
 ]);
 export type GateReason = z.infer<typeof GateReason>;
 
@@ -525,6 +529,7 @@ export const Run = z.object({
   metrics: RunMetrics.nullable().default(null),
   ...RunCostFields,
   ...runInFlightFields,
+  ...runSyncFields,
 });
 export type Run = z.infer<typeof Run>;
 
@@ -829,11 +834,23 @@ const CodeHostEventBase = z.object({
   receivedAt: Timestamp,
 });
 
+/** A push to a branch (AI-72: the default branch moving queues sync runs). */
+export const BranchPush = z.object({
+  /** The branch name, without `refs/heads/`. */
+  branch: z.string().min(1).max(256),
+  /** The commit the branch now points at. */
+  headSha: z.string().regex(/^[0-9a-f]{40}$/),
+  /** Whether `branch` is the repo's default branch. */
+  defaultBranch: z.boolean(),
+});
+export type BranchPush = z.infer<typeof BranchPush>;
+
 /** One webhook delivery about a registered repo, normalized. Idempotent by `deliveryId`. */
 export const CodeHostEvent = z.discriminatedUnion("kind", [
   CodeHostEventBase.extend({ kind: z.literal("pull_request"), pullRequest: PullRequest }),
   CodeHostEventBase.extend({ kind: z.literal("check_run"), checkRun: CheckRun }),
   CodeHostEventBase.extend({ kind: z.literal("workflow_run"), workflowRun: WorkflowRun }),
+  CodeHostEventBase.extend({ kind: z.literal("push"), push: BranchPush }),
 ]);
 export type CodeHostEvent = z.infer<typeof CodeHostEvent>;
 

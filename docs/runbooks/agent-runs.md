@@ -128,6 +128,24 @@ Before a live §9 run, check a sandbox change in Docker in about 30 seconds: `sc
 - **In CI:** `sandbox-self-test` (`.github/workflows/sandbox-self-test.yml`, action `platform/actions/sandbox-self-test`) runs this test bed on the runner with the stub, when a PR changes `platform/executor/**`, `scripts/executor-*.mjs`, `scripts/sandbox-lab/**`, `claude-executor.yml`, `agent-run.yml` or the job itself; otherwise it logs "skipped: no executor paths" and passes. It runs the workflow's exact check command through `verify-check`, then the probe; each FAIL (and annotation) names the expectation. The logs are the job's `sandbox-self-test-logs` artifact. Reproduce a failure with `LAB_MODEL=stub scripts/sandbox-lab/run.sh`. It catches accidents, not a hostile PR: the job runs the PR's own gate and test bed, so a PR could edit them (Andy reviews these paths; threat-model R5). It holds no Claude token, OIDC or GCP credential, and covers the runner's AppArmor rule but not a real model or `claude-code-action`.
 - **Not covered locally:** the runner's AppArmor rule, the real `claude-code-action` (its git writes are copied in `lab.sh`) and GitHub's tokens; §9 stays the proof. `lab.sh` copies the workflow's steps, so change both together.
 
+## 10. Sync runs: open agent PRs keep up with `main` (AI-72)
+
+What it does (ADR-0083): when `main` moves, every open agent PR whose head lacks it gets one sync run that merges `main` into the PR branch, resolves conflicts, runs the checks and pushes the merge. Needs **Builds** on (§8 step 0); it ignores Auto-build. No Terraform, secret or App permission change.
+
+1. **Once: subscribe the App to `push`.** GitHub → Settings → Developer settings → GitHub Apps → the control-plane App → Permissions & events → Subscribe to events → tick **Push** → Save. (Apps created from the UI after AI-72 already have it.) Until then only PRs merged into `main` start syncs, not direct pushes.
+2. Expect after a merge to `main`: each stale agent PR's ticket shows "Syncing with main" and a comment "Started a sync run: merging main into PR #…"; then "Merged main into PR #… and pushed …". The PR's checks and both review agents rerun on the new head. A PR that already contains `main` gets nothing.
+3. Why a sync waits: the ticket's status line ("sync with main waits: …"), the digest (`sync_waiting`) and the PR's build run (`prSync.waiting`): `paused`, `global_cap`, `quota_reserve`, `daily_cap` (3 a day; the ticket is flagged), `ticket_busy`, `builds_off` (no sync runs and the gate doesn't wait for one; tick **Builds** to resume) or `pr_cap` (over 20 open agent PRs: not checked yet, next in line on the next tick). It starts by itself on the next tick: a run ending, `main` moving, a settings change.
+4. A webhook delivery answered 500 "sync queueing failed": the host failed mid-tick (logged as `sync tick after main moved failed`). Redeliver it from the App's Advanced tab, or wait for the next tick.
+
+**On `conflict_unresolved` or `checks_failed`** (ticket in Needs you, "Waiting for you: sync with main stopped …", digest exception `sync_stopped`): the comment names the files and the reason; nothing was pushed.
+
+1. Read the comment and the sync run's log. Decide which side's intent wins, or how to combine them.
+2. On your machine: `git fetch origin && git switch <agent branch> && git merge origin/main`, resolve, run `pnpm lint && pnpm typecheck && pnpm test && pnpm build`, commit and push (never force). Agent branches are untrusted code: install with `pnpm install --ignore-scripts`.
+3. Clear the ticket's Needs-you flag. The new head lifts the stop: the next move of `main` syncs it again if needed.
+4. Or, if the PR is no longer worth it, close it and send the ticket back (rework) or cancel it.
+
+`checks_failed` also comes from the executor: "The PR changes dependency or toolchain files" (a sync never installs from files a PR changed: merge by hand), or "The executor ran the project's checks after the agent and they did not pass" (the agent said synced; nothing was pushed). A sync that failed without an outcome (push refused, setup failed) is flagged the same way. "GitHub refused the push" with workflow files in `main`'s change: the App has no `workflows` permission by design; merge `main` by hand as above.
+
 ## Troubleshooting
 
 | Symptom                                                                                      | Fix                                                                                                                                                                                                                                                                                                                                                                                                                      |

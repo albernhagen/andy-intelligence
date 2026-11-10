@@ -3647,7 +3647,7 @@ export interface paths {
                 run: {
                   id: string;
                   /** @enum {string} */
-                  step: "refine" | "plan" | "build" | "review" | "verify" | "scout";
+                  step: "refine" | "plan" | "build" | "review" | "verify" | "scout" | "sync";
                   /** @enum {string} */
                   status: "queued" | "running" | "succeeded" | "failed" | "cancelled";
                   /** Format: date-time */
@@ -3735,7 +3735,7 @@ export interface paths {
               projectId: string;
               ticketId: string | null;
               /** @enum {string} */
-              step: "refine" | "plan" | "build" | "review" | "verify" | "scout";
+              step: "refine" | "plan" | "build" | "review" | "verify" | "scout" | "sync";
               route: {
                 /** @enum {string} */
                 harness: "claude-code" | "jules" | "opencode" | "direct";
@@ -3845,6 +3845,7 @@ export interface paths {
                 | "checks_pending"
                 | "draft"
                 | "not_default_branch"
+                | "sync_pending"
               )[];
               /** @default [] */
               protectedFiles: string[];
@@ -3884,6 +3885,44 @@ export interface paths {
               touches: string[];
               /** @default null */
               reservedAdr: number | null;
+              /** @default null */
+              syncRun: {
+                buildRunId: string;
+                /** Format: uri */
+                pullRequest: string;
+                number: number;
+                branch: string;
+                headSha: string;
+                /** @enum {string|null} */
+                outcome:
+                  "synced" | "already_current" | "conflict_unresolved" | "checks_failed" | null;
+                pushedSha: string | null;
+                conflictFiles: string[];
+                reason: string | null;
+              } | null;
+              /** @default null */
+              prSync: {
+                /** Format: date-time */
+                pendingSince: string | null;
+                /** @enum {string|null} */
+                waiting:
+                  | "paused"
+                  | "global_cap"
+                  | "quota_reserve"
+                  | "daily_cap"
+                  | "ticket_busy"
+                  | "builds_off"
+                  | "pr_cap"
+                  | null;
+                stoppedHeadSha: string | null;
+                stoppedReason: string | null;
+                capFlaggedDay: string | null;
+                /**
+                 * Format: date-time
+                 * @default null
+                 */
+                checkedAt: string | null;
+              } | null;
             }[];
           };
         };
@@ -3932,7 +3971,7 @@ export interface paths {
               projectId: string;
               ticketId: string | null;
               /** @enum {string} */
-              step: "refine" | "plan" | "build" | "review" | "verify" | "scout";
+              step: "refine" | "plan" | "build" | "review" | "verify" | "scout" | "sync";
               route: {
                 /** @enum {string} */
                 harness: "claude-code" | "jules" | "opencode" | "direct";
@@ -4042,6 +4081,7 @@ export interface paths {
                 | "checks_pending"
                 | "draft"
                 | "not_default_branch"
+                | "sync_pending"
               )[];
               /** @default [] */
               protectedFiles: string[];
@@ -4081,6 +4121,44 @@ export interface paths {
               touches: string[];
               /** @default null */
               reservedAdr: number | null;
+              /** @default null */
+              syncRun: {
+                buildRunId: string;
+                /** Format: uri */
+                pullRequest: string;
+                number: number;
+                branch: string;
+                headSha: string;
+                /** @enum {string|null} */
+                outcome:
+                  "synced" | "already_current" | "conflict_unresolved" | "checks_failed" | null;
+                pushedSha: string | null;
+                conflictFiles: string[];
+                reason: string | null;
+              } | null;
+              /** @default null */
+              prSync: {
+                /** Format: date-time */
+                pendingSince: string | null;
+                /** @enum {string|null} */
+                waiting:
+                  | "paused"
+                  | "global_cap"
+                  | "quota_reserve"
+                  | "daily_cap"
+                  | "ticket_busy"
+                  | "builds_off"
+                  | "pr_cap"
+                  | null;
+                stoppedHeadSha: string | null;
+                stoppedReason: string | null;
+                capFlaggedDay: string | null;
+                /**
+                 * Format: date-time
+                 * @default null
+                 */
+                checkedAt: string | null;
+              } | null;
             };
           };
         };
@@ -4206,7 +4284,7 @@ export interface paths {
                 projectId: string;
                 ticketId: string | null;
                 /** @enum {string} */
-                step: "refine" | "plan" | "build" | "review" | "verify" | "scout";
+                step: "refine" | "plan" | "build" | "review" | "verify" | "scout" | "sync";
                 route: {
                   /** @enum {string} */
                   harness: "claude-code" | "jules" | "opencode" | "direct";
@@ -4316,6 +4394,7 @@ export interface paths {
                   | "checks_pending"
                   | "draft"
                   | "not_default_branch"
+                  | "sync_pending"
                 )[];
                 /** @default [] */
                 protectedFiles: string[];
@@ -4355,13 +4434,51 @@ export interface paths {
                 touches: string[];
                 /** @default null */
                 reservedAdr: number | null;
+                /** @default null */
+                syncRun: {
+                  buildRunId: string;
+                  /** Format: uri */
+                  pullRequest: string;
+                  number: number;
+                  branch: string;
+                  headSha: string;
+                  /** @enum {string|null} */
+                  outcome:
+                    "synced" | "already_current" | "conflict_unresolved" | "checks_failed" | null;
+                  pushedSha: string | null;
+                  conflictFiles: string[];
+                  reason: string | null;
+                } | null;
+                /** @default null */
+                prSync: {
+                  /** Format: date-time */
+                  pendingSince: string | null;
+                  /** @enum {string|null} */
+                  waiting:
+                    | "paused"
+                    | "global_cap"
+                    | "quota_reserve"
+                    | "daily_cap"
+                    | "ticket_busy"
+                    | "builds_off"
+                    | "pr_cap"
+                    | null;
+                  stoppedHeadSha: string | null;
+                  stoppedReason: string | null;
+                  capFlaggedDay: string | null;
+                  /**
+                   * Format: date-time
+                   * @default null
+                   */
+                  checkedAt: string | null;
+                } | null;
               };
               build: {
                 id: string;
                 projectId: string;
                 ticketId: string | null;
                 /** @enum {string} */
-                step: "refine" | "plan" | "build" | "review" | "verify" | "scout";
+                step: "refine" | "plan" | "build" | "review" | "verify" | "scout" | "sync";
                 route: {
                   /** @enum {string} */
                   harness: "claude-code" | "jules" | "opencode" | "direct";
@@ -4471,6 +4588,7 @@ export interface paths {
                   | "checks_pending"
                   | "draft"
                   | "not_default_branch"
+                  | "sync_pending"
                 )[];
                 /** @default [] */
                 protectedFiles: string[];
@@ -4510,6 +4628,44 @@ export interface paths {
                 touches: string[];
                 /** @default null */
                 reservedAdr: number | null;
+                /** @default null */
+                syncRun: {
+                  buildRunId: string;
+                  /** Format: uri */
+                  pullRequest: string;
+                  number: number;
+                  branch: string;
+                  headSha: string;
+                  /** @enum {string|null} */
+                  outcome:
+                    "synced" | "already_current" | "conflict_unresolved" | "checks_failed" | null;
+                  pushedSha: string | null;
+                  conflictFiles: string[];
+                  reason: string | null;
+                } | null;
+                /** @default null */
+                prSync: {
+                  /** Format: date-time */
+                  pendingSince: string | null;
+                  /** @enum {string|null} */
+                  waiting:
+                    | "paused"
+                    | "global_cap"
+                    | "quota_reserve"
+                    | "daily_cap"
+                    | "ticket_busy"
+                    | "builds_off"
+                    | "pr_cap"
+                    | null;
+                  stoppedHeadSha: string | null;
+                  stoppedReason: string | null;
+                  capFlaggedDay: string | null;
+                  /**
+                   * Format: date-time
+                   * @default null
+                   */
+                  checkedAt: string | null;
+                } | null;
               } | null;
               buildError: string | null;
             };
@@ -4600,7 +4756,7 @@ export interface paths {
               ticketKey: string | null;
               ticketTitle: string | null;
               /** @enum {string} */
-              step: "refine" | "plan" | "build" | "review" | "verify" | "scout";
+              step: "refine" | "plan" | "build" | "review" | "verify" | "scout" | "sync";
               /** @enum {string} */
               status: "queued" | "running";
               branch: string | null;
@@ -4751,7 +4907,9 @@ export interface paths {
                   | "waiting_on_andy"
                   | "blocked"
                   | "dispatch_idle"
-                  | "quota_reserve";
+                  | "quota_reserve"
+                  | "sync_stopped"
+                  | "sync_waiting";
                 ticketKey: string | null;
                 title: string | null;
                 prNumber: number | null;
@@ -4781,6 +4939,7 @@ export interface paths {
                     | "checks_pending"
                     | "draft"
                     | "not_default_branch"
+                    | "sync_pending"
                   )[];
                   /** @enum {string|null} */
                   outcome: "merged_clean" | "reworked" | "reverted" | "failed" | null;
@@ -4793,7 +4952,7 @@ export interface paths {
                   ticketKey: string | null;
                   title: string | null;
                   /** @enum {string} */
-                  step: "refine" | "plan" | "build" | "review" | "verify" | "scout";
+                  step: "refine" | "plan" | "build" | "review" | "verify" | "scout" | "sync";
                   /** @enum {string} */
                   status: "queued" | "running" | "succeeded" | "failed" | "cancelled";
                   label: string;

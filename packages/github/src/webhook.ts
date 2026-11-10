@@ -13,7 +13,7 @@ import { z } from "zod";
  */
 
 /** Events the control plane records. `ping` (sent when the hook is created) is acknowledged. */
-export const RECORDED_EVENTS = ["pull_request", "check_run", "workflow_run"] as const;
+export const RECORDED_EVENTS = ["pull_request", "check_run", "workflow_run", "push"] as const;
 export type RecordedEvent = (typeof RECORDED_EVENTS)[number];
 
 export function isRecordedEvent(name: string): name is RecordedEvent {
@@ -110,6 +110,28 @@ const WorkflowRunPayload = z.object({
   }),
 });
 
+/** Only branch pushes are kept; tags and deletions are dropped by the caller (`isBranchPush`). */
+const PushPayload = z.object({
+  ref: z.string(),
+  after: z.string(),
+  deleted: z.boolean().nullish(),
+  repository: z.object({ default_branch: z.string().nullish() }).nullish(),
+});
+
+const BRANCH_REF = /^refs\/heads\/(.{1,256})$/;
+
+/** Whether a push payload moved a branch (not a tag, not a deletion), so it is worth recording. */
+export function isBranchPush(payload: unknown): boolean {
+  const parsed = PushPayload.safeParse(payload);
+  return (
+    parsed.success &&
+    BRANCH_REF.test(parsed.data.ref) &&
+    !parsed.data.deleted &&
+    /^[0-9a-f]{40}$/.test(parsed.data.after) &&
+    !/^0{40}$/.test(parsed.data.after)
+  );
+}
+
 export interface DeliveryMeta {
   event: RecordedEvent;
   deliveryId: string;
@@ -189,6 +211,20 @@ function build(event: RecordedEvent, base: { repo: string }, payload: unknown): 
           headBranch: run.head_branch ?? null,
           headSha: run.head_sha,
           url: run.html_url,
+        },
+      };
+    }
+    case "push": {
+      const { ref, after, repository } = parse(PushPayload, payload, event);
+      const branch = BRANCH_REF.exec(ref)?.[1] ?? "";
+      return {
+        ...base,
+        kind: event,
+        action: "pushed",
+        push: {
+          branch,
+          headSha: after,
+          defaultBranch: branch !== "" && branch === repository?.default_branch,
         },
       };
     }

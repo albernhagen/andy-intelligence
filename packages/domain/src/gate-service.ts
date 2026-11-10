@@ -18,6 +18,7 @@ import {
   policyAllows,
   type GateDecision,
 } from "./gate";
+import { syncPendingFor } from "./sync-runs";
 import type { TicketService } from "./tickets";
 
 /**
@@ -254,12 +255,13 @@ export class PullRequestGate {
   }
 
   private async assess(repo: string, pr: PullRequest, run: Run): Promise<GateDecision> {
-    const [files, codeowners, required, checks] = await Promise.all([
+    const [files, codeowners, required, checks, active] = await Promise.all([
       this.host.listChangedFiles(repo, pr.number),
       // The base branch's file: a PR can't unprotect a path by editing CODEOWNERS.
       Promise.all(CODEOWNERS_PATHS.map((p) => this.host.readFile(repo, p, pr.baseRef))),
       this.host.listRequiredChecks(repo, pr.baseRef),
       this.host.listHeadChecks(repo, pr.headSha),
+      this.runs.listActive(run.projectId),
     ]);
     return decideGate({
       verification: run.verification,
@@ -269,6 +271,8 @@ export class PullRequestGate {
       codeowners: codeowners.flatMap((text) => (text === null ? [] : codeownersGlobs(text))),
       required,
       checks,
+      // AI-72 (ADR-0083): never merge a head a queued or running sync run is about to replace.
+      syncPending: syncPendingFor(run, active, this.now()),
     });
   }
 

@@ -4,7 +4,11 @@ import {
   BuildOutput,
   PLAN_REASON_MAX,
   PlanOutput,
+  PR_SYNC_EMPTY,
   RUN_SUMMARY_MAX,
+  SYNC_LIMITS,
+  SYNC_STOP_OUTCOMES,
+  SyncOutput,
   WorkTrackerError,
   notFound,
   type BillingType,
@@ -25,6 +29,7 @@ import {
   type RunStep,
   type RunStore,
   type Stage,
+  type SyncRunRecord,
   type Ticket,
   type WatchdogQueue,
   type WorkTracker,
@@ -56,6 +61,7 @@ import { RefineGate } from "./refine-gate";
 import { DomainError } from "./tickets";
 import { TIER_ROUTES } from "./tiers";
 import { afterFailure, deadlineAction, MAX_RUN_ATTEMPTS } from "./watchdog";
+import { syncPrompt, type SyncTarget } from "./sync-runs";
 
 /**
  * Agent runs (M1.6a: Claude Code executor, ARCHITECTURE §7.1–7.2, §9). Andy starts a run on a
@@ -107,6 +113,15 @@ export const STEP_LIMITS: Record<StartableStep, { maxTurns: number; timeoutMinut
 };
 
 /**
+ * Sync runs (ADR-0083): context 5 + agent job 80 (agent 40, the executor's own checks 30) +
+ * publish 10 + report 5 minutes, plus queueing. Fewer turns than a build: merge, resolve, check.
+ */
+export const SYNC_RUN_LIMITS = { maxTurns: 80, timeoutMinutes: 105 } as const;
+
+/** Runs that count against a project's dial: every step but sync (ADR-0083). */
+const countsForDial = (r: Run) => r.step !== "sync";
+
+/**
  * Refine runs per ticket, counting every run that reached the executor (ADR-0028: each one
  * spends subscription quota). A first pass, a re-refine after answers, and one retry.
  */
@@ -121,8 +136,10 @@ export interface RunContext {
   prompt: string;
   /** The run's ticket, for the PR title and link (build). Title is untrusted text. */
   ticket: { projectId: string; key: string; title: string } | null;
-  /** The branch a build run pushes; null for other steps. */
+  /** The branch a build or sync run pushes; null for other steps. */
   branch: string | null;
+  /** A sync run's PR: its number and the head it started from (AI-72); null for other steps. */
+  sync: { pullRequest: number; headSha: string } | null;
 }
 
 /**
@@ -149,6 +166,10 @@ export interface RunResult {
   pullRequest?: string | null;
   /** Build: tooling or dependency files the change touches (flagged on the PR). */
   toolingFiles?: string[];
+  /** Sync: the PR head already contained the default branch, so the agent didn't run. */
+  alreadyCurrent?: boolean;
+  /** Sync: the merge commit the publish job pushed, if any. */
+  headSha?: string | null;
 }
 
 function log(severity: "INFO" | "WARNING" | "ERROR", message: string, fields: object = {}) {
@@ -236,7 +257,7 @@ export class RunService {
     if (active.some((r) => r.ticketId === ticketId)) {
       throw new DomainError("run_limit", `${ticket.key} already has a run in flight`);
     }
-    if (active.length >= project.runsAtOnce) {
+    if (active.filter(countsForDial).length >= project.runsAtOnce) {
       throw new DomainError("run_limit", `project ${project.key} is at its runs-at-once dial`, [
         `limit: ${project.runsAtOnce}`,
         ...active.map((r) => `run ${r.id} (${r.status})`),
@@ -282,7 +303,10 @@ export class RunService {
     const inProject = after.filter((r) => r.projectId === projectId);
     const won =
       after.slice(0, MAX_ACTIVE_RUNS_GLOBAL).some((r) => r.id === run.id) &&
-      inProject.slice(0, project.runsAtOnce).some((r) => r.id === run.id) &&
+      inProject
+        .filter(countsForDial)
+        .slice(0, project.runsAtOnce)
+        .some((r) => r.id === run.id) &&
       inProject.find((r) => r.ticketId === ticketId)?.id === run.id;
     // ADR-0080: the overlap check, repeated against the runs that got in first.
     const older = inProject.slice(
@@ -308,16 +332,94 @@ export class RunService {
       ]);
     }
 
+    const started = retryOf
+      ? `Retrying the ${startable} run (attempt ${run.attempt} of ${MAX_RUN_ATTEMPTS})`
+      : `Started a ${startable} run (${run.route.model})`;
+    const dispatched = await this.dispatchRun(run, ticket, repo, started);
+    if (startable === "build") await this.markInProgress(ticket);
+    return dispatched;
+  }
+
+  /**
+   * A sync run on an open agent PR (AI-72, ADR-0083): the `SyncRuns` dispatcher checked the caps.
+   * Counts against the global cap, not the project's dial; one run per ticket at a time; builds
+   * must be on (it runs in the build sandbox). The oldest run wins a race, as for `start`.
+   */
+  async startSync(projectId: string, ticketId: string, target: SyncTarget): Promise<Run> {
+    if (!this.executor) {
+      throw new DomainError("executor_unavailable", "no executor: connect GitHub first");
+    }
+    const project = await this.tracker.getProject(projectId);
+    if (!project) throw notFound("project", projectId);
+    const ticket = await this.requireTicket(projectId, ticketId);
+    if (!project.buildEnabled) {
+      throw new DomainError("not_buildable", `builds are off for project ${project.key}`);
+    }
+    const repo = project.repos[0];
+    if (!repo) throw new DomainError("invalid_repo", `project ${project.key} has no repo`);
+    const everywhere = await this.inFlightEverywhere();
+    if (everywhere.some((r) => r.projectId === projectId && r.ticketId === ticketId)) {
+      throw new DomainError("run_limit", `${ticket.key} already has a run in flight`);
+    }
+    if (everywhere.length >= MAX_ACTIVE_RUNS_GLOBAL) {
+      throw new DomainError("run_limit", "the cap on runs across all projects is reached");
+    }
+    const build = buildRoute(ticket);
+    const prompt = syncPrompt(ticket, repo, target);
+    const run = await this.runs.create({
+      projectId,
+      ticketId,
+      step: "sync",
+      route: build.route,
+      tier: build.tier,
+      deadline: new Date(
+        this.now().getTime() + SYNC_RUN_LIMITS.timeoutMinutes * 60_000,
+      ).toISOString(),
+      prompt,
+      maxTurns: SYNC_RUN_LIMITS.maxTurns,
+      attempt: 1,
+      retryOf: null,
+      planRunId: null,
+      planPolicy: null,
+      syncRun: {
+        ...target,
+        outcome: null,
+        pushedSha: null,
+        conflictFiles: [],
+        reason: null,
+      },
+    });
+    const after = await this.inFlightEverywhere();
+    const won =
+      after.slice(0, MAX_ACTIVE_RUNS_GLOBAL).some((r) => r.id === run.id) &&
+      after.find((r) => r.projectId === projectId && r.ticketId === ticketId)?.id === run.id;
+    if (!won) {
+      await this.fail(run.id, "another run started at the same time");
+      throw new DomainError("run_limit", "the cap on runs across all projects is reached");
+    }
+    return this.dispatchRun(
+      run,
+      ticket,
+      repo,
+      `Started a sync run: merging main into PR #${target.number} (${run.route.model})`,
+    );
+  }
+
+  /** Hands a created run to the executor and records its handle and watchdog. */
+  private async dispatchRun(run: Run, ticket: Ticket, repo: string, started: string): Promise<Run> {
+    const executor = this.executor;
+    if (!executor)
+      throw new DomainError("executor_unavailable", "no executor: connect GitHub first");
     let handle;
     try {
-      handle = await this.executor.start({
+      handle = await executor.start({
         runId: run.id,
         projectRef: repo,
         ticketRef: ticket.key,
-        step: startable,
+        step: run.step,
         route: run.route,
         billingType: PROVIDER_BILLING[run.route.provider],
-        instructions: prompt,
+        instructions: run.prompt ?? "",
         callbackUrl: null,
       });
     } catch (err) {
@@ -343,7 +445,7 @@ export class RunService {
         externalId: handle.externalId,
         error: message,
       });
-      await this.executor
+      await executor
         .cancel(handle)
         .catch((e: unknown) =>
           log("ERROR", "cancel after a failed record failed", { runId: run.id, error: String(e) }),
@@ -358,14 +460,10 @@ export class RunService {
       attempt: run.attempt,
     });
     await this.scheduleWatchdog(dispatched);
-    if (startable === "build") await this.markInProgress(ticket);
-    const started = retryOf
-      ? `Retrying the ${startable} run (attempt ${run.attempt} of ${MAX_RUN_ATTEMPTS})`
-      : `Started a ${startable} run (${run.route.model})`;
     // Best effort: the run is dispatched and recorded, so a failed comment mustn't read as a
     // failed start (a retry would then be flagged Needs-you while it runs).
     await this.tracker
-      .addComment(projectId, ticketId, `${started}: ${handle.url ?? run.id}`, "system")
+      .addComment(run.projectId, ticket.id, `${started}: ${handle.url ?? run.id}`, "system")
       .catch((e: unknown) =>
         log("ERROR", "run start comment not written", { runId: run.id, error: String(e) }),
       );
@@ -394,7 +492,16 @@ export class RunService {
       maxTurns: run.maxTurns,
       prompt: run.prompt,
       ticket: ticket ? { projectId: ticket.projectId, key: ticket.key, title: ticket.title } : null,
-      branch: ticket && run.step === "build" ? branchFor(ticket.key, run.id) : null,
+      branch:
+        ticket && run.step === "build"
+          ? branchFor(ticket.key, run.id)
+          : run.step === "sync"
+            ? (run.syncRun?.branch ?? null)
+            : null,
+      sync:
+        run.step === "sync" && run.syncRun
+          ? { pullRequest: run.syncRun.number, headSha: run.syncRun.headSha }
+          : null,
     };
   }
 
@@ -416,6 +523,7 @@ export class RunService {
     let asked = 0;
     let lateRefine = "";
     let built: BuildRecord | null = null;
+    let synced: SyncRunRecord | null = null;
     let planned: PlanOutput | null = null;
     // The outcome is applied before the run is closed: the write is idempotent per run, so a
     // report replayed after a crash here finishes the job instead of duplicating it.
@@ -449,6 +557,15 @@ export class RunService {
       }
       if (built.summary) summary = built.summary;
     }
+    if (run.step === "sync") {
+      const checked = checkSync(run, result);
+      synced = checked.record;
+      if (status === "succeeded" && checked.error) {
+        status = "failed";
+        error = checked.error;
+      }
+      if (checked.summary) summary = checked.summary;
+    }
     const usage = result.usage ?? null;
     const billing = PROVIDER_BILLING[run.route.provider];
     const cost = runCost(run.route.model, billing, usage, result.costUsd);
@@ -477,6 +594,7 @@ export class RunService {
                 links: { ...run.links, pullRequest: built.pullRequest ?? undefined },
               }
             : {}),
+          ...(synced ? { syncRun: synced, toolingFiles: toolingOf(result) } : {}),
         },
         ACTIVE_RUN_STATUSES,
       );
@@ -503,15 +621,22 @@ export class RunService {
       const decide = planned
         ? "\n\nNeeds you: approve or reject this plan in the ticket's Activity (or MCP approve_plan / reject_plan). The build starts when you approve."
         : "";
-      const body =
-        status === "succeeded"
+      const syncTooling =
+        synced && done.toolingFiles.length > 0
+          ? `\n\nThe merge changes tooling or dependency files (the gate won't auto-merge it): ${done.toolingFiles.join(", ")}`
+          : "";
+      const body = synced
+        ? `${syncComment(done, synced, status, error, summary)}${syncTooling}`
+        : status === "succeeded"
           ? `${summary ?? "The run finished without a summary."}${asks}${lateRefine}${pr}${tooling}${decide}`
           : `The ${done.step} run failed.${error ? ` ${error}` : ""}${summary ? `\n\n${summary}` : ""}${kept}`;
       await this.tracker.addComment(done.projectId, done.ticketId, body, `agent:${run.id}`);
     }
     // A reported failure gets the watchdog policy (one retry, then Needs-you); a refine result
     // the control plane rejected is flagged at once: retrying the same agent rarely fixes it.
-    if (result.status === "failed") await this.retryOrFlag(done, "reported a failure");
+    if (synced && SYNC_STOP_OUTCOMES.includes(synced.outcome!)) await this.stopSyncs(done, synced);
+    else if (result.status === "failed") await this.retryOrFlag(done, "reported a failure");
+    else if (done.step === "sync" && status === "failed") await this.flagTicket(done);
     else if (done.step === "refine" && status === "failed") await this.flagFailedRefine(done);
     else if (done.step === "build" && status === "failed") await this.flagTicket(done);
     // A plan waits for Andy (ADR-0050): the ticket is flagged and nothing starts. A rejected
@@ -553,8 +678,11 @@ export class RunService {
    */
   async claimPushGrant(runId: string, caller: RunExecutor): Promise<Run> {
     const run = await this.requireCaller(runId, caller);
-    if (run.step !== "build") {
-      throw new DomainError("forbidden", `run ${runId} is a ${run.step} run; only build runs push`);
+    if (run.step !== "build" && run.step !== "sync") {
+      throw new DomainError(
+        "forbidden",
+        `run ${runId} is a ${run.step} run; only build and sync runs push`,
+      );
     }
     if (run.status !== "running")
       throw new DomainError("run_finished", `run ${runId} is ${run.status}`);
@@ -854,11 +982,40 @@ export class RunService {
       error =
         "It finished without opening a pull request (no changes, or the PR couldn't be opened).";
     }
-    const toolingFiles = (result.toolingFiles ?? [])
-      .filter((f) => typeof f === "string" && f.length > 0 && f.length <= 300)
-      .slice(0, 50);
+    const toolingFiles = toolingOf(result);
     const verification = parsed.success ? parsed.data.verification : [];
     return { plan, branch, pullRequest, summary, error, toolingFiles, verification };
+  }
+
+  /**
+   * A sync that stopped (conflict_unresolved, checks_failed): no sync starts on the PR head it
+   * began from (`prSync.stoppedHeadSha` on the PR's build run), and the ticket is flagged; the
+   * comment with the reason and files is the run's report comment. Logs, never throws.
+   */
+  private async stopSyncs(run: Run, synced: SyncRunRecord): Promise<void> {
+    try {
+      const buildRun = await this.runs.get(synced.buildRunId);
+      if (buildRun?.step === "build" && buildRun.projectId === run.projectId) {
+        await this.runs.update(
+          buildRun.id,
+          {
+            prSync: {
+              ...PR_SYNC_EMPTY,
+              ...buildRun.prSync,
+              pendingSince: null,
+              waiting: null,
+              stoppedHeadSha: synced.headSha,
+              stoppedReason: (synced.reason ?? synced.outcome ?? "").slice(0, SYNC_LIMITS.reason),
+            },
+          },
+          ["succeeded"],
+        );
+      }
+      await this.flagTicket(run);
+      log("WARNING", "sync stopped", { runId: run.id, outcome: synced.outcome });
+    } catch (err) {
+      log("ERROR", "sync stop not recorded", { runId: run.id, error: String(err) });
+    }
   }
 
   /**
@@ -1039,7 +1196,10 @@ export class RunService {
   private async retryOrFlag(run: Run, reason: string): Promise<"retried" | "flagged"> {
     if (!run.ticketId) return "flagged";
     let why = `The ${run.step} run ${reason}`;
-    if (afterFailure(run) === "retry") {
+    if (run.step === "sync") {
+      // No automatic retry (ADR-0083): the next move of main, or a run ending, queues another.
+      why += "; sync runs aren't retried";
+    } else if (afterFailure(run) === "retry") {
       try {
         const retry = await this.start(run.projectId, run.ticketId, run.step, run);
         log("INFO", "run retried", { runId: run.id, retryId: retry.id, reason });
@@ -1121,8 +1281,11 @@ export class RunService {
           ticketTitle: ticket?.title ?? null,
           step: r.step,
           status: r.status === "queued" ? "queued" : "running",
-          branch: r.branch ?? (ticket && r.step === "build" ? branchFor(ticket.key, r.id) : null),
-          pullRequest: r.links.pullRequest ?? null,
+          branch:
+            r.branch ??
+            r.syncRun?.branch ??
+            (ticket && r.step === "build" ? branchFor(ticket.key, r.id) : null),
+          pullRequest: r.links.pullRequest ?? r.syncRun?.pullRequest ?? null,
           startedAt: r.startedAt ?? r.createdAt,
           touches: r.touches,
           reservedAdr: r.reservedAdr,
@@ -1130,11 +1293,14 @@ export class RunService {
       });
   }
 
-  /** Runs in flight in the project and across all projects, of any step (ADR-0079). */
+  /**
+   * Runs in flight in the project (counted against its dial: every step but sync, ADR-0083) and
+   * across all projects (the global cap: every step), ADR-0079.
+   */
   async activeCounts(projectId: string): Promise<{ project: number; global: number }> {
     const runs = await this.inFlightEverywhere();
     return {
-      project: runs.filter((r) => r.projectId === projectId).length,
+      project: runs.filter((r) => r.projectId === projectId && countsForDial(r)).length,
       global: runs.length,
     };
   }
@@ -1224,6 +1390,90 @@ function issuesOf(error: { issues: readonly { path: PropertyKey[]; message: stri
     .slice(0, 5)
     .map((i) => `${i.path.join(".") || "result"}: ${i.message}`)
     .join("; ");
+}
+
+/**
+ * Checks a sync run's report (AI-72): `already_current` from the executor's own check; else the
+ * agent's checked result. `synced` needs the push of the run's own branch with a commit SHA; a
+ * stop outcome stands whatever the run's status. The record keeps the PR the run started on.
+ */
+export function checkSync(
+  run: Run,
+  result: RunResult,
+): { record: SyncRunRecord | null; summary: string | null; error: string | null } {
+  const base = run.syncRun;
+  if (!base) return { record: null, summary: null, error: "The run has no pull request recorded." };
+  if (result.alreadyCurrent === true && result.status === "succeeded") {
+    return {
+      record: { ...base, outcome: "already_current" },
+      summary: "The PR already contained main; nothing to do.",
+      error: null,
+    };
+  }
+  const parsed = SyncOutput.safeParse(result.output);
+  if (!parsed.success) {
+    return {
+      record: base,
+      summary: null,
+      error: `Its result was rejected (${issuesOf(parsed.error)}).`,
+    };
+  }
+  const out = parsed.data;
+  const record: SyncRunRecord = {
+    ...base,
+    outcome: out.outcome,
+    conflictFiles: out.conflictFiles,
+    reason: out.reason.trim() || null,
+  };
+  if (out.outcome !== "synced") return { record, summary: out.summary, error: null };
+  const pushed =
+    result.branch === base.branch && /^[0-9a-f]{40}$/.test(result.headSha ?? "")
+      ? result.headSha!
+      : null;
+  if (!pushed) {
+    return {
+      record: { ...record, outcome: null },
+      summary: out.summary,
+      error: "It finished without pushing the merge to the PR branch.",
+    };
+  }
+  return { record: { ...record, pushedSha: pushed }, summary: out.summary, error: null };
+}
+
+/** The tooling files a run reported, capped and cleaned (the publish job's list). */
+function toolingOf(result: RunResult): string[] {
+  return (result.toolingFiles ?? [])
+    .filter((f) => typeof f === "string" && f.length > 0 && f.length <= 300)
+    .slice(0, 50);
+}
+
+const SYNC_FILES_LISTED = 20;
+
+/** The ticket comment for a sync run's report: what happened to the PR, in plain words. */
+function syncComment(
+  run: Run,
+  synced: SyncRunRecord,
+  status: "succeeded" | "failed",
+  error: string | null,
+  summary: string | null,
+): string {
+  const pr = `PR #${synced.number}`;
+  const files = synced.conflictFiles.slice(0, SYNC_FILES_LISTED).join(", ");
+  const more = synced.conflictFiles.length > SYNC_FILES_LISTED ? ", …" : "";
+  const detail = summary ? `\n\n${summary}` : "";
+  switch (
+    status === "failed" && !SYNC_STOP_OUTCOMES.includes(synced.outcome!) ? null : synced.outcome
+  ) {
+    case "synced":
+      return `Merged main into ${pr} and pushed ${synced.pushedSha!.slice(0, 7)}${files ? ` (resolved conflicts in ${files}${more})` : ""}; its checks and reviews rerun on the new head.${detail}`;
+    case "already_current":
+      return `${pr} already contained main; the sync run did nothing.`;
+    case "conflict_unresolved":
+    case "checks_failed":
+      return `Needs you: the sync run couldn't bring ${pr} up to date with main (${synced.outcome === "conflict_unresolved" ? "a conflict it couldn't resolve" : "the project's checks failed after the merge"})${files ? `. Files: ${files}${more}` : ""}.${synced.reason ? ` ${synced.reason}` : ""} Nothing was pushed; no sync runs on this head again. Merge main into the branch by hand (runbook agent-runs.md).${detail}`;
+    default:
+      return `The sync run of ${pr} failed.${error ? ` ${error}` : ""} Nothing was pushed (${run.id}).${detail}`;
+  }
 }
 
 /** What a build report leaves on its Run once checked. */

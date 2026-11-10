@@ -3,6 +3,7 @@ export * from "./projects";
 export * from "./stages";
 export * from "./tickets";
 export * from "./runs";
+export * from "./sync-runs";
 export * from "./pull-requests";
 export * from "./watchdog";
 export * from "./refine-dispatch";

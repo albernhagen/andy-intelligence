@@ -140,6 +140,14 @@ describe("policyAllows", () => {
 });
 
 describe("decideGate", () => {
+  it("GivenASyncQueuedOrRunningForThePr_WhenDecided_ThenNoAutoMergeAndNoFlag", () => {
+    expect(decideGate(facts({ syncPending: true }))).toMatchObject({
+      wouldAutoMerge: false,
+      reasons: ["sync_pending"],
+      flag: false,
+    });
+  });
+
   it("GivenAllPassing_WhenDecided_ThenItWouldMerge", () => {
     expect(decideGate(facts())).toMatchObject({ wouldAutoMerge: true, reasons: [], flag: false });
   });

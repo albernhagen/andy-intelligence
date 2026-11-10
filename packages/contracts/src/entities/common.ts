@@ -45,7 +45,7 @@ export type ProviderKey = z.infer<typeof ProviderKey>;
 export const HarnessKey = z.enum(["claude-code", "jules", "opencode", "direct"]);
 export type HarnessKey = z.infer<typeof HarnessKey>;
 
-export const RunStep = z.enum(["refine", "plan", "build", "review", "verify", "scout"]);
+export const RunStep = z.enum(["refine", "plan", "build", "review", "verify", "scout", "sync"]);
 export type RunStep = z.infer<typeof RunStep>;
 
 export const Urgency = z.enum(["low", "normal", "high"]);
