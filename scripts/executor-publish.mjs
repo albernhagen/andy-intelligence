@@ -7,11 +7,13 @@
 // shell, and are never printed. The token is masked, kept in memory and passed to git through
 // GIT_CONFIG_* env (not argv).
 //
-// Usage: executor-publish.mjs publish | sync | drop-placeholders
+// Usage: executor-publish.mjs publish | sync | install-drift | drop-placeholders
+//   install-drift (sync merge step): NUL-separated paths on stdin; prints the install inputs among them.
 //   drop-placeholders (agent job, before the change is collected): env WORKSPACE, MANIFEST.
 //   sync (AI-72, ADR-0083; checkout at the PR head with history): env PATCH (may be absent),
 //   PROFILE, CODEOWNERS, RUN_ID, BRANCH, REPO, HEAD_SHA, MAIN_SHA, MERGE_TREE, CONTROL_PLANE_URL,
-//   the two ACTIONS_ID_TOKEN_* variables, GITHUB_OUTPUT. Writes outputs `branch` and `head_sha`.
+//   the two ACTIONS_ID_TOKEN_* variables, RUNNER_TEMP, GITHUB_OUTPUT. Writes outputs `branch`,
+//   `head_sha` and `tooling_files` (JSON array).
 //   publish env: PATCH, PROFILE, CODEOWNERS (path or empty), RUN_ID, BRANCH, REPO, BASE, PROJECT_ID,
 //   TICKET_KEY, TICKET_TITLE, MODEL, REPORT (the agent's report JSON), CONTROL_PLANE_URL,
 //   ACTIONS_ID_TOKEN_REQUEST_URL, ACTIONS_ID_TOKEN_REQUEST_TOKEN, GITHUB_OUTPUT.
@@ -19,6 +21,7 @@
 import { Buffer } from "node:buffer";
 import { execFileSync } from "node:child_process";
 import { appendFileSync, lstatSync, readFileSync, realpathSync, unlinkSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { codeownersPatterns } from "./executor-profile.mjs";
@@ -146,6 +149,30 @@ export function toolingFiles(entries) {
 function expandBraces(glob) {
   const m = /^(.*)\{([^}]+)\}(.*)$/.exec(glob);
   return m ? m[2].split(",").map((alt) => `${m[1]}${alt}${m[3]}`) : [glob];
+}
+
+/**
+ * Files the dependency install (outside the sandbox) and the toolchain setup read (AI-72). A sync
+ * run installs from the merged tree, so these must be exactly as on the default branch: then the
+ * install sees only files a person merged, as a build run's does. Repo-relative globs.
+ */
+export const INSTALL_INPUT_GLOBS = [
+  "**/package.json",
+  "**/pnpm-lock.yaml",
+  "**/pnpm-workspace.yaml",
+  "**/.pnpmfile.cjs",
+  "**/.npmrc",
+  "**/.yarnrc*",
+  "**/package-lock.json",
+  "**/yarn.lock",
+  "**/.nvmrc",
+  "**/.node-version",
+];
+
+/** The changed paths (vs the default branch) that the install or toolchain setup reads. */
+export function installDrift(paths) {
+  const patterns = INSTALL_INPUT_GLOBS.map(globToRegExp);
+  return [...new Set(paths)].filter((p) => patterns.some((re) => re.test(p))).sort();
 }
 
 /**
@@ -500,11 +527,17 @@ export async function publishSync({ env, git, fetch: fetchImpl = globalThis.fetc
     throw new PublishRefused(["the merge didn't reproduce the tree the agent started from"]);
   }
 
-  let entries = [];
-  if (env.PATCH) {
-    git(["apply", "--index", "--binary", env.PATCH]);
-    entries = parseRaw(git(["diff-index", "--cached", "--raw", "-z", "--no-renames", base]));
-  }
+  // Check before anything is applied: the patch goes into a scratch index seeded with the merge
+  // tree (never the checkout or the real index), and its paths, modes and the conflicted files'
+  // final text are judged there. Only a patch that passes is applied for real.
+  const scratch = {
+    GIT_INDEX_FILE: join(env.RUNNER_TEMP || tmpdir(), `sync-check-${env.RUN_ID}.index`),
+  };
+  git(["read-tree", base], scratch);
+  if (env.PATCH) git(["apply", "--cached", "--binary", env.PATCH], scratch);
+  const entries = parseRaw(
+    git(["diff-index", "--cached", "--raw", "-z", "--no-renames", base], scratch),
+  );
   const profile = JSON.parse(readFileSync(env.PROFILE, "utf8"));
   let owners;
   try {
@@ -518,7 +551,7 @@ export async function publishSync({ env, git, fetch: fetchImpl = globalThis.fetc
   );
   const stagedText = (path) => {
     try {
-      return git(["show", `:${path}`]);
+      return git(["show", `:${path}`], scratch);
     } catch {
       return null; // deleted in the resolution
     }
@@ -527,6 +560,9 @@ export async function publishSync({ env, git, fetch: fetchImpl = globalThis.fetc
     refused.push(`${path}: conflict markers left`);
   }
   if (refused.length > 0) throw new PublishRefused(refused);
+  // Allowed but flagged, as for a build (ADR-0063): the run records them and the gate vetoes them.
+  const tooling = toolingFiles(entries);
+  if (env.PATCH) git(["apply", "--index", "--binary", env.PATCH]);
 
   const tree = git(["write-tree"]).trim();
   const commit = git([
@@ -545,10 +581,11 @@ export async function publishSync({ env, git, fetch: fetchImpl = globalThis.fetc
   pushRef({ env, git, emit, token, source: commit });
   output("branch", env.BRANCH);
   output("head_sha", commit);
+  output("tooling_files", JSON.stringify(tooling));
   emit(
     `Pushed the merge to ${env.BRANCH}${conflicted.length ? ` (${conflicted.length} conflicted file(s) resolved)` : ""}.`,
   );
-  return { branch: env.BRANCH, headSha: commit, conflicted };
+  return { branch: env.BRANCH, headSha: commit, conflicted, tooling };
 }
 
 /**
@@ -643,6 +680,15 @@ export async function publish({ env, git, fetch: fetchImpl = globalThis.fetch, e
 async function main() {
   const [command] = process.argv.slice(2);
   const env = process.env;
+  if (command === "install-drift") {
+    // The sync merge step (AI-72): NUL-separated paths on stdin (git diff -z against the default
+    // branch); prints the install inputs among them as a JSON array.
+    const paths = readFileSync(0, "utf8")
+      .split("\0")
+      .filter((p) => p !== "");
+    process.stdout.write(`${JSON.stringify(installDrift(paths))}\n`);
+    return;
+  }
   if (command === "drop-placeholders") {
     // The agent job's collect step, before `git add -A` (env WORKSPACE, MANIFEST).
     try {
@@ -658,7 +704,9 @@ async function main() {
     return;
   }
   if (command !== "publish" && command !== "sync") {
-    throw new Error("usage: executor-publish.mjs publish | sync | drop-placeholders");
+    throw new Error(
+      "usage: executor-publish.mjs publish | sync | install-drift | drop-placeholders",
+    );
   }
   try {
     await (command === "sync" ? publishSync : publish)({
@@ -674,6 +722,10 @@ async function main() {
   }
 }
 
-if (process.argv[1] === fileURLToPath(import.meta.url)) {
+// Real paths on both sides: a checkout under a symlinked temp directory still runs main().
+if (
+  process.argv[1] &&
+  realpathSync(process.argv[1]) === realpathSync(fileURLToPath(import.meta.url))
+) {
   main();
 }

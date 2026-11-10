@@ -1,5 +1,5 @@
 import { execFileSync } from "node:child_process";
-import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { describe, expect, it } from "vitest";
@@ -145,7 +145,11 @@ describe("sync publish", () => {
     expect(h.pushes).toHaveLength(1);
     expect(h.pushes[0].args.at(-1)).toBe(`${result.headSha}:refs/heads/agent/AI-3/build1`);
     expect(h.pushes[0].args).not.toContain("--force");
-    expect(h.outputs).toEqual({ branch: "agent/AI-3/build1", head_sha: result.headSha });
+    expect(h.outputs).toEqual({
+      branch: "agent/AI-3/build1",
+      head_sha: result.headSha,
+      tooling_files: "[]",
+    });
   });
 
   it("GivenACleanMergeAndNoPatch_WhenPublished_ThenTheMergeIsPushed", async () => {
@@ -175,6 +179,22 @@ describe("sync publish", () => {
     const h = harness(root, { PATCH: patch, HEAD_SHA: head, MAIN_SHA: main, MERGE_TREE: tree });
     await expect(h.run()).rejects.toBeInstanceOf(PublishRefused);
     expect(h.pushes).toEqual([]);
+    // Refused before anything was applied: the checkout and its index hold the merge only.
+    expect(existsSync(join(root, ".github/workflows/x.yml"))).toBe(false);
+    expect(sh(root, "diff", "--cached", "--name-only", "--", ".github")).toBe("");
+  });
+
+  it("GivenAResolutionThatTouchesADependencyFile_WhenPublished_ThenItIsPushedAndFlagged", async () => {
+    const { root, head, main } = repo();
+    const tree = mergeTree(root, main);
+    const patch = resolution(root, main, {
+      "a.txt": "one\nresolved\nthree\n",
+      "package.json": '{"name":"x"}\n',
+    });
+    const h = harness(root, { PATCH: patch, HEAD_SHA: head, MAIN_SHA: main, MERGE_TREE: tree });
+    const result = await h.run();
+    expect(result.tooling).toEqual(["package.json"]);
+    expect(h.outputs.tooling_files).toBe('["package.json"]');
   });
 
   it("GivenAMergeTreeThatDoesntMatch_WhenPublished_ThenItIsRefused", async () => {

@@ -3912,10 +3912,16 @@ export interface paths {
                   | "daily_cap"
                   | "ticket_busy"
                   | "builds_off"
+                  | "pr_cap"
                   | null;
                 stoppedHeadSha: string | null;
                 stoppedReason: string | null;
                 capFlaggedDay: string | null;
+                /**
+                 * Format: date-time
+                 * @default null
+                 */
+                checkedAt: string | null;
               } | null;
             }[];
           };
@@ -4142,10 +4148,16 @@ export interface paths {
                   | "daily_cap"
                   | "ticket_busy"
                   | "builds_off"
+                  | "pr_cap"
                   | null;
                 stoppedHeadSha: string | null;
                 stoppedReason: string | null;
                 capFlaggedDay: string | null;
+                /**
+                 * Format: date-time
+                 * @default null
+                 */
+                checkedAt: string | null;
               } | null;
             };
           };
@@ -4449,10 +4461,16 @@ export interface paths {
                     | "daily_cap"
                     | "ticket_busy"
                     | "builds_off"
+                    | "pr_cap"
                     | null;
                   stoppedHeadSha: string | null;
                   stoppedReason: string | null;
                   capFlaggedDay: string | null;
+                  /**
+                   * Format: date-time
+                   * @default null
+                   */
+                  checkedAt: string | null;
                 } | null;
               };
               build: {
@@ -4637,10 +4655,16 @@ export interface paths {
                     | "daily_cap"
                     | "ticket_busy"
                     | "builds_off"
+                    | "pr_cap"
                     | null;
                   stoppedHeadSha: string | null;
                   stoppedReason: string | null;
                   capFlaggedDay: string | null;
+                  /**
+                   * Format: date-time
+                   * @default null
+                   */
+                  checkedAt: string | null;
                 } | null;
               } | null;
               buildError: string | null;
@@ -4884,7 +4908,8 @@ export interface paths {
                   | "blocked"
                   | "dispatch_idle"
                   | "quota_reserve"
-                  | "sync_stopped";
+                  | "sync_stopped"
+                  | "sync_waiting";
                 ticketKey: string | null;
                 title: string | null;
                 prNumber: number | null;

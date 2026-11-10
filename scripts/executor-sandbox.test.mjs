@@ -18,6 +18,7 @@ import {
   factsProblem,
   gitTampering,
   verifyCheck,
+  verifyChecks,
 } from "./executor-sandbox.mjs";
 
 const COMMAND = "git update-index -q --refresh && env | cut -d= -f1 > .executor-sandbox-check";
@@ -122,6 +123,41 @@ describe("sandbox check facts", () => {
     expect(verifyCheck(args)).toBe(null);
     expect(existsSync(marker)).toBe(false);
     expect(verifyCheck(args)).toBe("the command wrote no facts file");
+  });
+});
+
+describe("sync checks run (AI-72)", () => {
+  const CHECKS = "pnpm run --if-present test && printf 'nonce=%s' \"$N\" > /tmp/agent/m";
+  const marker = () => join(mkdtempSync(join(tmpdir(), "checks-")), "sync-checks-passed");
+
+  it("GivenTheChecksRanAndWroteTheNonce_WhenVerified_ThenTheyPassAndTheMarkerIsGone", () => {
+    const m = marker();
+    writeFileSync(m, "nonce=abc\n");
+    const messages = [use("Bash", { command: CHECKS }), result()];
+    expect(verifyChecks({ messages, command: CHECKS, marker: m, nonce: "abc" })).toBe(null);
+    expect(existsSync(m)).toBe(false);
+  });
+
+  it("GivenAFailedCheckNoMarkerOrAStaleNonce_WhenVerified_ThenTheyFail", () => {
+    const ok = [use("Bash", { command: CHECKS }), result()];
+    expect(verifyChecks({ messages: ok, command: CHECKS, marker: marker(), nonce: "abc" })).toMatch(
+      /didn't all pass/,
+    );
+    const stale = marker();
+    writeFileSync(stale, "nonce=old\n");
+    expect(verifyChecks({ messages: ok, command: CHECKS, marker: stale, nonce: "abc" })).toMatch(
+      /didn't all pass/,
+    );
+    const failed = [use("Bash", { command: CHECKS }), result(true)];
+    const written = marker();
+    writeFileSync(written, "nonce=abc\n");
+    expect(verifyChecks({ messages: failed, command: CHECKS, marker: written, nonce: "abc" })).toBe(
+      "the Bash call failed in the sandbox",
+    );
+    const other = [use("Bash", { command: "true" }), result()];
+    expect(verifyChecks({ messages: other, command: CHECKS, marker: written, nonce: "abc" })).toBe(
+      "the check ran a different command",
+    );
   });
 });
 

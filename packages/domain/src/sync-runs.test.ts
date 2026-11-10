@@ -9,6 +9,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { MAX_ACTIVE_RUNS_GLOBAL } from "./dispatch-caps";
 import { RunService, checkSync, type RunResult } from "./runs";
 import {
+  MAX_SYNC_PRS_PER_TICK,
   MAX_SYNC_RUNS_PER_PR_PER_DAY,
   SyncRuns,
   maySync,
@@ -207,7 +208,11 @@ describe("SyncRuns", () => {
       output: syncOutput("synced"),
       branch: pr.build.branch,
       headSha: sha("c"),
+      toolingFiles: ["package.json"],
     });
+    expect((await store.get(first!.id))!.toolingFiles).toEqual(["package.json"]);
+    const said = (await tracker.listEvents(projectId, pr.ticket.id)).at(-1)!.body ?? "";
+    expect(said).toContain("tooling or dependency files");
     await sync.next(projectId);
     const all = await syncRunsOf(pr.ticket.id);
     expect(all).toHaveLength(2);
@@ -368,6 +373,40 @@ describe("SyncRuns", () => {
       "andy",
     );
     expect((await runs.start(projectId, next.id, "build")).step).toBe("build");
+  });
+
+  it("GivenMoreOpenPrsThanATickChecks_WhenMainMoves_ThenTheRestWaitVisiblyAndComeFirstNextTick", async () => {
+    await tracker.updateProject(projectId, { paused: true });
+    const prs = [];
+    for (let i = 0; i <= MAX_SYNC_PRS_PER_TICK; i++) {
+      const pr = await agentPr(100 + i, sha("a"));
+      prs.push(pr);
+    }
+    host.behindDefault.add(sha("a"));
+    expect(await sync.defaultBranchMoved(projectId)).toBe(true);
+    const states = await Promise.all(prs.map(async (p) => (await store.get(p.build.id))!.prSync));
+    expect(states.filter((st) => st?.waiting === "pr_cap")).toHaveLength(1);
+    expect(states.filter((st) => st?.waiting === "paused")).toHaveLength(MAX_SYNC_PRS_PER_TICK);
+    const capped = prs[states.findIndex((st) => st?.waiting === "pr_cap")]!;
+    expect((await store.get(capped.build.id))!.prSync?.pendingSince).not.toBeNull();
+
+    // Next tick: the PR past the cap is checked first (never checked before).
+    await sync.next(projectId);
+    expect((await store.get(capped.build.id))!.prSync).toMatchObject({ waiting: "paused" });
+  });
+
+  it("GivenTheHostFailsDuringATick_WhenMainMoves_ThenItReportsFailureAndTheNextTickStartsTheSync", async () => {
+    const pr = await agentPr(40, sha("a"));
+    host.behindDefault.add(sha("a"));
+    const real = host.headContains.bind(host);
+    host.headContains = async () => {
+      throw new Error("GitHub 502");
+    };
+    expect(await sync.defaultBranchMoved(projectId)).toBe(false);
+    expect(await syncRunsOf(pr.ticket.id)).toEqual([]);
+    host.headContains = real;
+    await sync.next(projectId);
+    expect(await syncRunsOf(pr.ticket.id)).toHaveLength(1);
   });
 
   it("GivenARunEndedWithin24Hours_WhenCounted_ThenOnlyThatPrsSyncRunsThatReachedTheExecutorCount", () => {

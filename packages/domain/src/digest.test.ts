@@ -139,6 +139,36 @@ describe("buildDigest", () => {
     );
   });
 
+  it("GivenAnOpenPrWhoseSyncWaits_WhenBuiltLive_ThenASyncWaitingExceptionSaysWhy", () => {
+    const build = run({
+      step: "build",
+      status: "succeeded",
+      links: { pullRequest: "https://github.com/albernhagen/andy-intelligence/pull/9" },
+      prSync: {
+        pendingSince: IN,
+        waiting: "daily_cap",
+        stoppedHeadSha: null,
+        stoppedReason: null,
+        capFlaggedDay: null,
+        checkedAt: null,
+      },
+    });
+    const d = buildDigest(
+      WINDOW,
+      data({
+        tickets: [ticket(1, { stage: "ready_for_review" })],
+        ticketRuns: new Map([["t1", [build]]]),
+      }),
+    );
+    expect(d.exceptions).toContainEqual(
+      expect.objectContaining({
+        kind: "sync_waiting",
+        prNumber: 9,
+        reason: "PR #9: sync with main waits: 3 syncs in 24 hours",
+      }),
+    );
+  });
+
   it("GivenAPrClosedUnmerged_WhenBuilt_ThenPrClosedException", () => {
     const d = buildDigest(
       WINDOW,

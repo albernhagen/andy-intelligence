@@ -134,7 +134,8 @@ What it does (ADR-0083): when `main` moves, every open agent PR whose head lacks
 
 1. **Once: subscribe the App to `push`.** GitHub → Settings → Developer settings → GitHub Apps → the control-plane App → Permissions & events → Subscribe to events → tick **Push** → Save. (Apps created from the UI after AI-72 already have it.) Until then only PRs merged into `main` start syncs, not direct pushes.
 2. Expect after a merge to `main`: each stale agent PR's ticket shows "Syncing with main" and a comment "Started a sync run: merging main into PR #…"; then "Merged main into PR #… and pushed …". The PR's checks and both review agents rerun on the new head. A PR that already contains `main` gets nothing.
-3. Why a sync waits: the PR's build run in MCP `status` / the Runs list has `prSync.waiting`: `paused`, `global_cap`, `quota_reserve`, `daily_cap` (3 a day; the ticket is flagged), `ticket_busy` or `builds_off`. It starts by itself when a run ends or `main` moves again.
+3. Why a sync waits: the ticket's status line ("sync with main waits: …"), the digest (`sync_waiting`) and the PR's build run (`prSync.waiting`): `paused`, `global_cap`, `quota_reserve`, `daily_cap` (3 a day; the ticket is flagged), `ticket_busy`, `builds_off` or `pr_cap` (over 20 open agent PRs; next in line on the next tick). It starts by itself on the next tick: a run ending, `main` moving, a settings change.
+4. A webhook delivery answered 500 "sync queueing failed": the host failed mid-tick (logged as `sync tick after main moved failed`). Redeliver it from the App's Advanced tab, or wait for the next tick.
 
 **On `conflict_unresolved` or `checks_failed`** (ticket in Needs you, "Waiting for you: sync with main stopped …", digest exception `sync_stopped`): the comment names the files and the reason; nothing was pushed.
 
@@ -143,7 +144,7 @@ What it does (ADR-0083): when `main` moves, every open agent PR whose head lacks
 3. Clear the ticket's Needs-you flag. The new head lifts the stop: the next move of `main` syncs it again if needed.
 4. Or, if the PR is no longer worth it, close it and send the ticket back (rework) or cancel it.
 
-A sync that failed without an outcome (push refused, setup failed) is flagged the same way. "GitHub refused the push" with workflow files in `main`'s change: the App has no `workflows` permission by design; merge `main` by hand as above.
+`checks_failed` also comes from the executor: "The PR changes dependency or toolchain files" (a sync never installs from files a PR changed: merge by hand), or "The executor ran the project's checks after the agent and they did not pass" (the agent said synced; nothing was pushed). A sync that failed without an outcome (push refused, setup failed) is flagged the same way. "GitHub refused the push" with workflow files in `main`'s change: the App has no `workflows` permission by design; merge `main` by hand as above.
 
 ## Troubleshooting
 

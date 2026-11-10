@@ -150,17 +150,17 @@ jobs:
   agent:
     needs: context
     runs-on: ubuntu-latest
-    timeout-minutes: ${{ needs.context.outputs.step == 'build' && 65 || (needs.context.outputs.step == 'sync' && 50) || 30 }}
+    timeout-minutes: ${{ needs.context.outputs.step == 'build' && 65 || (needs.context.outputs.step == 'sync' && 80) || 30 }}
     permissions:
       contents: read
     outputs:
-      report: ${{ steps.report.outputs.report }}
+      report: ${{ steps.settle.outputs.report || steps.report.outputs.report }}
       base_sha: ${{ steps.change.outputs.base_sha }}
       has_change: ${{ steps.change.outputs.has_change }}
       change_error: ${{ steps.change.outputs.change_error }}
       main_sha: ${{ steps.merge.outputs.main_sha }}
       merge_tree: ${{ steps.merge.outputs.merge_tree }}
-      sync_publish: ${{ steps.report.outputs.sync_publish }}
+      sync_publish: ${{ steps.settle.outputs.sync_publish }}
     steps:
       # A sync run checks out the PR head it was started on, with history, to merge the default
       # branch into it; every other step starts from the default branch.
@@ -245,6 +245,19 @@ jobs:
           git add -A
           echo "merge_tree=$(git write-tree)" >> "$GITHUB_OUTPUT"
           git commit -q --no-verify -m "Merge the default branch (sync base, not pushed)"
+          # The dependency install below runs outside the sandbox. A build installs from the
+          # default branch; a sync would install from the merged tree, whose manifests, lockfile
+          # and .npmrc the PR may have changed. So a merged tree whose install inputs differ from
+          # the default branch's stops here, before any install or agent (ADR-0083).
+          drift=$(git diff --name-only -z --no-renames "$main_sha" HEAD \
+            | node "$RUNNER_TEMP/platform/scripts/executor-publish.mjs" install-drift) || {
+            echo "::error title=claude-executor::Couldn't compare the install inputs with the default branch."
+            exit 1
+          }
+          if [ "$drift" != "[]" ]; then
+            echo "install_drift=$drift" >> "$GITHUB_OUTPUT"
+            echo "The merge changes install inputs against the default branch: $drift. No install, no agent."
+          fi
           echo "Merged $main_sha; conflicted files: $(tr '\0' '\n' < "$RUNNER_TEMP/sync-conflicts" | grep -c .)."
 
       # Whether the agent edits (build, or a sync with something to merge: everything below that
@@ -254,12 +267,19 @@ jobs:
         env:
           STEP: ${{ needs.context.outputs.step }}
           ALREADY_CURRENT: ${{ steps.merge.outputs.already_current }}
+          INSTALL_DRIFT: ${{ steps.merge.outputs.install_drift }}
         run: |
           edits=false
           skip_agent=false
           case "$STEP" in
             build) edits=true ;;
-            sync) if [ "$ALREADY_CURRENT" = true ]; then skip_agent=true; else edits=true; fi ;;
+            sync)
+              if [ "$ALREADY_CURRENT" = true ] || [ -n "$INSTALL_DRIFT" ]; then
+                skip_agent=true
+              else
+                edits=true
+              fi
+              ;;
           esac
           { echo "edits=$edits"; echo "skip_agent=$skip_agent"; } >> "$GITHUB_OUTPUT"
           echo "Step $STEP: edits $edits, agent skipped $skip_agent."
@@ -512,16 +532,112 @@ jobs:
           REASON: ${{ steps.sandbox_verify.outcome == 'failure' && 'The sandbox check failed, so the agent did not run (a sandboxed Bash call could not write the checkout and .git with credentials unset)' || (steps.claude.outcome == 'skipped' && 'Executor setup failed before the agent ran' || '') }}
           STEP: ${{ needs.context.outputs.step }}
           ALREADY_CURRENT: ${{ steps.merge.outputs.already_current }}
+          INSTALL_DRIFT: ${{ steps.merge.outputs.install_drift }}
         run: |
           if [ "$ALREADY_CURRENT" = true ]; then
             report=$(jq -cn '{status: "succeeded", summary: "The PR already contained the default branch.", alreadyCurrent: true, tokensIn: null, tokensOut: null, costUsd: null}')
+          elif [ -n "$INSTALL_DRIFT" ]; then
+            # The executor's own verdict, not the agent's: no install or agent ran.
+            report=$(jq -cn '(env.INSTALL_DRIFT | try fromjson catch [] | map(tostring) | .[:50]) as $files | {status: "succeeded", summary: "The PR changes dependency or toolchain files, so the sync run did not install or run anything.", tokensIn: null, tokensOut: null, costUsd: null, output: {outcome: "checks_failed", summary: "The PR changes dependency or toolchain files; a sync run installs only what the default branch has.", conflictFiles: $files, reason: "The PR changes dependency or toolchain files against main; a sync run never installs from files a PR changed. Merge main into it by hand.", verification: []}}')
           else
             report=$(node "$RUNNER_TEMP/platform/scripts/executor-report.mjs")
           fi
           echo "status: $(jq -r .status <<<"$report")"
-          # Sync: only an agent that says it synced gets the merge published.
+          # Sync: an agent that says it synced only earns the executor's own run of the checks.
           if [ "$STEP" = sync ] && jq -e '.status == "succeeded" and .output.outcome == "synced"' <<<"$report" > /dev/null 2>&1; then
+            echo "agent_synced=true" >> "$GITHUB_OUTPUT"
+          fi
+          delimiter="REPORT_$(openssl rand -hex 16)"
+          printf 'report<<%s\n%s\n%s\n' "$delimiter" "$report" "$delimiter" >> "$GITHUB_OUTPUT"
+
+      # Sync only (AI-72, ADR-0083): the agent's word that the checks pass isn't enough to push.
+      # The executor runs them itself, as the sandbox check runs its command: one fixed command
+      # through Claude Code's sandbox (same managed settings, scrub and env as the agent; Haiku,
+      # 3 turns), judged from the execution log (that exact command, one Bash call, no error) and a
+      # marker only the command's success writes, holding a nonce the agent never saw. Every
+      # package script it runs stays inside the sandbox; only this verdict publishes.
+      - name: Prepare the checks (sync)
+        id: checks_prepare
+        if: steps.report.outputs.agent_synced == 'true' && steps.change.outputs.change_error == ''
+        run: |
+          rm -f /tmp/agent/sync-checks-passed
+          # shellcheck disable=SC2016
+          command='pnpm run --if-present lint && pnpm run --if-present typecheck && pnpm run --if-present test && pnpm run --if-present build && printf "nonce=%s\n" "$SYNC_CHECKS_NONCE" > /tmp/agent/sync-checks-passed'
+          { echo "nonce=$(openssl rand -hex 16)"; echo "command=$command"; } >> "$GITHUB_OUTPUT"
+
+      - name: Run the checks (sync)
+        id: sync_checks
+        if: steps.checks_prepare.outcome == 'success'
+        continue-on-error: true # the verify step judges it
+        timeout-minutes: 30
+        uses: anthropics/claude-code-action@d70510b174a1244958df0b03166a54912811f3e6 # v1.0.264
+        env:
+          CLAUDE_CODE_SUBPROCESS_ENV_SCRUB: "1"
+          TMPDIR: /tmp/agent
+          npm_config_store_dir: /tmp/agent/pnpm-store
+          npm_config_cache_dir: /tmp/agent/pnpm-cache
+          npm_config_state_dir: /tmp/agent/pnpm-state
+          # The checks take minutes; Bash's default 2-minute timeout would cut them off.
+          BASH_DEFAULT_TIMEOUT_MS: "1500000"
+          BASH_MAX_TIMEOUT_MS: "1500000"
+          SYNC_CHECKS_NONCE: ${{ steps.checks_prepare.outputs.nonce }}
+        with:
+          claude_code_oauth_token: ${{ inputs.credential == 'subscription' && secrets.CLAUDE_CODE_OAUTH_TOKEN || '' }}
+          anthropic_api_key: ${{ inputs.credential == 'api_key' && secrets.ANTHROPIC_API_KEY || '' }}
+          github_token: ${{ github.token }}
+          allowed_bots: andy-intelligence-control
+          settings: '{"disableAllHooks": true}'
+          prompt: |
+            This is a check run. Don't read any file. Use the Bash tool exactly once to run this exact command, unchanged, and use no other tool. Then reply with its exit code and nothing else. If it fails, don't retry it or try anything else.
+
+            ${{ steps.checks_prepare.outputs.command }}
+          claude_args: |
+            --model haiku
+            --max-turns 3
+
+      - name: Verify the checks (sync)
+        id: checks_verify
+        if: always() && steps.checks_prepare.outcome == 'success'
+        env:
+          EXECUTION_FILE: ${{ steps.sync_checks.outputs.execution_file }}
+          COMMAND: ${{ steps.checks_prepare.outputs.command }}
+          NONCE: ${{ steps.checks_prepare.outputs.nonce }}
+        run: |
+          # The run could write .git, like the agent: the pristine copy goes back, and a changed
+          # path that steers git fails the checks.
+          tampered=$(PRISTINE="$RUNNER_TEMP/pristine.git" LIVE="$GITHUB_WORKSPACE/.git" \
+            node "$RUNNER_TEMP/platform/scripts/executor-sandbox.mjs" check-git) || tampered="(check failed)"
+          rm -rf "$GITHUB_WORKSPACE/.git"
+          cp -a "$RUNNER_TEMP/pristine.git" "$GITHUB_WORKSPACE/.git"
+          if [ -n "$tampered" ]; then
+            echo "problem=the check run changed .git: $(tr '\n' ' ' <<<"$tampered")" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          if problem=$(MARKER=/tmp/agent/sync-checks-passed \
+            node "$RUNNER_TEMP/platform/scripts/executor-sandbox.mjs" verify-checks); then
+            echo "passed=true" >> "$GITHUB_OUTPUT"
+            echo "The project's checks passed in the sandbox."
+          else
+            echo "problem=$(tr '\n' ' ' <<<"$problem" | cut -c1-300)" >> "$GITHUB_OUTPUT"
+            echo "::warning title=claude-executor::The executor's run of the checks failed: $problem"
+          fi
+
+      # Sync only: publish when the agent synced and the executor's checks passed; an agent that
+      # said synced but whose checks failed becomes checks_failed (Needs-you, no push).
+      - name: Settle the sync result (sync)
+        id: settle
+        if: always() && needs.context.outputs.step == 'sync' && steps.report.outcome == 'success'
+        env:
+          REPORT: ${{ steps.report.outputs.report }}
+          AGENT_SYNCED: ${{ steps.report.outputs.agent_synced }}
+          CHECKS_PASSED: ${{ steps.checks_verify.outputs.passed }}
+          CHECKS_PROBLEM: ${{ steps.checks_verify.outputs.problem || 'the checks did not run' }}
+        run: |
+          report="$REPORT"
+          if [ "$AGENT_SYNCED" = true ] && [ "$CHECKS_PASSED" = true ]; then
             echo "sync_publish=true" >> "$GITHUB_OUTPUT"
+          elif [ "$AGENT_SYNCED" = true ]; then
+            report=$(jq -c '.output.outcome = "checks_failed" | .output.reason = ("The executor ran the project'"'"'s checks after the agent and they did not pass (" + env.CHECKS_PROBLEM + "); nothing was pushed.")' <<<"$REPORT")
           fi
           delimiter="REPORT_$(openssl rand -hex 16)"
           printf 'report<<%s\n%s\n%s\n' "$delimiter" "$report" "$delimiter" >> "$GITHUB_OUTPUT"
@@ -549,7 +665,7 @@ jobs:
     outputs:
       branch: ${{ steps.push.outputs.branch }}
       pull_request: ${{ steps.push.outputs.pull_request }}
-      tooling_files: ${{ steps.push.outputs.tooling_files }}
+      tooling_files: ${{ steps.push.outputs.tooling_files || steps.sync.outputs.tooling_files }}
       head_sha: ${{ steps.sync.outputs.head_sha }}
     steps:
       - name: Check out the agent's base commit (the PR head with history for sync)

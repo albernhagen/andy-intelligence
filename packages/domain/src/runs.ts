@@ -113,10 +113,10 @@ export const STEP_LIMITS: Record<StartableStep, { maxTurns: number; timeoutMinut
 };
 
 /**
- * Sync runs (ADR-0083): context 5 + agent 45 + publish 10 + report 5 minutes, plus queueing.
- * Fewer turns than a build: merge, resolve, check.
+ * Sync runs (ADR-0083): context 5 + agent job 80 (agent 40, the executor's own checks 30) +
+ * publish 10 + report 5 minutes, plus queueing. Fewer turns than a build: merge, resolve, check.
  */
-export const SYNC_RUN_LIMITS = { maxTurns: 80, timeoutMinutes: 75 } as const;
+export const SYNC_RUN_LIMITS = { maxTurns: 80, timeoutMinutes: 105 } as const;
 
 /** Runs that count against a project's dial: every step but sync (ADR-0083). */
 const countsForDial = (r: Run) => r.step !== "sync";
@@ -594,7 +594,7 @@ export class RunService {
                 links: { ...run.links, pullRequest: built.pullRequest ?? undefined },
               }
             : {}),
-          ...(synced ? { syncRun: synced } : {}),
+          ...(synced ? { syncRun: synced, toolingFiles: toolingOf(result) } : {}),
         },
         ACTIVE_RUN_STATUSES,
       );
@@ -621,8 +621,12 @@ export class RunService {
       const decide = planned
         ? "\n\nNeeds you: approve or reject this plan in the ticket's Activity (or MCP approve_plan / reject_plan). The build starts when you approve."
         : "";
+      const syncTooling =
+        synced && done.toolingFiles.length > 0
+          ? `\n\nThe merge changes tooling or dependency files (the gate won't auto-merge it): ${done.toolingFiles.join(", ")}`
+          : "";
       const body = synced
-        ? syncComment(done, synced, status, error, summary)
+        ? `${syncComment(done, synced, status, error, summary)}${syncTooling}`
         : status === "succeeded"
           ? `${summary ?? "The run finished without a summary."}${asks}${lateRefine}${pr}${tooling}${decide}`
           : `The ${done.step} run failed.${error ? ` ${error}` : ""}${summary ? `\n\n${summary}` : ""}${kept}`;
@@ -978,9 +982,7 @@ export class RunService {
       error =
         "It finished without opening a pull request (no changes, or the PR couldn't be opened).";
     }
-    const toolingFiles = (result.toolingFiles ?? [])
-      .filter((f) => typeof f === "string" && f.length > 0 && f.length <= 300)
-      .slice(0, 50);
+    const toolingFiles = toolingOf(result);
     const verification = parsed.success ? parsed.data.verification : [];
     return { plan, branch, pullRequest, summary, error, toolingFiles, verification };
   }
@@ -1436,6 +1438,13 @@ export function checkSync(
     };
   }
   return { record: { ...record, pushedSha: pushed }, summary: out.summary, error: null };
+}
+
+/** The tooling files a run reported, capped and cleaned (the publish job's list). */
+function toolingOf(result: RunResult): string[] {
+  return (result.toolingFiles ?? [])
+    .filter((f) => typeof f === "string" && f.length > 0 && f.length <= 300)
+    .slice(0, 50);
 }
 
 const SYNC_FILES_LISTED = 20;

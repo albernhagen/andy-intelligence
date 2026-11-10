@@ -7,6 +7,7 @@ import {
   statusLine,
   type StatusInput,
   syncStopped,
+  syncWaiting,
 } from "./status-line";
 
 const NOW = new Date("2026-11-05T12:00:00.000Z");
@@ -254,5 +255,24 @@ describe("syncStopped", () => {
     expect(syncStopped([sync("synced"), build("b1")])).toBeNull();
     expect(syncStopped([build("b2"), sync("conflict_unresolved", "b1")])).toBeNull();
     expect(syncStopped([])).toBeNull();
+  });
+});
+
+describe("syncWaiting", () => {
+  const build = (prSync: object | null) =>
+    ({
+      step: "build",
+      id: "b1",
+      links: { pullRequest: "https://github.com/a/b/pull/7" },
+      prSync,
+    }) as unknown as Run;
+
+  it("GivenAPendingSyncThatWaits_WhenRead_ThenItSaysWhyAndTheReviewLineShowsIt", () => {
+    const runs = [build({ pendingSince: "2026-11-10T00:00:00Z", waiting: "pr_cap" })];
+    expect(syncWaiting(runs)).toBe("more open PRs than one check covers; next in line");
+    expect(syncWaiting([build({ pendingSince: null, waiting: null })])).toBeNull();
+    expect(line({ stage: "ready_for_review", syncWaiting: "dispatch is paused" }).text).toBe(
+      "Ready for review · sync with main waits: dispatch is paused",
+    );
   });
 });

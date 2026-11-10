@@ -6,6 +6,7 @@ import {
   type Run,
   type RunStep,
   type Stage,
+  type SyncWaitReason,
   type Ticket,
   type TicketEvent,
   type TicketSummary,
@@ -36,6 +37,8 @@ export interface StatusInput {
   overlaps?: string | null;
   /** Why the last sync run stopped (AI-72), shown while the ticket waits for Andy; null: none. */
   syncStopped?: string | null;
+  /** Why the PR's wanted sync hasn't started (AI-72); null or absent: none waits. */
+  syncWaiting?: string | null;
 }
 
 export function statusLine(s: StatusInput, now: Date): { text: string; tone: StatusTone } {
@@ -88,10 +91,36 @@ function mainStatus(s: StatusInput, now: Date): { text: string; tone: StatusTone
         tone: "default",
       };
     case "in_progress":
-      return { text: join("In progress", pr ?? "no run in flight"), tone: "default" };
+      return {
+        text: join("In progress", pr ?? "no run in flight", waits(s.syncWaiting)),
+        tone: "default",
+      };
     case "ready_for_review":
-      return { text: join("Ready for review", pr), tone: "default" };
+      return { text: join("Ready for review", pr, waits(s.syncWaiting)), tone: "default" };
   }
+}
+
+const waits = (why: string | null | undefined) => (why ? `sync with main waits: ${why}` : null);
+
+/** Plain words for why a wanted sync waits (status line, digest). */
+export const SYNC_WAIT_WORDS: Record<SyncWaitReason, string> = {
+  paused: "dispatch is paused",
+  global_cap: "the global cap is reached",
+  quota_reserve: "quota is at the reserve",
+  daily_cap: "3 syncs in 24 hours",
+  ticket_busy: "another run of the ticket is in flight",
+  builds_off: "builds are off",
+  pr_cap: "more open PRs than one check covers; next in line",
+};
+
+/**
+ * Why the ticket's open PR waits for a sync (AI-72), from its newest build run with a PR; null
+ * when none waits. `runs` is newest first.
+ */
+export function syncWaiting(runs: readonly Run[]): string | null {
+  const build = runs.find((r) => r.step === "build" && r.links.pullRequest);
+  const state = build?.prSync;
+  return state?.pendingSince && state.waiting ? SYNC_WAIT_WORDS[state.waiting] : null;
 }
 
 function ordinal(n: number): string {
@@ -217,6 +246,7 @@ export function ticketStatusLine(ticket: Ticket, facts: TicketFacts, now: Date) 
       worker: facts.worker,
       overlaps: ticket.stage === "ready" ? overlappingKey(ticket, facts.inFlight ?? []) : null,
       syncStopped: syncStopped(facts.runs),
+      syncWaiting: syncWaiting(facts.runs),
     },
     now,
   );

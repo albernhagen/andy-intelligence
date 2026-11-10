@@ -30,8 +30,8 @@ import { DomainError } from "./tickets";
 
 /** Sync runs per PR in any 24 hours, counting runs that reached the executor (ADR-0028). */
 export const MAX_SYNC_RUNS_PER_PR_PER_DAY = 3;
-/** Open agent PRs one push looks at; each costs host reads (ADR-0028). */
-export const MAX_SYNC_PRS_PER_PUSH = 20;
+/** Open agent PRs one tick checks on the host (two reads each, ADR-0028); the rest wait a tick. */
+export const MAX_SYNC_PRS_PER_TICK = 20;
 const DAY_MS = 24 * 60 * 60 * 1000;
 
 export interface SyncCounts {
@@ -131,13 +131,6 @@ function log(severity: "INFO" | "WARNING" | "ERROR", message: string, fields: ob
   console.log(JSON.stringify({ severity, message, component: "sync-runs", ...fields }));
 }
 
-/** An open agent PR: its build run, ticket and current state on the host. */
-interface AgentPr {
-  run: Run;
-  ticket: Ticket;
-  pr: PullRequest;
-}
-
 /** Stages with an open agent PR: in review, or back in progress for rework. */
 const PR_STAGES = new Set(["ready_for_review", "in_progress"]);
 
@@ -153,41 +146,21 @@ export class SyncRuns {
   ) {}
 
   /**
-   * The default branch of the project's repo moved: mark every open agent PR whose head lacks it
-   * as wanting a sync (a PR already pending or syncing coalesces), then start what the caps
-   * allow. Never throws.
+   * The default branch moved (a push, or a PR merged into it): one dispatch tick. Returns false
+   * when the tick failed (logged), so the webhook can answer with an error; nothing is lost
+   * either way, because every later tick derives again which PRs lack the default branch.
    */
-  async defaultBranchMoved(projectId: string): Promise<void> {
+  async defaultBranchMoved(projectId: string): Promise<boolean> {
     try {
-      const project = await this.tracker.getProject(projectId);
-      const repo = project?.repos[0];
-      if (!project || !repo || !this.host) return;
-      for (const agent of await this.openAgentPrs(project, repo)) {
-        const state = agent.run.prSync ?? PR_SYNC_EMPTY;
-        const contains = await this.host.headContains(repo, agent.pr.headSha, agent.pr.baseRef);
-        if (contains !== false) {
-          if (state.pendingSince)
-            await this.setState(agent.run, { pendingSince: null, waiting: null });
-          continue;
-        }
-        if (state.stoppedHeadSha === agent.pr.headSha) {
-          log("INFO", "sync not queued: stopped on this head", { ticket: agent.ticket.key });
-          continue;
-        }
-        if (state.pendingSince) continue; // coalesced into the sync already queued
-        await this.setState(agent.run, { pendingSince: this.now().toISOString(), waiting: null });
-        log("INFO", "sync queued", { ticket: agent.ticket.key, pr: agent.pr.number });
-      }
+      await this.dispatch(projectId);
+      return true;
     } catch (err) {
-      log("ERROR", "sync queueing failed", { projectId, error: String(err) });
+      log("ERROR", "sync tick after main moved failed", { projectId, error: String(err) });
+      return false;
     }
-    await this.next(projectId);
   }
 
-  /**
-   * Starts queued syncs in the project, oldest first, while the caps allow; records why each
-   * waiting one waits. Called after a push and whenever a run ends. Never throws.
-   */
+  /** A dispatch tick after any run ends or a setting changes. Never throws. */
   async next(projectId: string): Promise<Run | null> {
     try {
       return await this.dispatch(projectId);
@@ -197,30 +170,53 @@ export class SyncRuns {
     }
   }
 
+  /**
+   * One tick: for each open agent PR (at most `MAX_SYNC_PRS_PER_TICK`, least recently checked
+   * first once there are more), asks the host whether its head lacks the default branch, then
+   * starts a sync where the caps allow and records why the others wait (`prSync.pendingSince`
+   * and `waiting`, which the gate's veto reads). PRs past the cap are marked waiting
+   * (`pr_cap`) and come first on the next tick. Being derived each tick, nothing queued is
+   * lost to a failed tick, and a newer push coalesces into the sync already wanted or running.
+   */
   private async dispatch(projectId: string): Promise<Run | null> {
     if (!this.host) return null;
     const project = await this.tracker.getProject(projectId);
     const repo = project?.repos[0];
-    if (!project || !repo) return null;
-    const pending = (await this.agentRuns(project))
-      .filter((a) => a.run.prSync?.pendingSince)
-      .sort((a, b) => a.run.prSync!.pendingSince!.localeCompare(b.run.prSync!.pendingSince!));
-    if (pending.length === 0) return null;
-    const quotaLevel = await this.quotaLevel();
-    let first: Run | null = null;
-    for (const { run, ticket } of pending) {
-      const pr = await this.openPr(repo, run);
+    if (!project?.buildEnabled || !repo) return null;
+    const all = await this.agentRuns(project);
+    const rotate = all.length > MAX_SYNC_PRS_PER_TICK;
+    const ordered = rotate
+      ? [...all].sort((a, b) =>
+          (a.run.prSync?.checkedAt ?? "").localeCompare(b.run.prSync?.checkedAt ?? ""),
+        )
+      : all;
+    for (const { run, ticket } of ordered.slice(MAX_SYNC_PRS_PER_TICK)) {
       const state = run.prSync ?? PR_SYNC_EMPTY;
-      if (!pr || state.stoppedHeadSha === pr.headSha) {
-        await this.setState(run, { pendingSince: null, waiting: null });
-        continue;
+      if (state.waiting !== "pr_cap") {
+        log("INFO", "sync waits", { ticket: ticket.key, reason: "pr_cap" });
+        await this.setState(run, {
+          pendingSince: state.pendingSince ?? this.now().toISOString(),
+          waiting: "pr_cap",
+        });
       }
-      if ((await this.host.headContains(repo, pr.headSha, pr.baseRef)) !== false) {
-        await this.setState(run, { pendingSince: null, waiting: null });
+    }
+    let quotaLevel: QuotaLevel | null = null;
+    let first: Run | null = null;
+    for (const { run, ticket } of ordered.slice(0, MAX_SYNC_PRS_PER_TICK)) {
+      const state = run.prSync ?? PR_SYNC_EMPTY;
+      const checked = rotate ? { checkedAt: this.now().toISOString() } : {};
+      const pr = await this.openPr(repo, run);
+      const contains = pr ? await this.host.headContains(repo, pr.headSha, pr.baseRef) : true;
+      if (!pr || contains !== false || state.stoppedHeadSha === pr.headSha) {
+        // Closed, caught up, unknown to the host, or stopped on this head: nothing wanted.
+        if (state.pendingSince || state.waiting || rotate) {
+          await this.setState(run, { pendingSince: null, waiting: null, ...checked });
+        }
         continue;
       }
       const now = this.now();
       const ticketRuns = await this.runStore.listForTicket(projectId, ticket.id);
+      quotaLevel ??= await this.quotaLevel();
       const verdict = maySync(project, {
         globalActive: (await this.runs.activeCounts(projectId)).global,
         quotaLevel,
@@ -228,7 +224,7 @@ export class SyncRuns {
         ticketBusy: ticketRuns.some((r) => isInFlight(r, now)),
       });
       if (verdict !== "start") {
-        await this.wait(run, ticket, state, verdict);
+        await this.wait(run, ticket, state, verdict, checked);
         continue;
       }
       try {
@@ -239,12 +235,12 @@ export class SyncRuns {
           branch: pr.headRef,
           headSha: pr.headSha,
         });
-        await this.setState(run, { pendingSince: null, waiting: null });
+        await this.setState(run, { pendingSince: null, waiting: null, ...checked });
         log("INFO", "sync started", { ticket: ticket.key, pr: pr.number, runId: started.id });
         first ??= started;
       } catch (err) {
         if (!(err instanceof DomainError)) throw err;
-        // run_limit: another start took the last slot or the ticket meanwhile; it stays queued.
+        // run_limit: another start took the last slot or the ticket meanwhile; it stays wanted.
         const reason: SyncWaitReason =
           err.code === "run_limit"
             ? /ticket|already/.test(err.message)
@@ -252,7 +248,7 @@ export class SyncRuns {
               : "global_cap"
             : "builds_off";
         log("WARNING", "sync not started", { ticket: ticket.key, reason: err.message });
-        await this.wait(run, ticket, state, reason);
+        await this.wait(run, ticket, state, reason, checked);
       }
     }
     return first;
@@ -264,12 +260,18 @@ export class SyncRuns {
     ticket: Ticket,
     state: PrSyncState,
     reason: SyncWaitReason,
+    checked: Partial<PrSyncState> = {},
   ): Promise<void> {
     log("INFO", "sync waits", { ticket: ticket.key, reason });
     const today = this.now().toISOString().slice(0, 10);
     const flag = reason === "daily_cap" && state.capFlaggedDay !== today;
-    if (state.waiting === reason && !flag) return;
-    await this.setState(run, { waiting: reason, ...(flag ? { capFlaggedDay: today } : {}) });
+    if (state.waiting === reason && state.pendingSince && !flag && !checked.checkedAt) return;
+    await this.setState(run, {
+      pendingSince: state.pendingSince ?? this.now().toISOString(),
+      waiting: reason,
+      ...checked,
+      ...(flag ? { capFlaggedDay: today } : {}),
+    });
     if (!flag) return;
     await this.tracker.addComment(
       ticket.projectId,
@@ -283,16 +285,6 @@ export class SyncRuns {
       { fields: { needsAttention: true } },
       "system",
     );
-  }
-
-  /** Open agent PRs of the project: newest succeeded build run with a PR, per ticket, open now. */
-  private async openAgentPrs(project: Project, repo: string): Promise<AgentPr[]> {
-    const out: AgentPr[] = [];
-    for (const { run, ticket } of (await this.agentRuns(project)).slice(0, MAX_SYNC_PRS_PER_PUSH)) {
-      const pr = await this.openPr(repo, run);
-      if (pr) out.push({ run, ticket, pr });
-    }
-    return out;
   }
 
   /** Per ticket with an open PR stage, its newest succeeded build run that opened a PR. */

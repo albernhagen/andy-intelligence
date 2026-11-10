@@ -28,4 +28,4 @@ End with the structured output (`sync.schema.json` next to this file):
 - `reason`: empty when `synced`; otherwise one or two sentences for Andy: what clashes or what fails.
 - `verification`: the checks from step 4.
 
-`synced` pushes the merge: the PR's checks and both review agents rerun on it. The other two push nothing and put the ticket in Andy's Needs-you inbox with your reason and files; no sync runs on that PR again until its head changes.
+`synced` doesn't push on your word: the executor then runs the checks itself and pushes only if they pass; the PR's CI and both review agents then rerun on it. The other two push nothing and put the ticket in Andy's Needs-you inbox with your reason and files; no sync runs on that PR again until its head changes.

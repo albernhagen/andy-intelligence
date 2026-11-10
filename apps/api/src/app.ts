@@ -261,9 +261,7 @@ export function createApp(deps: AppDeps) {
       tickets: service,
       codeHost: new ConnectedCodeHost(connection),
       runs: deps.runs,
-      onDefaultBranchMoved: async (projectId) => {
-        await syncer.defaultBranchMoved(projectId);
-      },
+      onDefaultBranchMoved: (projectId) => syncer.defaultBranchMoved(projectId),
       now,
     });
     registerGitHubToken(app, {

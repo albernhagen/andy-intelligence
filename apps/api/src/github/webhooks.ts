@@ -54,9 +54,10 @@ export interface WebhookDeps {
   runs: RunStore;
   /**
    * The default branch of the project's repo moved (AI-72): queue sync runs for open agent PRs.
-   * Called after a default-branch push and after a PR merges into it. Must not throw.
+   * Called after a default-branch push and after a PR merges into it, on a redelivery too.
+   * Resolves false when the tick failed (it logs why). Must not throw.
    */
-  onDefaultBranchMoved?: (projectId: string) => Promise<void>;
+  onDefaultBranchMoved?: (projectId: string) => Promise<boolean>;
   now?: () => Date;
 }
 
@@ -123,21 +124,23 @@ export function registerGitHubWebhook(app: Hono<AuthEnv>, deps: WebhookDeps): vo
 
   /**
    * Main moved: a push to the default branch, or a PR merged into it (the same move, and the only
-   * one an App without the push event sees). Duplicates coalesce in the sync dispatcher.
+   * one an App without the push event sees). Runs on redeliveries too: the tick is idempotent,
+   * so a failed one (answered 500, logged) can be redelivered from GitHub; any later tick (a run
+   * ending) also catches up, because each tick derives the stale PRs from the host again.
    */
-  async function syncOnMove(record: CodeHostEvent, project: Project) {
+  async function syncOnMove(record: CodeHostEvent, project: Project): Promise<boolean> {
     const moved =
       (record.kind === "push" && record.push.defaultBranch) ||
       (record.kind === "pull_request" &&
         record.action === "closed" &&
         record.pullRequest.state === "merged" &&
         record.pullRequest.intoDefaultBranch);
-    if (!moved || !deps.onDefaultBranchMoved) return;
+    if (!moved || !deps.onDefaultBranchMoved) return true;
     log("INFO", "default branch moved: syncing open agent PRs", {
       deliveryId: record.deliveryId,
       projectId: project.id,
     });
-    await deps.onDefaultBranchMoved(project.id);
+    return deps.onDefaultBranchMoved(project.id);
   }
 
   app.post(
@@ -211,7 +214,9 @@ export function registerGitHubWebhook(app: Hono<AuthEnv>, deps: WebhookDeps): vo
         if (result === "recorded") {
           await moveTicket(record, project);
           await applyGate(record, project);
-          await syncOnMove(record, project);
+        }
+        if (!(await syncOnMove(record, project))) {
+          return c.json({ error: "sync queueing failed; redeliver to retry" }, 500);
         }
         return c.json({ result }, 200);
       } catch (err) {

@@ -309,6 +309,42 @@ describe("sync run flow", () => {
     expect((await pr.read()).needsAttention).toBe(true);
   });
 
+  it("GivenTheHostFailsWhileQueueing_WhenMainMoves_ThenTheWebhookFailsAndARedeliveryQueuesTheSync", async () => {
+    const w = await world();
+    const pr = await w.agentPr(40, sha("a"));
+    w.t.host.behindDefault.add(sha("a"));
+    const real = w.t.host.headContains.bind(w.t.host);
+    w.t.host.headContains = async () => {
+      throw new Error("GitHub 502");
+    };
+    const body = {
+      ref: "refs/heads/main",
+      after: sha("1"),
+      repository: { full_name: REPO, default_branch: "main" },
+    };
+    const payload = JSON.stringify(body);
+    const deliver = async () =>
+      w.t.app.request(WEBHOOK_PATH, {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          "x-github-event": "push",
+          "x-github-delivery": "redeliver-1",
+          "x-hub-signature-256": await sign(createdApp.webhookSecret, payload),
+        },
+        body: payload,
+      });
+    expect((await deliver()).status).toBe(500);
+    expect(await pr.syncs()).toEqual([]);
+
+    // GitHub's redelivery (same delivery ID) is a duplicate record, but the tick runs again.
+    w.t.host.headContains = real;
+    const again = await deliver();
+    expect(again.status).toBe(200);
+    expect(await again.json()).toEqual({ result: "duplicate" });
+    expect(await pr.syncs()).toHaveLength(1);
+  });
+
   it("GivenAPushToAnotherBranchOrATag_WhenDelivered_ThenNothingIsRecordedOrSynced", async () => {
     const w = await world();
     const pr = await w.agentPr(40, sha("a"));

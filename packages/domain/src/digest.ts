@@ -22,7 +22,7 @@ import {
 import { ticketCost } from "./cost";
 import { MAX_ACTIVE_RUNS_GLOBAL, MAX_PRS_WAITING_PER_PROJECT, isInFlight } from "./dispatch-caps";
 import { quotaStatus } from "./quota";
-import { openBlockerKeys, runLabel, ticketStatusLine } from "./status-line";
+import { openBlockerKeys, runLabel, syncWaiting, ticketStatusLine } from "./status-line";
 import { resolveWorker } from "./worker";
 
 /**
@@ -88,6 +88,7 @@ export function buildDigest(window: DigestWindow, data: DigestData): Digest {
   const exceptions: DigestException[] = [
     ...failedRuns(data, byId),
     ...syncStops(data, byId),
+    ...(live ? syncWaits(data, byId) : []),
     ...prs.filter((p) => p.state === "closed").map((p) => prClosed(p)),
     ...outcomes(prs),
     ...reviewBlockers(data, byId, inWindow, live),
@@ -167,6 +168,30 @@ function syncStops(data: DigestData, byId: Map<string, Ticket>): DigestException
         prNumber: r.syncRun!.number,
         reason: `Sync with main stopped on PR #${r.syncRun!.number} (${why})${named}`,
         at: r.endedAt,
+      },
+    ];
+  });
+}
+
+/** Open agent PRs whose wanted sync waits now, with the reason (AI-72); live windows only. */
+function syncWaits(data: DigestData, byId: Map<string, Ticket>): DigestException[] {
+  return [...data.ticketRuns].flatMap(([ticketId, runs]): DigestException[] => {
+    const ticket = byId.get(ticketId);
+    if (!ticket || ticket.archived || ticket.stage === "done" || ticket.stage === "cancelled") {
+      return [];
+    }
+    const why = syncWaiting(runs);
+    const build = runs.find((r) => r.step === "build" && r.links.pullRequest);
+    // A run of the ticket in flight is a moment's wait, not news.
+    if (!why || !build?.prSync || build.prSync.waiting === "ticket_busy") return [];
+    const number = Number(/\/pull\/(\d+)$/.exec(build.links.pullRequest ?? "")?.[1]) || null;
+    return [
+      {
+        kind: "sync_waiting",
+        ...label(ticket),
+        prNumber: number,
+        reason: `${number ? `PR #${number}: s` : "S"}ync with main waits: ${why}`,
+        at: build.prSync.pendingSince,
       },
     ];
   });

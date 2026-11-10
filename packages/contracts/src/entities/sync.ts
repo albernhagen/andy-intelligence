@@ -29,6 +29,8 @@ export const SyncWaitReason = z.enum([
   "ticket_busy",
   /** Builds are off for the project, or no executor is connected. */
   "builds_off",
+  /** More open agent PRs than one tick checks; it comes first on the next tick. */
+  "pr_cap",
 ]);
 export type SyncWaitReason = z.infer<typeof SyncWaitReason>;
 
@@ -88,6 +90,8 @@ export const PrSyncState = z.object({
   stoppedReason: z.string().max(SYNC_LIMITS.reason).nullable(),
   /** The UTC day (YYYY-MM-DD) the daily cap last flagged the ticket, so it flags once a day. */
   capFlaggedDay: z.string().max(10).nullable(),
+  /** When a tick last checked the PR on the host; orders the PRs once there are more than a tick checks. */
+  checkedAt: Timestamp.nullable().default(null),
 });
 export type PrSyncState = z.infer<typeof PrSyncState>;
 
@@ -97,6 +101,7 @@ export const PR_SYNC_EMPTY: PrSyncState = {
   stoppedHeadSha: null,
   stoppedReason: null,
   capFlaggedDay: null,
+  checkedAt: null,
 };
 
 /** Spread into `Run`. Defaults keep older documents readable (no schema version bump). */
