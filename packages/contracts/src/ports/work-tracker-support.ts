@@ -39,6 +39,7 @@ export function buildProject(input: NewProject): Project {
     runsAtOnce: RUNS_AT_ONCE_DEFAULT,
     paused: false,
     lastDispatch: null,
+    emailNotifications: true,
   };
 }
 

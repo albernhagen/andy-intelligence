@@ -9,12 +9,15 @@ import {
   FirestoreRunStore,
   FirestoreWorkTracker,
   CloudTasksWatchdogQueue,
+  CloudTasksNotifyFlushQueue,
+  FirestoreNotifyLedger,
   createFirestore,
 } from "@andy/store";
 import { createApp } from "./app";
 import { parseAllowList } from "./auth";
 import { firebaseVerifier } from "./firebase";
 import { ClientMetadataResolver } from "./mcp";
+import { ResendNotifier, emailConfigFromEnv } from "./notifier-email";
 
 function requireEnv(name: string): string {
   const value = process.env[name];
@@ -49,7 +52,24 @@ async function main() {
     );
   }
 
+  // Needs-you email (AI-77): off, logged once here, until the key and both addresses are set.
+  // The window's flush rides the watchdog queue; without it, an in-process timer (local dev).
+  const emailConfig = emailConfigFromEnv(process.env);
+  const email =
+    emailConfig && publicUrl
+      ? {
+          notifier: new ResendNotifier(emailConfig),
+          ledger: new FirestoreNotifyLedger(db),
+          flushQueue:
+            watchdogQueue && invokerEmail
+              ? new CloudTasksNotifyFlushQueue({ queue: watchdogQueue, publicUrl, invokerEmail })
+              : null,
+          appUrl: publicUrl,
+        }
+      : undefined;
+
   const app = createApp({
+    email,
     verifier: firebaseVerifier(projectId),
     allowedEmails,
     version: process.env.K_REVISION ?? "dev",

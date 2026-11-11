@@ -1,6 +1,7 @@
 import type { OAuthGrantStore, WorkTracker } from "@andy/contracts";
 import type {
   DigestReader,
+  EmailNotifications,
   ProjectService,
   QuotaClearer,
   RunService,
@@ -30,6 +31,8 @@ export interface McpEndpointDeps {
   runs: RunService;
   projects: ProjectService;
   digest: DigestReader;
+  /** Needs-you email (AI-77); null: not configured. */
+  notifyEmail: EmailNotifications | null;
   quota: QuotaClearer;
 }
 
@@ -85,6 +88,7 @@ export function registerMcpEndpoint(app: Hono<AuthEnv>, deps: McpEndpointDeps) {
       runs: deps.runs,
       projects: deps.projects,
       digest: deps.digest,
+      notifyEmail: deps.notifyEmail,
       quota: deps.quota,
       email,
     });

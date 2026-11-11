@@ -52,3 +52,34 @@ variable "usage_alert_thresholds" {
   description = "Usage alert thresholds. Override one at a time, e.g. -var 'usage_alert_thresholds={run_requests_per_5m=0}'."
   default     = {}
 }
+
+variable "email_enabled" {
+  type        = bool
+  description = "Needs-you email (AI-77): sets EMAIL_FROM, EMAIL_TO and RESEND_API_KEY on the service. Turn on only after the resend-api-key secret has a version (runbook email-notifications.md)."
+  default     = false
+
+  validation {
+    # nonsensitive on the booleans only: the addresses stay sensitive.
+    condition     = !var.email_enabled || (nonsensitive(var.email_from != "") && nonsensitive(var.email_to != ""))
+    error_message = "email_enabled needs email_from and email_to."
+  }
+}
+
+variable "email_from" {
+  type        = string
+  description = "Sender of Needs-you emails (AI-77), on the domain verified in Resend. Used only with email_enabled. Never committed: set via gitignored terraform.tfvars."
+  default     = ""
+  sensitive   = true
+}
+
+variable "email_to" {
+  type        = string
+  description = "Recipient of Needs-you emails (AI-77). Used only with email_enabled. Never committed: set via gitignored terraform.tfvars."
+  default     = ""
+  sensitive   = true
+
+  validation {
+    condition     = var.email_to == "" || can(regex("^[^@\\s]+@[^@\\s]+\\.[^@\\s]+$", var.email_to))
+    error_message = "email_to must be empty or an email address."
+  }
+}

@@ -120,3 +120,5 @@ export { FirestoreWorkTracker } from "./work-tracker";
 export { ticketEventV2toV3, ticketV1toV2, ticketV2toV3, upgrade, type Upgrader } from "./upgrade";
 export { FirestoreRunStore } from "./run-store";
 export { CloudTasksWatchdogQueue, watchdogUrl, type TaskCreator } from "./watchdog-queue";
+export { FirestoreNotifyLedger } from "./notify-ledger";
+export { CloudTasksNotifyFlushQueue, notifyFlushUrl } from "./notify-flush-queue";
