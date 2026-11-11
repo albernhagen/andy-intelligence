@@ -80,22 +80,50 @@ describe("LiveUpdates", () => {
     expect(live.interval("live")).toBe(IDLE_POLL_MS);
   });
 
-  it("GivenAndyIdle_WhenHeMovesTheMouse_ThenTheViewsOnScreenRefetchAtOnce", () => {
+  it("GivenAndyIdle_WhenHeMovesTheMouse_ThenTheLiveViewsOnScreenRefetchAtOnce", () => {
     const { live, refetch, advance } = setup();
     live.noteInput();
     expect(refetch).not.toHaveBeenCalled();
     advance(IDLE_AFTER_MS);
     live.noteInput();
-    expect(refetch).toHaveBeenCalledWith({ type: "active" });
+    expect(refetch).toHaveBeenCalledTimes(1);
+    const [filters, options] = refetch.mock.calls[0]!;
+    expect(filters?.type).toBe("active");
+    expect(options).toEqual({ cancelRefetch: false });
+    const query = (meta?: Record<string, unknown>) => ({ meta }) as never;
+    expect(filters?.predicate?.(query({ live: true }))).toBe(true);
+    expect(filters?.predicate?.(query(undefined))).toBe(false);
     expect(live.interval("live")).toBe(LIVE_POLL_MS);
   });
 
-  it("GivenFailedPolls_WhenOneReachesTheApi_ThenDelayedClearsAndBackoffResets", () => {
-    const { live } = setup();
+  it("GivenAndyIdle_WhenTheTabBecomesVisible_ThenHeIsActiveWithoutASecondRefetch", () => {
+    const { live, refetch, advance } = setup();
+    advance(IDLE_AFTER_MS * 2);
+    live.noteVisible();
+    expect(refetch).not.toHaveBeenCalled();
+    expect(live.isIdle()).toBe(false);
+  });
+
+  it("GivenSeveralViewsFailingInOneRound_WhenCounted_ThenItIsOneFailure", () => {
+    const { live, advance } = setup();
+    vi.spyOn(console, "warn").mockImplementation(() => {});
+    live.noteResult(false);
+    live.noteResult(false);
+    live.noteResult(false);
+    expect(live.interval("live")).toBe(10_000);
+    advance(10_000);
+    live.noteResult(false);
+    live.noteResult(false);
+    expect(live.interval("live")).toBe(20_000);
+  });
+
+  it("GivenFailedRounds_WhenOneReachesTheApi_ThenDelayedClearsAndBackoffResets", () => {
+    const { live, advance } = setup();
     const changes = vi.fn();
     live.subscribe(changes);
     vi.spyOn(console, "warn").mockImplementation(() => {});
     live.noteResult(false);
+    advance(10_000);
     live.noteResult(false);
     expect(live.delayed()).toBe(true);
     expect(live.interval("live")).toBe(20_000);

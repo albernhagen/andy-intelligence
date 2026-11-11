@@ -24,15 +24,15 @@ The UI should show changes made elsewhere (agent runs, MCP sessions, webhooks) w
 
 One client module, `apps/web/src/lib/live.ts`, decides every polled query's interval; views don't. A push transport later replaces that module, not the views.
 
-| Rule            | What                                                                                                                               |
-| --------------- | ---------------------------------------------------------------------------------------------------------------------------------- |
-| Live views      | Board, ticket panel (ticket, readiness, history, questions, runs), inbox and header count, runs in flight: every 5 s.              |
-| Slow views      | Projects, quota, ticket list, worker: every 60 s. Digest and GitHub setup: on focus only.                                          |
-| Idle            | No pointer, key or wheel input for 5 min and no run in flight in that view's data: 60 s. The next input refetches at once.         |
-| Hidden tab      | No polling (TanStack Query pauses intervals); focus or the tab becoming visible refetches.                                         |
-| Unreachable API | A network error or 5xx doubles the interval per failed poll (10, 20, 40, 60 s); a shell banner says "Updates delayed"; data stays. |
-| Cap (ADR-0028)  | Every interval is clamped to 5–60 s: no query polls faster than 5 s.                                                               |
-| Own writes      | Unchanged: every write refetches all queries.                                                                                      |
+| Rule            | What                                                                                                                                                                                                        |
+| --------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Live views      | Board, ticket panel (ticket, readiness, history, questions, runs), inbox and header count, runs in flight: every 5 s.                                                                                       |
+| Slow views      | Projects, quota, ticket list, worker: every 60 s. Digest and GitHub setup: on focus only.                                                                                                                   |
+| Idle            | No pointer, key or wheel input for 5 min and no run in flight in that view's data: 60 s. The next input refetches at once.                                                                                  |
+| Hidden tab      | No polling (TanStack Query pauses intervals); focus refetches (once: the tab becoming visible only marks Andy active).                                                                                      |
+| Unreachable API | A network error or 5xx doubles the interval per failed poll round, not per query (10, 20, 40, 60 s); a shell banner says "Updates delayed"; data stays.                                                     |
+| Cap (ADR-0028)  | Every interval is clamped to 5–60 s: no query polls faster than 5 s.                                                                                                                                        |
+| Own writes      | Unchanged: every write refetches all queries. An in-place edit sends the `updatedAt` its draft started from, moved forward only by Andy's own saves, so a polled-in change made elsewhere still gets a 409. |
 
 No ETag or "changed since" read: a 304 still costs the Firestore reads behind it, and a cheap change marker needs a write on every change. Revisit if read cost shows up in the digest.
 

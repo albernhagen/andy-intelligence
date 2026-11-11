@@ -188,6 +188,7 @@ function Story({ ticket: t }: { ticket: Ticket }) {
         required
         value={t.title}
         onSave={(v, done) => title.save({ title: v }, done)}
+        onEdit={title.begin}
         pending={title.pending}
         error={title.error}
         wrap={(button) => (
@@ -202,6 +203,7 @@ function Story({ ticket: t }: { ticket: Ticket }) {
             label="Description"
             value={t.body}
             onSave={(v, done) => body.save({ body: v }, done)}
+            onEdit={body.begin}
             pending={body.pending}
             error={body.error}
           />
@@ -283,6 +285,7 @@ function Rail({ ticket: t }: { ticket: Ticket }) {
           placeholder="Why this size?"
           value={t.sizeReason ?? ""}
           onSave={(v, done) => sizeReason.save({ sizeReason: v || null }, done)}
+          onEdit={sizeReason.begin}
           pending={sizeReason.pending}
           error={sizeReason.error}
           className="text-xs"

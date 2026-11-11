@@ -9,7 +9,7 @@ import { ApiError } from "./api";
  * - Hidden tab: no polling (TanStack pauses intervals while `document.hidden`); focus refetches.
  * - Visible, Andy active or a run in flight: every 5 s, the floor.
  * - Visible, no input for 5 min and nothing in flight: every 60 s; his next input refetches.
- * - API unreachable: doubles per failed poll up to 60 s, and the shell shows "Updates delayed".
+ * - API unreachable: doubles per failed poll round up to 60 s, and the shell shows "Updates delayed".
  */
 
 /** The floor: no query polls faster, so a tab can never hammer the API. */
@@ -55,6 +55,7 @@ const INPUT_EVENTS = ["pointerdown", "pointermove", "keydown", "wheel", "touchst
 export class LiveUpdates {
   private lastInputAt: number;
   private failures = 0;
+  private lastFailureAt: number | null = null;
   private readonly listeners = new Set<() => void>();
 
   constructor(
@@ -72,18 +73,38 @@ export class LiveUpdates {
     return this.now() - this.lastInputAt >= IDLE_AFTER_MS;
   }
 
-  /** Back from idle, what is on screen refetches at once instead of waiting up to 60 s. */
+  /** Back from idle, the live views on screen refetch at once instead of waiting up to 60 s. */
   noteInput(): void {
     const wasIdle = this.isIdle();
     this.lastInputAt = this.now();
-    if (wasIdle) void this.queryClient.refetchQueries({ type: "active" });
+    if (wasIdle)
+      void this.queryClient.refetchQueries(
+        { type: "active", predicate: (q) => Boolean(q.meta?.live) },
+        { cancelRefetch: false },
+      );
   }
 
+  /** The tab became visible: TanStack's focus refetch already runs, so only mark Andy active. */
+  noteVisible(): void {
+    this.lastInputAt = this.now();
+  }
+
+  /**
+   * Counts failed poll rounds, not failed queries: the views on a page fail together, so
+   * failures within one floor interval of the last counted one are the same round.
+   */
   noteResult(reached: boolean): void {
-    const next = reached ? 0 : this.failures + 1;
-    if (next === this.failures) return;
-    if (!reached) console.warn(`live updates: poll failed (${next} in a row)`);
-    this.failures = next;
+    if (reached) {
+      if (this.failures === 0) return;
+      this.failures = 0;
+      this.lastFailureAt = null;
+    } else {
+      const now = this.now();
+      if (this.lastFailureAt !== null && now - this.lastFailureAt < LIVE_POLL_MS) return;
+      this.lastFailureAt = now;
+      this.failures += 1;
+      console.warn(`live updates: poll round failed (${this.failures} in a row)`);
+    }
     this.listeners.forEach((l) => l());
   }
 
@@ -97,7 +118,7 @@ export class LiveUpdates {
   /** Watches Andy's input and every live query's results; returns the cleanup. */
   start(): () => void {
     const onInput = () => this.noteInput();
-    const onVisible = () => document.visibilityState === "visible" && this.noteInput();
+    const onVisible = () => document.visibilityState === "visible" && this.noteVisible();
     INPUT_EVENTS.forEach((e) => window.addEventListener(e, onInput, { passive: true }));
     document.addEventListener("visibilitychange", onVisible);
     const unsubscribe = this.queryClient.getQueryCache().subscribe((event) => {

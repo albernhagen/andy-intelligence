@@ -80,4 +80,44 @@ describe("live updates (AI-9)", () => {
     expect(await within(backlog).findByText(second.key)).toBeTruthy();
     expect(screen.queryByText(/Updates delayed/)).toBeNull();
   });
+
+  it("GivenADraftOpen_WhenAPollBringsAChangeMadeElsewhere_ThenSavingStillAsksForAReload", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    const harness = renderApp();
+    await harness.tracker.createProject({ name: "AI", key: "AI" });
+    const ticket = await harness.service.create("ai", { type: "feature", title: "Board" }, "andy");
+    await harness.router.navigate({ to: `/p/ai/t/${ticket.id}` });
+    const { user } = harness;
+
+    await user.click(await screen.findByRole("button", { name: "Edit description" }));
+    await harness.service.update("ai", ticket.id, { body: "Written by an agent" }, "agent");
+    await tick(LIVE_POLL_MS);
+    expect(await screen.findByRole("heading", { name: "AI-1: Board" })).toBeTruthy();
+    await user.type(screen.getByLabelText("Description"), "Andy's stale draft");
+    await user.click(screen.getByRole("button", { name: "Save" }));
+
+    expect(await screen.findByText(/Reload to see the latest/)).toBeTruthy();
+    expect((await harness.tracker.getTicket("ai", ticket.id))?.body).toBe("Written by an agent");
+  });
+
+  it("GivenTwoQuickEditsInDifferentFields_WhenBothSave_ThenNeitherConflicts", async () => {
+    const harness = renderApp();
+    await harness.tracker.createProject({ name: "AI", key: "AI" });
+    const ticket = await harness.service.create("ai", { type: "feature", title: "Board" }, "andy");
+    await harness.router.navigate({ to: `/p/ai/t/${ticket.id}` });
+    const { user } = harness;
+
+    await user.click(await screen.findByRole("button", { name: "Edit description" }));
+    await user.click(screen.getByTitle("Edit title"));
+    await user.clear(screen.getByLabelText("Title"));
+    await user.type(screen.getByLabelText("Title"), "Board v2{Enter}");
+    await user.type(screen.getByLabelText("Description"), "Both saved");
+    await user.click(screen.getByRole("button", { name: "Save" }));
+
+    await vi.waitFor(async () => {
+      const saved = await harness.tracker.getTicket("ai", ticket.id);
+      expect([saved?.title, saved?.body]).toEqual(["Board v2", "Both saved"]);
+    });
+    expect(screen.queryByText(/Reload to see the latest/)).toBeNull();
+  });
 });
