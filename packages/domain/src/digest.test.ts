@@ -301,6 +301,20 @@ describe("buildDigest", () => {
     ]);
   });
 
+  it("GivenAQuestionLineButAnotherStatusLine_WhenBuilt_ThenTheStatusLineIsKept", () => {
+    const tickets = [
+      ticket(1, { stage: "backlog", needsAttention: true }),
+      ticket(2, { stage: "ready", overrides: { assignee: "me" } }),
+    ];
+    const questionLines = new Map([
+      ["t1", "Which layout should the board use?"],
+      ["t2", "Who signs off?"],
+    ]);
+    // No open questions are counted, so neither status line is the open-question one.
+    const d = buildDigest(WINDOW, data({ tickets, questionLines }));
+    expect(d.exceptions.map((e) => e.reason)).toEqual(["Waiting for you", "Mine · waiting on you"]);
+  });
+
   it("GivenAPausedProjectOrACapIdle_WhenBuilt_ThenDispatchIdleWithTheReason", () => {
     const paused = buildDigest(WINDOW, data({ project: { ...project, paused: true } }));
     expect(paused.exceptions).toEqual([

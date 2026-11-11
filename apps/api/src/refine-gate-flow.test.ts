@@ -526,6 +526,10 @@ describe("refine gate flow", () => {
       ["no context", { context: undefined }],
       ["an option without a consequence", { options: [{ label: "Subscription" }] }],
       ["bare-string options", { options: ["Subscription", "API key"] }],
+      [
+        "a recommendation that is not an option",
+        { recommendation: { answer: "Subscription (no new secret)", reason: "No new bill." } },
+      ],
     ])(
       "GivenAQuestionWith%s_WhenReported_ThenTheResultIsRejectedAndNothingIsAsked",
       async (_, over) => {

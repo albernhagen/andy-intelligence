@@ -65,3 +65,21 @@ export const refineQuestionFields = (maxOptions: number) => ({
     reason: capped(QUESTION_FORMAT_LIMITS.reason),
   }),
 });
+
+/**
+ * With options, the recommended answer is one of their labels exactly, so the one-click
+ * "accept recommended" answers with an option; the why goes in `reason`. An open question
+ * (no options) may recommend any answer.
+ */
+export function recommendationIsAnOption(
+  gap: { options: { label: string }[]; recommendation: { answer: string } },
+  ctx: z.RefinementCtx,
+): void {
+  if (gap.options.length === 0) return;
+  if (gap.options.some((o) => o.label === gap.recommendation.answer)) return;
+  ctx.addIssue({
+    code: "custom",
+    path: ["recommendation", "answer"],
+    message: "the recommended answer must equal one option's label; put the why in reason",
+  });
+}

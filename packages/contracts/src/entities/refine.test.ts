@@ -108,6 +108,11 @@ describe("RefineOutput", () => {
     expect(out.gaps[0]).toEqual({ ...gap, urgency: "normal" });
   });
 
+  it("GivenAnOpenQuestion_WhenItRecommendsAnyAnswer_ThenItIsValid", () => {
+    const open = { ...gap, options: [], recommendation: { answer: "Firestore", reason: "r" } };
+    expect(RefineOutput.safeParse({ ...base, gaps: [open] }).success).toBe(true);
+  });
+
   it("GivenNoGaps_WhenParsed_ThenItIsValid", () => {
     expect(RefineOutput.safeParse({ ...base, gaps: [] }).success).toBe(true);
   });
@@ -138,6 +143,13 @@ describe("RefineOutput", () => {
     ],
     ["a gap with no recommendation", { ...base, gaps: [{ ...gap, recommendation: null }] }],
     ["the old suggestedAnswer field", { ...base, gaps: [{ ...gap, suggestedAnswer: "x" }] }],
+    [
+      "a recommendation that is not an option's label",
+      {
+        ...base,
+        gaps: [{ ...gap, recommendation: { answer: "Firestore (no server)", reason: "r" } }],
+      },
+    ],
     ["an unknown field", { ...base, stage: "ready" }],
     ["a summary too long", { ...base, summary: "x".repeat(4001) }],
     ["a send-back with no reason", { ...base, outcome: "send_back" }],

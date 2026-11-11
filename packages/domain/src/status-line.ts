@@ -41,6 +41,11 @@ export interface StatusInput {
   syncWaiting?: string | null;
 }
 
+/** The status line while questions wait; the digest swaps in the question itself (AI-73). */
+export function questionsWaiting(n: number): string {
+  return `Waiting for you: ${n} question${n === 1 ? "" : "s"}`;
+}
+
 export function statusLine(s: StatusInput, now: Date): { text: string; tone: StatusTone } {
   const { text, tone } = mainStatus(s, now);
   return { text: s.archived ? `${text} · archived` : text, tone };
@@ -52,10 +57,7 @@ function mainStatus(s: StatusInput, now: Date): { text: string; tone: StatusTone
 
   if (s.stage === "cancelled") return { text: "Cancelled", tone: "default" };
   if (s.stage === "done") return { text: join("Done", pr), tone: "success" };
-  if (s.openQuestions > 0) {
-    const n = s.openQuestions;
-    return { text: `Waiting for you: ${n} question${n === 1 ? "" : "s"}`, tone: "attention" };
-  }
+  if (s.openQuestions > 0) return { text: questionsWaiting(s.openQuestions), tone: "attention" };
   if (s.needsAttention) {
     return {
       text: s.syncStopped ? `Waiting for you: ${s.syncStopped}` : "Waiting for you",

@@ -23,7 +23,12 @@ import { RunCostFields } from "./cost";
 import { runInFlightFields } from "./in-flight";
 import { runSyncFields } from "./sync";
 import { RefineScores, TicketScores } from "./scores";
-import { questionFormatFields, questionLine, refineQuestionFields } from "./question-format";
+import {
+  questionFormatFields,
+  questionLine,
+  recommendationIsAnOption,
+  refineQuestionFields,
+} from "./question-format";
 
 export * from "./common";
 export * from "./cost";
@@ -284,17 +289,19 @@ export const REFINE_LIMITS = {
 
 const capped = (max: number) => z.string().trim().min(1).max(max);
 
-export const RefineGap = z.strictObject({
-  /** One plain question Andy can answer without reading the ticket (AI-73: question format). */
-  question: questionLine(REFINE_LIMITS.text),
-  /** The default refine would go with. Recorded if the gap becomes an assumption. */
-  assumption: capped(REFINE_LIMITS.assumption),
-  /** `context`, `options` as `{label, consequence}`, `recommendation` with a reason. */
-  ...refineQuestionFields(REFINE_LIMITS.maxOptions),
-  cost: GapCost,
-  confidence: GapConfidence,
-  urgency: Urgency.default("normal"),
-});
+export const RefineGap = z
+  .strictObject({
+    /** One plain question Andy can answer without reading the ticket (AI-73: question format). */
+    question: questionLine(REFINE_LIMITS.text),
+    /** The default refine would go with. Recorded if the gap becomes an assumption. */
+    assumption: capped(REFINE_LIMITS.assumption),
+    /** `context`, `options` as `{label, consequence}`, `recommendation` with a reason. */
+    ...refineQuestionFields(REFINE_LIMITS.maxOptions),
+    cost: GapCost,
+    confidence: GapConfidence,
+    urgency: Urgency.default("normal"),
+  })
+  .superRefine(recommendationIsAnOption);
 export type RefineGap = z.infer<typeof RefineGap>;
 
 export const RefineChild = z.strictObject({

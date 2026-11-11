@@ -59,12 +59,12 @@ Sure and `reversible` becomes an assumption; anything else is asked. **The contr
 
 ## Questions Andy can answer (AI-73)
 
-Andy reads them away from the desk, without the ticket. Each gap stands on its own:
+Each gap stands on its own, for Andy away from the desk:
 
 - `question`: one plain sentence ending in `?`. Every ID with its title; no jargon.
 - `context`: two to four sentences: what the feature is in plain words, what happens today, why the answer is needed now.
 - `options` (2-5; empty for an open question): each `{label, consequence}`, what choosing it does or costs.
-- `recommendation`: the answer you'd pick, with a one-line reason.
+- `recommendation`: your pick (an option's exact label, if any) and why, in one line.
 
 No `?`, no context or an option without a consequence fails the result.
 

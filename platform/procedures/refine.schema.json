@@ -168,7 +168,7 @@
           "recommendation": {
             "type": "object",
             "additionalProperties": false,
-            "description": "The answer you would pick, with a one-line reason.",
+            "description": "The answer you would pick, with a one-line reason. With options, answer is exactly the label of one option.",
             "properties": {
               "answer": {
                 "type": "string",

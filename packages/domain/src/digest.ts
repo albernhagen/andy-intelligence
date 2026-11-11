@@ -22,7 +22,13 @@ import {
 import { ticketCost } from "./cost";
 import { MAX_ACTIVE_RUNS_GLOBAL, MAX_PRS_WAITING_PER_PROJECT, isInFlight } from "./dispatch-caps";
 import { quotaStatus } from "./quota";
-import { openBlockerKeys, runLabel, syncWaiting, ticketStatusLine } from "./status-line";
+import {
+  openBlockerKeys,
+  questionsWaiting,
+  runLabel,
+  syncWaiting,
+  ticketStatusLine,
+} from "./status-line";
 import { resolveWorker } from "./worker";
 
 /**
@@ -318,11 +324,14 @@ function waitingAndBlocked(data: DigestData): DigestException[] {
   return out;
 }
 
-/** AI-73: the question itself, not a count, when the ticket waits on one. */
-function waitingReason(data: DigestData, ticketId: string, fallback: string): string {
+/**
+ * AI-73: the question itself, not a count, but only where the status line is the open-question
+ * one (`questionsWaiting`); any other reason the ticket waits on Andy is kept as it is.
+ */
+function waitingReason(data: DigestData, ticketId: string, line: string): string {
   const question = data.questionLines?.get(ticketId);
   const n = data.openQuestions.get(ticketId) ?? 0;
-  if (!question || n === 0) return fallback;
+  if (!question || n === 0 || line !== questionsWaiting(n)) return line;
   return `Waiting for you: ${clip(question)}${n > 1 ? ` (and ${plural(n - 1, "more question")})` : ""}`;
 }
 
