@@ -2,7 +2,7 @@ name: Baseline — agent evals
 description: >-
   Runs the agent eval suite (AI-6: M1.17: Agent evals v1, ADR-0040, ADR-0086) when the change
   touches agent configuration, and reports a pass without running otherwise. Each case runs once
-  through Claude Code under promptfoo; the check fails below a 90% pass rate or when a case's input
+  through Claude Code (in-repo runner, no dependencies); the check fails below a 90% pass rate or when a case's input
   tokens rise more than 20% over its committed baseline. Caps: 10 cases, 15 turns and $1 per case.
   The cases and the configuration under test are read from `data-path` as data; the runner is this
   action's own copy. Runbook: docs/runbooks/agent-evals.md.

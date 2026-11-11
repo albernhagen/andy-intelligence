@@ -15,8 +15,11 @@ export const TOKEN_JUMP_MAX = 0.2;
 /** Copy of the pause level in packages/domain/src/quota.ts (CLAUDE_SUB_THRESHOLDS.pausePct). */
 export const QUOTA_RESERVE_PCT = 80;
 
-/** Pinned with an exact version (ADR-0042 cooldown applies when bumping). */
-export const PROMPTFOO_VERSION = "0.125.1";
+/**
+ * Above this a reading can't be a fraction of a window (the CLI reports `utilization` 0-1, above 1
+ * only past a cap): the scale isn't what we assumed, so the case fails instead of skipping.
+ */
+export const QUOTA_MAX_PLAUSIBLE_PCT = 200;
 
 /** Case input caps: inputs are committed text, but a PR can grow them. */
 export const MAX_INPUT_BYTES = 120_000;

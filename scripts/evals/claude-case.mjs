@@ -1,25 +1,14 @@
-// promptfoo provider (AI-6, ADR-0086): runs one eval case through Claude Code, the CLI the review
-// agents and the executor run, with the production procedure, schema, model and read-only tools,
-// in a workspace holding only the case's inputs. Returns the structured output and token counts.
+// One eval case through Claude Code (AI-6, ADR-0086): the CLI the review agents and the executor
+// run, with the production procedure, schema, model and read-only tools, in a workspace holding
+// only the case's inputs. Returns the structured output, first-request tokens and quota reading.
 import { spawn } from "node:child_process";
-import { mkdirSync, readFileSync } from "node:fs";
+import { mkdirSync } from "node:fs";
 import { join } from "node:path";
 import { clearTimeout, setTimeout } from "node:timers";
 import { rateLimits, runUsage, structuredOutput } from "../executor-report.mjs";
-import {
-  CASE_TIMEOUT_MS,
-  MAX_BUDGET_USD_PER_CASE,
-  MAX_TURNS_PER_CASE,
-  QUOTA_RESERVE_PCT,
-} from "./config.mjs";
+import { CASE_TIMEOUT_MS, MAX_BUDGET_USD_PER_CASE, MAX_TURNS_PER_CASE } from "./config.mjs";
 
 const MAX_STDOUT_BYTES = 32 * 1024 * 1024;
-/**
- * Above this a reading can't be a fraction of a window (the CLI reports `utilization` 0-1, above 1
- * only past a cap): the scale is not what we assumed, so the run fails instead of skipping.
- */
-export const QUOTA_MAX_PLAUSIBLE_PCT = 200;
-
 /**
  * Settings for every case. Reads outside the case workspace already need a permission nobody
  * grants (`--tools` without `--allowedTools`); the deny rules and the empty HOME are extra layers.
@@ -164,60 +153,27 @@ function runClaude(spawnFn, { bin, args, cwd, env }) {
   });
 }
 
-export default class ClaudeCodeProvider {
-  constructor(options = {}) {
-    this.config = options.config ?? {};
-    this.spawnFn = options.spawn ?? spawn;
-    /** The reading that reached the reserve; promptfoo runs the cases one at a time (`-j 1`). */
-    this.reserveReading = null;
-  }
-
-  id() {
-    return "claude-code";
-  }
-
-  async callApi(prompt, context) {
-    const { caseId, workspace, schemaFile, model } = context.vars;
-    const { source, workDir, stubUrl, claudeBin = "claude" } = this.config;
-    if (this.reserveReading !== null) {
-      return { error: "skipped: quota reserve", metadata: { caseId, skipped: "quota" } };
-    }
-    const home = join(workDir, "home", caseId);
-    mkdirSync(join(home, "tmp"), { recursive: true });
-    const run = await runClaude(this.spawnFn, {
-      bin: claudeBin,
-      args: claudeArgs({ prompt, model, schema: readFileSync(schemaFile, "utf8") }),
-      cwd: workspace,
-      env: claudeEnv({ source, env: process.env, home, caseId, stubUrl }),
-    });
-    const read = readStream(run.stdout);
-    if (source === "subscription" && read.quotaPct !== null) {
-      if (read.quotaPct > QUOTA_MAX_PLAUSIBLE_PCT) {
-        const kind = "quota reading out of range (utilization is not a 0-1 fraction?)";
-        return { error: kind, metadata: { caseId, errorKind: kind, quotaPct: read.quotaPct } };
-      }
-      if (read.quotaPct >= QUOTA_RESERVE_PCT) this.reserveReading = read.quotaPct;
-    }
-    const metadata = {
-      caseId,
-      firstInputTokens: read.firstInputTokens,
-      turns: read.usage?.turns ?? null,
-      quotaPct: read.quotaPct,
-    };
-    const kind = errorKind({ ...read, ...run });
-    if (kind) return { error: kind, metadata: { ...metadata, errorKind: kind } };
-    const u = read.usage;
-    return {
-      output: JSON.stringify(read.output),
-      cost: read.costUsd ?? undefined,
-      tokenUsage: u
-        ? {
-            prompt: u.inputTokens + u.cacheReadTokens + u.cacheWriteTokens,
-            completion: u.outputTokens,
-            total: u.inputTokens + u.cacheReadTokens + u.cacheWriteTokens + u.outputTokens,
-          }
-        : undefined,
-      metadata,
-    };
-  }
+/**
+ * Runs one case and returns what it produced: `{ output, errorKind, firstInputTokens, quotaPct }`.
+ * `output` is the structured output (model text stays there); `errorKind` is a fixed reason.
+ */
+export async function runCase(
+  { caseId, prompt, workspace, schema, model },
+  { source, workDir, stubUrl, claudeBin = "claude", spawnFn = spawn, env = process.env },
+) {
+  const home = join(workDir, "home", caseId);
+  mkdirSync(join(home, "tmp"), { recursive: true });
+  const run = await runClaude(spawnFn, {
+    bin: claudeBin,
+    args: claudeArgs({ prompt, model, schema }),
+    cwd: workspace,
+    env: claudeEnv({ source, env, home, caseId, stubUrl }),
+  });
+  const read = readStream(run.stdout);
+  return {
+    output: read.output,
+    errorKind: errorKind({ ...read, ...run }),
+    firstInputTokens: read.firstInputTokens,
+    quotaPct: read.quotaPct,
+  };
 }

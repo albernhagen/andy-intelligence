@@ -1,6 +1,5 @@
 import { describe, expect, it } from "vitest";
 import { checkOutput } from "./assertions.mjs";
-import assertCase from "./promptfoo-assert.mjs";
 
 const offByOne = {
   severity: "blocker",
@@ -73,32 +72,5 @@ describe("checkOutput", () => {
       { check: "finding", severity: ["blocker"] },
     ]);
     expect(failures.join(" ")).not.toContain("SECRET");
-  });
-});
-
-describe("promptfoo assertion", () => {
-  const context = {
-    test: { metadata: { expect: [{ check: "no-finding", severity: ["blocker"] }] } },
-  };
-
-  it("GivenACleanOutput_WhenAsserted_ThenPasses", () => {
-    expect(assertCase(JSON.stringify({ summary: "ok", findings: [] }), context)).toMatchObject({
-      pass: true,
-    });
-  });
-
-  it("GivenABlocker_WhenAsserted_ThenFailsWithReason", () => {
-    expect(assertCase(JSON.stringify({ summary: "x", findings: [offByOne] }), context)).toEqual({
-      pass: false,
-      score: 0,
-      reason: "expected no blocker finding: got 1",
-    });
-  });
-
-  it("GivenNonJson_WhenAsserted_ThenFails", () => {
-    expect(assertCase("not json", context)).toMatchObject({
-      pass: false,
-      reason: "output is not JSON",
-    });
   });
 });

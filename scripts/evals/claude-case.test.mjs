@@ -1,17 +1,18 @@
 import { EventEmitter } from "node:events";
-import { mkdtempSync, writeFileSync } from "node:fs";
+import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { PassThrough } from "node:stream";
 import { setTimeout } from "node:timers";
 import { describe, expect, it } from "vitest";
-import ClaudeCodeProvider, {
+import {
   claudeArgs,
   claudeEnv,
   errorKind,
   quotaUsedPct,
   readStream,
-} from "./claude-provider.mjs";
+  runCase,
+} from "./claude-case.mjs";
 import { CLAUDE_SUB_THRESHOLDS, parseRateLimits } from "../../packages/domain/src/quota.ts";
 import { MAX_BUDGET_USD_PER_CASE, MAX_TURNS_PER_CASE, QUOTA_RESERVE_PCT } from "./config.mjs";
 
@@ -61,15 +62,6 @@ function fakeSpawn(stdout, code = 0) {
     return child;
   };
   return { spawn, calls };
-}
-
-function caseVars() {
-  const dir = mkdtempSync(join(tmpdir(), "evals-provider-"));
-  writeFileSync(join(dir, "schema.json"), '{"type":"object"}');
-  return {
-    dir,
-    vars: { caseId: "c1", workspace: dir, schemaFile: join(dir, "schema.json"), model: "sonnet" },
-  };
 }
 
 describe("claudeArgs", () => {
@@ -164,64 +156,33 @@ describe("errorKind", () => {
   });
 });
 
-describe("ClaudeCodeProvider", () => {
-  it("GivenASuccessfulRun_WhenCalled_ThenOutputAndTokenMetadata", async () => {
-    const { dir, vars } = caseVars();
-    const { spawn, calls } = fakeSpawn(stream(assistant, result));
-    const provider = new ClaudeCodeProvider({ config: { source: "stub", workDir: dir }, spawn });
-    const res = await provider.callApi("the prompt", { vars });
-    expect(JSON.parse(res.output)).toEqual(output);
-    expect(res.metadata).toMatchObject({ caseId: "c1", firstInputTokens: 1000, turns: 2 });
-    expect(calls[0].opts.cwd).toBe(dir);
-    expect(calls[0].args[1]).toBe("the prompt");
+describe("runCase", () => {
+  const spec = (dir) => ({
+    caseId: "c1",
+    prompt: "the prompt",
+    workspace: dir,
+    schema: "{}",
+    model: "sonnet",
   });
 
-  it("GivenATurnCap_WhenCalled_ThenAFixedErrorKind", async () => {
-    const { dir, vars } = caseVars();
+  it("GivenASuccessfulRun_WhenRun_ThenOutputTokensAndQuota", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "evals-case-"));
+    const { spawn, calls } = fakeSpawn(stream(limits(0.42), assistant, result));
+    const r = await runCase(spec(dir), { source: "stub", workDir: dir, spawnFn: spawn, env: {} });
+    expect(r).toEqual({ output, errorKind: null, firstInputTokens: 1000, quotaPct: 42 });
+    expect(calls[0].opts.cwd).toBe(dir);
+    expect(calls[0].args[1]).toBe("the prompt");
+    expect(calls[0].opts.env.HOME).toBe(join(dir, "home", "c1"));
+  });
+
+  it("GivenATurnCap_WhenRun_ThenAFixedErrorKind", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "evals-case-"));
     const { spawn } = fakeSpawn(
       stream({ type: "result", subtype: "error_max_turns", is_error: true }),
       1,
     );
-    const provider = new ClaudeCodeProvider({ config: { source: "stub", workDir: dir }, spawn });
-    expect(await provider.callApi("p", { vars })).toMatchObject({
-      error: "turn cap reached",
-      metadata: { errorKind: "turn cap reached" },
-    });
-  });
-
-  it("GivenTheQuotaReachesTheReserve_WhenCalled_ThenLaterCasesSkipWithoutRunning", async () => {
-    const { dir, vars } = caseVars();
-    const { spawn, calls } = fakeSpawn(stream(limits(0.85), assistant, result));
-    const provider = new ClaudeCodeProvider({
-      config: { source: "subscription", workDir: dir },
-      spawn,
-    });
-    await provider.callApi("p", { vars });
-    const second = await provider.callApi("p", { vars: { ...vars, caseId: "c2" } });
-    expect(second).toMatchObject({ metadata: { skipped: "quota" } });
-    expect(calls).toHaveLength(1);
-  });
-
-  it("GivenTheApiKeySource_WhenTheReadingIsHigh_ThenNoReserveSkip", async () => {
-    const { dir, vars } = caseVars();
-    const { spawn, calls } = fakeSpawn(stream(limits(0.95), assistant, result));
-    const provider = new ClaudeCodeProvider({ config: { source: "api-key", workDir: dir }, spawn });
-    await provider.callApi("p", { vars });
-    const second = await provider.callApi("p", { vars: { ...vars, caseId: "c2" } });
-    expect(second.metadata.skipped).toBeUndefined();
-    expect(calls).toHaveLength(2);
-  });
-
-  it("GivenAReadingOnA0To100Scale_WhenCalled_ThenTheCaseErrorsInsteadOfSkipping", async () => {
-    const { dir, vars } = caseVars();
-    const { spawn } = fakeSpawn(stream(limits(45), assistant, result));
-    const provider = new ClaudeCodeProvider({
-      config: { source: "subscription", workDir: dir },
-      spawn,
-    });
-    const res = await provider.callApi("p", { vars });
-    expect(res.metadata.errorKind).toMatch(/^quota reading out of range/);
-    expect(provider.reserveReading).toBeNull();
+    const r = await runCase(spec(dir), { source: "stub", workDir: dir, spawnFn: spawn, env: {} });
+    expect(r.errorKind).toBe("turn cap reached");
   });
 });
 

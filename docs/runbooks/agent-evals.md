@@ -24,7 +24,7 @@ The `agent-evals` check (AI-6: M1.17: Agent evals v1, ADR-0040, ADR-0086) tests 
 | `api-key`                | `AGENT_EVALS_ANTHROPIC_API_KEY`                   | Repo variable `AGENT_EVALS_SOURCE=api-key`, or the dispatch input `source` |
 | `stub`                   | none (scripted model)                             | Only the plumbing job; `agent-evals` refuses it (it would pass every case) |
 
-Only the selected source's secret reaches the runner; promptfoo and Claude Code get a narrowed env (PATH, locale, that credential). The summary heading names the source. Switch back by deleting the variable (or setting it to `subscription`).
+Only the selected source's secret reaches the runner; Claude Code gets a narrowed env (PATH, locale, that credential). The runner has no dependencies: nothing is downloaded but the pinned Claude Code CLI. The summary heading names the source. Switch back by deleting the variable (or setting it to `subscription`).
 
 ## 3. Setting up the API-key path (Andy, by hand)
 
@@ -95,6 +95,6 @@ node scripts/evals/run.mjs --source local --cases adversarial-planted-off-by-one
 
 `platform/evals/cases/baselines.json` holds `"live": { "<case id>": <tokens> }`: input tokens of the case's first model request. A case without one is listed in the summary with its measured value, not failed. Change a baseline deliberately in a PR (it's a protected path: Andy reviews it); a Claude Code version bump (`scripts/sandbox-lab/Dockerfile`) can move them all.
 
-## 7. Bumping promptfoo
+## 7. Schemas the runner checks
 
-Edit `PROMPTFOO_VERSION` in `scripts/evals/config.mjs` to a release at least 7 days old (ADR-0042). Dependabot doesn't see it.
+`scripts/evals/schema-check.mjs` checks output against a JSON Schema subset (`type`, `properties`, `required`, `items`, `enum`, `description`). A schema using anything else is refused before any case runs: extend the checker (and its tests) first.

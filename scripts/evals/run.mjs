@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // Agent evals runner (AI-6: M1.17: Agent evals v1, ADR-0086; runbook docs/runbooks/agent-evals.md).
 // Reads the cases and the agent configuration under test from one git commit (`--data`, `--ref`),
-// runs every case once through Claude Code under promptfoo, and fails below the pass rate or on
+// runs every case once through Claude Code, and fails below the pass rate or on
 // a token jump. Exit 0: pass or skipped (quota reserve); 1: fail or a broken run.
 //
 //   node scripts/evals/run.mjs [--source subscription|api-key|stub|local] [--data .] [--ref HEAD]
@@ -21,7 +21,9 @@ import {
   SOURCES,
   TOKEN_JUMP_MAX,
 } from "./config.mjs";
-import { PromptfooEvaluator } from "./promptfoo-evaluator.mjs";
+import { runCase } from "./claude-case.mjs";
+import { ClaudeCodeEvaluator } from "./evaluator.mjs";
+import { assertSupportedSchema } from "./schema-check.mjs";
 import { cell, summary, verdict } from "./verdict.mjs";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
@@ -114,36 +116,23 @@ export function prepareWorkspaces(tree, cases, overrides, workDir) {
   });
 }
 
-/** The promptfoo config: one test per case, our provider, schema validity plus the case's checks. */
-export function promptfooConfig({ suite, cases, prepared, source, workDir, stubUrl, claudeBin }) {
-  return {
-    description: `agent evals: ${suite}`,
-    prompts: ["{{task}}"],
-    providers: [
-      {
-        id: `file://${join(HERE, "claude-provider.mjs")}`,
-        config: { source, workDir, stubUrl, claudeBin },
-      },
-    ],
-    tests: cases.map((c) => {
-      const p = prepared.find((x) => x.id === c.id);
-      return {
-        description: c.id,
-        vars: {
-          caseId: c.id,
-          task: AGENTS[c.agent].prompt,
-          workspace: p.workspace,
-          schemaFile: p.schemaFile,
-          model: AGENTS[c.agent].model,
-        },
-        metadata: { expect: c.expect },
-        assert: [
-          { type: "is-json", value: JSON.parse(p.schema) },
-          { type: "javascript", value: `file://${join(HERE, "promptfoo-assert.mjs")}` },
-        ],
-      };
-    }),
-  };
+/** What the evaluator needs per case. The schema must stay inside the subset schema-check knows. */
+export function caseSpecs(cases, prepared) {
+  return cases.map((c) => {
+    const p = prepared.find((x) => x.id === c.id);
+    const schema = JSON.parse(p.schema);
+    assertSupportedSchema(schema);
+    const agent = AGENTS[c.agent];
+    return {
+      id: c.id,
+      prompt: agent.prompt,
+      model: agent.model,
+      workspace: p.workspace,
+      schemaText: p.schema,
+      schema,
+      expect: c.expect,
+    };
+  });
 }
 
 /** For `--expect fail` (the self-test): every case must have failed, by a check or a token jump. */
@@ -182,19 +171,20 @@ async function main() {
   const prepared = prepareWorkspaces(tree, cases, opts.overrides, workDir);
   const stub = opts.source === "stub" ? await startStub(join(workDir, "stub-answers")) : null;
   try {
-    const evaluator = new PromptfooEvaluator({
-      workDir,
-      local: opts.source === "local",
-      buildConfig: (suite) =>
-        promptfooConfig({
-          suite,
-          cases,
-          prepared,
-          source: opts.source,
-          workDir,
-          stubUrl: stub?.url,
-          claudeBin: opts.claude,
-        }),
+    const evaluator = new ClaudeCodeEvaluator({
+      specs: caseSpecs(cases, prepared),
+      source: opts.source,
+      runCase: (spec) =>
+        runCase(
+          {
+            caseId: spec.id,
+            prompt: spec.prompt,
+            workspace: spec.workspace,
+            schema: spec.schemaText,
+            model: spec.model,
+          },
+          { source: opts.source, workDir, stubUrl: stub?.url, claudeBin: opts.claude },
+        ),
     });
     const run = await evaluator.runSuite(opts.dir, {
       caseIds: cases.map((c) => c.id),

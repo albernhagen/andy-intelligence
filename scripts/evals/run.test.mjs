@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { credentialProblem, expectedFailureMet, parseArgs, promptfooConfig } from "./run.mjs";
+import { caseSpecs, credentialProblem, expectedFailureMet, parseArgs } from "./run.mjs";
 import { verdict } from "./verdict.mjs";
 
 describe("parseArgs", () => {
@@ -54,31 +54,30 @@ describe("credentialProblem", () => {
   });
 });
 
-describe("promptfooConfig", () => {
-  it("GivenACase_WhenBuilt_ThenOneTestWithSchemaAndCaseChecksAndNoInlineCode", () => {
-    const config = promptfooConfig({
-      suite: "s",
-      cases: [
-        {
-          id: "c1",
-          agent: "adversarial-review",
-          expect: [{ check: "no-finding", severity: ["blocker"] }],
-        },
-      ],
-      prepared: [
-        { id: "c1", workspace: "/w/c1", schemaFile: "/w/c1/s.json", schema: '{"type":"object"}' },
-      ],
-      source: "stub",
-      workDir: "/w",
-      stubUrl: "http://127.0.0.1:1",
-      claudeBin: "claude",
+describe("caseSpecs", () => {
+  const c = {
+    id: "c1",
+    agent: "adversarial-review",
+    expect: [{ check: "no-finding", severity: ["blocker"] }],
+  };
+
+  it("GivenAPreparedCase_WhenBuilt_ThenTheAgentsPromptModelSchemaAndChecks", () => {
+    const [spec] = caseSpecs([c], [{ id: "c1", workspace: "/w/c1", schema: '{"type":"object"}' }]);
+    expect(spec).toMatchObject({
+      id: "c1",
+      model: "sonnet",
+      workspace: "/w/c1",
+      schema: { type: "object" },
+      schemaText: '{"type":"object"}',
+      expect: c.expect,
     });
-    const [test] = config.tests;
-    expect(test.vars).toMatchObject({ caseId: "c1", workspace: "/w/c1", model: "sonnet" });
-    expect(test.metadata.expect).toEqual([{ check: "no-finding", severity: ["blocker"] }]);
-    expect(test.assert[0]).toEqual({ type: "is-json", value: { type: "object" } });
-    expect(test.assert[1].value).toMatch(/^file:\/\/.*scripts\/evals\/promptfoo-assert\.mjs$/);
-    expect(config.providers[0].id).toMatch(/claude-provider\.mjs$/);
+    expect(spec.prompt).toContain(".review/procedure.md");
+  });
+
+  it("GivenASchemaOutsideTheSubset_WhenBuilt_ThenRefused", () => {
+    expect(() =>
+      caseSpecs([c], [{ id: "c1", workspace: "/w", schema: '{"type":"object","oneOf":[]}' }]),
+    ).toThrow("unsupported schema keyword");
   });
 });
 
