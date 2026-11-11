@@ -19,12 +19,12 @@
   "devDependencies": {
     "@eslint/js": "^10.0.1",
     "@types/node": "^24.19.2",
-    "eslint": "^10.13.0",
+    "eslint": "^10.14.0",
     "lefthook": "^2.2.2",
     "prettier": "^3.0.0",
     "typescript": "^6.0.3",
-    "typescript-eslint": "^8.0.0",
-    "vitest": "^5.0.5"
+    "typescript-eslint": "^8.72.1",
+    "vitest": "^5.1.0"
   },
   "//pnpm.overrides": {
     "@grpc/grpc-js@<1.13.6": "GHSA-m9gg-hp2v-232j (high), GHSA-f596-whhp-79r4 (low). @firebase/firestore 4.19 (via firebase) pins ~1.9.0. Remove when it allows >=1.13.6.",
