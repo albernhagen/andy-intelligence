@@ -184,6 +184,7 @@ async function main() {
   try {
     const evaluator = new PromptfooEvaluator({
       workDir,
+      local: opts.source === "local",
       buildConfig: (suite) =>
         promptfooConfig({
           suite,

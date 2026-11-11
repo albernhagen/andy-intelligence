@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { evaluatorContract } from "../../packages/contracts/src/testing/index.ts";
 import { PROMPTFOO_VERSION } from "./config.mjs";
-import { PromptfooEvaluator, toCaseResult } from "./promptfoo-evaluator.mjs";
+import { PromptfooEvaluator, promptfooEnv, toCaseResult } from "./promptfoo-evaluator.mjs";
 
 /** A promptfoo result as the pinned version writes it. */
 function pfResult(caseId, outcome) {
@@ -37,8 +37,8 @@ function pfResult(caseId, outcome) {
 
 /** An exec stand-in that answers each config test with the scripted outcome, like promptfoo would. */
 function fakePromptfoo(script, calls = []) {
-  return async (cmd, args) => {
-    calls.push({ cmd, args });
+  return async (cmd, args, env) => {
+    calls.push({ cmd, args, env });
     const config = JSON.parse(readFileSync(args[args.indexOf("-c") + 1], "utf8"));
     const results = config.tests.map((t) =>
       pfResult(t.vars.caseId, script[t.vars.caseId] ?? "error"),
@@ -79,6 +79,38 @@ describe("PromptfooEvaluator", () => {
     await expect(e.runSuite("s", { caseIds: ["a"], maxCases: 5 })).rejects.toThrow(
       "promptfoo exited with code 1",
     );
+  });
+});
+
+describe("promptfooEnv", () => {
+  it("GivenTheRunnerEnv_WhenNarrowed_ThenOnlyPathLocaleAndTheCredentialPass", () => {
+    const env = promptfooEnv(
+      {
+        PATH: "/bin",
+        LANG: "C.UTF-8",
+        CLAUDE_CODE_OAUTH_TOKEN: "tok",
+        GITHUB_TOKEN: "gh",
+        ACTIONS_RUNTIME_TOKEN: "rt",
+        HOME: "/home/runner",
+        NODE_OPTIONS: "--require x",
+      },
+      "/w",
+    );
+    expect(env).toMatchObject({
+      PATH: "/bin",
+      CLAUDE_CODE_OAUTH_TOKEN: "tok",
+      HOME: "/w/promptfoo-home",
+    });
+    for (const k of [
+      "GITHUB_TOKEN",
+      "ACTIONS_RUNTIME_TOKEN",
+      "NODE_OPTIONS",
+      "ANTHROPIC_API_KEY",
+    ]) {
+      expect(env).not.toHaveProperty(k);
+    }
+    expect(env.npm_config_ignore_scripts).toBe("true");
+    expect(env.PROMPTFOO_DISABLE_TELEMETRY).toBe("1");
   });
 });
 

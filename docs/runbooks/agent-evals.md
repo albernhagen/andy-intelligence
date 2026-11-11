@@ -22,9 +22,9 @@ The `agent-evals` check (AI-6: M1.17: Agent evals v1, ADR-0040, ADR-0086) tests 
 | ------------------------ | ------------------------------------------------- | -------------------------------------------------------------------------- |
 | `subscription` (default) | `CLAUDE_CODE_OAUTH_TOKEN` (the reviewers' secret) | Nothing to do                                                              |
 | `api-key`                | `AGENT_EVALS_ANTHROPIC_API_KEY`                   | Repo variable `AGENT_EVALS_SOURCE=api-key`, or the dispatch input `source` |
-| `stub`                   | none (scripted model; plumbing only)              | Dispatch input, or the plumbing job                                        |
+| `stub`                   | none (scripted model)                             | Only the plumbing job; `agent-evals` refuses it (it would pass every case) |
 
-Only the selected source's secret reaches the runner. Switch back by deleting the variable (or setting it to `subscription`).
+Only the selected source's secret reaches the runner; promptfoo and Claude Code get a narrowed env (PATH, locale, that credential). The summary heading names the source. Switch back by deleting the variable (or setting it to `subscription`).
 
 ## 3. Setting up the API-key path (Andy, by hand)
 
@@ -82,6 +82,14 @@ node scripts/evals/run.mjs --source local --cases adversarial-planted-off-by-one
 ```
 
 `--source stub` runs the plumbing locally; `--dir platform/evals/selftest --expect fail` the self-test.
+
+**First live run after merge: check these, then record the result in the build log.** Neither has been seen on a live run yet.
+
+| Check        | Pass                                                                                                                                                                                 |
+| ------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Quota scale  | The run doesn't stop at the reserve while Claude's usage page shows under 80%. A reading over 200% fails the case ("quota reading out of range"): `utilization` isn't a 0-1 fraction |
+| Token metric | Every case shows input tokens, thousands not tens (system prompt, `AGENTS.md`, procedure and inputs)                                                                                 |
+| Weakened run | The second command above fails                                                                                                                                                       |
 
 ## 6. Token baselines
 
