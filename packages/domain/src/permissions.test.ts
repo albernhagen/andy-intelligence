@@ -1,3 +1,6 @@
+import { readdirSync, readFileSync } from "node:fs";
+import { join, relative } from "node:path";
+import { fileURLToPath } from "node:url";
 import { EventActor } from "@andy/contracts";
 import { describe, expect, it, vi } from "vitest";
 import {
@@ -69,5 +72,29 @@ describe("permissions", () => {
     for (const bad of ["Andy", "user:", "andy@example.com", ""]) {
       expect(EventActor.safeParse(bad).success).toBe(false);
     }
+  });
+
+  // `isOwner` trusts the `user:` prefix, so only `userActor` may build one, and only the auth
+  // adapter (after the allow-list) may call it (AI-19 review). This scan keeps it that way.
+  it("GivenTheSource_WhenScanned_ThenOnlyTheAuthAdapterMakesUserActors", () => {
+    const root = fileURLToPath(new URL("../../..", import.meta.url));
+    const files = ["packages", "apps"].flatMap((top) =>
+      readdirSync(join(root, top), { recursive: true, encoding: "utf8" })
+        .filter((f) => /\/src\/.*\.tsx?$/.test(f) && !/\.test\.tsx?$|node_modules|\.gen\./.test(f))
+        .map((f) => join(root, top, f)),
+    );
+    const code = (file: string) =>
+      readFileSync(file, "utf8")
+        .split("\n")
+        .filter((l) => !/^\s*(\*|\/\/|\/\*)/.test(l));
+    const literal = files.filter(
+      (f) => !f.endsWith("permissions.ts") && code(f).some((l) => /["'`]user:/.test(l)),
+    );
+    const callers = files.filter(
+      (f) => !f.endsWith("permissions.ts") && code(f).some((l) => /\buserActor\(/.test(l)),
+    );
+    expect(files.length).toBeGreaterThan(50);
+    expect(literal.map((f) => relative(root, f))).toEqual([]);
+    expect(callers.map((f) => relative(root, f))).toEqual(["apps/api/src/auth.ts"]);
   });
 });
