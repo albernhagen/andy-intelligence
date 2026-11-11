@@ -1,6 +1,8 @@
 import {
   RateLimitReport,
   type ProviderKey,
+  type QuotaClearResult,
+  type QuotaStore,
   type QuotaFreshness,
   type QuotaLevel,
   type QuotaReading,
@@ -8,6 +10,7 @@ import {
   type QuotaWindow,
   type QuotaWindowStatus,
 } from "@andy/contracts";
+import { DomainError } from "./tickets";
 
 /**
  * Subscription quota (ARCHITECTURE §5, M1.9: Quota capture): turns what a run reports into
@@ -89,8 +92,9 @@ export function quotaRejection(
   if (incomingReset && incomingReset > nowMs + WINDOW_MS[incoming.window] + RESET_TOLERANCE_MS) {
     return "reset_too_far";
   }
-  // An old stored reading can't veto a new one, so a false high can't lock itself in.
-  if (!stored || !isRecent(stored, nowMs)) return null;
+  // An old stored reading can't veto a new one, so a false high can't lock itself in; nor can
+  // one Andy discarded (AI-74), so the next real reading after a clear is believed.
+  if (!stored || stored.discarded || !isRecent(stored, nowMs)) return null;
   const storedReset = stored.resetsAt ? Date.parse(stored.resetsAt) : null;
   if (storedReset && storedReset <= nowMs) return null; // That window is over.
   if (storedReset && incomingReset && Math.abs(storedReset - incomingReset) > RESET_TOLERANCE_MS) {
@@ -109,7 +113,18 @@ function isRecent(reading: QuotaReading, nowMs: number): boolean {
  * for a week; with it, the next run after 6 hours brings a new reading.
  */
 export function readingsForDispatch(readings: QuotaReading[], now: Date): QuotaReading[] {
-  return readings.filter((r) => isRecent(r, now.getTime()));
+  return readings.filter((r) => !r.discarded && isRecent(r, now.getTime()));
+}
+
+/** The readings holding dispatch at the reserve: those `quotaStatus` puts at `pause` for it. */
+export function readingsAtReserve(
+  readings: QuotaReading[],
+  now: Date,
+  thresholds: QuotaThresholds = CLAUDE_SUB_THRESHOLDS,
+): QuotaReading[] {
+  return readingsForDispatch(readings, now).filter(
+    (r) => quotaFreshness(r, now) === "fresh" && quotaLevel(r.usedPct, thresholds) === "pause",
+  );
 }
 
 /** Fresh until the window's reset passes; with no reset time, for 6 hours after it was taken. */
@@ -155,14 +170,64 @@ export function quotaStatus(
   thresholds: QuotaThresholds = CLAUDE_SUB_THRESHOLDS,
   windowsExpected: QuotaWindow[] = CLAUDE_SUB_WINDOWS,
 ): QuotaStatus {
+  // A reading Andy discarded (AI-74) reads as missing: unknown until the next one.
   const windows = windowsExpected.map((w) =>
     windowStatus(
       w,
-      readings.find((r) => r.window === w),
+      readings.find((r) => r.window === w && !r.discarded),
       now,
       thresholds,
     ),
   );
   const level = SEVERITY.find((l) => windows.some((w) => w.level === l)) ?? "unknown";
   return { provider, ...thresholds, level, windows };
+}
+
+function log(severity: "INFO" | "WARNING" | "ERROR", message: string, fields: object = {}) {
+  console.log(JSON.stringify({ severity, message, component: "quota", ...fields }));
+}
+
+/**
+ * Andy's clear of a quota idle (AI-74): discards the readings holding dispatch at the reserve, so
+ * quota reads unknown until the next reading and dispatch resumes under its other caps. The
+ * readings stay, marked with who and when; each clear is kept in the store's history. At most
+ * one clear per reading: the store refuses a reading already discarded.
+ */
+export class QuotaClearer {
+  constructor(
+    private readonly store: QuotaStore | null,
+    private readonly now: () => Date = () => new Date(),
+    /** Dispatches every project again. */
+    private readonly wake: () => Promise<void> = async () => {},
+  ) {}
+
+  async clearIdle(by: string): Promise<QuotaClearResult> {
+    const now = this.now();
+    const held = this.store ? readingsAtReserve(await this.store.latest("claude-sub"), now) : [];
+    const cleared =
+      this.store && held.length > 0
+        ? await this.store.discard(
+            "claude-sub",
+            held.map((r) => ({ window: r.window, takenAt: r.takenAt })),
+            { by, at: now.toISOString() },
+          )
+        : [];
+    if (cleared.length === 0) {
+      throw new DomainError(
+        "not_clearable",
+        "No quota reading is holding dispatch at the reserve: nothing to clear",
+      );
+    }
+    log("INFO", "quota idle cleared", {
+      windows: cleared.map((c) => c.window),
+      usedPct: cleared.map((c) => c.usedPct),
+    });
+    // The clear is committed; a failed wake-up only waits for the next one.
+    try {
+      await this.wake();
+    } catch (err) {
+      log("ERROR", "quota clear wake-up failed", { error: String(err) });
+    }
+    return { cleared };
+  }
 }

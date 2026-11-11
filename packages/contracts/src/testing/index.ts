@@ -4,6 +4,7 @@ import {
   CodeHostEvent,
   Project,
   Question,
+  QuotaClear,
   QuotaReading,
   Repo,
   RepoToken,
@@ -22,6 +23,7 @@ import {
   type Executor,
   type OAuthGrantStore,
   type QuotaStore,
+  quotaClearId,
   type NewRun,
   type RunRequest,
   type RunStore,
@@ -472,7 +474,19 @@ export function executorContract(
   });
 }
 
-export function quotaStoreContract(name: string, make: () => Promise<QuotaStore>): void {
+export interface QuotaStoreContractOptions {
+  /** Timeout (ms) for the case that races two clears; see `RunStoreContractOptions` (AI-71). */
+  raceTimeoutMs?: number;
+}
+
+export function quotaStoreContract(
+  name: string,
+  make: () => Promise<QuotaStore>,
+  options: QuotaStoreContractOptions = {},
+): void {
+  /** A case that races two clears of one reading: gets the adapter's race timeout. */
+  const itRaces = (title: string, fn: () => Promise<void>) => it(title, fn, options.raceTimeoutMs);
+
   describe(`QuotaStore contract: ${name}`, () => {
     const reading = (window: "5h" | "weekly", usedPct: number): QuotaReading => ({
       provider: "claude-sub",
@@ -507,6 +521,84 @@ export function quotaStoreContract(name: string, make: () => Promise<QuotaStore>
       const store = await make();
       await store.save([reading("5h", 10)]);
       expect(await store.latest("google-sub")).toEqual([]);
+    });
+
+    // AI-74: Andy clears a reading that holds dispatch at the reserve.
+    const by = { by: "andy@example.com", at: "2026-11-08T12:30:00.000Z" };
+    const held = { window: "5h" as const, takenAt: "2026-11-08T12:00:00.000Z" };
+
+    it("GivenAStoredReading_WhenDiscarded_ThenItIsMarkedAndAClearIsRecorded", async () => {
+      const store = await make();
+      await store.save([reading("5h", 90), reading("weekly", 20)]);
+      const clears = await store.discard("claude-sub", [held], by);
+      expect(clears).toEqual([
+        {
+          id: quotaClearId("claude-sub", "5h", held.takenAt),
+          provider: "claude-sub",
+          window: "5h",
+          usedPct: 90,
+          readingTakenAt: held.takenAt,
+          by: by.by,
+          at: by.at,
+        },
+      ]);
+      for (const c of clears) expect(QuotaClear.parse(c)).toEqual(c);
+      const latest = await store.latest("claude-sub");
+      expect(latest.find((r) => r.window === "5h")?.discarded).toEqual(by);
+      expect(latest.find((r) => r.window === "weekly")?.discarded).toBeUndefined();
+    });
+
+    it("GivenADiscardedReading_WhenDiscardedAgain_ThenNothingIsCleared", async () => {
+      const store = await make();
+      await store.save([reading("5h", 90)]);
+      await store.discard("claude-sub", [held], by);
+      expect(
+        await store.discard("claude-sub", [held], { ...by, at: "2026-11-08T13:00:00.000Z" }),
+      ).toEqual([]);
+      expect(await store.clearsSince("claude-sub", "2026-11-08T00:00:00.000Z", 10)).toHaveLength(1);
+    });
+
+    it("GivenANewerReadingWasSaved_WhenTheOldOneIsDiscarded_ThenNothingIsCleared", async () => {
+      const store = await make();
+      await store.save([{ ...reading("5h", 40), takenAt: "2026-11-08T12:10:00.000Z" }]);
+      expect(await store.discard("claude-sub", [held], by)).toEqual([]);
+      expect((await store.latest("claude-sub"))[0]?.discarded).toBeUndefined();
+    });
+
+    it("GivenADiscardedReading_WhenTheNextIsSaved_ThenItReplacesItAndTheClearIsKept", async () => {
+      const store = await make();
+      await store.save([reading("5h", 90)]);
+      await store.discard("claude-sub", [held], by);
+      await store.save([{ ...reading("5h", 40), takenAt: "2026-11-08T13:00:00.000Z" }]);
+      const [latest] = await store.latest("claude-sub");
+      expect(latest).toMatchObject({ usedPct: 40 });
+      expect(latest?.discarded).toBeUndefined();
+      const kept = await store.clearsSince("claude-sub", "2026-11-08T00:00:00.000Z", 10);
+      expect(kept.map((c) => c.usedPct)).toEqual([90]);
+    });
+
+    it("GivenClearsAtDifferentTimes_WhenReadSince_ThenNewestFirstWithinTheLimit", async () => {
+      const store = await make();
+      const at = (h: number) => `2026-11-08T${String(h).padStart(2, "0")}:00:00.000Z`;
+      for (const h of [10, 11, 12]) {
+        await store.save([{ ...reading("5h", 90), takenAt: at(h) }]);
+        await store.discard("claude-sub", [{ window: "5h", takenAt: at(h) }], { ...by, at: at(h) });
+      }
+      const since = await store.clearsSince("claude-sub", at(11), 10);
+      expect(since.map((c) => c.at)).toEqual([at(12), at(11)]);
+      expect(await store.clearsSince("claude-sub", at(0), 1)).toHaveLength(1);
+      expect(await store.clearsSince("google-sub", at(0), 10)).toEqual([]);
+    });
+
+    itRaces("GivenTwoConcurrentClears_WhenApplied_ThenExactlyOneClearIsMade", async () => {
+      const store = await make();
+      await store.save([reading("5h", 90)]);
+      const results = await Promise.all([
+        store.discard("claude-sub", [held], by),
+        store.discard("claude-sub", [held], { ...by, at: "2026-11-08T12:30:01.000Z" }),
+      ]);
+      expect(results.flat()).toHaveLength(1);
+      expect(await store.clearsSince("claude-sub", "2026-11-08T00:00:00.000Z", 10)).toHaveLength(1);
     });
   });
 }

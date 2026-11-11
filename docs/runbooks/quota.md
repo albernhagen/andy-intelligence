@@ -9,7 +9,7 @@ Claude subscription only, best-effort. A fresh reading at the pause level, taken
 | Source    | Claude Code's `rate_limit_event` message, field `rate_limit_info`. `scripts/executor-report.mjs` forwards the last event's windows as `rateLimits` in the run report.                                                 |
 | Capture   | `POST /runs/{id}/report` (`apps/api/src/runs.ts`), the only place readings are written. A reading per window (5h, weekly), via `parseRateLimits` in `packages/domain/src/quota.ts`. A replayed report writes nothing. |
 | Malformed | Discarded with one `quota reading discarded` log line; the last reading stays and the run report still succeeds.                                                                                                      |
-| Storage   | Firestore `quotaReadings`, one document per provider and window (latest only).                                                                                                                                        |
+| Storage   | Firestore `quotaReadings`, one document per provider and window (latest only); `quotaClears`, one per reading Andy cleared (AI-74), kept.                                                                             |
 | Read      | `GET /api/quota`: per window `freshness`, `level`, `usedPct`, plus the worst level. `usedPct` is null unless fresh.                                                                                                   |
 | Fresh     | Until the window's `resetsAt` passes; with no `resetsAt`, 6 hours after `takenAt`. Stale or missing shows as **unknown**.                                                                                             |
 | Levels    | From the §5 policy, 70% warn and 80% pause (`CLAUDE_SUB_THRESHOLDS`, constants until Provider documents exist). Worst first: pause, warn, unknown, ok.                                                                |
@@ -21,4 +21,4 @@ After a subscription run ends, open the app: the header gauge should show the 5-
 
 ## Trust
 
-Any verified run report can write readings. Each is checked when written (`quotaRejection`, log line `quota reading rejected`): a reset further off than the window, a different window before the recent one resets, or a drop of over 5 points in a window is rejected. A false high still idles dispatch for at most 6 hours per report. Still to do: confirm the units above on a live event.
+Any verified run report can write readings. Each is checked when written (`quotaRejection`, log line `quota reading rejected`): a reset further off than the window, a different window before the recent one resets, or a drop of over 5 points in a window is rejected. A false high still idles dispatch for at most 6 hours per report, unless Andy clears it (`agent-runs.md`, "Dispatch says `quota_reserve`"). Still to do: confirm the units above on a live event.

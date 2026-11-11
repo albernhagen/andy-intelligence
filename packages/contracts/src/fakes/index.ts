@@ -19,7 +19,10 @@ import {
   type Project,
   type ProviderKey,
   type Question,
+  type QuotaClear,
+  type QuotaDiscard,
   type QuotaReading,
+  type QuotaWindow,
   type Ticket,
   type TicketEvent,
 } from "../entities";
@@ -39,6 +42,7 @@ import {
   type OAuthGrantStore,
   type QuestionFilter,
   type QuotaStore,
+  quotaClearId,
   type RecordResult,
   type RunHandle,
   type RunPatch,
@@ -408,6 +412,7 @@ export class InMemoryWatchdogQueue implements WatchdogQueue {
 
 export class InMemoryQuotaStore implements QuotaStore {
   private readonly readings = new Map<string, QuotaReading>();
+  private readonly clears = new Map<string, QuotaClear>();
 
   async save(readings: QuotaReading[]): Promise<void> {
     for (const r of readings) this.readings.set(`${r.provider}_${r.window}`, structuredClone(r));
@@ -415,6 +420,43 @@ export class InMemoryQuotaStore implements QuotaStore {
 
   async latest(provider: ProviderKey): Promise<QuotaReading[]> {
     return structuredClone([...this.readings.values()].filter((r) => r.provider === provider));
+  }
+
+  async discard(
+    provider: ProviderKey,
+    readings: { window: QuotaWindow; takenAt: string }[],
+    by: QuotaDiscard,
+  ): Promise<QuotaClear[]> {
+    const made: QuotaClear[] = [];
+    for (const { window, takenAt } of readings) {
+      const stored = this.readings.get(`${provider}_${window}`);
+      const id = quotaClearId(provider, window, takenAt);
+      if (!stored || stored.takenAt !== takenAt || stored.discarded || this.clears.has(id)) {
+        continue;
+      }
+      stored.discarded = { ...by };
+      const clear: QuotaClear = {
+        id,
+        provider,
+        window,
+        usedPct: stored.usedPct,
+        readingTakenAt: takenAt,
+        by: by.by,
+        at: by.at,
+      };
+      this.clears.set(id, clear);
+      made.push(structuredClone(clear));
+    }
+    return made;
+  }
+
+  async clearsSince(provider: ProviderKey, since: string, limit: number): Promise<QuotaClear[]> {
+    return structuredClone(
+      [...this.clears.values()]
+        .filter((c) => c.provider === provider && c.at >= since)
+        .sort((a, b) => b.at.localeCompare(a.at))
+        .slice(0, limit),
+    );
   }
 }
 

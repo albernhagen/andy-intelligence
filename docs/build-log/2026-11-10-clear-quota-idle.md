@@ -1,0 +1,7 @@
+# 2026-11-10 — AI-74: Clear a quota idle
+
+- Andy decided (digest decision 12) he wants a control for the AI-66 review finding: a plausible but false high quota reading idles dispatch at the reserve for up to 6 hours, and a real lower reading is rejected as an implausible drop.
+- Built: `QuotaClearer.clearIdle` (`packages/domain/src/quota.ts`) discards the fresh readings at the pause level. Each stays in `quotaReadings` with `discarded: { by, at }` until the next reading replaces it; a `QuotaClear` record per reading is kept in `quotaClears` (id from provider, window and `takenAt`: at most one clear per reading, enforced in one small transaction). Dispatch and the gauge treat a discarded reading as missing (unknown); `quotaRejection` skips the drop check against it; cost deltas don't measure from it.
+- Parity (AI-40): `POST /api/quota/clear`, MCP `clear_quota_idle` (`apps/api/src/mcp/tools-quota.ts`), and a **Clear quota idle** button in the quota banner and beside the idle reason in Project settings, shown only at the pause level. A refusal is 409 `not_clearable`. A clear wakes dispatch in every project.
+- Digest: exception `quota_cleared` for clears in the window. Runbook `agent-runs.md` §11. Threat model R24 mitigation updated.
+- Not changed: `quotaRejection`'s plausibility rules; other providers. No `SCHEMA_VERSION` bump (optional field, new collection and enum value); no `terraform apply`; no new index (the clear history reads a single-field range).
