@@ -586,6 +586,10 @@ export type Policy = z.infer<typeof Policy>;
 export const QuotaWindow = z.enum(["5h", "weekly", "daily_tasks"]);
 export type QuotaWindow = z.infer<typeof QuotaWindow>;
 
+/** Who cleared a quota reading, and when (AI-74). `by` is the signed-in email. */
+export const QuotaDiscard = z.object({ by: z.string().min(1).max(320), at: Timestamp });
+export type QuotaDiscard = z.infer<typeof QuotaDiscard>;
+
 export const QuotaReading = z.object({
   provider: ProviderKey,
   window: QuotaWindow,
@@ -594,8 +598,35 @@ export const QuotaReading = z.object({
   source: z.string().min(1),
   takenAt: Timestamp,
   confidence: z.enum(["high", "low"]),
+  /**
+   * Set when Andy cleared this reading because it held dispatch at the reserve (AI-74): dispatch
+   * and the gauge then treat the window as unknown until the next reading replaces it.
+   */
+  discarded: QuotaDiscard.optional(),
 });
 export type QuotaReading = z.infer<typeof QuotaReading>;
+
+/**
+ * One cleared reading, kept after the next reading replaces it (AI-74): the history of quota
+ * idles Andy cleared. Id: provider, window and the cleared reading's `takenAt`, so a reading is
+ * cleared at most once.
+ */
+export const QuotaClear = z.object({
+  id: z.string().min(1),
+  provider: ProviderKey,
+  window: QuotaWindow,
+  usedPct: z.number().min(0).max(100),
+  readingTakenAt: Timestamp,
+  by: z.string().min(1).max(320),
+  at: Timestamp,
+});
+export type QuotaClear = z.infer<typeof QuotaClear>;
+
+/** What a clear did: the readings it discarded. */
+export const QuotaClearResult = z.object({
+  cleared: z.array(QuotaClear).min(1),
+});
+export type QuotaClearResult = z.infer<typeof QuotaClearResult>;
 
 // Far enough for any real reset, and small enough that new Date() stays valid.
 const EpochSeconds = z.number().int().positive().max(4_102_444_800);

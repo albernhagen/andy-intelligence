@@ -146,6 +146,15 @@ What it does (ADR-0083): when `main` moves, every open agent PR whose head lacks
 
 `checks_failed` also comes from the executor: "The PR changes dependency or toolchain files" (a sync never installs from files a PR changed: merge by hand), or "The executor ran the project's checks after the agent and they did not pass" (the agent said synced; nothing was pushed). A sync that failed without an outcome (push refused, setup failed) is flagged the same way. "GitHub refused the push" with workflow files in `main`'s change: the App has no `workflows` permission by design; merge `main` by hand as above.
 
+## 11. Dispatch says `quota_reserve` and you don't believe it (AI-74)
+
+Dispatch stops while a fresh quota reading is at 80% or more (ADR-0079). A plausible but false high holds it for up to 6 hours, and neither **Paused** nor the dial clears it.
+
+1. Check the real usage on Claude's own usage page. If it really is at the reserve, wait: the reserve protects your own Claude use.
+2. If it isn't: click **Clear quota idle** in the quota banner or beside "Dispatch: subscription quota is at its reserve" in Project settings, or call MCP `clear_quota_idle` (`POST /api/quota/clear`).
+3. Expect: the readings at the reserve are kept but marked discarded with your email and the time; the gauge shows **unknown**; dispatch wakes every project and starts under its other caps; the digest lists a `quota_cleared` exception. The next run's reading is believed even if far lower.
+4. "Nothing to clear" (409, or an MCP tool error): no fresh reading is at the reserve now, or this one was already cleared (once per reading). A new high reading after a clear is a new reading: clear it again only if you still don't believe it, and check the executor's rate-limit report if it repeats (`docs/runbooks/quota.md`).
+
 ## Troubleshooting
 
 | Symptom                                                                                      | Fix                                                                                                                                                                                                                                                                                                                                                                                                                      |
