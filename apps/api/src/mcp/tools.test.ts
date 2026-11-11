@@ -106,7 +106,7 @@ describe("create_ticket", () => {
     const list = (await (await ctx.rest("/api/projects/ai/tickets")).json()) as Ticket[];
     expect(list).toEqual([expect.objectContaining({ key: "AI-1", title: "Board" })]);
     const events = await ctx.tracker.listEvents("ai", list[0]!.id);
-    expect(events[0]).toMatchObject({ kind: "created", actor: "andy" });
+    expect(events[0]).toMatchObject({ kind: "created", actor: "user:andy" });
   });
 
   it("GivenOnlyATitle_WhenCreated_ThenTheTicketHasNoTypeAndReadinessAsksForOne", async () => {
@@ -534,7 +534,10 @@ describe("cancel_ticket and archive_ticket", () => {
     const cancelled = await ctx.call("cancel_ticket", { ticket: "AI-1", reason: "not needed" });
     expect(cancelled.data.ticket).toMatchObject({ stage: "cancelled", archived: false });
     const status = await ctx.call("status", { ticket: "AI-1" });
-    expect(status.data.recentEvents.at(-1)).toMatchObject({ actor: "andy", body: "not needed" });
+    expect(status.data.recentEvents.at(-1)).toMatchObject({
+      actor: "user:andy",
+      body: "not needed",
+    });
 
     const archived = await ctx.call("archive_ticket", { ticket: "AI-1" });
     expect(archived.data.ticket).toMatchObject({ archived: true });

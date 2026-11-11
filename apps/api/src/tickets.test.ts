@@ -11,6 +11,7 @@ import type { TokenVerifier } from "./auth";
 
 const verifier: TokenVerifier = {
   async verify(token) {
+    if (token === "stranger") return { uid: "uid-2", email: "x@example.com", emailVerified: true };
     if (token !== "andy") throw new Error("bad token");
     return { uid: "andy", email: "andy@example.com", emailVerified: true };
   },
@@ -55,6 +56,25 @@ describe("ticket API", () => {
     });
     return json as unknown as Ticket;
   }
+
+  // AI-19: the real path, request → auth → TicketService → `can`. Only allow-listed users reach
+  // the policy; it records them by uid, and the email never lands in history.
+  it("GivenTheSignedInOwner_WhenCancellingOverTheApi_ThenAllowedAndHistoryRecordsTheirUid", async () => {
+    const ticket = await projectWithTicket();
+    const base = `/api/projects/ai/tickets/${ticket.id}`;
+    expect((await call("POST", `${base}/cancel`, { reason: "dup" })).status).toBe(200);
+    const events = (await call("GET", `${base}/events`)).json as unknown as TicketEvent[];
+    expect(events.map((e) => e.actor)).toEqual(["user:andy", "user:andy"]);
+    expect(JSON.stringify(events)).not.toContain("andy@example.com");
+  });
+
+  it("GivenASignedInUserNotOnTheAllowList_WhenCancellingOverTheApi_ThenForbiddenAndUnchanged", async () => {
+    const ticket = await projectWithTicket();
+    const base = `/api/projects/ai/tickets/${ticket.id}`;
+    const res = await call("POST", `${base}/cancel`, { reason: "x" }, "stranger");
+    expect(res).toMatchObject({ status: 403, json: { error: "forbidden" } });
+    expect((await call("GET", base)).json).toMatchObject({ stage: "backlog" });
+  });
 
   it("GivenATicketKey_WhenReadByKey_ThenTheTicketIsReturned", async () => {
     const ticket = await projectWithTicket();
@@ -264,7 +284,7 @@ describe("ticket API", () => {
     const t = await projectWithTicket();
     const res = await call("POST", `/api/projects/ai/tickets/${t.id}/comments`, { body: "hi" });
     expect(res.status).toBe(201);
-    expect(res.json).toMatchObject({ kind: "comment", actor: "andy", body: "hi" });
+    expect(res.json).toMatchObject({ kind: "comment", actor: "user:andy", body: "hi" });
     const unknown = crypto.randomUUID();
     expect((await call("GET", `/api/projects/ai/tickets/${unknown}`)).status).toBe(404);
     expect((await call("GET", `/api/projects/ai/tickets/${unknown}/events`)).status).toBe(404);

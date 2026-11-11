@@ -12,6 +12,7 @@ import {
   type TicketChange,
   type WorkTracker,
 } from "@andy/contracts";
+import { isOwner } from "./permissions";
 
 /**
  * Email for the Needs-you inbox (AI-77, ADR-0060). When a ticket starts to need Andy, it waits
@@ -345,7 +346,7 @@ export function notifyOnNeedsYou(
     change: TicketChange,
     actor: EventActor,
   ) => {
-    const flags = change.fields?.needsAttention === true && actor !== "andy";
+    const flags = change.fields?.needsAttention === true && !isOwner(actor);
     const before = flags ? await tracker.getTicket(projectId, ticketId) : null;
     const after = await tracker.updateTicket(projectId, ticketId, change, actor);
     if (before && !before.needsAttention && after.needsAttention) await onNeedsYou(after);

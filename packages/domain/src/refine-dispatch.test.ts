@@ -12,6 +12,9 @@ import { MAX_REFINE_RUNS_PER_TICKET, RunService } from "./runs";
 import { WorkflowExecutor } from "./test-executor";
 import { TicketService } from "./tickets";
 
+/** The owner as owner-only rules take them (AI-19). */
+const OWNER = { actor: "andy", email: "andy@example.com" };
+
 const REPO = {
   fullName: "albernhagen/andy-intelligence",
   defaultBranch: "main",
@@ -260,7 +263,7 @@ describe("RefineDispatcher", () => {
 
   it("GivenCancelledAndArchivedTickets_WhenAutoRefineTurnsOn_ThenNeitherIsRefined", async () => {
     const { tickets, projects } = wire();
-    await projects.update(projectId, { autoRefine: false }, "andy@example.com");
+    await projects.update(projectId, { autoRefine: false }, OWNER);
     const cancelled = await tickets.create(projectId, { type: "feature", title: "One" }, "andy", {
       upNext: true,
     });
@@ -271,20 +274,20 @@ describe("RefineDispatcher", () => {
     // Archived while in Backlog (e.g. reopened after archiving): still hidden, still skipped.
     await tracker.updateTicket(projectId, archived.id, { fields: { archived: true } }, "andy");
 
-    await projects.update(projectId, { autoRefine: true }, "andy@example.com");
+    await projects.update(projectId, { autoRefine: true }, OWNER);
     expect(await refines(cancelled.id)).toEqual([]);
     expect(await refines(archived.id)).toEqual([]);
   });
 
   it("GivenAutoRefineOff_WhenATicketEntersUpNext_ThenNoRunStartsUntilItIsTurnedOn", async () => {
     const { tickets, projects } = wire();
-    await projects.update(projectId, { autoRefine: false }, "andy@example.com");
+    await projects.update(projectId, { autoRefine: false }, OWNER);
     const ticket = await tickets.create(projectId, { type: "feature", title: "Board" }, "andy", {
       upNext: true,
     });
     expect(await refines(ticket.id)).toEqual([]);
 
-    await projects.update(projectId, { autoRefine: true }, "andy@example.com");
+    await projects.update(projectId, { autoRefine: true }, OWNER);
     expect(await refines(ticket.id)).toHaveLength(1);
   });
 

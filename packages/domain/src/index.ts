@@ -2,6 +2,7 @@ export * from "./dor";
 export * from "./projects";
 export * from "./stages";
 export * from "./tickets";
+export * from "./permissions";
 export * from "./runs";
 export * from "./sync-runs";
 export * from "./pull-requests";

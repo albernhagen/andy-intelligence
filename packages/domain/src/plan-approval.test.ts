@@ -251,6 +251,20 @@ describe("plan approval", () => {
     },
   );
 
+  it("GivenTheOwnerAsAUserUid_WhenRejecting_ThenTheCommentIsRecordedAsTheUid", async () => {
+    const { ticket, plan } = await planned();
+    const as = { actor: "user:uid-1", email: "andy@example.com" };
+    await runs.decidePlan(
+      projectId,
+      ticket.id,
+      plan.id,
+      { decision: "rejected", reason: "no" },
+      as,
+    );
+    const events = await tracker.listEvents(projectId, ticket.id);
+    expect(events.find((e) => e.body?.startsWith("Plan rejected"))?.actor).toBe("user:uid-1");
+  });
+
   it("GivenTwoConcurrentDecisions_WhenBothRace_ThenOneWinsAndTheOtherIsRefused", async () => {
     const { ticket, plan } = await planned();
     const results = await Promise.allSettled([

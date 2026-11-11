@@ -40,7 +40,7 @@ export function registerDispatchTools(server: McpServer, deps: ToolDeps, run: Ru
         const updated = await deps.projects.update(
           project.toLowerCase(),
           { runsAtOnce: runs },
-          deps.email,
+          { actor: deps.actor, email: deps.email },
         );
         return { project: updated.key, runsAtOnce: updated.runsAtOnce };
       }),
@@ -56,7 +56,14 @@ export function registerDispatchTools(server: McpServer, deps: ToolDeps, run: Ru
     },
     ({ project, paused }) =>
       run(async () => {
-        const updated = await deps.projects.update(project.toLowerCase(), { paused }, deps.email);
+        const updated = await deps.projects.update(
+          project.toLowerCase(),
+          { paused },
+          {
+            actor: deps.actor,
+            email: deps.email,
+          },
+        );
         return { project: updated.key, paused: updated.paused };
       }),
   );

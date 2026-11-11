@@ -11,7 +11,7 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { WebStandardStreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js";
 import type { Hono, MiddlewareHandler } from "hono";
 import { bodyLimit } from "hono/body-limit";
-import type { AuthEnv } from "../auth";
+import { actorOf, type AuthEnv } from "../auth";
 import { mcpUrls } from "./oauth";
 import type { FixedWindowLimiter } from "./rate-limit";
 import { hashToken, isTokenShaped } from "./tokens";
@@ -80,7 +80,7 @@ export function registerMcpEndpoint(app: Hono<AuthEnv>, deps: McpEndpointDeps) {
     }),
   );
   app.all("/mcp", async (c) => {
-    const { email } = c.get("identity");
+    const identity = c.get("identity");
     const server = new McpServer({ name: "andy-intelligence", version: deps.version });
     registerTools(server, {
       tracker: deps.tracker,
@@ -90,7 +90,8 @@ export function registerMcpEndpoint(app: Hono<AuthEnv>, deps: McpEndpointDeps) {
       digest: deps.digest,
       notifyEmail: deps.notifyEmail,
       quota: deps.quota,
-      email,
+      email: identity.email,
+      actor: actorOf(identity),
     });
     const transport = new WebStandardStreamableHTTPServerTransport({
       sessionIdGenerator: undefined,

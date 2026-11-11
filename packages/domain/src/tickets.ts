@@ -21,6 +21,8 @@ import {
   type WorkTracker,
 } from "@andy/contracts";
 import { checkDor, type DorResult } from "./dor";
+import { DomainError } from "./errors";
+import { requireCan } from "./permissions";
 import { inboxCards } from "./inbox-order";
 import { blockerProblem, parentProblem, reorderRank, type ReorderAnchor } from "./ticket-edits";
 import { MAX_OPEN_QUESTIONS_PER_TICKET } from "./refine-gate";
@@ -32,34 +34,7 @@ function log(severity: "INFO" | "WARNING", message: string, fields: object = {})
   console.log(JSON.stringify({ severity, message, component: "tickets", ...fields }));
 }
 
-/** A rule violation the caller caused; the API maps codes to HTTP statuses. */
-export class DomainError extends Error {
-  constructor(
-    readonly code:
-      | "invalid_transition"
-      | "dor_not_met"
-      | "forbidden"
-      | "invalid_repo"
-      | "repo_taken"
-      | "invalid_step"
-      | "not_refinable"
-      | "not_buildable"
-      | "run_limit"
-      | "run_finished"
-      | "executor_unavailable"
-      | "dispatch_failed"
-      | "cancel_failed"
-      | "plan_not_decidable"
-      | "not_promotable"
-      | "invalid_reference"
-      | "not_clearable",
-    message: string,
-    readonly details: string[] = [],
-  ) {
-    super(message);
-    this.name = "DomainError";
-  }
-}
+export { DomainError } from "./errors";
 
 /** Fields callers may edit; `dorStatus` is always computed here. */
 export type EditableFields = Omit<TicketFields, "dorStatus">;
@@ -224,6 +199,7 @@ export class TicketService {
     assumptionId: string,
     actor: EventActor,
   ): Promise<Question> {
+    requireCan(actor, "promote_assumption", projectId);
     const ticket = await this.require(projectId, ticketId);
     const assumption = ticket.refineAssumptions.find((a) => a.id === assumptionId);
     if (!assumption) throw notFound("assumption", assumptionId);
@@ -345,6 +321,7 @@ export class TicketService {
     worker: WorkerChoice | null,
     actor: EventActor,
   ): Promise<WorkerView> {
+    requireCan(actor, "set_worker", projectId);
     const [ticket, project] = await Promise.all([
       this.require(projectId, ticketId),
       this.requireProject(projectId),
@@ -406,12 +383,10 @@ export class TicketService {
     if (to === "cancelled") {
       throw new DomainError("invalid_transition", "cancel the ticket instead of moving it");
     }
-    if (ticket.stage === "cancelled" && actor !== "andy") {
-      throw new DomainError("forbidden", "only Andy can reopen a cancelled ticket");
-    }
+    if (ticket.stage === "cancelled") requireCan(actor, "reopen_ticket", projectId);
     if (force) {
       // ADR-0057: the reason is optional; `forced: true` in history is the audit trail.
-      if (actor !== "andy") throw new DomainError("forbidden", "only Andy can force a stage move");
+      requireCan(actor, "force_move", projectId);
     } else {
       if (!canTransition(ticket.stage, to)) {
         throw new DomainError("invalid_transition", `can't move from ${ticket.stage} to ${to}`);
@@ -461,7 +436,7 @@ export class TicketService {
     actor: EventActor,
     reason: string | null = null,
   ): Promise<Ticket> {
-    if (actor !== "andy") throw new DomainError("forbidden", "only Andy can cancel a ticket");
+    requireCan(actor, "cancel_ticket", projectId);
     const ticket = await this.require(projectId, ticketId);
     if (ticket.stage === "cancelled") {
       throw new DomainError("invalid_transition", `${ticket.key} is already cancelled`);
@@ -511,7 +486,7 @@ export class TicketService {
     archived: boolean,
     actor: EventActor,
   ): Promise<Ticket> {
-    if (actor !== "andy") throw new DomainError("forbidden", "only Andy can archive a ticket");
+    requireCan(actor, "archive_ticket", projectId);
     const ticket = await this.require(projectId, ticketId);
     if (archived && !ARCHIVABLE_STAGES.includes(ticket.stage)) {
       throw new DomainError(
@@ -653,6 +628,8 @@ export class TicketService {
     via: AnsweredVia,
     actor: EventActor,
   ): Promise<Question> {
+    const asked = await this.tracker.getQuestion(questionId);
+    requireCan(actor, "answer_question", asked?.projectId ?? null);
     const question = await this.tracker.answerQuestion(questionId, answer, via, actor);
     const ticket = await this.require(question.projectId, question.ticketId);
     const open = await this.openQuestionCount(ticket.id);

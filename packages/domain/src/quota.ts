@@ -1,5 +1,6 @@
 import {
   RateLimitReport,
+  type EventActor,
   type ProviderKey,
   type QuotaClearResult,
   type QuotaStore,
@@ -10,7 +11,8 @@ import {
   type QuotaWindow,
   type QuotaWindowStatus,
 } from "@andy/contracts";
-import { DomainError } from "./tickets";
+import { DomainError } from "./errors";
+import { requireCan } from "./permissions";
 
 /**
  * Subscription quota (ARCHITECTURE §5, M1.9: Quota capture): turns what a run reports into
@@ -201,7 +203,9 @@ export class QuotaClearer {
     private readonly wake: () => Promise<void> = async () => {},
   ) {}
 
-  async clearIdle(by: string): Promise<QuotaClearResult> {
+  /** Owner-only (`clear_quota_idle`, AI-19); `by.email` is recorded on the discarded readings. */
+  async clearIdle(by: { actor: EventActor; email: string }): Promise<QuotaClearResult> {
+    requireCan(by.actor, "clear_quota_idle", null);
     const now = this.now();
     const held = this.store ? readingsAtReserve(await this.store.latest("claude-sub"), now) : [];
     const cleared =
@@ -209,7 +213,7 @@ export class QuotaClearer {
         ? await this.store.discard(
             "claude-sub",
             held.map((r) => ({ window: r.window, takenAt: r.takenAt })),
-            { by, at: now.toISOString() },
+            { by: by.email, at: now.toISOString() },
           )
         : [];
     if (cleared.length === 0) {
