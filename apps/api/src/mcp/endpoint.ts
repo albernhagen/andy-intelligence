@@ -3,6 +3,7 @@ import type {
   DigestReader,
   EmailNotifications,
   ProjectService,
+  QuotaClearer,
   RunService,
   TicketService,
 } from "@andy/domain";
@@ -32,6 +33,7 @@ export interface McpEndpointDeps {
   digest: DigestReader;
   /** Needs-you email (AI-77); null: not configured. */
   notifyEmail: EmailNotifications | null;
+  quota: QuotaClearer;
 }
 
 /**
@@ -87,6 +89,7 @@ export function registerMcpEndpoint(app: Hono<AuthEnv>, deps: McpEndpointDeps) {
       projects: deps.projects,
       digest: deps.digest,
       notifyEmail: deps.notifyEmail,
+      quota: deps.quota,
       email,
     });
     const transport = new WebStandardStreamableHTTPServerTransport({

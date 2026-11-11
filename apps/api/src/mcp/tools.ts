@@ -17,6 +17,7 @@ import {
   type DigestReader,
   type EmailNotifications,
   type ProjectService,
+  type QuotaClearer,
   type RunService,
   type TicketService,
 } from "@andy/domain";
@@ -31,6 +32,7 @@ import { registerScoreTools, withStartScore } from "./tools-scores";
 import { registerSettingsTools } from "./tools-settings";
 import { registerNotifyTools } from "./tools-notify";
 import { registerDigestTools } from "./tools-digest";
+import { registerQuotaTools } from "./tools-quota";
 
 /**
  * MCP core tools (M1.4: MCP core tools; `refine` from M1.7: Refinement; `build` and
@@ -49,6 +51,8 @@ export interface ToolDeps {
   digest?: DigestReader;
   /** Needs-you email (AI-77); null or absent: not configured. */
   notifyEmail?: EmailNotifications | null;
+  /** Clears a quota idle (AI-74); the app always passes it, unit tests may not. */
+  quota?: QuotaClearer;
   /** Signed-in email, shown by `status` so it doubles as the connection check. */
   email: string;
 }
@@ -166,6 +170,7 @@ export function registerTools(server: McpServer, deps: ToolDeps): void {
   registerWorkerTools(server, deps, run);
   registerTicketTools(server, deps);
   registerDigestTools(server, deps, run);
+  registerQuotaTools(server, deps, run);
 
   /** Decides the ticket's latest plan run as Andy (owner-only, ADR-0050). */
   const decide = async (key: string, decision: "approved" | "rejected", reason: string | null) => {

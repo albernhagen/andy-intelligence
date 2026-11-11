@@ -13,6 +13,9 @@ import {
   QuestionStatus,
   QuotaReading,
   Route,
+  type QuotaClear,
+  type QuotaDiscard,
+  type QuotaWindow,
   PlanApproval,
   Run,
   RunExecutor,
@@ -462,6 +465,23 @@ export interface QuotaSource {
 export interface QuotaStore extends QuotaSource {
   /** Replaces the stored reading for each reading's provider and window. */
   save(readings: QuotaReading[]): Promise<void>;
+  /**
+   * Andy's clear (AI-74), atomically: marks each named reading discarded and records a clear for
+   * it, but only while it is still the stored reading for its window (same `takenAt`) and not
+   * already discarded. Returns the clears made; empty when none applied, e.g. a second clear.
+   */
+  discard(
+    provider: ProviderKey,
+    readings: { window: QuotaWindow; takenAt: string }[],
+    by: QuotaDiscard,
+  ): Promise<QuotaClear[]>;
+  /** Clears made at or after `since` (ISO), newest first, at most `limit`. */
+  clearsSince(provider: ProviderKey, since: string, limit: number): Promise<QuotaClear[]>;
+}
+
+/** A clear's id: one per reading, so a reading can be cleared at most once (AI-74). */
+export function quotaClearId(provider: ProviderKey, window: QuotaWindow, takenAt: string): string {
+  return `${provider}_${window}_${takenAt}`;
 }
 
 // ── OAuthGrantStore ──────────────────────────────────────────────────────────

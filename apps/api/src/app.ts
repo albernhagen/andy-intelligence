@@ -19,6 +19,7 @@ import {
   RunService,
   BoardReader,
   DigestReader,
+  QuotaClearer,
   TicketService,
   EmailNotifications,
   notifyOnNeedsYou,
@@ -157,6 +158,7 @@ const DOMAIN_STATUS = {
   plan_not_decidable: 409,
   not_promotable: 409,
   invalid_reference: 422,
+  not_clearable: 409,
 } as const;
 
 export function createApp(input: AppDeps) {
@@ -325,7 +327,11 @@ export function createApp(input: AppDeps) {
 
   registerRunRoutes(app, runs);
   registerInFlightRoutes(app, runs);
-  registerQuotaRoutes(app, deps.quota ?? null, now);
+  // AI-74: a clear wakes every project, as a settings change wakes one.
+  const quotaClearer = new QuotaClearer(deps.quota ?? null, now, async () => {
+    for (const p of await deps.tracker.listProjects()) await dispatchNext(p.id);
+  });
+  registerQuotaRoutes(app, deps.quota ?? null, quotaClearer, now);
   const digest = new DigestReader(deps.tracker, deps.runs, deps.quota ?? null, now);
   registerDigestRoutes(app, digest, now);
   registerNotifyRoutes(app, email);
@@ -351,6 +357,7 @@ export function createApp(input: AppDeps) {
       projects,
       digest,
       notifyEmail: email,
+      quota: quotaClearer,
     });
   }
 
