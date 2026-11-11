@@ -18,12 +18,12 @@ A new session gets the MCP connector's current tools. A long-lived one keeps the
 
 ## 2. Settings that matter
 
-| Setting                                    | Value                                                                                             |
-| ------------------------------------------ | ------------------------------------------------------------------------------------------------- |
-| Auto-archive sessions when their PR closes | On (Settings → Claude Code). A worker is archived when its PR merges, so its PR must be complete. |
-| Worker model and effort                    | Opus 5.5, medium, for building. Sonnet, low, for upkeep.                                          |
-| Auto-fix on the coordinator's own PRs      | On per PR, when Andy says so.                                                                     |
-| Coordinator merges low-risk PRs            | Yes, since 2026-11-08 (§5). Medium and high stay with Andy.                                       |
+| Setting                                     | Value                                                                                             |
+| ------------------------------------------- | ------------------------------------------------------------------------------------------------- |
+| Auto-archive sessions when their PR closes  | On (Settings → Claude Code). A worker is archived when its PR merges, so its PR must be complete. |
+| Worker model and effort                     | Opus 5.5, medium, for building. Sonnet, low, for upkeep.                                          |
+| Auto-fix on the coordinator's own PRs       | On per PR, when Andy says so.                                                                     |
+| Coordinator merges low- and medium-risk PRs | Low since 2026-11-08, medium since 2026-11-11 (§5). High stays with Andy.                         |
 
 ## 3. What the coordinator does that the procedure doesn't say
 
@@ -39,7 +39,7 @@ A new session gets the MCP connector's current tools. A long-lived one keeps the
 
 Between batches, the coordinator writes `docs/build-log/<date>-handover-<milestone>.md` (merged, open, waiting on Andy, next batch) in a docs PR, and Andy starts the next coordinator with the message in §1.
 
-## 5. Auto-merge by the coordinator (ADR-0078)
+## 5. Auto-merge by the coordinator (ADR-0078, ADR-0088)
 
 Andy authorised the coordinator to merge **low-risk** PRs itself (2026-11-08); ADR-0078 holds the decision and `AGENTS.md` rule 2 carves out exactly this class. AI-34: M1.8b: Gate and auto-merge builds the same classification into the product (`would_auto_merge`, vetoes, protected paths, outcomes); keep the two aligned.
 
@@ -53,6 +53,8 @@ A PR is low risk when **all** hold:
 | Diff      | Confined to `apps/web`, `packages/domain`, `packages/store` read paths, read-only MCP tools, or these docs only: `README.md`, `docs/features.md`, `docs/build-log.md`, `docs/build-log/**`, `docs/architecture/history/**`. No `SCHEMA_VERSION` bump, migration, new entry point or credential. Also low risk, only when every row of ADR-0084's table holds (apply that table, not a summary): a lockfile-only fix for open Dependabot alerts, where the coordinator checks the alerts, versions and lockfile sources itself and reads the whole diff. |
 | Size      | S or M.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
 
-Never low risk, so **Andy merges**: `.github/`, `platform/**` (procedures, actions, baseline, executor), `scripts/executor-*`, `infra/`; auth or permissions (AI-19, settings setters); the dispatcher or gate (AI-34); `packages/contracts` schemas the executor reads; Firestore rules or `SCHEMA_VERSION`; deploy or release paths; anything needing `terraform apply`; the agent rule files (`AGENTS.md`, `CLAUDE.md`, `docs/BUILD-PROMPT.md`, `.claude/**`), `context-budget.json`, `CODEOWNERS`, dependency changes outside ADR-0084 (a major jump, a new dependency, `scripts`), and every other file under `docs/`: `docs/security/**`, ADRs, `docs/architecture/*.md` (the design source of truth) and `docs/runbooks/**` (steps Andy runs by hand), including `platform/procedures/coordinate.md` and this runbook (the coordinator never merges a change to its own authority); any PR where a reviewer or the coordinator is unsure. When unsure, it is medium.
+**Medium risk** (ADR-0088, Andy 2026-11-11) the coordinator also merges: the Checks, Reviews, Synced and Size rows above all hold and nothing in the diff is high risk. Apply ADR-0088's table, not this summary.
 
-How: `gh pr merge <n> --squash --delete-branch`, one PR at a time; then `gh run list --branch main`; then message every open worker to merge `main` and rerun. Keep a running table of every merge (PR, ticket, risk class, who merged, review verdicts) in the milestone digest (`docs/build-log/<date>-digest-<milestone>.md`).
+**High risk, so Andy merges:** `.github/`, `infra/`, anything needing `terraform apply`, deploy or release paths, `platform/actions/**`, `platform/baseline/**`; sign-in, the allow-list, permissions, IAM, a new or changed credential, an entry point that is unauthenticated or takes outside input; Firestore rules, a `SCHEMA_VERSION` bump, a migration; the review agents' procedures, the gate (AI-34), the executor sandbox; the agent rule files (`AGENTS.md`, `CLAUDE.md`, `docs/BUILD-PROMPT.md`, `.claude/**`), `context-budget.json`, `CODEOWNERS`, `platform/procedures/coordinate.md`, this runbook and any ADR about who merges (the coordinator never merges a change to its own authority); a new dependency, a major jump or install `scripts`; a docs-only PR that adds or changes an ADR or `docs/security/**`; size L; anything the coordinator or a reviewer is unsure of. High-risk PRs queue for Andy, verified and listed in the digest in merge order.
+
+How: `gh pr merge <n> --squash --delete-branch`, one PR at a time; then `gh run list --branch main`; then message every open worker to merge `main` and rerun. Keep a running table of every merge (PR, ticket, risk class, who merged, review verdicts) in the milestone digest (`docs/build-log/<date>-digest-<milestone>.md`), which opens with a plain summary of what was built or changed.
