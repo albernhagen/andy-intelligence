@@ -67,7 +67,28 @@ export function loadConfig(dir = path.join(HERE, "github")) {
     actions: read("actions.json"),
     labels: read("labels.json"),
     ruleset: read("ruleset-main.json"),
+    sourceOnlyChecks: read("source-only.json").required_status_checks,
   };
+}
+
+/** The config for one repo: repos other than the baseline source don't get source-only checks. */
+export function configFor(config, repo, source) {
+  if (repo.toLowerCase() === source.toLowerCase()) return config;
+  const drop = new Set(config.sourceOnlyChecks);
+  const rules = config.ruleset.rules.map((rule) =>
+    rule.type === "required_status_checks"
+      ? {
+          ...rule,
+          parameters: {
+            ...rule.parameters,
+            required_status_checks: rule.parameters.required_status_checks.filter(
+              (c) => !drop.has(c.context),
+            ),
+          },
+        }
+      : rule,
+  );
+  return { ...config, ruleset: { ...config.ruleset, rules } };
 }
 
 const manifest = () => JSON.parse(readFileSync(path.join(HERE, "manifest.json"), "utf8"));
@@ -191,7 +212,7 @@ function printSections(results) {
 
 async function applyCommand(repo, dryRun) {
   const names = SECTIONS.map((s) => s.name);
-  const config = loadConfig();
+  const config = configFor(loadConfig(), repo, manifest().source);
   if (dryRun) {
     const results = await checkSections(ghApi, repo, config, names);
     printSections(results);
@@ -208,7 +229,12 @@ async function checkCommand(repo, only) {
   let failed = false;
   const settings = names.filter((n) => n !== "files");
   if (settings.length > 0) {
-    const results = await checkSections(ghApi, repo, loadConfig(), settings);
+    const results = await checkSections(
+      ghApi,
+      repo,
+      configFor(loadConfig(), repo, manifest().source),
+      settings,
+    );
     printSections(results);
     failed = results.some((r) => r.status === "drift");
   }
