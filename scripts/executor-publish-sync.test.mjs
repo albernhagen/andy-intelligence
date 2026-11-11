@@ -91,7 +91,8 @@ function resolution(root, main, files) {
   return patch;
 }
 
-function harness(root, env) {
+/** publishSync with `push` intercepted; `after(args)` runs after each other git call. */
+function harness(root, env, after = () => {}) {
   const real = gitRunner(root);
   const pushes = [];
   const git = (args, extra = {}) => {
@@ -99,7 +100,9 @@ function harness(root, env) {
       pushes.push({ args, env: extra });
       return "";
     }
-    return real(args, extra);
+    const out = real(args, extra);
+    after(args);
+    return out;
   };
   const reply = (body) => ({ ok: true, status: 200, json: async () => body, text: async () => "" });
   const fetch = async (url) =>
@@ -195,6 +198,29 @@ describe("sync publish", () => {
     const result = await h.run();
     expect(result.tooling).toEqual(["package.json"]);
     expect(h.outputs.tooling_files).toBe('["package.json"]');
+  });
+
+  it("GivenAnotherRunResettingTheSharedTempIndex_WhenPublished_ThenThisPublishIsUnaffected", async () => {
+    // AI-78: another run of this file (a second worktree's pre-push hook) used the same scratch
+    // index path, because the harness left RUNNER_TEMP unset and RUN_ID fixed. Its `read-tree` of
+    // the conflicted merge landed between this publish's `apply --cached` and its marker check.
+    // Here that other run is played at exactly that moment, on the shared temp dir's path.
+    const { root, head, main } = repo();
+    const tree = mergeTree(root, main);
+    const patch = resolution(root, main, { "a.txt": "one\nresolved\nthree\n" });
+    const runId = "sync-shared-index";
+    const shared = join(tmpdir(), `sync-check-${runId}.index`);
+    const h = harness(
+      root,
+      { RUN_ID: runId, PATCH: patch, HEAD_SHA: head, MAIN_SHA: main, MERGE_TREE: tree },
+      (args) => {
+        if (args[0] === "apply" && args[1] === "--cached") {
+          gitRunner(root)(["read-tree", tree], { GIT_INDEX_FILE: shared });
+        }
+      },
+    );
+    const result = await h.run();
+    expect(sh(root, "show", `${result.headSha}:a.txt`)).toBe("one\nresolved\nthree");
   });
 
   it("GivenAMergeTreeThatDoesntMatch_WhenPublished_ThenItIsRefused", async () => {
