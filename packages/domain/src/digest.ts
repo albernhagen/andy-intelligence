@@ -43,6 +43,8 @@ export interface DigestData {
   tickets: readonly Ticket[];
   /** Open questions per ticket id. */
   openQuestions: ReadonlyMap<string, number>;
+  /** The oldest open question's line per ticket id (AI-73); absent: the count alone is shown. */
+  questionLines?: ReadonlyMap<string, string>;
   /** Runs queued or running now. */
   activeRuns: readonly Run[];
   /** Runs whose `endedAt` is in the window. */
@@ -305,6 +307,7 @@ function waitingAndBlocked(data: DigestData): DigestException[] {
         runs: data.activeRuns.filter((r) => r.ticketId === t.id),
         events: data.ticketEvents.get(t.id) ?? [],
         worker: resolveWorker(t, data.project),
+        questionLine: data.questionLines?.get(t.id) ?? null,
       },
       data.now,
     );
@@ -529,6 +532,10 @@ export class DigestReader {
     const openQuestions = new Map<string, number>();
     for (const q of questions)
       openQuestions.set(q.ticketId, (openQuestions.get(q.ticketId) ?? 0) + 1);
+    const questionLines = new Map<string, string>();
+    for (const q of [...questions].sort((a, b) => a.createdAt.localeCompare(b.createdAt))) {
+      if (!questionLines.has(q.ticketId)) questionLines.set(q.ticketId, q.text);
+    }
 
     const toRead = tickets
       .filter((t) => t.updatedAt >= from || (t.stage === "ready_for_review" && !t.archived))
@@ -548,6 +555,7 @@ export class DigestReader {
       project,
       tickets,
       openQuestions,
+      questionLines,
       activeRuns,
       endedRuns: ended.runs,
       ticketRuns: new Map(histories.map((h) => [h.id, h.runs])),

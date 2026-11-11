@@ -42,8 +42,9 @@ const output = (question: string) => ({
     {
       question,
       assumption: `Assume ${question}`,
+      context: `Context for ${question}`,
       options: [],
-      suggestedAnswer: "yes",
+      recommendation: { answer: "yes", reason: "the simplest" },
       cost: "direction",
       confidence: "unsure",
       urgency: "normal",

@@ -178,9 +178,8 @@ export function composeEmail(batch: Batch, appUrl: string): Notice | null {
 export function needsYouLine(open: readonly Question[]): string {
   const first = open[0];
   if (!first) return "Waiting for you: open the ticket to see why.";
-  // AI-73 adds a plain `question` line; older questions have only `text`.
-  const q = (first as { question?: unknown }).question;
-  const text = typeof q === "string" && q.trim() ? q : first.text;
+  // The question line is `text`, also under AI-73's question format.
+  const text = first.text;
   const more =
     open.length > 1 ? ` (+${open.length - 1} more question${open.length > 2 ? "s" : ""})` : "";
   return `Question: ${plainLine(text)}${more}`;

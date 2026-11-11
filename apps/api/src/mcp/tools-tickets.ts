@@ -121,6 +121,12 @@ export async function listNeedsMe(deps: ToolDeps) {
 const questionView = (ticket: string | null) => (q: InboxCard["questions"][number]) => ({
   id: q.id,
   ticket,
+  // AI-73: the question line first, then context, choices with consequences, recommendation.
+  // Questions stored before AI-73 have null/empty ones and read as before from the fields below.
+  question: q.text,
+  context: q.context,
+  choices: q.choices,
+  recommendation: q.recommendation,
   text: q.text,
   options: q.options,
   suggestedAnswer: q.suggestedAnswer,

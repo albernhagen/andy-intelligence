@@ -44,6 +44,35 @@ describe("statusLine", () => {
     expect(line({ openQuestions: 1 }).text).toBe("Waiting for you: 1 question");
   });
 
+  it("GivenOpenQuestionsAndAQuestionLine_WhenComputed_ThenTheLineShowsTheQuestionNotACount", () => {
+    const q = "Which layout should the board use?";
+    expect(line({ openQuestions: 1, questionLine: q })).toEqual({
+      text: `Waiting for you: ${q}`,
+      tone: "attention",
+    });
+    expect(line({ openQuestions: 3, questionLine: q }).text).toBe(
+      `Waiting for you: ${q} (and 2 more questions)`,
+    );
+    expect(line({ openQuestions: 2, questionLine: "x".repeat(250) }).text).toBe(
+      `Waiting for you: ${"x".repeat(200)}… (and 1 more question)`,
+    );
+  });
+
+  // AI-73 review: the question line replaces only the open-question line, never another reason.
+  it.each<[string, Partial<StatusInput>, string]>([
+    ["a flag", { needsAttention: true }, "Waiting for you"],
+    [
+      "a stopped sync",
+      { needsAttention: true, syncStopped: "sync with main stopped" },
+      "Waiting for you: sync with main stopped",
+    ],
+    ["a ticket of Andy's", { stage: "ready", worker: "me" }, "Mine · waiting on you"],
+    ["a ticket with no worker", { stage: "ready", worker: "ask" }, "Needs a worker"],
+    ["a done ticket with questions", { stage: "done", openQuestions: 1 }, "Done"],
+  ])("GivenAQuestionLineAnd%s_WhenComputed_ThenThatLineIsKept", (_, over, text) => {
+    expect(line({ ...over, questionLine: "Which layout should the board use?" }).text).toBe(text);
+  });
+
   it("GivenNeedsAttentionWithoutQuestions_WhenComputed_ThenItWaitsForAndy", () => {
     expect(line({ needsAttention: true })).toEqual({ text: "Waiting for you", tone: "attention" });
   });

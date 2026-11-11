@@ -153,9 +153,9 @@ describe("needsYouLine", () => {
     expect(needsYouLine([])).toMatch(/^Waiting for you/);
   });
 
-  it("GivenAPlainQuestionLine_WhenLined_ThenItIsPreferredOverText", () => {
-    expect(needsYouLine([q("long text", { question: "Short?" }), q("b")])).toBe(
-      "Question: Short? (+1 more question)",
+  it("GivenTwoQuestions_WhenLined_ThenTheFirstQuestionLineAndACount", () => {
+    expect(needsYouLine([q("Which board?", { context: "Long context." }), q("b")])).toBe(
+      "Question: Which board? (+1 more question)",
     );
   });
 });

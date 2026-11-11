@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  Assumption,
   CodeHostConnection,
   CodeHostEvent,
   Project,
@@ -440,6 +441,81 @@ export function workTrackerContract(name: string, make: () => Promise<WorkTracke
 
       const kinds = (await tracker.listEvents(project.id, ticket.id)).map((e) => e.kind);
       expect(kinds).toEqual(["created", "question_asked", "question_withdrawn"]);
+    });
+
+    // AI-73: the question format. Every store keeps context, choices and recommendation, on
+    // questions and on refine's assumptions, and reads older questions back with the defaults.
+    describe("question format (AI-73)", () => {
+      const format = {
+        context: "The board lists tickets. Nothing lists them today. The build needs one layout.",
+        choices: [
+          { label: "Columns", consequence: "One column per stage; wide screens only." },
+          { label: "List", consequence: "One row per ticket; works on a phone." },
+        ],
+        recommendation: { answer: "List", reason: "Andy reads it on his phone." },
+      };
+
+      it("GivenAFormattedQuestion_WhenAskedReadAndAnswered_ThenEveryFormatFieldIsKept", async () => {
+        const { tracker, project, ticket } = await setup();
+        const asked = await tracker.askQuestion(
+          project.id,
+          ticket.id,
+          { text: "Which layout should the board use?", options: ["Columns", "List"], ...format },
+          "system",
+        );
+        expect(asked).toMatchObject(format);
+        expect(await tracker.getQuestion(asked.id)).toEqual(asked);
+        expect(await tracker.listQuestions({ ticketId: ticket.id })).toEqual([asked]);
+        const answered = await tracker.answerQuestion(asked.id, "List", "mcp", "andy");
+        expect(answered).toMatchObject(format);
+        expect(await tracker.getQuestion(asked.id)).toEqual(answered);
+      });
+
+      it("GivenARunsFormattedQuestions_WhenAskedInABatch_ThenEachKeepsItsFormat", async () => {
+        const { tracker, project, ticket } = await setup();
+        const [q] = await tracker.askQuestions(
+          project.id,
+          ticket.id,
+          [{ text: "Which layout should the board use?", ...format }],
+          "agent:run-9",
+          "run-9",
+        );
+        expect(await tracker.getQuestion(q!.id)).toMatchObject(format);
+      });
+
+      it("GivenAQuestionWithoutTheFormat_WhenRead_ThenTheFieldsAreEmpty", async () => {
+        const { tracker, project, ticket } = await setup();
+        const q = await tracker.askQuestion(project.id, ticket.id, { text: "Which?" }, "system");
+        expect(await tracker.getQuestion(q.id)).toMatchObject({
+          context: null,
+          choices: [],
+          recommendation: null,
+        });
+      });
+
+      it("GivenAnAssumptionWithTheFormat_WhenStoredOnTheTicket_ThenItReadsBackWhole", async () => {
+        const { tracker, project, ticket } = await setup();
+        const assumption = Assumption.parse({
+          id: "run-9-a1",
+          text: "List",
+          question: "Which layout should the board use?",
+          options: ["Columns", "List"],
+          cost: "direction",
+          confidence: "unsure",
+          demotedBy: "ticket_cap",
+          runId: "run-9",
+          createdAt: "2026-11-10T00:00:00.000Z",
+          ...format,
+        });
+        await tracker.updateTicket(
+          project.id,
+          ticket.id,
+          { fields: { refineAssumptions: [assumption] } },
+          "system",
+        );
+        const read = await tracker.getTicket(project.id, ticket.id);
+        expect(read?.refineAssumptions).toEqual([assumption]);
+      });
     });
   });
 }
