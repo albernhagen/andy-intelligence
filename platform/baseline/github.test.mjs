@@ -6,7 +6,7 @@ import {
   normalizeRuleset,
   UNREADABLE,
 } from "./github.mjs";
-import { loadConfig } from "./baseline.mjs";
+import { configFor, loadConfig } from "./baseline.mjs";
 
 const REPO = "albernhagen/scratch";
 const config = loadConfig();
@@ -161,6 +161,52 @@ describe("checkSections", () => {
     state.routes[`repos/${REPO}/vulnerability-alerts`] = { status: 403, data: {} };
     const [result] = await checkSections(gh(state), REPO, config, ["security"]);
     expect(result.status).toBe("unreadable");
+  });
+});
+
+describe("source-only checks", () => {
+  const SOURCE = "albernhagen/andy-intelligence";
+  const checksOf = (ruleset) =>
+    ruleset.rules
+      .find((r) => r.type === "required_status_checks")
+      .parameters.required_status_checks.map((c) => c.context);
+
+  /** Live ruleset as on the source repo (with `firestore-suite`); bypass_actors hidden, as for a non-admin token. */
+  function sourceRepo() {
+    const state = compliant();
+    const live = { ...state.routes[`repos/${REPO}/rulesets/7`].data };
+    delete live.bypass_actors;
+    state.routes[`repos/${REPO}/rulesets/7`] = { status: 200, data: live };
+    return state;
+  }
+
+  it("GivenTheSourceRepo_WhenChecked_ThenNoRequiredCheckDrift", async () => {
+    const [result] = await checkSections(gh(sourceRepo()), REPO, configFor(config, REPO, REPO), [
+      "ruleset",
+    ]);
+    expect(result.status).toBe("unreadable");
+    expect(result.diffs.map((d) => d.setting)).toEqual(["bypass_actors"]);
+  });
+
+  it("GivenAManagedRepoWithoutTheCheck_WhenChecked_ThenOk", async () => {
+    const managed = configFor(config, REPO, SOURCE);
+    const state = compliant();
+    state.routes[`repos/${REPO}/rulesets/7`] = {
+      status: 200,
+      data: { id: 7, ...managed.ruleset },
+    };
+    const [result] = await checkSections(gh(state), REPO, managed, ["ruleset"]);
+    expect(result.status).toBe("ok");
+  });
+
+  it("GivenAManagedRepoWithoutARuleset_WhenApplied_ThenCreatedWithoutSourceOnlyChecks", async () => {
+    const state = compliant();
+    state.routes[`repos/${REPO}/rulesets?includes_parents=false`] = { status: 200, data: [] };
+    const { gh, writes } = fakeGitHub(state);
+    await applySections(gh, REPO, configFor(config, REPO, SOURCE), ["ruleset"]);
+    expect(writes).toHaveLength(1);
+    expect(checksOf(writes[0].body)).not.toContain("firestore-suite");
+    expect(checksOf(writes[0].body)).toContain("check");
   });
 });
 

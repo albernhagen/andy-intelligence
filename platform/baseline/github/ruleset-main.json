@@ -25,6 +25,7 @@
         "do_not_enforce_on_create": false,
         "required_status_checks": [
           { "context": "check", "integration_id": 15368 },
+          { "context": "firestore-suite", "integration_id": 15368 },
           { "context": "actionlint", "integration_id": 15368 },
           { "context": "terraform", "integration_id": 15368 },
           { "context": "trufflehog", "integration_id": 15368 },

@@ -1,0 +1,4 @@
+{
+  "$comment": "Required checks only the baseline source repo (manifest.json `source`) gets; baseline.mjs drops them from ruleset-main.json for every other repo. firestore-suite: the control plane's Firestore adapter suites (ADR-0048); managed repos have no such job.",
+  "required_status_checks": ["firestore-suite"]
+}
