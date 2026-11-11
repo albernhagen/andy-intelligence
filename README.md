@@ -10,16 +10,17 @@ What is built on `main` now. Target design: [ARCHITECTURE.md](docs/architecture/
  Browser UI ─┐                                   ┌─ Firestore (tickets, questions, history, runs, OAuth grants, webhook events)
              ├─▶ Cloud Run: control-plane ───────┤
  Claude (MCP)┤   API + /mcp + OAuth + SPA        ├─ Cloud Tasks queue (run-watchdog: one check per run at its deadline)
- GitHub App ─┘   + /webhooks/github                └─ Secret Manager (GitHub App key, webhook secret)
+ GitHub App ─┘   + /webhooks/github                ├─ Secret Manager (GitHub App key, webhook secret, Resend key)
+                                                   └─ Resend (Needs-you email; off until configured)
  GitHub PRs ──▶ CI checks + review agents (GitHub Actions)
  Agent runs ◀─▶ agent-run.yml → claude-executor.yml (GitHub Actions; dispatched by the App, call back with OIDC)
 ```
 
-**Working:** tickets on a board (Backlog split into Up next and Ideas; only Up next gets refined; cards show size, risk and confidence, and Ready can sort by them; MCP `list_ready` filters them) with a Needs-you inbox, answerable the same way in the UI or with the `/inbox` skill in Claude Code; a Claude connector (MCP) with every ticket decision the UI offers; GitHub PRs that move tickets; Refine and Build agent runs on GitHub Actions; PR checks and review agents; the merge gate (an agent PR merges itself when every required check and both review agents pass on its head, no veto applies, and the project's `autoMerge` policy covers the ticket's size; project `AI` stays `none`); Dependabot; the project baseline; agent evals on procedure and `AGENTS.md` changes (runbook `agent-evals.md`); cost guardrails. Feature by feature, with how to use each: [`docs/features.md`](docs/features.md). Each project has a default worker (agent, Andy or ask) and any ticket can override it; only an agent's tickets build. Every per-project switch lives in Project settings (header link, `/p/<project>/settings`), read over MCP with `get_project_settings`. A header gauge and persistent banner show Claude quota from run reports (unknown until a run reports it). Each ticket shows what its runs cost: an API-price estimate (the subscription itself is flat-rate), quota used and how many runs have no known cost, in the story panel, per run in Activity, and in MCP `status`. A daily digest (header → Digest, MCP `digest`) lists exceptions first, then what merged and what it cost, what is in progress and totals, for the last 24 hours.
+**Working:** tickets on a board (Backlog split into Up next and Ideas; only Up next gets refined; cards show size, risk and confidence, and Ready can sort by them; MCP `list_ready` filters them) with a Needs-you inbox, answerable the same way in the UI or with the `/inbox` skill in Claude Code; a Claude connector (MCP) with every ticket decision the UI offers; GitHub PRs that move tickets; Refine and Build agent runs on GitHub Actions; PR checks and review agents; the merge gate (an agent PR merges itself when every required check and both review agents pass on its head, no veto applies, and the project's `autoMerge` policy covers the ticket's size; project `AI` stays `none`); Dependabot; the project baseline; agent evals on procedure and `AGENTS.md` changes (runbook `agent-evals.md`); cost guardrails. Feature by feature, with how to use each: [`docs/features.md`](docs/features.md). Each project has a default worker (agent, Andy or ask) and any ticket can override it; only an agent's tickets build. Every per-project switch lives in Project settings (header link, `/p/<project>/settings`), read over MCP with `get_project_settings`. A header gauge and persistent banner show Claude quota from run reports (unknown until a run reports it). Each ticket shows what its runs cost: an API-price estimate (the subscription itself is flat-rate), quota used and how many runs have no known cost, in the story panel, per run in Activity, and in MCP `status`. A daily digest (header → Digest, MCP `digest`) lists exceptions first, then what merged and what it cost, what is in progress and totals, for the last 24 hours. Needs-you email (AI-77): a ticket that needs Andy is emailed with its question and link, batched per 10 minutes, 20 a day; off until configured (runbook `email-notifications.md`); per-project switch in settings or MCP.
 
 **Dispatch:** with auto-build on, Ready tickets start from the top, up to the project's "Runs at once" dial (default 2, max 4), 4 runs across projects and 5 agent PRs waiting for Andy; "Paused" stops new starts, and so does the quota reserve. Project settings, the board and MCP `status` show why dispatch is idle; set with `set_runs_at_once` and `set_paused` (ADR-0079). A ticket whose `touches` overlap a build in flight waits ("Waiting: overlaps AI-12 in flight") while the next one starts; the board's In flight panel and MCP `list_in_flight` show each run's ticket, branch, PR and files, and each build gets its own ADR number (ADR-0080). A quota reading you don't believe holding dispatch at the reserve: **Clear quota idle** (banner, Project settings, MCP `clear_quota_idle`) discards it, kept with who and when; quota reads unknown until the next run reports, and the digest lists the clear (AI-74). When `main` moves, each open agent PR whose head lacks it gets a sync run: it merges `main`, resolves conflicts, reruns the checks and pushes; a conflict it can't settle goes to Needs you, and the gate never auto-merges a PR while its sync is pending (ADR-0083).
 
-**Not built yet:** Needs you has no push or email notification; one run at a time per ticket; the digest is not sent anywhere. Next: M2 wave 2 (ARCHITECTURE §12, `docs/build-log.md`).
+**Not built yet:** Needs you has no push notification (M7); one run at a time per ticket; the digest is not sent anywhere. Next: M2 wave 2 (ARCHITECTURE §12, `docs/build-log.md`).
 
 ## Docs
 
@@ -107,6 +108,8 @@ Set `PUBLIC_URL` (public origin, e.g. `http://localhost:8080`) to turn on `/mcp`
 
 Run watchdog (M1.6b: Claude Code executor: watchdog + retry): on when `PUBLIC_URL`, `WATCHDOG_QUEUE` (Cloud Tasks queue name, `projects/…/queues/run-watchdog`) and `WATCHDOG_INVOKER_EMAIL` (the `tasks-invoker` service account) are set; Terraform sets them. Off locally: no deadline check.
 
+Needs-you email (AI-77): on when `RESEND_API_KEY`, `EMAIL_FROM` and `EMAIL_TO` are set (Terraform, with `email_enabled`); else off, logged once. Flushes ride the `run-watchdog` queue. Setup: [`docs/runbooks/email-notifications.md`](docs/runbooks/email-notifications.md).
+
 MCP tools live in `apps/api/src/mcp/tools.ts` and call the same `TicketService` as the REST API; `archive_ticket` hides Done or Cancelled tickets from board, inbox and counts.
 
 GitHub (ADR-0043: GitHub App setup from the UI) is on when `PUBLIC_URL` is set: connect it from `/settings/github`. The App's key and webhook secret live in Secret Manager (written by the API, read at runtime); CI jobs get repo tokens from `POST /github/token` with their Actions OIDC token. Locally without `PUBLIC_URL`, repos on projects are only format-checked. Setup: [`docs/runbooks/github-app.md`](docs/runbooks/github-app.md).
@@ -115,16 +118,16 @@ GitHub (ADR-0043: GitHub App setup from the UI) is on when `PUBLIC_URL` is set: 
 
 Design rules: [`apps/web/design.md`](apps/web/design.md). One header on every screen: project picker (the scope, remembered), Board, Inbox, Settings, "Needs you N".
 
-| Route                               | Screen                                                                                               |
-| ----------------------------------- | ---------------------------------------------------------------------------------------------------- |
-| `/`                                 | Opens the inbox in the last-picked scope                                                             |
-| `/p/:projectId/inbox`, `/all/inbox` | Needs you: a card per ticket, its questions answered with one click                                  |
-| `/all/board`                        | Asks for a project                                                                                   |
-| `/p/:projectId/settings`            | Project settings (header link): every switch and what it does; MCP `get_project_settings` reads them |
-| `/projects`, `/projects/new`        | Open the current project's settings; add a project (picker → Add project)                            |
-| `/settings/github`                  | Connect the GitHub App, install link, installed repos                                                |
-| `/p/:projectId`                     | Board: lanes with status on cards, quick add, drag to reorder or move                                |
-| `/p/:projectId/t/:ticketRef`        | Ticket detail (ref = key, e.g. `AI-2`): edit, Definition of Ready, moves, runs, questions, history   |
+| Route                               | Screen                                                                                                                        |
+| ----------------------------------- | ----------------------------------------------------------------------------------------------------------------------------- |
+| `/`                                 | Opens the inbox in the last-picked scope                                                                                      |
+| `/p/:projectId/inbox`, `/all/inbox` | Needs you: a card per ticket; each question with context, options and their consequences, a recommendation; one-click answers |
+| `/all/board`                        | Asks for a project                                                                                                            |
+| `/p/:projectId/settings`            | Project settings (header link): every switch and what it does; MCP `get_project_settings` reads them                          |
+| `/projects`, `/projects/new`        | Open the current project's settings; add a project (picker → Add project)                                                     |
+| `/settings/github`                  | Connect the GitHub App, install link, installed repos                                                                         |
+| `/p/:projectId`                     | Board: lanes with status on cards, quick add, drag to reorder or move                                                         |
+| `/p/:projectId/t/:ticketRef`        | Ticket detail (ref = key, e.g. `AI-2`): edit, Definition of Ready, moves, runs, questions, history                            |
 
 - API client: `openapi-fetch` typed by `apps/web/src/lib/api.gen.ts`, generated from the API's OpenAPI document. After changing an API route, run `pnpm --filter @andy/web gen:api` and commit the file; a test fails while it is stale.
 - Tests (`apps/web/src/**/*.test.tsx`, jsdom) render the UI against the real API in-process (`createApp` + fakes), so they also exercise auth and the ticket rules.

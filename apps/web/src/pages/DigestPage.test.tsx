@@ -43,7 +43,7 @@ describe("digest page", () => {
   it("GivenActivity_WhenTheDigestOpens_ThenSectionsInOrderWithReasonsAndCost", async () => {
     await seeded("/p/ai/digest");
     const exceptions = await screen.findByRole("region", { name: "Exceptions" });
-    expect(within(exceptions).getByText("Waiting for you: 1 question")).toBeTruthy();
+    expect(within(exceptions).getByText("Waiting for you: Which?")).toBeTruthy();
     const merged = screen.getByRole("region", { name: "Merged" });
     expect(within(merged).getByRole("link", { name: "PR #3" })).toBeTruthy();
     expect(within(merged).getByText("$1.50")).toBeTruthy();

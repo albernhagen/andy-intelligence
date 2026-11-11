@@ -88,7 +88,7 @@ If a verified fact contradicts the architecture, stop and ask how to proceed.
 
 - Brief status updates; no narration of every step.
 - Never use a bare ID (milestone, slice, PR, ADR, open question, runbook step) in chat, PR titles/descriptions, or docs. Write `ID: title`: "M1.2: Ticket core", "M0: Foundations: repo, sign-in, GCP infra", "ADR-0019: Actions OIDC callbacks", "PR #1: Foundations". Milestone titles are in ARCHITECTURE §12.
-- When blocked on me, say exactly what you need and why, in one message.
+- When blocked on me, ask in one message: a plain question ending in `?`, then context, options with what each costs, your recommendation (`platform/procedures/refine.md`).
 - If you think a requirement is wrong or over-engineered, say so directly with a recommendation.
 
 ## Suggested repo layout (already adopted in M0: Foundations)

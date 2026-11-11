@@ -16,6 +16,7 @@ import {
   Urgency,
 } from "./common";
 import { projectDispatchFields } from "./dispatch-caps";
+import { projectNotifyFields } from "./notify-email";
 
 export * from "./common";
 export * from "./dispatch-caps";
@@ -23,12 +24,20 @@ import { RunCostFields } from "./cost";
 import { runInFlightFields } from "./in-flight";
 import { runSyncFields } from "./sync";
 import { RefineScores, TicketScores } from "./scores";
+import {
+  questionFormatFields,
+  questionLine,
+  recommendationIsAnOption,
+  refineQuestionFields,
+} from "./question-format";
 
 export * from "./common";
 export * from "./cost";
 export * from "./in-flight";
 export * from "./sync";
 export * from "./scores";
+export * from "./notify-email";
+export * from "./question-format";
 
 /** ARCHITECTURE §5 — domain model. Vendor concepts must not appear here. */
 
@@ -84,6 +93,7 @@ export const Project = z.object({
    */
   autoMerge: AutoMerge.default("none"),
   ...projectDispatchFields,
+  ...projectNotifyFields,
   /** Who does a ticket's work when it has no pick of its own (ADR-0082). */
   defaultWorker: Worker.default("agent"),
 });
@@ -147,6 +157,7 @@ export const Assumption = z.object({
   /** The re-refine run that covered this gap. */
   settledBy: Id.nullable().default(null),
   createdAt: Timestamp,
+  ...questionFormatFields,
 });
 export type Assumption = z.infer<typeof Assumption>;
 
@@ -251,6 +262,7 @@ export const Question = z.object({
   answeredAt: Timestamp.nullable(),
   /** The agent run that asked it (M1.7: Refinement); null when Andy or the system asked. */
   runId: Id.nullable().default(null),
+  ...questionFormatFields,
 });
 export type Question = z.infer<typeof Question>;
 
@@ -280,17 +292,19 @@ export const REFINE_LIMITS = {
 
 const capped = (max: number) => z.string().trim().min(1).max(max);
 
-export const RefineGap = z.strictObject({
-  /** The decision, phrased as a question Andy could answer without reading the code. */
-  question: capped(REFINE_LIMITS.text),
-  /** The default refine would go with. Recorded if the gap becomes an assumption. */
-  assumption: capped(REFINE_LIMITS.assumption),
-  options: z.array(capped(REFINE_LIMITS.option)).max(REFINE_LIMITS.maxOptions).default([]),
-  suggestedAnswer: capped(REFINE_LIMITS.option).nullable().default(null),
-  cost: GapCost,
-  confidence: GapConfidence,
-  urgency: Urgency.default("normal"),
-});
+export const RefineGap = z
+  .strictObject({
+    /** One plain question Andy can answer without reading the ticket (AI-73: question format). */
+    question: questionLine(REFINE_LIMITS.text),
+    /** The default refine would go with. Recorded if the gap becomes an assumption. */
+    assumption: capped(REFINE_LIMITS.assumption),
+    /** `context`, `options` as `{label, consequence}`, `recommendation` with a reason. */
+    ...refineQuestionFields(REFINE_LIMITS.maxOptions),
+    cost: GapCost,
+    confidence: GapConfidence,
+    urgency: Urgency.default("normal"),
+  })
+  .superRefine(recommendationIsAnOption);
 export type RefineGap = z.infer<typeof RefineGap>;
 
 export const RefineChild = z.strictObject({

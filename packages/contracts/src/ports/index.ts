@@ -10,6 +10,7 @@ import {
   Worker,
   ProviderKey,
   Question,
+  questionFormatFields,
   QuestionStatus,
   QuotaReading,
   Route,
@@ -42,6 +43,7 @@ import {
   type WorkflowDispatch,
   type WorkflowRun,
   projectDispatchPatch,
+  projectNotifyPatch,
 } from "../entities";
 
 /**
@@ -174,6 +176,7 @@ export const BoardTicket = Ticket.extend({ summary: TicketSummary });
 export type BoardTicket = z.infer<typeof BoardTicket>;
 
 export const NewQuestion = Question.pick({ text: true }).extend({
+  ...questionFormatFields,
   options: z.array(z.string()).default([]),
   suggestedAnswer: z.string().nullable().default(null),
   assumptions: z.array(z.string()).default([]),
@@ -203,6 +206,7 @@ export const ProjectPatch = z.strictObject({
   dailyQuestionCap: Project.shape.dailyQuestionCap.unwrap().optional(),
   autoMerge: AutoMerge.optional(),
   ...projectDispatchPatch,
+  ...projectNotifyPatch,
   defaultWorker: Worker.optional(),
 });
 export type ProjectPatch = z.infer<typeof ProjectPatch>;
@@ -218,6 +222,7 @@ export const ProjectSettings = ProjectPatch.pick({
   runsAtOnce: true,
   paused: true,
   defaultWorker: true,
+  emailNotifications: true,
 });
 export type ProjectSettings = z.infer<typeof ProjectSettings>;
 
@@ -678,3 +683,4 @@ export interface Telemetry {
 }
 
 export * from "./digest";
+export * from "./notify-email";

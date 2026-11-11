@@ -40,7 +40,7 @@ const verifier: TokenVerifier = {
 
 export function githubApp(
   overrides: Partial<NonNullable<AppDeps["github"]>> = {},
-  extra: Pick<AppDeps, "watchdog" | "quota" | "mcp"> = {},
+  extra: Pick<AppDeps, "watchdog" | "quota" | "mcp" | "email"> = {},
 ) {
   const connections = new InMemoryCodeHostConnectionStore();
   const host = new InMemoryCodeHost([repo()]);

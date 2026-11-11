@@ -166,6 +166,8 @@ export interface paths {
                 /** Format: date-time */
                 at: string;
               } | null;
+              /** @default true */
+              emailNotifications: boolean;
               /**
                * @default agent
                * @enum {string}
@@ -261,6 +263,8 @@ export interface paths {
                 /** Format: date-time */
                 at: string;
               } | null;
+              /** @default true */
+              emailNotifications: boolean;
               /**
                * @default agent
                * @enum {string}
@@ -404,6 +408,8 @@ export interface paths {
                 /** Format: date-time */
                 at: string;
               } | null;
+              /** @default true */
+              emailNotifications: boolean;
               /**
                * @default agent
                * @enum {string}
@@ -491,6 +497,7 @@ export interface paths {
             paused?: boolean;
             /** @enum {string} */
             defaultWorker?: "agent" | "me" | "ask";
+            emailNotifications?: boolean;
           };
         };
       };
@@ -556,6 +563,8 @@ export interface paths {
                 /** Format: date-time */
                 at: string;
               } | null;
+              /** @default true */
+              emailNotifications: boolean;
               /**
                * @default agent
                * @enum {string}
@@ -730,6 +739,18 @@ export interface paths {
                 settledBy: string | null;
                 /** Format: date-time */
                 createdAt: string;
+                /** @default null */
+                context: string | null;
+                /** @default [] */
+                choices: {
+                  label: string;
+                  consequence: string;
+                }[];
+                /** @default null */
+                recommendation: {
+                  answer: string;
+                  reason: string;
+                } | null;
               }[];
               /**
                * @default null
@@ -957,6 +978,18 @@ export interface paths {
                 settledBy: string | null;
                 /** Format: date-time */
                 createdAt: string;
+                /** @default null */
+                context: string | null;
+                /** @default [] */
+                choices: {
+                  label: string;
+                  consequence: string;
+                }[];
+                /** @default null */
+                recommendation: {
+                  answer: string;
+                  reason: string;
+                } | null;
               }[];
               /**
                * @default null
@@ -1146,6 +1179,18 @@ export interface paths {
                 settledBy: string | null;
                 /** Format: date-time */
                 createdAt: string;
+                /** @default null */
+                context: string | null;
+                /** @default [] */
+                choices: {
+                  label: string;
+                  consequence: string;
+                }[];
+                /** @default null */
+                recommendation: {
+                  answer: string;
+                  reason: string;
+                } | null;
               }[];
               /**
                * @default null
@@ -1380,6 +1425,18 @@ export interface paths {
                 settledBy: string | null;
                 /** Format: date-time */
                 createdAt: string;
+                /** @default null */
+                context: string | null;
+                /** @default [] */
+                choices: {
+                  label: string;
+                  consequence: string;
+                }[];
+                /** @default null */
+                recommendation: {
+                  answer: string;
+                  reason: string;
+                } | null;
               }[];
               /**
                * @default null
@@ -1564,6 +1621,18 @@ export interface paths {
                 settledBy: string | null;
                 /** Format: date-time */
                 createdAt: string;
+                /** @default null */
+                context: string | null;
+                /** @default [] */
+                choices: {
+                  label: string;
+                  consequence: string;
+                }[];
+                /** @default null */
+                recommendation: {
+                  answer: string;
+                  reason: string;
+                } | null;
               }[];
               /**
                * @default null
@@ -1866,6 +1935,18 @@ export interface paths {
                 settledBy: string | null;
                 /** Format: date-time */
                 createdAt: string;
+                /** @default null */
+                context: string | null;
+                /** @default [] */
+                choices: {
+                  label: string;
+                  consequence: string;
+                }[];
+                /** @default null */
+                recommendation: {
+                  answer: string;
+                  reason: string;
+                } | null;
               }[];
               /**
                * @default null
@@ -2065,6 +2146,18 @@ export interface paths {
                 settledBy: string | null;
                 /** Format: date-time */
                 createdAt: string;
+                /** @default null */
+                context: string | null;
+                /** @default [] */
+                choices: {
+                  label: string;
+                  consequence: string;
+                }[];
+                /** @default null */
+                recommendation: {
+                  answer: string;
+                  reason: string;
+                } | null;
               }[];
               /**
                * @default null
@@ -2192,6 +2285,18 @@ export interface paths {
               answeredAt: string | null;
               /** @default null */
               runId: string | null;
+              /** @default null */
+              context: string | null;
+              /** @default [] */
+              choices: {
+                label: string;
+                consequence: string;
+              }[];
+              /** @default null */
+              recommendation: {
+                answer: string;
+                reason: string;
+              } | null;
             };
           };
         };
@@ -2371,6 +2476,18 @@ export interface paths {
                 settledBy: string | null;
                 /** Format: date-time */
                 createdAt: string;
+                /** @default null */
+                context: string | null;
+                /** @default [] */
+                choices: {
+                  label: string;
+                  consequence: string;
+                }[];
+                /** @default null */
+                recommendation: {
+                  answer: string;
+                  reason: string;
+                } | null;
               }[];
               /**
                * @default null
@@ -2569,6 +2686,18 @@ export interface paths {
                 settledBy: string | null;
                 /** Format: date-time */
                 createdAt: string;
+                /** @default null */
+                context: string | null;
+                /** @default [] */
+                choices: {
+                  label: string;
+                  consequence: string;
+                }[];
+                /** @default null */
+                recommendation: {
+                  answer: string;
+                  reason: string;
+                } | null;
               }[];
               /**
                * @default null
@@ -2915,6 +3044,18 @@ export interface paths {
               answeredAt: string | null;
               /** @default null */
               runId: string | null;
+              /** @default null */
+              context: string | null;
+              /** @default [] */
+              choices: {
+                label: string;
+                consequence: string;
+              }[];
+              /** @default null */
+              recommendation: {
+                answer: string;
+                reason: string;
+              } | null;
             }[];
           };
         };
@@ -2983,6 +3124,18 @@ export interface paths {
         content: {
           "application/json": {
             text: string;
+            /** @default null */
+            context?: string | null;
+            /** @default [] */
+            choices?: {
+              label: string;
+              consequence: string;
+            }[];
+            /** @default null */
+            recommendation?: {
+              answer: string;
+              reason: string;
+            } | null;
             /** @default [] */
             options?: string[];
             /** @default null */
@@ -3025,6 +3178,18 @@ export interface paths {
               answeredAt: string | null;
               /** @default null */
               runId: string | null;
+              /** @default null */
+              context: string | null;
+              /** @default [] */
+              choices: {
+                label: string;
+                consequence: string;
+              }[];
+              /** @default null */
+              recommendation: {
+                answer: string;
+                reason: string;
+              } | null;
             };
           };
         };
@@ -3137,6 +3302,18 @@ export interface paths {
               answeredAt: string | null;
               /** @default null */
               runId: string | null;
+              /** @default null */
+              context: string | null;
+              /** @default [] */
+              choices: {
+                label: string;
+                consequence: string;
+              }[];
+              /** @default null */
+              recommendation: {
+                answer: string;
+                reason: string;
+              } | null;
             };
           };
         };
@@ -3240,6 +3417,18 @@ export interface paths {
                 answeredAt: string | null;
                 /** @default null */
                 runId: string | null;
+                /** @default null */
+                context: string | null;
+                /** @default [] */
+                choices: {
+                  label: string;
+                  consequence: string;
+                }[];
+                /** @default null */
+                recommendation: {
+                  answer: string;
+                  reason: string;
+                } | null;
               }[];
               tickets: {
                 id: string;
@@ -3327,6 +3516,18 @@ export interface paths {
                   settledBy: string | null;
                   /** Format: date-time */
                   createdAt: string;
+                  /** @default null */
+                  context: string | null;
+                  /** @default [] */
+                  choices: {
+                    label: string;
+                    consequence: string;
+                  }[];
+                  /** @default null */
+                  recommendation: {
+                    answer: string;
+                    reason: string;
+                  } | null;
                 }[];
                 /**
                  * @default null
@@ -3623,6 +3824,18 @@ export interface paths {
                 settledBy: string | null;
                 /** Format: date-time */
                 createdAt: string;
+                /** @default null */
+                context: string | null;
+                /** @default [] */
+                choices: {
+                  label: string;
+                  consequence: string;
+                }[];
+                /** @default null */
+                recommendation: {
+                  answer: string;
+                  reason: string;
+                } | null;
               }[];
               /**
                * @default null
@@ -5075,6 +5288,101 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  "/api/notify/email": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get: {
+      parameters: {
+        query?: never;
+        header?: never;
+        path?: never;
+        cookie?: never;
+      };
+      requestBody?: never;
+      responses: {
+        /** @description Whether Needs-you email is configured, and today's count against the cap */
+        200: {
+          headers: {
+            [name: string]: unknown;
+          };
+          content: {
+            "application/json": components["schemas"]["EmailStatus"];
+          };
+        };
+      };
+    };
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/notify/email/test": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    post: {
+      parameters: {
+        query?: never;
+        header?: never;
+        path?: never;
+        cookie?: never;
+      };
+      requestBody?: never;
+      responses: {
+        /** @description A test email went out; it counts toward the daily cap */
+        200: {
+          headers: {
+            [name: string]: unknown;
+          };
+          content: {
+            "application/json": {
+              /** @enum {boolean} */
+              sent: true;
+            };
+          };
+        };
+        /** @description Email is not configured, or today's cap is reached */
+        409: {
+          headers: {
+            [name: string]: unknown;
+          };
+          content: {
+            "application/json": {
+              error: string;
+            };
+          };
+        };
+        /** @description The email provider refused the send (e.g. a bad key or unverified domain); not counted */
+        502: {
+          headers: {
+            [name: string]: unknown;
+          };
+          content: {
+            "application/json": {
+              error: string;
+            };
+          };
+        };
+      };
+    };
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   "/api/github": {
     parameters: {
       query?: never;
@@ -5241,6 +5549,12 @@ export interface components {
     };
     Error: {
       error: string;
+    };
+    EmailStatus: {
+      configured: boolean;
+      sentToday: number;
+      dailyCap: number;
+      windowMinutes: number;
     };
     GitHubStatus: {
       connected: boolean;

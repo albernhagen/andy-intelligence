@@ -95,12 +95,20 @@ export function answeredGaps(ticket: Ticket, run: Pick<Run, "createdAt">): Assum
 
 export type RefineApplied = { summary: string; asked: number; notice?: string } | { error: string };
 
+/** The question line, context, choices and recommendation (AI-73); old readers keep `options`. */
+const formatOf = (gap: RefineGap) => ({
+  context: gap.context,
+  choices: gap.options,
+  recommendation: gap.recommendation,
+});
+
 const toQuestion = (gap: RefineGap): NewQuestion => ({
   text: gap.question,
-  options: gap.options,
-  suggestedAnswer: gap.suggestedAnswer,
+  options: gap.options.map((o) => o.label),
+  suggestedAnswer: gap.recommendation.answer,
   assumptions: [gap.assumption],
   urgency: gap.urgency,
+  ...formatOf(gap),
 });
 
 /** Checks a refine run's result and applies its outcome to the ticket (ADR-0075). */
@@ -235,7 +243,8 @@ export class RefineGate {
       id: `${run.id}-a${i + 1}`,
       text: gap.assumption,
       question: gap.question,
-      options: gap.options,
+      options: gap.options.map((o) => o.label),
+      ...formatOf(gap),
       cost: gap.cost,
       confidence: gap.confidence,
       demotedBy,

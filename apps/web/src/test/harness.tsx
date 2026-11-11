@@ -25,6 +25,8 @@ export function renderApp(
     githubConnected?: boolean;
     /** Runs before each API request reaches the app; a test can hold one here. */
     beforeFetch?: (request: Request) => Promise<void>;
+    /** Needs-you email (AI-77); absent: not configured. */
+    email?: Parameters<typeof createApp>[0]["email"];
   } = {},
 ) {
   const tracker = new InMemoryWorkTracker();
@@ -53,6 +55,7 @@ export function renderApp(
     tracker,
     runs,
     quota,
+    email: opts.email,
     github: {
       publicUrl: "http://localhost",
       connections,

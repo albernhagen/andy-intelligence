@@ -4,6 +4,7 @@ import {
   Confidence,
   GapConfidence,
   GapCost,
+  QUESTION_FORMAT_LIMITS,
   REFINE_LIMITS,
   RefineOutput,
   Risk,
@@ -22,10 +23,11 @@ const schema = JSON.parse(schemaText);
 const item = schema.properties.gaps.items;
 
 const gap = {
-  question: "Which store?",
+  question: "Which store should tickets live in?",
+  context: "Tickets need a home. Today nothing stores them. The build starts with the store.",
   assumption: "Firestore",
-  options: ["Firestore"],
-  suggestedAnswer: "Firestore",
+  options: [{ label: "Firestore", consequence: "No server to run; scales to zero." }],
+  recommendation: { answer: "Firestore", reason: "Scales to zero." },
   cost: "reversible",
   confidence: "sure",
 };
@@ -59,8 +61,16 @@ describe("RefineOutput", () => {
     expect(item.properties.question.maxLength).toBe(REFINE_LIMITS.text);
     expect(item.properties.assumption.maxLength).toBe(REFINE_LIMITS.assumption);
     expect(item.properties.options.maxItems).toBe(REFINE_LIMITS.maxOptions);
-    expect(item.properties.options.items.maxLength).toBe(REFINE_LIMITS.option);
-    expect(item.properties.suggestedAnswer.maxLength).toBe(REFINE_LIMITS.option);
+    const option = item.properties.options.items;
+    expect(option.properties.label.maxLength).toBe(QUESTION_FORMAT_LIMITS.label);
+    expect(option.properties.consequence.maxLength).toBe(QUESTION_FORMAT_LIMITS.consequence);
+    expect(option.required).toEqual(["label", "consequence"]);
+    expect(item.properties.context.maxLength).toBe(QUESTION_FORMAT_LIMITS.context);
+    const rec = item.properties.recommendation;
+    expect(rec.properties.answer.maxLength).toBe(QUESTION_FORMAT_LIMITS.label);
+    expect(rec.properties.reason.maxLength).toBe(QUESTION_FORMAT_LIMITS.reason);
+    expect(rec.required).toEqual(["answer", "reason"]);
+    expect([...item.required].sort()).toEqual(Object.keys(item.properties).sort());
     expect(schema.properties.sizeReason.maxLength).toBe(REFINE_LIMITS.sizeReason);
     expect(schema.properties.size.enum).toEqual(Size.options);
     expect(schema.properties.type.enum).toEqual(TicketType.options);
@@ -77,10 +87,11 @@ describe("RefineOutput", () => {
       [
         "assumption",
         "confidence",
+        "context",
         "cost",
         "options",
         "question",
-        "suggestedAnswer",
+        "recommendation",
         "urgency",
       ].sort(),
     );
@@ -95,6 +106,11 @@ describe("RefineOutput", () => {
     const out = RefineOutput.parse({ ...base, summary: " ok " });
     expect(out.summary).toBe("ok");
     expect(out.gaps[0]).toEqual({ ...gap, urgency: "normal" });
+  });
+
+  it("GivenAnOpenQuestion_WhenItRecommendsAnyAnswer_ThenItIsValid", () => {
+    const open = { ...gap, options: [], recommendation: { answer: "Firestore", reason: "r" } };
+    expect(RefineOutput.safeParse({ ...base, gaps: [open] }).success).toBe(true);
   });
 
   it("GivenNoGaps_WhenParsed_ThenItIsValid", () => {
@@ -112,7 +128,28 @@ describe("RefineOutput", () => {
     ["a gap too long", { ...base, gaps: [{ ...gap, question: "x".repeat(501) }] }],
     ["a gap with no rating", { ...base, gaps: [{ question: "q", assumption: "a" }] }],
     ["an unknown cost", { ...base, gaps: [{ ...gap, cost: "cheap" }] }],
-    ["too many options", { ...base, gaps: [{ ...gap, options: Array(6).fill("o") }] }],
+    ["too many options", { ...base, gaps: [{ ...gap, options: Array(6).fill(gap.options[0]) }] }],
+    // AI-73: the question format. A bare label, no context or an option without a consequence fails.
+    [
+      "a question with no question mark",
+      { ...base, gaps: [{ ...gap, question: "AI-6: M1.17: Agent evals v1, q1: who pays" }] },
+    ],
+    ["a gap with no context", { ...base, gaps: [{ ...gap, context: undefined }] }],
+    ["a gap with a blank context", { ...base, gaps: [{ ...gap, context: " " }] }],
+    ["an option as a bare label", { ...base, gaps: [{ ...gap, options: ["Firestore"] }] }],
+    [
+      "an option without a consequence",
+      { ...base, gaps: [{ ...gap, options: [{ label: "Firestore", consequence: "" }] }] },
+    ],
+    ["a gap with no recommendation", { ...base, gaps: [{ ...gap, recommendation: null }] }],
+    ["the old suggestedAnswer field", { ...base, gaps: [{ ...gap, suggestedAnswer: "x" }] }],
+    [
+      "a recommendation that is not an option's label",
+      {
+        ...base,
+        gaps: [{ ...gap, recommendation: { answer: "Firestore (no server)", reason: "r" } }],
+      },
+    ],
     ["an unknown field", { ...base, stage: "ready" }],
     ["a summary too long", { ...base, summary: "x".repeat(4001) }],
     ["a send-back with no reason", { ...base, outcome: "send_back" }],

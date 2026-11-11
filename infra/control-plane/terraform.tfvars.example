@@ -1,3 +1,7 @@
 # Copy to terraform.tfvars (gitignored) and fill in. Never commit the real file.
 allowed_emails = ["you@example.com"]
 alert_email    = "you@example.com"
+# Needs-you email (AI-77): keep email_enabled false until the Resend key's version exists (runbook email-notifications.md).
+email_enabled = false
+email_from = "" # e.g. "andy-intelligence <notify@example.com>"
+email_to   = "" # e.g. "you@example.com"

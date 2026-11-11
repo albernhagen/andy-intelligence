@@ -709,3 +709,4 @@ export class InMemoryEvaluator implements Evaluator {
     };
   }
 }
+export * from "./notify-email";
