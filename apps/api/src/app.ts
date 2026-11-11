@@ -150,6 +150,7 @@ const DOMAIN_STATUS = {
   not_promotable: 409,
   invalid_reference: 422,
   not_clearable: 409,
+  not_acceptable: 409,
 } as const;
 
 export function createApp(deps: AppDeps) {
@@ -235,6 +236,8 @@ export function createApp(deps: AppDeps) {
     deps.quota ?? null,
   );
   const dispatchNext = async (projectId: string) => {
+    // AI-75 (ADR-0087): held gaps are asked first, as the question caps allow; no run needed.
+    await refiner.askHeld(projectId);
     await syncer.next(projectId);
     await builder.wakeGlobalCapWaiters(projectId);
     return (await builder.next(projectId)) ?? (await refiner.next(projectId));

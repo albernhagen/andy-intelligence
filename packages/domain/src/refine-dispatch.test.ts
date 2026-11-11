@@ -1,4 +1,5 @@
 import {
+  Assumption,
   InMemoryCodeHost,
   InMemoryRunStore,
   InMemoryWorkTracker,
@@ -320,5 +321,50 @@ describe("RefineDispatcher", () => {
       throw new Error("firestore down");
     };
     await expect(dispatcher.next(projectId)).resolves.toBeNull();
+  });
+  describe("askHeld (AI-75)", () => {
+    async function heldTicket() {
+      const t = await tracker.createTicket(projectId, { title: "Board" }, "andy");
+      await tracker.updateTicket(
+        projectId,
+        t.id,
+        {
+          fields: {
+            upNextRank: "0000000001",
+            refineAssumptions: [
+              Assumption.parse({
+                id: "run-1-a1",
+                text: "assume",
+                question: "Which?",
+                cost: "scope",
+                confidence: "unsure",
+                demotedBy: "daily_cap",
+                runId: "run-1",
+                createdAt: now().toISOString(),
+              }),
+            ],
+          },
+        },
+        "system",
+      );
+      return t;
+    }
+
+    it("GivenAHeldGapAndAutoRefineOff_WhenAskHeldRuns_ThenItIsAskedWithoutARun", async () => {
+      const { dispatcher } = wire(null);
+      const t = await heldTicket();
+      await tracker.updateProject(projectId, { autoRefine: false });
+      expect(await dispatcher.askHeld(projectId)).toBe(1);
+      expect(await tracker.listQuestions({ ticketId: t.id, status: "open" })).toHaveLength(1);
+      expect(await refines(t.id)).toEqual([]);
+    });
+
+    it("GivenAPausedProject_WhenAskHeldRuns_ThenNothingIsAsked", async () => {
+      const { dispatcher } = wire();
+      const t = await heldTicket();
+      await tracker.updateProject(projectId, { paused: true });
+      expect(await dispatcher.askHeld(projectId)).toBe(0);
+      expect(await tracker.listQuestions({ ticketId: t.id })).toEqual([]);
+    });
   });
 });

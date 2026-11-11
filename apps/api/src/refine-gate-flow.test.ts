@@ -6,7 +6,7 @@ import {
   type Question,
   type Ticket,
 } from "@andy/contracts";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { REPO, createdApp, githubApp } from "./github/test-app";
 import type { ActionsClaims } from "./github/token";
 import { ClientMetadataResolver } from "./mcp/client-metadata";
@@ -262,24 +262,158 @@ describe("refine gate flow", () => {
     expect(await t.runs(kids[0]!.id)).toEqual([]);
   });
 
-  it("GivenAProjectAtItsDailyCap_WhenARefineHasQuestions_ThenTheyBecomeAssumptionsAndTheTicketSaysSo", async () => {
-    const t = await setup();
+  /** A project with a daily cap of 1 already spent, and a ticket whose costly gap it held. */
+  async function heldOnTheDailyCap(t: Awaited<ReturnType<typeof setup>>, gaps = [gap("B?")]) {
     await t.call(t.base, { method: "PATCH", body: JSON.stringify({ dailyQuestionCap: 1 }) });
     const first = await t.create({ upNext: true });
     await t.report(first.id, output({ gaps: [gap("A?")] }));
     const second = await t.create({ upNext: true });
     const [q] = await t.questions(first.id);
     await t.answer(q!.id);
-    await t.report(second.id, output({ gaps: [gap("B?")] }));
+    await t.report(second.id, output({ gaps }));
+    return second;
+  }
 
-    const capped = await t.ticket(second.id);
-    expect(await t.questions(second.id)).toEqual([]);
-    expect(capped).toMatchObject({ stage: "ready" });
-    expect(capped.refineAssumptions[0]).toMatchObject({
-      demotedBy: "daily_cap",
-      cost: "direction",
+  describe("held gaps (AI-75)", () => {
+    afterEach(() => vi.useRealTimers());
+
+    it("GivenAProjectAtItsDailyCap_WhenARefineHasACostlyGap_ThenTheTicketIsHeldInUpNextAndNeedsYouAndSaysWhy", async () => {
+      const t = await setup();
+      const second = await heldOnTheDailyCap(t);
+
+      const held = await t.ticket(second.id);
+      expect(await t.questions(second.id)).toEqual([]);
+      expect(held).toMatchObject({ stage: "backlog", needsAttention: true, dorStatus: "not_met" });
+      expect(held.upNextRank).not.toBeNull();
+      expect(held.refineAssumptions[0]).toMatchObject({
+        demotedBy: "daily_cap",
+        cost: "direction",
+        status: "assumed",
+      });
+      expect((await t.inbox()).tickets.map((x) => x.id)).toContain(second.id);
+      expect((await t.comments(second.id)).join()).toContain("daily question cap");
+
+      const call = await t.mcp();
+      const { data } = await call("status", { ticket: second.key });
+      const status = data as { statusLine: { text: string }; readiness: { missing: string[] } };
+      expect(status.statusLine.text).toContain("1 held question");
+      expect(status.statusLine.text).toContain("daily question cap");
+      expect(status.readiness.missing).toContain("1 held question(s) asked or accepted");
     });
-    expect((await t.comments(second.id)).join()).toContain("daily question cap");
+
+    it("GivenAProjectAtItsDailyCap_WhenAReversibleGapIsDemoted_ThenTheTicketStillReachesReady", async () => {
+      const t = await setup();
+      const second = await heldOnTheDailyCap(t, [
+        gap("B?", { cost: "reversible", confidence: "unsure" }),
+      ]);
+
+      const ready = await t.ticket(second.id);
+      expect(ready).toMatchObject({ stage: "ready" });
+      expect(ready.refineAssumptions[0]).toMatchObject({
+        demotedBy: "daily_cap",
+        status: "assumed",
+      });
+    });
+
+    it("GivenAHeldGapOnTheDailyCap_WhenADispatchEventFiresAfterTheWindow_ThenItIsAskedAndItsAnswerReRefinesIt", async () => {
+      vi.useFakeTimers({ toFake: ["Date"], now: new Date("2026-11-11T09:00:00Z") });
+      const t = await setup();
+      const second = await heldOnTheDailyCap(t);
+
+      // Inside the window an event (here: a ticket entering Up next) asks nothing.
+      const idea = await t.create({ title: "An idea", upNext: true });
+      expect(await t.questions(second.id)).toEqual([]);
+
+      // The next event after the window (here: that refine ending) asks it.
+      vi.setSystemTime(new Date("2026-11-12T09:00:01Z"));
+      await t.report(idea.id, output({ gaps: [] }));
+      const [asked] = await t.questions(second.id);
+      expect(asked).toMatchObject({ text: "B?", status: "open", context: "Context for B?" });
+      const waiting = await t.ticket(second.id);
+      expect(waiting.refineAssumptions[0]).toMatchObject({
+        status: "promoted",
+        questionId: asked!.id,
+      });
+
+      await t.answer(asked!.id, "No, C");
+      const reRefine = (await t.runs(second.id)).find((r) => r.status !== "succeeded");
+      expect(reRefine?.prompt).toContain("No, C");
+      await t.report(second.id, output({ gaps: [] }));
+      expect(await t.ticket(second.id)).toMatchObject({ stage: "ready" });
+    });
+
+    it("GivenAHeldGapAndOneFreeSlot_WhenRetried_ThenNoMoreQuestionsThanTheCapAllowsAreAsked", async () => {
+      const t = await setup();
+      const created = await t.create({ upNext: true });
+      await t.report(
+        created.id,
+        output({ gaps: ["A?", "B?", "C?", "D?", "E?"].map((q) => gap(q)) }),
+      );
+      const before = await t.ticket(created.id);
+      expect(before.refineAssumptions.map((a) => a.demotedBy)).toEqual([
+        "ticket_cap",
+        "ticket_cap",
+      ]);
+      expect(before).toMatchObject({ stage: "backlog", needsAttention: true });
+
+      const [first] = await t.questions(created.id);
+      await t.answer(first!.id);
+      const open = (await t.questions(created.id)).filter((q) => q.status === "open");
+      expect(open.map((q) => q.text)).toEqual(["B?", "C?", "D?"]);
+      // Another event with no free slot asks nothing more.
+      await t.create({ title: "An idea", upNext: true });
+      const after = await t.ticket(created.id);
+      expect(after.refineAssumptions.map((a) => a.status)).toEqual(["promoted", "assumed"]);
+      expect((await t.questions(created.id)).filter((q) => q.status === "open")).toHaveLength(3);
+    });
+
+    it("GivenAHeldGap_WhenAndyPromotesItOverMcp_ThenItIsAnOpenQuestion", async () => {
+      const t = await setup();
+      const second = await heldOnTheDailyCap(t);
+      const [held] = (await t.ticket(second.id)).refineAssumptions;
+
+      const call = await t.mcp();
+      await call("promote_assumption", { ticket: second.key, assumptionId: held!.id });
+      expect((await t.questions(second.id)).map((q) => q.text)).toEqual(["B?"]);
+      expect((await t.ticket(second.id)).refineAssumptions[0]).toMatchObject({
+        status: "promoted",
+      });
+    });
+
+    it("GivenAHeldGap_WhenAndyAcceptsIt_ThenTheTicketIsReleasedToReady", async () => {
+      const t = await setup();
+      const second = await heldOnTheDailyCap(t);
+      const [held] = (await t.ticket(second.id)).refineAssumptions;
+
+      const res = await t.post(`${t.path(second.id)}/assumptions/${held!.id}/accept`);
+      expect(res.status).toBe(200);
+      const released = await t.ticket(second.id);
+      expect(released).toMatchObject({ stage: "ready", needsAttention: false, dorStatus: "met" });
+      expect(released.refineAssumptions[0]).toMatchObject({ status: "accepted" });
+      expect(await t.questions(second.id)).toEqual([]);
+    });
+
+    it("GivenAnAssumptionThatIsNotHeld_WhenAccepted_ThenRefused", async () => {
+      const t = await setup();
+      const created = await t.create({ upNext: true });
+      await t.report(created.id, output({ gaps: [cheap("A?")] }));
+      const [a] = (await t.ticket(created.id)).refineAssumptions;
+
+      const res = await t.post(`${t.path(created.id)}/assumptions/${a!.id}/accept`);
+      expect(res.status).toBe(409);
+      expect((await t.ticket(created.id)).refineAssumptions[0]).toMatchObject({
+        status: "assumed",
+      });
+    });
+
+    it("GivenAHeldGap_WhenAndyMovesTheTicketToReady_ThenTheDefinitionOfReadyRefusesIt", async () => {
+      const t = await setup();
+      const second = await heldOnTheDailyCap(t);
+
+      const res = await t.post(`${t.path(second.id)}/stage`, { to: "ready" });
+      expect(res.status).toBe(422);
+      expect(await t.ticket(second.id)).toMatchObject({ stage: "backlog" });
+    });
   });
 
   it("GivenFourCostlyGaps_WhenReported_ThenThreeQuestionsAndOneAssumption", async () => {

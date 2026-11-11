@@ -1,4 +1,5 @@
 import {
+  REFINE_LIMITS,
   RefineOutput,
   type Assumption,
   type NewQuestion,
@@ -8,7 +9,7 @@ import {
   type TicketFields,
   type WorkTracker,
 } from "@andy/contracts";
-import { checkDor } from "./dor";
+import { checkDor, heldGaps } from "./dor";
 
 function log(severity: "INFO" | "WARNING", message: string, fields: object = {}) {
   console.log(JSON.stringify({ severity, message, component: "refine-gate", ...fields }));
@@ -273,7 +274,7 @@ export class RefineGate {
     }
     const fills = refocus ? {} : refineFills(ticket, output);
     const open = (await this.tracker.listQuestions({ ticketId: ticket.id, status: "open" })).length;
-    const dor = checkDor({ ...ticket, ...fills }, open);
+    const dor = checkDor({ ...ticket, ...fills, refineAssumptions }, open);
     const toReady = open === 0 && dor.met;
     // Nothing to ask and still not ready: another run would learn nothing new, so Andy decides.
     const needsAttention = open > 0 || !toReady;
@@ -304,13 +305,71 @@ export class RefineGate {
     return { summary: output.summary, asked: plan.questions.length, ...(notice ? { notice } : {}) };
   }
 
+  /**
+   * Asks a ticket's held gaps (AI-75, ADR-0087) as far as the caps allow now; the refine
+   * dispatcher calls it on every dispatch event, so there is no timer. Each question's `runId` is
+   * `<assumption id>-h<try>`: it counts against the daily cap like refine's own, and a retry
+   * after a crash adopts the open one instead of asking twice. Returns how many it asked.
+   */
+  async askHeld(ticket: Ticket): Promise<number> {
+    const held = heldGaps(ticket);
+    if (held.length === 0 || ticket.stage !== "backlog" || ticket.upNextRank === null) return 0;
+    const room = await this.room(ticket, null);
+    const slots = Math.max(
+      0,
+      Math.min(MAX_OPEN_QUESTIONS_PER_TICKET - room.openOnTicket, room.dailyCap - room.openedToday),
+    );
+    if (slots === 0) return 0;
+    const mine = await this.tracker.listQuestions({ ticketId: ticket.id });
+    const asked = new Map<string, string>();
+    for (const a of held) {
+      const tries = mine.filter((q) => q.runId?.startsWith(`${a.id}-h`));
+      // A crash between the ask and the ticket write left it open: adopt it, no new slot.
+      const open = tries.find(isOpen);
+      if (open) {
+        asked.set(a.id, open.id);
+        continue;
+      }
+      if (asked.size >= slots) continue;
+      // A withdrawn earlier try (the ticket left Up next) keeps its id, so each try gets its own.
+      const [question] = await this.tracker.askQuestions(
+        ticket.projectId,
+        ticket.id,
+        [assumptionQuestion(a)],
+        "system",
+        `${a.id}-h${tries.length + 1}`,
+      );
+      asked.set(a.id, question!.id);
+    }
+    if (asked.size === 0) return 0;
+    await this.tracker.updateTicket(
+      ticket.projectId,
+      ticket.id,
+      {
+        fields: {
+          needsAttention: true,
+          dorStatus: "not_met",
+          refineAssumptions: ticket.refineAssumptions.map((a) =>
+            asked.has(a.id)
+              ? { ...a, status: "promoted" as const, questionId: asked.get(a.id)! }
+              : a,
+          ),
+        },
+        ifUpdatedAt: ticket.updatedAt,
+      },
+      "system",
+    );
+    log("INFO", "held gaps asked", { ticket: ticket.key, asked: asked.size, held: held.length });
+    return asked.size;
+  }
+
   /** How much room the caps leave, not counting this run's own questions (a replay). */
-  private async room(ticket: Ticket, runId: string): Promise<CapRoom> {
+  private async room(ticket: Ticket, runId: string | null): Promise<CapRoom> {
     const [project, questions] = await Promise.all([
       this.tracker.getProject(ticket.projectId),
       this.tracker.listQuestions({ projectId: ticket.projectId }),
     ]);
-    const others = questions.filter((q) => q.runId !== runId);
+    const others = runId === null ? questions : questions.filter((q) => q.runId !== runId);
     const since = new Date(this.now().getTime() - QUESTION_CAP_WINDOW_MS).toISOString();
     return {
       openOnTicket: others.filter((q) => q.ticketId === ticket.id && isOpen(q)).length,
@@ -327,11 +386,34 @@ export class RefineGate {
 
 const isOpen = (q: { status: string }) => q.status === "open";
 
+/** An assumption as a question, in the words refine wrote for it (ADR-0075, AI-73). */
+export function assumptionQuestion(a: Assumption): NewQuestion {
+  return {
+    text: a.question,
+    options: a.options,
+    suggestedAnswer: a.recommendation?.answer ?? a.text.slice(0, REFINE_LIMITS.option),
+    assumptions: [a.text],
+    context: a.context,
+    choices: a.choices,
+    recommendation: a.recommendation,
+  };
+}
+
+/** Plain words for the cap that holds a gap (status line, notices). */
+export const CAP_WORDS: Record<DemotedBy, string> = {
+  daily_cap: "the project's daily question cap",
+  ticket_cap: "the limit of questions per ticket",
+};
+
 function capNotice(assumptions: Assumption[]): string {
   const demoted = assumptions.filter((a) => a.demotedBy);
   if (demoted.length === 0) return "";
-  const which = demoted.some((a) => a.demotedBy === "daily_cap")
-    ? "the project's daily question cap"
-    : "the limit of questions per ticket";
-  return `Reached ${which}: ${demoted.length} gap(s) became assumptions. Promote one to ask about it.`;
+  const which =
+    CAP_WORDS[demoted.some((a) => a.demotedBy === "daily_cap") ? "daily_cap" : "ticket_cap"];
+  const held = heldGaps({ refineAssumptions: demoted }).length;
+  const holds =
+    held > 0
+      ? ` ${held} of them would be costly to get wrong, so the ticket waits: each is asked when the cap allows, or promote or accept it.`
+      : "";
+  return `Reached ${which}: ${demoted.length} gap(s) became assumptions. Promote one to ask about it.${holds}`;
 }
