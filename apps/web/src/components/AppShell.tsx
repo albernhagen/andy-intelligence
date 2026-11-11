@@ -11,6 +11,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { LiveUpdatesBanner } from "@/components/LiveUpdatesBanner";
 import { QuotaBanner } from "@/components/QuotaBanner";
 import { QuotaGauge } from "@/components/QuotaGauge";
 import { waitingCounts } from "@/lib/needs-you";
@@ -84,6 +85,7 @@ export function AppShell() {
           {useContext(HeaderEndContext)}
         </div>
       </header>
+      <LiveUpdatesBanner />
       <QuotaBanner />
       <main className="px-4 py-4 sm:px-6">
         <Outlet />
