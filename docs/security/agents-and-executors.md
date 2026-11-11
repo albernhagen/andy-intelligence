@@ -24,3 +24,13 @@ Detail on GitHub Actions triggers, review agents and the executor. Risk register
 | ------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------ |
 | `CLAUDE_CODE_OAUTH_TOKEN` | Andy's Claude subscription. Local copy for the sandbox test bed (`~/.config/andy-intelligence/sandbox-lab.env`, mode 600, trusted code only; AI-58) | Any same-repo workflow run (not forks, not Dependabot); agent runs (`claude-executor.yml` `agent` job) |
 | `GITHUB_TOKEN`            | Per-job, least privilege (`permissions:` in each workflow)                                                                                          | That job                                                                                               |
+
+## Planned: local executor (ADR-0089, not built)
+
+New entry points `POST /runner/claim` (runner secret) and `POST /runs/{id}/heartbeat` (per-run token); the per-run token also on `context`, `report` and `/github/token`. The laptop only calls out. Risk R-AI-44.
+
+| Identity           | Grants                                                               | Usable from                                      |
+| ------------------ | -------------------------------------------------------------------- | ------------------------------------------------ |
+| Runner secret      | Claim runs on its ticked projects; minted and revoked only in the UI | The runner, as macOS user `ai-runner` (Keychain) |
+| Per-run token      | Its own run's context, heartbeat, report and one push grant          | The runner, never the agent                      |
+| Push token (local) | 1-hour App token, contents + pull requests write, one per run        | The runner's publish step                        |
