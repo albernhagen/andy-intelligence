@@ -5,7 +5,8 @@ import { PASS_RATE_MIN, QUOTA_RESERVE_PCT, TOKEN_JUMP_MAX } from "./config.mjs";
 /**
  * `fail` below PASS_RATE_MIN or on any token jump past TOKEN_JUMP_MAX over the case's baseline;
  * `skipped` when the quota reserve stopped the run and nothing that ran failed; else `pass`.
- * Errors count as failed cases. A case with no baseline is listed, not failed.
+ * Errors count as failed cases. A case with no baseline is listed, not failed. A run with no
+ * cases fails: an emptied suite must not turn the check green.
  */
 export function verdict(run, baselines = {}) {
   const ran = run.cases.filter((c) => c.status !== "skipped");
@@ -20,6 +21,7 @@ export function verdict(run, baselines = {}) {
   const jumps = tokens.filter((t) => t.jump !== null && t.jump > TOKEN_JUMP_MAX);
   const missingBaselines = tokens.filter((t) => t.baseline === null && t.inputTokens !== null);
   const reasons = [];
+  if (run.cases.length === 0) reasons.push("no cases: the suite is empty");
   if (passRate < PASS_RATE_MIN) {
     reasons.push(
       `pass rate ${pct(passRate)} is below ${pct(PASS_RATE_MIN)} (${passed} of ${ran.length})`,

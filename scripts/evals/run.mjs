@@ -135,6 +135,12 @@ export function caseSpecs(cases, prepared) {
   });
 }
 
+/** A workflow warning when a subscription run saw no quota reading: the reserve couldn't apply. */
+export function quotaWarning(source, run) {
+  if (source !== "subscription" || run.quotaPct !== null) return null;
+  return "::warning title=agent-evals::No quota reading in any case: the 80% quota reserve could not apply to this run (runbook agent-evals.md §5).";
+}
+
 /** For `--expect fail` (the self-test): every case must have failed, by a check or a token jump. */
 export function expectedFailureMet(run, result) {
   const jumped = new Set(
@@ -193,6 +199,8 @@ async function main() {
     const result = verdict(run, opts.source === "stub" ? baselines.stub : baselines.live);
     const caps = { maxCases: MAX_CASES, maxTurns: MAX_TURNS_PER_CASE };
     report(summary({ run, result, source: opts.source, caps, cases }));
+    const warning = quotaWarning(opts.source, run);
+    if (warning) process.stdout.write(`${warning}\n`);
     if (Object.keys(opts.overrides).length) {
       report(
         `\nProcedure overrides: ${Object.entries(opts.overrides)

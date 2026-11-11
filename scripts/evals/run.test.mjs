@@ -1,5 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { caseSpecs, credentialProblem, expectedFailureMet, parseArgs } from "./run.mjs";
+import {
+  caseSpecs,
+  credentialProblem,
+  expectedFailureMet,
+  parseArgs,
+  quotaWarning,
+} from "./run.mjs";
 import { verdict } from "./verdict.mjs";
 
 describe("parseArgs", () => {
@@ -105,5 +111,21 @@ describe("expectedFailureMet", () => {
   it("GivenACasePassedCleanly_WhenSelfTested_ThenNotMet", () => {
     const run = { suite: "s", cases: [bad("a"), ok("t", 100)] };
     expect(expectedFailureMet(run, verdict(run, { t: 100 }))).toBe(false);
+  });
+});
+
+describe("quotaWarning", () => {
+  it("GivenASubscriptionRunWithNoReading_WhenChecked_ThenAWorkflowWarning", () => {
+    expect(quotaWarning("subscription", { quotaPct: null })).toMatch(
+      /^::warning title=agent-evals::/,
+    );
+  });
+
+  it.each([
+    ["subscription", { quotaPct: 42 }],
+    ["api-key", {}],
+    ["stub", {}],
+  ])("GivenSource %s_WhenChecked_ThenNoWarning", (source, run) => {
+    expect(quotaWarning(source, run)).toBeNull();
   });
 });

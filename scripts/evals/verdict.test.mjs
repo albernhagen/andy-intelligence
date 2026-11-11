@@ -78,8 +78,11 @@ describe("verdict", () => {
     expect(verdict(run(bad("a"), skip)).outcome).toBe("fail");
   });
 
-  it("GivenNoCases_WhenJudged_ThenPass", () => {
-    expect(verdict(run()).outcome).toBe("pass");
+  it("GivenNoCases_WhenJudged_ThenFail", () => {
+    expect(verdict(run())).toMatchObject({
+      outcome: "fail",
+      reasons: ["no cases: the suite is empty"],
+    });
   });
 });
 
