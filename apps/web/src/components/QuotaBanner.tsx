@@ -1,4 +1,5 @@
 import type { QuotaStatus } from "@andy/contracts";
+import { ClearQuotaIdle } from "@/components/ClearQuotaIdle";
 import { WINDOW_LABEL } from "@/components/QuotaGauge";
 import { useQuota } from "@/lib/queries";
 import { cn } from "@/lib/utils";
@@ -11,8 +12,9 @@ function atLevel(status: QuotaStatus): string {
 }
 
 /**
- * Persistent while the level holds; there is no dismiss control (§7). Nothing pauses runs on
- * these readings yet (M2), so the text doesn't claim it. A failed fetch counts as unknown.
+ * Persistent while the level holds; there is no dismiss control (§7). At the pause level dispatch
+ * starts nothing new (ADR-0079), and Andy can clear a reading he doesn't believe (AI-74). A failed
+ * fetch counts as unknown.
  */
 export function QuotaBanner() {
   const quota = useQuota();
@@ -41,8 +43,9 @@ export function QuotaBanner() {
       )}
     >
       {pause
-        ? `Claude quota at the pause level (${status.pausePct}%): ${atLevel(status)}. Runs are not paused automatically yet.`
+        ? `Claude quota at the pause level (${status.pausePct}%): ${atLevel(status)}. Dispatch starts nothing new until it drops.`
         : `Claude quota past the warning level (${status.warnPct}%): ${atLevel(status)}.`}
+      {pause && <ClearQuotaIdle />}
     </p>
   );
 }

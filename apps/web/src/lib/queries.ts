@@ -222,6 +222,12 @@ function useWrite<V, R>(
   });
 }
 
+/** Andy's clear of a quota idle (AI-74): discards the reading holding dispatch at the reserve. */
+export function useClearQuotaIdle() {
+  const api = useApi();
+  return useWrite(async () => unwrap(await api.POST("/api/quota/clear")));
+}
+
 export function useCreateProject() {
   const api = useApi();
   return useWrite(async (body: { name: string; key: string; repos: string[] }) =>

@@ -32,6 +32,8 @@ export const DigestExceptionKind = z.enum([
   "sync_stopped",
   // An open agent PR's sync waits on a cap (AI-72, ADR-0083).
   "sync_waiting",
+  // Andy cleared a quota reading that held dispatch at the reserve (AI-74).
+  "quota_cleared",
 ]);
 export type DigestExceptionKind = z.infer<typeof DigestExceptionKind>;
 

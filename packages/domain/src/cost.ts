@@ -102,7 +102,8 @@ function windowDelta(
 ): number | null {
   const was = before.find((r) => r.window === window);
   const now = after.find((r) => r.window === window);
-  if (!was || !now) return null;
+  // A reading Andy discarded (AI-74) isn't a baseline to measure usage from.
+  if (!was || was.discarded || !now) return null;
   // A window that reset between the readings can't be compared; neither can a drop in usage.
   if (quotaFreshness(was, new Date(now.takenAt)) !== "fresh" || now.usedPct < was.usedPct) {
     return null;
