@@ -199,6 +199,24 @@ describe("RefineGate.askHeld (AI-75)", () => {
     expect(open.map((q) => q.id)).toEqual(["run-1-a1-h1-q1"]);
   });
 
+  it("GivenTwoLostClaimsAndThreeHeldGaps_WhenAsked_ThenTheLostClaimsTakeTheirSlotsFirst", async () => {
+    const lost = (n: number) => held(n, { status: "promoted", questionId: `run-1-a${n}-h1-q1` });
+    const t = await setup([lost(1), lost(2), held(3), held(4), held(5)]);
+    expect(await t.gate.askHeld(await t.ticket())).toBe(3);
+    expect((await t.open()).map((q) => q.text)).toEqual([
+      "Question 1?",
+      "Question 2?",
+      "Question 3?",
+    ]);
+    expect((await t.ticket()).refineAssumptions.map((a) => a.status)).toEqual([
+      "promoted",
+      "promoted",
+      "promoted",
+      "assumed",
+      "assumed",
+    ]);
+  });
+
   it("GivenTwoOverlappingDispatchEvents_WhenBothAskTheSameHeldGap_ThenOneQuestionIsAsked", async () => {
     const t = await setup([held(1)]);
     const same = await t.ticket();

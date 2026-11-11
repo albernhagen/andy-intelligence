@@ -83,6 +83,21 @@ export class RefineDispatcher {
    * returns how many it asked. Never throws.
    */
   async askHeld(projectId: string): Promise<number> {
+    // One at a time per project in this instance, so two events can't both spend the same
+    // daily slots on different tickets. Across instances a small overshoot remains (ADR-0087).
+    const prev = this.heldQueue.get(projectId) ?? Promise.resolve(0);
+    const next = prev.then(() => this.askHeldNow(projectId));
+    this.heldQueue.set(projectId, next);
+    try {
+      return await next;
+    } finally {
+      if (this.heldQueue.get(projectId) === next) this.heldQueue.delete(projectId);
+    }
+  }
+
+  private readonly heldQueue = new Map<string, Promise<number>>();
+
+  private async askHeldNow(projectId: string): Promise<number> {
     try {
       const project = await this.tracker.getProject(projectId);
       if (!project || project.paused) return 0;

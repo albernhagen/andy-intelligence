@@ -329,7 +329,7 @@ export class RefineGate {
         a.questionId.startsWith(`${a.id}-h`) &&
         !exists.has(a.questionId),
     );
-    const claims = await this.claimHeld(ticket, mine);
+    const claims = await this.claimHeld(ticket, mine, lost.length);
     const asking = [...lost, ...claims];
     for (const a of asking) {
       const runId = a.questionId!.replace(/-q1$/, "");
@@ -351,15 +351,23 @@ export class RefineGate {
     return asking.length;
   }
 
-  /** Marks as many held gaps `promoted` as the caps allow, in one conditional write. */
-  private async claimHeld(ticket: Ticket, mine: readonly Question[]): Promise<Assumption[]> {
+  /**
+   * Marks as many held gaps `promoted` as the caps allow, in one conditional write. `pending`
+   * claims (asked in this call, not yet stored) take their slots first.
+   */
+  private async claimHeld(
+    ticket: Ticket,
+    mine: readonly Question[],
+    pending: number,
+  ): Promise<Assumption[]> {
     const held = heldGaps(ticket);
     if (held.length === 0) return [];
     const room = await this.room(ticket, null);
-    const slots = Math.min(
-      MAX_OPEN_QUESTIONS_PER_TICKET - room.openOnTicket,
-      room.dailyCap - room.openedToday,
-    );
+    const slots =
+      Math.min(
+        MAX_OPEN_QUESTIONS_PER_TICKET - room.openOnTicket,
+        room.dailyCap - room.openedToday,
+      ) - pending;
     if (slots <= 0) return [];
     const claimed = new Map<string, string>();
     for (const a of held.slice(0, slots)) {
