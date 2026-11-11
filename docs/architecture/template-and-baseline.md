@@ -25,16 +25,16 @@ Onboarding a project = UI/MCP "Add project" → onboarding interview → brief P
 
 ### 8.1 Project baseline (ADR-0031)
 
-Every guardrail built here reaches each managed project the same way; this repo uses the same baseline. **Every slice that adds or changes a guardrail updates this table in the same PR.**
+Every guardrail built here reaches each managed project the same way, this repo included. **Every slice that adds or changes a guardrail updates this table in the same PR.**
 
 Carried by (ADR-0038): **A** = composite action in `platform/actions/`; managed repos get the caller workflow with the action pinned by SHA · **M** = managed file (kept identical; listed in `platform/baseline/manifest.json`) · **S** = seed file, copied once from `template/` · **G** = GitHub config in `platform/baseline/github/`, applied by `platform/baseline/baseline.mjs` · **TF** = Terraform module in `infra/modules/` · **RB** = runbook step (secrets).
 
-This repo's Dependabot bumps third-party pins in `platform/actions/`; managed repos get them through the baseline pin. Drift: `baseline.mjs check <repo>` (Andy, local, everything); the weekly system security review checks labels and ruleset (its token can't read the rest).
+This repo's Dependabot bumps third-party pins in `platform/actions/`; managed repos get them through the baseline pin. Drift: `baseline.mjs check <repo>` (Andy, local, everything); the weekly system review checks labels and ruleset (its token can't read the rest).
 
 | Guardrail | ADR | Source in this repo | Carried by | Status |
 |---|---|---|---|---|
 | Lint, typecheck, test, build | 0022 | `ci.yml` (`check`) → `platform/actions/ci-check` | A | carried (M1.16) |
-| Firestore adapter contract suites on the emulator (path-gated) | 0034, 0048 | `firestore-suite.yml` | — | control plane only: required here; `github/source-only.json` keeps it off other repos |
+| Firestore adapter contract suites on the emulator (path-gated) | 0034, 0048 | `firestore-suite.yml` | — | control plane only (`github/source-only.json`) |
 | Workflow linter (actionlint) | 0027 | `ci.yml` → `platform/actions/actionlint` | A | carried (M1.16) |
 | Terraform fmt/validate | 0011, 0024 | `ci.yml` → `platform/actions/terraform-check` (skips without `infra/`) | A | carried (M1.16) |
 | Public-safe Terraform plan summary | 0011 | `terraform-plan.yml` | — | not yet carried (M6: Dev → prod releases; needs per-project WIF) |
@@ -50,7 +50,7 @@ This repo's Dependabot bumps third-party pins in `platform/actions/`; managed re
 | Threat model seed | 0025 | `template/docs/security/threat-model.md` | S | carried (M1.16) |
 | Dispatch, sync caps, pause | 0079, 0083 | `dispatch-caps.ts`, `sync-runs.ts` | — | control plane |
 | Public-repo hygiene (`.gitignore`: tfvars, state, `.env*`) | 0015 | `template/gitignore.lines` | M (lines) | carried (M1.16) |
-| `main` ruleset: PR required (squash), no force push/deletion, required checks, code scanning (CodeQL, high or higher) | 0025 | `github/ruleset-main.json` | G | carried (M1.16) |
+| `main` ruleset: PR required (squash), no force push/deletion, required checks, code scanning (CodeQL, high or higher) | 0025 | `github/ruleset-main.json` | G | carried (M1.16), minus `github/source-only.json` (`firestore-suite`). No per-project extra checks yet (`apply` replaces the ruleset) |
 | Merge settings: squash only, delete branch on merge, auto-merge allowed (Dependabot; agent PRs through the review gate) | 0022, 0042, 0050 | `github/repo.json` | G | carried (M1.16; auto-merge from ADR-0042) |
 | Agent PR policy `autoMerge` (`none` / `s` / `s-and-m` / `all`; new projects `s-and-m`, project AI `none`): merges only when required and review checks pass and no veto applies | 0050 | built (M1.8b): product setting, nothing to copy. Protected paths (`packages/domain/src/gate.ts`) apply to every project, plus CODEOWNERS paths after `*` from the base branch |
 | `planApproval` (`none` / `m-and-l` / `all`): approved read-only plan before the build | 0050 | built (M1.8a): product setting, nothing to copy |
