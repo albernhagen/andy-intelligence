@@ -58,9 +58,9 @@ Ticket first (under its milestone's epic, with spec and criteria); the brief add
 
 Hand over between batches, never during one. Write a log entry: what merged, what is open and why, questions waiting on the owner, the next batch. The next coordinator starts from it, the milestone map and this procedure; one per milestone, or sooner once your context is summarized.
 
-## 7. Merging low-risk PRs yourself
+## 7. Merging PRs yourself
 
-Only where the owner decided it in a decision record (here ADR-0078, runbook `coordinating-sessions.md` §5). Low risk means all of: checks green on the head commit; both review agents ran on that head and posted a verdict with no open blocker, should-fix, high or critical finding (a neutral or skipped check does not count: where agents skip docs-only PRs, read the whole diff yourself and record it; a fix clears a finding, a reply does not) and no accepted-label override; the default branch merged in and rerun; a diff confined to UI, domain logic, read paths, or the few other paths the decision record lists; no schema bump, migration, new entry point or credential; size S or M. Everything else, and anything you are unsure of, the owner merges; never merge a change to your own authority. Squash, one at a time (§4); tell every open worker; record each merge (PR, ticket, class, who, verdicts) in the digest.
+Only where the owner decided it in a decision record (here ADR-0078 and ADR-0088, runbook `coordinating-sessions.md` §5). Always required: checks green on the head commit; both review agents posted a verdict on that head with no open blocker, should-fix, high or critical finding (a neutral check does not count: read a docs-only PR's whole diff yourself and record it; a fix clears a finding, a reply does not); no accepted-label override; the default branch merged in and rerun; size S or M. **Low** risk: a diff confined to UI, domain logic, read paths or the other paths the record lists. **Medium**: anything else off the record's high-risk list (CI, infrastructure, access, credentials, schema, the review system, agent rules, new dependencies). The owner merges the rest and anything you are unsure of. Never merge a change to your own authority. Squash, one at a time (§4); tell every open worker; record each merge (PR, ticket, class, who, verdicts) in the digest.
 
 ## 8. Asking the owner
 
