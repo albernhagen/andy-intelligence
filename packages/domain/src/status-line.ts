@@ -39,11 +39,22 @@ export interface StatusInput {
   syncStopped?: string | null;
   /** Why the PR's wanted sync hasn't started (AI-72); null or absent: none waits. */
   syncWaiting?: string | null;
+  /**
+   * The oldest open question's line (AI-73). Given (the digest gives it), it replaces the count
+   * on the open-question line; absent, the line counts the questions as before.
+   */
+  questionLine?: string | null;
 }
 
-/** The status line while questions wait; the digest swaps in the question itself (AI-73). */
-export function questionsWaiting(n: number): string {
-  return `Waiting for you: ${n} question${n === 1 ? "" : "s"}`;
+const QUESTION_LINE_MAX = 200;
+
+/** The line while questions wait: the oldest one's line when given (AI-73), else the count. */
+function questionsWaiting(n: number, question?: string | null): string {
+  if (!question) return `Waiting for you: ${n} question${n === 1 ? "" : "s"}`;
+  const q =
+    question.length > QUESTION_LINE_MAX ? `${question.slice(0, QUESTION_LINE_MAX)}…` : question;
+  const more = n > 1 ? ` (and ${n - 1} more question${n === 2 ? "" : "s"})` : "";
+  return `Waiting for you: ${q}${more}`;
 }
 
 export function statusLine(s: StatusInput, now: Date): { text: string; tone: StatusTone } {
@@ -57,7 +68,9 @@ function mainStatus(s: StatusInput, now: Date): { text: string; tone: StatusTone
 
   if (s.stage === "cancelled") return { text: "Cancelled", tone: "default" };
   if (s.stage === "done") return { text: join("Done", pr), tone: "success" };
-  if (s.openQuestions > 0) return { text: questionsWaiting(s.openQuestions), tone: "attention" };
+  if (s.openQuestions > 0) {
+    return { text: questionsWaiting(s.openQuestions, s.questionLine), tone: "attention" };
+  }
   if (s.needsAttention) {
     return {
       text: s.syncStopped ? `Waiting for you: ${s.syncStopped}` : "Waiting for you",
@@ -210,6 +223,8 @@ export interface TicketFacts {
   worker?: Worker;
   /** The project's in-flight view (ADR-0080); undefined until it loads. */
   inFlight?: readonly InFlightRun[];
+  /** The oldest open question's line (AI-73); only the digest passes it. */
+  questionLine?: string | null;
 }
 
 const SYNC_STOP_FILES = 3;
@@ -252,6 +267,7 @@ export function ticketStatusLine(ticket: Ticket, facts: TicketFacts, now: Date) 
       overlaps: ticket.stage === "ready" ? overlappingKey(ticket, facts.inFlight ?? []) : null,
       syncStopped: syncStopped(facts.runs),
       syncWaiting: syncWaiting(facts.runs),
+      questionLine: facts.questionLine ?? null,
     },
     now,
   );

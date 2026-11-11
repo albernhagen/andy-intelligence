@@ -23,13 +23,7 @@ import {
 import { ticketCost } from "./cost";
 import { MAX_ACTIVE_RUNS_GLOBAL, MAX_PRS_WAITING_PER_PROJECT, isInFlight } from "./dispatch-caps";
 import { quotaStatus } from "./quota";
-import {
-  openBlockerKeys,
-  questionsWaiting,
-  runLabel,
-  syncWaiting,
-  ticketStatusLine,
-} from "./status-line";
+import { openBlockerKeys, runLabel, syncWaiting, ticketStatusLine } from "./status-line";
 import { resolveWorker } from "./worker";
 
 /**
@@ -313,32 +307,18 @@ function waitingAndBlocked(data: DigestData): DigestException[] {
         runs: data.activeRuns.filter((r) => r.ticketId === t.id),
         events: data.ticketEvents.get(t.id) ?? [],
         worker: resolveWorker(t, data.project),
+        questionLine: data.questionLines?.get(t.id) ?? null,
       },
       data.now,
     );
     const common = { ...label(t), prNumber: null, at: t.updatedAt };
     if (line.tone === "attention") {
-      out.push({
-        kind: "waiting_on_andy",
-        ...common,
-        reason: waitingReason(data, t.id, line.text),
-      });
+      out.push({ kind: "waiting_on_andy", ...common, reason: line.text });
     } else if (openBlockerKeys(t, data.tickets).length > 0) {
       out.push({ kind: "blocked", ...common, reason: line.text });
     }
   }
   return out;
-}
-
-/**
- * AI-73: the question itself, not a count, but only where the status line is the open-question
- * one (`questionsWaiting`); any other reason the ticket waits on Andy is kept as it is.
- */
-function waitingReason(data: DigestData, ticketId: string, line: string): string {
-  const question = data.questionLines?.get(ticketId);
-  const n = data.openQuestions.get(ticketId) ?? 0;
-  if (!question || n === 0 || line !== questionsWaiting(n)) return line;
-  return `Waiting for you: ${clip(question)}${n > 1 ? ` (and ${plural(n - 1, "more question")})` : ""}`;
 }
 
 const IDLE_REASONS: Record<DispatchIdleReason, (p: DigestData["project"]) => string> = {
