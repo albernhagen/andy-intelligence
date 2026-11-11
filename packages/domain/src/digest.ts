@@ -42,6 +42,8 @@ export interface DigestData {
   tickets: readonly Ticket[];
   /** Open questions per ticket id. */
   openQuestions: ReadonlyMap<string, number>;
+  /** The oldest open question's line per ticket id (AI-73); absent: the count alone is shown. */
+  questionLines?: ReadonlyMap<string, string>;
   /** Runs queued or running now. */
   activeRuns: readonly Run[];
   /** Runs whose `endedAt` is in the window. */
@@ -304,12 +306,24 @@ function waitingAndBlocked(data: DigestData): DigestException[] {
     );
     const common = { ...label(t), prNumber: null, at: t.updatedAt };
     if (line.tone === "attention") {
-      out.push({ kind: "waiting_on_andy", ...common, reason: line.text });
+      out.push({
+        kind: "waiting_on_andy",
+        ...common,
+        reason: waitingReason(data, t.id, line.text),
+      });
     } else if (openBlockerKeys(t, data.tickets).length > 0) {
       out.push({ kind: "blocked", ...common, reason: line.text });
     }
   }
   return out;
+}
+
+/** AI-73: the question itself, not a count, when the ticket waits on one. */
+function waitingReason(data: DigestData, ticketId: string, fallback: string): string {
+  const question = data.questionLines?.get(ticketId);
+  const n = data.openQuestions.get(ticketId) ?? 0;
+  if (!question || n === 0) return fallback;
+  return `Waiting for you: ${clip(question)}${n > 1 ? ` (and ${plural(n - 1, "more question")})` : ""}`;
 }
 
 const IDLE_REASONS: Record<DispatchIdleReason, (p: DigestData["project"]) => string> = {
@@ -506,6 +520,10 @@ export class DigestReader {
     const openQuestions = new Map<string, number>();
     for (const q of questions)
       openQuestions.set(q.ticketId, (openQuestions.get(q.ticketId) ?? 0) + 1);
+    const questionLines = new Map<string, string>();
+    for (const q of [...questions].sort((a, b) => a.createdAt.localeCompare(b.createdAt))) {
+      if (!questionLines.has(q.ticketId)) questionLines.set(q.ticketId, q.text);
+    }
 
     const toRead = tickets
       .filter((t) => t.updatedAt >= from || (t.stage === "ready_for_review" && !t.archived))
@@ -525,6 +543,7 @@ export class DigestReader {
       project,
       tickets,
       openQuestions,
+      questionLines,
       activeRuns,
       endedRuns: ended.runs,
       ticketRuns: new Map(histories.map((h) => [h.id, h.runs])),

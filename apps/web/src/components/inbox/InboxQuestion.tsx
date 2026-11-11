@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { errorText } from "@/lib/api";
 import { useAnswerQuestion } from "@/lib/queries";
+import { QuestionContext, QuestionRecommendationLine, consequenceOf } from "./QuestionFormat";
 
 /** The answers to offer as buttons: the suggested one first (even if refine left it out of the options). */
 export function answerChoices(question: Pick<Question, "options" | "suggestedAnswer">): string[] {
@@ -14,13 +15,39 @@ export function answerChoices(question: Pick<Question, "options" | "suggestedAns
 }
 
 /**
- * One open question in the inbox: one click on a choice answers it; free text stays. `locked`
+ * One open question in the inbox, in the question format (AI-73): the question line, context,
+ * options with their consequences, the recommendation. Older questions show the line and plain
+ * option buttons. One click on a choice answers it; free text stays. `locked`
  * while any answer on its card is in flight, so two answers never race (AI-30 review).
  */
 export function InboxQuestion({ question, locked }: { question: Question; locked: boolean }) {
   const [text, setText] = useState("");
   const submit = useAnswerQuestion(question.ticketId);
   const answer = (value: string) => submit.mutate({ questionId: question.id, answer: value });
+  const choices = answerChoices(question);
+  const mark = question.recommendation ? "Recommended" : "Suggested";
+  // Older questions keep their layout: assumptions right under the line (AI-73: render as today).
+  const formatted = question.context !== null;
+  const assumptions = question.assumptions.length > 0 && (
+    <ul aria-label="Assumptions" className="list-disc pl-5 text-xs text-muted-foreground">
+      {question.assumptions.map((a) => (
+        <li key={a}>{a}</li>
+      ))}
+    </ul>
+  );
+  const choiceButton = (choice: string) => (
+    <Button
+      key={choice}
+      type="button"
+      size="sm"
+      variant="outline"
+      disabled={locked}
+      onClick={() => answer(choice)}
+    >
+      {choice}
+      {choice === question.suggestedAnswer && <Badge variant="success">{mark}</Badge>}
+    </Button>
+  );
 
   return (
     <li aria-label={`Question: ${question.text}`} className="space-y-2 py-2">
@@ -28,30 +55,28 @@ export function InboxQuestion({ question, locked }: { question: Question; locked
         <p className="whitespace-pre-wrap">{question.text}</p>
         {question.urgency === "high" && <Badge variant="attention">Urgent</Badge>}
       </div>
-      {question.assumptions.length > 0 && (
-        <ul aria-label="Assumptions" className="list-disc pl-5 text-xs text-muted-foreground">
-          {question.assumptions.map((a) => (
-            <li key={a}>{a}</li>
+      {!formatted && assumptions}
+      <QuestionContext question={question} />
+      {question.choices.length > 0 ? (
+        <ul aria-label="Answers" className="space-y-1">
+          {choices.map((choice) => (
+            <li key={choice} className="flex flex-wrap items-center gap-2">
+              {choiceButton(choice)}
+              <span className="text-sm text-muted-foreground">
+                {consequenceOf(question, choice)}
+              </span>
+            </li>
           ))}
         </ul>
+      ) : (
+        choices.length > 0 && (
+          <div className="flex flex-wrap gap-2" role="group" aria-label="Answers">
+            {choices.map(choiceButton)}
+          </div>
+        )
       )}
-      {answerChoices(question).length > 0 && (
-        <div className="flex flex-wrap gap-2" role="group" aria-label="Answers">
-          {answerChoices(question).map((choice) => (
-            <Button
-              key={choice}
-              type="button"
-              size="sm"
-              variant="outline"
-              disabled={locked}
-              onClick={() => answer(choice)}
-            >
-              {choice}
-              {choice === question.suggestedAnswer && <Badge variant="success">Suggested</Badge>}
-            </Button>
-          ))}
-        </div>
-      )}
+      <QuestionRecommendationLine question={question} />
+      {formatted && assumptions}
       <form
         className="flex max-w-2xl gap-2"
         onSubmit={(e) => {

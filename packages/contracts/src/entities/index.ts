@@ -23,12 +23,14 @@ import { RunCostFields } from "./cost";
 import { runInFlightFields } from "./in-flight";
 import { runSyncFields } from "./sync";
 import { RefineScores, TicketScores } from "./scores";
+import { questionFormatFields, questionLine, refineQuestionFields } from "./question-format";
 
 export * from "./common";
 export * from "./cost";
 export * from "./in-flight";
 export * from "./sync";
 export * from "./scores";
+export * from "./question-format";
 
 /** ARCHITECTURE §5 — domain model. Vendor concepts must not appear here. */
 
@@ -147,6 +149,7 @@ export const Assumption = z.object({
   /** The re-refine run that covered this gap. */
   settledBy: Id.nullable().default(null),
   createdAt: Timestamp,
+  ...questionFormatFields,
 });
 export type Assumption = z.infer<typeof Assumption>;
 
@@ -251,6 +254,7 @@ export const Question = z.object({
   answeredAt: Timestamp.nullable(),
   /** The agent run that asked it (M1.7: Refinement); null when Andy or the system asked. */
   runId: Id.nullable().default(null),
+  ...questionFormatFields,
 });
 export type Question = z.infer<typeof Question>;
 
@@ -281,12 +285,12 @@ export const REFINE_LIMITS = {
 const capped = (max: number) => z.string().trim().min(1).max(max);
 
 export const RefineGap = z.strictObject({
-  /** The decision, phrased as a question Andy could answer without reading the code. */
-  question: capped(REFINE_LIMITS.text),
+  /** One plain question Andy can answer without reading the ticket (AI-73: question format). */
+  question: questionLine(REFINE_LIMITS.text),
   /** The default refine would go with. Recorded if the gap becomes an assumption. */
   assumption: capped(REFINE_LIMITS.assumption),
-  options: z.array(capped(REFINE_LIMITS.option)).max(REFINE_LIMITS.maxOptions).default([]),
-  suggestedAnswer: capped(REFINE_LIMITS.option).nullable().default(null),
+  /** `context`, `options` as `{label, consequence}`, `recommendation` with a reason. */
+  ...refineQuestionFields(REFINE_LIMITS.maxOptions),
   cost: GapCost,
   confidence: GapConfidence,
   urgency: Urgency.default("normal"),

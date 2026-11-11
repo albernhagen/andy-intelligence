@@ -6,10 +6,17 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { errorText } from "@/lib/api";
 import { useAnswerQuestion } from "@/lib/queries";
+import {
+  QuestionContext,
+  QuestionRecommendationLine,
+  consequenceOf,
+} from "@/components/inbox/QuestionFormat";
 
 /**
- * An open question with its options and suggested answer; answered ones show the answer. The
- * text is untrusted (often agent-written): safe markdown only (`Markdown`).
+ * An open question with its options and suggested answer; answered ones show the answer. In the
+ * question format (AI-73) the line is followed by context, options with consequences and the
+ * recommendation; older questions render as before. The text is untrusted (often agent-written):
+ * safe markdown only (`Markdown`), the rest plain text.
  */
 export function QuestionCard({
   question,
@@ -20,6 +27,27 @@ export function QuestionCard({
 }) {
   const [answer, setAnswer] = useState(question.suggestedAnswer ?? "");
   const submit = useAnswerQuestion();
+  const formatted = question.context !== null;
+  const assumptions = question.assumptions.length > 0 && (
+    <ul className="list-disc pl-5 text-sm text-muted-foreground">
+      {question.assumptions.map((a) => (
+        <li key={a}>{a}</li>
+      ))}
+    </ul>
+  );
+  const option = (o: string) => (
+    <Button
+      key={o}
+      type="button"
+      size="sm"
+      variant={o === answer ? "default" : "outline"}
+      aria-pressed={o === answer}
+      onClick={() => setAnswer(o)}
+    >
+      {o}
+      {o === question.suggestedAnswer && (formatted ? " (recommended)" : " (suggested)")}
+    </Button>
+  );
 
   return (
     <article
@@ -31,13 +59,8 @@ export function QuestionCard({
         <Markdown className="font-medium">{question.text}</Markdown>
         {question.urgency === "high" && <Badge variant="attention">urgent</Badge>}
       </div>
-      {question.assumptions.length > 0 && (
-        <ul className="list-disc pl-5 text-sm text-muted-foreground">
-          {question.assumptions.map((a) => (
-            <li key={a}>{a}</li>
-          ))}
-        </ul>
-      )}
+      {!formatted && assumptions}
+      <QuestionContext question={question} />
 
       {question.status === "open" ? (
         <form
@@ -47,23 +70,26 @@ export function QuestionCard({
             if (answer.trim()) submit.mutate({ questionId: question.id, answer: answer.trim() });
           }}
         >
-          {question.options.length > 0 && (
-            <div className="flex flex-wrap gap-2" role="group" aria-label="Options">
+          {question.choices.length > 0 ? (
+            <ul aria-label="Options" className="space-y-1">
               {question.options.map((o) => (
-                <Button
-                  key={o}
-                  type="button"
-                  size="sm"
-                  variant={o === answer ? "default" : "outline"}
-                  aria-pressed={o === answer}
-                  onClick={() => setAnswer(o)}
-                >
-                  {o}
-                  {o === question.suggestedAnswer && " (suggested)"}
-                </Button>
+                <li key={o} className="flex flex-wrap items-center gap-2">
+                  {option(o)}
+                  <span className="text-sm text-muted-foreground">
+                    {consequenceOf(question, o)}
+                  </span>
+                </li>
               ))}
-            </div>
+            </ul>
+          ) : (
+            question.options.length > 0 && (
+              <div className="flex flex-wrap gap-2" role="group" aria-label="Options">
+                {question.options.map(option)}
+              </div>
+            )
           )}
+          <QuestionRecommendationLine question={question} />
+          {formatted && assumptions}
           <div className="flex gap-2">
             <Input
               aria-label="Answer"

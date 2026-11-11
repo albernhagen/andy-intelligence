@@ -277,6 +277,30 @@ describe("buildDigest", () => {
     ]);
   });
 
+  it("GivenTicketsWaitingOnQuestions_WhenBuilt_ThenTheReasonIsTheQuestionLineNotACount", () => {
+    const tickets = [ticket(1, { stage: "backlog" }), ticket(2, { stage: "backlog" })];
+    const line =
+      "Who pays for the model calls agent evals make in CI: Andy's subscription or a key?";
+    const d = buildDigest(
+      WINDOW,
+      data({
+        tickets,
+        openQuestions: new Map([
+          ["t1", 2],
+          ["t2", 1],
+        ]),
+        questionLines: new Map([
+          ["t1", line],
+          ["t2", "x".repeat(250)],
+        ]),
+      }),
+    );
+    expect(d.exceptions.map((e) => e.reason)).toEqual([
+      `Waiting for you: ${line} (and 1 more question)`,
+      `Waiting for you: ${"x".repeat(200)}…`,
+    ]);
+  });
+
   it("GivenAPausedProjectOrACapIdle_WhenBuilt_ThenDispatchIdleWithTheReason", () => {
     const paused = buildDigest(WINDOW, data({ project: { ...project, paused: true } }));
     expect(paused.exceptions).toEqual([

@@ -244,8 +244,12 @@ export class TicketService {
       {
         text: assumption.question,
         options: assumption.options,
-        suggestedAnswer: assumption.text.slice(0, REFINE_LIMITS.option),
+        suggestedAnswer:
+          assumption.recommendation?.answer ?? assumption.text.slice(0, REFINE_LIMITS.option),
         assumptions: [assumption.text],
+        context: assumption.context,
+        choices: assumption.choices,
+        recommendation: assumption.recommendation,
       },
       actor,
     );

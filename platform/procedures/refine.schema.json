@@ -127,7 +127,13 @@
             "type": "string",
             "minLength": 1,
             "maxLength": 500,
-            "description": "The decision, as one question answerable without reading the code."
+            "description": "One plain sentence ending in a question mark that someone who has not read the ticket can answer. Every ID with its title. Rubric and examples: refine.md."
+          },
+          "context": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 800,
+            "description": "Two to four sentences: what the feature is in plain words, what happens today, why the answer is needed now."
           },
           "assumption": {
             "type": "string",
@@ -138,18 +144,44 @@
           "options": {
             "type": "array",
             "maxItems": 5,
-            "description": "Choices when the answer is one of a few; empty for an open question.",
+            "description": "Choices when the answer is one of a few (2-5); empty for an open question. Each says what choosing it does or costs.",
             "items": {
-              "type": "string",
-              "minLength": 1,
-              "maxLength": 200
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "label": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 200,
+                  "description": "The option as Andy would answer it."
+                },
+                "consequence": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 300,
+                  "description": "What choosing it does or costs."
+                }
+              },
+              "required": ["label", "consequence"]
             }
           },
-          "suggestedAnswer": {
-            "type": ["string", "null"],
-            "minLength": 1,
-            "maxLength": 200,
-            "description": "The answer you would pick and why in a few words, or null."
+          "recommendation": {
+            "type": "object",
+            "additionalProperties": false,
+            "description": "The answer you would pick, with a one-line reason.",
+            "properties": {
+              "answer": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 200
+              },
+              "reason": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 300
+              }
+            },
+            "required": ["answer", "reason"]
           },
           "cost": {
             "type": "string",
@@ -168,9 +200,10 @@
         },
         "required": [
           "question",
+          "context",
           "assumption",
           "options",
-          "suggestedAnswer",
+          "recommendation",
           "cost",
           "confidence",
           "urgency"
