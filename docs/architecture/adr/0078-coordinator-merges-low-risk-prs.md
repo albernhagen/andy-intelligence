@@ -1,5 +1,5 @@
 ---
-status: accepted
+status: accepted, amended by 0084, 0088
 date: 2026-11-08
 amends: 0047 (who merges while a coordinator session runs the batch); AGENTS.md rule 2 (ask before touching `main`)
 ---
