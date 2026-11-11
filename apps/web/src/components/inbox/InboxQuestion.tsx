@@ -27,7 +27,7 @@ export function InboxQuestion({ question, locked }: { question: Question; locked
   const choices = answerChoices(question);
   const mark = question.recommendation ? "Recommended" : "Suggested";
   // Older questions keep their layout: assumptions right under the line (AI-73: render as today).
-  const formatted = question.context !== null;
+  const formatted = Boolean(question.context);
   const assumptions = question.assumptions.length > 0 && (
     <ul aria-label="Assumptions" className="list-disc pl-5 text-xs text-muted-foreground">
       {question.assumptions.map((a) => (

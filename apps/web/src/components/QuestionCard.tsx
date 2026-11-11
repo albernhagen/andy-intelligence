@@ -27,7 +27,7 @@ export function QuestionCard({
 }) {
   const [answer, setAnswer] = useState(question.suggestedAnswer ?? "");
   const submit = useAnswerQuestion();
-  const formatted = question.context !== null;
+  const formatted = Boolean(question.context);
   const assumptions = question.assumptions.length > 0 && (
     <ul className="list-disc pl-5 text-sm text-muted-foreground">
       {question.assumptions.map((a) => (
