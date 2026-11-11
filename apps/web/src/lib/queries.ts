@@ -243,6 +243,7 @@ export function useUpdateProject(projectId: string) {
       runsAtOnce?: number;
       paused?: boolean;
       defaultWorker?: Worker;
+      emailNotifications?: boolean;
     }) =>
       unwrap(
         await api.PATCH("/api/projects/{projectId}", { params: { path: { projectId } }, body }),

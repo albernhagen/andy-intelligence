@@ -332,6 +332,28 @@ resource "google_cloud_run_v2_service" "control_plane" {
         name  = "WATCHDOG_INVOKER_EMAIL"
         value = google_service_account.tasks_invoker.email
       }
+      # Email for the Needs-you inbox (AI-77): set only once Andy fills email_from and email_to,
+      # after adding the API key's version (runbook email-notifications.md). Until then the API
+      # sends nothing and logs "email not configured".
+      dynamic "env" {
+        for_each = local.email_on ? { EMAIL_FROM = var.email_from, EMAIL_TO = var.email_to } : {}
+        content {
+          name  = env.key
+          value = env.value
+        }
+      }
+      dynamic "env" {
+        for_each = local.email_on ? [google_secret_manager_secret.resend_api_key.secret_id] : []
+        content {
+          name = "RESEND_API_KEY"
+          value_source {
+            secret_key_ref {
+              secret  = env.value
+              version = "latest"
+            }
+          }
+        }
+      }
     }
   }
 
@@ -382,6 +404,31 @@ resource "google_secret_manager_secret_iam_member" "runtime_adds_github_versions
   for_each  = google_secret_manager_secret.github
   secret_id = each.value.id
   role      = "roles/secretmanager.secretVersionAdder"
+  member    = "serviceAccount:${google_service_account.runtime.email}"
+}
+
+# ── Email notifications (AI-77, ADR-0060) ───────────────────────────────────────
+# The Resend API key's container only: Andy adds its version by hand (runbook
+# email-notifications.md), so the key never passes through Terraform, state or the repo.
+
+locals {
+  email_on = var.email_from != "" && var.email_to != ""
+}
+
+resource "google_secret_manager_secret" "resend_api_key" {
+  secret_id = "resend-api-key"
+
+  replication {
+    auto {}
+  }
+
+  depends_on = [google_project_service.apis]
+}
+
+# The runtime reads this secret only; nothing can add versions but Andy.
+resource "google_secret_manager_secret_iam_member" "runtime_reads_resend_api_key" {
+  secret_id = google_secret_manager_secret.resend_api_key.id
+  role      = "roles/secretmanager.secretAccessor"
   member    = "serviceAccount:${google_service_account.runtime.email}"
 }
 

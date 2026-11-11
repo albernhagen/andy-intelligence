@@ -26,3 +26,4 @@ export * from "./ticket-edits";
 export * from "./worker";
 export * from "./dispatch-conflicts";
 export * from "./digest";
+export * from "./notify-email";

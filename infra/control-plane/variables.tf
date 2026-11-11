@@ -52,3 +52,22 @@ variable "usage_alert_thresholds" {
   description = "Usage alert thresholds. Override one at a time, e.g. -var 'usage_alert_thresholds={run_requests_per_5m=0}'."
   default     = {}
 }
+
+variable "email_from" {
+  type        = string
+  description = "Sender of Needs-you emails (AI-77), on the domain verified in Resend. Empty: email is off. Never committed: set via gitignored terraform.tfvars."
+  default     = ""
+  sensitive   = true
+}
+
+variable "email_to" {
+  type        = string
+  description = "Recipient of Needs-you emails (AI-77). Empty: email is off. Never committed: set via gitignored terraform.tfvars."
+  default     = ""
+  sensitive   = true
+
+  validation {
+    condition     = var.email_to == "" || can(regex("^[^@\\s]+@[^@\\s]+\\.[^@\\s]+$", var.email_to))
+    error_message = "email_to must be empty or an email address."
+  }
+}

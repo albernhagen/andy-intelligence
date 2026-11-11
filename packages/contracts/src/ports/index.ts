@@ -39,6 +39,7 @@ import {
   type WorkflowDispatch,
   type WorkflowRun,
   projectDispatchPatch,
+  projectNotifyPatch,
 } from "../entities";
 
 /**
@@ -200,6 +201,7 @@ export const ProjectPatch = z.strictObject({
   dailyQuestionCap: Project.shape.dailyQuestionCap.unwrap().optional(),
   autoMerge: AutoMerge.optional(),
   ...projectDispatchPatch,
+  ...projectNotifyPatch,
   defaultWorker: Worker.optional(),
 });
 export type ProjectPatch = z.infer<typeof ProjectPatch>;
@@ -215,6 +217,7 @@ export const ProjectSettings = ProjectPatch.pick({
   runsAtOnce: true,
   paused: true,
   defaultWorker: true,
+  emailNotifications: true,
 });
 export type ProjectSettings = z.infer<typeof ProjectSettings>;
 
@@ -617,3 +620,4 @@ export interface Telemetry {
 }
 
 export * from "./digest";
+export * from "./notify-email";

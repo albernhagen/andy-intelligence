@@ -2,6 +2,7 @@ import type { ReactNode } from "react";
 import { useParams } from "@tanstack/react-router";
 import { AutoMerge, PlanApproval, type Project } from "@andy/contracts";
 import { DispatchControls } from "@/components/DispatchControls";
+import { EmailNotificationsControl } from "@/components/EmailControls";
 import { Loading, QueryError } from "@/components/Status";
 import { DefaultWorkerSelect } from "@/components/WorkerControls";
 import { useProjects, useUpdateProject } from "@/lib/queries";
@@ -51,6 +52,9 @@ export function ProjectSettingsPage() {
         </Setting>
         <Setting what="Who works a ticket that has no pick of its own; applies to existing tickets too.">
           <DefaultWorkerSelect project={project} />
+        </Setting>
+        <Setting what="Email you when a ticket here starts to need you: items within 10 minutes share one email, at most 20 a day.">
+          <EmailNotificationsControl project={project} />
         </Setting>
       </ul>
     </section>

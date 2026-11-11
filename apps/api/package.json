@@ -30,6 +30,7 @@
     "firebase-admin": "^14.5.0",
     "hono": "^4.13.13",
     "jose": "^6.2.13",
+    "resend": "^6.37.0",
     "zod": "^4.6.7"
   },
   "devDependencies": {

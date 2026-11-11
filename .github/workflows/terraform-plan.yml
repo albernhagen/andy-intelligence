@@ -39,6 +39,9 @@ jobs:
     env:
       TF_VAR_allowed_emails: ${{ secrets.TF_VAR_ALLOWED_EMAILS }}
       TF_VAR_alert_email: ${{ secrets.TF_VAR_ALERT_EMAIL }}
+      # Needs-you email (AI-77): optional; unset reads as "" (email off), so the plan matches only once set.
+      TF_VAR_email_from: ${{ secrets.TF_VAR_EMAIL_FROM }}
+      TF_VAR_email_to: ${{ secrets.TF_VAR_EMAIL_TO }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Check variable secrets

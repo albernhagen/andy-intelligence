@@ -20,6 +20,9 @@ import {
   BoardReader,
   DigestReader,
   TicketService,
+  EmailNotifications,
+  notifyOnNeedsYou,
+  type EmailNotificationsDeps,
 } from "@andy/domain";
 import { bodyLimit } from "hono/body-limit";
 import { requireAllowedUser, type AuthEnv, type TokenVerifier } from "./auth";
@@ -30,6 +33,7 @@ import { registerTicketRoutes } from "./tickets";
 import { registerBoardRoutes } from "./board";
 import { registerInFlightRoutes } from "./in-flight";
 import { registerDigestRoutes } from "./digest";
+import { registerNotifyFlush, registerNotifyRoutes } from "./notify";
 import {
   ConnectedCodeHost,
   GitHubConnection,
@@ -92,6 +96,11 @@ export interface AppDeps {
     now?: () => Date;
   };
   /**
+   * Needs-you email (AI-77): when set, a ticket that starts to need Andy is emailed, batched and
+   * capped. Absent: email is off and the settings page says so.
+   */
+  email?: Omit<EmailNotificationsDeps, "tracker">;
+  /**
    * GitHub App (ADR-0041, ADR-0043): setup from the UI, webhook receiver, repo checks at
    * registration, repo tokens for CI. Off (routes absent) when not configured, e.g. local dev.
    */
@@ -150,7 +159,14 @@ const DOMAIN_STATUS = {
   invalid_reference: 422,
 } as const;
 
-export function createApp(deps: AppDeps) {
+export function createApp(input: AppDeps) {
+  // AI-77: with email configured, every service below writes through the tracker's email hook.
+  const email = input.email
+    ? new EmailNotifications({ tracker: input.tracker, ...input.email })
+    : null;
+  const deps = email
+    ? { ...input, tracker: notifyOnNeedsYou(input.tracker, (t) => email.ticketNeedsYou(t)) }
+    : input;
   const app = new OpenAPIHono<AuthEnv>({
     // Validation failures: 400 with the field paths, not Zod's raw error object.
     defaultHook: (result, c) => {
@@ -251,6 +267,17 @@ export function createApp(deps: AppDeps) {
     });
   }
 
+  // Public, outside /api: the queue calls the email flush with the invoker's OIDC token (AI-77).
+  if (email && deps.watchdog) {
+    registerNotifyFlush(app, {
+      email,
+      verify:
+        deps.watchdog.verifyInvokerToken ??
+        invokerTokenVerifier(deps.watchdog.publicUrl, deps.watchdog.invokerEmail),
+      now,
+    });
+  }
+
   // Public, outside /api: GitHub signs webhooks (HMAC); CI jobs present an Actions OIDC token.
   if (github && connection) {
     const verifyActionsToken = github.verifyActionsToken ?? actionsTokenVerifier(github.publicUrl);
@@ -301,6 +328,7 @@ export function createApp(deps: AppDeps) {
   registerQuotaRoutes(app, deps.quota ?? null, now);
   const digest = new DigestReader(deps.tracker, deps.runs, deps.quota ?? null, now);
   registerDigestRoutes(app, digest, now);
+  registerNotifyRoutes(app, email);
 
   if (github && connection) {
     registerGitHubSetup(app, {
@@ -322,6 +350,7 @@ export function createApp(deps: AppDeps) {
       runs,
       projects,
       digest,
+      notifyEmail: email,
     });
   }
 

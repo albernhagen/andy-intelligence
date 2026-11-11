@@ -1005,3 +1005,4 @@ export function watchdogQueueContract(name: string, make: () => Promise<Watchdog
     });
   });
 }
+export * from "./notify-email";

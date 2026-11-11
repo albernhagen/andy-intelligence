@@ -15,6 +15,7 @@ import {
 import {
   DomainError,
   type DigestReader,
+  type EmailNotifications,
   type ProjectService,
   type RunService,
   type TicketService,
@@ -28,6 +29,7 @@ import { registerWorkerTools } from "./tools-worker";
 import { listNeedsMe, registerTicketTools, statusLineOf } from "./tools-tickets";
 import { registerScoreTools, withStartScore } from "./tools-scores";
 import { registerSettingsTools } from "./tools-settings";
+import { registerNotifyTools } from "./tools-notify";
 import { registerDigestTools } from "./tools-digest";
 
 /**
@@ -45,6 +47,8 @@ export interface ToolDeps {
   projects: ProjectService;
   /** The daily digest (AI-70); the app always passes it, unit tests may not. */
   digest?: DigestReader;
+  /** Needs-you email (AI-77); null or absent: not configured. */
+  notifyEmail?: EmailNotifications | null;
   /** Signed-in email, shown by `status` so it doubles as the connection check. */
   email: string;
 }
@@ -459,6 +463,7 @@ export function registerTools(server: McpServer, deps: ToolDeps): void {
 
   registerScoreTools(server, tracker, run);
   registerSettingsTools(server, tracker, run);
+  registerNotifyTools(server, deps, run);
 }
 
 async function statusWithCost(service: TicketService, runs: RunService, key: string) {

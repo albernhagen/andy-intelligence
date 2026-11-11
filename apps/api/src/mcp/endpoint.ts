@@ -1,5 +1,11 @@
 import type { OAuthGrantStore, WorkTracker } from "@andy/contracts";
-import type { DigestReader, ProjectService, RunService, TicketService } from "@andy/domain";
+import type {
+  DigestReader,
+  EmailNotifications,
+  ProjectService,
+  RunService,
+  TicketService,
+} from "@andy/domain";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { WebStandardStreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js";
 import type { Hono, MiddlewareHandler } from "hono";
@@ -24,6 +30,8 @@ export interface McpEndpointDeps {
   runs: RunService;
   projects: ProjectService;
   digest: DigestReader;
+  /** Needs-you email (AI-77); null: not configured. */
+  notifyEmail: EmailNotifications | null;
 }
 
 /**
@@ -78,6 +86,7 @@ export function registerMcpEndpoint(app: Hono<AuthEnv>, deps: McpEndpointDeps) {
       runs: deps.runs,
       projects: deps.projects,
       digest: deps.digest,
+      notifyEmail: deps.notifyEmail,
       email,
     });
     const transport = new WebStandardStreamableHTTPServerTransport({
