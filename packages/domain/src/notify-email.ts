@@ -63,10 +63,12 @@ export function addPending(
 ): { state: EmailNotifyState; result: AddOutcome } {
   const s = rollDay(state, now);
   if (s.overflowSent) return { state: s, result: { kind: "over_cap" } };
+  // A window whose flush never came (queue down, lost task) goes out on the next item.
+  const overdue = s.windowEndsAt !== null && Date.parse(s.windowEndsAt) <= now.getTime();
   const known = s.pending.some(
     (p) => p.projectId === item.projectId && p.ticketId === item.ticketId,
   );
-  if (known) return { state: s, result: { kind: "duplicate" } };
+  if (known) return { state: s, result: overdue ? { kind: "overdue" } : { kind: "duplicate" } };
   const full = s.pending.length >= NOTIFY_PENDING_MAX;
   const next: EmailNotifyState = {
     ...s,
@@ -77,7 +79,6 @@ export function addPending(
     const flushAt = new Date(now.getTime() + EMAIL_BATCH_WINDOW_MS).toISOString();
     return { state: { ...next, windowEndsAt: flushAt }, result: { kind: "opened", flushAt } };
   }
-  const overdue = Date.parse(s.windowEndsAt) <= now.getTime();
   return { state: next, result: overdue ? { kind: "overdue" } : { kind: "queued" } };
 }
 
@@ -111,15 +112,27 @@ export function takeDue(
   return { state: emptied, result: { kind: "batch", batch: { kind: "dropped", count } } };
 }
 
+/** Dots an email client reads as a domain's dot: ASCII, ideographic, fullwidth, halfwidth. */
+const DOTS = /[.\u3002\uff0e\uff61]/g;
+/** A host-like token: labels of letters, digits or hyphens, ending in a letter label (any script). */
+const HOST =
+  /(?<![\p{L}\p{N}-])(?:[\p{L}\p{N}-]+[.\u3002\uff0e\uff61])+\p{L}{2,}(?![\p{L}\p{N}-])/gu;
+const IPV4 = /\b\d{1,3}(?:\.\d{1,3}){3}\b/g;
+
 /**
  * Agent-written text made safe for a plain-text body: one line (no forged headers or extra
  * lines), no control characters, no links (the email's only link is the one we write), capped.
+ * Scheme, `www.` and `mailto:` links are removed; bare hosts (`evil.example/login`, `README.md`,
+ * an IP) are defanged to `evil[.]example/login`, so no client auto-links them but they still read.
  */
 export function plainLine(text: string, max = LINE_MAX): string {
+  const defang = (host: string) => host.replace(DOTS, "[.]");
   const line = text
     // eslint-disable-next-line no-control-regex
     .replace(/[\u0000-\u001f\u007f-\u009f\u2028\u2029]/g, " ")
     .replace(/\b(?:[a-z][a-z0-9+.-]*:\/\/|www\.|mailto:)\S*/gi, "[link removed]")
+    .replace(HOST, defang)
+    .replace(IPV4, defang)
     .replace(/\s+/g, " ")
     .trim();
   return line.length > max ? `${line.slice(0, max - 1)}…` : line;
@@ -215,7 +228,7 @@ export class EmailNotifications {
       const now = this.now();
       const outcome = await this.deps.ledger.update((s) => addPending(s, item, now));
       log("INFO", "needs-you item queued for email", { key: ticket.key, outcome: outcome.kind });
-      if (outcome.kind === "opened") await this.scheduleFlush(outcome.flushAt);
+      if (outcome.kind === "opened") await this.scheduleFlushOrTimer(outcome.flushAt);
       if (outcome.kind === "overdue") await this.flush();
     } catch (err) {
       log("ERROR", "email notification failed", { key: ticket.key, error: String(err) });
@@ -241,6 +254,7 @@ export class EmailNotifications {
       // Not retried: the items stay in the Needs-you inbox, only the email is lost.
       const keys = batch.kind === "items" ? batch.items.map((i) => i.key) : [];
       log("ERROR", "email send failed", { keys, error: String(err) });
+      if (batch.kind === "items") await this.release(now);
       return "failed";
     }
     log("INFO", "email sent", {
@@ -250,23 +264,43 @@ export class EmailNotifications {
     return batch.kind === "items" ? "sent" : "more_waiting";
   }
 
-  /** A test email from the settings page; counts toward the daily cap. */
-  async sendTest(): Promise<"sent" | "cap_reached"> {
+  /**
+   * A test email from the settings page. A slot of the daily cap is held while it sends and
+   * given back if the provider refuses (bad key, unverified domain), so only a sent test counts.
+   */
+  async sendTest(): Promise<
+    { result: "sent" } | { result: "cap_reached" } | { result: "failed"; error: string }
+  > {
     const now = this.now();
     const allowed = await this.deps.ledger.update((state) => {
       const s = rollDay(state, now);
       if (s.sent >= EMAIL_DAILY_CAP) return { state: s, result: false };
       return { state: { ...s, sent: s.sent + 1 }, result: true };
     });
-    if (!allowed) return "cap_reached";
-    await this.deps.notifier.notify({
-      title: "andy-intelligence: test email",
-      body: `Email notifications work. Needs-you items will arrive like this.\n\nInbox: ${this.deps.appUrl}/all/inbox`,
-      urgency: "low",
-      link: `${this.deps.appUrl}/all/inbox`,
-    });
+    if (!allowed) return { result: "cap_reached" };
+    try {
+      await this.deps.notifier.notify({
+        title: "andy-intelligence: test email",
+        body: `Email notifications work. Needs-you items will arrive like this.\n\nInbox: ${this.deps.appUrl}/all/inbox`,
+        urgency: "low",
+        link: `${this.deps.appUrl}/all/inbox`,
+      });
+    } catch (err) {
+      await this.release(now);
+      log("ERROR", "test email failed", { error: String(err) });
+      return { result: "failed", error: String(err instanceof Error ? err.message : err) };
+    }
     log("INFO", "test email sent");
-    return "sent";
+    return { result: "sent" };
+  }
+
+  /** Gives back a slot taken today for a send that failed. */
+  private async release(at: Date): Promise<void> {
+    await this.deps.ledger.update((state) => {
+      const s = rollDay(state, this.now());
+      const sameDay = s.day === utcDay(at);
+      return { state: sameDay ? { ...s, sent: Math.max(0, s.sent - 1) } : s, result: null };
+    });
   }
 
   /** Today's count, for the settings page. */
@@ -275,10 +309,24 @@ export class EmailNotifications {
     return state && state.day === utcDay(this.now()) ? state.sent : 0;
   }
 
-  private async scheduleFlush(at: string): Promise<void> {
-    if (this.deps.flushQueue) return this.deps.flushQueue.schedule(at);
+  /**
+   * Queues the window's flush. If the queue refuses, an in-process timer tries instead (best
+   * effort: Cloud Run may throttle or stop the instance), and the next item after the window's
+   * end flushes it regardless (`overdue`), so a lost flush delays email but never stalls it.
+   */
+  private async scheduleFlushOrTimer(at: string): Promise<void> {
+    if (this.deps.flushQueue) {
+      try {
+        return await this.deps.flushQueue.schedule(at);
+      } catch (err) {
+        log("ERROR", "email flush not queued: timer instead; the next item flushes it too", {
+          at,
+          error: String(err),
+        });
+      }
+    }
     const ms = Math.max(0, Date.parse(at) - this.now().getTime());
-    setTimeout(() => void this.flush(), ms).unref();
+    setTimeout(() => void this.flush().catch(() => {}), ms).unref();
   }
 }
 

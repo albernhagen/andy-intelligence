@@ -93,12 +93,35 @@ describe("addPending / takeDue", () => {
       kind: "overdue",
     });
   });
+
+  it("GivenAWindowThatWasNeverFlushed_WhenTheSameTicketArrivesAgain_ThenOverdueNotDuplicate", () => {
+    const s = addPending(null, item(1), T0).state;
+    expect(addPending(s, item(1), at(EMAIL_BATCH_WINDOW_MS)).result).toEqual({ kind: "overdue" });
+  });
 });
 
 describe("plainLine / composeEmail", () => {
   it("GivenAgentTextWithNewlinesAndLinks_WhenMadePlain_ThenOneLineWithoutLinks", () => {
     const text = "Pick one\r\nSubject: hi see https://evil.example/x or www.evil.example";
     expect(plainLine(text)).toBe("Pick one Subject: hi see [link removed] or [link removed]");
+  });
+
+  it("GivenBareHostsAnEmailClientWouldAutoLink_WhenMadePlain_ThenTheirDotsAreDefanged", () => {
+    expect(plainLine("log in at evil.example/login now")).toBe(
+      "log in at evil[.]example/login now",
+    );
+    expect(plainLine("see README.md and a.b.co.uk")).toBe("see README[.]md and a[.]b[.]co[.]uk");
+    expect(plainLine("ping 10.0.0.1/admin")).toBe("ping 10[.]0[.]0[.]1/admin");
+    expect(plainLine("пример。рф/вход and evil．example")).toBe(
+      "пример[.]рф/вход and evil[.]example",
+    );
+    expect(plainLine("andy@evil.example")).toBe("andy@evil[.]example");
+  });
+
+  it("GivenTextWithoutHosts_WhenMadePlain_ThenItIsUnchanged", () => {
+    expect(plainLine("Pick A or B, e.g. 3.14 or v2. Done.")).toBe(
+      "Pick A or B, e.g. 3.14 or v2. Done.",
+    );
   });
 
   it("GivenLongText_WhenMadePlain_ThenCapped", () => {
@@ -228,6 +251,72 @@ describe("EmailNotifications", () => {
     spy.mockRestore();
   });
 
+  it("GivenTheQueueRefusesTheFlush_WhenTheNextItemArrivesAfterTheWindow_ThenBothGoOutInOneEmail", async () => {
+    const tracker = new InMemoryWorkTracker();
+    await tracker.createProject({ key: "AI", name: "AI", repos: ["o/r"], autonomy: "gated" });
+    let now = T0;
+    const sent: Notice[] = [];
+    const n = new EmailNotifications({
+      tracker,
+      ledger: new InMemoryNotifyLedger(),
+      notifier: { notify: async (x) => void sent.push(x) },
+      flushQueue: { schedule: async () => Promise.reject(new Error("queue down")) },
+      appUrl: APP,
+      now: () => now,
+    });
+    const flagged = notifyOnNeedsYou(tracker, (x) => n.ticketNeedsYou(x));
+    const spy = vi.spyOn(console, "log").mockImplementation(() => {});
+    const a = await tracker.createTicket("ai", { type: "feature", title: "A" }, "andy");
+    const b = await tracker.createTicket("ai", { type: "feature", title: "B" }, "andy");
+    await flagged.updateTicket("ai", a.id, { fields: { needsAttention: true } }, "system");
+    expect(spy.mock.calls.some(([l]) => String(l).includes("email flush not queued"))).toBe(true);
+    now = at(EMAIL_BATCH_WINDOW_MS + 1);
+    await flagged.updateTicket("ai", b.id, { fields: { needsAttention: true } }, "system");
+    expect(sent).toHaveLength(1);
+    expect(sent[0]?.title).toBe("andy-intelligence: 2 items need you");
+    spy.mockRestore();
+  });
+
+  it("GivenTheProviderRefusesATest_WhenSent_ThenFailedWithTheReasonAndNotCounted", async () => {
+    const tracker = new InMemoryWorkTracker();
+    const n = new EmailNotifications({
+      tracker,
+      ledger: new InMemoryNotifyLedger(),
+      notifier: { notify: async () => Promise.reject(new Error("domain not verified")) },
+      flushQueue: null,
+      appUrl: APP,
+      now: () => T0,
+    });
+    const spy = vi.spyOn(console, "log").mockImplementation(() => {});
+    expect(await n.sendTest()).toEqual({ result: "failed", error: "domain not verified" });
+    expect(await n.sentToday()).toBe(0);
+    spy.mockRestore();
+  });
+
+  it("GivenABatchSendFails_WhenFlushed_ThenItsSlotIsGivenBack", async () => {
+    const { tracker, ticket } = await setup();
+    let now = T0;
+    const n = new EmailNotifications({
+      tracker,
+      ledger: new InMemoryNotifyLedger(),
+      notifier: { notify: async () => Promise.reject(new Error("503")) },
+      flushQueue: new InMemoryNotifyFlushQueue(),
+      appUrl: APP,
+      now: () => now,
+    });
+    const spy = vi.spyOn(console, "log").mockImplementation(() => {});
+    await notifyOnNeedsYou(tracker, (x) => n.ticketNeedsYou(x)).updateTicket(
+      "ai",
+      ticket.id,
+      { fields: { needsAttention: true } },
+      "system",
+    );
+    now = at(EMAIL_BATCH_WINDOW_MS);
+    expect(await n.flush()).toBe("failed");
+    expect(await n.sentToday()).toBe(0);
+    spy.mockRestore();
+  });
+
   it("GivenTheCapIsReached_WhenATestIsSent_ThenRefused", async () => {
     const { notifications, ledger, sent } = await setup();
     await ledger.update(() => ({
@@ -241,7 +330,7 @@ describe("EmailNotifications", () => {
       },
       result: null,
     }));
-    expect(await notifications.sendTest()).toBe("cap_reached");
+    expect(await notifications.sendTest()).toEqual({ result: "cap_reached" });
     expect(sent).toHaveLength(0);
   });
 });

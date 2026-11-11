@@ -52,6 +52,11 @@ const testRoute = createRoute({
       content: { "application/json": { schema: ErrorBody } },
       description: "Email is not configured, or today's cap is reached",
     },
+    502: {
+      content: { "application/json": { schema: ErrorBody } },
+      description:
+        "The email provider refused the send (e.g. a bad key or unverified domain); not counted",
+    },
   },
 });
 
@@ -73,9 +78,13 @@ export function registerNotifyRoutes(
 
   app.openapi(testRoute, async (c) => {
     if (!email) return c.json({ error: "email is not configured" }, 409);
-    const result = await email.sendTest();
-    if (result === "cap_reached") {
+    const outcome = await email.sendTest();
+    if (outcome.result === "cap_reached") {
       return c.json({ error: `today's ${EMAIL_DAILY_CAP} emails are used` }, 409);
+    }
+    if (outcome.result === "failed") {
+      // The provider's error names the cause (key, domain); it never holds the key itself.
+      return c.json({ error: `test email not sent: ${outcome.error}` }, 502);
     }
     return c.json({ sent: true as const }, 200);
   });

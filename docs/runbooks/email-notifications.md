@@ -2,13 +2,14 @@
 
 Turns on email for the Needs-you inbox (AI-77: Email notifications for the inbox, ADR-0060). Until every step is done the control plane sends nothing: it logs `email not configured` once at start, and Project settings shows "Email notifications (off: email is not configured)".
 
-| Term             | Meaning                                                                                                                                |
-| ---------------- | -------------------------------------------------------------------------------------------------------------------------------------- |
-| Resend           | The email provider (resend.com) behind the `Notifier` port's email adapter (`apps/api/src/notifier-email.ts`)                          |
-| `resend-api-key` | Secret Manager secret in `andy-intelligence-512400` holding the Resend API key. Terraform makes the empty container; you add the value |
-| `email_from`     | Terraform variable: the sender, on the domain you verify in Resend, e.g. `andy-intelligence <notify@your-domain>`                      |
-| `email_to`       | Terraform variable: where the emails go                                                                                                |
-| Caps             | 20 emails a UTC day, then one "more waiting" email, then none until the next day; items within 10 minutes share one email (ADR-0028)   |
+| Term             | Meaning                                                                                                                                                                                              |
+| ---------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Resend           | The email provider (resend.com) behind the `Notifier` port's email adapter (`apps/api/src/notifier-email.ts`)                                                                                        |
+| `resend-api-key` | Secret Manager secret in `andy-intelligence-512400` holding the Resend API key. Terraform makes the empty container; you add the value                                                               |
+| `email_from`     | Terraform variable: the sender, on the domain you verify in Resend, e.g. `andy-intelligence <notify@your-domain>`                                                                                    |
+| `email_to`       | Terraform variable: where the emails go                                                                                                                                                              |
+| `email_enabled`  | Terraform variable (bool, default `false`): sets the three env vars on the service. Needs both addresses. A plain bool because Terraform can't loop over values derived from the sensitive addresses |
+| Caps             | 20 emails a UTC day, then one "more waiting" email, then none until the next day; items within 10 minutes share one email (ADR-0028)                                                                 |
 
 Addresses and the key never go in the repo (it is public, ADR-0015): only in gitignored `terraform.tfvars`, Actions secrets and Secret Manager.
 
@@ -20,7 +21,7 @@ Addresses and the key never go in the repo (it is public, ADR-0015): only in git
 
 ## 2. Apply this PR's Terraform (secret container)
 
-After the AI-77 PR merges, with `email_from` and `email_to` still unset:
+After the AI-77 PR merges, with `email_enabled` unset (false):
 
 ```sh
 cd infra/control-plane
@@ -44,8 +45,8 @@ pbcopy < /dev/null   # clear the clipboard
 
 ## 4. Addresses, then apply again
 
-1. In `infra/control-plane/terraform.tfvars` (gitignored) set `email_from` and `email_to` (see `terraform.tfvars.example`).
-2. Add the same two values as repository Actions secrets `TF_VAR_EMAIL_FROM` and `TF_VAR_EMAIL_TO` (Settings → Secrets and variables → Actions), so CI's `terraform plan` matches.
+1. In `infra/control-plane/terraform.tfvars` (gitignored) set `email_enabled = true`, `email_from` and `email_to` (see `terraform.tfvars.example`).
+2. Add the same three values as repository Actions secrets `TF_VAR_EMAIL_ENABLED` (`true`), `TF_VAR_EMAIL_FROM` and `TF_VAR_EMAIL_TO` (Settings → Secrets and variables → Actions), so CI's `terraform plan` matches.
 3. Plan and apply:
 
 ```sh
@@ -66,5 +67,5 @@ If nothing arrives: Cloud Logging, `jsonPayload.component="notify-email"`. `emai
 | Scope       | How                                                                                                                                                                |
 | ----------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | One project | Untick "Email notifications" in its settings, or MCP `set_email_notifications` with `enabled: false`                                                               |
-| Everything  | Set `email_from = ""` (or `email_to`) in tfvars and apply: 1 to change; the next revision sends nothing                                                            |
+| Everything  | Set `email_enabled = false` in tfvars (and its Actions secret) and apply: 1 to change; the next revision sends nothing                                             |
 | Leaked key  | Resend → API keys → revoke; create a new one; step 3 again, then redeploy (`terraform apply` with any change, or a new deploy) so a revision reads the new version |

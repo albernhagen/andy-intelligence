@@ -106,7 +106,7 @@ Set `PUBLIC_URL` (public origin, e.g. `http://localhost:8080`) to turn on `/mcp`
 
 Run watchdog (M1.6b: Claude Code executor: watchdog + retry): on when `PUBLIC_URL`, `WATCHDOG_QUEUE` (Cloud Tasks queue name, `projects/…/queues/run-watchdog`) and `WATCHDOG_INVOKER_EMAIL` (the `tasks-invoker` service account) are set; Terraform sets them. Off locally: no deadline check.
 
-Needs-you email (AI-77): on when `RESEND_API_KEY` (Secret Manager `resend-api-key`), `EMAIL_FROM` and `EMAIL_TO` are set (Terraform sets them from `email_from`/`email_to`); otherwise off and the API logs "email not configured" once at start. The batching window's flush rides the `run-watchdog` queue to `POST /notify/email/flush`; without the queue, an in-process timer. Setup: [`docs/runbooks/email-notifications.md`](docs/runbooks/email-notifications.md).
+Needs-you email (AI-77): on when `RESEND_API_KEY` (Secret Manager `resend-api-key`), `EMAIL_FROM` and `EMAIL_TO` are set (Terraform sets them when `email_enabled` is true, from `email_from`/`email_to`); otherwise off and the API logs "email not configured" once at start. The batching window's flush rides the `run-watchdog` queue to `POST /notify/email/flush`; without the queue, an in-process timer. Setup: [`docs/runbooks/email-notifications.md`](docs/runbooks/email-notifications.md).
 
 MCP tools live in `apps/api/src/mcp/tools.ts` and call the same `TicketService` as the REST API; `archive_ticket` hides Done or Cancelled tickets from board, inbox and counts.
 

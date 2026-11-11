@@ -212,6 +212,15 @@ describe("notify flow (AI-77)", () => {
     expect(status).toEqual({ configured: true, sentToday: 1, dailyCap: 20, windowMinutes: 10 });
   });
 
+  it("GivenTheProviderRefusesTheTest_WhenSent_Then502WithTheReasonAndNothingCounted", async () => {
+    const t = await setup(server);
+    server.status = 403;
+    const res = await t.post("/api/notify/email/test");
+    expect(res.status).toBe(502);
+    expect(((await res.json()) as { error: string }).error).toMatch(/^test email not sent: /);
+    expect((await t.json<EmailStatus>(t.call("/api/notify/email"))).sentToday).toBe(0);
+  });
+
   it("GivenNoKeyConfigured_WhenATicketIsFlagged_ThenNothingIsSentAndSettingsSayOff", async () => {
     const t = await setup(null);
     await t.flagged("Board", "Which board?");
