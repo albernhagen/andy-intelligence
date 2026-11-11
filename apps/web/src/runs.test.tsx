@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { act, screen, waitFor, within } from "@testing-library/react";
 import { DEFAULT_ROUTE, ticketSnapshot } from "@andy/domain";
 import { renderApp } from "@/test/harness";
-import { RUN_POLL_MS, runsRefetchInterval } from "@/lib/queries";
+import { LIVE_POLL_MS } from "@/lib/live";
 import { formatCost } from "@/components/Runs";
 
 /** Story panel → runs in the activity timeline (M1.6a: Claude Code executor), in-process API. */
@@ -195,25 +195,10 @@ describe("runs UI", () => {
     // The run reports back: its status changes and it leaves a comment on the ticket.
     await harness.runs.update(run.id, { status: "succeeded", summary: "Done." }, ["queued"]);
     await harness.service.comment("ai", harness.ticket.id, "Refined the ticket.", "agent");
-    await act(() => vi.advanceTimersByTimeAsync(RUN_POLL_MS));
+    await act(() => vi.advanceTimersByTimeAsync(LIVE_POLL_MS));
 
     expect(await within(section).findByText("succeeded")).toBeTruthy();
     await waitFor(() => expect(within(section).getByText("Refined the ticket.")).toBeTruthy());
-  });
-});
-
-describe("runsRefetchInterval", () => {
-  it("GivenARunQueuedOrRunning_WhenComputed_ThenPollsEveryFiveSeconds", () => {
-    expect(runsRefetchInterval([{ status: "succeeded" }, { status: "queued" }])).toBe(5_000);
-    expect(runsRefetchInterval([{ status: "running" }])).toBe(5_000);
-  });
-
-  it("GivenNoActiveRuns_WhenComputed_ThenPollingIsOff", () => {
-    expect(runsRefetchInterval(undefined)).toBe(false);
-    expect(runsRefetchInterval([])).toBe(false);
-    expect(
-      runsRefetchInterval([{ status: "succeeded" }, { status: "failed" }, { status: "cancelled" }]),
-    ).toBe(false);
   });
 });
 

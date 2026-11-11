@@ -5,6 +5,7 @@ import { Field, Input } from "@/components/ui/input";
 import { Loading, QueryError } from "@/components/Status";
 import { loadScope } from "@/lib/scope";
 import { useCreateProject, useGitHub, useProjects } from "@/lib/queries";
+import { showsError } from "@/lib/live";
 
 /**
  * `/projects` (AI-46): settings moved to `/p/<project>/settings`, so this opens the current
@@ -13,7 +14,8 @@ import { useCreateProject, useGitHub, useProjects } from "@/lib/queries";
 export function ProjectsPage() {
   const projects = useProjects();
   if (projects.isPending) return <Loading />;
-  if (projects.isError) return <QueryError error={projects.error} />;
+  if (projects.data === undefined || showsError(projects))
+    return <QueryError error={projects.error} />;
   const remembered = loadScope();
   const current =
     projects.data.find((p) => remembered.kind === "project" && p.id === remembered.projectId) ??
