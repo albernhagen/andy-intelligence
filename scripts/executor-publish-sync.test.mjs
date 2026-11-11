@@ -1,5 +1,6 @@
 import { execFileSync } from "node:child_process";
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { randomUUID } from "node:crypto";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { describe, expect, it } from "vitest";
@@ -86,7 +87,9 @@ function resolution(root, main, files) {
   const base = sh(work, "write-tree");
   for (const [path, text] of Object.entries(files)) write(work, path, text);
   sh(work, "add", "-A");
-  const patch = join(work, "..", `${Date.now()}-change.patch`);
+  // Outside the worktree (so `add -A` never sees it) and in a directory of its own: a name in the
+  // shared temp dir could collide with another run's.
+  const patch = join(mkdtempSync(join(tmpdir(), "sync-patch-")), "change.patch");
   writeFileSync(patch, execFileSync("git", ["diff", "--cached", "--binary", base], { cwd: work }));
   return patch;
 }
@@ -120,6 +123,8 @@ function harness(root, env, after = () => {}) {
         CONTROL_PLANE_URL: "https://ai.andybernhagen.com",
         ACTIONS_ID_TOKEN_REQUEST_URL: "https://actions.example/token?x=1",
         ACTIONS_ID_TOKEN_REQUEST_TOKEN: "req",
+        // As on a runner: a temp dir per job, so the scratch index is this test's alone (AI-78).
+        RUNNER_TEMP: mkdtempSync(join(tmpdir(), "sync-runner-")),
         ...env,
       },
       git,
@@ -204,11 +209,13 @@ describe("sync publish", () => {
     // AI-78: another run of this file (a second worktree's pre-push hook) used the same scratch
     // index path, because the harness left RUNNER_TEMP unset and RUN_ID fixed. Its `read-tree` of
     // the conflicted merge landed between this publish's `apply --cached` and its marker check.
-    // Here that other run is played at exactly that moment, on the shared temp dir's path.
+    // Here that other run is played at exactly that moment, on the shared temp dir's path; with
+    // RUNNER_TEMP per test, as on a runner, this publish's index is elsewhere and stays intact.
     const { root, head, main } = repo();
     const tree = mergeTree(root, main);
     const patch = resolution(root, main, { "a.txt": "one\nresolved\nthree\n" });
-    const runId = "sync-shared-index";
+    // Unique per invocation so concurrent copies of this file don't race on the lock here.
+    const runId = `sync-${randomUUID()}`;
     const shared = join(tmpdir(), `sync-check-${runId}.index`);
     const h = harness(
       root,
@@ -219,8 +226,12 @@ describe("sync publish", () => {
         }
       },
     );
-    const result = await h.run();
-    expect(sh(root, "show", `${result.headSha}:a.txt`)).toBe("one\nresolved\nthree");
+    try {
+      const result = await h.run();
+      expect(sh(root, "show", `${result.headSha}:a.txt`)).toBe("one\nresolved\nthree");
+    } finally {
+      rmSync(shared, { force: true });
+    }
   });
 
   it("GivenAMergeTreeThatDoesntMatch_WhenPublished_ThenItIsRefused", async () => {
