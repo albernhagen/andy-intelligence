@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 import { useParams } from "@tanstack/react-router";
 import { AutoMerge, PlanApproval, type Project } from "@andy/contracts";
+import { ClearQuotaIdle } from "@/components/ClearQuotaIdle";
 import { DispatchControls } from "@/components/DispatchControls";
 import { Loading, QueryError } from "@/components/Status";
 import { DefaultWorkerSelect } from "@/components/WorkerControls";
@@ -48,6 +49,7 @@ export function ProjectSettingsPage() {
         </Setting>
         <Setting what="Runs at once: runs this project may have in flight (1 to 4). Paused: dispatch starts nothing here; runs in flight finish.">
           <DispatchControls project={project} />
+          <ClearQuotaIdle />
         </Setting>
         <Setting what="Who works a ticket that has no pick of its own; applies to existing tickets too.">
           <DefaultWorkerSelect project={project} />

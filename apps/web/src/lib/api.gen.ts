@@ -5062,6 +5062,67 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  "/api/quota/clear": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    post: {
+      parameters: {
+        query?: never;
+        header?: never;
+        path?: never;
+        cookie?: never;
+      };
+      requestBody?: never;
+      responses: {
+        /** @description The readings that held dispatch at the reserve, now discarded */
+        200: {
+          headers: {
+            [name: string]: unknown;
+          };
+          content: {
+            "application/json": {
+              cleared: {
+                id: string;
+                /** @enum {string} */
+                provider: "claude-sub" | "google-sub" | "openrouter";
+                /** @enum {string} */
+                window: "5h" | "weekly" | "daily_tasks";
+                usedPct: number;
+                /** Format: date-time */
+                readingTakenAt: string;
+                by: string;
+                /** Format: date-time */
+                at: string;
+              }[];
+            };
+          };
+        };
+        /** @description No reading holds dispatch at the reserve, or it was already cleared */
+        409: {
+          headers: {
+            [name: string]: unknown;
+          };
+          content: {
+            "application/json": {
+              error: string;
+              details?: string[];
+            };
+          };
+        };
+      };
+    };
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   "/api/projects/{projectId}/digest": {
     parameters: {
       query?: never;
@@ -5113,7 +5174,8 @@ export interface paths {
                   | "dispatch_idle"
                   | "quota_reserve"
                   | "sync_stopped"
-                  | "sync_waiting";
+                  | "sync_waiting"
+                  | "quota_cleared";
                 ticketKey: string | null;
                 title: string | null;
                 prNumber: number | null;

@@ -11,6 +11,7 @@ import {
   type DigestReview,
   type DigestTotals,
   type Project,
+  type QuotaClear,
   type QuotaReading,
   type QuotaStore,
   type Run,
@@ -59,6 +60,8 @@ export interface DigestData {
   /** History (oldest first) of the tickets that changed in the window, by ticket id. */
   ticketEvents: ReadonlyMap<string, readonly TicketEvent[]>;
   quota: readonly QuotaReading[];
+  /** Quota readings Andy cleared in the window (AI-74), newest first. */
+  quotaClears: readonly QuotaClear[];
   /** A read cap was reached (`MAX_DIGEST_TICKET_READS` tickets or `MAX_DIGEST_RUNS` runs). */
   truncated: boolean;
   now: Date;
@@ -66,6 +69,8 @@ export interface DigestData {
 
 /** Ticket histories one digest reads (ADR-0028); the most recently changed first. */
 export const MAX_DIGEST_TICKET_READS = 50;
+/** Quota clears one digest reads (ADR-0028); one per reading, so a few a day at most. */
+export const MAX_DIGEST_QUOTA_CLEARS = 20;
 /** Ended runs one digest counts (ADR-0028). */
 export const MAX_DIGEST_RUNS = 500;
 /** A window ending this close to now shows current state (waiting, blocked, idle, quota). */
@@ -103,6 +108,7 @@ export function buildDigest(window: DigestWindow, data: DigestData): Digest {
     ...(live ? waitingAndBlocked(data) : []),
     ...(live ? dispatchIdle(data) : []),
     ...(live ? quotaAtReserve(data) : []),
+    ...quotaCleared(data, inWindow),
   ];
   const merged = prs.filter((p) => p.state === "merged").map((p) => mergedItem(p, data));
   // In flight as the dispatcher and the in-flight view count it (ADR-0080): a run past its
@@ -368,6 +374,20 @@ function quotaAtReserve(data: DigestData): DigestException[] {
     }));
 }
 
+/** Andy's clears of a quota idle (AI-74): what he discarded, so a wrong clear can be spotted. */
+function quotaCleared(data: DigestData, inWindow: (iso: string) => boolean): DigestException[] {
+  return data.quotaClears
+    .filter((c) => inWindow(c.at))
+    .map((c) => ({
+      kind: "quota_cleared" as const,
+      ticketKey: null,
+      title: null,
+      prNumber: null,
+      reason: `${WINDOW_NAMES[c.window] ?? c.window} quota reading of ${c.usedPct}% cleared by ${c.by}: dispatch no longer held at the reserve by it`,
+      at: c.at,
+    }));
+}
+
 function mergedItem(p: PrInWindow, data: DigestData): DigestMerged {
   const cost = ticketCost(data.ticketRuns.get(p.ticket.id) ?? []);
   const { run } = p;
@@ -518,12 +538,15 @@ export class DigestReader {
     if (!project) throw notFound("project", projectId);
     const from = window.from.toISOString();
     const to = window.to.toISOString();
-    const [tickets, questions, activeRuns, ended, quota] = await Promise.all([
+    const [tickets, questions, activeRuns, ended, quota, quotaClears] = await Promise.all([
       this.tracker.listTickets(projectId),
       this.tracker.listQuestions({ projectId, status: "open" }),
       this.runs.listActive(projectId),
       this.runs.listEndedBetween(projectId, from, to, MAX_DIGEST_RUNS),
       this.quota ? this.quota.latest("claude-sub") : Promise.resolve([]),
+      this.quota
+        ? this.quota.clearsSince("claude-sub", from, MAX_DIGEST_QUOTA_CLEARS)
+        : Promise.resolve([]),
     ]);
 
     const openQuestions = new Map<string, number>();
@@ -558,6 +581,7 @@ export class DigestReader {
       ticketRuns: new Map(histories.map((h) => [h.id, h.runs])),
       ticketEvents: new Map(histories.map((h) => [h.id, h.events])),
       quota,
+      quotaClears,
       truncated: toRead.length > read.length || !ended.complete,
       now: this.now(),
     });

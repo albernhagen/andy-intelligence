@@ -81,6 +81,7 @@ const data = (over: Partial<DigestData> = {}): DigestData => ({
   ticketRuns: new Map(),
   ticketEvents: new Map(),
   quota: [],
+  quotaClears: [],
   truncated: false,
   now: NOW,
   ...over,
@@ -345,6 +346,38 @@ describe("buildDigest", () => {
       expect.objectContaining({
         kind: "quota_reserve",
         reason: "Weekly quota 85% used: at the reserve (dispatch stops at 80%)",
+      }),
+    ]);
+  });
+
+  it("GivenAQuotaClearInTheWindow_WhenBuilt_ThenQuotaClearedExceptionAndNoReserve", () => {
+    const reading: QuotaReading = {
+      provider: "claude-sub",
+      window: "5h",
+      usedPct: 92,
+      resetsAt: "2026-11-10T00:00:00.000Z",
+      source: "test",
+      takenAt: IN,
+      confidence: "high",
+      discarded: { by: "andy@example.com", at: IN },
+    };
+    const clear = {
+      id: `claude-sub_5h_${IN}`,
+      provider: "claude-sub" as const,
+      window: "5h" as const,
+      usedPct: 92,
+      readingTakenAt: IN,
+      by: "andy@example.com",
+      at: IN,
+    };
+    const old = { ...clear, id: "old", at: "2026-11-01T00:00:00.000Z" };
+    const d = buildDigest(WINDOW, data({ quota: [reading], quotaClears: [clear, old] }));
+    expect(d.exceptions).toEqual([
+      expect.objectContaining({
+        kind: "quota_cleared",
+        reason:
+          "5-hour quota reading of 92% cleared by andy@example.com: dispatch no longer held at the reserve by it",
+        at: IN,
       }),
     ]);
   });
