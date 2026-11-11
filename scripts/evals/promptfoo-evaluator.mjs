@@ -120,6 +120,10 @@ export class PromptfooEvaluator {
     if (!OK_EXIT_CODES.includes(code)) throw new Error(`promptfoo exited with code ${code}`);
     const results = JSON.parse(readFileSync(out, "utf8")).results?.results ?? [];
     const byId = new Map(results.map((r) => [r.vars?.caseId ?? r.testCase?.vars?.caseId, r]));
-    return { suite, cases: caseIds.map((id) => toCaseResult(id, byId.get(id))) };
+    const readings = results
+      .map((r) => (r.response?.metadata ?? r.metadata ?? {}).quotaPct)
+      .filter((q) => Number.isFinite(q));
+    const quotaPct = readings.length ? Math.max(...readings) : null;
+    return { suite, cases: caseIds.map((id) => toCaseResult(id, byId.get(id))), quotaPct };
   }
 }

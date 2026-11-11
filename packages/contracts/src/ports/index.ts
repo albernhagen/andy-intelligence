@@ -646,6 +646,8 @@ export interface EvalSuiteRun {
   suite: string;
   /** One result per requested case, in request order. */
   cases: EvalCaseResult[];
+  /** Highest subscription quota used (%) any case reported; null: none did; absent: not read. */
+  quotaPct?: number | null;
 }
 
 export interface EvalRunOptions {

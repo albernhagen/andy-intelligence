@@ -20,7 +20,7 @@ function pfResult(caseId, outcome) {
   return {
     vars: { caseId },
     success: pass,
-    response: { output: "{}", metadata: { caseId, firstInputTokens: 1234 } },
+    response: { output: "{}", metadata: { caseId, firstInputTokens: 1234, quotaPct: 12.5 } },
     gradingResult: {
       pass,
       componentResults: [
@@ -72,6 +72,16 @@ describe("PromptfooEvaluator", () => {
     expect(calls).toHaveLength(1);
     expect(calls[0].args.slice(0, 3)).toEqual(["-y", `promptfoo@${PROMPTFOO_VERSION}`, "eval"]);
     expect(calls[0].args).toEqual(expect.arrayContaining(["--no-cache", "-j", "1"]));
+  });
+
+  it("GivenCasesReportQuota_WhenRun_ThenTheHighestReadingIsReturned", async () => {
+    const e = new PromptfooEvaluator({
+      workDir: workDir(),
+      buildConfig,
+      exec: fakePromptfoo({ a: "pass", b: "fail" }),
+    });
+    const run = await e.runSuite("s", { caseIds: ["a", "b"], maxCases: 5 });
+    expect(run.quotaPct).toBe(12.5);
   });
 
   it("GivenPromptfooCrashes_WhenRun_ThenRejects", async () => {

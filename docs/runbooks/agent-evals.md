@@ -85,11 +85,11 @@ node scripts/evals/run.mjs --source local --cases adversarial-planted-off-by-one
 
 **First live run after merge: check these, then record the result in the build log.** Neither has been seen on a live run yet.
 
-| Check        | Pass                                                                                                                                                                                 |
-| ------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| Quota scale  | The run doesn't stop at the reserve while Claude's usage page shows under 80%. A reading over 200% fails the case ("quota reading out of range"): `utilization` isn't a 0-1 fraction |
-| Token metric | Every case shows input tokens, thousands not tens (system prompt, `AGENTS.md`, procedure and inputs)                                                                                 |
-| Weakened run | The second command above fails                                                                                                                                                       |
+| Check        | Pass                                                                                                                                                                                                                    |
+| ------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Quota scale  | The summary's "Quota: highest reading N%" roughly matches Claude's usage page. "No quota reading" means the reserve can't work: fix the parsing before relying on it. Over 200% fails the case: `utilization` isn't 0-1 |
+| Token metric | Every case shows input tokens, thousands not tens (system prompt, `AGENTS.md`, procedure and inputs)                                                                                                                    |
+| Weakened run | The second command above fails                                                                                                                                                                                          |
 
 ## 6. Token baselines
 

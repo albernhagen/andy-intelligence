@@ -1,6 +1,6 @@
 // The agent-evals verdict (AI-6): pass rate and token thresholds over one suite run, and the job
 // summary. Everything here is numbers, case ids and fixed check messages: no model text.
-import { PASS_RATE_MIN, TOKEN_JUMP_MAX } from "./config.mjs";
+import { PASS_RATE_MIN, QUOTA_RESERVE_PCT, TOKEN_JUMP_MAX } from "./config.mjs";
 
 /**
  * `fail` below PASS_RATE_MIN or on any token jump past TOKEN_JUMP_MAX over the case's baseline;
@@ -68,7 +68,14 @@ export function summary({ run, result, source, caps, cases }) {
   if (result.skipped) {
     lines.push(`- ${result.skipped} case(s) skipped: the subscription reached the quota reserve.`);
   }
-  if (result.reasons.length || result.skipped) lines.push("");
+  if (source === "subscription" && run.quotaPct !== undefined) {
+    lines.push(
+      run.quotaPct === null
+        ? "- **No quota reading in any case's stream: the quota reserve can't stop this run** (runbook §5)."
+        : `- Quota: highest reading ${run.quotaPct}% (reserve ${QUOTA_RESERVE_PCT}%).`,
+    );
+  }
+  lines.push("");
   lines.push("| Case | Agent | Result | Input tokens | Baseline | Failed checks |");
   lines.push("| ---- | ----- | ------ | ------------ | -------- | ------------- |");
   for (const c of run.cases) {

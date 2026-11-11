@@ -112,6 +112,29 @@ describe("summary", () => {
   });
 });
 
+describe("summary quota line", () => {
+  const sum = (quotaPct, source = "subscription") =>
+    summary({
+      run: { ...run(ok("a", 10)), quotaPct },
+      result: verdict(run(ok("a", 10))),
+      source,
+      caps: { maxCases: 10, maxTurns: 15 },
+      cases: [],
+    });
+
+  it("GivenASubscriptionRunWithAReading_WhenSummarised_ThenTheHighestReadingShows", () => {
+    expect(sum(42.5)).toContain("Quota: highest reading 42.5% (reserve 80%)");
+  });
+
+  it("GivenASubscriptionRunWithNoReading_WhenSummarised_ThenItSaysTheReserveCantWork", () => {
+    expect(sum(null)).toContain("No quota reading in any case's stream");
+  });
+
+  it("GivenAnApiKeyRun_WhenSummarised_ThenNoQuotaLine", () => {
+    expect(sum(null, "api-key")).not.toContain("quota reading");
+  });
+});
+
 describe("cell", () => {
   it("GivenHostileText_WhenEscaped_ThenOneLineWithNoWorkflowCommandOrMarkup", () => {
     expect(cell("a\\|b\n::error::x`<img>")).toBe("a\\\\\\|b : :error: :x\\`\\<img\\>");
