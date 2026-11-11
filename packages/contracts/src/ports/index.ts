@@ -601,8 +601,47 @@ export interface Deployer {
   rollback(projectRef: string, releaseRef: string): Promise<void>;
 }
 
+// ── Evaluator ────────────────────────────────────────────────────────────────
+// Agent evals (M1.17: Agent evals v1, ADR-0040, ADR-0086): each case is an input plus
+// deterministic checks on the agent's structured output. Thresholds live with the caller.
+
+/** One case's outcome. `failures` are fixed evaluator messages, never model text. */
+export const EvalCaseResult = z
+  .object({
+    caseId: z.string().min(1),
+    /** `ran`: checks applied. `error`: no usable output. `skipped`: the run stopped first (quota). */
+    status: z.enum(["ran", "error", "skipped"]),
+    /** True only when the case ran and every check passed. */
+    passed: z.boolean(),
+    /** Input tokens of the agent's first model request (its loaded context); null when unknown. */
+    inputTokens: z.number().int().nonnegative().nullable(),
+    failures: z.array(z.string()),
+  })
+  .refine((r) => r.passed === (r.status === "ran" && r.failures.length === 0), {
+    message: "passed means ran with no failures",
+  });
+export type EvalCaseResult = z.infer<typeof EvalCaseResult>;
+
+export interface EvalSuiteRun {
+  suite: string;
+  /** One result per requested case, in request order. */
+  cases: EvalCaseResult[];
+}
+
+export interface EvalRunOptions {
+  caseIds: string[];
+  /** Hard cap (ADR-0028): more cases than this is refused before anything runs. */
+  maxCases: number;
+}
+
+export class EvalCapError extends Error {
+  readonly name = "EvalCapError";
+}
+
 export interface Evaluator {
   score(suite: string, model: string): Promise<{ score: number; details?: unknown }>;
+  /** Runs each case once (no retries). Rejects with EvalCapError above `maxCases`. */
+  runSuite(suite: string, options: EvalRunOptions): Promise<EvalSuiteRun>;
 }
 
 export interface CostEvent {

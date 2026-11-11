@@ -1,0 +1,105 @@
+name: Baseline — agent evals
+description: >-
+  Runs the agent eval suite (AI-6: M1.17: Agent evals v1, ADR-0040, ADR-0086) when the change
+  touches agent configuration, and reports a pass without running otherwise. Each case runs once
+  through Claude Code under promptfoo; the check fails below a 90% pass rate or when a case's input
+  tokens rise more than 20% over its committed baseline. Caps: 10 cases, 15 turns and $1 per case.
+  The cases and the configuration under test are read from `data-path` as data; the runner is this
+  action's own copy. Runbook: docs/runbooks/agent-evals.md.
+
+inputs:
+  source:
+    description: "Model source: subscription (default), api-key, or stub (scripted model, no credential)."
+    default: subscription
+  data-path:
+    description: Git checkout whose agent configuration and eval cases are evaluated (read at HEAD, never run).
+    default: "."
+  base-ref:
+    description: Ref in data-path to diff against to decide whether to run (e.g. HEAD^1 on a PR merge commit). Empty runs always.
+    default: ""
+  machinery:
+    description: '"true": also run when the eval runner itself changed (the stub plumbing job).'
+    default: "false"
+  fork:
+    description: '"true" for a fork PR: no credential reaches it, so an agent-configuration change fails instead of running.'
+    default: "false"
+  cases-dir:
+    description: Suite directory in data-path.
+    default: platform/evals/cases
+  cases:
+    description: Comma-separated case ids to run (default all, up to the cap).
+    default: ""
+  procedure-override:
+    description: "agent=path: run that agent with another procedure file from data-path (e.g. the weakened fixture)."
+    default: ""
+  expect:
+    description: '"fail" for the self-test: passes only when every case fails and the check goes red.'
+    default: pass
+  node-version-file:
+    description: Node version file, relative to the workspace.
+    default: .nvmrc
+  claude-code-oauth-token:
+    description: Subscription token, only when source is subscription.
+    default: ""
+  anthropic-api-key:
+    description: Claude API key, only when source is api-key.
+    default: ""
+
+runs:
+  using: composite
+  steps:
+    - name: Does this change touch agent configuration?
+      id: paths
+      shell: bash
+      env:
+        DATA: ${{ inputs.data-path }}
+        BASE_REF: ${{ inputs.base-ref }}
+        MACHINERY: ${{ inputs.machinery }}
+        FORK: ${{ inputs.fork }}
+      # The whole change (merge commit against its base), so a later doc-only push can't skip the
+      # run. If the diff can't be read, run.
+      run: |
+        flag=""; [ "$MACHINERY" = true ] && flag=--machinery
+        if [ -z "$BASE_REF" ]; then
+          run=run=true
+        elif ! run=$(git -C "$DATA" diff --name-only --no-renames -z "$BASE_REF" HEAD | node "$GITHUB_ACTION_PATH/../../../scripts/evals/paths.mjs" $flag); then
+          run=run=true
+        fi
+        if [ "$run" = run=true ] && [ "$FORK" = true ]; then
+          echo "::error title=agent-evals::This fork PR changes agent configuration, and fork PRs get no model credential. Push the branch to this repo to run the evals."
+          exit 1
+        fi
+        echo "$run" >> "$GITHUB_OUTPUT"
+        if [ "$run" = run=false ]; then
+          echo "Agent evals: skipped, no agent configuration changed." | tee -a "$GITHUB_STEP_SUMMARY"
+        fi
+
+    - if: steps.paths.outputs.run == 'true'
+      uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+      with:
+        node-version-file: ${{ inputs.node-version-file }}
+
+    # Claude Code at the sandbox test bed's pinned version (the executor's), outside the workspace.
+    - name: Install Claude Code
+      if: steps.paths.outputs.run == 'true'
+      shell: bash
+      run: |
+        version=$(sed -n 's/^ARG CLAUDE_CODE_VERSION=//p' "$GITHUB_ACTION_PATH/../../../scripts/sandbox-lab/Dockerfile")
+        npm install --silent -g "@anthropic-ai/claude-code@$version"
+
+    - name: Run the eval cases
+      if: steps.paths.outputs.run == 'true'
+      shell: bash
+      env:
+        SOURCE: ${{ inputs.source }}
+        DATA: ${{ inputs.data-path }}
+        CASES_DIR: ${{ inputs.cases-dir }}
+        CASES: ${{ inputs.cases }}
+        OVERRIDE: ${{ inputs.procedure-override }}
+        EXPECT: ${{ inputs.expect }}
+        CLAUDE_CODE_OAUTH_TOKEN: ${{ inputs.claude-code-oauth-token }}
+        ANTHROPIC_API_KEY: ${{ inputs.anthropic-api-key }}
+      run: |
+        node "$GITHUB_ACTION_PATH/../../../scripts/evals/run.mjs" \
+          --source "$SOURCE" --data "$DATA" --ref HEAD --dir "$CASES_DIR" \
+          --cases "$CASES" --procedure-override "$OVERRIDE" --expect "$EXPECT"

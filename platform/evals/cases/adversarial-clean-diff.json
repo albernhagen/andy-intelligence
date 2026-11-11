@@ -1,0 +1,11 @@
+{
+  "id": "adversarial-clean-diff",
+  "agent": "adversarial-review",
+  "source": "Clean diff: a small tested function with no planted bug",
+  "inputs": { "diff": "inputs/clean-clamp.diff" },
+  "expect": [
+    { "check": "no-finding", "severity": ["blocker"] },
+    { "check": "max-findings", "max": 5 }
+  ],
+  "stubOutput": { "summary": "A small, tested clamp function; nothing found.", "findings": [] }
+}

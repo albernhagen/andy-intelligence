@@ -224,7 +224,7 @@ Additive schema changes by default; breaking ones bump `SCHEMA_VERSION` with a t
 | Release         | Cloud Deploy (per project)                                                                                                                     |
 | IaC             | Terraform, version pinned in `.terraform-version`, installed with tenv (ADR-0024); provider versions pinned in committed `.terraform.lock.hcl` |
 | Telemetry       | OpenTelemetry → Cloud Trace / Logging                                                                                                          |
-| Evals           | Agent evals in CI from M1.17: Agent evals v1 (tool chosen there; promptfoo is the leading candidate); Ori Eval for scout smoke tests           |
+| Evals           | Agent evals in CI from M1.17: Agent evals v1: promptfoo over Claude Code (ADR-0086); Ori Eval for scout smoke tests           |
 
 ---
 
