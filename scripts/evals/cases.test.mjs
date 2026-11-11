@@ -11,7 +11,7 @@ import {
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { describe, expect, it } from "vitest";
-import { gitTree, loadSuite, parseBaselines, validateCase } from "./cases.mjs";
+import { cleanGitEnv, gitTree, loadSuite, parseBaselines, validateCase } from "./cases.mjs";
 import { MAX_CASES } from "./config.mjs";
 
 const good = {
@@ -26,7 +26,9 @@ const good = {
 /** A throwaway repo committing `files` (path → text, or { link: target }); returns its path. */
 function repo(files) {
   const dir = mkdtempSync(join(tmpdir(), "evals-cases-"));
-  const git = (...args) => execFileSync("git", ["-C", dir, ...args]);
+  // Without the hook's GIT_DIR/GIT_INDEX_FILE, or these commits would land in the real repo.
+  const git = (...args) =>
+    execFileSync("git", ["-C", dir, ...args], { env: cleanGitEnv(process.env) });
   git("init", "-q");
   for (const [path, content] of Object.entries(files)) {
     mkdirSync(dirname(join(dir, path)), { recursive: true });
@@ -72,6 +74,14 @@ describe("validateCase", () => {
     ["no stub output", { ...good, stubOutput: undefined }, "stubOutput must be"],
   ])("GivenA%s_WhenValidated_ThenRejected", (_name, raw, message) => {
     expect(validateCase(raw, "platform/evals/cases/c1.json").join("\n")).toContain(message);
+  });
+});
+
+describe("cleanGitEnv", () => {
+  it("GivenAHookEnv_WhenCleaned_ThenGitVariablesAreDropped", () => {
+    expect(cleanGitEnv({ PATH: "/bin", GIT_DIR: "/r/.git", GIT_INDEX_FILE: "i" })).toEqual({
+      PATH: "/bin",
+    });
   });
 });
 

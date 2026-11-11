@@ -14,13 +14,21 @@ const MAX_CHECKS = 10;
 const MAX_MENTIONS = 10;
 
 /**
+ * The env without inherited GIT_* variables (a git hook sets GIT_DIR, GIT_INDEX_FILE …), so
+ * `git -C repo` always means that repo.
+ */
+export function cleanGitEnv(env) {
+  return Object.fromEntries(Object.entries(env).filter(([k]) => !k.startsWith("GIT_")));
+}
+
+/**
  * Files at one commit of `repo`. Symlinks and non-files are refused, so a case can't point the
  * runner at a file outside the tree. Paths are literal (no pathspec magic).
  */
 export function gitTree(repo, ref) {
   const git = (args) =>
     execFileSync("git", ["-C", repo, ...args], {
-      env: { ...process.env, GIT_LITERAL_PATHSPECS: "1" },
+      env: { ...cleanGitEnv(process.env), GIT_LITERAL_PATHSPECS: "1" },
       maxBuffer: 32 * 1024 * 1024,
     });
   const ls = (path) =>
