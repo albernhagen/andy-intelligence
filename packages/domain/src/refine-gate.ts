@@ -1,8 +1,11 @@
 import {
   REFINE_LIMITS,
   RefineOutput,
+  WorkTrackerError,
+  runQuestionId,
   type Assumption,
   type NewQuestion,
+  type Question,
   type RefineGap,
   type Run,
   type Ticket,
@@ -307,60 +310,83 @@ export class RefineGate {
 
   /**
    * Asks a ticket's held gaps (AI-75, ADR-0087) as far as the caps allow now; the refine
-   * dispatcher calls it on every dispatch event, so there is no timer. Each question's `runId` is
-   * `<assumption id>-h<try>`: it counts against the daily cap like refine's own, and a retry
-   * after a crash adopts the open one instead of asking twice. Returns how many it asked.
+   * dispatcher calls it on every dispatch event, so there is no timer. It claims first: the
+   * ticket write (with `ifUpdatedAt`) marks each gap `promoted` with a question id derived from
+   * `<assumption id>-h<try>`, so of two overlapping events only one wins, and only then asks. A
+   * claim whose ask was lost (a crash) is asked on the next call with the same id; asking is
+   * idempotent per id. The questions count against the daily cap like refine's own. Returns how
+   * many it claimed or re-asked.
    */
   async askHeld(ticket: Ticket): Promise<number> {
-    const held = heldGaps(ticket);
-    if (held.length === 0 || ticket.stage !== "backlog" || ticket.upNextRank === null) return 0;
-    const room = await this.room(ticket, null);
-    const slots = Math.max(
-      0,
-      Math.min(MAX_OPEN_QUESTIONS_PER_TICKET - room.openOnTicket, room.dailyCap - room.openedToday),
-    );
-    if (slots === 0) return 0;
+    if (ticket.stage !== "backlog" || ticket.upNextRank === null) return 0;
     const mine = await this.tracker.listQuestions({ ticketId: ticket.id });
-    const asked = new Map<string, string>();
-    for (const a of held) {
-      const tries = mine.filter((q) => q.runId?.startsWith(`${a.id}-h`));
-      // A crash between the ask and the ticket write left it open: adopt it, no new slot.
-      const open = tries.find(isOpen);
-      if (open) {
-        asked.set(a.id, open.id);
-        continue;
-      }
-      if (asked.size >= slots) continue;
-      // A withdrawn earlier try (the ticket left Up next) keeps its id, so each try gets its own.
-      const [question] = await this.tracker.askQuestions(
+    const exists = new Set(mine.map((q) => q.id));
+    // Claimed earlier, never asked: re-ask with the claimed id, no new slot.
+    const lost = ticket.refineAssumptions.filter(
+      (a) =>
+        a.status === "promoted" &&
+        a.questionId !== null &&
+        a.questionId.startsWith(`${a.id}-h`) &&
+        !exists.has(a.questionId),
+    );
+    const claims = await this.claimHeld(ticket, mine);
+    const asking = [...lost, ...claims];
+    for (const a of asking) {
+      const runId = a.questionId!.replace(/-q1$/, "");
+      await this.tracker.askQuestions(
         ticket.projectId,
         ticket.id,
         [assumptionQuestion(a)],
         "system",
-        `${a.id}-h${tries.length + 1}`,
+        runId,
       );
-      asked.set(a.id, question!.id);
     }
-    if (asked.size === 0) return 0;
-    await this.tracker.updateTicket(
-      ticket.projectId,
-      ticket.id,
-      {
-        fields: {
-          needsAttention: true,
-          dorStatus: "not_met",
-          refineAssumptions: ticket.refineAssumptions.map((a) =>
-            asked.has(a.id)
-              ? { ...a, status: "promoted" as const, questionId: asked.get(a.id)! }
-              : a,
-          ),
-        },
-        ifUpdatedAt: ticket.updatedAt,
-      },
-      "system",
+    if (asking.length > 0) {
+      log("INFO", "held gaps asked", {
+        ticket: ticket.key,
+        claimed: claims.length,
+        reasked: lost.length,
+      });
+    }
+    return asking.length;
+  }
+
+  /** Marks as many held gaps `promoted` as the caps allow, in one conditional write. */
+  private async claimHeld(ticket: Ticket, mine: readonly Question[]): Promise<Assumption[]> {
+    const held = heldGaps(ticket);
+    if (held.length === 0) return [];
+    const room = await this.room(ticket, null);
+    const slots = Math.min(
+      MAX_OPEN_QUESTIONS_PER_TICKET - room.openOnTicket,
+      room.dailyCap - room.openedToday,
     );
-    log("INFO", "held gaps asked", { ticket: ticket.key, asked: asked.size, held: held.length });
-    return asked.size;
+    if (slots <= 0) return [];
+    const claimed = new Map<string, string>();
+    for (const a of held.slice(0, slots)) {
+      // Each try gets its own id: a withdrawn one (the ticket left Up next) keeps its id.
+      const tries = mine.filter((q) => q.runId?.startsWith(`${a.id}-h`)).length;
+      claimed.set(a.id, runQuestionId(`${a.id}-h${tries + 1}`, 0));
+    }
+    const refineAssumptions = ticket.refineAssumptions.map((a) =>
+      claimed.has(a.id) ? { ...a, status: "promoted" as const, questionId: claimed.get(a.id)! } : a,
+    );
+    try {
+      await this.tracker.updateTicket(
+        ticket.projectId,
+        ticket.id,
+        {
+          fields: { needsAttention: true, dorStatus: "not_met", refineAssumptions },
+          ifUpdatedAt: ticket.updatedAt,
+        },
+        "system",
+      );
+    } catch (err) {
+      if (!(err instanceof WorkTrackerError && err.code === "conflict")) throw err;
+      // Another event or edit got there first; the next dispatch event looks again.
+      log("INFO", "held gaps not claimed: the ticket changed", { ticket: ticket.key });
+      return [];
+    }
+    return refineAssumptions.filter((a) => claimed.has(a.id));
   }
 
   /** How much room the caps leave, not counting this run's own questions (a replay). */

@@ -137,7 +137,9 @@ describe("RefineGate.askHeld (AI-75)", () => {
     });
 
   async function setup(assumptions: Assumption[], dailyQuestionCap = 5) {
-    const clock = () => new Date(at);
+    // Ticks, so every write gets a new `updatedAt` and a stale claim conflicts.
+    let ms = Date.parse(at);
+    const clock = () => new Date(ms++);
     const tracker = new InMemoryWorkTracker(clock);
     const project = await tracker.createProject({ name: "AI", key: "AI", repos: [] });
     await tracker.updateProject(project.id, { dailyQuestionCap });
@@ -177,21 +179,37 @@ describe("RefineGate.askHeld (AI-75)", () => {
     expect(await t.open()).toEqual([]);
   });
 
-  it("GivenACrashAfterTheAsk_WhenAskedAgain_ThenTheOpenQuestionIsAdoptedNotAskedTwice", async () => {
-    const t = await setup([held(1)]);
+  it("GivenAClaimWhoseAskWasLost_WhenAskedAgainWithTheCapSpent_ThenItIsAskedOnceWithTheClaimedId", async () => {
+    const t = await setup([held(1)], 1);
     const before = await t.ticket();
-    await t.gate.askHeld(before);
-    // A replay with the ticket as it was before the write landed.
+    // A crash after the claim landed and before the ask: the gap is promoted, no question yet.
     await t.tracker.updateTicket(
       t.project.id,
       before.id,
-      { fields: { refineAssumptions: before.refineAssumptions } },
+      {
+        fields: {
+          refineAssumptions: [{ ...held(1), status: "promoted", questionId: "run-1-a1-h1-q1" }],
+        },
+      },
       "system",
     );
-    await t.gate.askHeld(await t.ticket());
+    expect(await t.gate.askHeld(await t.ticket())).toBe(1);
+    expect(await t.gate.askHeld(await t.ticket())).toBe(0);
     const open = await t.open();
-    expect(open).toHaveLength(1);
-    expect((await t.ticket()).refineAssumptions[0]!.questionId).toBe(open[0]!.id);
+    expect(open.map((q) => q.id)).toEqual(["run-1-a1-h1-q1"]);
+  });
+
+  it("GivenTwoOverlappingDispatchEvents_WhenBothAskTheSameHeldGap_ThenOneQuestionIsAsked", async () => {
+    const t = await setup([held(1)]);
+    const same = await t.ticket();
+    await Promise.all([t.gate.askHeld(same), t.gate.askHeld(same)]);
+    // A later event with the ticket as written: nothing more to ask.
+    await t.gate.askHeld(await t.ticket());
+    expect(await t.open()).toHaveLength(1);
+    expect((await t.ticket()).refineAssumptions[0]).toMatchObject({
+      status: "promoted",
+      questionId: "run-1-a1-h1-q1",
+    });
   });
 
   it("GivenAWithdrawnEarlierTry_WhenAskedAgain_ThenANewQuestionIsAsked", async () => {
