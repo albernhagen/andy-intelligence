@@ -10,6 +10,7 @@ import {
   Worker,
   ProviderKey,
   Question,
+  questionFormatFields,
   QuestionStatus,
   QuotaReading,
   Route,
@@ -174,6 +175,7 @@ export const BoardTicket = Ticket.extend({ summary: TicketSummary });
 export type BoardTicket = z.infer<typeof BoardTicket>;
 
 export const NewQuestion = Question.pick({ text: true }).extend({
+  ...questionFormatFields,
   options: z.array(z.string()).default([]),
   suggestedAnswer: z.string().nullable().default(null),
   assumptions: z.array(z.string()).default([]),

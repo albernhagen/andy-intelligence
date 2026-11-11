@@ -235,4 +235,92 @@ describe("inbox v2", () => {
     expect(within(ai).getByRole("heading").textContent).toBe("AI: Andy Intelligence 3");
     expect(screen.getByRole("link", { name: "Needs you 3" })).toBeTruthy();
   });
+
+  describe("question format (AI-73)", () => {
+    const formatted: NewQuestion = {
+      text: "Should agent evals in CI (AI-6: Agent evals v1) bill Andy's subscription?",
+      context:
+        "Agent evals replay fixed tickets to catch regressions. Today nothing runs them. CI needs a way to pay before the workflow lands.",
+      choices: [
+        { label: "API key", consequence: "Pay per call; needs a new secret." },
+        { label: "Subscription", consequence: "No new spend; shares the weekly quota." },
+      ],
+      options: ["API key", "Subscription"],
+      recommendation: { answer: "Subscription", reason: "No new secret, no new bill." },
+      suggestedAnswer: "Subscription",
+      assumptions: ["Subscription"],
+    };
+
+    it("GivenAFormattedQuestion_WhenTheInboxShowsIt_ThenQuestionContextOptionsWithConsequencesThenRecommendation", async () => {
+      const h = renderApp("/all/board");
+      await h.tracker.createProject({ name: "Andy Intelligence", key: "AI" });
+      const t = await h.service.create("ai", readyStory, "andy", { upNext: true });
+      await askAsRun(h, t.id, "run1", [formatted]);
+      await open(h, "/p/ai/inbox");
+
+      const item = within(await card("AI-1: Board")).getByRole("listitem", {
+        name: `Question: ${formatted.text}`,
+      });
+      const context = within(item).getByLabelText("Context");
+      const answers = within(item).getByRole("list", { name: "Answers" });
+      const recommendation = within(item).getByLabelText("Recommendation");
+      expect(context.textContent).toBe(formatted.context);
+      // The recommended option first, each with what choosing it does.
+      expect(
+        within(answers)
+          .getAllByRole("listitem")
+          .map((li) => li.textContent),
+      ).toEqual([
+        "SubscriptionRecommendedNo new spend; shares the weekly quota.",
+        "API keyPay per call; needs a new secret.",
+      ]);
+      expect(recommendation.textContent).toBe(
+        "Recommended: Subscription. No new secret, no new bill.",
+      );
+      // Reading order: line, context, options, recommendation.
+      const text = item.textContent ?? "";
+      const at = (s: string) => text.indexOf(s);
+      expect(at(formatted.text)).toBeLessThan(at(formatted.context!));
+      expect(at(formatted.context!)).toBeLessThan(at("Pay per call"));
+      expect(at("Pay per call")).toBeLessThan(at("Recommended: Subscription."));
+
+      await h.user.click(within(answers).getByRole("button", { name: /^API key/ }));
+      await waitFor(() => expect(question(formatted.text)).toBeNull());
+      const [answered] = await h.tracker.listQuestions({ ticketId: t.id });
+      expect(answered?.answer).toBe("API key");
+    });
+
+    it("GivenAFormattedQuestion_WhenTheTicketPageShowsIt_ThenContextOptionsWithConsequencesAndRecommendation", async () => {
+      const h = renderApp("/all/board");
+      await h.tracker.createProject({ name: "Andy Intelligence", key: "AI" });
+      const t = await h.service.create("ai", readyStory, "andy");
+      await askAsRun(h, t.id, "run1", [formatted]);
+      await open(h, "/p/ai/t/AI-1");
+
+      const item = await screen.findByRole("article", { name: `Question: ${formatted.text}` });
+      expect(within(item).getByLabelText("Context").textContent).toBe(formatted.context);
+      const options = within(item).getByRole("list", { name: "Options" });
+      expect(
+        within(options)
+          .getAllByRole("listitem")
+          .map((li) => li.textContent),
+      ).toEqual([
+        "API keyPay per call; needs a new secret.",
+        "Subscription (recommended)No new spend; shares the weekly quota.",
+      ]);
+      expect(within(item).getByLabelText("Recommendation").textContent).toBe(
+        "Recommended: Subscription. No new secret, no new bill.",
+      );
+    });
+
+    it("GivenAQuestionStoredBeforeTheFormat_WhenTheInboxShowsIt_ThenNoContextOrRecommendationAppears", async () => {
+      await twoTickets();
+      const item = within(await card("AI-1: Board")).getByRole("listitem", {
+        name: "Question: Which layout?",
+      });
+      expect(within(item).queryByLabelText("Context")).toBeNull();
+      expect(within(item).queryByLabelText("Recommendation")).toBeNull();
+      expect(within(item).getByRole("group", { name: "Answers" })).toBeTruthy();
+    });
+  });
 });

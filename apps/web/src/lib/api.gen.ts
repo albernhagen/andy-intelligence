@@ -730,6 +730,18 @@ export interface paths {
                 settledBy: string | null;
                 /** Format: date-time */
                 createdAt: string;
+                /** @default null */
+                context: string | null;
+                /** @default [] */
+                choices: {
+                  label: string;
+                  consequence: string;
+                }[];
+                /** @default null */
+                recommendation: {
+                  answer: string;
+                  reason: string;
+                } | null;
               }[];
               /**
                * @default null
@@ -957,6 +969,18 @@ export interface paths {
                 settledBy: string | null;
                 /** Format: date-time */
                 createdAt: string;
+                /** @default null */
+                context: string | null;
+                /** @default [] */
+                choices: {
+                  label: string;
+                  consequence: string;
+                }[];
+                /** @default null */
+                recommendation: {
+                  answer: string;
+                  reason: string;
+                } | null;
               }[];
               /**
                * @default null
@@ -1146,6 +1170,18 @@ export interface paths {
                 settledBy: string | null;
                 /** Format: date-time */
                 createdAt: string;
+                /** @default null */
+                context: string | null;
+                /** @default [] */
+                choices: {
+                  label: string;
+                  consequence: string;
+                }[];
+                /** @default null */
+                recommendation: {
+                  answer: string;
+                  reason: string;
+                } | null;
               }[];
               /**
                * @default null
@@ -1380,6 +1416,18 @@ export interface paths {
                 settledBy: string | null;
                 /** Format: date-time */
                 createdAt: string;
+                /** @default null */
+                context: string | null;
+                /** @default [] */
+                choices: {
+                  label: string;
+                  consequence: string;
+                }[];
+                /** @default null */
+                recommendation: {
+                  answer: string;
+                  reason: string;
+                } | null;
               }[];
               /**
                * @default null
@@ -1564,6 +1612,18 @@ export interface paths {
                 settledBy: string | null;
                 /** Format: date-time */
                 createdAt: string;
+                /** @default null */
+                context: string | null;
+                /** @default [] */
+                choices: {
+                  label: string;
+                  consequence: string;
+                }[];
+                /** @default null */
+                recommendation: {
+                  answer: string;
+                  reason: string;
+                } | null;
               }[];
               /**
                * @default null
@@ -1866,6 +1926,18 @@ export interface paths {
                 settledBy: string | null;
                 /** Format: date-time */
                 createdAt: string;
+                /** @default null */
+                context: string | null;
+                /** @default [] */
+                choices: {
+                  label: string;
+                  consequence: string;
+                }[];
+                /** @default null */
+                recommendation: {
+                  answer: string;
+                  reason: string;
+                } | null;
               }[];
               /**
                * @default null
@@ -2065,6 +2137,18 @@ export interface paths {
                 settledBy: string | null;
                 /** Format: date-time */
                 createdAt: string;
+                /** @default null */
+                context: string | null;
+                /** @default [] */
+                choices: {
+                  label: string;
+                  consequence: string;
+                }[];
+                /** @default null */
+                recommendation: {
+                  answer: string;
+                  reason: string;
+                } | null;
               }[];
               /**
                * @default null
@@ -2192,6 +2276,18 @@ export interface paths {
               answeredAt: string | null;
               /** @default null */
               runId: string | null;
+              /** @default null */
+              context: string | null;
+              /** @default [] */
+              choices: {
+                label: string;
+                consequence: string;
+              }[];
+              /** @default null */
+              recommendation: {
+                answer: string;
+                reason: string;
+              } | null;
             };
           };
         };
@@ -2371,6 +2467,18 @@ export interface paths {
                 settledBy: string | null;
                 /** Format: date-time */
                 createdAt: string;
+                /** @default null */
+                context: string | null;
+                /** @default [] */
+                choices: {
+                  label: string;
+                  consequence: string;
+                }[];
+                /** @default null */
+                recommendation: {
+                  answer: string;
+                  reason: string;
+                } | null;
               }[];
               /**
                * @default null
@@ -2569,6 +2677,18 @@ export interface paths {
                 settledBy: string | null;
                 /** Format: date-time */
                 createdAt: string;
+                /** @default null */
+                context: string | null;
+                /** @default [] */
+                choices: {
+                  label: string;
+                  consequence: string;
+                }[];
+                /** @default null */
+                recommendation: {
+                  answer: string;
+                  reason: string;
+                } | null;
               }[];
               /**
                * @default null
@@ -2915,6 +3035,18 @@ export interface paths {
               answeredAt: string | null;
               /** @default null */
               runId: string | null;
+              /** @default null */
+              context: string | null;
+              /** @default [] */
+              choices: {
+                label: string;
+                consequence: string;
+              }[];
+              /** @default null */
+              recommendation: {
+                answer: string;
+                reason: string;
+              } | null;
             }[];
           };
         };
@@ -2983,6 +3115,18 @@ export interface paths {
         content: {
           "application/json": {
             text: string;
+            /** @default null */
+            context?: string | null;
+            /** @default [] */
+            choices?: {
+              label: string;
+              consequence: string;
+            }[];
+            /** @default null */
+            recommendation?: {
+              answer: string;
+              reason: string;
+            } | null;
             /** @default [] */
             options?: string[];
             /** @default null */
@@ -3025,6 +3169,18 @@ export interface paths {
               answeredAt: string | null;
               /** @default null */
               runId: string | null;
+              /** @default null */
+              context: string | null;
+              /** @default [] */
+              choices: {
+                label: string;
+                consequence: string;
+              }[];
+              /** @default null */
+              recommendation: {
+                answer: string;
+                reason: string;
+              } | null;
             };
           };
         };
@@ -3137,6 +3293,18 @@ export interface paths {
               answeredAt: string | null;
               /** @default null */
               runId: string | null;
+              /** @default null */
+              context: string | null;
+              /** @default [] */
+              choices: {
+                label: string;
+                consequence: string;
+              }[];
+              /** @default null */
+              recommendation: {
+                answer: string;
+                reason: string;
+              } | null;
             };
           };
         };
@@ -3240,6 +3408,18 @@ export interface paths {
                 answeredAt: string | null;
                 /** @default null */
                 runId: string | null;
+                /** @default null */
+                context: string | null;
+                /** @default [] */
+                choices: {
+                  label: string;
+                  consequence: string;
+                }[];
+                /** @default null */
+                recommendation: {
+                  answer: string;
+                  reason: string;
+                } | null;
               }[];
               tickets: {
                 id: string;
@@ -3327,6 +3507,18 @@ export interface paths {
                   settledBy: string | null;
                   /** Format: date-time */
                   createdAt: string;
+                  /** @default null */
+                  context: string | null;
+                  /** @default [] */
+                  choices: {
+                    label: string;
+                    consequence: string;
+                  }[];
+                  /** @default null */
+                  recommendation: {
+                    answer: string;
+                    reason: string;
+                  } | null;
                 }[];
                 /**
                  * @default null
@@ -3623,6 +3815,18 @@ export interface paths {
                 settledBy: string | null;
                 /** Format: date-time */
                 createdAt: string;
+                /** @default null */
+                context: string | null;
+                /** @default [] */
+                choices: {
+                  label: string;
+                  consequence: string;
+                }[];
+                /** @default null */
+                recommendation: {
+                  answer: string;
+                  reason: string;
+                } | null;
               }[];
               /**
                * @default null
