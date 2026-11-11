@@ -679,6 +679,11 @@ export function quotaStoreContract(
   });
 }
 
+export interface OAuthGrantStoreContractOptions {
+  /** Timeout (ms) for the case that races three takes; see `RunStoreContractOptions` (AI-71). */
+  raceTimeoutMs?: number;
+}
+
 /**
  * `make` gets the clock the store must use, so the suite can test expiry without waiting.
  * Keys are random per test, so the suite can run against a shared store.
@@ -686,7 +691,11 @@ export function quotaStoreContract(
 export function oauthGrantStoreContract(
   name: string,
   make: (now: () => Date) => Promise<OAuthGrantStore>,
+  options: OAuthGrantStoreContractOptions = {},
 ): void {
+  /** A case that races takes of one grant: gets the adapter's race timeout. */
+  const itRaces = (title: string, fn: () => Promise<void>) => it(title, fn, options.raceTimeoutMs);
+
   describe(`OAuthGrantStore contract: ${name}`, () => {
     const start = new Date("2026-11-02T12:00:00Z");
     const key = () => crypto.randomUUID();
@@ -721,7 +730,7 @@ export function oauthGrantStoreContract(
       expect(await store.get(k)).toBeNull();
     });
 
-    it("GivenConcurrentTakes_WhenRacing_ThenExactlyOneWins", async () => {
+    itRaces("GivenConcurrentTakes_WhenRacing_ThenExactlyOneWins", async () => {
       const store = await make(() => start);
       const k = key();
       await store.put(k, grant());
