@@ -9,7 +9,7 @@ description: >-
 
 inputs:
   source:
-    description: "Model source: subscription (default), api-key, or stub (scripted model, no credential)."
+    description: "Model source: subscription (default), api-key, or stub (scripted model, no credential; only with machinery: true, the plumbing job)."
     default: subscription
   data-path:
     description: Git checkout whose agent configuration and eval cases are evaluated (read at HEAD, never run).
@@ -56,9 +56,15 @@ runs:
         BASE_REF: ${{ inputs.base-ref }}
         MACHINERY: ${{ inputs.machinery }}
         FORK: ${{ inputs.fork }}
+        SOURCE: ${{ inputs.source }}
       # The whole change (merge commit against its base), so a later doc-only push can't skip the
       # run. If the diff can't be read, run.
       run: |
+        # The stub's scripted answers pass every case: a check that can be required never uses it.
+        if [ "$SOURCE" = stub ] && [ "$MACHINERY" != true ]; then
+          echo "::error title=agent-evals::source stub is only for the plumbing job (machinery: true)"
+          exit 1
+        fi
         flag=""; [ "$MACHINERY" = true ] && flag=--machinery
         if [ -z "$BASE_REF" ]; then
           run=run=true

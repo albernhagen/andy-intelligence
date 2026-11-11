@@ -19,7 +19,7 @@ on:
       source:
         description: Model source (default = the AGENT_EVALS_SOURCE variable, else subscription)
         type: choice
-        options: [default, subscription, api-key, stub]
+        options: [default, subscription, api-key]
         default: default
       cases:
         description: Case ids, comma-separated (empty = all)
@@ -68,8 +68,10 @@ jobs:
           source=subscription
           if [ -n "$INPUT" ] && [ "$INPUT" != default ]; then source=$INPUT
           elif [ -n "$VARIABLE" ]; then source=$VARIABLE; fi
-          case "$source" in subscription|api-key|stub) ;; *)
-            echo "::error title=agent-evals::AGENT_EVALS_SOURCE must be subscription, api-key or stub"; exit 1;;
+          # Never the stub model here: its scripted answers pass every case, so a green check would
+          # mean nothing. The stub runs only in agent-evals-plumbing.
+          case "$source" in subscription|api-key) ;; *)
+            echo "::error title=agent-evals::the source must be subscription or api-key (AGENT_EVALS_SOURCE or the dispatch input)"; exit 1;;
           esac
           echo "source=$source" >> "$GITHUB_OUTPUT"
           if [ -f base/platform/actions/agent-evals/action.yml ]; then runner=true; else

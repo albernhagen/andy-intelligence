@@ -2,7 +2,7 @@
 // agents and the executor run, with the production procedure, schema, model and read-only tools,
 // in a workspace holding only the case's inputs. Returns the structured output and token counts.
 import { spawn } from "node:child_process";
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { mkdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { clearTimeout, setTimeout } from "node:timers";
 import { rateLimits, runUsage, structuredOutput } from "../executor-report.mjs";
@@ -14,7 +14,11 @@ import {
 } from "./config.mjs";
 
 const MAX_STDOUT_BYTES = 32 * 1024 * 1024;
-const RESERVE_FLAG = "quota-reserve";
+/**
+ * Above this a reading can't be a fraction of a window (the CLI reports `utilization` 0-1, above 1
+ * only past a cap): the scale is not what we assumed, so the run fails instead of skipping.
+ */
+export const QUOTA_MAX_PLAUSIBLE_PCT = 200;
 
 /**
  * Settings for every case. Reads outside the case workspace already need a permission nobody
@@ -79,14 +83,23 @@ export function claudeEnv({ source, env, home, caseId, stubUrl }) {
   throw new Error(`unknown source ${source}`);
 }
 
-/** The highest used share (0-100) of any subscription window, or null without a reading. */
+/**
+ * The highest used share (0-100+) of any subscription window, or null without a reading. Same
+ * scale and rounding as `parseRateLimits` in packages/domain/src/quota.ts (a test holds the two
+ * equal); the scripts can't import the TypeScript domain at run time.
+ */
 export function quotaUsedPct(limits) {
   if (!limits) return null;
-  const shares = [
-    limits.utilization,
-    limits.unifiedWindows?.five_hour?.utilization,
-    limits.unifiedWindows?.seven_day?.utilization,
-  ].filter((u) => Number.isFinite(u));
+  const windows = {};
+  // As in the domain: the top-level fields describe the limiting window; per-window data wins.
+  if (["five_hour", "seven_day"].includes(limits.rateLimitType)) {
+    windows[limits.rateLimitType] = limits.utilization;
+  }
+  for (const w of ["five_hour", "seven_day"]) {
+    const u = limits.unifiedWindows?.[w]?.utilization;
+    if (u !== undefined) windows[w] = u;
+  }
+  const shares = Object.values(windows).filter((u) => Number.isFinite(u));
   return shares.length ? Math.round(Math.max(...shares) * 1000) / 10 : null;
 }
 
@@ -155,6 +168,8 @@ export default class ClaudeCodeProvider {
   constructor(options = {}) {
     this.config = options.config ?? {};
     this.spawnFn = options.spawn ?? spawn;
+    /** The reading that reached the reserve; promptfoo runs the cases one at a time (`-j 1`). */
+    this.reserveReading = null;
   }
 
   id() {
@@ -164,8 +179,7 @@ export default class ClaudeCodeProvider {
   async callApi(prompt, context) {
     const { caseId, workspace, schemaFile, model } = context.vars;
     const { source, workDir, stubUrl, claudeBin = "claude" } = this.config;
-    const flag = join(workDir, RESERVE_FLAG);
-    if (existsSync(flag)) {
+    if (this.reserveReading !== null) {
       return { error: "skipped: quota reserve", metadata: { caseId, skipped: "quota" } };
     }
     const home = join(workDir, "home", caseId);
@@ -177,8 +191,12 @@ export default class ClaudeCodeProvider {
       env: claudeEnv({ source, env: process.env, home, caseId, stubUrl }),
     });
     const read = readStream(run.stdout);
-    if (source === "subscription" && read.quotaPct !== null && read.quotaPct >= QUOTA_RESERVE_PCT) {
-      writeFileSync(flag, String(read.quotaPct));
+    if (source === "subscription" && read.quotaPct !== null) {
+      if (read.quotaPct > QUOTA_MAX_PLAUSIBLE_PCT) {
+        const kind = "quota reading out of range (utilization is not a 0-1 fraction?)";
+        return { error: kind, metadata: { caseId, errorKind: kind, quotaPct: read.quotaPct } };
+      }
+      if (read.quotaPct >= QUOTA_RESERVE_PCT) this.reserveReading = read.quotaPct;
     }
     const metadata = {
       caseId,

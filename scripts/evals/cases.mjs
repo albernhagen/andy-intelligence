@@ -7,6 +7,7 @@ export const EVALS_ROOT = "platform/evals";
 const BASELINES_FILE = "baselines.json";
 
 const ID = /^[a-z0-9][a-z0-9-]{0,59}$/;
+const CASE_FILE = /^[a-z0-9][a-z0-9-]{0,59}\.json$/;
 const INPUT = /^inputs\/[a-z0-9][a-z0-9._-]{0,100}$/;
 const SEGMENT = /^[A-Za-z0-9_][A-Za-z0-9_.-]{0,100}$/;
 const MAX_FILES = 10;
@@ -185,7 +186,12 @@ export function parseBaselines(text, file) {
  */
 export function loadSuite(tree, dir, { only = [] } = {}) {
   const errors = [];
-  const files = tree.files(dir).filter((f) => f.endsWith(".json"));
+  // File names come from the PR: anything that isn't `<id>.json` is counted, never echoed, so a
+  // name can't carry a workflow command or Markdown into the log or the summary.
+  const named = tree.files(dir).map((f) => f.slice(dir.length + 1));
+  const files = named.filter((n) => CASE_FILE.test(n)).map((n) => `${dir}/${n}`);
+  const odd = named.filter((n) => !CASE_FILE.test(n) && n.endsWith(".json")).length;
+  if (odd) errors.push(`${dir}: ${odd} .json file(s) not named <case id>.json`);
   const caseFiles = files.filter((f) => !f.endsWith(`/${BASELINES_FILE}`));
   const selected = only.length
     ? caseFiles.filter((f) =>
@@ -198,7 +204,9 @@ export function loadSuite(tree, dir, { only = [] } = {}) {
       )
     : caseFiles;
   for (const id of only) {
-    if (!caseFiles.some((f) => f.endsWith(`/${id}.json`))) errors.push(`case ${id}: not in ${dir}`);
+    if (!ID.test(id)) errors.push(`a selected case id doesn't match ${ID}`);
+    else if (!caseFiles.some((f) => f.endsWith(`/${id}.json`)))
+      errors.push(`case ${id}: not in ${dir}`);
   }
   if (selected.length > MAX_CASES) {
     throw new Error(

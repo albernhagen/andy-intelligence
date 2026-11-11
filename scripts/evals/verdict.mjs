@@ -44,18 +44,22 @@ export function verdict(run, baselines = {}) {
 }
 
 const pct = (x) => `${Math.round(x * 1000) / 10}%`;
-const cell = (s) =>
+/** Text safe in a Markdown table cell and on one log line (no workflow commands). */
+export const cell = (s) =>
   String(s)
-    .replace(/\|/g, "\\|")
-    .replace(/[\r\n]+/g, " ");
+    // eslint-disable-next-line no-control-regex -- stripping control characters is the point
+    .replace(/[\u0000-\u001f\u007f]+/g, " ")
+    .replace(/[\\|`<>]/g, (c) => `\\${c}`)
+    .replace(/::/g, ": :");
 
 /** The job summary in Markdown. */
 export function summary({ run, result, source, caps, cases }) {
   const icon = { pass: "✅ pass", fail: "❌ fail", skipped: "⏭️ skipped (quota reserve)" }[
     result.outcome
   ];
+  const how = source === "stub" ? "stub model: plumbing only, no live model call" : source;
   const lines = [
-    `## Agent evals: ${icon}`,
+    `## Agent evals (${how}): ${icon}`,
     "",
     `Source: \`${source}\` · cases ${run.cases.length} (cap ${caps.maxCases}) · turns per case ≤ ${caps.maxTurns} · ${pct(result.passRate)} passed (needs ${pct(PASS_RATE_MIN)}) · token jump max +${pct(TOKEN_JUMP_MAX)}`,
     "",

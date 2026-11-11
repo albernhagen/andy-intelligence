@@ -22,7 +22,7 @@ import {
   TOKEN_JUMP_MAX,
 } from "./config.mjs";
 import { PromptfooEvaluator } from "./promptfoo-evaluator.mjs";
-import { summary, verdict } from "./verdict.mjs";
+import { cell, summary, verdict } from "./verdict.mjs";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const SEGMENT = /^[A-Za-z0-9_][A-Za-z0-9_.-]{0,100}$/;
@@ -228,7 +228,9 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
   main().then(
     (code) => process.exit(code),
     (err) => {
-      report(`## Agent evals: ❌ could not run\n\n${err.message}\n`);
+      // Escaped line by line: a message can name a path from the PR's tree.
+      const text = String(err.message).split("\n").map(cell).join("\n");
+      report(`## Agent evals: ❌ could not run\n\n${text}\n`);
       process.exit(1);
     },
   );

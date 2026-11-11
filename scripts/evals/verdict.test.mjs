@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { summary, verdict } from "./verdict.mjs";
+import { cell, summary, verdict } from "./verdict.mjs";
 
 const ok = (caseId, inputTokens = 1000) => ({
   caseId,
@@ -93,9 +93,27 @@ describe("summary", () => {
       caps: { maxCases: 10, maxTurns: 15 },
       cases: [{ id: "a", agent: "adversarial-review" }],
     });
-    expect(text).toContain("## Agent evals: ❌ fail");
+    expect(text).toContain("## Agent evals (subscription): ❌ fail");
     expect(text).toContain("cases 2 (cap 10) · turns per case ≤ 15");
     expect(text).toContain("| a | adversarial-review | fail (tokens) | 1300 | 1000 (+30%) |");
     expect(text).toContain("b\\|c");
+  });
+
+  it("GivenAStubRun_WhenSummarised_ThenTheHeadingSaysNoLiveCall", () => {
+    const r = run(ok("a", 10));
+    const text = summary({
+      run: r,
+      result: verdict(r),
+      source: "stub",
+      caps: { maxCases: 10, maxTurns: 15 },
+      cases: [],
+    });
+    expect(text).toContain("## Agent evals (stub model: plumbing only, no live model call)");
+  });
+});
+
+describe("cell", () => {
+  it("GivenHostileText_WhenEscaped_ThenOneLineWithNoWorkflowCommandOrMarkup", () => {
+    expect(cell("a\\|b\n::error::x`<img>")).toBe("a\\\\\\|b : :error: :x\\`\\<img\\>");
   });
 });

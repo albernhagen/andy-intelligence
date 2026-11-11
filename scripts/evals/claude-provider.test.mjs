@@ -1,5 +1,5 @@
 import { EventEmitter } from "node:events";
-import { existsSync, mkdtempSync, writeFileSync } from "node:fs";
+import { mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { PassThrough } from "node:stream";
@@ -12,7 +12,8 @@ import ClaudeCodeProvider, {
   quotaUsedPct,
   readStream,
 } from "./claude-provider.mjs";
-import { MAX_BUDGET_USD_PER_CASE, MAX_TURNS_PER_CASE } from "./config.mjs";
+import { CLAUDE_SUB_THRESHOLDS, parseRateLimits } from "../../packages/domain/src/quota.ts";
+import { MAX_BUDGET_USD_PER_CASE, MAX_TURNS_PER_CASE, QUOTA_RESERVE_PCT } from "./config.mjs";
 
 const output = { summary: "x", findings: [] };
 const assistant = {
@@ -139,9 +140,14 @@ describe("readStream", () => {
     expect(readStream("not json\n").result).toBeUndefined();
   });
 
+  it("GivenTheReserve_WhenCompared_ThenTheDomainPauseLevel", () => {
+    expect(QUOTA_RESERVE_PCT).toBe(CLAUDE_SUB_THRESHOLDS.pausePct);
+  });
+
   it("GivenNoReading_WhenQuotaRead_ThenNull", () => {
     expect(quotaUsedPct(null)).toBeNull();
-    expect(quotaUsedPct({ utilization: 0.81 })).toBe(81);
+    expect(quotaUsedPct({ utilization: 0.81, rateLimitType: "five_hour" })).toBe(81);
+    expect(quotaUsedPct({ utilization: 0.81 })).toBeNull();
   });
 });
 
@@ -191,7 +197,6 @@ describe("ClaudeCodeProvider", () => {
       spawn,
     });
     await provider.callApi("p", { vars });
-    expect(existsSync(join(dir, "quota-reserve"))).toBe(true);
     const second = await provider.callApi("p", { vars: { ...vars, caseId: "c2" } });
     expect(second).toMatchObject({ metadata: { skipped: "quota" } });
     expect(calls).toHaveLength(1);
@@ -199,9 +204,49 @@ describe("ClaudeCodeProvider", () => {
 
   it("GivenTheApiKeySource_WhenTheReadingIsHigh_ThenNoReserveSkip", async () => {
     const { dir, vars } = caseVars();
-    const { spawn } = fakeSpawn(stream(limits(0.95), assistant, result));
+    const { spawn, calls } = fakeSpawn(stream(limits(0.95), assistant, result));
     const provider = new ClaudeCodeProvider({ config: { source: "api-key", workDir: dir }, spawn });
     await provider.callApi("p", { vars });
-    expect(existsSync(join(dir, "quota-reserve"))).toBe(false);
+    const second = await provider.callApi("p", { vars: { ...vars, caseId: "c2" } });
+    expect(second.metadata.skipped).toBeUndefined();
+    expect(calls).toHaveLength(2);
+  });
+
+  it("GivenAReadingOnA0To100Scale_WhenCalled_ThenTheCaseErrorsInsteadOfSkipping", async () => {
+    const { dir, vars } = caseVars();
+    const { spawn } = fakeSpawn(stream(limits(45), assistant, result));
+    const provider = new ClaudeCodeProvider({
+      config: { source: "subscription", workDir: dir },
+      spawn,
+    });
+    const res = await provider.callApi("p", { vars });
+    expect(res.metadata.errorKind).toMatch(/^quota reading out of range/);
+    expect(provider.reserveReading).toBeNull();
+  });
+});
+
+describe("quotaUsedPct matches the domain's quota parser", () => {
+  it.each([
+    [{ utilization: 0.81, rateLimitType: "five_hour", resetsAt: 1 }],
+    [
+      {
+        unifiedWindows: {
+          five_hour: { utilization: 0.123, resetsAt: 1 },
+          seven_day: { utilization: 0.456, resetsAt: 1 },
+        },
+      },
+    ],
+    [
+      {
+        unifiedWindows: { five_hour: { utilization: 0.2, resetsAt: 1 } },
+        utilization: 0.9,
+        rateLimitType: "five_hour",
+      },
+    ],
+  ])("GivenARateLimitInfo_WhenBothRead_ThenTheSameHighestPercent %#", (info) => {
+    const parsed = parseRateLimits(info, new Date());
+    expect(parsed.ok).toBe(true);
+    const domainMax = Math.max(...parsed.readings.map((r) => r.usedPct));
+    expect(quotaUsedPct(info)).toBe(domainMax);
   });
 });

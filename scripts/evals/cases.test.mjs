@@ -119,6 +119,27 @@ describe("loadSuite", () => {
     );
   });
 
+  it("GivenACaseFileNameWithAWorkflowCommand_WhenLoaded_ThenCountedButNeverEchoed", () => {
+    const hostile = "platform/evals/cases/x\n::error::pwned.json";
+    const tree = gitTree(repo({ ...files, [hostile]: JSON.stringify(good) }), "HEAD");
+    let message = "";
+    try {
+      loadSuite(tree, "platform/evals/cases");
+    } catch (err) {
+      message = err.message;
+    }
+    expect(message).toContain("1 .json file(s) not named <case id>.json");
+    expect(message).not.toContain("::");
+    expect(message).not.toContain("pwned");
+  });
+
+  it("GivenASelectedIdThatIsNotAnId_WhenLoaded_ThenRefusedWithoutEchoingIt", () => {
+    const tree = gitTree(repo(files), "HEAD");
+    expect(() => loadSuite(tree, "platform/evals/cases", { only: ["::warning::x"] })).toThrow(
+      /selected case id doesn't match(?![\s\S]*::warning)/,
+    );
+  });
+
   it("GivenASymlinkedInput_WhenLoaded_ThenRefused", () => {
     const tree = gitTree(
       repo({ ...files, "platform/evals/inputs/a.diff": { link: "/etc/hosts" } }),
