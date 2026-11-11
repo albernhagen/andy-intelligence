@@ -1,6 +1,10 @@
-import type { QuotaReading } from "@andy/contracts";
-import { describe, expect, it } from "vitest";
+import { InMemoryQuotaStore, type QuotaReading } from "@andy/contracts";
+import { describe, expect, it, vi } from "vitest";
+import { DomainError } from "./tickets";
 import {
+  QuotaClearer,
+  readingsAtReserve,
+  readingsForDispatch,
   quotaRejection,
   QUOTA_MAX_AGE_MS,
   parseRateLimits,
@@ -201,5 +205,53 @@ describe("quotaRejection", () => {
     expect(
       quotaRejection(reading({ window: "weekly", usedPct: 20, resetsAt: hours(50) }), old, at),
     ).toBeNull();
+  });
+});
+
+describe("clear quota idle (AI-74)", () => {
+  const discarded = { by: "andy@example.com", at: now.toISOString() };
+
+  it("GivenADiscardedReading_WhenStatusIsRead_ThenItsWindowIsUnknown", () => {
+    const status = quotaStatus("claude-sub", [reading({ usedPct: 95, discarded })], now);
+    expect(status.windows[0]).toMatchObject({ window: "5h", level: "unknown", usedPct: null });
+    expect(readingsForDispatch([reading({ usedPct: 95, discarded })], now)).toEqual([]);
+  });
+
+  it("GivenADiscardedHighReading_WhenALowerOneArrives_ThenItIsNotRejectedAsADrop", () => {
+    const stored = reading({ usedPct: 95 });
+    const lower = reading({ usedPct: 30 });
+    expect(quotaRejection(lower, stored, now)).toBe("usage_drop");
+    expect(quotaRejection(lower, { ...stored, discarded }, now)).toBeNull();
+  });
+
+  it("GivenReadingsAtAndBelowThePauseLevel_WhenAtReserve_ThenOnlyThePauseOnesHold", () => {
+    const high = reading({ window: "weekly", usedPct: 85 });
+    expect(readingsAtReserve([reading({ usedPct: 75 }), high], now)).toEqual([high]);
+    expect(readingsAtReserve([{ ...high, discarded }], now)).toEqual([]);
+  });
+
+  it("GivenAReadingAtTheReserve_WhenCleared_ThenDiscardedAndDispatchIsWoken", async () => {
+    vi.spyOn(console, "log").mockImplementation(() => {});
+    const store = new InMemoryQuotaStore();
+    await store.save([reading({ usedPct: 92 }), reading({ window: "weekly", usedPct: 20 })]);
+    const wake = vi.fn(async () => {});
+    const result = await new QuotaClearer(store, () => now, wake).clearIdle("andy@example.com");
+    expect(result.cleared).toEqual([
+      expect.objectContaining({ window: "5h", usedPct: 92, by: "andy@example.com" }),
+    ]);
+    expect(wake).toHaveBeenCalledOnce();
+    expect(quotaStatus("claude-sub", await store.latest("claude-sub"), now).level).toBe("unknown");
+  });
+
+  it("GivenNothingAtTheReserve_WhenCleared_ThenRefusedAndNothingIsWoken", async () => {
+    const store = new InMemoryQuotaStore();
+    await store.save([reading({ usedPct: 50 })]);
+    const wake = vi.fn(async () => {});
+    const clearer = new QuotaClearer(store, () => now, wake);
+    await expect(clearer.clearIdle("andy@example.com")).rejects.toMatchObject({
+      code: "not_clearable",
+    });
+    await expect(new QuotaClearer(null).clearIdle("a")).rejects.toBeInstanceOf(DomainError);
+    expect(wake).not.toHaveBeenCalled();
   });
 });

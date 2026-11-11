@@ -166,4 +166,63 @@ describe("/projects", () => {
     await waitFor(() => expect(pathname(h)).toBe("/projects/new"));
     expect(screen.getByRole("button", { name: "Create project" })).toBeTruthy();
   });
+
+  // AI-74: the clear sits beside the idle reason while a reading holds dispatch at the reserve.
+  describe("clear quota idle", () => {
+    const highReading = (takenAt = new Date().toISOString()) => ({
+      provider: "claude-sub" as const,
+      window: "5h" as const,
+      usedPct: 92,
+      resetsAt: new Date(Date.now() + 3_600_000).toISOString(),
+      source: "test",
+      takenAt,
+      confidence: "high" as const,
+    });
+
+    async function idleAtReserve() {
+      const h = renderApp("/p/ai/settings");
+      await h.tracker.createProject({ name: "Andy Intelligence", key: "AI" });
+      await h.tracker.updateProject("ai", {
+        autoBuild: true,
+        buildEnabled: true,
+        lastDispatch: { decision: "quota_reserve", at: "2026-11-09T12:00:00.000Z" },
+      });
+      const reading = highReading();
+      await h.quota.save([reading]);
+      await h.queryClient.invalidateQueries();
+      const list = await settings();
+      await within(list).findByText(/Dispatch: subscription quota is at its reserve/);
+      return { h, list, reading };
+    }
+
+    it("GivenDispatchIdleAtTheReserve_WhenAndyClears_ThenTheButtonGoesAndTheReadingIsDiscarded", async () => {
+      const { h, list } = await idleAtReserve();
+      await h.user.click(within(list).getByRole("button", { name: "Clear quota idle" }));
+      await waitFor(() =>
+        expect(within(list).queryByRole("button", { name: "Clear quota idle" })).toBeNull(),
+      );
+      const [latest] = await h.quota.latest("claude-sub");
+      expect(latest?.discarded?.by).toBe("andy@example.com");
+    });
+
+    it("GivenTheReadingWasAlreadyCleared_WhenAndyClearsAgain_ThenTheRefusalIsShown", async () => {
+      const { h, list, reading } = await idleAtReserve();
+      await h.quota.discard("claude-sub", [reading], {
+        by: "andy@example.com",
+        at: new Date().toISOString(),
+      });
+      await h.user.click(within(list).getByRole("button", { name: "Clear quota idle" }));
+      expect(await within(list).findByText(/nothing to clear/)).toBeTruthy();
+    });
+
+    it("GivenQuotaBelowTheReserve_WhenThePageOpens_ThenNoClearIsOffered", async () => {
+      const h = renderApp("/p/ai/settings");
+      await h.tracker.createProject({ name: "Andy Intelligence", key: "AI" });
+      await h.quota.save([{ ...highReading(), usedPct: 40 }]);
+      await h.queryClient.invalidateQueries();
+      const list = await settings();
+      await within(list).findByRole("checkbox", { name: "Paused" });
+      expect(within(list).queryByRole("button", { name: "Clear quota idle" })).toBeNull();
+    });
+  });
 });

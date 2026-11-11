@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { screen, waitFor, within } from "@testing-library/react";
+import { fireEvent, screen, waitFor, within } from "@testing-library/react";
 import type { QuotaReading } from "@andy/contracts";
 import { renderApp } from "@/test/harness";
 
@@ -45,11 +45,28 @@ describe("quota gauge and banner", () => {
     expect(within(banner).queryByRole("button")).toBeNull();
   });
 
-  it("GivenAWindowPastPause_WhenTheShellOpens_ThenThePauseBannerSaysRunsAreNotPausedYet", async () => {
+  it("GivenAWindowPastPause_WhenTheShellOpens_ThenThePauseBannerSaysDispatchHolds", async () => {
     await open([reading("5h", 75), reading("weekly", 85)]);
     const banner = await screen.findByRole("alert");
     expect(banner.textContent).toMatch(/pause level \(80%\): Weekly 85%/);
-    expect(banner.textContent).toMatch(/not paused automatically yet/);
+    expect(banner.textContent).toMatch(/Dispatch starts nothing new until it drops/);
+  });
+
+  // AI-74: the clear shows only while a reading holds dispatch at the reserve.
+  it("GivenAWindowPastPause_WhenAndyClearsTheIdle_ThenTheReadingIsDiscardedAndQuotaReadsUnknown", async () => {
+    const harness = await open([reading("5h", 92), reading("weekly", 10)]);
+    const banner = await screen.findByRole("alert");
+    fireEvent.click(within(banner).getByRole("button", { name: "Clear quota idle" }));
+    await screen.findByText(/Claude quota unknown/);
+    expect(screen.queryByRole("button", { name: "Clear quota idle" })).toBeNull();
+    const [cleared] = (await harness.quota.latest("claude-sub")).filter((r) => r.window === "5h");
+    expect(cleared?.discarded?.by).toBe("andy@example.com");
+  });
+
+  it("GivenAWindowOnlyPastWarn_WhenTheShellOpens_ThenNoClearIsOffered", async () => {
+    await open([reading("5h", 75), reading("weekly", 10)]);
+    await screen.findByRole("alert");
+    expect(screen.queryByRole("button", { name: "Clear quota idle" })).toBeNull();
   });
 
   it("GivenNoReadings_WhenTheShellOpens_ThenTheGaugeAndALowerSeverityBannerShowUnknown", async () => {
