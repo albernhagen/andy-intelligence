@@ -41,7 +41,7 @@ Between batches, the coordinator writes `docs/build-log/<date>-handover-<milesto
 
 ## 5. Auto-merge by the coordinator (ADR-0078, ADR-0088)
 
-Andy authorised the coordinator to merge **low-risk** PRs itself (2026-11-08); ADR-0078 holds the decision and `AGENTS.md` rule 2 carves out exactly this class. AI-34: M1.8b: Gate and auto-merge builds the same classification into the product (`would_auto_merge`, vetoes, protected paths, outcomes); keep the two aligned.
+Andy authorised the coordinator to merge **low-risk** PRs itself (2026-11-08, ADR-0078) and **medium-risk** PRs too (2026-11-11, ADR-0088); `AGENTS.md` rule 2 carves out exactly these two classes. AI-34: M1.8b: Gate and auto-merge builds the same classification into the product (`would_auto_merge`, vetoes, protected paths, outcomes); keep the two aligned.
 
 A PR is low risk when **all** hold:
 
@@ -53,8 +53,8 @@ A PR is low risk when **all** hold:
 | Diff      | Confined to `apps/web`, `packages/domain`, `packages/store` read paths, read-only MCP tools, or these docs only: `README.md`, `docs/features.md`, `docs/build-log.md`, `docs/build-log/**`, `docs/architecture/history/**`. No `SCHEMA_VERSION` bump, migration, new entry point or credential. Also low risk, only when every row of ADR-0084's table holds (apply that table, not a summary): a lockfile-only fix for open Dependabot alerts, where the coordinator checks the alerts, versions and lockfile sources itself and reads the whole diff. |
 | Size      | S or M.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
 
-**Medium risk** (ADR-0088, Andy 2026-11-11) the coordinator also merges: the Checks, Reviews, Synced and Size rows above all hold and nothing in the diff is high risk. Apply ADR-0088's table, not this summary.
+**Medium risk** (ADR-0088, Andy 2026-11-11) the coordinator also merges: the Checks, Reviews, Synced and Size rows above all hold and nothing in the diff is high risk. Apply ADR-0092's table, not a summary.
 
-**High risk, so Andy merges:** everything in ADR-0088's high-risk table (CI and infra, access, data shape, the review system and executor sandbox, agent rules including this runbook, dependencies, docs-only decision changes, size L, doubt). That table is the only list; it is not repeated here so the two cannot drift. High-risk PRs queue for Andy, verified and listed in the digest in merge order.
+**High risk, so Andy merges:** everything in ADR-0092's high-risk table (CI and infra, access, data shape, the review system and executor sandbox, agent rules including this runbook, dependencies, docs-only decision changes, size L, doubt). That table is the only list; it is not repeated here so the two cannot drift. High-risk PRs queue for Andy, verified and listed in the digest in merge order.
 
 How: `gh pr merge <n> --squash --delete-branch`, one PR at a time; then `gh run list --branch main`; then message every open worker to merge `main` and rerun. Keep a running table of every merge (PR, ticket, risk class, who merged, review verdicts) in the milestone digest (`docs/build-log/<date>-digest-<milestone>.md`), which opens with a plain summary of what was built or changed.

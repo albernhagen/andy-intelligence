@@ -1,5 +1,5 @@
 ---
-status: accepted
+status: accepted, amended by 0092
 date: 2026-11-11
 amends: 0078 (which PRs a coordinator session may merge); AGENTS.md rule 2
 ---
@@ -18,22 +18,18 @@ A coordinator session may merge a PR itself when it is **low risk** (ADR-0078, A
 
 High risk, so **Andy merges**:
 
-| Area             | What counts                                                                                                                                                                                                                                                                                                                                                                                                         |
-| ---------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| CI and infra     | `.github/`, `infra/`, anything needing `terraform apply`, deploy or release paths, `platform/actions/**`, `platform/baseline/**`.                                                                                                                                                                                                                                                                                   |
-| Access           | Sign-in, the allow-list, permissions (AI-19: One permission function), IAM; a new or changed credential or secret; an entry point that is unauthenticated or takes input from outside (webhooks, callbacks).                                                                                                                                                                                                        |
-| Data             | Firestore rules, a `SCHEMA_VERSION` bump, a migration.                                                                                                                                                                                                                                                                                                                                                              |
-| Review and merge | The review agents and what runs them: `platform/procedures/security-review.*`, `adversarial-review.*`, `threat-model.md`, `scripts/review-*.mjs`; the gate and its protected paths (`packages/domain/src/gate.ts`, AI-34: M1.8b: Gate and auto-merge); dispatch caps and the pause (ADR-0079); the executor sandbox: `scripts/executor-*`, `platform/executor/**`, `packages/contracts` schemas the executor reads. |
-| Rules for agents | `AGENTS.md`, `CLAUDE.md`, `docs/BUILD-PROMPT.md`, `.claude/**`, `context-budget.json`, `CODEOWNERS`, `platform/procedures/coordinate.md`, runbook `coordinating-sessions.md`, and any ADR about who merges.                                                                                                                                                                                                         |
-| Dependencies     | A new dependency, a major version jump, install `scripts` (ADR-0084 covers lockfile-only alert fixes).                                                                                                                                                                                                                                                                                                              |
-| Decisions        | A docs-only PR that adds or changes an ADR, `docs/security/**`, `docs/runbooks/**` or `docs/architecture/*.md`. These files may change inside a ticket's own PR when they record what that PR does.                                                                                                                                                                                                                 |
-| Size and doubt   | Size L; a docs-only PR the coordinator has not read in full; anything the coordinator or a reviewer is unsure of.                                                                                                                                                                                                                                                                                                   |
+| Area             | What counts                                                                                                                                                                                                  |
+| ---------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| CI and infra     | `.github/`, `infra/`, anything needing `terraform apply`, deploy or release paths, `platform/actions/**`, `platform/baseline/**`.                                                                            |
+| Access           | Sign-in, the allow-list, permissions (AI-19: One permission function), IAM; a new or changed credential or secret; an entry point that is unauthenticated or takes input from outside (webhooks, callbacks). |
+| Data             | Firestore rules, a `SCHEMA_VERSION` bump, a migration.                                                                                                                                                       |
+| Review and merge | The review agents' procedures, the gate and its protected paths (AI-34: M1.8b: Gate and auto-merge), the executor sandbox (`scripts/executor-*`, `platform/executor/**`).                                    |
+| Rules for agents | `AGENTS.md`, `CLAUDE.md`, `docs/BUILD-PROMPT.md`, `.claude/**`, `context-budget.json`, `CODEOWNERS`, `platform/procedures/coordinate.md`, runbook `coordinating-sessions.md`, and any ADR about who merges.  |
+| Dependencies     | A new dependency, a major version jump, install `scripts` (ADR-0084 covers lockfile-only alert fixes).                                                                                                       |
+| Decisions        | A docs-only PR that adds or changes an ADR or `docs/security/**`. These files may change inside a ticket's own PR when they record what that PR does.                                                        |
+| Size and doubt   | Size L; a docs-only PR the coordinator has not read in full; anything the coordinator or a reviewer is unsure of.                                                                                            |
 
 The coordinator never merges a change to its own authority.
-
-**Left out on purpose** (reserved for Andy by ADR-0078, medium now): the other agent procedures (`refine.md`, `plan.md`, `build.md`, `sync.md`, `inbox.md`) and scripts outside the rows above; dispatcher logic other than caps and the pause; a signed-in route added beside existing ones; and design docs or runbooks changed inside a ticket's PR. They get both review agents and, from AI-6: M1.17: Agent evals v1, the `agent-evals` check.
-
-**One list.** This table is the list. `platform/procedures/coordinate.md` and runbook `coordinating-sessions.md` point here and do not restate it.
 
 High-risk PRs queue for Andy: verified, listed in the digest in merge order, re-synced when he is ready to merge.
 
@@ -42,5 +38,5 @@ High-risk PRs queue for Andy: verified, listed in the digest in merge order, re-
 ## Consequences
 
 - Good: tickets that build on each other land without waiting on Andy; he reviews the few PRs that touch access, infrastructure, data shape or the review system.
-- Bad: a wrongly classified or subtly wrong feature PR reaches `main` and deploys without a human reading it. Bounds: the required checks and both review agents on every non-docs PR, the high-risk list, safe deploy and rollback (AI-62), the digest. The threat model carries it as R23, raised to high.
-- The gate's `would_auto_merge` (AI-34) still uses its own, stricter protected paths (ADR-0078's list), so the gate and this table differ (threat model R21); aligning them is part of the `autoMerge` trial, after which this manual rule retires for project `AI`.
+- Bad: a wrongly classified or subtly wrong feature PR reaches `main` and deploys without a human reading it. Bounds: the required checks and both review agents on every non-docs PR, the high-risk list, safe deploy and rollback (AI-62), the digest. The threat model carries it as R23.
+- The gate's `would_auto_merge` (AI-34) still uses its own rules; aligning them is part of the `autoMerge` trial, after which this manual rule retires for project `AI`.
