@@ -671,3 +671,4 @@ export class InMemoryCodeEventLog implements CodeEventLog {
     return event ? structuredClone(event) : null;
   }
 }
+export * from "./notify-email";

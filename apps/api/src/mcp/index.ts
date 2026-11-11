@@ -1,6 +1,7 @@
 import type { WorkTracker } from "@andy/contracts";
 import type {
   DigestReader,
+  EmailNotifications,
   ProjectService,
   QuotaClearer,
   RunService,
@@ -28,6 +29,7 @@ export function registerMcp(
     runs: RunService;
     projects: ProjectService;
     digest: DigestReader;
+    notifyEmail: EmailNotifications | null;
     quota: QuotaClearer;
   },
 ) {

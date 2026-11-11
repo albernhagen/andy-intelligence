@@ -16,6 +16,7 @@ import {
   Urgency,
 } from "./common";
 import { projectDispatchFields } from "./dispatch-caps";
+import { projectNotifyFields } from "./notify-email";
 
 export * from "./common";
 export * from "./dispatch-caps";
@@ -35,6 +36,7 @@ export * from "./cost";
 export * from "./in-flight";
 export * from "./sync";
 export * from "./scores";
+export * from "./notify-email";
 export * from "./question-format";
 
 /** ARCHITECTURE §5 — domain model. Vendor concepts must not appear here. */
@@ -91,6 +93,7 @@ export const Project = z.object({
    */
   autoMerge: AutoMerge.default("none"),
   ...projectDispatchFields,
+  ...projectNotifyFields,
   /** Who does a ticket's work when it has no pick of its own (ADR-0082). */
   defaultWorker: Worker.default("agent"),
 });

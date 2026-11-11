@@ -332,6 +332,29 @@ resource "google_cloud_run_v2_service" "control_plane" {
         name  = "WATCHDOG_INVOKER_EMAIL"
         value = google_service_account.tasks_invoker.email
       }
+      # Email for the Needs-you inbox (AI-77): set only once Andy turns email_enabled on, after
+      # adding the API key's version (runbook email-notifications.md). Until then the API sends
+      # nothing and logs "email not configured". The switch is a plain bool: for_each can't take
+      # values derived from the sensitive addresses.
+      dynamic "env" {
+        for_each = var.email_enabled ? toset(["EMAIL_FROM", "EMAIL_TO"]) : toset([])
+        content {
+          name  = env.key
+          value = env.key == "EMAIL_FROM" ? var.email_from : var.email_to
+        }
+      }
+      dynamic "env" {
+        for_each = var.email_enabled ? [google_secret_manager_secret.resend_api_key.secret_id] : []
+        content {
+          name = "RESEND_API_KEY"
+          value_source {
+            secret_key_ref {
+              secret  = env.value
+              version = "latest"
+            }
+          }
+        }
+      }
     }
   }
 
@@ -382,6 +405,27 @@ resource "google_secret_manager_secret_iam_member" "runtime_adds_github_versions
   for_each  = google_secret_manager_secret.github
   secret_id = each.value.id
   role      = "roles/secretmanager.secretVersionAdder"
+  member    = "serviceAccount:${google_service_account.runtime.email}"
+}
+
+# ── Email notifications (AI-77, ADR-0060) ───────────────────────────────────────
+# The Resend API key's container only: Andy adds its version by hand (runbook
+# email-notifications.md), so the key never passes through Terraform, state or the repo.
+
+resource "google_secret_manager_secret" "resend_api_key" {
+  secret_id = "resend-api-key"
+
+  replication {
+    auto {}
+  }
+
+  depends_on = [google_project_service.apis]
+}
+
+# The runtime reads this secret only; nothing can add versions but Andy.
+resource "google_secret_manager_secret_iam_member" "runtime_reads_resend_api_key" {
+  secret_id = google_secret_manager_secret.resend_api_key.id
+  role      = "roles/secretmanager.secretAccessor"
   member    = "serviceAccount:${google_service_account.runtime.email}"
 }
 

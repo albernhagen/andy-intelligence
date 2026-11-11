@@ -74,7 +74,7 @@ describe("project settings page", () => {
     expect(value("Default worker")).toBe("ask");
     expect(within(list).getByText("Dispatch: paused by you")).toBeTruthy();
     // One row per setting group, each with its line on what it does.
-    expect(within(list).getAllByRole("listitem")).toHaveLength(8);
+    expect(within(list).getAllByRole("listitem")).toHaveLength(9);
     expect(within(list).getByText(/never over MCP/)).toBeTruthy();
   });
 
