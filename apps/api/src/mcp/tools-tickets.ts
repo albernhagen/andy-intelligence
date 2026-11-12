@@ -9,6 +9,7 @@ import {
 import {
   DomainError,
   inboxCards,
+  readEpicRollup,
   ticketStatusLine,
   type InboxCard,
   type TicketStatus,
@@ -72,13 +73,26 @@ const ReorderInput = {
   below: TicketKey.optional().describe("Place directly below this ticket."),
 };
 
-/** `status` for a ticket with the status line the UI shows. */
+/**
+ * `status` for a ticket with the status line the UI shows; an epic also gets its children and
+ * roll-up (AI-85), the same the epic panel reads.
+ */
 export async function statusLineOf<S extends TicketStatus>(deps: ToolDeps, status: S) {
   const { ticket, questions } = status;
   const tickets = await deps.tracker.listTickets(ticket.projectId);
   const open = questions.filter((q) => q.status === "open").length;
-  const line = await lineFor(deps, ticket, tickets, open, status.worker, status.executor.next);
-  return { ...status, statusLine: line };
+  const [line, epic] = await Promise.all([
+    lineFor(deps, ticket, tickets, open, status.worker, status.executor.next),
+    ticket.type === "epic"
+      ? readEpicRollup(
+          ticket,
+          tickets,
+          (p, t) => deps.runs.list(p, t),
+          (p) => deps.tracker.listTickets(p).catch(() => []),
+        )
+      : Promise.resolve(undefined),
+  ]);
+  return { ...status, statusLine: line, ...(epic && { epic }) };
 }
 
 async function lineFor(

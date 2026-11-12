@@ -2,6 +2,8 @@ import { OpenAPIHono, createRoute, z } from "@hono/zod-openapi";
 import {
   WorkTrackerError,
   type CodeEventLog,
+  type ConfigChangeStore,
+  type ReviewFindingSource,
   type CodeHostConnectionStore,
   type OAuthGrantStore,
   type RunStore,
@@ -21,6 +23,7 @@ import {
   RunnerService,
   LocalClaims,
   BoardReader,
+  ConfigProposals,
   DigestReader,
   QuotaClearer,
   TicketService,
@@ -37,8 +40,12 @@ import { registerRunCallbacks, registerRunRoutes } from "./runs";
 import { registerRunnerClaim, registerRunnerRoutes, runnerCredentials } from "./runners";
 import { registerTicketRoutes } from "./tickets";
 import { registerBoardRoutes } from "./board";
+import { registerEpicRoutes } from "./epics";
 import { registerInFlightRoutes } from "./in-flight";
 import { registerDigestRoutes } from "./digest";
+import { registerDashboardRoutes } from "./dashboard";
+import { registerSetupRoutes } from "./setup";
+import { noReviewFindings, registerConfigProposalRoutes } from "./config-proposals";
 import { registerNotifyFlush, registerNotifyRoutes } from "./notify";
 import {
   ConnectedCodeHost,
@@ -78,6 +85,10 @@ export interface AppDeps {
    * when not configured.
    */
   runners?: RunnerStore;
+  /** Pending config changes from review findings (ADR-0097); off (routes absent) when unset. */
+  configChanges?: ConfigChangeStore;
+  /** Stored review findings (ADR-0097 PR B); until then none, so sweeps propose nothing. */
+  reviewFindings?: ReviewFindingSource;
   /** Subscription quota readings (M1.9). Without it every window reads unknown. */
   quota?: QuotaStore;
   /**
@@ -401,6 +412,7 @@ export function createApp(input: AppDeps) {
   );
   registerTicketRoutes(app, deps.tracker, service, projects, runs);
   registerBoardRoutes(app, new BoardReader(deps.tracker, deps.runs));
+  registerEpicRoutes(app, deps.tracker, deps.runs);
 
   registerRunRoutes(app, runs, deps.runs);
   if (runners) registerRunnerRoutes(app, runners);
@@ -412,7 +424,18 @@ export function createApp(input: AppDeps) {
   registerQuotaRoutes(app, deps.quota ?? null, quotaClearer, now);
   const digest = new DigestReader(deps.tracker, deps.runs, deps.quota ?? null, now);
   registerDigestRoutes(app, digest, now);
+  registerDashboardRoutes(app, deps, now);
+  registerSetupRoutes(app, deps.tracker, connection ? new ConnectedCodeHost(connection) : null);
   registerNotifyRoutes(app, email);
+  const configProposals = deps.configChanges
+    ? new ConfigProposals(
+        deps.tracker,
+        deps.reviewFindings ?? noReviewFindings,
+        deps.configChanges,
+        now,
+      )
+    : null;
+  if (configProposals) registerConfigProposalRoutes(app, configProposals);
 
   if (github && connection) {
     registerGitHubSetup(app, {
@@ -436,6 +459,7 @@ export function createApp(input: AppDeps) {
       digest,
       notifyEmail: email,
       quota: quotaClearer,
+      configProposals,
     });
   }
 
