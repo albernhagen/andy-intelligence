@@ -44,6 +44,7 @@ vi.mock("@/lib/queries", () => ({
   useNeedsYou: () => ({ isPending: false, isError: false, data }),
   useProjects: () => ({ data: [] }),
 }));
+vi.mock("@/components/ProjectPlan", () => ({ ProjectPlansWaiting: () => null }));
 vi.mock("@/components/inbox/InboxTicketCard", () => ({
   InboxTicketCard: ({ card }: { card: { ticket: Ticket } }) => (
     <article aria-label={card.ticket.key} />

@@ -1,6 +1,7 @@
 import { useParams } from "@tanstack/react-router";
 import type { Project } from "@andy/contracts";
 import { InboxTicketCard } from "@/components/inbox/InboxTicketCard";
+import { ProjectPlansWaiting } from "@/components/ProjectPlan";
 import { Loading, QueryError } from "@/components/Status";
 import { cardCount, inboxCards, type InboxCard } from "@/lib/needs-you";
 import { useNeedsYou, useProjects } from "@/lib/queries";
@@ -27,6 +28,7 @@ export function InboxPage() {
       <h2 className="text-lg font-medium">
         Needs you <span className="text-muted-foreground tabular-nums">{total}</span>
       </h2>
+      <ProjectPlansWaiting projectId={projectId} />
       {total === 0 && <p className="text-muted-foreground">Nothing needs you.</p>}
       {projectId ? (
         <Cards cards={active} />
