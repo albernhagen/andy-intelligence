@@ -41,7 +41,7 @@ export function buildRoute(ticket: Pick<Ticket, "size" | "overrides">): {
 }
 
 /**
- * The `blockedBy` keys that aren't Done. A key with no ticket counts as unfinished: a typo
+ * The `blockedBy` entries (keys in any project, AI-96) that aren't Done. A key with no ticket counts as unfinished: a typo
  * mustn't release a ticket early.
  */
 export function unfinishedBlockers(

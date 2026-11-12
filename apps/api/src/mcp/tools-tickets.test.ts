@@ -8,10 +8,14 @@ import {
 import { TicketService, inboxCards, ticketStatusLine } from "@andy/domain";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
+import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
+import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { describe, expect, it } from "vitest";
 import { createApp } from "../app";
 import { parseAllowList, type TokenVerifier } from "../auth";
 import { ClientMetadataResolver } from "./client-metadata";
+import type { ToolDeps } from "./tools";
+import { registerTicketTools } from "./tools-tickets";
 import { hashToken, newToken } from "./tokens";
 
 const PUBLIC_URL = "https://control-plane.example.run.app";
@@ -147,16 +151,34 @@ describe("edit_ticket", () => {
     expect((await ctx.tracker.getTicket("ai", t.id))?.size).toBe("S");
   });
 
-  it("GivenBlockerKeys_WhenEdited_ThenStoredAsIdsAndForeignOnesRefused", async () => {
+  it("GivenBlockerKeysInAnyProject_WhenEdited_ThenStoredAsKeysAndUnknownOnesNotFound", async () => {
     const ctx = await setup();
     const a = await ctx.service.create("ai", { title: "A" }, "andy");
     const b = await ctx.service.create("ai", { title: "B" }, "andy");
     const ops = await ctx.service.create("ops", { title: "O" }, "andy");
-    await ctx.call("edit_ticket", { ticket: a.key, blockedBy: [b.key] });
-    expect((await ctx.tracker.getTicket("ai", a.id))?.blockedBy).toEqual([b.id]);
+    await ctx.call("edit_ticket", { ticket: a.key, blockedBy: [b.key, ops.key] });
+    expect((await ctx.tracker.getTicket("ai", a.id))?.blockedBy).toEqual(["AI-2", "OPS-1"]);
 
+    for (const key of ["OPS-9", "NOPE-1"]) {
+      const res = await ctx.call("edit_ticket", { ticket: a.key, blockedBy: [key] });
+      expect(res).toMatchObject({ isError: true });
+      expect(res.text).toMatch(/not found/);
+    }
+    const patched = await ctx.rest(`/api/projects/ai/tickets/${a.id}`, {
+      method: "PATCH",
+      body: JSON.stringify({ blockedBy: ["OPS-9"] }),
+    });
+    expect(patched.status).toBe(404);
+    expect((await ctx.tracker.getTicket("ai", a.id))?.blockedBy).toEqual(["AI-2", "OPS-1"]);
+  });
+
+  it("GivenACrossProjectCycle_WhenEdited_ThenRefused", async () => {
+    const ctx = await setup();
+    const a = await ctx.service.create("ai", { title: "A" }, "andy");
+    const ops = await ctx.service.create("ops", { title: "O" }, "andy");
+    await ctx.call("edit_ticket", { ticket: ops.key, blockedBy: [a.key] });
     const res = await ctx.call("edit_ticket", { ticket: a.key, blockedBy: [ops.key] });
-    expect(res).toMatchObject({ isError: true, text: "OPS-1 is not in this project" });
+    expect(res).toMatchObject({ isError: true, text: "OPS-1 is already waiting on AI-1" });
   });
 
   it("GivenABlockerCycle_WhenEdited_ThenRefusedOverMcpAndRest", async () => {
@@ -231,6 +253,64 @@ describe("set_ticket_parent", () => {
     });
     expect(patched.status).toBe(422);
     expect((await ctx.tracker.getTicket("ai", a.id))?.parentId).toBeNull();
+  });
+});
+
+describe("accept_assumption", () => {
+  const held = {
+    id: "r1-a1",
+    text: "Assume kanban",
+    question: "Kanban?",
+    options: [],
+    cost: "direction",
+    confidence: "unsure",
+    demotedBy: "daily_cap",
+    runId: "r1",
+    status: "assumed",
+    questionId: null,
+    answeredAt: null,
+    settledBy: null,
+    createdAt: "2026-11-08T00:00:00.000Z",
+  };
+
+  /** The ticket tools wired to `actor` directly: the HTTP endpoint only ever passes a user. */
+  async function callAs(actor: string, tracker: InMemoryWorkTracker, service: TicketService) {
+    const server = new McpServer({ name: "test", version: "1" });
+    registerTicketTools(server, { tracker, service, actor, email: "" } as unknown as ToolDeps);
+    const [clientSide, serverSide] = InMemoryTransport.createLinkedPair();
+    await server.connect(serverSide);
+    const client = new Client({ name: "test", version: "1" });
+    await client.connect(clientSide);
+    return async (name: string, args: Record<string, unknown>) => {
+      const result = await client.callTool({ name, arguments: args });
+      const text = (result.content as { type: string; text: string }[])[0]?.text ?? "";
+      return { isError: result.isError === true, text };
+    };
+  }
+
+  it("GivenAHeldGapAndACallerWhoIsNotTheOwner_WhenAccepted_ThenRefusedAndUnchanged", async () => {
+    const ctx = await setup();
+    const t = await ctx.service.create("ai", { title: "Board" }, "andy");
+    await ctx.tracker.updateTicket(
+      "ai",
+      t.id,
+      { fields: { refineAssumptions: [held] as never } },
+      "system",
+    );
+
+    const call = await callAs("agent:r1", ctx.tracker, ctx.service);
+    const res = await call("accept_assumption", { ticket: t.key, assumptionId: "r1-a1" });
+    expect(res).toMatchObject({ isError: true, text: "only the owner can accept a held gap" });
+    expect((await ctx.tracker.getTicket("ai", t.id))?.refineAssumptions[0]).toMatchObject({
+      status: "assumed",
+    });
+  });
+
+  it("GivenAnUnknownAssumption_WhenAcceptedByTheOwner_ThenRefused", async () => {
+    const ctx = await setup();
+    const t = await ctx.service.create("ai", { title: "Board" }, "andy");
+    const res = await ctx.call("accept_assumption", { ticket: t.key, assumptionId: "nope" });
+    expect(res.isError).toBe(true);
   });
 });
 
