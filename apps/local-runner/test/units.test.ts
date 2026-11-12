@@ -1,9 +1,11 @@
+import { spawn } from "node:child_process";
 import {
   chmodSync,
   mkdirSync,
   mkdtempSync,
   readFileSync,
   readdirSync,
+  realpathSync,
   utimesSync,
   writeFileSync,
 } from "node:fs";
@@ -18,7 +20,15 @@ import { KEYCHAIN_SERVICE, controlPlaneOrigin, checkRepo } from "../src/config";
 import { login, logout, readSecret } from "../src/keychain";
 import { loadPlatform } from "../src/platform";
 import { pruneWork } from "../src/runner";
-import { factsProblem } from "../src/sandbox-check";
+import { noConfinement, seatbelt, seatbeltProfile } from "../src/seatbelt";
+import {
+  cleanLeftoverAgents,
+  killAllAgents,
+  startWatchdog,
+  startTime,
+  track,
+  writePidFile,
+} from "../src/processes";
 import { SECRET } from "./fake-server";
 import { WORKSPACE, makeEnv } from "./fixtures";
 
@@ -188,24 +198,6 @@ describe("control plane answers", () => {
   });
 });
 
-describe("sandbox facts", () => {
-  const ok = "nonce=abc\noutside=denied\nenv=PATH\nenv=HOME\n";
-  const input = { nonce: "abc", probeExists: false, credentialVars: ["GH_TOKEN"] };
-
-  it("GivenFactsFromAWorkingSandbox_WhenChecked_ThenThereIsNoProblem", () => {
-    expect(factsProblem(ok, input)).toBeNull();
-  });
-
-  it("GivenFactsThatShowNoSandbox_WhenChecked_ThenEachIsAProblem", () => {
-    expect(factsProblem(null, input)).toMatch(/no facts/);
-    expect(factsProblem(ok.replace("abc", "xyz"), input)).toMatch(/nonce/);
-    expect(factsProblem(ok.replace("denied", "written"), input)).toMatch(/outside/);
-    expect(factsProblem(ok, { ...input, probeExists: true })).toMatch(/outside/);
-    expect(factsProblem(`${ok}env=GH_TOKEN\n`, input)).toMatch(/GH_TOKEN/);
-    expect(factsProblem(`${ok}env=RUN_TOKEN\n`, input)).toMatch(/RUN_TOKEN/);
-  });
-});
-
 describe("kept work directories", () => {
   it("GivenMoreThanTheCap_WhenPruned_ThenTheNewestAreKept", () => {
     const home = mkdtempSync(join(tmpdir(), "lr-prune-"));
@@ -220,14 +212,17 @@ describe("kept work directories", () => {
 });
 
 describe("local-runner check-settings", () => {
-  const platform = () => loadPlatform(WORKSPACE);
+  const platform = () =>
+    loadPlatform({ root: WORKSPACE, confinement: noConfinement, profilePath: "/nonexistent" });
 
   it("GivenAnAgentThatHonoursSettingSources_WhenChecked_ThenItPasses", async () => {
     const env = makeEnv();
     const problem = await checkSettings({
-      platform: await platform(),
+      platform: platform(),
       claudeCommand: env.claude,
-      dir: join(env.root, "check"),
+      dir: join(env.home, "check-settings", "scratch"),
+      runnerHome: env.home,
+      confinement: process.platform === "darwin" ? seatbelt : noConfinement,
     });
     expect(problem).toBeNull();
   });
@@ -235,10 +230,117 @@ describe("local-runner check-settings", () => {
   it("GivenAnAgentThatLoadsProjectSettings_WhenChecked_ThenItFailsNamingTheSources", async () => {
     const env = makeEnv({ ignoreSettingSources: true });
     const problem = await checkSettings({
-      platform: await platform(),
+      platform: platform(),
       claudeCommand: env.claude,
-      dir: join(env.root, "check"),
+      dir: join(env.home, "check-settings", "scratch"),
+      runnerHome: env.home,
+      confinement: process.platform === "darwin" ? seatbelt : noConfinement,
     });
     expect(problem).toBe("hooks from the project and local settings ran");
+  });
+});
+
+describe("seatbelt profile", () => {
+  it("GivenATask_WhenBuildingTheAgentsProfile_ThenHomesAndTheRunnerDirAreDeniedAndOnlyTheCheckoutReopened", () => {
+    const profile = seatbeltProfile({
+      runnerHome: "/opt/runner-home",
+      read: ["/opt/runner-home/work/r1/project"],
+      claude: { command: "/bin/sh" },
+    });
+    const lines = profile.split("\n");
+    const deny = lines.findIndex((l) => l.startsWith("(deny file-read-data file-write*"));
+    const allow = lines.indexOf(
+      '(allow file-read-data (subpath "/opt/runner-home/work/r1/project"))',
+    );
+    expect(lines[deny]).toContain('(subpath "/Users")');
+    expect(lines[deny]).toContain('(subpath "/opt/runner-home")');
+    expect(allow).toBeGreaterThan(deny); // later rules win
+    expect(profile).not.toContain("(deny network*)");
+  });
+
+  it("GivenThePlatformChild_WhenBuildingItsProfile_ThenItIsOfflineAndWithoutTheKeychain", () => {
+    const profile = seatbeltProfile({ runnerHome: "/opt/h", read: ["/opt/h/p"], offline: true });
+    expect(profile).toContain("(deny network*)");
+    expect(profile).toContain('(global-name "com.apple.SecurityServer")');
+  });
+
+  it("GivenAPathWithAQuote_WhenBuildingAProfile_ThenItIsRefused", () => {
+    expect(() => seatbeltProfile({ runnerHome: '/opt/a"b', read: [] })).toThrow(/not allowed/);
+  });
+
+  it.runIf(process.platform === "darwin")(
+    "GivenTheRealSandbox_WhenChecked_ThenTheAgentsProfilePassesAndAnOpenProfileFails",
+    async () => {
+      const home = realpathSync(mkdtempSync(join(tmpdir(), "lr-sb-")));
+      const runDir = join(home, "work", "r1");
+      const checkout = join(runDir, "project");
+      mkdirSync(checkout, { recursive: true });
+      writeFileSync(join(checkout, "README.md"), "x");
+      const good = join(home, "good.sb");
+      writeFileSync(
+        good,
+        seatbeltProfile({ runnerHome: home, read: [checkout], claude: { command: "/bin/sh" } }),
+      );
+      expect(await seatbelt.check({ profilePath: good, checkout, runDir })).toBeNull();
+      const open = join(home, "open.sb");
+      writeFileSync(open, "(version 1)\n(allow default)\n");
+      expect(await seatbelt.check({ profilePath: open, checkout, runDir })).toBe(
+        "a file outside the checkout was readable",
+      );
+    },
+  );
+});
+
+describe("agents never outlive the runner", () => {
+  const alive = (pid: number) => {
+    try {
+      process.kill(pid, 0);
+      return true;
+    } catch {
+      return false;
+    }
+  };
+  const detachedSleep = () => {
+    const child = spawn("/bin/sleep", ["60"], { detached: true, stdio: "ignore" });
+    child.unref();
+    return child.pid!;
+  };
+
+  it("GivenLiveAgents_WhenTheRunnerExits_ThenKillAllAgentsKillsTheirGroups", async () => {
+    const pid = detachedSleep();
+    track(pid);
+    expect(killAllAgents()).toBe(1);
+    await expect.poll(() => alive(pid), { timeout: 3000 }).toBe(false);
+  });
+
+  it("GivenARunnerThatIsKilled_WhenItsAgentIsStillRunning_ThenTheWatchdogKillsTheAgent", async () => {
+    const runner = spawn("/bin/sleep", ["60"], { detached: true, stdio: "ignore" });
+    runner.unref();
+    const agent = detachedSleep();
+    startWatchdog(agent, runner.pid!);
+    await new Promise((r) => setTimeout(r, 300));
+    expect(alive(agent)).toBe(true);
+    process.kill(runner.pid!, "SIGKILL");
+    await expect.poll(() => alive(agent), { timeout: 8000, interval: 200 }).toBe(false);
+  }, 15_000);
+
+  it("GivenALeftoverAgentPidFile_WhenTheRunnerStarts_ThenOnlyAMatchingLiveProcessIsKilled", async () => {
+    const home = mkdtempSync(join(tmpdir(), "lr-left-"));
+    const live = detachedSleep();
+    const other = detachedSleep();
+    mkdirSync(join(home, "work", "run-a"), { recursive: true });
+    mkdirSync(join(home, "work", "run-b"), { recursive: true });
+    await writePidFile(join(home, "work", "run-a", "agent.pid"), live);
+    // A reused pid: same number, another start time, never killed.
+    writeFileSync(
+      join(home, "work", "run-b", "agent.pid"),
+      JSON.stringify({ pgid: other, started: "Mon Jan  1 00:00:00 2001" }),
+    );
+    expect(await startTime(live)).not.toBeNull();
+
+    expect(await cleanLeftoverAgents(home)).toEqual(["run-a"]);
+    await expect.poll(() => alive(live), { timeout: 3000 }).toBe(false);
+    expect(alive(other)).toBe(true);
+    process.kill(-other, "SIGKILL");
   });
 });

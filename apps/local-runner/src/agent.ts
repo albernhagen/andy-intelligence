@@ -1,7 +1,8 @@
 import { spawn } from "node:child_process";
-import { createWriteStream } from "node:fs";
+import { createWriteStream, rmSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import { LOCAL_LIMITS } from "./config";
+import { startWatchdog, track, untrack, writePidFile } from "./processes";
 
 /** Tools for read-only steps, repeated as flags on top of the profile (as on Actions). */
 export const READ_ONLY_ALLOWED = "Read,Glob,Grep";
@@ -93,6 +94,8 @@ export interface SpawnAgentInput {
   outputPath: string;
   timeoutMs: number;
   signal: AbortSignal;
+  /** Where the agent's group id and start time go, for the next start's leftover check. */
+  pidFile?: string;
 }
 
 /**
@@ -113,6 +116,19 @@ export async function spawnAgent(input: SpawnAgentInput): Promise<AgentRun> {
     stdio: ["pipe", "pipe", "pipe"],
     detached: true,
   });
+  const exited = new Promise<number | null>((resolve) => {
+    child.on("error", (err) => {
+      stderrTail = `${stderrTail}\n${err.message}`.slice(-2000);
+      resolve(null);
+    });
+    child.on("close", (code) => resolve(code));
+  });
+  // Its own process group (detached): stopped as a group, and never outliving the runner.
+  const pgid = child.pid;
+  if (pgid !== undefined) {
+    track(pgid);
+    startWatchdog(pgid);
+  }
 
   const kill = () => {
     if (child.exitCode !== null || child.signalCode !== null || child.pid === undefined) return;
@@ -157,15 +173,14 @@ export async function spawnAgent(input: SpawnAgentInput): Promise<AgentRun> {
   child.stdin.on("error", () => undefined);
   child.stdin.end(input.prompt);
 
-  const exitCode = await new Promise<number | null>((resolve) => {
-    child.on("error", (err) => {
-      stderrTail = `${stderrTail}\n${err.message}`.slice(-2000);
-      resolve(null);
-    });
-    child.on("close", (code) => resolve(code));
-  });
+  if (pgid !== undefined && input.pidFile) {
+    await writePidFile(input.pidFile, pgid).catch(() => undefined);
+  }
+  const exitCode = await exited;
   clearTimeout(timer);
   input.signal.removeEventListener("abort", onAbort);
+  if (pgid !== undefined) untrack(pgid);
+  if (input.pidFile) rmSync(input.pidFile, { force: true });
   await new Promise<void>((resolve) => out.end(resolve));
 
   return {

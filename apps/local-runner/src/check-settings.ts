@@ -5,6 +5,7 @@ import { join } from "node:path";
 import { READ_ONLY_ALLOWED, READ_ONLY_DENIED, agentArgs, agentEnv, spawnAgent } from "./agent";
 import { git } from "./git";
 import type { Platform } from "./platform";
+import { seatbeltProfile, type Confinement } from "./seatbelt";
 
 /**
  * The live proof that a local agent loads no project or local settings and no hooks (ADR-0089
@@ -29,6 +30,9 @@ export interface CheckSettingsInput {
   claudeCommand: string;
   /** A scratch directory this check owns; removed afterwards. */
   dir: string;
+  /** The runner's directory, denied to the agent like in a task. */
+  runnerHome: string;
+  confinement: Confinement;
   model?: string;
   signal?: AbortSignal;
 }
@@ -36,13 +40,16 @@ export interface CheckSettingsInput {
 /** Null when no project or local setting or hook loaded, else what went wrong. */
 export async function checkSettings(input: CheckSettingsInput): Promise<string | null> {
   const project = join(input.dir, "project");
+  // Writable under the agent's sandbox, so a hook that loads can leave its marker.
+  const markerDir = join(input.dir, "markers");
   const markers = {
-    project: join(input.dir, "project-hook-ran"),
-    local: join(input.dir, "local-hook-ran"),
+    project: join(markerDir, "project-hook-ran"),
+    local: join(markerDir, "local-hook-ran"),
   };
   const nonce = randomBytes(8).toString("hex");
   await rm(input.dir, { recursive: true, force: true });
   await mkdir(join(project, ".claude"), { recursive: true, mode: 0o700 });
+  await mkdir(markerDir, { mode: 0o700 });
   try {
     await writeFile(join(project, "README.md"), `settings-check-${nonce}\n`);
     await writeFile(
@@ -56,19 +63,41 @@ export async function checkSettings(input: CheckSettingsInput): Promise<string |
     await git(["init", "--quiet"], project);
 
     const settingsPath = join(input.dir, "settings.json");
-    await writeFile(settingsPath, JSON.stringify(input.platform.settings("refine", project)), {
-      mode: 0o600,
-    });
-    const run = await spawnAgent({
-      command: input.claudeCommand,
-      args: agentArgs({
-        model: input.model ?? "haiku",
-        maxTurns: 3,
-        settingsPath,
-        schema: null,
-        allowedTools: READ_ONLY_ALLOWED,
-        disallowedTools: READ_ONLY_DENIED,
+    await writeFile(
+      settingsPath,
+      JSON.stringify(await input.platform.settings("refine", project)),
+      { mode: 0o600 },
+    );
+    // The same Seatbelt profile a task's agent gets, so this also proves Claude Code starts in it.
+    const profilePath = join(input.dir, "agent.sb");
+    await writeFile(
+      profilePath,
+      seatbeltProfile({
+        runnerHome: input.runnerHome,
+        read: [project, settingsPath],
+        readWrite: [markerDir],
+        claude: { command: input.claudeCommand },
       }),
+    );
+    const problem = await input.confinement.check({
+      profilePath,
+      checkout: project,
+      runDir: input.dir,
+    });
+    if (problem) return `the sandbox check failed: ${problem}`;
+    const run = await spawnAgent({
+      ...input.confinement.wrap(
+        profilePath,
+        input.claudeCommand,
+        agentArgs({
+          model: input.model ?? "haiku",
+          maxTurns: 3,
+          settingsPath,
+          schema: null,
+          allowedTools: READ_ONLY_ALLOWED,
+          disallowedTools: READ_ONLY_DENIED,
+        }),
+      ),
       cwd: project,
       env: agentEnv(),
       prompt:

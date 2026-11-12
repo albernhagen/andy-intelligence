@@ -22,7 +22,6 @@ const PLATFORM_FILES = [
   "scripts/executor-profile.mjs",
   "scripts/executor-procedure.mjs",
   "scripts/executor-report.mjs",
-  "scripts/executor-sandbox.mjs",
   "platform/executor/profile.json",
   "platform/procedures/refine.md",
   "platform/procedures/refine.schema.json",
@@ -67,7 +66,6 @@ export function makeRemote(remotes: string, repo: string, files: Record<string, 
 export interface StubConfig {
   agent?: "succeed" | "fail" | "hang";
   agentDelayMs?: number;
-  sandbox?: "works" | "leaks";
   ignoreSettingSources?: boolean;
   output?: unknown;
 }
@@ -113,10 +111,7 @@ export function makeEnv(stub: StubConfig = {}): Env {
   copyFileSync(join(here, "stub-claude.mjs"), claude);
   chmodSync(claude, 0o755);
   const setStub = (config: StubConfig) =>
-    writeFileSync(
-      join(stubDir, "config.json"),
-      JSON.stringify({ agent: "succeed", sandbox: "works", ...config }),
-    );
+    writeFileSync(join(stubDir, "config.json"), JSON.stringify({ agent: "succeed", ...config }));
   setStub(stub);
   return {
     root,

@@ -4,6 +4,7 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { ControlPlane } from "../src/api";
 import { RepoCache } from "../src/git";
 import { runLoop, type KeepAwake } from "../src/runner";
+import { noConfinement, seatbelt, type Confinement } from "../src/seatbelt";
 import { SECRET, startFakeServer, type FakeServer, type FakeTask } from "./fake-server";
 import {
   PLATFORM_REPO,
@@ -21,6 +22,8 @@ import {
  */
 
 const MS_PER_SECOND = 20;
+/** The real Seatbelt sandbox on macOS (the agent and platform child run under it); none on Linux CI. */
+const CONFINEMENT = process.platform === "darwin" ? seatbelt : noConfinement;
 
 let server: FakeServer;
 let env: Env;
@@ -39,6 +42,7 @@ function loop(
     secret?: string;
     idleMs?: number;
     signal?: AbortSignal;
+    confinement?: Confinement;
   } = {},
 ) {
   env = makeEnv(options.stub);
@@ -56,6 +60,7 @@ function loop(
       home: env.home,
       claudeCommand: env.claude,
       platformRepo: PLATFORM_REPO,
+      confinement: options.confinement ?? CONFINEMENT,
     },
     keepAwake,
     signal: options.signal ?? new AbortController().signal,
@@ -71,7 +76,7 @@ function afterAgentBeats(n: number, answer: "cancel" | 409) {
   return (phase: string | undefined) => (phase === "agent" && ++beats >= n ? answer : "ok");
 }
 
-const agentCalls = () => env.calls().filter((c) => !c.stdin.includes("This is a sandbox check"));
+const agentCalls = () => env.calls();
 const workDir = (runId: string) => join(env.home, "work", runId);
 
 describe("local-runner start", () => {
@@ -136,7 +141,7 @@ describe("local-runner start", () => {
     expect(await done).toBe("idle");
 
     expect(existsSync(env.hookMarker)).toBe(false);
-    expect(env.calls()).toHaveLength(2); // the sandbox check and the agent
+    expect(env.calls()).toHaveLength(1);
     for (const call of env.calls()) {
       const at = call.args.indexOf("--setting-sources");
       expect(at).toBeGreaterThan(-1);
@@ -195,9 +200,13 @@ describe("local-runner start", () => {
     expect(existsSync(workDir(t.claim.runId))).toBe(false);
   });
 
-  it("GivenASandboxThatLetsAWriteOutTheCheckout_WhenChecked_ThenTheAgentDoesNotRunAndTheTaskFails", async () => {
+  it("GivenASandboxCheckThatFails_WhenClaimed_ThenTheAgentDoesNotRunAndTheTaskFails", async () => {
     const t = task("refine");
-    const { done } = loop({ tasks: [t], stub: { sandbox: "leaks" } });
+    const failing: Confinement = {
+      ...noConfinement,
+      check: async () => "a file outside the checkout was readable",
+    };
+    const { done } = loop({ tasks: [t], confinement: failing });
     expect(await done).toBe("idle");
 
     expect(agentCalls()).toEqual([]);
@@ -205,6 +214,22 @@ describe("local-runner start", () => {
     expect(server.reports[0]!.body.summary).toContain("sandbox check failed");
     expect(server.reports[0]!.body.summary).toContain("outside the checkout");
   });
+
+  it.runIf(process.platform === "darwin")(
+    "GivenTheMacSandbox_WhenATaskRuns_ThenTheAgentRunsUnderSandboxExecWithTheTasksProfile",
+    async () => {
+      const t = task("refine");
+      const { done } = loop({ tasks: [t], stub: { agent: "fail" }, confinement: seatbelt });
+      expect(await done).toBe("idle");
+      const profile = readFileSync(join(workDir(t.claim.runId), "agent.sb"), "utf8");
+      expect(profile).toContain('(deny file-read-data file-write* (subpath "/Users")');
+      expect(profile).toContain(
+        `(allow file-read-data (subpath "${join(workDir(t.claim.runId), "project")}"))`,
+      );
+      expect(server.reports[0]!.body.status).toBe("failed");
+      expect(agentCalls()).toHaveLength(1);
+    },
+  );
 
   it("GivenAHeartbeatThatAnswersCancel_WhenTheAgentRuns_ThenItStopsTheAgentAndReportsCancelled", async () => {
     const t = task("refine");

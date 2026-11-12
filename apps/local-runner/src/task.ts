@@ -6,13 +6,13 @@ import type { ControlPlane } from "./api";
 import { LOCAL_LIMITS, LOCAL_STEPS } from "./config";
 import type { RepoCache } from "./git";
 import { errorText, type Logger } from "./log";
-import { loadPlatform as defaultLoadPlatform, type Platform } from "./platform";
-import { checkSandbox as defaultCheckSandbox, type SandboxCheckInput } from "./sandbox-check";
+import { loadPlatform } from "./platform";
+import { seatbeltProfile, type Confinement } from "./seatbelt";
 
 /**
  * One claimed agent task, start to end (ADR-0089 slice 5): heartbeats from the claim on, the
  * platform checkout at the commit fetched for this task, the project checkout in its own
- * worktree, the step's profile, the live sandbox check, the agent, the report.
+ * worktree, the live sandbox check, the step's profile, the agent under Seatbelt, the report.
  *
  * - Heartbeat `cancel: true`: stop the agent, report `cancelled`, remove the work directory.
  * - Heartbeat 409 (or a dead token): the task ended on the control plane (lease lost, deadline,
@@ -41,8 +41,8 @@ export interface TaskDeps {
   heartbeatMs: number;
   log: Logger;
   now?: () => Date;
-  loadPlatform?: (root: string) => Promise<Platform>;
-  checkSandbox?: (input: SandboxCheckInput) => Promise<string | null>;
+  /** The macOS sandbox (Seatbelt); tests on Linux pass `noConfinement`. */
+  confinement: Confinement;
 }
 
 class Stopped extends Error {}
@@ -161,43 +161,69 @@ export async function runTask(
     const platformSha = await deps.repos.fetch(deps.platformRepo);
     await deps.repos.addWorktree(deps.platformRepo, platformSha, platformDir);
     worktrees.push({ repo: deps.platformRepo, path: platformDir });
-    const platform = await (deps.loadPlatform ?? defaultLoadPlatform)(platformDir);
     const projectSha = await deps.repos.fetch(claimed.repo);
     await deps.repos.addWorktree(claimed.repo, projectSha, projectDir);
     worktrees.push({ repo: claimed.repo, path: projectDir });
     deps.log("INFO", "checkouts ready", { ...ids, platformSha, projectSha, workDir: runDir });
     checkpoint();
 
+    // Two Seatbelt profiles, both the runner's own (ADR-0098): the platform child reads only the
+    // two checkouts and the agent's stream, offline and without the Keychain; the agent reads
+    // only its checkout, its settings and Claude Code's own files.
+    const streamPath = join(runDir, "agent.jsonl");
     const settingsPath = join(runDir, "settings.json");
+    const platformProfile = join(runDir, "platform.sb");
+    const agentProfile = join(runDir, "agent.sb");
     await writeFile(
-      settingsPath,
-      `${JSON.stringify(platform.settings(context.step, projectDir), null, 2)}\n`,
+      platformProfile,
+      seatbeltProfile({
+        runnerHome: deps.home,
+        read: [platformDir, projectDir, streamPath],
+        offline: true,
+      }),
       { mode: 0o600 },
     );
-    const { prompt, schema } = platform.prompt(context.step, context.prompt);
-
-    const sandboxProblem = await (deps.checkSandbox ?? defaultCheckSandbox)({
-      platform,
-      claudeCommand: deps.claudeCommand,
-      worktree: projectDir,
+    await writeFile(
+      agentProfile,
+      seatbeltProfile({
+        runnerHome: deps.home,
+        read: [projectDir, settingsPath],
+        claude: { command: deps.claudeCommand },
+      }),
+      { mode: 0o600 },
+    );
+    const confinementProblem = await deps.confinement.check({
+      profilePath: agentProfile,
+      checkout: projectDir,
       runDir,
-      signal: stop.signal,
     });
-    checkpoint();
-    if (sandboxProblem) {
+    if (confinementProblem) {
       deps.log("ERROR", "sandbox check failed; the agent did not run", {
         ...ids,
-        problem: sandboxProblem,
+        problem: confinementProblem,
         workDir: runDir,
       });
       await report(
         emptyReport(
           "failed",
-          `The sandbox check failed, so the agent did not run: ${sandboxProblem}. See the local runner's log.`,
+          `The sandbox check failed, so the agent did not run: ${confinementProblem}. See the local runner's log.`,
         ),
       );
       return "reported";
     }
+
+    const platform = loadPlatform({
+      root: platformDir,
+      confinement: deps.confinement,
+      profilePath: platformProfile,
+    });
+    await writeFile(
+      settingsPath,
+      `${JSON.stringify(await platform.settings(context.step, projectDir), null, 2)}\n`,
+      { mode: 0o600 },
+    );
+    const { prompt, schema } = await platform.prompt(context.step, context.prompt);
+    checkpoint();
 
     phase = "agent";
     const untilDeadline = Date.parse(claimed.deadline) - now().getTime() - 60_000;
@@ -206,9 +232,10 @@ export async function runTask(
       Math.min(LOCAL_LIMITS.readOnlyAgentMinutes * 60_000, untilDeadline),
     );
     deps.log("INFO", "agent started", { ...ids, model: context.model, maxTurns: context.maxTurns });
-    const agent = await spawnAgent({
-      command: deps.claudeCommand,
-      args: agentArgs({
+    const command = deps.confinement.wrap(
+      agentProfile,
+      deps.claudeCommand,
+      agentArgs({
         model: context.model,
         maxTurns: context.maxTurns,
         settingsPath,
@@ -216,12 +243,16 @@ export async function runTask(
         allowedTools: READ_ONLY_ALLOWED,
         disallowedTools: READ_ONLY_DENIED,
       }),
+    );
+    const agent = await spawnAgent({
+      ...command,
       cwd: projectDir,
       env: agentEnv(),
       prompt,
-      outputPath: join(runDir, "agent.jsonl"),
+      outputPath: streamPath,
       timeoutMs,
       signal: stop.signal,
+      pidFile: join(runDir, "agent.pid"),
     });
     deps.log("INFO", "agent exited", {
       ...ids,
@@ -241,9 +272,9 @@ export async function runTask(
         : agent.exitCode === 0
           ? ""
           : `The agent exited with code ${agent.exitCode ?? "none"}`;
-    const body = platform.report({
+    const body = await platform.report({
       outcome: ok ? "success" : "failure",
-      messages: agent.messages,
+      streamPath,
       reason,
     });
     const outcome = await report(body);

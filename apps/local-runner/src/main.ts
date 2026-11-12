@@ -1,4 +1,4 @@
-import { mkdirSync } from "node:fs";
+import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { parseArgs } from "node:util";
 import { RUNNER_LIMITS } from "@andy/contracts";
@@ -16,7 +16,9 @@ import { RepoCache } from "./git";
 import { login, logout, readSecret } from "./keychain";
 import { consoleLogger, errorText } from "./log";
 import { loadPlatform } from "./platform";
+import { cleanLeftoverAgents, killAllAgents } from "./processes";
 import { caffeinate, pruneWork, runLoop } from "./runner";
+import { seatbelt, seatbeltProfile } from "./seatbelt";
 
 export const VERSION = "0.1.0";
 
@@ -87,13 +89,24 @@ async function main(argv: string[]): Promise<number> {
     const dir = join(home, "check-settings");
     const platformDir = join(dir, "platform");
     const scratch = join(dir, "scratch");
+    const platformProfile = join(dir, "platform.sb");
     await repos.removeWorktree(platformRepo, platformDir);
     await repos.addWorktree(platformRepo, sha, platformDir);
+    writeFileSync(
+      platformProfile,
+      seatbeltProfile({ runnerHome: home, read: [platformDir, scratch], offline: true }),
+    );
     try {
       const problem = await checkSettings({
-        platform: await loadPlatform(platformDir),
+        platform: loadPlatform({
+          root: platformDir,
+          confinement: seatbelt,
+          profilePath: platformProfile,
+        }),
         claudeCommand: values.claude,
         dir: scratch,
+        runnerHome: home,
+        confinement: seatbelt,
       });
       if (problem) {
         process.stdout.write(`FAIL: ${problem}.\n`);
@@ -118,12 +131,22 @@ async function main(argv: string[]): Promise<number> {
       process.stderr.write(`No runner secret for ${origin}: run local-runner login first.\n`);
       return 1;
     }
+    for (const runId of await cleanLeftoverAgents(home)) {
+      log("WARNING", "stopped an agent a previous runner left running", { runId });
+    }
     for (const name of pruneWork(home)) log("INFO", "old work directory removed", { name });
     const shutdown = new AbortController();
+    // First signal: stop agents and report. Second: kill every agent now and exit.
     for (const signal of ["SIGINT", "SIGTERM"] as const) {
-      process.once(signal, () => {
-        log("INFO", "stopping: finishing up the agent tasks in flight", { signal });
-        shutdown.abort();
+      process.on(signal, () => {
+        if (!shutdown.signal.aborted) {
+          log("INFO", "stopping: finishing up the agent tasks in flight", { signal });
+          shutdown.abort();
+          return;
+        }
+        log("WARNING", "second signal: killing the agents and exiting", { signal });
+        killAllAgents();
+        process.exit(130);
       });
     }
     const end = await runLoop({
@@ -131,7 +154,7 @@ async function main(argv: string[]): Promise<number> {
       secret,
       runsAtOnce,
       log,
-      task: { repos, home, claudeCommand: values.claude, platformRepo },
+      task: { repos, home, claudeCommand: values.claude, platformRepo, confinement: seatbelt },
       keepAwake: caffeinate(log),
       signal: shutdown.signal,
     });
@@ -141,6 +164,17 @@ async function main(argv: string[]): Promise<number> {
   process.stderr.write(`Unknown command "${command}".\n\n${USAGE}`);
   return 1;
 }
+
+// Whatever ends the runner, its agents end with it (the watchdog covers SIGKILL).
+process.on("exit", () => killAllAgents());
+process.on("uncaughtException", (err) => {
+  process.stderr.write(`local-runner: uncaught error: ${errorText(err)}\n`);
+  process.exit(1);
+});
+process.on("unhandledRejection", (err) => {
+  process.stderr.write(`local-runner: unhandled rejection: ${errorText(err)}\n`);
+  process.exit(1);
+});
 
 main(process.argv.slice(2)).then(
   (code) => process.exit(code),

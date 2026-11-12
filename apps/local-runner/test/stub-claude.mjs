@@ -3,7 +3,7 @@
 // to it; every call is appended to calls.jsonl there. It loads settings sources the way Claude
 // Code does: all three unless `--setting-sources` names fewer, and runs the hooks found in the
 // project's (.claude/settings.json) and local (.claude/settings.local.json) settings.
-import { execFileSync, spawnSync } from "node:child_process";
+import { execFileSync } from "node:child_process";
 import { appendFileSync, existsSync, readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import process from "node:process";
@@ -36,26 +36,6 @@ for (const source of sources) {
 }
 
 emit({ type: "system", subtype: "init", tools: ["Read"] });
-
-if (stdin.includes("This is a sandbox check")) {
-  const command = stdin.trim().split("\n\n").at(-1);
-  // "works": the stand-in sandbox refuses the write outside the checkout.
-  const env =
-    config.sandbox === "works"
-      ? { ...process.env, SANDBOX_CHECK_PROBE: "/nonexistent-local-runner-test/probe" }
-      : process.env;
-  const ran = spawnSync("sh", ["-c", command], { env });
-  emit({
-    type: "assistant",
-    message: { content: [{ type: "tool_use", id: "t1", name: "Bash", input: { command } }] },
-  });
-  emit({
-    type: "user",
-    message: { content: [{ type: "tool_result", tool_use_id: "t1", is_error: ran.status !== 0 }] },
-  });
-  emit({ type: "result", subtype: "success", is_error: false, result: String(ran.status) });
-  process.exit(0);
-}
 
 if (stdin.includes("read README.md")) {
   const first = readFileSync(join(process.cwd(), "README.md"), "utf8").split("\n")[0];
