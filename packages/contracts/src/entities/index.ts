@@ -777,7 +777,10 @@ export type PullRequest = z.infer<typeof PullRequest>;
  */
 export const FileProposal = z.object({
   branch: z.string().regex(/^[a-z][a-z0-9-]{0,30}\/[a-z0-9-]{1,60}$/),
-  path: z.string().regex(/^[A-Za-z0-9._-]+(\/[A-Za-z0-9._-]+)*$/).max(200),
+  path: z
+    .string()
+    .regex(/^[A-Za-z0-9._-]+(\/[A-Za-z0-9._-]+)*$/)
+    .max(200),
   content: z.string().max(100_000),
   message: z.string().min(1).max(200),
   title: z.string().min(1).max(200),

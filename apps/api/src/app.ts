@@ -23,6 +23,7 @@ import {
   BoardReader,
   DigestReader,
   QuotaClearer,
+  BriefService,
   TicketService,
   EmailNotifications,
   notifyOnNeedsYou,
@@ -39,6 +40,7 @@ import { registerBoardRoutes } from "./board";
 import { registerInFlightRoutes } from "./in-flight";
 import { registerDigestRoutes } from "./digest";
 import { registerNotifyFlush, registerNotifyRoutes } from "./notify";
+import { registerBriefRoutes } from "./brief";
 import {
   ConnectedCodeHost,
   GitHubConnection,
@@ -383,6 +385,12 @@ export function createApp(input: AppDeps) {
   const digest = new DigestReader(deps.tracker, deps.runs, deps.quota ?? null, now);
   registerDigestRoutes(app, digest, now);
   registerNotifyRoutes(app, email);
+  const brief = new BriefService(
+    deps.tracker,
+    connection ? new ConnectedCodeHost(connection) : null,
+    now,
+  );
+  registerBriefRoutes(app, brief);
 
   if (github && connection) {
     registerGitHubSetup(app, {
@@ -406,6 +414,7 @@ export function createApp(input: AppDeps) {
       digest,
       notifyEmail: email,
       quota: quotaClearer,
+      brief,
     });
   }
 

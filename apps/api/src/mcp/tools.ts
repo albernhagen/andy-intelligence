@@ -19,6 +19,7 @@ import {
   type EmailNotifications,
   type ProjectService,
   type QuotaClearer,
+  type BriefService,
   type RunService,
   type TicketService,
 } from "@andy/domain";
@@ -35,6 +36,7 @@ import { registerSettingsTools } from "./tools-settings";
 import { registerNotifyTools } from "./tools-notify";
 import { registerDigestTools } from "./tools-digest";
 import { registerQuotaTools } from "./tools-quota";
+import { registerBriefTools } from "./tools-brief";
 
 /**
  * MCP core tools (M1.4: MCP core tools; `refine` from M1.7: Refinement; `build` and
@@ -55,6 +57,8 @@ export interface ToolDeps {
   notifyEmail?: EmailNotifications | null;
   /** Clears a quota idle (AI-74); the app always passes it, unit tests may not. */
   quota?: QuotaClearer;
+  /** The project brief's write (AI-107); the app always passes it, unit tests may not. */
+  brief?: BriefService;
   /** Signed-in email, shown by `status` so it doubles as the connection check. */
   email: string;
   /** The signed-in user as an actor, `user:<uid>` (AI-19): every write is recorded as this. */
@@ -181,6 +185,7 @@ export function registerTools(server: McpServer, deps: ToolDeps): void {
   registerTicketTools(server, deps);
   registerDigestTools(server, deps, run);
   registerQuotaTools(server, deps, run);
+  registerBriefTools(server, deps, run);
 
   /** Decides the ticket's latest plan run as Andy (owner-only, ADR-0050). */
   const decide = async (key: string, decision: "approved" | "rejected", reason: string | null) => {

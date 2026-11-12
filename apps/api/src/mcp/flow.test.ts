@@ -195,6 +195,7 @@ describe("MCP OAuth flow (MCP SDK client)", () => {
       "set_ticket_parent",
       "set_worker",
       "status",
+      "submit_brief",
     ]);
   });
 
