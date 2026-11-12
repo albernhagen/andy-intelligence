@@ -3,6 +3,7 @@ import { join } from "node:path";
 import type { ClaimedRun, RunPhase, RunReportRequest } from "@andy/contracts";
 import { READ_ONLY_ALLOWED, READ_ONLY_DENIED, agentArgs, agentEnv, spawnAgent } from "./agent";
 import type { ControlPlane } from "./api";
+import { checkBash } from "./bash-check";
 import { collectChange } from "./change";
 import { LOCAL_LIMITS, LOCAL_STEPS } from "./config";
 import { gitDirOf, type RepoCache } from "./git";
@@ -287,6 +288,34 @@ export async function runTask(
       deps.log("INFO", "dependencies ready", { ...ids, install: installed.kind });
       await mkdir(AGENT_TMP, { recursive: true, mode: 0o700 });
       checkpoint();
+      // Fail closed (ADR-0102): Bash runs in Claude Code's sandbox, or no build agent runs.
+      const bashProblem = await checkBash({
+        claudeCommand: deps.claudeCommand,
+        confinement: deps.confinement,
+        profilePath: agentProfile,
+        settingsPath,
+        checkout: projectDir,
+        runDir,
+        gitDir: gitDir!,
+        signal: stop.signal,
+        extraEnv: { TMPDIR: AGENT_TMP },
+      });
+      checkpoint();
+      if (bashProblem) {
+        deps.log("ERROR", "Bash sandbox check failed; the agent did not run", {
+          ...ids,
+          problem: bashProblem,
+          workDir: runDir,
+        });
+        await report(
+          emptyReport(
+            "failed",
+            `The Bash sandbox check failed, so the build agent did not run: ${bashProblem}. See the local runner's log; set this ticket's executor to actions to build it on GitHub Actions.`,
+          ),
+        );
+        return "reported";
+      }
+      deps.log("INFO", "Bash sandbox check passed", ids);
     }
 
     phase = "agent";

@@ -71,6 +71,8 @@ export interface StubConfig {
   agentDelayMs?: number;
   ignoreSettingSources?: boolean;
   output?: unknown;
+  /** The Bash check's outcome (default "pass"). */
+  sandboxCheck?: "pass" | "open" | "refuse";
   /** Files the "agent" writes in its checkout before it finishes (a build's change). */
   edit?: Record<string, string>;
 }

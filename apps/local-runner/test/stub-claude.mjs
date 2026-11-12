@@ -37,6 +37,25 @@ for (const source of sources) {
 
 emit({ type: "system", subtype: "init", tools: ["Read"] });
 
+if (stdin.startsWith("This is a sandbox check.")) {
+  // The Bash check (ADR-0102): "pass" writes the facts a sandboxed Bash would; "open" as if the
+  // network were open; "refuse" as if Bash were refused (no facts).
+  const mode = config.sandboxCheck ?? "pass";
+  const command = stdin.trim().split("\n").at(-1);
+  emit({
+    type: "assistant",
+    message: { content: [{ type: "tool_use", name: "Bash", input: { command } }] },
+  });
+  if (mode !== "refuse") {
+    writeFileSync(
+      join(process.cwd(), ".executor-sandbox-check"),
+      `nonce=${process.env.SANDBOX_CHECK_NONCE}\ncanary=denied\nnet=${mode === "open" ? "open" : "blocked"}\n`,
+    );
+  }
+  emit({ type: "result", subtype: "success", is_error: false, result: "0" });
+  process.exit(0);
+}
+
 if (stdin.includes("read README.md")) {
   const first = readFileSync(join(process.cwd(), "README.md"), "utf8").split("\n")[0];
   emit({ type: "result", subtype: "success", is_error: false, result: first });

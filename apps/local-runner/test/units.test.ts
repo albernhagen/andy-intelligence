@@ -15,6 +15,7 @@ import { join } from "node:path";
 import { RUN_REPORT_MAX_BYTES, type RunContextResponse } from "@andy/contracts";
 import { describe, expect, it } from "vitest";
 import { agentArgs, agentEnv, parseStream } from "../src/agent";
+import { BASH_CHECK_COMMAND, BASH_CHECK_PROMPT, parseFacts, toolCalls } from "../src/bash-check";
 import { checkContext, fitReport } from "../src/api";
 import { checkSettings } from "../src/check-settings";
 import { KEYCHAIN_SERVICE, controlPlaneOrigin, checkRepo } from "../src/config";
@@ -408,5 +409,38 @@ describe("agents never outlive the runner", () => {
     expect(alive(agent)).toBe(true);
     expect(existsSync(join(home, "work", "run-a", "agent.pid"))).toBe(true);
     process.kill(-agent, "SIGKILL");
+  });
+});
+
+describe("Bash check (AI-133)", () => {
+  it("GivenAStream_WhenItsToolCallsAreRead_ThenOnlyToolUsesCountWithTheirCommands", () => {
+    const messages = [
+      { type: "system", subtype: "init" },
+      {
+        type: "assistant",
+        message: {
+          content: [
+            { type: "text", text: "ok" },
+            { type: "tool_use", name: "Bash", input: { command: BASH_CHECK_COMMAND } },
+          ],
+        },
+      },
+      { type: "assistant", message: { content: [{ type: "tool_use", name: "Read", input: {} }] } },
+    ];
+    expect(toolCalls(messages)).toEqual([
+      { name: "Bash", command: BASH_CHECK_COMMAND },
+      { name: "Read", command: undefined },
+    ]);
+    expect(toolCalls(null)).toEqual([]);
+  });
+
+  it("GivenTheFactsFile_WhenParsed_ThenKeyValuePairsAndTheCommandReadsNoTicketText", () => {
+    expect(parseFacts("nonce=abc\ncanary=denied\nnet=blocked\njunk\n")).toEqual({
+      nonce: "abc",
+      canary: "denied",
+      net: "blocked",
+    });
+    expect(BASH_CHECK_PROMPT.endsWith(BASH_CHECK_COMMAND)).toBe(true);
+    expect(BASH_CHECK_COMMAND).not.toContain("SANDBOX_CHECK_NONCE=");
   });
 });

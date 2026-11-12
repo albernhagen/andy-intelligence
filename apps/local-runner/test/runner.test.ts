@@ -249,9 +249,18 @@ describe("local-runner start", () => {
         pullRequest: `https://github.com/${PROJECT_REPO}/pull/1`,
         toolingFiles: [],
       });
+      // First the Bash check (Haiku, fixed prompt), then the agent.
+      expect(agentCalls()).toHaveLength(2);
+      const [check, agent] = agentCalls();
+      expect(check!.args[check!.args.indexOf("--model") + 1]).toBe("haiku");
+      expect(check!.stdin).not.toContain("Show the board");
       // A build's tools come from the profile, as on Actions: no read-only flags.
-      expect(agentCalls()[0]!.args).not.toContain("--allowedTools");
-      expect(agentCalls()[0]!.envNames).not.toContain("GITHUB_TOKEN");
+      expect(agent!.args).not.toContain("--allowedTools");
+      expect(agent!.envNames).not.toContain("GITHUB_TOKEN");
+      expect(agent!.envNames).not.toContain("SANDBOX_CHECK_NONCE");
+      expect(
+        existsSync(join(env.root, "home", "work", runId, "project", ".executor-sandbox-check")),
+      ).toBe(false);
       const lines = JSON.stringify(log.lines);
       expect(lines).not.toContain(PUSH_TOKEN);
       expect(lines).not.toContain(t.claim.token);
@@ -298,6 +307,26 @@ describe("local-runner start", () => {
       expect(server.reports[0]!.body).toMatchObject({ status: "succeeded" });
       expect(server.reports[0]!.body.branch ?? null).toBeNull();
     });
+
+    for (const mode of ["refuse", "open"] as const) {
+      it(`GivenABashCheckThatSees${mode === "refuse" ? "BashRefused" : "OpenNetwork"}_WhenABuildIsClaimed_ThenTheAgentDoesNotRunAndTheTaskFails`, async () => {
+        const t = task("build");
+        const { done } = loop({
+          tasks: [t],
+          stub: { sandboxCheck: mode, edit: { "src/board.ts": "x\n" } },
+          githubApi: server.origin,
+        });
+        expect(await done).toBe("idle");
+
+        expect(agentCalls()).toHaveLength(1);
+        expect(server.pushTokens).toEqual([]);
+        expect(server.reports[0]!.body.status).toBe("failed");
+        expect(server.reports[0]!.body.summary).toContain("Bash sandbox check failed");
+        expect(server.reports[0]!.body.summary).toContain(
+          mode === "refuse" ? "didn't run in Bash" : "off the registry allowlist",
+        );
+      });
+    }
 
     it("GivenABuildContextWithoutTheRunsBranch_WhenClaimed_ThenTheAgentDoesNotRun", async () => {
       const t = task("build");
