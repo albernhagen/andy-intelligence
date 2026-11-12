@@ -7,6 +7,7 @@ import { TIER_FOR_SIZE, isHeld, projectOfKey, ticketStatusLine, ticketsByRef } f
 import { Activity } from "@/components/Activity";
 import { AskQuestionForm } from "@/components/AskQuestionForm";
 import { CancelArchiveControls } from "@/components/CancelArchiveControls";
+import { EpicChildren } from "@/components/EpicChildren";
 import {
   EditableList,
   InlineText,
@@ -223,6 +224,7 @@ function Story({ ticket: t }: { ticket: Ticket }) {
         </div>
         <Rail ticket={t} />
       </div>
+      {t.type === "epic" && <EpicChildren {...pathOf(t)} />}
       <ScoreReasons ticket={t} />
       <Questions {...pathOf(t)} />
       <Assumptions ticket={t} />

@@ -19,6 +19,7 @@ import {
   type EmailNotifications,
   type ProjectService,
   type QuotaClearer,
+  type ConfigProposals,
   type RunService,
   type TicketService,
 } from "@andy/domain";
@@ -36,6 +37,7 @@ import { registerNotifyTools } from "./tools-notify";
 import { registerDigestTools } from "./tools-digest";
 import { registerQuotaTools } from "./tools-quota";
 import { registerProjectTools } from "./tools-projects";
+import { registerConfigTools } from "./tools-config";
 
 /**
  * MCP core tools (M1.4: MCP core tools; `refine` from M1.7: Refinement; `build` and
@@ -56,6 +58,8 @@ export interface ToolDeps {
   notifyEmail?: EmailNotifications | null;
   /** Clears a quota idle (AI-74); the app always passes it, unit tests may not. */
   quota?: QuotaClearer;
+  /** Config proposals from review findings (ADR-0097); absent or null: no config tools. */
+  configProposals?: ConfigProposals | null;
   /** Signed-in email, shown by `status` so it doubles as the connection check. */
   email: string;
   /** The signed-in user as an actor, `user:<uid>` (AI-19): every write is recorded as this. */
@@ -74,6 +78,7 @@ const CreateTicketInput = NewTicket.omit({ dorStatus: true, needsAttention: true
   type: NewTicket.shape.type.describe(
     "feature, chore, bug or epic (ADR-0058). Omit it: refine fills it, and the rest, from the title.",
   ),
+  parentId: NewTicket.shape.parentId.describe("An epic's key or id in the same project, or null."),
   upNext: z
     .boolean()
     .default(false)
@@ -183,6 +188,7 @@ export function registerTools(server: McpServer, deps: ToolDeps): void {
   registerDigestTools(server, deps, run);
   registerQuotaTools(server, deps, run);
   registerProjectTools(server, deps, run);
+  registerConfigTools(server, deps, run);
 
   /** Decides the ticket's latest plan run as Andy (owner-only, ADR-0050). */
   const decide = async (key: string, decision: "approved" | "rejected", reason: string | null) => {
@@ -469,7 +475,7 @@ export function registerTools(server: McpServer, deps: ToolDeps): void {
     "status",
     {
       description:
-        "With a ticket key: its stage, Definition of Ready gaps, questions and recent history. Without: every project's ticket counts by stage, its dispatch dial, pause switch and last dispatch decision (why nothing is running), and the Needs-you count.",
+        "With a ticket key: its stage, Definition of Ready gaps, questions and recent history; an epic's key also returns `epic`: its stories in dependency order, progress (Done of non-cancelled) and summed cost, read from at most 50 stories' agent tasks (two reads each; `partial` past that) and one ticket list per other project a blocker names (at most 5). Without: every project's ticket counts by stage, its dispatch dial, pause switch and last dispatch decision (why nothing is running), and the Needs-you count.",
       inputSchema: StatusInput,
       annotations: { readOnlyHint: true },
     },
