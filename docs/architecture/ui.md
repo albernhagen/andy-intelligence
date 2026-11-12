@@ -15,7 +15,7 @@ v1.x screens:
 - **Run detail** — M1: inside ticket detail. M4: own screen (metadata, cost, outcome, links to Action log / Jules session / PR).
 - **Config** (providers, harnesses, models, tiers, policies; audit log with revert; pending approvals).
 - **Releases** (dev status, promote to prod, rollback).
-- **Dashboards** — M4 (ADR-0045): delivery (tickets by stage over time, lead time, rework, CI green on first try, review blockers), cost, quota and tokens per run and step over time (ADR-0046), per project and overall; aggregation queries + shadcn charts. DORA metrics from M6.
+- **Dashboards** — M4 (ADR-0045): delivery (tickets by stage over time, lead time, rework, CI green on first try, review blockers), cost, quota and tokens per run and step over time (ADR-0046), per project and overall; aggregation queries + shadcn charts (`components/ui/chart.tsx`, built: AI-103). DORA metrics from M6.
 
 **Design (ADR-0045; M3, ADR-0059):** `apps/web/design.md` + shadcn theme tokens are the design source of truth agents and design skills read; Playwright screenshot checks. M4: design skills, pluggable per project (custom-skill context source, §7.6); Hallmark trial first; `sloplint --render` (non-blocking).
 
