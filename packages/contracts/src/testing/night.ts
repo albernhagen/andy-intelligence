@@ -29,7 +29,7 @@ export function nightLaunchStoreContract(
         status: "running",
         storyKeys: ["AI-85", "AI-86"],
         createdAt: at(0),
-        createdBy: "user:uid-1",
+        createdBy: "andy",
         startedAt: at(0),
         ...overrides,
       });
