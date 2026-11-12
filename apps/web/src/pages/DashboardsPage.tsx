@@ -419,7 +419,8 @@ function WeekChart(props: {
           tickFormatter={(v: number) => compact.format(v)}
         />
         <ChartTooltip content={<ChartTooltipContent />} />
-        <ChartLegend content={<ChartLegendContent />} />
+        {/* Series order, not alphabetical: stages read Backlog → Done. */}
+        <ChartLegend content={<ChartLegendContent />} itemSorter={null} />
         {props.children}
       </Chart>
     </ChartContainer>
