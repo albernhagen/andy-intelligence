@@ -3,6 +3,7 @@ import { useParams } from "@tanstack/react-router";
 import { AutoMerge, PlanApproval, type Project } from "@andy/contracts";
 import { ClearQuotaIdle } from "@/components/ClearQuotaIdle";
 import { DispatchControls } from "@/components/DispatchControls";
+import { ProjectPlanPanel } from "@/components/ProjectPlan";
 import { EmailNotificationsControl } from "@/components/EmailControls";
 import { SetupChecklist } from "@/components/SetupChecklist";
 import { Loading, QueryError } from "@/components/Status";
@@ -33,6 +34,7 @@ export function ProjectSettingsPage() {
       {project.repos.length > 0 && (
         <p className="text-sm text-muted-foreground">Repos: {project.repos.join(", ")}</p>
       )}
+      <ProjectPlanPanel projectId={project.id} />
       <SetupChecklist projectId={project.id} />
       <ul aria-label="Settings" className="divide-y divide-border rounded-md border border-border">
         <Setting what="Build tasks may start at all, by hand or on their own. Owner only: set here in the app, never over MCP. Turn on after the live sandbox proof.">

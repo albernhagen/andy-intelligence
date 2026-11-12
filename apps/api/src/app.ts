@@ -28,6 +28,7 @@ import {
   NightLaunches,
   DigestReader,
   QuotaClearer,
+  ProjectPlanService,
   TicketService,
   EmailNotifications,
   wakeAfterRunEnd,
@@ -50,6 +51,7 @@ import { registerDashboardRoutes } from "./dashboard";
 import { registerSetupRoutes } from "./setup";
 import { noReviewFindings, registerConfigProposalRoutes } from "./config-proposals";
 import { registerNotifyFlush, registerNotifyRoutes } from "./notify";
+import { registerProjectPlanRoutes } from "./project-plan";
 import {
   ConnectedCodeHost,
   GitHubConnection,
@@ -435,6 +437,13 @@ export function createApp(input: AppDeps) {
   registerDashboardRoutes(app, deps, now);
   registerSetupRoutes(app, deps.tracker, connection ? new ConnectedCodeHost(connection) : null);
   registerNotifyRoutes(app, email);
+  const plans = new ProjectPlanService(
+    deps.tracker,
+    service,
+    now,
+    email ? (id, plan) => email.planNeedsYou(id, plan.proposal.milestones.length) : undefined,
+  );
+  registerProjectPlanRoutes(app, plans);
   const configProposals = deps.configChanges
     ? new ConfigProposals(
         deps.tracker,
@@ -467,6 +476,7 @@ export function createApp(input: AppDeps) {
       digest,
       notifyEmail: email,
       quota: quotaClearer,
+      plans,
       configProposals,
       night,
     });

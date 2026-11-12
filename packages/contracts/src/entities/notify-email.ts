@@ -20,7 +20,8 @@ export const NOTIFY_PENDING_MAX = 20;
 export const PendingNotice = z.object({
   projectId: Id,
   ticketId: Id,
-  key: z.string().regex(/^[A-Z][A-Z0-9]{0,9}-\d+$/),
+  /** A ticket key, or `<PROJECT>-plan` for a project plan waiting for Andy (AI-108). */
+  key: z.string().regex(/^[A-Z][A-Z0-9]{0,9}-(\d+|plan)$/),
   title: z.string().max(300),
   /** The question line, or why the ticket waits. */
   line: z.string().max(300),

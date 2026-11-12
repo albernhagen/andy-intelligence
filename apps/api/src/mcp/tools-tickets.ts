@@ -147,6 +147,7 @@ export async function listNeedsMe(deps: ToolDeps) {
     cards,
     questions: cards.flatMap((c) => c.questions),
     tickets: await withWorkers(deps, inbox.tickets),
+    projectPlans: deps.plans ? await deps.plans.waiting() : [],
   };
 }
 
