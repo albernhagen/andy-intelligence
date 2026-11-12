@@ -6,6 +6,7 @@ import type {
   EmailNotifications,
   ProjectService,
   QuotaClearer,
+  ConfigProposals,
   RunService,
   TicketService,
 } from "@andy/domain";
@@ -38,6 +39,8 @@ export interface McpEndpointDeps {
   quota: QuotaClearer;
   brief: BriefService;
   ideate: IdeateService;
+  /** Config proposals (ADR-0097); null: the store isn't configured, so no tools. */
+  configProposals: ConfigProposals | null;
 }
 
 /**
@@ -96,6 +99,7 @@ export function registerMcpEndpoint(app: Hono<AuthEnv>, deps: McpEndpointDeps) {
       quota: deps.quota,
       brief: deps.brief,
       ideate: deps.ideate,
+      configProposals: deps.configProposals,
       email: identity.email,
       actor: actorOf(identity),
     });

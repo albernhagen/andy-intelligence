@@ -6,6 +6,7 @@ import type {
   QuotaClearer,
   BriefService,
   IdeateService,
+  ConfigProposals,
   RunService,
   TicketService,
 } from "@andy/domain";
@@ -35,6 +36,7 @@ export function registerMcp(
     quota: QuotaClearer;
     brief: BriefService;
     ideate: IdeateService;
+    configProposals: ConfigProposals | null;
   },
 ) {
   const lookups = new FixedWindowLimiter(LOOKUPS_PER_MINUTE, 60 * 1000);

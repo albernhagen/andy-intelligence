@@ -4,6 +4,7 @@ import {
   FileProposal,
   Repo,
   RepoName,
+  Stage,
   type ChangedFile,
   type HeadCheck,
   type Listing,
@@ -144,6 +145,21 @@ export class InMemoryWorkTracker implements WorkTracker {
       .filter((t) => filter.archived === undefined || t.archived === filter.archived)
       .sort((a, b) => compareRanks(a.rank, b.rank))
       .map((t) => structuredClone(t));
+  }
+
+  async getTicketByKey(projectId: string, key: string): Promise<Ticket | null> {
+    const ticket = [...this.tickets.values()].find(
+      (t) => t.projectId === projectId && t.key === key,
+    );
+    return ticket ? structuredClone(ticket) : null;
+  }
+
+  async countByStage(projectId: string): Promise<Record<Stage, number>> {
+    const counts = Object.fromEntries(Stage.options.map((s) => [s, 0])) as Record<Stage, number>;
+    for (const t of this.tickets.values()) {
+      if (t.projectId === projectId && !t.archived) counts[t.stage]++;
+    }
+    return counts;
   }
 
   async updateTicket(
@@ -757,3 +773,5 @@ export class InMemoryEvaluator implements Evaluator {
 }
 export * from "./notify-email";
 export * from "./runner";
+export * from "./night";
+export * from "./config-proposals";

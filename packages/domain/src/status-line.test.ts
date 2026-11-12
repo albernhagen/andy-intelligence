@@ -263,6 +263,13 @@ describe("status inputs", () => {
     expect(openBlockers(t, [open, done, t])).toEqual(["AI-3"]);
   });
 
+  it("GivenBlockersStoredAsKeys_WhenRead_ThenUnfinishedOnesAreNamed", () => {
+    const open = ticket({ id: "b1", key: "AI-3", stage: "in_progress" });
+    const done = ticket({ id: "b2", key: "AI-4", stage: "done" });
+    const t = ticket({ blockedBy: ["AI-3", "AI-4", "OPS-1"] });
+    expect(openBlockers(t, [open, done, t])).toEqual(["AI-3"]);
+  });
+
   it("GivenTheReadyLane_WhenRead_ThenThePositionFollowsRank", () => {
     const a = ticket({ id: "a", stage: "ready", rank: "0002" });
     const b = ticket({ id: "b", stage: "ready", rank: "0001" });

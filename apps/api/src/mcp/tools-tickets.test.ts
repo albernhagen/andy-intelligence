@@ -8,10 +8,14 @@ import {
 import { TicketService, inboxCards, ticketStatusLine } from "@andy/domain";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
-import { describe, expect, it } from "vitest";
+import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
+import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+import { describe, expect, it, vi } from "vitest";
 import { createApp } from "../app";
 import { parseAllowList, type TokenVerifier } from "../auth";
 import { ClientMetadataResolver } from "./client-metadata";
+import type { ToolDeps } from "./tools";
+import { registerTicketTools } from "./tools-tickets";
 import { hashToken, newToken } from "./tokens";
 
 const PUBLIC_URL = "https://control-plane.example.run.app";
@@ -147,16 +151,34 @@ describe("edit_ticket", () => {
     expect((await ctx.tracker.getTicket("ai", t.id))?.size).toBe("S");
   });
 
-  it("GivenBlockerKeys_WhenEdited_ThenStoredAsIdsAndForeignOnesRefused", async () => {
+  it("GivenBlockerKeysInAnyProject_WhenEdited_ThenStoredAsKeysAndUnknownOnesNotFound", async () => {
     const ctx = await setup();
     const a = await ctx.service.create("ai", { title: "A" }, "andy");
     const b = await ctx.service.create("ai", { title: "B" }, "andy");
     const ops = await ctx.service.create("ops", { title: "O" }, "andy");
-    await ctx.call("edit_ticket", { ticket: a.key, blockedBy: [b.key] });
-    expect((await ctx.tracker.getTicket("ai", a.id))?.blockedBy).toEqual([b.id]);
+    await ctx.call("edit_ticket", { ticket: a.key, blockedBy: [b.key, ops.key] });
+    expect((await ctx.tracker.getTicket("ai", a.id))?.blockedBy).toEqual(["AI-2", "OPS-1"]);
 
+    for (const key of ["OPS-9", "NOPE-1"]) {
+      const res = await ctx.call("edit_ticket", { ticket: a.key, blockedBy: [key] });
+      expect(res).toMatchObject({ isError: true });
+      expect(res.text).toMatch(/not found/);
+    }
+    const patched = await ctx.rest(`/api/projects/ai/tickets/${a.id}`, {
+      method: "PATCH",
+      body: JSON.stringify({ blockedBy: ["OPS-9"] }),
+    });
+    expect(patched.status).toBe(404);
+    expect((await ctx.tracker.getTicket("ai", a.id))?.blockedBy).toEqual(["AI-2", "OPS-1"]);
+  });
+
+  it("GivenACrossProjectCycle_WhenEdited_ThenRefused", async () => {
+    const ctx = await setup();
+    const a = await ctx.service.create("ai", { title: "A" }, "andy");
+    const ops = await ctx.service.create("ops", { title: "O" }, "andy");
+    await ctx.call("edit_ticket", { ticket: ops.key, blockedBy: [a.key] });
     const res = await ctx.call("edit_ticket", { ticket: a.key, blockedBy: [ops.key] });
-    expect(res).toMatchObject({ isError: true, text: "OPS-1 is not in this project" });
+    expect(res).toMatchObject({ isError: true, text: "OPS-1 is already waiting on AI-1" });
   });
 
   it("GivenABlockerCycle_WhenEdited_ThenRefusedOverMcpAndRest", async () => {
@@ -234,6 +256,103 @@ describe("set_ticket_parent", () => {
   });
 });
 
+describe("create_ticket parent (AI-130)", () => {
+  it("GivenAnEpicKey_WhenCreatedOverMcp_ThenTheEpicsIdIsStored", async () => {
+    const ctx = await setup();
+    const epic = await ctx.service.create("ai", { title: "E", type: "epic" }, "andy");
+    const res = await ctx.call("create_ticket", { project: "AI", title: "A", parentId: epic.key });
+    expect(res.isError).toBe(false);
+    const created = (await ctx.tracker.listTickets("ai")).find((t) => t.title === "A");
+    expect(created?.parentId).toBe(epic.id);
+  });
+
+  it("GivenAMissingOrNonEpicParent_WhenCreatedOverMcpOrRest_ThenRefusedAndNothingCreated", async () => {
+    const ctx = await setup();
+    const story = await ctx.service.create("ai", { title: "S", type: "feature" }, "andy");
+    const missing = await ctx.call("create_ticket", {
+      project: "AI",
+      title: "A",
+      parentId: "AI-9",
+    });
+    expect(missing).toMatchObject({ isError: true, text: "AI-9 is not in this project" });
+    const notEpic = await ctx.rest("/api/projects/ai/tickets", {
+      method: "POST",
+      body: JSON.stringify({ title: "A", parentId: story.id }),
+    });
+    expect(notEpic.status).toBe(422);
+    expect((await ctx.tracker.listTickets("ai")).map((t) => t.key)).toEqual([story.key]);
+  });
+
+  it("GivenAnEpicId_WhenCreatedOverRest_ThenThatIdIsStored", async () => {
+    const ctx = await setup();
+    const epic = await ctx.service.create("ai", { title: "E", type: "epic" }, "andy");
+    const res = await ctx.rest("/api/projects/ai/tickets", {
+      method: "POST",
+      body: JSON.stringify({ title: "A", parentId: epic.id }),
+    });
+    expect(res.status).toBe(201);
+    expect(((await res.json()) as { parentId: string }).parentId).toBe(epic.id);
+  });
+});
+
+describe("accept_assumption", () => {
+  const held = {
+    id: "r1-a1",
+    text: "Assume kanban",
+    question: "Kanban?",
+    options: [],
+    cost: "direction",
+    confidence: "unsure",
+    demotedBy: "daily_cap",
+    runId: "r1",
+    status: "assumed",
+    questionId: null,
+    answeredAt: null,
+    settledBy: null,
+    createdAt: "2026-11-08T00:00:00.000Z",
+  };
+
+  /** The ticket tools wired to `actor` directly: the HTTP endpoint only ever passes a user. */
+  async function callAs(actor: string, tracker: InMemoryWorkTracker, service: TicketService) {
+    const server = new McpServer({ name: "test", version: "1" });
+    registerTicketTools(server, { tracker, service, actor, email: "" } as unknown as ToolDeps);
+    const [clientSide, serverSide] = InMemoryTransport.createLinkedPair();
+    await server.connect(serverSide);
+    const client = new Client({ name: "test", version: "1" });
+    await client.connect(clientSide);
+    return async (name: string, args: Record<string, unknown>) => {
+      const result = await client.callTool({ name, arguments: args });
+      const text = (result.content as { type: string; text: string }[])[0]?.text ?? "";
+      return { isError: result.isError === true, text };
+    };
+  }
+
+  it("GivenAHeldGapAndACallerWhoIsNotTheOwner_WhenAccepted_ThenRefusedAndUnchanged", async () => {
+    const ctx = await setup();
+    const t = await ctx.service.create("ai", { title: "Board" }, "andy");
+    await ctx.tracker.updateTicket(
+      "ai",
+      t.id,
+      { fields: { refineAssumptions: [held] as never } },
+      "system",
+    );
+
+    const call = await callAs("agent:r1", ctx.tracker, ctx.service);
+    const res = await call("accept_assumption", { ticket: t.key, assumptionId: "r1-a1" });
+    expect(res).toMatchObject({ isError: true, text: "only the owner can accept a held gap" });
+    expect((await ctx.tracker.getTicket("ai", t.id))?.refineAssumptions[0]).toMatchObject({
+      status: "assumed",
+    });
+  });
+
+  it("GivenAnUnknownAssumption_WhenAcceptedByTheOwner_ThenRefused", async () => {
+    const ctx = await setup();
+    const t = await ctx.service.create("ai", { title: "Board" }, "andy");
+    const res = await ctx.call("accept_assumption", { ticket: t.key, assumptionId: "nope" });
+    expect(res.isError).toBe(true);
+  });
+});
+
 describe("reorder_ticket", () => {
   it("GivenALane_WhenReordered_ThenTheBoardOrderChanges", async () => {
     const ctx = await setup();
@@ -268,5 +387,35 @@ describe("reorder_ticket", () => {
     expect((await ctx.call("reorder_ticket", { ticket: a.key })).isError).toBe(true);
     const both = await ctx.call("reorder_ticket", { ticket: a.key, above: b.key, below: b.key });
     expect(both.isError).toBe(true);
+  });
+});
+
+describe("reads (ADR-0028)", () => {
+  it("GivenATicketKey_WhenAToolLooksItUp_ThenOnlyThatTicketIsReadNotTheProject", async () => {
+    const ctx = await setup();
+    const a = await ctx.service.create("ai", { title: "A" }, "andy");
+    const listed = vi.spyOn(ctx.tracker, "listTickets");
+    const byKey = vi.spyOn(ctx.tracker, "getTicketByKey");
+
+    expect((await ctx.call("comment_ticket", { ticket: a.key, body: "hi" })).isError).toBe(false);
+    expect(byKey).toHaveBeenCalledWith("ai", a.key);
+    expect(listed).not.toHaveBeenCalled();
+  });
+
+  it("GivenTicketsInSeveralStages_WhenStatusHasNoKey_ThenCountsComeFromCountByStage", async () => {
+    const ctx = await setup();
+    const a = await ctx.service.create("ai", story("A"), "andy");
+    await ctx.service.create("ai", { title: "B" }, "andy");
+    await ctx.service.move("ai", a.id, "ready", "andy");
+    const counted = vi.spyOn(ctx.tracker, "countByStage");
+    const listed = vi.spyOn(ctx.tracker, "listTickets");
+
+    const res = await ctx.call("status");
+    const ai = res.data.projects.find((p: { key: string }) => p.key === "AI");
+    expect(ai.ticketsByStage).toMatchObject({ backlog: 1, ready: 1, done: 0 });
+    expect(counted).toHaveBeenCalledWith("ai");
+    expect(counted).toHaveBeenCalledWith("ops");
+    // Only the Needs-you inbox reads tickets, and only its filtered sets.
+    for (const [, filter] of listed.mock.calls) expect(filter).toBeDefined();
   });
 });

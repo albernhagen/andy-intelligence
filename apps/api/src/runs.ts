@@ -10,6 +10,8 @@ import {
   type QuotaReading,
   type QuotaStore,
   type RunExecutor,
+  type RunStore,
+  notFound,
 } from "@andy/contracts";
 import {
   STARTABLE_STEPS,
@@ -56,6 +58,10 @@ const PlanDecisionResult = z.object({
   build: Run.nullable(),
   buildError: z.string().nullable(),
 });
+const RunParams = z.object({
+  projectId: TicketParams.shape.projectId,
+  runId: PlanRunParams.shape.runId,
+});
 const secured = { security: [{ bearer: [] }] };
 
 const routes = {
@@ -65,6 +71,13 @@ const routes = {
     path: "/api/projects/{projectId}/tickets/{ticketId}/runs",
     request: { params: TicketParams },
     responses: { 200: ok(z.array(Run), "Runs, newest first"), 404: ok(ErrorBody, "Not found") },
+  }),
+  getRun: createRoute({
+    ...secured,
+    method: "get",
+    path: "/api/projects/{projectId}/runs/{runId}",
+    request: { params: RunParams },
+    responses: { 200: ok(Run, "The agent task"), 404: ok(ErrorBody, "Not found") },
   }),
   startRun: createRoute({
     ...secured,
@@ -102,10 +115,23 @@ const routes = {
   }),
 };
 
-export function registerRunRoutes(app: OpenAPIHono<AuthEnv>, runs: RunService): void {
+export function registerRunRoutes(
+  app: OpenAPIHono<AuthEnv>,
+  runs: RunService,
+  store: Pick<RunStore, "get">,
+): void {
   app.openapi(routes.listRuns, async (c) => {
     const { projectId, ticketId } = c.req.valid("param");
     return c.json(await runs.list(projectId, ticketId), 200);
+  });
+
+  // The run detail screen (AI-101). Another project's run answers exactly like an unknown id,
+  // so the URL's project can't be used to read across projects.
+  app.openapi(routes.getRun, async (c) => {
+    const { projectId, runId } = c.req.valid("param");
+    const run = await store.get(runId);
+    if (!run || run.projectId !== projectId) throw notFound("agent task", runId);
+    return c.json(run, 200);
   });
 
   app.openapi(routes.startRun, async (c) => {
