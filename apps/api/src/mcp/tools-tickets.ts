@@ -9,6 +9,7 @@ import {
 import {
   DomainError,
   inboxCards,
+  readEpicRollup,
   ticketStatusLine,
   type InboxCard,
   type TicketStatus,
@@ -44,7 +45,7 @@ const EditInput = {
   blockedBy: z
     .array(TicketKey)
     .optional()
-    .describe("Keys of the tickets that block this one, in the same project. Replaces the list."),
+    .describe("Keys of the tickets that block this one, in any project. Replaces the list."),
   ifUpdatedAt: Timestamp.optional().describe(
     "The ticket's `updatedAt` from `status`: the edit is refused if it changed since.",
   ),
@@ -57,19 +58,41 @@ const ParentInput = {
   parent: TicketKey.nullable().describe("An epic's key in the same project; null removes it."),
 };
 
+const AcceptAssumptionInput = {
+  ticket: Key,
+  assumptionId: z
+    .string()
+    .min(1)
+    .max(80)
+    .describe("An `id` from the ticket's refineAssumptions: a gap held by a question cap."),
+};
+
 const ReorderInput = {
   ticket: Key,
   above: TicketKey.optional().describe("Place directly above this ticket."),
   below: TicketKey.optional().describe("Place directly below this ticket."),
 };
 
-/** `status` for a ticket with the status line the UI shows. */
+/**
+ * `status` for a ticket with the status line the UI shows; an epic also gets its children and
+ * roll-up (AI-85), the same the epic panel reads.
+ */
 export async function statusLineOf<S extends TicketStatus>(deps: ToolDeps, status: S) {
   const { ticket, questions } = status;
   const tickets = await deps.tracker.listTickets(ticket.projectId);
   const open = questions.filter((q) => q.status === "open").length;
-  const line = await lineFor(deps, ticket, tickets, open, status.worker, status.executor.next);
-  return { ...status, statusLine: line };
+  const [line, epic] = await Promise.all([
+    lineFor(deps, ticket, tickets, open, status.worker, status.executor.next),
+    ticket.type === "epic"
+      ? readEpicRollup(
+          ticket,
+          tickets,
+          (p, t) => deps.runs.list(p, t),
+          (p) => deps.tracker.listTickets(p).catch(() => []),
+        )
+      : Promise.resolve(undefined),
+  ]);
+  return { ...status, statusLine: line, ...(epic && { epic }) };
 }
 
 async function lineFor(
@@ -148,20 +171,7 @@ const questionView = (ticket: string | null) => (q: InboxCard["questions"][numbe
 });
 
 export function registerTicketTools(server: McpServer, deps: ToolDeps): void {
-  const { service, tracker } = deps;
-
-  /** Blocker keys to ids; a key outside the ticket's project is refused. */
-  const blockerIds = async (ticket: Ticket, keys: string[]) => {
-    const tickets = await tracker.listTickets(ticket.projectId);
-    return keys.map((key) => {
-      const found = tickets.find((t) => t.key === key);
-      if (!found) throw new DomainError("invalid_reference", `${key} is not in this project`);
-      if (found.id === ticket.id) {
-        throw new DomainError("invalid_reference", `${key} can't block itself`);
-      }
-      return found.id;
-    });
-  };
+  const { service } = deps;
 
   server.registerTool(
     "edit_ticket",
@@ -177,9 +187,7 @@ export function registerTicketTools(server: McpServer, deps: ToolDeps): void {
           throw new DomainError("invalid_reference", "give at least one field to edit");
         }
         const found = await service.findByKey(ticket);
-        const edits = blockedBy
-          ? { ...fields, blockedBy: await blockerIds(found, blockedBy) }
-          : fields;
+        const edits = blockedBy ? { ...fields, blockedBy } : fields;
         const updated = await service.update(
           found.projectId,
           found.id,
@@ -217,6 +225,27 @@ export function registerTicketTools(server: McpServer, deps: ToolDeps): void {
       run(async () => ({
         ticket: summary(await service.reparentByKey(ticket, parent, deps.actor)),
       })),
+  );
+
+  server.registerTool(
+    "accept_assumption",
+    {
+      description:
+        "Accepts a held gap (AI-75): one of refine's costly assumptions held back by a question cap, shown in `status` readiness as a held question. The ticket goes on with the assumption as written and moves to Ready when nothing else is missing. The other choice is `promote_assumption`, which asks it.",
+      inputSchema: AcceptAssumptionInput,
+      annotations: { destructiveHint: false, idempotentHint: false },
+    },
+    ({ ticket, assumptionId }) =>
+      run(async () => {
+        const found = await service.findByKey(ticket);
+        const accepted = await service.acceptAssumption(
+          found.projectId,
+          found.id,
+          assumptionId,
+          deps.actor,
+        );
+        return { ticket: summary(accepted) };
+      }),
   );
 
   server.registerTool(

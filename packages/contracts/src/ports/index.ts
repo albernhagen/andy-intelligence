@@ -256,6 +256,13 @@ export interface WorkTracker {
   getTicket(projectId: string, ticketId: string): Promise<Ticket | null>;
   /** Sorted by rank. */
   listTickets(projectId: string, filter?: TicketFilter): Promise<Ticket[]>;
+  /** The project's ticket with this key (e.g. "AI-7"), or null. Reads only that ticket. */
+  getTicketByKey(projectId: string, key: string): Promise<Ticket | null>;
+  /**
+   * Unarchived tickets per stage, every stage present. Counted by aggregation queries, not by
+   * reading tickets (ADR-0028).
+   */
+  countByStage(projectId: string): Promise<Record<Stage, number>>;
   /** Appends `fields_changed` (only fields that differ) and/or `stage_changed`. */
   updateTicket(
     projectId: string,
@@ -716,3 +723,5 @@ export interface Telemetry {
 export * from "./digest";
 export * from "./notify-email";
 export * from "./runner";
+export * from "./night";
+export * from "./config-proposals";

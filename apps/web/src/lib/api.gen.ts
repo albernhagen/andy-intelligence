@@ -4443,6 +4443,80 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  "/api/projects/{projectId}/tickets/{ticketId}/epic": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get: {
+      parameters: {
+        query?: never;
+        header?: never;
+        path: {
+          projectId: string;
+          ticketId: string;
+        };
+        cookie?: never;
+      };
+      requestBody?: never;
+      responses: {
+        /** @description The epic's children in dependency order, progress and cost */
+        200: {
+          headers: {
+            [name: string]: unknown;
+          };
+          content: {
+            "application/json": components["schemas"]["EpicRollup"];
+          };
+        };
+        /** @description Invalid request */
+        400: {
+          headers: {
+            [name: string]: unknown;
+          };
+          content: {
+            "application/json": {
+              error: string;
+              details?: string[];
+            };
+          };
+        };
+        /** @description Not found */
+        404: {
+          headers: {
+            [name: string]: unknown;
+          };
+          content: {
+            "application/json": {
+              error: string;
+              details?: string[];
+            };
+          };
+        };
+        /** @description The ticket isn't an epic */
+        422: {
+          headers: {
+            [name: string]: unknown;
+          };
+          content: {
+            "application/json": {
+              error: string;
+              details?: string[];
+            };
+          };
+        };
+      };
+    };
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   "/api/projects/{projectId}/tickets/{ticketId}/runs": {
     parameters: {
       query?: never;
@@ -4990,6 +5064,257 @@ export interface paths {
         };
       };
     };
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/projects/{projectId}/runs/{runId}": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get: {
+      parameters: {
+        query?: never;
+        header?: never;
+        path: {
+          projectId: string;
+          runId: string;
+        };
+        cookie?: never;
+      };
+      requestBody?: never;
+      responses: {
+        /** @description The agent task */
+        200: {
+          headers: {
+            [name: string]: unknown;
+          };
+          content: {
+            "application/json": {
+              id: string;
+              projectId: string;
+              ticketId: string | null;
+              /** @enum {string} */
+              step: "refine" | "plan" | "build" | "review" | "verify" | "scout" | "sync";
+              route: {
+                /** @enum {string} */
+                harness: "claude-code" | "jules" | "opencode" | "direct";
+                /** @enum {string} */
+                provider: "claude-sub" | "google-sub" | "openrouter";
+                model: string;
+              };
+              /** @enum {string|null} */
+              tier: "frontier" | "strong" | "fast" | "cheap" | null;
+              /** @enum {string} */
+              status: "queued" | "running" | "succeeded" | "failed" | "cancelled";
+              /** Format: date-time */
+              startedAt: string | null;
+              /** Format: date-time */
+              endedAt: string | null;
+              tokensIn: number | null;
+              tokensOut: number | null;
+              costUsd: number | null;
+              costIsEstimate: boolean;
+              quotaSnapshot: {
+                [key: string]: unknown;
+              } | null;
+              links: {
+                /** Format: uri */
+                executorRun?: string;
+                /** Format: uri */
+                pullRequest?: string;
+              };
+              /** @enum {string|null} */
+              outcome: "merged_clean" | "reworked" | "reverted" | "failed" | null;
+              wouldAutoMerge: boolean | null;
+              /**
+               * Format: date-time
+               * @default null
+               */
+              createdAt: string | null;
+              /**
+               * Format: date-time
+               * @default null
+               */
+              deadline: string | null;
+              /** @default null */
+              prompt: string | null;
+              /** @default null */
+              maxTurns: number | null;
+              /** @default null */
+              summary: string | null;
+              /** @default null */
+              error: string | null;
+              /** @default null */
+              executor: {
+                repo: string;
+                ref: string;
+                externalId: string;
+              } | null;
+              /** @default 1 */
+              attempt: number;
+              /** @default null */
+              retryOf: string | null;
+              /** @default null */
+              plan: {
+                files: string[];
+                steps: string[];
+                tests: string[];
+                riskiestStep: string;
+                rejectedAlternatives: string[];
+              } | null;
+              /** @default null */
+              branch: string | null;
+              /** @default [] */
+              toolingFiles: string[];
+              /**
+               * Format: date-time
+               * @default null
+               */
+              pushGrantedAt: string | null;
+              /** @default null */
+              planDecision: {
+                /** @enum {string} */
+                decision: "approved" | "rejected";
+                reason: string | null;
+                by: string;
+                /** Format: date-time */
+                at: string;
+              } | null;
+              /** @default null */
+              planRunId: string | null;
+              /**
+               * @default null
+               * @enum {string|null}
+               */
+              planPolicy: "none" | "m-and-l" | "all" | null;
+              /** @default [] */
+              verification: {
+                command: string;
+                passed: boolean;
+                output: string;
+              }[];
+              /** @default [] */
+              gateReasons: (
+                | "no_verification_output"
+                | "protected_path"
+                | "files_incomplete"
+                | "checks_incomplete"
+                | "no_required_checks"
+                | "checks_failed"
+                | "checks_pending"
+                | "draft"
+                | "not_default_branch"
+                | "sync_pending"
+              )[];
+              /** @default [] */
+              protectedFiles: string[];
+              /**
+               * Format: date-time
+               * @default null
+               */
+              gateFlaggedAt: string | null;
+              /** @default null */
+              mergeAttemptedSha: string | null;
+              /** @default null */
+              mergeError: string | null;
+              /** @default null */
+              metrics: {
+                ciGreenFirstTry: boolean | null;
+                reviewFailures: string[];
+                reviewBlockers: number | null;
+                andyCommits: number | null;
+                reworks: number | null;
+                costEstimateUsd: number | null;
+              } | null;
+              /** @default null */
+              usage: {
+                inputTokens: number;
+                outputTokens: number;
+                cacheReadTokens: number;
+                cacheWriteTokens: number;
+                turns: number | null;
+                wallMs: number | null;
+              } | null;
+              /** @default null */
+              quotaDelta: {
+                "5h": number | null;
+                weekly: number | null;
+              } | null;
+              /** @default [] */
+              touches: string[];
+              /** @default null */
+              reservedAdr: number | null;
+              /** @default null */
+              syncRun: {
+                buildRunId: string;
+                /** Format: uri */
+                pullRequest: string;
+                number: number;
+                branch: string;
+                headSha: string;
+                /** @enum {string|null} */
+                outcome:
+                  "synced" | "already_current" | "conflict_unresolved" | "checks_failed" | null;
+                pushedSha: string | null;
+                conflictFiles: string[];
+                reason: string | null;
+              } | null;
+              /** @default null */
+              prSync: {
+                /** Format: date-time */
+                pendingSince: string | null;
+                /** @enum {string|null} */
+                waiting:
+                  | "paused"
+                  | "global_cap"
+                  | "quota_reserve"
+                  | "daily_cap"
+                  | "ticket_busy"
+                  | "builds_off"
+                  | "pr_cap"
+                  | null;
+                stoppedHeadSha: string | null;
+                stoppedReason: string | null;
+                capFlaggedDay: string | null;
+                /**
+                 * Format: date-time
+                 * @default null
+                 */
+                checkedAt: string | null;
+              } | null;
+              /** @default null */
+              localRun: {
+                runnerId: string;
+                /** Format: date-time */
+                leaseExpiresAt: string;
+                /** Format: date-time */
+                heartbeatAt: string | null;
+              } | null;
+            };
+          };
+        };
+        /** @description Not found */
+        404: {
+          headers: {
+            [name: string]: unknown;
+          };
+          content: {
+            "application/json": {
+              error: string;
+              details?: string[];
+            };
+          };
+        };
+      };
+    };
+    put?: never;
+    post?: never;
     delete?: never;
     options?: never;
     head?: never;
@@ -6091,6 +6416,465 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  "/api/projects/{projectId}/dashboard": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get: {
+      parameters: {
+        query?: {
+          /** @description UTC weeks covered, Monday first, the last ending now: 1 to 26. Default 8. */
+          weeks?: number;
+        };
+        header?: never;
+        path: {
+          projectId: string;
+        };
+        cookie?: never;
+      };
+      requestBody?: never;
+      responses: {
+        /** @description Delivery and cost per week, the costliest agent tasks */
+        200: {
+          headers: {
+            [name: string]: unknown;
+          };
+          content: {
+            "application/json": {
+              projectId: string;
+              key: string;
+              /** Format: date-time */
+              from: string;
+              /** Format: date-time */
+              to: string;
+              weeks: {
+                /** Format: date-time */
+                start: string;
+                /** Format: date-time */
+                end: string;
+                ticketsByStage: {
+                  backlog?: number;
+                  ready?: number;
+                  in_progress?: number;
+                  ready_for_review?: number;
+                  done?: number;
+                  cancelled?: number;
+                };
+                leadTimeHours: {
+                  median: number | null;
+                  p90: number | null;
+                  count: number;
+                };
+                reworks: number;
+                ciGreenFirstTry: {
+                  green: number;
+                  known: number;
+                  rate: number | null;
+                };
+                reviewBlockers: number;
+                cost: {
+                  runs: number;
+                  unknownCostRuns: number;
+                  estimatedCostUsd: number;
+                  tokensIn: number;
+                  tokensOut: number;
+                  turns: number;
+                  quotaDelta: {
+                    "5h": number | null;
+                    weekly: number | null;
+                  };
+                };
+                byStep: {
+                  runs: number;
+                  unknownCostRuns: number;
+                  estimatedCostUsd: number;
+                  tokensIn: number;
+                  tokensOut: number;
+                  turns: number;
+                  quotaDelta: {
+                    "5h": number | null;
+                    weekly: number | null;
+                  };
+                  /** @enum {string} */
+                  step: "refine" | "plan" | "build" | "review" | "verify" | "scout" | "sync";
+                }[];
+                bySize: {
+                  runs: number;
+                  unknownCostRuns: number;
+                  estimatedCostUsd: number;
+                  tokensIn: number;
+                  tokensOut: number;
+                  turns: number;
+                  quotaDelta: {
+                    "5h": number | null;
+                    weekly: number | null;
+                  };
+                  /** @enum {string} */
+                  size: "S" | "M" | "L" | "unsized";
+                }[];
+              }[];
+              expensiveRuns: {
+                id: string;
+                projectId: string;
+                ticketId: string | null;
+                ticketKey: string | null;
+                /** @enum {string} */
+                step: "refine" | "plan" | "build" | "review" | "verify" | "scout" | "sync";
+                costUsd: number;
+                costIsEstimate: boolean;
+                /** Format: date-time */
+                endedAt: string;
+              }[];
+              partial: (
+                | "projects"
+                | "ticketsByStage"
+                | "leadTime"
+                | "reworks"
+                | "ciGreenFirstTry"
+                | "reviewBlockers"
+                | "cost"
+                | "expensiveRuns"
+              )[];
+            };
+          };
+        };
+        /** @description Invalid request */
+        400: {
+          headers: {
+            [name: string]: unknown;
+          };
+          content: {
+            "application/json": {
+              error: string;
+              details?: string[];
+            };
+          };
+        };
+        /** @description Not found */
+        404: {
+          headers: {
+            [name: string]: unknown;
+          };
+          content: {
+            "application/json": {
+              error: string;
+              details?: string[];
+            };
+          };
+        };
+      };
+    };
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/dashboard": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get: {
+      parameters: {
+        query?: {
+          /** @description UTC weeks covered, Monday first, the last ending now: 1 to 26. Default 8. */
+          weeks?: number;
+        };
+        header?: never;
+        path?: never;
+        cookie?: never;
+      };
+      requestBody?: never;
+      responses: {
+        /** @description The same figures summed across projects, then per project */
+        200: {
+          headers: {
+            [name: string]: unknown;
+          };
+          content: {
+            "application/json": {
+              /** Format: date-time */
+              from: string;
+              /** Format: date-time */
+              to: string;
+              weeks: {
+                /** Format: date-time */
+                start: string;
+                /** Format: date-time */
+                end: string;
+                ticketsByStage: {
+                  backlog?: number;
+                  ready?: number;
+                  in_progress?: number;
+                  ready_for_review?: number;
+                  done?: number;
+                  cancelled?: number;
+                };
+                leadTimeHours: {
+                  median: number | null;
+                  p90: number | null;
+                  count: number;
+                };
+                reworks: number;
+                ciGreenFirstTry: {
+                  green: number;
+                  known: number;
+                  rate: number | null;
+                };
+                reviewBlockers: number;
+                cost: {
+                  runs: number;
+                  unknownCostRuns: number;
+                  estimatedCostUsd: number;
+                  tokensIn: number;
+                  tokensOut: number;
+                  turns: number;
+                  quotaDelta: {
+                    "5h": number | null;
+                    weekly: number | null;
+                  };
+                };
+                byStep: {
+                  runs: number;
+                  unknownCostRuns: number;
+                  estimatedCostUsd: number;
+                  tokensIn: number;
+                  tokensOut: number;
+                  turns: number;
+                  quotaDelta: {
+                    "5h": number | null;
+                    weekly: number | null;
+                  };
+                  /** @enum {string} */
+                  step: "refine" | "plan" | "build" | "review" | "verify" | "scout" | "sync";
+                }[];
+                bySize: {
+                  runs: number;
+                  unknownCostRuns: number;
+                  estimatedCostUsd: number;
+                  tokensIn: number;
+                  tokensOut: number;
+                  turns: number;
+                  quotaDelta: {
+                    "5h": number | null;
+                    weekly: number | null;
+                  };
+                  /** @enum {string} */
+                  size: "S" | "M" | "L" | "unsized";
+                }[];
+              }[];
+              expensiveRuns: {
+                id: string;
+                projectId: string;
+                ticketId: string | null;
+                ticketKey: string | null;
+                /** @enum {string} */
+                step: "refine" | "plan" | "build" | "review" | "verify" | "scout" | "sync";
+                costUsd: number;
+                costIsEstimate: boolean;
+                /** Format: date-time */
+                endedAt: string;
+              }[];
+              partial: (
+                | "projects"
+                | "ticketsByStage"
+                | "leadTime"
+                | "reworks"
+                | "ciGreenFirstTry"
+                | "reviewBlockers"
+                | "cost"
+                | "expensiveRuns"
+              )[];
+              projects: {
+                projectId: string;
+                key: string;
+                /** Format: date-time */
+                from: string;
+                /** Format: date-time */
+                to: string;
+                weeks: {
+                  /** Format: date-time */
+                  start: string;
+                  /** Format: date-time */
+                  end: string;
+                  ticketsByStage: {
+                    backlog?: number;
+                    ready?: number;
+                    in_progress?: number;
+                    ready_for_review?: number;
+                    done?: number;
+                    cancelled?: number;
+                  };
+                  leadTimeHours: {
+                    median: number | null;
+                    p90: number | null;
+                    count: number;
+                  };
+                  reworks: number;
+                  ciGreenFirstTry: {
+                    green: number;
+                    known: number;
+                    rate: number | null;
+                  };
+                  reviewBlockers: number;
+                  cost: {
+                    runs: number;
+                    unknownCostRuns: number;
+                    estimatedCostUsd: number;
+                    tokensIn: number;
+                    tokensOut: number;
+                    turns: number;
+                    quotaDelta: {
+                      "5h": number | null;
+                      weekly: number | null;
+                    };
+                  };
+                  byStep: {
+                    runs: number;
+                    unknownCostRuns: number;
+                    estimatedCostUsd: number;
+                    tokensIn: number;
+                    tokensOut: number;
+                    turns: number;
+                    quotaDelta: {
+                      "5h": number | null;
+                      weekly: number | null;
+                    };
+                    /** @enum {string} */
+                    step: "refine" | "plan" | "build" | "review" | "verify" | "scout" | "sync";
+                  }[];
+                  bySize: {
+                    runs: number;
+                    unknownCostRuns: number;
+                    estimatedCostUsd: number;
+                    tokensIn: number;
+                    tokensOut: number;
+                    turns: number;
+                    quotaDelta: {
+                      "5h": number | null;
+                      weekly: number | null;
+                    };
+                    /** @enum {string} */
+                    size: "S" | "M" | "L" | "unsized";
+                  }[];
+                }[];
+                expensiveRuns: {
+                  id: string;
+                  projectId: string;
+                  ticketId: string | null;
+                  ticketKey: string | null;
+                  /** @enum {string} */
+                  step: "refine" | "plan" | "build" | "review" | "verify" | "scout" | "sync";
+                  costUsd: number;
+                  costIsEstimate: boolean;
+                  /** Format: date-time */
+                  endedAt: string;
+                }[];
+                partial: (
+                  | "projects"
+                  | "ticketsByStage"
+                  | "leadTime"
+                  | "reworks"
+                  | "ciGreenFirstTry"
+                  | "reviewBlockers"
+                  | "cost"
+                  | "expensiveRuns"
+                )[];
+              }[];
+            };
+          };
+        };
+        /** @description Invalid request */
+        400: {
+          headers: {
+            [name: string]: unknown;
+          };
+          content: {
+            "application/json": {
+              error: string;
+              details?: string[];
+            };
+          };
+        };
+      };
+    };
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/projects/{projectId}/setup": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get: {
+      parameters: {
+        query?: never;
+        header?: never;
+        path: {
+          projectId: string;
+        };
+        cookie?: never;
+      };
+      requestBody?: never;
+      responses: {
+        /** @description The five setup steps, each done, missing, unknown or not yet */
+        200: {
+          headers: {
+            [name: string]: unknown;
+          };
+          content: {
+            "application/json": components["schemas"]["SetupChecklist"];
+          };
+        };
+        /** @description Invalid request */
+        400: {
+          headers: {
+            [name: string]: unknown;
+          };
+          content: {
+            "application/json": {
+              error: string;
+              details?: string[];
+            };
+          };
+        };
+        /** @description Not found */
+        404: {
+          headers: {
+            [name: string]: unknown;
+          };
+          content: {
+            "application/json": {
+              error: string;
+              details?: string[];
+            };
+          };
+        };
+      };
+    };
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   "/api/notify/email": {
     parameters: {
       query?: never;
@@ -6658,6 +7442,338 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  "/api/config-changes": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get: {
+      parameters: {
+        query?: {
+          projectId?: string;
+        };
+        header?: never;
+        path?: never;
+        cookie?: never;
+      };
+      requestBody?: never;
+      responses: {
+        /** @description Every pending config change (of one project), newest first */
+        200: {
+          headers: {
+            [name: string]: unknown;
+          };
+          content: {
+            "application/json": {
+              id: string;
+              entity: string;
+              entityId: string;
+              diff: {
+                [key: string]: unknown;
+              };
+              /** @enum {string} */
+              actor: "andy" | "ui" | "agent" | "scout";
+              reason: string;
+              /** @enum {string} */
+              status: "pending" | "accepted" | "applied" | "reverted" | "rejected";
+              /** Format: date-time */
+              createdAt: string;
+              /** Format: date-time */
+              appliedAt: string | null;
+              /** @default null */
+              projectId: string | null;
+              /** @default null */
+              dedupeKey: string | null;
+              /** @default null */
+              decidedBy: string | null;
+              /**
+               * Format: date-time
+               * @default null
+               */
+              decidedAt: string | null;
+            }[];
+          };
+        };
+        /** @description Unknown project */
+        422: {
+          headers: {
+            [name: string]: unknown;
+          };
+          content: {
+            "application/json": {
+              error: string;
+              details?: string[];
+            };
+          };
+        };
+      };
+    };
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/projects/{projectId}/config-proposals/sweep": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    post: {
+      parameters: {
+        query?: never;
+        header?: never;
+        path: {
+          projectId: string;
+        };
+        cookie?: never;
+      };
+      requestBody?: never;
+      responses: {
+        /** @description Pending proposals written or already pending (none applied); throttled within a minute */
+        200: {
+          headers: {
+            [name: string]: unknown;
+          };
+          content: {
+            "application/json": {
+              projectId: string;
+              throttled: boolean;
+              findingsRead: number;
+              created: string[];
+              alreadyPending: string[];
+              heldByCap: number;
+            };
+          };
+        };
+        /** @description Unknown project */
+        422: {
+          headers: {
+            [name: string]: unknown;
+          };
+          content: {
+            "application/json": {
+              error: string;
+              details?: string[];
+            };
+          };
+        };
+      };
+    };
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/config-changes/{changeId}/accept": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    post: {
+      parameters: {
+        query?: never;
+        header?: never;
+        path: {
+          changeId: string;
+        };
+        cookie?: never;
+      };
+      requestBody?: never;
+      responses: {
+        /** @description Accepted; nothing is applied */
+        200: {
+          headers: {
+            [name: string]: unknown;
+          };
+          content: {
+            "application/json": {
+              id: string;
+              entity: string;
+              entityId: string;
+              diff: {
+                [key: string]: unknown;
+              };
+              /** @enum {string} */
+              actor: "andy" | "ui" | "agent" | "scout";
+              reason: string;
+              /** @enum {string} */
+              status: "pending" | "accepted" | "applied" | "reverted" | "rejected";
+              /** Format: date-time */
+              createdAt: string;
+              /** Format: date-time */
+              appliedAt: string | null;
+              /** @default null */
+              projectId: string | null;
+              /** @default null */
+              dedupeKey: string | null;
+              /** @default null */
+              decidedBy: string | null;
+              /**
+               * Format: date-time
+               * @default null
+               */
+              decidedAt: string | null;
+            };
+          };
+        };
+        /** @description Only the owner decides config changes */
+        403: {
+          headers: {
+            [name: string]: unknown;
+          };
+          content: {
+            "application/json": {
+              error: string;
+              details?: string[];
+            };
+          };
+        };
+        /** @description Not pending */
+        409: {
+          headers: {
+            [name: string]: unknown;
+          };
+          content: {
+            "application/json": {
+              error: string;
+              details?: string[];
+            };
+          };
+        };
+        /** @description Unknown config change */
+        422: {
+          headers: {
+            [name: string]: unknown;
+          };
+          content: {
+            "application/json": {
+              error: string;
+              details?: string[];
+            };
+          };
+        };
+      };
+    };
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/config-changes/{changeId}/reject": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    post: {
+      parameters: {
+        query?: never;
+        header?: never;
+        path: {
+          changeId: string;
+        };
+        cookie?: never;
+      };
+      requestBody?: never;
+      responses: {
+        /** @description Rejected */
+        200: {
+          headers: {
+            [name: string]: unknown;
+          };
+          content: {
+            "application/json": {
+              id: string;
+              entity: string;
+              entityId: string;
+              diff: {
+                [key: string]: unknown;
+              };
+              /** @enum {string} */
+              actor: "andy" | "ui" | "agent" | "scout";
+              reason: string;
+              /** @enum {string} */
+              status: "pending" | "accepted" | "applied" | "reverted" | "rejected";
+              /** Format: date-time */
+              createdAt: string;
+              /** Format: date-time */
+              appliedAt: string | null;
+              /** @default null */
+              projectId: string | null;
+              /** @default null */
+              dedupeKey: string | null;
+              /** @default null */
+              decidedBy: string | null;
+              /**
+               * Format: date-time
+               * @default null
+               */
+              decidedAt: string | null;
+            };
+          };
+        };
+        /** @description Only the owner decides config changes */
+        403: {
+          headers: {
+            [name: string]: unknown;
+          };
+          content: {
+            "application/json": {
+              error: string;
+              details?: string[];
+            };
+          };
+        };
+        /** @description Not pending */
+        409: {
+          headers: {
+            [name: string]: unknown;
+          };
+          content: {
+            "application/json": {
+              error: string;
+              details?: string[];
+            };
+          };
+        };
+        /** @description Unknown config change */
+        422: {
+          headers: {
+            [name: string]: unknown;
+          };
+          content: {
+            "application/json": {
+              error: string;
+              details?: string[];
+            };
+          };
+        };
+      };
+    };
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   "/api/github": {
     parameters: {
       query?: never;
@@ -6824,6 +7940,48 @@ export interface components {
     };
     Error: {
       error: string;
+    };
+    EpicRollup: {
+      children: {
+        id: string;
+        key: string;
+        title: string;
+        /** @enum {string|null} */
+        type: "epic" | "feature" | "chore" | "bug" | null;
+        /** @enum {string} */
+        stage: "backlog" | "ready" | "in_progress" | "ready_for_review" | "done" | "cancelled";
+        /** @enum {string|null} */
+        size: "S" | "M" | "L" | null;
+        openBlockers: string[];
+      }[];
+      progress: {
+        done: number;
+        total: number;
+      };
+      cost: {
+        estimatedCostUsd: number;
+        completedRuns: number;
+        unknownRuns: number;
+      };
+      costedChildren: number;
+      partial: boolean;
+    };
+    SetupChecklist: {
+      repo: string | null;
+      complete: boolean;
+      items: {
+        /** @enum {string} */
+        key:
+          | "repo_connected"
+          | "baseline_merged"
+          | "deploy_proven"
+          | "threat_model_started"
+          | "budget_caps_set";
+        label: string;
+        /** @enum {string} */
+        status: "done" | "missing" | "unknown" | "not_yet";
+        detail: string | null;
+      }[];
     };
     EmailStatus: {
       configured: boolean;

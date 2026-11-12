@@ -5,12 +5,14 @@ import {
   InMemoryWorkTracker,
   type Executor,
   type NewTicket,
+  type PlanApproval,
   type Run,
 } from "@andy/contracts";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { BuildDispatcher } from "./build-dispatch";
 import { MAX_BUILD_RUNS_PER_TICKET, branchFor } from "./builds";
 import { MAX_ACTIVE_RUNS_GLOBAL, MAX_PRS_WAITING_PER_PROJECT } from "./dispatch-caps";
+import { MAX_PLAN_RUNS_PER_TICKET } from "./plans";
 import { ProjectService } from "./projects";
 import { RunService, type RunResult } from "./runs";
 import { WorkflowExecutor, buildOutput } from "./test-executor";
@@ -155,6 +157,38 @@ describe("BuildDispatcher", () => {
     );
     const blocked = await inReady("Blocked", { blockedBy: [blocker.key] });
     expect((await dispatcher.next(projectId))?.ticketId).toBe(blocked.id);
+  });
+
+  it("GivenABlockerInAnotherProject_WhenItReachesDone_ThenTheBlockedProjectIsWokenAndTheTicketStarts", async () => {
+    const { dispatcher, tickets } = wire();
+    const ops = await tracker.createProject({ name: "Ops", key: "OPS", repos: [] });
+    const blocker = await tracker.createTicket(ops.id, ready("Ops"), "andy");
+    await tracker.updateTicket(
+      ops.id,
+      blocker.id,
+      { stage: { to: "ready_for_review", forced: true, reason: null } },
+      "andy",
+    );
+    const blocked = await inReady("Blocked", { blockedBy: [blocker.key] });
+
+    expect(await dispatcher.next(projectId)).toBeNull();
+    expect(await builds(blocked.id)).toEqual([]);
+
+    await tickets.followPullRequest(ops.id, blocker.id, "done", "PR merged");
+    const [run] = await builds(blocked.id);
+    expect(run).toMatchObject({ step: "build" });
+  });
+
+  it("GivenOneOfTwoBlockersInOtherProjectsIsDone_WhenWoken_ThenTheTicketStillWaits", async () => {
+    const { tickets } = wire();
+    const ops = await tracker.createProject({ name: "Ops", key: "OPS", repos: [] });
+    const web = await tracker.createProject({ name: "Web", key: "WEB", repos: [] });
+    const first = await tracker.createTicket(ops.id, ready("Ops"), "andy");
+    const second = await tracker.createTicket(web.id, ready("Web"), "andy");
+    const blocked = await inReady("Blocked", { blockedBy: [first.key, second.key] });
+
+    await tickets.move(ops.id, first.id, "done", "andy", { force: true });
+    expect(await builds(blocked.id)).toEqual([]);
   });
 
   it("GivenARunInFlight_WhenNext_ThenNothingStartsUntilItEnds", async () => {
@@ -547,5 +581,195 @@ describe("BuildDispatcher", () => {
     const t = await inReady("Board");
     await projects.update(projectId, { autoBuild: true }, OWNER);
     expect(await builds(t.id)).toHaveLength(1);
+  });
+
+  /** M4.6: Just-in-time re-planning when a story unblocks (`workflow.md` §4.4). */
+  describe("just-in-time re-planning", () => {
+    const planOutput = { summary: "Adds the board page.", plan: buildOutput.plan };
+    const toStage = (id: string, to: "done" | "in_progress") =>
+      tracker.updateTicket(projectId, id, { stage: { to, forced: true, reason: null } }, "andy");
+    const report = async (runs: RunService, run: Run) => {
+      await runs.context(run.id, run.executor!);
+      await succeed(runs, run, { output: run.step === "plan" ? planOutput : buildOutput });
+    };
+    const approve = (planId: string) =>
+      runStore.update(
+        planId,
+        {
+          planDecision: {
+            decision: "approved",
+            reason: null,
+            by: OWNER.email,
+            at: now().toISOString(),
+          },
+        },
+        ["succeeded"],
+      );
+    const unflag = (id: string) =>
+      tracker.updateTicket(projectId, id, { fields: { needsAttention: false } }, "andy");
+    const comments = async (id: string) =>
+      (await tracker.listEvents(projectId, id)).filter((e) => e.kind === "comment");
+
+    /**
+     * Story blocked by a Done blocker, planned and approved (its build waited); then, when
+     * `blockerDoneAgain`, the blocker is reopened and reaches Done again after the plan.
+     */
+    async function approvedPlan(blockerDoneAgain: boolean, planApproval: PlanApproval = "all") {
+      await tracker.updateProject(projectId, { planApproval });
+      const wired = wire();
+      const blocker = await tracker.createTicket(projectId, ready("Blocker"), "andy");
+      await toStage(blocker.id, "done");
+      const story = await inReady("Story", { blockedBy: [blocker.key] });
+      const plan = await wired.runs.start(projectId, story.id, "plan");
+      await report(wired.runs, plan);
+      await approve(plan.id);
+      await unflag(story.id);
+      if (blockerDoneAgain) {
+        await toStage(blocker.id, "in_progress");
+        await toStage(blocker.id, "done");
+      }
+      return { ...wired, blocker, story, plan };
+    }
+
+    it("GivenAPlanOlderThanItsBlockersDone_WhenNext_ThenAPlanRunStartsAndTheTimelineNamesTheBlocker", async () => {
+      const { dispatcher, blocker, story, plan } = await approvedPlan(true);
+      const run = await dispatcher.next(projectId);
+      expect(run).toMatchObject({ step: "plan", ticketId: story.id });
+      expect(run!.id).not.toBe(plan.id);
+      expect(await builds(story.id)).toEqual([]);
+      const notes = (await comments(story.id)).map((e) => e.body);
+      expect(notes).toContain(`Plan re-run: ${blocker.key} merged after the plan.`);
+    });
+
+    it("GivenAReRunPlan_WhenItIsReported_ThenTheTicketWaitsForApprovalAndBuildsOnTheNewPlan", async () => {
+      const { runs, dispatcher, story } = await approvedPlan(true);
+      const replan = (await dispatcher.next(projectId))!;
+      await report(runs, replan);
+      expect((await tracker.getTicket(projectId, story.id))!.needsAttention).toBe(true);
+      await unflag(story.id);
+      // Awaiting Andy's decision: nothing starts, and the new plan is newer than the blocker.
+      expect(await dispatcher.next(projectId)).toBeNull();
+      const { build } = await runs.decidePlan(
+        projectId,
+        story.id,
+        replan.id,
+        { decision: "approved" },
+        OWNER,
+      );
+      expect(build).toMatchObject({ step: "build", planRunId: replan.id });
+    });
+
+    it("GivenABlockerDoneWhileThePlanTaskRan_WhenNext_ThenThePlanIsReRun", async () => {
+      await tracker.updateProject(projectId, { planApproval: "all" });
+      const { runs, dispatcher } = wire();
+      const blocker = await tracker.createTicket(projectId, ready("Blocker"), "andy");
+      await toStage(blocker.id, "done");
+      const story = await inReady("Story", { blockedBy: [blocker.key] });
+      const plan = await runs.start(projectId, story.id, "plan");
+      // The plan task starts reading; the blocker is reopened and merged again before it ends.
+      await runs.context(plan.id, plan.executor!);
+      await toStage(blocker.id, "in_progress");
+      await toStage(blocker.id, "done");
+      await succeed(runs, plan, { output: planOutput });
+      await approve(plan.id);
+      await unflag(story.id);
+      expect(await dispatcher.next(projectId)).toMatchObject({ step: "plan", ticketId: story.id });
+    });
+
+    it("GivenAPlanNewerThanEveryBlockersDone_WhenNext_ThenTheBuildStartsWithThePlan", async () => {
+      const { dispatcher, story, plan } = await approvedPlan(false);
+      expect(await dispatcher.next(projectId)).toMatchObject({
+        step: "build",
+        ticketId: story.id,
+        planRunId: plan.id,
+      });
+      const notes = (await comments(story.id)).map((e) => e.body ?? "");
+      expect(notes.some((b) => b.startsWith("Plan re-run"))).toBe(false);
+    });
+
+    it("GivenPolicyNoneAndAPlanOlderThanItsBlockersDone_WhenNext_ThenThePlanIsReRunNotBuilt", async () => {
+      // Under "none" a plan exists only when Andy asked for one; it is re-run too.
+      const { dispatcher, story } = await approvedPlan(true, "none");
+      expect(await dispatcher.next(projectId)).toMatchObject({ step: "plan", ticketId: story.id });
+    });
+
+    it("GivenNoBlockersAndAnApprovedPlan_WhenNext_ThenTheBuildStartsAsBefore", async () => {
+      await tracker.updateProject(projectId, { planApproval: "all" });
+      const { runs, dispatcher } = wire();
+      const story = await inReady("Story");
+      const plan = await runs.start(projectId, story.id, "build");
+      await report(runs, plan);
+      await approve(plan.id);
+      await unflag(story.id);
+      expect(await dispatcher.next(projectId)).toMatchObject({
+        step: "build",
+        planRunId: plan.id,
+      });
+    });
+
+    it("GivenABlockerInAnotherProjectDoneAfterThePlan_WhenItMerges_ThenThePlanIsReRun", async () => {
+      await tracker.updateProject(projectId, { planApproval: "all" });
+      const { runs, tickets } = wire();
+      const ops = await tracker.createProject({ name: "Ops", key: "OPS", repos: [] });
+      const blocker = await tracker.createTicket(ops.id, ready("Ops"), "andy");
+      await tracker.updateTicket(
+        ops.id,
+        blocker.id,
+        { stage: { to: "done", forced: true, reason: null } },
+        "andy",
+      );
+      const story = await inReady("Story", { blockedBy: [blocker.key] });
+      const plan = await runs.start(projectId, story.id, "plan");
+      await report(runs, plan);
+      await approve(plan.id);
+      await unflag(story.id);
+      await tracker.updateTicket(
+        ops.id,
+        blocker.id,
+        { stage: { to: "ready_for_review", forced: true, reason: null } },
+        "andy",
+      );
+      // AI-96: the blocker's merge wakes this project's dispatcher.
+      await tickets.followPullRequest(ops.id, blocker.id, "done", "PR merged");
+      const [latest] = await runStore.listForTicket(projectId, story.id);
+      expect(latest).toMatchObject({ step: "plan", status: "queued" });
+      expect(latest!.id).not.toBe(plan.id);
+      const notes = (await comments(story.id)).map((e) => e.body);
+      expect(notes).toContain(`Plan re-run: ${blocker.key} merged after the plan.`);
+    });
+
+    it("GivenBlockerDoneTimesUnreadable_WhenNext_ThenTheTicketWaitsAndOthersStill", async () => {
+      const { dispatcher, story } = await approvedPlan(true);
+      const free = await inReady("Free");
+      vi.spyOn(tracker, "listEvents").mockRejectedValue(new Error("unavailable"));
+      expect(await dispatcher.next(projectId)).toMatchObject({ ticketId: free.id });
+      expect(await runStore.listForTicket(projectId, story.id)).toHaveLength(1);
+    });
+
+    it("GivenTheReplanNoteFailsToWrite_WhenNext_ThenThePlanRunStillStarts", async () => {
+      const { dispatcher, story } = await approvedPlan(true);
+      const add = tracker.addComment.bind(tracker);
+      vi.spyOn(tracker, "addComment").mockImplementation((p, t, body, actor) =>
+        body.startsWith("Plan re-run")
+          ? Promise.reject(new Error("unavailable"))
+          : add(p, t, body, actor),
+      );
+      expect(await dispatcher.next(projectId)).toMatchObject({ step: "plan", ticketId: story.id });
+    });
+
+    it("GivenAnOutdatedPlanAtThePlanCap_WhenNext_ThenTheTicketIsFlaggedNotReplanned", async () => {
+      const { runs, dispatcher, blocker, story } = await approvedPlan(false);
+      let latest: Run | undefined;
+      for (let i = 1; i < MAX_PLAN_RUNS_PER_TICKET; i++) {
+        latest = await runs.start(projectId, story.id, "plan");
+        await report(runs, latest);
+      }
+      await approve(latest!.id);
+      await unflag(story.id);
+      await toStage(blocker.id, "in_progress");
+      await toStage(blocker.id, "done");
+      expect(await dispatcher.next(projectId)).toBeNull();
+      expect((await tracker.getTicket(projectId, story.id))!.needsAttention).toBe(true);
+    });
   });
 });

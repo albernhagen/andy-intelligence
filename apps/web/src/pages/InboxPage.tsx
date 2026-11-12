@@ -1,5 +1,6 @@
 import { useParams } from "@tanstack/react-router";
 import type { Project } from "@andy/contracts";
+import { ConfigChanges } from "@/components/ConfigChanges";
 import { InboxTicketCard } from "@/components/inbox/InboxTicketCard";
 import { ProjectPlansWaiting } from "@/components/ProjectPlan";
 import { Loading, QueryError } from "@/components/Status";
@@ -37,6 +38,7 @@ export function InboxPage() {
           <Group key={id} title={name} cards={cards} />
         ))
       )}
+      <ConfigChanges projectId={projectId} />
       {stale.length > 0 && <Group title="Stale" cards={stale} />}
     </section>
   );
