@@ -1,4 +1,6 @@
 import { spawn } from "node:child_process";
+import { createServer } from "node:http";
+import type { AddressInfo } from "node:net";
 import {
   chmodSync,
   existsSync,
@@ -266,6 +268,52 @@ describe("seatbelt profile", () => {
     expect(profile).toContain('(global-name "com.apple.SecurityServer")');
   });
 
+  it("GivenTheAgentsProfile_WhenBuilt_ThenOutboundNetworkIsHttpsAndDnsOnly", () => {
+    const profile = seatbeltProfile({
+      runnerHome: "/opt/h",
+      read: [],
+      claude: { command: "/bin/sh" },
+    });
+    expect(profile).toContain("(deny network-outbound)");
+    expect(profile).toContain('(allow network-outbound (remote tcp "*:443"))');
+    expect(profile).toContain('(subpath "/Volumes")');
+  });
+
+  it.runIf(process.platform === "darwin")(
+    "GivenTheAgentsProfile_WhenAConfinedProcessCallsANon443Port_ThenItIsRefused",
+    async () => {
+      const server = createServer((_req, res) => res.end("ok"));
+      await new Promise<void>((r) => server.listen(0, "127.0.0.1", r));
+      const port = (server.address() as AddressInfo).port;
+      const dir = mkdtempSync(join(tmpdir(), "lr-net-"));
+      const profilePath = join(dir, "agent.sb");
+      writeFileSync(
+        profilePath,
+        seatbeltProfile({ runnerHome: dir, read: [], claude: { command: "/bin/sh" } }),
+      );
+      const curl = (args: string[]) =>
+        new Promise<number | null>((resolve) => {
+          const child = spawn(args[0]!, args.slice(1), { cwd: "/tmp", stdio: "ignore" });
+          child.on("close", resolve);
+        });
+      const url = `http://127.0.0.1:${port}/`;
+      expect(await curl(["/usr/bin/curl", "-s", "--max-time", "3", url])).toBe(0);
+      expect(
+        await curl([
+          "/usr/bin/sandbox-exec",
+          "-f",
+          profilePath,
+          "/usr/bin/curl",
+          "-s",
+          "--max-time",
+          "3",
+          url,
+        ]),
+      ).not.toBe(0);
+      server.close();
+    },
+  );
+
   it("GivenAPathWithAQuote_WhenBuildingAProfile_ThenItIsRefused", () => {
     expect(() => seatbeltProfile({ runnerHome: '/opt/a"b', read: [] })).toThrow(/not allowed/);
   });
@@ -293,6 +341,13 @@ describe("seatbelt profile", () => {
   );
 });
 
+/** A real live process's identity (pid and start time), standing in for another runner. */
+async function liveId() {
+  const child = spawn("/bin/sleep", ["60"], { detached: true, stdio: "ignore" });
+  child.unref();
+  return { pid: child.pid!, started: (await startTime(child.pid!))! };
+}
+
 describe("one runner per home", () => {
   it("GivenALiveRunnerHoldingTheLock_WhenAnotherStarts_ThenItIsRefused", async () => {
     const home = mkdtempSync(join(tmpdir(), "lr-lock-"));
@@ -301,6 +356,35 @@ describe("one runner per home", () => {
     expect(await acquireRunnerLock(home)).toEqual({ heldBy: process.pid });
     if ("release" in first) first.release();
     expect(existsSync(join(home, "runner.lock"))).toBe(false);
+  });
+
+  it("GivenAStaleLock_WhenTwoRunnersStartTogether_ThenExactlyOneHoldsIt", async () => {
+    const ids = await Promise.all([liveId(), liveId()]);
+    for (let round = 0; round < 20; round += 1) {
+      const home = mkdtempSync(join(tmpdir(), "lr-race-"));
+      writeFileSync(join(home, "runner.lock"), JSON.stringify({ pid: 999_999, started: "x" }));
+      const locks = await Promise.all(ids.map((id) => acquireRunnerLock(home, id)));
+      const winners = locks.filter((l) => "release" in l);
+      expect(winners).toHaveLength(1);
+      const winner = winners[0] as { held: () => boolean };
+      expect(winner.held()).toBe(true);
+      const loser = locks.find((l) => "heldBy" in l) as { heldBy: number };
+      expect(ids.map((i) => i.pid)).toContain(loser.heldBy);
+      // Only the lock itself is left: no private or moved-aside files.
+      expect(readdirSync(home)).toEqual(["runner.lock"]);
+    }
+    for (const id of ids) process.kill(id.pid, "SIGKILL");
+  });
+
+  it("GivenAHeldLock_WhenTheFileIsReplaced_ThenHeldTurnsFalse", async () => {
+    const home = mkdtempSync(join(tmpdir(), "lr-held-"));
+    const lock = await acquireRunnerLock(home);
+    if (!("held" in lock)) throw new Error("not taken");
+    expect(lock.held()).toBe(true);
+    writeFileSync(join(home, "runner.lock"), JSON.stringify({ pid: 1, started: "y" }));
+    expect(lock.held()).toBe(false);
+    lock.release(); // not ours: left in place
+    expect(existsSync(join(home, "runner.lock"))).toBe(true);
   });
 
   it("GivenAStaleLockOfADeadRunner_WhenStarting_ThenItIsTakenOver", async () => {

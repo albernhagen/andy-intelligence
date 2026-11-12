@@ -78,7 +78,7 @@ export function seatbeltProfile(input: ProfileInput): string {
   const lines = [
     "(version 1)",
     "(allow default)",
-    `(deny file-read-data file-write* (subpath "/Users") (subpath ${quoted(real(input.runnerHome))}) (subpath ${quoted(home)}))`,
+    `(deny file-read-data file-write* (subpath "/Users") (subpath "/Volumes") (subpath ${quoted(real(input.runnerHome))}) (subpath ${quoted(home)}))`,
   ];
   const allowRead = [...input.read];
   // Node runs the runner, the platform scripts and (often) Claude Code: its install is readable.
@@ -101,6 +101,12 @@ export function seatbeltProfile(input: ProfileInput): string {
     lines.push(
       `(allow file-read-data file-write* (prefix ${quoted(real(dirname(p)) + "/" + p.split("/").at(-1))}))`,
     );
+  }
+  if (input.claude) {
+    // Claude Code needs HTTPS (the API) and DNS (mDNSResponder's socket); nothing else.
+    lines.push("(deny network-outbound)");
+    lines.push('(allow network-outbound (remote tcp "*:443"))');
+    lines.push('(allow network-outbound (literal "/private/var/run/mDNSResponder"))');
   }
   if (input.offline) {
     lines.push("(deny network*)");

@@ -131,6 +131,7 @@ async function main(argv: string[]): Promise<number> {
       process.stderr.write(`No runner secret for ${origin}: run local-runner login first.\n`);
       return 1;
     }
+    const shutdown = new AbortController();
     const lock = await acquireRunnerLock(home);
     if ("heldBy" in lock) {
       process.stderr.write(
@@ -139,11 +140,18 @@ async function main(argv: string[]): Promise<number> {
       return 1;
     }
     process.on("exit", lock.release);
+    // Losing the lock (a three-way start race, a deleted file) stops this runner.
+    const lockCheck = setInterval(() => {
+      if (!lock.held()) {
+        log("ERROR", "the runner lock is no longer this runner's; stopping");
+        shutdown.abort();
+      }
+    }, 30_000);
+    lockCheck.unref();
     for (const runId of await cleanLeftoverAgents(home)) {
       log("WARNING", "stopped an agent a previous runner left running", { runId });
     }
     for (const name of pruneWork(home)) log("INFO", "old work directory removed", { name });
-    const shutdown = new AbortController();
     // First signal: stop agents and report. Second: kill every agent now and exit.
     for (const signal of ["SIGINT", "SIGTERM"] as const) {
       process.on(signal, () => {

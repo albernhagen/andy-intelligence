@@ -1,5 +1,6 @@
 import { execFile, spawn } from "node:child_process";
-import { readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { randomBytes } from "node:crypto";
+import { linkSync, readdirSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { promisify } from "node:util";
 
@@ -89,7 +90,11 @@ async function isAlive(p: Partial<ProcessId> | undefined): Promise<boolean> {
 let self: ProcessId | null = null;
 /** This runner's own pid and start time. */
 export async function selfId(): Promise<ProcessId> {
-  self ??= { pid: process.pid, started: (await startTime(process.pid)) ?? "unknown" };
+  if (self) return self;
+  const started = await startTime(process.pid);
+  // Without a start time a reused pid would look like this runner: refuse to run.
+  if (!started) throw new Error("couldn't read this runner's start time (ps)");
+  self = { pid: process.pid, started };
   return self;
 }
 
@@ -143,40 +148,72 @@ export async function cleanLeftoverAgents(home: string): Promise<string[]> {
   return stopped;
 }
 
-/**
- * One runner per home: `runner.lock` holds the live runner's pid and start time, created
- * exclusively. A lock whose runner is gone is stale and taken over. Returns a release function,
- * or the pid of the runner that holds it.
- */
-export async function acquireRunnerLock(
-  home: string,
-): Promise<{ release: () => void } | { heldBy: number }> {
-  const path = join(home, "runner.lock");
-  const me = await selfId();
-  for (let attempt = 0; attempt < 2; attempt += 1) {
-    try {
-      writeFileSync(path, JSON.stringify(me), { flag: "wx", mode: 0o600 });
-      return {
-        release: () => {
-          try {
-            const held = JSON.parse(readFileSync(path, "utf8")) as ProcessId;
-            if (held.pid === me.pid && held.started === me.started) rmSync(path, { force: true });
-          } catch {
-            // Already gone.
-          }
-        },
-      };
-    } catch (err) {
-      if ((err as { code?: string }).code !== "EEXIST") throw err;
-    }
-    let held: Partial<ProcessId> | undefined;
-    try {
-      held = JSON.parse(readFileSync(path, "utf8")) as ProcessId;
-    } catch {
-      held = undefined;
-    }
-    if (held && (await isAlive(held))) return { heldBy: held.pid! };
-    rmSync(path, { force: true });
+const sameId = (a: Partial<ProcessId> | undefined, b: ProcessId) =>
+  a?.pid === b.pid && a?.started === b.started;
+
+function readId(path: string): Partial<ProcessId> | undefined {
+  try {
+    return JSON.parse(readFileSync(path, "utf8")) as ProcessId;
+  } catch {
+    return undefined;
   }
-  throw new Error("couldn't take the runner lock");
+}
+
+export type RunnerLock = { release: () => void; held: () => boolean } | { heldBy: number };
+
+/**
+ * One runner per home: `runner.lock` holds the live runner's pid and start time. Every step is
+ * atomic, so two runners starting together never both win:
+ *
+ * - taking it: `link` of a private file onto `runner.lock` fails if the lock exists;
+ * - taking over a dead runner's lock: `rename` it aside (only one starter's rename of that file
+ *   succeeds; the other gets ENOENT and starts over), then check what was moved: a live
+ *   runner's lock moved by mistake goes straight back (`link`, never overwriting).
+ *
+ * `held()` re-reads the lock, so a runner that lost it (a three-way race, a deleted file) stops.
+ */
+export async function acquireRunnerLock(home: string, me?: ProcessId): Promise<RunnerLock> {
+  const id = me ?? (await selfId());
+  const path = join(home, "runner.lock");
+  const tag = `${id.pid}-${randomBytes(4).toString("hex")}`;
+  const mine = `${path}.${tag}`;
+  writeFileSync(mine, JSON.stringify(id), { mode: 0o600 });
+  try {
+    for (let attempt = 0; attempt < 5; attempt += 1) {
+      try {
+        linkSync(mine, path);
+        return {
+          release: () => {
+            if (sameId(readId(path), id)) rmSync(path, { force: true });
+          },
+          held: () => sameId(readId(path), id),
+        };
+      } catch (err) {
+        if ((err as { code?: string }).code !== "EEXIST") throw err;
+      }
+      const holder = readId(path);
+      if (holder && (await isAlive(holder))) return { heldBy: holder.pid! };
+      // Stale (or unreadable): move it aside; only one starter's rename of it succeeds.
+      const aside = `${path}.stale-${tag}`;
+      try {
+        renameSync(path, aside);
+      } catch (err) {
+        if ((err as { code?: string }).code === "ENOENT") continue;
+        throw err;
+      }
+      const moved = readId(aside);
+      if (moved && (await isAlive(moved))) {
+        // Another starter took it between our read and our rename: put it back.
+        try {
+          linkSync(aside, path);
+        } catch {
+          // A third starter holds it now; the next attempt finds that one.
+        }
+      }
+      rmSync(aside, { force: true });
+    }
+    throw new Error("couldn't take the runner lock");
+  } finally {
+    rmSync(mine, { force: true });
+  }
 }
