@@ -280,7 +280,7 @@ describe("ConfigProposals", () => {
       () => `cc-${++n}`,
       { ...CONFIG_PROPOSAL_LIMITS, maxNewPerSweep: 25, maxPendingPerProject: 25 },
     );
-    const listDecided = vi.spyOn(changes, "listDecided");
+    const listDecisions = vi.spyOn(changes, "listDecisions");
     const latestDecision = vi.spyOn(changes, "latestDecision");
     // 25 kinds, past the old 20-lookup cap; the last ones by name were never proposed.
     const kinds = Array.from({ length: 25 }, (_, i) => `kind-${String(i).padStart(2, "0")}`);
@@ -293,8 +293,11 @@ describe("ConfigProposals", () => {
     expect(pending.map((c) => c.dedupeKey).sort()).toEqual(
       kinds.map((k) => proposalKey(projectId, "AGENTS.md", k)),
     );
-    expect(listDecided).toHaveBeenCalledTimes(1);
-    expect(listDecided).toHaveBeenCalledWith(projectId, CONFIG_PROPOSAL_LIMITS.maxDecidedRead);
+    expect(listDecisions).toHaveBeenCalledTimes(1);
+    expect(listDecisions).toHaveBeenCalledWith(
+      kinds.map((k) => proposalKey(projectId, "AGENTS.md", k)),
+      CONFIG_PROPOSAL_LIMITS.maxDecidedRead,
+    );
     expect(latestDecision).not.toHaveBeenCalled();
   });
 
@@ -343,6 +346,16 @@ describe("ConfigProposals", () => {
     expect(logs.mock.calls.map(([line]) => JSON.parse(String(line)))).toContainEqual(
       expect.objectContaining({ severity: "ERROR", projectId, maxDecidedRead: 1 }),
     );
+  });
+
+  it("GivenNoKindOnEnoughPulls_WhenSwept_ThenNoDecisionIsRead", async () => {
+    const { service, findings, changes, projectId } = await setup();
+    const listDecisions = vi.spyOn(changes, "listDecisions");
+    findings.add(finding(1, { projectId }), finding(2, { projectId }));
+
+    await service.sweep(projectId);
+
+    expect(listDecisions).not.toHaveBeenCalled();
   });
 
   it("GivenNoFindingsStoredYet_WhenSwept_ThenNothingIsProposed", async () => {

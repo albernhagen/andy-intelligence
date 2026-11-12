@@ -59,9 +59,13 @@ export class InMemoryConfigChangeStore implements ConfigChangeStore {
     return latest ? structuredClone(latest) : null;
   }
 
-  async listDecided(projectId: string, max: number): Promise<Listing<ConfigChange>> {
+  async listDecisions(dedupeKeys: readonly string[], max: number): Promise<Listing<ConfigChange>> {
+    const keys = new Set(dedupeKeys);
     const decided = [...this.changes.values()].filter(
-      (c) => c.projectId === projectId && (c.status === "accepted" || c.status === "rejected"),
+      (c) =>
+        c.dedupeKey !== null &&
+        keys.has(c.dedupeKey) &&
+        (c.status === "accepted" || c.status === "rejected"),
     );
     return { items: structuredClone(decided.slice(0, max)), complete: decided.length <= max };
   }

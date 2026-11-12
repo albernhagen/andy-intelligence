@@ -15,13 +15,16 @@ import { collections, typedCollection } from "./index";
  */
 export const CONFIG_CHANGE_PENDING_READ_MAX = 1_000;
 
+/** Keys per `in` query in `listDecisions`, within Firestore's limit on `in` values. */
+export const CONFIG_CHANGE_KEYS_PER_QUERY = 10;
+
 const newestFirst = (a: ConfigChange, b: ConfigChange) =>
   b.createdAt.localeCompare(a.createdAt) || a.id.localeCompare(b.id);
 
 /**
  * ConfigChangeStore on Firestore (ADR-0097): `configChanges/{id}`. The duplicate check, the
  * pending cap and decisions run inside transactions (serializable, queries included), so
- * concurrent proposals can't both pass. Queries use equality filters only: no composite index.
+ * concurrent proposals can't both pass. Queries use equality and `in` filters only: no composite index.
  */
 export class FirestoreConfigChangeStore implements ConfigChangeStore {
   constructor(private readonly db: Firestore) {}
@@ -87,18 +90,27 @@ export class FirestoreConfigChangeStore implements ConfigChangeStore {
     return decided[0] ?? null;
   }
 
-  /** Two equality queries, one per decided status (no composite index); `max + 1` each shows overflow. */
-  async listDecided(projectId: string, max: number): Promise<Listing<ConfigChange>> {
-    const read = async (status: "accepted" | "rejected") =>
-      (
-        await this.changes()
-          .where("projectId", "==", projectId)
-          .where("status", "==", status)
-          .limit(max + 1)
-          .get()
-      ).docs.map((d) => d.data());
-    const decided = [...(await read("accepted")), ...(await read("rejected"))];
-    return { items: decided.slice(0, max), complete: decided.length <= max };
+  /**
+   * `dedupeKey in [...]` queries, `CONFIG_CHANGE_KEYS_PER_QUERY` keys each (a single-field filter:
+   * no composite index); decided ones are kept in memory. `max + 1` per query shows overflow.
+   */
+  async listDecisions(dedupeKeys: readonly string[], max: number): Promise<Listing<ConfigChange>> {
+    const decided: ConfigChange[] = [];
+    let complete = true;
+    const keys = [...new Set(dedupeKeys)];
+    for (let i = 0; i < keys.length; i += CONFIG_CHANGE_KEYS_PER_QUERY) {
+      const snap = await this.changes()
+        .where("dedupeKey", "in", keys.slice(i, i + CONFIG_CHANGE_KEYS_PER_QUERY))
+        .limit(max + 1)
+        .get();
+      if (snap.size > max) complete = false;
+      for (const d of snap.docs) {
+        const c = d.data();
+        if (c.status === "accepted" || c.status === "rejected") decided.push(c);
+      }
+    }
+    if (decided.length > max) complete = false;
+    return { items: decided.slice(0, max), complete };
   }
 
   async decide(

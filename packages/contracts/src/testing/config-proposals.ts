@@ -155,33 +155,49 @@ export function configChangeStoreContract(
       expect(await store.latestDecision("other")).toBeNull();
     });
 
-    it("GivenDecidedAndPendingChangesInTwoProjects_WhenDecidedAreListed_ThenOnlyTheProjectsDecidedComeBackComplete", async () => {
+    it("GivenDecidedAndPendingChanges_WhenDecisionsAreListedForSomeKeys_ThenOnlyThoseKeysDecidedComeBackComplete", async () => {
       const store = await make();
-      const accepted = pendingConfigChange();
-      const rejected = pendingConfigChange();
-      const elsewhere = pendingConfigChange({ projectId: "other" });
-      for (const c of [accepted, rejected, elsewhere]) await store.createPending(c, 10);
-      await store.createPending(pendingConfigChange(), 10);
+      const accepted = pendingConfigChange({ dedupeKey: "k1" });
+      const rejected = pendingConfigChange({ dedupeKey: "k2" });
+      const otherKey = pendingConfigChange({ dedupeKey: "k3" });
+      for (const c of [accepted, rejected, otherKey]) await store.createPending(c, 10);
+      await store.createPending(pendingConfigChange({ dedupeKey: "k1" }), 10);
       await store.decide(accepted.id, "accepted", "andy", at);
       await store.decide(rejected.id, "rejected", "andy", at);
-      await store.decide(elsewhere.id, "accepted", "andy", at);
+      await store.decide(otherKey.id, "accepted", "andy", at);
 
-      const listed = await store.listDecided("ai", 10);
+      const listed = await store.listDecisions(["k1", "k2", "unknown"], 10);
 
       expect(listed.complete).toBe(true);
       expect(listed.items.map((c) => c.id).sort()).toEqual([accepted.id, rejected.id].sort());
+      expect(await store.listDecisions([], 10)).toEqual({ items: [], complete: true });
     });
 
-    it("GivenMoreDecidedChangesThanMax_WhenListed_ThenAtMostMaxAndIncomplete", async () => {
+    it("GivenDecisionsOnMoreKeysThanOneQueryTakes_WhenListed_ThenEveryKeysDecisionComesBack", async () => {
+      const store = await make();
+      const keys = Array.from({ length: 12 }, (_, i) => `many-${i}`);
+      for (const key of keys) {
+        const c = pendingConfigChange({ dedupeKey: key });
+        await store.createPending(c, 20);
+        await store.decide(c.id, "rejected", "andy", at);
+      }
+
+      const listed = await store.listDecisions(keys, 50);
+
+      expect(listed.complete).toBe(true);
+      expect(listed.items.map((c) => c.dedupeKey).sort()).toEqual([...keys].sort());
+    });
+
+    it("GivenMoreDecisionsThanMax_WhenListed_ThenAtMostMaxAndIncomplete", async () => {
       const store = await make();
       for (let i = 0; i < 3; i++) {
-        const c = pendingConfigChange();
+        const c = pendingConfigChange({ dedupeKey: "k" });
         await store.createPending(c, 10);
         await store.decide(c.id, i % 2 === 0 ? "accepted" : "rejected", "andy", at);
       }
 
-      const listed = await store.listDecided("ai", 2);
-      const exact = await store.listDecided("ai", 3);
+      const listed = await store.listDecisions(["k"], 2);
+      const exact = await store.listDecisions(["k"], 3);
 
       expect(listed.items).toHaveLength(2);
       expect(listed.complete).toBe(false);

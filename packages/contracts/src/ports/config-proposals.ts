@@ -52,11 +52,11 @@ export interface ConfigChangeStore {
    */
   latestDecision(dedupeKey: string): Promise<ConfigChange | null>;
   /**
-   * The project's decided changes (accepted or rejected), in no set order: at most `max`, in one
-   * capped read (AI-137). `complete` is false when more exist, so a caller must not take a
-   * missing key as undecided.
+   * The decided changes (accepted or rejected) with any of these `dedupeKey`s, in no set order:
+   * at most `max` (AI-137). No keys reads nothing. `complete` is false when more may exist, so a
+   * caller must not take a missing key as undecided.
    */
-  listDecided(projectId: string, max: number): Promise<Listing<ConfigChange>>;
+  listDecisions(dedupeKeys: readonly string[], max: number): Promise<Listing<ConfigChange>>;
   /**
    * Pending → accepted or rejected, recording who and when; `appliedAt` stays null.
    * `conflict` when the change isn't pending, `not_found` when unknown.
