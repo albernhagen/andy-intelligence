@@ -38,6 +38,7 @@ import {
   type WatchdogQueue,
   type WorkTracker,
   type NightLaunchStore,
+  type BaseBranch,
 } from "@andy/contracts";
 import { buildBaseBranch } from "./night-branch";
 import { MAX_ACTIVE_RUNS_GLOBAL, isInFlight, wasDispatched } from "./dispatch-caps";
@@ -217,6 +218,41 @@ export class RunService {
     private readonly launches: Pick<NightLaunchStore, "findActive"> | null = null,
   ) {}
 
+  /**
+   * A build's base branch (AI-122): its night launch's `epic/<KEY>` while that launch is active
+   * and covers the story, else null (the default branch). A retry keeps its run's base, so one
+   * story's attempts never straddle two branches, and is refused once the launch that set it is
+   * over (its branch may be merged or gone). The local runner can't build on one yet (ADR-0089
+   * slice 6), so a local start is refused rather than built on the default branch.
+   */
+  private async baseBranchFor(
+    step: StartableStep,
+    projectId: string,
+    ticketKey: string,
+    retryOf: Run | undefined,
+    opts: { runner?: Runner },
+  ): Promise<BaseBranch | null> {
+    if (step !== "build") return null;
+    const current = this.launches
+      ? await buildBaseBranch(this.launches, projectId, ticketKey)
+      : null;
+    if (retryOf?.baseBranch && retryOf.baseBranch !== current) {
+      throw new DomainError(
+        "not_buildable",
+        `${ticketKey}'s night launch is over, so its build isn't retried on ${retryOf.baseBranch}`,
+        ["Start the build again by hand: it builds on the default branch."],
+      );
+    }
+    const base = retryOf ? retryOf.baseBranch : current;
+    if (base && opts.runner) {
+      throw new DomainError(
+        "not_buildable",
+        `the local runner can't build on ${base} yet (ADR-0089 slice 6)`,
+      );
+    }
+    return base;
+  }
+
   /** Whether a local runner serving the project is present now (ADR-0089). */
   async runnerPresent(projectId: string): Promise<boolean> {
     return this.runnerPresence ? this.runnerPresence(projectId) : false;
@@ -328,15 +364,7 @@ export class RunService {
         ? (retryOf?.reservedAdr ?? (await this.reserveAdr(projectId, repo)))
         : null;
     const prompt = await this.promptFor(startable, ticket, repo, questions, approved, reservedAdr);
-    // AI-122: a retry keeps its run's base, so one story's attempts never straddle two branches.
-    const baseBranch =
-      startable !== "build"
-        ? null
-        : retryOf
-          ? retryOf.baseBranch
-          : this.launches
-            ? await buildBaseBranch(this.launches, projectId, ticket.key)
-            : null;
+    const baseBranch = await this.baseBranchFor(startable, projectId, ticket.key, retryOf, opts);
     const run = await this.runs.create({
       projectId,
       ticketId,

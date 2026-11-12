@@ -241,7 +241,8 @@ describe("NightLaunches", () => {
       () => now,
       () => "launch-b",
       {
-        open: async (_projectId, key) => {
+        open: async (_projectId, { id, key }) => {
+          expect(id).toBe(epic.id);
           opened.push(key);
           return { name: `epic/${key}` as const, sha };
         },

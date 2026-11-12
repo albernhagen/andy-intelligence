@@ -175,12 +175,13 @@ jobs:
     steps:
       # A sync run checks out the PR head it was started on, with history, to merge the default
       # branch into it; a night launch's story build checks out its epic branch (AI-122, checked in
-      # the context job); every other step starts from the default branch.
+      # the context job), with history, to compare it with the default branch; every other step
+      # starts from the default branch.
       - name: Check out the project
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: ${{ needs.context.outputs.step == 'sync' && needs.context.outputs.head_sha || needs.context.outputs.base_branch || github.event.repository.default_branch }}
-          fetch-depth: ${{ fromJSON(needs.context.outputs.step == 'sync' && '0' || '1') }}
+          fetch-depth: ${{ fromJSON((needs.context.outputs.step == 'sync' || needs.context.outputs.base_branch != '') && '0' || '1') }}
           persist-credentials: false
 
       # The profile and scripts come from the platform at the commit this workflow runs from
@@ -198,6 +199,34 @@ jobs:
             scripts
             platform/executor
             platform/procedures
+
+      # AI-122: the dependency install below runs outside the sandbox and the permission profile
+      # reads CODEOWNERS from the checkout, both trusting the default branch's files. An epic
+      # branch whose install inputs or CODEOWNERS differ from them stops here, before the profile,
+      # the install or the agent. Git alone (hooks, fsmonitor and global config off); file names
+      # aren't printed (they are repo text).
+      - name: Check the epic branch against the default branch
+        if: needs.context.outputs.base_branch != ''
+        env:
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+        run: |
+          export GIT_CONFIG_NOSYSTEM=1 GIT_CONFIG_GLOBAL=/dev/null
+          git() { command git -c core.hooksPath=/dev/null -c core.fsmonitor=false "$@"; }
+          main_sha=$(git rev-parse --verify "refs/remotes/origin/$DEFAULT_BRANCH^{commit}") || {
+            echo "::error title=claude-executor::The default branch wasn't fetched."
+            exit 1
+          }
+          drift=$(git diff --name-only -z --no-renames "$main_sha" HEAD \
+            | node .executor-platform/scripts/executor-publish.mjs install-drift) || {
+            echo "::error title=claude-executor::Couldn't compare the epic branch's install inputs with the default branch."
+            exit 1
+          }
+          owners=$(git diff --name-only --no-renames "$main_sha" HEAD -- .github/CODEOWNERS CODEOWNERS docs/CODEOWNERS | grep -c . || true)
+          if [ "$drift" != "[]" ] || [ "$owners" != 0 ]; then
+            echo "::error title=claude-executor::The epic branch changes install inputs or CODEOWNERS against the default branch: no install, no agent."
+            exit 1
+          fi
+          echo "The epic branch's install inputs and CODEOWNERS match $main_sha."
 
       - name: Install the permission profile as managed settings
         env:
@@ -258,7 +287,7 @@ jobs:
           echo "merge_tree=$(git write-tree)" >> "$GITHUB_OUTPUT"
           git commit -q --no-verify -m "Merge the default branch (sync base, not pushed)"
           # The dependency install below runs outside the sandbox. A build installs from the
-          # default branch; a sync would install from the merged tree, whose manifests, lockfile
+          # default branch (or an epic branch checked to match it, AI-122); a sync would install from the merged tree, whose manifests, lockfile
           # and .npmrc the PR may have changed. So a merged tree whose install inputs differ from
           # the default branch's stops here, before any install or agent (ADR-0083).
           drift=$(git diff --name-only -z --no-renames "$main_sha" HEAD \
@@ -425,7 +454,7 @@ jobs:
       # Build only (ADR-0072). Inside the sandbox node_modules and its .bin are read-only binds
       # (Claude Code's own protected package-manager paths), so dependencies are installed here,
       # outside the sandbox, before the agent: from the lockfile of the commit the agent starts
-      # from (the default branch), with lifecycle scripts and .pnpmfile.cjs hooks off, so no package
+      # from (the default branch, or an epic branch with the same install inputs, AI-122), with lifecycle scripts and .pnpmfile.cjs hooks off, so no package
       # or project code runs in this job (pnpm still reads the repo's .npmrc and workspace settings).
       # The store is under runner temp, which sandboxed commands can't read, so the agent can't
       # alter the files behind node_modules' hardlinks. A failed install fails the job.

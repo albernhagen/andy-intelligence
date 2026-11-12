@@ -1,5 +1,5 @@
-import { chmodSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
-import { spawnSync } from "node:child_process";
+import { chmodSync, cpSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { execFileSync, spawnSync } from "node:child_process";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -156,7 +156,108 @@ describe("executor context step: base branch (AI-122)", () => {
     expect(publish).toContain("DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}");
     // Never interpolated into a script: the value reaches `run:` only through env.
     for (const line of WORKFLOW.split("\n").filter((l) => l.includes("outputs.base_branch"))) {
-      expect(line).toMatch(/^\s*(ref|BASE|base_branch): /);
+      expect(line).toMatch(/^\s*(ref|BASE|base_branch|fetch-depth|if): /);
     }
+  });
+});
+
+const GIT_ENV = {
+  GIT_CONFIG_NOSYSTEM: "1",
+  GIT_CONFIG_GLOBAL: "/dev/null",
+  GIT_AUTHOR_NAME: "t",
+  GIT_AUTHOR_EMAIL: "t@example.com",
+  GIT_COMMITTER_NAME: "t",
+  GIT_COMMITTER_EMAIL: "t@example.com",
+};
+const git = (cwd, ...args) =>
+  execFileSync("git", args, { cwd, encoding: "utf8", env: { ...process.env, ...GIT_ENV } }).trim();
+
+/**
+ * A checkout of `epic/AI-1` with `origin/main` fetched (as the full-history checkout leaves it):
+ * main has a lockfile and CODEOWNERS; `onEpic` writes the epic branch's own commit.
+ */
+function epicCheckout(onEpic) {
+  const root = mkdtempSync(join(tmpdir(), "epic-check-"));
+  git(root, "init", "-q", "-b", "main");
+  writeFileSync(join(root, "package.json"), '{"name":"p"}\n');
+  writeFileSync(join(root, "pnpm-lock.yaml"), "lockfileVersion: '9.0'\n");
+  writeFileSync(join(root, "CODEOWNERS"), "* @andy\n");
+  git(root, "add", "-A");
+  git(root, "commit", "-q", "-m", "main");
+  git(root, "update-ref", "refs/remotes/origin/main", "HEAD");
+  git(root, "checkout", "-q", "-b", "epic/AI-1");
+  onEpic(root);
+  git(root, "add", "-A");
+  git(root, "commit", "-q", "--allow-empty", "-m", "story");
+  // The platform checkout the step reads its script from, untracked like in the job.
+  mkdirSync(join(root, ".executor-platform"));
+  cpSync(join(ROOT, "scripts"), join(root, ".executor-platform", "scripts"), { recursive: true });
+  return root;
+}
+
+function runEpicCheck(cwd) {
+  const res = spawnSync(
+    "bash",
+    [
+      "--noprofile",
+      "--norc",
+      "-eo",
+      "pipefail",
+      "-c",
+      stepScript("Check the epic branch against the default branch"),
+    ],
+    { cwd, encoding: "utf8", env: { ...process.env, ...GIT_ENV, DEFAULT_BRANCH: "main" } },
+  );
+  return { status: res.status, log: res.stdout + res.stderr };
+}
+
+describe("executor agent job: epic branch check (AI-122)", () => {
+  it("GivenAnEpicBranchWithOnlyCodeChanges_WhenChecked_ThenTheJobGoesOn", () => {
+    const r = runEpicCheck(
+      epicCheckout((root) => writeFileSync(join(root, "story.ts"), "export const x = 1;\n")),
+    );
+
+    expect(r.status, r.log).toBe(0);
+    expect(r.log).toContain("match");
+  });
+
+  it.each([
+    ["the lockfile", "pnpm-lock.yaml", "lockfileVersion: '9.0'\nchanged: true\n"],
+    ["a package manifest", "package.json", '{"name":"p","dependencies":{"x":"1"}}\n'],
+    ["an npmrc", ".npmrc", "registry=https://evil.example/\n"],
+    ["CODEOWNERS", "CODEOWNERS", "* @someone-else\n"],
+  ])(
+    "GivenAnEpicBranchThatChanges%s_WhenChecked_ThenTheJobStopsBeforeTheInstall",
+    (_what, path, text) => {
+      const r = runEpicCheck(epicCheckout((root) => writeFileSync(join(root, path), text)));
+
+      expect(r.status).not.toBe(0);
+      expect(r.log).toContain("no install, no agent");
+    },
+  );
+
+  it("GivenTheDefaultBranchWasNotFetched_WhenChecked_ThenTheJobStops", () => {
+    const root = epicCheckout(() => {});
+    git(root, "update-ref", "-d", "refs/remotes/origin/main");
+
+    const r = runEpicCheck(root);
+
+    expect(r.status).not.toBe(0);
+    expect(r.log).toContain("wasn't fetched");
+  });
+
+  it("GivenTheWorkflow_WhenRead_ThenTheCheckRunsOnlyForEpicBuildsAndBeforeTheProfileAndInstall", () => {
+    const check = stepBlock("Check the epic branch against the default branch").join("\n");
+    expect(check).toContain("if: needs.context.outputs.base_branch != ''");
+    const order = (name) => WORKFLOW.indexOf(`- name: ${name}`);
+    expect(order("Check the epic branch against the default branch")).toBeLessThan(
+      order("Install the permission profile as managed settings"),
+    );
+    expect(order("Install the permission profile as managed settings")).toBeLessThan(
+      order("Install dependencies (build)"),
+    );
+    expect(stepBlock("Check out the project").join("\n")).toContain(
+      "fetch-depth: ${{ fromJSON((needs.context.outputs.step == 'sync' || needs.context.outputs.base_branch != '') && '0' || '1') }}",
+    );
   });
 });

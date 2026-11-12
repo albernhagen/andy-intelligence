@@ -227,7 +227,7 @@ export class NightLaunches {
     }
     const parsed = StartNightLaunch.parse(input);
     // Before the launch is stored, so an existing branch is never this launch's (AI-122).
-    const epicBranch = this.branches ? await this.branches.open(projectId, epic.key) : null;
+    const epicBranch = this.branches ? await this.branches.open(projectId, epic) : null;
     const at = this.now().toISOString();
     const launch = await this.store.create({
       id: this.newId(),
