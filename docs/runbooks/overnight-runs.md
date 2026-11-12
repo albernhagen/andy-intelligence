@@ -32,4 +32,4 @@ Over MCP (Claude):
 
 While it runs, the section shows stories done, running, stopped (flagged Needs-you or cancelled) and waiting, and the spend of the stories' agent tasks since the launch against the budget. Tasks without a usage report count as unknown, never $0.
 
-To stop early: **Stop** in the section, or MCP `stop_night` with the epic's key. The launch shows **Stopping** until the night ends (M4.18 ends it).
+To stop early: **Stop** in the section, or MCP `stop_night` with the epic's key. The launch shows **Stopping** while its stories still have agent tasks in flight, then ends ("stopped"). A launch past its stop time ends too ("stop_time"). Both are checked whenever the section, `night_status`, a launch or a stop reads the launch, so an over night never blocks the next one. M4.18 will end launches on its own.

@@ -89,7 +89,7 @@ describe("night MCP tools", () => {
     expect(await store.listForProject("ai")).toEqual([]);
   });
 
-  it("GivenNothingOpen_WhenLaunchedThenStopped_ThenRunningThenStopping", async () => {
+  it("GivenNothingOpen_WhenLaunchedThenStopped_ThenRunningThenEnded", async () => {
     const { call, epic, ready } = await setup();
     await ready();
     const launched = await call("launch_night", {
@@ -100,8 +100,8 @@ describe("night MCP tools", () => {
     const stopped = await call("stop_night", { ticket: epic.key });
     const status = await call("night_status", { ticket: epic.key });
     expect(launched.data.launch).toMatchObject({ status: "running", budget: BUDGET });
-    expect(stopped.data.launch).toMatchObject({ status: "stopping" });
-    expect(status.data.launch).toMatchObject({ status: "stopping" });
+    expect(stopped.data.launch).toMatchObject({ status: "ended", endReason: "stopped" });
+    expect(status.data.launch).toMatchObject({ status: "ended" });
     expect(status.data.progress.stories).toMatchObject({ total: 1 });
   });
 

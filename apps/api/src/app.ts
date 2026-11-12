@@ -417,6 +417,7 @@ export function createApp(input: AppDeps) {
         tracker: deps.tracker,
         runs: deps.runs,
         plans: runs,
+        now,
       }
     : null;
   if (night) registerNightRoutes(app, night);

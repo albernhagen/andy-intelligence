@@ -97,7 +97,7 @@ describe("plan the night", () => {
     ).toContain(`${asking.key}: 1 open question; ${big.key}: size M, plan still running`);
   });
 
-  it("GivenAClearChecklist_WhenAndyLaunchesThenStops_ThenProgressAndSpendShowAndThenStopping", async () => {
+  it("GivenAClearChecklist_WhenAndyLaunchesThenStops_ThenProgressAndSpendShowAndThenItEnds", async () => {
     const { section } = await withEpic([{}, {}]);
     const form = await within(section).findByRole("form", { name: "Launch the night" });
     const stopAt = new Date(Date.now() + 4 * 3_600_000);
@@ -116,9 +116,12 @@ describe("plan the night", () => {
       "0 of 20 agent tasks · 0 of 5,000,000 tokens · ~$0.00 of $50 (estimate)",
     );
 
+    // Nothing in flight: the night ends at once and the form is back for the next one.
     fireEvent.click(within(running).getByRole("button", { name: "Stop" }));
-    await waitFor(() => expect(within(section).getByText("Stopping")).toBeTruthy());
-    expect(within(section).getByText(/No new agent tasks start/)).toBeTruthy();
+    await waitFor(() =>
+      expect(within(section).getByText("Last launch ended: stopped.")).toBeTruthy(),
+    );
+    expect(within(section).getByRole("form", { name: "Launch the night" })).toBeTruthy();
   });
 
   it("GivenAStoryNotReady_WhenTheSectionOpens_ThenItsProblemShowsUnderIt", async () => {

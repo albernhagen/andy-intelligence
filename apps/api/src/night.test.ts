@@ -173,19 +173,61 @@ describe("night launch API", () => {
     ]);
   });
 
-  it("GivenARunningLaunch_WhenStopped_ThenItIsStoppingAndASecondStopIsAConflict", async () => {
+  it("GivenAnAgentTaskInFlight_WhenStopped_ThenStoppingUntilItFinishesThenEndedAndTheProjectFree", async () => {
+    const { runs, ready, call, path } = await setup();
+    const first = await ready("First");
+    await call("POST", path, { budget: BUDGET, stopAt: inHours(4) });
+    const run = await runs.create({
+      projectId: "ai",
+      ticketId: first.id,
+      step: "build",
+      route,
+      tier: null,
+    });
+    await runs.update(run.id, { status: "running" }, ["queued"]);
+
+    const stopped = await call("POST", `${path}/stop`);
+    const again = await call("POST", `${path}/stop`);
+    const whileRunning = (await call("GET", path)).json as NightStatus;
+    await runs.update(run.id, { status: "succeeded" }, ["running"]);
+    const after = (await call("GET", path)).json as NightStatus;
+    const relaunch = await call("POST", path, { budget: BUDGET, stopAt: inHours(4) });
+
+    expect(stopped.status).toBe(200);
+    expect(stopped.json).toMatchObject({ status: "stopping" });
+    expect(again.status).toBe(409);
+    expect(whileRunning.launch).toMatchObject({ status: "stopping" });
+    expect(after.launch).toMatchObject({ status: "ended", endReason: "stopped" });
+    expect(after.problems).toEqual([]);
+    expect(relaunch.json).toMatchObject({ status: "running" });
+  });
+
+  it("GivenNothingInFlight_WhenStopped_ThenTheLaunchEndsAtOnce", async () => {
     const { ready, call, path } = await setup();
     await ready("First");
     await call("POST", path, { budget: BUDGET, stopAt: inHours(4) });
 
     const stopped = await call("POST", `${path}/stop`);
-    const again = await call("POST", `${path}/stop`);
-    const { json } = await call("GET", path);
 
-    expect(stopped.status).toBe(200);
-    expect(stopped.json).toMatchObject({ status: "stopping" });
-    expect(again.status).toBe(409);
-    expect((json as NightStatus).launch).toMatchObject({ status: "stopping" });
+    expect(stopped.json).toMatchObject({ status: "ended", endReason: "stopped" });
+  });
+
+  it("GivenALaunchPastItsStopTime_WhenTheStatusIsRead_ThenItEndsAndANewLaunchIsAllowed", async () => {
+    const { ready, call, path } = await setup();
+    await ready("First");
+    await call("POST", path, { budget: BUDGET, stopAt: inHours(1) });
+
+    vi.useFakeTimers({ now: Date.now() + 2 * 3_600_000, toFake: ["Date"] });
+    try {
+      const { json } = await call("GET", path);
+      expect((json as NightStatus).launch).toMatchObject({
+        status: "ended",
+        endReason: "stop_time",
+      });
+      expect((json as NightStatus).problems).toEqual([]);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("GivenNoLaunch_WhenStopped_ThenAConflict", async () => {
