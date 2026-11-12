@@ -268,6 +268,64 @@ describe("seatbelt profile", () => {
     expect(profile).toContain('(global-name "com.apple.SecurityServer")');
   });
 
+  /**
+   * The profile's forms, checked the way Seatbelt reads them, without `sandbox-exec` (Linux CI):
+   * one balanced form per line, strings closed, a known head. Later rules win in Seatbelt.
+   */
+  function forms(profile: string): string[] {
+    const lines = profile.trim().split("\n");
+    for (const line of lines) {
+      let depth = 0;
+      let inString = false;
+      for (const ch of line) {
+        if (ch === '"') inString = !inString;
+        else if (!inString && ch === "(") depth += 1;
+        else if (!inString && ch === ")") depth -= 1;
+        expect(depth).toBeGreaterThanOrEqual(0);
+      }
+      expect(inString).toBe(false);
+      expect(depth).toBe(0);
+      expect(line).toMatch(/^\((version 1\)|allow |deny )/);
+    }
+    return lines;
+  }
+
+  it("GivenTheAgentsProfile_WhenParsed_ThenEveryAllowComesAfterTheDenyItReopens", () => {
+    const lines = forms(
+      seatbeltProfile({
+        runnerHome: "/opt/h",
+        read: ["/opt/h/work/r1/project"],
+        readWrite: ["/opt/h/work/r1/markers"],
+        claude: { command: "/bin/sh" },
+      }),
+    );
+    expect(lines.slice(0, 2)).toEqual(["(version 1)", "(allow default)"]);
+    const at = (prefix: string) => lines.findIndex((l) => l.startsWith(prefix));
+    const lastAt = (prefix: string) => lines.findLastIndex((l) => l.startsWith(prefix));
+    // Files: the one deny, then only allows (each reopens a path under it).
+    expect(at("(deny file-read-data")).toBe(2);
+    expect(at("(allow file-read-data")).toBeGreaterThan(2);
+    expect(lines.filter((l) => l.startsWith("(deny file"))).toHaveLength(1);
+    // Network: deny all outbound first, then exactly HTTPS and DNS, and nothing after them.
+    const deny = at("(deny network-outbound)");
+    expect(deny).toBeGreaterThan(lastAt("(allow file-read-data"));
+    expect(lines.slice(deny + 1)).toEqual([
+      '(allow network-outbound (remote tcp "*:443"))',
+      '(allow network-outbound (literal "/private/var/run/mDNSResponder"))',
+    ]);
+  });
+
+  it("GivenThePlatformChildsProfile_WhenParsed_ThenNetworkAndKeychainAreDeniedLast", () => {
+    const lines = forms(
+      seatbeltProfile({ runnerHome: "/opt/h", read: ["/opt/h/p"], offline: true }),
+    );
+    expect(lines.at(-2)).toBe("(deny network*)");
+    expect(lines.at(-1)).toMatch(
+      /^\(deny mach-lookup \(global-name "com\.apple\.SecurityServer"\)/,
+    );
+    expect(lines.some((l) => l.startsWith("(allow network"))).toBe(false);
+  });
+
   it("GivenTheAgentsProfile_WhenBuilt_ThenOutboundNetworkIsHttpsAndDnsOnly", () => {
     const profile = seatbeltProfile({
       runnerHome: "/opt/h",

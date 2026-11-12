@@ -43,6 +43,7 @@ function loop(
     idleMs?: number;
     signal?: AbortSignal;
     confinement?: Confinement;
+    mayClaim?: () => boolean;
   } = {},
 ) {
   env = makeEnv(options.stub);
@@ -66,14 +67,15 @@ function loop(
     signal: options.signal ?? new AbortController().signal,
     msPerSecond: MS_PER_SECOND,
     idleMs: options.idleMs ?? 400,
+    ...(options.mayClaim ? { mayClaim: options.mayClaim } : {}),
   });
   return { done, log, awake };
 }
 
-/** Answers `answer` from the n-th heartbeat in the agent phase on, once the stub has started. */
-function afterAgentBeats(n: number, answer: "cancel" | 409) {
-  let beats = 0;
-  return (phase: string | undefined) => (phase === "agent" && ++beats >= n ? answer : "ok");
+/** Answers `answer` once the stub agent has started (its call is logged); "ok" before. */
+function onceAgentStarted(answer: "cancel" | 409) {
+  return (phase: string | undefined) =>
+    phase === "agent" && env.calls().length > 0 ? answer : "ok";
 }
 
 const agentCalls = () => env.calls();
@@ -234,7 +236,7 @@ describe("local-runner start", () => {
   it("GivenAHeartbeatThatAnswersCancel_WhenTheAgentRuns_ThenItStopsTheAgentAndReportsCancelled", async () => {
     const t = task("refine");
     const { done } = loop({
-      tasks: [{ ...t, heartbeat: afterAgentBeats(15, "cancel") }],
+      tasks: [{ ...t, heartbeat: onceAgentStarted("cancel") }],
       stub: { agent: "hang" },
     });
     expect(await done).toBe("idle");
@@ -246,7 +248,7 @@ describe("local-runner start", () => {
   it("GivenAHeartbeatThatAnswers409_WhenTheAgentRuns_ThenItStopsTheAgentReportsNothingAndKeepsTheWorktree", async () => {
     const t = task("refine");
     const { done, log } = loop({
-      tasks: [{ ...t, heartbeat: afterAgentBeats(15, 409) }],
+      tasks: [{ ...t, heartbeat: onceAgentStarted(409) }],
       stub: { agent: "hang" },
     });
     expect(await done).toBe("idle");
@@ -272,6 +274,17 @@ describe("local-runner start", () => {
     expect(await done).toBe("stopped");
     expect(server.reports.map((r) => r.body.status)).toEqual(["failed"]);
     expect(server.reports[0]!.body.summary).toContain("stopped on its Mac");
+  });
+
+  it("GivenTheRunnerLockIsLost_WhenTheNextClaimIsDue_ThenItStopsWithoutClaiming", async () => {
+    let owns = true;
+    const { done } = loop({ mayClaim: () => owns, idleMs: 60_000 });
+    await expect.poll(() => server.claims.length, { timeout: 3000 }).toBeGreaterThanOrEqual(1);
+    owns = false;
+    expect(await done).toBe("lock_lost");
+    const claims = server.claims.length;
+    await new Promise((r) => setTimeout(r, 5 * MS_PER_SECOND));
+    expect(server.claims.length).toBe(claims);
   });
 
   it("GivenARevokedSecret_WhenClaiming_ThenTheRunnerExitsUnauthorizedWithoutLoggingTheSecret", async () => {

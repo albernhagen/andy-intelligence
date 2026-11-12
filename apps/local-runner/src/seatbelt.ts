@@ -2,6 +2,8 @@ import { execFile } from "node:child_process";
 import { randomBytes } from "node:crypto";
 import { existsSync, realpathSync } from "node:fs";
 import { rm, writeFile } from "node:fs/promises";
+import { createServer } from "node:http";
+import type { AddressInfo } from "node:net";
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 import { promisify } from "node:util";
@@ -123,7 +125,8 @@ export interface Confinement {
   /**
    * The live check before the agent (fail closed): under the profile, a file in the runner's
    * directory can't be read, the checkout can be listed but not written, and (when the runner
-   * user's home is under /Users) the home's Keychain folder can't be listed. Null when it holds.
+   * user's home is under /Users) the home's Keychain folder can't be listed, and a non-HTTPS
+   * connection is refused. Null when it holds.
    */
   check(input: { profilePath: string; checkout: string; runDir: string }): Promise<string | null>;
 }
@@ -161,13 +164,38 @@ export const seatbelt: Confinement = {
       const keychains = join(real(homedir()), "Library", "Keychains");
       if (real(homedir()).startsWith("/Users/") && (await confined("/bin/ls", [keychains])).ok)
         return "the home's Keychain folder was listable";
-      return null;
+      return await networkProblem(profilePath, checkout);
     } finally {
       await rm(canary, { force: true });
       await rm(probe, { force: true });
     }
   },
 };
+
+/**
+ * Outbound network other than HTTPS is refused: a local HTTP server on a random (non-443) port
+ * answers `curl` outside the profile and must not answer it inside. Null when that holds.
+ */
+async function networkProblem(profilePath: string, cwd: string): Promise<string | null> {
+  const server = createServer((_req, res) => res.end("ok"));
+  await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+  const url = `http://127.0.0.1:${(server.address() as AddressInfo).port}/`;
+  const curl = ["/usr/bin/curl", "-s", "-o", "/dev/null", "--max-time", "3", url];
+  const runs = async (cmd: string, args: string[]) =>
+    run(cmd, args, { cwd, timeout: 10_000 }).then(
+      () => true,
+      () => false,
+    );
+  try {
+    if (!(await runs(curl[0]!, curl.slice(1))))
+      return "the network check couldn't reach its own server";
+    if (await runs(SANDBOX_EXEC, ["-f", profilePath, ...curl]))
+      return "a connection to a non-HTTPS port was allowed";
+    return null;
+  } finally {
+    server.close();
+  }
+}
 
 /** No sandbox: tests on Linux CI only (`sandbox-exec` is macOS-only). Never used by `main`. */
 export const noConfinement: Confinement = {
