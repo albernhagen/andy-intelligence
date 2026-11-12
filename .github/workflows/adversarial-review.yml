@@ -27,6 +27,9 @@ jobs:
     permissions:
       contents: read
       pull-requests: write # sticky comment + removing the override label
+    outputs:
+      # The verdict for adversarial-review-record; empty unless the agent ran and succeeded.
+      findings: ${{ steps.prep.outputs.mode == 'review' && steps.review.outcome == 'success' && steps.review.outputs.structured_output || '' }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -80,3 +83,31 @@ jobs:
           findings: ${{ steps.review.outputs.structured_output }}
           execution-file: ${{ steps.review.outputs.execution_file }}
           github-token: ${{ github.token }}
+
+  adversarial-review-record:
+    # Posts the verdict's findings to the control plane (ADR-0097). A job of its own so the OIDC
+    # credential never shares a job with PR code: it checks out the base commit and runs only
+    # the base branch's script. Fork PRs never reach it (no verdict, and no OIDC token for forks).
+    # Runs after a failed review too (blocking findings fail that job); never fails itself.
+    needs: adversarial-review
+    if: ${{ !cancelled() && needs.adversarial-review.outputs.findings != '' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      id-token: write # Actions OIDC token for the control plane's POST /review/findings
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.event.pull_request.base.sha }}
+          persist-credentials: false
+
+      - name: Record findings
+        # Best effort; also lets the PR that adds this action pass while its base lacks it.
+        continue-on-error: true
+        uses: ./platform/actions/agent-review-record
+        with:
+          role: adversarial
+          findings: ${{ needs.adversarial-review.outputs.findings }}
+          head-sha: ${{ github.event.pull_request.head.sha }}
+          control-plane-url: https://ai.andybernhagen.com

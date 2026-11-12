@@ -53,4 +53,4 @@ Also read the ADRs the change touches (find them in `docs/architecture/adr/READM
 
 ## Output
 
-JSON matching `platform/procedures/security-review.schema.json`: a one- or two-sentence `summary` and `findings[]` with `severity`, `title`, `file`, `line`, `description` (what is wrong and how it is exploited), `recommendation`. CI turns it into one PR comment and the check result.
+JSON matching `platform/procedures/security-review.schema.json`: a one- or two-sentence `summary` and `findings[]` with `severity`, `kind` (the schema's category list; `other` if none fits; repeated kinds become proposed agent rules, ADR-0097), `title`, `file`, `line`, `description` (what is wrong and how it is exploited), `recommendation`. CI turns it into one PR comment and the check result.
