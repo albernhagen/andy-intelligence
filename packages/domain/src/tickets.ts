@@ -118,9 +118,28 @@ export class TicketService {
     if (upNext && parsed.type === "epic") {
       throw new DomainError("invalid_transition", "epics are never refined, so never Up next");
     }
+    const parentId = parsed.parentId && (await this.parentIdOf(projectId, parsed.parentId));
     const dorStatus = checkDor(parsed, 0).met ? "met" : "not_met";
-    const ticket = await this.tracker.createTicket(projectId, { ...parsed, dorStatus }, actor);
+    const ticket = await this.tracker.createTicket(
+      projectId,
+      { ...parsed, parentId, dorStatus },
+      actor,
+    );
     return upNext ? this.setUpNext(projectId, ticket.id, { upNext: true }, actor) : ticket;
+  }
+
+  /**
+   * A new ticket's parent, given as a key or an id (AI-130): the epic's id, or a refusal, as
+   * `reparentByKey` and `update` refuse. A new ticket has no children, so no cycle check.
+   */
+  private async parentIdOf(projectId: string, parent: string): Promise<string> {
+    const tickets = await this.tracker.listTickets(projectId);
+    const found = tickets.find((t) => t.id === parent || t.key === parent);
+    if (!found) throw new DomainError("invalid_reference", `${parent} is not in this project`);
+    if (found.type !== "epic") {
+      throw new DomainError("invalid_reference", `${found.key} is not an epic`);
+    }
+    return found.id;
   }
 
   /**

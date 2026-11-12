@@ -234,6 +234,45 @@ describe("set_ticket_parent", () => {
   });
 });
 
+describe("create_ticket parent (AI-130)", () => {
+  it("GivenAnEpicKey_WhenCreatedOverMcp_ThenTheEpicsIdIsStored", async () => {
+    const ctx = await setup();
+    const epic = await ctx.service.create("ai", { title: "E", type: "epic" }, "andy");
+    const res = await ctx.call("create_ticket", { project: "AI", title: "A", parentId: epic.key });
+    expect(res.isError).toBe(false);
+    const created = (await ctx.tracker.listTickets("ai")).find((t) => t.title === "A");
+    expect(created?.parentId).toBe(epic.id);
+  });
+
+  it("GivenAMissingOrNonEpicParent_WhenCreatedOverMcpOrRest_ThenRefusedAndNothingCreated", async () => {
+    const ctx = await setup();
+    const story = await ctx.service.create("ai", { title: "S", type: "feature" }, "andy");
+    const missing = await ctx.call("create_ticket", {
+      project: "AI",
+      title: "A",
+      parentId: "AI-9",
+    });
+    expect(missing).toMatchObject({ isError: true, text: "AI-9 is not in this project" });
+    const notEpic = await ctx.rest("/api/projects/ai/tickets", {
+      method: "POST",
+      body: JSON.stringify({ title: "A", parentId: story.id }),
+    });
+    expect(notEpic.status).toBe(422);
+    expect((await ctx.tracker.listTickets("ai")).map((t) => t.key)).toEqual([story.key]);
+  });
+
+  it("GivenAnEpicId_WhenCreatedOverRest_ThenThatIdIsStored", async () => {
+    const ctx = await setup();
+    const epic = await ctx.service.create("ai", { title: "E", type: "epic" }, "andy");
+    const res = await ctx.rest("/api/projects/ai/tickets", {
+      method: "POST",
+      body: JSON.stringify({ title: "A", parentId: epic.id }),
+    });
+    expect(res.status).toBe(201);
+    expect(((await res.json()) as { parentId: string }).parentId).toBe(epic.id);
+  });
+});
+
 describe("reorder_ticket", () => {
   it("GivenALane_WhenReordered_ThenTheBoardOrderChanges", async () => {
     const ctx = await setup();

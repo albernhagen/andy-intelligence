@@ -73,6 +73,7 @@ const CreateTicketInput = NewTicket.omit({ dorStatus: true, needsAttention: true
   type: NewTicket.shape.type.describe(
     "feature, chore, bug or epic (ADR-0058). Omit it: refine fills it, and the rest, from the title.",
   ),
+  parentId: NewTicket.shape.parentId.describe("An epic's key or id in the same project, or null."),
   upNext: z
     .boolean()
     .default(false)
