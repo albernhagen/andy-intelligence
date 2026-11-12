@@ -35,6 +35,7 @@ import {
 
 export * from "./common";
 export * from "./cost";
+export * from "./dashboard";
 export * from "./in-flight";
 export * from "./sync";
 export * from "./scores";

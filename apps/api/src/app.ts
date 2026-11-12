@@ -39,6 +39,7 @@ import { registerTicketRoutes } from "./tickets";
 import { registerBoardRoutes } from "./board";
 import { registerInFlightRoutes } from "./in-flight";
 import { registerDigestRoutes } from "./digest";
+import { registerDashboardRoutes } from "./dashboard";
 import { registerNotifyFlush, registerNotifyRoutes } from "./notify";
 import {
   ConnectedCodeHost,
@@ -403,6 +404,7 @@ export function createApp(input: AppDeps) {
   registerQuotaRoutes(app, deps.quota ?? null, quotaClearer, now);
   const digest = new DigestReader(deps.tracker, deps.runs, deps.quota ?? null, now);
   registerDigestRoutes(app, digest, now);
+  registerDashboardRoutes(app, deps, now);
   registerNotifyRoutes(app, email);
 
   if (github && connection) {
