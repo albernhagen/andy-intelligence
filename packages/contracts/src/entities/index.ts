@@ -40,6 +40,7 @@ export * from "./sync";
 export * from "./scores";
 export * from "./notify-email";
 export * from "./question-format";
+export * from "./brief";
 
 /** ARCHITECTURE §5 — domain model. Vendor concepts must not appear here. */
 
