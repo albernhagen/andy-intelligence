@@ -11,8 +11,8 @@ v1.x screens:
 - **Quota & spend** (per provider gauges with reset times; paid spend vs caps; banner on warn/pause/unknown; built: header gauge, banner).
 - **Project settings** (AI-46, built): `/p/:projectId/settings`, a header link; each switch explained, saved by the project PATCH. `/projects` opens the current project's; `/projects/new` adds one.
 - **Digest** (AI-70, ADR-0081): `/p/:projectId/digest`, header link in a project scope.
-- **Tickets** — M1: board, ticket detail with history and linked runs/PRs/cost. M3 (ADR-0059): status on cards, story panel, command palette. M5: filter and group by project. M4: epic grouping, overrides editing.
-- **Run detail** — M4: own screen (built, AI-101); Jules links M9.
+- **Tickets** — M1: board, ticket detail with history and linked runs/PRs/cost. M3 (ADR-0059): status on cards, story panel, command palette. M5: filter and group by project. M4: overrides editing.
+- **Run detail** — M4, built (AI-101); Jules links M9.
 - **Config** (providers, harnesses, models, tiers, policies; audit log with revert; pending approvals).
 - **Releases** (dev status, promote to prod, rollback).
 - **Dashboards** — M4 (ADR-0045): delivery (tickets by stage over time, lead time, rework, CI green on first try, review blockers), cost, quota and tokens per run and step over time (ADR-0046), per project and overall; aggregation queries + shadcn charts. DORA metrics from M6.
@@ -36,11 +36,11 @@ v1.x screens:
 - Screenshot checks: Playwright over the API with seeded fakes (`apps/web/e2e/`), CI job `ui-screenshots` (§8.1).
 
 **Built in AI-28: Board v2 (M3, ADR-0059 row "Board"):**
-- One read, `GET /api/projects/:id/board`: tickets with open question count, run in flight and latest PR (≤ 50 history reads, ADR-0028).
-- Cards: type icon, key, title, then markers (size, worker, questions, run step and minutes, PR state, "Blocked by"). Ready is numbered; the first unblocked agent card says "Next".
-- Worker markers: ADR-0082; never inbox items.
-- Drag (mouse, touch, keyboard) within a lane sets `rank` through the ticket PATCH (`rankBetween`, `packages/domain`); across lanes moves (forced if not allowed, not onto Cancelled), then ranks at the drop. Optimistic; a refusal rolls back with the API's message. A drop never opens the ticket (AI-25).
-- Quick add atop Backlog (title only). Up next above Ideas (ADR-0075). Done is a counted strip; Cancelled and archived behind a toggle.
+- One read, `GET /api/projects/:id/board`: tickets with question count, run in flight, latest PR (≤ 50 history reads, ADR-0028).
+- Cards: type icon, key, title, markers (size, worker, questions, run step and minutes, PR, "Blocked by"; worker: ADR-0082). Ready is numbered; the first unblocked agent card says "Next".
+- Drag (mouse, touch, keyboard) within a lane sets `rank` (`rankBetween`); across lanes moves (forced if not allowed, not onto Cancelled), then ranks. Optimistic; a refusal rolls back, showing why. A drop never opens the ticket (AI-25).
+- Quick add atop Backlog. Up next above Ideas (ADR-0075). Done is a counted strip; Cancelled and archived behind a toggle.
+- Group by epic (AI-86, remembered): per lane, a header per epic (key, title, done of total), No epic last; rank stays per lane. Epic filter.
 
 **Built in AI-29: Story panel (M3, ADR-0059):**
 - The ticket route is the board's child (`<Outlet />`): a 640px panel, full page under 900px; Esc or Close returns.

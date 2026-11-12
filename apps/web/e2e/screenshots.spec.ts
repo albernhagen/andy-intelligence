@@ -74,6 +74,13 @@ test("story panel with a question", async ({ page }) => {
   await expect(page).toHaveScreenshot("story-panel-question.png");
 });
 
+test("board grouped by epic", async ({ page }) => {
+  await open(page, "/p/ops", "Monthly restore drill");
+  await page.getByRole("checkbox", { name: "Group by epic" }).check();
+  await expect(page.getByText("1 of 3 done").first()).toBeVisible();
+  await expect(page).toHaveScreenshot("board-grouped.png", { fullPage: true });
+});
+
 test("agent task page from the story panel", async ({ page }) => {
   await page.clock.setFixedTime(SEED_NOW);
   await open(page, "/p/ai/t/AI-3", "Waiting for you: 1 question");
