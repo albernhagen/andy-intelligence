@@ -2,6 +2,8 @@ import { OpenAPIHono, createRoute, z } from "@hono/zod-openapi";
 import {
   WorkTrackerError,
   type CodeEventLog,
+  type ConfigChangeStore,
+  type ReviewFindingSource,
   type CodeHostConnectionStore,
   type OAuthGrantStore,
   type RunStore,
@@ -21,6 +23,7 @@ import {
   RunnerService,
   LocalClaims,
   BoardReader,
+  ConfigProposals,
   DigestReader,
   QuotaClearer,
   TicketService,
@@ -40,6 +43,7 @@ import { registerBoardRoutes } from "./board";
 import { registerInFlightRoutes } from "./in-flight";
 import { registerDigestRoutes } from "./digest";
 import { registerSetupRoutes } from "./setup";
+import { noReviewFindings, registerConfigProposalRoutes } from "./config-proposals";
 import { registerNotifyFlush, registerNotifyRoutes } from "./notify";
 import {
   ConnectedCodeHost,
@@ -79,6 +83,10 @@ export interface AppDeps {
    * when not configured.
    */
   runners?: RunnerStore;
+  /** Pending config changes from review findings (ADR-0097); off (routes absent) when unset. */
+  configChanges?: ConfigChangeStore;
+  /** Stored review findings (ADR-0097 PR B); until then none, so sweeps propose nothing. */
+  reviewFindings?: ReviewFindingSource;
   /** Subscription quota readings (M1.9). Without it every window reads unknown. */
   quota?: QuotaStore;
   /**
@@ -406,6 +414,15 @@ export function createApp(input: AppDeps) {
   registerDigestRoutes(app, digest, now);
   registerSetupRoutes(app, deps.tracker, connection ? new ConnectedCodeHost(connection) : null);
   registerNotifyRoutes(app, email);
+  const configProposals = deps.configChanges
+    ? new ConfigProposals(
+        deps.tracker,
+        deps.reviewFindings ?? noReviewFindings,
+        deps.configChanges,
+        now,
+      )
+    : null;
+  if (configProposals) registerConfigProposalRoutes(app, configProposals);
 
   if (github && connection) {
     registerGitHubSetup(app, {
@@ -429,6 +446,7 @@ export function createApp(input: AppDeps) {
       digest,
       notifyEmail: email,
       quota: quotaClearer,
+      configProposals,
     });
   }
 
