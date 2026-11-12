@@ -156,6 +156,21 @@ describe("ProjectService config change log (M4.11)", () => {
     ]);
   });
 
+  it("GivenBuildingTheChangeFails_WhenASettingIsWritten_ThenTheWriteStandsAndAnErrorIsLogged", async () => {
+    const failing = new ProjectService(tracker, null, null, now, changes, () => {
+      throw new Error("no id");
+    });
+    expect((await failing.update("ai", { paused: true }, OWNER)).paused).toBe(true);
+    const errors = vi
+      .mocked(console.log)
+      .mock.calls.map(([line]) => JSON.parse(String(line)) as { severity: string; message: string })
+      .filter((l) => l.severity === "ERROR");
+    expect(errors).toEqual([
+      expect.objectContaining({ message: "config change not recorded", configChangeId: null }),
+    ]);
+    expect(await changes.listForProject("ai")).toEqual([]);
+  });
+
   it("GivenARefusedWrite_WhenItThrows_ThenNoChangeIsAppended", async () => {
     await expect(service.update("ai", { autoBuild: true }, OWNER)).rejects.toMatchObject({
       code: "not_buildable",

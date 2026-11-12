@@ -3,6 +3,7 @@ import {
   ProjectSettings,
   RepoName,
   type CodeHost,
+  type ConfigChange,
   type ConfigChangeLog,
   type EventActor,
   type Project,
@@ -93,8 +94,9 @@ export class ProjectService {
   }
 
   /**
-   * Appends the write's ConfigChange. The setting is already applied, so a failed append doesn't
-   * fail the request: it is logged as an ERROR with the diff, so the audit trail survives in logs.
+   * Appends the write's ConfigChange. The setting is already applied, so nothing here fails the
+   * request: building or appending the change can only log an ERROR (with the diff when built),
+   * so the audit trail survives in the logs.
    */
   private async recordChange(
     before: Project,
@@ -103,16 +105,17 @@ export class ProjectService {
     reason: string | undefined,
   ): Promise<void> {
     if (!this.configChanges) return;
-    const change = projectSettingsChange({
-      id: this.newId(),
-      before,
-      after,
-      actor,
-      reason,
-      at: this.now(),
-    });
-    if (!change) return;
+    let change: ConfigChange | null = null;
     try {
+      change = projectSettingsChange({
+        id: this.newId(),
+        before,
+        after,
+        actor,
+        reason,
+        at: this.now(),
+      });
+      if (!change) return;
       await this.configChanges.append(change);
       log("INFO", "project settings changed", {
         projectId: after.id,
@@ -123,8 +126,8 @@ export class ProjectService {
     } catch (err) {
       log("ERROR", "config change not recorded", {
         projectId: after.id,
-        configChangeId: change.id,
-        diff: change.diff,
+        configChangeId: change?.id ?? null,
+        diff: change?.diff ?? null,
         by: actor,
         error: String(err),
       });
