@@ -114,3 +114,72 @@ describe("configFor", () => {
     expect(requiredChecks(base)).toContain("firestore-suite");
   });
 });
+
+// AI-106 (ADR-0096): the managed repos' caller of the platform executor.
+describe("managed-repo caller (agent-run.yml)", () => {
+  const CALLER = "template/.github/workflows/agent-run.yml";
+  const caller = read(CALLER);
+  const lines = caller.split("\n");
+  /** Lines of a block: those indented deeper than the line that starts it. */
+  const block = (start) => {
+    const at = lines.findIndex((l) => l.trimEnd() === start.trimEnd());
+    expect(at, start).toBeGreaterThan(-1);
+    const indent = start.length - start.trimStart().length;
+    const out = [];
+    for (const l of lines.slice(at + 1)) {
+      if (l.trim() === "") continue;
+      if (l.length - l.trimStart().length <= indent) break;
+      out.push(l);
+    }
+    return out;
+  };
+  const keys = (blockLines) => {
+    const depth = Math.min(...blockLines.map((l) => l.length - l.trimStart().length));
+    return blockLines
+      .filter((l) => l.length - l.trimStart().length === depth)
+      .map((l) => l.trim().replace(/:.*$/, ""));
+  };
+
+  it("GivenTheManifest_WhenRead_ThenTheCallerIsAManagedFileFromTheTemplate", () => {
+    expect(manifest.managed).toContainEqual({
+      path: ".github/workflows/agent-run.yml",
+      from: CALLER,
+    });
+  });
+
+  it("GivenTheCaller_WhenRead_ThenItCallsTheExecutorTheControlPlaneChecks", () => {
+    // The ref the callbacks and push grant accept (packages/github/src/executor.ts), minus
+    // `refs/heads/`: a change on either side fails here.
+    const ts = read("packages/github/src/executor.ts");
+    const platform = ts.match(/export const PLATFORM_REPO = "([^"]+)";/)[1];
+    const suffix = ts.match(/export const CLAUDE_EXECUTOR_REF = `\$\{PLATFORM_REPO\}([^`]+)`;/)[1];
+    const expected = `${platform}${suffix}`.replace("@refs/heads/", "@");
+    expect(expected).toBe(
+      "albernhagen/andy-intelligence/.github/workflows/claude-executor.yml@main",
+    );
+    const uses = lines.filter((l) => /^\s*uses:/.test(l)).map((l) => l.trim());
+    expect(uses).toEqual([`uses: ${expected}`]);
+  });
+
+  it("GivenTheCaller_WhenRead_ThenItTakesOnlyTheRunIdAndCredentialKind", () => {
+    expect(keys(block("on:"))).toEqual(["workflow_dispatch"]);
+    expect(keys(block("    inputs:"))).toEqual(["run_id", "credential"]);
+  });
+
+  it("GivenTheCaller_WhenRead_ThenItRequestsOnlyTheAdrsPermissions", () => {
+    expect(lines).toContain("permissions: {}");
+    expect(keys(block("jobs:"))).toEqual(["agent-run"]);
+    const job = block("    permissions:").map((l) => l.replace(/#.*$/, "").trim());
+    expect(job).toEqual(["contents: read", "id-token: write"]);
+    expect(lines.filter((l) => /^\s*permissions:/.test(l))).toHaveLength(2);
+  });
+
+  it("GivenThisReposOwnCaller_WhenComparedWithTheTemplate_ThenOnlyUsesDiffers", () => {
+    const code = (text) =>
+      text
+        .split("\n")
+        .filter((l) => !/^\s*#/.test(l))
+        .filter((l) => !/^\s*uses:/.test(l));
+    expect(code(caller)).toEqual(code(read(".github/workflows/agent-run.yml")));
+  });
+});

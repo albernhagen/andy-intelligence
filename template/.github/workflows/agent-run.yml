@@ -1,0 +1,42 @@
+name: Agent run
+run-name: "Agent run ${{ inputs.run_id }}"
+
+# Per-project caller of the platform's Claude Code executor (ARCHITECTURE §7.2, M1.6: Claude Code
+# executor). The control plane dispatches this file by name (agent-run.yml) on the default branch
+# with a run ID; everything else (prompt, step, model) comes from the control plane over OIDC.
+
+on:
+  workflow_dispatch:
+    inputs:
+      run_id:
+        description: "Control-plane run ID"
+        type: string
+        required: true
+      credential:
+        description: "Model credential"
+        type: choice
+        options: [subscription, api_key]
+        default: subscription
+        required: true
+
+permissions: {}
+
+# One executor per run ID: a duplicate dispatch waits instead of running the agent twice at once.
+concurrency:
+  group: agent-run-${{ inputs.run_id }}
+  cancel-in-progress: false
+
+jobs:
+  agent-run:
+    permissions:
+      contents: read # project checkout
+      id-token: write # Actions OIDC token for the control-plane callbacks
+    uses: albernhagen/andy-intelligence/.github/workflows/claude-executor.yml@main
+    with:
+      run_id: ${{ inputs.run_id }}
+      credential: ${{ inputs.credential }}
+    # TOKEN SOURCE, the one place it is set (ADR-0096 open question 1, waiting on Andy): repo
+    # secrets passed here, or an `agent` environment limited to `main` (then this block goes).
+    secrets:
+      CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+      ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}

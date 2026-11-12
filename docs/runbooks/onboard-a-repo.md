@@ -129,6 +129,20 @@ Your next merge deploys the update. If `Deploy control plane` did deploy the bot
 
 Managed repos get both with the next baseline tag (§4: Update a repo to a newer baseline).
 
+## 7. Agent tasks in a managed repo (ADR-0096, AI-106)
+
+The baseline writes `.github/workflows/agent-run.yml`: the caller the control plane dispatches. It calls `albernhagen/andy-intelligence/.github/workflows/claude-executor.yml@main` and asks only for `contents: read` and `id-token: write`. Before the repo can run agent tasks, Andy:
+
+| Step                                                                                             | Where                                                                                                                    | Why                                             |
+| ------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------ | ----------------------------------------------- |
+| 1. Install the GitHub App on the repo                                                            | GitHub → the App → Configure                                                                                             | Dispatch, callbacks and the push grant (AI-105) |
+| 2. Register the repo to a project                                                                | UI → Add project → "GitHub repo"                                                                                         | Only a registered repo's caller is accepted     |
+| 3. Allow reusable workflows from `albernhagen/andy-intelligence`; workflow permissions read-only | Repo → Settings → Actions → General                                                                                      | The caller's `uses:`                            |
+| 4. Give the repo its Claude token                                                                | Pending: ADR-0096 open question 1 (a repo secret `CLAUDE_CODE_OAUTH_TOKEN`, or an `agent` environment limited to `main`) | The executor's `agent` job needs it             |
+| 5. Merge the baseline PR, then switch Builds on                                                  | The repo; Project settings                                                                                               | Agent tasks start only after both               |
+
+`check` reports the caller as drift if it was edited (R5). This repo keeps its own `agent-run.yml`, which calls the executor locally; the two differ only in `uses:` (a test in `platform/baseline/baseline.test.mjs` holds them together).
+
 ## Troubleshooting
 
 | Symptom                                                                          | Fix                                                                                                                                       |
