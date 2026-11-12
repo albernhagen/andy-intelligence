@@ -4429,6 +4429,204 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  "/api/projects/{projectId}/tickets/{ticketId}/night": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get: {
+      parameters: {
+        query?: never;
+        header?: never;
+        path: {
+          projectId: string;
+          ticketId: string;
+        };
+        cookie?: never;
+      };
+      requestBody?: never;
+      responses: {
+        /** @description The epic's launch checklist and its latest launch with progress */
+        200: {
+          headers: {
+            [name: string]: unknown;
+          };
+          content: {
+            "application/json": components["schemas"]["NightStatus"];
+          };
+        };
+        /** @description Not found */
+        404: {
+          headers: {
+            [name: string]: unknown;
+          };
+          content: {
+            "application/json": {
+              error: string;
+              details?: string[];
+            };
+          };
+        };
+      };
+    };
+    put?: never;
+    post: {
+      parameters: {
+        query?: never;
+        header?: never;
+        path: {
+          projectId: string;
+          ticketId: string;
+        };
+        cookie?: never;
+      };
+      requestBody: {
+        content: {
+          "application/json": components["schemas"]["LaunchNight"];
+        };
+      };
+      responses: {
+        /** @description The running launch */
+        200: {
+          headers: {
+            [name: string]: unknown;
+          };
+          content: {
+            "application/json": components["schemas"]["NightLaunch"];
+          };
+        };
+        /** @description Only the owner launches a night */
+        403: {
+          headers: {
+            [name: string]: unknown;
+          };
+          content: {
+            "application/json": {
+              error: string;
+              details?: string[];
+            };
+          };
+        };
+        /** @description Not found */
+        404: {
+          headers: {
+            [name: string]: unknown;
+          };
+          content: {
+            "application/json": {
+              error: string;
+              details?: string[];
+            };
+          };
+        };
+        /** @description Another launch is active in the project */
+        409: {
+          headers: {
+            [name: string]: unknown;
+          };
+          content: {
+            "application/json": {
+              error: string;
+              details?: string[];
+            };
+          };
+        };
+        /** @description Something is open: every problem in `details` */
+        422: {
+          headers: {
+            [name: string]: unknown;
+          };
+          content: {
+            "application/json": {
+              error: string;
+              details?: string[];
+            };
+          };
+        };
+      };
+    };
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/projects/{projectId}/tickets/{ticketId}/night/stop": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    post: {
+      parameters: {
+        query?: never;
+        header?: never;
+        path: {
+          projectId: string;
+          ticketId: string;
+        };
+        cookie?: never;
+      };
+      requestBody?: never;
+      responses: {
+        /** @description Stopping: no new agent tasks, in-flight ones finish */
+        200: {
+          headers: {
+            [name: string]: unknown;
+          };
+          content: {
+            "application/json": components["schemas"]["NightLaunch"];
+          };
+        };
+        /** @description Only the owner stops a night */
+        403: {
+          headers: {
+            [name: string]: unknown;
+          };
+          content: {
+            "application/json": {
+              error: string;
+              details?: string[];
+            };
+          };
+        };
+        /** @description Not found */
+        404: {
+          headers: {
+            [name: string]: unknown;
+          };
+          content: {
+            "application/json": {
+              error: string;
+              details?: string[];
+            };
+          };
+        };
+        /** @description No running launch for this epic */
+        409: {
+          headers: {
+            [name: string]: unknown;
+          };
+          content: {
+            "application/json": {
+              error: string;
+              details?: string[];
+            };
+          };
+        };
+      };
+    };
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   "/api/projects/{projectId}/tickets/{ticketId}/runs": {
     parameters: {
       query?: never;
@@ -7405,6 +7603,111 @@ export interface components {
       };
       costedChildren: number;
       partial: boolean;
+    };
+    NightStatus: {
+      epicKey: string;
+      stories: {
+        id: string;
+        key: string;
+        title: string;
+        /** @enum {string} */
+        stage: "backlog" | "ready" | "in_progress" | "ready_for_review" | "done" | "cancelled";
+        /** @enum {string|null} */
+        size: "S" | "M" | "L" | null;
+        questions: {
+          id: string;
+          text: string;
+        }[];
+        plan: {
+          /** @enum {string} */
+          kind: "none" | "planning" | "awaiting" | "approved" | "rejected" | "stale";
+          runId: string | null;
+        };
+      }[];
+      problems: {
+        /** @enum {string} */
+        kind:
+          | "not_epic"
+          | "no_stories"
+          | "too_many_stories"
+          | "open_questions"
+          | "not_ready"
+          | "plan_not_approved"
+          | "budget_missing"
+          | "budget_not_positive"
+          | "budget_over_cap"
+          | "stop_time_missing"
+          | "stop_time_past"
+          | "stop_time_too_far"
+          | "launch_running";
+        ticketKey: string | null;
+        message: string;
+      }[];
+      launch: components["schemas"]["NightLaunch"];
+      progress: {
+        stories: {
+          total: number;
+          done: number;
+          running: number;
+          stopped: number;
+          waiting: number;
+        };
+        spend: {
+          runs: number;
+          tokens: number;
+          estimatedUsd: number;
+          unknownRuns: number;
+        };
+      } | null;
+      limits: {
+        maxRuns: number;
+        maxTokens: number;
+        maxUsd: number;
+        maxHours: number;
+      };
+    };
+    NightLaunch: {
+      id: string;
+      projectId: string;
+      epicId: string;
+      epicKey: string;
+      budget: {
+        maxRuns: number;
+        maxTokens: number;
+        maxUsd: number;
+      };
+      /** Format: date-time */
+      stopAt: string;
+      /** @enum {string} */
+      status: "planned" | "running" | "stopping" | "ended";
+      storyKeys: string[];
+      /** Format: date-time */
+      createdAt: string;
+      createdBy: string;
+      /**
+       * Format: date-time
+       * @default null
+       */
+      startedAt: string | null;
+      /**
+       * Format: date-time
+       * @default null
+       */
+      endedAt: string | null;
+      /**
+       * @default null
+       * @enum {string|null}
+       */
+      endReason: "done" | "stopped" | "stop_time" | "max_runs" | "max_tokens" | "max_usd" | null;
+    } | null;
+    LaunchNight: {
+      budget: {
+        maxRuns?: number | null;
+        maxTokens?: number | null;
+        maxUsd?: number | null;
+      };
+      /** Format: date-time */
+      stopAt?: string | null;
     };
     SetupChecklist: {
       repo: string | null;
