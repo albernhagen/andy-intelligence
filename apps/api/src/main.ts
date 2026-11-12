@@ -7,6 +7,7 @@ import {
   FirestoreOAuthGrantStore,
   FirestoreQuotaStore,
   FirestoreRunStore,
+  FirestoreRunnerStore,
   FirestoreWorkTracker,
   CloudTasksWatchdogQueue,
   CloudTasksNotifyFlushQueue,
@@ -80,6 +81,7 @@ async function main() {
     },
     tracker: new FirestoreWorkTracker(db),
     runs: new FirestoreRunStore(db),
+    runners: new FirestoreRunnerStore(db),
     quota: new FirestoreQuotaStore(db),
     // Serve only the public URL's host; the run.app URLs answer /health alone (ADR-0044).
     publicHost: publicUrl ? new URL(publicUrl).host : undefined,

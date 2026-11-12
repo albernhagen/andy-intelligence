@@ -7,6 +7,7 @@ import {
   oauthGrantStoreContract,
   quotaStoreContract,
   runStoreContract,
+  runnerStoreContract,
   watchdogQueueContract,
   workTrackerContract,
 } from "../testing";
@@ -17,6 +18,7 @@ import {
   InMemoryEvaluator,
   InMemoryExecutor,
   InMemoryOAuthGrantStore,
+  InMemoryRunnerStore,
   InMemoryQuotaStore,
   InMemoryRunStore,
   InMemoryWatchdogQueue,
@@ -78,3 +80,5 @@ evaluatorContract("in-memory", async (script) => {
     ),
   );
 });
+
+runnerStoreContract("in-memory", async (now) => new InMemoryRunnerStore(now));

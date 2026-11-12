@@ -17,6 +17,7 @@ Every ticket sits under a milestone. Milestones are epic tickets in project `AI`
 | M1: First end-to-end flow: ticket → PR with Claude | Closed 2026-11-10: all tickets done, "Done when" checked (auto-merge never exercised on project `AI`: `autoMerge` off), §9.1 security review merged (PR #126: no high or critical risks; R25 and R26 low, open).                                                                                                                                                                 |
 | M2: Self-hosting: andy-intelligence builds itself  | All tickets merged (digests `build-log/2026-11-09-digest-m2.md`, `build-log/2026-11-11-digest.md`): the last were AI-73, AI-74, AI-75, AI-76, AI-77: Email notifications (off until Andy adds the key), AI-6: M1.17: Agent evals v1, AI-78. Left: the `autoMerge` trial and the "Done when" trial, both Andy's to start (auto-build on).                                         |
 | M3: New UI and MCP                                 | Done: AI-32, AI-37, AI-40, AI-46, AI-9: Live UI updates (tuned polling), AI-19: One permission function, AI-44: Local executor design (ADR-0089). In progress since 2026-11-11: AI-43: Call it an agent task; AI-79: Local executor, control-plane side (ADR-0089 slices 2 to 4, one combined PR for Andy). After AI-79: the runner CLI, local publish, runbook (slices 5 to 7). |
+| M4: Epics + story board                            | Sliced 2026-11-11 (AI-80): epic AI-84, 23 tickets, map in `architecture/m4-slices.md`. Batch 1 can start: AI-85, AI-86, AI-87, AI-88, AI-101, AI-102, AI-103, AI-104. AI-126, AI-128 and AI-129 wait on Andy.                                                                                                                                                                    |
 | M5: Multi-project in parallel                      | Sliced 2026-11-11 (AI-81): epic AI-82, 23 slices, table in `architecture/m5-slices.md`; AI-65: Project planning baked into the flow is a child epic. Batch 1: AI-89, AI-90, AI-91, AI-95, AI-96, AI-100 (medium); AI-83, AI-93, AI-94, AI-98 (high, Andy merges). AI-111: M5.4 waits on Andy (second repo).                                                                      |
 | M8: Project members                                | AI-18: Project members (questions answered 2026-11-10).                                                                                                                                                                                                                                                                                                                          |
 
@@ -27,8 +28,10 @@ Every ticket sits under a milestone. Milestones are epic tickets in project `AI`
 - Production monitoring (alerts, error budget per project) as part of "shipped" (brief): add to M6: Dev → prod releases at slicing.
 - `autoMerge` on for project `AI`: after a trial of five tickets where the gate's `would_auto_merge` calls are compared with the coordinator's (Andy, 2026-11-10).
 - Context sources design (open question 12).
+- ADR-0094: Local executor build choices (AI-79, PR review): accept the six, or change any?
 
 ## Blocked on Andy
 
 - Firestore export before the next schema-changing deploy (runbook `ticket-core.md`); the bucket exists.
 - For AI-77: Email notifications: a Resend account, a verified domain, one secret, then `terraform apply` (runbook `email-notifications.md`). High-risk PRs from the 2026-11-11 night batch, in the order the coordinator names.
+- M4 questions, each in its ticket body: AI-126: M4.13: Hallmark trial (how to run it), AI-128: M4.15: Pluggable design skills (build now or move to Later), AI-129: M4.23: First overnight run trial (which epic and budget).

@@ -1182,6 +1182,35 @@ export function watchdogQueueContract(name: string, make: () => Promise<Watchdog
     it("GivenAnInvalidRunId_WhenScheduled_ThenRejected", async () => {
       await expect((await make()).schedule({ runId: "a/b", at })).rejects.toThrow();
     });
+
+    it("GivenALeaseCheck_WhenScheduledTwiceForOneTime_ThenDuplicate_AndANewTimeSchedules", async () => {
+      const queue = await make();
+      const id = runId();
+      expect(await queue.scheduleCheck({ kind: "lease", runId: id, at })).toBe("scheduled");
+      expect(await queue.scheduleCheck({ kind: "lease", runId: id, at })).toBe("duplicate");
+      expect(
+        await queue.scheduleCheck({ kind: "lease", runId: id, at: "2026-11-04T13:05:00.000Z" }),
+      ).toBe("scheduled");
+    });
+
+    it("GivenARunnerAwayCheck_WhenScheduledTwiceInOneMinute_ThenDuplicate", async () => {
+      const queue = await make();
+      const runnerId = runId();
+      expect(await queue.scheduleCheck({ kind: "runner_away", runnerId, at })).toBe("scheduled");
+      expect(
+        await queue.scheduleCheck({
+          kind: "runner_away",
+          runnerId,
+          at: "2026-11-04T13:00:30.000Z",
+        }),
+      ).toBe("duplicate");
+    });
+
+    it("GivenAnInvalidSubject_WhenACheckIsScheduled_ThenRejected", async () => {
+      await expect(
+        (await make()).scheduleCheck({ kind: "lease", runId: "a/b", at }),
+      ).rejects.toThrow();
+    });
   });
 }
 
@@ -1226,3 +1255,4 @@ export function evaluatorContract(
   });
 }
 export * from "./notify-email";
+export * from "./runner";

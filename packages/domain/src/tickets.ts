@@ -7,6 +7,8 @@ import {
   notFound,
   type AnsweredVia,
   type EventActor,
+  type ExecutorKind,
+  type ExecutorView,
   type NewQuestion,
   type Project,
   type Question,
@@ -27,6 +29,7 @@ import { blockerProblem, parentProblem, reorderRank, type ReorderAnchor } from "
 import { MAX_OPEN_QUESTIONS_PER_TICKET, assumptionQuestion } from "./refine-gate";
 import { rankBetween } from "./ranks";
 import { isDispatchable, resolveWorker, workerView } from "./worker";
+import { executorView } from "./executor";
 import { canTransition, isForwardMove, pullRequestPath, type PullRequestTarget } from "./stages";
 
 function log(severity: "INFO" | "WARNING", message: string, fields: object = {}) {
@@ -45,6 +48,8 @@ export interface TicketStatus {
   questions: Question[];
   recentEvents: TicketEvent[];
   worker: Worker;
+  /** Where its runs execute (ADR-0089), before runner presence is considered. */
+  executor: ExecutorView;
 }
 
 /** Every project with its unarchived ticket count per stage, plus the size of the Needs-you inbox. */
@@ -94,7 +99,13 @@ export class TicketService {
      */
     private readonly dispatchNext: ((projectId: string) => Promise<unknown>) | null = null,
     private readonly now: () => Date = () => new Date(),
+    /** Whether a local runner serving the project is present (ADR-0089); null: none can be. */
+    private readonly runnerPresence: ((projectId: string) => Promise<boolean>) | null = null,
   ) {}
+
+  private async runnerPresent(projectId: string): Promise<boolean> {
+    return this.runnerPresence ? this.runnerPresence(projectId) : false;
+  }
 
   /** A new ticket lands in Ideas and costs nothing, unless `upNext` pulls it forward (ADR-0075). */
   async create(
@@ -381,6 +392,45 @@ export class TicketService {
     );
     if (isDispatchable(updated, project)) await this.dispatchNext?.(projectId);
     return workerView(updated, project);
+  }
+
+  /** Where the ticket's runs execute (ADR-0089). */
+  async executor(projectId: string, ticketId: string): Promise<ExecutorView> {
+    const [ticket, project] = await Promise.all([
+      this.require(projectId, ticketId),
+      this.requireProject(projectId),
+    ]);
+    return executorView(ticket, project, await this.runnerPresent(projectId));
+  }
+
+  /**
+   * Stores the ticket's executor pick (`overrides.executor`), or clears it (null). Owner-only
+   * (`set_executor`). A run in flight keeps its executor; the pick applies to the next run. The
+   * dispatchers are woken, since a ticket may have just become startable on either executor.
+   */
+  async setExecutor(
+    projectId: string,
+    ticketId: string,
+    executor: ExecutorKind | null,
+    actor: EventActor,
+  ): Promise<ExecutorView> {
+    requireCan(actor, "set_executor", projectId);
+    const [ticket, project] = await Promise.all([
+      this.require(projectId, ticketId),
+      this.requireProject(projectId),
+    ]);
+    const overrides = { ...ticket.overrides };
+    delete overrides.executor;
+    if (executor) overrides.executor = executor;
+    const updated = await this.tracker.updateTicket(
+      projectId,
+      ticketId,
+      { fields: { overrides }, ifUpdatedAt: ticket.updatedAt },
+      actor,
+    );
+    log("INFO", "ticket executor set", { ticket: ticket.key, executor, by: actor });
+    await this.dispatchNext?.(projectId);
+    return executorView(updated, project, await this.runnerPresent(projectId));
   }
 
   /** Re-parents by key: `parent` is an epic's key in the same project, or null for none. */
@@ -786,12 +836,14 @@ export class TicketService {
       this.tracker.listEvents(ticket.projectId, ticket.id),
     ]);
     const open = questions.filter((q) => q.status === "open").length;
+    const project = await this.requireProject(ticket.projectId);
     return {
       ticket,
       readiness: checkDor(ticket, open),
       questions,
       recentEvents: events.slice(-RECENT_EVENTS),
-      worker: resolveWorker(ticket, await this.requireProject(ticket.projectId)),
+      worker: resolveWorker(ticket, project),
+      executor: executorView(ticket, project, await this.runnerPresent(project.id)),
     };
   }
 

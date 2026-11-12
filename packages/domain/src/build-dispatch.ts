@@ -6,18 +6,20 @@ import type {
   QuotaLevel,
   QuotaStore,
   Run,
+  Runner,
   RunStore,
   Ticket,
   WorkTracker,
 } from "@andy/contracts";
 import { MAX_BUILD_RUNS_PER_TICKET, isAndysWork, unfinishedBlockers } from "./builds";
-import { mayDispatch } from "./dispatch-caps";
+import { mayDispatch, wasDispatched } from "./dispatch-caps";
 import { blockingRun, editingRuns } from "./dispatch-conflicts";
 import { checkDor } from "./dor";
 import { MAX_PLAN_RUNS_PER_TICKET, planRequired } from "./plans";
 import { quotaStatus, readingsForDispatch } from "./quota";
 import type { RunService } from "./runs";
 import { isDispatchable } from "./worker";
+import { ACTIONS_ROUTE, routeTakes, type DispatchRoute } from "./executor";
 import { DomainError } from "./tickets";
 
 function log(severity: "INFO" | "WARNING" | "ERROR", message: string, fields: object = {}) {
@@ -51,9 +53,22 @@ export class BuildDispatcher {
   /** Starts waiting builds in the project up to the caps; the first run, or null. Never throws. */
   async next(projectId: string): Promise<Run | null> {
     try {
-      return await this.dispatch(projectId);
+      return await this.dispatch(projectId, ACTIONS_ROUTE);
     } catch (err) {
       log("ERROR", "build dispatch failed", { projectId, error: String(err) });
+      return null;
+    }
+  }
+
+  /**
+   * A local runner's claim (ADR-0089): the same selection and caps, limited to tickets that ask
+   * for `local`, starting at most one run, claimed by `runner`. Never throws.
+   */
+  async claimFor(projectId: string, runner: Runner): Promise<Run | null> {
+    try {
+      return await this.dispatch(projectId, { kind: "local", runner });
+    } catch (err) {
+      log("ERROR", "build claim failed", { projectId, runnerId: runner.id, error: String(err) });
       return null;
     }
   }
@@ -73,10 +88,13 @@ export class BuildDispatcher {
     }
   }
 
-  private async dispatch(projectId: string): Promise<Run | null> {
-    if (!this.runs.canDispatch) return null;
+  private async dispatch(projectId: string, route: DispatchRoute): Promise<Run | null> {
+    const local = route.kind === "local";
+    if (!local && !this.runs.canDispatch) return null;
     const project = await this.tracker.getProject(projectId);
     if (!project?.autoBuild || !project.buildEnabled) return null;
+    // The claiming runner is present by definition; the cloud dispatcher asks (ADR-0089).
+    const runnerPresent = local || (await this.runs.runnerPresent(projectId));
     const tickets = await this.tracker.listTickets(projectId, { archived: false });
     const prsWaiting = await this.prsWaiting(tickets);
     const quotaLevel = await this.quotaLevel();
@@ -101,6 +119,7 @@ export class BuildDispatcher {
       // An epic never runs (ADR-0058); refine can leave one in Ready. Andy's own work never builds.
       if (ticket.type === "epic" || isAndysWork(ticket)) continue;
       if (!isDispatchable(ticket, project)) continue; // AI-32: Who does the work (ADR-0082).
+      if (!routeTakes(route, ticket, project, runnerPresent)) continue; // ADR-0089.
       if (ticket.archived || ticket.needsAttention) continue;
       const blocker = blockingRun(ticket, inFlight);
       if (blocker) {
@@ -117,8 +136,11 @@ export class BuildDispatcher {
       try {
         const run = await this.runs.start(projectId, ticket.id, "build", undefined, {
           avoidOverlap: true,
+          ...(local ? { runner: route.runner } : {}),
         });
-        log("INFO", "build started on its own", { ticket: ticket.key, runId: run.id });
+        log("INFO", "build started on its own", { ticket: ticket.key, runId: run.id, local });
+        // A claim hands the runner one run; it claims again when it has a free slot.
+        if (local) return run;
         first ??= run;
         inFlight.push(...editingRuns([run], this.now()));
       } catch (err) {
@@ -135,6 +157,8 @@ export class BuildDispatcher {
       }
       verdict = await check();
     }
+    // A claim every 30 s must not rewrite the project's last decision (the cloud's) each time.
+    if (local) return null;
     const decision =
       verdict !== "start"
         ? verdict
@@ -191,7 +215,7 @@ export class BuildDispatcher {
     if (!checkDor(ticket, open.length).met) return false;
     if (unfinishedBlockers(ticket, await this.runs.blockerStages(ticket)).length > 0) return false;
     const builds = (await this.runStore.listForTicket(ticket.projectId, ticket.id)).filter(
-      (r) => r.step === "build" && r.executor !== null,
+      (r) => r.step === "build" && wasDispatched(r),
     );
     if (builds.length >= MAX_BUILD_RUNS_PER_TICKET) {
       await this.flag(
@@ -211,7 +235,7 @@ export class BuildDispatcher {
     if (!planRequired(policy, ticket)) return true;
     if (plan.kind === "rejected") return false;
     const plans = (await this.runStore.listForTicket(ticket.projectId, ticket.id)).filter(
-      (r) => r.step === "plan" && r.executor !== null,
+      (r) => r.step === "plan" && wasDispatched(r),
     );
     if (plans.length >= MAX_PLAN_RUNS_PER_TICKET) {
       await this.flag(

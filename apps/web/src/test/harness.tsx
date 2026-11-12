@@ -8,6 +8,7 @@ import {
   InMemoryCodeHostConnectionStore,
   InMemoryQuotaStore,
   InMemoryRunStore,
+  InMemoryRunnerStore,
   InMemoryWorkTracker,
 } from "@andy/contracts";
 import { TicketService } from "@andy/domain";
@@ -32,6 +33,7 @@ export function renderApp(
   const tracker = new InMemoryWorkTracker();
   const runs = new InMemoryRunStore();
   const quota = new InMemoryQuotaStore();
+  const runners = new InMemoryRunnerStore();
   // GitHub fakes (ADR-0043): one installed repo; any manifest code "connects" this App.
   const connections = new InMemoryCodeHostConnectionStore();
   const codeHost = new InMemoryCodeHost([
@@ -55,6 +57,7 @@ export function renderApp(
     tracker,
     runs,
     quota,
+    runners,
     email: opts.email,
     github: {
       publicUrl: "http://localhost",
@@ -103,6 +106,7 @@ export function renderApp(
     </QueryClientProvider>,
   );
   return {
+    runners,
     user,
     router,
     queryClient,

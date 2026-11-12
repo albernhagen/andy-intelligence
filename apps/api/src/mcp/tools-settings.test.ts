@@ -81,6 +81,7 @@ describe("get_project_settings", () => {
       runsAtOnce: 3,
       paused: true,
       defaultWorker: "ask",
+      executor: "local",
       emailNotifications: false,
       lastDispatch: { decision: "paused", at: "2026-11-09T12:00:00.000Z" },
     });
@@ -102,6 +103,7 @@ describe("get_project_settings", () => {
       runsAtOnce: 3,
       paused: true,
       defaultWorker: "ask",
+      executor: "local",
       emailNotifications: false,
       lastDispatch: { decision: "paused", at: "2026-11-09T12:00:00.000Z" },
     });

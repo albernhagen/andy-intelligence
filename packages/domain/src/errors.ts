@@ -19,7 +19,9 @@ export class DomainError extends Error {
       | "not_promotable"
       | "invalid_reference"
       | "not_clearable"
-      | "not_acceptable",
+      | "not_acceptable"
+      | "runner_limit"
+      | "runs_elsewhere",
     message: string,
     readonly details: string[] = [],
   ) {

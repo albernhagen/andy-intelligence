@@ -3,6 +3,7 @@ import {
   compareRanks,
   type InFlightRun,
   type PullRequestLink,
+  type ResolvedExecutor,
   type Run,
   type RunStep,
   type Stage,
@@ -48,6 +49,8 @@ export interface StatusInput {
   questionLine?: string | null;
   /** Held gaps (AI-75): how many, and the cap that holds them; null or absent: none. */
   held?: { count: number; cap: string } | null;
+  /** Where its next run goes (ADR-0089); absent until it loads, read as `actions`. */
+  executor?: ResolvedExecutor;
 }
 
 const QUESTION_LINE_MAX = 200;
@@ -107,24 +110,39 @@ function mainStatus(s: StatusInput, now: Date): { text: string; tone: StatusTone
       };
     case "ready":
       if (s.overlaps) return { text: `Waiting: overlaps ${s.overlaps} in flight`, tone: "default" };
+      if (s.executor === "wait") return { text: LOCAL_RUNNER_AWAY, tone: "default" };
       return {
-        text:
+        text: join(
           s.queuePosition === null
             ? "Ready"
             : s.queuePosition === 1
               ? "Ready · next in the queue"
               : `Ready · ${ordinal(s.queuePosition)} in the queue`,
+          runsLocally(s.executor),
+        ),
         tone: "default",
       };
     case "in_progress":
+      if (s.executor === "wait" && !pr) return { text: LOCAL_RUNNER_AWAY, tone: "default" };
       return {
-        text: join("In progress", pr ?? "no agent task in flight", waits(s.syncWaiting)),
+        text: join(
+          "In progress",
+          pr ?? "no agent task in flight",
+          waits(s.syncWaiting),
+          runsLocally(s.executor),
+        ),
         tone: "default",
       };
     case "ready_for_review":
       return { text: join("Ready for review", pr, waits(s.syncWaiting)), tone: "default" };
   }
 }
+
+/** A ticket overriding to `local` while no runner is present (ADR-0089 open question 3). */
+export const LOCAL_RUNNER_AWAY = "Waiting: local runner away";
+
+const runsLocally = (executor: ResolvedExecutor | undefined) =>
+  executor === "local" ? "runs locally" : null;
 
 const waits = (why: string | null | undefined) => (why ? `sync with main waits: ${why}` : null);
 
@@ -236,6 +254,8 @@ export interface TicketFacts {
   inFlight?: readonly InFlightRun[];
   /** The oldest open question's line (AI-73); only the digest passes it. */
   questionLine?: string | null;
+  /** Where its next run goes (ADR-0089); undefined until it loads. */
+  executor?: ResolvedExecutor;
 }
 
 const SYNC_STOP_FILES = 3;
@@ -288,6 +308,7 @@ export function ticketStatusLine(ticket: Ticket, facts: TicketFacts, now: Date) 
       syncWaiting: syncWaiting(facts.runs),
       questionLine: facts.questionLine ?? null,
       held: heldLine(ticket),
+      executor: facts.executor,
     },
     now,
   );

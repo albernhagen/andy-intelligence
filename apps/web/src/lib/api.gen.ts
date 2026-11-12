@@ -173,6 +173,11 @@ export interface paths {
                * @enum {string}
                */
               defaultWorker: "agent" | "me" | "ask";
+              /**
+               * @default actions
+               * @enum {string}
+               */
+              executor: "actions" | "local";
             }[];
           };
         };
@@ -270,6 +275,11 @@ export interface paths {
                * @enum {string}
                */
               defaultWorker: "agent" | "me" | "ask";
+              /**
+               * @default actions
+               * @enum {string}
+               */
+              executor: "actions" | "local";
             };
           };
         };
@@ -415,6 +425,11 @@ export interface paths {
                * @enum {string}
                */
               defaultWorker: "agent" | "me" | "ask";
+              /**
+               * @default actions
+               * @enum {string}
+               */
+              executor: "actions" | "local";
             };
           };
         };
@@ -497,6 +512,8 @@ export interface paths {
             paused?: boolean;
             /** @enum {string} */
             defaultWorker?: "agent" | "me" | "ask";
+            /** @enum {string} */
+            executor?: "actions" | "local";
             emailNotifications?: boolean;
           };
         };
@@ -570,6 +587,11 @@ export interface paths {
                * @enum {string}
                */
               defaultWorker: "agent" | "me" | "ask";
+              /**
+               * @default actions
+               * @enum {string}
+               */
+              executor: "actions" | "local";
             };
           };
         };
@@ -686,6 +708,8 @@ export interface paths {
                 autonomy?: "autonomous" | "gated" | "manual";
                 /** @enum {string} */
                 targetEnv?: "dev" | "prod";
+                /** @enum {string} */
+                executor?: "actions" | "local";
               };
               needsAttention: boolean;
               /** @enum {string} */
@@ -877,6 +901,8 @@ export interface paths {
               autonomy?: "autonomous" | "gated" | "manual";
               /** @enum {string} */
               targetEnv?: "dev" | "prod";
+              /** @enum {string} */
+              executor?: "actions" | "local";
             };
             /** @default [] */
             blockedBy?: string[];
@@ -925,6 +951,8 @@ export interface paths {
                 autonomy?: "autonomous" | "gated" | "manual";
                 /** @enum {string} */
                 targetEnv?: "dev" | "prod";
+                /** @enum {string} */
+                executor?: "actions" | "local";
               };
               needsAttention: boolean;
               /** @enum {string} */
@@ -1126,6 +1154,8 @@ export interface paths {
                 autonomy?: "autonomous" | "gated" | "manual";
                 /** @enum {string} */
                 targetEnv?: "dev" | "prod";
+                /** @enum {string} */
+                executor?: "actions" | "local";
               };
               needsAttention: boolean;
               /** @enum {string} */
@@ -1317,6 +1347,8 @@ export interface paths {
               autonomy?: "autonomous" | "gated" | "manual";
               /** @enum {string} */
               targetEnv?: "dev" | "prod";
+              /** @enum {string} */
+              executor?: "actions" | "local";
             };
             needsAttention?: boolean;
             blockedBy?: string[];
@@ -1372,6 +1404,8 @@ export interface paths {
                 autonomy?: "autonomous" | "gated" | "manual";
                 /** @enum {string} */
                 targetEnv?: "dev" | "prod";
+                /** @enum {string} */
+                executor?: "actions" | "local";
               };
               needsAttention: boolean;
               /** @enum {string} */
@@ -1568,6 +1602,8 @@ export interface paths {
                 autonomy?: "autonomous" | "gated" | "manual";
                 /** @enum {string} */
                 targetEnv?: "dev" | "prod";
+                /** @enum {string} */
+                executor?: "actions" | "local";
               };
               needsAttention: boolean;
               /** @enum {string} */
@@ -1882,6 +1918,8 @@ export interface paths {
                 autonomy?: "autonomous" | "gated" | "manual";
                 /** @enum {string} */
                 targetEnv?: "dev" | "prod";
+                /** @enum {string} */
+                executor?: "actions" | "local";
               };
               needsAttention: boolean;
               /** @enum {string} */
@@ -2093,6 +2131,8 @@ export interface paths {
                 autonomy?: "autonomous" | "gated" | "manual";
                 /** @enum {string} */
                 targetEnv?: "dev" | "prod";
+                /** @enum {string} */
+                executor?: "actions" | "local";
               };
               needsAttention: boolean;
               /** @enum {string} */
@@ -2417,6 +2457,8 @@ export interface paths {
                 autonomy?: "autonomous" | "gated" | "manual";
                 /** @enum {string} */
                 targetEnv?: "dev" | "prod";
+                /** @enum {string} */
+                executor?: "actions" | "local";
               };
               needsAttention: boolean;
               /** @enum {string} */
@@ -2627,6 +2669,8 @@ export interface paths {
                 autonomy?: "autonomous" | "gated" | "manual";
                 /** @enum {string} */
                 targetEnv?: "dev" | "prod";
+                /** @enum {string} */
+                executor?: "actions" | "local";
               };
               needsAttention: boolean;
               /** @enum {string} */
@@ -2837,6 +2881,8 @@ export interface paths {
                 autonomy?: "autonomous" | "gated" | "manual";
                 /** @enum {string} */
                 targetEnv?: "dev" | "prod";
+                /** @enum {string} */
+                executor?: "actions" | "local";
               };
               needsAttention: boolean;
               /** @enum {string} */
@@ -3667,6 +3713,8 @@ export interface paths {
                   autonomy?: "autonomous" | "gated" | "manual";
                   /** @enum {string} */
                   targetEnv?: "dev" | "prod";
+                  /** @enum {string} */
+                  executor?: "actions" | "local";
                 };
                 needsAttention: boolean;
                 /** @enum {string} */
@@ -3918,6 +3966,189 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  "/api/projects/{projectId}/tickets/{ticketId}/executor": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get: {
+      parameters: {
+        query?: never;
+        header?: never;
+        path: {
+          projectId: string;
+          ticketId: string;
+        };
+        cookie?: never;
+      };
+      requestBody?: never;
+      responses: {
+        /** @description Where the ticket's agent tasks run */
+        200: {
+          headers: {
+            [name: string]: unknown;
+          };
+          content: {
+            "application/json": {
+              /** @enum {string} */
+              executor: "actions" | "local";
+              /** @enum {string|null} */
+              override: "actions" | "local" | null;
+              /** @enum {string} */
+              projectDefault: "actions" | "local";
+              /** @enum {string} */
+              next: "actions" | "local" | "wait";
+              runnerPresent: boolean;
+            };
+          };
+        };
+        /** @description Invalid request */
+        400: {
+          headers: {
+            [name: string]: unknown;
+          };
+          content: {
+            "application/json": {
+              error: string;
+              details?: string[];
+            };
+          };
+        };
+        /** @description Only the owner sets the executor */
+        403: {
+          headers: {
+            [name: string]: unknown;
+          };
+          content: {
+            "application/json": {
+              error: string;
+              details?: string[];
+            };
+          };
+        };
+        /** @description Not found */
+        404: {
+          headers: {
+            [name: string]: unknown;
+          };
+          content: {
+            "application/json": {
+              error: string;
+              details?: string[];
+            };
+          };
+        };
+        /** @description Conflict */
+        409: {
+          headers: {
+            [name: string]: unknown;
+          };
+          content: {
+            "application/json": {
+              error: string;
+              details?: string[];
+            };
+          };
+        };
+      };
+    };
+    put: {
+      parameters: {
+        query?: never;
+        header?: never;
+        path: {
+          projectId: string;
+          ticketId: string;
+        };
+        cookie?: never;
+      };
+      requestBody: {
+        content: {
+          "application/json": {
+            /** @enum {string|null} */
+            executor: "actions" | "local" | null;
+          };
+        };
+      };
+      responses: {
+        /** @description Stored; applies to the ticket's next agent task */
+        200: {
+          headers: {
+            [name: string]: unknown;
+          };
+          content: {
+            "application/json": {
+              /** @enum {string} */
+              executor: "actions" | "local";
+              /** @enum {string|null} */
+              override: "actions" | "local" | null;
+              /** @enum {string} */
+              projectDefault: "actions" | "local";
+              /** @enum {string} */
+              next: "actions" | "local" | "wait";
+              runnerPresent: boolean;
+            };
+          };
+        };
+        /** @description Invalid request */
+        400: {
+          headers: {
+            [name: string]: unknown;
+          };
+          content: {
+            "application/json": {
+              error: string;
+              details?: string[];
+            };
+          };
+        };
+        /** @description Only the owner sets the executor */
+        403: {
+          headers: {
+            [name: string]: unknown;
+          };
+          content: {
+            "application/json": {
+              error: string;
+              details?: string[];
+            };
+          };
+        };
+        /** @description Not found */
+        404: {
+          headers: {
+            [name: string]: unknown;
+          };
+          content: {
+            "application/json": {
+              error: string;
+              details?: string[];
+            };
+          };
+        };
+        /** @description Conflict */
+        409: {
+          headers: {
+            [name: string]: unknown;
+          };
+          content: {
+            "application/json": {
+              error: string;
+              details?: string[];
+            };
+          };
+        };
+      };
+    };
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   "/api/projects/{projectId}/board": {
     parameters: {
       query?: never;
@@ -3975,6 +4206,8 @@ export interface paths {
                 autonomy?: "autonomous" | "gated" | "manual";
                 /** @enum {string} */
                 targetEnv?: "dev" | "prod";
+                /** @enum {string} */
+                executor?: "actions" | "local";
               };
               needsAttention: boolean;
               /** @enum {string} */
@@ -4340,6 +4573,14 @@ export interface paths {
                  */
                 checkedAt: string | null;
               } | null;
+              /** @default null */
+              localRun: {
+                runnerId: string;
+                /** Format: date-time */
+                leaseExpiresAt: string;
+                /** Format: date-time */
+                heartbeatAt: string | null;
+              } | null;
             }[];
           };
         };
@@ -4575,6 +4816,14 @@ export interface paths {
                  * @default null
                  */
                 checkedAt: string | null;
+              } | null;
+              /** @default null */
+              localRun: {
+                runnerId: string;
+                /** Format: date-time */
+                leaseExpiresAt: string;
+                /** Format: date-time */
+                heartbeatAt: string | null;
               } | null;
             };
           };
@@ -4889,6 +5138,14 @@ export interface paths {
                    */
                   checkedAt: string | null;
                 } | null;
+                /** @default null */
+                localRun: {
+                  runnerId: string;
+                  /** Format: date-time */
+                  leaseExpiresAt: string;
+                  /** Format: date-time */
+                  heartbeatAt: string | null;
+                } | null;
               };
               build: {
                 id: string;
@@ -5083,6 +5340,14 @@ export interface paths {
                    */
                   checkedAt: string | null;
                 } | null;
+                /** @default null */
+                localRun: {
+                  runnerId: string;
+                  /** Format: date-time */
+                  leaseExpiresAt: string;
+                  /** Format: date-time */
+                  heartbeatAt: string | null;
+                } | null;
               } | null;
               buildError: string | null;
             };
@@ -5126,6 +5391,252 @@ export interface paths {
         };
         /** @description Not the latest plan, already decided, stale, or no reason */
         409: {
+          headers: {
+            [name: string]: unknown;
+          };
+          content: {
+            "application/json": {
+              error: string;
+              details?: string[];
+            };
+          };
+        };
+      };
+    };
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/runners": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get: {
+      parameters: {
+        query?: never;
+        header?: never;
+        path?: never;
+        cookie?: never;
+      };
+      requestBody?: never;
+      responses: {
+        /** @description Runners, newest first; never their secrets */
+        200: {
+          headers: {
+            [name: string]: unknown;
+          };
+          content: {
+            "application/json": {
+              id: string;
+              name: string;
+              projectIds: string[];
+              /** @default 1 */
+              runsAtOnce: number;
+              /** Format: date-time */
+              createdAt: string;
+              createdBy: string;
+              /** Format: date-time */
+              expiresAt: string;
+              /**
+               * Format: date-time
+               * @default null
+               */
+              revokedAt: string | null;
+              /**
+               * Format: date-time
+               * @default null
+               */
+              lastSeenAt: string | null;
+              present: boolean;
+              /** @enum {string} */
+              state: "active" | "revoked" | "expired";
+            }[];
+          };
+        };
+      };
+    };
+    put?: never;
+    post: {
+      parameters: {
+        query?: never;
+        header?: never;
+        path?: never;
+        cookie?: never;
+      };
+      requestBody: {
+        content: {
+          "application/json": {
+            name: string;
+            projectIds: string[];
+            runsAtOnce?: number;
+          };
+        };
+      };
+      responses: {
+        /** @description Minted; the secret is in this response only */
+        201: {
+          headers: {
+            [name: string]: unknown;
+          };
+          content: {
+            "application/json": {
+              runner: {
+                id: string;
+                name: string;
+                projectIds: string[];
+                /** @default 1 */
+                runsAtOnce: number;
+                /** Format: date-time */
+                createdAt: string;
+                createdBy: string;
+                /** Format: date-time */
+                expiresAt: string;
+                /**
+                 * Format: date-time
+                 * @default null
+                 */
+                revokedAt: string | null;
+                /**
+                 * Format: date-time
+                 * @default null
+                 */
+                lastSeenAt: string | null;
+                present: boolean;
+                /** @enum {string} */
+                state: "active" | "revoked" | "expired";
+              };
+              secret: string;
+            };
+          };
+        };
+        /** @description Invalid request */
+        400: {
+          headers: {
+            [name: string]: unknown;
+          };
+          content: {
+            "application/json": {
+              error: string;
+              details?: string[];
+            };
+          };
+        };
+        /** @description Only the owner mints runners */
+        403: {
+          headers: {
+            [name: string]: unknown;
+          };
+          content: {
+            "application/json": {
+              error: string;
+              details?: string[];
+            };
+          };
+        };
+        /** @description A project doesn't exist */
+        404: {
+          headers: {
+            [name: string]: unknown;
+          };
+          content: {
+            "application/json": {
+              error: string;
+              details?: string[];
+            };
+          };
+        };
+        /** @description The runner cap is reached */
+        409: {
+          headers: {
+            [name: string]: unknown;
+          };
+          content: {
+            "application/json": {
+              error: string;
+              details?: string[];
+            };
+          };
+        };
+      };
+    };
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/runners/{runnerId}/revoke": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    post: {
+      parameters: {
+        query?: never;
+        header?: never;
+        path: {
+          runnerId: string;
+        };
+        cookie?: never;
+      };
+      requestBody?: never;
+      responses: {
+        /** @description Revoked; its next claim is refused */
+        200: {
+          headers: {
+            [name: string]: unknown;
+          };
+          content: {
+            "application/json": {
+              id: string;
+              name: string;
+              projectIds: string[];
+              /** @default 1 */
+              runsAtOnce: number;
+              /** Format: date-time */
+              createdAt: string;
+              createdBy: string;
+              /** Format: date-time */
+              expiresAt: string;
+              /**
+               * Format: date-time
+               * @default null
+               */
+              revokedAt: string | null;
+              /**
+               * Format: date-time
+               * @default null
+               */
+              lastSeenAt: string | null;
+              present: boolean;
+              /** @enum {string} */
+              state: "active" | "revoked" | "expired";
+            };
+          };
+        };
+        /** @description Only the owner revokes runners */
+        403: {
+          headers: {
+            [name: string]: unknown;
+          };
+          content: {
+            "application/json": {
+              error: string;
+              details?: string[];
+            };
+          };
+        };
+        /** @description Not found */
+        404: {
           headers: {
             [name: string]: unknown;
           };
