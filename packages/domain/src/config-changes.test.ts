@@ -6,7 +6,12 @@ import {
 } from "@andy/contracts";
 import { configChangeLogContract } from "@andy/contracts/testing";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { changeActor, projectSettingsChange, settingsDiff } from "./config-changes";
+import {
+  CONFIG_CHANGE_NOT_RECORDED,
+  changeActor,
+  projectSettingsChange,
+  settingsDiff,
+} from "./config-changes";
 import { ProjectService } from "./projects";
 
 const OWNER = { actor: "andy" as const, email: "andy@example.com" };
@@ -34,6 +39,13 @@ describe("settingsDiff", () => {
   it("GivenOnlyWhoAndWhenChanged_WhenDiffed_ThenNothingDiffers", () => {
     const after = { ...project, buildEnabledBy: "x@example.com", updatedAt: "now" } as Project;
     expect(settingsDiff(project, after)).toEqual({});
+  });
+});
+
+describe("CONFIG_CHANGE_NOT_RECORDED", () => {
+  it("GivenTheAlertMatchesIt_WhenRead_ThenTheMessageIsUnchanged", () => {
+    // AI-136's log-based alert matches this exact text.
+    expect(CONFIG_CHANGE_NOT_RECORDED).toBe("config change not recorded");
   });
 });
 
@@ -166,7 +178,12 @@ describe("ProjectService config change log (M4.11)", () => {
       .mock.calls.map(([line]) => JSON.parse(String(line)) as { severity: string; message: string })
       .filter((l) => l.severity === "ERROR");
     expect(errors).toEqual([
-      expect.objectContaining({ message: "config change not recorded", configChangeId: null }),
+      expect.objectContaining({
+        severity: "ERROR",
+        component: "projects",
+        message: "config change not recorded",
+        configChangeId: null,
+      }),
     ]);
     expect(await changes.listForProject("ai")).toEqual([]);
   });

@@ -11,6 +11,12 @@ import {
  * ConfigChange. Pure rules; `ProjectService.update` appends what `projectSettingsChange` returns.
  */
 
+/**
+ * The ERROR log message when a settings write's ConfigChange isn't recorded (`component:
+ * "projects"`). Stable: the log-based alert (AI-136) matches it, so don't reword it.
+ */
+export const CONFIG_CHANGE_NOT_RECORDED = "config change not recorded";
+
 /** Before and after of each changed field. */
 export type SettingsDiff = Record<string, { from: unknown; to: unknown }>;
 

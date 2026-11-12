@@ -10,7 +10,7 @@ import {
   type WorkTracker,
 } from "@andy/contracts";
 import { notFound } from "@andy/contracts";
-import { projectSettingsChange } from "./config-changes";
+import { CONFIG_CHANGE_NOT_RECORDED, projectSettingsChange } from "./config-changes";
 import { DomainError } from "./errors";
 import { requireCan } from "./permissions";
 
@@ -124,7 +124,7 @@ export class ProjectService {
         by: actor,
       });
     } catch (err) {
-      log("ERROR", "config change not recorded", {
+      log("ERROR", CONFIG_CHANGE_NOT_RECORDED, {
         projectId: after.id,
         configChangeId: change?.id ?? null,
         diff: change?.diff ?? null,
