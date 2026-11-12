@@ -1,0 +1,8 @@
+{
+  "id": "selftest-token-jump",
+  "agent": "security-review",
+  "source": "Self-test: input tokens far over the committed baseline must fail the check",
+  "inputs": { "diff": "inputs/clean-clamp.diff" },
+  "expect": [{ "check": "no-finding", "severity": ["critical", "high"] }],
+  "stubOutput": { "summary": "Pure function, no security surface.", "findings": [] }
+}

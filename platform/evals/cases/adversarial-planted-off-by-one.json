@@ -1,0 +1,28 @@
+{
+  "id": "adversarial-planted-off-by-one",
+  "agent": "adversarial-review",
+  "source": "PR #22: adversarial review demo (planted off-by-one in pageOf, tests that miss it)",
+  "inputs": { "diff": "inputs/pr-22-off-by-one.diff" },
+  "files": { "packages/domain/src/paging.ts": "inputs/paging.ts" },
+  "expect": [
+    {
+      "check": "finding",
+      "severity": ["blocker"],
+      "file": "paging.ts",
+      "mentions": ["off-by-one", "off by one", "page > 3", "start - 1", "slice", "skip", "overlap"]
+    }
+  ],
+  "stubOutput": {
+    "summary": "pageOf returns the wrong items past page 3.",
+    "findings": [
+      {
+        "severity": "blocker",
+        "title": "Off-by-one for pages past 3",
+        "file": "packages/domain/src/paging.ts",
+        "line": 6,
+        "scenario": "pageOf([1..12], 4, 3) returns [9, 10, 11] instead of [10, 11, 12]",
+        "recommendation": "Remove the page > 3 branch and add a test with more than 9 items."
+      }
+    ]
+  }
+}
