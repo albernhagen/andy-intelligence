@@ -25,11 +25,84 @@ describe("TicketService", () => {
   const rejects = (p: Promise<unknown>, code: DomainError["code"]) =>
     expect(p).rejects.toMatchObject({ name: "DomainError", code });
 
+  it("GivenAChildOfAnEpicAssignedToAndy_WhenWorkersAreListedWithoutTheEpic_ThenTheChildIsAndys", async () => {
+    const epic = await service.create(projectId, { title: "Boards", type: "epic" }, "andy");
+    await tracker.updateTicket(
+      projectId,
+      epic.id,
+      { fields: { overrides: { assignee: "me" } } },
+      "andy",
+    );
+    const child = await service.create(projectId, { ...readyStory, parentId: epic.id }, "andy");
+    const own = await service.create(
+      projectId,
+      { ...readyStory, parentId: epic.id, overrides: { assignee: "claude-code" } },
+      "andy",
+    );
+    const workers = await service.workersFor([child, own]);
+    expect(workers.get(child.id)).toBe("me");
+    expect(workers.get(own.id)).toBe("agent");
+  });
+
+  it("GivenAnEpicAssignedToAndy_WhenItsOverridesAreEdited_ThenTheDispatcherIsWoken", async () => {
+    const dispatchNext = vi.fn(async () => null);
+    service = new TicketService(tracker, null, dispatchNext);
+    const epic = await service.create(projectId, { title: "Boards", type: "epic" }, "andy");
+    const story = await service.create(projectId, readyStory, "andy");
+    await service.update(projectId, epic.id, { overrides: {} }, "andy");
+    expect(dispatchNext).toHaveBeenCalledWith(projectId);
+    dispatchNext.mockClear();
+    await service.update(projectId, story.id, { overrides: {} }, "andy");
+    await service.update(projectId, epic.id, { title: "Boards v2" }, "andy");
+    expect(dispatchNext).not.toHaveBeenCalled();
+  });
+
   it("GivenACompleteStory_WhenCreated_ThenDorMet", async () => {
     expect((await service.create(projectId, readyStory, "andy")).dorStatus).toBe("met");
     expect((await service.create(projectId, { type: "chore", title: "x" }, "andy")).dorStatus).toBe(
       "not_met",
     );
+  });
+
+  describe("a new ticket's parent (AI-130)", () => {
+    it("GivenAnEpicKey_WhenCreated_ThenTheEpicsIdIsStored", async () => {
+      const epic = await service.create(projectId, { type: "epic", title: "E" }, "andy");
+      const t = await service.create(projectId, { title: "A", parentId: epic.key }, "andy");
+      expect(t.parentId).toBe(epic.id);
+    });
+
+    it("GivenAnEpicId_WhenCreated_ThenThatIdIsStored", async () => {
+      const epic = await service.create(projectId, { type: "epic", title: "E" }, "andy");
+      const t = await service.create(projectId, { title: "A", parentId: epic.id }, "andy");
+      expect(t.parentId).toBe(epic.id);
+    });
+
+    it("GivenAParentThatDoesNotExist_WhenCreated_ThenRefusedAndNothingCreated", async () => {
+      await expect(
+        service.create(projectId, { title: "A", parentId: "AI-99" }, "andy"),
+      ).rejects.toMatchObject({
+        code: "invalid_reference",
+        message: "AI-99 is not in this project",
+      });
+      expect(await tracker.listTickets(projectId)).toEqual([]);
+    });
+
+    it("GivenAParentThatIsNotAnEpic_WhenCreated_ThenRefusedAndNothingCreated", async () => {
+      const story = await service.create(projectId, { type: "feature", title: "S" }, "andy");
+      await expect(
+        service.create(projectId, { title: "A", parentId: story.key }, "andy"),
+      ).rejects.toMatchObject({ code: "invalid_reference", message: "AI-1 is not an epic" });
+      expect(await tracker.listTickets(projectId)).toHaveLength(1);
+    });
+
+    it("GivenAnEpicInAnotherProject_WhenCreated_ThenRefused", async () => {
+      const ops = (await tracker.createProject({ name: "Ops", key: "OPS" })).id;
+      const epic = await service.create(ops, { type: "epic", title: "E" }, "andy");
+      await rejects(
+        service.create(projectId, { title: "A", parentId: epic.id }, "andy"),
+        "invalid_reference",
+      );
+    });
   });
 
   it("GivenAnIncompleteStory_WhenMovedToReady_ThenRejectedWithGaps", async () => {
@@ -64,6 +137,40 @@ describe("TicketService", () => {
       body: "done outside the system",
       data: { from: "backlog", to: "done", forced: true },
     });
+  });
+
+  it("GivenADependentInAnotherProject_WhenTheBlockerReachesDone_ThenOnlyThatProjectIsWoken", async () => {
+    const woken: string[] = [];
+    service = new TicketService(tracker, null, async (p) => void woken.push(p));
+    const ops = await tracker.createProject({ name: "Ops", key: "OPS" });
+    await tracker.createProject({ name: "Web", key: "WEB" });
+    const blocker = await service.create(projectId, { type: "chore", title: "x" }, "andy");
+    const dependent = await tracker.createTicket(
+      ops.id,
+      { ...readyStory, blockedBy: ["AI-1"] },
+      "andy",
+    );
+    await tracker.updateTicket(
+      ops.id,
+      dependent.id,
+      { stage: { to: "ready", forced: false, reason: null } },
+      "andy",
+    );
+
+    await service.move(projectId, blocker.id, "done", "andy", { force: true });
+    expect(woken).toEqual(["ops"]);
+  });
+
+  it("GivenTheWakeFails_WhenABlockerReachesDone_ThenTheMoveStillStandsAndTheErrorIsLogged", async () => {
+    const logs = vi.spyOn(console, "log").mockImplementation(() => {});
+    service = new TicketService(tracker, null, async () => {});
+    vi.spyOn(tracker, "listProjects").mockRejectedValue(new Error("firestore down"));
+    const blocker = await service.create(projectId, { type: "chore", title: "x" }, "andy");
+
+    const moved = await service.move(projectId, blocker.id, "done", "andy", { force: true });
+    expect(moved.stage).toBe("done");
+    expect(logs.mock.calls.flat().join("\n")).toMatch(/waking dependent projects failed/);
+    logs.mockRestore();
   });
 
   it("GivenAForcedMove_WhenNotAndy_ThenForbidden", async () => {

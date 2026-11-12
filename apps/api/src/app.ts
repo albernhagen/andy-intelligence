@@ -2,6 +2,8 @@ import { OpenAPIHono, createRoute, z } from "@hono/zod-openapi";
 import {
   WorkTrackerError,
   type CodeEventLog,
+  type ConfigChangeStore,
+  type ReviewFindingSource,
   type CodeHostConnectionStore,
   type OAuthGrantStore,
   type RunStore,
@@ -21,11 +23,13 @@ import {
   RunnerService,
   LocalClaims,
   BoardReader,
+  ConfigProposals,
   DigestReader,
   QuotaClearer,
   BriefService,
   TicketService,
   EmailNotifications,
+  wakeAfterRunEnd,
   notifyOnNeedsYou,
   type EmailNotificationsDeps,
 } from "@andy/domain";
@@ -37,8 +41,12 @@ import { registerRunCallbacks, registerRunRoutes } from "./runs";
 import { registerRunnerClaim, registerRunnerRoutes, runnerCredentials } from "./runners";
 import { registerTicketRoutes } from "./tickets";
 import { registerBoardRoutes } from "./board";
+import { registerEpicRoutes } from "./epics";
 import { registerInFlightRoutes } from "./in-flight";
 import { registerDigestRoutes } from "./digest";
+import { registerDashboardRoutes } from "./dashboard";
+import { registerSetupRoutes } from "./setup";
+import { noReviewFindings, registerConfigProposalRoutes } from "./config-proposals";
 import { registerNotifyFlush, registerNotifyRoutes } from "./notify";
 import { registerBriefRoutes } from "./brief";
 import {
@@ -79,6 +87,10 @@ export interface AppDeps {
    * when not configured.
    */
   runners?: RunnerStore;
+  /** Pending config changes from review findings (ADR-0097); off (routes absent) when unset. */
+  configChanges?: ConfigChangeStore;
+  /** Stored review findings (ADR-0097 PR B); until then none, so sweeps propose nothing. */
+  reviewFindings?: ReviewFindingSource;
   /** Subscription quota readings (M1.9). Without it every window reads unknown. */
   quota?: QuotaStore;
   /**
@@ -247,6 +259,8 @@ export function createApp(input: AppDeps) {
   // create, last answer, move to Ready and switch turned on: a build first (ADR-0063, projects
   // with autoBuild), else a refine (ADR-0054). Projects waiting on the global cap go first,
   // then builds start up to the caps (ADR-0079). `next` and `wakeGlobalCapWaiters` never throw.
+  // When a run ends at the global cap, `wakeAfterRunEnd` offers the slot to other projects in
+  // `dispatchOrder` (AI-91), syncs and refines too, until it's taken; the freeing project goes last.
   // Local runners (ADR-0089): claims start runs through the same dispatchers and RunService.
   const runners = deps.runners
     ? new RunnerService(deps.runners, deps.tracker, runnerCredentials, now)
@@ -258,7 +272,7 @@ export function createApp(input: AppDeps) {
     connection ? new ClaudeCodeActionsExecutor(new ConnectedCodeHost(connection)) : null,
     now,
     deps.watchdog?.queue ?? null,
-    async (projectId) => void (await dispatchNext(projectId)),
+    async (projectId) => runEnded(projectId),
     connection ? new ConnectedCodeHost(connection) : null,
     runnerPresence,
   );
@@ -273,12 +287,33 @@ export function createApp(input: AppDeps) {
     now,
     deps.quota ?? null,
   );
-  const dispatchNext = async (projectId: string) => {
+  const dispatchNext = async (projectId: string, wakeWaiters = true) => {
     // AI-75 (ADR-0087): held gaps are asked first, as the question caps allow; no run needed.
     await refiner.askHeld(projectId);
     await syncer.next(projectId);
-    await builder.wakeGlobalCapWaiters(projectId);
+    if (wakeWaiters) await builder.wakeGlobalCapWaiters(projectId);
     return (await builder.next(projectId)) ?? (await refiner.next(projectId));
+  };
+  const runEnded = async (projectId: string) => {
+    await wakeAfterRunEnd({
+      freedBy: projectId,
+      listProjects: () => deps.tracker.listProjects(),
+      globalActive: async () => (await runs.activeCounts(projectId)).global,
+      // One project's failure must not keep the slot from the projects after it.
+      dispatch: (id, wakeWaiters) =>
+        dispatchNext(id, wakeWaiters).then(
+          () => undefined,
+          (err: unknown) =>
+            console.error(
+              JSON.stringify({
+                severity: "ERROR",
+                message: "dispatch after a run ended failed",
+                projectId: id,
+                error: String(err),
+              }),
+            ),
+        ),
+    });
   };
   // One TicketService for REST, MCP and webhooks: all get the same ticket rules (packages/domain).
   const service = new TicketService(deps.tracker, runs, dispatchNext, now, runnerPresence);
@@ -373,8 +408,9 @@ export function createApp(input: AppDeps) {
   );
   registerTicketRoutes(app, deps.tracker, service, projects, runs);
   registerBoardRoutes(app, new BoardReader(deps.tracker, deps.runs));
+  registerEpicRoutes(app, deps.tracker, deps.runs);
 
-  registerRunRoutes(app, runs);
+  registerRunRoutes(app, runs, deps.runs);
   if (runners) registerRunnerRoutes(app, runners);
   registerInFlightRoutes(app, runs);
   // AI-74: a clear wakes every project, as a settings change wakes one.
@@ -384,6 +420,8 @@ export function createApp(input: AppDeps) {
   registerQuotaRoutes(app, deps.quota ?? null, quotaClearer, now);
   const digest = new DigestReader(deps.tracker, deps.runs, deps.quota ?? null, now);
   registerDigestRoutes(app, digest, now);
+  registerDashboardRoutes(app, deps, now);
+  registerSetupRoutes(app, deps.tracker, connection ? new ConnectedCodeHost(connection) : null);
   registerNotifyRoutes(app, email);
   const brief = new BriefService(
     deps.tracker,
@@ -391,6 +429,15 @@ export function createApp(input: AppDeps) {
     now,
   );
   registerBriefRoutes(app, brief);
+  const configProposals = deps.configChanges
+    ? new ConfigProposals(
+        deps.tracker,
+        deps.reviewFindings ?? noReviewFindings,
+        deps.configChanges,
+        now,
+      )
+    : null;
+  if (configProposals) registerConfigProposalRoutes(app, configProposals);
 
   if (github && connection) {
     registerGitHubSetup(app, {
@@ -415,6 +462,7 @@ export function createApp(input: AppDeps) {
       notifyEmail: email,
       quota: quotaClearer,
       brief,
+      configProposals,
     });
   }
 

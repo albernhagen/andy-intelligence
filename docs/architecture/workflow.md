@@ -19,7 +19,7 @@ Overview and reading map: [ARCHITECTURE.md](ARCHITECTURE.md). Section numbers ma
 
 As built (PR events, build dispatch, plan approval): [`history/workflow-as-built.md`](history/workflow-as-built.md).
 
-**Dispatch (ADR-0079, ADR-0080):** the build dispatcher takes Ready tickets from the top while `mayDispatch` says start (pause, dial, global and PR caps, quota) and stores why it stopped. A ticket whose `touches` overlap a build in flight (empty overlaps any) is skipped. Builds record their touches and a reserved ADR number, shown by MCP `list_in_flight` and the board. **Sync runs (ADR-0083):** when `main` moves, each open agent PR behind it gets a run that merges `main`, resolves conflicts, runs the checks and pushes; global cap, not the dial; a conflict or failing check flags Needs-you.
+**Dispatch (ADR-0079, ADR-0080):** the build dispatcher takes Ready tickets from the top while `mayDispatch` says start (pause, dial, global and PR caps, quota) and stores why it stopped. A run's end at the global cap offers others the slot first (AI-91). A ticket whose `touches` overlap a build in flight (empty overlaps any) waits. Builds record touches and a reserved ADR number (MCP `list_in_flight`, board). **Sync runs (ADR-0083):** when `main` moves, each open agent PR behind it gets a run that merges `main`, resolves conflicts, checks, pushes; global cap, not the dial; conflicts or failing checks flag Needs-you.
 
 **Needs-you is a flag, not a stage:** flagged items stay put and appear in the Needs-you inbox (UI + MCP).
 
@@ -45,7 +45,7 @@ As built (PR events, build dispatch, plan approval): [`history/workflow-as-built
 ### 4.4 Epics
 - Ticket types (Epic / Feature / Chore / Bug, ADR-0058) + **child tickets** (`parent_id`).
 - Epic refinement produces stories with `depends_on`: vertical slices, independently mergeable behind flags; no long-lived epic branches. Exception: an **overnight run** (ADR-0049) merges its stories into a one-night branch `epic/<key>`, reviewed by Andy as one PR the next morning.
-- **Just-in-time re-planning:** when a story unblocks, a plan pass re-reads the codebase.
+- **Just-in-time re-planning** (built, M4.6): dispatch re-runs plans older than a blocker's Done.
 - Epic status, cost and progress roll up; an epic's overrides cascade to its stories.
 
 ### 4.5 Review gate (v1.x: rules only)

@@ -8,6 +8,7 @@ Overview and reading map: [ARCHITECTURE.md](ARCHITECTURE.md). Section numbers ma
 - Run records (tokens, cost, outcome, quota snapshot) in Firestore drive the UI; rollups via aggregation queries (§5).
 - Paid cost from OpenRouter usage; subscription runs record **API-equivalent cost estimates** (labelled as estimates) alongside quota %.
 - Cost per run and ticket (AI-67): `packages/domain/src/cost.ts`; a run without usage is unknown, counted but not priced.
+- Dashboards (AI-102): `domain/src/dashboard.ts`; lead time: Done from its cycle's first Ready.
 - Transcripts are not stored; run detail links to the Action log / Jules session / PR.
 ### 10.1 GCP cost guardrails (ADR-0028)
 
