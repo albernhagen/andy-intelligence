@@ -3,6 +3,7 @@ import { fileURLToPath } from "node:url";
 import {
   InMemoryCodeEventLog,
   InMemoryCodeHostConnectionStore,
+  InMemoryConfigChangeStore,
   InMemoryRunStore,
   InMemoryRunnerStore,
   InMemoryWorkTracker,
@@ -27,6 +28,7 @@ export async function generateApiTypes(): Promise<string> {
     tracker: new InMemoryWorkTracker(),
     runs: new InMemoryRunStore(),
     runners: new InMemoryRunnerStore(),
+    configChanges: new InMemoryConfigChangeStore(),
     // Fakes only, so the GitHub setup routes are in the document.
     github: {
       publicUrl: "http://localhost",
