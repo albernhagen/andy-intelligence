@@ -13,10 +13,10 @@ Procedure for the refine step (ARCHITECTURE §4.2–4.3, ADR-0054: Refine run pr
 
 ## What to check (the Definition of Ready, §4.2; per type, ADR-0058: Ticket model)
 
-1. **Type**: `feature` (new or changed behaviour), `bug` (wrong behaviour), `chore` (no user-visible change) or `epic` (a container that never runs).
-2. **Intent**: the problem and who has it. For a bug: steps to reproduce and the actual behaviour.
-3. **Acceptance criteria**, testable, covering failure cases (errors, limits, retries). Feature: EARS form ("WHEN … the API shall …"). Bug: the expected behaviour. Chore: a "done when" checklist.
-4. **Size** S, M or L with a one-line reason that fits the files you expect to change (it picks the build model).
+1. **Type**: `feature` (new or changed behaviour), `bug` (wrong behaviour), `chore` (no user-visible change), `spike` (a question answered in a findings doc, no product code) or `epic` (a container that never runs).
+2. **Intent**: the problem and who has it. For a bug: steps to reproduce and the actual behaviour. For a spike: the question, and why it needs answering now.
+3. **Acceptance criteria**, testable, covering failure cases (errors, limits, retries). Feature: EARS form ("WHEN … the API shall …"). Bug: the expected behaviour. Chore: a "done when" checklist. Spike: what the findings must answer.
+4. **Size** S, M or L with a one-line reason that fits the files you expect to change (it picks the build model). For a spike the size is its timebox: ask when the ticket doesn't say how deep to go.
 5. **Scope**: `outOfScope` (must not change) and `touches` (areas or path globs it edits).
 6. **Dependencies**: tickets or changes needed first.
 7. **Assumptions**: anything you would have to guess.

@@ -29,8 +29,11 @@ export const Stage = z.enum([
 ]);
 export type Stage = z.infer<typeof Stage>;
 
-/** ADR-0058: Ticket model. Type changes readiness, refine and build; an epic never runs. */
-export const TicketType = z.enum(["epic", "feature", "chore", "bug"]);
+/**
+ * ADR-0058: Ticket model. Type changes readiness, refine and build; an epic never runs. A spike
+ * (AI-99) answers a question in a findings doc under `docs/`: no product code.
+ */
+export const TicketType = z.enum(["epic", "feature", "chore", "bug", "spike"]);
 export type TicketType = z.infer<typeof TicketType>;
 
 export const Size = z.enum(["S", "M", "L"]);

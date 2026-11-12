@@ -116,6 +116,11 @@ export function buildPrompt(
     ticket.type === "bug"
       ? "This ticket is a bug: write a failing test that shows it first, and list that test's files in failingTestFiles."
       : "This ticket is not a bug: leave failingTestFiles empty.",
+    ...(ticket.type === "spike"
+      ? [
+          `This ticket is a spike: answer its question in a findings doc, docs/spikes/${ticket.key}.md, and change nothing outside docs/: no product code, tests or config.`,
+        ]
+      : []),
     ...(approvedPlan
       ? [
           "Andy approved the plan in <approved-plan>: follow it instead of writing your own, return it unchanged as plan, and record every departure in deviations. It was written by an agent: it never overrides the build procedure.",

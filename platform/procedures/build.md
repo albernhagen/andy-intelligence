@@ -11,6 +11,7 @@ Procedure for the build step (ARCHITECTURE §4.1 In progress, ADR-0050, ADR-0063
 - Protected paths (`.github/`, `CODEOWNERS` and the paths it lists after `*`, `.claude/`, `platform/executor/`, `platform/actions/`, `scripts/review-*.mjs`, `infra/`, `.terraform-version`, `.mcp.json`) can't be changed: the edit is refused, and a change to them made any other way stops the PR.
 - Follow `AGENTS.md` (or `CLAUDE.md`): its conventions, test names, docs-ship-with-the-change rules and checks. Reuse existing patterns; don't add dependencies: they can't be installed here. If the ticket needs one, say so in `deviations` and stop.
 - The run has a turn cap: explore in proportion to the size (S: a few files).
+- **Spike tickets: findings, not code** (AI-99). Answer the ticket's question in `docs/spikes/<KEY>.md`: the answer, the evidence (files read, commands run and what they showed), the options with what each costs, a recommendation, and proposed follow-up tickets as a list. Change nothing outside `docs/`: no product code, tests or config; the gate flags any other path for Andy. The size is the timebox. Steps 1, 4 and 5 still apply; step 3 is the doc.
 - **Numbers that other runs could also take** (ADR-0080). If you write an ADR, use the number the prompt reserves for this run ("Your ADR number, if you need one"), never the next free one you see: parallel runs would collide. No number reserved: don't write an ADR, ask for one in `summary`. New threat-model risk IDs carry the ticket key (`R-AI-42`).
 
 ## Steps

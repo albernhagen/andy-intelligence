@@ -374,7 +374,7 @@ describe("build run flow", () => {
     /** A project on `autoMerge`, one M ticket built to an open PR #50 whose checks are green. */
     async function builtPr(
       autoMerge: string,
-      opts: { files?: string[]; verificationOutput?: string } = {},
+      opts: { files?: string[]; verificationOutput?: string; type?: "feature" | "spike" } = {},
     ) {
       const t = githubApp({ verifyActionsToken: verify });
       await t.connections.save({ ...createdApp, connectedAt: "2026-11-03T00:00:00Z" });
@@ -391,7 +391,7 @@ describe("build run flow", () => {
       expect(patched.autoMerge).toBe(autoMerge);
       const ticket = await json<{ id: string; key: string }>(
         send(`${projectPath}/tickets`, "POST", {
-          type: "feature",
+          type: opts.type ?? "feature",
           title: "Board",
           body: "Andy can't see his tickets.",
           acceptanceCriteria: ["WHEN Andy opens the board THE SYSTEM SHALL list his tickets"],
@@ -551,6 +551,31 @@ describe("build run flow", () => {
           costEstimateUsd: 0.36,
         },
       });
+    });
+
+    it("GivenASpikePrThatChangesOnlyDocs_WhenChecksPass_ThenItMergesLikeAnyOther", async () => {
+      const f = await builtPr("s-and-m", { type: "spike", files: ["docs/spikes/AI-1.md"] });
+      expect(f.t.host.merges).toHaveLength(1);
+      expect(await f.latestRun()).toMatchObject({ wouldAutoMerge: true, gateReasons: [] });
+    });
+
+    it("GivenASpikePrThatChangesCode_WhenChecksPass_ThenNotMergedAndTheTicketIsFlaggedWithThePath", async () => {
+      const f = await builtPr("s-and-m", {
+        type: "spike",
+        files: ["docs/spikes/AI-1.md", "apps/web/src/pages/BoardPage.tsx"],
+      });
+      expect(f.t.host.merges).toHaveLength(0);
+      expect(await f.latestRun()).toMatchObject({
+        wouldAutoMerge: false,
+        gateReasons: ["spike_outside_docs"],
+      });
+      expect((await f.readTicket()).needsAttention).toBe(true);
+      const events = await f.json<{ kind: string; body: string | null }[]>(
+        f.t.call(`${f.ticketPath}/events`),
+      );
+      expect(events.map((e) => e.body ?? "")).toContainEqual(
+        expect.stringContaining("(spike_outside_docs): apps/web/src/pages/BoardPage.tsx"),
+      );
     });
 
     it("GivenTwoFinishedChecks_WhenBothPass_ThenOnlyOneMergeIsAttempted", async () => {

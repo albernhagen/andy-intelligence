@@ -684,7 +684,7 @@ export interface paths {
               projectId: string;
               key: string;
               /** @enum {string|null} */
-              type: "epic" | "feature" | "chore" | "bug" | null;
+              type: "epic" | "feature" | "chore" | "bug" | "spike" | null;
               parentId: string | null;
               title: string;
               body: string;
@@ -869,7 +869,7 @@ export interface paths {
              * @default null
              * @enum {string|null}
              */
-            type?: "epic" | "feature" | "chore" | "bug" | null;
+            type?: "epic" | "feature" | "chore" | "bug" | "spike" | null;
             /** @default  */
             body?: string;
             /** @default null */
@@ -927,7 +927,7 @@ export interface paths {
               projectId: string;
               key: string;
               /** @enum {string|null} */
-              type: "epic" | "feature" | "chore" | "bug" | null;
+              type: "epic" | "feature" | "chore" | "bug" | "spike" | null;
               parentId: string | null;
               title: string;
               body: string;
@@ -1130,7 +1130,7 @@ export interface paths {
               projectId: string;
               key: string;
               /** @enum {string|null} */
-              type: "epic" | "feature" | "chore" | "bug" | null;
+              type: "epic" | "feature" | "chore" | "bug" | "spike" | null;
               parentId: string | null;
               title: string;
               body: string;
@@ -1325,7 +1325,7 @@ export interface paths {
         content: {
           "application/json": {
             /** @enum {string|null} */
-            type?: "epic" | "feature" | "chore" | "bug" | null;
+            type?: "epic" | "feature" | "chore" | "bug" | "spike" | null;
             title?: string;
             body?: string;
             parentId?: string | null;
@@ -1380,7 +1380,7 @@ export interface paths {
               projectId: string;
               key: string;
               /** @enum {string|null} */
-              type: "epic" | "feature" | "chore" | "bug" | null;
+              type: "epic" | "feature" | "chore" | "bug" | "spike" | null;
               parentId: string | null;
               title: string;
               body: string;
@@ -1578,7 +1578,7 @@ export interface paths {
               projectId: string;
               key: string;
               /** @enum {string|null} */
-              type: "epic" | "feature" | "chore" | "bug" | null;
+              type: "epic" | "feature" | "chore" | "bug" | "spike" | null;
               parentId: string | null;
               title: string;
               body: string;
@@ -1894,7 +1894,7 @@ export interface paths {
               projectId: string;
               key: string;
               /** @enum {string|null} */
-              type: "epic" | "feature" | "chore" | "bug" | null;
+              type: "epic" | "feature" | "chore" | "bug" | "spike" | null;
               parentId: string | null;
               title: string;
               body: string;
@@ -2107,7 +2107,7 @@ export interface paths {
               projectId: string;
               key: string;
               /** @enum {string|null} */
-              type: "epic" | "feature" | "chore" | "bug" | null;
+              type: "epic" | "feature" | "chore" | "bug" | "spike" | null;
               parentId: string | null;
               title: string;
               body: string;
@@ -2433,7 +2433,7 @@ export interface paths {
               projectId: string;
               key: string;
               /** @enum {string|null} */
-              type: "epic" | "feature" | "chore" | "bug" | null;
+              type: "epic" | "feature" | "chore" | "bug" | "spike" | null;
               parentId: string | null;
               title: string;
               body: string;
@@ -2645,7 +2645,7 @@ export interface paths {
               projectId: string;
               key: string;
               /** @enum {string|null} */
-              type: "epic" | "feature" | "chore" | "bug" | null;
+              type: "epic" | "feature" | "chore" | "bug" | "spike" | null;
               parentId: string | null;
               title: string;
               body: string;
@@ -2857,7 +2857,7 @@ export interface paths {
               projectId: string;
               key: string;
               /** @enum {string|null} */
-              type: "epic" | "feature" | "chore" | "bug" | null;
+              type: "epic" | "feature" | "chore" | "bug" | "spike" | null;
               parentId: string | null;
               title: string;
               body: string;
@@ -3689,7 +3689,7 @@ export interface paths {
                 projectId: string;
                 key: string;
                 /** @enum {string|null} */
-                type: "epic" | "feature" | "chore" | "bug" | null;
+                type: "epic" | "feature" | "chore" | "bug" | "spike" | null;
                 parentId: string | null;
                 title: string;
                 body: string;
@@ -4182,7 +4182,7 @@ export interface paths {
               projectId: string;
               key: string;
               /** @enum {string|null} */
-              type: "epic" | "feature" | "chore" | "bug" | null;
+              type: "epic" | "feature" | "chore" | "bug" | "spike" | null;
               parentId: string | null;
               title: string;
               body: string;
@@ -4574,6 +4574,7 @@ export interface paths {
                 | "draft"
                 | "not_default_branch"
                 | "sync_pending"
+                | "spike_outside_docs"
               )[];
               /** @default [] */
               protectedFiles: string[];
@@ -4819,6 +4820,7 @@ export interface paths {
                 | "draft"
                 | "not_default_branch"
                 | "sync_pending"
+                | "spike_outside_docs"
               )[];
               /** @default [] */
               protectedFiles: string[];
@@ -5129,6 +5131,7 @@ export interface paths {
                 | "draft"
                 | "not_default_branch"
                 | "sync_pending"
+                | "spike_outside_docs"
               )[];
               /** @default [] */
               protectedFiles: string[];
@@ -5393,6 +5396,7 @@ export interface paths {
                   | "draft"
                   | "not_default_branch"
                   | "sync_pending"
+                  | "spike_outside_docs"
                 )[];
                 /** @default [] */
                 protectedFiles: string[];
@@ -5596,6 +5600,7 @@ export interface paths {
                   | "draft"
                   | "not_default_branch"
                   | "sync_pending"
+                  | "spike_outside_docs"
                 )[];
                 /** @default [] */
                 protectedFiles: string[];
@@ -6264,6 +6269,7 @@ export interface paths {
                     | "draft"
                     | "not_default_branch"
                     | "sync_pending"
+                    | "spike_outside_docs"
                   )[];
                   /** @enum {string|null} */
                   outcome: "merged_clean" | "reworked" | "reverted" | "failed" | null;
@@ -7396,7 +7402,7 @@ export interface components {
         key: string;
         title: string;
         /** @enum {string|null} */
-        type: "epic" | "feature" | "chore" | "bug" | null;
+        type: "epic" | "feature" | "chore" | "bug" | "spike" | null;
         /** @enum {string} */
         stage: "backlog" | "ready" | "in_progress" | "ready_for_review" | "done" | "cancelled";
         /** @enum {string|null} */

@@ -7,6 +7,7 @@ import type {
   RequiredCheck,
   Run,
   Size,
+  TicketType,
 } from "@andy/contracts";
 
 /**
@@ -103,7 +104,11 @@ const FLAGGED_REASONS: readonly GateReason[] = [
   "no_verification_output",
   "protected_path",
   "files_incomplete",
+  "spike_outside_docs",
 ];
+
+/** The one directory a spike's PR may change (AI-99). */
+export const SPIKE_DIR = "docs/";
 
 const MAX_CODEOWNERS_LINES = 1000;
 
@@ -171,6 +176,15 @@ export function protectedFiles(files: ChangedFile[], extraGlobs: string[]): stri
   return [...new Set(paths.filter((p) => patterns.some((re) => re.test(p))))];
 }
 
+/**
+ * Changed paths outside `docs/`, for a spike (AI-99). A rename counts under both names, so a
+ * file moved out of `docs/` into product code is caught.
+ */
+export function outsideDocs(files: ChangedFile[]): string[] {
+  const paths = files.flatMap((f) => (f.previousPath ? [f.path, f.previousPath] : [f.path]));
+  return [...new Set(paths.filter((p) => !p.toLowerCase().startsWith(SPIKE_DIR)))];
+}
+
 /** Whether the project's policy lets the control plane merge a ticket of this size. */
 export function policyAllows(policy: AutoMerge, size: Size | null): boolean {
   if (!size) return false;
@@ -197,6 +211,8 @@ export interface GateFacts {
   checks: Listing<HeadCheck>;
   /** A sync run is queued or running for the PR (AI-72): its head is about to change. */
   syncPending?: boolean;
+  /** The ticket's type: a spike may change only `docs/` (AI-99). */
+  ticketType?: TicketType | null;
 }
 
 export interface GateDecision {
@@ -204,6 +220,8 @@ export interface GateDecision {
   /** Empty exactly when `wouldAutoMerge`. */
   reasons: GateReason[];
   protectedFiles: string[];
+  /** A spike's changed paths outside `docs/` (AI-99); empty for other types. */
+  outsideDocs: string[];
   /** Whether Andy should be told now. */
   flag: boolean;
   /** A required non-review check has failed on this commit. */
@@ -276,12 +294,15 @@ export function decideGate(facts: GateFacts): GateDecision {
   if (facts.draft) reasons.push("draft");
   if (!facts.intoDefaultBranch) reasons.push("not_default_branch");
   if (facts.syncPending) reasons.push("sync_pending");
+  const stray = facts.ticketType === "spike" ? outsideDocs(facts.files.items) : [];
+  if (stray.length > 0) reasons.push("spike_outside_docs");
   const checks = assessChecks(facts.required, facts.checks);
   reasons.push(...checks.reasons);
   return {
     wouldAutoMerge: reasons.length === 0,
     reasons,
     protectedFiles: hits.slice(0, 50).map((p) => p.slice(0, 300)),
+    outsideDocs: stray.slice(0, 50).map((p) => p.slice(0, 300)),
     flag: reasons.some((r) => FLAGGED_REASONS.includes(r)),
     ciFailed: checks.ciFailed,
     failedReviews: checks.failedReviews,

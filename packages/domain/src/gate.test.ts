@@ -4,6 +4,7 @@ import {
   TOOLING_GLOBS,
   codeownersGlobs,
   decideGate,
+  outsideDocs,
   policyAllows,
   protectedFiles,
   type GateFacts,
@@ -258,6 +259,52 @@ describe("decideGate", () => {
     expect(decideGate(facts({ draft: true })).reasons).toEqual(["draft"]);
     expect(decideGate(facts({ intoDefaultBranch: false })).reasons).toEqual(["not_default_branch"]);
   });
+});
+
+describe("spike PRs (AI-99)", () => {
+  const docsOnly = {
+    items: [file("docs/spikes/AI-7.md"), file("docs/features.md")],
+    complete: true,
+  };
+
+  it("GivenASpikeThatChangesOnlyDocs_WhenDecided_ThenNoDeviation", () => {
+    expect(decideGate(facts({ ticketType: "spike", files: docsOnly }))).toMatchObject({
+      wouldAutoMerge: true,
+      reasons: [],
+      outsideDocs: [],
+      flag: false,
+    });
+  });
+
+  it("GivenASpikeThatChangesProductCode_WhenDecided_ThenFlaggedAsADeviationWithThePaths", () => {
+    const files = {
+      items: [...docsOnly.items, file("apps/web/src/pages/BoardPage.tsx")],
+      complete: true,
+    };
+    expect(decideGate(facts({ ticketType: "spike", files }))).toMatchObject({
+      wouldAutoMerge: false,
+      reasons: ["spike_outside_docs"],
+      outsideDocs: ["apps/web/src/pages/BoardPage.tsx"],
+      flag: true,
+    });
+  });
+
+  it("GivenAFileMovedFromDocsIntoCode_WhenListed_ThenBothNamesCountAndOnlyTheCodeOneIsOutside", () => {
+    expect(outsideDocs([file("src/notes.ts", "docs/notes.md")])).toEqual(["src/notes.ts"]);
+    expect(outsideDocs([file("docs/notes.md", "src/notes.ts")])).toEqual(["src/notes.ts"]);
+    expect(outsideDocs([file("docsx/a.md"), file("Docs/b.md")])).toEqual(["docsx/a.md"]);
+  });
+
+  it.each(["feature", "chore", "bug", null] as const)(
+    "GivenA%sTicketThatChangesCode_WhenDecided_ThenTheGateIsAsToday",
+    (ticketType) => {
+      expect(decideGate(facts({ ticketType }))).toMatchObject({
+        wouldAutoMerge: true,
+        reasons: [],
+        outsideDocs: [],
+      });
+    },
+  );
 });
 
 describe("revertedPullRequest", () => {
