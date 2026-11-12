@@ -78,6 +78,7 @@ const CreateTicketInput = NewTicket.omit({ dorStatus: true, needsAttention: true
   type: NewTicket.shape.type.describe(
     "feature, chore, bug or epic (ADR-0058). Omit it: refine fills it, and the rest, from the title.",
   ),
+  parentId: NewTicket.shape.parentId.describe("An epic's key or id in the same project, or null."),
   upNext: z
     .boolean()
     .default(false)
@@ -474,7 +475,7 @@ export function registerTools(server: McpServer, deps: ToolDeps): void {
     "status",
     {
       description:
-        "With a ticket key: its stage, Definition of Ready gaps, questions and recent history. Without: every project's ticket counts by stage, its dispatch dial, pause switch and last dispatch decision (why nothing is running), and the Needs-you count.",
+        "With a ticket key: its stage, Definition of Ready gaps, questions and recent history; an epic's key also returns `epic`: its stories in dependency order, progress (Done of non-cancelled) and summed cost, read from at most 50 stories' agent tasks (two reads each; `partial` past that) and one ticket list per other project a blocker names (at most 5). Without: every project's ticket counts by stage, its dispatch dial, pause switch and last dispatch decision (why nothing is running), and the Needs-you count.",
       inputSchema: StatusInput,
       annotations: { readOnlyHint: true },
     },

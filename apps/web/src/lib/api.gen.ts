@@ -4355,6 +4355,80 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  "/api/projects/{projectId}/tickets/{ticketId}/epic": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get: {
+      parameters: {
+        query?: never;
+        header?: never;
+        path: {
+          projectId: string;
+          ticketId: string;
+        };
+        cookie?: never;
+      };
+      requestBody?: never;
+      responses: {
+        /** @description The epic's children in dependency order, progress and cost */
+        200: {
+          headers: {
+            [name: string]: unknown;
+          };
+          content: {
+            "application/json": components["schemas"]["EpicRollup"];
+          };
+        };
+        /** @description Invalid request */
+        400: {
+          headers: {
+            [name: string]: unknown;
+          };
+          content: {
+            "application/json": {
+              error: string;
+              details?: string[];
+            };
+          };
+        };
+        /** @description Not found */
+        404: {
+          headers: {
+            [name: string]: unknown;
+          };
+          content: {
+            "application/json": {
+              error: string;
+              details?: string[];
+            };
+          };
+        };
+        /** @description The ticket isn't an epic */
+        422: {
+          headers: {
+            [name: string]: unknown;
+          };
+          content: {
+            "application/json": {
+              error: string;
+              details?: string[];
+            };
+          };
+        };
+      };
+    };
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   "/api/projects/{projectId}/tickets/{ticketId}/runs": {
     parameters: {
       query?: never;
@@ -6254,6 +6328,67 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  "/api/projects/{projectId}/setup": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get: {
+      parameters: {
+        query?: never;
+        header?: never;
+        path: {
+          projectId: string;
+        };
+        cookie?: never;
+      };
+      requestBody?: never;
+      responses: {
+        /** @description The five setup steps, each done, missing, unknown or not yet */
+        200: {
+          headers: {
+            [name: string]: unknown;
+          };
+          content: {
+            "application/json": components["schemas"]["SetupChecklist"];
+          };
+        };
+        /** @description Invalid request */
+        400: {
+          headers: {
+            [name: string]: unknown;
+          };
+          content: {
+            "application/json": {
+              error: string;
+              details?: string[];
+            };
+          };
+        };
+        /** @description Not found */
+        404: {
+          headers: {
+            [name: string]: unknown;
+          };
+          content: {
+            "application/json": {
+              error: string;
+              details?: string[];
+            };
+          };
+        };
+      };
+    };
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   "/api/notify/email": {
     parameters: {
       query?: never;
@@ -6847,6 +6982,48 @@ export interface components {
     };
     Error: {
       error: string;
+    };
+    EpicRollup: {
+      children: {
+        id: string;
+        key: string;
+        title: string;
+        /** @enum {string|null} */
+        type: "epic" | "feature" | "chore" | "bug" | null;
+        /** @enum {string} */
+        stage: "backlog" | "ready" | "in_progress" | "ready_for_review" | "done" | "cancelled";
+        /** @enum {string|null} */
+        size: "S" | "M" | "L" | null;
+        openBlockers: string[];
+      }[];
+      progress: {
+        done: number;
+        total: number;
+      };
+      cost: {
+        estimatedCostUsd: number;
+        completedRuns: number;
+        unknownRuns: number;
+      };
+      costedChildren: number;
+      partial: boolean;
+    };
+    SetupChecklist: {
+      repo: string | null;
+      complete: boolean;
+      items: {
+        /** @enum {string} */
+        key:
+          | "repo_connected"
+          | "baseline_merged"
+          | "deploy_proven"
+          | "threat_model_started"
+          | "budget_caps_set";
+        label: string;
+        /** @enum {string} */
+        status: "done" | "missing" | "unknown" | "not_yet";
+        detail: string | null;
+      }[];
     };
     EmailStatus: {
       configured: boolean;
