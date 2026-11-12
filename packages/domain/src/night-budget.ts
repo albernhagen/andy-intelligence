@@ -1,5 +1,4 @@
 import type { NightEndReason, NightLaunch, Run } from "@andy/contracts";
-import { wasDispatched } from "./dispatch-caps";
 
 /**
  * Night budget (ADR-0049 "Night budget", ADR-0028, M4.18). Pure: `BuildDispatcher` gathers the
@@ -24,17 +23,20 @@ export interface NightUsage {
   usd: number;
 }
 
-type CountedRun = Pick<Run, "createdAt" | "status" | "executor" | "localRun">;
+type CountedRun = Pick<Run, "createdAt" | "status" | "executor" | "localRun" | "startedAt">;
 
 /**
  * Whether a story's run counts against its launch: created since the launch started (a run with
- * no creation time counts, so a missing field can only hold dispatch back), and queued, running
- * or dispatched. A start that lost a race is failed before dispatch and doesn't count.
+ * no creation time counts, so a missing field can only hold dispatch back), and queued, running,
+ * or one that started: dispatched to the cloud executor, started, or heartbeated by a local
+ * runner. A start that lost a race is failed before any of these and doesn't count, cloud or
+ * local (a local run carries its claim from creation, so the claim alone isn't enough).
  */
 export function countsForNight(launch: Pick<NightLaunch, "startedAt">, run: CountedRun): boolean {
   const since = launch.startedAt ? Date.parse(launch.startedAt) : -Infinity;
   if (run.createdAt && Date.parse(run.createdAt) < since) return false;
-  return run.status === "queued" || run.status === "running" || wasDispatched(run);
+  if (run.status === "queued" || run.status === "running") return true;
+  return run.executor !== null || run.startedAt !== null || run.localRun?.heartbeatAt != null;
 }
 
 /** What the launch's counted runs (`runs`: its stories' runs) have used. */

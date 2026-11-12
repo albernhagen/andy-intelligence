@@ -255,6 +255,8 @@ export class RunService {
    * the runner) is refused, so a runner and the cloud executor never both take it.
    * `night` (the dispatcher's start of a night launch's story, M4.18): the run must also be among
    * the launch's first `maxRuns` agent tasks, so concurrent dispatches can't overshoot it.
+   * Retries (`retryOf`, the watchdog's) carry no slot on purpose: each story's retries are bounded
+   * by MAX_RUN_ATTEMPTS, and they count toward the launch's usage, so no new story starts after.
    */
   async start(
     projectId: string,

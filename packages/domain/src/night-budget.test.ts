@@ -21,7 +21,8 @@ const run = (
   costUsd,
   status,
   executor: dispatched ? EXECUTOR : null,
-  localRun: null,
+  localRun: null as null | { runnerId: string; leaseExpiresAt: string; heartbeatAt: string | null },
+  startedAt: dispatched ? createdAt : null,
 });
 const at = (iso: string) => new Date(iso);
 const NIGHT = at("2026-11-13T01:00:00.000Z");
@@ -40,6 +41,20 @@ describe("night budget", () => {
     const lost = run("2026-11-12T23:00:00.000Z", null, null, "failed", false);
     const queued = run("2026-11-12T23:00:00.000Z", null, null, "queued", false);
     expect(nightUsage(launch, [lost, queued]).runs).toBe(1);
+  });
+
+  it("GivenALocalClaimThatLostARaceBeforeItStarted_WhenUsageIsCounted_ThenItDoesNotCount", () => {
+    const claim = { runnerId: "r1", leaseExpiresAt: "2026-11-13T00:10:00.000Z", heartbeatAt: null };
+    const lost = {
+      ...run("2026-11-12T23:00:00.000Z", null, null, "failed", false),
+      localRun: claim,
+    };
+    const ran = {
+      ...run("2026-11-12T23:00:00.000Z", 10, 0.1, "succeeded", false),
+      localRun: { ...claim, heartbeatAt: "2026-11-12T23:01:00.000Z" },
+    };
+    expect(nightUsage(launch, [lost]).runs).toBe(0);
+    expect(nightUsage(launch, [ran]).runs).toBe(1);
   });
 
   it("GivenThreeConcurrentStartsAndMaxTwo_WhenEachChecksItsSlot_ThenOnlyTheTwoOldestWin", () => {
