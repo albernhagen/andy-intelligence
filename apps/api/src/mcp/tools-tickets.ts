@@ -1,4 +1,11 @@
-import { TicketFields, TicketKey, Timestamp, type Ticket, type Worker } from "@andy/contracts";
+import {
+  TicketFields,
+  TicketKey,
+  Timestamp,
+  type ResolvedExecutor,
+  type Ticket,
+  type Worker,
+} from "@andy/contracts";
 import {
   DomainError,
   inboxCards,
@@ -61,7 +68,8 @@ export async function statusLineOf<S extends TicketStatus>(deps: ToolDeps, statu
   const { ticket, questions } = status;
   const tickets = await deps.tracker.listTickets(ticket.projectId);
   const open = questions.filter((q) => q.status === "open").length;
-  return { ...status, statusLine: await lineFor(deps, ticket, tickets, open, status.worker) };
+  const line = await lineFor(deps, ticket, tickets, open, status.worker, status.executor.next);
+  return { ...status, statusLine: line };
 }
 
 async function lineFor(
@@ -70,13 +78,14 @@ async function lineFor(
   tickets: readonly Ticket[],
   openQuestions: number,
   worker?: Worker,
+  executor?: ResolvedExecutor,
 ) {
   const [runs, events, inFlight] = await Promise.all([
     deps.runs.list(ticket.projectId, ticket.id),
     deps.tracker.listEvents(ticket.projectId, ticket.id),
     deps.runs.inFlight(ticket.projectId),
   ]);
-  const facts = { tickets, runs, events, openQuestions, worker, inFlight };
+  const facts = { tickets, runs, events, openQuestions, worker, inFlight, executor };
   return ticketStatusLine(ticket, facts, new Date());
 }
 

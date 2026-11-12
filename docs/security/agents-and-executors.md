@@ -26,6 +26,6 @@ Detail on Actions triggers, review agents and executors. Risk register, assets a
 | `CLAUDE_CODE_OAUTH_TOKEN` | Andy's Claude subscription. Local copy for the sandbox test bed (`~/.config/andy-intelligence/sandbox-lab.env`, mode 600, trusted code only; AI-58) | Any same-repo workflow run (not forks, not Dependabot); agent runs (`claude-executor.yml` `agent` job) |
 | `GITHUB_TOKEN`            | Per-job, least privilege (`permissions:` in each workflow)                                                                                          | That job                                                                                               |
 
-## Planned (not built)
+## Local executor (ADR-0089)
 
-Local executor (ADR-0089): `POST /runner/claim` and `POST /runs/{id}/heartbeat`; outbound only. Risk R-AI-44.
+Built: control-plane side (entry-points-and-credentials.md). Not built: runner, sandbox, publish. R-AI-44.

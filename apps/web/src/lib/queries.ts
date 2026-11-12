@@ -2,6 +2,7 @@ import { useEffect, useRef } from "react";
 import { type QueryClient, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type {
   AutoMerge,
+  ExecutorKind,
   PlanApproval,
   Run,
   Size,
@@ -168,6 +169,32 @@ export function useSetWorker(path: TicketPath) {
   );
 }
 
+export function useExecutor(path: TicketPath) {
+  const api = useApi();
+  return useQuery({
+    ...useLivePoll("slow"),
+    queryKey: ["executor", path],
+    queryFn: async () =>
+      unwrap(
+        await api.GET("/api/projects/{projectId}/tickets/{ticketId}/executor", {
+          params: { path },
+        }),
+      ),
+  });
+}
+
+export function useSetExecutor(path: TicketPath) {
+  const api = useApi();
+  return useWrite(async (body: { executor: ExecutorKind | null }) =>
+    unwrap(
+      await api.PUT("/api/projects/{projectId}/tickets/{ticketId}/executor", {
+        params: { path },
+        body,
+      }),
+    ),
+  );
+}
+
 export const isActiveRun = (run: Pick<Run, "status">) =>
   run.status === "queued" || run.status === "running";
 
@@ -236,6 +263,31 @@ export function useClearQuotaIdle() {
   return useWrite(async () => unwrap(await api.POST("/api/quota/clear")));
 }
 
+/** Local runners (ADR-0089): never their secrets. */
+export function useRunners() {
+  const api = useApi();
+  return useQuery({
+    ...useLivePoll("slow"),
+    queryKey: ["runners"],
+    queryFn: async () => unwrap(await api.GET("/api/runners")),
+  });
+}
+
+/** The response holds the runner's secret: shown once by the caller, never cached. */
+export function useMintRunner() {
+  const api = useApi();
+  return useWrite(async (body: { name: string; projectIds: string[] }) =>
+    unwrap(await api.POST("/api/runners", { body })),
+  );
+}
+
+export function useRevokeRunner() {
+  const api = useApi();
+  return useWrite(async (runnerId: string) =>
+    unwrap(await api.POST("/api/runners/{runnerId}/revoke", { params: { path: { runnerId } } })),
+  );
+}
+
 export function useCreateProject() {
   const api = useApi();
   return useWrite(async (body: { name: string; key: string; repos: string[] }) =>
@@ -257,6 +309,7 @@ export function useUpdateProject(projectId: string) {
       runsAtOnce?: number;
       paused?: boolean;
       defaultWorker?: Worker;
+      executor?: ExecutorKind;
       emailNotifications?: boolean;
     }) =>
       unwrap(

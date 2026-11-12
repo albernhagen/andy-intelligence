@@ -8,6 +8,7 @@ import {
   Id,
   Project,
   Worker,
+  ExecutorKind,
   ProviderKey,
   Question,
   questionFormatFields,
@@ -208,6 +209,7 @@ export const ProjectPatch = z.strictObject({
   ...projectDispatchPatch,
   ...projectNotifyPatch,
   defaultWorker: Worker.optional(),
+  executor: ExecutorKind.optional(),
 });
 export type ProjectPatch = z.infer<typeof ProjectPatch>;
 
@@ -222,6 +224,7 @@ export const ProjectSettings = ProjectPatch.pick({
   runsAtOnce: true,
   paused: true,
   defaultWorker: true,
+  executor: true,
   emailNotifications: true,
 });
 export type ProjectSettings = z.infer<typeof ProjectSettings>;
@@ -370,6 +373,7 @@ export const NewRun = Run.pick({
   touches: true,
   reservedAdr: true,
   syncRun: true,
+  localRun: true,
 });
 export type NewRun = z.input<typeof NewRun>;
 
@@ -404,6 +408,7 @@ export const RunPatch = Run.pick({
   metrics: true,
   syncRun: true,
   prSync: true,
+  localRun: true,
 }).partial();
 export type RunPatch = z.input<typeof RunPatch>;
 
@@ -449,12 +454,36 @@ export const WatchdogCheck = z.object({
 });
 export type WatchdogCheck = z.infer<typeof WatchdogCheck>;
 
+/**
+ * Other delayed checks on the same queue (ADR-0089): a local run's lease expiry, and whether a
+ * runner is still away 2 minutes after its last claim.
+ */
+const CheckSubject = z.string().regex(/^[A-Za-z0-9-]{1,64}$/);
+export const QueuedCheck = z.discriminatedUnion("kind", [
+  z.object({ kind: z.literal("lease"), runId: CheckSubject, at: Timestamp }),
+  z.object({ kind: z.literal("runner_away"), runnerId: CheckSubject, at: Timestamp }),
+]);
+export type QueuedCheck = z.infer<typeof QueuedCheck>;
+
 export interface WatchdogQueue {
   /**
    * Queues the run's check for delivery at `at`. Idempotent by run ID: a second call for the
    * same run queues nothing and returns "duplicate", so a run has at most one check.
    */
   schedule(check: WatchdogCheck): Promise<"scheduled" | "duplicate">;
+  /**
+   * Queues a lease or runner-away check for delivery at `at`. Idempotent per subject and time:
+   * a lease per run and second of `at`, a runner-away check per runner and minute of `at`.
+   */
+  scheduleCheck(check: QueuedCheck): Promise<"scheduled" | "duplicate">;
+}
+
+/** The idempotency key of a queued check (also its task name on the queue). */
+export function queuedCheckKey(check: QueuedCheck): string {
+  const ms = Date.parse(check.at);
+  return check.kind === "lease"
+    ? `lease-${check.runId}-${Math.ceil(ms / 1000)}`
+    : `runner-away-${check.runnerId}-${Math.floor(ms / 60_000)}`;
 }
 
 // ── QuotaSource ──────────────────────────────────────────────────────────────
@@ -684,3 +713,4 @@ export interface Telemetry {
 
 export * from "./digest";
 export * from "./notify-email";
+export * from "./runner";

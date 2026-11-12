@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { Worker } from "./worker";
+import { ExecutorKind } from "./executor";
 import {
   Actor,
   HarnessKey,
@@ -23,6 +24,7 @@ export * from "./dispatch-caps";
 import { RunCostFields } from "./cost";
 import { runInFlightFields } from "./in-flight";
 import { runSyncFields } from "./sync";
+import { runLocalFields } from "./runner";
 import { RefineScores, TicketScores } from "./scores";
 import {
   questionFormatFields,
@@ -96,6 +98,8 @@ export const Project = z.object({
   ...projectNotifyFields,
   /** Who does a ticket's work when it has no pick of its own (ADR-0082). */
   defaultWorker: Worker.default("agent"),
+  /** Where a ticket's runs execute when it has no pick of its own (ADR-0089). */
+  executor: ExecutorKind.default("actions"),
 });
 export type Project = z.infer<typeof Project>;
 
@@ -105,6 +109,8 @@ export const TicketOverrides = z.object({
   modelPin: Route.optional(),
   autonomy: AutonomyLevel.optional(),
   targetEnv: z.enum(["dev", "prod"]).optional(),
+  /** Where this ticket's runs execute; absent follows the project's `executor` (ADR-0089). */
+  executor: ExecutorKind.optional(),
 });
 export type TicketOverrides = z.infer<typeof TicketOverrides>;
 
@@ -548,6 +554,7 @@ export const Run = z.object({
   ...RunCostFields,
   ...runInFlightFields,
   ...runSyncFields,
+  ...runLocalFields,
 });
 export type Run = z.infer<typeof Run>;
 
@@ -904,3 +911,5 @@ export const CodeHostEvent = z.discriminatedUnion("kind", [
 export type CodeHostEvent = z.infer<typeof CodeHostEvent>;
 
 export * from "./worker";
+export * from "./executor";
+export * from "./runner";

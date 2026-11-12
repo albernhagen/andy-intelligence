@@ -46,3 +46,11 @@ export function isInFlight(run: Pick<Run, "status" | "deadline">, now: Date): bo
     (!run.deadline || Date.parse(run.deadline) > now.getTime())
   );
 }
+
+/**
+ * A run that reached an executor: dispatched to the cloud executor or claimed by a local runner
+ * (ADR-0089). Per-ticket run caps count these: each one may have spent quota.
+ */
+export function wasDispatched(run: Pick<Run, "executor" | "localRun">): boolean {
+  return run.executor !== null || run.localRun != null;
+}

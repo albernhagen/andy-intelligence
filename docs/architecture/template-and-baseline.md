@@ -29,14 +29,14 @@ Every guardrail built here reaches each managed project the same way, this repo 
 
 Carried by (ADR-0038): **A** = composite action in `platform/actions/`; managed repos get the caller workflow with the action pinned by SHA · **M** = managed file (kept identical; listed in `platform/baseline/manifest.json`) · **S** = seed file, copied once from `template/` · **G** = GitHub config in `platform/baseline/github/`, applied by `platform/baseline/baseline.mjs` · **TF** = Terraform module in `infra/modules/` · **RB** = runbook step (secrets).
 
-This repo's Dependabot bumps third-party pins in `platform/actions/`; managed repos get them through the baseline pin. Drift: `baseline.mjs check <repo>` (Andy, local, everything); the weekly system review checks labels and ruleset (its token can't read the rest).
+This repo's Dependabot bumps third-party pins in `platform/actions/`; managed repos get them through the baseline pin. Drift: `baseline.mjs check <repo>`; the weekly system review checks labels and ruleset.
 
 | Guardrail | ADR | Source in this repo | Carried by | Status |
 |---|---|---|---|---|
 | Lint, typecheck, test, build | 0022 | `ci.yml` (`check`) → `platform/actions/ci-check` | A | carried (M1.16) |
 | Firestore adapter contract suites on the emulator (path-gated) | 0034, 0048 | `firestore-suite.yml` | — | control plane only (`github/source-only.json`) |
 | Workflow linter (actionlint) | 0027 | `ci.yml` → `platform/actions/actionlint` | A | carried (M1.16) |
-| Terraform fmt/validate | 0011, 0024 | `ci.yml` → `platform/actions/terraform-check` (skips without `infra/`) | A | carried (M1.16) |
+| Terraform fmt/validate | 0011, 0024 | `ci.yml` → `platform/actions/terraform-check` | A | carried (M1.16) |
 | Public-safe Terraform plan summary | 0011 | `terraform-plan.yml` | — | not yet carried (M6: Dev → prod releases; needs per-project WIF) |
 | Secret scan (TruffleHog) | 0015 | `secret-scan.yml` → `platform/actions/secret-scan` | A | carried (M1.16) |
 | CodeQL, dependency review, Terraform misconfig scan | 0025, 0030 | `security-scans.yml` → `platform/actions/{codeql,dependency-review,terraform-misconfig}` | A | carried (M1.16) |
@@ -48,7 +48,7 @@ This repo's Dependabot bumps third-party pins in `platform/actions/`; managed re
 | PR template (docs + security checklist) | 0022, 0025 | `template/.github/pull_request_template.md` | M | carried (M1.16) |
 | Agent rules; docs ship with the change | 0022 | `template/AGENTS.md.template` | S | carried (M1.16) |
 | Threat model seed | 0025 | `template/docs/security/threat-model.md` | S | carried (M1.16) |
-| Dispatch, sync caps, pause | 0079, 0083 | `dispatch-caps.ts`, `sync-runs.ts` | — | control plane |
+| Dispatch, sync and local-runner caps (2 runners, a claim per 10 s, lookup caps), pause | 0079, 0083, 0094 | `dispatch-caps.ts`, `sync-runs.ts`, `runners.ts`, `local-claims.ts` | — | control plane |
 | Public-repo hygiene (`.gitignore`: tfvars, state, `.env*`) | 0015 | `template/gitignore.lines` | M (lines) | carried (M1.16) |
 | `main` ruleset: PR required (squash), no force push/deletion, required checks, code scanning (CodeQL, high or higher) | 0025 | `github/ruleset-main.json` | G | carried (M1.16), minus `github/source-only.json` (`firestore-suite`). No per-project extra checks yet (`apply` replaces the ruleset) |
 | Merge settings: squash only, delete branch on merge, auto-merge allowed (Dependabot; agent PRs through the review gate) | 0022, 0042, 0050 | `github/repo.json` | G | carried (M1.16; auto-merge from ADR-0042) |

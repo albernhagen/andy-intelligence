@@ -2,6 +2,7 @@ import {
   ACTIVE_RUN_STATUSES,
   ADR_NUMBER_MAX,
   BuildOutput,
+  RUNNER_LIMITS,
   PLAN_REASON_MAX,
   PlanOutput,
   PR_SYNC_EMPTY,
@@ -25,7 +26,10 @@ import {
   type Route,
   type Run,
   type RunExecutor,
+  type RunContextResponse,
   type RunHandle,
+  type RunHeartbeatResponse,
+  type Runner,
   type RunStep,
   type RunStore,
   type Stage,
@@ -34,9 +38,10 @@ import {
   type WatchdogQueue,
   type WorkTracker,
 } from "@andy/contracts";
-import { MAX_ACTIVE_RUNS_GLOBAL, isInFlight } from "./dispatch-caps";
+import { MAX_ACTIVE_RUNS_GLOBAL, isInFlight, wasDispatched } from "./dispatch-caps";
 import { blockingRun, editingRuns, highestAdrInIndex, runTouches } from "./dispatch-conflicts";
 import { isDispatchable, resolveWorker } from "./worker";
+import { resolveExecutor, wantedExecutor } from "./executor";
 import { runCost } from "./cost";
 import {
   BUILDABLE_STAGES,
@@ -128,20 +133,27 @@ const countsForDial = (r: Run) => r.step !== "sync";
  */
 export const MAX_REFINE_RUNS_PER_TICKET = 3;
 
-/** What a run gets when it asks for its instructions. */
-export interface RunContext {
-  runId: string;
-  step: RunStep;
-  model: string;
-  maxTurns: number;
-  prompt: string;
-  /** The run's ticket, for the PR title and link (build). Title is untrusted text. */
-  ticket: { projectId: string; key: string; title: string } | null;
-  /** The branch a build or sync run pushes; null for other steps. */
-  branch: string | null;
-  /** A sync run's PR: its number and the head it started from (AI-72); null for other steps. */
-  sync: { pullRequest: number; headSha: string } | null;
+/** What a run gets when it asks for its instructions (`RunContextResponse` on the wire). */
+export type RunContext = RunContextResponse;
+
+/** A local runner calling back with a per-run token it got from its claim (ADR-0089). */
+export interface LocalCaller {
+  runnerId: string;
 }
+
+/** Who calls back: the cloud executor's verified job, or a local runner. */
+export type RunCaller = RunExecutor | LocalCaller;
+
+const isLocalCaller = (caller: RunCaller): caller is LocalCaller => "runnerId" in caller;
+
+/** Why a local run ended when its runner stopped heartbeating (ADR-0089). */
+export const LEASE_LOST_ERROR = "lease_lost: Local agent task lost: the runner went away";
+
+/**
+ * What the lease check did. `renewed`: a heartbeat moved the lease, the next check is queued.
+ * `early`: delivered before the lease's end with its check already queued (the queue retries).
+ */
+export type LeaseOutcome = "unknown" | "settled" | "renewed" | "early" | "lost";
 
 /**
  * What the watchdog did with a run at its deadline. `early`: delivered before the deadline,
@@ -151,7 +163,8 @@ export type WatchdogOutcome = "unknown" | "early" | "settled" | "healed" | "retr
 
 /** What a run reports when it ends. Summary and output are untrusted agent text. */
 export interface RunResult {
-  status: "succeeded" | "failed";
+  /** `cancelled`: the local runner stopped after a heartbeat said so (ADR-0089). */
+  status: "succeeded" | "failed" | "cancelled";
   summary: string | null;
   /** The step's structured result, if it has one (refine: RefineOutput). Unchecked JSON. */
   output?: unknown;
@@ -193,7 +206,17 @@ export class RunService {
     private readonly onRunEnded: ((projectId: string) => Promise<void>) | null = null,
     /** Reads the repo's ADR index to reserve build runs' ADR numbers (ADR-0080); null: none. */
     private readonly codeHost: Pick<CodeHost, "getRepo" | "readFile"> | null = null,
+    /**
+     * Whether a local runner that serves the project is present (ADR-0089); null: no runners,
+     * so a `local` default runs on the cloud executor and a `local` override waits.
+     */
+    private readonly runnerPresence: ((projectId: string) => Promise<boolean>) | null = null,
   ) {}
+
+  /** Whether a local runner serving the project is present now (ADR-0089). */
+  async runnerPresent(projectId: string): Promise<boolean> {
+    return this.runnerPresence ? this.runnerPresence(projectId) : false;
+  }
 
   /** Whether runs can be dispatched at all (an executor is configured). */
   get canDispatch(): boolean {
@@ -225,13 +248,16 @@ export class RunService {
    * on a ticket that needs an approved plan (ADR-0050) starts a plan run instead and returns it.
    * `avoidOverlap` (the dispatcher's starts, ADR-0080): a build whose touches overlap an older
    * build in flight fails like a lost race, so concurrent dispatches can't start both.
+   * `runner` (a local runner's claim, ADR-0089): the run is claimed by that runner instead of
+   * dispatched to the cloud executor; without it, a ticket that resolves to `local` (or waits for
+   * the runner) is refused, so a runner and the cloud executor never both take it.
    */
   async start(
     projectId: string,
     ticketId: string,
     step: string,
     retryOf?: Run,
-    opts: { avoidOverlap?: boolean } = {},
+    opts: { avoidOverlap?: boolean; runner?: Runner } = {},
   ): Promise<Run> {
     if (!STARTABLE_STEPS.includes(step as StartableStep)) {
       throw new DomainError("invalid_step", `can't start a ${step} task yet`, [
@@ -239,7 +265,7 @@ export class RunService {
       ]);
     }
     let startable = step as StartableStep;
-    if (!this.executor) {
+    if (!this.executor && !opts.runner) {
       throw new DomainError("executor_unavailable", "no executor: connect GitHub first");
     }
     const project = await this.tracker.getProject(projectId);
@@ -248,6 +274,8 @@ export class RunService {
     if (ticket.stage === "cancelled") {
       throw new DomainError("invalid_transition", `${ticket.key} is cancelled; reopen it first`);
     }
+    // An automatic retry stays on the executor its run used (local runs are never retried).
+    if (!retryOf) await this.checkRoute(ticket, project, opts.runner);
     const questions = await this.tracker.listQuestions({ ticketId, status: "answered" });
     let approved: Run | null = null;
     if (startable === "refine") await this.checkRefinable(ticket);
@@ -311,6 +339,13 @@ export class RunService {
       planPolicy: startable === "plan" ? project.planApproval : null,
       touches,
       reservedAdr,
+      localRun: opts.runner
+        ? {
+            runnerId: opts.runner.id,
+            leaseExpiresAt: this.leaseEnd(),
+            heartbeatAt: null,
+          }
+        : null,
     });
 
     // Check again now that this run exists: two concurrent starts both pass the first check,
@@ -352,7 +387,9 @@ export class RunService {
     const started = retryOf
       ? `Retrying the ${startable} task (attempt ${run.attempt} of ${MAX_RUN_ATTEMPTS})`
       : `Started a ${startable} task (${run.route.model})`;
-    const dispatched = await this.dispatchRun(run, ticket, repo, started);
+    const dispatched = opts.runner
+      ? await this.claimLocal(run, ticket, opts.runner, started)
+      : await this.dispatchRun(run, ticket, repo, started);
     if (startable === "build") await this.markInProgress(ticket);
     return dispatched;
   }
@@ -422,6 +459,80 @@ export class RunService {
     );
   }
 
+  /**
+   * Where a start may go (ADR-0089). A runner's claim takes only tickets that ask for `local` in
+   * a project it serves; any other start goes to the cloud executor, so it is refused for a
+   * ticket that resolves to `local` (the runner claims it) or waits for an away runner.
+   */
+  private async checkRoute(ticket: Ticket, project: Project, runner?: Runner): Promise<void> {
+    if (runner) {
+      if (!runner.projectIds.includes(project.id)) {
+        throw new DomainError("forbidden", `runner ${runner.id} doesn't serve ${project.key}`);
+      }
+      if (wantedExecutor(ticket, project) !== "local") {
+        throw new DomainError("runs_elsewhere", `${ticket.key} runs on GitHub Actions`);
+      }
+      return;
+    }
+    const resolved = resolveExecutor(ticket, project, await this.runnerPresent(project.id));
+    if (resolved === "local") {
+      throw new DomainError("runs_elsewhere", `${ticket.key} runs on the local runner`, [
+        "the runner claims it on its next poll; set its executor to actions to run it on Actions",
+      ]);
+    }
+    if (resolved === "wait") {
+      throw new DomainError("runs_elsewhere", `${ticket.key} waits for the local runner`, [
+        "the runner is away; set its executor to actions to run it on Actions",
+      ]);
+    }
+  }
+
+  /** When a lease taken or renewed now runs out. */
+  private leaseEnd(): string {
+    return new Date(this.now().getTime() + RUNNER_LIMITS.leaseSeconds * 1000).toISOString();
+  }
+
+  /**
+   * A run a local runner just claimed (ADR-0089): nothing is dispatched (the runner fetches its
+   * context with the per-run token), the watchdog checks its deadline, and a lease check is
+   * queued at the lease's end. It stays queued until the runner's first context call.
+   */
+  private async claimLocal(
+    run: Run,
+    ticket: Ticket,
+    runner: Runner,
+    started: string,
+  ): Promise<Run> {
+    log("INFO", "run claimed by a local runner", {
+      runId: run.id,
+      ticket: ticket.key,
+      runnerId: runner.id,
+    });
+    await this.scheduleWatchdog(run);
+    await this.scheduleLease(run);
+    await this.tracker
+      .addComment(
+        run.projectId,
+        ticket.id,
+        `${started} on the local runner "${runner.name}": ${run.id}`,
+        "system",
+      )
+      .catch((e: unknown) =>
+        log("ERROR", "run start comment not written", { runId: run.id, error: String(e) }),
+      );
+    return run;
+  }
+
+  /**
+   * Ends a claimed run whose per-run token couldn't be issued: the runner never learns of it, so
+   * it fails now instead of waiting for its lease. Logs, never throws.
+   */
+  async abandonClaim(run: Run, reason: string): Promise<void> {
+    log("ERROR", "claimed run abandoned", { runId: run.id, reason });
+    await this.fail(run.id, `the local runner's claim failed: ${reason}`);
+    await this.runEnded(run);
+  }
+
   /** Hands a created run to the executor and records its handle and watchdog. */
   private async dispatchRun(run: Run, ticket: Ticket, repo: string, started: string): Promise<Run> {
     const executor = this.executor;
@@ -488,7 +599,7 @@ export class RunService {
   }
 
   /** The run's instructions. The first call marks it running. */
-  async context(runId: string, caller: RunExecutor): Promise<RunContext> {
+  async context(runId: string, caller: RunCaller): Promise<RunContext> {
     let run = await this.requireCaller(runId, caller);
     if (run.status === "queued") {
       run = await this.runs.update(
@@ -528,13 +639,14 @@ export class RunService {
    */
   async report(
     runId: string,
-    caller: RunExecutor,
+    caller: RunCaller,
     result: RunResult,
   ): Promise<"recorded" | "duplicate"> {
     const run = await this.requireCaller(runId, caller);
     if (!ACTIVE_RUN_STATUSES.includes(run.status)) return "duplicate";
+    if (result.status === "cancelled") return this.recordCancelled(run);
     const at = this.now().toISOString();
-    let status = result.status;
+    let status: "succeeded" | "failed" = result.status;
     let summary = result.summary ? result.summary.slice(0, RUN_SUMMARY_MAX) : null;
     let error: string | null = null;
     let asked = 0;
@@ -661,6 +773,27 @@ export class RunService {
     else if (done.step === "plan") await this.flagTicket(done);
     // After the retry, so a retry keeps the project's run slot.
     await this.runEnded(done);
+    return "recorded";
+  }
+
+  /**
+   * A run its executor stopped on its own (the local runner after a cancel): ended `cancelled`,
+   * never retried or flagged. Usually the cancel already ended it and the report is a duplicate.
+   */
+  private async recordCancelled(run: Run): Promise<"recorded" | "duplicate"> {
+    const at = this.now().toISOString();
+    try {
+      await this.runs.update(
+        run.id,
+        { status: "cancelled", startedAt: run.startedAt ?? at, endedAt: at, error: "cancelled" },
+        ACTIVE_RUN_STATUSES,
+      );
+    } catch (err) {
+      if (err instanceof WorkTrackerError && err.code === "conflict") return "duplicate";
+      throw err;
+    }
+    log("WARNING", "run reported cancelled", { runId: run.id });
+    await this.runEnded(run);
     return "recorded";
   }
 
@@ -846,7 +979,7 @@ export class RunService {
       throw new DomainError("run_limit", `${ticket.key} already has a plan task in flight`);
     }
     const plans = (await this.runs.listForTicket(ticket.projectId, ticket.id)).filter(
-      (r) => r.step === "plan" && r.executor !== null,
+      (r) => r.step === "plan" && wasDispatched(r),
     );
     if (plans.length >= MAX_PLAN_RUNS_PER_TICKET) {
       throw new DomainError("run_limit", `${ticket.key} has had ${plans.length} plan tasks`, [
@@ -910,7 +1043,7 @@ export class RunService {
       ]);
     }
     const builds = (await this.runs.listForTicket(ticket.projectId, ticket.id)).filter(
-      (r) => r.step === "build" && r.executor !== null,
+      (r) => r.step === "build" && wasDispatched(r),
     );
     if (builds.length >= MAX_BUILD_RUNS_PER_TICKET) {
       throw new DomainError("run_limit", `${ticket.key} has had ${builds.length} build tasks`, [
@@ -1071,7 +1204,7 @@ export class RunService {
       ]);
     }
     const refines = (await this.runs.listForTicket(ticket.projectId, ticket.id)).filter(
-      (r) => r.step === "refine" && r.executor !== null,
+      (r) => r.step === "refine" && wasDispatched(r),
     );
     if (refines.length >= MAX_REFINE_RUNS_PER_TICKET) {
       throw new DomainError("run_limit", `${ticket.key} has had ${refines.length} refine tasks`, [
@@ -1122,6 +1255,99 @@ export class RunService {
   }
 
   /**
+   * A local runner's heartbeat (ADR-0089): renews the run's lease. A run Andy cancelled answers
+   * `cancel: true` (the runner stops the agent); a run that ended any other way (lease lost,
+   * deadline, report) is refused with `run_finished`, so a runner that slept can't carry on.
+   */
+  async heartbeat(runId: string, caller: LocalCaller): Promise<RunHeartbeatResponse> {
+    const run = await this.requireCaller(runId, caller);
+    if (run.status === "cancelled") return { cancel: true, leaseExpiresAt: null };
+    if (!ACTIVE_RUN_STATUSES.includes(run.status) || !run.localRun) {
+      throw new DomainError("run_finished", `run ${runId} is ${run.status}`);
+    }
+    const leaseExpiresAt = this.leaseEnd();
+    try {
+      await this.runs.update(
+        run.id,
+        {
+          localRun: { ...run.localRun, leaseExpiresAt, heartbeatAt: this.now().toISOString() },
+        },
+        ACTIVE_RUN_STATUSES,
+      );
+    } catch (err) {
+      if (!(err instanceof WorkTrackerError && err.code === "conflict")) throw err;
+      // It ended while we looked: a cancel says so, anything else refuses.
+      const ended = await this.runs.get(run.id);
+      if (ended?.status === "cancelled") return { cancel: true, leaseExpiresAt: null };
+      throw new DomainError("run_finished", `run ${runId} is ${ended?.status ?? "gone"}`);
+    }
+    return { cancel: false, leaseExpiresAt };
+  }
+
+  /**
+   * The lease check of a local run (ADR-0089), queued at the lease's end. Renewed since: the
+   * next check is queued at the new end. Not renewed: the run fails as `lease_lost` and the
+   * ticket goes to Needs-you; it is never retried (amends ADR-0055 for local runs), so a runner
+   * that wakes later finds its run ended and publishes nothing.
+   */
+  async checkLease(runId: string): Promise<LeaseOutcome> {
+    const run = await this.runs.get(runId);
+    if (!run) {
+      log("WARNING", "lease check for an unknown run", { runId });
+      return "unknown";
+    }
+    if (!ACTIVE_RUN_STATUSES.includes(run.status) || !run.localRun) return "settled";
+    if (Date.parse(run.localRun.leaseExpiresAt) > this.now().getTime()) {
+      const queued = await this.scheduleLease(run);
+      return queued === "duplicate" ? "early" : "renewed";
+    }
+    const at = this.now().toISOString();
+    let ended: Run;
+    try {
+      ended = await this.runs.update(
+        run.id,
+        { status: "failed", startedAt: run.startedAt ?? at, endedAt: at, error: LEASE_LOST_ERROR },
+        ACTIVE_RUN_STATUSES,
+      );
+    } catch (err) {
+      // A report or a cancel arrived while we looked: it wins.
+      if (err instanceof WorkTrackerError && err.code === "conflict") return "settled";
+      throw err;
+    }
+    log("WARNING", "local run lost its lease", {
+      runId,
+      runnerId: run.localRun.runnerId,
+      leaseExpiresAt: run.localRun.leaseExpiresAt,
+    });
+    await this.flagNeedsYou(
+      ended,
+      `Local agent task lost: the runner went away (lease_lost, the ${ended.step} task). It isn't retried. Start it again once the runner is back, set the ticket's executor to actions to run it on GitHub Actions, or take it over`,
+    );
+    await this.runEnded(ended);
+    return "lost";
+  }
+
+  /** Queues the run's next lease check at its lease's end; logs (doesn't throw) on failure. */
+  private async scheduleLease(run: Run): Promise<"scheduled" | "duplicate" | null> {
+    if (!run.localRun) return null;
+    if (!this.watchdog) {
+      log("WARNING", "no watchdog queue: the local run's lease is unwatched", { runId: run.id });
+      return null;
+    }
+    try {
+      return await this.watchdog.scheduleCheck({
+        kind: "lease",
+        runId: run.id,
+        at: run.localRun.leaseExpiresAt,
+      });
+    } catch (err) {
+      // The deadline check still ends the run; only an early end of a lost run is missed.
+      log("ERROR", "lease check not queued", { runId: run.id, error: String(err) });
+      return null;
+    }
+  }
+
+  /**
    * The watchdog's one look at a run, at its deadline (§7.1). A run that already reported is
    * left alone. Otherwise the executor is asked once: a finished run is healed, anything else
    * is ended (and stopped if still going), then retried once or flagged Needs-you. Status
@@ -1140,7 +1366,10 @@ export class RunService {
     }
     const handle = this.executor ? handleOf(run) : null;
     const status = handle ? (await this.executor!.status(handle)).status : null;
-    const action = deadlineAction(status);
+    // A local run has no executor to ask (ADR-0089): past its deadline, it failed.
+    const action = run.localRun
+      ? ({ kind: "end", status: "failed", cancel: false, error: "passed its deadline" } as const)
+      : deadlineAction(status);
     if (action.kind === "end" && action.cancel && handle) {
       await this.executor!.cancel(handle).catch((e: unknown) =>
         log("ERROR", "watchdog couldn't cancel the run", { runId, error: String(e) }),
@@ -1213,6 +1442,10 @@ export class RunService {
     if (run.step === "sync") {
       // No automatic retry (ADR-0083): the next move of main, or a run ending, queues another.
       why += "; sync tasks aren't retried";
+    } else if (run.localRun) {
+      // ADR-0089: a local run that failed is never re-run on its own; Andy decides.
+      why +=
+        "; local agent tasks aren't retried. Start it again, set its executor to actions to run it on GitHub Actions, or take it over";
     } else if (afterFailure(run) === "retry") {
       try {
         const retry = await this.start(run.projectId, run.ticketId, run.step, run);
@@ -1227,6 +1460,13 @@ export class RunService {
       why += ` on its retry (attempt ${run.attempt} of ${MAX_RUN_ATTEMPTS})`;
     }
     if (run.branch) why += `; its branch ${run.branch} is kept`;
+    await this.flagNeedsYou(run, `${why} (${run.id}). Check the task log, then start it again`);
+    return "flagged";
+  }
+
+  /** Flags the run's ticket Needs-you with `why` as a comment. Logs, never throws. */
+  private async flagNeedsYou(run: Run, why: string): Promise<void> {
+    if (!run.ticketId) return;
     try {
       await this.tracker.updateTicket(
         run.projectId,
@@ -1234,17 +1474,11 @@ export class RunService {
         { fields: { needsAttention: true } },
         "system",
       );
-      await this.tracker.addComment(
-        run.projectId,
-        run.ticketId,
-        `Needs you: ${why} (${run.id}). Check the task log, then start it again.`,
-        "system",
-      );
+      await this.tracker.addComment(run.projectId, run.ticketId, `Needs you: ${why}.`, "system");
       log("WARNING", "run flagged Needs-you", { runId: run.id, reason: why });
     } catch (err) {
       log("ERROR", "couldn't flag the ticket Needs-you", { runId: run.id, error: String(err) });
     }
-    return "flagged";
   }
 
   /**
@@ -1347,10 +1581,18 @@ export class RunService {
       );
   }
 
-  /** The run, if `caller` is the executor run it was dispatched as; `forbidden` otherwise. */
-  private async requireCaller(runId: string, caller: RunExecutor): Promise<Run> {
+  /**
+   * The run, if `caller` is the executor run it was dispatched as, or the local runner that
+   * claimed it; `forbidden` otherwise (a cloud caller never matches a local run, nor the reverse).
+   */
+  private async requireCaller(runId: string, caller: RunCaller): Promise<Run> {
     const run = await this.runs.get(runId);
     if (!run) throw notFound("run", runId);
+    if (isLocalCaller(caller)) {
+      if (run.localRun?.runnerId === caller.runnerId) return run;
+      log("WARNING", "run callback from the wrong runner", { runId, runnerId: caller.runnerId });
+      throw new DomainError("forbidden", "this run was not claimed by the caller");
+    }
     const expected = run.executor;
     const matches =
       expected !== null &&

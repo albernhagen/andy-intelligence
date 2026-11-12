@@ -19,6 +19,9 @@ export const OWNER_ACTIONS = {
   accept_assumption: "accept a held gap",
   decide_plan: "approve or reject a plan",
   set_worker: "choose who works a ticket",
+  set_executor: "choose where a ticket's agent tasks run",
+  mint_runner: "register a local runner",
+  revoke_runner: "revoke a local runner",
   change_project_settings: "change project settings",
   clear_quota_idle: "clear a quota idle",
 } as const;

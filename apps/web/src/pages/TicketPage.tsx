@@ -15,6 +15,7 @@ import {
   useTicketSave,
 } from "@/components/InlineEdit";
 import { WorkerControl } from "@/components/WorkerControls";
+import { ExecutorControl } from "@/components/ExecutorControls";
 import { useInFlight } from "@/components/InFlightPanel";
 import { MoveControls } from "@/components/MoveControls";
 import { QuestionCard } from "@/components/QuestionCard";
@@ -35,6 +36,7 @@ import {
   useTicketByRef,
   useTicketQuestions,
   useWorker,
+  useExecutor,
   useTickets,
 } from "@/lib/queries";
 import { STAGE_LABELS, TYPE_LABELS } from "@/lib/tickets";
@@ -156,6 +158,7 @@ function StatusLine({ ticket }: { ticket: Ticket }) {
   const questions = useTicketQuestions(path).data ?? [];
   const events = useEvents(path).data ?? [];
   const worker = useWorker(path).data?.worker;
+  const executor = useExecutor(path).data?.next;
   const inFlight = useInFlight(ticket.projectId).data;
   const { text, tone } = ticketStatusLine(
     ticket,
@@ -166,6 +169,7 @@ function StatusLine({ ticket }: { ticket: Ticket }) {
       openQuestions: questions.filter((q) => q.status === "open").length,
       worker,
       inFlight,
+      executor,
     },
     new Date(),
   );
@@ -266,6 +270,7 @@ function Rail({ ticket: t }: { ticket: Ticket }) {
         <MoveControls ticket={t} />
       </div>
       <WorkerControl ticket={t} />
+      <ExecutorControl ticket={t} />
       <SelectField
         ticket={t}
         label="Type"
