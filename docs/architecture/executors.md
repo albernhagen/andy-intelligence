@@ -11,7 +11,7 @@ Overview and reading map: [ARCHITECTURE.md](ARCHITECTURE.md). Sections match the
   - **Built (AI-72, ADR-0083):** the `sync` step, under build's profile and sandbox: the job merges `main` into an open agent PR; the agent resolves conflicts and runs checks; `publish` checks the merge and pushes only the agent's edits.
   - **Managed repos (ADR-0096, not built):** a registered repo's `agent-run.yml` calls `claude-executor.yml@main` here; callbacks and push grant only from that caller and executor, for tasks dispatched there.
   - **Built (M1.8a, ADR-0050):** the `plan` step: read-only like refine, no publish job; `plan.md` + `plan.schema.json` (the build plan). An approved plan goes into the build's prompt; deviations are recorded.
-- **Ticket context for agents** (all executors): the dispatch request carries the ticket snapshot (title, body, acceptance criteria, assumptions, answered questions). Until M5: Multi-project in parallel that is all an agent gets; then it may call the API/MCP read-only, scoped to its project (OIDC, or a per-run token for non-Actions executors).
+- **Ticket context for agents** (all executors): the dispatch request carries the ticket snapshot (title, body, acceptance criteria, assumptions, answered questions). Planned (ADR-0099): a read-only token per run for `/mcp/agent`: three read tools, its project only, dead when the run settles.
 - **Local** (ADR-0089): a runner on Andy's Mac polls `POST /runner/claim`, which starts a `local` ticket's agent task and returns a token for context, heartbeat (5-minute lease) and report; no runner yet.
 - **OpenCode**: Actions workflow, per-project OpenRouter key, non-Claude models.
 - **Jules**: REST API; its PR is detected by the PR webhook (§7.1).
