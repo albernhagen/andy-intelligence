@@ -107,6 +107,40 @@ describe("TicketService", () => {
     });
   });
 
+  it("GivenADependentInAnotherProject_WhenTheBlockerReachesDone_ThenOnlyThatProjectIsWoken", async () => {
+    const woken: string[] = [];
+    service = new TicketService(tracker, null, async (p) => void woken.push(p));
+    const ops = await tracker.createProject({ name: "Ops", key: "OPS" });
+    await tracker.createProject({ name: "Web", key: "WEB" });
+    const blocker = await service.create(projectId, { type: "chore", title: "x" }, "andy");
+    const dependent = await tracker.createTicket(
+      ops.id,
+      { ...readyStory, blockedBy: ["AI-1"] },
+      "andy",
+    );
+    await tracker.updateTicket(
+      ops.id,
+      dependent.id,
+      { stage: { to: "ready", forced: false, reason: null } },
+      "andy",
+    );
+
+    await service.move(projectId, blocker.id, "done", "andy", { force: true });
+    expect(woken).toEqual(["ops"]);
+  });
+
+  it("GivenTheWakeFails_WhenABlockerReachesDone_ThenTheMoveStillStandsAndTheErrorIsLogged", async () => {
+    const logs = vi.spyOn(console, "log").mockImplementation(() => {});
+    service = new TicketService(tracker, null, async () => {});
+    vi.spyOn(tracker, "listProjects").mockRejectedValue(new Error("firestore down"));
+    const blocker = await service.create(projectId, { type: "chore", title: "x" }, "andy");
+
+    const moved = await service.move(projectId, blocker.id, "done", "andy", { force: true });
+    expect(moved.stage).toBe("done");
+    expect(logs.mock.calls.flat().join("\n")).toMatch(/waking dependent projects failed/);
+    logs.mockRestore();
+  });
+
   it("GivenAForcedMove_WhenNotAndy_ThenForbidden", async () => {
     const t = await service.create(projectId, readyStory, "andy");
     await rejects(

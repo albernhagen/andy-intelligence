@@ -15,6 +15,7 @@ import { InboxPage } from "@/pages/InboxPage";
 import { NewProjectPage, ProjectsPage } from "@/pages/ProjectsPage";
 import { ProjectSettingsPage } from "@/pages/ProjectSettingsPage";
 import { RunnersPage } from "@/pages/RunnersPage";
+import { RunPage } from "@/pages/RunPage";
 import { TicketPage } from "@/pages/TicketPage";
 
 const rootRoute = createRootRoute({
@@ -75,6 +76,12 @@ const routeTree = rootRoute.addChildren([
     getParentRoute: () => rootRoute,
     path: "/p/$projectId/digest",
     component: DigestPage,
+  }),
+  // An agent task's own screen (AI-101); project-scoped only, as its URL names its project.
+  createRoute({
+    getParentRoute: () => rootRoute,
+    path: "/p/$projectId/runs/$runId",
+    component: RunPage,
   }),
   createRoute({ getParentRoute: () => rootRoute, path: "/settings/github", component: GitHubPage }),
   createRoute({

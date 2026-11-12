@@ -35,6 +35,7 @@ import { registerSettingsTools } from "./tools-settings";
 import { registerNotifyTools } from "./tools-notify";
 import { registerDigestTools } from "./tools-digest";
 import { registerQuotaTools } from "./tools-quota";
+import { registerProjectTools } from "./tools-projects";
 
 /**
  * MCP core tools (M1.4: MCP core tools; `refine` from M1.7: Refinement; `build` and
@@ -182,6 +183,7 @@ export function registerTools(server: McpServer, deps: ToolDeps): void {
   registerTicketTools(server, deps);
   registerDigestTools(server, deps, run);
   registerQuotaTools(server, deps, run);
+  registerProjectTools(server, deps, run);
 
   /** Decides the ticket's latest plan run as Andy (owner-only, ADR-0050). */
   const decide = async (key: string, decision: "approved" | "rejected", reason: string | null) => {

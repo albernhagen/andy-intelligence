@@ -25,14 +25,22 @@ import { checkDor, heldGaps, isHeld, type DorResult } from "./dor";
 import { DomainError } from "./errors";
 import { requireCan } from "./permissions";
 import { inboxCards } from "./inbox-order";
-import { blockerProblem, parentProblem, reorderRank, type ReorderAnchor } from "./ticket-edits";
+import {
+  blockerKeys,
+  blockerProblem,
+  parentProblem,
+  projectOfKey,
+  reorderRank,
+  ticketsByRef,
+  type ReorderAnchor,
+} from "./ticket-edits";
 import { MAX_OPEN_QUESTIONS_PER_TICKET, assumptionQuestion } from "./refine-gate";
 import { rankBetween } from "./ranks";
 import { isDispatchable, resolveWorker, workerView } from "./worker";
 import { executorView } from "./executor";
 import { canTransition, isForwardMove, pullRequestPath, type PullRequestTarget } from "./stages";
 
-function log(severity: "INFO" | "WARNING", message: string, fields: object = {}) {
+function log(severity: "INFO" | "WARNING" | "ERROR", message: string, fields: object = {}) {
   console.log(JSON.stringify({ severity, message, component: "tickets", ...fields }));
 }
 
@@ -348,10 +356,8 @@ export class TicketService {
       const problem = parentProblem(current, fields.parentId, tickets);
       if (problem) throw new DomainError("invalid_reference", problem);
     }
-    if (fields.blockedBy?.some((id) => !current.blockedBy.includes(id))) {
-      const tickets = await this.tracker.listTickets(projectId);
-      const problem = blockerProblem(current, fields.blockedBy, tickets);
-      if (problem) throw new DomainError("invalid_reference", problem);
+    if (fields.blockedBy) {
+      fields = { ...fields, blockedBy: await this.checkedBlockers(current, fields.blockedBy) };
     }
     const merged = { ...current, ...stripUndefined(fields) };
     const dor = checkDor(merged, await this.openQuestionCount(ticketId));
@@ -361,6 +367,70 @@ export class TicketService {
       { fields: { ...fields, dorStatus: dor.met ? "met" : "not_met" }, ifUpdatedAt },
       actor,
     );
+  }
+
+  /**
+   * The blockers to store, as keys of tickets in any project (AI-96). A new entry must name a
+   * ticket (`not_found` otherwise) and mustn't close a cycle; an entry already on the ticket stays
+   * even if its ticket is gone, so it can still be removed.
+   */
+  private async checkedBlockers(ticket: Ticket, blockedBy: readonly string[]): Promise<string[]> {
+    const added = blockedBy.filter((ref) => !ticket.blockedBy.includes(ref));
+    const byRef = await this.blockerGraph(ticket, added);
+    const missing = added.find((ref) => !byRef.has(ref));
+    if (missing) throw notFound("ticket", missing);
+    const problem = blockerProblem(ticket, blockedBy, byRef);
+    if (problem) throw new DomainError("invalid_reference", problem);
+    return blockerKeys(blockedBy, byRef);
+  }
+
+  /**
+   * Every ticket of the ticket's project and of each project a blocker chain from `refs` reaches,
+   * by key and by id. Reads each project once; an unknown prefix reads as an empty project.
+   */
+  private async blockerGraph(
+    ticket: Ticket,
+    refs: readonly string[],
+  ): Promise<Map<string, Ticket>> {
+    const byRef = new Map<string, Ticket>();
+    const read = new Set<string>();
+    let pending = [ticket.projectId, ...refs.flatMap((r) => projectOfKey(r) ?? [])];
+    while (pending.length > 0) {
+      const next: string[] = [];
+      for (const projectId of new Set(pending)) {
+        if (read.has(projectId)) continue;
+        read.add(projectId);
+        const tickets = await this.tracker.listTickets(projectId);
+        for (const [ref, t] of ticketsByRef(tickets)) byRef.set(ref, t);
+        next.push(...tickets.flatMap((t) => t.blockedBy.flatMap((r) => projectOfKey(r) ?? [])));
+      }
+      pending = next.filter((p) => !read.has(p));
+    }
+    return byRef;
+  }
+
+  /**
+   * A ticket reached Done: wakes each other project with a Ready ticket it blocks, so its
+   * dispatcher can start the ticket once this was the last blocker (AI-96). The dispatcher
+   * re-checks every blocker. Never throws: the move stands either way.
+   */
+  private async wakeDependents(done: Ticket): Promise<void> {
+    if (!this.dispatchNext) return;
+    try {
+      for (const project of await this.tracker.listProjects()) {
+        if (project.id === done.projectId) continue;
+        const ready = await this.tracker.listTickets(project.id, { stage: "ready" });
+        if (ready.some((t) => !t.archived && t.blockedBy.includes(done.key))) {
+          log("INFO", "blocker done, waking dependent project", {
+            ticket: done.key,
+            projectId: project.id,
+          });
+          await this.dispatchNext(project.id);
+        }
+      }
+    } catch (err) {
+      log("ERROR", "waking dependent projects failed", { ticket: done.key, error: String(err) });
+    }
   }
 
   /** Who does the ticket's work (ADR-0082). */
@@ -531,6 +601,7 @@ export class TicketService {
     if (to === "ready" || ticket.stage === "ready_for_review") {
       await this.dispatchNext?.(projectId);
     }
+    if (to === "done") await this.wakeDependents(moved);
     return moved;
   }
 
@@ -646,7 +717,10 @@ export class TicketService {
         ticket = await this.require(projectId, ticketId);
       }
     }
-    if (to === "done" && moved.includes("done")) await this.completeByPullRequest(ticket);
+    if (to === "done" && moved.includes("done")) {
+      await this.completeByPullRequest(ticket);
+      await this.wakeDependents(ticket);
+    }
     return moved;
   }
 
