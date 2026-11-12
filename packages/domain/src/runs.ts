@@ -1180,7 +1180,7 @@ export class RunService {
   }
 
   /**
-   * Refine runs on an Up-next ticket that isn't an epic, with no open questions (answer them first: the next pass
+   * Refine runs on an Up-next ticket (an epic too, AI-115), with no open questions (answer them first: the next pass
    * sees the answers), at most MAX_REFINE_RUNS_PER_TICKET times.
    */
   private async checkRefinable(ticket: Ticket): Promise<void> {
@@ -1189,8 +1189,8 @@ export class RunService {
         "refine runs on Backlog tickets; move it back to Backlog to re-refine",
       ]);
     }
-    if (ticket.type === "epic" || ticket.archived) {
-      throw new DomainError("not_refinable", `${ticket.key} is an epic or archived`);
+    if (ticket.archived) {
+      throw new DomainError("not_refinable", `${ticket.key} is archived`);
     }
     if (ticket.upNextRank === null) {
       throw new DomainError("not_refinable", `${ticket.key} is in Ideas`, [

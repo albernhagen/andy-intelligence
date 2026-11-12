@@ -3,6 +3,7 @@ import {
   InMemoryWorkTracker,
   type RefineGap,
   type RefineOutput,
+  type Run,
   type Ticket,
 } from "@andy/contracts";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -252,5 +253,112 @@ describe("RefineGate.askHeld (AI-75)", () => {
     const t = await setup([held(1)]);
     const ticket = await t.ticket();
     expect(await t.gate.askHeld({ ...ticket, upNextRank: null })).toBe(0);
+  });
+});
+
+describe("RefineGate split of an epic (AI-115)", () => {
+  const at = "2026-11-12T09:00:00.000Z";
+  const result = (children: RefineOutput["children"]): RefineOutput => ({
+    summary: "s",
+    type: "epic",
+    size: "L",
+    sizeReason: "many slices",
+    risk: "low",
+    riskReason: "r",
+    confidence: "high",
+    confidenceReason: "r",
+    outOfScope: [],
+    touches: [],
+    body: null,
+    acceptanceCriteria: [],
+    outcome: "split",
+    reason: "Three slices",
+    children,
+    gaps: [],
+  });
+  const child = (title: string, blockedBy: number[] = [], touches: string[] = []) => ({
+    title,
+    body: `${title} body`,
+    blockedBy,
+    touches,
+  });
+  const slices = [
+    child("Schema", [], ["packages/contracts/**"]),
+    child("API", [0, 2], ["apps/api/**"]),
+    child("UI"),
+  ];
+
+  async function setup(type: "epic" | "feature") {
+    let ms = Date.parse(at);
+    const clock = () => new Date(ms++);
+    const tracker = new InMemoryWorkTracker(clock);
+    const project = await tracker.createProject({ name: "AI", key: "AI", repos: [] });
+    const grand = await tracker.createTicket(project.id, { title: "M4", type: "epic" }, "andy");
+    const made = await tracker.createTicket(
+      project.id,
+      { title: "Boards", type, parentId: grand.id },
+      "andy",
+    );
+    const enterUpNext = () =>
+      tracker.updateTicket(
+        project.id,
+        made.id,
+        { fields: { upNextRank: "0000000001", upNextAt: clock().toISOString() } },
+        "system",
+      );
+    await enterUpNext();
+    const run = { id: "run-1", projectId: project.id, ticketId: made.id, createdAt: at } as Run;
+    const gate = new RefineGate(tracker, clock);
+    const ticket = async () => (await tracker.getTicket(project.id, made.id))!;
+    const children = async () =>
+      (await tracker.listTickets(project.id)).filter((t) => t.title !== "M4" && t.id !== made.id);
+    return { tracker, gate, run, ticket, children, grand, enterUpNext };
+  }
+
+  beforeEach(() => void vi.spyOn(console, "log").mockImplementation(() => {}));
+
+  it("GivenAnEpicSplit_WhenApplied_ThenChildrenAreIdeasUnderTheEpicWithSiblingKeysAndTouches", async () => {
+    const t = await setup("epic");
+    const applied = await t.gate.apply(t.run, result(slices));
+    const epic = await t.ticket();
+    const [schema, api, ui] = await t.children();
+    expect([schema?.title, api?.title, ui?.title]).toEqual(["Schema", "API", "UI"]);
+    for (const kid of [schema, api, ui]) {
+      expect(kid).toMatchObject({ parentId: epic.id, stage: "backlog", upNextRank: null });
+    }
+    expect(api?.blockedBy).toEqual([schema!.key, ui!.key]);
+    expect(schema?.blockedBy).toEqual([]);
+    expect(schema?.touches).toEqual(["packages/contracts/**"]);
+    expect(epic).toMatchObject({ stage: "backlog", upNextRank: null, sentBackReason: null });
+    expect(applied).toMatchObject({ notice: expect.stringContaining(api!.key) });
+  });
+
+  it("GivenAnEpicSplitWhoseLastWriteWasLost_WhenTheSameRunIsAppliedAgain_ThenNoChildIsCreatedTwice", async () => {
+    const t = await setup("epic");
+    await t.gate.apply(t.run, result(slices));
+    const first = await t.children();
+    await t.enterUpNext(); // As if the crash came before the epic left Up next.
+    await t.gate.apply(t.run, result(slices));
+    const again = await t.children();
+    expect(again.map((k) => k.id)).toEqual(first.map((k) => k.id));
+    expect(again.map((k) => k.blockedBy)).toEqual(first.map((k) => k.blockedBy));
+  });
+
+  it("GivenAFinishedEpicSplit_WhenTheSameRunIsAppliedAgain_ThenNothingMoreIsCreated", async () => {
+    const t = await setup("epic");
+    await t.gate.apply(t.run, result(slices));
+    await t.gate.apply(t.run, result(slices));
+    expect(await t.children()).toHaveLength(3);
+  });
+
+  it("GivenANonEpicSplit_WhenApplied_ThenChildrenGoUnderItsEpicAndIgnoreSiblingLinksAndTouches", async () => {
+    const t = await setup("feature");
+    await t.gate.apply(t.run, result(slices));
+    const kids = await t.children();
+    expect(kids).toHaveLength(3);
+    for (const kid of kids) {
+      expect(kid).toMatchObject({ parentId: t.grand.id, blockedBy: [], touches: [] });
+    }
+    expect((await t.ticket()).sentBackReason).toBe("Three slices");
   });
 });

@@ -123,9 +123,6 @@ export class TicketService {
     { upNext = false }: { upNext?: boolean } = {},
   ): Promise<Ticket> {
     const parsed = NewTicket.parse(input);
-    if (upNext && parsed.type === "epic") {
-      throw new DomainError("invalid_transition", "epics are never refined, so never Up next");
-    }
     const dorStatus = checkDor(parsed, 0).met ? "met" : "not_met";
     const ticket = await this.tracker.createTicket(projectId, { ...parsed, dorStatus }, actor);
     return upNext ? this.setUpNext(projectId, ticket.id, { upNext: true }, actor) : ticket;
@@ -145,9 +142,6 @@ export class TicketService {
     const ticket = await this.require(projectId, ticketId);
     if (ticket.stage !== "backlog") {
       throw new DomainError("invalid_transition", `${ticket.key} is not in Backlog`);
-    }
-    if (ticket.type === "epic") {
-      throw new DomainError("invalid_transition", "epics are never refined, so never Up next");
     }
     const inUpNext = ticket.upNextRank !== null;
     if (!upNext) {
