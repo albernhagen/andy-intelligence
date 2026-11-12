@@ -213,4 +213,59 @@ describe("repo token endpoint: executor publish job (ADR-0063, ADR-0096)", () =>
       403,
     );
   });
+  /** A build run of `projectKey` in flight, dispatched to `repository`'s executor run "1". */
+  async function runFor(
+    t: Awaited<ReturnType<typeof setupWith>>,
+    projectKey: string,
+    repository: string,
+  ) {
+    const project = (await t.tracker.listProjects()).find((p) => p.key === projectKey)!;
+    const created = await t.runs.create({
+      projectId: project.id,
+      ticketId: "t1",
+      step: "build",
+      route: { harness: "claude-code", provider: "claude-sub", model: "sonnet" },
+      tier: "fast",
+      deadline: null,
+      prompt: "x",
+      maxTurns: 1,
+    });
+    const executor = { repo: repository, ref: CLAUDE_EXECUTOR_REF, externalId: "1" };
+    await t.runs.update(created.id, { status: "running", executor }, ["queued"]);
+    return created.id;
+  }
+
+  // ADR-0096, end to end through app.ts: a repo registered to project MG never gets a push
+  // token, nor the context, for a run of project BB, even when that run names MG's repo.
+  it("GivenARunOfProjectBDispatchedToProjectAsRepo_WhenItsExecutorAsksForAToken_Then403", async () => {
+    const t = await setupWith([
+      { key: "MG", repos: [OTHER] },
+      { key: "BB", repos: ["albernhagen/bb"] },
+    ]);
+    const runId = await runFor(t, "BB", OTHER);
+    expect((await t.ask(claims(OTHER), { runId })).status).toBe(403);
+    expect((await t.runs.get(runId))?.pushGrantedAt ?? null).toBeNull();
+  });
+
+  it("GivenARunOfTheReposOwnProject_WhenItsExecutorAsksForAToken_Then200ForThatRepo", async () => {
+    const t = await setupWith([
+      { key: "MG", repos: [OTHER] },
+      { key: "BB", repos: ["albernhagen/bb"] },
+    ]);
+    const runId = await runFor(t, "MG", OTHER);
+    const res = await t.ask(claims(OTHER), { runId });
+    expect(res.status).toBe(200);
+    expect(await res.json()).toMatchObject({ token: `fake-token-${OTHER}` });
+  });
+
+  it("GivenARunOfProjectBDispatchedToProjectAsRepo_WhenItsExecutorCallsBack_Then403", async () => {
+    const t = await setupWith([
+      { key: "MG", repos: [OTHER] },
+      { key: "BB", repos: ["albernhagen/bb"] },
+    ]);
+    const context = (runId: string) =>
+      t.call(`/runs/${runId}/context`, { method: "GET" }, JSON.stringify(claims(OTHER)));
+    expect((await context(await runFor(t, "BB", OTHER))).status).toBe(403);
+    expect((await context(await runFor(t, "MG", OTHER))).status).toBe(200);
+  });
 });
