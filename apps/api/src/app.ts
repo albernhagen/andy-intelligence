@@ -11,6 +11,7 @@ import {
   type WatchdogQueue,
   type WorkTracker,
   type QuotaStore,
+  type NightLaunchStore,
 } from "@andy/contracts";
 import { ClaudeCodeActionsExecutor, exchangeManifestCode, type CreatedApp } from "@andy/github";
 import {
@@ -24,6 +25,7 @@ import {
   LocalClaims,
   BoardReader,
   ConfigProposals,
+  NightLaunches,
   DigestReader,
   QuotaClearer,
   ProjectPlanService,
@@ -42,6 +44,7 @@ import { registerRunnerClaim, registerRunnerRoutes, runnerCredentials } from "./
 import { registerTicketRoutes } from "./tickets";
 import { registerBoardRoutes } from "./board";
 import { registerEpicRoutes } from "./epics";
+import { registerNightRoutes, type NightDeps } from "./night";
 import { registerInFlightRoutes } from "./in-flight";
 import { registerDigestRoutes } from "./digest";
 import { registerDashboardRoutes } from "./dashboard";
@@ -93,6 +96,8 @@ export interface AppDeps {
   reviewFindings?: ReviewFindingSource;
   /** Subscription quota readings (M1.9). Without it every window reads unknown. */
   quota?: QuotaStore;
+  /** Night launches (ADR-0049): a launched story's build gets its `epic/<KEY>` base (AI-122). */
+  nightLaunches?: NightLaunchStore;
   /**
    * The only host served (ADR-0044), e.g. `ai.andybernhagen.com`. Requests for any other host
    * (the default run.app URLs) get 404, except /health for monitoring. Unset: every host (local dev).
@@ -406,6 +411,18 @@ export function createApp(input: AppDeps) {
   registerTicketRoutes(app, deps.tracker, service, projects, runs);
   registerBoardRoutes(app, new BoardReader(deps.tracker, deps.runs));
   registerEpicRoutes(app, deps.tracker, deps.runs);
+  // M4.17: the night launch step; absent without a launch store (routes and tools both).
+  const night: NightDeps | null = deps.nightLaunches
+    ? {
+        nights: new NightLaunches(deps.nightLaunches, deps.tracker, runs, now),
+        store: deps.nightLaunches,
+        tracker: deps.tracker,
+        runs: deps.runs,
+        plans: runs,
+        now,
+      }
+    : null;
+  if (night) registerNightRoutes(app, night);
 
   registerRunRoutes(app, runs, deps.runs);
   if (runners) registerRunnerRoutes(app, runners);
@@ -461,6 +478,7 @@ export function createApp(input: AppDeps) {
       quota: quotaClearer,
       plans,
       configProposals,
+      night,
     });
   }
 

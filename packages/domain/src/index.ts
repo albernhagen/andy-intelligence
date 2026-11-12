@@ -40,3 +40,4 @@ export * from "./night-launch";
 export * from "./config-proposals";
 export * from "./dispatch-order";
 export * from "./overrides";
+export * from "./night-end";
