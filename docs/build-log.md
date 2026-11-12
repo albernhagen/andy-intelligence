@@ -27,6 +27,7 @@ Every ticket sits under a milestone. Milestones are epic tickets in project `AI`
 - Production monitoring (alerts, error budget per project) as part of "shipped" (brief): add to M6: Dev → prod releases at slicing.
 - `autoMerge` on for project `AI`: after a trial of five tickets where the gate's `would_auto_merge` calls are compared with the coordinator's (Andy, 2026-11-10).
 - Context sources design (open question 12).
+- ADR-0094: Local executor build choices (AI-79, PR review): accept the six, or change any?
 
 ## Blocked on Andy
 
