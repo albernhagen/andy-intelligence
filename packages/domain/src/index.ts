@@ -32,3 +32,4 @@ export * from "./notify-email";
 export * from "./runners";
 export * from "./local-claims";
 export * from "./config-proposals";
+export * from "./dispatch-order";
