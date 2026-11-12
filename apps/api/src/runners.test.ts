@@ -83,6 +83,24 @@ describe("runner registration and claim", () => {
     expect((await s.claim(body.secret)).status).toBe(401);
   });
 
+  it("GivenARevokedSecretThatWasKnown_WhenItKeepsClaiming_ThenItTakesFromTheLookupCapAgain", async () => {
+    const s = await setup();
+    const { body } = await s.mint();
+    expect((await s.claim(body.secret)).status).toBe(200);
+    await s.t.call(`/api/runners/${body.runner.id}/revoke`, { method: "POST" });
+    const find = vi.spyOn(s.store, "findBySecretHash");
+
+    const statuses: number[] = [];
+    for (let i = 0; i <= RUNNER_LOOKUPS_PER_MINUTE; i++) {
+      statuses.push((await s.claim(body.secret)).status);
+    }
+
+    // Known on its first try (no cap taken), then counted: the cap runs out within the minute.
+    expect(statuses[0]).toBe(401);
+    expect(statuses.at(-1)).toBe(429);
+    expect(find.mock.calls.length).toBeLessThanOrEqual(RUNNER_LOOKUPS_PER_MINUTE + 1);
+  });
+
   it.each([
     ["no token", null],
     ["a malformed token", "not-a-secret"],

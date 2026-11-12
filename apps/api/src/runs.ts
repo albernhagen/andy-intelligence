@@ -193,8 +193,12 @@ export function registerRunCallbacks(app: OpenAPIHono<AuthEnv>, deps: RunCallbac
       if (!deps.runners) return null;
       if (!knownTokens.has(token) && !tokenLookups.tryTake()) return "limited";
       const local = await deps.runners.authenticateRun(token, runId);
-      if (!local) log("WARNING", "per-run token rejected", { runId });
-      else knownTokens.remember(token);
+      if (local) knownTokens.remember(token);
+      else {
+        // A token that stops verifying takes from the lookup cap again.
+        knownTokens.forget(token);
+        log("WARNING", "per-run token rejected", { runId });
+      }
       return local;
     }
     try {

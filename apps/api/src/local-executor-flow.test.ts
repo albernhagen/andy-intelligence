@@ -261,6 +261,22 @@ describe("local executor: claim, lease and routing", () => {
     expect((await asRun(claimed.token)).status).toBe(200);
   });
 
+  it("GivenARevokedRunnersKnownToken_WhenItKeepsCallingBack_ThenItTakesFromTheLookupCapAgain", async () => {
+    const s = await setup();
+    await s.readyTicket("Board", "local");
+    const { secret, runner } = await s.mint();
+    const claimed = (await s.claim(secret))!;
+    const beat = () => s.send(`/runs/${claimed.runId}/heartbeat`, "POST", {}, claimed.token);
+    expect((await beat()).status).toBe(200);
+    await s.send(`/api/runners/${runner.id}/revoke`, "POST");
+
+    const statuses: number[] = [];
+    for (let i = 0; i <= RUN_TOKEN_LOOKUPS_PER_MINUTE; i++) statuses.push((await beat()).status);
+
+    expect(statuses[0]).toBe(401);
+    expect(statuses.at(-1)).toBe(429);
+  });
+
   it("GivenARevokedRunner_WhenItsRunCallsBack_Then401", async () => {
     const s = await setup();
     await s.readyTicket("Board", "local");

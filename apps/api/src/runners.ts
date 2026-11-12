@@ -145,6 +145,7 @@ export function registerRunnerClaim(app: Hono<AuthEnv>, deps: RunnerClaimDeps): 
       }
       const runner = await deps.runners.authenticate(secret);
       if (!runner) {
+        known.forget(secret);
         log("WARNING", "runner claim rejected");
         return c.json({ error: "unauthenticated" }, 401);
       }

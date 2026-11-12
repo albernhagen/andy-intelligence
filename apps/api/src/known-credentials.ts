@@ -4,7 +4,8 @@ import { hashToken } from "./mcp/tokens";
  * Hashes of credentials that verified recently (ADR-0094). A caller presenting one skips the
  * unauthenticated lookup cap, so a flood of guessed runner secrets or per-run tokens can use up
  * that cap without locking out the real runner. Knowing a hash grants nothing: the caller is
- * still verified against the store on every request (so a revoke applies at once). Bounded:
+ * still verified against the store on every request (so a revoke applies at once), and one that
+ * fails verification is forgotten, so it takes from the cap again. Bounded:
  * at most `maxEntries` hashes, each forgotten `ttlMs` after its last use.
  */
 export class KnownCredentials {
@@ -25,6 +26,11 @@ export class KnownCredentials {
       return false;
     }
     return true;
+  }
+
+  /** Drops a credential that failed verification (revoked, expired, ended run). */
+  forget(credential: string): void {
+    this.seen.delete(hashToken(credential));
   }
 
   /** Records a credential that just verified; the oldest entry goes when full. */

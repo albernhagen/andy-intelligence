@@ -12,6 +12,13 @@ describe("KnownCredentials", () => {
     expect(known.has("a")).toBe(false);
   });
 
+  it("GivenARememberedCredential_WhenForgotten_ThenUnknown", () => {
+    const known = new KnownCredentials(10, 60_000, () => 0);
+    known.remember("a");
+    known.forget("a");
+    expect(known.has("a")).toBe(false);
+  });
+
   it("GivenAFullCache_WhenANewCredentialIsRemembered_ThenTheOldestIsForgotten", () => {
     const known = new KnownCredentials(2, 60_000, () => 0);
     known.remember("a");
