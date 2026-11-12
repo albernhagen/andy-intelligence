@@ -351,6 +351,26 @@ describe("RefineGate split of an epic (AI-115)", () => {
     expect(await t.children()).toHaveLength(3);
   });
 
+  it("GivenAnEpicWithStories_WhenANewRefineRunSplitsItAgain_ThenExistingStoriesAreKeptNotDuplicated", async () => {
+    const t = await setup("epic");
+    await t.gate.apply(t.run, result(slices));
+    const first = await t.children();
+    const api = first.find((k) => k.title === "API")!;
+    // Andy edits a story's blockers between the two runs; a second run must not undo it.
+    await t.tracker.updateTicket(api.projectId, api.id, { fields: { blockedBy: [] } }, "andy");
+    await t.enterUpNext();
+
+    const second = { ...t.run, id: "run-2", createdAt: new Date().toISOString() } as Run;
+    const applied = await t.gate.apply(second, result([...slices, child("Docs", [0])]));
+
+    const kids = await t.children();
+    expect(kids.map((k) => k.title).sort()).toEqual(["API", "Docs", "Schema", "UI"]);
+    expect(kids.find((k) => k.id === api.id)!.blockedBy).toEqual([]);
+    const schema = kids.find((k) => k.title === "Schema")!;
+    expect(kids.find((k) => k.title === "Docs")!.blockedBy).toEqual([schema.key]);
+    expect("notice" in applied && applied.notice).toContain("already existed");
+  });
+
   it("GivenANonEpicSplit_WhenApplied_ThenChildrenGoUnderItsEpicAndIgnoreSiblingLinksAndTouches", async () => {
     const t = await setup("feature");
     await t.gate.apply(t.run, result(slices));
