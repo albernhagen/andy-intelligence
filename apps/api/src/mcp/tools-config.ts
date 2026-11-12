@@ -59,7 +59,7 @@ export function registerConfigTools(
     server.registerTool(
       tool,
       {
-        description: `${what} a pending config change as Andy (owner only). ${decision === "accepted" ? "Records agreement only: nothing is applied; the text goes into the file by a PR." : "A kind that keeps repeating may be proposed again later."} Refused when the change isn't pending.`,
+        description: `${what} a pending config change as Andy (owner only). ${decision === "accepted" ? "Records agreement only: nothing is applied; the text goes into the file by a PR. The kind is proposed again only if it recurs on 3 PRs after this." : "The kind is proposed again only if it recurs on 3 PRs after this."} Refused when the change isn't pending.`,
         inputSchema: { id: ChangeId },
         annotations: { destructiveHint: false, idempotentHint: false, openWorldHint: false },
       },
