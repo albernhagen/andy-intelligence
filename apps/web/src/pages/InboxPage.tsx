@@ -4,6 +4,7 @@ import { InboxTicketCard } from "@/components/inbox/InboxTicketCard";
 import { Loading, QueryError } from "@/components/Status";
 import { cardCount, inboxCards, type InboxCard } from "@/lib/needs-you";
 import { useNeedsYou, useProjects } from "@/lib/queries";
+import { showsError } from "@/lib/live";
 
 /**
  * Needs-you inbox, the home screen (ARCHITECTURE §7.5): one card per ticket with its open
@@ -15,7 +16,8 @@ export function InboxPage() {
   const needsYou = useNeedsYou();
   const projects = useProjects();
   if (needsYou.isPending) return <Loading />;
-  if (needsYou.isError) return <QueryError error={needsYou.error} />;
+  if (needsYou.data === undefined || showsError(needsYou))
+    return <QueryError error={needsYou.error} />;
 
   const { active, stale } = inboxCards(needsYou.data, projectId);
   const total = sum([...active, ...stale]);

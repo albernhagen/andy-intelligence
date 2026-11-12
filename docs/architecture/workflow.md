@@ -24,29 +24,29 @@ As built (PR events, build dispatch, plan approval): [`history/workflow-as-built
 **Needs-you is a flag, not a stage:** flagged items stay put and appear in the Needs-you inbox (UI + MCP).
 
 ### 4.2 Definition of Ready (per type, ADR-0058)
-- **Type** set: feature, chore, bug or epic. A title alone is a valid ticket; refine fills the type.
+- **Type** set: feature, chore, bug or epic; refine fills it.
 - Problem/intent stated (a non-empty body; for a bug, refine asks for steps to reproduce and the actual behaviour, which are not checked mechanically).
 - Acceptance criteria: **feature**, at least one, each in **EARS** form, any sentence with "… shall …" ("WHEN … the API shall …"); **bug**, at least one stating the expected behaviour; **chore**, a "done when" checklist in any wording.
 - Size tagged S/M/L with one-line justification (`sizeReason`) (rubric in `docs/agent/size-rubric.md`).
 - Dependencies declared (ticket "blocked by" links).
-- **No open questions.** Assumptions listed explicitly.
+- **No open questions** and no held gaps (§4.3). Assumptions listed explicitly.
 - Tier is not a readiness item: `tierFor` derives it from size (S → `fast`, Sonnet; M and L → `strong`, Opus; ADR-0050); `overrides.tier` pins one (ADR-0062).
-- Per-project policy may allow "proceed on documented assumptions" for S tasks only; default is **require Andy's answers**. Overnight runs (ADR-0049) answer everything before launch and decide later ambiguity on recorded assumptions, listed in the morning report.
+- Per-project policy may allow "proceed on documented assumptions" for S tasks only; default is **require Andy's answers**. Overnight runs (ADR-0049) answer everything before launch; later ambiguity is decided on recorded assumptions.
 - **Epics** need only a stated intent and no open questions (no criteria or size).
 - Checked in `packages/domain` (`checkDor`); `dorStatus` is computed on every change, never set by callers.
 
 ### 4.3 Refinement and questions
-- Backlog has **Ideas** (no agent spend) and **Up next**; entering Up next starts a refinement pass (ADR-0075). The agent drafts the ticket, or sends it back, or splits it. Each gap is rated; the control plane makes it a question only if the agent is unsure or a wrong guess is costly to reverse, else an assumption Andy can promote. Zero questions is allowed; at most 3 open per ticket and `dailyQuestionCap` per project per 24 hours.
-- Refine also scores the ticket (AI-37): `risk` (how much a bad change could break) and `confidence` (how sure it is of ticket and plan), each with a one-line reason, by the rubric in `platform/procedures/refine.md`. Filled only when empty; optional, never part of the DoR; the dispatcher ignores them. `startScore` is the one label board and MCP share; sorting Ready by score (`?sort=score`: size, risk, confidence) writes no rank.
+- Backlog has **Ideas** (no agent spend) and **Up next**; entering Up next starts a refinement pass (ADR-0075). The agent drafts the ticket, or sends it back, or splits it. Each gap is rated; the control plane makes it a question only if the agent is unsure or a wrong guess is costly to reverse, else an assumption Andy can promote. Zero questions is allowed; at most 3 open per ticket and `dailyQuestionCap` per project per 24 hours. A costly gap past a cap is **held** (ADR-0087): the ticket stays in Up next, in Needs-you, until Andy accepts it or it is asked at the first dispatch event the caps allow (no timer).
+- Refine also scores the ticket (AI-37): `risk` and `confidence`, each with a one-line reason, by the rubric in `platform/procedures/refine.md`. Filled only when empty; optional, never part of the DoR; the dispatcher ignores them. `startScore` is the one label board and MCP share; sorting Ready by score (`?sort=score`: size, risk, confidence) writes no rank.
 - Questions are **structured records** (§5 Question) Andy can answer without the ticket: a question line, context, options with consequences, a recommendation (AI-73); refine output without them fails. Andy answers in the UI, MCP or the `/inbox` skill.
 - Answering re-checks the DoR; the last answer moves an Up-next ticket that meets it to Ready (`system`, `ifUpdatedAt`).
 - As built (refine dispatch): [`history/workflow-as-built.md`](history/workflow-as-built.md).
 
 ### 4.4 Epics
 - Ticket types (Epic / Feature / Chore / Bug, ADR-0058) + **child tickets** (`parent_id`).
-- Epic refinement produces stories with `depends_on`. Stories are vertical slices, independently mergeable behind feature flags; merge to `main`, no long-lived epic branches. Exception: an **overnight run** (ADR-0049) merges its stories into a one-night branch `epic/<key>`, reviewed by Andy as one PR the next morning.
-- **Just-in-time re-planning:** when a story unblocks, a short plan pass re-reads the current codebase before execution.
-- Epic status, cost, and progress roll up from children. Overrides on an epic cascade to its stories.
+- Epic refinement produces stories with `depends_on`: vertical slices, independently mergeable behind flags; no long-lived epic branches. Exception: an **overnight run** (ADR-0049) merges its stories into a one-night branch `epic/<key>`, reviewed by Andy as one PR the next morning.
+- **Just-in-time re-planning:** when a story unblocks, a plan pass re-reads the codebase.
+- Epic status, cost and progress roll up; an epic's overrides cascade to its stories.
 
 ### 4.5 Review gate (v1.x: rules only)
 - **Hard vetoes → Andy reviews:** protected paths (CODEOWNERS: auth, payments, migrations, infra), dependency changes, CI not green, new behavior without new tests, no verification output in the run summary (ADR-0040), diff > N lines, any agent-raised concern.
@@ -60,5 +60,5 @@ As built (PR events, build dispatch, plan approval): [`history/workflow-as-built
 - Per project: GCP projects `<app>-dev` and `<app>-prod`.
 - **Build once, promote the same image digest** via **Cloud Deploy** (dev → prod, approval required for prod, one-click rollback).
 - On merge: deploy to dev → smoke/e2e (Playwright + API) → a verification agent logs the results on the ticket.
-- **Release:** "Promote to prod" from UI or MCP → Cloud Deploy approval → deploy. Release notes come from its tickets.
+- **Release:** "Promote to prod" from UI or MCP → Cloud Deploy approval → deploy; notes from its tickets.
 - Agent write policy: dev writes per project policy; prod read-only.

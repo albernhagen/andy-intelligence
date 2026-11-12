@@ -385,6 +385,7 @@ describe("TicketService", () => {
         const q = await service.ask(projectId, t.id, { text: "Which?" }, "agent:r1");
         await rejects(service.answer(q.id, "A", "ui", actor), "forbidden");
         await rejects(service.promoteAssumption(projectId, t.id, "a1", actor), "forbidden");
+        await rejects(service.acceptAssumption(projectId, t.id, "a1", actor), "forbidden");
         await rejects(service.setWorker(projectId, t.id, "me", actor), "forbidden");
         expect(await tracker.getQuestion(q.id)).toMatchObject({ status: "open" });
         expect((await tracker.getTicket(projectId, t.id))?.overrides).toEqual({});

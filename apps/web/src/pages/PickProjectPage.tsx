@@ -1,6 +1,7 @@
 import { Link } from "@tanstack/react-router";
 import { Loading, QueryError } from "@/components/Status";
 import { useProjects } from "@/lib/queries";
+import { showsError } from "@/lib/live";
 
 /** The board under All projects: a board shows one project, so ask which (ADR-0059). */
 export function PickProjectPage() {
@@ -10,7 +11,7 @@ export function PickProjectPage() {
       <h2 className="text-lg font-medium">Board</h2>
       <p className="text-muted-foreground">A board shows one project. Pick one:</p>
       {projects.isPending && <Loading />}
-      {projects.isError && <QueryError error={projects.error} />}
+      {showsError(projects) && <QueryError error={projects.error} />}
       {projects.data?.length === 0 && (
         <p className="text-muted-foreground">
           No projects yet.{" "}

@@ -18,7 +18,8 @@ export class DomainError extends Error {
       | "plan_not_decidable"
       | "not_promotable"
       | "invalid_reference"
-      | "not_clearable",
+      | "not_clearable"
+      | "not_acceptable",
     message: string,
     readonly details: string[] = [],
   ) {

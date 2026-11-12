@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { checkDor, type DorInput } from "./dor";
+import { checkDor, isHeld, type DorInput } from "./dor";
 
 const feature: DorInput = {
   type: "feature",
@@ -110,5 +110,31 @@ describe("checkDor", () => {
     expect(checkDor(epic, 0).met).toBe(true);
     expect(checkDor(epic, 1).met).toBe(false);
     expect(checkDor({ ...epic, body: "" }, 0).missing).toEqual(["problem/intent in the body"]);
+  });
+});
+
+describe("held gaps (AI-75)", () => {
+  const assumption = (over: object = {}) => ({
+    status: "assumed" as const,
+    demotedBy: "daily_cap" as const,
+    cost: "direction" as const,
+    ...over,
+  });
+
+  it("GivenACostlyGapACapDemoted_WhenChecked_ThenTheTicketIsNotReady", () => {
+    const result = checkDor({ ...feature, refineAssumptions: [assumption()] as never }, 0);
+    expect(result).toEqual({ met: false, missing: ["1 held question(s) asked or accepted"] });
+  });
+
+  it.each([
+    ["reversible", { cost: "reversible" }],
+    ["not demoted", { demotedBy: null }],
+    ["accepted", { status: "accepted" }],
+    ["promoted", { status: "promoted" }],
+  ])("GivenADemotedGapThatIs%s_WhenChecked_ThenItDoesNotHold", (_, over) => {
+    expect(isHeld(assumption(over) as never)).toBe(false);
+    expect(checkDor({ ...feature, refineAssumptions: [assumption(over)] as never }, 0).met).toBe(
+      true,
+    );
   });
 });

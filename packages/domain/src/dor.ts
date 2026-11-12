@@ -1,6 +1,25 @@
-import type { Ticket } from "@andy/contracts";
+import type { Assumption, Ticket } from "@andy/contracts";
 
-export type DorInput = Pick<Ticket, "type" | "body" | "acceptanceCriteria" | "size" | "sizeReason">;
+export type DorInput = Pick<
+  Ticket,
+  "type" | "body" | "acceptanceCriteria" | "size" | "sizeReason"
+> &
+  Partial<Pick<Ticket, "refineAssumptions">>;
+
+/**
+ * A held gap (AI-75, ADR-0087): one that should have been a question, but a question cap turned it
+ * into an assumption, and a wrong guess is costly. It keeps the ticket out of Ready until it is
+ * asked (`promoted`) or Andy accepts it (`accepted`). Cheap-to-reverse demoted gaps never hold.
+ */
+export function isHeld(a: Pick<Assumption, "status" | "demotedBy" | "cost">): boolean {
+  return a.status === "assumed" && a.demotedBy !== null && a.cost !== "reversible";
+}
+
+export function heldGaps<A extends Pick<Assumption, "status" | "demotedBy" | "cost">>(ticket: {
+  refineAssumptions?: readonly A[];
+}): A[] {
+  return (ticket.refineAssumptions ?? []).filter(isHeld);
+}
 
 export interface DorResult {
   met: boolean;
@@ -13,14 +32,14 @@ const EARS = /\S\s+shall\s+\S/i;
 
 /**
  * Definition of Ready (ARCHITECTURE §4.2, per type from ADR-0058: Ticket model). Every type
- * needs an intent and no open questions; an epic needs nothing else. Features, bugs and chores
+ * needs an intent, no open questions and no held gaps (`isHeld`); an epic needs nothing else. Features, bugs and chores
  * also need a size with its reason; then:
  * - feature: at least one criterion, each in EARS form;
  * - bug: at least one criterion stating the expected behaviour (any wording);
  * - chore: a "done when" checklist (any wording).
  * A ticket with no type yet gets the shared checks plus "type". Tier is not checked: it is
- * derived from size (`tierFor`). Risk and confidence are optional and never checked. Dependencies and assumptions can't be checked mechanically;
- * refinement owns them.
+ * derived from size (`tierFor`). Risk and confidence are optional and never checked. Dependencies
+ * and other assumptions can't be checked mechanically; refinement owns them.
  */
 export function checkDor(ticket: DorInput, openQuestions: number): DorResult {
   const missing: string[] = [];
@@ -33,6 +52,8 @@ export function checkDor(ticket: DorInput, openQuestions: number): DorResult {
     );
   }
   if (openQuestions > 0) missing.push(`${openQuestions} open question(s) answered`);
+  const held = heldGaps(ticket).length;
+  if (held > 0) missing.push(`${held} held question(s) asked or accepted`);
   if (ticket.type === "epic") return result(missing);
 
   const criteria = ticket.acceptanceCriteria.filter((c) => c.trim() !== "");

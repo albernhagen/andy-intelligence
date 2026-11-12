@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useId, useState } from "react";
+import { createContext, useContext, useEffect, useId, useRef, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { X } from "lucide-react";
 import type { Ticket } from "@andy/contracts";
@@ -17,32 +17,48 @@ import { cn } from "@/lib/utils";
  */
 
 /**
- * One save at a time per ticket. Each waits for the one before and then sends the latest cached
- * `updatedAt`, so two quick edits in different fields never conflict with each other; a change
- * made elsewhere still does.
+ * One save at a time per ticket. Each waits for the one before. It sends the `updatedAt` its
+ * value was based on: the version when the editor opened (`begin`), or the rendered one for
+ * one-click saves. That version is moved forward only through Andy's own saves (`ownSaves`), so
+ * two quick edits in different fields never conflict, while a change made elsewhere still does,
+ * even after polling (AI-9) has put the newer ticket in the cache.
  */
 const saveQueues = new Map<string, Promise<void>>();
+/** `ticketId:from` → `to` for each of Andy's own saves in this tab. */
+const ownSaves = new Map<string, string>();
+
+function latestOwnVersion(ticketId: string, base: string): string {
+  let version = base;
+  for (let next = ownSaves.get(`${ticketId}:${version}`); next;) {
+    version = next;
+    next = ownSaves.get(`${ticketId}:${version}`);
+  }
+  return version;
+}
 
 export function useTicketSave(ticket: Ticket) {
   const update = useUpdateTicket({ projectId: ticket.projectId, ticketId: ticket.id });
   const queryClient = useQueryClient();
   // Saves of this field queued or in flight: pending from the click, not only once it runs.
   const [inFlight, setInFlight] = useState(0);
+  const began = useRef<string | null>(null);
+  const begin = () => void (began.current = ticket.updatedAt);
   const save = (patch: Omit<TicketPatch, "ifUpdatedAt">, onSaved?: () => void) => {
     setInFlight((n) => n + 1);
+    const base = began.current ?? ticket.updatedAt;
     const run = async () => {
-      const cached = queryClient.getQueryData<Ticket>(ticketQueryKey(ticket.projectId, ticket.key));
+      const ifUpdatedAt = latestOwnVersion(ticket.id, base);
       try {
-        const saved = await update.mutateAsync({
-          ...patch,
-          ifUpdatedAt: (cached ?? ticket).updatedAt,
-        });
-        // The saved ticket at once (before the refetch), so the next save sends its `updatedAt`.
+        const saved = await update.mutateAsync({ ...patch, ifUpdatedAt });
+        ownSaves.set(`${ticket.id}:${ifUpdatedAt}`, saved.updatedAt);
+        // The saved ticket at once (before the refetch), so the panel shows it.
         queryClient.setQueryData(ticketQueryKey(saved.projectId, saved.key), saved);
         onSaved?.();
       } catch {
         // Shown through `update.error` next to the field.
       } finally {
+        // After a save or a conflict, the next save is based on what is on screen then.
+        began.current = null;
         setInFlight((n) => n - 1);
       }
     };
@@ -51,6 +67,7 @@ export function useTicketSave(ticket: Ticket) {
   };
   return {
     save,
+    begin,
     pending: inFlight > 0,
     error: update.error ? <SaveError error={update.error} /> : null,
   };
@@ -96,6 +113,8 @@ interface EditorProps<T> {
   label: string;
   value: T;
   onSave: SaveFn<T>;
+  /** Called when a draft opens, so the save is checked against the version it started from. */
+  onEdit?: () => void;
   pending: boolean;
   error: React.ReactNode;
 }
@@ -128,6 +147,7 @@ export function InlineText({
   label,
   value,
   onSave,
+  onEdit,
   pending,
   error,
   placeholder = "—",
@@ -151,7 +171,10 @@ export function InlineText({
             type="button"
             aria-label={value ? undefined : `Edit ${label.toLowerCase()}`}
             title={`Edit ${label.toLowerCase()}`}
-            onClick={() => setDraft(value)}
+            onClick={() => {
+              onEdit?.();
+              setDraft(value);
+            }}
             className={cn(
               "rounded-md text-left hover:bg-muted focus-visible:outline-2 focus-visible:outline-ring",
               !value && "text-muted-foreground",
@@ -188,11 +211,19 @@ export function InlineText({
 }
 
 /** The description: rendered markdown; click it (not a link) or Edit for Write / Preview. */
-export function MarkdownField({ label, value, onSave, pending, error }: EditorProps<string>) {
+export function MarkdownField({
+  label,
+  value,
+  onSave,
+  onEdit,
+  pending,
+  error,
+}: EditorProps<string>) {
   const [draft, setDraft] = useState<string | null>(null);
   const [preview, setPreview] = useState(false);
   useUnsavedDraft(draft !== null && draft !== value);
   const edit = () => {
+    onEdit?.();
     setPreview(false);
     setDraft(value);
   };

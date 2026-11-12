@@ -187,6 +187,16 @@ const routes = {
     request: { params: AssumptionParams },
     responses: { 201: ok(Question, "The assumption is now an open question"), ...errors },
   }),
+  acceptAssumption: createRoute({
+    ...secured,
+    method: "post",
+    path: "/api/projects/{projectId}/tickets/{ticketId}/assumptions/{assumptionId}/accept",
+    request: { params: AssumptionParams },
+    responses: {
+      200: ok(Ticket, "The held gap stands as an assumption; the ticket is re-checked for Ready"),
+      ...errors,
+    },
+  }),
   cancelTicket: createRoute({
     ...secured,
     method: "post",
@@ -347,6 +357,14 @@ export function registerTicketRoutes(
         actorOf(c.get("identity")),
       ),
       201,
+    );
+  });
+
+  app.openapi(routes.acceptAssumption, async (c) => {
+    const { projectId, ticketId, assumptionId } = c.req.valid("param");
+    return c.json(
+      await service.acceptAssumption(projectId, ticketId, assumptionId, actorOf(c.get("identity"))),
+      200,
     );
   });
 

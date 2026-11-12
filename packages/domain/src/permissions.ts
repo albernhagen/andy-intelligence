@@ -16,6 +16,7 @@ export const OWNER_ACTIONS = {
   start_run: "start a run",
   answer_question: "answer a question",
   promote_assumption: "promote an assumption",
+  accept_assumption: "accept a held gap",
   decide_plan: "approve or reject a plan",
   set_worker: "choose who works a ticket",
   change_project_settings: "change project settings",

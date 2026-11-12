@@ -13,6 +13,8 @@ import {
   type Worker,
 } from "@andy/contracts";
 import { overlappingKey } from "./dispatch-conflicts";
+import { heldGaps } from "./dor";
+import { CAP_WORDS } from "./refine-gate";
 
 /** The story panel's first line (ADR-0059): where the ticket is and what it waits for. */
 export type StatusTone = "default" | "attention" | "running" | "success" | "danger";
@@ -44,6 +46,8 @@ export interface StatusInput {
    * on the open-question line; absent, the line counts the questions as before.
    */
   questionLine?: string | null;
+  /** Held gaps (AI-75): how many, and the cap that holds them; null or absent: none. */
+  held?: { count: number; cap: string } | null;
 }
 
 const QUESTION_LINE_MAX = 200;
@@ -70,6 +74,13 @@ function mainStatus(s: StatusInput, now: Date): { text: string; tone: StatusTone
   if (s.stage === "done") return { text: join("Done", pr), tone: "success" };
   if (s.openQuestions > 0) {
     return { text: questionsWaiting(s.openQuestions, s.questionLine), tone: "attention" };
+  }
+  if (s.held && s.stage === "backlog") {
+    const n = s.held.count;
+    return {
+      text: `Waiting for you: ${n} held question${n === 1 ? "" : "s"} (reached ${s.held.cap}); asked when the cap allows, or promote or accept it`,
+      tone: "attention",
+    };
   }
   if (s.needsAttention) {
     return {
@@ -250,6 +261,14 @@ export function syncStopped(runs: readonly Run[]): string | null {
     : `sync with main stopped: checks failed after the merge${named}`;
 }
 
+/** The held gaps and the cap behind them; the daily cap is named when any gap waits on it. */
+function heldLine(ticket: Ticket): StatusInput["held"] {
+  const held = heldGaps(ticket);
+  if (held.length === 0) return null;
+  const cap = held.some((a) => a.demotedBy === "daily_cap") ? "daily_cap" : "ticket_cap";
+  return { count: held.length, cap: CAP_WORDS[cap] };
+}
+
 /** One ticket's status line: the UI's story panel and MCP `status` both call this (AI-40). */
 export function ticketStatusLine(ticket: Ticket, facts: TicketFacts, now: Date) {
   return statusLine(
@@ -268,6 +287,7 @@ export function ticketStatusLine(ticket: Ticket, facts: TicketFacts, now: Date) 
       syncStopped: syncStopped(facts.runs),
       syncWaiting: syncWaiting(facts.runs),
       questionLine: facts.questionLine ?? null,
+      held: heldLine(ticket),
     },
     now,
   );

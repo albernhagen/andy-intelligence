@@ -1,5 +1,6 @@
 import { execFileSync } from "node:child_process";
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { randomUUID } from "node:crypto";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { describe, expect, it } from "vitest";
@@ -86,12 +87,15 @@ function resolution(root, main, files) {
   const base = sh(work, "write-tree");
   for (const [path, text] of Object.entries(files)) write(work, path, text);
   sh(work, "add", "-A");
-  const patch = join(work, "..", `${Date.now()}-change.patch`);
+  // Outside the worktree (so `add -A` never sees it) and in a directory of its own: a name in the
+  // shared temp dir could collide with another run's.
+  const patch = join(mkdtempSync(join(tmpdir(), "sync-patch-")), "change.patch");
   writeFileSync(patch, execFileSync("git", ["diff", "--cached", "--binary", base], { cwd: work }));
   return patch;
 }
 
-function harness(root, env) {
+/** publishSync with `push` intercepted; `after(args, env)` runs after each other git call. */
+function harness(root, env, after = () => {}) {
   const real = gitRunner(root);
   const pushes = [];
   const git = (args, extra = {}) => {
@@ -99,7 +103,9 @@ function harness(root, env) {
       pushes.push({ args, env: extra });
       return "";
     }
-    return real(args, extra);
+    const out = real(args, extra);
+    after(args, extra);
+    return out;
   };
   const reply = (body) => ({ ok: true, status: 200, json: async () => body, text: async () => "" });
   const fetch = async (url) =>
@@ -117,6 +123,8 @@ function harness(root, env) {
         CONTROL_PLANE_URL: "https://ai.andybernhagen.com",
         ACTIONS_ID_TOKEN_REQUEST_URL: "https://actions.example/token?x=1",
         ACTIONS_ID_TOKEN_REQUEST_TOKEN: "req",
+        // As on a runner: a temp dir per job, so the scratch index is this test's alone (AI-78).
+        RUNNER_TEMP: mkdtempSync(join(tmpdir(), "sync-runner-")),
         ...env,
       },
       git,
@@ -195,6 +203,51 @@ describe("sync publish", () => {
     const result = await h.run();
     expect(result.tooling).toEqual(["package.json"]);
     expect(h.outputs.tooling_files).toBe('["package.json"]');
+  });
+
+  it("GivenAnotherRunResettingTheSharedTempIndex_WhenPublished_ThenThisPublishIsUnaffected", async () => {
+    // AI-78: another run of this file (a second worktree's pre-push hook) used the same scratch
+    // index path, because the harness left RUNNER_TEMP unset and RUN_ID fixed. Its `read-tree` of
+    // the conflicted merge landed between this publish's `apply --cached` and its marker check.
+    // Here that other run is played at exactly that moment, on the shared temp dir's path; with
+    // RUNNER_TEMP per test, as on a runner, this publish's index is elsewhere and stays intact.
+    // The test also checks the interference ran and where this publish's index actually was, so
+    // it can't pass without exercising the moment (on the old harness it fails, see a2d5f93).
+    const { root, head, main } = repo();
+    const tree = mergeTree(root, main);
+    const patch = resolution(root, main, { "a.txt": "one\nresolved\nthree\n" });
+    // Unique per invocation so concurrent copies of this file don't race on the lock here.
+    const runId = `sync-${randomUUID()}`;
+    const shared = join(tmpdir(), `sync-check-${runId}.index`);
+    const runnerTemp = mkdtempSync(join(tmpdir(), "sync-runner-"));
+    const checkedIn = [];
+    const h = harness(
+      root,
+      {
+        RUN_ID: runId,
+        RUNNER_TEMP: runnerTemp,
+        PATCH: patch,
+        HEAD_SHA: head,
+        MAIN_SHA: main,
+        MERGE_TREE: tree,
+      },
+      (args, env) => {
+        if (args[0] === "apply" && args[1] === "--cached") {
+          checkedIn.push(env.GIT_INDEX_FILE);
+          gitRunner(root)(["read-tree", tree], { GIT_INDEX_FILE: shared });
+        }
+      },
+    );
+    try {
+      const result = await h.run();
+      expect(sh(root, "show", `${result.headSha}:a.txt`)).toBe("one\nresolved\nthree");
+      // The other run reset the shared index while this publish checked its patch elsewhere.
+      expect(checkedIn).toHaveLength(1);
+      expect(checkedIn[0].startsWith(`${runnerTemp}/`)).toBe(true);
+      expect(existsSync(shared)).toBe(true);
+    } finally {
+      rmSync(shared, { force: true });
+    }
   });
 
   it("GivenAMergeTreeThatDoesntMatch_WhenPublished_ThenItIsRefused", async () => {
