@@ -69,6 +69,7 @@ import { requireCan } from "./permissions";
 import { TIER_ROUTES } from "./tiers";
 import { afterFailure, deadlineAction, MAX_RUN_ATTEMPTS } from "./watchdog";
 import { syncPrompt, type SyncTarget } from "./sync-runs";
+import { winsNightSlot, type NightSlot } from "./night-budget";
 
 /**
  * Agent runs (M1.6a: Claude Code executor, ARCHITECTURE §7.1–7.2, §9). Andy starts a run on a
@@ -252,13 +253,17 @@ export class RunService {
    * `runner` (a local runner's claim, ADR-0089): the run is claimed by that runner instead of
    * dispatched to the cloud executor; without it, a ticket that resolves to `local` (or waits for
    * the runner) is refused, so a runner and the cloud executor never both take it.
+   * `night` (the dispatcher's start of a night launch's story, M4.18): the run must also be among
+   * the launch's first `maxRuns` agent tasks, so concurrent dispatches can't overshoot it.
+   * Retries (`retryOf`, the watchdog's) carry no slot on purpose: each story's retries are bounded
+   * by MAX_RUN_ATTEMPTS, and they count toward the launch's usage, so no new story starts after.
    */
   async start(
     projectId: string,
     ticketId: string,
     step: string,
     retryOf?: Run,
-    opts: { avoidOverlap?: boolean; runner?: Runner } = {},
+    opts: { avoidOverlap?: boolean; runner?: Runner; night?: NightSlot } = {},
   ): Promise<Run> {
     if (!STARTABLE_STEPS.includes(step as StartableStep)) {
       throw new DomainError("invalid_step", `can't start a ${step} task yet`, [
@@ -383,6 +388,23 @@ export class RunService {
         `dial: ${project.runsAtOnce}`,
         `global cap: ${MAX_ACTIVE_RUNS_GLOBAL}`,
       ]);
+    }
+    if (opts.night) {
+      const ids = opts.night.ticketIds;
+      const storyRuns = (
+        await Promise.all(ids.map((id) => this.runs.listForTicket(projectId, id)))
+      ).flat();
+      if (!winsNightSlot(opts.night, storyRuns, run.id)) {
+        await this.fail(run.id, "the night launch's max agent tasks was reached at the same time");
+        throw new DomainError(
+          "run_limit",
+          `${ticket.key}: its night launch is at max agent tasks`,
+          [
+            `launch: ${opts.night.launch.id}`,
+            `max agent tasks: ${opts.night.launch.budget.maxRuns}`,
+          ],
+        );
+      }
     }
 
     const started = retryOf
