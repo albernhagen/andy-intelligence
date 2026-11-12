@@ -4,6 +4,7 @@ import type {
   EmailNotifications,
   ProjectService,
   QuotaClearer,
+  ProjectPlanService,
   RunService,
   TicketService,
 } from "@andy/domain";
@@ -31,6 +32,7 @@ export function registerMcp(
     digest: DigestReader;
     notifyEmail: EmailNotifications | null;
     quota: QuotaClearer;
+    plans: ProjectPlanService;
   },
 ) {
   const lookups = new FixedWindowLimiter(LOOKUPS_PER_MINUTE, 60 * 1000);

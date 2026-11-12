@@ -162,6 +162,7 @@ describe("list_needs_me", () => {
       cards: [],
       questions: [],
       tickets: [],
+      projectPlans: [],
     });
   });
 
@@ -209,6 +210,7 @@ describe("answer_question", () => {
       cards: [],
       questions: [],
       tickets: [],
+      projectPlans: [],
     });
   });
 
