@@ -92,9 +92,8 @@ export function NightLaunch(path: TicketPath) {
 }
 
 function Checklist({ projectId, night }: { projectId: string; night: NightStatus }) {
-  const byKey = new Map<string | null, string[]>();
-  for (const p of night.problems)
-    byKey.set(p.ticketKey, [...(byKey.get(p.ticketKey) ?? []), p.message]);
+  const byKey = new Map<string | null, NightStatus["problems"]>();
+  for (const p of night.problems) byKey.set(p.ticketKey, [...(byKey.get(p.ticketKey) ?? []), p]);
   const storyKeys = new Set(night.stories.map((s) => s.key));
   const general = night.problems.filter((p) => !storyKeys.has(p.ticketKey ?? ""));
   return (
@@ -144,6 +143,14 @@ function Checklist({ projectId, night }: { projectId: string; night: NightStatus
                 {s.plan.kind !== "approved" && (s.size !== "S" || s.plan.runId) && (
                   <PlanLine projectId={projectId} story={s} />
                 )}
+                {/* Questions and plans have their own linked lines above. */}
+                {open
+                  .filter((p) => p.kind !== "open_questions" && p.kind !== "plan_not_approved")
+                  .map((p) => (
+                    <p key={p.kind} className="pl-4 text-xs text-attention">
+                      {p.message.replace(`${s.key}: `, "")}
+                    </p>
+                  ))}
               </li>
             );
           })}

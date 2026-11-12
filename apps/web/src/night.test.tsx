@@ -121,6 +121,20 @@ describe("plan the night", () => {
     expect(within(section).getByText(/No new agent tasks start/)).toBeTruthy();
   });
 
+  it("GivenAStoryNotReady_WhenTheSectionOpens_ThenItsProblemShowsUnderIt", async () => {
+    const { harness, stories, section } = await withEpic([{}]);
+    await harness.tracker.updateTicket(
+      "ai",
+      stories[0]!.id,
+      { stage: { to: "backlog", forced: true, reason: null } },
+      "andy",
+    );
+    await harness.queryClient.invalidateQueries();
+    const list = await within(section).findByRole("list", { name: "Launch checklist" });
+    expect(await within(list).findByText("in Backlog, not Ready")).toBeTruthy();
+    expect(within(list).getByText("1 problem")).toBeTruthy();
+  });
+
   it("GivenABadBudget_WhenLaunched_ThenTheApiProblemIsShown", async () => {
     const { section } = await withEpic([{}]);
     const form = await within(section).findByRole("form", { name: "Launch the night" });
