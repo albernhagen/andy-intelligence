@@ -1,4 +1,4 @@
-import { InMemoryRunStore, InMemoryWorkTracker } from "@andy/contracts";
+import { InMemoryConfigChangeStore, InMemoryRunStore, InMemoryWorkTracker } from "@andy/contracts";
 import type { NewTicket, Stage } from "@andy/contracts";
 import { TicketService, rankBetween } from "@andy/domain";
 import { createApp } from "@andy/api/app";
@@ -167,6 +167,7 @@ export async function createFakeApp() {
   );
   await service.move("ops", logs.id, "done", "andy", { force: true });
   await service.ask("ops", logs.id, { text: "Delete the old bucket too?" }, "agent");
+  await seedEpic(service);
 
   return createApp({
     verifier: {
@@ -180,6 +181,8 @@ export async function createFakeApp() {
     webConfig: { firebaseApiKey: "k", firebaseAuthDomain: "d", projectId: "p" },
     tracker,
     runs,
+    // ADR-0097: no findings, so a project inbox shows the empty "Config proposals" row.
+    configChanges: new InMemoryConfigChangeStore(),
   });
 }
 
@@ -255,4 +258,24 @@ async function seedBoardMarkers(
   await pr(core.id, 40, "merged");
 
   await service.create("ai", { title: "Keyboard shortcuts" }, "andy");
+}
+
+/**
+ * AI-86: Board: group by epic: an OPS epic with children in three lanes, one Done, for the
+ * grouped-board screenshot. OPS, not AI, so the AI board and story panel screenshots don't
+ * change; nothing here asks a question, so the inbox doesn't either.
+ */
+async function seedEpic(service: TicketService) {
+  const epic = await service.create(
+    "ops",
+    { type: "epic", title: "Backups you can trust", body: "" },
+    "andy",
+  );
+  const child = async (stage: Stage, fields: NewTicket) => {
+    const t = await service.create("ops", { ...ready, ...fields, parentId: epic.id }, "andy");
+    await service.move("ops", t.id, stage, "andy", { force: true });
+  };
+  await child("ready", { type: "chore", title: "Monthly restore drill" });
+  await child("in_progress", { type: "feature", title: "Alert when a backup fails" });
+  await child("done", { type: "chore", title: "Backups to a second region" });
 }

@@ -3,10 +3,11 @@ import { Link, useBlocker, useNavigate, useParams } from "@tanstack/react-router
 import { useQueryClient } from "@tanstack/react-query";
 import { X } from "lucide-react";
 import { Size, TicketType, TierKey, type Ticket } from "@andy/contracts";
-import { TIER_FOR_SIZE, isHeld, ticketStatusLine } from "@andy/domain";
+import { TIER_FOR_SIZE, isHeld, projectOfKey, ticketStatusLine, ticketsByRef } from "@andy/domain";
 import { Activity } from "@/components/Activity";
 import { AskQuestionForm } from "@/components/AskQuestionForm";
 import { CancelArchiveControls } from "@/components/CancelArchiveControls";
+import { EpicChildren } from "@/components/EpicChildren";
 import {
   EditableList,
   InlineText,
@@ -25,7 +26,7 @@ import { Markdown } from "@/components/Markdown";
 import { Loading, QueryError } from "@/components/Status";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Select } from "@/components/ui/input";
+import { Input, Select } from "@/components/ui/input";
 import {
   ticketQueryKey,
   useEvents,
@@ -223,6 +224,7 @@ function Story({ ticket: t }: { ticket: Ticket }) {
         </div>
         <Rail ticket={t} />
       </div>
+      {t.type === "epic" && <EpicChildren {...pathOf(t)} />}
       <ScoreReasons ticket={t} />
       <Questions {...pathOf(t)} />
       <Assumptions ticket={t} />
@@ -362,21 +364,30 @@ function SelectField({
   );
 }
 
+/**
+ * Blockers are ticket keys in any project (AI-96); entries from before hold same-project ids.
+ * A blocker from another project links to its own project, by its key.
+ */
 function BlockedBy({ ticket: t, tickets }: { ticket: Ticket; tickets: Ticket[] }) {
   const s = useTicketSave(t);
-  const byId = new Map(tickets.map((o) => [o.id, o]));
+  const [key, setKey] = useState("");
+  const byRef = ticketsByRef(tickets);
   const candidates = tickets.filter(
-    (o) => o.id !== t.id && !o.archived && !t.blockedBy.includes(o.id),
+    (o) =>
+      o.id !== t.id && !o.archived && !t.blockedBy.includes(o.id) && !t.blockedBy.includes(o.key),
   );
+  const add = (ref: string, onSaved?: () => void) =>
+    s.save({ blockedBy: [...t.blockedBy, ref] }, onSaved);
   return (
     <section aria-label="Blocked by" className="space-y-1">
       <span className="text-xs text-muted-foreground">Blocked by</span>
       {t.blockedBy.length > 0 && (
         <ul className="space-y-1">
-          {t.blockedBy.map((id) => {
-            const b = byId.get(id);
+          {t.blockedBy.map((ref) => {
+            const b = byRef.get(ref);
+            const elsewhere = b ? null : projectOfKey(ref);
             return (
-              <li key={id} className="flex items-center justify-between gap-1">
+              <li key={ref} className="flex items-center justify-between gap-1">
                 {b ? (
                   <Link
                     to="/p/$projectId/t/$ticketRef"
@@ -385,6 +396,14 @@ function BlockedBy({ ticket: t, tickets }: { ticket: Ticket; tickets: Ticket[] }
                   >
                     {b.key}: {b.title}
                   </Link>
+                ) : elsewhere ? (
+                  <Link
+                    to="/p/$projectId/t/$ticketRef"
+                    params={{ projectId: elsewhere, ticketRef: ref }}
+                    className="truncate underline"
+                  >
+                    {ref} (another project)
+                  </Link>
                 ) : (
                   <span className="text-muted-foreground">Another ticket</span>
                 )}
@@ -392,9 +411,9 @@ function BlockedBy({ ticket: t, tickets }: { ticket: Ticket; tickets: Ticket[] }
                   size="sm"
                   variant="ghost"
                   className="h-5 shrink-0 px-1 text-muted-foreground"
-                  aria-label={`Remove blocker: ${b?.key ?? id}`}
+                  aria-label={`Remove blocker: ${b?.key ?? ref}`}
                   disabled={s.pending}
-                  onClick={() => s.save({ blockedBy: t.blockedBy.filter((x) => x !== id) })}
+                  onClick={() => s.save({ blockedBy: t.blockedBy.filter((x) => x !== ref) })}
                 >
                   <X aria-hidden className="size-3.5" />
                 </Button>
@@ -408,15 +427,31 @@ function BlockedBy({ ticket: t, tickets }: { ticket: Ticket; tickets: Ticket[] }
         className="h-8"
         value=""
         disabled={s.pending}
-        onChange={(e) => e.target.value && s.save({ blockedBy: [...t.blockedBy, e.target.value] })}
+        onChange={(e) => e.target.value && add(e.target.value)}
       >
         <option value="">Add a blocker…</option>
         {candidates.map((o) => (
-          <option key={o.id} value={o.id}>
+          <option key={o.id} value={o.key}>
             {o.key}: {o.title}
           </option>
         ))}
       </Select>
+      <form
+        onSubmit={(e) => {
+          e.preventDefault();
+          const ref = key.trim().toUpperCase();
+          if (ref) add(ref, () => setKey(""));
+        }}
+      >
+        <Input
+          aria-label="Add a blocker from another project"
+          placeholder="Or a key, e.g. OPS-12"
+          className="h-8"
+          value={key}
+          disabled={s.pending}
+          onChange={(e) => setKey(e.target.value)}
+        />
+      </form>
       {s.error}
     </section>
   );
