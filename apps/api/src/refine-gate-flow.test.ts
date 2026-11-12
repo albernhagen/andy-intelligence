@@ -398,6 +398,40 @@ describe("refine gate flow", () => {
       expect(events.findLast((e) => e.data.diff?.refineAssumptions)?.actor).toMatch(/^user:/);
     });
 
+    it("GivenAHeldGap_WhenAndyAcceptsItOverMcp_ThenTheTicketIsReleasedToReadyAsTheSignedInUser", async () => {
+      const t = await setup();
+      const second = await heldOnTheDailyCap(t);
+      const [held] = (await t.ticket(second.id)).refineAssumptions;
+
+      const call = await t.mcp();
+      const res = await call("accept_assumption", { ticket: second.key, assumptionId: held!.id });
+      expect(res.isError).toBe(false);
+      expect(res.data.ticket).toMatchObject({ key: second.key, stage: "ready" });
+      const released = await t.ticket(second.id);
+      expect(released).toMatchObject({ stage: "ready", needsAttention: false, dorStatus: "met" });
+      expect(released.refineAssumptions[0]).toMatchObject({ status: "accepted" });
+      expect(await t.questions(second.id)).toEqual([]);
+      const events = await t.json<
+        { kind: string; actor: string; data: { diff?: Record<string, unknown> } }[]
+      >(t.call(`${t.path(second.id)}/events`));
+      expect(events.findLast((e) => e.data.diff?.refineAssumptions)?.actor).toMatch(/^user:/);
+    });
+
+    it("GivenAnAssumptionThatIsNotHeld_WhenAcceptedOverMcp_ThenRefusedAndUnchanged", async () => {
+      const t = await setup();
+      const created = await t.create({ upNext: true });
+      await t.report(created.id, output({ gaps: [cheap("A?")] }));
+      const [a] = (await t.ticket(created.id)).refineAssumptions;
+
+      const call = await t.mcp();
+      const res = await call("accept_assumption", { ticket: created.key, assumptionId: a!.id });
+      expect(res.isError).toBe(true);
+      expect(res.text).toContain("only a held gap waits to be accepted");
+      expect((await t.ticket(created.id)).refineAssumptions[0]).toMatchObject({
+        status: "assumed",
+      });
+    });
+
     it("GivenAnAssumptionThatIsNotHeld_WhenAccepted_ThenRefused", async () => {
       const t = await setup();
       const created = await t.create({ upNext: true });

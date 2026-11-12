@@ -157,6 +157,38 @@ describe("BuildDispatcher", () => {
     expect((await dispatcher.next(projectId))?.ticketId).toBe(blocked.id);
   });
 
+  it("GivenABlockerInAnotherProject_WhenItReachesDone_ThenTheBlockedProjectIsWokenAndTheTicketStarts", async () => {
+    const { dispatcher, tickets } = wire();
+    const ops = await tracker.createProject({ name: "Ops", key: "OPS", repos: [] });
+    const blocker = await tracker.createTicket(ops.id, ready("Ops"), "andy");
+    await tracker.updateTicket(
+      ops.id,
+      blocker.id,
+      { stage: { to: "ready_for_review", forced: true, reason: null } },
+      "andy",
+    );
+    const blocked = await inReady("Blocked", { blockedBy: [blocker.key] });
+
+    expect(await dispatcher.next(projectId)).toBeNull();
+    expect(await builds(blocked.id)).toEqual([]);
+
+    await tickets.followPullRequest(ops.id, blocker.id, "done", "PR merged");
+    const [run] = await builds(blocked.id);
+    expect(run).toMatchObject({ step: "build" });
+  });
+
+  it("GivenOneOfTwoBlockersInOtherProjectsIsDone_WhenWoken_ThenTheTicketStillWaits", async () => {
+    const { tickets } = wire();
+    const ops = await tracker.createProject({ name: "Ops", key: "OPS", repos: [] });
+    const web = await tracker.createProject({ name: "Web", key: "WEB", repos: [] });
+    const first = await tracker.createTicket(ops.id, ready("Ops"), "andy");
+    const second = await tracker.createTicket(web.id, ready("Web"), "andy");
+    const blocked = await inReady("Blocked", { blockedBy: [first.key, second.key] });
+
+    await tickets.move(ops.id, first.id, "done", "andy", { force: true });
+    expect(await builds(blocked.id)).toEqual([]);
+  });
+
   it("GivenARunInFlight_WhenNext_ThenNothingStartsUntilItEnds", async () => {
     const { dispatcher, runs } = wire();
     const a = await inReady("A");

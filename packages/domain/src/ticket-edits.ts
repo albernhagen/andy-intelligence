@@ -1,4 +1,4 @@
-import { compareRanks, type Ticket } from "@andy/contracts";
+import { TicketKey, compareRanks, type Ticket } from "@andy/contracts";
 import { rankBetween } from "./ranks";
 
 /** Where a reordered ticket goes: directly above or below another ticket's key. */
@@ -23,24 +23,52 @@ export function parentProblem(
   return null;
 }
 
-/** Why these blockers can't be set on the ticket (one would end up blocking itself), or null. */
+/**
+ * Every ticket by key and by id. `blockedBy` holds keys of tickets in any project (key prefixes
+ * are unique, AI-96); entries written before that hold ids of tickets in the same project.
+ */
+export function ticketsByRef(tickets: readonly Ticket[]): Map<string, Ticket> {
+  return new Map(tickets.flatMap((t) => [[t.key, t] as const, [t.id, t] as const]));
+}
+
+/** The project a ticket key belongs to (its lowercased prefix), or null for an id. */
+export function projectOfKey(ref: string): string | null {
+  return TicketKey.safeParse(ref).success ? ref.slice(0, ref.lastIndexOf("-")).toLowerCase() : null;
+}
+
+/** Each entry as its ticket's key, without repeats; an entry that names no ticket stays as it is. */
+export function blockerKeys(
+  blockedBy: readonly string[],
+  byRef: ReadonlyMap<string, Ticket>,
+): string[] {
+  return [...new Set(blockedBy.map((ref) => byRef.get(ref)?.key ?? ref))];
+}
+
+/**
+ * Why these blockers can't be set on the ticket (one would end up blocking itself), or null.
+ * `byRef` (see ticketsByRef) holds every ticket the chain can reach, in any project.
+ */
 export function blockerProblem(
   ticket: Ticket,
   blockedBy: readonly string[],
-  tickets: readonly Ticket[],
+  byRef: ReadonlyMap<string, Ticket>,
 ): string | null {
-  const byId = new Map(tickets.map((t) => [t.id, t]));
-  for (const id of blockedBy) {
-    if (ticket.blockedBy.includes(id)) continue;
+  for (const ref of blockedBy) {
+    if (ticket.blockedBy.includes(ref)) continue;
+    const start = byRef.get(ref);
+    if (!start) continue;
+    if (start.id === ticket.id) return `${ticket.key} can't block itself`;
     const seen = new Set<string>();
-    const pending = [id];
+    const pending = [start];
     while (pending.length > 0) {
       const next = pending.pop()!;
-      if (next === ticket.id)
-        return `${byId.get(id)?.key ?? id} is already waiting on ${ticket.key}`;
-      if (seen.has(next)) continue;
-      seen.add(next);
-      pending.push(...(byId.get(next)?.blockedBy ?? []));
+      if (next.id === ticket.id) return `${start.key} is already waiting on ${ticket.key}`;
+      if (seen.has(next.id)) continue;
+      seen.add(next.id);
+      for (const r of next.blockedBy) {
+        const found = byRef.get(r);
+        if (found) pending.push(found);
+      }
     }
   }
   return null;
