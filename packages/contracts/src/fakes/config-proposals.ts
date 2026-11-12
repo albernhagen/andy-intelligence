@@ -1,5 +1,5 @@
-import { ConfigChange, type Listing } from "../entities";
-import { ReviewFinding } from "../entities/config-proposals";
+import { ConfigChange } from "../entities";
+import { ProposalLookupCursor, ReviewFinding } from "../entities/config-proposals";
 import { WorkTrackerError } from "../ports";
 import type {
   ConfigChangeDecision,
@@ -18,6 +18,7 @@ const newestFirst = (a: ConfigChange, b: ConfigChange) =>
  */
 export class InMemoryConfigChangeStore implements ConfigChangeStore {
   private readonly changes = new Map<string, ConfigChange>();
+  private readonly cursors = new Map<string, ProposalLookupCursor>();
 
   async createPending(change: ConfigChange, maxPending: number): Promise<CreatePendingOutcome> {
     const parsed = ConfigChange.parse(change);
@@ -59,15 +60,14 @@ export class InMemoryConfigChangeStore implements ConfigChangeStore {
     return latest ? structuredClone(latest) : null;
   }
 
-  async listDecisions(dedupeKeys: readonly string[], max: number): Promise<Listing<ConfigChange>> {
-    const keys = new Set(dedupeKeys);
-    const decided = [...this.changes.values()].filter(
-      (c) =>
-        c.dedupeKey !== null &&
-        keys.has(c.dedupeKey) &&
-        (c.status === "accepted" || c.status === "rejected"),
-    );
-    return { items: structuredClone(decided.slice(0, max)), complete: decided.length <= max };
+  async getLookupCursor(projectId: string): Promise<ProposalLookupCursor | null> {
+    const cursor = this.cursors.get(projectId);
+    return cursor ? structuredClone(cursor) : null;
+  }
+
+  async setLookupCursor(cursor: ProposalLookupCursor): Promise<void> {
+    const parsed = ProposalLookupCursor.parse(cursor);
+    this.cursors.set(parsed.projectId, parsed);
   }
 
   async decide(

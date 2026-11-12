@@ -11,7 +11,9 @@ import {
   ConfigProposals,
   flattenUntrusted,
   proposalKey,
+  lookupPage,
   proposeFromFindings,
+  type ConfigProposalLimits,
 } from "./config-proposals";
 
 const NOW = new Date("2026-11-12T12:00:00.000Z");
@@ -121,6 +123,42 @@ describe("proposeFromFindings after a decision", () => {
     expect(
       proposeFromFindings("ai", [after(3), after(2), after(1)], undefined, decided),
     ).toHaveLength(1);
+  });
+});
+
+describe("lookupPage", () => {
+  const kinds = ["a", "b", "c", "d", "e"];
+
+  it("GivenNoCursor_WhenPaged_ThenTheFirstKindsByName", () => {
+    expect(lookupPage(kinds, null, 2)).toEqual(["a", "b"]);
+  });
+
+  it("GivenACursor_WhenPaged_ThenTheKindsAfterItWrappingToTheStart", () => {
+    expect(lookupPage(kinds, "b", 2)).toEqual(["c", "d"]);
+    expect(lookupPage(kinds, "d", 2)).toEqual(["e", "a"]);
+    expect(lookupPage(kinds, "e", 2)).toEqual(["a", "b"]);
+  });
+
+  it("GivenACursorKindThatNoLongerRepeats_WhenPaged_ThenItResumesAfterItsPlaceByName", () => {
+    expect(lookupPage(kinds, "bb", 2)).toEqual(["c", "d"]);
+    expect(lookupPage(kinds, "z", 2)).toEqual(["a", "b"]);
+  });
+
+  it("GivenNoMoreKindsThanTheCap_WhenPaged_ThenAllOfThem", () => {
+    expect(lookupPage(kinds, "c", 5)).toEqual(kinds);
+  });
+
+  it("GivenAnyCursor_WhenPagedRepeatedly_ThenEveryKindIsCoveredWithinCeilKindsOverMaxPages", () => {
+    for (const start of [null, "a", "c", "e", "x"]) {
+      const seen = new Set<string>();
+      let cursor: string | null = start;
+      for (let i = 0; i < Math.ceil(kinds.length / 2); i++) {
+        const page = lookupPage(kinds, cursor, 2);
+        page.forEach((k) => seen.add(k));
+        cursor = page.at(-1)!;
+      }
+      expect([...seen].sort()).toEqual(kinds);
+    }
   });
 });
 
@@ -269,93 +307,91 @@ describe("ConfigProposals", () => {
     expect(await changes.listPending(projectId)).toHaveLength(1);
   });
 
-  it("GivenMoreRepeatedKindsThanTheOldLookupCap_WhenSweptOnce_ThenEveryKindIsProposedFromOneCappedRead", async () => {
-    const { tracker, findings, changes, projectId, repeated } = await setup();
-    let n = 0;
-    const service = new ConfigProposals(
-      tracker,
-      findings,
-      changes,
+  /** A fresh service per sweep, as after a cold start: only the store carries the cursor. */
+  const restarted = (
+    s: Awaited<ReturnType<typeof setup>>,
+    limits: Partial<ConfigProposalLimits>,
+    ids: { n: number },
+  ) =>
+    new ConfigProposals(
+      s.tracker,
+      s.findings,
+      s.changes,
       () => NOW,
-      () => `cc-${++n}`,
-      { ...CONFIG_PROPOSAL_LIMITS, maxNewPerSweep: 25, maxPendingPerProject: 25 },
+      () => `cc-${++ids.n}`,
+      { ...CONFIG_PROPOSAL_LIMITS, minSweepIntervalMs: 0, ...limits },
     );
-    const listDecisions = vi.spyOn(changes, "listDecisions");
-    const latestDecision = vi.spyOn(changes, "latestDecision");
-    // 25 kinds, past the old 20-lookup cap; the last ones by name were never proposed.
+
+  it("GivenMoreRepeatedKindsThanTheLookupCap_WhenSweptAcrossRestarts_ThenEveryKindIsProposedWithinBoundedSweepsAndLookupsStayCapped", async () => {
+    const s = await setup();
+    const ids = { n: 0 };
+    const limits = { maxNewPerSweep: 25, maxPendingPerProject: 25 };
+    const lookups = vi.spyOn(s.changes, "latestDecision");
+    // 25 kinds, past the 20-lookup cap; before AI-137 the last 5 by name were never proposed.
     const kinds = Array.from({ length: 25 }, (_, i) => `kind-${String(i).padStart(2, "0")}`);
-    for (const kind of kinds) findings.add(...repeated(kind));
+    for (const kind of kinds) s.findings.add(...s.repeated(kind));
 
-    const result = await service.sweep(projectId);
+    await restarted(s, limits, ids).sweep(s.projectId);
+    expect(lookups).toHaveBeenCalledTimes(20);
+    // The 5 not looked up wait, undecided: nothing proposed for them yet.
+    expect(await s.changes.listPending(s.projectId)).toHaveLength(20);
 
-    expect(result.created).toHaveLength(25);
-    const pending = await changes.listPending(projectId);
+    lookups.mockClear();
+    await restarted(s, limits, ids).sweep(s.projectId);
+    expect(lookups.mock.calls.length).toBeLessThanOrEqual(20);
+
+    // Bounded: ceil(25 / 20) = 2 sweeps covered every kind, across a restart.
+    const pending = await s.changes.listPending(s.projectId);
     expect(pending.map((c) => c.dedupeKey).sort()).toEqual(
-      kinds.map((k) => proposalKey(projectId, "AGENTS.md", k)),
+      kinds.map((k) => proposalKey(s.projectId, "AGENTS.md", k)),
     );
-    expect(listDecisions).toHaveBeenCalledTimes(1);
-    expect(listDecisions).toHaveBeenCalledWith(
-      kinds.map((k) => proposalKey(projectId, "AGENTS.md", k)),
-      CONFIG_PROPOSAL_LIMITS.maxDecidedRead,
-    );
-    expect(latestDecision).not.toHaveBeenCalled();
   });
 
-  it("GivenADecidedKindAmongMany_WhenSwept_ThenItsEarlierDecisionStillHoldsItAndTheRestAreProposed", async () => {
-    const { service, findings, changes, projectId, repeated, advance } = await setup();
-    findings.add(...repeated("b-kind"));
-    await service.sweep(projectId);
-    await service.decide("cc-1", "rejected", "user:uid-1");
-    findings.add(...repeated("a-kind"), ...repeated("c-kind"));
-    advance(60_000);
+  it("GivenMoreDecidedKindsThanTheLookupCap_WhenSweptRepeatedly_ThenTheUndecidedKindIsReachedAndDecidedOnesStayHeld", async () => {
+    const s = await setup();
+    const ids = { n: 0 };
+    const decided = ["a-kind", "b-kind", "c-kind", "d-kind", "e-kind"];
+    for (const kind of decided) s.findings.add(...s.repeated(kind));
+    await restarted(s, {}, ids).sweep(s.projectId);
+    for (const c of await s.changes.listPending(s.projectId)) {
+      await restarted(s, {}, ids).decide(c.id, "rejected", "user:uid-1");
+    }
+    s.findings.add(...s.repeated("f-kind"));
+    const lookups = vi.spyOn(s.changes, "latestDecision");
 
-    await service.sweep(projectId);
+    // 6 repeated kinds, 2 lookups a sweep: within ceil(6 / 2) = 3 sweeps.
+    for (let sweep = 0; sweep < 3; sweep++) {
+      lookups.mockClear();
+      await restarted(s, { maxDecisionLookups: 2 }, ids).sweep(s.projectId);
+      expect(lookups.mock.calls.length).toBeLessThanOrEqual(2);
+    }
 
-    const pending = await changes.listPending(projectId);
-    expect(pending.map((c) => c.dedupeKey).sort()).toEqual([
-      proposalKey(projectId, "AGENTS.md", "a-kind"),
-      proposalKey(projectId, "AGENTS.md", "c-kind"),
+    const pending = await s.changes.listPending(s.projectId);
+    expect(pending.map((c) => c.dedupeKey)).toEqual([
+      proposalKey(s.projectId, "AGENTS.md", "f-kind"),
     ]);
   });
 
-  it("GivenMoreDecidedChangesThanTheReadCap_WhenSwept_ThenNothingIsProposedAndAnErrorIsLogged", async () => {
-    const { tracker, findings, changes, projectId, repeated } = await setup();
-    let n = 0;
-    const make = (maxDecidedRead: number) =>
-      new ConfigProposals(
-        tracker,
-        findings,
-        changes,
-        () => NOW,
-        () => `cc-${++n}`,
-        { ...CONFIG_PROPOSAL_LIMITS, maxDecidedRead, minSweepIntervalMs: 0 },
-      );
-    findings.add(...repeated("a-kind"), ...repeated("b-kind"));
-    await make(1_000).sweep(projectId);
-    for (const c of await changes.listPending(projectId)) {
-      await make(1_000).decide(c.id, "accepted", "user:uid-1");
-    }
-    findings.add(...repeated("c-kind"));
-    const logs = vi.mocked(console.log);
-    logs.mockClear();
+  it("GivenNoMoreRepeatedKindsThanTheCap_WhenSwept_ThenNoCursorIsReadOrWritten", async () => {
+    const { service, findings, changes, projectId, repeated } = await setup();
+    const get = vi.spyOn(changes, "getLookupCursor");
+    const set = vi.spyOn(changes, "setLookupCursor");
+    findings.add(...repeated("a-kind"), finding(9, { projectId, kind: "rare-kind" }));
 
-    const result = await make(1).sweep(projectId);
+    await service.sweep(projectId);
 
-    expect(result.created).toEqual([]);
-    expect(await changes.listPending(projectId)).toEqual([]);
-    expect(logs.mock.calls.map(([line]) => JSON.parse(String(line)))).toContainEqual(
-      expect.objectContaining({ severity: "ERROR", projectId, maxDecidedRead: 1 }),
-    );
+    expect(get).not.toHaveBeenCalled();
+    expect(set).not.toHaveBeenCalled();
   });
 
   it("GivenNoKindOnEnoughPulls_WhenSwept_ThenNoDecisionIsRead", async () => {
     const { service, findings, changes, projectId } = await setup();
-    const listDecisions = vi.spyOn(changes, "listDecisions");
+    const lookups = vi.spyOn(changes, "latestDecision");
     findings.add(finding(1, { projectId }), finding(2, { projectId }));
 
     await service.sweep(projectId);
 
-    expect(listDecisions).not.toHaveBeenCalled();
+    expect(lookups).not.toHaveBeenCalled();
   });
 
   it("GivenNoFindingsStoredYet_WhenSwept_ThenNothingIsProposed", async () => {

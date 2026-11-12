@@ -41,10 +41,11 @@ export const CONFIG_PROPOSAL_LIMITS = {
   /** A project's sweeps are this far apart at least, per instance (max 2 instances). */
   minSweepIntervalMs: 60_000,
   /**
-   * Decided changes one sweep reads, for the repeated kinds only (AI-137). Past it the sweep
-   * proposes nothing and logs an error, so a decided kind is never re-proposed unread.
+   * Kinds per sweep whose last decision is looked up (one read each). With more repeated kinds,
+   * a stored cursor pages through them by name, so each is looked up within
+   * ceil(kinds / this) sweeps; the rest wait, undecided (AI-137).
    */
-  maxDecidedRead: 1_000,
+  maxDecisionLookups: 20,
 } as const;
 
 export type ConfigProposalLimits = { [K in keyof typeof CONFIG_PROPOSAL_LIMITS]: number };
@@ -115,24 +116,18 @@ export function repeatedKinds(
 }
 
 /**
- * When Andy last decided each kind, from the project's decided changes: the newest `decidedAt`
- * per proposal key of the target file. Other keys (other files, other sources) are ignored.
+ * The kinds one sweep looks up (AI-137): up to `max` of the sorted `kinds`, starting after
+ * `lastKind` by name and wrapping to the start, so consecutive sweeps cover every kind.
  */
-export function lastDecisionByKind(
-  projectId: string,
-  decided: readonly ConfigChange[],
-): Map<string, string> {
-  const prefix = proposalKey(projectId, PROPOSAL_TARGET_FILE, "");
-  const byKind = new Map<string, string>();
-  for (const c of decided) {
-    if (!c.dedupeKey?.startsWith(prefix) || c.decidedAt === null) continue;
-    const kind = c.dedupeKey.slice(prefix.length);
-    const seen = byKind.get(kind);
-    if (seen === undefined || Date.parse(c.decidedAt) > Date.parse(seen)) {
-      byKind.set(kind, c.decidedAt);
-    }
-  }
-  return byKind;
+export function lookupPage(
+  kinds: readonly string[],
+  lastKind: string | null,
+  max: number,
+): string[] {
+  if (kinds.length <= max) return [...kinds];
+  const after = lastKind === null ? 0 : kinds.findIndex((k) => k > lastKind);
+  const start = after === -1 ? 0 : after;
+  return Array.from({ length: max }, (_, i) => kinds[(start + i) % kinds.length]!);
 }
 
 function pullsByKind(
@@ -188,8 +183,10 @@ function proposal(
   };
 }
 
-function log(message: string, fields: Record<string, unknown>, severity = "INFO") {
-  console.log(JSON.stringify({ severity, message, component: "config-proposals", ...fields }));
+function log(message: string, fields: Record<string, unknown>) {
+  console.log(
+    JSON.stringify({ severity: "INFO", message, component: "config-proposals", ...fields }),
+  );
 }
 
 /** Sweeps for proposals, lists pending ones, and records Andy's decision. Never applies one. */
@@ -233,10 +230,11 @@ export class ConfigProposals {
       maxFindings: this.limits.maxFindings,
     });
     result.findingsRead = findings.length;
-    const decidedAt = await this.lastDecisions(projectId, findings);
-    const proposals = decidedAt
-      ? proposeFromFindings(projectId, findings, this.limits, decidedAt)
-      : [];
+    const { decidedAt, deferred } = await this.lastDecisions(projectId, findings);
+    // Deferred kinds weren't looked up: they wait for their page rather than risk re-proposing
+    // a kind Andy decided (AI-137).
+    const lookedUp = findings.filter((f) => !deferred.has(f.kind));
+    const proposals = proposeFromFindings(projectId, lookedUp, this.limits, decidedAt);
     for (const p of proposals) {
       // The store checks duplicates and the pending cap in one transaction.
       const written = await this.changes.createPending(
@@ -264,28 +262,40 @@ export class ConfigProposals {
   }
 
   /**
-   * When Andy last decided each repeated kind (AI-137): one capped read of the decisions on
-   * those kinds' proposal keys, so every repeated kind is checked on every sweep, and a sweep
-   * with no repeated kind reads none. Null when the read hit its cap: decisions may be missing,
-   * so the sweep proposes nothing rather than re-propose a decided kind.
+   * When Andy last decided each repeated kind, at most `maxDecisionLookups` reads. With more
+   * kinds than that, the stored cursor picks this sweep's page and advances past it; the kinds
+   * left out are `deferred`: undecided, and not proposed this sweep (AI-137).
    */
   private async lastDecisions(
     projectId: string,
     findings: readonly ReviewFinding[],
-  ): Promise<Map<string, string> | null> {
+  ): Promise<{ decidedAt: Map<string, string>; deferred: Set<string> }> {
+    const decidedAt = new Map<string, string>();
     const kinds = repeatedKinds(projectId, findings, this.limits.minPulls);
-    if (kinds.length === 0) return new Map();
-    const keys = kinds.map((k) => proposalKey(projectId, PROPOSAL_TARGET_FILE, k));
-    const decided = await this.changes.listDecisions(keys, this.limits.maxDecidedRead);
-    if (!decided.complete) {
-      log(
-        "config proposal sweep skipped: decisions on repeated kinds exceed the read cap",
-        { projectId, kinds: kinds.length, maxDecidedRead: this.limits.maxDecidedRead },
-        "ERROR",
-      );
-      return null;
+    let page = kinds;
+    if (kinds.length > this.limits.maxDecisionLookups) {
+      const cursor = await this.changes.getLookupCursor(projectId);
+      page = lookupPage(kinds, cursor?.lastKind ?? null, this.limits.maxDecisionLookups);
+      await this.changes.setLookupCursor({
+        projectId,
+        lastKind: page.at(-1)!,
+        updatedAt: this.now().toISOString(),
+      });
+      log("config proposal lookups paged", {
+        projectId,
+        kinds: kinds.length,
+        from: page[0],
+        to: page.at(-1),
+      });
     }
-    return lastDecisionByKind(projectId, decided.items);
+    for (const kind of page) {
+      const last = await this.changes.latestDecision(
+        proposalKey(projectId, PROPOSAL_TARGET_FILE, kind),
+      );
+      if (last?.decidedAt) decidedAt.set(kind, last.decidedAt);
+    }
+    const inPage = new Set(page);
+    return { decidedAt, deferred: new Set(kinds.filter((k) => !inPage.has(k))) };
   }
 
   /** Every pending change (of one project when given), newest first. */
