@@ -41,7 +41,7 @@ export function StartRuns({ path, runs }: { path: TicketPath; runs: Run[] | unde
             disabled={start.isPending || inFlight}
             onClick={() => start.mutate({ step })}
           >
-            Start {step} run
+            Start {step} task
           </Button>
         ))}
       </div>
@@ -73,7 +73,7 @@ export function RunItem({
     <li className="space-y-1 rounded-md border border-border p-3 text-sm">
       <p className="flex flex-wrap items-center gap-2">
         <Badge variant={STATUS_VARIANT[run.status]}>{run.status}</Badge>
-        <span className="font-medium">{run.step}</span>
+        <span className="font-medium">Agent task · {run.step}</span>
         <span className="text-muted-foreground">{run.route.model}</span>
         {run.retryOf && <span className="text-muted-foreground">retry {run.attempt}</span>}
         {created && <Time label="started" iso={created} />}
@@ -85,7 +85,7 @@ export function RunItem({
             rel="noopener noreferrer"
             className="ml-auto underline"
           >
-            Run log
+            Task log
           </a>
         )}
       </p>

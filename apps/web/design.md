@@ -1,6 +1,6 @@
 # Design source — control-plane UI
 
-Every UI change follows this file (ADR-0059: UX foundation; ADR-0045: UI design system). Shortcut's simplicity is the starting point, not the look (ADR-0070): a modern, minimalist design of our own, biased toward deciding (answer, approve, watch). A screen needing a rule this file lacks adds it here.
+Every UI change follows this file (ADR-0059: UX foundation; ADR-0045: UI design system). Shortcut's simplicity is the starting point, not the look (ADR-0070): a modern, minimalist design of our own, biased toward deciding (answer, approve, watch). Add missing rules here.
 
 Stack: React, Tailwind v4, shadcn/ui components in `src/components/ui/`, icons from `lucide-react`. Tokens live in `src/index.css`; use them through Tailwind classes (`bg-muted`, `text-attention`), never raw colours.
 
@@ -40,7 +40,7 @@ Counts, durations and ticket keys use `tabular-nums`. No sizes above `text-lg`, 
 | Lines           | `border`, `ring` (focus)         | Card and header borders; keyboard focus             |
 | Action          | `primary`                        | The one main button on a screen                     |
 | Needs attention | `attention`                      | Waiting on a human: "Needs you", open questions     |
-| Running         | `running`                        | A run in flight                                     |
+| Running         | `running`                        | A task in flight                                    |
 | Success         | `success`                        | Checks passing, merged, Done                        |
 | Danger          | `destructive`                    | Errors, failed checks, blocked                      |
 
@@ -63,7 +63,7 @@ One small set, reused everywhere (board, inbox, panel, picker). Build them from 
 | --------------- | ---------------------------- | --------------------------------------------------------------- |
 | Type            | Feature, chore, bug, epic    | Lucide icon in `muted-foreground`, type name as its title       |
 | Size, score     | "S", "low risk"              | `Badge`; high risk `danger`                                     |
-| Run in flight   | Step and elapsed time        | `Badge variant="running"`: "Refining · 3 min"                   |
+| Agent task      | Step and elapsed time        | `Badge variant="running"`: "Refining · 3 min"                   |
 | PR state        | Number and state             | "PR #12 · open" neutral, `success` merged, `destructive` closed |
 | Needs attention | The ticket waits on a human  | `Badge variant="attention"`: "2 questions", else "Needs you"    |
 | Blocked         | An unfinished blocker        | `Badge variant="danger"`: "Blocked by AI-3"                     |
@@ -76,6 +76,7 @@ No spinners or pulsing in markers: static text keeps screenshots stable.
 - Sentence case everywhere: "New ticket", "All projects", "Add project".
 - "Needs you" for items waiting on the viewer (header count, inbox, badges). "Needs attention" is the ticket fact, used in docs and the API, not in the viewer's UI.
 - Never a bare ID in prose or links: "AI-26: Design source and app shell". A card may show the key beside its title.
+- Say "agent task", never "run".
 - Buttons are verbs. Empty states say what's missing: "Nothing needs you."
 - Errors show the API's message (`QueryError`); never swallow one.
 
