@@ -66,14 +66,16 @@ function useDashboard(projectId: string | undefined, weeks: number) {
   const api = useApi();
   return useQuery({
     queryKey: ["dashboard", projectId ?? "all", weeks],
+    // The generated types read `ticketsByStage` as optional keys; the API's schema fills every
+    // stage, so the contracts type is the true shape.
     queryFn: async (): Promise<ProjectDashboard | Dashboard> =>
       projectId
-        ? unwrap(
+        ? (unwrap(
             await api.GET("/api/projects/{projectId}/dashboard", {
               params: { path: { projectId }, query: { weeks } },
             }),
-          )
-        : unwrap(await api.GET("/api/dashboard", { params: { query: { weeks } } })),
+          ) as ProjectDashboard)
+        : (unwrap(await api.GET("/api/dashboard", { params: { query: { weeks } } })) as Dashboard),
   });
 }
 
