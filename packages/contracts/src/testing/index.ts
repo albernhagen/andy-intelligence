@@ -10,6 +10,7 @@ import {
   Repo,
   RepoToken,
   Run,
+  Stage,
   Ticket,
   TicketEvent,
 } from "../entities";
@@ -286,6 +287,44 @@ export function workTrackerContract(name: string, make: () => Promise<WorkTracke
       expect(await ids(true)).toEqual([second.id]);
       expect(await ids(false)).toEqual([ticket.id]);
       expect(await ids()).toEqual([ticket.id, second.id]);
+    });
+
+    it("GivenTicketsInTwoProjects_WhenLookedUpByKey_ThenOnlyTheProjectsOwnTicketIsFound", async () => {
+      const { tracker, project, ticket } = await setup();
+      const other = await tracker.createProject({ name: "Other", key: uniqueKey() });
+      const elsewhere = await tracker.createTicket(other.id, { title: "Elsewhere" }, "andy");
+      expect(await tracker.getTicketByKey(project.id, ticket.key)).toEqual(ticket);
+      expect(await tracker.getTicketByKey(project.id, elsewhere.key)).toBeNull();
+      expect(await tracker.getTicketByKey(project.id, `${project.key}-999`)).toBeNull();
+      expect(await tracker.getTicketByKey("nope", ticket.key)).toBeNull();
+    });
+
+    it("GivenTicketsInSeveralStages_WhenCounted_ThenEveryStageHasItsUnarchivedCount", async () => {
+      const { tracker, project, ticket } = await setup();
+      const add = async (title: string) =>
+        (await tracker.createTicket(project.id, { title }, "andy")).id;
+      const [ready, done, archived] = await Promise.all([add("R"), add("D"), add("A")]);
+      const moveTo = async (id: string, to: Stage) =>
+        tracker.updateTicket(project.id, id, { stage: { to, reason: null } }, "andy");
+      await moveTo(ready, "ready");
+      await moveTo(done, "done");
+      await moveTo(archived, "done");
+      await tracker.updateTicket(project.id, archived, { fields: { archived: true } }, "andy");
+      const other = await tracker.createProject({ name: "Other", key: uniqueKey() });
+      await tracker.createTicket(other.id, { title: "Elsewhere" }, "andy");
+
+      expect(await tracker.countByStage(project.id)).toEqual({
+        backlog: 1,
+        ready: 1,
+        in_progress: 0,
+        ready_for_review: 0,
+        done: 1,
+        cancelled: 0,
+      });
+      expect(ticket.stage).toBe("backlog");
+      expect(await tracker.countByStage("nope")).toEqual(
+        Object.fromEntries(Stage.options.map((s) => [s, 0])),
+      );
     });
 
     it("GivenFieldAndStageChanges_WhenUpdated_ThenHistoryRecordsOnlyRealChanges", async () => {
@@ -1256,4 +1295,5 @@ export function evaluatorContract(
 }
 export * from "./notify-email";
 export * from "./runner";
+export * from "./night";
 export * from "./config-proposals";
