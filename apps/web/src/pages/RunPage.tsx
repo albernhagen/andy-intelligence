@@ -4,7 +4,7 @@ import { useQuery } from "@tanstack/react-query";
 import type { BuildCheck, Run } from "@andy/contracts";
 import { Loading, QueryError } from "@/components/Status";
 import { Badge } from "@/components/ui/badge";
-import { STATUS_VARIANT, Summary, formatCost } from "@/components/Runs";
+import { STATUS_VARIANT, Summary, formatCost, httpsHref } from "@/components/Runs";
 import { formatQuotaDelta } from "@/components/TicketCostLine";
 import { ApiError, unwrap, useApi } from "@/lib/api";
 import { useLivePoll } from "@/lib/live";
@@ -116,8 +116,8 @@ function Links({ run }: { run: Run }) {
   return (
     <p className="flex flex-wrap gap-x-4 gap-y-1 text-sm">
       {run.ticketId && <TicketLink projectId={run.projectId} ticketId={run.ticketId} />}
-      {run.links.executorRun && <External href={run.links.executorRun}>Task log</External>}
-      {run.links.pullRequest && <External href={run.links.pullRequest}>Pull request</External>}
+      <External href={run.links.executorRun}>Task log</External>
+      <External href={run.links.pullRequest}>Pull request</External>
       {run.branch && <span className="text-muted-foreground">branch {run.branch}</span>}
     </p>
   );
@@ -205,9 +205,12 @@ function Fact({ label, children }: { label: string; children: ReactNode }) {
   );
 }
 
-function External({ href, children }: { href: string; children: ReactNode }) {
+/** Nothing for a missing or non-https URL. */
+function External({ href, children }: { href: string | undefined; children: ReactNode }) {
+  const safe = httpsHref(href);
+  if (!safe) return null;
   return (
-    <a href={href} target="_blank" rel="noopener noreferrer" className="underline">
+    <a href={safe} target="_blank" rel="noopener noreferrer" className="underline">
       {children}
     </a>
   );

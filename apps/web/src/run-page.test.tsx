@@ -3,6 +3,7 @@ import { screen, waitFor, within } from "@testing-library/react";
 import { DEFAULT_ROUTE } from "@andy/domain";
 import { renderApp } from "@/test/harness";
 import { formatDuration, gateText, wallMs } from "@/pages/RunPage";
+import { httpsHref } from "@/components/Runs";
 
 /** AI-101: the agent task detail screen, over the real API in-process. */
 
@@ -207,5 +208,13 @@ describe("agent task page helpers", () => {
     expect(gateText({ wouldAutoMerge: false, gateReasons: ["draft", "checks_failed"] })).toBe(
       "held: draft, checks_failed",
     );
+  });
+
+  it("GivenNonHttpsUrls_WhenCheckedForLinks_ThenOnlyHttpsRenders", () => {
+    expect(httpsHref(PR)).toBe(PR);
+    expect(httpsHref("javascript:alert(1)")).toBeUndefined();
+    expect(httpsHref("http://example.com")).toBeUndefined();
+    expect(httpsHref("not a url")).toBeUndefined();
+    expect(httpsHref(undefined)).toBeUndefined();
   });
 });

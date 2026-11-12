@@ -70,6 +70,8 @@ export function RunItem({
   decidable?: boolean;
 }) {
   const created = run.createdAt ?? run.startedAt;
+  const log = httpsHref(run.links.executorRun);
+  const pr = httpsHref(run.links.pullRequest);
   return (
     <li className="space-y-1 rounded-md border border-border p-3 text-sm">
       <p className="flex flex-wrap items-center gap-2">
@@ -86,13 +88,8 @@ export function RunItem({
         {run.retryOf && <span className="text-muted-foreground">retry {run.attempt}</span>}
         {created && <Time label="started" iso={created} />}
         {run.endedAt && <Time label="ended" iso={run.endedAt} />}
-        {run.links.executorRun && (
-          <a
-            href={run.links.executorRun}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="ml-auto underline"
-          >
+        {log && (
+          <a href={log} target="_blank" rel="noopener noreferrer" className="ml-auto underline">
             Task log
           </a>
         )}
@@ -107,19 +104,14 @@ export function RunItem({
       {!isActiveRun(run) && run.costUsd === null && (
         <p className="text-muted-foreground">Cost unknown</p>
       )}
-      {(run.links.pullRequest || run.branch) && (
+      {(pr || run.branch) && (
         <p className="text-muted-foreground">
-          {run.links.pullRequest && (
-            <a
-              href={run.links.pullRequest}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="underline"
-            >
+          {pr && (
+            <a href={pr} target="_blank" rel="noopener noreferrer" className="underline">
               Pull request
             </a>
           )}
-          {run.links.pullRequest && run.branch && " · "}
+          {pr && run.branch && " · "}
           {run.branch && <span>branch {run.branch}</span>}
         </p>
       )}
@@ -195,6 +187,16 @@ export function Summary({ text }: { text: string }) {
       {open && <p className="whitespace-pre-wrap">{text}</p>}
     </div>
   );
+}
+
+/** Only https links render as links (ADR-0025): a run's URLs are stored, not trusted. */
+export function httpsHref(url: string | undefined): string | undefined {
+  if (!url) return undefined;
+  try {
+    return new URL(url).protocol === "https:" ? url : undefined;
+  } catch {
+    return undefined;
+  }
 }
 
 export function formatTokens(run: Pick<Run, "tokensIn" | "tokensOut">): string {
