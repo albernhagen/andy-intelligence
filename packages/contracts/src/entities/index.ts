@@ -133,8 +133,9 @@ export type GapConfidence = z.infer<typeof GapConfidence>;
 /**
  * `assumed`: refine's default stands. `promoted`: Andy turned it into a question. `answered`: he
  * answered it and that gap waits for a re-refine. `settled`: the re-refine ran (ADR-0075).
+ * `accepted`: Andy let a held gap stand as an assumption (AI-75, ADR-0087).
  */
-export const AssumptionStatus = z.enum(["assumed", "promoted", "answered", "settled"]);
+export const AssumptionStatus = z.enum(["assumed", "promoted", "answered", "settled", "accepted"]);
 export type AssumptionStatus = z.infer<typeof AssumptionStatus>;
 
 /** A gap refine decided by itself, visible and reversible (ADR-0075). Untrusted agent text. */
