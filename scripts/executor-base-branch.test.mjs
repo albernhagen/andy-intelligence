@@ -182,7 +182,7 @@ const git = (cwd, ...args) =>
  * A checkout of `epic/AI-1` with `origin/main` fetched (as the full-history checkout leaves it):
  * main has a lockfile and CODEOWNERS; `onEpic` writes the epic branch's own commit.
  */
-function epicCheckout(onEpic) {
+function epicCheckout(onEpic, onMainLater = null) {
   const root = mkdtempSync(join(tmpdir(), "epic-check-"));
   git(root, "init", "-q", "-b", "main");
   writeFileSync(join(root, "package.json"), '{"name":"p"}\n');
@@ -195,6 +195,15 @@ function epicCheckout(onEpic) {
   onEpic(root);
   git(root, "add", "-A");
   git(root, "commit", "-q", "--allow-empty", "-m", "story");
+  if (onMainLater) {
+    // The default branch moves on after the epic branch left it.
+    git(root, "checkout", "-q", "main");
+    onMainLater(root);
+    git(root, "add", "-A");
+    git(root, "commit", "-q", "-m", "main moves on");
+    git(root, "update-ref", "refs/remotes/origin/main", "HEAD");
+    git(root, "checkout", "-q", "epic/AI-1");
+  }
   // The platform checkout the step reads its script from, untracked like in the job.
   mkdirSync(join(root, ".executor-platform"));
   cpSync(join(ROOT, "scripts"), join(root, ".executor-platform", "scripts"), { recursive: true });
@@ -224,7 +233,47 @@ describe("executor agent job: epic branch check (AI-122)", () => {
     );
 
     expect(r.status, r.log).toBe(0);
-    expect(r.log).toContain("match");
+    expect(r.log).toContain("unchanged since");
+  });
+
+  it("GivenTheDefaultBranchBumpsItsLockfileAndCodeownersAfterTheEpicLeft_WhenChecked_ThenTheJobGoesOn", () => {
+    const r = runEpicCheck(
+      epicCheckout(
+        (root) => writeFileSync(join(root, "story.ts"), "export const x = 1;\n"),
+        (root) => {
+          writeFileSync(join(root, "pnpm-lock.yaml"), "lockfileVersion: '9.0'\nbumped: true\n");
+          writeFileSync(join(root, "CODEOWNERS"), "* @andy\n/infra/ @andy\n");
+        },
+      ),
+    );
+
+    expect(r.status, r.log).toBe(0);
+  });
+
+  it("GivenTheEpicChangedItsLockfileAndTheDefaultBranchMovedOn_WhenChecked_ThenTheJobStillStops", () => {
+    const r = runEpicCheck(
+      epicCheckout(
+        (root) =>
+          writeFileSync(join(root, "pnpm-lock.yaml"), "lockfileVersion: '9.0'\nepic: true\n"),
+        (root) => writeFileSync(join(root, "README.md"), "moved on\n"),
+      ),
+    );
+
+    expect(r.status).not.toBe(0);
+    expect(r.log).toContain("no install, no agent");
+  });
+
+  it("GivenAnEpicBranchWithNoHistoryInCommonWithTheDefaultBranch_WhenChecked_ThenTheJobStops", () => {
+    const root = epicCheckout(() => {});
+    git(root, "checkout", "-q", "--orphan", "stray");
+    git(root, "commit", "-q", "--allow-empty", "-m", "unrelated");
+    git(root, "update-ref", "refs/remotes/origin/main", "HEAD");
+    git(root, "checkout", "-q", "epic/AI-1");
+
+    const r = runEpicCheck(root);
+
+    expect(r.status).not.toBe(0);
+    expect(r.log).toContain("no history");
   });
 
   it.each([

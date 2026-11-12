@@ -201,10 +201,11 @@ jobs:
             platform/procedures
 
       # AI-122: the dependency install below runs outside the sandbox and the permission profile
-      # reads CODEOWNERS from the checkout, both trusting the default branch's files. An epic
-      # branch whose install inputs or CODEOWNERS differ from them stops here, before the profile,
-      # the install or the agent. Git alone (hooks, fsmonitor and global config off); file names
-      # aren't printed (they are repo text).
+      # reads CODEOWNERS from the checkout, both trusting files from the default branch. An epic
+      # branch whose own commits (since its merge-base with the default branch) changed install
+      # inputs or CODEOWNERS stops here, before the profile, the install or the agent; the
+      # default branch moving on doesn't count. Git alone (hooks, fsmonitor and global config
+      # off); file names aren't printed (they are repo text).
       - name: Check the epic branch against the default branch
         if: needs.context.outputs.base_branch != ''
         env:
@@ -216,17 +217,21 @@ jobs:
             echo "::error title=claude-executor::The default branch wasn't fetched."
             exit 1
           }
-          drift=$(git diff --name-only -z --no-renames "$main_sha" HEAD \
+          fork=$(git merge-base "$main_sha" HEAD) || {
+            echo "::error title=claude-executor::The epic branch shares no history with the default branch."
+            exit 1
+          }
+          drift=$(git diff --name-only -z --no-renames "$fork" HEAD \
             | node .executor-platform/scripts/executor-publish.mjs install-drift) || {
             echo "::error title=claude-executor::Couldn't compare the epic branch's install inputs with the default branch."
             exit 1
           }
-          owners=$(git diff --name-only --no-renames "$main_sha" HEAD -- .github/CODEOWNERS CODEOWNERS docs/CODEOWNERS | grep -c . || true)
+          owners=$(git diff --name-only --no-renames "$fork" HEAD -- .github/CODEOWNERS CODEOWNERS docs/CODEOWNERS | grep -c . || true)
           if [ "$drift" != "[]" ] || [ "$owners" != 0 ]; then
-            echo "::error title=claude-executor::The epic branch changes install inputs or CODEOWNERS against the default branch: no install, no agent."
+            echo "::error title=claude-executor::The epic branch changed install inputs or CODEOWNERS since it left the default branch: no install, no agent."
             exit 1
           fi
-          echo "The epic branch's install inputs and CODEOWNERS match $main_sha."
+          echo "The epic branch's install inputs and CODEOWNERS are unchanged since $fork."
 
       - name: Install the permission profile as managed settings
         env:
