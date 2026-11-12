@@ -174,8 +174,8 @@ jobs:
       sync_publish: ${{ steps.settle.outputs.sync_publish }}
     steps:
       # A sync run checks out the PR head it was started on, with history, to merge the default
-      # branch into it; a night launch's story build its epic branch (AI-122, checked in the
-      # context job); every other step starts from the default branch.
+      # branch into it; a night launch's story build checks out its epic branch (AI-122, checked in
+      # the context job); every other step starts from the default branch.
       - name: Check out the project
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
