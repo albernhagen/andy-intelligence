@@ -8,7 +8,6 @@ import {
 } from "@andy/contracts";
 import { wasDispatched } from "./dispatch-caps";
 import { checkDor } from "./dor";
-import { RefineGate } from "./refine-gate";
 import { MAX_REFINE_RUNS_PER_TICKET, type RunService } from "./runs";
 import { DomainError } from "./tickets";
 import { ACTIONS_ROUTE, routeTakes, type DispatchRoute } from "./executor";
@@ -135,7 +134,7 @@ export class RefineDispatcher {
   }
 
   private async askHeldIn(projectId: string): Promise<number> {
-    const gate = new RefineGate(this.tracker, this.now);
+    const gate = this.runs.refineGate();
     let asked = 0;
     for (const ticket of await this.upNext(projectId)) {
       if (ticket.archived) continue;

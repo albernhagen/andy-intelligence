@@ -31,7 +31,7 @@ As built (PR events, build dispatch, plan approval): [`history/workflow-as-built
 - Dependencies declared (ticket "blocked by" links).
 - **No open questions** and no held gaps (§4.3). Assumptions listed explicitly.
 - Tier is not a readiness item: `tierFor` derives it from size (S → `fast`, Sonnet; M and L → `strong`, Opus; ADR-0050); `overrides.tier` pins one (ADR-0062).
-- Per-project policy may allow "proceed on documented assumptions" for S tasks only; default is **require Andy's answers**. Overnight runs (ADR-0049) answer everything before launch; later ambiguity is decided on recorded assumptions.
+- Per-project policy may allow "proceed on documented assumptions" for S tasks only; default is **require Andy's answers**. Overnight runs (ADR-0049) answer everything before launch; later gaps: night assumptions; failures stop dependants.
 - **Epics** need only a stated intent and no open questions (no criteria or size).
 - Checked in `packages/domain` (`checkDor`); `dorStatus` is computed on every change, never set by callers.
 

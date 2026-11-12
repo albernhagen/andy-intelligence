@@ -63,6 +63,7 @@ import {
   type PlanState,
 } from "./plans";
 import { checkDor } from "./dor";
+import type { NightUnattended } from "./night-unattended";
 import { RefineGate } from "./refine-gate";
 import { DomainError } from "./errors";
 import { requireCan } from "./permissions";

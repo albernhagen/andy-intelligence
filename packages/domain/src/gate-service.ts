@@ -19,6 +19,7 @@ import {
   type GateDecision,
 } from "./gate";
 import { syncPendingFor } from "./sync-runs";
+import type { NightUnattended } from "./night-unattended";
 import type { TicketService } from "./tickets";
 
 /**
@@ -59,6 +60,8 @@ export class PullRequestGate {
     private readonly runs: RunStore,
     private readonly tickets: TicketService,
     private readonly now: () => Date = () => new Date(),
+    /** Night launches (AI-123): a vetoed PR stops its story for the night; null: none. */
+    private readonly night: NightUnattended | null = null,
   ) {}
 
   /** One recorded delivery. Replays never get here; a second delivery of a close is a no-op. */
@@ -100,7 +103,14 @@ export class PullRequestGate {
     );
     const base = { pr: number, runId: run.id };
     log("INFO", "gate assessed", { ...base, reasons: decision.reasons });
-    if (decision.flag) await this.flagOnce(run, agent.ticket, decision);
+    if (decision.flag) {
+      await this.flagOnce(run, agent.ticket, decision);
+      await this.night?.stopStory(
+        agent.ticket.projectId,
+        agent.ticket.id,
+        `the merge gate vetoed its PR #${pr.number}: ${decision.reasons.join(", ")}`,
+      );
+    }
     if (!decision.wouldAutoMerge) return { result: "assessed", ...base };
 
     // The repo index caches projects for a minute: read the policy now.

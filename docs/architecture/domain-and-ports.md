@@ -24,7 +24,7 @@ All records carry `project_id` where applicable. Zod schemas in `packages/contra
 | **ConfigChange** | entity, diff, actor (andy / ui / agent / scout), reason, status (pending/accepted/applied/reverted/rejected), project, dedupe key, decided by/at, timestamps |
 | **Release** | project, image digest, tickets included, notes, status |
 | **CodeHostEvent** | delivery ID (document ID), project, repo, kind (pull_request / check_run / workflow_run), action, normalized PR / check / workflow fields, received_at; TTL 30 days (ADR-0041) |
-| **NightLaunch** | epic, project, budget (max agent tasks, tokens, USD), stop time (≤ 16 h away), status (planned / running / stopping / ended), started/ended, end reason, story keys (ADR-0049) |
+| **NightLaunch** | epic, project, budget (max agent tasks, tokens, USD), stop time (≤ 16 h away), status (planned/running/stopping/ended), started/ended, end reason, story keys, stopped stories (ADR-0049) |
 
 ### Configuration rules
 - **Global config is the ceiling; project config can only narrow** (disable providers, lower caps, raise reserves, pin tiers).
@@ -60,7 +60,7 @@ Contracts are defined in `packages/contracts` (Zod schemas + TypeScript interfac
 | `OAuthGrantStore` | OAuthGrant (code, access token, refresh token; keyed by token hash) | **Firestore** (ADR-0039) | Local store (ADR-0032) |
 | `RunnerStore` | Runner, per-run token (hashes only; ADR-0089) | **Firestore** | — |
 | `ConfigChangeStore`, `ReviewFindingSource` | ConfigChange, ReviewFinding (ADR-0097) | **Firestore** | — |
-| `NightLaunchStore` | NightLaunch; one active per project, checked atomically | **Firestore** | — |
+| `NightLaunchStore` | NightLaunch; one active per project, checked atomically; story stops atomic, idempotent | **Firestore** | — |
 | `Telemetry` | Trace, Span, CostEvent | OTel → Cloud Trace / Cloud Logging | BigQuery sink |
 
 **Rule:** freeze the `Executor` contract only after **two real adapters** (Claude Code + Jules) work. Vendor terms map to domain terms (a Jules *session* is a `Run`; its *activities* are run events).
