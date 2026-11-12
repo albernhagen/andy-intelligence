@@ -1,4 +1,4 @@
-import { InMemoryRunStore, InMemoryWorkTracker } from "@andy/contracts";
+import { InMemoryConfigChangeStore, InMemoryRunStore, InMemoryWorkTracker } from "@andy/contracts";
 import type { NewTicket, Stage } from "@andy/contracts";
 import { TicketService, rankBetween } from "@andy/domain";
 import { createApp } from "@andy/api/app";
@@ -181,6 +181,8 @@ export async function createFakeApp() {
     webConfig: { firebaseApiKey: "k", firebaseAuthDomain: "d", projectId: "p" },
     tracker,
     runs,
+    // ADR-0097: no findings, so a project inbox shows the empty "Config proposals" row.
+    configChanges: new InMemoryConfigChangeStore(),
   });
 }
 
