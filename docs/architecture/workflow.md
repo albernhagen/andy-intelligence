@@ -19,7 +19,7 @@ Overview and reading map: [ARCHITECTURE.md](ARCHITECTURE.md). Section numbers ma
 
 As built (PR events, build dispatch, plan approval): [`history/workflow-as-built.md`](history/workflow-as-built.md).
 
-**Dispatch (ADR-0079, ADR-0080):** the build dispatcher takes Ready tickets from the top while `mayDispatch` says start (pause, dial, global and PR caps, quota) and stores why it stopped. A run's end wakes all projects, global-cap waiters first, its own last (AI-91). A ticket whose `touches` overlap a build in flight (empty overlaps any) waits. Builds record touches and a reserved ADR number (MCP `list_in_flight`, board). **Sync runs (ADR-0083):** when `main` moves, each open agent PR behind it gets a run that merges `main`, resolves conflicts, checks, pushes; global cap, not the dial; conflicts or failing checks flag Needs-you.
+**Dispatch (ADR-0079, ADR-0080):** the build dispatcher takes Ready tickets from the top while `mayDispatch` says start (pause, dial, global and PR caps, quota) and stores why it stopped. A run's end at the global cap offers others the slot first (AI-91). A ticket whose `touches` overlap a build in flight (empty overlaps any) waits. Builds record touches and a reserved ADR number (MCP `list_in_flight`, board). **Sync runs (ADR-0083):** when `main` moves, each open agent PR behind it gets a run that merges `main`, resolves conflicts, checks, pushes; global cap, not the dial; conflicts or failing checks flag Needs-you.
 
 **Needs-you is a flag, not a stage:** flagged items stay put and appear in the Needs-you inbox (UI + MCP).
 

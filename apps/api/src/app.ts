@@ -25,7 +25,7 @@ import {
   QuotaClearer,
   TicketService,
   EmailNotifications,
-  dispatchOrder,
+  wakeAfterRunEnd,
   notifyOnNeedsYou,
   type EmailNotificationsDeps,
 } from "@andy/domain";
@@ -243,8 +243,8 @@ export function createApp(input: AppDeps) {
   // create, last answer, move to Ready and switch turned on: a build first (ADR-0063, projects
   // with autoBuild), else a refine (ADR-0054). Projects waiting on the global cap go first,
   // then builds start up to the caps (ADR-0079). `next` and `wakeGlobalCapWaiters` never throw.
-  // When a run ends, every project is woken in `dispatchOrder` (AI-91): syncs and refines that
-  // wait on the global cap elsewhere get the freed slot too, and the freeing project goes last.
+  // When a run ends at the global cap, `wakeAfterRunEnd` offers the slot to other projects in
+  // `dispatchOrder` (AI-91), syncs and refines too, until it's taken; the freeing project goes last.
   // Local runners (ADR-0089): claims start runs through the same dispatchers and RunService.
   const runners = deps.runners
     ? new RunnerService(deps.runners, deps.tracker, runnerCredentials, now)
@@ -279,19 +279,25 @@ export function createApp(input: AppDeps) {
     return (await builder.next(projectId)) ?? (await refiner.next(projectId));
   };
   const runEnded = async (projectId: string) => {
-    for (const id of dispatchOrder(await deps.tracker.listProjects(), projectId)) {
+    await wakeAfterRunEnd({
+      freedBy: projectId,
+      listProjects: () => deps.tracker.listProjects(),
+      globalActive: async () => (await runs.activeCounts(projectId)).global,
       // One project's failure must not keep the slot from the projects after it.
-      await dispatchNext(id, false).catch((err: unknown) =>
-        console.error(
-          JSON.stringify({
-            severity: "ERROR",
-            message: "dispatch after a run ended failed",
-            projectId: id,
-            error: String(err),
-          }),
+      dispatch: (id, wakeWaiters) =>
+        dispatchNext(id, wakeWaiters).then(
+          () => undefined,
+          (err: unknown) =>
+            console.error(
+              JSON.stringify({
+                severity: "ERROR",
+                message: "dispatch after a run ended failed",
+                projectId: id,
+                error: String(err),
+              }),
+            ),
         ),
-      );
-    }
+    });
   };
   // One TicketService for REST, MCP and webhooks: all get the same ticket rules (packages/domain).
   const service = new TicketService(deps.tracker, runs, dispatchNext, now, runnerPresence);

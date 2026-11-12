@@ -1,7 +1,7 @@
 import type { DispatchDecision, LastDispatch } from "@andy/contracts";
 import { describe, expect, it } from "vitest";
 import { MAX_ACTIVE_RUNS_GLOBAL } from "./dispatch-caps";
-import { dispatchOrder } from "./dispatch-order";
+import { MAX_PROJECTS_WOKEN_PER_RUN_END, dispatchOrder, wakeAfterRunEnd } from "./dispatch-order";
 
 const at = (minute: number) => new Date(Date.UTC(2026, 10, 12, 0, minute)).toISOString();
 const project = (id: string, decision: DispatchDecision | null, minute = 0) => ({
@@ -93,5 +93,73 @@ describe("dispatchOrder", () => {
     // A frees the first slots: B (waiting since before C), then C. Once each holds a run, the
     // project that waited longest takes each freed slot: a round robin, none left out.
     expect(starts.join("")).toBe("BCBCABCABCAB");
+  });
+});
+
+describe("wakeAfterRunEnd", () => {
+  /** `free` slots are open after the run's end; each dispatched project takes one if any is left. */
+  function wire(projects: ReturnType<typeof project>[], free: number, takers = new Set<string>()) {
+    let active = MAX_ACTIVE_RUNS_GLOBAL - free;
+    const calls: [string, boolean][] = [];
+    return {
+      calls,
+      wake: (freedBy: string) =>
+        wakeAfterRunEnd({
+          freedBy,
+          listProjects: async () => projects,
+          globalActive: async () => active,
+          dispatch: async (id, wakeWaiters) => {
+            calls.push([id, wakeWaiters]);
+            if (takers.has(id) && active < MAX_ACTIVE_RUNS_GLOBAL) active++;
+          },
+        }),
+    };
+  }
+
+  it("GivenTheCapWasFullBeforeTheEnd_WhenARunEnds_ThenOthersGoFirstAndTheWalkStopsOnceTheSlotIsTaken", async () => {
+    const projects = [
+      project("A", "started", 0),
+      project("B", "global_cap", 1),
+      project("C", "nothing_ready", 2),
+      project("D", "nothing_ready", 3),
+    ];
+    const { calls, wake } = wire(projects, 1, new Set(["C"]));
+    expect(await wake("A")).toEqual(["B", "C"]);
+    // D is never asked: the cap is full again once C took the slot.
+    expect(calls).toEqual([
+      ["B", false],
+      ["C", false],
+      ["A", false],
+    ]);
+  });
+
+  it("GivenTheCapWasNotFullBeforeTheEnd_WhenARunEnds_ThenOnlyTheFreeingProjectIsDispatched", async () => {
+    const projects = [project("A", "started", 0), project("B", "nothing_ready", 1)];
+    const { calls, wake } = wire(projects, 2);
+    expect(await wake("A")).toEqual([]);
+    // As any other event: it wakes build waiters on the global cap itself.
+    expect(calls).toEqual([["A", true]]);
+  });
+
+  it("GivenMoreProjectsThanTheCap_WhenNoneTakesTheSlot_ThenAtMostTheCapAreWoken", async () => {
+    const projects = [project("A", "started", 0)];
+    for (let i = 0; i < MAX_PROJECTS_WOKEN_PER_RUN_END + 5; i++) {
+      projects.push(project(`P${i}`, "nothing_ready", i + 1));
+    }
+    const { calls, wake } = wire(projects, 1);
+    expect(await wake("A")).toHaveLength(MAX_PROJECTS_WOKEN_PER_RUN_END);
+    expect(calls.at(-1)).toEqual(["A", false]);
+  });
+
+  it("GivenABuildWaiterAndAProjectWithARefineWaiting_WhenASlotFrees_ThenTheBuildWaiterTakesItFirst", async () => {
+    // The refine's wait isn't on lastDispatch (its project shows nothing_ready): no guaranteed place.
+    const projects = [
+      project("A", "started", 0),
+      project("R", "nothing_ready", 1),
+      project("B", "global_cap", 5),
+    ];
+    const { calls, wake } = wire(projects, 1, new Set(["B", "R"]));
+    expect(await wake("A")).toEqual(["B"]);
+    expect(calls.map(([id]) => id)).toEqual(["B", "A"]);
   });
 });
