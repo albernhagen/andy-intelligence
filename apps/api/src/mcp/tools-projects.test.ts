@@ -4,6 +4,7 @@ import { createApp } from "../app";
 import { parseAllowList, type TokenVerifier } from "../auth";
 import { ClientMetadataResolver } from "./client-metadata";
 import { mcpCaller } from "./test-client";
+import { LIST_PROJECTS_MAX } from "./tools-projects";
 import { hashToken, newToken } from "./tokens";
 
 const PUBLIC_URL = "https://control-plane.example.run.app";
@@ -80,7 +81,8 @@ describe("list_projects", () => {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any -- JSON from the tool
       result.data.projects.map((p: any) => [p.key, p]),
     );
-    expect(Object.keys(byKey).sort()).toEqual(["AI", "OPS"]);
+    expect(Object.keys(byKey)).toEqual(["AI", "OPS"]);
+    expect(result.data.truncated).toBe(false);
     expect(byKey.AI).toMatchObject({
       name: "Andy Intelligence",
       repos: ["o/ai"],
@@ -92,6 +94,20 @@ describe("list_projects", () => {
     // The archived Done ticket is not counted.
     expect(byKey.AI.ticketsByStage).toMatchObject({ backlog: 1, ready: 1, done: 0 });
     expect(Object.values(byKey.OPS.ticketsByStage).every((n) => n === 0)).toBe(true);
+  });
+
+  it("GivenMoreProjectsThanTheCap_WhenListed_ThenTheFirstByKeyAreReturnedAndTruncatedIsSet", async () => {
+    const ctx = await setup();
+    for (let i = 0; i < LIST_PROJECTS_MAX; i++) {
+      await ctx.tracker.createProject({ name: `P${i}`, key: `P${String(i).padStart(2, "0")}` });
+    }
+    const call = await mcpCaller(ctx.app, ctx.grants, RESOURCE);
+
+    const result = await call("list_projects");
+
+    expect(result.data.projects).toHaveLength(LIST_PROJECTS_MAX);
+    expect(result.data.projects[0].key).toBe("AI");
+    expect(result.data.truncated).toBe(true);
   });
 
   it("GivenListProjects_WhenCalled_ThenNoDataChanges", async () => {
