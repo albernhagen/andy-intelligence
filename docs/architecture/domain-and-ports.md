@@ -6,13 +6,13 @@ Overview and reading map: [ARCHITECTURE.md](ARCHITECTURE.md). Section numbers ma
 
 All records carry `project_id` where applicable. Zod schemas in `packages/contracts` validate every read and write; tickets and their events nest under their project (`projects/{p}/tickets/{t}/events/{e}`). Ticket numbers come from a per-project counter (`counters/tickets-{p}`), in the ticket's transaction. Queries use equality filters only (no composite indexes); results are sorted in memory.
 
-**Rollups** (cost per ticket/epic/model/provider) are **computed on read with Firestore aggregation queries** in v1.x — no denormalized counters. Revisit if reads get slow.
+**Rollups** (cost per ticket/epic/model/provider) are **computed on read with Firestore aggregation queries** in v1.x; no denormalized counters. Revisit if reads get slow.
 
 | Entity | Key fields |
 |---|---|
 | **Project** | name, repos, GCP dev/prod project IDs, policy overrides, budget allocation, autonomy level, enabled, `autoRefine` (default on), `autoBuild` (default off, ADR-0063), `planApproval` (default `none`, ADR-0050), `autoMerge` (`s-and-m` for new projects, ADR-0050), `executor` (`actions` or `local`, ADR-0089) |
 | **Ticket** (system of record) | key (`AI-42`), title, body, acceptance criteria (the checklist; EARS for features), assumptions, type (epic/feature/chore/bug, empty at capture; ADR-0058), parent, stage, size, size reason, overrides (assignee agent/me or a harness key, resolved against the project's `defaultWorker`, ADR-0082; executor, ADR-0089; tier, model pin, autonomy, target env), needs_attention (blocked on a human), DoR status, rank, blocked_by (keys, any project), archived, out_of_scope, touches (areas or path globs; ≤ 20 × 300 chars each). No stored tier: derived from size (ADR-0062) |
-| **TicketEvent** | ticket, kind (comment / stage_change / field_change / run_linked / pr_linked …), actor (`user:<uid>` for a signed-in user by auth uid, never an email (AI-19); legacy `andy`, read as the owner; agent:<run> / system; label derived on read), body/diff, timestamp — the ticket's full history |
+| **TicketEvent** | ticket, kind (comment / stage_change / field_change / run_linked / pr_linked …), actor (`user:<uid>` for a signed-in user by auth uid, never an email (AI-19); legacy `andy`, read as the owner; agent:<run> / system; label derived on read), body/diff, timestamp; the ticket's full history |
 | **Question** | ticket, text (the question line), context, choices (label, consequence), recommendation (answer, reason), options, suggested_answer, assumptions, urgency, status, answer, answered_via, run (if an agent asked), timestamps; the format fields are null or empty on questions from before AI-73 |
 | **Run** | ticket, step (refine/plan/build/review/verify/scout), harness, provider, model, tier, status, started/ended, deadline, attempt + retry_of, tokens, usage (input, output, cache read and write tokens, turns, wall time; null = cost unknown), cost_usd (actual or API-equivalent estimate), quota delta (percentage points per window since the previous reading), quota snapshot, links (Action run, Jules session, PR), build plan + branch (ADR-0063), plan decision (who, when, reason) and a build's approved plan run (ADR-0050), executor identity (Actions `run_id`, Jules session id) to correlate completion signals, **outcome** (merged_clean / reworked / reverted / failed), would_auto_merge |
 | **Provider** | key (claude-sub, google-sub, openrouter), billing_type (subscription / pay_per_use), credential secret ref, quota_source, reserve_pct, warn_pct, pause_pct, caps (daily/monthly USD), enabled |
@@ -29,7 +29,7 @@ All records carry `project_id` where applicable. Zod schemas in `packages/contra
 ### Configuration rules
 - **Global config is the ceiling; project config can only narrow** (disable providers, lower caps, raise reserves, pin tiers).
 - **Compatibility enforced on save:** `claude-code` ↔ `claude-sub` + Claude models; `jules` ↔ `google-sub`; `opencode` / `direct` ↔ `openrouter` + any model.
-- **Override precedence:** ticket → epic → project → global.
+- **Override precedence:** ticket → epic (not `executor`) → project → global.
 - Every change is a ConfigChange (audited, revertable). Agent/scout proposals are `pending` until Andy approves.
 
 ### Default global quota policy
