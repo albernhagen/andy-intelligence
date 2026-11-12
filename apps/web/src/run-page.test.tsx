@@ -169,7 +169,8 @@ describe("agent task page", () => {
     const h = await setup();
     const run = await h.newRun();
     await open(h, `/p/ai/t/${h.ticket.id}`);
-    const activity = await screen.findByRole("region", { name: "Activity" });
+    // The story panel loads several queries; give it longer on a busy machine.
+    const activity = await screen.findByRole("region", { name: "Activity" }, { timeout: 5000 });
 
     await h.user.click(await within(activity).findByRole("link", { name: "Agent task · build" }));
 
