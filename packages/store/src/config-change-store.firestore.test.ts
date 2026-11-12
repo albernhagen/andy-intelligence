@@ -1,4 +1,4 @@
-import { configChangeStoreContract } from "@andy/contracts/testing";
+import { configChangeLogContract, configChangeStoreContract } from "@andy/contracts/testing";
 import { describe, it } from "vitest";
 import { FirestoreConfigChangeStore } from "./config-change-store";
 import { createFirestore } from "./index";
@@ -17,6 +17,12 @@ if (process.env.FIRESTORE_EMULATOR_HOST) {
     // Three transactions on one query: the emulator's lock wait plus client backoff (AI-71).
     { raceTimeoutMs: 30_000 },
   );
+  // The applied log (M4.11), in this file so the two suites never clear the collection at once.
+  configChangeLogContract("firestore (emulator)", async () => {
+    const existing = await db.collection("configChanges").get();
+    await Promise.all(existing.docs.map((d) => d.ref.delete()));
+    return new FirestoreConfigChangeStore(db);
+  });
 } else {
   describe("ConfigChangeStore contract: firestore", () => {
     it.skip("needs the emulator: pnpm test:firestore", () => {});

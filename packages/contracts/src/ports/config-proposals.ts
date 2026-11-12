@@ -1,4 +1,5 @@
 import type { ConfigChange } from "../entities";
+import type { ConfigChangeLog } from "./config-changes";
 import type { ReviewFinding } from "../entities/config-proposals";
 
 // ── ReviewFindingSource ──────────────────────────────────────────────────────
@@ -32,7 +33,8 @@ export type CreatePendingOutcome =
 /** The decisions Andy makes on a pending change; neither applies it. */
 export type ConfigChangeDecision = "accepted" | "rejected";
 
-export interface ConfigChangeStore {
+/** Pending proposals (here) and the applied log (`ConfigChangeLog`, M4.11) in one collection. */
+export interface ConfigChangeStore extends ConfigChangeLog {
   /**
    * Stores a `pending` change, atomically: when a pending change with the same `dedupeKey`
    * exists it comes back instead (`duplicate`); when its project (`projectId`, null included)

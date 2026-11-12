@@ -1,6 +1,7 @@
 import { ConfigChange } from "../entities";
 import { ReviewFinding } from "../entities/config-proposals";
 import { WorkTrackerError } from "../ports";
+import { CONFIG_CHANGE_LIST_MAX } from "../ports/config-changes";
 import type {
   ConfigChangeDecision,
   ConfigChangeStore,
@@ -41,6 +42,23 @@ export class InMemoryConfigChangeStore implements ConfigChangeStore {
   async get(id: string): Promise<ConfigChange | null> {
     const found = this.changes.get(id);
     return found ? structuredClone(found) : null;
+  }
+
+  async append(change: ConfigChange): Promise<ConfigChange> {
+    const parsed = ConfigChange.parse(change);
+    if (this.changes.has(parsed.id)) {
+      throw new WorkTrackerError("conflict", `config change ${parsed.id} exists`);
+    }
+    this.changes.set(parsed.id, parsed);
+    return structuredClone(parsed);
+  }
+
+  async listForProject(projectId: string, limit = CONFIG_CHANGE_LIST_MAX): Promise<ConfigChange[]> {
+    return [...this.changes.values()]
+      .filter((c) => c.entity === "project" && c.entityId === projectId)
+      .sort(newestFirst)
+      .slice(0, Math.min(limit, CONFIG_CHANGE_LIST_MAX))
+      .map((c) => structuredClone(c));
   }
 
   async listPending(projectId?: string): Promise<ConfigChange[]> {

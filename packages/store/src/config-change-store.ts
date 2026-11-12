@@ -1,5 +1,6 @@
 import type { Firestore } from "@google-cloud/firestore";
 import {
+  CONFIG_CHANGE_LIST_MAX,
   ConfigChange,
   WorkTrackerError,
   type ConfigChangeDecision,
@@ -13,6 +14,9 @@ import { collections, typedCollection } from "./index";
  * this is never reached in practice; if it is, the read logs an error rather than hiding it.
  */
 export const CONFIG_CHANGE_PENDING_READ_MAX = 1_000;
+
+/** A guard on one project's log read (ADR-0028, M4.11). */
+export const CONFIG_CHANGE_LOG_READ_MAX = 1_000;
 
 const newestFirst = (a: ConfigChange, b: ConfigChange) =>
   b.createdAt.localeCompare(a.createdAt) || a.id.localeCompare(b.id);
@@ -53,6 +57,48 @@ export class FirestoreConfigChangeStore implements ConfigChangeStore {
       tx.create(this.changes().doc(parsed.id), parsed);
       return { outcome: "created", change: parsed };
     });
+  }
+
+  /** M4.11: `create` refuses an existing id, so an append never overwrites a change. */
+  async append(change: ConfigChange): Promise<ConfigChange> {
+    const parsed = ConfigChange.parse(change);
+    try {
+      await this.changes().doc(parsed.id).create(parsed);
+    } catch (err) {
+      // gRPC ALREADY_EXISTS (6): the id is taken.
+      if ((err as { code?: number }).code === 6) {
+        throw new WorkTrackerError("conflict", `config change ${parsed.id} exists`);
+      }
+      throw err;
+    }
+    return parsed;
+  }
+
+  /**
+   * Equality filters only, sorted in memory (no composite index). Settings changes are rare, so
+   * the read guard is far off; reaching it logs an error, as the newest may be missed.
+   */
+  async listForProject(projectId: string, limit = CONFIG_CHANGE_LIST_MAX): Promise<ConfigChange[]> {
+    const snap = await this.changes()
+      .where("entity", "==", "project")
+      .where("entityId", "==", projectId)
+      .limit(CONFIG_CHANGE_LOG_READ_MAX)
+      .get();
+    if (snap.size >= CONFIG_CHANGE_LOG_READ_MAX) {
+      console.error(
+        JSON.stringify({
+          severity: "ERROR",
+          message: "config changes reached the read guard; the newest may be missing",
+          component: "config-change-store",
+          projectId,
+          read: snap.size,
+        }),
+      );
+    }
+    return snap.docs
+      .map((d) => d.data())
+      .sort(newestFirst)
+      .slice(0, Math.min(limit, CONFIG_CHANGE_LIST_MAX));
   }
 
   async get(id: string): Promise<ConfigChange | null> {

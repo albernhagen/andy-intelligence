@@ -85,7 +85,10 @@ export interface AppDeps {
    * when not configured.
    */
   runners?: RunnerStore;
-  /** Pending config changes from review findings (ADR-0097); off (routes absent) when unset. */
+  /**
+   * Config changes: pending ones from review findings (ADR-0097; routes absent when unset) and
+   * the log every project-settings write appends to (M4.11; off when unset).
+   */
   configChanges?: ConfigChangeStore;
   /** Stored review findings (ADR-0097 PR B); until then none, so sweeps propose nothing. */
   reviewFindings?: ReviewFindingSource;
@@ -400,6 +403,7 @@ export function createApp(input: AppDeps) {
     connection ? new ConnectedCodeHost(connection) : null,
     dispatchNext,
     now,
+    deps.configChanges ?? null,
   );
   registerTicketRoutes(app, deps.tracker, service, projects, runs);
   registerBoardRoutes(app, new BoardReader(deps.tracker, deps.runs));
