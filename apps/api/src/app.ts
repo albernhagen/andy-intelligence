@@ -9,6 +9,7 @@ import {
   type WatchdogQueue,
   type WorkTracker,
   type QuotaStore,
+  type ConfigChangeStore,
 } from "@andy/contracts";
 import { ClaudeCodeActionsExecutor, exchangeManifestCode, type CreatedApp } from "@andy/github";
 import {
@@ -80,6 +81,8 @@ export interface AppDeps {
   runners?: RunnerStore;
   /** Subscription quota readings (M1.9). Without it every window reads unknown. */
   quota?: QuotaStore;
+  /** The config change log (M4.11): every project-settings write appends one; off when absent. */
+  configChanges?: ConfigChangeStore;
   /**
    * The only host served (ADR-0044), e.g. `ai.andybernhagen.com`. Requests for any other host
    * (the default run.app URLs) get 404, except /health for monitoring. Unset: every host (local dev).
@@ -389,6 +392,7 @@ export function createApp(input: AppDeps) {
     connection ? new ConnectedCodeHost(connection) : null,
     dispatchNext,
     now,
+    deps.configChanges ?? null,
   );
   registerTicketRoutes(app, deps.tracker, service, projects, runs);
   registerBoardRoutes(app, new BoardReader(deps.tracker, deps.runs));

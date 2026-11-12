@@ -3,15 +3,17 @@ import {
   ProjectSettings,
   RepoName,
   type CodeHost,
+  type ConfigChangeStore,
   type EventActor,
   type Project,
   type WorkTracker,
 } from "@andy/contracts";
 import { notFound } from "@andy/contracts";
+import { projectSettingsChange } from "./config-changes";
 import { DomainError } from "./errors";
 import { requireCan } from "./permissions";
 
-function log(severity: "INFO" | "WARNING", message: string, fields: object = {}) {
+function log(severity: "INFO" | "WARNING" | "ERROR", message: string, fields: object = {}) {
   console.log(JSON.stringify({ severity, message, component: "projects", ...fields }));
 }
 
@@ -31,18 +33,23 @@ export class ProjectService {
      */
     private readonly dispatchNext: ((projectId: string) => Promise<unknown>) | null = null,
     private readonly now: () => Date = () => new Date(),
+    /** The config change log (M4.11); null where none is kept (tests, local dev without one). */
+    private readonly configChanges: ConfigChangeStore | null = null,
+    private readonly newId: () => string = () => crypto.randomUUID(),
   ) {}
 
   /**
    * Changes a project's switches: owner-only (`change_project_settings`, AI-19). `buildEnabled`
    * records who (`by.email`, the signed-in email) and
    * when; turning it off turns `autoBuild` off too, and `autoBuild` can't be on without it
-   * (ADR-0063: no build before the live sandbox proof).
+   * (ADR-0063: no build before the live sandbox proof). A write that changes a setting appends an
+   * `applied` ConfigChange with the changed fields' before and after (M4.11); `reason` is optional.
    */
   async update(
     projectId: string,
     settings: ProjectSettings,
     by: { actor: EventActor; email: string },
+    reason?: string,
   ): Promise<Project> {
     requireCan(by.actor, "change_project_settings", projectId);
     const patch = ProjectSettings.parse(settings);
@@ -64,6 +71,7 @@ export class ProjectService {
             ...(patch.buildEnabled ? {} : { autoBuild: false }),
           }),
     });
+    await this.recordChange(current, project, by.actor, reason);
     if (patch.buildEnabled !== undefined) {
       log("INFO", "project builds switched", {
         projectId,
@@ -82,6 +90,45 @@ export class ProjectService {
       await this.dispatchNext?.(projectId);
     }
     return project;
+  }
+
+  /**
+   * Appends the write's ConfigChange. The setting is already applied, so a failed append doesn't
+   * fail the request: it is logged as an ERROR with the diff, so the audit trail survives in logs.
+   */
+  private async recordChange(
+    before: Project,
+    after: Project,
+    actor: EventActor,
+    reason: string | undefined,
+  ): Promise<void> {
+    if (!this.configChanges) return;
+    const change = projectSettingsChange({
+      id: this.newId(),
+      before,
+      after,
+      actor,
+      reason,
+      at: this.now(),
+    });
+    if (!change) return;
+    try {
+      await this.configChanges.append(change);
+      log("INFO", "project settings changed", {
+        projectId: after.id,
+        configChangeId: change.id,
+        fields: Object.keys(change.diff),
+        by: actor,
+      });
+    } catch (err) {
+      log("ERROR", "config change not recorded", {
+        projectId: after.id,
+        configChangeId: change.id,
+        diff: change.diff,
+        by: actor,
+        error: String(err),
+      });
+    }
   }
 
   async register(input: NewProject): Promise<Project> {

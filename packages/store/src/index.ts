@@ -126,6 +126,7 @@ export { ticketEventV2toV3, ticketV1toV2, ticketV2toV3, upgrade, type Upgrader }
 export { FirestoreRunStore } from "./run-store";
 export { FirestoreRunnerStore } from "./runner-store";
 export { FirestoreNightLaunchStore } from "./night-launch-store";
+export { FirestoreConfigChangeStore } from "./config-change-store";
 export {
   CloudTasksWatchdogQueue,
   leaseUrl,
