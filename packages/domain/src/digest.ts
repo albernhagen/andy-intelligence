@@ -25,6 +25,7 @@ import { MAX_ACTIVE_RUNS_GLOBAL, MAX_PRS_WAITING_PER_PROJECT, isInFlight } from 
 import { quotaStatus } from "./quota";
 import { openBlockerKeys, runLabel, syncWaiting, ticketStatusLine } from "./status-line";
 import { resolveWorker } from "./worker";
+import { epicOf, withEpicOverrides } from "./overrides";
 
 /**
  * The daily digest (AI-70, ADR-0081): what Andy reads when he comes back. Exceptions first, then
@@ -306,7 +307,8 @@ function waitingAndBlocked(data: DigestData): DigestException[] {
         openQuestions: data.openQuestions.get(t.id) ?? 0,
         runs: data.activeRuns.filter((r) => r.ticketId === t.id),
         events: data.ticketEvents.get(t.id) ?? [],
-        worker: resolveWorker(t, data.project),
+        // AI-116: the epic's pick counts, as for the dispatcher and the card.
+        worker: resolveWorker(withEpicOverrides(t, epicOf(t, data.tickets)), data.project),
         questionLine: data.questionLines?.get(t.id) ?? null,
       },
       data.now,
