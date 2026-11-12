@@ -53,4 +53,4 @@ v1.x screens:
 
 **Built in AI-9: Live updates (ADR-0091):** `lib/live.ts` sets every polled query's interval: 5 s in use or with a run in flight, else 60 s; none hidden. Failed polls back off; the shell shows "Updates delayed".
 
-**Built in AI-101: M4.7: Run detail screen:** `/p/:projectId/runs/:runId`, opened from Activity; another project's task is not found.
+**Built in AI-101: M4.7: Run detail screen:** `/p/:projectId/runs/:runId`, opened from Activity; another project's task: not found.
