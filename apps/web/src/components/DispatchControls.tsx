@@ -4,13 +4,13 @@ import { useProjects, useUpdateProject } from "@/lib/queries";
 
 const DECISION_TEXT: Record<DispatchDecision, string> = {
   paused: "paused by you",
-  project_cap: "at this project's runs-at-once dial",
-  global_cap: "at the cap on runs across all projects",
+  project_cap: "at this project's agent-tasks-at-once dial",
+  global_cap: "at the cap on agent tasks across all projects",
   prs_waiting_cap: "too many agent PRs are waiting for you",
   quota_reserve: "subscription quota is at its reserve",
-  started: "started a run",
+  started: "started an agent task",
   nothing_ready: "no Ready ticket can start",
-  touches_overlap: "Ready tickets overlap runs in flight",
+  touches_overlap: "Ready tickets overlap agent tasks in flight",
 };
 
 /** Why dispatch last did what it did (ADR-0079); nothing while auto-build is off. */
@@ -36,14 +36,14 @@ export function DispatchControls({ project }: { project: Project }) {
   return (
     <>
       <label className="ml-3 inline-flex items-center gap-1 text-sm text-muted-foreground">
-        Runs at once
+        Agent tasks at once
         <input
           // Remount after a save or a refetch, so a refused value doesn't stay in the box.
           key={project.runsAtOnce}
           type="number"
           min={1}
           max={RUNS_AT_ONCE_MAX}
-          aria-label="Runs at once"
+          aria-label="Agent tasks at once"
           className="w-12 rounded-md border border-border bg-background px-1"
           defaultValue={project.runsAtOnce}
           disabled={update.isPending}

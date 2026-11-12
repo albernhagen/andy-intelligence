@@ -69,7 +69,7 @@ describe("project settings page", () => {
     expect(checkbox("Auto-refine")).toBe(false);
     expect(value("Questions per day")).toBe("7");
     expect(value("Auto-merge")).toBe("s");
-    expect(value("Runs at once")).toBe("3");
+    expect(value("Agent tasks at once")).toBe("3");
     expect(checkbox("Paused")).toBe(true);
     expect(value("Default worker")).toBe("ask");
     expect(within(list).getByText("Dispatch: paused by you")).toBeTruthy();
@@ -112,7 +112,7 @@ describe("project settings page", () => {
     await h.user.click(within(list).getByRole("checkbox", { name: "Paused" }));
     await waitFor(async () => expect((await h.tracker.getProject("ai"))?.paused).toBe(true));
 
-    const dial = within(list).getByRole("spinbutton", { name: "Runs at once" });
+    const dial = within(list).getByRole("spinbutton", { name: "Agent tasks at once" });
     await waitFor(() => expect((dial as HTMLInputElement).disabled).toBe(false));
     await h.user.clear(dial);
     await h.user.type(dial, "3");

@@ -156,7 +156,7 @@ export function overlappingKey(
   const hit = inFlight.find(
     (r) => r.step === "build" && r.ticketKey !== ticket.key && overlaps(ticket.touches, r.touches),
   );
-  return hit ? (hit.ticketKey ?? "a run") : null;
+  return hit ? (hit.ticketKey ?? "an agent task") : null;
 }
 
 /** What a build run records at start: the ticket's touches plus the approved plan's files. */

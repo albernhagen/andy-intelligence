@@ -118,7 +118,7 @@ function mainStatus(s: StatusInput, now: Date): { text: string; tone: StatusTone
       };
     case "in_progress":
       return {
-        text: join("In progress", pr ?? "no run in flight", waits(s.syncWaiting)),
+        text: join("In progress", pr ?? "no agent task in flight", waits(s.syncWaiting)),
         tone: "default",
       };
     case "ready_for_review":
@@ -134,8 +134,8 @@ export const SYNC_WAIT_WORDS: Record<SyncWaitReason, string> = {
   global_cap: "the global cap is reached",
   quota_reserve: "quota is at the reserve",
   daily_cap: "3 syncs in 24 hours",
-  ticket_busy: "another run of the ticket is in flight",
-  builds_off: "builds are off, so no sync runs",
+  ticket_busy: "another agent task of the ticket is in flight",
+  builds_off: "builds are off, so no sync tasks",
   pr_cap: "not checked yet (more open PRs than one check covers); next in line",
 };
 

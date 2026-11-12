@@ -32,7 +32,7 @@ export function ProjectSettingsPage() {
         <p className="text-sm text-muted-foreground">Repos: {project.repos.join(", ")}</p>
       )}
       <ul aria-label="Settings" className="divide-y divide-border rounded-md border border-border">
-        <Setting what="Build runs may start at all, by hand or on their own. Owner only: set here in the app, never over MCP. Turn on after the live sandbox proof.">
+        <Setting what="Build tasks may start at all, by hand or on their own. Owner only: set here in the app, never over MCP. Turn on after the live sandbox proof.">
           <BuildsEnabledToggle project={project} />
         </Setting>
         <Setting what="Ready tickets are built on their own, top of the order first. Needs Builds on.">
@@ -50,7 +50,7 @@ export function ProjectSettingsPage() {
         <Setting what="Which tickets' agent PRs merge on their own once every check and both reviews pass.">
           <AutoMergeSelect project={project} />
         </Setting>
-        <Setting what="Runs at once: runs this project may have in flight (1 to 4). Paused: dispatch starts nothing here; runs in flight finish.">
+        <Setting what="Agent tasks at once: agent tasks this project may have in flight (1 to 4). Paused: dispatch starts nothing here; agent tasks in flight finish.">
           <DispatchControls project={project} />
           <ClearQuotaIdle />
         </Setting>

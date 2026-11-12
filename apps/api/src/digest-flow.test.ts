@@ -88,7 +88,7 @@ describe("daily digest", () => {
 
     expect(digest.quiet).toBe(false);
     expect(digest.exceptions.map((e) => [e.kind, e.ticketKey, e.reason])).toEqual([
-      ["run_failed", failing.key, "Build run failed: no report by the deadline"],
+      ["run_failed", failing.key, "Build task failed: no report by the deadline"],
       ["waiting_on_andy", asking.key, "Waiting for you: Which way?"],
       ["dispatch_idle", null, "Dispatch is paused"],
     ]);
