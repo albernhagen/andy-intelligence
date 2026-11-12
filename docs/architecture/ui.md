@@ -12,7 +12,7 @@ v1.x screens:
 - **Project settings** (AI-46, built): `/p/:projectId/settings`, a header link; each switch explained, saved by the project PATCH. `/projects` opens the current project's; `/projects/new` adds one.
 - **Digest** (AI-70, ADR-0081): `/p/:projectId/digest`, header link in a project scope.
 - **Tickets** — M1: board, ticket detail with history and linked runs/PRs/cost. M3 (ADR-0059): status on cards, story panel, command palette. M5: filter and group by project. M4: overrides editing.
-- **Run detail** — M1: inside ticket detail. M4: own screen (metadata, cost, outcome, links to Action log / Jules session / PR).
+- **Run detail** — M4, built (AI-101); Jules links M9.
 - **Config** (providers, harnesses, models, tiers, policies; audit log with revert; pending approvals).
 - **Releases** (dev status, promote to prod, rollback).
 - **Dashboards** — M4 (ADR-0045): delivery (tickets by stage over time, lead time, rework, CI green on first try, review blockers), cost, quota and tokens per run and step over time (ADR-0046), per project and overall; aggregation queries + shadcn charts. DORA metrics from M6.
@@ -52,3 +52,5 @@ v1.x screens:
 **Built in M1.19: GitHub App setup from the UI:** `/settings/github` (connect, install link, installed repos); the new-project form suggests installed repos.
 
 **Built in AI-9: Live updates (ADR-0091):** `lib/live.ts` sets every polled query's interval: 5 s in use or with a run in flight, else 60 s; none hidden. Failed polls back off; the shell shows "Updates delayed".
+
+**Built in AI-101: M4.7: Run detail screen:** `/p/:projectId/runs/:runId`, opened from Activity; another project's task: not found.

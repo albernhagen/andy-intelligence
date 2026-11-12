@@ -44,7 +44,7 @@ const EditInput = {
   blockedBy: z
     .array(TicketKey)
     .optional()
-    .describe("Keys of the tickets that block this one, in the same project. Replaces the list."),
+    .describe("Keys of the tickets that block this one, in any project. Replaces the list."),
   ifUpdatedAt: Timestamp.optional().describe(
     "The ticket's `updatedAt` from `status`: the edit is refused if it changed since.",
   ),
@@ -156,20 +156,7 @@ const questionView = (ticket: string | null) => (q: InboxCard["questions"][numbe
 });
 
 export function registerTicketTools(server: McpServer, deps: ToolDeps): void {
-  const { service, tracker } = deps;
-
-  /** Blocker keys to ids; a key outside the ticket's project is refused. */
-  const blockerIds = async (ticket: Ticket, keys: string[]) => {
-    const tickets = await tracker.listTickets(ticket.projectId);
-    return keys.map((key) => {
-      const found = tickets.find((t) => t.key === key);
-      if (!found) throw new DomainError("invalid_reference", `${key} is not in this project`);
-      if (found.id === ticket.id) {
-        throw new DomainError("invalid_reference", `${key} can't block itself`);
-      }
-      return found.id;
-    });
-  };
+  const { service } = deps;
 
   server.registerTool(
     "edit_ticket",
@@ -185,9 +172,7 @@ export function registerTicketTools(server: McpServer, deps: ToolDeps): void {
           throw new DomainError("invalid_reference", "give at least one field to edit");
         }
         const found = await service.findByKey(ticket);
-        const edits = blockedBy
-          ? { ...fields, blockedBy: await blockerIds(found, blockedBy) }
-          : fields;
+        const edits = blockedBy ? { ...fields, blockedBy } : fields;
         const updated = await service.update(
           found.projectId,
           found.id,
