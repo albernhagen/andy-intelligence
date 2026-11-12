@@ -124,6 +124,8 @@ export function registerGitHubToken(app: Hono<AuthEnv>, deps: TokenDeps): void {
   const localLookups = new FixedWindowLimiter(LOCAL_TOKEN_LOOKUPS_PER_MINUTE, 60_000, () =>
     now().getTime(),
   );
+  // Local grants have their own bucket, so they can't starve Actions publishes (or the reverse).
+  const localIssues = new FixedWindowLimiter(TOKEN_RATE_LIMIT, 60_000, () => now().getTime());
 
   app.post(
     TOKEN_PATH,
@@ -207,7 +209,7 @@ export function registerGitHubToken(app: Hono<AuthEnv>, deps: TokenDeps): void {
       log("WARNING", "per-run token rejected for a push token", { runId });
       return c.json({ error: "unauthenticated" }, 401);
     }
-    if (!limiter.tryTake()) return c.json({ error: "rate limited" }, 429);
+    if (!localIssues.tryTake()) return c.json({ error: "rate limited" }, 429);
     let repo: string;
     try {
       ({ repo } = await deps.local.claim(runId, caller));
