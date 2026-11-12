@@ -50,16 +50,16 @@ When `.review/new-commits.diff` exists:
 | Decisions  | Code that contradicts the architecture docs (`docs/architecture/`) or an ADR without a new ADR; cost caps missing on anything that scales (ADR-0028) |
 | Simplicity | Abstractions with one caller, dead code, config nobody sets: only when it causes a concrete problem                                                  |
 | Parity     | A decision Andy can make that lacks a UI control, API endpoint or MCP tool in this PR (`api-and-mcp.md`, "Parity rule")                              |
-| Docs       | Docs the change makes wrong, per the table in `AGENTS.md`                                                                                            |
+| Docs       | Docs the change makes wrong (README commands, runbooks, ARCHITECTURE, threat model), per the table in `AGENTS.md`                                    |
 
 ## Severity
 
-| Severity   | Meaning                                                                                                      | Check                                                         |
-| ---------- | ------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------- |
-| blocker    | Merging causes wrong behavior, data loss, a broken build or deploy, or breaks a rule in `AGENTS.md` / an ADR | Fails `adversarial-review` unless Andy adds `review-accepted` |
-| should-fix | Real problem with a scenario, but not worth blocking (e.g. a missing edge-case test)                         | Comment only                                                  |
-| question   | You can't tell from the code whether it's right; say what would settle it                                    | Comment only                                                  |
+| Severity   | Meaning                                                                                                      | Check                                                                                    |
+| ---------- | ------------------------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------- |
+| blocker    | Merging causes wrong behavior, data loss, a broken build or deploy, or breaks a rule in `AGENTS.md` / an ADR | Fails `adversarial-review` unless Andy adds `review-accepted` (removed on the next push) |
+| should-fix | Real problem with a scenario, but not worth blocking (e.g. a missing edge-case test)                         | Comment only                                                                             |
+| question   | You can't tell from the code whether it's right; say what would settle it                                    | Comment only                                                                             |
 
 ## Output
 
-JSON matching `platform/procedures/adversarial-review.schema.json`: a one- or two-sentence `summary`; `findings[]` (every finding still open, with `severity`, `kind` (the schema's category list; `other` if none fits), `title`, `file`, `line`, `scenario`, `recommendation`); and `resolved[]` on later pushes.
+JSON matching `platform/procedures/adversarial-review.schema.json`: a one- or two-sentence `summary`; `findings[]` (every finding still open, with `severity`, `kind` (schema list), `title`, `file`, `line`, `scenario`, `recommendation`); and `resolved[]` on later pushes. CI turns it into one PR comment and the check result.

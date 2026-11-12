@@ -68,7 +68,7 @@ describe("main", () => {
 
   it("GivenAVerdict_WhenRun_ThenItPostsWithTheOidcTokenForTheControlPlaneAudience", async () => {
     const fetchImpl = vi.fn(async (url) =>
-      String(url).startsWith("https://oidc.example")
+      new URL(String(url)).host === "oidc.example"
         ? new Response(JSON.stringify({ value: "jwt" }))
         : new Response("{}", { status: 201 }),
     );
