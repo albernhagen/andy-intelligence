@@ -161,7 +161,13 @@ describe("executor context step: base branch (AI-122)", () => {
   });
 });
 
+// A git hook (pre-push runs the tests) exports GIT_DIR and friends; inherited, they would point
+// these temporary repos' git commands at the real one. So no GIT_* variable is inherited.
+const CLEAN_ENV = Object.fromEntries(
+  Object.entries(process.env).filter(([k]) => !k.startsWith("GIT_")),
+);
 const GIT_ENV = {
+  ...CLEAN_ENV,
   GIT_CONFIG_NOSYSTEM: "1",
   GIT_CONFIG_GLOBAL: "/dev/null",
   GIT_AUTHOR_NAME: "t",
@@ -170,7 +176,7 @@ const GIT_ENV = {
   GIT_COMMITTER_EMAIL: "t@example.com",
 };
 const git = (cwd, ...args) =>
-  execFileSync("git", args, { cwd, encoding: "utf8", env: { ...process.env, ...GIT_ENV } }).trim();
+  execFileSync("git", args, { cwd, encoding: "utf8", env: GIT_ENV }).trim();
 
 /**
  * A checkout of `epic/AI-1` with `origin/main` fetched (as the full-history checkout leaves it):
@@ -206,7 +212,7 @@ function runEpicCheck(cwd) {
       "-c",
       stepScript("Check the epic branch against the default branch"),
     ],
-    { cwd, encoding: "utf8", env: { ...process.env, ...GIT_ENV, DEFAULT_BRANCH: "main" } },
+    { cwd, encoding: "utf8", env: { ...GIT_ENV, DEFAULT_BRANCH: "main" } },
   );
   return { status: res.status, log: res.stdout + res.stderr };
 }
