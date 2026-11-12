@@ -443,7 +443,7 @@ function BlockedBy({ ticket: t, tickets }: { ticket: Ticket; tickets: Ticket[] }
       >
         <Input
           aria-label="Add a blocker from another project"
-          placeholder="Or another project's key, e.g. OPS-12"
+          placeholder="Or a key, e.g. OPS-12"
           className="h-8"
           value={key}
           disabled={s.pending}
