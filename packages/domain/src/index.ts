@@ -31,6 +31,7 @@ export * from "./digest";
 export * from "./notify-email";
 export * from "./runners";
 export * from "./local-claims";
+export * from "./dashboard";
 export * from "./setup-checklist";
 export * from "./epic-rollup";
 export * from "./night-launch";
