@@ -4,7 +4,7 @@
 // Code does: all three unless `--setting-sources` names fewer, and runs the hooks found in the
 // project's (.claude/settings.json) and local (.claude/settings.local.json) settings.
 import { execFileSync } from "node:child_process";
-import { appendFileSync, existsSync, readFileSync } from "node:fs";
+import { appendFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import process from "node:process";
 import { setInterval, setTimeout } from "node:timers";
@@ -51,6 +51,10 @@ if (config.agent === "hang") {
 } else {
   // Lets the runner's heartbeats run while the "agent" works.
   await new Promise((resolve) => setTimeout(resolve, config.agentDelayMs ?? 0));
+  for (const [path, text] of Object.entries(config.edit ?? {})) {
+    mkdirSync(dirname(join(process.cwd(), path)), { recursive: true });
+    writeFileSync(join(process.cwd(), path), text);
+  }
   emit({
     type: "assistant",
     message: { content: [{ type: "text", text: "Reading the ticket." }] },

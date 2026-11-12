@@ -47,6 +47,8 @@ export interface ProfileInput {
   claude?: { command: string };
   /** The platform child: no network and no Keychain (Security server) either. */
   offline?: boolean;
+  /** No Keychain (Security server), network on: the install and publish children. */
+  noKeychain?: boolean;
 }
 
 /** Real path, so Seatbelt matches it (`/var` is `/private/var`). Missing paths stay as given. */
@@ -102,8 +104,8 @@ export function seatbeltProfile(input: ProfileInput): string {
       `(allow file-read-data file-write* (prefix ${quoted(real(dirname(p)) + "/" + p.split("/").at(-1))}))`,
     );
   }
-  if (input.offline) {
-    lines.push("(deny network*)");
+  if (input.offline) lines.push("(deny network*)");
+  if (input.offline || input.noKeychain) {
     lines.push(
       '(deny mach-lookup (global-name "com.apple.SecurityServer") (global-name "com.apple.securityd"))',
     );
@@ -116,10 +118,16 @@ export interface Confinement {
   wrap(profilePath: string, command: string, args: string[]): { command: string; args: string[] };
   /**
    * The live check before the agent (fail closed): under the profile, a file in the runner's
-   * directory can't be read, the checkout can be listed but not written, and (when the runner
-   * user's home is under /Users) the home's Keychain folder can't be listed. Null when it holds.
+   * directory can't be read, the checkout can be listed and written only when `writable` (a
+   * build), and (when the runner user's home is under /Users) the home's Keychain folder can't
+   * be listed. Null when it holds.
    */
-  check(input: { profilePath: string; checkout: string; runDir: string }): Promise<string | null>;
+  check(input: {
+    profilePath: string;
+    checkout: string;
+    runDir: string;
+    writable?: boolean;
+  }): Promise<string | null>;
 }
 
 export const seatbelt: Confinement = {
@@ -127,7 +135,7 @@ export const seatbelt: Confinement = {
     command: SANDBOX_EXEC,
     args: ["-f", profilePath, command, ...args],
   }),
-  async check({ profilePath, checkout, runDir }) {
+  async check({ profilePath, checkout, runDir, writable = false }) {
     if (process.platform !== "darwin" || !existsSync(SANDBOX_EXEC)) {
       return "macOS sandbox-exec is not available";
     }
@@ -150,8 +158,9 @@ export const seatbelt: Confinement = {
       const read = await confined("/bin/cat", [canary]);
       if (read.ok || read.stdout.includes(nonce)) return "a file outside the checkout was readable";
       if (!(await confined("/bin/ls", [checkout])).ok) return "the checkout wasn't readable";
-      if ((await confined("/usr/bin/touch", [probe])).ok || existsSync(probe))
-        return "the checkout was writable";
+      const wrote = (await confined("/usr/bin/touch", [probe])).ok && existsSync(probe);
+      if (wrote !== writable)
+        return writable ? "the checkout wasn't writable" : "the checkout was writable";
       const keychains = join(real(homedir()), "Library", "Keychains");
       if (real(homedir()).startsWith("/Users/") && (await confined("/bin/ls", [keychains])).ok)
         return "the home's Keychain folder was listable";

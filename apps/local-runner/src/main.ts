@@ -7,6 +7,7 @@ import { checkSettings } from "./check-settings";
 import {
   DEFAULT_GIT_BASE,
   DEFAULT_PLATFORM_REPO,
+  DEFAULT_GITHUB_API,
   DEFAULT_URL,
   checkRepo,
   controlPlaneOrigin,
@@ -162,7 +163,16 @@ async function main(argv: string[]): Promise<number> {
       secret,
       runsAtOnce,
       log,
-      task: { repos, home, claudeCommand: values.claude, platformRepo, confinement: seatbelt },
+      task: {
+        repos,
+        home,
+        claudeCommand: values.claude,
+        platformRepo,
+        origin,
+        gitBase: values["git-base"],
+        githubApi: DEFAULT_GITHUB_API,
+        confinement: seatbelt,
+      },
       keepAwake: caffeinate(log),
       signal: shutdown.signal,
     });

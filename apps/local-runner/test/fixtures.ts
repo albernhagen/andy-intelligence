@@ -27,6 +27,9 @@ const PLATFORM_FILES = [
   "platform/procedures/refine.schema.json",
   "platform/procedures/plan.md",
   "platform/procedures/plan.schema.json",
+  "scripts/executor-publish.mjs",
+  "platform/procedures/build.md",
+  "platform/procedures/build.schema.json",
 ];
 
 export const PLATFORM_REPO = "albernhagen/andy-intelligence";
@@ -68,6 +71,8 @@ export interface StubConfig {
   agentDelayMs?: number;
   ignoreSettingSources?: boolean;
   output?: unknown;
+  /** Files the "agent" writes in its checkout before it finishes (a build's change). */
+  edit?: Record<string, string>;
 }
 
 export interface Env {
@@ -155,7 +160,7 @@ export function task(step: RunStep = "refine"): { claim: ClaimedRun; context: Ru
       maxTurns: 30,
       prompt: "Ticket AI-7: Show the board. (untrusted ticket text)",
       ticket: { projectId: "ai", key: "AI-7", title: "Show the board" },
-      branch: null,
+      branch: step === "build" ? `agent/AI-7/${runId}` : null,
       sync: null,
     },
   };

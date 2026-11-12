@@ -131,8 +131,7 @@ describe("agent arguments", () => {
       maxTurns: 3,
       settingsPath: "/x/settings.json",
       schema: '{"type":"object"}',
-      allowedTools: "Read",
-      disallowedTools: "Bash",
+      tools: { allowed: "Read", disallowed: "Bash" },
     });
     expect(
       args.slice(args.indexOf("--setting-sources"), args.indexOf("--setting-sources") + 2),

@@ -35,6 +35,12 @@ export type ReportResult =
   | { kind: "rejected"; status: number; reason: string }
   | { kind: "error"; reason: string };
 
+export type PushTokenResult =
+  | { kind: "ok"; token: string }
+  /** 401/403/404/409: the grant was refused (already used, run ended, revoked). */
+  | { kind: "refused"; status: number; reason: string }
+  | { kind: "error"; reason: string };
+
 export interface ApiOptions {
   origin: string;
   version: string;
@@ -130,6 +136,27 @@ export class ControlPlane {
       return { kind: "ok", cancel: parsed.data.cancel };
     } catch (err) {
       return { kind: "error", reason: `heartbeat failed: ${networkReason(err)}` };
+    }
+  }
+
+  /**
+   * The run's one push token (ADR-0089: `POST /github/token` with the per-run token). Never
+   * retried: a second request is refused by design. The token is returned, never logged or
+   * put in a reason.
+   */
+  async pushToken(runId: string, token: string): Promise<PushTokenResult> {
+    try {
+      const res = await this.call("/github/token", token, { method: "POST", body: { runId } });
+      if (res.status !== 200) {
+        return { kind: "refused", status: res.status, reason: errorField(res.json) };
+      }
+      const value = (res.json as { token?: unknown } | null)?.token;
+      if (typeof value !== "string" || !/^\S{8,4096}$/.test(value)) {
+        return { kind: "error", reason: "the push token answer has an unexpected shape" };
+      }
+      return { kind: "ok", token: value };
+    } catch (err) {
+      return { kind: "error", reason: `push token request failed: ${networkReason(err)}` };
     }
   }
 
