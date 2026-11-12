@@ -168,6 +168,28 @@ export interface paths {
               } | null;
               /** @default true */
               emailNotifications: boolean;
+              /** @default null */
+              projectPlan: {
+                /** @enum {string} */
+                status: "proposed" | "approving" | "approved" | "rejected";
+                proposal: {
+                  summary: string;
+                  milestones: {
+                    title: string;
+                    goal: string;
+                    doneWhen: string[];
+                    slices: string[];
+                  }[];
+                };
+                proposedBy: string;
+                /** Format: date-time */
+                proposedAt: string;
+                decidedBy: string | null;
+                /** Format: date-time */
+                decidedAt: string | null;
+                reason: string | null;
+                epicIds: string[];
+              } | null;
               /**
                * @default agent
                * @enum {string}
@@ -270,6 +292,28 @@ export interface paths {
               } | null;
               /** @default true */
               emailNotifications: boolean;
+              /** @default null */
+              projectPlan: {
+                /** @enum {string} */
+                status: "proposed" | "approving" | "approved" | "rejected";
+                proposal: {
+                  summary: string;
+                  milestones: {
+                    title: string;
+                    goal: string;
+                    doneWhen: string[];
+                    slices: string[];
+                  }[];
+                };
+                proposedBy: string;
+                /** Format: date-time */
+                proposedAt: string;
+                decidedBy: string | null;
+                /** Format: date-time */
+                decidedAt: string | null;
+                reason: string | null;
+                epicIds: string[];
+              } | null;
               /**
                * @default agent
                * @enum {string}
@@ -420,6 +464,28 @@ export interface paths {
               } | null;
               /** @default true */
               emailNotifications: boolean;
+              /** @default null */
+              projectPlan: {
+                /** @enum {string} */
+                status: "proposed" | "approving" | "approved" | "rejected";
+                proposal: {
+                  summary: string;
+                  milestones: {
+                    title: string;
+                    goal: string;
+                    doneWhen: string[];
+                    slices: string[];
+                  }[];
+                };
+                proposedBy: string;
+                /** Format: date-time */
+                proposedAt: string;
+                decidedBy: string | null;
+                /** Format: date-time */
+                decidedAt: string | null;
+                reason: string | null;
+                epicIds: string[];
+              } | null;
               /**
                * @default agent
                * @enum {string}
@@ -582,6 +648,28 @@ export interface paths {
               } | null;
               /** @default true */
               emailNotifications: boolean;
+              /** @default null */
+              projectPlan: {
+                /** @enum {string} */
+                status: "proposed" | "approving" | "approved" | "rejected";
+                proposal: {
+                  summary: string;
+                  milestones: {
+                    title: string;
+                    goal: string;
+                    doneWhen: string[];
+                    slices: string[];
+                  }[];
+                };
+                proposedBy: string;
+                /** Format: date-time */
+                proposedAt: string;
+                decidedBy: string | null;
+                /** Format: date-time */
+                decidedAt: string | null;
+                reason: string | null;
+                epicIds: string[];
+              } | null;
               /**
                * @default agent
                * @enum {string}
@@ -7462,6 +7550,478 @@ export interface paths {
         };
       };
     };
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/projects/{projectId}/plan": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get: {
+      parameters: {
+        query?: never;
+        header?: never;
+        path: {
+          projectId: string;
+        };
+        cookie?: never;
+      };
+      requestBody?: never;
+      responses: {
+        /** @description The project's plan; null: none yet */
+        200: {
+          headers: {
+            [name: string]: unknown;
+          };
+          content: {
+            "application/json": {
+              plan: {
+                /** @enum {string} */
+                status: "proposed" | "approving" | "approved" | "rejected";
+                proposal: {
+                  summary: string;
+                  milestones: {
+                    title: string;
+                    goal: string;
+                    doneWhen: string[];
+                    slices: string[];
+                  }[];
+                };
+                proposedBy: string;
+                /** Format: date-time */
+                proposedAt: string;
+                decidedBy: string | null;
+                /** Format: date-time */
+                decidedAt: string | null;
+                reason: string | null;
+                epicIds: string[];
+              } | null;
+            };
+          };
+        };
+        /** @description No such project */
+        404: {
+          headers: {
+            [name: string]: unknown;
+          };
+          content: {
+            "application/json": {
+              error: string;
+              details?: string[];
+            };
+          };
+        };
+      };
+    };
+    put?: never;
+    post: {
+      parameters: {
+        query?: never;
+        header?: never;
+        path: {
+          projectId: string;
+        };
+        cookie?: never;
+      };
+      requestBody: {
+        content: {
+          "application/json": {
+            summary: string;
+            milestones: {
+              title: string;
+              goal: string;
+              doneWhen: string[];
+              slices: string[];
+            }[];
+          };
+        };
+      };
+      responses: {
+        /** @description Stored as a proposal for Andy */
+        201: {
+          headers: {
+            [name: string]: unknown;
+          };
+          content: {
+            "application/json": {
+              /** @enum {string} */
+              status: "proposed" | "approving" | "approved" | "rejected";
+              proposal: {
+                summary: string;
+                milestones: {
+                  title: string;
+                  goal: string;
+                  doneWhen: string[];
+                  slices: string[];
+                }[];
+              };
+              proposedBy: string;
+              /** Format: date-time */
+              proposedAt: string;
+              decidedBy: string | null;
+              /** Format: date-time */
+              decidedAt: string | null;
+              reason: string | null;
+              epicIds: string[];
+            };
+          };
+        };
+        /** @description Invalid request */
+        400: {
+          headers: {
+            [name: string]: unknown;
+          };
+          content: {
+            "application/json": {
+              error: string;
+              details?: string[];
+            };
+          };
+        };
+        /** @description Only the owner */
+        403: {
+          headers: {
+            [name: string]: unknown;
+          };
+          content: {
+            "application/json": {
+              error: string;
+              details?: string[];
+            };
+          };
+        };
+        /** @description No such project */
+        404: {
+          headers: {
+            [name: string]: unknown;
+          };
+          content: {
+            "application/json": {
+              error: string;
+              details?: string[];
+            };
+          };
+        };
+        /** @description No plan to decide, or one waits or is approved already */
+        409: {
+          headers: {
+            [name: string]: unknown;
+          };
+          content: {
+            "application/json": {
+              error: string;
+              details?: string[];
+            };
+          };
+        };
+      };
+    };
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/projects/{projectId}/plan/decision": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    post: {
+      parameters: {
+        query?: never;
+        header?: never;
+        path: {
+          projectId: string;
+        };
+        cookie?: never;
+      };
+      requestBody: {
+        content: {
+          "application/json":
+            | {
+                /** @enum {string} */
+                decision: "approved";
+              }
+            | {
+                /** @enum {string} */
+                decision: "rejected";
+                reason: string;
+              };
+        };
+      };
+      responses: {
+        /** @description Decided; epics created on approval */
+        200: {
+          headers: {
+            [name: string]: unknown;
+          };
+          content: {
+            "application/json": {
+              plan: {
+                /** @enum {string} */
+                status: "proposed" | "approving" | "approved" | "rejected";
+                proposal: {
+                  summary: string;
+                  milestones: {
+                    title: string;
+                    goal: string;
+                    doneWhen: string[];
+                    slices: string[];
+                  }[];
+                };
+                proposedBy: string;
+                /** Format: date-time */
+                proposedAt: string;
+                decidedBy: string | null;
+                /** Format: date-time */
+                decidedAt: string | null;
+                reason: string | null;
+                epicIds: string[];
+              };
+              epics: {
+                id: string;
+                projectId: string;
+                key: string;
+                /** @enum {string|null} */
+                type: "epic" | "feature" | "chore" | "bug" | null;
+                parentId: string | null;
+                title: string;
+                body: string;
+                acceptanceCriteria: string[];
+                assumptions: string[];
+                /** @enum {string} */
+                stage:
+                  "backlog" | "ready" | "in_progress" | "ready_for_review" | "done" | "cancelled";
+                rank: string;
+                /** @enum {string|null} */
+                size: "S" | "M" | "L" | null;
+                sizeReason: string | null;
+                overrides: {
+                  assignee?: "me" | "agent" | ("claude-code" | "jules" | "opencode" | "direct");
+                  /** @enum {string} */
+                  tier?: "frontier" | "strong" | "fast" | "cheap";
+                  modelPin?: {
+                    /** @enum {string} */
+                    harness: "claude-code" | "jules" | "opencode" | "direct";
+                    /** @enum {string} */
+                    provider: "claude-sub" | "google-sub" | "openrouter";
+                    model: string;
+                  };
+                  /** @enum {string} */
+                  autonomy?: "autonomous" | "gated" | "manual";
+                  /** @enum {string} */
+                  targetEnv?: "dev" | "prod";
+                  /** @enum {string} */
+                  executor?: "actions" | "local";
+                };
+                needsAttention: boolean;
+                /** @enum {string} */
+                dorStatus: "not_met" | "met";
+                blockedBy: string[];
+                /** @default false */
+                archived: boolean;
+                /** @default [] */
+                outOfScope: string[];
+                /** @default [] */
+                touches: string[];
+                /** @default null */
+                upNextRank: string | null;
+                /**
+                 * Format: date-time
+                 * @default null
+                 */
+                upNextAt: string | null;
+                /** @default null */
+                sentBackReason: string | null;
+                /** @default [] */
+                refineAssumptions: {
+                  id: string;
+                  text: string;
+                  question: string;
+                  /** @default [] */
+                  options: string[];
+                  /** @enum {string} */
+                  cost: "reversible" | "direction" | "scope" | "trust" | "spend";
+                  /** @enum {string} */
+                  confidence: "sure" | "unsure";
+                  /**
+                   * @default null
+                   * @enum {string|null}
+                   */
+                  demotedBy: "ticket_cap" | "daily_cap" | null;
+                  runId: string;
+                  /**
+                   * @default assumed
+                   * @enum {string}
+                   */
+                  status: "assumed" | "promoted" | "answered" | "settled" | "accepted";
+                  /** @default null */
+                  questionId: string | null;
+                  /**
+                   * Format: date-time
+                   * @default null
+                   */
+                  answeredAt: string | null;
+                  /** @default null */
+                  settledBy: string | null;
+                  /** Format: date-time */
+                  createdAt: string;
+                  /** @default null */
+                  context: string | null;
+                  /** @default [] */
+                  choices: {
+                    label: string;
+                    consequence: string;
+                  }[];
+                  /** @default null */
+                  recommendation: {
+                    answer: string;
+                    reason: string;
+                  } | null;
+                }[];
+                /**
+                 * @default null
+                 * @enum {string|null}
+                 */
+                risk: "low" | "medium" | "high" | null;
+                /** @default null */
+                riskReason: string | null;
+                /**
+                 * @default null
+                 * @enum {string|null}
+                 */
+                confidence: "high" | "medium" | "low" | null;
+                /** @default null */
+                confidenceReason: string | null;
+                /** Format: date-time */
+                createdAt: string;
+                /** Format: date-time */
+                updatedAt: string;
+              }[];
+            };
+          };
+        };
+        /** @description Invalid request */
+        400: {
+          headers: {
+            [name: string]: unknown;
+          };
+          content: {
+            "application/json": {
+              error: string;
+              details?: string[];
+            };
+          };
+        };
+        /** @description Only the owner */
+        403: {
+          headers: {
+            [name: string]: unknown;
+          };
+          content: {
+            "application/json": {
+              error: string;
+              details?: string[];
+            };
+          };
+        };
+        /** @description No such project */
+        404: {
+          headers: {
+            [name: string]: unknown;
+          };
+          content: {
+            "application/json": {
+              error: string;
+              details?: string[];
+            };
+          };
+        };
+        /** @description No plan to decide, or one waits or is approved already */
+        409: {
+          headers: {
+            [name: string]: unknown;
+          };
+          content: {
+            "application/json": {
+              error: string;
+              details?: string[];
+            };
+          };
+        };
+      };
+    };
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/project-plans/waiting": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get: {
+      parameters: {
+        query?: never;
+        header?: never;
+        path?: never;
+        cookie?: never;
+      };
+      requestBody?: never;
+      responses: {
+        /** @description Plans waiting for Andy, every project */
+        200: {
+          headers: {
+            [name: string]: unknown;
+          };
+          content: {
+            "application/json": {
+              projectId: string;
+              key: string;
+              name: string;
+              plan: {
+                /** @enum {string} */
+                status: "proposed" | "approving" | "approved" | "rejected";
+                proposal: {
+                  summary: string;
+                  milestones: {
+                    title: string;
+                    goal: string;
+                    doneWhen: string[];
+                    slices: string[];
+                  }[];
+                };
+                proposedBy: string;
+                /** Format: date-time */
+                proposedAt: string;
+                decidedBy: string | null;
+                /** Format: date-time */
+                decidedAt: string | null;
+                reason: string | null;
+                epicIds: string[];
+              };
+            }[];
+          };
+        };
+      };
+    };
+    put?: never;
+    post?: never;
     delete?: never;
     options?: never;
     head?: never;

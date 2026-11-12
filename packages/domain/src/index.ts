@@ -33,6 +33,7 @@ export * from "./runners";
 export * from "./local-claims";
 export * from "./brief";
 export * from "./ideate";
+export * from "./project-plan";
 export * from "./dashboard";
 export * from "./setup-checklist";
 export * from "./epic-rollup";

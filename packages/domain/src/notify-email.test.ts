@@ -190,6 +190,18 @@ async function setup() {
 }
 
 describe("EmailNotifications", () => {
+  it("GivenAProjectPlanWaits_WhenTheWindowFlushes_ThenOneEmailLinksToItsSettings", async () => {
+    const { notifications, sent, setNow } = await setup();
+    vi.spyOn(console, "log").mockImplementation(() => {});
+    await notifications.planNeedsYou("ai", 3);
+    setNow(at(EMAIL_BATCH_WINDOW_MS));
+    expect(await notifications.flush()).toBe("sent");
+    expect(sent).toHaveLength(1);
+    expect(sent[0]!.body).toContain("AI-plan: Project plan");
+    expect(sent[0]!.body).toContain("Plan waiting: 3 milestones to approve or reject.");
+    expect(sent[0]!.body).toContain(`${APP}/p/ai/settings`);
+  });
+
   it("GivenAnAgentFlagsATicket_WhenTheWindowFlushes_ThenOneEmailWithItsQuestion", async () => {
     const { tracker, flagged, notifications, queue, sent, ticket, setNow } = await setup();
     await tracker.askQuestion("ai", ticket.id, { text: "Which one?", options: [] }, "agent:r1");

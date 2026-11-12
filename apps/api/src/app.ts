@@ -28,6 +28,7 @@ import {
   QuotaClearer,
   BriefService,
   IdeateService,
+  ProjectPlanService,
   TicketService,
   EmailNotifications,
   wakeAfterRunEnd,
@@ -51,6 +52,7 @@ import { noReviewFindings, registerConfigProposalRoutes } from "./config-proposa
 import { registerNotifyFlush, registerNotifyRoutes } from "./notify";
 import { registerBriefRoutes } from "./brief";
 import { registerIdeateRoutes } from "./ideate";
+import { registerProjectPlanRoutes } from "./project-plan";
 import {
   ConnectedCodeHost,
   GitHubConnection,
@@ -438,6 +440,13 @@ export function createApp(input: AppDeps) {
     now,
   );
   registerIdeateRoutes(app, ideate);
+  const plans = new ProjectPlanService(
+    deps.tracker,
+    service,
+    now,
+    email ? (id, plan) => email.planNeedsYou(id, plan.proposal.milestones.length) : undefined,
+  );
+  registerProjectPlanRoutes(app, plans);
   const configProposals = deps.configChanges
     ? new ConfigProposals(
         deps.tracker,
@@ -472,6 +481,7 @@ export function createApp(input: AppDeps) {
       quota: quotaClearer,
       brief,
       ideate,
+      plans,
       configProposals,
     });
   }
