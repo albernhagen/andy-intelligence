@@ -15,7 +15,8 @@ const json = (status: number, body: unknown) =>
 function fakeGitHub(routes: Record<string, (init?: RequestInit) => Response>) {
   return vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
     const url = new URL(typeof input === "string" ? input : input.toString());
-    const route = routes[`${init?.method ?? "GET"} ${url.pathname}`];
+    // Octokit encodes `/` in a path parameter (as GitHub accepts it): match the decoded path.
+    const route = routes[`${init?.method ?? "GET"} ${decodeURIComponent(url.pathname)}`];
     return route ? route(init) : json(500, { message: `unexpected ${url.pathname}` });
   });
 }
@@ -356,6 +357,73 @@ describe("GitHubCodeHost", () => {
       expect(await host(fetch).headContains("albernhagen/andy-intelligence", "abc", "main")).toBe(
         null,
       );
+    });
+  });
+  describe("proposeFile", () => {
+    const R = "/repos/albernhagen/andy-intelligence";
+    const proposal = {
+      branch: "brief/ai-20261112080000",
+      path: "docs/product/brief.md",
+      content: "# Project brief\n",
+      message: "Project brief",
+      title: "AI: Project brief",
+      body: "Rendered from the onboarding answers.",
+    };
+    const routes = (existing: boolean, put: (init?: RequestInit) => Response) => ({
+      ...installed,
+      [`GET ${R}/git/ref/heads/main`]: () => json(200, { object: { sha: "basesha" } }),
+      [`POST ${R}/git/refs`]: (init?: RequestInit) =>
+        json(201, { ref: JSON.parse(String(init?.body)).ref }),
+      [`GET ${R}/contents/docs/product/brief.md`]: () =>
+        existing ? json(200, { type: "file", sha: "blobsha", size: 3 }) : json(404, {}),
+      [`PUT ${R}/contents/docs/product/brief.md`]: put,
+      [`POST ${R}/pulls`]: () =>
+        json(201, {
+          number: 7,
+          html_url: "https://github.com/albernhagen/andy-intelligence/pull/7",
+        }),
+    });
+
+    it("GivenANewFile_WhenProposed_ThenABranchFromTheDefaultHeadCommitsItAndAPrOpens", async () => {
+      const put = vi.fn((_init?: RequestInit) => json(201, {}));
+      const fetch = fakeGitHub(routes(false, put));
+      expect(await host(fetch).proposeFile("albernhagen/andy-intelligence", proposal)).toEqual({
+        number: 7,
+        url: "https://github.com/albernhagen/andy-intelligence/pull/7",
+        branch: proposal.branch,
+      });
+      const body = JSON.parse(String(put.mock.calls[0]![0]!.body));
+      expect(body).toMatchObject({ branch: proposal.branch, message: "Project brief" });
+      expect(body.sha).toBeUndefined();
+      expect(Buffer.from(body.content, "base64").toString("utf8")).toBe(proposal.content);
+    });
+
+    it("GivenAnExistingFile_WhenProposed_ThenItIsReplacedByItsBlobSha", async () => {
+      const put = vi.fn((_init?: RequestInit) => json(200, {}));
+      await host(fakeGitHub(routes(true, put))).proposeFile(
+        "albernhagen/andy-intelligence",
+        proposal,
+      );
+      expect(JSON.parse(String(put.mock.calls[0]![0]!.body)).sha).toBe("blobsha");
+    });
+
+    it("GivenTheBranchExists_WhenProposed_ThenItThrowsAndNothingIsCommitted", async () => {
+      const put = vi.fn((_init?: RequestInit) => json(201, {}));
+      const fetch = fakeGitHub({
+        ...routes(false, put),
+        [`POST ${R}/git/refs`]: () => json(422, { message: "Reference already exists" }),
+      });
+      await expect(
+        host(fetch).proposeFile("albernhagen/andy-intelligence", proposal),
+      ).rejects.toThrow(/already exists/);
+      expect(put).not.toHaveBeenCalled();
+    });
+
+    it("GivenTheAppIsNotInstalled_WhenProposed_ThenNull", async () => {
+      const fetch = fakeGitHub({
+        "GET /repos/albernhagen/other/installation": () => json(404, { message: "Not Found" }),
+      });
+      expect(await host(fetch).proposeFile("albernhagen/other", proposal)).toBeNull();
     });
   });
 });

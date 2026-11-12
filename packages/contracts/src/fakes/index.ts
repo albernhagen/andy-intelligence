@@ -1,6 +1,7 @@
 import {
   CodeHostConnection,
   CodeHostEvent,
+  FileProposal,
   Repo,
   RepoName,
   type ChangedFile,
@@ -8,6 +9,7 @@ import {
   type Listing,
   type PullRequest,
   type PullRequestCommit,
+  type ProposedPullRequest,
   type RepoToken,
   type RequiredCheck,
   type Run,
@@ -536,6 +538,14 @@ export class InMemoryCodeHost implements CodeHost {
   failMerge: Error | null = null;
   /** Test seam: head commits that don't contain the default branch yet (others do). */
   readonly behindDefault = new Set<string>();
+  /** Files proposed with `proposeFile`, in order. */
+  readonly proposals: {
+    fullName: string;
+    proposal: FileProposal;
+    opened: ProposedPullRequest;
+  }[] = [];
+  /** Test seam: make `proposeFile` fail. */
+  failPropose: Error | null = null;
 
   constructor(
     repos: Repo[] = [],
@@ -657,6 +667,20 @@ export class InMemoryCodeHost implements CodeHost {
   async headContains(fullName: string, head: string): Promise<boolean | null> {
     if (!(await this.getRepo(fullName))) return null;
     return !this.behindDefault.has(head);
+  }
+
+  async proposeFile(fullName: string, proposal: FileProposal): Promise<ProposedPullRequest | null> {
+    const repo = await this.getRepo(fullName);
+    if (!repo) return null;
+    if (this.failPropose) throw this.failPropose;
+    const parsed = FileProposal.parse(proposal);
+    if (this.proposals.some((p) => p.proposal.branch === parsed.branch)) {
+      throw new Error(`branch ${parsed.branch} already exists`);
+    }
+    const number = 1000 + this.proposals.length;
+    const opened = { number, url: `${repo.url}/pull/${number}`, branch: parsed.branch };
+    this.proposals.push({ fullName: repo.fullName, proposal: parsed, opened });
+    return structuredClone(opened);
   }
 }
 

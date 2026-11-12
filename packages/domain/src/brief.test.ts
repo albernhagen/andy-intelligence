@@ -1,7 +1,21 @@
 import { readFileSync } from "node:fs";
-import { BRIEF_MAX_WORDS, BRIEF_SECTIONS, BriefAnswers } from "@andy/contracts";
+import {
+  BRIEF_MAX_WORDS,
+  BRIEF_SECTIONS,
+  BriefAnswers,
+  InMemoryCodeHost,
+  InMemoryWorkTracker,
+} from "@andy/contracts";
 import { describe, expect, it } from "vitest";
-import { countWords, plainAnswer, renderBrief } from "./brief";
+import {
+  BRIEF_PATH,
+  BRIEF_PRS_PER_HOUR,
+  BriefService,
+  countWords,
+  plainAnswer,
+  renderBrief,
+} from "./brief";
+import { DomainError } from "./errors";
 
 const full: BriefAnswers = {
   projectName: "Trail log",
@@ -132,5 +146,103 @@ describe("onboard procedure and BriefAnswers", () => {
       expect(procedure).toContain(`${title} ${maxWords}`);
     }
     expect(procedure).toContain(`${BRIEF_MAX_WORDS} words`);
+  });
+});
+
+describe("BriefService", () => {
+  const REPO = "albernhagen/trail-log";
+  const T0 = new Date("2026-11-12T08:00:00.000Z");
+  const OWNER = "user:uid-1" as const;
+
+  const setup = async (repos = [REPO]) => {
+    const tracker = new InMemoryWorkTracker();
+    const host = new InMemoryCodeHost([
+      { fullName: REPO, defaultBranch: "main", private: false, url: `https://github.com/${REPO}` },
+    ]);
+    const project = await tracker.createProject({ name: "Trail log", key: "TRL", repos });
+    let now = T0;
+    const service = new BriefService(tracker, host, () => now);
+    const tick = (ms: number) => (now = new Date(now.getTime() + ms));
+    return { tracker, host, project, service, tick };
+  };
+
+  it("GivenAnswers_WhenTheOwnerSubmits_ThenAPrProposesTheRenderedBrief", async () => {
+    const { host, project, service } = await setup();
+    const result = await service.submit(project.id, full, OWNER);
+    expect(result).toMatchObject({ status: "opened", revised: false });
+    expect(host.proposals).toHaveLength(1);
+    const { fullName, proposal } = host.proposals[0]!;
+    expect(fullName).toBe(REPO);
+    expect(proposal).toMatchObject({
+      path: BRIEF_PATH,
+      content: rendered(full),
+      title: "TRL: Project brief",
+      branch: `brief/${project.id}-20261112080000`,
+    });
+  });
+
+  it("GivenACurrentBrief_WhenRevised_ThenThePrReplacesIt", async () => {
+    const { host, project, service } = await setup();
+    host.files.set(BRIEF_PATH, rendered(full));
+    const result = await service.submit(project.id, { ...full, vision: "A new vision." }, OWNER);
+    expect(result).toMatchObject({ status: "opened", revised: true });
+    expect(host.proposals[0]!.proposal.message).toBe("TRL: update the project brief");
+  });
+
+  it("GivenTheSameBriefOnTheDefaultBranch_WhenSubmitted_ThenUnchangedAndNoPr", async () => {
+    const { host, project, service } = await setup();
+    host.files.set(BRIEF_PATH, rendered(full));
+    expect(await service.submit(project.id, full, OWNER)).toEqual({ status: "unchanged" });
+    expect(host.proposals).toHaveLength(0);
+  });
+
+  it.each(["agent:run-1", "system"] as const)(
+    "GivenTheCaller%s_WhenSubmitting_ThenForbiddenAndNoPr",
+    async (actor) => {
+      const { host, project, service } = await setup();
+      await expect(service.submit(project.id, full, actor)).rejects.toMatchObject({
+        code: "forbidden",
+      });
+      expect(host.proposals).toHaveLength(0);
+    },
+  );
+
+  it("GivenASectionOverItsCap_WhenSubmitted_ThenRefusedNamingItAndNoPr", async () => {
+    const { host, project, service } = await setup();
+    const err = await service
+      .submit(project.id, { ...full, vision: words(81) }, OWNER)
+      .catch((e: unknown) => e);
+    expect(err).toBeInstanceOf(DomainError);
+    expect(err).toMatchObject({ code: "brief_too_long", details: ["Vision"] });
+    expect(host.proposals).toHaveLength(0);
+  });
+
+  it("GivenAProjectWithoutARepo_WhenSubmitted_ThenInvalidRepo", async () => {
+    const { project, service } = await setup([]);
+    await expect(service.submit(project.id, full, OWNER)).rejects.toMatchObject({
+      code: "invalid_repo",
+    });
+  });
+
+  it("GivenNoCodeHost_WhenSubmitted_ThenUnavailable", async () => {
+    const { tracker, project } = await setup();
+    const service = new BriefService(tracker, null, () => T0);
+    await expect(service.submit(project.id, full, OWNER)).rejects.toMatchObject({
+      code: "code_host_unavailable",
+    });
+  });
+
+  it("GivenTheHourlyCapReached_WhenSubmitted_ThenRateLimitedUntilAnHourPasses", async () => {
+    const { host, project, service, tick } = await setup();
+    for (let i = 0; i < BRIEF_PRS_PER_HOUR; i++) {
+      await service.submit(project.id, { ...full, vision: `Vision ${i}.` }, OWNER);
+      tick(1000);
+    }
+    await expect(
+      service.submit(project.id, { ...full, vision: "One more." }, OWNER),
+    ).rejects.toMatchObject({ code: "rate_limited" });
+    tick(60 * 60_000);
+    await service.submit(project.id, { ...full, vision: "Later." }, OWNER);
+    expect(host.proposals).toHaveLength(BRIEF_PRS_PER_HOUR + 1);
   });
 });

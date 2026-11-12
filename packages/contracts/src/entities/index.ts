@@ -771,6 +771,27 @@ export const PullRequest = z.object({
 });
 export type PullRequest = z.infer<typeof PullRequest>;
 
+/**
+ * One file proposed as a pull request (AI-107): committed on a new branch cut from the default
+ * branch, then opened into it. `content` is untrusted text; nothing reads it as instructions.
+ */
+export const FileProposal = z.object({
+  branch: z.string().regex(/^[a-z][a-z0-9-]{0,30}\/[a-z0-9-]{1,60}$/),
+  path: z.string().regex(/^[A-Za-z0-9._-]+(\/[A-Za-z0-9._-]+)*$/).max(200),
+  content: z.string().max(100_000),
+  message: z.string().min(1).max(200),
+  title: z.string().min(1).max(200),
+  body: z.string().max(2000),
+});
+export type FileProposal = z.infer<typeof FileProposal>;
+
+export const ProposedPullRequest = z.object({
+  number: z.number().int().positive(),
+  url: z.url(),
+  branch: z.string().min(1),
+});
+export type ProposedPullRequest = z.infer<typeof ProposedPullRequest>;
+
 export const CheckStatus = z.enum(["queued", "in_progress", "completed"]);
 export type CheckStatus = z.infer<typeof CheckStatus>;
 

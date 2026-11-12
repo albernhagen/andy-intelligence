@@ -784,6 +784,19 @@ export function codeHostContract(
       expect(await host.getRepo(unknownRepo)).toBeNull();
     });
 
+    it("GivenARepoWithoutTheApp_WhenAFileIsProposed_ThenNullAndNothingOpens", async () => {
+      const { host, unknownRepo } = await make();
+      const proposal = {
+        branch: "brief/contract-test",
+        path: "docs/product/brief.md",
+        content: "x",
+        message: "x",
+        title: "x",
+        body: "",
+      };
+      expect(await host.proposeFile(unknownRepo, proposal)).toBeNull();
+    });
+
     it("GivenAMalformedName_WhenRead_ThenNull", async () => {
       const { host } = await make();
       expect(await host.getRepo("../etc/passwd")).toBeNull();

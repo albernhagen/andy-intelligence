@@ -171,6 +171,9 @@ const DOMAIN_STATUS = {
   not_acceptable: 409,
   runner_limit: 409,
   runs_elsewhere: 409,
+  brief_too_long: 422,
+  code_host_unavailable: 503,
+  rate_limited: 429,
 } as const;
 
 export function createApp(input: AppDeps) {
