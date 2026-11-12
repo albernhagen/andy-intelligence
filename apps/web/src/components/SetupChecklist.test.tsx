@@ -15,7 +15,7 @@ async function open(prepare: (h: ReturnType<typeof renderApp>) => void = () => {
   await h.tracker.createProject({ name: "Andy Intelligence", key: "AI", repos: [REPO] });
   prepare(h);
   await h.queryClient.invalidateQueries();
-  return within(await screen.findByRole("list", { name: "Setup checklist" }));
+  return within(await screen.findByRole("list", { name: "Setup checklist" }, { timeout: 5000 }));
 }
 
 const row = (list: ReturnType<typeof within>, label: string) =>

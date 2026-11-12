@@ -62,29 +62,34 @@ function log(message: string, fields: object) {
 }
 
 /** What the code host says about `repo`; a thrown error becomes an `error` fact, never "done". */
-export async function readRepoFacts(codeHost: CodeHost | null, repo: string | undefined) {
-  if (!repo) return { kind: "no_repo" } satisfies RepoFacts;
-  if (!codeHost) return { kind: "not_installed", repo } satisfies RepoFacts;
+export async function readRepoFacts(
+  codeHost: CodeHost | null,
+  repo: string | undefined,
+): Promise<RepoFacts> {
+  if (!repo) return { kind: "no_repo" };
+  if (!codeHost) return { kind: "not_installed", repo };
   try {
     const found = await codeHost.getRepo(repo);
-    if (!found) return { kind: "not_installed", repo } satisfies RepoFacts;
+    if (!found) return { kind: "not_installed", repo };
     const ref = found.defaultBranch;
     const present = async (path: string) =>
       (await codeHost.readFile(found.fullName, path, ref)) !== null;
     const [baseline, threatModel] = await Promise.all([
-      Promise.all(BASELINE_FILES.map(async (path) => ((await present(path)) ? null : path))),
+      Promise.all(
+        BASELINE_FILES.map(async (path: string) => ((await present(path)) ? null : path)),
+      ),
       present(THREAT_MODEL_PATH),
     ]);
     return {
-      kind: "read",
+      kind: "read" as const,
       repo: found.fullName,
       missingBaselineFiles: baseline.filter((p): p is string => p !== null),
       threatModel,
-    } satisfies RepoFacts;
+    };
   } catch (err) {
     const error = (err instanceof Error ? err.message : String(err)).slice(0, ERROR_MAX);
     log("setup checklist couldn't read the repo", { repo, error });
-    return { kind: "error", repo, error } satisfies RepoFacts;
+    return { kind: "error", repo, error };
   }
 }
 
