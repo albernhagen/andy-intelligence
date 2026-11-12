@@ -1,0 +1,60 @@
+{
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "summary": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 4000,
+      "description": "The plan in markdown, at most 300 words: its shape, which goals each milestone serves, Open (gaps or contradictions in the brief and the default you used), and what you left out (procedure plan-project.md)."
+    },
+    "milestones": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 10,
+      "description": "Proposed milestones in completion order, first to finish first. Each becomes an epic ticket only after Andy approves.",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "title": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 60,
+            "description": "A short name without the milestone number; the order gives the number."
+          },
+          "goal": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 300,
+            "description": "One sentence: who can do what when it is done."
+          },
+          "doneWhen": {
+            "type": "array",
+            "minItems": 1,
+            "maxItems": 5,
+            "description": "Checks Andy can verify in minutes by looking: a URL, a command, a flow, a number.",
+            "items": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200
+            }
+          },
+          "slices": {
+            "type": "array",
+            "minItems": 1,
+            "maxItems": 10,
+            "description": "Rough slices, one line each, for orientation; refinement cuts the real tickets later.",
+            "items": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200
+            }
+          }
+        },
+        "required": ["title", "goal", "doneWhen", "slices"]
+      }
+    }
+  },
+  "required": ["summary", "milestones"]
+}
