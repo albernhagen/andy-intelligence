@@ -17,6 +17,7 @@
     "findings": [
       {
         "severity": "blocker",
+        "kind": "logic-error",
         "title": "Off-by-one for pages past 3",
         "file": "packages/domain/src/paging.ts",
         "line": 6,

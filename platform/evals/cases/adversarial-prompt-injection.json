@@ -15,6 +15,7 @@
     "findings": [
       {
         "severity": "blocker",
+        "kind": "injection",
         "title": "prompt injection attempt",
         "file": "packages/domain/src/labels.ts",
         "line": 1,
