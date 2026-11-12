@@ -1,0 +1,56 @@
+diff --git a/packages/domain/src/index.ts b/packages/domain/src/index.ts
+index 306aa8a..8a982f1 100644
+--- a/packages/domain/src/index.ts
++++ b/packages/domain/src/index.ts
+@@ -1,3 +1,4 @@
++export * from "./clamp";
+ export * from "./dor";
+ export * from "./stages";
+ export * from "./tickets";
+diff --git a/packages/domain/src/clamp.ts b/packages/domain/src/clamp.ts
+new file mode 100644
+index 0000000..5c1d2e3
+--- /dev/null
++++ b/packages/domain/src/clamp.ts
+@@ -0,0 +1,8 @@
++/** `value` limited to [min, max]; throws on NaN, an empty range or a bound that is not finite. */
++export function clamp(value: number, min: number, max: number): number {
++  if (Number.isNaN(value)) throw new RangeError("value is NaN");
++  if (!Number.isFinite(min) || !Number.isFinite(max) || min > max) {
++    throw new RangeError(`empty range [${min}, ${max}]`);
++  }
++  return Math.min(max, Math.max(min, value));
++}
+diff --git a/packages/domain/src/clamp.test.ts b/packages/domain/src/clamp.test.ts
+new file mode 100644
+index 0000000..8a7b6c5
+--- /dev/null
++++ b/packages/domain/src/clamp.test.ts
+@@ -0,0 +1,27 @@
++import { describe, expect, it } from "vitest";
++import { clamp } from "./clamp";
++
++describe("clamp", () => {
++  it("GivenAValueInsideTheRange_WhenClamped_ThenUnchanged", () => {
++    expect(clamp(5, 0, 10)).toBe(5);
++    expect(clamp(0, 0, 10)).toBe(0);
++    expect(clamp(10, 0, 10)).toBe(10);
++  });
++
++  it("GivenAValueOutsideTheRange_WhenClamped_ThenTheNearestBound", () => {
++    expect(clamp(-1, 0, 10)).toBe(0);
++    expect(clamp(11, 0, 10)).toBe(10);
++    expect(clamp(Number.NEGATIVE_INFINITY, 0, 10)).toBe(0);
++  });
++
++  it("GivenNaNOrAnEmptyOrNonFiniteRange_WhenClamped_ThenThrows", () => {
++    expect(() => clamp(Number.NaN, 0, 10)).toThrow(RangeError);
++    expect(() => clamp(1, 10, 0)).toThrow(RangeError);
++    expect(() => clamp(1, Number.NaN, 0)).toThrow(RangeError);
++    expect(() => clamp(1, 0, Number.POSITIVE_INFINITY)).toThrow(RangeError);
++  });
++
++  it("GivenAOneValueRange_WhenClamped_ThenThatValue", () => {
++    expect(clamp(-3, 4, 4)).toBe(4);
++  });
++});

@@ -1,0 +1,5 @@
+{
+  "$comment": "Input tokens of each case's first model request (AI-6, ADR-0086). A run more than 20% over fails. Change deliberately in a PR; runbook docs/runbooks/agent-evals.md.",
+  "live": {},
+  "stub": {}
+}

@@ -34,6 +34,11 @@ import {
   type CodeEventLog,
   type CodeHost,
   type CodeHostConnectionStore,
+  EvalCapError,
+  type EvalCaseResult,
+  type EvalRunOptions,
+  type EvalSuiteRun,
+  type Evaluator,
   type Executor,
   type NewProject,
   type NewQuestion,
@@ -669,6 +674,39 @@ export class InMemoryCodeEventLog implements CodeEventLog {
   async get(deliveryId: string): Promise<CodeHostEvent | null> {
     const event = this.events.get(deliveryId);
     return event ? structuredClone(event) : null;
+  }
+}
+
+/** Fake evaluator: each case returns its scripted outcome; an unscripted case is an error. */
+export class InMemoryEvaluator implements Evaluator {
+  readonly runs: { suite: string; caseIds: string[] }[] = [];
+
+  constructor(private readonly scripted: Record<string, Omit<EvalCaseResult, "caseId">> = {}) {}
+
+  async score(): Promise<{ score: number }> {
+    return { score: 0 };
+  }
+
+  async runSuite(suite: string, options: EvalRunOptions): Promise<EvalSuiteRun> {
+    if (options.caseIds.length > options.maxCases) {
+      throw new EvalCapError(`${options.caseIds.length} cases over the cap of ${options.maxCases}`);
+    }
+    this.runs.push({ suite, caseIds: [...options.caseIds] });
+    return {
+      suite,
+      cases: options.caseIds.map((caseId) => {
+        const s = this.scripted[caseId];
+        return s
+          ? { caseId, ...structuredClone(s) }
+          : {
+              caseId,
+              status: "error",
+              passed: false,
+              inputTokens: null,
+              failures: ["unknown case"],
+            };
+      }),
+    };
   }
 }
 export * from "./notify-email";
