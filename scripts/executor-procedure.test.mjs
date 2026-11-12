@@ -26,6 +26,15 @@ describe("executor-procedure", () => {
     expect(schemaArgs(files.schema)).toMatch(/^--json-schema '\{"type":"object".*\}'$/);
   });
 
+  it.each(["plan-project", "ideate"])(
+    "GivenThe%sStep_WhenLoaded_ThenItsProcedureAndSchemaMakeValidArgs",
+    (step) => {
+      const files = loadStep(PROCEDURES, step);
+      expect(files.procedure).toMatch(new RegExp(`^# /${step} `));
+      expect(schemaArgs(files.schema)).toMatch(/^--json-schema '\{"type":"object".*\}'$/);
+    },
+  );
+
   it("GivenAStepWithoutFiles_WhenLoaded_ThenBothAreNull", () => {
     expect(loadStep(PROCEDURES, "verify")).toEqual({ procedure: null, schema: null });
   });
