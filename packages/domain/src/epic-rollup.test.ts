@@ -1,7 +1,13 @@
 import type { Run, Ticket } from "@andy/contracts";
 import { describe, expect, it } from "vitest";
 import { DomainError } from "./errors";
-import { MAX_EPIC_COST_READS, dependencyOrder, epicChildren, readEpicRollup } from "./epic-rollup";
+import {
+  MAX_EPIC_COST_READS,
+  costOrder,
+  dependencyOrder,
+  epicChildren,
+  readEpicRollup,
+} from "./epic-rollup";
 
 const ticket = (n: number, over: Partial<Ticket> = {}): Ticket =>
   ({
@@ -16,6 +22,7 @@ const ticket = (n: number, over: Partial<Ticket> = {}): Ticket =>
     size: "M",
     archived: false,
     blockedBy: [],
+    upNextRank: null,
     ...over,
   }) as Ticket;
 
@@ -83,7 +90,46 @@ describe("epic roll-up (AI-85)", () => {
 
     expect(rollup.progress).toEqual({ done: 1, total: 2 });
     expect(rollup.cost).toEqual({ estimatedCostUsd: 1.75, completedRuns: 3, unknownRuns: 1 });
-    expect(rollup).toMatchObject({ costedChildren: 3, partial: false });
+    expect(rollup).toMatchObject({ costedChildren: 2, partial: false });
+  });
+
+  it("GivenACancelledChild_WhenRolledUp_ThenItsAgentTasksAreNotRead", async () => {
+    const tickets = [epic, ticket(1, { stage: "cancelled" }), ticket(2)];
+    const read: string[] = [];
+
+    await readEpicRollup(epic, tickets, async (_, id) => {
+      read.push(id);
+      return [];
+    });
+
+    expect(read).toEqual(["t2"]);
+  });
+
+  it("GivenChildrenInEveryStage_WhenCostOrdered_ThenPastBacklogFirstThenUpNextThenIdeas", () => {
+    const idea = ticket(1);
+    const upNext = ticket(2, { upNextRank: "a" });
+    const done = ticket(3, { stage: "done" });
+    const building = ticket(4, { stage: "in_progress" });
+    const cancelled = ticket(5, { stage: "cancelled" });
+
+    const order = costOrder([idea, upNext, done, building, cancelled]).map((t) => t.key);
+
+    expect(order).toEqual(["AI-3", "AI-4", "AI-2", "AI-1"]);
+  });
+
+  it("GivenIdeasPastTheCap_WhenRolledUp_ThenTheReadsGoToStoriesPastBacklog", async () => {
+    const ideas = Array.from({ length: MAX_EPIC_COST_READS }, (_, i) => ticket(i + 1));
+    const done = ticket(MAX_EPIC_COST_READS + 1, { stage: "done" });
+    const read = new Set<string>();
+
+    const rollup = await readEpicRollup(epic, [epic, ...ideas, done], async (_, id) => {
+      read.add(id);
+      return [run({ costUsd: id === done.id ? 3 : 0 })];
+    });
+
+    expect(read.has(done.id)).toBe(true);
+    expect(rollup.cost.estimatedCostUsd).toBe(3);
+    expect(rollup).toMatchObject({ costedChildren: MAX_EPIC_COST_READS, partial: true });
   });
 
   it("GivenMoreChildrenThanTheReadCap_WhenRolledUp_ThenRunsAreReadForTheCapOnlyAndItSaysPartial", async () => {

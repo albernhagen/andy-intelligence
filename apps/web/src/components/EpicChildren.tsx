@@ -64,7 +64,8 @@ export function EpicChildren(path: TicketPath) {
           </p>
           {r.partial && (
             <p className="text-xs text-muted-foreground">
-              Cost counts the first {r.costedChildren} of {r.children.length} stories only.
+              Cost counts {r.costedChildren} of {r.progress.total} stories, those likeliest to have
+              agent tasks.
             </p>
           )}
           <ul className="divide-y divide-border rounded-md border border-border text-sm">

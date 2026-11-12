@@ -8,7 +8,10 @@ import { DomainError } from "./errors";
  * cost needs one runs read per child, capped (ADR-0028).
  */
 
-/** Children whose runs are read for the cost roll-up; past it the cost is marked partial. */
+/**
+ * Children whose agent tasks are read for the cost roll-up, most likely spenders first
+ * (`costOrder`); past it the cost is marked partial. Cancelled children are never read.
+ */
 export const MAX_EPIC_COST_READS = 50;
 
 /** Stages where a blocker no longer blocks. */
@@ -30,10 +33,10 @@ export interface EpicRollup {
   children: EpicChild[];
   /** Done children of all children that aren't Cancelled. */
   progress: { done: number; total: number };
-  /** Summed over the finished runs of the first `costedChildren` children. */
+  /** Summed over the finished agent tasks of the `costedChildren` children read; Cancelled excluded. */
   cost: { estimatedCostUsd: number; completedRuns: number; unknownRuns: number };
   costedChildren: number;
-  /** True when some children's runs weren't read (over `MAX_EPIC_COST_READS`). */
+  /** True when some non-cancelled children weren't read (over `MAX_EPIC_COST_READS`). */
   partial: boolean;
 }
 
@@ -65,11 +68,14 @@ export function dependencyOrder(children: readonly Ticket[]): Ticket[] {
   return [...ordered, ...ranked.filter((t) => !placed.has(t.id))];
 }
 
+/** The epic's non-archived children. */
+const childrenOf = (epic: Ticket, tickets: readonly Ticket[]) =>
+  tickets.filter((t) => t.parentId === epic.id && !t.archived);
+
 /** The epic's children, in dependency order, from the project's ticket list. */
 export function epicChildren(epic: Ticket, tickets: readonly Ticket[]): EpicChild[] {
   const byId = new Map(tickets.map((t) => [t.id, t]));
-  const children = tickets.filter((t) => t.parentId === epic.id && !t.archived);
-  return dependencyOrder(children).map((t) => ({
+  return dependencyOrder(childrenOf(epic, tickets)).map((t) => ({
     id: t.id,
     key: t.key,
     title: t.title,
@@ -83,7 +89,22 @@ export function epicChildren(epic: Ticket, tickets: readonly Ticket[]): EpicChil
   }));
 }
 
-/** Progress and cost from the children and the runs read for the first of them. */
+/** Where agent tasks are likeliest: past Backlog, then Up next, then Ideas (no agent spend). */
+const spendTier = (t: Ticket) => (t.stage !== "backlog" ? 0 : t.upNextRank !== null ? 1 : 2);
+
+/**
+ * The non-cancelled children in the order their agent tasks are read for cost: likeliest
+ * spenders first (`spendTier`), then dependency order. Cancelled children are left out.
+ */
+export function costOrder(children: readonly Ticket[]): Ticket[] {
+  const open = dependencyOrder(children).filter((t) => t.stage !== "cancelled");
+  return open
+    .map((t, i) => ({ t, i }))
+    .sort((a, b) => spendTier(a.t) - spendTier(b.t) || a.i - b.i)
+    .map(({ t }) => t);
+}
+
+/** Progress and cost from the children and the agent tasks read for some of them. */
 export function epicRollup(
   children: readonly EpicChild[],
   runsByChild: ReadonlyMap<string, readonly Run[]>,
@@ -99,7 +120,7 @@ export function epicRollup(
       unknownRuns: cost.unknownRuns,
     },
     costedChildren: runsByChild.size,
-    partial: runsByChild.size < children.length,
+    partial: runsByChild.size < counted.length,
   };
 }
 
@@ -107,8 +128,9 @@ export function epicRollup(
 export type RunsOfTicket = (projectId: string, ticketId: string) => Promise<readonly Run[]>;
 
 /**
- * Reads an epic's roll-up: the ticket list the caller already has, plus at most
- * `MAX_EPIC_COST_READS` runs reads. A ticket that isn't an epic is refused.
+ * Reads an epic's roll-up: the ticket list the caller already has, plus one `runsOf` call for
+ * each of at most `MAX_EPIC_COST_READS` children (`costOrder`). A ticket that isn't an epic is
+ * refused.
  */
 export async function readEpicRollup(
   epic: Ticket,
@@ -118,8 +140,7 @@ export async function readEpicRollup(
   if (epic.type !== "epic") {
     throw new DomainError("invalid_reference", `${epic.key} is not an epic`);
   }
-  const children = epicChildren(epic, tickets);
-  const read = children.slice(0, MAX_EPIC_COST_READS);
+  const read = costOrder(childrenOf(epic, tickets)).slice(0, MAX_EPIC_COST_READS);
   const runs = await Promise.all(read.map((c) => runsOf(epic.projectId, c.id)));
-  return epicRollup(children, new Map(read.map((c, i) => [c.id, runs[i]!])));
+  return epicRollup(epicChildren(epic, tickets), new Map(read.map((c, i) => [c.id, runs[i]!])));
 }

@@ -73,3 +73,18 @@ test("story panel with a question", async ({ page }) => {
   await page.getByRole("region", { name: "Questions" }).scrollIntoViewIfNeeded();
   await expect(page).toHaveScreenshot("story-panel-question.png");
 });
+
+test("board grouped by epic", async ({ page }) => {
+  await open(page, "/p/ops", "Monthly restore drill");
+  await page.getByRole("checkbox", { name: "Group by epic" }).check();
+  await expect(page.getByText("1 of 3 done").first()).toBeVisible();
+  await expect(page).toHaveScreenshot("board-grouped.png", { fullPage: true });
+});
+
+/** AI-85: the epic's stories in the panel, on the OPS epic AI-86 seeds (OPS-5). */
+test("story panel for an epic", async ({ page }) => {
+  await page.clock.setFixedTime(SEED_NOW);
+  await open(page, "/p/ops/t/OPS-5", "1 of 3 done");
+  await page.getByRole("region", { name: "Stories" }).scrollIntoViewIfNeeded();
+  await expect(page).toHaveScreenshot("story-panel-epic.png");
+});
