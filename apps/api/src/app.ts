@@ -3,7 +3,7 @@ import {
   WorkTrackerError,
   type CodeEventLog,
   type ConfigChangeStore,
-  type ReviewFindingSource,
+  type ReviewFindingLog,
   type CodeHostConnectionStore,
   type OAuthGrantStore,
   type RunStore,
@@ -47,6 +47,7 @@ import { registerDashboardRoutes } from "./dashboard";
 import { registerSetupRoutes } from "./setup";
 import { noReviewFindings, registerConfigProposalRoutes } from "./config-proposals";
 import { registerNotifyFlush, registerNotifyRoutes } from "./notify";
+import { registerReviewFindings } from "./review-findings";
 import {
   ConnectedCodeHost,
   GitHubConnection,
@@ -87,8 +88,11 @@ export interface AppDeps {
   runners?: RunnerStore;
   /** Pending config changes from review findings (ADR-0097); off (routes absent) when unset. */
   configChanges?: ConfigChangeStore;
-  /** Stored review findings (ADR-0097 PR B); until then none, so sweeps propose nothing. */
-  reviewFindings?: ReviewFindingSource;
+  /**
+   * Stored review findings (ADR-0097): the review workflows post them to `/review/findings`
+   * (needs GitHub); sweeps read them. Unset: none, so sweeps propose nothing.
+   */
+  reviewFindings?: ReviewFindingLog;
   /** Subscription quota readings (M1.9). Without it every window reads unknown. */
   quota?: QuotaStore;
   /**
@@ -379,6 +383,14 @@ export function createApp(input: AppDeps) {
       now,
       quota: deps.quota,
     });
+    if (deps.reviewFindings) {
+      registerReviewFindings(app, {
+        log: deps.reviewFindings,
+        tracker: deps.tracker,
+        verify: verifyActionsToken,
+        now,
+      });
+    }
   }
 
   app.use("/api/*", requireAllowedUser(deps.verifier, deps.allowedEmails));

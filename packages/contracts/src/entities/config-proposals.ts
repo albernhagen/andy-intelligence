@@ -55,6 +55,46 @@ export const ReviewFinding = z.object({
 });
 export type ReviewFinding = z.infer<typeof ReviewFinding>;
 
+/**
+ * Caps on stored verdicts (ADR-0028, ADR-0097 PR B): findings one verdict keeps, and verdicts
+ * kept per project (the oldest go). 100 verdicts cover at least 50 PRs, over the 20 a sweep reads.
+ */
+export const REVIEW_VERDICT_LIMITS = { findings: 50, perProject: 100 } as const;
+
+/**
+ * One reviewer's latest verdict on one PR, as stored: a later verdict on the same PR by the same
+ * reviewer replaces it. `findings` repeat the verdict's fields so `recent` reads them flat.
+ */
+export const ReviewVerdict = z.object({
+  projectId: Id,
+  repo: ReviewFinding.shape.repo,
+  pullNumber: ReviewFinding.shape.pullNumber,
+  reviewer: ReviewerRole,
+  headSha: ReviewFinding.shape.headSha,
+  recordedAt: Timestamp,
+  findings: z.array(ReviewFinding).max(REVIEW_VERDICT_LIMITS.findings),
+});
+export type ReviewVerdict = z.infer<typeof ReviewVerdict>;
+
+/**
+ * What the review workflow posts for one verdict (`POST /review/findings`). The repo, PR and
+ * reviewer come from the caller's Actions OIDC token, never from this body.
+ */
+export const ReviewVerdictReport = z.strictObject({
+  headSha: z.string().regex(/^[0-9a-f]{40}$/),
+  findings: z
+    .array(
+      z.strictObject({
+        severity: FindingSeverity,
+        kind: FindingKind,
+        title: z.string().max(REVIEW_FINDING_LIMITS.title),
+        file: z.string().max(REVIEW_FINDING_LIMITS.file).nullable(),
+      }),
+    )
+    .max(REVIEW_VERDICT_LIMITS.findings),
+});
+export type ReviewVerdictReport = z.infer<typeof ReviewVerdictReport>;
+
 /** Caps on what a proposal carries (ADR-0028). */
 export const CONFIG_PROPOSAL_TEXT_MAX = 4_000;
 export const CONFIG_PROPOSAL_MAX_PRS = 20;

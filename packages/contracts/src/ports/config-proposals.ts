@@ -1,10 +1,9 @@
 import type { ConfigChange } from "../entities";
-import type { ReviewFinding } from "../entities/config-proposals";
+import type { ReviewFinding, ReviewVerdict } from "../entities/config-proposals";
 
 // ── ReviewFindingSource ──────────────────────────────────────────────────────
-// The PR review agents' findings, as stored by the control plane (ADR-0097). Read-only here:
-// the writer (a callback from the review workflow) is PR B of ADR-0097. Finding text is
-// untrusted data.
+// The PR review agents' findings, as stored by the control plane (ADR-0097). The writer is
+// `ReviewFindingLog`, fed by the review workflow's callback. Finding text is untrusted data.
 
 export interface RecentFindingsQuery {
   /** Findings from the project's `maxPulls` most recently reviewed PRs only. */
@@ -16,6 +15,16 @@ export interface RecentFindingsQuery {
 export interface ReviewFindingSource {
   /** The project's findings from its most recently reviewed PRs, newest first. */
   recent(projectId: string, query: RecentFindingsQuery): Promise<ReviewFinding[]>;
+}
+
+/** The writer side (ADR-0097 PR B): the review workflow's callback records each verdict. */
+export interface ReviewFindingLog extends ReviewFindingSource {
+  /**
+   * Stores a reviewer's verdict on a PR, replacing that reviewer's earlier verdict on the same
+   * PR (latest head wins), and keeps at most `maxPerProject` verdicts per project: the oldest
+   * by `recordedAt` are deleted in the same write.
+   */
+  recordVerdict(verdict: ReviewVerdict, maxPerProject: number): Promise<void>;
 }
 
 // ── ConfigChangeStore ────────────────────────────────────────────────────────

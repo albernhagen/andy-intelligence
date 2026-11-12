@@ -59,7 +59,7 @@ Contracts are defined in `packages/contracts` (Zod schemas + TypeScript interfac
 | `Evaluator` | Suite, Case, Score, per-case result | Agent evals (M1.17: Agent evals v1, ADR-0086); Ori Eval for scout smoke tests | Claude Code runner (`scripts/evals/evaluator.mjs`) |
 | `OAuthGrantStore` | OAuthGrant (code, access token, refresh token; keyed by token hash) | **Firestore** (ADR-0039) | Local store (ADR-0032) |
 | `RunnerStore` | Runner, per-run token (hashes only; ADR-0089) | **Firestore** | — |
-| `ConfigChangeStore`, `ReviewFindingSource` | ConfigChange, ReviewFinding (ADR-0097) | **Firestore** | — |
+| `ConfigChangeStore`, `ReviewFindingLog` | ConfigChange, ReviewVerdict (ADR-0097) | **Firestore** | — |
 | `NightLaunchStore` | NightLaunch; one active per project, checked atomically | **Firestore** | — |
 | `Telemetry` | Trace, Span, CostEvent | OTel → Cloud Trace / Cloud Logging | BigQuery sink |
 

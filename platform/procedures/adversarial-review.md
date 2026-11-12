@@ -62,4 +62,4 @@ When `.review/new-commits.diff` exists:
 
 ## Output
 
-JSON matching `platform/procedures/adversarial-review.schema.json`: a one- or two-sentence `summary`; `findings[]` (every finding still open, with `severity`, `title`, `file`, `line`, `scenario`, `recommendation`); and `resolved[]` on later pushes. CI turns it into one PR comment and the check result.
+JSON matching `platform/procedures/adversarial-review.schema.json`: a one- or two-sentence `summary`; `findings[]` (every finding still open, with `severity`, `kind` (schema list), `title`, `file`, `line`, `scenario`, `recommendation`); and `resolved[]` on later pushes. CI turns it into one PR comment and the check result.

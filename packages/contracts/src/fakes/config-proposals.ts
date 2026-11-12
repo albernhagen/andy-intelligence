@@ -1,12 +1,12 @@
 import { ConfigChange } from "../entities";
-import { ReviewFinding } from "../entities/config-proposals";
+import { ReviewFinding, ReviewVerdict } from "../entities/config-proposals";
 import { WorkTrackerError } from "../ports";
 import type {
   ConfigChangeDecision,
   ConfigChangeStore,
   CreatePendingOutcome,
   RecentFindingsQuery,
-  ReviewFindingSource,
+  ReviewFindingLog,
 } from "../ports/config-proposals";
 
 const newestFirst = (a: ConfigChange, b: ConfigChange) =>
@@ -81,21 +81,39 @@ export class InMemoryConfigChangeStore implements ConfigChangeStore {
   }
 }
 
-/** In-memory ReviewFindingSource; tests `add` findings. */
-export class InMemoryReviewFindingSource implements ReviewFindingSource {
+/** In-memory ReviewFindingLog; tests `add` loose findings or record verdicts. */
+export class InMemoryReviewFindingSource implements ReviewFindingLog {
   private readonly findings: ReviewFinding[] = [];
+  private readonly verdicts = new Map<string, ReviewVerdict>();
 
   add(...findings: ReviewFinding[]): void {
     this.findings.push(...findings.map((f) => ReviewFinding.parse(f)));
   }
 
+  async recordVerdict(verdict: ReviewVerdict, maxPerProject: number): Promise<void> {
+    const parsed = ReviewVerdict.parse(verdict);
+    this.verdicts.set(verdictKey(parsed), parsed);
+    const ofProject = [...this.verdicts.entries()]
+      .filter(([, v]) => v.projectId === parsed.projectId)
+      .sort(([, a], [, b]) => b.recordedAt.localeCompare(a.recordedAt));
+    for (const [key] of ofProject.slice(maxPerProject)) this.verdicts.delete(key);
+  }
+
   async recent(projectId: string, query: RecentFindingsQuery): Promise<ReviewFinding[]> {
+    const recorded = [...this.verdicts.values()]
+      .filter((v) => v.projectId === projectId)
+      .flatMap((v) => v.findings);
     return recentFindings(
-      this.findings.filter((f) => f.projectId === projectId),
+      [...this.findings.filter((f) => f.projectId === projectId), ...recorded],
       query,
     );
   }
 }
+
+/** One stored verdict per project, PR and reviewer; repo names compare case-insensitively. */
+export const verdictKey = (
+  v: Pick<ReviewVerdict, "projectId" | "repo" | "pullNumber" | "reviewer">,
+) => `${v.projectId}~${v.repo.toLowerCase().replace("/", "~")}~${v.pullNumber}~${v.reviewer}`;
 
 /**
  * The `recent` rule shared by the fake and adapters: PRs ordered by their latest finding,
