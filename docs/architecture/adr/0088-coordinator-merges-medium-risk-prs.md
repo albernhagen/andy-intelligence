@@ -1,5 +1,5 @@
 ---
-status: accepted
+status: accepted, amended by 0092
 date: 2026-11-11
 amends: 0078 (which PRs a coordinator session may merge); AGENTS.md rule 2
 ---
