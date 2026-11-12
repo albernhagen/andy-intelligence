@@ -40,6 +40,7 @@ import { registerRunCallbacks, registerRunRoutes } from "./runs";
 import { registerRunnerClaim, registerRunnerRoutes, runnerCredentials } from "./runners";
 import { registerTicketRoutes } from "./tickets";
 import { registerBoardRoutes } from "./board";
+import { registerEpicRoutes } from "./epics";
 import { registerInFlightRoutes } from "./in-flight";
 import { registerDigestRoutes } from "./digest";
 import { registerSetupRoutes } from "./setup";
@@ -401,6 +402,7 @@ export function createApp(input: AppDeps) {
   );
   registerTicketRoutes(app, deps.tracker, service, projects, runs);
   registerBoardRoutes(app, new BoardReader(deps.tracker, deps.runs));
+  registerEpicRoutes(app, deps.tracker, deps.runs);
 
   registerRunRoutes(app, runs, deps.runs);
   if (runners) registerRunnerRoutes(app, runners);

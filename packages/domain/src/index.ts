@@ -32,6 +32,7 @@ export * from "./notify-email";
 export * from "./runners";
 export * from "./local-claims";
 export * from "./setup-checklist";
+export * from "./epic-rollup";
 export * from "./night-launch";
 export * from "./config-proposals";
 export * from "./dispatch-order";
