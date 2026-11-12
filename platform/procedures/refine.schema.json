@@ -110,9 +110,30 @@
             "type": "string",
             "minLength": 1,
             "maxLength": 4000
+          },
+          "blockedBy": {
+            "type": "array",
+            "maxItems": 4,
+            "uniqueItems": true,
+            "description": "0-based indexes of other children in this list that must merge first. Empty when none; never its own index or a cycle.",
+            "items": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 4
+            }
+          },
+          "touches": {
+            "type": "array",
+            "maxItems": 20,
+            "description": "Areas or path globs this child edits; disjoint from its siblings where possible.",
+            "items": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 300
+            }
           }
         },
-        "required": ["title", "body"]
+        "required": ["title", "body", "blockedBy", "touches"]
       }
     },
     "gaps": {

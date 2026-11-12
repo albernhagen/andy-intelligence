@@ -42,6 +42,7 @@ export * from "./sync";
 export * from "./scores";
 export * from "./notify-email";
 export * from "./question-format";
+export * from "./brief";
 
 /** ARCHITECTURE §5 — domain model. Vendor concepts must not appear here. */
 
@@ -285,6 +286,10 @@ export type Question = z.infer<typeof Question>;
  */
 export const REFINE_LIMITS = {
   maxGaps: 10,
+  /**
+   * Same for an epic (M4.3): a split child that is still too big splits again when refined and stays
+   * under the epic, so 5 keeps one result reviewable without capping the epic's size.
+   */
   maxChildren: 5,
   title: 200,
   reason: REFINE_REASON_MAX,
@@ -319,11 +324,57 @@ export const RefineGap = z
   .superRefine(recommendationIsAnOption);
 export type RefineGap = z.infer<typeof RefineGap>;
 
+/**
+ * One ticket a split creates. `blockedBy` holds the 0-based indexes of sibling children it waits
+ * on (M4.3, ARCHITECTURE workflow §4.4); `RefineOutput` checks they name other children and form
+ * no cycle. Both new fields default to empty, so a result without them still parses.
+ */
 export const RefineChild = z.strictObject({
   title: capped(REFINE_LIMITS.title),
   body: capped(REFINE_LIMITS.body),
+  blockedBy: z
+    .array(
+      z
+        .number()
+        .int()
+        .min(0)
+        .max(REFINE_LIMITS.maxChildren - 1),
+    )
+    .max(REFINE_LIMITS.maxChildren - 1)
+    .default([]),
+  touches: z.array(capped(REFINE_LIMITS.scopeItem)).max(REFINE_LIMITS.maxScopeItems).default([]),
 });
 export type RefineChild = z.infer<typeof RefineChild>;
+
+/** Why `children`' sibling links are invalid: self, unknown or repeated indexes, or a cycle. */
+export function siblingDependencyIssues(children: readonly RefineChild[]): string[] {
+  const issues: string[] = [];
+  children.forEach((child, i) => {
+    if (new Set(child.blockedBy).size !== child.blockedBy.length) {
+      issues.push(`child ${i} names a sibling twice`);
+    }
+    for (const b of child.blockedBy) {
+      if (b === i) issues.push(`child ${i} is blocked by itself`);
+      else if (b >= children.length)
+        issues.push(`child ${i} is blocked by child ${b}, not in the output`);
+    }
+  });
+  if (issues.length > 0) return issues;
+  // Repeatedly settle children whose blockers are all settled; any left over are in a cycle.
+  const settled = new Set<number>();
+  let progressed = true;
+  while (progressed) {
+    progressed = false;
+    children.forEach((child, i) => {
+      if (!settled.has(i) && child.blockedBy.every((b) => settled.has(b))) {
+        settled.add(i);
+        progressed = true;
+      }
+    });
+  }
+  if (settled.size < children.length) issues.push("children block each other in a cycle");
+  return issues;
+}
 
 /** `ready`: use the gaps. `send_back`: too vague, needs `reason`. `split`: too big, needs `children`. */
 export const RefineOutcome = z.enum(["ready", "send_back", "split"]);
@@ -354,6 +405,9 @@ export const RefineOutput = z
     }
     if (o.outcome === "split" && o.children.length === 0) {
       ctx.addIssue({ code: "custom", path: ["children"], message: "split needs children" });
+    }
+    for (const message of siblingDependencyIssues(o.children)) {
+      ctx.addIssue({ code: "custom", path: ["children"], message });
     }
   });
 export type RefineOutput = z.infer<typeof RefineOutput>;
