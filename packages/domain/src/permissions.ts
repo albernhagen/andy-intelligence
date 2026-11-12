@@ -24,6 +24,7 @@ export const OWNER_ACTIONS = {
   revoke_runner: "revoke a local runner",
   change_project_settings: "change project settings",
   clear_quota_idle: "clear a quota idle",
+  decide_config_change: "accept or reject a proposed config change",
 } as const;
 
 export type OwnerAction = keyof typeof OWNER_ACTIONS;

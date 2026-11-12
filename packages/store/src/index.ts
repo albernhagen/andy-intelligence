@@ -132,3 +132,4 @@ export {
 } from "./watchdog-queue";
 export { FirestoreNotifyLedger } from "./notify-ledger";
 export { CloudTasksNotifyFlushQueue, notifyFlushUrl } from "./notify-flush-queue";
+export { CONFIG_CHANGE_LIST_READ_MAX, FirestoreConfigChangeStore } from "./config-change-store";

@@ -733,3 +733,4 @@ export class InMemoryEvaluator implements Evaluator {
 }
 export * from "./notify-email";
 export * from "./runner";
+export * from "./config-proposals";

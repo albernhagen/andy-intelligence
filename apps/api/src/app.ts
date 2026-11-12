@@ -2,6 +2,8 @@ import { OpenAPIHono, createRoute, z } from "@hono/zod-openapi";
 import {
   WorkTrackerError,
   type CodeEventLog,
+  type ConfigChangeStore,
+  type ReviewFindingSource,
   type CodeHostConnectionStore,
   type OAuthGrantStore,
   type RunStore,
@@ -21,6 +23,7 @@ import {
   RunnerService,
   LocalClaims,
   BoardReader,
+  ConfigProposals,
   DigestReader,
   QuotaClearer,
   TicketService,
@@ -38,6 +41,7 @@ import { registerTicketRoutes } from "./tickets";
 import { registerBoardRoutes } from "./board";
 import { registerInFlightRoutes } from "./in-flight";
 import { registerDigestRoutes } from "./digest";
+import { noReviewFindings, registerConfigProposalRoutes } from "./config-proposals";
 import { registerNotifyFlush, registerNotifyRoutes } from "./notify";
 import {
   ConnectedCodeHost,
@@ -77,6 +81,10 @@ export interface AppDeps {
    * when not configured.
    */
   runners?: RunnerStore;
+  /** Pending config changes from review findings (ADR-0097); off (routes absent) when unset. */
+  configChanges?: ConfigChangeStore;
+  /** Stored review findings (ADR-0097 PR B); until then none, so sweeps propose nothing. */
+  reviewFindings?: ReviewFindingSource;
   /** Subscription quota readings (M1.9). Without it every window reads unknown. */
   quota?: QuotaStore;
   /**
@@ -380,6 +388,15 @@ export function createApp(input: AppDeps) {
   const digest = new DigestReader(deps.tracker, deps.runs, deps.quota ?? null, now);
   registerDigestRoutes(app, digest, now);
   registerNotifyRoutes(app, email);
+  if (deps.configChanges) {
+    const proposals = new ConfigProposals(
+      deps.tracker,
+      deps.reviewFindings ?? noReviewFindings,
+      deps.configChanges,
+      now,
+    );
+    registerConfigProposalRoutes(app, proposals);
+  }
 
   if (github && connection) {
     registerGitHubSetup(app, {

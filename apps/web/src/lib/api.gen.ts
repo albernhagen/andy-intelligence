@@ -6098,6 +6098,226 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  "/api/config-changes": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get: {
+      parameters: {
+        query?: {
+          projectId?: string;
+          status?: "pending" | "applied" | "reverted" | "rejected";
+        };
+        header?: never;
+        path?: never;
+        cookie?: never;
+      };
+      requestBody?: never;
+      responses: {
+        /** @description Config changes, newest first (default: pending), at most 50 */
+        200: {
+          headers: {
+            [name: string]: unknown;
+          };
+          content: {
+            "application/json": {
+              id: string;
+              entity: string;
+              entityId: string;
+              diff: {
+                [key: string]: unknown;
+              };
+              /** @enum {string} */
+              actor: "andy" | "ui" | "agent" | "scout";
+              reason: string;
+              /** @enum {string} */
+              status: "pending" | "applied" | "reverted" | "rejected";
+              /** Format: date-time */
+              createdAt: string;
+              /** Format: date-time */
+              appliedAt: string | null;
+              /** @default null */
+              projectId: string | null;
+              /** @default null */
+              dedupeKey: string | null;
+              /** @default null */
+              decidedBy: string | null;
+              /**
+               * Format: date-time
+               * @default null
+               */
+              decidedAt: string | null;
+            }[];
+          };
+        };
+      };
+    };
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/projects/{projectId}/config-proposals/sweep": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    post: {
+      parameters: {
+        query?: never;
+        header?: never;
+        path: {
+          projectId: string;
+        };
+        cookie?: never;
+      };
+      requestBody?: never;
+      responses: {
+        /** @description Pending proposals written or already pending; none applied */
+        200: {
+          headers: {
+            [name: string]: unknown;
+          };
+          content: {
+            "application/json": {
+              projectId: string;
+              findingsRead: number;
+              created: string[];
+              alreadyPending: string[];
+              heldByCap: number;
+            };
+          };
+        };
+        /** @description Unknown project */
+        422: {
+          headers: {
+            [name: string]: unknown;
+          };
+          content: {
+            "application/json": {
+              error: string;
+              details?: string[];
+            };
+          };
+        };
+      };
+    };
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/config-changes/{changeId}/reject": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    post: {
+      parameters: {
+        query?: never;
+        header?: never;
+        path: {
+          changeId: string;
+        };
+        cookie?: never;
+      };
+      requestBody?: never;
+      responses: {
+        /** @description Rejected */
+        200: {
+          headers: {
+            [name: string]: unknown;
+          };
+          content: {
+            "application/json": {
+              id: string;
+              entity: string;
+              entityId: string;
+              diff: {
+                [key: string]: unknown;
+              };
+              /** @enum {string} */
+              actor: "andy" | "ui" | "agent" | "scout";
+              reason: string;
+              /** @enum {string} */
+              status: "pending" | "applied" | "reverted" | "rejected";
+              /** Format: date-time */
+              createdAt: string;
+              /** Format: date-time */
+              appliedAt: string | null;
+              /** @default null */
+              projectId: string | null;
+              /** @default null */
+              dedupeKey: string | null;
+              /** @default null */
+              decidedBy: string | null;
+              /**
+               * Format: date-time
+               * @default null
+               */
+              decidedAt: string | null;
+            };
+          };
+        };
+        /** @description Only the owner decides config changes */
+        403: {
+          headers: {
+            [name: string]: unknown;
+          };
+          content: {
+            "application/json": {
+              error: string;
+              details?: string[];
+            };
+          };
+        };
+        /** @description Not pending */
+        409: {
+          headers: {
+            [name: string]: unknown;
+          };
+          content: {
+            "application/json": {
+              error: string;
+              details?: string[];
+            };
+          };
+        };
+        /** @description Unknown config change */
+        422: {
+          headers: {
+            [name: string]: unknown;
+          };
+          content: {
+            "application/json": {
+              error: string;
+              details?: string[];
+            };
+          };
+        };
+      };
+    };
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   "/api/github": {
     parameters: {
       query?: never;
