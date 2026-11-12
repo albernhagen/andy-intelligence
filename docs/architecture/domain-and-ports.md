@@ -21,7 +21,7 @@ All records carry `project_id` where applicable. Documents are validated with th
 | **Tier** | key (frontier, strong, fast, cheap), ordered **routes** of (harness, provider, model) |
 | **Policy** | scope (global / project / epic / ticket), gates, autonomy, auto-merge rules, write policy, step→tier mapping |
 | **QuotaReading** | provider, window (5h / weekly / daily-tasks), used_pct, resets_at, source, taken_at, confidence |
-| **ConfigChange** | entity, diff, actor (andy / ui / agent / scout), reason, status (pending / applied / reverted), timestamps |
+| **ConfigChange** | entity, diff, actor (andy/ui/agent/scout), reason, status (pending / applied / reverted), timestamps; each project-settings write logs one (built, M4.11) |
 | **Release** | project, image digest, tickets included, notes, status |
 | **CodeHostEvent** | delivery ID (document ID), project, repo, kind (pull_request / check_run / workflow_run), action, normalized PR / check / workflow fields, received_at; TTL 30 days (ADR-0041) |
 | **NightLaunch** | epic, project, budget (max agent tasks, tokens, USD), stop time (≤ 16 h away), status (planned / running / stopping / ended), started/ended, end reason, story keys (ADR-0049) |
