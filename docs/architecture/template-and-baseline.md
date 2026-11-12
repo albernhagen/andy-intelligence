@@ -48,15 +48,15 @@ This repo's Dependabot bumps third-party pins in `platform/actions/`; managed re
 | PR template (docs + security checklist) | 0022, 0025 | `template/.github/pull_request_template.md` | M | carried (M1.16) |
 | Agent rules; docs ship with the change | 0022 | `template/AGENTS.md.template` | S | carried (M1.16) |
 | Threat model seed | 0025 | `template/docs/security/threat-model.md` | S | carried (M1.16) |
-| Dispatch, sync and local-runner caps (2 runners, a claim per 10 s, lookup caps), pause | 0079, 0083, 0094 | `dispatch-caps.ts`, `sync-runs.ts`, `runners.ts`, `local-claims.ts` | — | control plane |
+| Dispatch, sync, night-launch and local-runner caps (2 runners, a claim per 10 s, lookup caps), pause | 0079, 0083, 0094, 0049 | `dispatch-caps.ts`, `night-budget.ts`, `sync-runs.ts`, `runners.ts`, `local-claims.ts` | — | control plane |
 | Public-repo hygiene (`.gitignore`: tfvars, state, `.env*`) | 0015 | `template/gitignore.lines` | M (lines) | carried (M1.16) |
 | `main` ruleset: PR required (squash), no force push/deletion, required checks, code scanning (CodeQL, high or higher) | 0025 | `github/ruleset-main.json` | G | carried (M1.16), minus `github/source-only.json` (`firestore-suite`). No per-project extra checks yet (`apply` replaces the ruleset) |
 | Merge settings: squash only, delete branch on merge, auto-merge allowed (Dependabot; agent PRs through the review gate) | 0022, 0042, 0050 | `github/repo.json` | G | carried (M1.16; auto-merge from ADR-0042) |
 | Agent PR policy `autoMerge` (`none` / `s` / `s-and-m` / `all`; new projects `s-and-m`, project AI `none`): merges only when required and review checks pass and no veto applies | 0050 | built (M1.8b): product setting, nothing to copy. Protected paths (`packages/domain/src/gate.ts`) apply to every project, plus CODEOWNERS paths after `*` from the base branch |
 | `planApproval` (`none` / `m-and-l` / `all`): approved read-only plan before the build | 0050 | built (M1.8a): product setting, nothing to copy |
-| Dependabot auto-merge: npm patches + stable minors after all required checks; bot merges don't deploy | 0042 | `dependabot-auto-merge.yml` → `platform/actions/dependabot-auto-merge`, `scripts/dependabot-merge.mjs` | A | carried (next baseline tag) |
+| Dependabot auto-merge: npm patches + stable minors after required checks; bot merges don't deploy | 0042 | `dependabot-auto-merge.yml` → `platform/actions/dependabot-auto-merge`, `scripts/dependabot-merge.mjs` | A | carried (next baseline tag) |
 | CODEOWNERS: Andy requested on every PR (incl. Dependabot) | 0042 | `template/.github/CODEOWNERS` | S | carried (next baseline tag) |
-| Security & analysis: Dependabot alerts + security updates, secret scanning, push protection, private vulnerability reporting; CodeQL default setup off | 0015, 0025 | `github/security.json` (dependency graph is always on for public repos) | G | carried (M1.16) |
+| Security & analysis: Dependabot alerts + security updates, secret scanning, push protection, private vulnerability reporting; CodeQL default setup off | 0015, 0025 | `github/security.json` (dependency graph: always on for public repos) | G | carried (M1.16) |
 | Actions: read-only default token; Actions may open PRs; actions must be pinned to a full SHA | 0025, 0038 | `github/actions.json` | G | carried (M1.16) |
 | Labels `security-accepted`, `review-accepted` | 0025, 0026 | `github/labels.json` | G | carried (M1.16) |
 | Reviewer token secret | 0030 | `CLAUDE_CODE_OAUTH_TOKEN` | RB | carried (M1.16: `docs/runbooks/onboard-a-repo.md`) |
