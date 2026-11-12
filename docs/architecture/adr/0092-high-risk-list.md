@@ -31,7 +31,7 @@ The coordinator never merges a change to its own authority.
 
 **Left out on purpose** (reserved for Andy by ADR-0078, medium now): scripts outside the rows above; dispatcher logic other than caps and the pause; a signed-in route added beside existing ones; and design docs or runbooks changed inside a ticket's PR. They get both review agents.
 
-**Tests only** (Andy, 2026-11-11: "Yes, tests are medium"): a PR is medium when the only files it changes under a path named in the "Access", "Data" or "Review and merge" rows are `*.test.*` files, and nothing else in it is high. Deleting or skipping a test there stays high. First case: PR #153 (AI-78: Flaky sync-publish test) changed only `scripts/executor-publish-sync.test.mjs` under those paths and waited for Andy.
+**Tests only** (Andy, 2026-11-11: "Yes, tests are medium"): a PR is medium when the only files it changes under a path named in the "Access", "Data" or "Review and merge" rows are `*.test.*` files, and nothing else in it is high. The change may only add test cases or make an existing test deterministic. Deleting or skipping a test, removing or loosening an assertion, or changing what a test expects of the code there stays high; so does any doubt about which it is. First case: PR #153 (AI-78: Flaky sync-publish test) changed only `scripts/executor-publish-sync.test.mjs` under those paths and waited for Andy.
 
 **One list.** This table is the list. `platform/procedures/coordinate.md` and runbook `coordinating-sessions.md` point here and do not restate it.
 
