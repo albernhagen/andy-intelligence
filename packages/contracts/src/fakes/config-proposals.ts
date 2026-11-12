@@ -2,8 +2,9 @@ import { ConfigChange } from "../entities";
 import { ReviewFinding } from "../entities/config-proposals";
 import { WorkTrackerError } from "../ports";
 import type {
-  ConfigChangeFilter,
+  ConfigChangeDecision,
   ConfigChangeStore,
+  CreatePendingOutcome,
   RecentFindingsQuery,
   ReviewFindingSource,
 } from "../ports/config-proposals";
@@ -18,22 +19,23 @@ const newestFirst = (a: ConfigChange, b: ConfigChange) =>
 export class InMemoryConfigChangeStore implements ConfigChangeStore {
   private readonly changes = new Map<string, ConfigChange>();
 
-  async createPending(change: ConfigChange): Promise<{ created: boolean; change: ConfigChange }> {
+  async createPending(change: ConfigChange, maxPending: number): Promise<CreatePendingOutcome> {
     const parsed = ConfigChange.parse(change);
     if (parsed.status !== "pending") {
       throw new WorkTrackerError("conflict", "only a pending change can be created here");
     }
-    if (parsed.dedupeKey !== null) {
-      const existing = [...this.changes.values()].find(
-        (c) => c.status === "pending" && c.dedupeKey === parsed.dedupeKey,
-      );
-      if (existing) return { created: false, change: structuredClone(existing) };
-    }
+    const pending = [...this.changes.values()].filter(
+      (c) => c.status === "pending" && c.projectId === parsed.projectId,
+    );
+    const same =
+      parsed.dedupeKey === null ? undefined : pending.find((c) => c.dedupeKey === parsed.dedupeKey);
+    if (same) return { outcome: "duplicate", change: structuredClone(same) };
+    if (pending.length >= maxPending) return { outcome: "capped", change: null };
     if (this.changes.has(parsed.id)) {
       throw new WorkTrackerError("conflict", `config change ${parsed.id} exists`);
     }
     this.changes.set(parsed.id, parsed);
-    return { created: true, change: structuredClone(parsed) };
+    return { outcome: "created", change: structuredClone(parsed) };
   }
 
   async get(id: string): Promise<ConfigChange | null> {
@@ -41,29 +43,33 @@ export class InMemoryConfigChangeStore implements ConfigChangeStore {
     return found ? structuredClone(found) : null;
   }
 
-  async list(filter: ConfigChangeFilter): Promise<ConfigChange[]> {
+  async listPending(projectId?: string): Promise<ConfigChange[]> {
     return [...this.changes.values()]
-      .filter((c) => filter.projectId === undefined || c.projectId === filter.projectId)
-      .filter((c) => filter.status === undefined || c.status === filter.status)
+      .filter((c) => c.status === "pending")
+      .filter((c) => projectId === undefined || c.projectId === projectId)
       .sort(newestFirst)
-      .slice(0, filter.limit)
       .map((c) => structuredClone(c));
   }
 
-  async reject(id: string, by: string, at: string): Promise<ConfigChange> {
+  async decide(
+    id: string,
+    decision: ConfigChangeDecision,
+    by: string,
+    at: string,
+  ): Promise<ConfigChange> {
     const found = this.changes.get(id);
     if (!found) throw new WorkTrackerError("not_found", `config change ${id} not found`);
     if (found.status !== "pending") {
       throw new WorkTrackerError("conflict", `config change ${id} is ${found.status}`);
     }
-    const rejected = ConfigChange.parse({
+    const decided = ConfigChange.parse({
       ...found,
-      status: "rejected",
+      status: decision,
       decidedBy: by,
       decidedAt: at,
     });
-    this.changes.set(id, rejected);
-    return structuredClone(rejected);
+    this.changes.set(id, decided);
+    return structuredClone(decided);
   }
 }
 

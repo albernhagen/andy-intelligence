@@ -388,15 +388,15 @@ export function createApp(input: AppDeps) {
   const digest = new DigestReader(deps.tracker, deps.runs, deps.quota ?? null, now);
   registerDigestRoutes(app, digest, now);
   registerNotifyRoutes(app, email);
-  if (deps.configChanges) {
-    const proposals = new ConfigProposals(
-      deps.tracker,
-      deps.reviewFindings ?? noReviewFindings,
-      deps.configChanges,
-      now,
-    );
-    registerConfigProposalRoutes(app, proposals);
-  }
+  const configProposals = deps.configChanges
+    ? new ConfigProposals(
+        deps.tracker,
+        deps.reviewFindings ?? noReviewFindings,
+        deps.configChanges,
+        now,
+      )
+    : null;
+  if (configProposals) registerConfigProposalRoutes(app, configProposals);
 
   if (github && connection) {
     registerGitHubSetup(app, {
@@ -420,6 +420,7 @@ export function createApp(input: AppDeps) {
       digest,
       notifyEmail: email,
       quota: quotaClearer,
+      configProposals,
     });
   }
 

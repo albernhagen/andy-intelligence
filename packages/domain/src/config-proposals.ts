@@ -5,7 +5,7 @@ import {
   ConfigChange,
   FindingProposalDiff,
   pullKey,
-  type ConfigChangeStatus,
+  type ConfigChangeDecision,
   type ConfigChangeStore,
   type ConfigProposalSweep,
   type EventActor,
@@ -19,9 +19,9 @@ import { requireCan } from "./permissions";
 /**
  * Repeated review findings become a pending ConfigChange (ADR-0040 row 5, ADR-0097): a finding
  * kind seen on `minPulls` or more of a project's recent PRs yields one proposal to add a rule to
- * the project's `AGENTS.md`. Nothing here applies a change: Andy accepts (M4 config editing) or
- * rejects it. Finding text is untrusted (an agent wrote it after reading PR content): only the
- * kind slug and PR numbers shape the proposal; titles appear as quoted, flattened examples.
+ * the project's `AGENTS.md`. Nothing here applies a change: Andy accepts or rejects it, and
+ * applying an accepted one is M4 config editing. Finding text is untrusted (an agent wrote it after reading PR content): only the
+ * kind slug and PR numbers shape the proposal; titles appear as flattened examples.
  */
 
 /** Caps and the threshold (ADR-0028; the ticket's assumption: 3 PRs). */
@@ -38,8 +38,8 @@ export const CONFIG_PROPOSAL_LIMITS = {
   maxPendingPerProject: 10,
   /** Characters kept of each example title. */
   exampleChars: 120,
-  /** Changes one list returns. */
-  maxList: 50,
+  /** A project's sweeps are this far apart at least, per instance (max 2 instances). */
+  minSweepIntervalMs: 60_000,
 } as const;
 
 export type ConfigProposalLimits = { [K in keyof typeof CONFIG_PROPOSAL_LIMITS]: number };
@@ -58,10 +58,21 @@ export function proposalKey(projectId: string, file: string, kind: string): stri
   return `review-findings:${projectId}:${file}:${kind}`;
 }
 
-/** Untrusted text as one short plain line: no control characters, markup, mentions or code. */
+/** URLs and bare `www.` hosts, removed from untrusted text before anything else. */
+const URL_LIKE = /\b(?:[a-z][a-z0-9+.-]*:\/\/|www\.)\S*/giu;
+/** Everything but letters, digits, spaces and plain punctuation: no markup survives. */
+const NOT_PLAIN = /[^\p{L}\p{N} .,:;'?%+/-]/gu;
+
+/**
+ * Untrusted text as one short plain line: URLs become "link removed"; then every character
+ * outside a small allow-list (letters, digits, spaces, `. , : ; ' ? % + / -`) becomes a space,
+ * so no Markdown (links, emphasis, headings, code, quotes), HTML, mention or control character
+ * reaches proposed text.
+ */
 export function flattenUntrusted(text: string, max: number): string {
   const flat = text
-    .replace(/[\p{Cc}\p{Cf}<>`@\\|]/gu, " ")
+    .replace(URL_LIKE, " link removed ")
+    .replace(NOT_PLAIN, " ")
     .replace(/\s+/g, " ")
     .trim();
   return flat.length > max ? `${flat.slice(0, max - 1)}…` : flat;
@@ -132,8 +143,10 @@ function log(message: string, fields: Record<string, unknown>) {
   );
 }
 
-/** Sweeps for proposals, lists them, and records Andy's reject. Never applies a change. */
+/** Sweeps for proposals, lists pending ones, and records Andy's decision. Never applies one. */
 export class ConfigProposals {
+  private readonly lastSweep = new Map<string, number>();
+
   constructor(
     private readonly tracker: Pick<WorkTracker, "getProject">,
     private readonly findings: ReviewFindingSource,
@@ -143,41 +156,37 @@ export class ConfigProposals {
     private readonly limits: ConfigProposalLimits = CONFIG_PROPOSAL_LIMITS,
   ) {}
 
-  /** Reads the project's recent findings and writes a pending proposal per repeated kind. */
+  /**
+   * Reads the project's recent findings and writes a pending proposal per repeated kind. A
+   * second sweep of the project within `minSweepIntervalMs` reads nothing (`throttled`).
+   */
   async sweep(projectId: string): Promise<ConfigProposalSweep> {
     if (!(await this.tracker.getProject(projectId))) {
       throw new DomainError("invalid_reference", `project ${projectId} not found`);
     }
-    const findings = await this.findings.recent(projectId, {
-      maxPulls: this.limits.recentPulls,
-      maxFindings: this.limits.maxFindings,
-    });
-    const proposals = proposeFromFindings(projectId, findings, this.limits);
-    const pending = await this.changes.list({
-      projectId,
-      status: "pending",
-      limit: this.limits.maxPendingPerProject,
-    });
-    const pendingByKey = new Map(pending.map((c) => [c.dedupeKey, c.id]));
-    let free = this.limits.maxPendingPerProject - pending.length;
     const result: ConfigProposalSweep = {
       projectId,
-      findingsRead: findings.length,
+      throttled: false,
+      findingsRead: 0,
       created: [],
       alreadyPending: [],
       heldByCap: 0,
     };
-    for (const p of proposals) {
-      const existingId = pendingByKey.get(p.dedupeKey);
-      if (existingId) {
-        result.alreadyPending.push(existingId);
-        continue;
-      }
-      if (free <= 0) {
-        result.heldByCap += 1;
-        continue;
-      }
-      const { created, change } = await this.changes.createPending(
+    const nowMs = this.now().getTime();
+    const last = this.lastSweep.get(projectId);
+    if (last !== undefined && nowMs - last < this.limits.minSweepIntervalMs) {
+      return { ...result, throttled: true };
+    }
+    this.lastSweep.set(projectId, nowMs);
+
+    const findings = await this.findings.recent(projectId, {
+      maxPulls: this.limits.recentPulls,
+      maxFindings: this.limits.maxFindings,
+    });
+    result.findingsRead = findings.length;
+    for (const p of proposeFromFindings(projectId, findings, this.limits)) {
+      // The store checks duplicates and the pending cap in one transaction.
+      const written = await this.changes.createPending(
         ConfigChange.parse({
           id: this.newId(),
           entity: AGENT_CONFIG_ENTITY,
@@ -191,29 +200,39 @@ export class ConfigProposals {
           projectId,
           dedupeKey: p.dedupeKey,
         }),
+        this.limits.maxPendingPerProject,
       );
-      if (created) {
-        result.created.push(change.id);
-        free -= 1;
-      } else {
-        result.alreadyPending.push(change.id);
-      }
+      if (written.outcome === "created") result.created.push(written.change.id);
+      else if (written.outcome === "duplicate") result.alreadyPending.push(written.change.id);
+      else result.heldByCap += 1;
     }
     log("config proposal sweep", { ...result });
     return result;
   }
 
-  async list(filter: { projectId?: string; status?: ConfigChangeStatus }): Promise<ConfigChange[]> {
-    return this.changes.list({ ...filter, limit: this.limits.maxList });
+  /** Every pending change (of one project when given), newest first. */
+  async listPending(projectId?: string): Promise<ConfigChange[]> {
+    if (projectId !== undefined && !(await this.tracker.getProject(projectId))) {
+      throw new DomainError("invalid_reference", `project ${projectId} not found`);
+    }
+    return this.changes.listPending(projectId);
   }
 
-  /** Andy's reject (owner only). `invalid_reference` when unknown; a decided change: conflict. */
-  async reject(id: string, actor: EventActor): Promise<ConfigChange> {
+  /**
+   * Andy's accept or reject (owner only, under the project-settings rule: a config change is a
+   * project setting). Accepting records agreement; it applies nothing (`appliedAt` stays null).
+   * `invalid_reference` when unknown; a decided change: conflict.
+   */
+  async decide(
+    id: string,
+    decision: ConfigChangeDecision,
+    actor: EventActor,
+  ): Promise<ConfigChange> {
     const change = await this.changes.get(id);
     if (!change) throw new DomainError("invalid_reference", `config change ${id} not found`);
-    requireCan(actor, "decide_config_change", change.projectId);
-    const rejected = await this.changes.reject(id, actor, this.now().toISOString());
-    log("config change rejected", { id, projectId: change.projectId, actor });
-    return rejected;
+    requireCan(actor, "change_project_settings", change.projectId);
+    const decided = await this.changes.decide(id, decision, actor, this.now().toISOString());
+    log("config change decided", { id, projectId: change.projectId, decision, actor });
+    return decided;
   }
 }

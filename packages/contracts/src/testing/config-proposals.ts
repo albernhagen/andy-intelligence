@@ -32,12 +32,15 @@ export function configChangeStoreContract(
   make: () => Promise<ConfigChangeStore>,
   options: ConfigChangeStoreContractOptions = {},
 ): void {
+  const itRaces = (title: string, fn: () => Promise<void>) => it(title, fn, options.raceTimeoutMs);
+  const at = "2026-11-12T11:00:00.000Z";
+
   describe(`ConfigChangeStore contract: ${name}`, () => {
     it("GivenAPendingChange_WhenCreatedAndRead_ThenItComesBackEqual", async () => {
       const store = await make();
       const change = pendingConfigChange();
 
-      expect(await store.createPending(change)).toEqual({ created: true, change });
+      expect(await store.createPending(change, 10)).toEqual({ outcome: "created", change });
       expect(await store.get(change.id)).toEqual(change);
       expect(await store.get(crypto.randomUUID())).toBeNull();
     });
@@ -45,80 +48,111 @@ export function configChangeStoreContract(
     it("GivenAPendingChangeWithAKey_WhenAnotherWithTheSameKeyIsCreated_ThenTheFirstComesBack", async () => {
       const store = await make();
       const first = pendingConfigChange({ dedupeKey: "same" });
-      await store.createPending(first);
+      await store.createPending(first, 10);
 
-      const again = await store.createPending(pendingConfigChange({ dedupeKey: "same" }));
+      const again = await store.createPending(pendingConfigChange({ dedupeKey: "same" }), 10);
 
-      expect(again).toEqual({ created: false, change: first });
-      expect(await store.list({ limit: 10 })).toHaveLength(1);
+      expect(again).toEqual({ outcome: "duplicate", change: first });
+      expect(await store.listPending()).toHaveLength(1);
     });
 
     it("GivenARejectedChange_WhenOneWithTheSameKeyIsCreated_ThenItIsStored", async () => {
       const store = await make();
       const first = pendingConfigChange({ dedupeKey: "same" });
-      await store.createPending(first);
-      await store.reject(first.id, "andy", "2026-11-12T11:00:00.000Z");
+      await store.createPending(first, 10);
+      await store.decide(first.id, "rejected", "andy", at);
 
-      const again = await store.createPending(pendingConfigChange({ dedupeKey: "same" }));
+      const again = await store.createPending(pendingConfigChange({ dedupeKey: "same" }), 10);
 
-      expect(again.created).toBe(true);
+      expect(again.outcome).toBe("created");
+    });
+
+    it("GivenTheProjectAtItsPendingCap_WhenAnotherIsCreated_ThenCappedAndNothingWritten", async () => {
+      const store = await make();
+      await store.createPending(pendingConfigChange(), 2);
+      await store.createPending(pendingConfigChange(), 2);
+      await store.createPending(pendingConfigChange({ projectId: "other" }), 2);
+
+      expect(await store.createPending(pendingConfigChange(), 2)).toEqual({
+        outcome: "capped",
+        change: null,
+      });
+      expect(await store.listPending("ai")).toHaveLength(2);
     });
 
     it("GivenANonPendingChange_WhenCreated_ThenConflict", async () => {
       const store = await make();
       await expect(
-        store.createPending(pendingConfigChange({ status: "applied" })),
+        store.createPending(pendingConfigChange({ status: "applied" }), 10),
       ).rejects.toMatchObject({ name: "WorkTrackerError", code: "conflict" });
     });
 
-    it(
-      "GivenConcurrentCreatesWithOneKey_WhenRacing_ThenOnlyOneIsStored",
+    itRaces("GivenConcurrentCreatesWithOneKey_WhenRacing_ThenOnlyOneIsStored", async () => {
+      const store = await make();
+      const results = await Promise.all(
+        [1, 2, 3].map(() => store.createPending(pendingConfigChange({ dedupeKey: "race" }), 10)),
+      );
+      expect(results.filter((r) => r.outcome === "created")).toHaveLength(1);
+      expect(await store.listPending()).toHaveLength(1);
+    });
+
+    itRaces(
+      "GivenConcurrentCreatesOfDifferentKeys_WhenRacingForTheLastSlot_ThenOnlyOneWins",
       async () => {
         const store = await make();
+        await store.createPending(pendingConfigChange(), 2);
         const results = await Promise.all(
-          [1, 2, 3].map(() => store.createPending(pendingConfigChange({ dedupeKey: "race" }))),
+          [1, 2, 3].map(() => store.createPending(pendingConfigChange(), 2)),
         );
-        expect(results.filter((r) => r.created)).toHaveLength(1);
-        expect(await store.list({ limit: 10 })).toHaveLength(1);
+        expect(results.filter((r) => r.outcome === "created")).toHaveLength(1);
+        expect(await store.listPending("ai")).toHaveLength(2);
       },
-      options.raceTimeoutMs,
     );
 
-    it("GivenChanges_WhenListedByProjectAndStatus_ThenOnlyMatchesNewestFirstUpToTheLimit", async () => {
+    it("GivenChanges_WhenPendingAreListed_ThenAllPendingOfTheProjectNewestFirst", async () => {
       const store = await make();
       const older = pendingConfigChange({ createdAt: "2026-11-12T09:00:00.000Z" });
       const newer = pendingConfigChange({ createdAt: "2026-11-12T10:00:00.000Z" });
       const other = pendingConfigChange({ projectId: "other" });
       const rejected = pendingConfigChange();
-      for (const c of [older, newer, other, rejected]) await store.createPending(c);
-      await store.reject(rejected.id, "andy", "2026-11-12T11:00:00.000Z");
+      for (const c of [older, newer, other, rejected]) await store.createPending(c, 10);
+      await store.decide(rejected.id, "rejected", "andy", at);
 
-      const pending = await store.list({ projectId: "ai", status: "pending", limit: 10 });
-      expect(pending.map((c) => c.id)).toEqual([newer.id, older.id]);
-      expect(await store.list({ projectId: "ai", status: "pending", limit: 1 })).toEqual([newer]);
-      expect(await store.list({ status: "rejected", limit: 10 })).toHaveLength(1);
+      expect((await store.listPending("ai")).map((c) => c.id)).toEqual([newer.id, older.id]);
+      expect(await store.listPending()).toHaveLength(3);
     });
 
-    it("GivenAPendingChange_WhenRejected_ThenItRecordsWhoAndWhenAndCantBeRejectedAgain", async () => {
+    for (const decision of ["accepted", "rejected"] as const) {
+      it(`GivenAPendingChange_WhenDecided${decision}_ThenItRecordsWhoAndWhenAndIsNotApplied`, async () => {
+        const store = await make();
+        const change = pendingConfigChange();
+        await store.createPending(change, 10);
+
+        const decided = await store.decide(change.id, decision, "andy", at);
+
+        expect(decided).toMatchObject({
+          status: decision,
+          decidedBy: "andy",
+          decidedAt: at,
+          appliedAt: null,
+        });
+        expect(await store.get(change.id)).toEqual(decided);
+        expect(await store.listPending()).toEqual([]);
+      });
+    }
+
+    it("GivenADecidedOrUnknownChange_WhenDecided_ThenConflictOrNotFound", async () => {
       const store = await make();
       const change = pendingConfigChange();
-      await store.createPending(change);
+      await store.createPending(change, 10);
+      await store.decide(change.id, "rejected", "andy", at);
 
-      const rejected = await store.reject(change.id, "andy", "2026-11-12T11:00:00.000Z");
-
-      expect(rejected).toMatchObject({
-        status: "rejected",
-        decidedBy: "andy",
-        decidedAt: "2026-11-12T11:00:00.000Z",
-        appliedAt: null,
+      await expect(store.decide(change.id, "accepted", "andy", at)).rejects.toMatchObject({
+        code: "conflict",
       });
-      expect(await store.get(change.id)).toEqual(rejected);
-      await expect(
-        store.reject(change.id, "andy", "2026-11-12T12:00:00.000Z"),
-      ).rejects.toMatchObject({ code: "conflict" });
-      await expect(
-        store.reject(crypto.randomUUID(), "andy", "2026-11-12T12:00:00.000Z"),
-      ).rejects.toMatchObject({ code: "not_found" });
+      await expect(store.decide(crypto.randomUUID(), "rejected", "andy", at)).rejects.toMatchObject(
+        { code: "not_found" },
+      );
     });
   });
 }

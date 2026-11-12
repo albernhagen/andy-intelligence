@@ -92,9 +92,13 @@ export const configChangeProposalFields = {
   decidedAt: Timestamp.nullable().default(null),
 };
 
-/** What one sweep for proposals did (ADR-0097). `heldByCap`: proposals not written, cap reached. */
+/**
+ * What one sweep for proposals did (ADR-0097). `throttled`: the project was swept under a
+ * minute ago, so nothing was read. `heldByCap`: proposals not written, the pending cap reached.
+ */
 export const ConfigProposalSweep = z.object({
   projectId: Id,
+  throttled: z.boolean(),
   findingsRead: z.number().int().nonnegative(),
   created: z.array(z.string()),
   alreadyPending: z.array(z.string()),

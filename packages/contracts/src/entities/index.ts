@@ -700,7 +700,14 @@ export const QuotaStatus = z.object({
 });
 export type QuotaStatus = z.infer<typeof QuotaStatus>;
 
-export const ConfigChangeStatus = z.enum(["pending", "applied", "reverted", "rejected"]);
+/** `accepted` (ADR-0097): Andy agreed to a proposal; applying it is separate (`applied`). */
+export const ConfigChangeStatus = z.enum([
+  "pending",
+  "accepted",
+  "applied",
+  "reverted",
+  "rejected",
+]);
 export type ConfigChangeStatus = z.infer<typeof ConfigChangeStatus>;
 
 export const ConfigChange = z.object({

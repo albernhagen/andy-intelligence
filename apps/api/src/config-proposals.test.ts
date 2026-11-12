@@ -68,7 +68,7 @@ describe("config proposals API", () => {
     vi.spyOn(console, "log").mockImplementation(() => {});
   });
 
-  it("GivenAKindOnThreePulls_WhenSweptTwiceAndListed_ThenOnePendingChange", async () => {
+  it("GivenAKindOnThreePulls_WhenSweptTwiceAndListed_ThenOnePendingChangeAndASecondSweepIsThrottled", async () => {
     const { call, findings } = await setup();
     findings.add(finding(1), finding(2), finding(3));
 
@@ -84,20 +84,31 @@ describe("config proposals API", () => {
     ]);
   });
 
-  it("GivenAPendingChange_WhenAndyRejectsIt_ThenRejectedAsHisActorAndNoLongerPending", async () => {
-    const { call, findings } = await setup();
-    findings.add(finding(1), finding(2), finding(3));
-    const sweep = (await call("POST", "/api/projects/ai/config-proposals/sweep"))
-      .json as ConfigProposalSweep;
+  for (const [action, status] of [
+    ["accept", "accepted"],
+    ["reject", "rejected"],
+  ] as const) {
+    it(`GivenAPendingChange_WhenAndyCalls_${action}_ThenDecidedAsHisActorAndNoLongerPending`, async () => {
+      const { call, findings } = await setup();
+      findings.add(finding(1), finding(2), finding(3));
+      const sweep = (await call("POST", "/api/projects/ai/config-proposals/sweep"))
+        .json as ConfigProposalSweep;
 
-    const rejected = await call("POST", `/api/config-changes/${sweep.created[0]}/reject`);
-    const again = await call("POST", `/api/config-changes/${sweep.created[0]}/reject`);
+      const decided = await call("POST", `/api/config-changes/${sweep.created[0]}/${action}`);
+      const again = await call("POST", `/api/config-changes/${sweep.created[0]}/${action}`);
 
-    expect(rejected.status).toBe(200);
-    expect(rejected.json).toMatchObject({ status: "rejected", decidedBy: "user:uid-1" });
-    expect(again.status).toBe(409);
-    expect((await call("GET", "/api/config-changes")).json).toEqual([]);
-    expect((await call("GET", "/api/config-changes?status=rejected")).json).toHaveLength(1);
+      expect(decided.status).toBe(200);
+      expect(decided.json).toMatchObject({ status, decidedBy: "user:uid-1", appliedAt: null });
+      expect(again.status).toBe(409);
+      expect((await call("GET", "/api/config-changes")).json).toEqual([]);
+    });
+  }
+
+  it("GivenASweepJustRan_WhenSweptAgain_ThenThrottled", async () => {
+    const { call } = await setup();
+    await call("POST", "/api/projects/ai/config-proposals/sweep");
+    const { json } = await call("POST", "/api/projects/ai/config-proposals/sweep");
+    expect(json).toMatchObject({ throttled: true });
   });
 
   it("GivenNoFindingSource_WhenSwept_ThenNothingIsProposed", async () => {
@@ -111,6 +122,7 @@ describe("config proposals API", () => {
     const { call } = await setup();
     expect((await call("POST", "/api/projects/zz/config-proposals/sweep")).status).toBe(422);
     expect((await call("POST", "/api/config-changes/nope/reject")).status).toBe(422);
+    expect((await call("GET", "/api/config-changes?projectId=zz")).status).toBe(422);
   });
 
   it("GivenNoConfigChangeStore_WhenListed_ThenTheRouteIsAbsent", async () => {

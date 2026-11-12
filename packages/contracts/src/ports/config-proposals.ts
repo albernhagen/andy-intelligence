@@ -1,4 +1,4 @@
-import type { ConfigChange, ConfigChangeStatus } from "../entities";
+import type { ConfigChange } from "../entities";
 import type { ReviewFinding } from "../entities/config-proposals";
 
 // ── ReviewFindingSource ──────────────────────────────────────────────────────
@@ -23,24 +23,32 @@ export interface ReviewFindingSource {
 // Nothing here applies a change: no method moves a change to `applied` (M4 config editing).
 // Errors are WorkTrackerError (`not_found`, `conflict`), mapped the same way by the API.
 
-export interface ConfigChangeFilter {
-  projectId?: string;
-  status?: ConfigChangeStatus;
-  /** At most this many, newest first. */
-  limit: number;
-}
+/** What `createPending` did: stored it, found an equal pending one, or hit the pending cap. */
+export type CreatePendingOutcome =
+  | { outcome: "created"; change: ConfigChange }
+  | { outcome: "duplicate"; change: ConfigChange }
+  | { outcome: "capped"; change: null };
+
+/** The decisions Andy makes on a pending change; neither applies it. */
+export type ConfigChangeDecision = "accepted" | "rejected";
 
 export interface ConfigChangeStore {
   /**
-   * Stores a `pending` change, atomically refusing a duplicate: when a pending change with the
-   * same `dedupeKey` exists, nothing is written and that change comes back (`created: false`).
+   * Stores a `pending` change, atomically: when a pending change with the same `dedupeKey`
+   * exists it comes back instead (`duplicate`); when its project (`projectId`, null included)
+   * already has `maxPending` pending changes nothing is written (`capped`). Concurrent calls
+   * can't pass either check together.
    */
-  createPending(change: ConfigChange): Promise<{ created: boolean; change: ConfigChange }>;
+  createPending(change: ConfigChange, maxPending: number): Promise<CreatePendingOutcome>;
   get(id: string): Promise<ConfigChange | null>;
-  list(filter: ConfigChangeFilter): Promise<ConfigChange[]>;
   /**
-   * Pending → rejected, recording who and when. `conflict` when the change isn't pending,
-   * `not_found` when unknown.
+   * Every pending change (of one project when given), newest first. Complete: `createPending`
+   * caps pending changes per project, so this list is bounded without a read cap of its own.
    */
-  reject(id: string, by: string, at: string): Promise<ConfigChange>;
+  listPending(projectId?: string): Promise<ConfigChange[]>;
+  /**
+   * Pending → accepted or rejected, recording who and when; `appliedAt` stays null.
+   * `conflict` when the change isn't pending, `not_found` when unknown.
+   */
+  decide(id: string, decision: ConfigChangeDecision, by: string, at: string): Promise<ConfigChange>;
 }
