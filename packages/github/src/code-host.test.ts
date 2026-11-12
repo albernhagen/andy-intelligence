@@ -419,6 +419,18 @@ describe("GitHubCodeHost", () => {
       expect(put).not.toHaveBeenCalled();
     });
 
+    it("GivenTheCommitFails_WhenProposed_ThenTheNewBranchIsDeletedAndItThrows", async () => {
+      const del = vi.fn((_init?: RequestInit) => new Response(null, { status: 204 }));
+      const fetch = fakeGitHub({
+        ...routes(false, () => json(500, { message: "boom" })),
+        [`DELETE ${R}/git/refs/heads/${proposal.branch}`]: del,
+      });
+      await expect(
+        host(fetch).proposeFile("albernhagen/andy-intelligence", proposal),
+      ).rejects.toThrow(/boom/);
+      expect(del).toHaveBeenCalledOnce();
+    });
+
     it("GivenTheAppIsNotInstalled_WhenProposed_ThenNull", async () => {
       const fetch = fakeGitHub({
         "GET /repos/albernhagen/other/installation": () => json(404, { message: "Not Found" }),

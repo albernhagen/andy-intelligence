@@ -844,7 +844,11 @@ export const FileProposal = z.object({
   path: z
     .string()
     .regex(/^[A-Za-z0-9._-]+(\/[A-Za-z0-9._-]+)*$/)
-    .max(200),
+    .max(200)
+    // Never workflows or agent settings, whoever calls it (defense in depth).
+    .refine((p) => !/^\.(github|claude)\//i.test(p), {
+      message: "a proposal can't write under .github/ or .claude/",
+    }),
   content: z.string().max(100_000),
   message: z.string().min(1).max(200),
   title: z.string().min(1).max(200),

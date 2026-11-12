@@ -802,6 +802,8 @@ export function oauthGrantStoreContract(
 export function codeHostContract(
   name: string,
   make: () => Promise<{ host: CodeHost; knownRepo: string; unknownRepo: string }>,
+  /** `proposals`: also open real PRs on `knownRepo` (fakes only; the live suite must not). */
+  options: { proposals?: boolean } = {},
 ): void {
   describe(`CodeHost contract: ${name}`, () => {
     it("GivenAnInstalledRepo_WhenRead_ThenItsCanonicalDetailsAreReturned", async () => {
@@ -821,6 +823,40 @@ export function codeHostContract(
     it("GivenARepoWithoutTheApp_WhenRead_ThenNull", async () => {
       const { host, unknownRepo } = await make();
       expect(await host.getRepo(unknownRepo)).toBeNull();
+    });
+
+    const itProposes = options.proposals ? it : it.skip;
+    const proposal = {
+      branch: "brief/contract-test",
+      path: "docs/product/brief.md",
+      content: "x",
+      message: "x",
+      title: "x",
+      body: "",
+    };
+
+    itProposes(
+      "GivenAnInstalledRepo_WhenAFileIsProposed_ThenAPrOnThatBranchComesBack",
+      async () => {
+        const { host, knownRepo } = await make();
+        const pr = await host.proposeFile(knownRepo, proposal);
+        expect(pr).toMatchObject({ branch: proposal.branch });
+        expect(pr!.number).toBeGreaterThan(0);
+        expect(() => new URL(pr!.url)).not.toThrow();
+      },
+    );
+
+    itProposes("GivenAnExistingBranch_WhenProposedAgain_ThenItThrows", async () => {
+      const { host, knownRepo } = await make();
+      await host.proposeFile(knownRepo, proposal);
+      await expect(host.proposeFile(knownRepo, proposal)).rejects.toThrow();
+    });
+
+    itProposes("GivenAPathUnderGithub_WhenProposed_ThenItThrows", async () => {
+      const { host, knownRepo } = await make();
+      await expect(
+        host.proposeFile(knownRepo, { ...proposal, path: ".github/workflows/x.yml" }),
+      ).rejects.toThrow();
     });
 
     it("GivenARepoWithoutTheApp_WhenAFileIsProposed_ThenNullAndNothingOpens", async () => {
