@@ -142,6 +142,27 @@ describe("epic roll-up API and MCP status (AI-85)", () => {
     expect(json.children[0].openBlockers).toEqual([blocker.key]);
   });
 
+  it("GivenABlockerInAnotherProjectByKey_WhenRead_ThenItIsOpenUntilDone", async () => {
+    await tracker.createProject({ name: "Ops", key: "OPS" });
+    const ops = await tracker.createTicket("ops", { title: "Ops work" }, "andy");
+    const epic = await tracker.createTicket("ai", { title: "Epic", type: "epic" }, "andy");
+    await tracker.createTicket(
+      "ai",
+      { title: "Child", parentId: epic.id, blockedBy: [ops.key] },
+      "andy",
+    );
+    const path = `/api/projects/ai/tickets/${epic.id}/epic`;
+
+    expect((await get(path)).json.children[0].openBlockers).toEqual([ops.key]);
+    await tracker.updateTicket(
+      "ops",
+      ops.id,
+      { stage: { to: "done", forced: true, reason: null } },
+      "andy",
+    );
+    expect((await get(path)).json.children[0].openBlockers).toEqual([]);
+  });
+
   it("GivenMoreChildrenThanTheReadCap_WhenRead_ThenTheRollUpSaysPartial", async () => {
     const epic = await tracker.createTicket("ai", { title: "Epic", type: "epic" }, "andy");
     for (let i = 0; i <= MAX_EPIC_COST_READS; i++) {

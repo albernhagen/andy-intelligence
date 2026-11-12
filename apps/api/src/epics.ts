@@ -62,7 +62,12 @@ export function registerEpicRoutes(
     const epic = await tracker.getTicket(projectId, ticketId);
     if (!epic) return c.json({ error: "ticket not found" }, 404);
     const tickets = await tracker.listTickets(projectId);
-    const rollup = await readEpicRollup(epic, tickets, (p, t) => runs.listForTicket(p, t));
+    const rollup = await readEpicRollup(
+      epic,
+      tickets,
+      (p, t) => runs.listForTicket(p, t),
+      (p) => tracker.listTickets(p).catch(() => []),
+    );
     return c.json(rollup, 200);
   });
 }

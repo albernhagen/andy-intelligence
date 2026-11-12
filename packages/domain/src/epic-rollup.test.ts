@@ -2,6 +2,7 @@ import type { Run, Ticket } from "@andy/contracts";
 import { describe, expect, it } from "vitest";
 import { DomainError } from "./errors";
 import {
+  MAX_EPIC_BLOCKER_PROJECTS,
   MAX_EPIC_COST_READS,
   costOrder,
   dependencyOrder,
@@ -30,6 +31,7 @@ const epic = ticket(0, { type: "epic", parentId: null, title: "The epic" });
 const run = (over: Partial<Run>) =>
   ({ status: "succeeded", costUsd: null, quotaDelta: null, ...over }) as Run;
 const noRuns = async () => [];
+const noTickets = async () => [];
 
 describe("epic roll-up (AI-85)", () => {
   it("GivenAChildBlockedByALaterRankedSibling_WhenOrdered_ThenItComesAfterItsBlocker", () => {
@@ -44,6 +46,51 @@ describe("epic roll-up (AI-85)", () => {
     const b = ticket(2, { blockedBy: ["t3"] });
     const c = ticket(3);
     expect(dependencyOrder([a, b, c]).map((t) => t.key)).toEqual(["AI-3", "AI-2", "AI-1"]);
+  });
+
+  it("GivenABlockerNamedByKey_WhenOrdered_ThenTheChildComesAfterIt", () => {
+    const a = ticket(1, { blockedBy: ["AI-2"] });
+    const b = ticket(2);
+    expect(dependencyOrder([a, b]).map((t) => t.key)).toEqual(["AI-2", "AI-1"]);
+  });
+
+  it("GivenABlockerInAnotherProject_WhenRolledUp_ThenItsStageIsReadOnceAndADoneOneIsNotOpen", async () => {
+    const tickets = [
+      epic,
+      ticket(1, { blockedBy: ["OPS-1", "OPS-2"] }),
+      ticket(2, { blockedBy: ["OPS-2"] }),
+    ];
+    const ops = [
+      ticket(101, { projectId: "ops", key: "OPS-1", stage: "done", parentId: null }),
+      ticket(102, { projectId: "ops", key: "OPS-2", stage: "in_progress", parentId: null }),
+    ];
+    const read: string[] = [];
+
+    const rollup = await readEpicRollup(epic, tickets, noRuns, async (p) => {
+      read.push(p);
+      return p === "ops" ? ops : [];
+    });
+
+    expect(read).toEqual(["ops"]);
+    expect(rollup.children.map((c) => c.openBlockers)).toEqual([["OPS-2"], ["OPS-2"]]);
+  });
+
+  it("GivenBlockersInMoreProjectsThanTheCap_WhenRolledUp_ThenOnlyTheCapIsReadAndTheRestAreOpen", async () => {
+    const keys = Array.from({ length: MAX_EPIC_BLOCKER_PROJECTS + 1 }, (_, i) => `P${i}-1`);
+    const read: string[] = [];
+
+    const rollup = await readEpicRollup(
+      epic,
+      [epic, ticket(1, { blockedBy: keys })],
+      noRuns,
+      async (p) => {
+        read.push(p);
+        return [];
+      },
+    );
+
+    expect(read).toHaveLength(MAX_EPIC_BLOCKER_PROJECTS);
+    expect(rollup.children[0]!.openBlockers).toEqual(keys);
   });
 
   it("GivenACycle_WhenOrdered_ThenItsTicketsFollowInRankOrder", () => {
@@ -86,7 +133,7 @@ describe("epic roll-up (AI-85)", () => {
       t2: [run({ costUsd: 0.5 }), run({ status: "running", costUsd: null })],
     };
 
-    const rollup = await readEpicRollup(epic, tickets, async (_, id) => runs[id] ?? []);
+    const rollup = await readEpicRollup(epic, tickets, async (_, id) => runs[id] ?? [], noTickets);
 
     expect(rollup.progress).toEqual({ done: 1, total: 2 });
     expect(rollup.cost).toEqual({ estimatedCostUsd: 1.75, completedRuns: 3, unknownRuns: 1 });
@@ -97,10 +144,15 @@ describe("epic roll-up (AI-85)", () => {
     const tickets = [epic, ticket(1, { stage: "cancelled" }), ticket(2)];
     const read: string[] = [];
 
-    await readEpicRollup(epic, tickets, async (_, id) => {
-      read.push(id);
-      return [];
-    });
+    await readEpicRollup(
+      epic,
+      tickets,
+      async (_, id) => {
+        read.push(id);
+        return [];
+      },
+      noTickets,
+    );
 
     expect(read).toEqual(["t2"]);
   });
@@ -122,10 +174,15 @@ describe("epic roll-up (AI-85)", () => {
     const done = ticket(MAX_EPIC_COST_READS + 1, { stage: "done" });
     const read = new Set<string>();
 
-    const rollup = await readEpicRollup(epic, [epic, ...ideas, done], async (_, id) => {
-      read.add(id);
-      return [run({ costUsd: id === done.id ? 3 : 0 })];
-    });
+    const rollup = await readEpicRollup(
+      epic,
+      [epic, ...ideas, done],
+      async (_, id) => {
+        read.add(id);
+        return [run({ costUsd: id === done.id ? 3 : 0 })];
+      },
+      noTickets,
+    );
 
     expect(read.has(done.id)).toBe(true);
     expect(rollup.cost.estimatedCostUsd).toBe(3);
@@ -136,10 +193,15 @@ describe("epic roll-up (AI-85)", () => {
     const children = Array.from({ length: MAX_EPIC_COST_READS + 2 }, (_, i) => ticket(i + 1));
     let reads = 0;
 
-    const rollup = await readEpicRollup(epic, [epic, ...children], async () => {
-      reads++;
-      return [run({ costUsd: 1 })];
-    });
+    const rollup = await readEpicRollup(
+      epic,
+      [epic, ...children],
+      async () => {
+        reads++;
+        return [run({ costUsd: 1 })];
+      },
+      noTickets,
+    );
 
     expect(reads).toBe(MAX_EPIC_COST_READS);
     expect(rollup.children).toHaveLength(MAX_EPIC_COST_READS + 2);
@@ -150,11 +212,13 @@ describe("epic roll-up (AI-85)", () => {
 
   it("GivenAFeature_WhenRolledUp_ThenRefused", async () => {
     const feature = ticket(1);
-    await expect(readEpicRollup(feature, [feature], noRuns)).rejects.toBeInstanceOf(DomainError);
+    await expect(readEpicRollup(feature, [feature], noRuns, noTickets)).rejects.toBeInstanceOf(
+      DomainError,
+    );
   });
 
   it("GivenAnEpicWithNoChildren_WhenRolledUp_ThenEmptyAndNotPartial", async () => {
-    expect(await readEpicRollup(epic, [epic], noRuns)).toEqual({
+    expect(await readEpicRollup(epic, [epic], noRuns, noTickets)).toEqual({
       children: [],
       progress: { done: 0, total: 0 },
       cost: { estimatedCostUsd: 0, completedRuns: 0, unknownRuns: 0 },

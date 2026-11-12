@@ -84,7 +84,12 @@ export async function statusLineOf<S extends TicketStatus>(deps: ToolDeps, statu
   const [line, epic] = await Promise.all([
     lineFor(deps, ticket, tickets, open, status.worker, status.executor.next),
     ticket.type === "epic"
-      ? readEpicRollup(ticket, tickets, (p, t) => deps.runs.list(p, t))
+      ? readEpicRollup(
+          ticket,
+          tickets,
+          (p, t) => deps.runs.list(p, t),
+          (p) => deps.tracker.listTickets(p).catch(() => []),
+        )
       : Promise.resolve(undefined),
   ]);
   return { ...status, statusLine: line, ...(epic && { epic }) };
