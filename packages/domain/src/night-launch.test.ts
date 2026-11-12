@@ -94,7 +94,7 @@ describe("launchProblems", () => {
       kinds(launchProblems({ key: "AI-9", type: "feature" }, [child("AI-85")], request())),
     ).toEqual(["not_epic"]);
     const many = Array.from({ length: NIGHT_LIMITS.maxStories + 1 }, (_, i) =>
-      child(`AI-${200 + i}`),
+      child(`AI-${200 + i}`, { stage: "backlog" }, { openQuestions: 1, plan: "none" }),
     );
     expect(kinds(launchProblems(EPIC, many, request()))).toEqual(["too_many_stories"]);
   });
@@ -294,6 +294,29 @@ describe("NightLaunches", () => {
     await expect(launches.start("ai", input({ epicId: "nope" }), "andy")).rejects.toMatchObject({
       code: "not_found",
     });
+  });
+
+  it("GivenMoreStoriesThanTheCap_WhenChecked_ThenNoPerStoryReadsAndOnlyTheCountIsAProblem", async () => {
+    for (let i = 0; i <= NIGHT_LIMITS.maxStories; i++) await story();
+    const questions = vi.spyOn(tracker, "listQuestions");
+    let planReads = 0;
+    launches = new NightLaunches(
+      store,
+      tracker,
+      {
+        planStateOf: async () => {
+          planReads++;
+          return { kind: "none" };
+        },
+      },
+      () => now,
+    );
+
+    const result = await launches.check("ai", input());
+
+    expect(kinds(result.problems)).toEqual(["too_many_stories"]);
+    expect(questions).not.toHaveBeenCalled();
+    expect(planReads).toBe(0);
   });
 
   it("GivenAnEpic_WhenChecked_ThenProblemsAndCoveredStoriesComeBackAndNothingIsStored", async () => {

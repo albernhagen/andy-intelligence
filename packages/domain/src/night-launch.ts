@@ -82,14 +82,16 @@ export function launchProblems(
   if (epic.type !== "epic") add("not_epic", epic.key, `${epic.key} is not an epic`);
   const stories = launchStories(children);
   if (stories.length === 0) add("no_stories", epic.key, `${epic.key} has no open stories`);
-  if (stories.length > NIGHT_LIMITS.maxStories) {
+  // Over the cap, the stories aren't checked one by one (their facts aren't read either).
+  const tooMany = stories.length > NIGHT_LIMITS.maxStories;
+  if (tooMany) {
     add(
       "too_many_stories",
       epic.key,
       `${epic.key} has ${stories.length} open stories; at most ${NIGHT_LIMITS.maxStories}`,
     );
   }
-  for (const { ticket, openQuestions, plan } of stories) {
+  for (const { ticket, openQuestions, plan } of tooMany ? [] : stories) {
     if (openQuestions > 0) {
       const noun = openQuestions === 1 ? "question" : "questions";
       add("open_questions", ticket.key, `${ticket.key}: ${openQuestions} open ${noun}`);
@@ -181,14 +183,20 @@ export class NightLaunches {
     const children = (await this.tracker.listTickets(projectId)).filter(
       (t) => t.parentId === epic.id,
     );
-    const stories = await Promise.all(
-      launchStories(children.map((ticket) => ({ ticket }))).map(async ({ ticket }) => ({
-        ticket,
-        openQuestions: (await this.tracker.listQuestions({ ticketId: ticket.id, status: "open" }))
-          .length,
-        plan: (await this.plans.planStateOf(ticket)).kind,
-      })),
-    );
+    const covered = launchStories(children.map((ticket) => ({ ticket })));
+    // Two reads per story: over the cap, read none (`launchProblems` then checks only the count).
+    const stories: LaunchChild[] =
+      covered.length > NIGHT_LIMITS.maxStories
+        ? covered.map(({ ticket }) => ({ ticket, openQuestions: 0, plan: "none" }))
+        : await Promise.all(
+            covered.map(async ({ ticket }) => ({
+              ticket,
+              openQuestions: (
+                await this.tracker.listQuestions({ ticketId: ticket.id, status: "open" })
+              ).length,
+              plan: (await this.plans.planStateOf(ticket)).kind,
+            })),
+          );
     const problems = launchProblems(epic, stories, {
       budget: parsed.budget,
       stopAt: parsed.stopAt,

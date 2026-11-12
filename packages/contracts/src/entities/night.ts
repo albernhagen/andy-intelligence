@@ -51,7 +51,8 @@ export type NightBudget = z.infer<typeof NightBudget>;
 
 const TicketKey = z.string().regex(/^[A-Z][A-Z0-9]{0,9}-\d+$/);
 
-export const NightLaunch = z.object({
+/** The launch's fields without the cross-field rules: extend this one, not `NightLaunch`. */
+export const NightLaunchFields = z.object({
   id: z.string().regex(/^[A-Za-z0-9-]{1,64}$/),
   projectId: Id,
   /** The epic ticket's id, and its key for display and the `epic/<key>` branch. */
@@ -69,9 +70,33 @@ export const NightLaunch = z.object({
   endedAt: Timestamp.nullable().default(null),
   endReason: NightEndReason.nullable().default(null),
 });
+
+/**
+ * A consistent launch: `ended` has `endedAt` and `endReason`, no other status has either;
+ * `running` and `stopping` have `startedAt`, `planned` doesn't. Stores parse every write with it,
+ * so a bad `transition` is refused instead of stored.
+ */
+export const NightLaunch = NightLaunchFields.superRefine((launch, ctx) => {
+  const issue = (path: string, message: string) =>
+    ctx.addIssue({ code: "custom", path: [path], message });
+  const ended = launch.status === "ended";
+  if (ended && launch.endedAt === null) issue("endedAt", "an ended launch needs endedAt");
+  if (ended && launch.endReason === null) issue("endReason", "an ended launch needs endReason");
+  if (!ended && launch.endedAt !== null)
+    issue("endedAt", `a ${launch.status} launch has no endedAt`);
+  if (!ended && launch.endReason !== null) {
+    issue("endReason", `a ${launch.status} launch has no endReason`);
+  }
+  if (nightLaunchIsActive(launch) && launch.startedAt === null) {
+    issue("startedAt", `a ${launch.status} launch needs startedAt`);
+  }
+  if (launch.status === "planned" && launch.startedAt !== null) {
+    issue("startedAt", "a planned launch has no startedAt");
+  }
+});
 export type NightLaunch = z.infer<typeof NightLaunch>;
 
-export function nightLaunchIsActive(launch: Pick<NightLaunch, "status">): boolean {
+export function nightLaunchIsActive(launch: { status: NightLaunchStatus }): boolean {
   return ACTIVE_NIGHT_STATUSES.includes(launch.status);
 }
 

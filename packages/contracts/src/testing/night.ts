@@ -144,6 +144,26 @@ export function nightLaunchStoreContract(
       expect((await store.get(planned.id))?.status).toBe("planned");
     });
 
+    it("GivenAnInconsistentLaunch_WhenCreatedOrTransitionedTo_ThenRefusedAndNothingStored", async () => {
+      const store = await make();
+      const base = launch();
+      expect(() => launch({ status: "ended" })).toThrow("an ended launch needs endedAt");
+      expect(() => launch({ endReason: "done" })).toThrow("a running launch has no endReason");
+      expect(() => launch({ startedAt: null })).toThrow("a running launch needs startedAt");
+      expect(() => launch({ status: "planned" })).toThrow("a planned launch has no startedAt");
+      await expect(store.create({ ...base, status: "ended" })).rejects.toThrow();
+      expect(await store.get(base.id)).toBeNull();
+
+      await store.create(base);
+      await expect(store.transition(base.id, ["running"], { status: "ended" })).rejects.toThrow(
+        "an ended launch needs endReason",
+      );
+      await expect(
+        store.transition(base.id, ["running"], { status: "stopping", endReason: "done" }),
+      ).rejects.toThrow("a stopping launch has no endReason");
+      expect(await store.get(base.id)).toEqual(base);
+    });
+
     itRaces("GivenConcurrentStops_WhenRacing_ThenOnlyOneTransitionWins", async () => {
       const store = await make();
       const l = launch();
