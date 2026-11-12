@@ -11,6 +11,7 @@ import {
   type WatchdogQueue,
   type WorkTracker,
   type QuotaStore,
+  type NightLaunchStore,
 } from "@andy/contracts";
 import { ClaudeCodeActionsExecutor, exchangeManifestCode, type CreatedApp } from "@andy/github";
 import {
@@ -93,6 +94,8 @@ export interface AppDeps {
   reviewFindings?: ReviewFindingSource;
   /** Subscription quota readings (M1.9). Without it every window reads unknown. */
   quota?: QuotaStore;
+  /** Night launches (ADR-0049): a launched story's build gets its `epic/<KEY>` base (AI-122). */
+  nightLaunches?: NightLaunchStore;
   /**
    * The only host served (ADR-0044), e.g. `ai.andybernhagen.com`. Requests for any other host
    * (the default run.app URLs) get 404, except /health for monitoring. Unset: every host (local dev).
@@ -272,6 +275,7 @@ export function createApp(input: AppDeps) {
     async (projectId) => runEnded(projectId),
     connection ? new ConnectedCodeHost(connection) : null,
     runnerPresence,
+    deps.nightLaunches ?? null,
   );
   const refiner = new RefineDispatcher(deps.tracker, deps.runs, runs, now);
   const builder = new BuildDispatcher(deps.tracker, deps.runs, runs, now, deps.quota ?? null);

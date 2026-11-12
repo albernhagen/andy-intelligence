@@ -348,6 +348,68 @@ describe("GitHubCodeHost", () => {
       },
     );
 
+    const SHA = "a".repeat(40);
+    // Octokit encodes the ref's slashes in the path; GitHub reads them either way.
+    const refPath = (branch: string) => `GET ${R}/git/ref/${encodeURIComponent(`heads/${branch}`)}`;
+
+    it("GivenABranch_WhenItsTipIsRead_ThenTheShaComesBackAndAMissingOneIsNull", async () => {
+      const fetch = fakeGitHub({
+        ...installed,
+        [refPath("main")]: () => json(200, { ref: "refs/heads/main", object: { sha: SHA } }),
+        [refPath("epic/AI-84")]: () => json(404, { message: "Not Found" }),
+      });
+      expect(await host(fetch).branchSha("albernhagen/andy-intelligence", "main")).toBe(SHA);
+      expect(await host(fetch).branchSha("albernhagen/andy-intelligence", "epic/AI-84")).toBeNull();
+    });
+
+    it("GivenAnUnsafeBranchName_WhenItsTipIsRead_ThenItThrowsWithoutCallingGitHub", async () => {
+      const fetch = fakeGitHub(installed);
+      await expect(
+        host(fetch).branchSha("albernhagen/andy-intelligence", "../main"),
+      ).rejects.toThrow(/unexpected branch/);
+      expect(fetch).not.toHaveBeenCalled();
+    });
+
+    it("GivenAnEpicBranch_WhenCreated_ThenTheRefIsMadeAtTheSha", async () => {
+      const post = vi.fn((_init?: RequestInit) => json(201, { ref: "refs/heads/epic/AI-84" }));
+      const fetch = fakeGitHub({ ...installed, [`POST ${R}/git/refs`]: post });
+      expect(
+        await host(fetch).createBranch("albernhagen/andy-intelligence", "epic/AI-84", SHA),
+      ).toBe("created");
+      expect(JSON.parse(String(post.mock.calls[0]![0]!.body))).toEqual({
+        ref: "refs/heads/epic/AI-84",
+        sha: SHA,
+      });
+    });
+
+    it("GivenTheBranchExists_WhenCreated_ThenExistsAndOtherRefusalsThrow", async () => {
+      const exists = fakeGitHub({
+        ...installed,
+        [`POST ${R}/git/refs`]: () => json(422, { message: "Reference already exists" }),
+      });
+      expect(
+        await host(exists).createBranch("albernhagen/andy-intelligence", "epic/AI-84", SHA),
+      ).toBe("exists");
+      const bad = fakeGitHub({
+        ...installed,
+        [`POST ${R}/git/refs`]: () => json(422, { message: "Object does not exist" }),
+      });
+      await expect(
+        host(bad).createBranch("albernhagen/andy-intelligence", "epic/AI-84", SHA),
+      ).rejects.toThrow(/Object does not exist/);
+    });
+
+    it.each(["main", "agent/AI-1/run", "epic/AI-84/x", "epic/ai-84"])(
+      "GivenTheBranch%s_WhenCreated_ThenRefusedWithoutCallingGitHub",
+      async (branch) => {
+        const fetch = fakeGitHub(installed);
+        await expect(
+          host(fetch).createBranch("albernhagen/andy-intelligence", branch, SHA),
+        ).rejects.toThrow(/only epic/);
+        expect(fetch).not.toHaveBeenCalled();
+      },
+    );
+
     it("GivenAnUnknownRef_WhenAskedIfTheHeadContainsMain_ThenNull", async () => {
       const fetch = fakeGitHub({
         ...installed,

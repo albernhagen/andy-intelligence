@@ -383,6 +383,7 @@ export const NewRun = Run.pick({
   reservedAdr: true,
   syncRun: true,
   localRun: true,
+  baseBranch: true,
 });
 export type NewRun = z.input<typeof NewRun>;
 

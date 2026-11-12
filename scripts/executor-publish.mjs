@@ -14,7 +14,8 @@
 //   PROFILE, CODEOWNERS, RUN_ID, BRANCH, REPO, HEAD_SHA, MAIN_SHA, MERGE_TREE, CONTROL_PLANE_URL,
 //   the two ACTIONS_ID_TOKEN_* variables, RUNNER_TEMP, GITHUB_OUTPUT. Writes outputs `branch`,
 //   `head_sha` and `tooling_files` (JSON array).
-//   publish env: PATCH, PROFILE, CODEOWNERS (path or empty), RUN_ID, BRANCH, REPO, BASE, PROJECT_ID,
+//   publish env: PATCH, PROFILE, CODEOWNERS (path or empty), RUN_ID, BRANCH, REPO, BASE (the PR's
+//   target: DEFAULT_BRANCH or the launch's `epic/<KEY>`, AI-122), DEFAULT_BRANCH, PROJECT_ID,
 //   TICKET_KEY, TICKET_TITLE, MODEL, REPORT (the agent's report JSON), CONTROL_PLANE_URL,
 //   ACTIONS_ID_TOKEN_REQUEST_URL, ACTIONS_ID_TOKEN_REQUEST_TOKEN, GITHUB_OUTPUT.
 //   Writes outputs `branch`, `tooling_files` (JSON array) and, when a PR opened, `pull_request`.
@@ -357,6 +358,22 @@ export function pullRequest({
 const BRANCH = /^agent\/[A-Z][A-Z0-9]{0,9}-[0-9]{1,9}\/[A-Za-z0-9-]{1,64}$/;
 const RUN_ID = /^[A-Za-z0-9-]{1,64}$/;
 const REPO = /^[A-Za-z0-9-]+\/[A-Za-z0-9._-]+$/;
+const EPIC_BRANCH = /^epic\/[A-Z][A-Z0-9]{0,9}-[0-9]{1,9}$/;
+const TICKET_KEY = /^[A-Z][A-Z0-9]{0,9}-[0-9]{1,9}$/;
+
+/**
+ * Whether the PR may target `base` (AI-122): the default branch, or a night launch's
+ * `epic/<KEY>` in the ticket's own project (the control plane sets it, the context job checks
+ * it). Anything else is refused, whatever the workflow passed.
+ */
+export function baseAllowed({ base, defaultBranch, ticketKey }) {
+  if (typeof base !== "string" || base === "") return false;
+  if (typeof defaultBranch === "string" && defaultBranch !== "" && base === defaultBranch) {
+    return true;
+  }
+  if (!EPIC_BRANCH.test(base) || !TICKET_KEY.test(ticketKey ?? "")) return false;
+  return base.slice("epic/".length).split("-")[0] === ticketKey.split("-")[0];
+}
 
 /**
  * A log-safe line: reasons can hold agent-chosen paths, which may contain newlines; a newline
@@ -597,6 +614,11 @@ export async function publish({ env, git, fetch: fetchImpl = globalThis.fetch, e
   if (!BRANCH.test(env.BRANCH ?? "")) reasons.push("unexpected branch name");
   if (!RUN_ID.test(env.RUN_ID ?? "")) reasons.push("unexpected run id");
   if (!REPO.test(env.REPO ?? "")) reasons.push("unexpected repository");
+  if (
+    !baseAllowed({ base: env.BASE, defaultBranch: env.DEFAULT_BRANCH, ticketKey: env.TICKET_KEY })
+  ) {
+    reasons.push("unexpected base branch");
+  }
   if (reasons.length > 0) throw new PublishRefused(reasons);
   let report;
   try {
