@@ -77,7 +77,9 @@ describe("runs UI", () => {
       await within(section).findByRole("button", { name: "Start refine task" }),
     );
 
-    expect((await within(section).findByRole("alert")).textContent).toMatch(/runs-at-once dial/);
+    expect((await within(section).findByRole("alert")).textContent).toMatch(
+      /agent-tasks-at-once dial/,
+    );
   });
 
   it("GivenASucceededRunWithHtmlInItsSummary_WhenViewed_ThenTheSummaryRendersAsPlainText", async () => {

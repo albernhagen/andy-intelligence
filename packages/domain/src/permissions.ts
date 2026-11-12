@@ -13,7 +13,7 @@ export const OWNER_ACTIONS = {
   reopen_ticket: "reopen a cancelled ticket",
   cancel_ticket: "cancel a ticket",
   archive_ticket: "archive a ticket",
-  start_run: "start a run",
+  start_run: "start an agent task",
   answer_question: "answer a question",
   promote_assumption: "promote an assumption",
   accept_assumption: "accept a held gap",

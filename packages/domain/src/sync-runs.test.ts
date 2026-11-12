@@ -300,7 +300,7 @@ describe("SyncRuns", () => {
     });
     expect((await tracker.getTicket(projectId, pr.ticket.id))!.needsAttention).toBe(true);
     const capped = (await tracker.listEvents(projectId, pr.ticket.id)).filter((e) =>
-      e.body?.includes("sync runs in 24 hours"),
+      e.body?.includes("sync tasks in 24 hours"),
     );
     expect(capped).toHaveLength(1);
 
@@ -416,7 +416,7 @@ describe("SyncRuns", () => {
     const build = (await store.get(pr.build.id))!;
     expect(build.prSync).toMatchObject({ waiting: "builds_off", pendingSince: null });
     expect(syncPendingFor(build, [], now)).toBe(false);
-    expect(syncWaiting([build])).toBe("builds are off, so no sync runs");
+    expect(syncWaiting([build])).toBe("builds are off, so no sync tasks");
     expect(await syncRunsOf(pr.ticket.id)).toEqual([]);
 
     // Builds back on: the next tick checks it again and starts the sync.

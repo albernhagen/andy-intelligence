@@ -107,7 +107,7 @@ describe("buildDigest", () => {
     expect(d.exceptions[0]).toMatchObject({
       kind: "run_failed",
       ticketKey: "AI-1",
-      reason: "Build run failed, retried: timed out",
+      reason: "Build task failed, retried: timed out",
     });
     expect(d.totals).toMatchObject({ runs: 1, failedRuns: 1 });
   });
@@ -312,7 +312,7 @@ describe("buildDigest", () => {
       data({ project: { ...project, lastDispatch: { decision: "project_cap", at: IN } } }),
     );
     expect(capped.exceptions[0]).toMatchObject({
-      reason: "Dispatch is at the project's dial (2 runs at once)",
+      reason: "Dispatch is at the project's dial (2 agent tasks at once)",
       at: IN,
     });
   });
@@ -519,7 +519,7 @@ describe("buildDigest", () => {
 
   it("GivenTruncatedReads_WhenRendered_ThenTheTextSaysSomeMayBeMissing", () => {
     const d = buildDigest(WINDOW, data({ truncated: true, project: { ...project, paused: true } }));
-    expect(d.text).toContain("some tickets or runs may be missing");
+    expect(d.text).toContain("some tickets or agent tasks may be missing");
   });
 });
 

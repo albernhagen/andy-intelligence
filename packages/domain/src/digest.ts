@@ -152,7 +152,7 @@ function failedRuns(data: DigestData, byId: Map<string, Ticket>): DigestExceptio
         kind: "run_failed",
         ...label(r.ticketId ? byId.get(r.ticketId) : undefined),
         prNumber: null,
-        reason: `${capital(r.step)} run failed${retried ? ", retried" : ""}: ${why}`,
+        reason: `${capital(r.step)} task failed${retried ? ", retried" : ""}: ${why}`,
         at: r.endedAt,
       };
     });
@@ -323,8 +323,9 @@ function waitingAndBlocked(data: DigestData): DigestException[] {
 
 const IDLE_REASONS: Record<DispatchIdleReason, (p: DigestData["project"]) => string> = {
   paused: () => "Dispatch is paused",
-  project_cap: (p) => `Dispatch is at the project's dial (${plural(p.runsAtOnce, "run")} at once)`,
-  global_cap: () => `Dispatch is at the global cap (${MAX_ACTIVE_RUNS_GLOBAL} runs at once)`,
+  project_cap: (p) =>
+    `Dispatch is at the project's dial (${plural(p.runsAtOnce, "agent task")} at once)`,
+  global_cap: () => `Dispatch is at the global cap (${MAX_ACTIVE_RUNS_GLOBAL} agent tasks at once)`,
   prs_waiting_cap: () => `Dispatch is idle: ${MAX_PRS_WAITING_PER_PROJECT} PRs wait for Andy`,
   quota_reserve: () => "Dispatch is idle: quota is at the reserve",
 };
@@ -473,7 +474,9 @@ export function renderDigestText(d: Omit<Digest, "text">, live: boolean): string
   section(
     "Merged",
     d.merged.map((m) => {
-      const unknown = m.unknownCostRuns ? ` (+${plural(m.unknownCostRuns, "run")} unknown)` : "";
+      const unknown = m.unknownCostRuns
+        ? ` (+${plural(m.unknownCostRuns, "agent task")} unknown)`
+        : "";
       const by = MERGED_BY[m.mergedBy];
       return `${who(m)} · PR #${m.prNumber} · ${by} · ${gateText(m)} · ${usd(m.costUsd)}${unknown}`;
     }),
@@ -486,14 +489,14 @@ export function renderDigestText(d: Omit<Digest, "text">, live: boolean): string
   ]);
   const t = d.totals;
   const totals = [
-    `${plural(t.runs, "run")}${t.failedRuns ? ` (${t.failedRuns} failed)` : ""}`,
+    `${plural(t.runs, "agent task")}${t.failedRuns ? ` (${t.failedRuns} failed)` : ""}`,
     `${usd(t.costUsd)} estimated${t.unknownCostRuns ? ` (${t.unknownCostRuns} unknown)` : ""}`,
     quotaText(t.quotaDelta),
     `${t.merged} merged`,
   ].filter(Boolean);
   lines.push("", "Totals", `- ${totals.join(" · ")}`);
   if (d.truncated) {
-    lines.push("", "A read cap was reached: some tickets or runs may be missing.");
+    lines.push("", "A read cap was reached: some tickets or agent tasks may be missing.");
   }
   return lines.join("\n");
 }

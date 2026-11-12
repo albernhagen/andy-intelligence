@@ -317,7 +317,7 @@ export function registerTools(server: McpServer, deps: ToolDeps): void {
     "set_auto_build",
     {
       description:
-        "Turns a project's auto-build on or off (default off). On: when a ticket reaches Ready or an agent task ends, waiting Ready tickets are built from the top, up to the project's runs-at-once dial and the caps (`status` shows why dispatch is idle).",
+        "Turns a project's auto-build on or off (default off). On: when a ticket reaches Ready or an agent task ends, waiting Ready tickets are built from the top, up to the project's agent-tasks-at-once dial and the caps (`status` shows why dispatch is idle).",
       inputSchema: AutoBuildInput,
       annotations: { destructiveHint: false, idempotentHint: true, openWorldHint: true },
     },
