@@ -10,7 +10,7 @@ import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { createApp } from "../app";
 import { parseAllowList, type TokenVerifier } from "../auth";
 import { ClientMetadataResolver } from "./client-metadata";
@@ -348,5 +348,35 @@ describe("reorder_ticket", () => {
     expect((await ctx.call("reorder_ticket", { ticket: a.key })).isError).toBe(true);
     const both = await ctx.call("reorder_ticket", { ticket: a.key, above: b.key, below: b.key });
     expect(both.isError).toBe(true);
+  });
+});
+
+describe("reads (ADR-0028)", () => {
+  it("GivenATicketKey_WhenAToolLooksItUp_ThenOnlyThatTicketIsReadNotTheProject", async () => {
+    const ctx = await setup();
+    const a = await ctx.service.create("ai", { title: "A" }, "andy");
+    const listed = vi.spyOn(ctx.tracker, "listTickets");
+    const byKey = vi.spyOn(ctx.tracker, "getTicketByKey");
+
+    expect((await ctx.call("comment_ticket", { ticket: a.key, body: "hi" })).isError).toBe(false);
+    expect(byKey).toHaveBeenCalledWith("ai", a.key);
+    expect(listed).not.toHaveBeenCalled();
+  });
+
+  it("GivenTicketsInSeveralStages_WhenStatusHasNoKey_ThenCountsComeFromCountByStage", async () => {
+    const ctx = await setup();
+    const a = await ctx.service.create("ai", story("A"), "andy");
+    await ctx.service.create("ai", { title: "B" }, "andy");
+    await ctx.service.move("ai", a.id, "ready", "andy");
+    const counted = vi.spyOn(ctx.tracker, "countByStage");
+    const listed = vi.spyOn(ctx.tracker, "listTickets");
+
+    const res = await ctx.call("status");
+    const ai = res.data.projects.find((p: { key: string }) => p.key === "AI");
+    expect(ai.ticketsByStage).toMatchObject({ backlog: 1, ready: 1, done: 0 });
+    expect(counted).toHaveBeenCalledWith("ai");
+    expect(counted).toHaveBeenCalledWith("ops");
+    // Only the Needs-you inbox reads tickets, and only its filtered sets.
+    for (const [, filter] of listed.mock.calls) expect(filter).toBeDefined();
   });
 });
