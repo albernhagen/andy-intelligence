@@ -2,7 +2,9 @@ import { useQuery } from "@tanstack/react-query";
 import { adrLabel } from "@andy/domain";
 import { QueryError } from "@/components/Status";
 import { unwrap, useApi } from "@/lib/api";
-import { runsRefetchInterval } from "@/lib/queries";
+import { useLivePoll } from "@/lib/live";
+import { hasActiveRun } from "@/lib/queries";
+import { showsError } from "@/lib/live";
 
 /**
  * The in-flight view (ADR-0080): the project's runs in flight, oldest first, with what each may
@@ -11,12 +13,12 @@ import { runsRefetchInterval } from "@/lib/queries";
 export function useInFlight(projectId: string) {
   const api = useApi();
   return useQuery({
+    ...useLivePoll("live", hasActiveRun),
     queryKey: ["in-flight", projectId],
     queryFn: async () =>
       unwrap(
         await api.GET("/api/projects/{projectId}/in-flight", { params: { path: { projectId } } }),
       ),
-    refetchInterval: (q) => runsRefetchInterval(q.state.data),
   });
 }
 
@@ -25,7 +27,7 @@ const safeUrl = (url: string | null) => (url?.startsWith("https://") ? url : nul
 
 export function InFlightPanel({ projectId }: { projectId: string }) {
   const inFlight = useInFlight(projectId);
-  if (inFlight.isError) return <QueryError error={inFlight.error} />;
+  if (showsError(inFlight)) return <QueryError error={inFlight.error} />;
   const runs = inFlight.data ?? [];
   if (runs.length === 0) return null;
   return (

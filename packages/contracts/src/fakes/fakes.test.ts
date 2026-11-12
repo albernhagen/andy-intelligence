@@ -2,6 +2,7 @@ import {
   codeEventLogContract,
   codeHostConnectionStoreContract,
   codeHostContract,
+  evaluatorContract,
   executorContract,
   oauthGrantStoreContract,
   quotaStoreContract,
@@ -13,6 +14,7 @@ import {
   InMemoryCodeEventLog,
   InMemoryCodeHost,
   InMemoryCodeHostConnectionStore,
+  InMemoryEvaluator,
   InMemoryExecutor,
   InMemoryOAuthGrantStore,
   InMemoryQuotaStore,
@@ -60,3 +62,19 @@ codeEventLogContract("in-memory", async () => new InMemoryCodeEventLog());
 codeHostConnectionStoreContract("in-memory", async () => new InMemoryCodeHostConnectionStore());
 
 watchdogQueueContract("in-memory", async () => new InMemoryWatchdogQueue());
+
+evaluatorContract("in-memory", async (script) => {
+  const outcome = {
+    pass: { status: "ran", passed: true, inputTokens: 100, failures: [] },
+    fail: { status: "ran", passed: false, inputTokens: 100, failures: ["expected a finding"] },
+    error: { status: "error", passed: false, inputTokens: null, failures: ["no result"] },
+  } as const;
+  return new InMemoryEvaluator(
+    Object.fromEntries(
+      Object.entries(script).map(([id, o]) => [
+        id,
+        { ...outcome[o], failures: [...outcome[o].failures] },
+      ]),
+    ),
+  );
+});

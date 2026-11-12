@@ -38,6 +38,7 @@ import {
   useTickets,
 } from "@/lib/queries";
 import { STAGE_LABELS, TYPE_LABELS } from "@/lib/tickets";
+import { showsError } from "@/lib/live";
 
 /**
  * The story panel (ADR-0059: UX foundation, row "Story panel"): the ticket over the board,
@@ -102,7 +103,7 @@ export function TicketPage() {
       </div>
       <div className="px-4 py-4 sm:px-6">
         {ticket.isPending && <Loading />}
-        {ticket.isError && <QueryError error={ticket.error} />}
+        {showsError(ticket) && <QueryError error={ticket.error} />}
         {loaded && (
           // Keyed by ticket: another ticket starts with fresh editors, never this one's drafts.
           <UnsavedDrafts.Provider value={drafts}>
@@ -188,6 +189,7 @@ function Story({ ticket: t }: { ticket: Ticket }) {
         required
         value={t.title}
         onSave={(v, done) => title.save({ title: v }, done)}
+        onEdit={title.begin}
         pending={title.pending}
         error={title.error}
         wrap={(button) => (
@@ -202,6 +204,7 @@ function Story({ ticket: t }: { ticket: Ticket }) {
             label="Description"
             value={t.body}
             onSave={(v, done) => body.save({ body: v }, done)}
+            onEdit={body.begin}
             pending={body.pending}
             error={body.error}
           />
@@ -283,6 +286,7 @@ function Rail({ ticket: t }: { ticket: Ticket }) {
           placeholder="Why this size?"
           value={t.sizeReason ?? ""}
           onSave={(v, done) => sizeReason.save({ sizeReason: v || null }, done)}
+          onEdit={sizeReason.begin}
           pending={sizeReason.pending}
           error={sizeReason.error}
           className="text-xs"
@@ -417,7 +421,7 @@ function Readiness(path: TicketPath) {
   const dor = useReadiness(path);
   return (
     <section aria-label="Definition of Ready" className="space-y-1 text-xs">
-      {dor.isError && <QueryError error={dor.error} />}
+      {showsError(dor) && <QueryError error={dor.error} />}
       {dor.data?.met && <p className="text-muted-foreground">Definition of Ready: met.</p>}
       {dor.data && !dor.data.met && (
         <>
@@ -443,7 +447,7 @@ function Questions(path: TicketPath) {
     <section aria-label="Questions" className="space-y-2">
       <h3 className="text-sm font-medium">Questions</h3>
       {questions.isPending && <Loading />}
-      {questions.isError && <QueryError error={questions.error} />}
+      {showsError(questions) && <QueryError error={questions.error} />}
       {sorted.map((q) => (
         <QuestionCard key={q.id} question={q} />
       ))}
@@ -507,7 +511,7 @@ function Timeline(path: TicketPath) {
   const events = useEvents(path);
   const runs = useRuns(path);
   if (events.isPending || runs.isPending) return <Loading />;
-  if (events.isError) return <QueryError error={events.error} />;
-  if (runs.isError) return <QueryError error={runs.error} />;
+  if (events.data === undefined || showsError(events)) return <QueryError error={events.error} />;
+  if (runs.data === undefined || showsError(runs)) return <QueryError error={runs.error} />;
   return <Activity {...path} events={events.data} runs={runs.data} />;
 }
