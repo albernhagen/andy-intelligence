@@ -43,6 +43,7 @@ import { registerBoardRoutes } from "./board";
 import { registerEpicRoutes } from "./epics";
 import { registerInFlightRoutes } from "./in-flight";
 import { registerDigestRoutes } from "./digest";
+import { registerDashboardRoutes } from "./dashboard";
 import { registerSetupRoutes } from "./setup";
 import { noReviewFindings, registerConfigProposalRoutes } from "./config-proposals";
 import { registerNotifyFlush, registerNotifyRoutes } from "./notify";
@@ -418,6 +419,7 @@ export function createApp(input: AppDeps) {
   registerQuotaRoutes(app, deps.quota ?? null, quotaClearer, now);
   const digest = new DigestReader(deps.tracker, deps.runs, deps.quota ?? null, now);
   registerDigestRoutes(app, digest, now);
+  registerDashboardRoutes(app, deps, now);
   registerSetupRoutes(app, deps.tracker, connection ? new ConnectedCodeHost(connection) : null);
   registerNotifyRoutes(app, email);
   const configProposals = deps.configChanges
