@@ -37,6 +37,11 @@ export class ProjectPlanService {
     private readonly tracker: WorkTracker,
     private readonly tickets: Pick<TicketService, "create">,
     private readonly now: () => Date,
+    /** Told when a plan starts waiting for Andy (the Needs-you email); must not throw. */
+    private readonly onProposed: (
+      projectId: string,
+      plan: ProjectPlan,
+    ) => Promise<void> = async () => {},
   ) {}
 
   async get(projectId: string): Promise<ProjectPlan | null> {
@@ -74,6 +79,7 @@ export class ProjectPlanService {
     };
     await this.tracker.updateProject(projectId, { projectPlan: plan });
     log("project plan proposed", { projectId, milestones: proposal.milestones.length });
+    await this.onProposed(projectId, plan);
     return plan;
   }
 
@@ -133,17 +139,23 @@ export class ProjectPlanService {
       await this.tracker.updateProject(projectId, { projectPlan: current });
     }
     const epics: Ticket[] = [];
+    // An epic created by an earlier attempt that failed before recording it is found by its
+    // title and body (fixed per milestone) and recorded instead of created again.
+    const existing =
+      current.epicIds.length < plan.proposal.milestones.length
+        ? (await this.tracker.listTickets(projectId)).filter(
+            (t) => t.type === "epic" && !t.archived,
+          )
+        : [];
     for (const [i, milestone] of plan.proposal.milestones.entries()) {
       if (i < current.epicIds.length) continue;
-      const epic = await this.tickets.create(
-        projectId,
-        {
-          type: "epic",
-          title: `M${i + 1}: ${plainAnswer(milestone.title)}`,
-          body: epicBody(milestone),
-        },
-        actor,
+      const title = `M${i + 1}: ${plainAnswer(milestone.title)}`;
+      const body = epicBody(milestone);
+      const found = existing.find(
+        (t) => t.title === title && t.body === body && !current.epicIds.includes(t.id),
       );
+      const epic =
+        found ?? (await this.tickets.create(projectId, { type: "epic", title, body }, actor));
       epics.push(epic);
       current = { ...current, epicIds: [...current.epicIds, epic.id] };
       await this.tracker.updateProject(projectId, { projectPlan: current });

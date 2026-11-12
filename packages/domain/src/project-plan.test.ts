@@ -194,4 +194,44 @@ describe("ProjectPlanService", () => {
     expect([a.status, b.status].sort()).toEqual(["fulfilled", "rejected"]);
     expect(await tracker.listTickets(project.id)).toHaveLength(3);
   });
+
+  it("GivenAnEpicCreatedButNotRecorded_WhenApprovedAgain_ThenItIsRecordedNotDuplicated", async () => {
+    const { tracker, project } = await setup();
+    const real = new TicketService(tracker, null, null, () => T0);
+    let calls = 0;
+    const lossy = {
+      create: async (...args: Parameters<TicketService["create"]>) => {
+        const epic = await real.create(...args);
+        calls += 1;
+        if (calls === 2) throw new Error("lost the reply");
+        return epic;
+      },
+    };
+    const plans = new ProjectPlanService(tracker, lossy, () => T0);
+    await plans.propose(project.id, proposal, OWNER);
+    await expect(plans.decide(project.id, { decision: "approved" }, OWNER)).rejects.toThrow(
+      "lost the reply",
+    );
+    const { plan } = await plans.decide(project.id, { decision: "approved" }, OWNER);
+    const listed = await tracker.listTickets(project.id);
+    expect(listed.map((t) => t.title)).toEqual([
+      "M1: Walking skeleton",
+      "M2: Log a run",
+      "M3: Weekly summary",
+    ]);
+    expect(plan.epicIds).toEqual(listed.map((t) => t.id));
+  });
+
+  it("GivenAPlanIsProposed_WhenStored_ThenTheNeedsYouHookIsTold", async () => {
+    const { tracker, project } = await setup();
+    const told: string[] = [];
+    const plans = new ProjectPlanService(
+      tracker,
+      new TicketService(tracker, null, null, () => T0),
+      () => T0,
+      async (id, plan) => void told.push(`${id}:${plan.proposal.milestones.length}`),
+    );
+    await plans.propose(project.id, proposal, OWNER);
+    expect(told).toEqual(["trl:3"]);
+  });
 });

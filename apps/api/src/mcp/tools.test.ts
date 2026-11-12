@@ -275,8 +275,7 @@ describe("status", () => {
           dispatch: { runsAtOnce: 2, paused: false, lastDispatch: null },
         },
       ],
-      needsYou: { questions: 0, tickets: 0 },
-      projectPlansWaiting: 0,
+      needsYou: { questions: 0, tickets: 0, projectPlans: 0 },
     });
   });
 
