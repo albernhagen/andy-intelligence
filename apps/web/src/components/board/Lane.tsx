@@ -21,6 +21,41 @@ export function LaneZone({ id, label, count }: { id: string; label: string; coun
   );
 }
 
+/**
+ * A group header inside a lane when the board is grouped by epic (AI-86): the epic's key, title
+ * and how many of its children are done, or "No epic". Not a drop target: rank stays per lane.
+ */
+export function EpicGroupHeader({
+  epic,
+  progress,
+}: {
+  epic: { key: string; title: string } | null;
+  progress: { done: number; total: number } | null;
+}) {
+  return (
+    <li
+      data-epic={epic?.key ?? "none"}
+      className="flex h-6 items-center gap-1 px-1 text-xs text-muted-foreground"
+    >
+      {epic ? (
+        <>
+          <span className="font-medium text-foreground">{epic.key}</span>
+          <span className="min-w-0 flex-1 truncate" title={epic.title}>
+            {epic.title}
+          </span>
+          {progress && (
+            <span className="shrink-0 tabular-nums">
+              {progress.done} of {progress.total} done
+            </span>
+          )}
+        </>
+      ) : (
+        <span className="font-medium">No epic</span>
+      )}
+    </li>
+  );
+}
+
 /** Ready's view switch: queue order, or easiest first by score. The URL holds it (`?sort=score`). */
 export function ReadySortToggle({ sorted, onToggle }: { sorted: boolean; onToggle: () => void }) {
   return (

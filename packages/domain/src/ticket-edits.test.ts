@@ -1,6 +1,13 @@
 import { describe, expect, it } from "vitest";
 import type { Ticket } from "@andy/contracts";
-import { blockerProblem, parentProblem, reorderRank } from "./ticket-edits";
+import {
+  blockerKeys,
+  blockerProblem,
+  parentProblem,
+  projectOfKey,
+  reorderRank,
+  ticketsByRef,
+} from "./ticket-edits";
 
 const t = (key: string, fields: Partial<Ticket> = {}) =>
   ({
@@ -85,26 +92,47 @@ describe("blockerProblem", () => {
   it("GivenADirectCycle_WhenChecked_ThenRefused", () => {
     const a = t("AI-1", { blockedBy: ["AI-2"] });
     const b = t("AI-2");
-    expect(blockerProblem(b, ["AI-1"], [a, b])).toMatch(/already waiting on AI-2/);
+    expect(blockerProblem(b, ["AI-1"], ticketsByRef([a, b]))).toMatch(/already waiting on AI-2/);
   });
 
   it("GivenALongerCycle_WhenChecked_ThenRefused", () => {
     const a = t("AI-1", { blockedBy: ["AI-2"] });
     const b = t("AI-2", { blockedBy: ["AI-3"] });
     const c = t("AI-3");
-    expect(blockerProblem(c, ["AI-1"], [a, b, c])).toMatch(/already waiting on AI-3/);
+    expect(blockerProblem(c, ["AI-1"], ticketsByRef([a, b, c]))).toMatch(/already waiting on AI-3/);
   });
 
   it("GivenItself_WhenChecked_ThenRefused", () => {
     const a = t("AI-1");
-    expect(blockerProblem(a, ["AI-1"], [a])).toMatch(/already waiting/);
+    expect(blockerProblem(a, ["AI-1"], ticketsByRef([a]))).toMatch(/can't block itself/);
   });
 
   it("GivenNoCycleOrAnExistingBlocker_WhenChecked_ThenAllowed", () => {
     const a = t("AI-1", { blockedBy: ["AI-2"] });
     const b = t("AI-2", { blockedBy: ["AI-1"] });
     const c = t("AI-3");
-    expect(blockerProblem(c, ["AI-1"], [a, b, c])).toBeNull();
-    expect(blockerProblem(a, ["AI-2"], [a, b, c])).toBeNull();
+    expect(blockerProblem(c, ["AI-1"], ticketsByRef([a, b, c]))).toBeNull();
+    expect(blockerProblem(a, ["AI-2"], ticketsByRef([a, b, c]))).toBeNull();
+  });
+});
+
+describe("cross-project blockers", () => {
+  const a = t("AI-1", { id: "a" });
+  const ops = t("OPS-7", { id: "o", blockedBy: ["AI-1"] });
+
+  it("GivenABlockerInAnotherProject_WhenItWouldCloseACycle_ThenRefused", () => {
+    expect(blockerProblem(a, ["OPS-7"], ticketsByRef([a, ops]))).toMatch(
+      /OPS-7 is already waiting on AI-1/,
+    );
+  });
+
+  it("GivenAKeyOrAnOlderId_WhenNormalised_ThenItIsStoredAsTheKey", () => {
+    const byRef = ticketsByRef([a, ops]);
+    expect(blockerKeys(["o", "OPS-7", "AI-9"], byRef)).toEqual(["OPS-7", "AI-9"]);
+  });
+
+  it("GivenAKeyOrAnId_WhenItsProjectIsRead_ThenTheLowercasedPrefixOrNull", () => {
+    expect(projectOfKey("OPS-7")).toBe("ops");
+    expect(projectOfKey("ab12-cd")).toBeNull();
   });
 });
