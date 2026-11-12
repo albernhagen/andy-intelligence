@@ -8,7 +8,7 @@ export type Scope = { kind: "all" } | { kind: "project"; projectId: string };
 export const ALL: Scope = { kind: "all" };
 
 /** The screens the header links to. Settings is global, so it is not a scoped section. */
-export type Section = "inbox" | "board";
+export type Section = "inbox" | "board" | "dashboards";
 
 const PROJECT_ID = /^[a-z][a-z0-9]{0,9}$/;
 const STORAGE_KEY = "andy.scope";
@@ -34,6 +34,7 @@ export function sectionFromPath(pathname: string): Section | null {
   if (/^\/p\/[^/]+\/settings\/?$/.test(pathname)) return null;
   if (/^\/p\/[^/]+\/digest\/?$/.test(pathname)) return null; // The digest (AI-70) is its own page.
   if (/^\/(all|p\/[^/]+)\/inbox\/?$/.test(pathname)) return "inbox";
+  if (/^\/(all|p\/[^/]+)\/dashboards\/?$/.test(pathname)) return "dashboards";
   if (/^\/(all\/board|p\/[^/]+)(\/|$)/.test(pathname)) return "board";
   return null;
 }
@@ -42,7 +43,7 @@ export function sectionFromPath(pathname: string): Section | null {
 export function scopePath(scope: Scope, section: Section): string {
   if (scope.kind === "all") return `/all/${section}`;
   const base = `/p/${encodeURIComponent(scope.projectId)}`;
-  return section === "board" ? base : `${base}/inbox`;
+  return section === "board" ? base : `${base}/${section}`;
 }
 
 /** A project's settings page (AI-46), linked from the header while a project is in scope. */
