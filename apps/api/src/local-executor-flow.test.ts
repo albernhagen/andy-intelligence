@@ -8,6 +8,7 @@ import { LEASE_LOST_ERROR } from "@andy/domain";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { PUBLIC_URL, REPO, createdApp, githubApp } from "./github/test-app";
 import { RUNNER_CLAIM_PATH } from "./runners";
+import { RUN_TOKEN_LOOKUPS_PER_MINUTE } from "./runs";
 
 /**
  * AI-79 (ADR-0089 slice 4): claim, lease and routing, end to end in-process with a script as the
@@ -241,6 +242,23 @@ describe("local executor: claim, lease and routing", () => {
     expect((await s.json<{ needsAttention: boolean }>(s.t.call(ticket.path))).needsAttention).toBe(
       true,
     );
+  });
+
+  it("GivenAFloodOfFakeRunTokens_WhenTheLookupCapIsReached_Then429AndTheRealRunnerStillCallsBack", async () => {
+    const s = await setup();
+    await s.readyTicket("Board", "local");
+    const { secret } = await s.mint();
+    const claimed = (await s.claim(secret))!;
+    const asRun = (token: string) => s.send(`/runs/${claimed.runId}/heartbeat`, "POST", {}, token);
+    expect((await asRun(claimed.token)).status).toBe(200);
+
+    // The real token took one lookup on its first use; the guesses take the rest.
+    for (let i = 1; i < RUN_TOKEN_LOOKUPS_PER_MINUTE; i++) {
+      expect((await asRun(`airt_${String(i).padStart(43, "x")}`)).status).toBe(401);
+    }
+    expect((await asRun(`airt_${"y".repeat(43)}`)).status).toBe(429);
+
+    expect((await asRun(claimed.token)).status).toBe(200);
   });
 
   it("GivenARevokedRunner_WhenItsRunCallsBack_Then401", async () => {

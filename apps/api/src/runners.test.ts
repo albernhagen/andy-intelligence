@@ -104,6 +104,19 @@ describe("runner registration and claim", () => {
     expect(find).toHaveBeenCalledTimes(RUNNER_LOOKUPS_PER_MINUTE);
   });
 
+  it("GivenARunnerThatClaimedBefore_WhenAFloodOfGuessesUsesUpTheCap_ThenTheRunnerStillClaims", async () => {
+    const s = await setup();
+    const { body } = await s.mint();
+    expect((await s.claim(body.secret)).status).toBe(200);
+    for (let i = 0; i <= RUNNER_LOOKUPS_PER_MINUTE; i++) {
+      await s.claim(`air_${String(i).padStart(43, "x")}`);
+    }
+    expect((await s.claim(`air_${"y".repeat(43)}`)).status).toBe(429);
+
+    s.advance(10);
+    expect((await s.claim(body.secret)).status).toBe(200);
+  });
+
   it("GivenTwoRunners_WhenAThirdIsMinted_Then409", async () => {
     const s = await setup();
     await s.mint("A");

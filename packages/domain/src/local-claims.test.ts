@@ -130,6 +130,18 @@ describe("LocalClaims", () => {
     ]);
   });
 
+  it("GivenClaimsWithinOneMinute_WhenEachQueuesItsAwayCheck_ThenOnlyOneCheckIsQueued", async () => {
+    const s = await setup();
+    await s.claims.claim(s.runner);
+    s.advance(10);
+    await s.claims.claim(s.runner);
+    s.advance(20);
+    await s.claims.claim(s.runner);
+
+    const away = [...s.queue.queued.values()].filter((c) => c.kind === "runner_away");
+    expect(away.length).toBeLessThanOrEqual(1);
+  });
+
   it("GivenARunnerAtItsRunsAtOnce_WhenItClaims_ThenNothing", async () => {
     const s = await setup();
     await s.upNext("A");
@@ -219,6 +231,73 @@ describe("local run lease and heartbeat", () => {
       error: "the run passed its deadline",
     });
     expect(await s.runStore.listForTicket(s.project.id, ticket.id)).toHaveLength(1);
+  });
+});
+
+describe("retry routing", () => {
+  beforeEach(() => {
+    vi.spyOn(console, "log").mockImplementation(() => {});
+  });
+
+  it("GivenAnActionsRunThatFailed_WhenItsTicketNowResolvesToLocal_ThenTheRetryStaysOnActions", async () => {
+    let now = START;
+    const tracker = new InMemoryWorkTracker(() => now);
+    const runStore = new InMemoryRunStore(() => now);
+    let started = 0;
+    const executor = {
+      start: async (req: { runId: string }) => ({
+        runId: req.runId,
+        externalId: `wf-${++started}`,
+        url: null,
+        executor: {
+          repo: "albernhagen/andy-intelligence",
+          ref: "ref",
+          externalId: `wf-${started}`,
+        },
+      }),
+      status: async () => ({ status: "failed" }) as never,
+      cancel: async () => {},
+    };
+    let present = false;
+    const runs = new RunService(
+      tracker,
+      runStore,
+      executor,
+      () => now,
+      null,
+      null,
+      null,
+      async () => present,
+    );
+    const project = await tracker.createProject({
+      name: "AI",
+      key: "AI",
+      repos: ["albernhagen/andy-intelligence"],
+    });
+    await tracker.updateProject(project.id, { executor: "local" });
+    const t = await tracker.createTicket(project.id, { type: "feature", title: "A" }, "andy");
+    await tracker.updateTicket(
+      project.id,
+      t.id,
+      { fields: { upNextRank: "a", upNextAt: START.toISOString() } },
+      "andy",
+    );
+    // The runner is away, so the refine goes to Actions; then the runner comes back.
+    const first = await runs.start(project.id, t.id, "refine");
+    present = true;
+    now = new Date(START.getTime() + 60_000);
+
+    await runs.report(first.id, first.executor!, {
+      status: "failed",
+      summary: "boom",
+      tokensIn: null,
+      tokensOut: null,
+      costUsd: null,
+    });
+
+    const all = await runStore.listForTicket(project.id, t.id);
+    expect(all).toHaveLength(2);
+    expect(all[0]).toMatchObject({ attempt: 2, localRun: null, status: "queued" });
   });
 });
 

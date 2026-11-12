@@ -12,6 +12,7 @@ import type { RunnerService } from "@andy/domain";
 import type { Hono } from "hono";
 import { bodyLimit } from "hono/body-limit";
 import { actorOf, type AuthEnv } from "./auth";
+import { KnownCredentials } from "./known-credentials";
 import { FixedWindowLimiter } from "./mcp/rate-limit";
 import { hashToken, newToken } from "./mcp/tokens";
 
@@ -36,8 +37,13 @@ export const runnerCredentials = {
 };
 
 export const RUNNER_CLAIM_PATH = "/runner/claim";
-/** Secret lookups per instance per minute, valid or not (max 2 instances; ADR-0028, R14). */
+/**
+ * Lookups of secrets not seen to verify recently, per instance per minute (max 2 instances;
+ * ADR-0028, R14). A secret that verified skips this cap, so guesses can't starve the real runner.
+ */
 export const RUNNER_LOOKUPS_PER_MINUTE = 60;
+/** Recently verified credentials remembered per instance, and for how long since last use. */
+export const KNOWN_CREDENTIALS = { maxEntries: 20, ttlMs: 10 * 60_000 } as const;
 
 const ErrorBody = z.object({ error: z.string(), details: z.array(z.string()).optional() });
 const json = <S extends z.ZodType>(schema: S, description: string) => ({
@@ -117,6 +123,9 @@ export interface RunnerClaimDeps {
 export function registerRunnerClaim(app: Hono<AuthEnv>, deps: RunnerClaimDeps): void {
   const now = deps.now ?? (() => new Date());
   const lookups = new FixedWindowLimiter(RUNNER_LOOKUPS_PER_MINUTE, 60_000, () => now().getTime());
+  const known = new KnownCredentials(KNOWN_CREDENTIALS.maxEntries, KNOWN_CREDENTIALS.ttlMs, () =>
+    now().getTime(),
+  );
 
   app.post(
     RUNNER_CLAIM_PATH,
@@ -128,8 +137,9 @@ export function registerRunnerClaim(app: Hono<AuthEnv>, deps: RunnerClaimDeps): 
         log("WARNING", "runner claim without a runner secret");
         return c.json({ error: "unauthenticated" }, 401);
       }
-      // Before the lookup, so a flood of guesses can't run up Firestore reads.
-      if (!lookups.tryTake()) {
+      // Before the lookup, so a flood of guesses can't run up Firestore reads; a secret that
+      // verified recently is exempt, so the flood can't lock the real runner out.
+      if (!known.has(secret) && !lookups.tryTake()) {
         c.header("retry-after", "60");
         return c.json({ error: "rate limited" }, 429);
       }
@@ -138,6 +148,7 @@ export function registerRunnerClaim(app: Hono<AuthEnv>, deps: RunnerClaimDeps): 
         log("WARNING", "runner claim rejected");
         return c.json({ error: "unauthenticated" }, 401);
       }
+      known.remember(secret);
       const body = RunnerClaimRequest.safeParse(await c.req.json().catch(() => ({})));
       if (!body.success) return c.json({ error: "invalid request" }, 400);
       if ((await deps.runners.recordClaim(runner)) === "too_soon") {

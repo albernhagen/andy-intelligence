@@ -25,7 +25,8 @@ import { bodyLimit } from "hono/body-limit";
 import { actorOf, signedIn, type AuthEnv } from "./auth";
 import { FixedWindowLimiter } from "./mcp/rate-limit";
 import type { ActionsTokenVerifier } from "./github/token";
-import { RUN_TOKEN_SHAPE } from "./runners";
+import { KnownCredentials } from "./known-credentials";
+import { KNOWN_CREDENTIALS, RUN_TOKEN_SHAPE } from "./runners";
 
 /**
  * Agent runs (M1.6a: Claude Code executor). Andy starts and lists runs under /api. The run
@@ -136,6 +137,11 @@ export const RUN_REPORT_PATH = "/runs/:runId/report";
 export const RUN_HEARTBEAT_PATH = "/runs/:runId/heartbeat";
 /** Verified callbacks per instance per minute (max 2 instances; ADR-0028). */
 export const RUN_CALLBACK_RATE_LIMIT = 60;
+/**
+ * Lookups of per-run tokens not seen to verify recently, per instance per minute (ADR-0094): a
+ * flood of well-shaped fake tokens is capped before it reaches the store.
+ */
+export const RUN_TOKEN_LOOKUPS_PER_MINUTE = 60;
 export { RUN_REPORT_MAX_BYTES };
 const RunId = z.string().regex(/^[A-Za-z0-9-]{1,64}$/);
 
@@ -163,19 +169,32 @@ export interface RunCallbackDeps {
 export function registerRunCallbacks(app: OpenAPIHono<AuthEnv>, deps: RunCallbackDeps): void {
   const now = deps.now ?? (() => new Date());
   const limiter = new FixedWindowLimiter(RUN_CALLBACK_RATE_LIMIT, 60_000, () => now().getTime());
+  const tokenLookups = new FixedWindowLimiter(RUN_TOKEN_LOOKUPS_PER_MINUTE, 60_000, () =>
+    now().getTime(),
+  );
+  const knownTokens = new KnownCredentials(
+    KNOWN_CREDENTIALS.maxEntries,
+    KNOWN_CREDENTIALS.ttlMs,
+    () => now().getTime(),
+  );
 
   /**
-   * The verified caller, or null (the caller answers 401): a local runner's per-run token for
-   * this run (ADR-0089), else the cloud executor's Actions OIDC token.
+   * The verified caller, null (401), or "limited" (429): a local runner's per-run token for this
+   * run (ADR-0089), else the cloud executor's Actions OIDC token. A per-run token not seen to
+   * verify recently takes a lookup from a capped budget first (ADR-0094).
    */
   const authenticate = async (
     authorization: string | undefined,
     runId: string,
-  ): Promise<RunCaller | null> => {
+  ): Promise<RunCaller | null | "limited"> => {
     const match = /^Bearer\s+(\S+)$/i.exec(authorization ?? "");
     if (match?.[1] && RUN_TOKEN_SHAPE.test(match[1])) {
-      const local = deps.runners ? await deps.runners.authenticateRun(match[1], runId) : null;
+      const token = match[1];
+      if (!deps.runners) return null;
+      if (!knownTokens.has(token) && !tokenLookups.tryTake()) return "limited";
+      const local = await deps.runners.authenticateRun(token, runId);
       if (!local) log("WARNING", "per-run token rejected", { runId });
+      else knownTokens.remember(token);
       return local;
     }
     try {
@@ -249,6 +268,7 @@ export function registerRunCallbacks(app: OpenAPIHono<AuthEnv>, deps: RunCallbac
     const runId = RunId.safeParse(c.req.param("runId"));
     if (!runId.success) return c.json({ error: "not found" }, 404);
     const caller = await authenticate(c.req.header("authorization"), runId.data);
+    if (caller === "limited") return c.json({ error: "rate limited" }, 429);
     if (!caller) return c.json({ error: "unauthenticated" }, 401);
     // After verification, so unauthenticated floods can't use up the cap.
     if (!limiter.tryTake()) return c.json({ error: "rate limited" }, 429);
@@ -264,6 +284,7 @@ export function registerRunCallbacks(app: OpenAPIHono<AuthEnv>, deps: RunCallbac
       const runId = RunId.safeParse(c.req.param("runId"));
       if (!runId.success) return c.json({ error: "not found" }, 404);
       const caller = await authenticate(c.req.header("authorization"), runId.data);
+      if (caller === "limited") return c.json({ error: "rate limited" }, 429);
       if (!caller) return c.json({ error: "unauthenticated" }, 401);
       if (!("runnerId" in caller)) return c.json({ error: "only a local runner heartbeats" }, 403);
       if (!limiter.tryTake()) return c.json({ error: "rate limited" }, 429);
@@ -285,6 +306,7 @@ export function registerRunCallbacks(app: OpenAPIHono<AuthEnv>, deps: RunCallbac
       const runId = RunId.safeParse(c.req.param("runId"));
       if (!runId.success) return c.json({ error: "not found" }, 404);
       const caller = await authenticate(c.req.header("authorization"), runId.data);
+      if (caller === "limited") return c.json({ error: "rate limited" }, 429);
       if (!caller) return c.json({ error: "unauthenticated" }, 401);
       if (!limiter.tryTake()) return c.json({ error: "rate limited" }, 429);
       const body = RunReportRequest.safeParse(await c.req.json().catch(() => null));

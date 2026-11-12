@@ -274,7 +274,8 @@ export class RunService {
     if (ticket.stage === "cancelled") {
       throw new DomainError("invalid_transition", `${ticket.key} is cancelled; reopen it first`);
     }
-    await this.checkRoute(ticket, project, opts.runner);
+    // An automatic retry stays on the executor its run used (local runs are never retried).
+    if (!retryOf) await this.checkRoute(ticket, project, opts.runner);
     const questions = await this.tracker.listQuestions({ ticketId, status: "answered" });
     let approved: Run | null = null;
     if (startable === "refine") await this.checkRefinable(ticket);
