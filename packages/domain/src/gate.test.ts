@@ -295,6 +295,25 @@ describe("spike PRs (AI-99)", () => {
     expect(outsideDocs([file("docsx/a.md"), file("Docs/b.md")])).toEqual(["docsx/a.md"]);
   });
 
+  it("GivenAnyFacts_WhenTheTicketIsASpike_ThenTheVetoOnlyAddsReasonsAndNeverAllowsAMerge", () => {
+    const variants: Partial<GateFacts>[] = [
+      {},
+      { files: docsOnly },
+      { verification: [] },
+      { draft: true },
+      { files: { items: [file(".github/workflows/ci.yml")], complete: true } },
+      { files: { items: [file("docs/a.md")], complete: false } },
+      { checks: { items: [], complete: true } },
+    ];
+    for (const over of variants) {
+      const before = decideGate(facts(over));
+      const after = decideGate(facts({ ...over, ticketType: "spike" }));
+      expect(after.reasons).toEqual(expect.arrayContaining(before.reasons));
+      if (!before.wouldAutoMerge) expect(after.wouldAutoMerge).toBe(false);
+      if (before.flag) expect(after.flag).toBe(true);
+    }
+  });
+
   it.each(["feature", "chore", "bug", null] as const)(
     "GivenA%sTicketThatChangesCode_WhenDecided_ThenTheGateIsAsToday",
     (ticketType) => {
