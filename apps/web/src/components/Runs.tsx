@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { Link } from "@tanstack/react-router";
 import type { Run, RunStatus } from "@andy/contracts";
 import { QueryError } from "@/components/Status";
 import { Badge } from "@/components/ui/badge";
@@ -13,7 +14,7 @@ const SHORT_SUMMARY_CHARS = 400;
 const SHORT_SUMMARY_LINES = 6;
 
 /** Status markers from design.md. */
-const STATUS_VARIANT: Record<RunStatus, "default" | "running" | "success" | "danger"> = {
+export const STATUS_VARIANT: Record<RunStatus, "default" | "running" | "success" | "danger"> = {
   queued: "default",
   running: "running",
   succeeded: "success",
@@ -73,7 +74,14 @@ export function RunItem({
     <li className="space-y-1 rounded-md border border-border p-3 text-sm">
       <p className="flex flex-wrap items-center gap-2">
         <Badge variant={STATUS_VARIANT[run.status]}>{run.status}</Badge>
-        <span className="font-medium">Agent task · {run.step}</span>
+        {/* Opens the agent task's own page (AI-101); styled as the label it replaced. */}
+        <Link
+          to="/p/$projectId/runs/$runId"
+          params={{ projectId: run.projectId, runId: run.id }}
+          className="font-medium hover:underline"
+        >
+          Agent task · {run.step}
+        </Link>
         <span className="text-muted-foreground">{run.route.model}</span>
         {run.retryOf && <span className="text-muted-foreground">retry {run.attempt}</span>}
         {created && <Time label="started" iso={created} />}
@@ -173,7 +181,7 @@ function Time({ label, iso }: { label: string; iso: string }) {
 }
 
 /** Plain text only: the summary is untrusted agent output (never parsed as HTML). */
-function Summary({ text }: { text: string }) {
+export function Summary({ text }: { text: string }) {
   const short =
     text.length <= SHORT_SUMMARY_CHARS && text.split("\n").length <= SHORT_SUMMARY_LINES;
   const [open, setOpen] = useState(short);

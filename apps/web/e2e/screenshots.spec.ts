@@ -1,7 +1,7 @@
 import { expect, test, type Page } from "@playwright/test";
 
 /**
- * AI-26: screenshot checks for the shell, board, story panel (AI-29) and inbox (AI-30). A diff fails CI; a deliberate
+ * AI-26: screenshot checks for the shell, board, story panel (AI-29), inbox (AI-30) and agent task page (AI-101). A diff fails CI; a deliberate
  * change updates the stored images in the same PR (README: "Screenshot checks").
  */
 
@@ -72,4 +72,13 @@ test("story panel with a question", async ({ page }) => {
   await expect(page.getByRole("region", { name: "Activity" })).toBeVisible();
   await page.getByRole("region", { name: "Questions" }).scrollIntoViewIfNeeded();
   await expect(page).toHaveScreenshot("story-panel-question.png");
+});
+
+test("agent task page from the story panel", async ({ page }) => {
+  await page.clock.setFixedTime(SEED_NOW);
+  await open(page, "/p/ai/t/AI-3", "Waiting for you: 1 question");
+  await page.getByRole("link", { name: "Agent task · refine" }).click();
+  await expect(page.getByRole("heading", { name: "Agent task · refine" })).toBeVisible();
+  await expect(page.getByRole("link", { name: /^AI-3: / })).toBeVisible();
+  await expect(page).toHaveScreenshot("agent-task-page.png");
 });
