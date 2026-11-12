@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
+import { cleanGitEnv } from "./git-env.mjs";
 
 /**
  * AI-122 (ADR-0049): a night launch's story builds on `epic/<KEY>`. The context step of
@@ -162,12 +163,9 @@ describe("executor context step: base branch (AI-122)", () => {
 });
 
 // A git hook (pre-push runs the tests) exports GIT_DIR and friends; inherited, they would point
-// these temporary repos' git commands at the real one. So no GIT_* variable is inherited.
-const CLEAN_ENV = Object.fromEntries(
-  Object.entries(process.env).filter(([k]) => !k.startsWith("GIT_")),
-);
+// these temporary repos' git commands at the real one (AI-135).
 const GIT_ENV = {
-  ...CLEAN_ENV,
+  ...cleanGitEnv(),
   GIT_CONFIG_NOSYSTEM: "1",
   GIT_CONFIG_GLOBAL: "/dev/null",
   GIT_AUTHOR_NAME: "t",
