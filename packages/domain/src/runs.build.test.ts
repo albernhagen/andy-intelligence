@@ -241,6 +241,25 @@ describe("RunService build runs", () => {
     );
   });
 
+  // ADR-0096: a repo registered to project A never pushes for a run of project B.
+  it("GivenARunOfAnotherProjectDispatchedToThisRepo_WhenAPushGrantIsClaimed_ThenForbidden", async () => {
+    const other = await tracker.createProject({ name: "BB", key: "BB", repos: ["albernhagen/bb"] });
+    const executor = { repo: REPO.fullName, ref: "platform-executor", externalId: "77" };
+    const created = await runs.create({
+      projectId: other.id,
+      ticketId: "t1",
+      step: "build",
+      route: { harness: "claude-code", provider: "claude-sub", model: "sonnet" },
+      tier: "fast",
+      deadline: null,
+      prompt: "x",
+      maxTurns: 1,
+    });
+    await runs.update(created.id, { status: "running", executor }, ["queued"]);
+    await rejects(service.claimPushGrant(created.id, executor), "forbidden");
+    await rejects(service.context(created.id, executor), "forbidden");
+  });
+
   it("GivenAQueuedBuild_WhenAPushGrantIsClaimed_ThenRunFinished", async () => {
     const t = await ticketIn("ready");
     const run = await service.start(projectId, t.id, "build");

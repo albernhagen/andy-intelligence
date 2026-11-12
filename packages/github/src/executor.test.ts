@@ -46,18 +46,31 @@ describe("ClaudeCodeActionsExecutor", () => {
     expect(host.workflowRuns.get(handle.externalId)?.inputs.credential).toBe("api_key");
   });
 
-  it("GivenAnotherRepoOrDefaultBranch_WhenStarted_ThenItFailsBeforeDispatch", async () => {
-    for (const other of [
-      { ...repo, fullName: "albernhagen/other", url: "https://github.com/albernhagen/other" },
-      { ...repo, defaultBranch: "trunk" },
-    ]) {
-      const host = new InMemoryCodeHost([other]);
-      const executor = new ClaudeCodeActionsExecutor(host);
-      await expect(
-        executor.start({ ...request("r5"), projectRef: other.fullName }),
-      ).rejects.toThrow(/only on albernhagen\/andy-intelligence/);
-      expect(host.workflowRuns.size).toBe(0);
-    }
+  // ADR-0096: a registered project's repo gets its own agent-run.yml dispatched.
+  it("GivenAManagedRepo_WhenStarted_ThenAgentRunIsDispatchedInThatRepo", async () => {
+    const managed = {
+      ...repo,
+      fullName: "albernhagen/other",
+      url: "https://github.com/albernhagen/other",
+    };
+    const host = new InMemoryCodeHost([managed]);
+    const handle = await new ClaudeCodeActionsExecutor(host).start({
+      ...request("r5"),
+      projectRef: managed.fullName,
+    });
+    expect(host.workflowRuns.get(handle.externalId)).toMatchObject({
+      repo: managed.fullName,
+      workflow: "agent-run.yml",
+    });
+    expect(handle.executor).toMatchObject({ repo: managed.fullName, ref: CLAUDE_EXECUTOR_REF });
+  });
+
+  it("GivenADefaultBranchOtherThanMain_WhenStarted_ThenItFailsBeforeDispatch", async () => {
+    const host = new InMemoryCodeHost([{ ...repo, defaultBranch: "trunk" }]);
+    await expect(new ClaudeCodeActionsExecutor(host).start(request("r6"))).rejects.toThrow(
+      /default branch to be main/,
+    );
+    expect(host.workflowRuns.size).toBe(0);
   });
 
   it("GivenTheAppIsNotInstalled_WhenStarted_ThenItFails", async () => {

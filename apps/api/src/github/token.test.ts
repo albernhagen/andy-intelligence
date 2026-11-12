@@ -1,12 +1,14 @@
 import { SignJWT, createLocalJWKSet, exportJWK, generateKeyPair } from "jose";
 import { describe, expect, it } from "vitest";
-import { REPO, createdApp, githubApp } from "./test-app";
+import { CLAUDE_EXECUTOR_REF } from "@andy/github";
+import { REPO, createdApp, githubApp, repo } from "./test-app";
 import {
   ACTIONS_ISSUER,
   TOKEN_PATH,
   TOKEN_POLICY,
   TOKEN_RATE_LIMIT,
   actionsTokenVerifier,
+  executorEntry,
   type ActionsClaims,
 } from "./token";
 
@@ -134,33 +136,81 @@ describe("actionsTokenVerifier", () => {
   });
 });
 
-describe("repo token endpoint: executor publish job (ADR-0063)", () => {
-  const executor = TOKEN_POLICY.find((p) => p.runGrant)!;
-  const claims = (extra: Partial<ActionsClaims> = {}): ActionsClaims => ({
-    repository: executor.repository,
-    workflow_ref: executor.workflow_ref,
-    job_workflow_ref: executor.job_workflow_ref,
+describe("repo token endpoint: executor publish job (ADR-0063, ADR-0096)", () => {
+  const OTHER = "albernhagen/managed";
+  const claims = (repository = REPO, extra: Partial<ActionsClaims> = {}): ActionsClaims => ({
+    repository,
+    workflow_ref: `${repository}/.github/workflows/agent-run.yml@refs/heads/main`,
+    job_workflow_ref: CLAUDE_EXECUTOR_REF,
     run_id: "1",
     ...extra,
   });
-  const ask = async (c: ActionsClaims, body: unknown) => {
+  async function setupWith(projects: { key: string; repos: string[] }[]) {
     const t = githubApp({ verifyActionsToken: verify });
+    t.host.install(repo(OTHER));
     await t.connections.save({ ...createdApp, connectedAt: "2026-11-03T00:00:00Z" });
-    return t.call(TOKEN_PATH, { method: "POST", body: JSON.stringify(body) }, JSON.stringify(c));
-  };
+    for (const p of projects) {
+      await t.tracker.createProject({ name: p.key, key: p.key, repos: p.repos });
+    }
+    const ask = (c: ActionsClaims, body: unknown) =>
+      t.call(TOKEN_PATH, { method: "POST", body: JSON.stringify(body) }, JSON.stringify(c));
+    return { ...t, ask };
+  }
 
   it("GivenTheExecutorWithoutARunId_WhenAsking_Then403", async () => {
+    const { ask } = await setupWith([{ key: "AI", repos: [REPO] }]);
     expect((await ask(claims(), {})).status).toBe(403);
   });
 
   it("GivenTheCallerWorkflowButAnotherReusableWorkflow_WhenAsking_Then403", async () => {
-    const other = claims({
+    const { ask } = await setupWith([{ key: "AI", repos: [REPO] }]);
+    const other = claims(REPO, {
       job_workflow_ref: `${REPO}/.github/workflows/evil.yml@refs/heads/main`,
     });
     expect((await ask(other, { runId: "r1" })).status).toBe(403);
   });
 
-  it("GivenAnUnknownRun_WhenAsking_Then404", async () => {
+  it("GivenARegisteredReposExecutorForAnUnknownRun_WhenAsking_ThenTheRunIsChecked404", async () => {
+    const { ask } = await setupWith([
+      { key: "AI", repos: [REPO] },
+      { key: "MG", repos: [OTHER] },
+    ]);
     expect((await ask(claims(), { runId: "nope" })).status).toBe(404);
+    expect((await ask(claims(OTHER), { runId: "nope" })).status).toBe(404);
+  });
+
+  it("GivenAnUnregisteredRepoRunningTheExecutor_WhenAsking_Then403", async () => {
+    const { ask } = await setupWith([{ key: "AI", repos: [REPO] }]);
+    expect((await ask(claims(OTHER), { runId: "r1" })).status).toBe(403);
+  });
+
+  it("GivenADisabledProjectsRepo_WhenTheRuleIsChecked_ThenNoEntry", async () => {
+    const { tracker } = await setupWith([{ key: "MG", repos: [OTHER] }]);
+    const [project] = await tracker.listProjects();
+    expect(await executorEntry(claims(OTHER), async () => project!)).toMatchObject({
+      runGrant: true,
+    });
+    expect(
+      await executorEntry(claims(OTHER), async () => ({ ...project!, enabled: false })),
+    ).toBeNull();
+  });
+
+  it("GivenARegisteredRepoButAnotherCallerFileOrBranch_WhenAsking_Then403", async () => {
+    const { ask } = await setupWith([{ key: "MG", repos: [OTHER] }]);
+    for (const workflow_ref of [
+      `${OTHER}/.github/workflows/ci.yml@refs/heads/main`,
+      `${OTHER}/.github/workflows/agent-run.yml@refs/heads/evil`,
+      `${REPO}/.github/workflows/agent-run.yml@refs/heads/main`,
+    ]) {
+      expect((await ask(claims(OTHER, { workflow_ref }), { runId: "r1" })).status).toBe(403);
+    }
+  });
+
+  it("GivenTheExecutorAtAnotherRef_WhenAsking_Then403", async () => {
+    const { ask } = await setupWith([{ key: "MG", repos: [OTHER] }]);
+    const pinned = CLAUDE_EXECUTOR_REF.replace("refs/heads/main", "refs/heads/dev");
+    expect((await ask(claims(OTHER, { job_workflow_ref: pinned }), { runId: "r1" })).status).toBe(
+      403,
+    );
   });
 });
