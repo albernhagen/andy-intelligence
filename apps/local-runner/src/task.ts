@@ -1,4 +1,4 @@
-import { mkdir, rm, writeFile } from "node:fs/promises";
+import { chmod, lstat, mkdir, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import type { ClaimedRun, RunPhase, RunReportRequest } from "@andy/contracts";
 import { READ_ONLY_ALLOWED, READ_ONLY_DENIED, agentArgs, agentEnv, spawnAgent } from "./agent";
@@ -51,6 +51,8 @@ export interface TaskDeps {
   /** Where a build pushes and opens its PR (tests: local fakes). */
   gitBase: string;
   githubApi: string;
+  /** The pnpm command for a build's install; tests pass a stub. */
+  pnpmCommand?: string;
   /** How often to heartbeat (the claim's heartbeatSeconds, in ms). */
   heartbeatMs: number;
   log: Logger;
@@ -63,6 +65,21 @@ class Stopped extends Error {}
 
 /** The build profile's writable scratch directory (its sandbox `allowWrite`), as on Actions. */
 const AGENT_TMP = "/tmp/agent";
+
+/**
+ * `/tmp/agent` must be this user's own real directory (not a symlink, not another user's, mode
+ * 0700) before a task's subdirectory is made in it: another user could pre-create it.
+ */
+async function ownScratch(dir: string): Promise<void> {
+  await mkdir(AGENT_TMP, { recursive: true, mode: 0o700 });
+  const info = await lstat(AGENT_TMP);
+  if (!info.isDirectory() || info.isSymbolicLink() || info.uid !== process.getuid?.()) {
+    throw new Error(`${AGENT_TMP} isn't this user's own directory`);
+  }
+  if ((info.mode & 0o077) !== 0) await chmod(AGENT_TMP, 0o700);
+  await rm(dir, { recursive: true, force: true });
+  await mkdir(dir, { mode: 0o700 });
+}
 
 const emptyReport = (status: RunReportRequest["status"], summary: string): RunReportRequest => ({
   status,
@@ -84,6 +101,8 @@ export async function runTask(
   const platformDir = join(runDir, "platform");
   const publishDir = join(runDir, "publish");
   const build = claimed.step === "build";
+  // The build profile's scratch (`/tmp/agent`), one subdirectory per task (ADR-0102).
+  const scratchDir = join(AGENT_TMP, claimed.runId);
   const worktrees: { repo: string; path: string }[] = [];
   const stop = new AbortController();
   let why: "cancel" | "ended" | "shutdown" | null = null;
@@ -131,6 +150,7 @@ export async function runTask(
   const removeWork = async () => {
     for (const w of worktrees) await deps.repos.removeWorktree(w.repo, w.path);
     await rm(runDir, { recursive: true, force: true });
+    if (build) await rm(scratchDir, { recursive: true, force: true });
   };
 
   const report = async (body: RunReportRequest): Promise<TaskOutcome> => {
@@ -191,6 +211,8 @@ export async function runTask(
     // Read before the agent: it can rewrite the checkout's `.git` file, never this directory.
     const gitDir = build ? await gitDirOf(projectDir) : null;
     const repoCache = deps.repos.path(claimed.repo);
+    // Before the profiles: Seatbelt matches real paths, so the directory must exist.
+    if (build) await ownScratch(scratchDir);
     checkpoint();
 
     // Two Seatbelt profiles, both the runner's own (ADR-0098): the platform child reads only the
@@ -218,6 +240,7 @@ export async function runTask(
               runnerHome: deps.home,
               read: [settingsPath, repoCache],
               readWrite: [projectDir],
+              scratch: { root: AGENT_TMP, own: scratchDir },
               claude: { command: deps.claudeCommand },
             }
           : {
@@ -270,7 +293,10 @@ export async function runTask(
         confinement: deps.confinement,
         timeoutMs: LOCAL_LIMITS.installMinutes * 60_000,
         signal: stop.signal,
+        ...(deps.pnpmCommand ? { pnpm: deps.pnpmCommand } : {}),
       });
+      // A cancel or lost lease during the install stops the task, never reports it failed.
+      checkpoint();
       if (installed.kind === "failed") {
         deps.log("ERROR", "dependency install failed; the agent did not run", {
           ...ids,
@@ -286,7 +312,6 @@ export async function runTask(
         return "reported";
       }
       deps.log("INFO", "dependencies ready", { ...ids, install: installed.kind });
-      await mkdir(AGENT_TMP, { recursive: true, mode: 0o700 });
       checkpoint();
       // Fail closed (ADR-0102): Bash runs in Claude Code's sandbox, or no build agent runs.
       const bashProblem = await checkBash({
@@ -298,7 +323,7 @@ export async function runTask(
         runDir,
         gitDir: gitDir!,
         signal: stop.signal,
-        extraEnv: { TMPDIR: AGENT_TMP },
+        extraEnv: { TMPDIR: scratchDir },
       });
       checkpoint();
       if (bashProblem) {
@@ -342,7 +367,7 @@ export async function runTask(
     const agent = await spawnAgent({
       ...command,
       cwd: projectDir,
-      env: agentEnv(build ? { TMPDIR: AGENT_TMP } : {}),
+      env: agentEnv(build ? { TMPDIR: scratchDir } : {}),
       prompt,
       outputPath: streamPath,
       timeoutMs,
@@ -452,6 +477,12 @@ export async function runTask(
     const base = await deps.repos.defaultBranch(claimed.repo);
     // Cancelled or ended meanwhile: publish nothing (the heartbeat contract).
     checkpoint();
+    if (!(await deps.confinement.environmentHidden())) {
+      deps.log("ERROR", "this Mac shows other processes' environments; not publishing", ids);
+      return failed(
+        "The local runner refused to publish: this Mac shows a process's environment to other processes of the same user, where git would get the push credential.",
+      );
+    }
     const granted = await deps.api.pushToken(claimed.runId, claimed.token);
     if (granted.kind !== "ok") {
       deps.log("ERROR", "push token refused; nothing published", {

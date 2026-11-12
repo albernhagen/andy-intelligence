@@ -1,5 +1,6 @@
 import { execFileSync } from "node:child_process";
-import { existsSync, readFileSync } from "node:fs";
+import { chmodSync, existsSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { ControlPlane } from "../src/api";
@@ -46,9 +47,11 @@ function loop(
     signal?: AbortSignal;
     confinement?: Confinement;
     githubApi?: string;
+    projectFiles?: Record<string, string>;
+    pnpm?: string;
   } = {},
 ) {
-  env = makeEnv(options.stub);
+  env = makeEnv(options.stub, options.projectFiles);
   server.queue.push(...(options.tasks ?? []));
   const log = memoryLogger();
   const awake: boolean[] = [];
@@ -66,6 +69,7 @@ function loop(
       origin: server.origin,
       gitBase: env.gitBase,
       githubApi: options.githubApi ?? "http://127.0.0.1:9",
+      ...(options.pnpm ? { pnpmCommand: options.pnpm } : {}),
       confinement: options.confinement ?? CONFINEMENT,
     },
     keepAwake,
@@ -327,6 +331,66 @@ describe("local-runner start", () => {
         );
       });
     }
+
+    /** A `pnpm` stand-in: exits `code` after `seconds`. */
+    const stubPnpm = (code: number, seconds = 0) => {
+      const dir = mkdtempSync(join(tmpdir(), "lr-pnpm-"));
+      const script = join(dir, "pnpm");
+      writeFileSync(
+        script,
+        `#!/bin/sh\nsleep ${seconds}\necho 'install failed' >&2\nexit ${code}\n`,
+      );
+      chmodSync(script, 0o755);
+      return script;
+    };
+    const lockfile = { "pnpm-lock.yaml": "lockfileVersion: '9.0'\n" };
+
+    it("GivenAnInstallThatFails_WhenABuildIsClaimed_ThenTheAgentDoesNotRunAndTheTaskFails", async () => {
+      const t = task("build");
+      const { done } = loop({
+        tasks: [t],
+        projectFiles: lockfile,
+        pnpm: stubPnpm(1),
+        githubApi: server.origin,
+      });
+      expect(await done).toBe("idle");
+
+      expect(agentCalls()).toEqual([]);
+      expect(server.reports[0]!.body.status).toBe("failed");
+      expect(server.reports[0]!.body.summary).toContain("Installing dependencies failed");
+    });
+
+    it("GivenACancelDuringTheInstall_WhenTheHeartbeatSaysSo_ThenTheTaskIsCancelledNotFailed", async () => {
+      const t = task("build");
+      let beats = 0;
+      const { done } = loop({
+        tasks: [
+          { ...t, heartbeat: (phase) => (phase === "starting" && ++beats >= 30 ? "cancel" : "ok") },
+        ],
+        projectFiles: lockfile,
+        pnpm: stubPnpm(0, 5),
+        githubApi: server.origin,
+      });
+      expect(await done).toBe("idle");
+
+      expect(agentCalls()).toEqual([]);
+      expect(server.reports.map((r) => r.body.status)).toEqual(["cancelled"]);
+    });
+
+    it("GivenAMacThatShowsOtherProcessesEnvironments_WhenABuildFinishes_ThenNoPushTokenIsAskedFor", async () => {
+      const t = task("build");
+      const { done } = loop({
+        tasks: [t],
+        stub: { edit: { "src/board.ts": "x\n" } },
+        githubApi: server.origin,
+        confinement: { ...CONFINEMENT, environmentHidden: async () => false },
+      });
+      expect(await done).toBe("idle");
+
+      expect(server.pushTokens).toEqual([]);
+      expect(server.reports[0]!.body.status).toBe("failed");
+      expect(server.reports[0]!.body.summary).toContain("refused to publish");
+    });
 
     it("GivenABuildContextWithoutTheRunsBranch_WhenClaimed_ThenTheAgentDoesNotRun", async () => {
       const t = task("build");

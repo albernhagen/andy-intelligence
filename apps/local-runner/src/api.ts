@@ -140,13 +140,19 @@ export class ControlPlane {
   }
 
   /**
-   * The run's one push token (ADR-0089: `POST /github/token` with the per-run token). Never
-   * retried: a second request is refused by design. The token is returned, never logged or
+   * The run's one push token (ADR-0089: `POST /github/token` with the per-run token). Retried
+   * once on 429 only (rate-limited before the grant); a second grant is refused by design. The token is returned, never logged or
    * put in a reason.
    */
   async pushToken(runId: string, token: string): Promise<PushTokenResult> {
     try {
-      const res = await this.call("/github/token", token, { method: "POST", body: { runId } });
+      const ask = () => this.call("/github/token", token, { method: "POST", body: { runId } });
+      let res = await ask();
+      // 429 comes before the grant is claimed, so one retry can't take a second token.
+      if (res.status === 429) {
+        await sleep(this.retryDelayMs);
+        res = await ask();
+      }
       if (res.status !== 200) {
         return { kind: "refused", status: res.status, reason: errorField(res.json) };
       }

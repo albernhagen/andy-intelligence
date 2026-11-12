@@ -88,7 +88,7 @@ export interface Env {
   calls(): { args: string[]; cwd: string; envNames: string[]; stdin: string }[];
 }
 
-export function makeEnv(stub: StubConfig = {}): Env {
+export function makeEnv(stub: StubConfig = {}, projectFiles: Record<string, string> = {}): Env {
   const root = realpathSync(mkdtempSync(join(tmpdir(), "local-runner-")));
   const remotes = join(root, "remotes");
   const hookMarker = join(root, "project-hook-ran");
@@ -111,6 +111,7 @@ export function makeEnv(stub: StubConfig = {}): Env {
     ".claude/settings.json": JSON.stringify(hooks),
     ".claude/settings.local.json": JSON.stringify(hooks),
     ".github/CODEOWNERS": "/docs/ @andy\n",
+    ...projectFiles,
   });
   const stubDir = join(root, "stub");
   mkdirSync(stubDir);

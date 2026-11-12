@@ -444,3 +444,28 @@ describe("Bash check (AI-133)", () => {
     expect(BASH_CHECK_COMMAND).not.toContain("SANDBOX_CHECK_NONCE=");
   });
 });
+
+describe("build scratch isolation (AI-133)", () => {
+  it("GivenAScratchRoot_WhenTheProfileIsWritten_ThenTheRootIsDeniedAndOnlyTheTasksOwnDirectoryReopened", () => {
+    const text = seatbeltProfile({
+      runnerHome: "/nonexistent/runner",
+      read: [],
+      scratch: { root: "/nonexistent/agent", own: "/nonexistent/agent/run-1" },
+    });
+    const lines = text.split("\n");
+    const deny = lines.findIndex(
+      (l) => l === '(deny file-read-data file-write* (subpath "/nonexistent/agent"))',
+    );
+    const allow = lines.findIndex(
+      (l) => l === '(allow file-read-data file-write* (subpath "/nonexistent/agent/run-1"))',
+    );
+    expect(deny).toBeGreaterThan(-1);
+    expect(allow).toBeGreaterThan(deny);
+  });
+
+  it("GivenThisMac_WhenAskedWhetherOtherProcessesEnvironmentsShow_ThenTheAnswerIsABoolean", async () => {
+    expect(await noConfinement.environmentHidden()).toBe(true);
+    if (process.platform === "darwin")
+      expect(typeof (await seatbelt.environmentHidden())).toBe("boolean");
+  });
+});
