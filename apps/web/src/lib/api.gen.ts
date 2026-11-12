@@ -5403,6 +5403,252 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  "/api/runners": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get: {
+      parameters: {
+        query?: never;
+        header?: never;
+        path?: never;
+        cookie?: never;
+      };
+      requestBody?: never;
+      responses: {
+        /** @description Runners, newest first; never their secrets */
+        200: {
+          headers: {
+            [name: string]: unknown;
+          };
+          content: {
+            "application/json": {
+              id: string;
+              name: string;
+              projectIds: string[];
+              /** @default 1 */
+              runsAtOnce: number;
+              /** Format: date-time */
+              createdAt: string;
+              createdBy: string;
+              /** Format: date-time */
+              expiresAt: string;
+              /**
+               * Format: date-time
+               * @default null
+               */
+              revokedAt: string | null;
+              /**
+               * Format: date-time
+               * @default null
+               */
+              lastSeenAt: string | null;
+              present: boolean;
+              /** @enum {string} */
+              state: "active" | "revoked" | "expired";
+            }[];
+          };
+        };
+      };
+    };
+    put?: never;
+    post: {
+      parameters: {
+        query?: never;
+        header?: never;
+        path?: never;
+        cookie?: never;
+      };
+      requestBody: {
+        content: {
+          "application/json": {
+            name: string;
+            projectIds: string[];
+            runsAtOnce?: number;
+          };
+        };
+      };
+      responses: {
+        /** @description Minted; the secret is in this response only */
+        201: {
+          headers: {
+            [name: string]: unknown;
+          };
+          content: {
+            "application/json": {
+              runner: {
+                id: string;
+                name: string;
+                projectIds: string[];
+                /** @default 1 */
+                runsAtOnce: number;
+                /** Format: date-time */
+                createdAt: string;
+                createdBy: string;
+                /** Format: date-time */
+                expiresAt: string;
+                /**
+                 * Format: date-time
+                 * @default null
+                 */
+                revokedAt: string | null;
+                /**
+                 * Format: date-time
+                 * @default null
+                 */
+                lastSeenAt: string | null;
+                present: boolean;
+                /** @enum {string} */
+                state: "active" | "revoked" | "expired";
+              };
+              secret: string;
+            };
+          };
+        };
+        /** @description Invalid request */
+        400: {
+          headers: {
+            [name: string]: unknown;
+          };
+          content: {
+            "application/json": {
+              error: string;
+              details?: string[];
+            };
+          };
+        };
+        /** @description Only the owner mints runners */
+        403: {
+          headers: {
+            [name: string]: unknown;
+          };
+          content: {
+            "application/json": {
+              error: string;
+              details?: string[];
+            };
+          };
+        };
+        /** @description A project doesn't exist */
+        404: {
+          headers: {
+            [name: string]: unknown;
+          };
+          content: {
+            "application/json": {
+              error: string;
+              details?: string[];
+            };
+          };
+        };
+        /** @description The runner cap is reached */
+        409: {
+          headers: {
+            [name: string]: unknown;
+          };
+          content: {
+            "application/json": {
+              error: string;
+              details?: string[];
+            };
+          };
+        };
+      };
+    };
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/runners/{runnerId}/revoke": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    post: {
+      parameters: {
+        query?: never;
+        header?: never;
+        path: {
+          runnerId: string;
+        };
+        cookie?: never;
+      };
+      requestBody?: never;
+      responses: {
+        /** @description Revoked; its next claim is refused */
+        200: {
+          headers: {
+            [name: string]: unknown;
+          };
+          content: {
+            "application/json": {
+              id: string;
+              name: string;
+              projectIds: string[];
+              /** @default 1 */
+              runsAtOnce: number;
+              /** Format: date-time */
+              createdAt: string;
+              createdBy: string;
+              /** Format: date-time */
+              expiresAt: string;
+              /**
+               * Format: date-time
+               * @default null
+               */
+              revokedAt: string | null;
+              /**
+               * Format: date-time
+               * @default null
+               */
+              lastSeenAt: string | null;
+              present: boolean;
+              /** @enum {string} */
+              state: "active" | "revoked" | "expired";
+            };
+          };
+        };
+        /** @description Only the owner revokes runners */
+        403: {
+          headers: {
+            [name: string]: unknown;
+          };
+          content: {
+            "application/json": {
+              error: string;
+              details?: string[];
+            };
+          };
+        };
+        /** @description Not found */
+        404: {
+          headers: {
+            [name: string]: unknown;
+          };
+          content: {
+            "application/json": {
+              error: string;
+              details?: string[];
+            };
+          };
+        };
+      };
+    };
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   "/api/projects/{projectId}/in-flight": {
     parameters: {
       query?: never;

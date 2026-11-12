@@ -263,6 +263,31 @@ export function useClearQuotaIdle() {
   return useWrite(async () => unwrap(await api.POST("/api/quota/clear")));
 }
 
+/** Local runners (ADR-0089): never their secrets. */
+export function useRunners() {
+  const api = useApi();
+  return useQuery({
+    ...useLivePoll("slow"),
+    queryKey: ["runners"],
+    queryFn: async () => unwrap(await api.GET("/api/runners")),
+  });
+}
+
+/** The response holds the runner's secret: shown once by the caller, never cached. */
+export function useMintRunner() {
+  const api = useApi();
+  return useWrite(async (body: { name: string; projectIds: string[] }) =>
+    unwrap(await api.POST("/api/runners", { body })),
+  );
+}
+
+export function useRevokeRunner() {
+  const api = useApi();
+  return useWrite(async (runnerId: string) =>
+    unwrap(await api.POST("/api/runners/{runnerId}/revoke", { params: { path: { runnerId } } })),
+  );
+}
+
 export function useCreateProject() {
   const api = useApi();
   return useWrite(async (body: { name: string; key: string; repos: string[] }) =>

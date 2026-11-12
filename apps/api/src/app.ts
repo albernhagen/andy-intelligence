@@ -5,6 +5,7 @@ import {
   type CodeHostConnectionStore,
   type OAuthGrantStore,
   type RunStore,
+  type RunnerStore,
   type WatchdogQueue,
   type WorkTracker,
   type QuotaStore,
@@ -17,6 +18,7 @@ import {
   ProjectService,
   RefineDispatcher,
   RunService,
+  RunnerService,
   BoardReader,
   DigestReader,
   QuotaClearer,
@@ -30,6 +32,7 @@ import { requireAllowedUser, type AuthEnv, type TokenVerifier } from "./auth";
 import { registerMcp, type ClientMetadataResolver } from "./mcp";
 import { registerQuotaRoutes } from "./quota";
 import { registerRunCallbacks, registerRunRoutes } from "./runs";
+import { registerRunnerClaim, registerRunnerRoutes, runnerCredentials } from "./runners";
 import { registerTicketRoutes } from "./tickets";
 import { registerBoardRoutes } from "./board";
 import { registerInFlightRoutes } from "./in-flight";
@@ -68,6 +71,11 @@ export interface AppDeps {
   tracker: WorkTracker;
   /** Agent run records (M1.6a: Claude Code executor). */
   runs: RunStore;
+  /**
+   * Local runners (ADR-0089): `/settings/runners` and `POST /runner/claim`. Off (routes absent)
+   * when not configured.
+   */
+  runners?: RunnerStore;
   /** Subscription quota readings (M1.9). Without it every window reads unknown. */
   quota?: QuotaStore;
   /**
@@ -160,6 +168,7 @@ const DOMAIN_STATUS = {
   invalid_reference: 422,
   not_clearable: 409,
   not_acceptable: 409,
+  runner_limit: 409,
 } as const;
 
 export function createApp(input: AppDeps) {
@@ -258,6 +267,9 @@ export function createApp(input: AppDeps) {
     await builder.wakeGlobalCapWaiters(projectId);
     return (await builder.next(projectId)) ?? (await refiner.next(projectId));
   };
+  const runners = deps.runners
+    ? new RunnerService(deps.runners, deps.tracker, runnerCredentials, now)
+    : null;
   // One TicketService for REST, MCP and webhooks: all get the same ticket rules (packages/domain).
   const service = new TicketService(deps.tracker, runs, dispatchNext);
 
@@ -271,6 +283,9 @@ export function createApp(input: AppDeps) {
       now,
     });
   }
+
+  // Public, outside /api: the local runner presents its runner secret (ADR-0089).
+  if (runners) registerRunnerClaim(app, { runners, now });
 
   // Public, outside /api: the queue calls the email flush with the invoker's OIDC token (AI-77).
   if (email && deps.watchdog) {
@@ -329,6 +344,7 @@ export function createApp(input: AppDeps) {
   registerBoardRoutes(app, new BoardReader(deps.tracker, deps.runs));
 
   registerRunRoutes(app, runs);
+  if (runners) registerRunnerRoutes(app, runners);
   registerInFlightRoutes(app, runs);
   // AI-74: a clear wakes every project, as a settings change wakes one.
   const quotaClearer = new QuotaClearer(deps.quota ?? null, now, async () => {
