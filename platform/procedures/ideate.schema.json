@@ -130,7 +130,8 @@
                 }
               },
               "required": ["label", "consequence"]
-            }
+            },
+            "minItems": 2
           },
           "recommendation": {
             "type": "object",

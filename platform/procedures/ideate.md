@@ -46,4 +46,4 @@ End with the structured output the run asks for (the schema `ideate.schema.json`
 - `epic` and `spec`: filled for `epic`, `null` for `question`.
 - `questions`: exactly one for `question`, empty for `epic`.
 
-A result that doesn't match the schema fails the run and creates nothing.
+The schema can't tie `outcome` to these fields; the control plane's check does (M5.22: Ideate from MCP and the UI). A result that doesn't match either fails the run and creates nothing.
