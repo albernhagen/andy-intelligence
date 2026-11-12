@@ -147,16 +147,34 @@ describe("edit_ticket", () => {
     expect((await ctx.tracker.getTicket("ai", t.id))?.size).toBe("S");
   });
 
-  it("GivenBlockerKeys_WhenEdited_ThenStoredAsIdsAndForeignOnesRefused", async () => {
+  it("GivenBlockerKeysInAnyProject_WhenEdited_ThenStoredAsKeysAndUnknownOnesNotFound", async () => {
     const ctx = await setup();
     const a = await ctx.service.create("ai", { title: "A" }, "andy");
     const b = await ctx.service.create("ai", { title: "B" }, "andy");
     const ops = await ctx.service.create("ops", { title: "O" }, "andy");
-    await ctx.call("edit_ticket", { ticket: a.key, blockedBy: [b.key] });
-    expect((await ctx.tracker.getTicket("ai", a.id))?.blockedBy).toEqual([b.id]);
+    await ctx.call("edit_ticket", { ticket: a.key, blockedBy: [b.key, ops.key] });
+    expect((await ctx.tracker.getTicket("ai", a.id))?.blockedBy).toEqual(["AI-2", "OPS-1"]);
 
+    for (const key of ["OPS-9", "NOPE-1"]) {
+      const res = await ctx.call("edit_ticket", { ticket: a.key, blockedBy: [key] });
+      expect(res).toMatchObject({ isError: true });
+      expect(res.text).toMatch(/not found/);
+    }
+    const patched = await ctx.rest(`/api/projects/ai/tickets/${a.id}`, {
+      method: "PATCH",
+      body: JSON.stringify({ blockedBy: ["OPS-9"] }),
+    });
+    expect(patched.status).toBe(404);
+    expect((await ctx.tracker.getTicket("ai", a.id))?.blockedBy).toEqual(["AI-2", "OPS-1"]);
+  });
+
+  it("GivenACrossProjectCycle_WhenEdited_ThenRefused", async () => {
+    const ctx = await setup();
+    const a = await ctx.service.create("ai", { title: "A" }, "andy");
+    const ops = await ctx.service.create("ops", { title: "O" }, "andy");
+    await ctx.call("edit_ticket", { ticket: ops.key, blockedBy: [a.key] });
     const res = await ctx.call("edit_ticket", { ticket: a.key, blockedBy: [ops.key] });
-    expect(res).toMatchObject({ isError: true, text: "OPS-1 is not in this project" });
+    expect(res).toMatchObject({ isError: true, text: "OPS-1 is already waiting on AI-1" });
   });
 
   it("GivenABlockerCycle_WhenEdited_ThenRefusedOverMcpAndRest", async () => {
