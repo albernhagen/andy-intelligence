@@ -141,6 +141,20 @@ export function configChangeStoreContract(
       });
     }
 
+    it("GivenAKeyDecidedTwice_WhenTheLatestDecisionIsRead_ThenTheNewestDecisionComesBack", async () => {
+      const store = await make();
+      const first = pendingConfigChange({ dedupeKey: "k" });
+      await store.createPending(first, 10);
+      await store.decide(first.id, "rejected", "andy", "2026-11-12T11:00:00.000Z");
+      const second = pendingConfigChange({ dedupeKey: "k" });
+      await store.createPending(second, 10);
+      await store.decide(second.id, "accepted", "andy", "2026-11-12T12:00:00.000Z");
+      await store.createPending(pendingConfigChange({ dedupeKey: "k" }), 10);
+
+      expect(await store.latestDecision("k")).toMatchObject({ id: second.id, status: "accepted" });
+      expect(await store.latestDecision("other")).toBeNull();
+    });
+
     it("GivenADecidedOrUnknownChange_WhenDecided_ThenConflictOrNotFound", async () => {
       const store = await make();
       const change = pendingConfigChange();

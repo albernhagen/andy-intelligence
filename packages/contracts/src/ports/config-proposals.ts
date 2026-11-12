@@ -47,6 +47,11 @@ export interface ConfigChangeStore {
    */
   listPending(projectId?: string): Promise<ConfigChange[]>;
   /**
+   * The most recently decided change (accepted or rejected, by `decidedAt`) with this
+   * `dedupeKey`, or null. Proposals use it so a decided kind comes back only on new evidence.
+   */
+  latestDecision(dedupeKey: string): Promise<ConfigChange | null>;
+  /**
    * Pending → accepted or rejected, recording who and when; `appliedAt` stays null.
    * `conflict` when the change isn't pending, `not_found` when unknown.
    */

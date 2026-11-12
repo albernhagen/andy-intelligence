@@ -40,6 +40,8 @@ export const CONFIG_PROPOSAL_LIMITS = {
   exampleChars: 120,
   /** A project's sweeps are this far apart at least, per instance (max 2 instances). */
   minSweepIntervalMs: 60_000,
+  /** Kinds per sweep whose last decision is looked up (one read each). */
+  maxDecisionLookups: 20,
 } as const;
 
 export type ConfigProposalLimits = { [K in keyof typeof CONFIG_PROPOSAL_LIMITS]: number };
@@ -80,26 +82,51 @@ export function flattenUntrusted(text: string, max: number): string {
 
 /**
  * The pure rule: groups findings by kind over distinct PRs and proposes one change per kind
- * seen on `minPulls`+ PRs, most widespread first, at most `maxNewPerSweep`.
+ * seen on `minPulls`+ PRs, most widespread first, at most `maxNewPerSweep`. `decidedAt` maps a
+ * kind to Andy's last decision on its proposal: only findings recorded after it count, so an
+ * accepted or rejected kind comes back only when it recurs on `minPulls` new PRs.
  */
 export function proposeFromFindings(
   projectId: string,
   findings: readonly ReviewFinding[],
   limits: ConfigProposalLimits = CONFIG_PROPOSAL_LIMITS,
+  decidedAt: ReadonlyMap<string, string> = new Map(),
 ): FindingProposal[] {
+  return [...pullsByKind(projectId, findings, decidedAt).entries()]
+    .filter(([, pulls]) => pulls.size >= limits.minPulls)
+    .sort(([ka, a], [kb, b]) => b.size - a.size || ka.localeCompare(kb))
+    .slice(0, limits.maxNewPerSweep)
+    .map(([kind, pulls]) => proposal(projectId, kind, [...pulls.values()], limits.exampleChars));
+}
+
+/** Kinds seen on `minPulls`+ distinct PRs, ignoring decisions: the ones worth a decision lookup. */
+export function repeatedKinds(
+  projectId: string,
+  findings: readonly ReviewFinding[],
+  minPulls: number,
+): string[] {
+  return [...pullsByKind(projectId, findings, new Map()).entries()]
+    .filter(([, pulls]) => pulls.size >= minPulls)
+    .map(([kind]) => kind)
+    .sort();
+}
+
+function pullsByKind(
+  projectId: string,
+  findings: readonly ReviewFinding[],
+  decidedAt: ReadonlyMap<string, string>,
+): Map<string, Map<string, ReviewFinding>> {
   const byKind = new Map<string, Map<string, ReviewFinding>>();
   for (const f of findings) {
     if (f.projectId !== projectId) continue;
+    const decided = decidedAt.get(f.kind);
+    if (decided !== undefined && Date.parse(f.recordedAt) <= Date.parse(decided)) continue;
     const pulls = byKind.get(f.kind) ?? new Map<string, ReviewFinding>();
     // The first finding seen per PR is its example; callers pass findings newest first.
     if (!pulls.has(pullKey(f))) pulls.set(pullKey(f), f);
     byKind.set(f.kind, pulls);
   }
-  return [...byKind.entries()]
-    .filter(([, pulls]) => pulls.size >= limits.minPulls)
-    .sort(([ka, a], [kb, b]) => b.size - a.size || ka.localeCompare(kb))
-    .slice(0, limits.maxNewPerSweep)
-    .map(([kind, pulls]) => proposal(projectId, kind, [...pulls.values()], limits.exampleChars));
+  return byKind;
 }
 
 function proposal(
@@ -184,7 +211,8 @@ export class ConfigProposals {
       maxFindings: this.limits.maxFindings,
     });
     result.findingsRead = findings.length;
-    for (const p of proposeFromFindings(projectId, findings, this.limits)) {
+    const decidedAt = await this.lastDecisions(projectId, findings);
+    for (const p of proposeFromFindings(projectId, findings, this.limits, decidedAt)) {
       // The store checks duplicates and the pending cap in one transaction.
       const written = await this.changes.createPending(
         ConfigChange.parse({
@@ -208,6 +236,30 @@ export class ConfigProposals {
     }
     log("config proposal sweep", { ...result });
     return result;
+  }
+
+  /**
+   * When Andy last decided each repeated kind's proposal. Kinds past `maxDecisionLookups` (the
+   * last by name) aren't looked up and are left out of this sweep, so a decided
+   * kind is never re-proposed unread.
+   */
+  private async lastDecisions(
+    projectId: string,
+    findings: readonly ReviewFinding[],
+  ): Promise<Map<string, string>> {
+    const decidedAt = new Map<string, string>();
+    const kinds = repeatedKinds(projectId, findings, this.limits.minPulls);
+    for (const kind of kinds.slice(0, this.limits.maxDecisionLookups)) {
+      const last = await this.changes.latestDecision(
+        proposalKey(projectId, PROPOSAL_TARGET_FILE, kind),
+      );
+      if (last?.decidedAt) decidedAt.set(kind, last.decidedAt);
+    }
+    // Unlooked-up kinds: treated as decided now, so none of their findings count this sweep.
+    for (const kind of kinds.slice(this.limits.maxDecisionLookups)) {
+      decidedAt.set(kind, this.now().toISOString());
+    }
+    return decidedAt;
   }
 
   /** Every pending change (of one project when given), newest first. */

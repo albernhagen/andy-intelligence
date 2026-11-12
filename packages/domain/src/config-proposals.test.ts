@@ -106,6 +106,24 @@ describe("proposeFromFindings", () => {
   });
 });
 
+describe("proposeFromFindings after a decision", () => {
+  it("GivenADecisionAfterTheFindings_WhenGrouped_ThenOnlyLaterFindingsCount", () => {
+    const decided = new Map([["missing-test", NOW.toISOString()]]);
+    const after = (n: number) =>
+      finding(n, { recordedAt: new Date(NOW.getTime() + n * 1000).toISOString() });
+
+    expect(
+      proposeFromFindings("ai", [finding(1), finding(2), finding(3)], undefined, decided),
+    ).toEqual([]);
+    expect(proposeFromFindings("ai", [after(3), after(2), finding(1)], undefined, decided)).toEqual(
+      [],
+    );
+    expect(
+      proposeFromFindings("ai", [after(3), after(2), after(1)], undefined, decided),
+    ).toHaveLength(1);
+  });
+});
+
 describe("flattenUntrusted", () => {
   it("GivenAMarkdownLinkAQuoteAndEmphasis_WhenFlattened_ThenOnlyPlainWordsRemain", () => {
     const title =
@@ -198,15 +216,38 @@ describe("ConfigProposals", () => {
     expect(await service.sweep(projectId)).toMatchObject({ throttled: true, findingsRead: 0 });
   });
 
-  it("GivenARejectedProposal_WhenTheKindRepeatsAgain_ThenANewPendingOneIsMade", async () => {
-    const { service, findings, projectId, repeated, advance } = await setup();
-    findings.add(...repeated("missing-test"));
-    await service.sweep(projectId);
-    await service.decide("cc-1", "rejected", "user:uid-1");
-    advance(60_000);
+  for (const decision of ["accepted", "rejected"] as const) {
+    it(`GivenAProposal_${decision}_WhenSweptAgainOnTheSameFindings_ThenNotProposedAgain`, async () => {
+      const { service, findings, changes, projectId, repeated, advance } = await setup();
+      findings.add(...repeated("missing-test"));
+      await service.sweep(projectId);
+      await service.decide("cc-1", decision, "user:uid-1");
+      advance(60_000);
 
-    expect((await service.sweep(projectId)).created).toEqual(["cc-2"]);
-  });
+      const again = await service.sweep(projectId);
+
+      expect(again.created).toEqual([]);
+      expect(await changes.listPending(projectId)).toEqual([]);
+    });
+
+    it(`GivenAProposal_${decision}_WhenTheKindRecursOnThreeNewPulls_ThenProposedAgain`, async () => {
+      const { service, findings, projectId, repeated, advance } = await setup();
+      findings.add(...repeated("missing-test"));
+      await service.sweep(projectId);
+      await service.decide("cc-1", decision, "user:uid-1");
+      advance(60_000);
+      const later = (n: number) =>
+        finding(n, { projectId, recordedAt: new Date(NOW.getTime() + n * 1000).toISOString() });
+      findings.add(later(4), later(5));
+      expect((await service.sweep(projectId)).created).toEqual([]);
+      advance(60_000);
+      findings.add(later(6));
+
+      const again = await service.sweep(projectId);
+
+      expect(again.created).toEqual(["cc-2"]);
+    });
+  }
 
   it("GivenThePendingCapIsReached_WhenSwept_ThenNothingMoreIsWrittenAndTheHeldCountIsReported", async () => {
     const { tracker, findings, changes, projectId, repeated } = await setup();
@@ -226,6 +267,29 @@ describe("ConfigProposals", () => {
     expect(result.created).toHaveLength(1);
     expect(result.heldByCap).toBe(1);
     expect(await changes.listPending(projectId)).toHaveLength(1);
+  });
+
+  it("GivenMoreRepeatedKindsThanDecisionLookups_WhenSwept_ThenTheUnlookedUpKindsWait", async () => {
+    const { tracker, findings, changes, projectId, repeated } = await setup();
+    const service = new ConfigProposals(
+      tracker,
+      findings,
+      changes,
+      () => NOW,
+      () => "cc-1",
+      {
+        ...CONFIG_PROPOSAL_LIMITS,
+        maxDecisionLookups: 1,
+      },
+    );
+    findings.add(...repeated("a-kind"), ...repeated("b-kind"));
+
+    const result = await service.sweep(projectId);
+
+    expect(result.created).toEqual(["cc-1"]);
+    expect((await changes.get("cc-1"))?.dedupeKey).toBe(
+      proposalKey(projectId, "AGENTS.md", "a-kind"),
+    );
   });
 
   it("GivenNoFindingsStoredYet_WhenSwept_ThenNothingIsProposed", async () => {

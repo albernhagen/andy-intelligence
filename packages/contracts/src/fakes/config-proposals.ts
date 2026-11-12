@@ -51,6 +51,14 @@ export class InMemoryConfigChangeStore implements ConfigChangeStore {
       .map((c) => structuredClone(c));
   }
 
+  async latestDecision(dedupeKey: string): Promise<ConfigChange | null> {
+    const decided = [...this.changes.values()].filter(
+      (c) => c.dedupeKey === dedupeKey && c.decidedAt !== null,
+    );
+    const latest = decided.sort((a, b) => (b.decidedAt ?? "").localeCompare(a.decidedAt ?? ""))[0];
+    return latest ? structuredClone(latest) : null;
+  }
+
   async decide(
     id: string,
     decision: ConfigChangeDecision,

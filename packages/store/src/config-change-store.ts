@@ -78,6 +78,14 @@ export class FirestoreConfigChangeStore implements ConfigChangeStore {
     return snap.docs.map((d) => d.data()).sort(newestFirst);
   }
 
+  async latestDecision(dedupeKey: string): Promise<ConfigChange | null> {
+    // One key's history: a change per proposal, each decided once, so small; sorted in memory.
+    const snap = await this.changes().where("dedupeKey", "==", dedupeKey).get();
+    const decided = snap.docs.map((d) => d.data()).filter((c) => c.decidedAt !== null);
+    decided.sort((a, b) => (b.decidedAt ?? "").localeCompare(a.decidedAt ?? ""));
+    return decided[0] ?? null;
+  }
+
   async decide(
     id: string,
     decision: ConfigChangeDecision,
