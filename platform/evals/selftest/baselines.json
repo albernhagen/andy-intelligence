@@ -1,0 +1,5 @@
+{
+  "$comment": "Self-test only: a baseline far below any real request, so selftest-token-jump fails on tokens.",
+  "live": {},
+  "stub": { "selftest-token-jump": 100 }
+}
