@@ -34,7 +34,7 @@ describe("epic panel", () => {
       { title: "Dropped", parentId: epic.id },
       "andy",
     );
-    await tracker.updateTicket("ai", second.id, { rank: "0" }, "andy");
+    await tracker.updateTicket("ai", second.id, { fields: { rank: "0" } }, "andy");
     await tracker.updateTicket(
       "ai",
       first.id,
