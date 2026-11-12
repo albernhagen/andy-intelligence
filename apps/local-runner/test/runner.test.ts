@@ -216,6 +216,8 @@ describe("local-runner start", () => {
           cwd: remote,
           encoding: "utf8",
           stdio: ["ignore", "pipe", "pipe"],
+          // Not the caller's environment: a git hook running the tests sets GIT_DIR.
+          env: { PATH: process.env.PATH, GIT_CONFIG_NOSYSTEM: "1", GIT_CONFIG_GLOBAL: "/dev/null" },
         }).trim();
       } catch {
         return null;
