@@ -51,8 +51,13 @@ fs.appendFileSync(path.join(dir, "argv.log"), JSON.stringify(args) + "\\n");
 const items = fs.existsSync(store) ? JSON.parse(fs.readFileSync(store, "utf8")) : {};
 const key = args[args.indexOf("-s") + 1] + "|" + args[args.indexOf("-a") + 1];
 if (args[0] === "add-generic-password") {
-  items[key] = fs.readFileSync(0, "utf8").split("\\n")[0];
-  fs.writeFileSync(store, JSON.stringify(items));
+  // Async: a synchronous read of a pipe can fail with EAGAIN on Linux.
+  let input = "";
+  process.stdin.on("data", (d) => (input += d));
+  process.stdin.on("end", () => {
+    items[key] = input.split("\\n")[0];
+    fs.writeFileSync(store, JSON.stringify(items));
+  });
 } else if (args[0] === "find-generic-password") {
   if (!(key in items)) process.exit(44);
   process.stdout.write(items[key] + "\\n");
