@@ -57,6 +57,15 @@ const ParentInput = {
   parent: TicketKey.nullable().describe("An epic's key in the same project; null removes it."),
 };
 
+const AcceptAssumptionInput = {
+  ticket: Key,
+  assumptionId: z
+    .string()
+    .min(1)
+    .max(80)
+    .describe("An `id` from the ticket's refineAssumptions: a gap held by a question cap."),
+};
+
 const ReorderInput = {
   ticket: Key,
   above: TicketKey.optional().describe("Place directly above this ticket."),
@@ -201,6 +210,27 @@ export function registerTicketTools(server: McpServer, deps: ToolDeps): void {
       run(async () => ({
         ticket: summary(await service.reparentByKey(ticket, parent, deps.actor)),
       })),
+  );
+
+  server.registerTool(
+    "accept_assumption",
+    {
+      description:
+        "Accepts a held gap (AI-75): one of refine's costly assumptions held back by a question cap, shown in `status` readiness as a held question. The ticket goes on with the assumption as written and moves to Ready when nothing else is missing. The other choice is `promote_assumption`, which asks it.",
+      inputSchema: AcceptAssumptionInput,
+      annotations: { destructiveHint: false, idempotentHint: false },
+    },
+    ({ ticket, assumptionId }) =>
+      run(async () => {
+        const found = await service.findByKey(ticket);
+        const accepted = await service.acceptAssumption(
+          found.projectId,
+          found.id,
+          assumptionId,
+          deps.actor,
+        );
+        return { ticket: summary(accepted) };
+      }),
   );
 
   server.registerTool(
