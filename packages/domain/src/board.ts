@@ -10,6 +10,7 @@ import {
 } from "@andy/contracts";
 
 import { resolveWorker } from "./worker";
+import { epicOf } from "./overrides";
 
 /** Stages whose cards show a pull request; Backlog, Ready and Done ones skip the history read. */
 export const PR_STAGES: readonly Stage[] = ["in_progress", "ready_for_review"];
@@ -72,7 +73,8 @@ export class BoardReader {
               }
             : null,
           pullRequest: prs.get(t.id) ?? null,
-          worker: resolveWorker(t, project),
+          // AI-116: a child without its own pick takes its epic's.
+          worker: resolveWorker(t, project, epicOf(t, tickets)),
         },
       };
     });
