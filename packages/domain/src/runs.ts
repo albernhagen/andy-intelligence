@@ -25,6 +25,7 @@ import {
   type Route,
   type Run,
   type RunExecutor,
+  type RunContextResponse,
   type RunHandle,
   type RunStep,
   type RunStore,
@@ -128,20 +129,8 @@ const countsForDial = (r: Run) => r.step !== "sync";
  */
 export const MAX_REFINE_RUNS_PER_TICKET = 3;
 
-/** What a run gets when it asks for its instructions. */
-export interface RunContext {
-  runId: string;
-  step: RunStep;
-  model: string;
-  maxTurns: number;
-  prompt: string;
-  /** The run's ticket, for the PR title and link (build). Title is untrusted text. */
-  ticket: { projectId: string; key: string; title: string } | null;
-  /** The branch a build or sync run pushes; null for other steps. */
-  branch: string | null;
-  /** A sync run's PR: its number and the head it started from (AI-72); null for other steps. */
-  sync: { pullRequest: number; headSha: string } | null;
-}
+/** What a run gets when it asks for its instructions (`RunContextResponse` on the wire). */
+export type RunContext = RunContextResponse;
 
 /**
  * What the watchdog did with a run at its deadline. `early`: delivered before the deadline,
@@ -151,7 +140,8 @@ export type WatchdogOutcome = "unknown" | "early" | "settled" | "healed" | "retr
 
 /** What a run reports when it ends. Summary and output are untrusted agent text. */
 export interface RunResult {
-  status: "succeeded" | "failed";
+  /** `cancelled`: the local runner stopped after a heartbeat said so (ADR-0089). */
+  status: "succeeded" | "failed" | "cancelled";
   summary: string | null;
   /** The step's structured result, if it has one (refine: RefineOutput). Unchecked JSON. */
   output?: unknown;
@@ -532,8 +522,9 @@ export class RunService {
   ): Promise<"recorded" | "duplicate"> {
     const run = await this.requireCaller(runId, caller);
     if (!ACTIVE_RUN_STATUSES.includes(run.status)) return "duplicate";
+    if (result.status === "cancelled") return this.recordCancelled(run);
     const at = this.now().toISOString();
-    let status = result.status;
+    let status: "succeeded" | "failed" = result.status;
     let summary = result.summary ? result.summary.slice(0, RUN_SUMMARY_MAX) : null;
     let error: string | null = null;
     let asked = 0;
@@ -660,6 +651,27 @@ export class RunService {
     else if (done.step === "plan") await this.flagTicket(done);
     // After the retry, so a retry keeps the project's run slot.
     await this.runEnded(done);
+    return "recorded";
+  }
+
+  /**
+   * A run its executor stopped on its own (the local runner after a cancel): ended `cancelled`,
+   * never retried or flagged. Usually the cancel already ended it and the report is a duplicate.
+   */
+  private async recordCancelled(run: Run): Promise<"recorded" | "duplicate"> {
+    const at = this.now().toISOString();
+    try {
+      await this.runs.update(
+        run.id,
+        { status: "cancelled", startedAt: run.startedAt ?? at, endedAt: at, error: "cancelled" },
+        ACTIVE_RUN_STATUSES,
+      );
+    } catch (err) {
+      if (err instanceof WorkTrackerError && err.code === "conflict") return "duplicate";
+      throw err;
+    }
+    log("WARNING", "run reported cancelled", { runId: run.id });
+    await this.runEnded(run);
     return "recorded";
   }
 

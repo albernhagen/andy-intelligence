@@ -373,6 +373,7 @@ export const NewRun = Run.pick({
   touches: true,
   reservedAdr: true,
   syncRun: true,
+  localRun: true,
 });
 export type NewRun = z.input<typeof NewRun>;
 
@@ -407,6 +408,7 @@ export const RunPatch = Run.pick({
   metrics: true,
   syncRun: true,
   prSync: true,
+  localRun: true,
 }).partial();
 export type RunPatch = z.input<typeof RunPatch>;
 
@@ -687,3 +689,4 @@ export interface Telemetry {
 
 export * from "./digest";
 export * from "./notify-email";
+export * from "./runner";

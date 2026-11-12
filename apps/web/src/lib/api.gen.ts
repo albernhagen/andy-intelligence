@@ -4567,6 +4567,14 @@ export interface paths {
                  */
                 checkedAt: string | null;
               } | null;
+              /** @default null */
+              localRun: {
+                runnerId: string;
+                /** Format: date-time */
+                leaseExpiresAt: string;
+                /** Format: date-time */
+                heartbeatAt: string | null;
+              } | null;
             }[];
           };
         };
@@ -4802,6 +4810,14 @@ export interface paths {
                  * @default null
                  */
                 checkedAt: string | null;
+              } | null;
+              /** @default null */
+              localRun: {
+                runnerId: string;
+                /** Format: date-time */
+                leaseExpiresAt: string;
+                /** Format: date-time */
+                heartbeatAt: string | null;
               } | null;
             };
           };
@@ -5116,6 +5132,14 @@ export interface paths {
                    */
                   checkedAt: string | null;
                 } | null;
+                /** @default null */
+                localRun: {
+                  runnerId: string;
+                  /** Format: date-time */
+                  leaseExpiresAt: string;
+                  /** Format: date-time */
+                  heartbeatAt: string | null;
+                } | null;
               };
               build: {
                 id: string;
@@ -5309,6 +5333,14 @@ export interface paths {
                    * @default null
                    */
                   checkedAt: string | null;
+                } | null;
+                /** @default null */
+                localRun: {
+                  runnerId: string;
+                  /** Format: date-time */
+                  leaseExpiresAt: string;
+                  /** Format: date-time */
+                  heartbeatAt: string | null;
                 } | null;
               } | null;
               buildError: string | null;

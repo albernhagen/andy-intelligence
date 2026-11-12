@@ -3,6 +3,8 @@ import {
   PLAN_REASON_MAX,
   Run,
   RunUsage,
+  RUN_REPORT_MAX_BYTES,
+  RunReportRequest,
   type QuotaDelta,
   type QuotaReading,
   type QuotaStore,
@@ -128,37 +130,8 @@ export const RUN_CONTEXT_PATH = "/runs/:runId/context";
 export const RUN_REPORT_PATH = "/runs/:runId/report";
 /** Verified callbacks per instance per minute (max 2 instances; ADR-0028). */
 export const RUN_CALLBACK_RATE_LIMIT = 60;
-/** Report body cap: a 20,000-character summary plus the step's capped structured output. */
-export const RUN_REPORT_MAX_BYTES = 96 * 1024;
-
+export { RUN_REPORT_MAX_BYTES };
 const RunId = z.string().regex(/^[A-Za-z0-9-]{1,64}$/);
-
-const Report = z.object({
-  status: z.enum(["succeeded", "failed"]),
-  summary: z.string().nullable(),
-  tokensIn: z.number().int().nonnegative().nullable(),
-  tokensOut: z.number().int().nonnegative().nullable(),
-  costUsd: z.number().nonnegative().nullable(),
-  /** The step's structured result (refine: RefineOutput); RunService checks it. */
-  output: z.unknown().optional(),
-  /** Build: the branch and PR the publish job made; RunService checks they are the run's own. */
-  branch: z.string().max(200).nullable().optional(),
-  pullRequest: z.string().max(500).nullable().optional(),
-  /** Build: tooling or dependency files the change touches (flagged on the PR). */
-  toolingFiles: z.array(z.string().max(300)).max(50).optional(),
-  /** Sync: the PR already contained the default branch, so the agent didn't run (AI-72). */
-  alreadyCurrent: z.boolean().optional(),
-  /** Sync: the merge commit the publish job pushed; RunService checks it went to the run's branch. */
-  headSha: z
-    .string()
-    .regex(/^[0-9a-f]{40}$/)
-    .nullable()
-    .optional(),
-  /** The agent's last rate-limit event; parseRateLimits checks it, so a bad one can't lose the report. */
-  rateLimits: z.unknown().optional(),
-  /** Checked by parseUsage, so a bad one leaves the cost unknown instead of losing the report. */
-  usage: z.unknown().optional(),
-});
 
 function log(
   severity: "INFO" | "WARNING" | "ERROR",
@@ -268,7 +241,7 @@ export function registerRunCallbacks(app: OpenAPIHono<AuthEnv>, deps: RunCallbac
       const caller = await authenticate(c.req.header("authorization"));
       if (!caller) return c.json({ error: "unauthenticated" }, 401);
       if (!limiter.tryTake()) return c.json({ error: "rate limited" }, 429);
-      const body = Report.safeParse(await c.req.json().catch(() => null));
+      const body = RunReportRequest.safeParse(await c.req.json().catch(() => null));
       if (!body.success) {
         const details = body.error.issues.map((i) => `${i.path.join(".")}: ${i.message}`);
         return c.json({ error: "invalid request", details }, 400);
