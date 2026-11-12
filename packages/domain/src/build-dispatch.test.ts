@@ -159,6 +159,38 @@ describe("BuildDispatcher", () => {
     expect((await dispatcher.next(projectId))?.ticketId).toBe(blocked.id);
   });
 
+  it("GivenABlockerInAnotherProject_WhenItReachesDone_ThenTheBlockedProjectIsWokenAndTheTicketStarts", async () => {
+    const { dispatcher, tickets } = wire();
+    const ops = await tracker.createProject({ name: "Ops", key: "OPS", repos: [] });
+    const blocker = await tracker.createTicket(ops.id, ready("Ops"), "andy");
+    await tracker.updateTicket(
+      ops.id,
+      blocker.id,
+      { stage: { to: "ready_for_review", forced: true, reason: null } },
+      "andy",
+    );
+    const blocked = await inReady("Blocked", { blockedBy: [blocker.key] });
+
+    expect(await dispatcher.next(projectId)).toBeNull();
+    expect(await builds(blocked.id)).toEqual([]);
+
+    await tickets.followPullRequest(ops.id, blocker.id, "done", "PR merged");
+    const [run] = await builds(blocked.id);
+    expect(run).toMatchObject({ step: "build" });
+  });
+
+  it("GivenOneOfTwoBlockersInOtherProjectsIsDone_WhenWoken_ThenTheTicketStillWaits", async () => {
+    const { tickets } = wire();
+    const ops = await tracker.createProject({ name: "Ops", key: "OPS", repos: [] });
+    const web = await tracker.createProject({ name: "Web", key: "WEB", repos: [] });
+    const first = await tracker.createTicket(ops.id, ready("Ops"), "andy");
+    const second = await tracker.createTicket(web.id, ready("Web"), "andy");
+    const blocked = await inReady("Blocked", { blockedBy: [first.key, second.key] });
+
+    await tickets.move(ops.id, first.id, "done", "andy", { force: true });
+    expect(await builds(blocked.id)).toEqual([]);
+  });
+
   it("GivenARunInFlight_WhenNext_ThenNothingStartsUntilItEnds", async () => {
     const { dispatcher, runs } = wire();
     const a = await inReady("A");
@@ -656,6 +688,37 @@ describe("BuildDispatcher", () => {
         step: "build",
         planRunId: plan.id,
       });
+    });
+
+    it("GivenABlockerInAnotherProjectDoneAfterThePlan_WhenItMerges_ThenThePlanIsReRun", async () => {
+      await tracker.updateProject(projectId, { planApproval: "all" });
+      const { runs, tickets } = wire();
+      const ops = await tracker.createProject({ name: "Ops", key: "OPS", repos: [] });
+      const blocker = await tracker.createTicket(ops.id, ready("Ops"), "andy");
+      await tracker.updateTicket(
+        ops.id,
+        blocker.id,
+        { stage: { to: "done", forced: true, reason: null } },
+        "andy",
+      );
+      const story = await inReady("Story", { blockedBy: [blocker.key] });
+      const plan = await runs.start(projectId, story.id, "plan");
+      await report(runs, plan);
+      await approve(plan.id);
+      await unflag(story.id);
+      await tracker.updateTicket(
+        ops.id,
+        blocker.id,
+        { stage: { to: "ready_for_review", forced: true, reason: null } },
+        "andy",
+      );
+      // AI-96: the blocker's merge wakes this project's dispatcher.
+      await tickets.followPullRequest(ops.id, blocker.id, "done", "PR merged");
+      const [latest] = await runStore.listForTicket(projectId, story.id);
+      expect(latest).toMatchObject({ step: "plan", status: "queued" });
+      expect(latest!.id).not.toBe(plan.id);
+      const notes = (await comments(story.id)).map((e) => e.body);
+      expect(notes).toContain(`Plan re-run: ${blocker.key} merged after the plan.`);
     });
 
     it("GivenBlockerDoneTimesUnreadable_WhenNext_ThenTheTicketWaitsAndOthersStill", async () => {
