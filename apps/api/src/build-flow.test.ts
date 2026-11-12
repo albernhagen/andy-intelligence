@@ -988,5 +988,66 @@ describe("build run flow", () => {
       expect(await f.runsOf(other, queuedElsewhere)).toEqual([]);
       expect(await f.decision(other)).toBe("global_cap");
     });
+
+    // AI-91: a run's end wakes every project, not only builds idle on the global cap.
+    it("GivenARefineWaitsOnTheGlobalCap_WhenARunEndsInAnotherProject_ThenTheRefineTakesTheSlotFirst", async () => {
+      const f = await setup();
+      const waitingProject = await f.project("AI", REPO, { autoBuild: false, autoRefine: true });
+      const other = await f.project("BB", `${REPO}-b`, { runsAtOnce: 4 });
+      const executor = { repo: `${REPO}-b`, ref: CLAUDE_EXECUTOR_REF, externalId: "held-0" };
+      const held = [];
+      for (let i = 0; i < 4; i++) {
+        held.push(
+          await f.t.runs.create({
+            projectId: other,
+            ticketId: `held${i}`,
+            step: "build",
+            route: { harness: "claude-code", provider: "claude-sub", model: "sonnet" },
+            tier: "fast",
+            deadline: null,
+            prompt: "x",
+            maxTurns: 1,
+          }),
+        );
+      }
+      await f.t.runs.update(held[0]!.id, { status: "running", executor }, ["queued"]);
+      const queuedElsewhere = await f.ready(other, "Queued in the other project");
+      const { id: toRefine } = await f.json<{ id: string }>(
+        f.send(`/api/projects/${waitingProject}/tickets`, "POST", {
+          type: "feature",
+          title: "Needs refining",
+          body: "Andy can't see his tickets.",
+          upNext: true,
+        }),
+      );
+      expect(await f.runsOf(waitingProject, toRefine)).toEqual([]);
+
+      // The held run's executor reports it stopped: the run ends in the other project.
+      const claims: ActionsClaims = {
+        repository: executor.repo,
+        workflow_ref: `${executor.repo}/.github/workflows/agent-run.yml@refs/heads/main`,
+        job_workflow_ref: CLAUDE_EXECUTOR_REF,
+        run_id: executor.externalId,
+      };
+      const report = await f.t.call(
+        `/runs/${held[0]!.id}/report`,
+        {
+          method: "POST",
+          body: JSON.stringify({
+            status: "cancelled",
+            summary: null,
+            tokensIn: null,
+            tokensOut: null,
+            costUsd: null,
+          }),
+        },
+        JSON.stringify(claims),
+      );
+      expect(report.status).toBe(200);
+
+      const [refine] = await f.runsOf(waitingProject, toRefine);
+      expect(refine).toMatchObject({ step: "refine", status: "queued" });
+      expect(await f.runsOf(other, queuedElsewhere)).toEqual([]);
+    });
   });
 });
