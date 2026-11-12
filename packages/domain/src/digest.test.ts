@@ -278,6 +278,19 @@ describe("buildDigest", () => {
     ]);
   });
 
+  it("GivenAChildOfAnEpicAssignedToAndy_WhenBuilt_ThenItWaitsOnAndyLikeItsCard", () => {
+    const tickets = [
+      ticket(1, { type: "epic", stage: "backlog", overrides: { assignee: "me" } }),
+      ticket(2, { stage: "ready", parentId: "t1" }),
+    ];
+    const d = buildDigest(WINDOW, data({ tickets }));
+    expect(d.exceptions.map((e) => [e.kind, e.ticketKey, e.reason])).toContainEqual([
+      "waiting_on_andy",
+      "AI-2",
+      "Mine · waiting on you",
+    ]);
+  });
+
   it("GivenTicketsWaitingOnQuestions_WhenBuilt_ThenTheReasonIsTheQuestionLineNotACount", () => {
     const tickets = [ticket(1, { stage: "backlog" }), ticket(2, { stage: "backlog" })];
     const line =

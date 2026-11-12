@@ -37,6 +37,7 @@ import {
 import { MAX_OPEN_QUESTIONS_PER_TICKET, assumptionQuestion } from "./refine-gate";
 import { rankBetween } from "./ranks";
 import { isDispatchable, resolveWorker, workerView } from "./worker";
+import { cascadesFrom, epicOf, withEpicOverrides } from "./overrides";
 import { executorView } from "./executor";
 import { canTransition, isForwardMove, pullRequestPath, type PullRequestTarget } from "./stages";
 
@@ -355,12 +356,17 @@ export class TicketService {
     }
     const merged = { ...current, ...stripUndefined(fields) };
     const dor = checkDor(merged, await this.openQuestionCount(ticketId));
-    return this.tracker.updateTicket(
+    const updated = await this.tracker.updateTicket(
       projectId,
       ticketId,
       { fields: { ...fields, dorStatus: dor.met ? "met" : "not_met" }, ifUpdatedAt },
       actor,
     );
+    // AI-116: an epic's overrides cascade, so an edit may free its Ready children to build.
+    if (current.type === "epic" && fields.overrides !== undefined) {
+      await this.dispatchNext?.(projectId);
+    }
+    return updated;
   }
 
   /**
@@ -433,7 +439,13 @@ export class TicketService {
       this.require(projectId, ticketId),
       this.requireProject(projectId),
     ]);
-    return workerView(ticket, project);
+    return workerView(ticket, project, await this.epicFor(ticket));
+  }
+
+  /** The ticket's epic when its overrides cascade (AI-116); one read when it has a parent. */
+  private async epicFor(ticket: Ticket): Promise<Ticket | null> {
+    if (!ticket.parentId) return null;
+    return cascadesFrom(await this.tracker.getTicket(ticket.projectId, ticket.parentId));
   }
 
   /** The resolved worker of each ticket, by id; reads each project once. */
@@ -442,7 +454,23 @@ export class TicketService {
     const projects = new Map(
       await Promise.all(ids.map(async (id) => [id, await this.requireProject(id)] as const)),
     );
-    return new Map(tickets.map((t) => [t.id, resolveWorker(t, projects.get(t.projectId)!)]));
+    // AI-116: a child takes its epic's pick, so read parents the list doesn't hold (once each).
+    const listed = new Set(tickets.map((t) => t.id));
+    const missing = [
+      ...new Map(
+        tickets
+          .filter((t) => t.parentId && !listed.has(t.parentId))
+          .map((t) => [t.parentId!, t.projectId] as const),
+      ),
+    ];
+    const parents = await Promise.all(missing.map(([id, p]) => this.tracker.getTicket(p, id)));
+    const pool = [...tickets, ...parents.filter((p): p is Ticket => p !== null)];
+    return new Map(
+      tickets.map((t) => [
+        t.id,
+        resolveWorker(withEpicOverrides(t, epicOf(t, pool)), projects.get(t.projectId)!),
+      ]),
+    );
   }
 
   /**
@@ -473,8 +501,9 @@ export class TicketService {
       { fields: { overrides }, ifUpdatedAt: ticket.updatedAt },
       actor,
     );
-    if (isDispatchable(updated, project)) await this.dispatchNext?.(projectId);
-    return workerView(updated, project);
+    const epic = await this.epicFor(updated);
+    if (isDispatchable(updated, project, epic)) await this.dispatchNext?.(projectId);
+    return workerView(updated, project, epic);
   }
 
   /** Where the ticket's runs execute (ADR-0089). */
@@ -928,7 +957,7 @@ export class TicketService {
       readiness: checkDor(ticket, open),
       questions,
       recentEvents: events.slice(-RECENT_EVENTS),
-      worker: resolveWorker(ticket, project),
+      worker: resolveWorker(ticket, project, await this.epicFor(ticket)),
       executor: executorView(ticket, project, await this.runnerPresent(project.id)),
     };
   }
