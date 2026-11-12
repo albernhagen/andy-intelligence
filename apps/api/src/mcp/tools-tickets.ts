@@ -170,7 +170,13 @@ export function registerTicketTools(server: McpServer, deps: ToolDeps): void {
         const edits = blockedBy
           ? { ...fields, blockedBy: await blockerIds(found, blockedBy) }
           : fields;
-        const updated = await service.update(found.projectId, found.id, edits, "andy", ifUpdatedAt);
+        const updated = await service.update(
+          found.projectId,
+          found.id,
+          edits,
+          deps.actor,
+          ifUpdatedAt,
+        );
         return { ticket: summary(updated) };
       }),
   );
@@ -185,7 +191,7 @@ export function registerTicketTools(server: McpServer, deps: ToolDeps): void {
     ({ ticket, body }) =>
       run(async () => {
         const found = await service.findByKey(ticket);
-        return { comment: await service.comment(found.projectId, found.id, body, "andy") };
+        return { comment: await service.comment(found.projectId, found.id, body, deps.actor) };
       }),
   );
 
@@ -198,7 +204,9 @@ export function registerTicketTools(server: McpServer, deps: ToolDeps): void {
       annotations: { destructiveHint: false, idempotentHint: true },
     },
     ({ ticket, parent }) =>
-      run(async () => ({ ticket: summary(await service.reparentByKey(ticket, parent, "andy")) })),
+      run(async () => ({
+        ticket: summary(await service.reparentByKey(ticket, parent, deps.actor)),
+      })),
   );
 
   server.registerTool(
@@ -215,7 +223,7 @@ export function registerTicketTools(server: McpServer, deps: ToolDeps): void {
           throw new DomainError("invalid_reference", "give exactly one of `above` or `below`");
         }
         const anchor = above !== undefined ? { above } : { below: below! };
-        return { ticket: summary(await service.reorderByKey(ticket, anchor, "andy")) };
+        return { ticket: summary(await service.reorderByKey(ticket, anchor, deps.actor)) };
       }),
   );
 }

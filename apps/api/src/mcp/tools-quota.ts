@@ -5,7 +5,7 @@ import type { ToolDeps } from "./tools";
 /** Andy's clear of a quota idle over MCP (AI-74); same rule as POST /api/quota/clear. */
 export function registerQuotaTools(
   server: McpServer,
-  deps: Pick<ToolDeps, "quota" | "email">,
+  deps: Pick<ToolDeps, "quota" | "email" | "actor">,
   run: <T extends object>(fn: () => Promise<T>) => Promise<CallToolResult>,
 ): void {
   const clearer = deps.quota;
@@ -18,6 +18,6 @@ export function registerQuotaTools(
       inputSchema: {},
       annotations: { destructiveHint: false, idempotentHint: false, openWorldHint: false },
     },
-    () => run(() => clearer.clearIdle(deps.email)),
+    () => run(() => clearer.clearIdle({ actor: deps.actor, email: deps.email })),
   );
 }

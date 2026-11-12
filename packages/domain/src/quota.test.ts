@@ -13,6 +13,9 @@ import {
   quotaStatus,
 } from "./quota";
 
+/** The owner as owner-only rules take them (AI-19). */
+const OWNER = { actor: "andy", email: "andy@example.com" };
+
 const now = new Date("2026-11-08T12:00:00.000Z");
 const epoch = (iso: string) => new Date(iso).getTime() / 1000;
 const RESET = "2026-11-08T15:00:00.000Z";
@@ -235,7 +238,7 @@ describe("clear quota idle (AI-74)", () => {
     const store = new InMemoryQuotaStore();
     await store.save([reading({ usedPct: 92 }), reading({ window: "weekly", usedPct: 20 })]);
     const wake = vi.fn(async () => {});
-    const result = await new QuotaClearer(store, () => now, wake).clearIdle("andy@example.com");
+    const result = await new QuotaClearer(store, () => now, wake).clearIdle(OWNER);
     expect(result.cleared).toEqual([
       expect.objectContaining({ window: "5h", usedPct: 92, by: "andy@example.com" }),
     ]);
@@ -243,15 +246,28 @@ describe("clear quota idle (AI-74)", () => {
     expect(quotaStatus("claude-sub", await store.latest("claude-sub"), now).level).toBe("unknown");
   });
 
+  it("GivenAnAgent_WhenClearingAQuotaIdle_ThenForbiddenAndNothingIsDiscarded", async () => {
+    vi.spyOn(console, "log").mockImplementation(() => {});
+    const store = new InMemoryQuotaStore();
+    await store.save([reading({ usedPct: 92 })]);
+    const clearer = new QuotaClearer(store, () => now);
+    await expect(
+      clearer.clearIdle({ actor: "agent:r1", email: "andy@example.com" }),
+    ).rejects.toMatchObject({ code: "forbidden" });
+    expect(quotaStatus("claude-sub", await store.latest("claude-sub"), now).level).not.toBe(
+      "unknown",
+    );
+  });
+
   it("GivenNothingAtTheReserve_WhenCleared_ThenRefusedAndNothingIsWoken", async () => {
     const store = new InMemoryQuotaStore();
     await store.save([reading({ usedPct: 50 })]);
     const wake = vi.fn(async () => {});
     const clearer = new QuotaClearer(store, () => now, wake);
-    await expect(clearer.clearIdle("andy@example.com")).rejects.toMatchObject({
+    await expect(clearer.clearIdle(OWNER)).rejects.toMatchObject({
       code: "not_clearable",
     });
-    await expect(new QuotaClearer(null).clearIdle("a")).rejects.toBeInstanceOf(DomainError);
+    await expect(new QuotaClearer(null).clearIdle(OWNER)).rejects.toBeInstanceOf(DomainError);
     expect(wake).not.toHaveBeenCalled();
   });
 });

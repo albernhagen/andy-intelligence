@@ -3,11 +3,13 @@ import {
   ProjectSettings,
   RepoName,
   type CodeHost,
+  type EventActor,
   type Project,
   type WorkTracker,
 } from "@andy/contracts";
 import { notFound } from "@andy/contracts";
-import { DomainError } from "./tickets";
+import { DomainError } from "./errors";
+import { requireCan } from "./permissions";
 
 function log(severity: "INFO" | "WARNING", message: string, fields: object = {}) {
   console.log(JSON.stringify({ severity, message, component: "projects", ...fields }));
@@ -32,11 +34,17 @@ export class ProjectService {
   ) {}
 
   /**
-   * Changes a project's switches. `buildEnabled` records who (`by`, the signed-in email) and
+   * Changes a project's switches: owner-only (`change_project_settings`, AI-19). `buildEnabled`
+   * records who (`by.email`, the signed-in email) and
    * when; turning it off turns `autoBuild` off too, and `autoBuild` can't be on without it
    * (ADR-0063: no build before the live sandbox proof).
    */
-  async update(projectId: string, settings: ProjectSettings, by: string): Promise<Project> {
+  async update(
+    projectId: string,
+    settings: ProjectSettings,
+    by: { actor: EventActor; email: string },
+  ): Promise<Project> {
+    requireCan(by.actor, "change_project_settings", projectId);
     const patch = ProjectSettings.parse(settings);
     const current = await this.tracker.getProject(projectId);
     if (!current) throw notFound("project", projectId);
@@ -51,13 +59,17 @@ export class ProjectService {
       ...(patch.buildEnabled === undefined
         ? {}
         : {
-            buildEnabledBy: by,
+            buildEnabledBy: by.email,
             buildEnabledAt: this.now().toISOString(),
             ...(patch.buildEnabled ? {} : { autoBuild: false }),
           }),
     });
     if (patch.buildEnabled !== undefined) {
-      log("INFO", "project builds switched", { projectId, buildEnabled: patch.buildEnabled, by });
+      log("INFO", "project builds switched", {
+        projectId,
+        buildEnabled: patch.buildEnabled,
+        by: by.actor,
+      });
     }
     // With builds on, queued sync runs (AI-72) may start too, e.g. once pause is lifted; turning
     // builds off lets the sync dispatcher drop its gate vetoes and say why.

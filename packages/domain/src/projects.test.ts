@@ -23,6 +23,18 @@ describe("ProjectService", () => {
   const rejects = (p: Promise<unknown>, code: string) =>
     expect(p).rejects.toMatchObject({ name: "DomainError", code });
 
+  it.each(["agent:r1", "system"])(
+    "GivenTheActor%s_WhenChangingSettings_ThenForbiddenAndNothingChanges",
+    async (actor) => {
+      await tracker.createProject({ name: "AI", key: "AI" });
+      await rejects(
+        service.update("ai", { paused: true }, { actor, email: "andy@example.com" }),
+        "forbidden",
+      );
+      expect((await tracker.getProject("ai"))?.paused).toBe(false);
+    },
+  );
+
   it("GivenAnInstalledRepo_WhenRegistered_ThenTheProjectStoresTheHostSpelling", async () => {
     const project = await service.register({
       name: "andy-intelligence",

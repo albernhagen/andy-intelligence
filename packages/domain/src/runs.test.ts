@@ -68,6 +68,19 @@ describe("RunService", () => {
     expect(events.at(-1)).toMatchObject({ kind: "comment", actor: "system" });
   });
 
+  it.each(["agent:r1", "system"])(
+    "GivenTheActor%s_WhenRequestingARun_ThenForbiddenAndNothingStarts",
+    async (actor) => {
+      await rejects(service.request(projectId, ticketId, "refine", actor), "forbidden");
+      expect(await runs.listForTicket(projectId, ticketId)).toEqual([]);
+    },
+  );
+
+  it("GivenTheOwner_WhenRequestingARun_ThenItStartsLikeStart", async () => {
+    const run = await service.request(projectId, ticketId, "refine", "user:uid-1");
+    expect(run).toMatchObject({ status: "queued", step: "refine" });
+  });
+
   it("GivenAStepThatIsNotBuiltYet_WhenStarted_ThenInvalidStep", async () => {
     await rejects(service.start(projectId, ticketId, "review"), "invalid_step");
   });

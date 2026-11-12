@@ -17,11 +17,11 @@ import {
 } from "@andy/contracts";
 import type { ProjectService, RunService, TicketService } from "@andy/domain";
 import type { WorkTracker } from "@andy/contracts";
-import type { AuthEnv } from "./auth";
+import { actorOf, signedIn, type AuthEnv } from "./auth";
 import { registerWorkerRoutes } from "./worker";
 import { costOfTicket } from "./ticket-cost";
 
-/** Ticket core REST API (M1.2: Ticket core). Every caller here is Andy (allow-list), so actor = "andy". */
+/** Ticket core REST API (M1.2: Ticket core). Every caller here is Andy (allow-list), so actor = actorOf(c.get("identity")). */
 
 const ErrorBody = z.object({ error: z.string(), details: z.array(z.string()).optional() });
 const ok = <S extends z.ZodType>(schema: S, description: string) => ({
@@ -283,7 +283,7 @@ export function registerTicketRoutes(
       await projects.update(
         c.req.valid("param").projectId,
         c.req.valid("json"),
-        c.get("identity").email,
+        signedIn(c.get("identity")),
       ),
       200,
     ),
@@ -298,7 +298,10 @@ export function registerTicketRoutes(
   app.openapi(routes.createTicket, async (c) => {
     const { projectId } = c.req.valid("param");
     const { upNext, ...input } = c.req.valid("json");
-    return c.json(await service.create(projectId, input, "andy", { upNext }), 201);
+    return c.json(
+      await service.create(projectId, input, actorOf(c.get("identity")), { upNext }),
+      201,
+    );
   });
 
   app.openapi(routes.getTicket, async (c) => {
@@ -316,7 +319,10 @@ export function registerTicketRoutes(
   app.openapi(routes.patchTicket, async (c) => {
     const { projectId, ticketId } = c.req.valid("param");
     const { ifUpdatedAt, ...fields } = c.req.valid("json");
-    return c.json(await service.update(projectId, ticketId, fields, "andy", ifUpdatedAt), 200);
+    return c.json(
+      await service.update(projectId, ticketId, fields, actorOf(c.get("identity")), ifUpdatedAt),
+      200,
+    );
   });
 
   app.openapi(routes.readiness, async (c) => {
@@ -327,34 +333,57 @@ export function registerTicketRoutes(
   app.openapi(routes.moveStage, async (c) => {
     const { projectId, ticketId } = c.req.valid("param");
     const { to, force, reason } = c.req.valid("json");
-    return c.json(await service.move(projectId, ticketId, to, "andy", { force, reason }), 200);
+    return c.json(
+      await service.move(projectId, ticketId, to, actorOf(c.get("identity")), { force, reason }),
+      200,
+    );
   });
 
   app.openapi(routes.setUpNext, async (c) => {
     const { projectId, ticketId } = c.req.valid("param");
-    return c.json(await service.setUpNext(projectId, ticketId, c.req.valid("json"), "andy"), 200);
+    return c.json(
+      await service.setUpNext(projectId, ticketId, c.req.valid("json"), actorOf(c.get("identity"))),
+      200,
+    );
   });
 
   app.openapi(routes.promoteAssumption, async (c) => {
     const { projectId, ticketId, assumptionId } = c.req.valid("param");
-    return c.json(await service.promoteAssumption(projectId, ticketId, assumptionId, "andy"), 201);
+    return c.json(
+      await service.promoteAssumption(
+        projectId,
+        ticketId,
+        assumptionId,
+        actorOf(c.get("identity")),
+      ),
+      201,
+    );
   });
 
   app.openapi(routes.acceptAssumption, async (c) => {
     const { projectId, ticketId, assumptionId } = c.req.valid("param");
-    return c.json(await service.acceptAssumption(projectId, ticketId, assumptionId, "andy"), 200);
+    return c.json(
+      await service.acceptAssumption(projectId, ticketId, assumptionId, actorOf(c.get("identity"))),
+      200,
+    );
   });
 
   app.openapi(routes.cancelTicket, async (c) => {
     const { projectId, ticketId } = c.req.valid("param");
     const { reason } = c.req.valid("json");
-    return c.json(await service.cancel(projectId, ticketId, "andy", reason), 200);
+    return c.json(
+      await service.cancel(projectId, ticketId, actorOf(c.get("identity")), reason),
+      200,
+    );
   });
 
   app.openapi(routes.archiveTicket, async (c) => {
     const { projectId, ticketId } = c.req.valid("param");
     const { archived } = c.req.valid("json");
-    return c.json(await service.archive(projectId, ticketId, archived, "andy"), 200);
+    return c.json(
+      await service.archive(projectId, ticketId, archived, actorOf(c.get("identity"))),
+      200,
+    );
   });
 
   app.openapi(routes.listEvents, async (c) => {
@@ -365,7 +394,12 @@ export function registerTicketRoutes(
   app.openapi(routes.addComment, async (c) => {
     const { projectId, ticketId } = c.req.valid("param");
     return c.json(
-      await service.comment(projectId, ticketId, c.req.valid("json").body, "andy"),
+      await service.comment(
+        projectId,
+        ticketId,
+        c.req.valid("json").body,
+        actorOf(c.get("identity")),
+      ),
       201,
     );
   });
@@ -378,14 +412,25 @@ export function registerTicketRoutes(
 
   app.openapi(routes.askQuestion, async (c) => {
     const { projectId, ticketId } = c.req.valid("param");
-    return c.json(await service.ask(projectId, ticketId, c.req.valid("json"), "andy"), 201);
+    return c.json(
+      await service.ask(projectId, ticketId, c.req.valid("json"), actorOf(c.get("identity"))),
+      201,
+    );
   });
 
   app.openapi(routes.answerQuestion, async (c) => {
     // The channel is set by the route, not the caller, so history can't claim a channel the
     // request didn't use. MCP tools (M1.4) answer with "mcp".
     const { answer } = c.req.valid("json");
-    return c.json(await service.answer(c.req.valid("param").questionId, answer, "ui", "andy"), 200);
+    return c.json(
+      await service.answer(
+        c.req.valid("param").questionId,
+        answer,
+        "ui",
+        actorOf(c.get("identity")),
+      ),
+      200,
+    );
   });
 
   app.openapi(routes.needsYou, async (c) => c.json(await service.needsYou(), 200));

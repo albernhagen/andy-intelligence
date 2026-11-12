@@ -225,11 +225,14 @@ export const TicketEventKind = z.enum([
 ]);
 export type TicketEventKind = z.infer<typeof TicketEventKind>;
 
-/** Who did it: "andy" | "system" | "agent:<runId>". */
-export const EventActor = z.string().regex(/^(andy|system|agent:.+)$/);
+/**
+ * Who did it: "user:<uid>" (a signed-in user, by auth uid, AI-19) | "system" | "agent:<runId>".
+ * "andy" is the owner's actor before AI-19: still valid, read as the owner.
+ */
+export const EventActor = z.string().regex(/^(andy|system|agent:.+|user:.+)$/);
 export type EventActor = z.infer<typeof EventActor>;
 
-/** Append-only ticket history. actor: "andy" | "system" | "agent:<runId>". */
+/** Append-only ticket history; `actor` is an EventActor. */
 export const TicketEvent = z.object({
   id: Id,
   ticketId: Id,

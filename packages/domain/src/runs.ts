@@ -58,7 +58,8 @@ import {
 } from "./plans";
 import { checkDor } from "./dor";
 import { RefineGate } from "./refine-gate";
-import { DomainError } from "./tickets";
+import { DomainError } from "./errors";
+import { requireCan } from "./permissions";
 import { TIER_ROUTES } from "./tiers";
 import { afterFailure, deadlineAction, MAX_RUN_ATTEMPTS } from "./watchdog";
 import { syncPrompt, type SyncTarget } from "./sync-runs";
@@ -202,6 +203,21 @@ export class RunService {
   async list(projectId: string, ticketId: string): Promise<Run[]> {
     await this.requireTicket(projectId, ticketId);
     return this.runs.listForTicket(projectId, ticketId);
+  }
+
+  /**
+   * A run the owner asks for (UI, API, MCP): owner-only (`start_run`, AI-19), then `start`. The
+   * dispatchers, the watchdog's retry and an approved plan call `start` directly: those are the
+   * rules starting runs, not a request.
+   */
+  async request(
+    projectId: string,
+    ticketId: string,
+    step: string,
+    actor: EventActor,
+  ): Promise<Run> {
+    requireCan(actor, "start_run", projectId);
+    return this.start(projectId, ticketId, step);
   }
 
   /**
@@ -698,8 +714,8 @@ export class RunService {
   }
 
   /**
-   * Andy's decision on a plan run (ADR-0050). Owner-only: any actor but `andy` (the signed-in,
-   * allow-listed user through the API or MCP) is refused. Only the ticket's latest plan run, once
+   * Andy's decision on a plan run (ADR-0050). Owner-only (`decide_plan`, AI-19): agents and the
+   * system are refused. Only the ticket's latest plan run, once
    * succeeded and undecided, can be decided; a stale plan can be rejected but not approved.
    * Approving clears the flag and starts the build with the plan in its prompt; if the build
    * can't start now (a run in flight, builds off), the approval stands and the build starts
@@ -713,10 +729,7 @@ export class RunService {
     input: { decision: "approved" | "rejected"; reason?: string | null },
     decider: { actor: EventActor; email: string },
   ): Promise<{ run: Run; build: Run | null; buildError: string | null }> {
-    if (decider.actor !== "andy") {
-      log("WARNING", "plan decision refused: not the owner", { runId, actor: decider.actor });
-      throw new DomainError("forbidden", "only Andy approves or rejects a plan");
-    }
+    requireCan(decider.actor, "decide_plan", projectId);
     const reason = input.reason?.trim() || null;
     if (input.decision === "rejected" && !reason) {
       throw new DomainError("plan_not_decidable", "a rejection needs a reason", [
@@ -781,7 +794,7 @@ export class RunService {
         projectId,
         ticketId,
         { fields: { needsAttention: true } },
-        "andy",
+        decider.actor,
       );
     }
     await this.tracker.addComment(
@@ -790,7 +803,7 @@ export class RunService {
       approved
         ? `Plan approved (${run.id})${reason ? `: ${reason}` : "."}`
         : `Plan rejected (${run.id}): ${reason}`,
-      "andy",
+      decider.actor,
     );
     if (!approved) return { run: decided, build: null, buildError: null };
     try {

@@ -31,7 +31,7 @@ export function registerNotifyTools(server: McpServer, deps: ToolDeps, run: Run)
         const updated = await deps.projects.update(
           project.toLowerCase(),
           { emailNotifications: enabled },
-          deps.email,
+          { actor: deps.actor, email: deps.email },
         );
         return {
           project: updated.key,

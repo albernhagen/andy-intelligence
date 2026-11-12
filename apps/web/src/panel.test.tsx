@@ -222,6 +222,22 @@ describe("activity timeline", () => {
     expect(link.getAttribute("target")).toBe("_blank");
     expect(within(activity).getByText("(example.com)")).toBeTruthy();
   });
+
+  it("GivenHistoryByTheOldAndyActorAndAUserUid_WhenShown_ThenBothShowTheOwnerLabel", async () => {
+    const { open, service, ticket } = await seeded();
+    await service.comment("ai", ticket.id, "new style", "user:uid-1");
+    await service.comment("ai", ticket.id, "from an agent", "agent:run-1");
+    const panel = await open();
+    const activity = await within(panel).findByRole("region", { name: "Activity" });
+    await within(activity).findByText("new style");
+    const items = within(activity)
+      .getAllByRole("listitem")
+      .map((i) => i.textContent ?? "");
+    expect(items.find((t) => /created the ticket/.test(t))).toMatch(/^Andy /);
+    expect(items.find((t) => /new style/.test(t))).toMatch(/^Andy /);
+    expect(items.find((t) => /from an agent/.test(t))).toMatch(/^agent:run-1 /);
+    expect(items.join("|")).not.toMatch(/user:uid-1/);
+  });
 });
 
 describe("untrusted markdown in the panel", () => {

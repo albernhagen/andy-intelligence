@@ -1,4 +1,4 @@
-import { Project, TicketKey, Worker, WorkerChoice } from "@andy/contracts";
+import { Project, TicketKey, Worker, WorkerChoice, type EventActor } from "@andy/contracts";
 import type { ProjectService, TicketService } from "@andy/domain";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
@@ -10,6 +10,7 @@ interface WorkerToolDeps {
   service: TicketService;
   projects: ProjectService;
   email: string;
+  actor: EventActor;
 }
 
 type Run = <T extends object>(fn: () => Promise<T>) => Promise<CallToolResult>;
@@ -46,7 +47,7 @@ export function registerWorkerTools(server: McpServer, deps: WorkerToolDeps, run
         const found = await deps.service.findByKey(ticket);
         return {
           ticket: found.key,
-          ...(await deps.service.setWorker(found.projectId, found.id, worker, "andy")),
+          ...(await deps.service.setWorker(found.projectId, found.id, worker, deps.actor)),
         };
       }),
   );
@@ -64,7 +65,7 @@ export function registerWorkerTools(server: McpServer, deps: WorkerToolDeps, run
         const updated = await deps.projects.update(
           project.toLowerCase(),
           { defaultWorker: worker },
-          deps.email,
+          { actor: deps.actor, email: deps.email },
         );
         return { project: updated.key, defaultWorker: updated.defaultWorker };
       }),
