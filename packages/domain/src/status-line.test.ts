@@ -27,6 +27,22 @@ const base: StatusInput = {
 const line = (s: Partial<StatusInput>) => statusLine({ ...base, ...s }, NOW);
 
 describe("statusLine", () => {
+  it("GivenAHeldGap_WhenComputed_ThenItWaitsOnAHeldQuestionAndSaysWhichCap", () => {
+    expect(
+      line({ needsAttention: true, held: { count: 1, cap: "the project's daily question cap" } }),
+    ).toEqual({
+      text: "Waiting for you: 1 held question (reached the project's daily question cap); asked when the cap allows, or promote or accept it",
+      tone: "attention",
+    });
+  });
+
+  it("GivenAHeldGapAndAnOpenQuestion_WhenComputed_ThenTheOpenQuestionComesFirst", () => {
+    const held = { count: 2, cap: "the limit of questions per ticket" };
+    expect(line({ openQuestions: 1, needsAttention: true, held }).text).toBe(
+      "Waiting for you: 1 question",
+    );
+  });
+
   it("GivenASyncThatStopped_WhenTheTicketWaitsForAndy_ThenTheLineSaysWhyAndWhere", () => {
     expect(
       line({ needsAttention: true, syncStopped: "sync with main stopped on a conflict in a.ts" }),

@@ -16,6 +16,9 @@ import { RunService, type RunResult } from "./runs";
 import { WorkflowExecutor, buildOutput } from "./test-executor";
 import { TicketService } from "./tickets";
 
+/** The owner as owner-only rules take them (AI-19). */
+const OWNER = { actor: "andy", email: "andy@example.com" };
+
 const REPO = {
   fullName: "albernhagen/andy-intelligence",
   defaultBranch: "main",
@@ -362,7 +365,7 @@ describe("BuildDispatcher", () => {
     await tracker.updateProject(projectId, { paused: true });
     const { projects } = wire();
     const t = await inReady("A");
-    await projects.update(projectId, { paused: false }, "andy@example.com");
+    await projects.update(projectId, { paused: false }, OWNER);
     expect(await builds(t.id)).toHaveLength(1);
     expect(await decision()).toBe("started");
   });
@@ -374,7 +377,7 @@ describe("BuildDispatcher", () => {
     const b = await inReady("B");
     await dispatcher.next(projectId);
     expect(await builds(b.id)).toEqual([]);
-    await projects.update(projectId, { runsAtOnce: 2 }, "andy@example.com");
+    await projects.update(projectId, { runsAtOnce: 2 }, OWNER);
     expect(await builds(b.id)).toHaveLength(1);
   });
 
@@ -516,16 +519,14 @@ describe("BuildDispatcher", () => {
   it("GivenBuildsNotEnabled_WhenAndyTurnsAutoBuildOn_ThenItIsRefused", async () => {
     await tracker.updateProject(projectId, { autoBuild: false, buildEnabled: false });
     const { projects } = wire();
-    await expect(
-      projects.update(projectId, { autoBuild: true }, "andy@example.com"),
-    ).rejects.toMatchObject({
+    await expect(projects.update(projectId, { autoBuild: true }, OWNER)).rejects.toMatchObject({
       code: "not_buildable",
     });
   });
 
   it("GivenBuildsOn_WhenAndyTurnsThemOff_ThenWhoAndWhenAreRecordedAndAutoBuildGoesOffToo", async () => {
     const { projects } = wire();
-    const off = await projects.update(projectId, { buildEnabled: false }, "andy@example.com");
+    const off = await projects.update(projectId, { buildEnabled: false }, OWNER);
     expect(off).toMatchObject({
       buildEnabled: false,
       autoBuild: false,
@@ -544,7 +545,7 @@ describe("BuildDispatcher", () => {
     await tracker.updateProject(projectId, { autoBuild: false });
     const { projects } = wire();
     const t = await inReady("Board");
-    await projects.update(projectId, { autoBuild: true }, "andy@example.com");
+    await projects.update(projectId, { autoBuild: true }, OWNER);
     expect(await builds(t.id)).toHaveLength(1);
   });
 });

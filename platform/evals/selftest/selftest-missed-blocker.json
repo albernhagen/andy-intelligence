@@ -1,0 +1,8 @@
+{
+  "id": "selftest-missed-blocker",
+  "agent": "adversarial-review",
+  "source": "Self-test: a reviewer that misses the PR #22 bug must fail the check",
+  "inputs": { "diff": "inputs/pr-22-off-by-one.diff" },
+  "expect": [{ "check": "finding", "severity": ["blocker"], "file": "paging.ts" }],
+  "stubOutput": { "summary": "Looks fine.", "findings": [] }
+}

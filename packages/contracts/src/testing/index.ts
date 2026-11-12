@@ -21,6 +21,8 @@ import {
   type CodeEventLog,
   type CodeHost,
   type CodeHostConnectionStore,
+  EvalCaseResult,
+  type Evaluator,
   type Executor,
   type OAuthGrantStore,
   type QuotaStore,
@@ -679,6 +681,11 @@ export function quotaStoreContract(
   });
 }
 
+export interface OAuthGrantStoreContractOptions {
+  /** Timeout (ms) for the case that races three takes; see `RunStoreContractOptions` (AI-71). */
+  raceTimeoutMs?: number;
+}
+
 /**
  * `make` gets the clock the store must use, so the suite can test expiry without waiting.
  * Keys are random per test, so the suite can run against a shared store.
@@ -686,7 +693,11 @@ export function quotaStoreContract(
 export function oauthGrantStoreContract(
   name: string,
   make: (now: () => Date) => Promise<OAuthGrantStore>,
+  options: OAuthGrantStoreContractOptions = {},
 ): void {
+  /** A case that races takes of one grant: gets the adapter's race timeout. */
+  const itRaces = (title: string, fn: () => Promise<void>) => it(title, fn, options.raceTimeoutMs);
+
   describe(`OAuthGrantStore contract: ${name}`, () => {
     const start = new Date("2026-11-02T12:00:00Z");
     const key = () => crypto.randomUUID();
@@ -721,7 +732,7 @@ export function oauthGrantStoreContract(
       expect(await store.get(k)).toBeNull();
     });
 
-    it("GivenConcurrentTakes_WhenRacing_ThenExactlyOneWins", async () => {
+    itRaces("GivenConcurrentTakes_WhenRacing_ThenExactlyOneWins", async () => {
       const store = await make(() => start);
       const k = key();
       await store.put(k, grant());
@@ -1170,6 +1181,47 @@ export function watchdogQueueContract(name: string, make: () => Promise<Watchdog
 
     it("GivenAnInvalidRunId_WhenScheduled_ThenRejected", async () => {
       await expect((await make()).schedule({ runId: "a/b", at })).rejects.toThrow();
+    });
+  });
+}
+
+/**
+ * Evaluator contract (M1.17: Agent evals v1). `make` gets cases to script: `pass` runs and
+ * passes, `fail` runs with one failed check, `error` gives no usable output.
+ */
+export function evaluatorContract(
+  name: string,
+  make: (script: Record<string, "pass" | "fail" | "error">) => Promise<Evaluator>,
+): void {
+  describe(`Evaluator contract: ${name}`, () => {
+    it("returns one valid result per case, in request order", async () => {
+      const evaluator = await make({ b: "fail", a: "pass", c: "error" });
+      const run = await evaluator.runSuite("suite", { caseIds: ["b", "a", "c"], maxCases: 5 });
+      expect(run.suite).toBe("suite");
+      expect(run.cases.map((r) => EvalCaseResult.parse(r).caseId)).toEqual(["b", "a", "c"]);
+    });
+
+    it("passes only a case that ran with no failures", async () => {
+      const evaluator = await make({ a: "pass", b: "fail", c: "error" });
+      const run = await evaluator.runSuite("suite", { caseIds: ["a", "b", "c"], maxCases: 5 });
+      const [a, b, c] = run.cases;
+      expect(a).toMatchObject({ status: "ran", passed: true, failures: [] });
+      expect(b).toMatchObject({ status: "ran", passed: false });
+      expect(b!.failures.length).toBeGreaterThan(0);
+      expect(c).toMatchObject({ status: "error", passed: false });
+    });
+
+    it("refuses more cases than the cap before running any", async () => {
+      const evaluator = await make({ a: "pass", b: "pass" });
+      await expect(
+        evaluator.runSuite("suite", { caseIds: ["a", "b"], maxCases: 1 }),
+      ).rejects.toMatchObject({ name: "EvalCapError" });
+    });
+
+    it("runs nothing for no cases", async () => {
+      const evaluator = await make({});
+      const run = await evaluator.runSuite("suite", { caseIds: [], maxCases: 1 });
+      expect(run.cases).toEqual([]);
     });
   });
 }

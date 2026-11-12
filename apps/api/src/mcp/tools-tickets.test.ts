@@ -190,11 +190,15 @@ describe("edit_ticket", () => {
 });
 
 describe("comment_ticket", () => {
-  it("GivenABody_WhenCommented_ThenItIsInHistoryAsAndy", async () => {
+  it("GivenABody_WhenCommented_ThenItIsInHistoryAsTheSignedInUser", async () => {
     const ctx = await setup();
     const a = await ctx.service.create("ai", { title: "A" }, "andy");
     const res = await ctx.call("comment_ticket", { ticket: a.key, body: "Looks right" });
-    expect(res.data.comment).toMatchObject({ kind: "comment", actor: "andy", body: "Looks right" });
+    expect(res.data.comment).toMatchObject({
+      kind: "comment",
+      actor: "user:andy",
+      body: "Looks right",
+    });
   });
 
   it("GivenAnUnknownProject_WhenCommented_ThenRefused", async () => {

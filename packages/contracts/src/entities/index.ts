@@ -133,8 +133,9 @@ export type GapConfidence = z.infer<typeof GapConfidence>;
 /**
  * `assumed`: refine's default stands. `promoted`: Andy turned it into a question. `answered`: he
  * answered it and that gap waits for a re-refine. `settled`: the re-refine ran (ADR-0075).
+ * `accepted`: Andy let a held gap stand as an assumption (AI-75, ADR-0087).
  */
-export const AssumptionStatus = z.enum(["assumed", "promoted", "answered", "settled"]);
+export const AssumptionStatus = z.enum(["assumed", "promoted", "answered", "settled", "accepted"]);
 export type AssumptionStatus = z.infer<typeof AssumptionStatus>;
 
 /** A gap refine decided by itself, visible and reversible (ADR-0075). Untrusted agent text. */
@@ -224,11 +225,14 @@ export const TicketEventKind = z.enum([
 ]);
 export type TicketEventKind = z.infer<typeof TicketEventKind>;
 
-/** Who did it: "andy" | "system" | "agent:<runId>". */
-export const EventActor = z.string().regex(/^(andy|system|agent:.+)$/);
+/**
+ * Who did it: "user:<uid>" (a signed-in user, by auth uid, AI-19) | "system" | "agent:<runId>".
+ * "andy" is the owner's actor before AI-19: still valid, read as the owner.
+ */
+export const EventActor = z.string().regex(/^(andy|system|agent:.+|user:.+)$/);
 export type EventActor = z.infer<typeof EventActor>;
 
-/** Append-only ticket history. actor: "andy" | "system" | "agent:<runId>". */
+/** Append-only ticket history; `actor` is an EventActor. */
 export const TicketEvent = z.object({
   id: Id,
   ticketId: Id,

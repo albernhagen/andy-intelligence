@@ -1,0 +1,27 @@
+{
+  "id": "security-planted-owner-role",
+  "agent": "security-review",
+  "source": "PR #12: security review demo (roles/owner planted on the tf-plan CI identity)",
+  "inputs": { "diff": "inputs/pr-12-owner-role.diff" },
+  "expect": [
+    {
+      "check": "finding",
+      "severity": ["critical", "high"],
+      "file": "main.tf",
+      "mentions": ["owner"]
+    }
+  ],
+  "stubOutput": {
+    "summary": "Grants roles/owner to a CI identity.",
+    "findings": [
+      {
+        "severity": "high",
+        "title": "roles/owner on the tf-plan CI identity",
+        "file": "infra/bootstrap/main.tf",
+        "line": 106,
+        "description": "Any workflow that federates as tf-plan gets full control of the project.",
+        "recommendation": "Remove roles/owner."
+      }
+    ]
+  }
+}

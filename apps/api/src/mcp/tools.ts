@@ -9,6 +9,7 @@ import {
   Stage,
   TicketKey,
   WorkTrackerError,
+  type EventActor,
   type Ticket,
   type WorkTracker,
 } from "@andy/contracts";
@@ -38,7 +39,7 @@ import { registerQuotaTools } from "./tools-quota";
  * MCP core tools (M1.4: MCP core tools; `refine` from M1.7: Refinement; `build` and
  * `set_auto_build` from M1.8a: Build run; `approve_plan`, `reject_plan` and `set_plan_approval`
  * from M1.8a: Plan approval). Thin adapters over
- * TicketService and RunService, the same rules the REST API and UI use. Every caller is Andy (allow-list), so actor = "andy", and answers are
+ * TicketService and RunService, the same rules the REST API and UI use. Every caller passed the allow-list and acts as `deps.actor` (`user:<uid>`, AI-19); owner-only rules decide through `can`. Answers are
  * recorded with answeredVia = "mcp".
  */
 
@@ -55,6 +56,8 @@ export interface ToolDeps {
   quota?: QuotaClearer;
   /** Signed-in email, shown by `status` so it doubles as the connection check. */
   email: string;
+  /** The signed-in user as an actor, `user:<uid>` (AI-19): every write is recorded as this. */
+  actor: EventActor;
 }
 
 const ProjectKey = z
@@ -184,7 +187,7 @@ export function registerTools(server: McpServer, deps: ToolDeps): void {
       found.id,
       state.run.id,
       { decision, reason },
-      { actor: "andy", email: deps.email },
+      { actor: deps.actor, email: deps.email },
     );
     return {
       plan: { id: result.run.id, decision: result.run.planDecision },
@@ -209,7 +212,7 @@ export function registerTools(server: McpServer, deps: ToolDeps): void {
     },
     ({ project, upNext, ...input }) =>
       run(async () => {
-        const ticket = await service.create(project.toLowerCase(), input, "andy", { upNext });
+        const ticket = await service.create(project.toLowerCase(), input, deps.actor, { upNext });
         const readiness = await service.readiness(ticket.projectId, ticket.id);
         return { ticket: summary(ticket), readiness };
       }),
@@ -225,7 +228,7 @@ export function registerTools(server: McpServer, deps: ToolDeps): void {
     },
     ({ ticket, assumptionId }) =>
       run(async () => ({
-        question: await service.promoteAssumptionByKey(ticket, assumptionId, "andy"),
+        question: await service.promoteAssumptionByKey(ticket, assumptionId, deps.actor),
       })),
   );
 
@@ -249,7 +252,7 @@ export function registerTools(server: McpServer, deps: ToolDeps): void {
     },
     ({ questionId, answer }) =>
       run(async () => {
-        const question = await service.answer(questionId, answer, "mcp", "andy");
+        const question = await service.answer(questionId, answer, "mcp", deps.actor);
         const ticket = await tracker.getTicket(question.projectId, question.ticketId);
         return { question, ticket: ticket && summary(ticket) };
       }),
@@ -266,7 +269,7 @@ export function registerTools(server: McpServer, deps: ToolDeps): void {
     ({ ticket }) =>
       run(async () => {
         const found = await service.findByKey(ticket);
-        const started = await deps.runs.start(found.projectId, found.id, "refine");
+        const started = await deps.runs.request(found.projectId, found.id, "refine", deps.actor);
         return {
           run: {
             id: started.id,
@@ -291,7 +294,7 @@ export function registerTools(server: McpServer, deps: ToolDeps): void {
     ({ ticket }) =>
       run(async () => {
         const found = await service.findByKey(ticket);
-        const started = await deps.runs.start(found.projectId, found.id, "build");
+        const started = await deps.runs.request(found.projectId, found.id, "build", deps.actor);
         return {
           run: {
             id: started.id,
@@ -318,7 +321,7 @@ export function registerTools(server: McpServer, deps: ToolDeps): void {
         const updated = await deps.projects.update(
           project.toLowerCase(),
           { autoBuild: enabled },
-          deps.email,
+          { actor: deps.actor, email: deps.email },
         );
         return { project: updated.key, autoBuild: updated.autoBuild };
       }),
@@ -359,7 +362,7 @@ export function registerTools(server: McpServer, deps: ToolDeps): void {
         const updated = await deps.projects.update(
           project.toLowerCase(),
           { planApproval: policy },
-          deps.email,
+          { actor: deps.actor, email: deps.email },
         );
         return { project: updated.key, planApproval: updated.planApproval };
       }),
@@ -378,7 +381,7 @@ export function registerTools(server: McpServer, deps: ToolDeps): void {
         const updated = await deps.projects.update(
           project.toLowerCase(),
           { autoMerge: policy },
-          deps.email,
+          { actor: deps.actor, email: deps.email },
         );
         return { project: updated.key, autoMerge: updated.autoMerge };
       }),
@@ -395,7 +398,12 @@ export function registerTools(server: McpServer, deps: ToolDeps): void {
     ({ ticket, reason }) =>
       run(async () => {
         const found = await service.findByKey(ticket);
-        const cancelled = await service.cancel(found.projectId, found.id, "andy", reason ?? null);
+        const cancelled = await service.cancel(
+          found.projectId,
+          found.id,
+          deps.actor,
+          reason ?? null,
+        );
         return { ticket: summary(cancelled) };
       }),
   );
@@ -412,7 +420,7 @@ export function registerTools(server: McpServer, deps: ToolDeps): void {
       run(async () => {
         const found = await service.findByKey(ticket);
         return {
-          ticket: summary(await service.archive(found.projectId, found.id, archived, "andy")),
+          ticket: summary(await service.archive(found.projectId, found.id, archived, deps.actor)),
         };
       }),
   );
@@ -430,7 +438,7 @@ export function registerTools(server: McpServer, deps: ToolDeps): void {
         const updated = await deps.projects.update(
           project.toLowerCase(),
           { autoRefine: enabled },
-          deps.email,
+          { actor: deps.actor, email: deps.email },
         );
         return { project: updated.key, autoRefine: updated.autoRefine };
       }),
@@ -445,7 +453,7 @@ export function registerTools(server: McpServer, deps: ToolDeps): void {
       annotations: { destructiveHint: false, idempotentHint: false },
     },
     ({ ticket, to }) =>
-      run(async () => ({ ticket: summary(await service.moveForward(ticket, to, "andy")) })),
+      run(async () => ({ ticket: summary(await service.moveForward(ticket, to, deps.actor)) })),
   );
 
   server.registerTool(

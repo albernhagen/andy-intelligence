@@ -31,6 +31,7 @@ import {
 } from "@/lib/board";
 import { useBoard, useBoardMove, useQuickAdd, useRankTicket, useSetUpNext } from "@/lib/queries";
 import { STAGES, dropMove, groupByStage, visibleTickets } from "@/lib/tickets";
+import { showsError } from "@/lib/live";
 
 /**
  * Board v2 (AI-28; ADR-0059 row "Board"): one swim lane per stage, cards with status markers,
@@ -63,7 +64,7 @@ export function BoardPage() {
 
       <InFlightPanel projectId={projectId} />
       {board.isPending && <Loading />}
-      {board.isError && <QueryError error={board.error} />}
+      {showsError(board) && <QueryError error={board.error} />}
       {board.data && (
         <Lanes
           tickets={visibleTickets(board.data, showArchived)}

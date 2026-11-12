@@ -1,0 +1,125 @@
+name: Agent evals
+
+# Agent evals (AI-6: M1.17: Agent evals v1, ADR-0040, ADR-0086; runbook agent-evals.md). On a PR
+# that changes agent configuration (procedures, AGENTS.md, .claude/, eval cases), `agent-evals`
+# runs every case once through Claude Code with live model calls and fails below a 90% pass rate
+# or on a +20% input-token jump; otherwise it passes without running, so it can be a required
+# check. `agent-evals-plumbing` runs the same runner against a stub model (no credential) when
+# the runner itself changes, and proves the check goes red on the self-test cases.
+#
+# Model source: the subscription token by default; the repo variable AGENT_EVALS_SOURCE or the
+# dispatch input switches to `api-key` (secret AGENT_EVALS_ANTHROPIC_API_KEY, which Andy creates;
+# inert until then). Caps: 10 cases, 15 turns and $1 per case (scripts/evals/config.mjs); the
+# subscription path stops at the quota reserve. Never `pull_request_target`: forks get no secret.
+
+on:
+  pull_request:
+  workflow_dispatch:
+    inputs:
+      source:
+        description: Model source (default = the AGENT_EVALS_SOURCE variable, else subscription)
+        type: choice
+        options: [default, subscription, api-key]
+        default: default
+      cases:
+        description: Case ids, comma-separated (empty = all)
+        type: string
+        default: ""
+      procedure-override:
+        description: "agent=path, e.g. adversarial-review=platform/evals/fixtures/adversarial-review.weakened.md"
+        type: string
+        default: ""
+
+permissions: {}
+
+concurrency:
+  group: agent-evals-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  agent-evals:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    permissions:
+      contents: read
+    steps:
+      # The change under test (the PR merge commit, or the dispatched ref): its procedures,
+      # AGENTS.md and cases are read as data by the runner, never executed.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          path: data
+          fetch-depth: 2
+          persist-credentials: false
+
+      # This job holds the model credential, so the runner comes from the base commit, not the PR
+      # (.github/AGENTS.md). A dispatch runs the dispatched ref, chosen by Andy.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          path: base
+          ref: ${{ github.event.pull_request.base.sha || github.sha }}
+          persist-credentials: false
+
+      - name: Choose the model source
+        id: source
+        env:
+          INPUT: ${{ inputs.source }}
+          VARIABLE: ${{ vars.AGENT_EVALS_SOURCE }}
+        run: |
+          source=subscription
+          if [ -n "$INPUT" ] && [ "$INPUT" != default ]; then source=$INPUT
+          elif [ -n "$VARIABLE" ]; then source=$VARIABLE; fi
+          # Never the stub model here: its scripted answers pass every case, so a green check would
+          # mean nothing. The stub runs only in agent-evals-plumbing.
+          case "$source" in subscription|api-key) ;; *)
+            echo "::error title=agent-evals::the source must be subscription or api-key (AGENT_EVALS_SOURCE or the dispatch input)"; exit 1;;
+          esac
+          echo "source=$source" >> "$GITHUB_OUTPUT"
+          if [ -f base/platform/actions/agent-evals/action.yml ]; then runner=true; else
+            runner=false
+            echo "Agent evals: the runner isn't on the base commit yet (the PR that adds it); see agent-evals-plumbing." | tee -a "$GITHUB_STEP_SUMMARY"
+          fi
+          echo "runner=$runner" >> "$GITHUB_OUTPUT"
+
+      - name: Agent evals
+        if: steps.source.outputs.runner == 'true'
+        uses: ./base/platform/actions/agent-evals
+        with:
+          source: ${{ steps.source.outputs.source }}
+          data-path: data
+          base-ref: ${{ github.event_name == 'pull_request' && 'HEAD^1' || '' }}
+          fork: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository }}
+          cases: ${{ inputs.cases }}
+          procedure-override: ${{ inputs.procedure-override }}
+          node-version-file: base/.nvmrc
+          # Only the selected source's credential reaches the runner.
+          claude-code-oauth-token: ${{ steps.source.outputs.source == 'subscription' && secrets.CLAUDE_CODE_OAUTH_TOKEN || '' }}
+          anthropic-api-key: ${{ steps.source.outputs.source == 'api-key' && secrets.AGENT_EVALS_ANTHROPIC_API_KEY || '' }}
+
+  # The PR's own runner against the stub model: no secret, read-only token, deterministic.
+  agent-evals-plumbing:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 2
+          persist-credentials: false
+
+      - name: Suite passes on the stub model
+        uses: ./platform/actions/agent-evals
+        with:
+          source: stub
+          base-ref: HEAD^1
+          machinery: "true"
+
+      - name: Self-test cases make the check go red
+        uses: ./platform/actions/agent-evals
+        with:
+          source: stub
+          base-ref: HEAD^1
+          machinery: "true"
+          cases-dir: platform/evals/selftest
+          expect: fail

@@ -6,6 +6,7 @@ import {
   type WorkTracker,
 } from "@andy/contracts";
 import { checkDor } from "./dor";
+import { RefineGate } from "./refine-gate";
 import { MAX_REFINE_RUNS_PER_TICKET, type RunService } from "./runs";
 import { DomainError } from "./tickets";
 
@@ -23,6 +24,11 @@ function log(severity: "INFO" | "WARNING" | "ERROR", message: string, fields: ob
  * Needs-you, isn't an epic, and any of: it entered Up next since its last refine; Andy answered a
  * promoted assumption; or its last refine succeeded and the Definition of Ready is still unmet
  * after his answers. A failed refine is never retried here: it flags Needs-you and Andy decides.
+ *
+ * `askHeld` asks held gaps (AI-75, ADR-0087) as far as the question caps allow; the API calls it
+ * on every dispatch event. There is no timer, so a gap held by the daily cap is asked at the
+ * first dispatch event after the window. Asking costs no run, so it doesn't wait for auto-refine,
+ * a free run slot or the executor; a paused project asks nothing.
  */
 export class RefineDispatcher {
   constructor(
@@ -48,10 +54,7 @@ export class RefineDispatcher {
     if (!project?.autoRefine || project.paused) return null;
     if (await this.busy(projectId)) return null;
 
-    const upNext = (await this.tracker.listTickets(projectId, { stage: "backlog" }))
-      .filter((t) => t.upNextRank !== null)
-      .sort((a, b) => compareRanks(a.upNextRank!, b.upNextRank!));
-    for (const ticket of upNext) {
+    for (const ticket of await this.upNext(projectId)) {
       // Backlog only, so Done and cancelled tickets never qualify; nor do hidden ones or epics.
       if (ticket.archived || ticket.type === "epic" || ticket.needsAttention) continue;
       if (!(await this.waiting(ticket))) continue;
@@ -73,6 +76,57 @@ export class RefineDispatcher {
       }
     }
     return null;
+  }
+
+  /**
+   * Asks held gaps in Up-next order, each ticket against the caps as they stand after the last;
+   * returns how many it asked. Never throws.
+   */
+  async askHeld(projectId: string): Promise<number> {
+    // One at a time per project in this instance, so two events can't both spend the same
+    // daily slots on different tickets. Across instances a small overshoot remains (ADR-0087).
+    const prev = this.heldQueue.get(projectId) ?? Promise.resolve(0);
+    const next = prev.then(() => this.askHeldNow(projectId));
+    this.heldQueue.set(projectId, next);
+    try {
+      return await next;
+    } finally {
+      if (this.heldQueue.get(projectId) === next) this.heldQueue.delete(projectId);
+    }
+  }
+
+  private readonly heldQueue = new Map<string, Promise<number>>();
+
+  private async askHeldNow(projectId: string): Promise<number> {
+    try {
+      const project = await this.tracker.getProject(projectId);
+      if (!project || project.paused) return 0;
+      return await this.askHeldIn(projectId);
+    } catch (err) {
+      log("ERROR", "held gaps not asked", { projectId, error: String(err) });
+      return 0;
+    }
+  }
+
+  private async askHeldIn(projectId: string): Promise<number> {
+    const gate = new RefineGate(this.tracker, this.now);
+    let asked = 0;
+    for (const ticket of await this.upNext(projectId)) {
+      if (ticket.archived || ticket.type === "epic") continue;
+      try {
+        asked += await gate.askHeld(ticket);
+      } catch (err) {
+        // A conflict means the ticket changed meanwhile; the next dispatch event tries again.
+        log("WARNING", "held gaps not asked", { ticket: ticket.key, error: String(err) });
+      }
+    }
+    return asked;
+  }
+
+  private async upNext(projectId: string): Promise<Ticket[]> {
+    return (await this.tracker.listTickets(projectId, { stage: "backlog" }))
+      .filter((t) => t.upNextRank !== null)
+      .sort((a, b) => compareRanks(a.upNextRank!, b.upNextRank!));
   }
 
   /** A run in flight that is still within its deadline (as RunService counts them). */

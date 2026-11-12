@@ -7,6 +7,7 @@ import { EmailNotificationsControl } from "@/components/EmailControls";
 import { Loading, QueryError } from "@/components/Status";
 import { DefaultWorkerSelect } from "@/components/WorkerControls";
 import { useProjects, useUpdateProject } from "@/lib/queries";
+import { showsError } from "@/lib/live";
 
 /**
  * One project's settings (AI-46), linked from the workspace header. Every switch saves on change
@@ -17,7 +18,8 @@ export function ProjectSettingsPage() {
   const { projectId } = useParams({ strict: false });
   const projects = useProjects();
   if (projects.isPending) return <Loading />;
-  if (projects.isError) return <QueryError error={projects.error} />;
+  if (projects.data === undefined || showsError(projects))
+    return <QueryError error={projects.error} />;
   const project = projects.data.find((p) => p.id === projectId);
   if (!project) return <p className="text-muted-foreground">Project not found.</p>;
 

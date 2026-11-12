@@ -12,14 +12,19 @@ import type {
   WorkerChoice,
 } from "@andy/contracts";
 import { unwrap, useApi } from "./api";
+import { useLivePoll } from "./live";
 import { withoutQuestion, type NeedsYou } from "./needs-you";
 
-/** Query hooks over the generated API client. One user, small data: every write refetches all. */
+/**
+ * Query hooks over the generated API client. One user, small data: every write refetches all.
+ * Views stay current by tuned polling (`useLivePoll`, AI-9); the digest and GitHub refetch on focus.
+ */
 
-/** Subscription quota for the header gauge and banner; refetched on focus, no polling. */
+/** Subscription quota for the header gauge and banner; polled slowly (60 s). */
 export function useQuota() {
   const api = useApi();
   return useQuery({
+    ...useLivePoll("slow"),
     queryKey: ["quota"],
     queryFn: async () => unwrap(await api.GET("/api/quota")),
   });
@@ -42,30 +47,32 @@ export function useDigest(projectId: string, hours: number) {
 export function useProjects() {
   const api = useApi();
   return useQuery({
+    ...useLivePoll("slow"),
     queryKey: ["projects"],
     queryFn: async () => unwrap(await api.GET("/api/projects")),
   });
 }
 
 /**
- * The board's tickets with their card status (AI-28: Board v2). Refetches every few seconds
- * while a card has a run in flight, like the runs list, so the elapsed time and the run's end
- * show up; otherwise only when something is written.
+ * The board's tickets with their card status (AI-28: Board v2). Polled; a card with a run in
+ * flight keeps it at 5 s even while Andy is idle, so the elapsed time and the run's end show up.
  */
 export function useBoard(projectId: string) {
   const api = useApi();
   return useQuery({
+    ...useLivePoll<{ summary: { run: Pick<Run, "status"> | null } }[]>("live", (tickets) =>
+      tickets.some((t) => t.summary.run && isActiveRun(t.summary.run)),
+    ),
     queryKey: ["board", projectId],
     queryFn: async () =>
       unwrap(await api.GET("/api/projects/{projectId}/board", { params: { path: { projectId } } })),
-    refetchInterval: (q) =>
-      runsRefetchInterval(q.state.data?.flatMap((t) => (t.summary.run ? [t.summary.run] : []))),
   });
 }
 
 export function useTickets(projectId: string) {
   const api = useApi();
   return useQuery({
+    ...useLivePoll("slow"),
     queryKey: ["tickets", projectId],
     queryFn: async () =>
       unwrap(
@@ -82,6 +89,7 @@ export const ticketQueryKey = (projectId: string, ref: string) => ["ticket", pro
 export function useTicketByRef(projectId: string, ref: string) {
   const api = useApi();
   return useQuery({
+    ...useLivePoll("live"),
     queryKey: ticketQueryKey(projectId, ref),
     queryFn: async () =>
       isTicketKey(ref)
@@ -99,6 +107,7 @@ export const isTicketKey = (ref: string) => /^[A-Z][A-Z0-9]{0,9}-\d+$/.test(ref)
 export function useReadiness(path: TicketPath) {
   const api = useApi();
   return useQuery({
+    ...useLivePoll("live"),
     queryKey: ["readiness", path],
     queryFn: async () =>
       unwrap(
@@ -112,6 +121,7 @@ export function useReadiness(path: TicketPath) {
 export function useEvents(path: TicketPath) {
   const api = useApi();
   return useQuery({
+    ...useLivePoll("live"),
     queryKey: ["events", path],
     queryFn: async () =>
       unwrap(
@@ -123,6 +133,7 @@ export function useEvents(path: TicketPath) {
 export function useTicketQuestions(path: TicketPath) {
   const api = useApi();
   return useQuery({
+    ...useLivePoll("live"),
     queryKey: ["questions", path],
     queryFn: async () =>
       unwrap(
@@ -136,6 +147,7 @@ export function useTicketQuestions(path: TicketPath) {
 export function useWorker(path: TicketPath) {
   const api = useApi();
   return useQuery({
+    ...useLivePoll("slow"),
     queryKey: ["worker", path],
     queryFn: async () =>
       unwrap(
@@ -156,16 +168,11 @@ export function useSetWorker(path: TicketPath) {
   );
 }
 
-/** How often the runs list refetches while a run is queued or running. */
-export const RUN_POLL_MS = 5_000;
-
 export const isActiveRun = (run: Pick<Run, "status">) =>
   run.status === "queued" || run.status === "running";
 
-/** Poll only while a run is in flight; stop once every run has finished (no websockets). */
-export function runsRefetchInterval(runs: readonly Pick<Run, "status">[] | undefined) {
-  return runs?.some(isActiveRun) ? RUN_POLL_MS : false;
-}
+/** For `useLivePoll`: a list with a run queued or running keeps polling at 5 s. */
+export const hasActiveRun = (runs: readonly Pick<Run, "status">[]) => runs.some(isActiveRun);
 
 /**
  * The ticket's agent runs, newest first. When a run it saw in flight finishes, everything is
@@ -175,12 +182,12 @@ export function useRuns(path: TicketPath) {
   const api = useApi();
   const queryClient = useQueryClient();
   const query = useQuery({
+    ...useLivePoll("live", hasActiveRun),
     queryKey: ["runs", path],
     queryFn: async () =>
       unwrap(
         await api.GET("/api/projects/{projectId}/tickets/{ticketId}/runs", { params: { path } }),
       ),
-    refetchInterval: (q) => runsRefetchInterval(q.state.data),
   });
 
   const active = useRef<Set<string>>(new Set());
@@ -197,6 +204,7 @@ export function useRuns(path: TicketPath) {
 export function useNeedsYou() {
   const api = useApi();
   return useQuery({
+    ...useLivePoll("live"),
     queryKey: ["needs-you"],
     queryFn: async () => unwrap(await api.GET("/api/needs-you")),
   });
@@ -389,6 +397,19 @@ export function usePromoteAssumption(path: TicketPath) {
     unwrap(
       await api.POST(
         "/api/projects/{projectId}/tickets/{ticketId}/assumptions/{assumptionId}/promote",
+        { params: { path: { ...path, assumptionId } } },
+      ),
+    ),
+  );
+}
+
+/** Andy lets a held gap stand as an assumption (AI-75); the ticket is re-checked for Ready. */
+export function useAcceptAssumption(path: TicketPath) {
+  const api = useApi();
+  return useWrite(async (assumptionId: string) =>
+    unwrap(
+      await api.POST(
+        "/api/projects/{projectId}/tickets/{ticketId}/assumptions/{assumptionId}/accept",
         { params: { path: { ...path, assumptionId } } },
       ),
     ),

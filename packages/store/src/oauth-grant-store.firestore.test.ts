@@ -10,6 +10,8 @@ if (process.env.FIRESTORE_EMULATOR_HOST) {
   oauthGrantStoreContract(
     "firestore (emulator)",
     async (now) => new FirestoreOAuthGrantStore(db, now),
+    // Three transactions take one grant: the emulator's lock wait plus client backoff (AI-71).
+    { raceTimeoutMs: 30_000 },
   );
 } else {
   describe("OAuthGrantStore contract: firestore", () => {

@@ -1,4 +1,5 @@
 import {
+  Assumption,
   InMemoryCodeHost,
   InMemoryRunStore,
   InMemoryWorkTracker,
@@ -11,6 +12,9 @@ import { RefineDispatcher } from "./refine-dispatch";
 import { MAX_REFINE_RUNS_PER_TICKET, RunService } from "./runs";
 import { WorkflowExecutor } from "./test-executor";
 import { TicketService } from "./tickets";
+
+/** The owner as owner-only rules take them (AI-19). */
+const OWNER = { actor: "andy", email: "andy@example.com" };
 
 const REPO = {
   fullName: "albernhagen/andy-intelligence",
@@ -260,7 +264,7 @@ describe("RefineDispatcher", () => {
 
   it("GivenCancelledAndArchivedTickets_WhenAutoRefineTurnsOn_ThenNeitherIsRefined", async () => {
     const { tickets, projects } = wire();
-    await projects.update(projectId, { autoRefine: false }, "andy@example.com");
+    await projects.update(projectId, { autoRefine: false }, OWNER);
     const cancelled = await tickets.create(projectId, { type: "feature", title: "One" }, "andy", {
       upNext: true,
     });
@@ -271,20 +275,20 @@ describe("RefineDispatcher", () => {
     // Archived while in Backlog (e.g. reopened after archiving): still hidden, still skipped.
     await tracker.updateTicket(projectId, archived.id, { fields: { archived: true } }, "andy");
 
-    await projects.update(projectId, { autoRefine: true }, "andy@example.com");
+    await projects.update(projectId, { autoRefine: true }, OWNER);
     expect(await refines(cancelled.id)).toEqual([]);
     expect(await refines(archived.id)).toEqual([]);
   });
 
   it("GivenAutoRefineOff_WhenATicketEntersUpNext_ThenNoRunStartsUntilItIsTurnedOn", async () => {
     const { tickets, projects } = wire();
-    await projects.update(projectId, { autoRefine: false }, "andy@example.com");
+    await projects.update(projectId, { autoRefine: false }, OWNER);
     const ticket = await tickets.create(projectId, { type: "feature", title: "Board" }, "andy", {
       upNext: true,
     });
     expect(await refines(ticket.id)).toEqual([]);
 
-    await projects.update(projectId, { autoRefine: true }, "andy@example.com");
+    await projects.update(projectId, { autoRefine: true }, OWNER);
     expect(await refines(ticket.id)).toHaveLength(1);
   });
 
@@ -320,5 +324,68 @@ describe("RefineDispatcher", () => {
       throw new Error("firestore down");
     };
     await expect(dispatcher.next(projectId)).resolves.toBeNull();
+  });
+  describe("askHeld (AI-75)", () => {
+    async function heldTicket() {
+      const t = await tracker.createTicket(projectId, { title: "Board" }, "andy");
+      const run = `run-${t.key}`;
+      await tracker.updateTicket(
+        projectId,
+        t.id,
+        {
+          fields: {
+            upNextRank: "0000000001",
+            refineAssumptions: [
+              Assumption.parse({
+                id: `${run}-a1`,
+                text: "assume",
+                question: "Which?",
+                cost: "scope",
+                confidence: "unsure",
+                demotedBy: "daily_cap",
+                runId: run,
+                createdAt: now().toISOString(),
+              }),
+            ],
+          },
+        },
+        "system",
+      );
+      return t;
+    }
+
+    it("GivenAHeldGapAndAutoRefineOff_WhenAskHeldRuns_ThenItIsAskedWithoutARun", async () => {
+      const { dispatcher } = wire(null);
+      const t = await heldTicket();
+      await tracker.updateProject(projectId, { autoRefine: false });
+      expect(await dispatcher.askHeld(projectId)).toBe(1);
+      expect(await tracker.listQuestions({ ticketId: t.id, status: "open" })).toHaveLength(1);
+      expect(await refines(t.id)).toEqual([]);
+    });
+
+    it("GivenTwoHeldTicketsAndOneDailySlot_WhenTwoEventsAskAtOnce_ThenOnlyOneQuestionIsAsked", async () => {
+      const { dispatcher } = wire();
+      await tracker.updateProject(projectId, { dailyQuestionCap: 1 });
+      const a = await heldTicket();
+      const b = await heldTicket();
+      // A slow ask: the other event reads the daily room before the first question exists.
+      const ask = tracker.askQuestions.bind(tracker);
+      vi.spyOn(tracker, "askQuestions").mockImplementation(async (...args) => {
+        await new Promise((r) => setTimeout(r, 10));
+        return ask(...args);
+      });
+      await Promise.all([dispatcher.askHeld(projectId), dispatcher.askHeld(projectId)]);
+      const open = await tracker.listQuestions({ projectId, status: "open" });
+      expect(open).toHaveLength(1);
+      expect([a.id, b.id]).toContain(open[0]!.ticketId);
+    });
+
+    it("GivenAPausedProject_WhenAskHeldRuns_ThenNothingIsAsked", async () => {
+      const { dispatcher } = wire();
+      const t = await heldTicket();
+      await tracker.updateProject(projectId, { paused: true });
+      expect(await dispatcher.askHeld(projectId)).toBe(0);
+      expect(await tracker.listQuestions({ ticketId: t.id })).toEqual([]);
+    });
   });
 });

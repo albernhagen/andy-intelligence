@@ -89,7 +89,7 @@ No secret is ever in the repo. Existing sign-in is reused where a person acts (m
 
 ### Security
 
-New entry points: `POST /runner/claim`, `POST /runs/{id}/heartbeat`, and the per-run token as a second identity on `context`, `report` and `/github/token`. New trust boundary: the laptop is now an executor host. Risk row `R-AI-44` in the threat model (open, mitigations planned); detail in `agents-and-executors.md`.
+New entry points: `POST /runner/claim`, `POST /runs/{id}/heartbeat`, and the per-run token as a second identity on `context`, `report` and `/github/token`. New trust boundary: the laptop is now an executor host. Risk row `R-AI-44` in the threat model (open, mitigations planned); entry points listed in `agents-and-executors.md`.
 
 | Attacker has                   | Gains                                                                                                                                                                                              | Bounded by                                                                                                                       |
 | ------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------- |
@@ -110,7 +110,7 @@ New entry points: `POST /runner/claim`, `POST /runs/{id}/heartbeat`, and the per
 | 6. Local build and publish           | Build and sync steps; `claimPushGrant` for local runs; publish from the platform checkout with the push token.                                                                                                                                    | M    | 4, 5       | high   | A `local` build opens an `agent/<KEY>/<runId>` PR as the App bot, and a second push-token request for that run is refused.                                                                          |
 | 7. Runbook and live proof            | Runbook (dedicated user, login, start and stop, revoke), README, features, one ticket end to end, the sleep case tried once.                                                                                                                      | S    | 6          | low    | He follows the runbook on a fresh `ai-runner` user and a ticket goes Ready → PR locally.                                                                                                            |
 
-Slices 2 and 3 can run in parallel; then 4 and 5 (5 builds against the contracts from 3 and a fake server).
+New owner-only actions (setting the executor, minting and revoking runners) go through the one permission function (`packages/domain/src/permissions.ts`, AI-19: One permission function). Slices 2 and 3 can run in parallel; then 4 and 5 (5 builds against the contracts from 3 and a fake server).
 
 ### Consequences
 

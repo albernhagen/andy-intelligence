@@ -3,7 +3,7 @@ import { Link, useBlocker, useNavigate, useParams } from "@tanstack/react-router
 import { useQueryClient } from "@tanstack/react-query";
 import { X } from "lucide-react";
 import { Size, TicketType, TierKey, type Ticket } from "@andy/contracts";
-import { TIER_FOR_SIZE, ticketStatusLine } from "@andy/domain";
+import { TIER_FOR_SIZE, isHeld, ticketStatusLine } from "@andy/domain";
 import { Activity } from "@/components/Activity";
 import { AskQuestionForm } from "@/components/AskQuestionForm";
 import { CancelArchiveControls } from "@/components/CancelArchiveControls";
@@ -28,6 +28,7 @@ import { Select } from "@/components/ui/input";
 import {
   ticketQueryKey,
   useEvents,
+  useAcceptAssumption,
   usePromoteAssumption,
   useReadiness,
   useRuns,
@@ -37,6 +38,7 @@ import {
   useTickets,
 } from "@/lib/queries";
 import { STAGE_LABELS, TYPE_LABELS } from "@/lib/tickets";
+import { showsError } from "@/lib/live";
 
 /**
  * The story panel (ADR-0059: UX foundation, row "Story panel"): the ticket over the board,
@@ -101,7 +103,7 @@ export function TicketPage() {
       </div>
       <div className="px-4 py-4 sm:px-6">
         {ticket.isPending && <Loading />}
-        {ticket.isError && <QueryError error={ticket.error} />}
+        {showsError(ticket) && <QueryError error={ticket.error} />}
         {loaded && (
           // Keyed by ticket: another ticket starts with fresh editors, never this one's drafts.
           <UnsavedDrafts.Provider value={drafts}>
@@ -187,6 +189,7 @@ function Story({ ticket: t }: { ticket: Ticket }) {
         required
         value={t.title}
         onSave={(v, done) => title.save({ title: v }, done)}
+        onEdit={title.begin}
         pending={title.pending}
         error={title.error}
         wrap={(button) => (
@@ -201,6 +204,7 @@ function Story({ ticket: t }: { ticket: Ticket }) {
             label="Description"
             value={t.body}
             onSave={(v, done) => body.save({ body: v }, done)}
+            onEdit={body.begin}
             pending={body.pending}
             error={body.error}
           />
@@ -282,6 +286,7 @@ function Rail({ ticket: t }: { ticket: Ticket }) {
           placeholder="Why this size?"
           value={t.sizeReason ?? ""}
           onSave={(v, done) => sizeReason.save({ sizeReason: v || null }, done)}
+          onEdit={sizeReason.begin}
           pending={sizeReason.pending}
           error={sizeReason.error}
           className="text-xs"
@@ -416,7 +421,7 @@ function Readiness(path: TicketPath) {
   const dor = useReadiness(path);
   return (
     <section aria-label="Definition of Ready" className="space-y-1 text-xs">
-      {dor.isError && <QueryError error={dor.error} />}
+      {showsError(dor) && <QueryError error={dor.error} />}
       {dor.data?.met && <p className="text-muted-foreground">Definition of Ready: met.</p>}
       {dor.data && !dor.data.met && (
         <>
@@ -442,7 +447,7 @@ function Questions(path: TicketPath) {
     <section aria-label="Questions" className="space-y-2">
       <h3 className="text-sm font-medium">Questions</h3>
       {questions.isPending && <Loading />}
-      {questions.isError && <QueryError error={questions.error} />}
+      {showsError(questions) && <QueryError error={questions.error} />}
       {sorted.map((q) => (
         <QuestionCard key={q.id} question={q} />
       ))}
@@ -451,15 +456,20 @@ function Questions(path: TicketPath) {
   );
 }
 
-/** What refine decided without asking (ADR-0075): one click makes any of them a question. */
+/**
+ * What refine decided without asking (ADR-0075): one click makes any of them a question. A held
+ * gap (AI-75) keeps the ticket out of Ready until it is asked or accepted.
+ */
 function Assumptions({ ticket }: { ticket: Ticket }) {
   const promote = usePromoteAssumption(pathOf(ticket));
+  const accept = useAcceptAssumption(pathOf(ticket));
   const canPromote = ticket.stage === "backlog" || ticket.stage === "ready";
   if (ticket.refineAssumptions.length === 0) return null;
   return (
     <section aria-label="Assumptions" className="space-y-2">
       <h3 className="text-sm font-medium">Assumptions</h3>
       {promote.error && <QueryError error={promote.error} />}
+      {accept.error && <QueryError error={accept.error} />}
       <ul className="space-y-2">
         {ticket.refineAssumptions.map((a) => (
           <li key={a.id} className="space-y-1 rounded-md border border-border p-3 text-sm">
@@ -467,6 +477,7 @@ function Assumptions({ ticket }: { ticket: Ticket }) {
             <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
               <span>{a.question}</span>
               {a.demotedBy && <Badge variant="attention">Over the question cap</Badge>}
+              {isHeld(a) && <Badge variant="attention">Holds the ticket</Badge>}
               {a.status !== "assumed" && <Badge>{a.status}</Badge>}
               {a.status === "assumed" && canPromote && (
                 <Button
@@ -476,6 +487,16 @@ function Assumptions({ ticket }: { ticket: Ticket }) {
                   onClick={() => promote.mutate(a.id)}
                 >
                   Ask me instead
+                </Button>
+              )}
+              {isHeld(a) && ticket.stage === "backlog" && (
+                <Button
+                  size="sm"
+                  variant="outline"
+                  disabled={accept.isPending}
+                  onClick={() => accept.mutate(a.id)}
+                >
+                  Accept as an assumption
                 </Button>
               )}
             </div>
@@ -490,7 +511,7 @@ function Timeline(path: TicketPath) {
   const events = useEvents(path);
   const runs = useRuns(path);
   if (events.isPending || runs.isPending) return <Loading />;
-  if (events.isError) return <QueryError error={events.error} />;
-  if (runs.isError) return <QueryError error={runs.error} />;
+  if (events.data === undefined || showsError(events)) return <QueryError error={events.error} />;
+  if (runs.data === undefined || showsError(runs)) return <QueryError error={runs.error} />;
   return <Activity {...path} events={events.data} runs={runs.data} />;
 }
