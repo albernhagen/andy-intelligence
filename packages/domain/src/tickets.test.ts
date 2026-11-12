@@ -44,6 +44,19 @@ describe("TicketService", () => {
     expect(workers.get(own.id)).toBe("agent");
   });
 
+  it("GivenAnEpicAssignedToAndy_WhenItsOverridesAreEdited_ThenTheDispatcherIsWoken", async () => {
+    const dispatchNext = vi.fn(async () => null);
+    service = new TicketService(tracker, null, dispatchNext);
+    const epic = await service.create(projectId, { title: "Boards", type: "epic" }, "andy");
+    const story = await service.create(projectId, readyStory, "andy");
+    await service.update(projectId, epic.id, { overrides: {} }, "andy");
+    expect(dispatchNext).toHaveBeenCalledWith(projectId);
+    dispatchNext.mockClear();
+    await service.update(projectId, story.id, { overrides: {} }, "andy");
+    await service.update(projectId, epic.id, { title: "Boards v2" }, "andy");
+    expect(dispatchNext).not.toHaveBeenCalled();
+  });
+
   it("GivenACompleteStory_WhenCreated_ThenDorMet", async () => {
     expect((await service.create(projectId, readyStory, "andy")).dorStatus).toBe("met");
     expect((await service.create(projectId, { type: "chore", title: "x" }, "andy")).dorStatus).toBe(

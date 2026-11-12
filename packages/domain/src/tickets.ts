@@ -362,12 +362,17 @@ export class TicketService {
     }
     const merged = { ...current, ...stripUndefined(fields) };
     const dor = checkDor(merged, await this.openQuestionCount(ticketId));
-    return this.tracker.updateTicket(
+    const updated = await this.tracker.updateTicket(
       projectId,
       ticketId,
       { fields: { ...fields, dorStatus: dor.met ? "met" : "not_met" }, ifUpdatedAt },
       actor,
     );
+    // AI-116: an epic's overrides cascade, so an edit may free its Ready children to build.
+    if (current.type === "epic" && fields.overrides !== undefined) {
+      await this.dispatchNext?.(projectId);
+    }
+    return updated;
   }
 
   /**
