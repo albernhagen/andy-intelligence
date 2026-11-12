@@ -123,6 +123,40 @@ describe("run routes", () => {
   });
 });
 
+describe("run detail route (AI-101)", () => {
+  beforeEach(() => {
+    vi.spyOn(console, "log").mockImplementation(() => {});
+  });
+
+  it("GivenARunInTheProject_WhenAndyGetsIt_ThenTheRunIsReturned", async () => {
+    const { start, call, project } = await setup();
+    const run = (await (await start()).json()) as { id: string };
+    const res = await call(`/api/projects/${project.id}/runs/${run.id}`);
+    expect(res.status).toBe(200);
+    expect(((await res.json()) as { id: string; step: string }).step).toBe("refine");
+  });
+
+  it("GivenARunInAnotherProject_WhenAndyGetsItUnderThisProject_Then404", async () => {
+    const { start, call, tracker } = await setup();
+    const run = (await (await start()).json()) as { id: string };
+    const other = await tracker.createProject({ name: "Ops", key: "OPS", repos: [] });
+    const res = await call(`/api/projects/${other.id}/runs/${run.id}`);
+    expect(res.status).toBe(404);
+    expect(JSON.stringify(await res.json())).not.toContain("refine");
+  });
+
+  it("GivenAnUnknownRunId_WhenAndyGetsIt_Then404", async () => {
+    const { call, project } = await setup();
+    expect((await call(`/api/projects/${project.id}/runs/no-such-run`)).status).toBe(404);
+  });
+
+  it("GivenNoAndyToken_WhenARunIsRead_Then401", async () => {
+    const { start, call, project } = await setup();
+    const run = (await (await start()).json()) as { id: string };
+    expect((await call(`/api/projects/${project.id}/runs/${run.id}`, {}, null)).status).toBe(401);
+  });
+});
+
 describe("run callbacks", () => {
   beforeEach(() => {
     vi.spyOn(console, "log").mockImplementation(() => {});
