@@ -1,6 +1,7 @@
 import { spawn } from "node:child_process";
 import {
   chmodSync,
+  existsSync,
   mkdirSync,
   mkdtempSync,
   readFileSync,
@@ -18,10 +19,11 @@ import { checkContext, fitReport } from "../src/api";
 import { checkSettings } from "../src/check-settings";
 import { KEYCHAIN_SERVICE, controlPlaneOrigin, checkRepo } from "../src/config";
 import { login, logout, readSecret } from "../src/keychain";
-import { loadPlatform } from "../src/platform";
+import { checkAgentSettings, loadPlatform } from "../src/platform";
 import { pruneWork } from "../src/runner";
 import { noConfinement, seatbelt, seatbeltProfile } from "../src/seatbelt";
 import {
+  acquireRunnerLock,
   cleanLeftoverAgents,
   killAllAgents,
   startWatchdog,
@@ -291,6 +293,54 @@ describe("seatbelt profile", () => {
   );
 });
 
+describe("one runner per home", () => {
+  it("GivenALiveRunnerHoldingTheLock_WhenAnotherStarts_ThenItIsRefused", async () => {
+    const home = mkdtempSync(join(tmpdir(), "lr-lock-"));
+    const first = await acquireRunnerLock(home);
+    expect("release" in first).toBe(true);
+    expect(await acquireRunnerLock(home)).toEqual({ heldBy: process.pid });
+    if ("release" in first) first.release();
+    expect(existsSync(join(home, "runner.lock"))).toBe(false);
+  });
+
+  it("GivenAStaleLockOfADeadRunner_WhenStarting_ThenItIsTakenOver", async () => {
+    const home = mkdtempSync(join(tmpdir(), "lr-stale-"));
+    writeFileSync(join(home, "runner.lock"), JSON.stringify({ pid: 999_999, started: "x" }));
+    const lock = await acquireRunnerLock(home);
+    expect("release" in lock).toBe(true);
+    expect(JSON.parse(readFileSync(join(home, "runner.lock"), "utf8")).pid).toBe(process.pid);
+    if ("release" in lock) lock.release();
+  });
+});
+
+describe("platform settings", () => {
+  const ok = { disableAllHooks: true, permissions: { allow: [], deny: [] }, allowedMcpServers: [] };
+
+  it("GivenThePlatformsOwnProfile_WhenChecked_ThenEveryStepPasses", async () => {
+    const platform = loadPlatform({
+      root: WORKSPACE,
+      confinement: noConfinement,
+      profilePath: "/x",
+    });
+    for (const step of ["refine", "plan", "build"]) {
+      await expect(platform.settings(step, WORKSPACE)).resolves.toMatchObject({
+        disableAllHooks: true,
+      });
+    }
+  });
+
+  it("GivenSettingsWithAHookAHelperOrHooksOn_WhenChecked_ThenTheyAreRefused", () => {
+    expect(checkAgentSettings(ok)).toEqual(ok);
+    expect(() => checkAgentSettings({ ...ok, hooks: {} })).toThrow(/hooks/);
+    expect(() => checkAgentSettings({ ...ok, apiKeyHelper: "sh x" })).toThrow(/apiKeyHelper/);
+    expect(() => checkAgentSettings({ ...ok, env: { A: "1" } })).toThrow(/env/);
+    expect(() => checkAgentSettings({ ...ok, disableAllHooks: false })).toThrow(/hooks off/);
+    expect(() => checkAgentSettings({ ...ok, allowedMcpServers: [{ serverName: "x" }] })).toThrow(
+      /MCP/,
+    );
+  });
+});
+
 describe("agents never outlive the runner", () => {
   const alive = (pid: number) => {
     try {
@@ -324,23 +374,40 @@ describe("agents never outlive the runner", () => {
     await expect.poll(() => alive(agent), { timeout: 8000, interval: 200 }).toBe(false);
   }, 15_000);
 
-  it("GivenALeftoverAgentPidFile_WhenTheRunnerStarts_ThenOnlyAMatchingLiveProcessIsKilled", async () => {
+  const deadRunner = { pid: 999_999, started: "Mon Jan  1 00:00:00 2001" };
+  const pidFile = (home: string, run: string, record: unknown) => {
+    mkdirSync(join(home, "work", run), { recursive: true });
+    writeFileSync(join(home, "work", run, "agent.pid"), JSON.stringify(record));
+  };
+
+  it("GivenALeftoverAgentOfADeadRunner_WhenTheRunnerStarts_ThenOnlyAMatchingLiveProcessIsKilled", async () => {
     const home = mkdtempSync(join(tmpdir(), "lr-left-"));
     const live = detachedSleep();
     const other = detachedSleep();
-    mkdirSync(join(home, "work", "run-a"), { recursive: true });
-    mkdirSync(join(home, "work", "run-b"), { recursive: true });
-    await writePidFile(join(home, "work", "run-a", "agent.pid"), live);
+    pidFile(home, "run-a", { pgid: live, started: await startTime(live), runner: deadRunner });
     // A reused pid: same number, another start time, never killed.
-    writeFileSync(
-      join(home, "work", "run-b", "agent.pid"),
-      JSON.stringify({ pgid: other, started: "Mon Jan  1 00:00:00 2001" }),
-    );
-    expect(await startTime(live)).not.toBeNull();
+    pidFile(home, "run-b", {
+      pgid: other,
+      started: "Mon Jan  1 00:00:00 2001",
+      runner: deadRunner,
+    });
 
     expect(await cleanLeftoverAgents(home)).toEqual(["run-a"]);
     await expect.poll(() => alive(live), { timeout: 3000 }).toBe(false);
     expect(alive(other)).toBe(true);
     process.kill(-other, "SIGKILL");
+  });
+
+  it("GivenAnAgentOfALiveRunner_WhenAnotherRunnerCleansUp_ThenItIsNotTouched", async () => {
+    const home = mkdtempSync(join(tmpdir(), "lr-live-"));
+    const agent = detachedSleep();
+    // writePidFile records this process as the owning runner, which is alive.
+    mkdirSync(join(home, "work", "run-a"), { recursive: true });
+    await writePidFile(join(home, "work", "run-a", "agent.pid"), agent);
+
+    expect(await cleanLeftoverAgents(home)).toEqual([]);
+    expect(alive(agent)).toBe(true);
+    expect(existsSync(join(home, "work", "run-a", "agent.pid"))).toBe(true);
+    process.kill(-agent, "SIGKILL");
   });
 });

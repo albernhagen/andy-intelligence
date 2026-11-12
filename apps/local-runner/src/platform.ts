@@ -61,6 +61,35 @@ if (req.op === "settings") {
 process.stdout.write(JSON.stringify(out));
 `;
 
+/**
+ * The settings keys a platform profile may set (those of `platform/executor/profile.json`).
+ * Anything else, and above all `hooks`, `apiKeyHelper`, `statusLine` or `env` (commands or
+ * variables Claude Code would run or set), is refused, so a bad platform commit can't run a
+ * command in the agent's process. Hooks must be off.
+ */
+export const AGENT_SETTINGS_KEYS = new Set([
+  "allowManagedPermissionRulesOnly",
+  "allowManagedHooksOnly",
+  "disableAllHooks",
+  "allowManagedMcpServersOnly",
+  "allowedMcpServers",
+  "enableAllProjectMcpServers",
+  "strictKnownMarketplaces",
+  "permissions",
+  "sandbox",
+]);
+
+export function checkAgentSettings(settings: Record<string, unknown>): Record<string, unknown> {
+  const extra = Object.keys(settings).filter((k) => !AGENT_SETTINGS_KEYS.has(k));
+  if (extra.length > 0)
+    throw new Error(`platform settings have keys the runner refuses: ${extra.join(", ")}`);
+  if (settings.disableAllHooks !== true) throw new Error("platform settings don't turn hooks off");
+  const servers = settings.allowedMcpServers;
+  if (servers !== undefined && !(Array.isArray(servers) && servers.length === 0))
+    throw new Error("platform settings allow MCP servers");
+  return settings;
+}
+
 export interface PlatformOptions {
   root: string;
   confinement: Confinement;
@@ -116,7 +145,7 @@ export function loadPlatform(options: PlatformOptions): Platform {
   return {
     root: options.root,
     settings: async (step, projectRoot) =>
-      object(await call({ op: "settings", step, projectRoot }), "settings"),
+      checkAgentSettings(object(await call({ op: "settings", step, projectRoot }), "settings")),
     async prompt(step, runPrompt) {
       const out = object(await call({ op: "prompt", step, runPrompt }), "prompt");
       if (typeof out.prompt !== "string") throw new Error("platform prompt has no text");

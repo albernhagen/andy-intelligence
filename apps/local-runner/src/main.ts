@@ -16,7 +16,7 @@ import { RepoCache } from "./git";
 import { login, logout, readSecret } from "./keychain";
 import { consoleLogger, errorText } from "./log";
 import { loadPlatform } from "./platform";
-import { cleanLeftoverAgents, killAllAgents } from "./processes";
+import { acquireRunnerLock, cleanLeftoverAgents, killAllAgents } from "./processes";
 import { caffeinate, pruneWork, runLoop } from "./runner";
 import { seatbelt, seatbeltProfile } from "./seatbelt";
 
@@ -131,6 +131,14 @@ async function main(argv: string[]): Promise<number> {
       process.stderr.write(`No runner secret for ${origin}: run local-runner login first.\n`);
       return 1;
     }
+    const lock = await acquireRunnerLock(home);
+    if ("heldBy" in lock) {
+      process.stderr.write(
+        `Another local runner (pid ${lock.heldBy}) is running with ${home}; stop it first.\n`,
+      );
+      return 1;
+    }
+    process.on("exit", lock.release);
     for (const runId of await cleanLeftoverAgents(home)) {
       log("WARNING", "stopped an agent a previous runner left running", { runId });
     }

@@ -12,8 +12,11 @@ const run = promisify(execFile);
  * 1. `killAllAgents()` from the runner's `exit` handler, a second Ctrl-C and an uncaught error;
  * 2. a watchdog per agent (`sh`, its own process group) that kills the agent's group once the
  *    runner's pid is gone, which covers SIGKILL and crashes;
- * 3. `agent.pid` in the task's work directory (group id and start time), so the next `start`
- *    kills a leftover the watchdog missed (e.g. the watchdog was killed too).
+ * 3. `agent.pid` in the task's work directory (group id, start time and owning runner), so the
+ *    next `start` kills a leftover the watchdog missed, once its runner is gone.
+ *
+ * `start` is single-instance per home (`acquireRunnerLock`), so a second runner never cleans up
+ * a live runner's agents.
  */
 
 const live = new Set<number>();
@@ -67,20 +70,47 @@ export async function startTime(pid: number): Promise<string | null> {
   }
 }
 
+/** A process by pid and start time: the same pid with another start time is another process. */
+interface ProcessId {
+  pid: number;
+  started: string;
+}
+
+async function isAlive(p: Partial<ProcessId> | undefined): Promise<boolean> {
+  return (
+    p !== undefined &&
+    Number.isInteger(p.pid) &&
+    (p.pid ?? 0) > 1 &&
+    typeof p.started === "string" &&
+    (await startTime(p.pid!)) === p.started
+  );
+}
+
+let self: ProcessId | null = null;
+/** This runner's own pid and start time. */
+export async function selfId(): Promise<ProcessId> {
+  self ??= { pid: process.pid, started: (await startTime(process.pid)) ?? "unknown" };
+  return self;
+}
+
 interface PidFile {
   pgid: number;
   started: string;
+  /** The runner that started the agent: its leftover is cleaned only once that runner is gone. */
+  runner: ProcessId;
 }
 
 export async function writePidFile(path: string, pgid: number): Promise<void> {
   const started = await startTime(pgid);
-  if (started)
-    writeFileSync(path, JSON.stringify({ pgid, started } satisfies PidFile), { mode: 0o600 });
+  if (!started) return;
+  const record: PidFile = { pgid, started, runner: await selfId() };
+  writeFileSync(path, JSON.stringify(record), { mode: 0o600 });
 }
 
 /**
- * Kills agents a previous runner left running: each `work/*\/agent.pid` whose process still has
- * the recorded start time (so a reused pid is never killed). Returns the run ids it stopped.
+ * Kills agents a dead runner left running: each `work/*\/agent.pid` whose runner is gone and
+ * whose agent still has the recorded start time (so a reused pid is never killed). An agent of
+ * a live runner is never touched. Returns the run ids it stopped.
  */
 export async function cleanLeftoverAgents(home: string): Promise<string[]> {
   const dir = join(home, "work");
@@ -99,11 +129,8 @@ export async function cleanLeftoverAgents(home: string): Promise<string[]> {
     } catch {
       continue;
     }
-    if (
-      Number.isInteger(record.pgid) &&
-      record.pgid > 1 &&
-      (await startTime(record.pgid)) === record.started
-    ) {
+    if (await isAlive(record.runner)) continue;
+    if (await isAlive({ pid: record.pgid, started: record.started })) {
       try {
         process.kill(-record.pgid, "SIGKILL");
         stopped.push(name);
@@ -114,4 +141,42 @@ export async function cleanLeftoverAgents(home: string): Promise<string[]> {
     rmSync(path, { force: true });
   }
   return stopped;
+}
+
+/**
+ * One runner per home: `runner.lock` holds the live runner's pid and start time, created
+ * exclusively. A lock whose runner is gone is stale and taken over. Returns a release function,
+ * or the pid of the runner that holds it.
+ */
+export async function acquireRunnerLock(
+  home: string,
+): Promise<{ release: () => void } | { heldBy: number }> {
+  const path = join(home, "runner.lock");
+  const me = await selfId();
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    try {
+      writeFileSync(path, JSON.stringify(me), { flag: "wx", mode: 0o600 });
+      return {
+        release: () => {
+          try {
+            const held = JSON.parse(readFileSync(path, "utf8")) as ProcessId;
+            if (held.pid === me.pid && held.started === me.started) rmSync(path, { force: true });
+          } catch {
+            // Already gone.
+          }
+        },
+      };
+    } catch (err) {
+      if ((err as { code?: string }).code !== "EEXIST") throw err;
+    }
+    let held: Partial<ProcessId> | undefined;
+    try {
+      held = JSON.parse(readFileSync(path, "utf8")) as ProcessId;
+    } catch {
+      held = undefined;
+    }
+    if (held && (await isAlive(held))) return { heldBy: held.pid! };
+    rmSync(path, { force: true });
+  }
+  throw new Error("couldn't take the runner lock");
 }
