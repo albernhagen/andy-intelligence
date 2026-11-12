@@ -430,3 +430,133 @@ describe("board v2", () => {
     expect(within(cancelled).getByText("Dropped")).toBeTruthy();
   });
 });
+
+/** AI-86: M4.2: Board: group by epic. */
+describe("board grouped by epic", () => {
+  /**
+   * AI-1 is an epic in Backlog; AI-2 and AI-4 are its children in Ready, AI-3 (Ready) has no
+   * epic, AI-5 is a Done child. Grouped, Ready reads: AI-1's header, AI-2, AI-4, No epic, AI-3.
+   */
+  async function seeded() {
+    const harness = renderApp();
+    await harness.tracker.createProject({ name: "AI", key: "AI" });
+    const epic = await harness.service.create(
+      "ai",
+      { type: "epic", title: "Epics on the board" },
+      "andy",
+    );
+    for (const [title, parentId] of [
+      ["A", epic.id],
+      ["B", null],
+      ["C", epic.id],
+    ] as const) {
+      const t = await harness.service.create("ai", { ...readyStory, title, parentId }, "andy");
+      await harness.service.move("ai", t.id, "ready", "andy");
+    }
+    const done = await harness.service.create("ai", { title: "D", parentId: epic.id }, "andy");
+    await harness.service.move("ai", done.id, "done", "andy", { force: true });
+    await harness.router.navigate({ to: "/p/ai" });
+    await screen.findByText("AI-4");
+    return harness;
+  }
+
+  /** Headers (`epic:<key>`) and cards in the order a lane shows them. */
+  const rowsIn = (lane: string) =>
+    [
+      ...screen.getByRole("region", { name: lane }).querySelectorAll("[data-epic], [data-ticket]"),
+    ].map((el) =>
+      el.hasAttribute("data-epic")
+        ? `epic:${el.getAttribute("data-epic")}`
+        : el.getAttribute("data-ticket"),
+    );
+  const groupToggle = () => screen.getByRole("checkbox", { name: "Group by epic" });
+
+  it("GivenGroupByEpicOn_WhenTheBoardShows_ThenEachLaneHasAHeaderPerEpicAndNoEpicLast", async () => {
+    const harness = await seeded();
+    expect(rowsIn("Ready")).toEqual(["AI-2", "AI-3", "AI-4"]);
+
+    await harness.user.click(groupToggle());
+
+    expect(rowsIn("Backlog")).toEqual(["epic:none", "AI-1"]);
+    expect(rowsIn("Ready")).toEqual(["epic:AI-1", "AI-2", "AI-4", "epic:none", "AI-3"]);
+    const header = document.querySelector('[data-epic="AI-1"]')!;
+    expect(header.textContent).toContain("Epics on the board");
+    expect(header.textContent).toContain("1 of 3 done");
+  });
+
+  it("GivenAnEpicPickedInTheFilter_WhenTheBoardShows_ThenOnlyItsChildrenShow", async () => {
+    const harness = await seeded();
+
+    await harness.user.selectOptions(screen.getByLabelText("Epic"), "AI-1: Epics on the board");
+
+    expect(rowsIn("Ready")).toEqual(["AI-2", "AI-4"]);
+    expect(rowsIn("Backlog")).toEqual([]);
+    expect(screen.getByRole("button", { name: "Show Done, 1" })).toBeTruthy();
+    await harness.user.selectOptions(screen.getByLabelText("Epic"), "All tickets");
+    expect(rowsIn("Ready")).toEqual(["AI-2", "AI-3", "AI-4"]);
+  });
+
+  it("GivenAGroupedLane_WhenACardIsDraggedWithinItsGroup_ThenItsLaneRankIsStored", async () => {
+    const harness = await seeded();
+    await harness.user.click(groupToggle());
+
+    await drag(harness.user, "AI-4", 0, -1);
+
+    await waitFor(() =>
+      expect(rowsIn("Ready")).toEqual(["epic:AI-1", "AI-4", "AI-2", "epic:none", "AI-3"]),
+    );
+    const stored = (await harness.tracker.listTickets("ai", { stage: "ready" })).sort((a, b) =>
+      a.rank < b.rank ? -1 : 1,
+    );
+    expect(stored.map((t) => t.key)).toEqual(["AI-4", "AI-2", "AI-3"]);
+  });
+
+  it("GivenAGroupedLane_WhenTheApiRefusesTheReorder_ThenTheCardGoesBackAndShowsWhy", async () => {
+    const harness = await seeded();
+    await harness.user.click(groupToggle());
+    harness.tracker.updateTicket = async () => {
+      throw new WorkTrackerError("conflict", "ticket AI-4 changed since it was read");
+    };
+
+    await drag(harness.user, "AI-4", 0, -1);
+
+    const alert = await within(
+      document.querySelector('[data-ticket="AI-4"]')!.parentElement!,
+    ).findByRole("alert");
+    expect(alert.textContent).toMatch(/changed since it was read/);
+    expect(rowsIn("Ready")).toEqual(["epic:AI-1", "AI-2", "AI-4", "epic:none", "AI-3"]);
+  });
+
+  it("GivenAGroupedLane_WhenACardIsDroppedOnAnotherEpicsCard_ThenNothingChanges", async () => {
+    const harness = await seeded();
+    await harness.user.click(groupToggle());
+    const before = (await harness.tracker.listTickets("ai")).map((t) => t.rank);
+
+    await drag(harness.user, "AI-3", 0, -1);
+
+    expect((await harness.tracker.listTickets("ai")).map((t) => t.rank)).toEqual(before);
+    expect(rowsIn("Ready")).toEqual(["epic:AI-1", "AI-2", "AI-4", "epic:none", "AI-3"]);
+  });
+
+  it("GivenGroupByEpicTurnedOn_WhenTheBoardIsOpenedAgain_ThenItIsStillGrouped", async () => {
+    const harness = await seeded();
+    await harness.user.click(groupToggle());
+    expect(window.localStorage.getItem("andy.board.groupByEpic")).toBe("1");
+
+    await harness.router.navigate({ to: "/p/ai/inbox" });
+    await waitFor(() => expect(screen.queryByRole("region", { name: "Backlog" })).toBeNull());
+    await harness.router.navigate({ to: "/p/ai" });
+
+    await screen.findByText("AI-4");
+    expect(groupToggle()).toHaveProperty("checked", true);
+    expect(rowsIn("Ready")[0]).toBe("epic:AI-1");
+  });
+
+  it("GivenTheChoiceStoredBeforeLoad_WhenTheBoardLoads_ThenItStartsGrouped", async () => {
+    window.localStorage.setItem("andy.board.groupByEpic", "1");
+    await seeded();
+
+    expect(groupToggle()).toHaveProperty("checked", true);
+    expect(rowsIn("Backlog")).toContain("epic:none");
+  });
+});
