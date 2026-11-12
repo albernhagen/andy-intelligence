@@ -99,7 +99,13 @@ export class TicketService {
      */
     private readonly dispatchNext: ((projectId: string) => Promise<unknown>) | null = null,
     private readonly now: () => Date = () => new Date(),
+    /** Whether a local runner serving the project is present (ADR-0089); null: none can be. */
+    private readonly runnerPresence: ((projectId: string) => Promise<boolean>) | null = null,
   ) {}
+
+  private async runnerPresent(projectId: string): Promise<boolean> {
+    return this.runnerPresence ? this.runnerPresence(projectId) : false;
+  }
 
   /** A new ticket lands in Ideas and costs nothing, unless `upNext` pulls it forward (ADR-0075). */
   async create(
@@ -394,7 +400,7 @@ export class TicketService {
       this.require(projectId, ticketId),
       this.requireProject(projectId),
     ]);
-    return executorView(ticket, project);
+    return executorView(ticket, project, await this.runnerPresent(projectId));
   }
 
   /**
@@ -424,7 +430,7 @@ export class TicketService {
     );
     log("INFO", "ticket executor set", { ticket: ticket.key, executor, by: actor });
     await this.dispatchNext?.(projectId);
-    return executorView(updated, project);
+    return executorView(updated, project, await this.runnerPresent(projectId));
   }
 
   /** Re-parents by key: `parent` is an epic's key in the same project, or null for none. */
@@ -837,7 +843,7 @@ export class TicketService {
       questions,
       recentEvents: events.slice(-RECENT_EVENTS),
       worker: resolveWorker(ticket, project),
-      executor: executorView(ticket, project),
+      executor: executorView(ticket, project, await this.runnerPresent(project.id)),
     };
   }
 

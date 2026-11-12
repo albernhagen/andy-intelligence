@@ -68,7 +68,7 @@ export async function statusLineOf<S extends TicketStatus>(deps: ToolDeps, statu
   const { ticket, questions } = status;
   const tickets = await deps.tracker.listTickets(ticket.projectId);
   const open = questions.filter((q) => q.status === "open").length;
-  const line = await lineFor(deps, ticket, tickets, open, status.worker, status.executor.executor);
+  const line = await lineFor(deps, ticket, tickets, open, status.worker, status.executor.next);
   return { ...status, statusLine: line };
 }
 

@@ -56,6 +56,8 @@ import {
   type NewRun,
   WatchdogCheck,
   type WatchdogQueue,
+  QueuedCheck,
+  queuedCheckKey,
   ACTIVE_RUN_STATUSES,
   type TicketChange,
   type TicketFilter,
@@ -404,6 +406,26 @@ export class InMemoryWatchdogQueue implements WatchdogQueue {
     if (this.checks.has(parsed.runId)) return "duplicate";
     this.checks.set(parsed.runId, parsed);
     return "scheduled";
+  }
+
+  /** Lease and runner-away checks, by their key. */
+  readonly queued = new Map<string, QueuedCheck>();
+
+  async scheduleCheck(check: QueuedCheck): Promise<"scheduled" | "duplicate"> {
+    const parsed = QueuedCheck.parse(check);
+    const key = queuedCheckKey(parsed);
+    if (this.queued.has(key)) return "duplicate";
+    this.queued.set(key, parsed);
+    return "scheduled";
+  }
+
+  /** Test helper: queued checks due at `now`, earliest first; delivered ones are removed. */
+  takeDue(now: Date): QueuedCheck[] {
+    const due = [...this.queued.entries()]
+      .filter(([, c]) => Date.parse(c.at) <= now.getTime())
+      .sort(([, a], [, b]) => a.at.localeCompare(b.at));
+    for (const [key] of due) this.queued.delete(key);
+    return due.map(([, c]) => c);
   }
 
   /** Test helper: run IDs whose check is due at `now`, earliest first. */

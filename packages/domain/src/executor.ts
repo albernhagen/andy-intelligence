@@ -3,6 +3,7 @@ import type {
   ExecutorView,
   Project,
   ResolvedExecutor,
+  Runner,
   Ticket,
 } from "@andy/contracts";
 
@@ -35,10 +36,39 @@ export function resolveExecutor(
   return ticket.overrides.executor === "local" ? "wait" : "actions";
 }
 
-export function executorView(ticket: ExecutorTicket, project: ExecutorProject): ExecutorView {
+export function executorView(
+  ticket: ExecutorTicket,
+  project: ExecutorProject,
+  runnerPresent: boolean,
+): ExecutorView {
   return {
     executor: wantedExecutor(ticket, project),
     override: ticket.overrides.executor ?? null,
     projectDefault: project.executor,
+    next: resolveExecutor(ticket, project, runnerPresent),
+    runnerPresent,
   };
+}
+
+/** Which executor a dispatch call fills: the cloud executor, or the runner that claims. */
+export type DispatchRoute = { kind: "actions" } | { kind: "local"; runner: Runner };
+
+export const ACTIONS_ROUTE: DispatchRoute = { kind: "actions" };
+
+/**
+ * Whether a dispatch for `route` may take the ticket (ADR-0089): the cloud dispatchers take
+ * only tickets that resolve to `actions` (so they skip `local` ones while a runner is present,
+ * and ones waiting for an away runner); a runner's claim only `local` ones in its projects.
+ */
+export function routeTakes(
+  route: DispatchRoute,
+  ticket: ExecutorTicket,
+  project: ExecutorProject & Pick<Project, "id">,
+  runnerPresent: boolean,
+): boolean {
+  if (route.kind === "actions")
+    return resolveExecutor(ticket, project, runnerPresent) === "actions";
+  return (
+    route.runner.projectIds.includes(project.id) && wantedExecutor(ticket, project) === "local"
+  );
 }

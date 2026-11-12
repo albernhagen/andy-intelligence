@@ -33,19 +33,23 @@ describe("resolveExecutor", () => {
 
 describe("executorView", () => {
   it("GivenNoOverride_WhenViewed_ThenItFollowsTheProjectAndOverrideIsNull", () => {
-    expect(executorView(ticket(), project("local"))).toEqual({
+    expect(executorView(ticket(), project("local"), false)).toEqual({
       executor: "local",
       override: null,
       projectDefault: "local",
+      next: "actions",
+      runnerPresent: false,
     });
   });
 
   it("GivenAnOverride_WhenViewed_ThenTheOverrideWins", () => {
     expect(wantedExecutor(ticket("local"), project("actions"))).toBe("local");
-    expect(executorView(ticket("local"), project("actions"))).toEqual({
+    expect(executorView(ticket("local"), project("actions"), false)).toEqual({
       executor: "local",
       override: "local",
       projectDefault: "actions",
+      next: "wait",
+      runnerPresent: false,
     });
   });
 });
@@ -68,7 +72,7 @@ describe("TicketService.setExecutor", () => {
     const { tracker, service, created, dispatchNext } = await setup();
 
     const view = await service.setExecutor("ai", created.id, "local", "user:uid-1");
-    expect(view).toEqual({ executor: "local", override: "local", projectDefault: "actions" });
+    expect(view).toMatchObject({ executor: "local", override: "local", projectDefault: "actions" });
     expect((await tracker.getTicket("ai", created.id))?.overrides).toEqual({
       tier: "strong",
       executor: "local",
@@ -97,6 +101,8 @@ describe("TicketService.setExecutor", () => {
       executor: "local",
       override: "local",
       projectDefault: "actions",
+      next: "wait",
+      runnerPresent: false,
     });
   });
 });

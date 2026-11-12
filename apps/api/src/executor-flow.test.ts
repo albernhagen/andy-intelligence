@@ -93,6 +93,8 @@ describe("executor flow", () => {
       executor: "actions",
       override: null,
       projectDefault: "actions",
+      next: "actions",
+      runnerPresent: false,
     });
 
     expect(await s.tool("set_executor", { ticket: key, executor: "local" })).toEqual({
@@ -100,6 +102,8 @@ describe("executor flow", () => {
       executor: "local",
       override: "local",
       projectDefault: "actions",
+      next: "wait",
+      runnerPresent: false,
     });
 
     const status = await s.tool("status", { ticket: key });
@@ -107,7 +111,8 @@ describe("executor flow", () => {
       ticket: { overrides: { executor: "local" } },
       executor: { executor: "local", override: "local" },
     });
-    expect((status.statusLine as { text: string }).text).toContain("runs locally");
+    // No runner registered: the override waits for one (ADR-0089).
+    expect((status.statusLine as { text: string }).text).toBe("Waiting: local runner away");
   });
 
   it("GivenALocalOverride_WhenAndyClearsItOverRest_ThenItFollowsTheProjectDefault", async () => {
@@ -119,7 +124,13 @@ describe("executor flow", () => {
 
     expect(cleared).toEqual({
       status: 200,
-      body: { executor: "actions", override: null, projectDefault: "actions" },
+      body: {
+        executor: "actions",
+        override: null,
+        projectDefault: "actions",
+        next: "actions",
+        runnerPresent: false,
+      },
     });
   });
 
@@ -135,10 +146,13 @@ describe("executor flow", () => {
     expect(await s.tool("get_project_settings", { project: "AI" })).toMatchObject({
       executor: "local",
     });
+    // No runner present: a project default of local falls back to Actions.
     expect((await s.send(`${path}/executor`, "GET")).body).toEqual({
       executor: "local",
       override: null,
       projectDefault: "local",
+      next: "actions",
+      runnerPresent: false,
     });
   });
 });

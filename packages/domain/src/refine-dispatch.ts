@@ -1,14 +1,17 @@
 import {
   compareRanks,
   type Run,
+  type Runner,
   type RunStore,
   type Ticket,
   type WorkTracker,
 } from "@andy/contracts";
+import { wasDispatched } from "./dispatch-caps";
 import { checkDor } from "./dor";
 import { RefineGate } from "./refine-gate";
 import { MAX_REFINE_RUNS_PER_TICKET, type RunService } from "./runs";
 import { DomainError } from "./tickets";
+import { ACTIONS_ROUTE, routeTakes, type DispatchRoute } from "./executor";
 
 function log(severity: "INFO" | "WARNING" | "ERROR", message: string, fields: object = {}) {
   console.log(JSON.stringify({ severity, message, component: "refine-dispatch", ...fields }));
@@ -41,25 +44,47 @@ export class RefineDispatcher {
   /** Starts the next waiting refine in the project; null when nothing started. Never throws. */
   async next(projectId: string): Promise<Run | null> {
     try {
-      return await this.dispatch(projectId);
+      return await this.dispatch(projectId, ACTIONS_ROUTE);
     } catch (err) {
       log("ERROR", "refine dispatch failed", { projectId, error: String(err) });
       return null;
     }
   }
 
-  private async dispatch(projectId: string): Promise<Run | null> {
-    if (!this.runs.canDispatch) return null;
+  /**
+   * A local runner's claim (ADR-0089): the same selection, limited to tickets that ask for
+   * `local`, claimed by `runner`. Never throws.
+   */
+  async claimFor(projectId: string, runner: Runner): Promise<Run | null> {
+    try {
+      return await this.dispatch(projectId, { kind: "local", runner });
+    } catch (err) {
+      log("ERROR", "refine claim failed", { projectId, runnerId: runner.id, error: String(err) });
+      return null;
+    }
+  }
+
+  private async dispatch(projectId: string, route: DispatchRoute): Promise<Run | null> {
+    const local = route.kind === "local";
+    if (!local && !this.runs.canDispatch) return null;
     const project = await this.tracker.getProject(projectId);
     if (!project?.autoRefine || project.paused) return null;
     if (await this.busy(projectId)) return null;
+    const runnerPresent = local || (await this.runs.runnerPresent(projectId));
 
     for (const ticket of await this.upNext(projectId)) {
       // Backlog only, so Done and cancelled tickets never qualify; nor do hidden ones or epics.
       if (ticket.archived || ticket.type === "epic" || ticket.needsAttention) continue;
+      if (!routeTakes(route, ticket, project, runnerPresent)) continue; // ADR-0089.
       if (!(await this.waiting(ticket))) continue;
       try {
-        const run = await this.runs.start(projectId, ticket.id, "refine");
+        const run = await this.runs.start(
+          projectId,
+          ticket.id,
+          "refine",
+          undefined,
+          local ? { runner: route.runner } : {},
+        );
         log("INFO", "refine started on its own", { ticket: ticket.key, runId: run.id });
         return run;
       } catch (err) {
@@ -151,7 +176,7 @@ export class RefineDispatcher {
     if (!newEntry && !gapAnswered) {
       if (!latest || latest.status !== "succeeded" || dor.met) return false;
     }
-    const counted = refines.filter((r) => r.executor !== null).length;
+    const counted = refines.filter(wasDispatched).length;
     if (counted >= MAX_REFINE_RUNS_PER_TICKET) {
       const still = dor.met
         ? ""

@@ -49,6 +49,25 @@ describe("CloudTasksWatchdogQueue", () => {
     ]);
   });
 
+  it("GivenALeaseAndARunnerAwayCheck_WhenScheduled_ThenNamedTasksPostToTheirEndpoints", async () => {
+    const client = new FakeCloudTasks();
+    const queue = make(client);
+    await queue.scheduleCheck({ kind: "lease", runId: "abc", at: "2026-11-04T12:45:00.000Z" });
+    await queue.scheduleCheck({
+      kind: "runner_away",
+      runnerId: "r1",
+      at: "2026-11-04T12:45:30.000Z",
+    });
+    const seconds = Date.parse("2026-11-04T12:45:00.000Z") / 1000;
+    expect(client.tasks.map((t) => [t.task.name, t.task.httpRequest.url])).toEqual([
+      [`${QUEUE}/tasks/lease-abc-${seconds}`, `${PUBLIC_URL}/runs/abc/lease`],
+      [
+        `${QUEUE}/tasks/runner-away-r1-${Math.floor(seconds / 60)}`,
+        `${PUBLIC_URL}/runners/r1/away`,
+      ],
+    ]);
+  });
+
   it("GivenCloudTasksFails_WhenScheduled_ThenTheErrorSurfaces", async () => {
     const queue = make({
       createTask: async () => {

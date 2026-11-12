@@ -24,6 +24,8 @@ import { requireCan } from "./permissions";
 export interface RunnerCredentials {
   /** A new secret: shown once, never stored. */
   newSecret(): string;
+  /** A new per-run token: returned by one claim, never stored. */
+  newRunToken(): string;
   /** The storage key for a secret or a per-run token. */
   hash(secret: string): string;
 }
@@ -144,6 +146,51 @@ export class RunnerService {
     return (await this.store.list()).some(
       (r) => r.projectIds.includes(projectId) && isPresent(r, now),
     );
+  }
+
+  /**
+   * Issues the per-run token for a run the runner just claimed: bound to that run and runner,
+   * dead at the run's deadline (and refused earlier once the run ends). Returns the token.
+   */
+  async issueRunToken(runId: string, runnerId: string, deadline: string): Promise<string> {
+    const token = this.credentials.newRunToken();
+    await this.store.putRunToken(this.credentials.hash(token), {
+      runId,
+      runnerId,
+      expiresAt: deadline,
+    });
+    return token;
+  }
+
+  /**
+   * The runner a per-run token speaks for, if it was issued for `runId`, hasn't expired, and its
+   * runner is still active (a revoked runner's runs lose their lease); null otherwise.
+   */
+  async authenticateRun(token: string, runId: string): Promise<{ runnerId: string } | null> {
+    const grant = await this.store.getRunToken(this.credentials.hash(token));
+    if (!grant || grant.runId !== runId) return null;
+    const runner = await this.store.get(grant.runnerId);
+    if (!runner || !runnerIsActive(runner, this.now())) {
+      log("WARNING", "run callback from a revoked or expired runner", { runId });
+      return null;
+    }
+    return { runnerId: runner.id };
+  }
+
+  /**
+   * The runner-away check (ADR-0089), queued 2 minutes after each claim: still away, the
+   * dispatchers of its projects are woken, so `local`-default tickets go to Actions.
+   */
+  async checkAway(
+    runnerId: string,
+    wake: (projectId: string) => Promise<unknown>,
+  ): Promise<"unknown" | "present" | "woken"> {
+    const runner = await this.store.get(runnerId);
+    if (!runner) return "unknown";
+    if (isPresent(runner, this.now())) return "present";
+    log("INFO", "local runner away: waking its projects", { runnerId });
+    for (const projectId of runner.projectIds) await wake(projectId);
+    return "woken";
   }
 
   async get(runnerId: string): Promise<Runner> {

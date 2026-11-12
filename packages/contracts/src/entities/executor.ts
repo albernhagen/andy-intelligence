@@ -22,6 +22,10 @@ export const ExecutorView = z.object({
   /** The ticket's own pick; null when it follows the project's default. */
   override: ExecutorKind.nullable(),
   projectDefault: ExecutorKind,
+  /** Where its next run goes now: `wait` while it overrides to `local` and no runner is present. */
+  next: ResolvedExecutor,
+  /** Whether a runner serving its project is present (polled in the last 2 minutes). */
+  runnerPresent: z.boolean(),
 });
 export type ExecutorView = z.infer<typeof ExecutorView>;
 

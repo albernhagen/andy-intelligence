@@ -13,6 +13,10 @@ import { FixedWindowLimiter } from "./mcp/rate-limit";
  */
 
 export const RUN_WATCHDOG_PATH = "/runs/:runId/watchdog";
+/** A local run's lease check, queued at the lease's end (ADR-0089). */
+export const RUN_LEASE_PATH = "/runs/:runId/lease";
+/** A runner's away check, queued 2 minutes after each claim (ADR-0089). */
+export const RUNNER_AWAY_PATH = "/runners/:runnerId/away";
 /** Verified watchdog calls per instance per minute (max 2 instances; ADR-0028). */
 export const RUN_WATCHDOG_RATE_LIMIT = 30;
 
@@ -46,6 +50,8 @@ function log(severity: "INFO" | "WARNING", message: string, fields: Record<strin
 export interface RunWatchdogDeps {
   runs: RunService;
   verify: InvokerTokenVerifier;
+  /** Local runners (ADR-0089): the runner-away check; its route is absent when unset. */
+  runnerAway?: (runnerId: string) => Promise<string>;
   now?: () => Date;
 }
 
@@ -53,15 +59,23 @@ export function registerRunWatchdog(app: Hono<AuthEnv>, deps: RunWatchdogDeps): 
   const now = deps.now ?? (() => new Date());
   const limiter = new FixedWindowLimiter(RUN_WATCHDOG_RATE_LIMIT, 60_000, () => now().getTime());
 
-  app.post(RUN_WATCHDOG_PATH, async (c) => {
-    const runId = RunId.safeParse(c.req.param("runId"));
-    if (!runId.success) return c.json({ error: "not found" }, 404);
-    const match = /^Bearer\s+(\S+)$/i.exec(c.req.header("authorization") ?? "");
+  /** True when the call carries the invoker's token; logs a refusal. */
+  const verified = async (authorization: string | undefined, subject: string) => {
+    const match = /^Bearer\s+(\S+)$/i.exec(authorization ?? "");
     try {
       if (!match?.[1]) throw new Error("no bearer token");
       await deps.verify(match[1]);
+      return true;
     } catch {
-      log("WARNING", "watchdog token rejected", { runId: runId.data });
+      log("WARNING", "watchdog token rejected", { subject });
+      return false;
+    }
+  };
+
+  app.post(RUN_WATCHDOG_PATH, async (c) => {
+    const runId = RunId.safeParse(c.req.param("runId"));
+    if (!runId.success) return c.json({ error: "not found" }, 404);
+    if (!(await verified(c.req.header("authorization"), runId.data))) {
       return c.json({ error: "unauthenticated" }, 401);
     }
     // After verification, so unauthenticated floods can't use up the cap.
@@ -71,4 +85,31 @@ export function registerRunWatchdog(app: Hono<AuthEnv>, deps: RunWatchdogDeps): 
     // Early: a non-2xx makes the queue deliver it again later (its retry policy).
     return c.json({ outcome }, outcome === "early" ? 503 : 200);
   });
+
+  app.post(RUN_LEASE_PATH, async (c) => {
+    const runId = RunId.safeParse(c.req.param("runId"));
+    if (!runId.success) return c.json({ error: "not found" }, 404);
+    if (!(await verified(c.req.header("authorization"), runId.data))) {
+      return c.json({ error: "unauthenticated" }, 401);
+    }
+    if (!limiter.tryTake()) return c.json({ error: "rate limited" }, 429);
+    const outcome = await deps.runs.checkLease(runId.data);
+    log("INFO", "lease check done", { runId: runId.data, outcome });
+    return c.json({ outcome }, outcome === "early" ? 503 : 200);
+  });
+
+  const runnerAway = deps.runnerAway;
+  if (runnerAway) {
+    app.post(RUNNER_AWAY_PATH, async (c) => {
+      const runnerId = RunId.safeParse(c.req.param("runnerId"));
+      if (!runnerId.success) return c.json({ error: "not found" }, 404);
+      if (!(await verified(c.req.header("authorization"), runnerId.data))) {
+        return c.json({ error: "unauthenticated" }, 401);
+      }
+      if (!limiter.tryTake()) return c.json({ error: "rate limited" }, 429);
+      const outcome = await runnerAway(runnerId.data);
+      log("INFO", "runner-away check done", { runnerId: runnerId.data, outcome });
+      return c.json({ outcome }, 200);
+    });
+  }
 }

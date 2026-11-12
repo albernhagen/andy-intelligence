@@ -158,7 +158,7 @@ function StatusLine({ ticket }: { ticket: Ticket }) {
   const questions = useTicketQuestions(path).data ?? [];
   const events = useEvents(path).data ?? [];
   const worker = useWorker(path).data?.worker;
-  const executor = useExecutor(path).data?.executor;
+  const executor = useExecutor(path).data?.next;
   const inFlight = useInFlight(ticket.projectId).data;
   const { text, tone } = ticketStatusLine(
     ticket,

@@ -20,7 +20,8 @@ export class DomainError extends Error {
       | "invalid_reference"
       | "not_clearable"
       | "not_acceptable"
-      | "runner_limit",
+      | "runner_limit"
+      | "runs_elsewhere",
     message: string,
     readonly details: string[] = [],
   ) {

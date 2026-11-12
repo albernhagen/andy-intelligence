@@ -10,7 +10,11 @@ async function setup() {
   await tracker.createProject({ name: "AI", key: "AI" });
   const store = new InMemoryRunnerStore(() => now);
   let n = 0;
-  const credentials = { newSecret: () => `secret-${++n}`, hash: (s: string) => `hash(${s})` };
+  const credentials = {
+    newSecret: () => `secret-${++n}`,
+    newRunToken: () => `token-${++n}`,
+    hash: (s: string) => `hash(${s})`,
+  };
   const service = new RunnerService(store, tracker, credentials, () => now);
   return { service, store, advance: (ms: number) => (now = new Date(now.getTime() + ms)) };
 }

@@ -24,10 +24,14 @@ import { hashToken, newToken } from "./mcp/tokens";
 /** Runner secrets: a fixed prefix (easy to spot in a leak) and 256 random bits. */
 export const RUNNER_SECRET_PREFIX = "air_";
 const SECRET_SHAPE = /^air_[A-Za-z0-9_-]{43}$/;
+/** Per-run tokens a claim returns: their own prefix, so the callbacks tell them from OIDC JWTs. */
+export const RUN_TOKEN_PREFIX = "airt_";
+export const RUN_TOKEN_SHAPE = /^airt_[A-Za-z0-9_-]{43}$/;
 
 /** What the domain uses to make and hash runner secrets and per-run tokens. */
 export const runnerCredentials = {
   newSecret: () => `${RUNNER_SECRET_PREFIX}${newToken()}`,
+  newRunToken: () => `${RUN_TOKEN_PREFIX}${newToken()}`,
   hash: hashToken,
 };
 
@@ -95,12 +99,12 @@ function log(severity: "INFO" | "WARNING", message: string, fields: Record<strin
   console.log(JSON.stringify({ severity, message, component: "runner-claim", ...fields }));
 }
 
-/** Starts the runner's next run, or answers that there is none (slice 4); null: no work. */
+/** Starts the runner's next run with its per-run token; null: no work. */
 export type ClaimWork = (runner: Runner) => Promise<RunnerClaimResponse["run"]>;
 
 export interface RunnerClaimDeps {
   runners: RunnerService;
-  /** Absent (slice 3): every claim answers `{ run: null }`. */
+  /** Absent (no executor wiring, e.g. tests of registration only): every claim answers `{ run: null }`. */
   claim?: ClaimWork;
   now?: () => Date;
 }

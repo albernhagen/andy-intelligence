@@ -19,6 +19,7 @@ import {
   RefineDispatcher,
   RunService,
   RunnerService,
+  LocalClaims,
   BoardReader,
   DigestReader,
   QuotaClearer,
@@ -169,6 +170,7 @@ const DOMAIN_STATUS = {
   not_clearable: 409,
   not_acceptable: 409,
   runner_limit: 409,
+  runs_elsewhere: 409,
 } as const;
 
 export function createApp(input: AppDeps) {
@@ -240,6 +242,11 @@ export function createApp(input: AppDeps) {
   // create, last answer, move to Ready and switch turned on: a build first (ADR-0063, projects
   // with autoBuild), else a refine (ADR-0054). Projects waiting on the global cap go first,
   // then builds start up to the caps (ADR-0079). `next` and `wakeGlobalCapWaiters` never throw.
+  // Local runners (ADR-0089): claims start runs through the same dispatchers and RunService.
+  const runners = deps.runners
+    ? new RunnerService(deps.runners, deps.tracker, runnerCredentials, now)
+    : null;
+  const runnerPresence = runners ? (projectId: string) => runners.presentFor(projectId) : null;
   const runs = new RunService(
     deps.tracker,
     deps.runs,
@@ -248,6 +255,7 @@ export function createApp(input: AppDeps) {
     deps.watchdog?.queue ?? null,
     async (projectId) => void (await dispatchNext(projectId)),
     connection ? new ConnectedCodeHost(connection) : null,
+    runnerPresence,
   );
   const refiner = new RefineDispatcher(deps.tracker, deps.runs, runs, now);
   const builder = new BuildDispatcher(deps.tracker, deps.runs, runs, now, deps.quota ?? null);
@@ -267,16 +275,26 @@ export function createApp(input: AppDeps) {
     await builder.wakeGlobalCapWaiters(projectId);
     return (await builder.next(projectId)) ?? (await refiner.next(projectId));
   };
-  const runners = deps.runners
-    ? new RunnerService(deps.runners, deps.tracker, runnerCredentials, now)
-    : null;
   // One TicketService for REST, MCP and webhooks: all get the same ticket rules (packages/domain).
-  const service = new TicketService(deps.tracker, runs, dispatchNext);
+  const service = new TicketService(deps.tracker, runs, dispatchNext, now, runnerPresence);
+  const claims = runners
+    ? new LocalClaims(
+        deps.tracker,
+        deps.runs,
+        runs,
+        runners,
+        builder,
+        refiner,
+        deps.watchdog?.queue ?? null,
+        now,
+      )
+    : null;
 
   // Public, outside /api: the watchdog queue presents a Google OIDC token for the invoker SA.
   if (deps.watchdog) {
     registerRunWatchdog(app, {
       runs,
+      ...(runners ? { runnerAway: (id: string) => runners.checkAway(id, dispatchNext) } : {}),
       verify:
         deps.watchdog.verifyInvokerToken ??
         invokerTokenVerifier(deps.watchdog.publicUrl, deps.watchdog.invokerEmail),
@@ -285,7 +303,9 @@ export function createApp(input: AppDeps) {
   }
 
   // Public, outside /api: the local runner presents its runner secret (ADR-0089).
-  if (runners) registerRunnerClaim(app, { runners, now });
+  if (runners && claims) {
+    registerRunnerClaim(app, { runners, claim: (runner) => claims.claim(runner), now });
+  }
 
   // Public, outside /api: the queue calls the email flush with the invoker's OIDC token (AI-77).
   if (email && deps.watchdog) {
@@ -317,7 +337,13 @@ export function createApp(input: AppDeps) {
       claimRunGrant: (runId, caller) => runs.claimPushGrant(runId, caller),
       now,
     });
-    registerRunCallbacks(app, { runs, verify: verifyActionsToken, now, quota: deps.quota });
+    registerRunCallbacks(app, {
+      runs,
+      runners,
+      verify: verifyActionsToken,
+      now,
+      quota: deps.quota,
+    });
   }
 
   app.use("/api/*", requireAllowedUser(deps.verifier, deps.allowedEmails));

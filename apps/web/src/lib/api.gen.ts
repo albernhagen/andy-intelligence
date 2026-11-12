@@ -3998,6 +3998,9 @@ export interface paths {
               override: "actions" | "local" | null;
               /** @enum {string} */
               projectDefault: "actions" | "local";
+              /** @enum {string} */
+              next: "actions" | "local" | "wait";
+              runnerPresent: boolean;
             };
           };
         };
@@ -4083,6 +4086,9 @@ export interface paths {
               override: "actions" | "local" | null;
               /** @enum {string} */
               projectDefault: "actions" | "local";
+              /** @enum {string} */
+              next: "actions" | "local" | "wait";
+              runnerPresent: boolean;
             };
           };
         };

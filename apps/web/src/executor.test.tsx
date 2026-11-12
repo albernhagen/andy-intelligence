@@ -13,7 +13,7 @@ async function readyTicket() {
 }
 
 describe("executor controls", () => {
-  it("GivenAnActionsTicket_WhenAndyClicksRunLocally_ThenTheOverrideIsStoredAndTheStatusSaysSo", async () => {
+  it("GivenAnActionsTicket_WhenAndyClicksRunLocally_ThenTheOverrideIsStoredAndTheTicketWaitsForTheRunner", async () => {
     const { harness, ticket } = await readyTicket();
 
     await harness.router.navigate({
@@ -25,8 +25,9 @@ describe("executor controls", () => {
 
     await screen.findByRole("button", { name: "Run on Actions" });
     expect((await harness.tracker.getTicket("ai", ticket.id))?.overrides.executor).toBe("local");
+    // No runner is present, so the override waits for one (ADR-0089).
     expect((await screen.findByRole("status", { name: "Status" })).textContent).toContain(
-      "runs locally",
+      "Waiting: local runner away",
     );
   });
 

@@ -12,7 +12,7 @@ import {
   type Ticket,
   type WorkTracker,
 } from "@andy/contracts";
-import { MAX_ACTIVE_RUNS_GLOBAL, isInFlight } from "./dispatch-caps";
+import { MAX_ACTIVE_RUNS_GLOBAL, isInFlight, wasDispatched } from "./dispatch-caps";
 import { quotaStatus, readingsForDispatch } from "./quota";
 import type { RunService } from "./runs";
 import { DomainError } from "./tickets";
@@ -73,7 +73,7 @@ export function syncsInLastDay(runs: readonly Run[], buildRunId: string, now: Da
     (r) =>
       r.step === "sync" &&
       r.syncRun?.buildRunId === buildRunId &&
-      r.executor !== null &&
+      wasDispatched(r) &&
       now.getTime() - Date.parse(r.createdAt ?? "") < DAY_MS,
   ).length;
 }
