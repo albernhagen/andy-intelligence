@@ -160,6 +160,15 @@ export const Assumption = z.object({
   confidence: GapConfidence,
   /** Set when a cap turned what should have been a question into this assumption. */
   demotedBy: z.enum(["ticket_cap", "daily_cap"]).nullable().default(null),
+  /**
+   * Set when a running night launch turned what would have been a question into this assumption
+   * (ADR-0049 "While unattended", AI-123): the launch's id. It isn't held, so the story goes on.
+   */
+  nightLaunchId: z
+    .string()
+    .regex(/^[A-Za-z0-9-]{1,64}$/)
+    .nullable()
+    .default(null),
   runId: Id,
   status: AssumptionStatus.default("assumed"),
   questionId: Id.nullable().default(null),

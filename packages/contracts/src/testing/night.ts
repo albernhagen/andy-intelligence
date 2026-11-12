@@ -120,6 +120,35 @@ export function nightLaunchStoreContract(
       expect(await store.findActive("ai")).toBeNull();
     });
 
+    it("GivenARunningLaunch_WhenAStoryStopsTwice_ThenItIsStoredOnceWithItsSkippedDependants", async () => {
+      const store = await make();
+      const l = launch();
+      await store.create(l);
+      const story = {
+        key: "AI-85",
+        reason: "the build failed on its retry",
+        at: at(5),
+        skipped: ["AI-86"],
+      };
+
+      const first = await store.stopStory(l.id, story);
+      expect(first.stoppedStories).toEqual([story]);
+      const again = await store.stopStory(l.id, { ...story, reason: "a later veto", at: at(9) });
+      expect(again.stoppedStories).toEqual([story]);
+      expect((await store.get(l.id))!.stoppedStories).toEqual([story]);
+    });
+
+    it("GivenAnEndedOrMissingLaunch_WhenAStoryStops_ThenConflictOrNotFound", async () => {
+      const store = await make();
+      const l = launch({ status: "ended", endedAt: at(1), endReason: "done" });
+      await store.create(l);
+      const story = { key: "AI-85", reason: "vetoed", at: at(5), skipped: [] };
+
+      await expect(store.stopStory(l.id, story)).rejects.toMatchObject({ code: "conflict" });
+      await expect(store.stopStory("missing", story)).rejects.toMatchObject({ code: "not_found" });
+      expect((await store.get(l.id))!.stoppedStories).toEqual([]);
+    });
+
     it("GivenALaunchInAnotherStatus_WhenTransitioned_ThenConflictAndNothingChanges", async () => {
       const store = await make();
       const l = launch({ status: "ended", endedAt: at(1), endReason: "done" });

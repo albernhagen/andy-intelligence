@@ -1,4 +1,11 @@
-import type { NightEndReason, NightLaunch, NightLaunchStatus } from "../entities/night";
+import {
+  NightLaunch,
+  nightLaunchIsActive,
+  type NightEndReason,
+  type NightLaunchStatus,
+  type NightStoppedStory,
+} from "../entities/night";
+import { WorkTrackerError } from "./index";
 
 // ── NightLaunchStore ─────────────────────────────────────────────────────────
 // Overnight launches (ADR-0049). Storage only: the readiness check lives in @andy/domain.
@@ -33,4 +40,22 @@ export interface NightLaunchStore {
     from: readonly NightLaunchStatus[],
     change: NightLaunchTransition,
   ): Promise<NightLaunch>;
+  /**
+   * Appends a stopped story atomically while the launch is `running` or `stopping`; a story
+   * already stopped keeps its first entry (a replay changes nothing). `conflict` once the launch
+   * ended, `not_found` if unknown.
+   */
+  stopStory(launchId: string, story: NightStoppedStory): Promise<NightLaunch>;
+}
+
+/**
+ * The launch with `story` appended (shared by every NightLaunchStore): `conflict` unless it is
+ * running or stopping; a story already stopped is left as it was.
+ */
+export function withStoppedStory(launch: NightLaunch, story: NightStoppedStory): NightLaunch {
+  if (!nightLaunchIsActive(launch)) {
+    throw new WorkTrackerError("conflict", `night launch ${launch.id} is ${launch.status}`);
+  }
+  if (launch.stoppedStories.some((s) => s.key === story.key)) return launch;
+  return NightLaunch.parse({ ...launch, stoppedStories: [...launch.stoppedStories, story] });
 }

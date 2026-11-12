@@ -51,6 +51,18 @@ export type NightBudget = z.infer<typeof NightBudget>;
 
 const TicketKey = z.string().regex(/^[A-Z][A-Z0-9]{0,9}-\d+$/);
 
+/**
+ * A story stopped for the night (AI-123): its run failed for good or its PR was vetoed. Its
+ * dependants in the launch (`skipped`) don't start; the other stories go on.
+ */
+export const NightStoppedStory = z.object({
+  key: TicketKey,
+  reason: z.string().min(1).max(500),
+  at: Timestamp,
+  skipped: z.array(TicketKey).max(NIGHT_LIMITS.maxStories).default([]),
+});
+export type NightStoppedStory = z.infer<typeof NightStoppedStory>;
+
 /** The launch's fields without the cross-field rules: extend this one, not `NightLaunch`. */
 export const NightLaunchFields = z.object({
   id: z.string().regex(/^[A-Za-z0-9-]{1,64}$/),
@@ -69,6 +81,8 @@ export const NightLaunchFields = z.object({
   startedAt: Timestamp.nullable().default(null),
   endedAt: Timestamp.nullable().default(null),
   endReason: NightEndReason.nullable().default(null),
+  /** Stories stopped for the night, in the order they stopped; one entry per story. */
+  stoppedStories: z.array(NightStoppedStory).max(NIGHT_LIMITS.maxStories).default([]),
 });
 
 /**

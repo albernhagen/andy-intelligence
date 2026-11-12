@@ -14,6 +14,7 @@ import {
   type WorkTracker,
 } from "@andy/contracts";
 import { checkDor, heldGaps } from "./dor";
+import type { NightUnattended } from "./night-unattended";
 
 function log(severity: "INFO" | "WARNING", message: string, fields: object = {}) {
   console.log(JSON.stringify({ severity, message, component: "refine-gate", ...fields }));
@@ -42,7 +43,22 @@ export type DemotedBy = "ticket_cap" | "daily_cap";
 
 export interface GapPlan {
   questions: RefineGap[];
-  assumptions: { gap: RefineGap; demotedBy: DemotedBy | null }[];
+  /** `night`: a running launch turned a question (or a held gap) into this (AI-123). */
+  assumptions: { gap: RefineGap; demotedBy: DemotedBy | null; night?: boolean }[];
+}
+
+/**
+ * While a running night launch covers the ticket (ADR-0049 "While unattended"): nothing is asked.
+ * A gap that would have been a question becomes a night assumption, which is never held, so the
+ * story goes on; Andy reviews them in the morning.
+ */
+export function planNightGaps(gaps: readonly RefineGap[]): GapPlan {
+  return {
+    questions: [],
+    assumptions: gaps.map((gap) =>
+      shouldAsk(gap) ? { gap, demotedBy: null, night: true } : { gap, demotedBy: null },
+    ),
+  };
 }
 
 /**
@@ -121,6 +137,8 @@ export class RefineGate {
   constructor(
     private readonly tracker: WorkTracker,
     private readonly now: () => Date,
+    /** Running night launches (AI-123); null: none, the gate asks as always. */
+    private readonly night: Pick<NightUnattended, "coveringLaunch"> | null = null,
   ) {}
 
   /**
@@ -273,9 +291,10 @@ export class RefineGate {
   ): Promise<RefineApplied> {
     const refocus = focused.length > 0;
     const gaps = refocus ? output.gaps.slice(0, 1) : output.gaps;
-    const plan = planGaps(gaps, await this.room(ticket, run.id));
+    const launch = this.night ? await this.night.coveringLaunch(ticket) : null;
+    const plan = launch ? planNightGaps(gaps) : planGaps(gaps, await this.room(ticket, run.id));
     const at = this.now().toISOString();
-    const assumptions = plan.assumptions.map(({ gap, demotedBy }, i): Assumption => ({
+    const assumptions = plan.assumptions.map(({ gap, demotedBy, night }, i): Assumption => ({
       id: `${run.id}-a${i + 1}`,
       text: gap.assumption,
       question: gap.question,
@@ -284,6 +303,7 @@ export class RefineGate {
       cost: gap.cost,
       confidence: gap.confidence,
       demotedBy,
+      nightLaunchId: night && launch ? launch.id : null,
       runId: run.id,
       status: "assumed",
       questionId: null,
@@ -331,7 +351,13 @@ export class RefineGate {
       },
       "system",
     );
-    const notices = [capNotice(assumptions)];
+    const nightly = assumptions.filter((a) => a.nightLaunchId).length;
+    const notices = [
+      capNotice(assumptions),
+      nightly > 0 && launch
+        ? `Night launch ${launch.id} is running, so nothing was asked: ${nightly} gap(s) that would have been questions are night assumptions, for Andy to review in the morning.`
+        : "",
+    ];
     if (open === 0 && !dor.met) {
       notices.push(`The Definition of Ready still misses: ${dor.missing.join(", ")}.`);
     }
@@ -351,6 +377,8 @@ export class RefineGate {
    */
   async askHeld(ticket: Ticket): Promise<number> {
     if (ticket.stage !== "backlog" || ticket.upNextRank === null) return 0;
+    // Unattended: no questions while a running launch covers it (AI-123).
+    if (this.night && (await this.night.coveringLaunch(ticket))) return 0;
     const mine = await this.tracker.listQuestions({ ticketId: ticket.id });
     const exists = new Set(mine.map((q) => q.id));
     // Claimed earlier, never asked: re-ask with the claimed id, no new slot.
