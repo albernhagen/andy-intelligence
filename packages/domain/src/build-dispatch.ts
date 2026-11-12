@@ -17,7 +17,7 @@ import { blockingRun, editingRuns } from "./dispatch-conflicts";
 import { checkDor } from "./dor";
 import { MAX_PLAN_RUNS_PER_TICKET, planRequired } from "./plans";
 import { quotaStatus, readingsForDispatch } from "./quota";
-import { blockersDoneAt, replanNote, staleBlocker } from "./replan";
+import { blockersDoneAt, replanNote, staleBlocker, writtenPlan } from "./replan";
 import type { RunService } from "./runs";
 import { isDispatchable } from "./worker";
 import { ACTIONS_ROUTE, routeTakes, type DispatchRoute } from "./executor";
@@ -257,7 +257,7 @@ export class BuildDispatcher {
   private async planAllows(ticket: Ticket, policy: PlanApproval): Promise<Start | null> {
     const plan = await this.runs.planStateOf(ticket, undefined, policy);
     const stale =
-      ticket.blockedBy.length > 0
+      ticket.blockedBy.length > 0 && writtenPlan(plan)
         ? staleBlocker(plan, await blockersDoneAt(this.tracker, ticket))
         : null;
     if (stale) return (await this.underPlanCap(ticket)) ? { step: "plan", replanFor: stale } : null;

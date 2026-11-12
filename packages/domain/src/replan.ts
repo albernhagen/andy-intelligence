@@ -1,4 +1,4 @@
-import type { Stage, Ticket, TicketEvent, WorkTracker } from "@andy/contracts";
+import type { Run, Stage, Ticket, TicketEvent, WorkTracker } from "@andy/contracts";
 import { planWrittenAt, type PlanState } from "./plans";
 
 /**
@@ -17,17 +17,27 @@ export function doneAt(events: readonly TicketEvent[]): string | null {
 }
 
 /**
+ * The plan run that wrote a plan which can be outdated (approved, awaiting or otherwise stale);
+ * null for none, planning or rejected (Andy re-plans a rejection).
+ */
+export function writtenPlan(plan: PlanState): Run | null {
+  return plan.kind === "approved" || plan.kind === "awaiting" || plan.kind === "stale"
+    ? plan.run
+    : null;
+}
+
+/**
  * The blocker that reached Done after the plan was written (the latest one if several), or null.
- * `blockersDoneAt`: each `blockedBy` entry's last Done time, null when unknown. Only a written
- * plan (approved, awaiting or otherwise stale) can be outdated: none, planning or rejected
- * (Andy re-plans a rejection) never are.
+ * `blockersDoneAt`: each `blockedBy` entry's last Done time, null when unknown. Only a
+ * `writtenPlan` can be outdated.
  */
 export function staleBlocker(
   plan: PlanState,
   blockersDoneAt: ReadonlyMap<string, string | null>,
 ): string | null {
-  if (plan.kind === "none" || plan.kind === "planning" || plan.kind === "rejected") return null;
-  const written = planWrittenAt(plan.run);
+  const run = writtenPlan(plan);
+  if (!run) return null;
+  const written = planWrittenAt(run);
   let stale: { key: string; at: number } | null = null;
   for (const [key, at] of blockersDoneAt) {
     const done = at === null ? NaN : Date.parse(at);
