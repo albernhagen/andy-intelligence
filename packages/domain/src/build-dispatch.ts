@@ -1,18 +1,23 @@
-import type {
-  DispatchDecision,
-  DispatchIdleReason,
-  PlanApproval,
-  Project,
-  QuotaLevel,
-  QuotaStore,
-  Run,
-  Runner,
-  RunStore,
-  Ticket,
-  WorkTracker,
+import {
+  WorkTrackerError,
+  type DispatchDecision,
+  type DispatchIdleReason,
+  type NightEndReason,
+  type NightLaunch,
+  type NightLaunchStore,
+  type NightLaunchTransition,
+  type PlanApproval,
+  type Project,
+  type QuotaLevel,
+  type QuotaStore,
+  type Run,
+  type Runner,
+  type RunStore,
+  type Ticket,
+  type WorkTracker,
 } from "@andy/contracts";
 import { MAX_BUILD_RUNS_PER_TICKET, isAndysWork, unfinishedBlockers } from "./builds";
-import { mayDispatch, wasDispatched } from "./dispatch-caps";
+import { isInFlight, mayDispatch, wasDispatched } from "./dispatch-caps";
 import { blockingRun, editingRuns } from "./dispatch-conflicts";
 import { checkDor } from "./dor";
 import { MAX_PLAN_RUNS_PER_TICKET, planRequired } from "./plans";
@@ -23,6 +28,19 @@ import { isDispatchable } from "./worker";
 import { epicOf, withEpicOverrides } from "./overrides";
 import { ACTIONS_ROUTE, routeTakes, type DispatchRoute } from "./executor";
 import { DomainError } from "./tickets";
+import {
+  NIGHT_END_TEXT,
+  nightEndReason,
+  nightLimitReached,
+  nightUsage,
+  type NightLimit,
+} from "./night-budget";
+
+/** A night launch holding its stories back: why, for the log. */
+interface NightHold {
+  launch: NightLaunch;
+  limit: NightLimit | "stopped";
+}
 
 /** What the dispatcher starts for a ticket; `replanFor` names the blocker that made its plan stale. */
 type Start = { step: "build"; replanFor: null } | { step: "plan"; replanFor: string };
@@ -47,6 +65,8 @@ function log(severity: "INFO" | "WARNING" | "ERROR", message: string, fields: ob
  * Andy (only he re-plans a rejected plan); one that needs a plan gets a plan run first.
  * A plan written before a `blockedBy` ticket reached Done is re-run before the build, whatever
  * the policy (M4.6: just-in-time re-planning); the new plan then waits for Andy like any other.
+ * A story of a night launch that reached its budget or stop time, or that Andy stopped, waits
+ * (M4.18: Night budget, ADR-0049); the launch ends once none of its agent tasks is in flight.
  */
 export class BuildDispatcher {
   constructor(
@@ -56,6 +76,8 @@ export class BuildDispatcher {
     private readonly now: () => Date = () => new Date(),
     /** Null when no readings are kept: quota then reads unknown, which doesn't stop dispatch. */
     private readonly quota: QuotaStore | null = null,
+    /** Null when night launches aren't kept: no ticket is then held back by a night budget. */
+    private readonly nights: NightLaunchStore | null = null,
   ) {}
 
   /** Starts waiting builds in the project up to the caps; the first run, or null. Never throws. */
@@ -116,6 +138,9 @@ export class BuildDispatcher {
       });
     };
 
+    // Before the caps' verdict, so a launch still ends while dispatch is paused or at a cap.
+    const night = await this.nightHold(projectId, tickets);
+
     let first: Run | null = null;
     let overlapSkipped = false;
     // Build runs in flight here, kept current as this call starts more (ADR-0080).
@@ -131,6 +156,14 @@ export class BuildDispatcher {
       if (!isDispatchable(effective, project)) continue; // AI-32: Who does the work (ADR-0082).
       if (!routeTakes(route, ticket, project, runnerPresent)) continue; // ADR-0089.
       if (ticket.archived || ticket.needsAttention) continue;
+      if (night && night.launch.storyKeys.includes(ticket.key)) {
+        log("INFO", "build waits: night launch stopped dispatching", {
+          ticket: ticket.key,
+          launchId: night.launch.id,
+          limit: night.limit,
+        });
+        continue;
+      }
       const blocker = blockingRun(ticket, inFlight);
       if (blocker) {
         overlapSkipped = true;
@@ -205,6 +238,74 @@ export class BuildDispatcher {
     await this.tracker.updateProject(project.id, {
       lastDispatch: { decision, at: this.now().toISOString() },
     });
+  }
+
+  /**
+   * The project's active night launch, if it must hold its stories back (ADR-0049 "Night
+   * budget"). A running launch that reached a limit moves to `stopping`; a stopping one, or one
+   * whose stories are all finished, ends with the reason once none of its agent tasks is in
+   * flight, and its unfinished stories are flagged for the morning so they don't start later as
+   * plain Ready tickets. Reads one run list per story (at most `NIGHT_LIMITS.maxStories`).
+   */
+  private async nightHold(projectId: string, tickets: Ticket[]): Promise<NightHold | null> {
+    if (!this.nights) return null;
+    let launch = await this.nights.findActive(projectId);
+    if (!launch) return null;
+    const keys = launch.storyKeys;
+    const stories = tickets.filter((t) => keys.includes(t.key));
+    const runs = (
+      await Promise.all(stories.map((t) => this.runStore.listForTicket(projectId, t.id)))
+    ).flat();
+    const now = this.now();
+    const limit = nightLimitReached(launch, nightUsage(launch, runs), now);
+    if (limit && launch.status === "running") {
+      launch = await this.moveLaunch(launch, ["running"], { status: "stopping" });
+      log("WARNING", "night launch stopping: limit reached", { launchId: launch.id, limit });
+    }
+    const finished = stories.every((t) => t.stage === "done" || t.stage === "cancelled");
+    const reason = runs.some((r) => isInFlight(r, now))
+      ? null
+      : nightEndReason(launch, limit, finished);
+    if (reason) {
+      launch = await this.moveLaunch(launch, ["running", "stopping"], {
+        status: "ended",
+        endedAt: now.toISOString(),
+        endReason: reason,
+      });
+      log("INFO", "night launch ended", { launchId: launch.id, reason });
+      if (reason !== "done") await this.flagUnfinished(launch, stories, reason);
+    }
+    if (reason === "done") return null;
+    return limit || launch.status !== "running" ? { launch, limit: limit ?? "stopped" } : null;
+  }
+
+  /** A launch transition; when another dispatch call moved it first, the launch as it is now. */
+  private async moveLaunch(
+    launch: NightLaunch,
+    from: NightLaunch["status"][],
+    change: NightLaunchTransition,
+  ): Promise<NightLaunch> {
+    try {
+      return await this.nights!.transition(launch.id, from, change);
+    } catch (err) {
+      if (!(err instanceof WorkTrackerError && err.code === "conflict")) throw err;
+      return (await this.nights!.get(launch.id)) ?? launch;
+    }
+  }
+
+  /** Flags the launch's stories that didn't get through, with why the launch ended. */
+  private async flagUnfinished(
+    launch: NightLaunch,
+    stories: Ticket[],
+    reason: NightEndReason,
+  ): Promise<void> {
+    for (const t of stories) {
+      if (t.needsAttention || (t.stage !== "ready" && t.stage !== "in_progress")) continue;
+      await this.flag(
+        t,
+        `Night launch of ${launch.epicKey} ended before this story finished: ${NIGHT_END_TEXT[reason]}. Build it by hand or launch again.`,
+      );
+    }
   }
 
   /** Tickets in Ready for review (an open PR, by the stage rules) whose PR a build run opened. */

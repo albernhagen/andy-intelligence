@@ -1,10 +1,13 @@
 import {
   InMemoryCodeHost,
+  InMemoryNightLaunchStore,
   InMemoryQuotaStore,
   InMemoryRunStore,
   InMemoryWorkTracker,
   type Executor,
   type NewTicket,
+  type NightLaunch,
+  type NightLaunchStore,
   type PlanApproval,
   type Run,
 } from "@andy/contracts";
@@ -48,7 +51,10 @@ describe("BuildDispatcher", () => {
   let ms: number;
   const now = () => new Date((ms += 1000));
 
-  function wire(executor: Executor | null = new WorkflowExecutor(host)) {
+  function wire(
+    executor: Executor | null = new WorkflowExecutor(host),
+    nights: NightLaunchStore | null = null,
+  ) {
     const runs: RunService = new RunService(
       tracker,
       runStore,
@@ -60,7 +66,7 @@ describe("BuildDispatcher", () => {
       },
       host,
     );
-    const dispatcher = new BuildDispatcher(tracker, runStore, runs, now);
+    const dispatcher = new BuildDispatcher(tracker, runStore, runs, now, null, nights);
     const next = (p: string) => dispatcher.next(p);
     return {
       runs,
@@ -770,6 +776,191 @@ describe("BuildDispatcher", () => {
       await toStage(blocker.id, "done");
       expect(await dispatcher.next(projectId)).toBeNull();
       expect((await tracker.getTicket(projectId, story.id))!.needsAttention).toBe(true);
+    });
+  });
+
+  describe("night budget (M4.18)", () => {
+    let nights: InMemoryNightLaunchStore;
+    beforeEach(() => {
+      nights = new InMemoryNightLaunchStore();
+    });
+
+    const BUDGET = { maxRuns: 10, maxTokens: 1_000_000, maxUsd: 50 };
+    /** A running launch over `stories`, started now, stopping in an hour unless `stopAt`. */
+    const launch = async (
+      stories: { key: string }[],
+      over: { budget?: Partial<NightLaunch["budget"]>; stopAt?: string } = {},
+    ) => {
+      const epic = await tracker.createTicket(projectId, { type: "epic", title: "Night" }, "andy");
+      const at = new Date(ms).toISOString();
+      return nights.create({
+        id: "launch-1",
+        projectId,
+        epicId: epic.id,
+        epicKey: epic.key,
+        budget: { ...BUDGET, ...over.budget },
+        stopAt: over.stopAt ?? new Date(ms + 3_600_000).toISOString(),
+        status: "running",
+        storyKeys: stories.map((t) => t.key),
+        createdAt: at,
+        createdBy: "user:andy",
+        startedAt: at,
+        endedAt: null,
+        endReason: null,
+      });
+    };
+    const holds = () =>
+      vi
+        .mocked(console.log)
+        .mock.calls.map(([line]) => JSON.parse(String(line)))
+        .filter((l) => l.message === "build waits: night launch stopped dispatching");
+
+    it("GivenALaunchAtItsMaxAgentTasks_WhenNext_ThenItsStoryWaitsAndTheLaunchIdAndLimitAreLogged", async () => {
+      const { dispatcher } = wire(undefined, nights);
+      const a = await inReady("A");
+      const b = await inReady("B");
+      await launch([a, b], { budget: { maxRuns: 1 } });
+      await tracker.updateProject(projectId, { runsAtOnce: 1 });
+      expect((await dispatcher.next(projectId))?.ticketId).toBe(a.id);
+      await tracker.updateProject(projectId, { runsAtOnce: 2 });
+
+      expect(await dispatcher.next(projectId)).toBeNull();
+      expect(await builds(b.id)).toEqual([]);
+      expect(holds()).toContainEqual(
+        expect.objectContaining({ ticket: b.key, launchId: "launch-1", limit: "max_runs" }),
+      );
+      expect((await nights.get("launch-1"))!.status).toBe("stopping");
+    });
+
+    // 1,000 in and 200 out: about $0.004 at Sonnet's API rates.
+    const USAGE = {
+      inputTokens: 1000,
+      outputTokens: 200,
+      cacheReadTokens: 0,
+      cacheWriteTokens: 0,
+      turns: 3,
+      wallMs: 1000,
+    };
+    it.each([
+      ["max_tokens", { maxTokens: 1000 }],
+      ["max_usd", { maxUsd: 0.003 }],
+    ] as const)(
+      "GivenAFinishedTaskOverThe%sBudget_WhenItEnds_ThenTheLaunchEndsAndTheRestIsFlagged",
+      async (limit, budget) => {
+        await tracker.updateProject(projectId, { runsAtOnce: 1 });
+        const { dispatcher, runs } = wire(undefined, nights);
+        const a = await inReady("A");
+        const b = await inReady("B");
+        await launch([a, b], { budget });
+        const run = (await dispatcher.next(projectId))!;
+        await runs.context(run.id, run.executor!);
+        // 1,200 tokens and an estimated cost: the report wakes the dispatcher, which ends it.
+        await succeed(runs, run, { usage: USAGE });
+
+        expect(await builds(b.id)).toEqual([]);
+        expect(await nights.get("launch-1")).toMatchObject({ status: "ended", endReason: limit });
+        const flagged = (await tracker.getTicket(projectId, b.id))!;
+        expect(flagged.needsAttention).toBe(true);
+        const comments = await tracker.listEvents(projectId, b.id);
+        expect(JSON.stringify(comments)).toContain("Night launch of");
+      },
+    );
+
+    it("GivenAStoppingLaunchWithATaskInFlight_WhenNext_ThenItWaitsToEndUntilTheTaskFinishes", async () => {
+      await tracker.updateProject(projectId, { runsAtOnce: 1 });
+      const { dispatcher, runs } = wire(undefined, nights);
+      const a = await inReady("A");
+      const b = await inReady("B");
+      await launch([a, b], { budget: { maxRuns: 1 } });
+      const run = (await dispatcher.next(projectId))!;
+      await tracker.updateProject(projectId, { runsAtOnce: 2 });
+      await dispatcher.next(projectId);
+      expect((await nights.get("launch-1"))!.status).toBe("stopping");
+
+      await runs.context(run.id, run.executor!);
+      await succeed(runs, run);
+      expect(await nights.get("launch-1")).toMatchObject({
+        status: "ended",
+        endReason: "max_runs",
+      });
+      expect((await tracker.getTicket(projectId, b.id))!.needsAttention).toBe(true);
+      expect(await builds(b.id)).toEqual([]);
+    });
+
+    it("GivenALaunchPastItsStopTime_WhenNext_ThenNoStoryStartsAndTheLaunchEnds", async () => {
+      const { dispatcher } = wire(undefined, nights);
+      const a = await inReady("A");
+      await launch([a], { stopAt: new Date(ms + 500).toISOString() });
+
+      expect(await dispatcher.next(projectId)).toBeNull();
+      expect(await builds(a.id)).toEqual([]);
+      expect(await nights.get("launch-1")).toMatchObject({
+        status: "ended",
+        endReason: "stop_time",
+      });
+      expect((await tracker.getTicket(projectId, a.id))!.needsAttention).toBe(true);
+    });
+
+    it("GivenATicketOutsideTheLaunch_WhenTheLaunchIsAtItsLimit_ThenItStartsAsToday", async () => {
+      const { dispatcher } = wire(undefined, nights);
+      const story = await inReady("Story");
+      const other = await inReady("Other");
+      await launch([story], { stopAt: new Date(ms + 500).toISOString() });
+
+      expect((await dispatcher.next(projectId))?.ticketId).toBe(other.id);
+      expect(await builds(story.id)).toEqual([]);
+    });
+
+    it("GivenALaunchWithBudgetLeft_WhenNext_ThenItsStoriesStartAsToday", async () => {
+      const { dispatcher } = wire(undefined, nights);
+      const a = await inReady("A");
+      await launch([a]);
+      expect((await dispatcher.next(projectId))?.ticketId).toBe(a.id);
+      expect((await nights.get("launch-1"))!.status).toBe("running");
+    });
+
+    it.each([
+      ["paused", { paused: true }, "paused"],
+      ["Builds off", { buildEnabled: false }, null],
+    ] as const)(
+      "GivenALaunchWithBudgetLeftAnd%s_WhenNext_ThenNothingStarts",
+      async (_, change, recorded) => {
+        const { dispatcher } = wire(undefined, nights);
+        const a = await inReady("A");
+        await launch([a]);
+        await tracker.updateProject(projectId, change);
+
+        expect(await dispatcher.next(projectId)).toBeNull();
+        expect(await builds(a.id)).toEqual([]);
+        if (recorded) expect(await decision()).toBe(recorded);
+      },
+    );
+
+    it("GivenAndyStoppedTheLaunch_WhenNext_ThenItsStoriesWaitAndItEndsStopped", async () => {
+      const { dispatcher } = wire(undefined, nights);
+      const a = await inReady("A");
+      await launch([a]);
+      await nights.transition("launch-1", ["running"], { status: "stopping" });
+
+      expect(await dispatcher.next(projectId)).toBeNull();
+      expect(await builds(a.id)).toEqual([]);
+      expect(await nights.get("launch-1")).toMatchObject({ status: "ended", endReason: "stopped" });
+    });
+
+    it("GivenEveryStoryDone_WhenNext_ThenTheLaunchEndsDoneAndNothingIsFlagged", async () => {
+      const { dispatcher } = wire(undefined, nights);
+      const a = await inReady("A");
+      await tracker.updateTicket(
+        projectId,
+        a.id,
+        { stage: { to: "done", forced: true, reason: null } },
+        "andy",
+      );
+      await launch([a]);
+
+      await dispatcher.next(projectId);
+      expect(await nights.get("launch-1")).toMatchObject({ status: "ended", endReason: "done" });
+      expect((await tracker.getTicket(projectId, a.id))!.needsAttention).toBe(false);
     });
   });
 });
