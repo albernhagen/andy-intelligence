@@ -25,6 +25,7 @@ import { RunCostFields } from "./cost";
 import { runInFlightFields } from "./in-flight";
 import { runSyncFields } from "./sync";
 import { runLocalFields } from "./runner";
+import { runBaseFields } from "./build";
 import { RefineScores, TicketScores } from "./scores";
 import {
   questionFormatFields,
@@ -555,6 +556,7 @@ export const Run = z.object({
   ...runInFlightFields,
   ...runSyncFields,
   ...runLocalFields,
+  ...runBaseFields,
 });
 export type Run = z.infer<typeof Run>;
 
@@ -913,4 +915,5 @@ export type CodeHostEvent = z.infer<typeof CodeHostEvent>;
 export * from "./worker";
 export * from "./executor";
 export * from "./runner";
+export * from "./build";
 export * from "./night";

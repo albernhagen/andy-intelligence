@@ -57,6 +57,7 @@ jobs:
       project_id: ${{ steps.context.outputs.project_id }}
       branch: ${{ steps.context.outputs.branch }}
       head_sha: ${{ steps.context.outputs.head_sha }}
+      base_branch: ${{ steps.context.outputs.base_branch }}
       platform_sha: ${{ steps.context.outputs.platform_sha }}
       error: ${{ steps.context.outputs.error }}
     steps:
@@ -117,7 +118,16 @@ jobs:
               and ((.branch | split("/") | .[1]) == .ticket.key)
               and (.sync.pullRequest | type == "number" and . == floor and . >= 1)
               and (.sync.headSha | type == "string" and test("^[0-9a-f]{40}$"))))
+            and (.baseBranch == null or (
+              (.step == "build")
+              and (.baseBranch | type == "string" and test("^epic/[A-Z][A-Z0-9]{0,9}-[0-9]{1,9}$"))
+              and ((.baseBranch | ltrimstr("epic/") | split("-") | .[0]) == (.ticket.key | split("-") | .[0]))))
           ' "$body" > /dev/null || fail "GET /runs/$RUN_ID/context: unexpected response shape"
+
+          # AI-122: a night launch's story builds on its epic branch; empty means the default
+          # branch, as before. Checked again here before it becomes an output.
+          base_branch=$(jq -r '.baseBranch // ""' "$body")
+          [[ -z "$base_branch" || "$base_branch" =~ ^epic/[A-Z][A-Z0-9]{0,9}-[0-9]{1,9}$ ]] || fail "unexpected base branch"
 
           step=$(jq -r .step "$body")
           case "$step" in refine | plan | review) read_only=true ;; *) read_only=false ;; esac
@@ -131,6 +141,7 @@ jobs:
             echo "project_id=$(jq -r '.ticket.projectId // ""' "$body")"
             echo "branch=$(jq -r '.branch // ""' "$body")"
             echo "head_sha=$(jq -r '.sync.headSha // ""' "$body")"
+            echo "base_branch=$base_branch"
             # One line: the title can't hold a newline here, and the delimiter is random.
             echo "ticket_title=$(jq -r '.ticket.title // "" | gsub("[\\r\\n]+"; " ")' "$body")"
             delimiter="PROMPT_$(openssl rand -hex 16)"
@@ -163,11 +174,12 @@ jobs:
       sync_publish: ${{ steps.settle.outputs.sync_publish }}
     steps:
       # A sync run checks out the PR head it was started on, with history, to merge the default
-      # branch into it; every other step starts from the default branch.
+      # branch into it; a night launch's story build its epic branch (AI-122, checked in the
+      # context job); every other step starts from the default branch.
       - name: Check out the project
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          ref: ${{ needs.context.outputs.step == 'sync' && needs.context.outputs.head_sha || github.event.repository.default_branch }}
+          ref: ${{ needs.context.outputs.step == 'sync' && needs.context.outputs.head_sha || needs.context.outputs.base_branch || github.event.repository.default_branch }}
           fetch-depth: ${{ fromJSON(needs.context.outputs.step == 'sync' && '0' || '1') }}
           persist-credentials: false
 
@@ -708,7 +720,8 @@ jobs:
           RUN_ID: ${{ inputs.run_id }}
           BRANCH: ${{ needs.context.outputs.branch }}
           REPO: ${{ github.repository }}
-          BASE: ${{ github.event.repository.default_branch }}
+          BASE: ${{ needs.context.outputs.base_branch || github.event.repository.default_branch }}
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
           PROJECT_ID: ${{ needs.context.outputs.project_id }}
           TICKET_KEY: ${{ needs.context.outputs.ticket_key }}
           TICKET_TITLE: ${{ needs.context.outputs.ticket_title }}

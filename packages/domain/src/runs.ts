@@ -37,7 +37,9 @@ import {
   type Ticket,
   type WatchdogQueue,
   type WorkTracker,
+  type NightLaunchStore,
 } from "@andy/contracts";
+import { buildBaseBranch } from "./night-branch";
 import { MAX_ACTIVE_RUNS_GLOBAL, isInFlight, wasDispatched } from "./dispatch-caps";
 import { blockingRun, editingRuns, highestAdrInIndex, runTouches } from "./dispatch-conflicts";
 import { isDispatchable, resolveWorker } from "./worker";
@@ -211,6 +213,8 @@ export class RunService {
      * so a `local` default runs on the cloud executor and a `local` override waits.
      */
     private readonly runnerPresence: ((projectId: string) => Promise<boolean>) | null = null,
+    /** Night launches (AI-122): a launched story's build gets its epic branch; null: none. */
+    private readonly launches: Pick<NightLaunchStore, "findActive"> | null = null,
   ) {}
 
   /** Whether a local runner serving the project is present now (ADR-0089). */
@@ -324,6 +328,15 @@ export class RunService {
         ? (retryOf?.reservedAdr ?? (await this.reserveAdr(projectId, repo)))
         : null;
     const prompt = await this.promptFor(startable, ticket, repo, questions, approved, reservedAdr);
+    // AI-122: a retry keeps its run's base, so one story's attempts never straddle two branches.
+    const baseBranch =
+      startable !== "build"
+        ? null
+        : retryOf
+          ? retryOf.baseBranch
+          : this.launches
+            ? await buildBaseBranch(this.launches, projectId, ticket.key)
+            : null;
     const run = await this.runs.create({
       projectId,
       ticketId,
@@ -339,6 +352,7 @@ export class RunService {
       planPolicy: startable === "plan" ? project.planApproval : null,
       touches,
       reservedAdr,
+      baseBranch,
       localRun: opts.runner
         ? {
             runnerId: opts.runner.id,
@@ -630,6 +644,7 @@ export class RunService {
         run.step === "sync" && run.syncRun
           ? { pullRequest: run.syncRun.number, headSha: run.syncRun.headSha }
           : null,
+      baseBranch: run.step === "build" ? run.baseBranch : null,
     };
   }
 

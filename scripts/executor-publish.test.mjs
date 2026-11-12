@@ -186,6 +186,7 @@ describe("executor publish job", () => {
     BRANCH: "agent/AI-3/run1",
     REPO: "albernhagen/andy-intelligence",
     BASE: "main",
+    DEFAULT_BRANCH: "main",
     PROJECT_ID: "ai",
     TICKET_KEY: "AI-3",
     TICKET_TITLE: "Build run",
@@ -262,6 +263,25 @@ describe("executor publish job", () => {
     await expect(h.run({ ...baseEnv, BRANCH: "main" })).rejects.toBeInstanceOf(PublishRefused);
     await expect(h.run({ ...baseEnv, REPO: "a b" })).rejects.toBeInstanceOf(PublishRefused);
     expect(h.calls).toEqual([]);
+  });
+
+  it("GivenALaunchedStoryOnItsEpicBranch_WhenPublished_ThenThePrTargetsTheEpicBranch", async () => {
+    const h = harness();
+    await h.run({ ...baseEnv, BASE: "epic/AI-1" });
+    const body = JSON.parse(h.requests.at(-1).init.body);
+    expect(body).toMatchObject({ head: "agent/AI-3/run1", base: "epic/AI-1" });
+  });
+
+  it("GivenABaseThatIsNeitherMainNorTheProjectsEpicBranch_WhenPublished_ThenItIsRefusedBeforeGitRuns", async () => {
+    const h = harness();
+    for (const BASE of ["release", "epic/BB-1", "epic/AI-1/x", "epic/ai-1", "", undefined]) {
+      await expect(h.run({ ...baseEnv, BASE })).rejects.toBeInstanceOf(PublishRefused);
+    }
+    await expect(h.run({ ...baseEnv, DEFAULT_BRANCH: undefined })).rejects.toBeInstanceOf(
+      PublishRefused,
+    );
+    expect(h.calls).toEqual([]);
+    expect(h.requests).toEqual([]);
   });
 
   it("GivenTheTokenIsRefused_WhenPublished_ThenNothingIsPushed", async () => {

@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { Id, RunStep, Timestamp } from "./common";
+import { BaseBranch } from "./build";
 
 /**
  * The local executor (ADR-0089): a runner program on Andy's Mac polls the control plane over plain
@@ -179,6 +180,8 @@ export const RunContextResponse = z.object({
   /** The branch a build or sync run pushes; null for other steps. */
   branch: z.string().nullable(),
   sync: z.object({ pullRequest: z.number().int().positive(), headSha: z.string() }).nullable(),
+  /** A build's base branch (`epic/<KEY>`, AI-122); null or absent: the default branch. */
+  baseBranch: BaseBranch.nullable().optional(),
 });
 export type RunContextResponse = z.infer<typeof RunContextResponse>;
 

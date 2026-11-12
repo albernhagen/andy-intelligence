@@ -15,6 +15,7 @@ import {
 import { DomainError } from "./errors";
 import type { PlanState } from "./plans";
 import { requireCan } from "./permissions";
+import type { EpicBranchOpener } from "./night-branch";
 
 /**
  * Night launch (ADR-0049 "Launch step" and "Night budget", M4.16). Before Andy steps away he
@@ -173,6 +174,8 @@ export class NightLaunches {
     private readonly plans: PlanStates,
     private readonly now: () => Date = () => new Date(),
     private readonly newId: () => string = () => crypto.randomUUID(),
+    /** Creates the launch's `epic/<KEY>` branch (AI-122); null: none, stories build on main. */
+    private readonly branches: EpicBranchOpener | null = null,
   ) {}
 
   /** Everything that blocks launching the epic now; the UI shows it as the checklist. */
@@ -223,6 +226,8 @@ export class NightLaunches {
       );
     }
     const parsed = StartNightLaunch.parse(input);
+    // Before the launch is stored, so an existing branch is never this launch's (AI-122).
+    const epicBranch = this.branches ? await this.branches.open(projectId, epic.key) : null;
     const at = this.now().toISOString();
     const launch = await this.store.create({
       id: this.newId(),
@@ -238,6 +243,7 @@ export class NightLaunches {
       startedAt: at,
       endedAt: null,
       endReason: null,
+      epicBranch,
     });
     log("INFO", "night launch started", { projectId, epic: epic.key, launchId: launch.id });
     return launch;

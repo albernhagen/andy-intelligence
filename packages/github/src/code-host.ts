@@ -12,6 +12,7 @@ import {
   type CheckConclusion,
   type CodeHost,
   type Listing,
+  EPIC_BRANCH_PATTERN,
 } from "@andy/contracts";
 import { createAppAuth } from "@octokit/auth-app";
 import { Octokit } from "@octokit/core";
@@ -26,6 +27,8 @@ export interface GitHubAppCredentials {
 
 /** A workflow file name in `.github/workflows/`, e.g. `agent-run.yml`. */
 const WORKFLOW_FILE = /^[A-Za-z0-9._-]{1,100}\.ya?ml$/;
+/** A branch name safe to put in a ref path: no `..`, no leading or trailing slash. */
+const SAFE_BRANCH = /^(?!.*\.\.)[A-Za-z0-9._-]+(\/[A-Za-z0-9._-]+)*$/;
 
 const CONCLUSIONS: readonly string[] = [
   "success",
@@ -347,6 +350,44 @@ export class GitHubCodeHost implements CodeHost {
     );
     if (!res) return null;
     return res.data.status === "ahead" || res.data.status === "identical";
+  }
+
+  /** The branch's tip commit; null when the branch (or the App's install) is missing. */
+  async branchSha(fullName: string, branch: string): Promise<string | null> {
+    if (!SAFE_BRANCH.test(branch)) throw new Error("unexpected branch name");
+    const client = await this.repoClient(fullName);
+    if (!client) return null;
+    const res = await this.notFoundAsNull(() =>
+      client.octokit.request("GET /repos/{owner}/{repo}/git/ref/{ref}", {
+        ...client.repo,
+        ref: `heads/${branch}`,
+      }),
+    );
+    return res ? res.data.object.sha : null;
+  }
+
+  /**
+   * Creates an `epic/<KEY>` branch at `sha` (AI-122): the App's only branch write outside a
+   * build's own repo token, and only for that pattern. "exists" when GitHub says it already is.
+   */
+  async createBranch(fullName: string, branch: string, sha: string): Promise<"created" | "exists"> {
+    if (!EPIC_BRANCH_PATTERN.test(branch)) throw new Error("only epic/<KEY> branches are created");
+    if (!/^[0-9a-f]{40}$/.test(sha)) throw new Error("unexpected commit sha");
+    const client = await this.repoClient(fullName);
+    if (!client) throw new Error(`the App isn't installed on ${fullName}`);
+    try {
+      await client.octokit.request("POST /repos/{owner}/{repo}/git/refs", {
+        ...client.repo,
+        ref: `refs/heads/${branch}`,
+        sha,
+      });
+      return "created";
+    } catch (err) {
+      // GitHub answers 422 "Reference already exists" for a branch that is there.
+      const { status, message } = err as { status?: number; message?: string };
+      if (status === 422 && /already exists/i.test(message ?? "")) return "exists";
+      throw err;
+    }
   }
 
   /** An installation client and owner/repo; null when the App isn't installed. */
