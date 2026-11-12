@@ -10,6 +10,7 @@ import {
   Risk,
   SCORE_REASON_MAX,
   Size,
+  siblingDependencyIssues,
   TicketType,
 } from "./index";
 
@@ -21,6 +22,7 @@ const schemaText = readFileSync(
 );
 const schema = JSON.parse(schemaText);
 const item = schema.properties.gaps.items;
+const childItem = schema.properties.children.items;
 
 const gap = {
   question: "Which store should tickets live in?",
@@ -49,6 +51,9 @@ const base = {
   children: [],
   gaps: [gap],
 };
+
+const child = { title: "t", body: "b", blockedBy: [] as number[], touches: [] as string[] };
+const split = (children: unknown[]) => ({ ...base, outcome: "split", reason: "big", children });
 
 describe("RefineOutput", () => {
   it("GivenTheAgentSchemaFile_WhenComparedWithTheLimits_ThenTheyMatch", () => {
@@ -97,6 +102,20 @@ describe("RefineOutput", () => {
     );
   });
 
+  it("GivenTheAgentSchemaFile_WhenChildrenAreComparedWithRefineChild_ThenTheyMatch", () => {
+    expect(Object.keys(childItem.properties).sort()).toEqual([
+      "blockedBy",
+      "body",
+      "title",
+      "touches",
+    ]);
+    expect([...childItem.required].sort()).toEqual(Object.keys(childItem.properties).sort());
+    expect(childItem.properties.blockedBy.maxItems).toBe(REFINE_LIMITS.maxChildren - 1);
+    expect(childItem.properties.blockedBy.items.maximum).toBe(REFINE_LIMITS.maxChildren - 1);
+    expect(childItem.properties.touches.maxItems).toBe(REFINE_LIMITS.maxScopeItems);
+    expect(childItem.properties.touches.items.maxLength).toBe(REFINE_LIMITS.scopeItem);
+  });
+
   it("GivenTheAgentSchemaFile_WhenPassedAsAShellArgument_ThenItHasNoSingleQuote", () => {
     // The workflow wraps the compact schema in single quotes inside claude_args.
     expect(schemaText).not.toContain("'");
@@ -115,6 +134,47 @@ describe("RefineOutput", () => {
 
   it("GivenNoGaps_WhenParsed_ThenItIsValid", () => {
     expect(RefineOutput.safeParse({ ...base, gaps: [] }).success).toBe(true);
+  });
+
+  it("GivenChildrenBlockedByOtherChildren_WhenParsed_ThenItIsValid", () => {
+    const out = RefineOutput.parse(
+      split([
+        { ...child, touches: ["packages/contracts/**"] },
+        { ...child, blockedBy: [0] },
+        { ...child, blockedBy: [3, 1] },
+        child,
+      ]),
+    );
+    expect(out.children.map((c) => c.blockedBy)).toEqual([[], [0], [3, 1], []]);
+    expect(out.children[0]?.touches).toEqual(["packages/contracts/**"]);
+  });
+
+  it("GivenChildrenWithoutTheNewFields_WhenParsed_ThenTheyDefaultToEmpty", () => {
+    const out = RefineOutput.parse(split([{ title: "t", body: "b" }]));
+    expect(out.children[0]).toEqual({ title: "t", body: "b", blockedBy: [], touches: [] });
+  });
+
+  it.each([
+    ["itself", [{ ...child, blockedBy: [0] }], "child 0 is blocked by itself"],
+    ["an index past the output", [child, { ...child, blockedBy: [2] }], "not in the output"],
+    ["a sibling twice", [child, { ...child, blockedBy: [0, 0] }], "names a sibling twice"],
+    [
+      "a cycle",
+      [
+        { ...child, blockedBy: [2] },
+        { ...child, blockedBy: [0] },
+        { ...child, blockedBy: [1] },
+      ],
+      "cycle",
+    ],
+  ])("GivenAChildBlockedBy%s_WhenParsed_ThenItIsRejected", (_, children, message) => {
+    const result = RefineOutput.safeParse(split(children));
+    expect(result.success).toBe(false);
+    expect(result.error?.issues.map((i) => i.message).join("; ")).toContain(message);
+  });
+
+  it("GivenNoChildren_WhenSiblingLinksAreChecked_ThenThereAreNoIssues", () => {
+    expect(siblingDependencyIssues([])).toEqual([]);
   });
 
   it.each([
@@ -163,6 +223,10 @@ describe("RefineOutput", () => {
         children: Array(6).fill({ title: "t", body: "b" }),
       },
     ],
+    ["a negative blockedBy index", split([child, { ...child, blockedBy: [-1] }])],
+    ["a fractional blockedBy index", split([child, { ...child, blockedBy: [0.5] }])],
+    ["a blank child touch", split([{ ...child, touches: [" "] }])],
+    ["21 child touches", split([{ ...child, touches: Array(21).fill("a") }])],
   ])("GivenAResultWith%s_WhenParsed_ThenItIsRejected", (_, value) => {
     expect(RefineOutput.safeParse(value).success).toBe(false);
   });
