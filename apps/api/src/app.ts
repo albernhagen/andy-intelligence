@@ -25,6 +25,7 @@ import {
   QuotaClearer,
   TicketService,
   EmailNotifications,
+  wakeAfterRunEnd,
   notifyOnNeedsYou,
   type EmailNotificationsDeps,
 } from "@andy/domain";
@@ -242,6 +243,8 @@ export function createApp(input: AppDeps) {
   // create, last answer, move to Ready and switch turned on: a build first (ADR-0063, projects
   // with autoBuild), else a refine (ADR-0054). Projects waiting on the global cap go first,
   // then builds start up to the caps (ADR-0079). `next` and `wakeGlobalCapWaiters` never throw.
+  // When a run ends at the global cap, `wakeAfterRunEnd` offers the slot to other projects in
+  // `dispatchOrder` (AI-91), syncs and refines too, until it's taken; the freeing project goes last.
   // Local runners (ADR-0089): claims start runs through the same dispatchers and RunService.
   const runners = deps.runners
     ? new RunnerService(deps.runners, deps.tracker, runnerCredentials, now)
@@ -253,7 +256,7 @@ export function createApp(input: AppDeps) {
     connection ? new ClaudeCodeActionsExecutor(new ConnectedCodeHost(connection)) : null,
     now,
     deps.watchdog?.queue ?? null,
-    async (projectId) => void (await dispatchNext(projectId)),
+    async (projectId) => runEnded(projectId),
     connection ? new ConnectedCodeHost(connection) : null,
     runnerPresence,
   );
@@ -268,12 +271,33 @@ export function createApp(input: AppDeps) {
     now,
     deps.quota ?? null,
   );
-  const dispatchNext = async (projectId: string) => {
+  const dispatchNext = async (projectId: string, wakeWaiters = true) => {
     // AI-75 (ADR-0087): held gaps are asked first, as the question caps allow; no run needed.
     await refiner.askHeld(projectId);
     await syncer.next(projectId);
-    await builder.wakeGlobalCapWaiters(projectId);
+    if (wakeWaiters) await builder.wakeGlobalCapWaiters(projectId);
     return (await builder.next(projectId)) ?? (await refiner.next(projectId));
+  };
+  const runEnded = async (projectId: string) => {
+    await wakeAfterRunEnd({
+      freedBy: projectId,
+      listProjects: () => deps.tracker.listProjects(),
+      globalActive: async () => (await runs.activeCounts(projectId)).global,
+      // One project's failure must not keep the slot from the projects after it.
+      dispatch: (id, wakeWaiters) =>
+        dispatchNext(id, wakeWaiters).then(
+          () => undefined,
+          (err: unknown) =>
+            console.error(
+              JSON.stringify({
+                severity: "ERROR",
+                message: "dispatch after a run ended failed",
+                projectId: id,
+                error: String(err),
+              }),
+            ),
+        ),
+    });
   };
   // One TicketService for REST, MCP and webhooks: all get the same ticket rules (packages/domain).
   const service = new TicketService(deps.tracker, runs, dispatchNext, now, runnerPresence);
