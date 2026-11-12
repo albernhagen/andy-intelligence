@@ -1,7 +1,14 @@
 import { Run, type Ticket } from "@andy/contracts";
 import { describe, expect, it } from "vitest";
 import { ticketSnapshot } from "./builds";
-import { MAX_PLAN_AGE_HOURS, planPrompt, planRequired, planState, renderPlan } from "./plans";
+import {
+  MAX_PLAN_AGE_HOURS,
+  planPrompt,
+  planRequired,
+  planState,
+  planWrittenAt,
+  renderPlan,
+} from "./plans";
 import { buildOutput } from "./test-executor";
 import { TIER_ROUTES } from "./tiers";
 
@@ -141,5 +148,15 @@ describe("renderPlan", () => {
     expect(text).toContain("- apps/web/src/pages/BoardPage.tsx");
     expect(text).toContain("1. Write the page");
     expect(text).toContain("Riskiest step: Ordering by rank");
+  });
+});
+
+describe("planWrittenAt", () => {
+  it("GivenAFinishedPlanRun_WhenRead_ThenItIsTheEndTime", () => {
+    expect(planWrittenAt(planRun())).toBe(Date.parse("2026-11-06T11:00:00.000Z"));
+  });
+
+  it("GivenAPlanRunWithoutAnEnd_WhenRead_ThenItIsTheCreationTime", () => {
+    expect(planWrittenAt(planRun({ endedAt: null }))).toBe(Date.parse("2026-11-06T10:00:00.000Z"));
   });
 });
