@@ -139,26 +139,26 @@ pnpm --filter @andy/web screenshots          # local run (macOS renders differ)
 
 ## Layout
 
-| Path                  | What                                                                            |
-| --------------------- | ------------------------------------------------------------------------------- |
-| `apps/api`            | Hono API, MCP endpoint + its OAuth server; serves the SPA                       |
-| `apps/web`            | React + Vite + shadcn UI; design rules in `design.md`                           |
-| `packages/contracts`  | Zod entities, ports, fakes, contract suites                                     |
-| `packages/domain`     | Ticket and project rules: stages, DoR, Needs-you, repo registration             |
-| `packages/store`      | Firestore client, converters, `FirestoreWorkTracker`                            |
-| `packages/github`     | GitHub App adapter: `GitHubCodeHost`, webhook HMAC + mapping                    |
-| `infra/bootstrap`     | One-time GCP bootstrap (state bucket, GitHub OIDC)                              |
-| `infra/control-plane` | Control-plane GCP resources                                                     |
-| `infra/billing`       | Billing budget, alerts, opt-in kill switch (local plans only)                   |
-| `infra/dns`           | Cloudflare records for `ai.andybernhagen.com` (local plans only)                |
-| `scripts`             | Repo tooling (Claude Code format hook, review gate and scope)                   |
-| `platform/actions`    | Composite actions behind every required check (baseline)                        |
-| `platform/baseline`   | Baseline manifest, GitHub config JSON, `baseline.mjs`                           |
-| `platform/executor`   | Permission profile for headless agent tasks (ADR-0051)                          |
-| `platform/procedures` | Agent procedures: `/security-review`, `/threat-model`, `/refine`, `/coordinate` |
-| `context-budget.json` | Size budgets for agent-loaded docs (`pnpm context:check`, ADR-0046)             |
-| `template`            | Files copied into managed repos (managed, seed, starter)                        |
-| `lefthook.yml`        | Git hooks: pre-commit lint/format, pre-push checks                              |
-| `firebase.json`       | Firestore emulator config for `pnpm test:firestore`                             |
+| Path                  | What                                                                 |
+| --------------------- | -------------------------------------------------------------------- |
+| `apps/api`            | Hono API, MCP endpoint + its OAuth server; serves the SPA            |
+| `apps/web`            | React + Vite + shadcn UI; design rules in `design.md`                |
+| `packages/contracts`  | Zod entities, ports, fakes, contract suites                          |
+| `packages/domain`     | Ticket and project rules: stages, DoR, Needs-you, repo registration  |
+| `packages/store`      | Firestore client, converters, `FirestoreWorkTracker`                 |
+| `packages/github`     | GitHub App adapter: `GitHubCodeHost`, webhook HMAC + mapping         |
+| `infra/bootstrap`     | One-time GCP bootstrap (state bucket, GitHub OIDC)                   |
+| `infra/control-plane` | Control-plane GCP resources                                          |
+| `infra/billing`       | Billing budget, alerts, opt-in kill switch (local plans only)        |
+| `infra/dns`           | Cloudflare records for `ai.andybernhagen.com` (local plans only)     |
+| `scripts`             | Repo tooling (Claude Code format hook, review gate and scope)        |
+| `platform/actions`    | Composite actions behind every required check (baseline)             |
+| `platform/baseline`   | Baseline manifest, GitHub config JSON, `baseline.mjs`                |
+| `platform/executor`   | Permission profile for headless agent tasks (ADR-0051)               |
+| `platform/procedures` | Agent procedures: `/refine`, `/onboard`, `/plan-project`, `/ideate`… |
+| `context-budget.json` | Size budgets for agent-loaded docs (`pnpm context:check`, ADR-0046)  |
+| `template`            | Files copied into managed repos (managed, seed, starter)             |
+| `lefthook.yml`        | Git hooks: pre-commit lint/format, pre-push checks                   |
+| `firebase.json`       | Firestore emulator config for `pnpm test:firestore`                  |
 
 Runbooks for every manual step (infra setup, billing, reviews, onboarding, MCP, GitHub App, DNS): [`docs/runbooks/`](docs/runbooks/). Deploys and going back to an earlier revision: [`deploy-and-rollback.md`](docs/runbooks/deploy-and-rollback.md).
