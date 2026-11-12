@@ -123,6 +123,16 @@ describe("launchDependants", () => {
     ]);
     expect(launchDependants(["AI-1", "AI-4"], tickets, "AI-4")).toEqual([]);
   });
+
+  it("GivenAChainThroughATicketOutsideTheLaunch_WhenDependantsAreFound_ThenTheLaunchStoryAtItsEndIsSkipped", () => {
+    // AI-1 and AI-3 are launched; AI-2 (not launched) waits on AI-1, and AI-3 waits on AI-2.
+    const tickets = [
+      { key: "AI-1", blockedBy: [] },
+      { key: "AI-2", blockedBy: ["AI-1"] },
+      { key: "AI-3", blockedBy: ["AI-2"] },
+    ];
+    expect(launchDependants(["AI-1", "AI-3"], tickets, "AI-1")).toEqual(["AI-3"]);
+  });
 });
 
 describe("NightUnattended.coveringLaunch", () => {

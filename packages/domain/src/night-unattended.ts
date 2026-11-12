@@ -13,30 +13,28 @@ function log(severity: "INFO" | "WARNING" | "ERROR", message: string, fields: ob
   console.log(JSON.stringify({ severity, message, component: "night-unattended", ...fields }));
 }
 
-/** Launch stories that wait on `stoppedKey`, directly or through other stories, in launch order. */
+/**
+ * Launch stories that wait on `stoppedKey`, directly or through any other ticket (in the launch
+ * or not), in launch order. Only launch stories are reported; a chain may pass through others.
+ */
 export function launchDependants(
   storyKeys: readonly string[],
   tickets: readonly Pick<Ticket, "key" | "blockedBy">[],
   stoppedKey: string,
 ): string[] {
-  const inLaunch = new Set(storyKeys);
-  const blockers = new Map(tickets.map((t) => [t.key, t.blockedBy] as const));
-  const skipped = new Set<string>();
+  const waiting = new Set<string>([stoppedKey]);
   let grew = true;
   while (grew) {
     grew = false;
-    for (const key of storyKeys) {
-      if (key === stoppedKey || skipped.has(key)) continue;
-      const waits = (blockers.get(key) ?? []).some(
-        (b) => inLaunch.has(b) && (b === stoppedKey || skipped.has(b)),
-      );
-      if (waits) {
-        skipped.add(key);
+    for (const t of tickets) {
+      if (waiting.has(t.key)) continue;
+      if (t.blockedBy.some((b) => waiting.has(b))) {
+        waiting.add(t.key);
         grew = true;
       }
     }
   }
-  return storyKeys.filter((k) => skipped.has(k));
+  return storyKeys.filter((k) => k !== stoppedKey && waiting.has(k));
 }
 
 export class NightUnattended {
