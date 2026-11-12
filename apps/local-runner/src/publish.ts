@@ -11,8 +11,9 @@ import type { Confinement } from "./seatbelt";
  * The script gets its push token from an Actions OIDC exchange. The harness below answers that
  * exchange in memory with the token the runner already holds, so the script runs unchanged and
  * the child never sees the runner secret or the per-run token. The token reaches the child on
- * stdin only, and the child's answer never holds it: the script's `::add-mask::` lines are
- * dropped and any other line has the token removed.
+ * stdin only, never into any process's environment (git gets it through a file, see the
+ * harness), and the child's answer never holds it: the script's `::add-mask::` lines are dropped
+ * and any other line has the token removed.
  */
 
 export interface PublishInput {
@@ -34,6 +35,8 @@ export interface PublishInput {
   /** The control plane's origin: the ticket link on the PR's first line. */
   controlPlaneOrigin: string;
   pushToken: string;
+  /** A directory only the publish child can read: git's credential file lives there briefly. */
+  credDir: string;
   /** Where git pushes and the GitHub API; tests point them at local fakes. */
   gitBase: string;
   githubApi: string;
@@ -50,14 +53,15 @@ export type PublishResult =
 
 /** Runs in the child: imports the platform's publish script by path, answers on stdout. */
 const HARNESS = `
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
 const root = process.argv.at(-1);
 const req = JSON.parse(readFileSync(0, "utf8"));
 const token = req.pushToken;
 delete req.pushToken;
-const scrub = (text) => String(text).split(token).join("***");
+const encodedToken = Buffer.from("x-access-token:" + token).toString("base64");
+const scrub = (text) => String(text).split(token).join("***").split(encodedToken).join("***");
 const { publish, gitRunner, PublishRefused } = await import(
   pathToFileURL(join(root, "scripts", "executor-publish.mjs")).href
 );
@@ -75,11 +79,26 @@ const fetchShim = async (url, init) => {
   throw new Error("the publish script asked for an unexpected URL");
 };
 const base = gitRunner(process.cwd());
-const git = (args, extraEnv) => {
-  const i = args.indexOf("push");
-  if (i !== -1 && req.gitBase !== "https://github.com") {
+const HEADER_KEY = "http.https://github.com/.extraheader";
+const git = (args, extraEnv = {}) => {
+  if (args.includes("push") && req.gitBase !== "https://github.com") {
     args = args.map((a) => (a.startsWith("https://github.com/") ? req.gitBase + a.slice(18) : a));
   }
+  // The script hands git the push credential in its environment, which another process of the
+  // same user can read. Here it goes in a mode-600 file only this child can read instead; git
+  // gets the file's path (include.path) and nothing else.
+  if (extraEnv.GIT_CONFIG_KEY_0 === HEADER_KEY && extraEnv.GIT_CONFIG_COUNT === "1") {
+    const file = join(req.credDir, "push.gitconfig");
+    writeFileSync(file, '[http "https://github.com/"]\\n\\textraheader = ' + extraEnv.GIT_CONFIG_VALUE_0 + "\\n", { mode: 0o600 });
+    try {
+      return base(args, { GIT_CONFIG_COUNT: "1", GIT_CONFIG_KEY_0: "include.path", GIT_CONFIG_VALUE_0: file });
+    } finally {
+      rmSync(file, { force: true });
+    }
+  }
+  const encoded = Buffer.from("x-access-token:" + token).toString("base64");
+  const text = JSON.stringify(extraEnv);
+  if (text.includes(token) || text.includes(encoded)) throw new Error("refusing to put the push token in git's environment");
   return base(args, extraEnv);
 };
 const log = [];
@@ -118,6 +137,7 @@ export function publishChange(input: PublishInput): Promise<PublishOutcome> {
   }
   const request = {
     pushToken: input.pushToken,
+    credDir: input.credDir,
     gitBase: input.gitBase,
     githubApi: input.githubApi.replace(/\/+$/, ""),
     env: {

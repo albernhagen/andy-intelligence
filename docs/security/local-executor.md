@@ -13,7 +13,7 @@ Every process below runs as the runner's macOS user (`ai-runner`) under a Seatbe
 | Agent, build                              | Settings file, the repo's cache (git reads), Claude Code's own files | Its checkout, its own `/tmp/agent/<runId>` | On (its API)       | The runner user's Claude login; Bash only in Claude Code's sandbox, checked before each build (one Haiku call) |
 | Platform child (settings, prompt, report) | Platform checkout, checkout, agent stream                            | Nothing                                    | Off; no Keychain   | None                                                                                                           |
 | Install child (build, `pnpm-lock.yaml`)   | pnpm                                                                 | Checkout, its own store and home           | On; no Keychain    | None; scripts and pnpmfile off                                                                                 |
-| Publish child (build with a change)       | Platform checkout, the patch                                         | Its fresh worktree, the repo's cache       | On; no Keychain    | Push token (stdin; to git through `GIT_CONFIG_*` env, as on Actions)                                           |
+| Publish child (build with a change)       | Platform checkout, the patch, its credential file                    | Its fresh worktree, the repo's cache       | On; no Keychain    | Push token (stdin; to git as a mode-600 file in the work directory, never in an environment)                   |
 
 ## The push token (ADR-0102)
 
@@ -24,7 +24,7 @@ Every process below runs as the runner's macOS user (`ai-runner`) under a Seatbe
 ## Residual risk
 
 - A 1-hour App token for one repo is on the Mac during publish: agent branches and PRs on that repo, never `main` (ruleset).
-- A process the build agent leaves behind can outlive it during publish. It keeps the agent's profile (no work-directory reads). macOS hides other processes' environments, so git's credential variable isn't readable; the runner checks that live before each push token and publishes nothing otherwise.
+- A process the build agent leaves behind can outlive it during publish. It keeps the agent's profile, so it can't read the work directory, where git's credential file lives for the push. It can read other same-user processes' environments (Seatbelt can't deny that), which is why no process gets the token in its environment.
 - Platform code from `main` runs in the platform and publish children (ADR-0098); the publish child holds the push token, as the Actions publish job does.
 - Whether Claude Code's sandbox starts inside Seatbelt is unproven. If not, the pre-agent Bash check fails and no local build runs (ADR-0102).
 

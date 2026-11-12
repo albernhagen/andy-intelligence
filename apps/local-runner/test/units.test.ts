@@ -462,10 +462,4 @@ describe("build scratch isolation (AI-133)", () => {
     expect(deny).toBeGreaterThan(-1);
     expect(allow).toBeGreaterThan(deny);
   });
-
-  it("GivenThisMac_WhenAskedWhetherOtherProcessesEnvironmentsShow_ThenTheAnswerIsABoolean", async () => {
-    expect(await noConfinement.environmentHidden()).toBe(true);
-    if (process.platform === "darwin")
-      expect(typeof (await seatbelt.environmentHidden())).toBe("boolean");
-  });
 });

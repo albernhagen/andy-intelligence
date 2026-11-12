@@ -1,4 +1,4 @@
-import { execFile, spawn } from "node:child_process";
+import { execFile } from "node:child_process";
 import { randomBytes } from "node:crypto";
 import { existsSync, realpathSync } from "node:fs";
 import { rm, writeFile } from "node:fs/promises";
@@ -139,39 +139,9 @@ export interface Confinement {
     runDir: string;
     writable?: boolean;
   }): Promise<string | null>;
-  /**
-   * Before a push token is fetched: true when this user can't read another of its processes'
-   * environment (macOS hides it). git gets the push credential in its environment (the platform
-   * publish script's design), and a process a build agent left behind runs as the same user, so
-   * the runner checks this live, unconfined (a stronger reader than any confined process).
-   */
-  environmentHidden(): Promise<boolean>;
-}
-
-/** Starts a helper with a marker in its environment and looks for it with `ps eww`. */
-async function environmentHidden(): Promise<boolean> {
-  const marker = `LR_ENV_CHECK=${randomBytes(12).toString("hex")}`;
-  const helper = spawn("/bin/sleep", ["10"], {
-    env: { PATH: "/usr/bin:/bin", [marker.split("=")[0]!]: marker.split("=")[1]! },
-    stdio: "ignore",
-  });
-  try {
-    await new Promise((resolve) => setTimeout(resolve, 200));
-    if (helper.pid === undefined) return false;
-    const { stdout } = await run("/bin/ps", ["eww", "-o", "command=", "-p", String(helper.pid)], {
-      timeout: 10_000,
-    });
-    if (!stdout.includes("sleep")) return false;
-    return !stdout.includes(marker);
-  } catch {
-    return false;
-  } finally {
-    helper.kill("SIGKILL");
-  }
 }
 
 export const seatbelt: Confinement = {
-  environmentHidden,
   wrap: (profilePath, command, args) => ({
     command: SANDBOX_EXEC,
     args: ["-f", profilePath, command, ...args],
@@ -215,7 +185,6 @@ export const seatbelt: Confinement = {
 
 /** No sandbox: tests on Linux CI only (`sandbox-exec` is macOS-only). Never used by `main`. */
 export const noConfinement: Confinement = {
-  environmentHidden: async () => true,
   wrap: (_profilePath, command, args) => ({ command, args }),
   check: async () => null,
 };

@@ -15,7 +15,9 @@ import type { Confinement } from "./seatbelt";
  *
  * - the nonce, which reaches the command only through its environment, so the command ran;
  * - a file in the runner's work directory can't be read (the runner's Seatbelt holds);
- * - HTTPS to a host off the registry allowlist fails (Claude Code's sandbox proxy holds).
+ * - the registry answers (the network works through Claude Code's proxy), and HTTPS to a host off
+ *   its allowlist is refused by a proxy (a 4xx or 5xx CONNECT answer): a dead network or a
+ *   direct connection can't pass.
  *
  * The stream must show exactly one tool call, Bash with that exact command. Anything else, a
  * refused Bash (the sandbox couldn't start inside Seatbelt: `failIfUnavailable`) included, fails
@@ -29,7 +31,8 @@ export const BASH_CHECK_FILE = ".executor-sandbox-check";
 export const BASH_CHECK_COMMAND = [
   `printf 'nonce=%s\\n' "$SANDBOX_CHECK_NONCE" > ${BASH_CHECK_FILE}`,
   `if /bin/cat "$SANDBOX_CHECK_CANARY" > /dev/null 2>&1; then echo canary=read; else echo canary=denied; fi >> ${BASH_CHECK_FILE}`,
-  `if /usr/bin/curl -s -m 5 -o /dev/null https://example.com; then echo net=open; else echo net=blocked; fi >> ${BASH_CHECK_FILE}`,
+  `echo "registry=$(/usr/bin/curl -s -m 10 -o /dev/null -w '%{http_code}' https://registry.npmjs.org/)" >> ${BASH_CHECK_FILE}`,
+  `other=$(/usr/bin/curl -s -m 10 -o /dev/null -w '%{http_connect}' https://example.com); echo "other_exit=$?" >> ${BASH_CHECK_FILE}; echo "other_connect=$other" >> ${BASH_CHECK_FILE}`,
 ].join("; ");
 
 export const BASH_CHECK_PROMPT = `This is a sandbox check. Don't read any file. Use the Bash tool exactly once to run this exact command, unchanged, and use no other tool. Then reply with its exit code and nothing else. If it fails, don't retry it or try anything else.
@@ -129,7 +132,11 @@ export async function checkBash(input: BashCheckInput): Promise<string | null> {
     if (found.nonce !== nonce)
       return "the check command didn't run in Bash (Claude Code's sandbox may not start inside the runner's Seatbelt)";
     if (found.canary !== "denied") return "Bash could read a file in the runner's work directory";
-    if (found.net !== "blocked") return "Bash reached a host off the registry allowlist";
+    if (!/^[23]\d\d$/.test(found.registry ?? ""))
+      return "Bash couldn't reach the package registry, so the network check proves nothing";
+    if (found.other_exit === "0") return "Bash reached a host off the registry allowlist";
+    if (!/^[45]\d\d$/.test(found.other_connect ?? ""))
+      return "no proxy refused a host off the registry allowlist (Claude Code's network filter didn't show)";
     if ((await status()) !== before) return "the check left the checkout changed";
     return null;
   } finally {

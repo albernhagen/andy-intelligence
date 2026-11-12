@@ -312,8 +312,8 @@ describe("local-runner start", () => {
       expect(server.reports[0]!.body.branch ?? null).toBeNull();
     });
 
-    for (const mode of ["refuse", "open"] as const) {
-      it(`GivenABashCheckThatSees${mode === "refuse" ? "BashRefused" : "OpenNetwork"}_WhenABuildIsClaimed_ThenTheAgentDoesNotRunAndTheTaskFails`, async () => {
+    for (const mode of ["refuse", "open", "offline"] as const) {
+      it(`GivenABashCheckThatSees${{ refuse: "BashRefused", open: "OpenNetwork", offline: "NoNetwork" }[mode]}_WhenABuildIsClaimed_ThenTheAgentDoesNotRunAndTheTaskFails`, async () => {
         const t = task("build");
         const { done } = loop({
           tasks: [t],
@@ -327,7 +327,11 @@ describe("local-runner start", () => {
         expect(server.reports[0]!.body.status).toBe("failed");
         expect(server.reports[0]!.body.summary).toContain("Bash sandbox check failed");
         expect(server.reports[0]!.body.summary).toContain(
-          mode === "refuse" ? "didn't run in Bash" : "off the registry allowlist",
+          {
+            refuse: "didn't run in Bash",
+            open: "off the registry allowlist",
+            offline: "couldn't reach the package registry",
+          }[mode],
         );
       });
     }
@@ -375,21 +379,6 @@ describe("local-runner start", () => {
 
       expect(agentCalls()).toEqual([]);
       expect(server.reports.map((r) => r.body.status)).toEqual(["cancelled"]);
-    });
-
-    it("GivenAMacThatShowsOtherProcessesEnvironments_WhenABuildFinishes_ThenNoPushTokenIsAskedFor", async () => {
-      const t = task("build");
-      const { done } = loop({
-        tasks: [t],
-        stub: { edit: { "src/board.ts": "x\n" } },
-        githubApi: server.origin,
-        confinement: { ...CONFINEMENT, environmentHidden: async () => false },
-      });
-      expect(await done).toBe("idle");
-
-      expect(server.pushTokens).toEqual([]);
-      expect(server.reports[0]!.body.status).toBe("failed");
-      expect(server.reports[0]!.body.summary).toContain("refused to publish");
     });
 
     it("GivenABuildContextWithoutTheRunsBranch_WhenClaimed_ThenTheAgentDoesNotRun", async () => {

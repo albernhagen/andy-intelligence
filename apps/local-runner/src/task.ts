@@ -477,12 +477,6 @@ export async function runTask(
     const base = await deps.repos.defaultBranch(claimed.repo);
     // Cancelled or ended meanwhile: publish nothing (the heartbeat contract).
     checkpoint();
-    if (!(await deps.confinement.environmentHidden())) {
-      deps.log("ERROR", "this Mac shows other processes' environments; not publishing", ids);
-      return failed(
-        "The local runner refused to publish: this Mac shows a process's environment to other processes of the same user, where git would get the push credential.",
-      );
-    }
     const granted = await deps.api.pushToken(claimed.runId, claimed.token);
     if (granted.kind !== "ok") {
       deps.log("ERROR", "push token refused; nothing published", {
@@ -495,12 +489,15 @@ export async function runTask(
       );
     }
     const publishProfile = join(runDir, "publish.sb");
+    // git's credential file: under the work directory, which the agent's profile can't read.
+    const credDir = join(runDir, "cred");
+    await mkdir(credDir, { mode: 0o700 });
     await writeFile(
       publishProfile,
       seatbeltProfile({
         runnerHome: deps.home,
         read: [platformDir, patchPath],
-        readWrite: [publishDir, run.repoCache],
+        readWrite: [publishDir, run.repoCache, credDir],
         noKeychain: true,
       }),
       { mode: 0o600 },
@@ -520,6 +517,7 @@ export async function runTask(
       report: body,
       controlPlaneOrigin: deps.origin,
       pushToken: granted.token,
+      credDir,
       gitBase: deps.gitBase,
       githubApi: deps.githubApi,
       confinement: deps.confinement,

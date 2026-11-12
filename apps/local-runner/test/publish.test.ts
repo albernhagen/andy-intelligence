@@ -1,5 +1,13 @@
 import { execFileSync } from "node:child_process";
-import { mkdirSync, mkdtempSync, readFileSync, realpathSync, writeFileSync } from "node:fs";
+import {
+  chmodSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  readdirSync,
+  realpathSync,
+  writeFileSync,
+} from "node:fs";
 import { createServer, type IncomingMessage } from "node:http";
 import type { AddressInfo } from "node:net";
 import { tmpdir } from "node:os";
@@ -86,7 +94,9 @@ function setup(edit: Record<string, string>) {
   gitIn(agentDir, ["add", "-A"]);
   const patchPath = join(root, "change.patch");
   writeFileSync(patchPath, `${gitIn(agentDir, ["diff", "--cached", "--binary"])}\n`);
-  return { root, remote, remotes, publishDir, patchPath, platform: platformDir(root) };
+  const credDir = join(root, "cred");
+  mkdirSync(credDir);
+  return { root, remote, remotes, publishDir, patchPath, credDir, platform: platformDir(root) };
 }
 
 const closers: (() => Promise<void>)[] = [];
@@ -112,6 +122,7 @@ async function publishWith(s: ReturnType<typeof setup>, over: Partial<PublishInp
     report: { status: "succeeded", summary: "**Ask**: a board", output: null },
     controlPlaneOrigin: "https://cp.example",
     pushToken: TOKEN,
+    credDir: s.credDir,
     gitBase: s.remotes,
     githubApi: github.origin,
     confinement: noConfinement,
@@ -147,11 +158,35 @@ describe("local publish (AI-133)", () => {
     expect(text).not.toContain("add-mask");
   });
 
+  it("GivenAPush_WhenGitRuns_ThenNoGitProcessHasThePushCredentialInItsEnvironment", async () => {
+    const s = setup({ "src/board.ts": "export const board = 1;\n" });
+    // A `git` in front of the real one that records each call's environment.
+    const bin = join(s.root, "bin");
+    mkdirSync(bin);
+    const real = execFileSync("/usr/bin/which", ["git"], { encoding: "utf8" }).trim();
+    const envLog = join(s.root, "git-env.log");
+    writeFileSync(join(bin, "git"), `#!/bin/sh\nenv >> '${envLog}'\nexec '${real}' "$@"\n`);
+    chmodSync(join(bin, "git"), 0o755);
+    const path = process.env.PATH;
+    process.env.PATH = `${bin}:${path}`;
+    try {
+      const { outcome } = await publishWith(s);
+      expect(outcome.result.kind).toBe("published");
+    } finally {
+      process.env.PATH = path;
+    }
+    const seen = readFileSync(envLog, "utf8");
+    expect(seen).toContain("GIT_CONFIG_KEY_0=include.path");
+    expect(seen).not.toContain(TOKEN);
+    expect(seen).not.toContain(Buffer.from(`x-access-token:${TOKEN}`).toString("base64"));
+    expect(readdirSync(s.credDir)).toEqual([]);
+  });
+
   it("GivenAChangeToAProtectedPath_WhenPublished_ThenItIsRefusedAndNothingIsPushed", async () => {
     const s = setup({ ".github/workflows/x.yml": "on: push\n" });
     const { outcome, github } = await publishWith(s);
 
-    expect(outcome.result.kind).toBe("refused");
+    expect(outcome.result).toMatchObject({ kind: "refused" });
     expect(outcome.result.kind === "refused" && outcome.result.reasons.join()).toContain(
       ".github/workflows/x.yml: protected",
     );
