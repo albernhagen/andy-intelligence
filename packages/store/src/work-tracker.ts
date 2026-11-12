@@ -7,6 +7,7 @@ import {
 import {
   ProjectPatch,
   PullRequestLink,
+  Stage,
   WorkTrackerError,
   applyTicketChange,
   buildProject,
@@ -159,6 +160,35 @@ export class FirestoreWorkTracker implements WorkTracker {
         (t) => filter.needsAttention === undefined || t.needsAttention === filter.needsAttention,
       );
     return tickets.sort((a, b) => compareRanks(a.rank, b.rank));
+  }
+
+  async getTicketByKey(projectId: string, key: string): Promise<Ticket | null> {
+    const found = await this.tickets(projectId).where("key", "==", key).limit(1).get();
+    return found.docs[0]?.data() ?? null;
+  }
+
+  /**
+   * Count aggregations, equality filters only (no composite index). Older documents have no
+   * `archived` field, so unarchived = all − archived; v2 Done may be stored as `monitoring`.
+   */
+  async countByStage(projectId: string): Promise<Record<Stage, number>> {
+    const tickets = this.tickets(projectId);
+    const count = async (stored: string) => {
+      const byStage = tickets.where("stage", "==", stored);
+      const [all, archived] = await Promise.all([
+        byStage.count().get(),
+        byStage.where("archived", "==", true).count().get(),
+      ]);
+      return all.data().count - archived.data().count;
+    };
+    const counted = await Promise.all(
+      Stage.options.map(async (stage) => {
+        const stored = stage === "done" ? STORED_AS_DONE : [stage];
+        const counts = await Promise.all(stored.map(count));
+        return [stage, counts.reduce((a, b) => a + b, 0)] as const;
+      }),
+    );
+    return Object.fromEntries(counted) as Record<Stage, number>;
   }
 
   async updateTicket(

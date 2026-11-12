@@ -18,6 +18,7 @@ import {
 } from "./common";
 import { projectDispatchFields } from "./dispatch-caps";
 import { projectNotifyFields } from "./notify-email";
+import { configChangeProposalFields } from "./config-proposals";
 
 export * from "./common";
 export * from "./dispatch-caps";
@@ -35,6 +36,7 @@ import {
 
 export * from "./common";
 export * from "./cost";
+export * from "./dashboard";
 export * from "./in-flight";
 export * from "./sync";
 export * from "./scores";
@@ -752,7 +754,15 @@ export const QuotaStatus = z.object({
 });
 export type QuotaStatus = z.infer<typeof QuotaStatus>;
 
-export const ConfigChangeStatus = z.enum(["pending", "applied", "reverted", "rejected"]);
+/** `accepted` (ADR-0097): Andy agreed to a proposal; applying it is separate (`applied`). */
+export const ConfigChangeStatus = z.enum([
+  "pending",
+  "accepted",
+  "applied",
+  "reverted",
+  "rejected",
+]);
+export type ConfigChangeStatus = z.infer<typeof ConfigChangeStatus>;
 
 export const ConfigChange = z.object({
   id: Id,
@@ -764,6 +774,7 @@ export const ConfigChange = z.object({
   status: ConfigChangeStatus,
   createdAt: Timestamp,
   appliedAt: Timestamp.nullable(),
+  ...configChangeProposalFields,
 });
 export type ConfigChange = z.infer<typeof ConfigChange>;
 
@@ -966,3 +977,5 @@ export type CodeHostEvent = z.infer<typeof CodeHostEvent>;
 export * from "./worker";
 export * from "./executor";
 export * from "./runner";
+export * from "./night";
+export * from "./config-proposals";
