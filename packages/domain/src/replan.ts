@@ -46,6 +46,9 @@ export function staleBlocker(
   return stale?.key ?? null;
 }
 
+/** A ticket key (`AI-1`); an id has hyphens too, but names no project. */
+const TICKET_KEY = /^[A-Z][A-Z0-9]{0,9}-\d+$/;
+
 /** The timeline line for a plan re-run (the ticket's own wording). */
 export function replanNote(blockerKey: string): string {
   return `Plan re-run: ${blockerKey} merged after the plan.`;
@@ -54,7 +57,7 @@ export function replanNote(blockerKey: string): string {
 /**
  * Each `blockedBy` entry's last Done time, keyed by the ticket's key. An entry names a ticket by
  * key (`AI-1`, possibly another project's) or by id, as `RunService.blockerStages` reads them.
- * An entry that names no ticket is left out.
+ * An entry that names no ticket is left out. A failed read throws: freshness unknown is not fresh.
  */
 export async function blockersDoneAt(
   tracker: WorkTracker,
@@ -65,12 +68,12 @@ export async function blockersDoneAt(
   const projects = new Set([
     ticket.projectId,
     ...ticket.blockedBy
-      .filter((b) => b.includes("-"))
+      .filter((b) => TICKET_KEY.test(b))
       .map((b) => b.slice(0, b.lastIndexOf("-")).toLowerCase()),
   ]);
   const wanted = new Set(ticket.blockedBy);
   for (const projectId of projects) {
-    for (const t of await tracker.listTickets(projectId).catch(() => [])) {
+    for (const t of await tracker.listTickets(projectId)) {
       if (!wanted.has(t.key) && !wanted.has(t.id)) continue;
       if (out.has(t.key)) continue;
       out.set(t.key, doneAt(await tracker.listEvents(t.projectId, t.id)));

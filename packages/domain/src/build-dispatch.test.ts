@@ -658,6 +658,25 @@ describe("BuildDispatcher", () => {
       });
     });
 
+    it("GivenBlockerDoneTimesUnreadable_WhenNext_ThenTheTicketWaitsAndOthersStill", async () => {
+      const { dispatcher, story } = await approvedPlan(true);
+      const free = await inReady("Free");
+      vi.spyOn(tracker, "listEvents").mockRejectedValue(new Error("unavailable"));
+      expect(await dispatcher.next(projectId)).toMatchObject({ ticketId: free.id });
+      expect(await runStore.listForTicket(projectId, story.id)).toHaveLength(1);
+    });
+
+    it("GivenTheReplanNoteFailsToWrite_WhenNext_ThenThePlanRunStillStarts", async () => {
+      const { dispatcher, story } = await approvedPlan(true);
+      const add = tracker.addComment.bind(tracker);
+      vi.spyOn(tracker, "addComment").mockImplementation((p, t, body, actor) =>
+        body.startsWith("Plan re-run")
+          ? Promise.reject(new Error("unavailable"))
+          : add(p, t, body, actor),
+      );
+      expect(await dispatcher.next(projectId)).toMatchObject({ step: "plan", ticketId: story.id });
+    });
+
     it("GivenAnOutdatedPlanAtThePlanCap_WhenNext_ThenTheTicketIsFlaggedNotReplanned", async () => {
       const { runs, dispatcher, blocker, story } = await approvedPlan(false);
       let latest: Run | undefined;

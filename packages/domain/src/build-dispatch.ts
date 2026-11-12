@@ -153,14 +153,7 @@ export class BuildDispatcher {
           local,
           ...(start.replanFor ? { reason: "plan_stale", blocker: start.replanFor } : {}),
         });
-        if (start.replanFor) {
-          await this.tracker.addComment(
-            projectId,
-            ticket.id,
-            replanNote(start.replanFor),
-            "system",
-          );
-        }
+        if (start.replanFor) await this.noteReplan(ticket, start.replanFor);
         // A claim hands the runner one run; it claims again when it has a free slot.
         if (local) return run;
         first ??= run;
@@ -256,16 +249,34 @@ export class BuildDispatcher {
    */
   private async planAllows(ticket: Ticket, policy: PlanApproval): Promise<Start | null> {
     const plan = await this.runs.planStateOf(ticket, undefined, policy);
-    const stale =
-      ticket.blockedBy.length > 0 && writtenPlan(plan)
-        ? staleBlocker(plan, await blockersDoneAt(this.tracker, ticket))
-        : null;
+    let stale: string | null = null;
+    if (ticket.blockedBy.length > 0 && writtenPlan(plan)) {
+      try {
+        stale = staleBlocker(plan, await blockersDoneAt(this.tracker, ticket));
+      } catch (err) {
+        // Freshness unknown: skip the ticket this time rather than build on a stale plan.
+        log("WARNING", "build waits: blocker Done times unreadable", {
+          ticket: ticket.key,
+          error: String(err),
+        });
+        return null;
+      }
+    }
     if (stale) return (await this.underPlanCap(ticket)) ? { step: "plan", replanFor: stale } : null;
     if (plan.kind === "approved") return BUILD;
     if (plan.kind === "awaiting" || plan.kind === "planning") return null;
     if (!planRequired(policy, ticket)) return BUILD;
     if (plan.kind === "rejected") return null;
     return (await this.underPlanCap(ticket)) ? BUILD : null;
+  }
+
+  /** The timeline line for a re-plan; best-effort, as the plan run has already started. */
+  private async noteReplan(ticket: Ticket, blocker: string): Promise<void> {
+    try {
+      await this.tracker.addComment(ticket.projectId, ticket.id, replanNote(blocker), "system");
+    } catch (err) {
+      log("WARNING", "re-plan note not written", { ticket: ticket.key, error: String(err) });
+    }
   }
 
   /** Under MAX_PLAN_RUNS_PER_TICKET; a ticket at the cap is flagged. */

@@ -1,5 +1,5 @@
 import { InMemoryWorkTracker, Run, type TicketEvent } from "@andy/contracts";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import type { PlanState } from "./plans";
 import { blockersDoneAt, doneAt, replanNote, staleBlocker } from "./replan";
 import { TIER_ROUTES } from "./tiers";
@@ -132,6 +132,14 @@ describe("blockersDoneAt", () => {
         [done.key, moved.updatedAt],
         [open.key, null],
       ]),
+    );
+  });
+
+  it("GivenAFailingRead_WhenRead_ThenItThrowsRatherThanReportNothing", async () => {
+    const tracker = new InMemoryWorkTracker();
+    vi.spyOn(tracker, "listTickets").mockRejectedValue(new Error("unavailable"));
+    await expect(blockersDoneAt(tracker, { projectId: "ai", blockedBy: ["AI-1"] })).rejects.toThrow(
+      "unavailable",
     );
   });
 
