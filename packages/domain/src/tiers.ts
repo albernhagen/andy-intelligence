@@ -1,4 +1,5 @@
 import type { Route, Size, Ticket, TierKey } from "@andy/contracts";
+import { effectiveOverrides } from "./overrides";
 
 /**
  * Model tier policy (ADR-0058: tier derived from size; ADR-0050: tiers start inside Claude).
@@ -23,8 +24,15 @@ export const TIER_FOR_SIZE: Record<Size, keyof typeof TIER_ROUTES> = {
   L: "strong",
 };
 
-/** The ticket's tier: `overrides.tier` if pinned, else from its size; null without a size. */
-export function tierFor(ticket: Pick<Ticket, "size" | "overrides">): TierKey | null {
-  if (ticket.overrides.tier) return ticket.overrides.tier;
+/**
+ * The ticket's tier: `overrides.tier` if pinned on the ticket, else on its epic (AI-116), else
+ * from its size; null without a size.
+ */
+export function tierFor(
+  ticket: Pick<Ticket, "size" | "overrides">,
+  epic?: Pick<Ticket, "overrides"> | null,
+): TierKey | null {
+  const pinned = effectiveOverrides(ticket, epic).tier;
+  if (pinned) return pinned;
   return ticket.size === null ? null : TIER_FOR_SIZE[ticket.size];
 }
