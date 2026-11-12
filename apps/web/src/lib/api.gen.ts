@@ -6328,6 +6328,465 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  "/api/projects/{projectId}/dashboard": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get: {
+      parameters: {
+        query?: {
+          /** @description UTC weeks covered, Monday first, the last ending now: 1 to 26. Default 8. */
+          weeks?: number;
+        };
+        header?: never;
+        path: {
+          projectId: string;
+        };
+        cookie?: never;
+      };
+      requestBody?: never;
+      responses: {
+        /** @description Delivery and cost per week, the costliest agent tasks */
+        200: {
+          headers: {
+            [name: string]: unknown;
+          };
+          content: {
+            "application/json": {
+              projectId: string;
+              key: string;
+              /** Format: date-time */
+              from: string;
+              /** Format: date-time */
+              to: string;
+              weeks: {
+                /** Format: date-time */
+                start: string;
+                /** Format: date-time */
+                end: string;
+                ticketsByStage: {
+                  backlog?: number;
+                  ready?: number;
+                  in_progress?: number;
+                  ready_for_review?: number;
+                  done?: number;
+                  cancelled?: number;
+                };
+                leadTimeHours: {
+                  median: number | null;
+                  p90: number | null;
+                  count: number;
+                };
+                reworks: number;
+                ciGreenFirstTry: {
+                  green: number;
+                  known: number;
+                  rate: number | null;
+                };
+                reviewBlockers: number;
+                cost: {
+                  runs: number;
+                  unknownCostRuns: number;
+                  estimatedCostUsd: number;
+                  tokensIn: number;
+                  tokensOut: number;
+                  turns: number;
+                  quotaDelta: {
+                    "5h": number | null;
+                    weekly: number | null;
+                  };
+                };
+                byStep: {
+                  runs: number;
+                  unknownCostRuns: number;
+                  estimatedCostUsd: number;
+                  tokensIn: number;
+                  tokensOut: number;
+                  turns: number;
+                  quotaDelta: {
+                    "5h": number | null;
+                    weekly: number | null;
+                  };
+                  /** @enum {string} */
+                  step: "refine" | "plan" | "build" | "review" | "verify" | "scout" | "sync";
+                }[];
+                bySize: {
+                  runs: number;
+                  unknownCostRuns: number;
+                  estimatedCostUsd: number;
+                  tokensIn: number;
+                  tokensOut: number;
+                  turns: number;
+                  quotaDelta: {
+                    "5h": number | null;
+                    weekly: number | null;
+                  };
+                  /** @enum {string} */
+                  size: "S" | "M" | "L" | "unsized";
+                }[];
+              }[];
+              expensiveRuns: {
+                id: string;
+                projectId: string;
+                ticketId: string | null;
+                ticketKey: string | null;
+                /** @enum {string} */
+                step: "refine" | "plan" | "build" | "review" | "verify" | "scout" | "sync";
+                costUsd: number;
+                costIsEstimate: boolean;
+                /** Format: date-time */
+                endedAt: string;
+              }[];
+              partial: (
+                | "projects"
+                | "ticketsByStage"
+                | "leadTime"
+                | "reworks"
+                | "ciGreenFirstTry"
+                | "reviewBlockers"
+                | "cost"
+                | "expensiveRuns"
+              )[];
+            };
+          };
+        };
+        /** @description Invalid request */
+        400: {
+          headers: {
+            [name: string]: unknown;
+          };
+          content: {
+            "application/json": {
+              error: string;
+              details?: string[];
+            };
+          };
+        };
+        /** @description Not found */
+        404: {
+          headers: {
+            [name: string]: unknown;
+          };
+          content: {
+            "application/json": {
+              error: string;
+              details?: string[];
+            };
+          };
+        };
+      };
+    };
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/dashboard": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get: {
+      parameters: {
+        query?: {
+          /** @description UTC weeks covered, Monday first, the last ending now: 1 to 26. Default 8. */
+          weeks?: number;
+        };
+        header?: never;
+        path?: never;
+        cookie?: never;
+      };
+      requestBody?: never;
+      responses: {
+        /** @description The same figures summed across projects, then per project */
+        200: {
+          headers: {
+            [name: string]: unknown;
+          };
+          content: {
+            "application/json": {
+              /** Format: date-time */
+              from: string;
+              /** Format: date-time */
+              to: string;
+              weeks: {
+                /** Format: date-time */
+                start: string;
+                /** Format: date-time */
+                end: string;
+                ticketsByStage: {
+                  backlog?: number;
+                  ready?: number;
+                  in_progress?: number;
+                  ready_for_review?: number;
+                  done?: number;
+                  cancelled?: number;
+                };
+                leadTimeHours: {
+                  median: number | null;
+                  p90: number | null;
+                  count: number;
+                };
+                reworks: number;
+                ciGreenFirstTry: {
+                  green: number;
+                  known: number;
+                  rate: number | null;
+                };
+                reviewBlockers: number;
+                cost: {
+                  runs: number;
+                  unknownCostRuns: number;
+                  estimatedCostUsd: number;
+                  tokensIn: number;
+                  tokensOut: number;
+                  turns: number;
+                  quotaDelta: {
+                    "5h": number | null;
+                    weekly: number | null;
+                  };
+                };
+                byStep: {
+                  runs: number;
+                  unknownCostRuns: number;
+                  estimatedCostUsd: number;
+                  tokensIn: number;
+                  tokensOut: number;
+                  turns: number;
+                  quotaDelta: {
+                    "5h": number | null;
+                    weekly: number | null;
+                  };
+                  /** @enum {string} */
+                  step: "refine" | "plan" | "build" | "review" | "verify" | "scout" | "sync";
+                }[];
+                bySize: {
+                  runs: number;
+                  unknownCostRuns: number;
+                  estimatedCostUsd: number;
+                  tokensIn: number;
+                  tokensOut: number;
+                  turns: number;
+                  quotaDelta: {
+                    "5h": number | null;
+                    weekly: number | null;
+                  };
+                  /** @enum {string} */
+                  size: "S" | "M" | "L" | "unsized";
+                }[];
+              }[];
+              expensiveRuns: {
+                id: string;
+                projectId: string;
+                ticketId: string | null;
+                ticketKey: string | null;
+                /** @enum {string} */
+                step: "refine" | "plan" | "build" | "review" | "verify" | "scout" | "sync";
+                costUsd: number;
+                costIsEstimate: boolean;
+                /** Format: date-time */
+                endedAt: string;
+              }[];
+              partial: (
+                | "projects"
+                | "ticketsByStage"
+                | "leadTime"
+                | "reworks"
+                | "ciGreenFirstTry"
+                | "reviewBlockers"
+                | "cost"
+                | "expensiveRuns"
+              )[];
+              projects: {
+                projectId: string;
+                key: string;
+                /** Format: date-time */
+                from: string;
+                /** Format: date-time */
+                to: string;
+                weeks: {
+                  /** Format: date-time */
+                  start: string;
+                  /** Format: date-time */
+                  end: string;
+                  ticketsByStage: {
+                    backlog?: number;
+                    ready?: number;
+                    in_progress?: number;
+                    ready_for_review?: number;
+                    done?: number;
+                    cancelled?: number;
+                  };
+                  leadTimeHours: {
+                    median: number | null;
+                    p90: number | null;
+                    count: number;
+                  };
+                  reworks: number;
+                  ciGreenFirstTry: {
+                    green: number;
+                    known: number;
+                    rate: number | null;
+                  };
+                  reviewBlockers: number;
+                  cost: {
+                    runs: number;
+                    unknownCostRuns: number;
+                    estimatedCostUsd: number;
+                    tokensIn: number;
+                    tokensOut: number;
+                    turns: number;
+                    quotaDelta: {
+                      "5h": number | null;
+                      weekly: number | null;
+                    };
+                  };
+                  byStep: {
+                    runs: number;
+                    unknownCostRuns: number;
+                    estimatedCostUsd: number;
+                    tokensIn: number;
+                    tokensOut: number;
+                    turns: number;
+                    quotaDelta: {
+                      "5h": number | null;
+                      weekly: number | null;
+                    };
+                    /** @enum {string} */
+                    step: "refine" | "plan" | "build" | "review" | "verify" | "scout" | "sync";
+                  }[];
+                  bySize: {
+                    runs: number;
+                    unknownCostRuns: number;
+                    estimatedCostUsd: number;
+                    tokensIn: number;
+                    tokensOut: number;
+                    turns: number;
+                    quotaDelta: {
+                      "5h": number | null;
+                      weekly: number | null;
+                    };
+                    /** @enum {string} */
+                    size: "S" | "M" | "L" | "unsized";
+                  }[];
+                }[];
+                expensiveRuns: {
+                  id: string;
+                  projectId: string;
+                  ticketId: string | null;
+                  ticketKey: string | null;
+                  /** @enum {string} */
+                  step: "refine" | "plan" | "build" | "review" | "verify" | "scout" | "sync";
+                  costUsd: number;
+                  costIsEstimate: boolean;
+                  /** Format: date-time */
+                  endedAt: string;
+                }[];
+                partial: (
+                  | "projects"
+                  | "ticketsByStage"
+                  | "leadTime"
+                  | "reworks"
+                  | "ciGreenFirstTry"
+                  | "reviewBlockers"
+                  | "cost"
+                  | "expensiveRuns"
+                )[];
+              }[];
+            };
+          };
+        };
+        /** @description Invalid request */
+        400: {
+          headers: {
+            [name: string]: unknown;
+          };
+          content: {
+            "application/json": {
+              error: string;
+              details?: string[];
+            };
+          };
+        };
+      };
+    };
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/projects/{projectId}/setup": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get: {
+      parameters: {
+        query?: never;
+        header?: never;
+        path: {
+          projectId: string;
+        };
+        cookie?: never;
+      };
+      requestBody?: never;
+      responses: {
+        /** @description The five setup steps, each done, missing, unknown or not yet */
+        200: {
+          headers: {
+            [name: string]: unknown;
+          };
+          content: {
+            "application/json": components["schemas"]["SetupChecklist"];
+          };
+        };
+        /** @description Invalid request */
+        400: {
+          headers: {
+            [name: string]: unknown;
+          };
+          content: {
+            "application/json": {
+              error: string;
+              details?: string[];
+            };
+          };
+        };
+        /** @description Not found */
+        404: {
+          headers: {
+            [name: string]: unknown;
+          };
+          content: {
+            "application/json": {
+              error: string;
+              details?: string[];
+            };
+          };
+        };
+      };
+    };
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   "/api/notify/email": {
     parameters: {
       query?: never;
@@ -6946,6 +7405,23 @@ export interface components {
       };
       costedChildren: number;
       partial: boolean;
+    };
+    SetupChecklist: {
+      repo: string | null;
+      complete: boolean;
+      items: {
+        /** @enum {string} */
+        key:
+          | "repo_connected"
+          | "baseline_merged"
+          | "deploy_proven"
+          | "threat_model_started"
+          | "budget_caps_set";
+        label: string;
+        /** @enum {string} */
+        status: "done" | "missing" | "unknown" | "not_yet";
+        detail: string | null;
+      }[];
     };
     EmailStatus: {
       configured: boolean;
