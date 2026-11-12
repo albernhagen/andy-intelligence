@@ -1,7 +1,8 @@
 // shadcn/ui chart wrapper over recharts (ADR-0045), adapted to the design tokens in index.css:
 // axes, grid and tooltip use the surface, text and line tokens; each series colour is a token
 // named in the ChartConfig (e.g. `var(--running)`). Dark mode comes from the tokens, so there is
-// no per-theme colour map. Series colours reach recharts as `var(--color-<key>)`.
+// no per-theme colour map. Series colours reach recharts as `chartColor(<key>)`, which is
+// `var(--color-<key>)` with any character outside [A-Za-z0-9_-] replaced by `-`.
 import * as React from "react";
 import * as RechartsPrimitive from "recharts";
 import type { LegendPayload, TooltipContentProps, TooltipPayloadEntry } from "recharts";
@@ -12,6 +13,16 @@ export type ChartConfig = Record<
   string,
   { label?: React.ReactNode; icon?: React.ComponentType; color?: string }
 >;
+
+/** A key or id made safe for a CSS custom property name and an attribute selector. */
+function cssName(value: string) {
+  return value.replace(/[^A-Za-z0-9_-]/g, "-");
+}
+
+/** The colour a mark uses for the series `key`: `fill={chartColor("merged")}`. */
+function chartColor(key: string) {
+  return `var(--color-${cssName(key)})`;
+}
 
 type ChartContextProps = { config: ChartConfig };
 
@@ -39,7 +50,7 @@ function ChartContainer({
   initialDimension?: ResponsiveContainerProps["initialDimension"];
 }) {
   const uniqueId = React.useId();
-  const chartId = `chart-${id ?? uniqueId.replace(/:/g, "")}`;
+  const chartId = `chart-${cssName(id ?? uniqueId)}`;
 
   return (
     <ChartContext.Provider value={{ config }}>
@@ -71,13 +82,13 @@ function ChartContainer({
   );
 }
 
-/** Sets `--color-<key>` on the chart from each series' token, so marks can use it. */
+/** Sets `--color-<key>` on the chart from each series' token, so marks can use `chartColor`. */
 function ChartStyle({ id, config }: { id: string; config: ChartConfig }) {
   const vars = Object.entries(config)
     .filter(([, item]) => item.color)
-    .map(([key, item]) => `  --color-${key}: ${item.color};`);
+    .map(([key, item]) => `  --color-${cssName(key)}: ${item.color};`);
   if (!vars.length) return null;
-  return <style>{`[data-chart=${id}] {\n${vars.join("\n")}\n}`}</style>;
+  return <style>{`[data-chart="${cssName(id)}"] {\n${vars.join("\n")}\n}`}</style>;
 }
 
 const ChartTooltip = RechartsPrimitive.Tooltip;
@@ -236,7 +247,7 @@ function ChartLegendContent({
                 style={{ backgroundColor: item.color }}
               />
             )}
-            {itemConfig?.label}
+            {itemConfig?.label ?? item.value}
           </div>
         );
       })}
@@ -263,6 +274,7 @@ function configForPayload(
 }
 
 export {
+  chartColor,
   ChartContainer,
   ChartTooltip,
   ChartTooltipContent,
