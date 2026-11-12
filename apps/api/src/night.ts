@@ -14,7 +14,7 @@ import {
   type Ticket,
   type WorkTracker,
 } from "@andy/contracts";
-import type { NightLaunches, PlanState } from "@andy/domain";
+import { settleNight, type NightLaunches, type PlanState } from "@andy/domain";
 import { actorOf, type AuthEnv } from "./auth";
 
 /**
@@ -118,7 +118,7 @@ export type LaunchNightBody = z.infer<typeof LaunchNightBody>;
 
 /** The epic's checklist, problems and latest launch with progress. */
 export async function readNightStatus(deps: NightDeps, epic: Ticket): Promise<NightStatus> {
-  await settleActive(deps, epic.projectId);
+  await settleNight(deps, epic.projectId);
   const { storyKeys, problems } = await deps.nights.check(epic.projectId, { epicId: epic.id });
   const byKey = new Map(
     (await deps.tracker.listTickets(epic.projectId))
@@ -166,47 +166,6 @@ async function latestLaunch(store: NightLaunchStore, epic: Ticket): Promise<Nigh
   return (await store.listForProject(epic.projectId)).find((l) => l.epicId === epic.id) ?? null;
 }
 
-/**
- * Ends the project's active launch when nothing else will (M4.18 isn't built): past its stop time
- * (`stop_time`), or stopping with no agent task in flight on its stories (`stopped`). Called
- * before every read, launch and stop, so a stopped or expired night never blocks the next one.
- * A concurrent end loses the race with a `conflict`, which is fine: the launch ended either way.
- */
-export async function settleActive(
-  deps: Pick<NightDeps, "nights" | "store" | "tracker" | "runs" | "now">,
-  projectId: string,
-): Promise<NightLaunch | null> {
-  const active = await deps.store.findActive(projectId);
-  if (!active) return null;
-  const now = (deps.now ?? (() => new Date()))();
-  const reason =
-    Date.parse(active.stopAt) <= now.getTime()
-      ? "stop_time"
-      : active.status === "stopping" && !(await anyInFlight(deps, active))
-        ? "stopped"
-        : null;
-  if (!reason) return active;
-  try {
-    await deps.nights.end(active.id, reason);
-  } catch (err) {
-    if (!(err instanceof WorkTrackerError && err.code === "conflict")) throw err;
-  }
-  return null;
-}
-
-async function anyInFlight(
-  deps: Pick<NightDeps, "tracker" | "runs">,
-  launch: NightLaunch,
-): Promise<boolean> {
-  const keys = new Set(launch.storyKeys);
-  for (const t of await deps.tracker.listTickets(launch.projectId)) {
-    if (!keys.has(t.key)) continue;
-    const runs = await deps.runs.listForTicket(t.projectId, t.id);
-    if (runs.some((r) => ACTIVE_RUN.has(r.status))) return true;
-  }
-  return false;
-}
-
 /** Story counts by where they stand and the spend since the launch started. */
 export async function progressOf(
   deps: Pick<NightDeps, "tracker" | "runs">,
@@ -247,7 +206,7 @@ export async function launchNight(
   body: LaunchNightBody,
   actor: EventActor,
 ): Promise<NightLaunch> {
-  await settleActive(deps, epic.projectId);
+  await settleNight(deps, epic.projectId);
   return deps.nights.start(
     epic.projectId,
     { epicId: epic.id, budget: body.budget, stopAt: body.stopAt ?? null },
@@ -261,13 +220,13 @@ export async function stopNight(
   epic: Ticket,
   actor: EventActor,
 ): Promise<NightLaunch> {
-  const active = await settleActive(deps, epic.projectId);
+  const active = await settleNight(deps, epic.projectId);
   if (!active || active.epicId !== epic.id || active.status !== "running") {
     throw new WorkTrackerError("conflict", `${epic.key} has no running launch`);
   }
   const stopping = await deps.nights.stop(active.id, actor);
   // With nothing in flight the night is over at once; otherwise it ends once they finish.
-  await settleActive(deps, epic.projectId);
+  await settleNight(deps, epic.projectId);
   return (await deps.store.get(stopping.id)) ?? stopping;
 }
 
