@@ -527,8 +527,7 @@ export class TicketService {
     const ticket = await this.findByKey(key);
     let parentId: string | null = null;
     if (parent !== null) {
-      const tickets = await this.tracker.listTickets(ticket.projectId);
-      const found = tickets.find((t) => t.key === parent);
+      const found = await this.tracker.getTicketByKey(ticket.projectId, parent);
       if (!found) throw new DomainError("invalid_reference", `${parent} is not in this project`);
       parentId = found.id;
     }
@@ -911,7 +910,7 @@ export class TicketService {
   async findByKey(key: string): Promise<Ticket> {
     if (!TicketKey.safeParse(key).success) throw notFound("ticket", key);
     const projectId = key.slice(0, key.lastIndexOf("-")).toLowerCase();
-    const ticket = (await this.tracker.listTickets(projectId)).find((t) => t.key === key);
+    const ticket = await this.tracker.getTicketByKey(projectId, key);
     if (!ticket) throw notFound("ticket", key);
     return ticket;
   }
@@ -944,13 +943,7 @@ export class TicketService {
     const [projects, inbox] = await Promise.all([this.tracker.listProjects(), this.needsYou()]);
     const counted = await Promise.all(
       projects.map(async (p) => {
-        const ticketsByStage = Object.fromEntries(Stage.options.map((s) => [s, 0])) as Record<
-          Stage,
-          number
-        >;
-        for (const t of await this.tracker.listTickets(p.id, { archived: false })) {
-          ticketsByStage[t.stage]++;
-        }
+        const ticketsByStage = await this.tracker.countByStage(p.id);
         const { runsAtOnce, paused, lastDispatch } = p;
         return {
           key: p.key,
