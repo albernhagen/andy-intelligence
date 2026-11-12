@@ -359,6 +359,15 @@ export function createApp(input: AppDeps) {
       connection,
       verify: verifyActionsToken,
       claimRunGrant: (runId, caller) => runs.claimPushGrant(runId, caller),
+      ...(runners
+        ? {
+            local: {
+              authenticate: (token: string, runId: string) => runners.authenticateRun(token, runId),
+              claim: (runId: string, caller: { runnerId: string }) =>
+                runs.claimLocalPushGrant(runId, caller),
+            },
+          }
+        : {}),
       now,
     });
     registerRunCallbacks(app, {
