@@ -79,7 +79,9 @@ function loop(
 /** Answers `answer` from the n-th heartbeat in the agent phase on, once the stub has started. */
 function afterAgentBeats(n: number, answer: "cancel" | 409) {
   let beats = 0;
-  return (phase: string | undefined) => (phase === "agent" && ++beats >= n ? answer : "ok");
+  // Beats count only once the stub has recorded its call: under load it can start late.
+  return (phase: string | undefined) =>
+    phase === "agent" && env.calls().length > 0 && ++beats >= n ? answer : "ok";
 }
 
 const agentCalls = () => env.calls();
