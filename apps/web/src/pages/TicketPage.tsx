@@ -2,11 +2,13 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { Link, useBlocker, useNavigate, useParams } from "@tanstack/react-router";
 import { useQueryClient } from "@tanstack/react-query";
 import { X } from "lucide-react";
-import { Size, TicketType, TierKey, type Ticket } from "@andy/contracts";
-import { TIER_FOR_SIZE, isHeld, projectOfKey, ticketStatusLine, ticketsByRef } from "@andy/domain";
+import { Size, TicketType, type Ticket } from "@andy/contracts";
+import { isHeld, projectOfKey, ticketStatusLine, ticketsByRef } from "@andy/domain";
 import { Activity } from "@/components/Activity";
 import { AskQuestionForm } from "@/components/AskQuestionForm";
 import { CancelArchiveControls } from "@/components/CancelArchiveControls";
+import { EpicChildren } from "@/components/EpicChildren";
+import { OverridesEditor } from "@/components/OverridesEditor";
 import {
   EditableList,
   InlineText,
@@ -223,6 +225,7 @@ function Story({ ticket: t }: { ticket: Ticket }) {
         </div>
         <Rail ticket={t} />
       </div>
+      {t.type === "epic" && <EpicChildren {...pathOf(t)} />}
       <ScoreReasons ticket={t} />
       <Questions {...pathOf(t)} />
       <Assumptions ticket={t} />
@@ -255,7 +258,6 @@ function ListField({
 /** Stage and moves, then the facts: type, size, tier, epic, blocked by; cancel and archive. */
 function Rail({ ticket: t }: { ticket: Ticket }) {
   const tickets = useTickets(t.projectId).data ?? [];
-  const derived = t.size ? TIER_FOR_SIZE[t.size] : null;
   const epics = tickets.filter((o) => o.type === "epic" && o.id !== t.id);
   const sizeReason = useTicketSave(t);
 
@@ -297,21 +299,8 @@ function Rail({ ticket: t }: { ticket: Ticket }) {
           className="text-xs"
         />
       </div>
-      <SelectField
-        ticket={t}
-        label="Tier"
-        value={t.overrides.tier ?? ""}
-        // Tier comes from size; choosing one pins it (`overrides.tier`, ADR-0058).
-        options={[
-          ["", derived ? `${derived} (from size)` : "from size"],
-          ...TierKey.options.map((v) => [v, `${v} (pinned)`] as const),
-        ]}
-        patch={(v) => {
-          const rest = { ...t.overrides };
-          delete rest.tier;
-          return { overrides: v === "" ? rest : { ...rest, tier: TierKey.parse(v) } };
-        }}
-      />
+      {/* Tier comes from size; an override pins it, on the ticket or its epic (AI-116). */}
+      <OverridesEditor ticket={t} tickets={tickets} />
       <SelectField
         ticket={t}
         label="Epic"
