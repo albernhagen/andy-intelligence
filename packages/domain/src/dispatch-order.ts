@@ -46,6 +46,8 @@ export interface RunEndWake {
  * freeing project (AI-91). Bounded: others are woken only when the global cap was full before
  * this end (otherwise none could be waiting on it), the walk stops once the cap is full again,
  * and at most `MAX_PROJECTS_WOKEN_PER_RUN_END` are tried. Returns the other projects woken.
+ * Below a full cap, waiters on the warn cap (AI-92: one task in flight) are reached only through
+ * `dispatch(freedBy, true)`, which wakes `waitsForSlot` projects first (`wakeGlobalCapWaiters`).
  */
 export async function wakeAfterRunEnd(wake: RunEndWake): Promise<string[]> {
   const woken: string[] = [];

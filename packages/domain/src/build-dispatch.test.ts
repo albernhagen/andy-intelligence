@@ -11,6 +11,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { BuildDispatcher } from "./build-dispatch";
 import { MAX_BUILD_RUNS_PER_TICKET, branchFor } from "./builds";
 import { MAX_ACTIVE_RUNS_GLOBAL, MAX_PRS_WAITING_PER_PROJECT } from "./dispatch-caps";
+import { wakeAfterRunEnd } from "./dispatch-order";
 import { ProjectService } from "./projects";
 import { RunService, type RunResult } from "./runs";
 import { WorkflowExecutor, buildOutput } from "./test-executor";
@@ -548,7 +549,7 @@ describe("BuildDispatcher", () => {
     expect(await runStore.listActive(b.id)).toHaveLength(1);
   });
 
-  it("GivenAProjectIdleOnTheWarnCap_WhenARunEndsElsewhere_ThenTheWaiterIsWokenAndStarts", async () => {
+  it("GivenAProjectIdleOnTheWarnCap_WhenARunEndsElsewhere_ThenTheRunEndPathWakesTheWaiterFirst", async () => {
     const quota = new InMemoryQuotaStore();
     await quota.save([
       {
@@ -580,9 +581,19 @@ describe("BuildDispatcher", () => {
     expect(await dispatcher.next(b.id)).toBeNull();
     expect(await decision(b.id)).toBe("quota_warn");
 
+    // The production run-end path (apps/api/src/app.ts): wakeAfterRunEnd → dispatchNext.
     await succeed(runs, running!);
-    await dispatcher.wakeGlobalCapWaiters(projectId);
+    await wakeAfterRunEnd({
+      freedBy: projectId,
+      listProjects: () => tracker.listProjects(),
+      globalActive: async () => (await runs.activeCounts(projectId)).global,
+      dispatch: async (id, wakeWaiters) => {
+        if (wakeWaiters) await dispatcher.wakeGlobalCapWaiters(id);
+        await dispatcher.next(id);
+      },
+    });
     expect(await runStore.listActive(b.id)).toHaveLength(1);
+    expect(await runStore.listActive(projectId)).toHaveLength(0);
   });
 
   it("GivenATicketAtItsBuildCap_WhenNext_ThenItIsFlaggedNotStarted", async () => {
