@@ -118,6 +118,28 @@ if (process.env.FIRESTORE_EMULATOR_HOST) {
         expect(ids).not.toContain(legacy.id);
       }
     });
+
+    it("GivenLegacyTicketsInMonitoringOrWithoutArchived_WhenCounted_ThenTheyCountAsUnarchived", async () => {
+      const tracker = new FirestoreWorkTracker(db);
+      const project = await tracker.createProject({
+        name: "Counts",
+        key: `C${crypto
+          .randomUUID()
+          .slice(0, 6)
+          .toUpperCase()
+          .replace(/[^A-Z0-9]/g, "X")}`,
+      });
+      const raw = (id: string) => db.collection(collections.tickets.path(project.id)).doc(id);
+      const monitoring = await tracker.createTicket(project.id, { title: "Monitoring" }, "andy");
+      await raw(monitoring.id).set({ ...monitoring, stage: "monitoring", _v: 2 });
+      const noArchived = await tracker.createTicket(project.id, { title: "Old" }, "andy");
+      const old: Record<string, unknown> = { ...noArchived, _v: 2 };
+      delete old.archived;
+      await raw(noArchived.id).set(old);
+
+      const counts = await tracker.countByStage(project.id);
+      expect(counts).toMatchObject({ done: 1, backlog: 1 });
+    });
   });
 } else {
   describe("WorkTracker contract: firestore", () => {

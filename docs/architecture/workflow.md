@@ -45,7 +45,7 @@ As built (PR events, build dispatch, plan approval): [`history/workflow-as-built
 ### 4.4 Epics
 - Ticket types (Epic / Feature / Chore / Bug, ADR-0058) + **child tickets** (`parent_id`).
 - Epic refinement (built) makes stories with `blockedBy`: vertical slices, independently mergeable behind flags; no long-lived branches. Exception: an **overnight run** (ADR-0049) merges its stories into a one-night branch `epic/<key>`, reviewed by Andy as one PR the next morning.
-- **Just-in-time re-planning:** when a story unblocks, a plan pass re-reads the codebase.
+- **Just-in-time re-planning** (built, M4.6): dispatch re-runs plans older than a blocker's Done.
 - Epic status, cost and progress roll up; an epic's overrides cascade to its stories.
 
 ### 4.5 Review gate (v1.x: rules only)
