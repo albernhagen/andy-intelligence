@@ -13,10 +13,10 @@ Procedure for the refine step (ARCHITECTURE §4.2–4.3, ADR-0054: Refine run pr
 
 ## What to check (the Definition of Ready, §4.2; per type, ADR-0058: Ticket model)
 
-1. **Type**: `feature` (new or changed behaviour), `bug` (wrong behaviour), `chore` (no user-visible change), `spike` (a question answered in a findings doc, no product code) or `epic` (a container that never runs).
-2. **Intent**: the problem and who has it. For a bug: steps to reproduce and the actual behaviour. For a spike: the question, and why it needs answering now.
-3. **Acceptance criteria**, testable, covering failure cases (errors, limits, retries). Feature: EARS form ("WHEN … the API shall …"). Bug: the expected behaviour. Chore: a "done when" checklist. Spike: what the findings must answer.
-4. **Size** S, M or L with a one-line reason that fits the files you expect to change (it picks the build model). For a spike the size is its timebox: ask when the ticket doesn't say how deep to go.
+1. **Type**: `feature` (new or changed behaviour), `bug` (wrong behaviour), `chore` (no user-visible change), `spike` (findings, no code) or `epic` (a container that never runs).
+2. **Intent**: the problem and who has it. For a bug: steps to reproduce and the actual behaviour.
+3. **Acceptance criteria**, testable, covering failure cases (errors, limits, retries). Feature: EARS form ("WHEN … the API shall …"). Bug: the expected behaviour. Chore: a "done when" checklist. Spike: what its findings answer.
+4. **Size** S, M or L with a one-line reason that fits the files you expect to change (it picks the build model). Spike: the timebox.
 5. **Scope**: `outOfScope` (must not change) and `touches` (areas or path globs it edits).
 6. **Dependencies**: tickets or changes needed first.
 7. **Assumptions**: anything you would have to guess.
@@ -59,7 +59,7 @@ Sure and `reversible` becomes an assumption; anything else is asked. **The contr
 
 ## Questions Andy can answer (AI-73)
 
-Each gap stands on its own, for Andy away from the desk:
+Each gap stands alone, for Andy away from the desk:
 
 - `question`: one plain sentence ending in `?`. Every ID with its title; no jargon.
 - `context`: two to four sentences: the feature in plain words, what happens today, why it's needed now.
@@ -78,10 +78,10 @@ If the snapshot has `focusGaps`, Andy answered those assumptions as questions. L
 
 ## Result
 
-End with the structured output the run asks for (the schema `refine.schema.json` sits next to this file):
+End with the structured output (schema: `refine.schema.json`, next to this file):
 
 - The ticket fields (`type` … `acceptanceCriteria`): your proposal, always given. Each is written only where the ticket's is empty, so Andy's values win; a set value you think is wrong is a gap.
 - `summary`: markdown, at most 300 words: **Ask** (one sentence), **Gaps** (what the Definition of Ready misses), **Files**, **Risks** (security, data, cost, concurrency).
 - `outcome`, `reason`, `children`, `gaps`: as above.
 
-A result that doesn't match the schema fails the run and writes nothing. With nothing to ask and the Definition of Ready met, the ticket moves to Ready; otherwise questions land in the Needs-you inbox and the last answer moves it to Ready or runs refine again (at most 3 runs).
+A result not matching the schema fails the run and writes nothing. With nothing to ask and the Definition of Ready met, the ticket moves to Ready; otherwise questions land in the Needs-you inbox and the last answer moves it to Ready or runs refine again (at most 3 runs).
