@@ -371,7 +371,7 @@ export function createApp(input: AppDeps) {
   registerBoardRoutes(app, new BoardReader(deps.tracker, deps.runs));
   registerEpicRoutes(app, deps.tracker, deps.runs);
 
-  registerRunRoutes(app, runs);
+  registerRunRoutes(app, runs, deps.runs);
   if (runners) registerRunnerRoutes(app, runners);
   registerInFlightRoutes(app, runs);
   // AI-74: a clear wakes every project, as a settings change wakes one.
