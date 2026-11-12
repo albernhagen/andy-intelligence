@@ -29,6 +29,7 @@ Every ticket sits under a milestone. Milestones are epic tickets in project `AI`
 - Context sources design (open question 12).
 - ADR-0094: Local executor build choices (AI-79, PR review): accept the six, or change any?
 - ADR-0097: Review findings → config proposals (AI-100): accept the two-PR plan, the 3-PR threshold and `AGENTS.md` as the only target?
+- ADR-0096: Managed repos call one executor (AI-83): Claude token in an environment on `main`, executor at `@main`, one repo per project?
 
 ## Blocked on Andy
 
