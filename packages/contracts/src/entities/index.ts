@@ -18,6 +18,7 @@ import {
 } from "./common";
 import { projectDispatchFields } from "./dispatch-caps";
 import { projectNotifyFields } from "./notify-email";
+import { projectPlanFields } from "./project-plan";
 import { configChangeProposalFields } from "./config-proposals";
 
 export * from "./common";
@@ -43,6 +44,7 @@ export * from "./scores";
 export * from "./notify-email";
 export * from "./question-format";
 export * from "./brief";
+export * from "./project-plan";
 
 /** ARCHITECTURE §5 — domain model. Vendor concepts must not appear here. */
 
@@ -99,6 +101,7 @@ export const Project = z.object({
   autoMerge: AutoMerge.default("none"),
   ...projectDispatchFields,
   ...projectNotifyFields,
+  ...projectPlanFields,
   /** Who does a ticket's work when it has no pick of its own (ADR-0082). */
   defaultWorker: Worker.default("agent"),
   /** Where a ticket's runs execute when it has no pick of its own (ADR-0089). */

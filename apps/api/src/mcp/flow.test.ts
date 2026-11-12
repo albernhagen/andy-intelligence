@@ -166,6 +166,7 @@ describe("MCP OAuth flow (MCP SDK client)", () => {
       "accept_assumption",
       "answer_question",
       "approve_plan",
+      "approve_project_plan",
       "archive_ticket",
       "build",
       "cancel_ticket",
@@ -183,6 +184,7 @@ describe("MCP OAuth flow (MCP SDK client)", () => {
       "promote_assumption",
       "refine",
       "reject_plan",
+      "reject_project_plan",
       "reorder_ticket",
       "set_auto_build",
       "set_auto_merge",
@@ -198,6 +200,7 @@ describe("MCP OAuth flow (MCP SDK client)", () => {
       "set_worker",
       "status",
       "submit_brief",
+      "submit_project_plan",
     ]);
   });
 
