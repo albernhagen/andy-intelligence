@@ -6328,6 +6328,67 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  "/api/projects/{projectId}/setup": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get: {
+      parameters: {
+        query?: never;
+        header?: never;
+        path: {
+          projectId: string;
+        };
+        cookie?: never;
+      };
+      requestBody?: never;
+      responses: {
+        /** @description The five setup steps, each done, missing, unknown or not yet */
+        200: {
+          headers: {
+            [name: string]: unknown;
+          };
+          content: {
+            "application/json": components["schemas"]["SetupChecklist"];
+          };
+        };
+        /** @description Invalid request */
+        400: {
+          headers: {
+            [name: string]: unknown;
+          };
+          content: {
+            "application/json": {
+              error: string;
+              details?: string[];
+            };
+          };
+        };
+        /** @description Not found */
+        404: {
+          headers: {
+            [name: string]: unknown;
+          };
+          content: {
+            "application/json": {
+              error: string;
+              details?: string[];
+            };
+          };
+        };
+      };
+    };
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   "/api/notify/email": {
     parameters: {
       query?: never;
@@ -6946,6 +7007,23 @@ export interface components {
       };
       costedChildren: number;
       partial: boolean;
+    };
+    SetupChecklist: {
+      repo: string | null;
+      complete: boolean;
+      items: {
+        /** @enum {string} */
+        key:
+          | "repo_connected"
+          | "baseline_merged"
+          | "deploy_proven"
+          | "threat_model_started"
+          | "budget_caps_set";
+        label: string;
+        /** @enum {string} */
+        status: "done" | "missing" | "unknown" | "not_yet";
+        detail: string | null;
+      }[];
     };
     EmailStatus: {
       configured: boolean;
