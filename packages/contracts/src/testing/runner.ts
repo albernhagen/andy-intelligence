@@ -24,7 +24,7 @@ export function runnerStoreContract(
         name: "Andy's Mac",
         projectIds: ["ai"],
         createdAt: start.toISOString(),
-        createdBy: "user:uid-1",
+        createdBy: "andy",
         expiresAt: "2027-02-09T12:00:00.000Z",
         ...overrides,
       });
