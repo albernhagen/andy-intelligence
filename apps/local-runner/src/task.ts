@@ -421,6 +421,8 @@ export async function runTask(
     await deps.repos.addWorktree(claimed.repo, run.projectSha, publishDir);
     worktrees.push({ repo: claimed.repo, path: publishDir });
     const base = await deps.repos.defaultBranch(claimed.repo);
+    // Cancelled or ended meanwhile: publish nothing (the heartbeat contract).
+    checkpoint();
     const granted = await deps.api.pushToken(claimed.runId, claimed.token);
     if (granted.kind !== "ok") {
       deps.log("ERROR", "push token refused; nothing published", {
