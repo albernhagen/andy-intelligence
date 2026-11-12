@@ -17,10 +17,16 @@ import { blockingRun, editingRuns } from "./dispatch-conflicts";
 import { checkDor } from "./dor";
 import { MAX_PLAN_RUNS_PER_TICKET, planRequired } from "./plans";
 import { quotaStatus, readingsForDispatch } from "./quota";
+import { blockersDoneAt, replanNote, staleBlocker, writtenPlan } from "./replan";
 import type { RunService } from "./runs";
 import { isDispatchable } from "./worker";
+import { epicOf, withEpicOverrides } from "./overrides";
 import { ACTIONS_ROUTE, routeTakes, type DispatchRoute } from "./executor";
 import { DomainError } from "./tickets";
+
+/** What the dispatcher starts for a ticket; `replanFor` names the blocker that made its plan stale. */
+type Start = { step: "build"; replanFor: null } | { step: "plan"; replanFor: string };
+const BUILD: Start = { step: "build", replanFor: null };
 
 function log(severity: "INFO" | "WARNING" | "ERROR", message: string, fields: object = {}) {
   console.log(JSON.stringify({ severity, message, component: "build-dispatch", ...fields }));
@@ -39,6 +45,8 @@ function log(severity: "INFO" | "WARNING" | "ERROR", message: string, fields: ob
  * (ADR-0080); with nothing else started, the decision is `touches_overlap`. With plan approval
  * (ADR-0050), a ticket whose plan awaits Andy, is still being planned or was rejected waits for
  * Andy (only he re-plans a rejected plan); one that needs a plan gets a plan run first.
+ * A plan written before a `blockedBy` ticket reached Done is re-run before the build, whatever
+ * the policy (M4.6: just-in-time re-planning); the new plan then waits for Andy like any other.
  */
 export class BuildDispatcher {
   constructor(
@@ -117,8 +125,10 @@ export class BuildDispatcher {
     for (const ticket of tickets.filter((t) => t.stage === "ready")) {
       if (verdict !== "start") break;
       // An epic never runs (ADR-0058); refine can leave one in Ready. Andy's own work never builds.
-      if (ticket.type === "epic" || isAndysWork(ticket)) continue;
-      if (!isDispatchable(ticket, project)) continue; // AI-32: Who does the work (ADR-0082).
+      // AI-116: an epic's overrides hold its children too, unless a child has its own pick.
+      const effective = withEpicOverrides(ticket, epicOf(ticket, tickets));
+      if (ticket.type === "epic" || isAndysWork(effective)) continue;
+      if (!isDispatchable(effective, project)) continue; // AI-32: Who does the work (ADR-0082).
       if (!routeTakes(route, ticket, project, runnerPresent)) continue; // ADR-0089.
       if (ticket.archived || ticket.needsAttention) continue;
       const blocker = blockingRun(ticket, inFlight);
@@ -132,13 +142,21 @@ export class BuildDispatcher {
         });
         continue;
       }
-      if (!(await this.waiting(ticket, project.planApproval))) continue;
+      const start = await this.waiting(ticket, project.planApproval);
+      if (!start) continue;
       try {
-        const run = await this.runs.start(projectId, ticket.id, "build", undefined, {
+        const run = await this.runs.start(projectId, ticket.id, start.step, undefined, {
           avoidOverlap: true,
           ...(local ? { runner: route.runner } : {}),
         });
-        log("INFO", "build started on its own", { ticket: ticket.key, runId: run.id, local });
+        log("INFO", "build started on its own", {
+          ticket: ticket.key,
+          runId: run.id,
+          step: run.step,
+          local,
+          ...(start.replanFor ? { reason: "plan_stale", blocker: start.replanFor } : {}),
+        });
+        if (start.replanFor) await this.noteReplan(ticket, start.replanFor);
         // A claim hands the runner one run; it claims again when it has a free slot.
         if (local) return run;
         first ??= run;
@@ -210,10 +228,11 @@ export class BuildDispatcher {
     return quotaStatus("claude-sub", readings, now).level;
   }
 
-  private async waiting(ticket: Ticket, policy: PlanApproval): Promise<boolean> {
+  /** What to start for a waiting ticket, or null when it doesn't wait. */
+  private async waiting(ticket: Ticket, policy: PlanApproval): Promise<Start | null> {
     const open = await this.tracker.listQuestions({ ticketId: ticket.id, status: "open" });
-    if (!checkDor(ticket, open.length).met) return false;
-    if (unfinishedBlockers(ticket, await this.runs.blockerStages(ticket)).length > 0) return false;
+    if (!checkDor(ticket, open.length).met) return null;
+    if (unfinishedBlockers(ticket, await this.runs.blockerStages(ticket)).length > 0) return null;
     const builds = (await this.runStore.listForTicket(ticket.projectId, ticket.id)).filter(
       (r) => r.step === "build" && wasDispatched(r),
     );
@@ -222,18 +241,49 @@ export class BuildDispatcher {
         ticket,
         `Build ran ${builds.length} times without a merged change. Finish the ticket by hand.`,
       );
-      return false;
+      return null;
     }
     return this.planAllows(ticket, policy);
   }
 
-  /** Whether the ticket's plan lets a start go ahead now (a build, or a plan run first). */
-  private async planAllows(ticket: Ticket, policy: PlanApproval): Promise<boolean> {
+  /**
+   * What the ticket's plan lets start now: a build (`RunService.start` turns it into a plan run
+   * when the policy needs one), a plan re-run for a plan older than a blocker's Done, or nothing.
+   */
+  private async planAllows(ticket: Ticket, policy: PlanApproval): Promise<Start | null> {
     const plan = await this.runs.planStateOf(ticket, undefined, policy);
-    if (plan.kind === "approved") return true;
-    if (plan.kind === "awaiting" || plan.kind === "planning") return false;
-    if (!planRequired(policy, ticket)) return true;
-    if (plan.kind === "rejected") return false;
+    let stale: string | null = null;
+    if (ticket.blockedBy.length > 0 && writtenPlan(plan)) {
+      try {
+        stale = staleBlocker(plan, await blockersDoneAt(this.tracker, ticket));
+      } catch (err) {
+        // Freshness unknown: skip the ticket this time rather than build on a stale plan.
+        log("WARNING", "build waits: blocker Done times unreadable", {
+          ticket: ticket.key,
+          error: String(err),
+        });
+        return null;
+      }
+    }
+    if (stale) return (await this.underPlanCap(ticket)) ? { step: "plan", replanFor: stale } : null;
+    if (plan.kind === "approved") return BUILD;
+    if (plan.kind === "awaiting" || plan.kind === "planning") return null;
+    if (!planRequired(policy, ticket)) return BUILD;
+    if (plan.kind === "rejected") return null;
+    return (await this.underPlanCap(ticket)) ? BUILD : null;
+  }
+
+  /** The timeline line for a re-plan; best-effort, as the plan run has already started. */
+  private async noteReplan(ticket: Ticket, blocker: string): Promise<void> {
+    try {
+      await this.tracker.addComment(ticket.projectId, ticket.id, replanNote(blocker), "system");
+    } catch (err) {
+      log("WARNING", "re-plan note not written", { ticket: ticket.key, error: String(err) });
+    }
+  }
+
+  /** Under MAX_PLAN_RUNS_PER_TICKET; a ticket at the cap is flagged. */
+  private async underPlanCap(ticket: Ticket): Promise<boolean> {
     const plans = (await this.runStore.listForTicket(ticket.projectId, ticket.id)).filter(
       (r) => r.step === "plan" && wasDispatched(r),
     );
