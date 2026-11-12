@@ -36,6 +36,7 @@ import { registerSettingsTools } from "./tools-settings";
 import { registerNotifyTools } from "./tools-notify";
 import { registerDigestTools } from "./tools-digest";
 import { registerQuotaTools } from "./tools-quota";
+import { registerProjectTools } from "./tools-projects";
 import { registerConfigTools } from "./tools-config";
 
 /**
@@ -185,6 +186,7 @@ export function registerTools(server: McpServer, deps: ToolDeps): void {
   registerTicketTools(server, deps);
   registerDigestTools(server, deps, run);
   registerQuotaTools(server, deps, run);
+  registerProjectTools(server, deps, run);
   registerConfigTools(server, deps, run);
 
   /** Decides the ticket's latest plan run as Andy (owner-only, ADR-0050). */
