@@ -2,6 +2,8 @@ import { OpenAPIHono, createRoute, z } from "@hono/zod-openapi";
 import {
   WorkTrackerError,
   type CodeEventLog,
+  type ConfigChangeStore,
+  type ReviewFindingSource,
   type CodeHostConnectionStore,
   type OAuthGrantStore,
   type RunStore,
@@ -9,7 +11,6 @@ import {
   type WatchdogQueue,
   type WorkTracker,
   type QuotaStore,
-  type ConfigChangeStore,
 } from "@andy/contracts";
 import { ClaudeCodeActionsExecutor, exchangeManifestCode, type CreatedApp } from "@andy/github";
 import {
@@ -22,6 +23,7 @@ import {
   RunnerService,
   LocalClaims,
   BoardReader,
+  ConfigProposals,
   DigestReader,
   QuotaClearer,
   TicketService,
@@ -40,6 +42,7 @@ import { registerTicketRoutes } from "./tickets";
 import { registerBoardRoutes } from "./board";
 import { registerInFlightRoutes } from "./in-flight";
 import { registerDigestRoutes } from "./digest";
+import { noReviewFindings, registerConfigProposalRoutes } from "./config-proposals";
 import { registerNotifyFlush, registerNotifyRoutes } from "./notify";
 import {
   ConnectedCodeHost,
@@ -79,10 +82,15 @@ export interface AppDeps {
    * when not configured.
    */
   runners?: RunnerStore;
+  /**
+   * Config changes: pending ones from review findings (ADR-0097; routes absent when unset) and
+   * the log every project-settings write appends to (M4.11; off when unset).
+   */
+  configChanges?: ConfigChangeStore;
+  /** Stored review findings (ADR-0097 PR B); until then none, so sweeps propose nothing. */
+  reviewFindings?: ReviewFindingSource;
   /** Subscription quota readings (M1.9). Without it every window reads unknown. */
   quota?: QuotaStore;
-  /** The config change log (M4.11): every project-settings write appends one; off when absent. */
-  configChanges?: ConfigChangeStore;
   /**
    * The only host served (ADR-0044), e.g. `ai.andybernhagen.com`. Requests for any other host
    * (the default run.app URLs) get 404, except /health for monitoring. Unset: every host (local dev).
@@ -408,6 +416,15 @@ export function createApp(input: AppDeps) {
   const digest = new DigestReader(deps.tracker, deps.runs, deps.quota ?? null, now);
   registerDigestRoutes(app, digest, now);
   registerNotifyRoutes(app, email);
+  const configProposals = deps.configChanges
+    ? new ConfigProposals(
+        deps.tracker,
+        deps.reviewFindings ?? noReviewFindings,
+        deps.configChanges,
+        now,
+      )
+    : null;
+  if (configProposals) registerConfigProposalRoutes(app, configProposals);
 
   if (github && connection) {
     registerGitHubSetup(app, {
@@ -431,6 +448,7 @@ export function createApp(input: AppDeps) {
       digest,
       notifyEmail: email,
       quota: quotaClearer,
+      configProposals,
     });
   }
 

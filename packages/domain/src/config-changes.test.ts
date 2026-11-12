@@ -4,7 +4,7 @@ import {
   type ConfigChange,
   type Project,
 } from "@andy/contracts";
-import { configChangeStoreContract } from "@andy/contracts/testing";
+import { configChangeLogContract } from "@andy/contracts/testing";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { changeActor, projectSettingsChange, settingsDiff } from "./config-changes";
 import { ProjectService } from "./projects";
@@ -12,7 +12,7 @@ import { ProjectService } from "./projects";
 const OWNER = { actor: "andy" as const, email: "andy@example.com" };
 
 // The fake passes the same suite as the Firestore adapter (`packages/store`, emulator).
-configChangeStoreContract("in-memory", async () => new InMemoryConfigChangeStore());
+configChangeLogContract("in-memory", async () => new InMemoryConfigChangeStore());
 
 describe("settingsDiff", () => {
   const project = {
@@ -64,12 +64,16 @@ describe("projectSettingsChange", () => {
       id: "c1",
       entity: "project",
       entityId: "ai",
+      projectId: "ai",
       diff: { paused: { from: false, to: true } },
       actor: "andy",
       reason: "night off",
       status: "applied",
       createdAt: at.toISOString(),
       appliedAt: at.toISOString(),
+      dedupeKey: null,
+      decidedBy: null,
+      decidedAt: null,
     });
   });
 

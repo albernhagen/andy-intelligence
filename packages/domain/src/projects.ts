@@ -3,7 +3,7 @@ import {
   ProjectSettings,
   RepoName,
   type CodeHost,
-  type ConfigChangeStore,
+  type ConfigChangeLog,
   type EventActor,
   type Project,
   type WorkTracker,
@@ -34,7 +34,7 @@ export class ProjectService {
     private readonly dispatchNext: ((projectId: string) => Promise<unknown>) | null = null,
     private readonly now: () => Date = () => new Date(),
     /** The config change log (M4.11); null where none is kept (tests, local dev without one). */
-    private readonly configChanges: ConfigChangeStore | null = null,
+    private readonly configChanges: ConfigChangeLog | null = null,
     private readonly newId: () => string = () => crypto.randomUUID(),
   ) {}
 

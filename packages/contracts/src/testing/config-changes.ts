@@ -1,10 +1,10 @@
 import { describe, expect, it } from "vitest";
 import { ConfigChange } from "../entities";
-import { CONFIG_CHANGE_LIST_MAX, type ConfigChangeStore } from "../ports/config-changes";
+import { CONFIG_CHANGE_LIST_MAX, type ConfigChangeLog } from "../ports/config-changes";
 
-/** `make` must return a store with nothing in it. */
-export function configChangeStoreContract(name: string, make: () => Promise<ConfigChangeStore>) {
-  describe(`ConfigChangeStore contract: ${name}`, () => {
+/** The applied log (M4.11). `make` must return a store with nothing in it. */
+export function configChangeLogContract(name: string, make: () => Promise<ConfigChangeLog>) {
+  describe(`ConfigChangeLog contract: ${name}`, () => {
     const start = Date.parse("2026-11-12T10:00:00.000Z");
     const at = (minutes: number) => new Date(start + minutes * 60_000).toISOString();
     const change = (overrides: Partial<ConfigChange> = {}): ConfigChange =>
@@ -12,6 +12,7 @@ export function configChangeStoreContract(name: string, make: () => Promise<Conf
         id: crypto.randomUUID(),
         entity: "project",
         entityId: "ai",
+        projectId: "ai",
         diff: { autoBuild: { from: false, to: true } },
         actor: "andy",
         reason: "",
@@ -53,7 +54,7 @@ export function configChangeStoreContract(name: string, make: () => Promise<Conf
       const recent = change({ createdAt: at(5) });
       await store.append(old);
       await store.append(recent);
-      await store.append(change({ entityId: "other" }));
+      await store.append(change({ entityId: "other", projectId: "other" }));
       await store.append(change({ entity: "tier", entityId: "ai" }));
       expect((await store.listForProject("ai")).map((c) => c.id)).toEqual([recent.id, old.id]);
       expect(await store.listForProject("none")).toEqual([]);

@@ -126,7 +126,6 @@ export { ticketEventV2toV3, ticketV1toV2, ticketV2toV3, upgrade, type Upgrader }
 export { FirestoreRunStore } from "./run-store";
 export { FirestoreRunnerStore } from "./runner-store";
 export { FirestoreNightLaunchStore } from "./night-launch-store";
-export { FirestoreConfigChangeStore } from "./config-change-store";
 export {
   CloudTasksWatchdogQueue,
   leaseUrl,
@@ -136,3 +135,8 @@ export {
 } from "./watchdog-queue";
 export { FirestoreNotifyLedger } from "./notify-ledger";
 export { CloudTasksNotifyFlushQueue, notifyFlushUrl } from "./notify-flush-queue";
+export {
+  CONFIG_CHANGE_LOG_READ_MAX,
+  CONFIG_CHANGE_PENDING_READ_MAX,
+  FirestoreConfigChangeStore,
+} from "./config-change-store";

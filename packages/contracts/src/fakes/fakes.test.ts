@@ -1,5 +1,7 @@
 import {
   codeEventLogContract,
+  configChangeStoreContract,
+  reviewFindingSourceContract,
   codeHostConnectionStoreContract,
   codeHostContract,
   evaluatorContract,
@@ -13,6 +15,8 @@ import {
 } from "../testing";
 import {
   InMemoryCodeEventLog,
+  InMemoryConfigChangeStore,
+  InMemoryReviewFindingSource,
   InMemoryCodeHost,
   InMemoryCodeHostConnectionStore,
   InMemoryEvaluator,
@@ -82,3 +86,11 @@ evaluatorContract("in-memory", async (script) => {
 });
 
 runnerStoreContract("in-memory", async (now) => new InMemoryRunnerStore(now));
+
+configChangeStoreContract("in-memory", async () => new InMemoryConfigChangeStore());
+
+reviewFindingSourceContract("in-memory", async (findings) => {
+  const source = new InMemoryReviewFindingSource();
+  source.add(...findings);
+  return source;
+});

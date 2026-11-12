@@ -53,6 +53,7 @@ export function projectSettingsChange(input: {
     id: input.id,
     entity: "project",
     entityId: input.after.id,
+    projectId: input.after.id,
     diff,
     actor: changeActor(input.actor),
     reason: input.reason?.trim() ?? "",
