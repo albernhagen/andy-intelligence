@@ -46,6 +46,7 @@ export const BASELINE_FILES = [
   ".github/workflows/security-review.yml",
   ".github/workflows/adversarial-review.yml",
   ".github/workflows/dependabot-auto-merge.yml",
+  ".github/workflows/agent-run.yml",
   ".github/dependabot.yml",
   ".github/pull_request_template.md",
   ".prettierrc.json",

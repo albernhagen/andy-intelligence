@@ -13,7 +13,7 @@ import type { AuthEnv } from "./auth";
  * A project's setup checklist (AI-95: M5.15): the five steps from AI-65, decided by the domain
  * from repo facts read here through the `CodeHost` port. Signed-in read only; it never does a
  * step. Each view reads the project's first repo once plus one file per baseline file and the
- * threat model (a fixed 14 calls, ADR-0028), in parallel.
+ * threat model (a fixed 15 calls, ADR-0028), in parallel.
  */
 
 const ErrorBody = z.object({ error: z.string(), details: z.array(z.string()).optional() });
