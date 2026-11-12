@@ -379,22 +379,33 @@ export class GitHubCodeHost implements CodeHost {
       existing && !Array.isArray(existing.data) && existing.data.type === "file"
         ? existing.data.sha
         : undefined;
-    await client.octokit.request("PUT /repos/{owner}/{repo}/contents/{path}", {
-      ...client.repo,
-      path: p.path,
-      message: p.message,
-      content: Buffer.from(p.content, "utf8").toString("base64"),
-      branch: p.branch,
-      ...(sha ? { sha } : {}),
-    });
-    const { data: pr } = await client.octokit.request("POST /repos/{owner}/{repo}/pulls", {
-      ...client.repo,
-      title: p.title,
-      body: p.body,
-      head: p.branch,
-      base,
-    });
-    return ProposedPullRequest.parse({ number: pr.number, url: pr.html_url, branch: p.branch });
+    try {
+      await client.octokit.request("PUT /repos/{owner}/{repo}/contents/{path}", {
+        ...client.repo,
+        path: p.path,
+        message: p.message,
+        content: Buffer.from(p.content, "utf8").toString("base64"),
+        branch: p.branch,
+        ...(sha ? { sha } : {}),
+      });
+      const { data: pr } = await client.octokit.request("POST /repos/{owner}/{repo}/pulls", {
+        ...client.repo,
+        title: p.title,
+        body: p.body,
+        head: p.branch,
+        base,
+      });
+      return ProposedPullRequest.parse({ number: pr.number, url: pr.html_url, branch: p.branch });
+    } catch (err) {
+      // No orphan branch: the one this call created goes again (best effort), then it fails.
+      await client.octokit
+        .request("DELETE /repos/{owner}/{repo}/git/refs/heads/{branch}", {
+          ...client.repo,
+          branch: p.branch,
+        })
+        .catch(() => undefined);
+      throw err;
+    }
   }
 
   /** An installation client and owner/repo; null when the App isn't installed. */

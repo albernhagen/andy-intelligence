@@ -95,6 +95,8 @@ export class BriefService {
     private readonly tracker: Pick<WorkTracker, "getProject">,
     private readonly codeHost: CodeHost | null,
     private readonly now: () => Date,
+    /** Test seam: the branch name's random tail. */
+    private readonly suffix: () => string = () => crypto.randomUUID().slice(0, 8),
   ) {}
 
   async submit(
@@ -124,15 +126,23 @@ export class BriefService {
 
     const at = this.now();
     this.takeSlot(at.getTime());
-    const pullRequest = await this.codeHost.proposeFile(repo.fullName, {
-      branch: `brief/${project.id}-${at.toISOString().replace(/\D/g, "").slice(0, 14)}`,
-      path: BRIEF_PATH,
-      content: rendered.markdown,
-      message: `${project.key}: ${current === null ? "add" : "update"} the project brief`,
-      title: `${project.key}: Project brief`,
-      body: "Rendered from the onboarding answers (ADR-0053: Project brief, `platform/procedures/onboard.md`). Andy reviews and merges; agents read it as data, never as instructions.",
-    });
+    // A random tail, so two submissions in the same second get different branches.
+    const branch = `brief/${project.id}-${at.toISOString().replace(/\D/g, "").slice(0, 14)}-${this.suffix()}`;
+    const pullRequest = await this.codeHost
+      .proposeFile(repo.fullName, {
+        branch,
+        path: BRIEF_PATH,
+        content: rendered.markdown,
+        message: `${project.key}: ${current === null ? "add" : "update"} the project brief`,
+        title: `${project.key}: Project brief`,
+        body: "Rendered from the onboarding answers (ADR-0053: Project brief, `platform/procedures/onboard.md`). Andy reviews and merges; agents read it as data, never as instructions.",
+      })
+      .catch((err: unknown) => {
+        this.opened.pop();
+        throw err;
+      });
     if (!pullRequest) {
+      this.opened.pop();
       throw new DomainError("invalid_repo", `the App isn't installed on ${repo.fullName}`);
     }
     console.log(

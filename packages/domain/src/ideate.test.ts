@@ -45,11 +45,13 @@ async function setup(repos = [REPO]) {
   ]);
   const project = await tracker.createProject({ name: "Trail log", key: "TRL", repos });
   let now = T0;
+  let n = 0;
   const ideate = new IdeateService(
     tracker,
     new TicketService(tracker, null, null, () => now),
     host,
     () => now,
+    () => `tail000${++n}`,
   );
   return {
     tracker,
@@ -86,7 +88,7 @@ describe("IdeateService", () => {
     expect(host.proposals[0]).toMatchObject({
       fullName: REPO,
       proposal: {
-        branch: "ideate/weekly-summary-20261112110000",
+        branch: "ideate/weekly-summary-20261112110000-tail0001",
         path: "specs/weekly-summary.md",
         content: "## Problem\n\nNo overview.\n",
         title: "TRL-1: Spec draft: Andy sees his week",

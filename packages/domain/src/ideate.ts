@@ -46,6 +46,8 @@ export class IdeateService {
     private readonly tickets: Pick<TicketService, "create">,
     private readonly codeHost: CodeHost | null,
     private readonly now: () => Date,
+    /** Test seam: the branch name's random tail, so same-second ideas don't collide. */
+    private readonly suffix: () => string = () => crypto.randomUUID().slice(0, 8),
   ) {}
 
   async submit(projectId: string, input: unknown, actor: EventActor): Promise<IdeateResult> {
@@ -87,7 +89,7 @@ export class IdeateService {
     );
     try {
       const pr = await this.codeHost!.proposeFile(repo.fullName, {
-        branch: `ideate/${spec.path.slice("specs/".length, -".md".length).slice(0, 45)}-${stamp(this.now())}`,
+        branch: `ideate/${spec.path.slice("specs/".length, -".md".length).slice(0, 36)}-${stamp(this.now())}-${this.suffix()}`,
         path: spec.path,
         content: spec.markdown.endsWith("\n") ? spec.markdown : `${spec.markdown}\n`,
         message: `${epic.key}: spec draft`,

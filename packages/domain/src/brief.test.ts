@@ -161,7 +161,13 @@ describe("BriefService", () => {
     ]);
     const project = await tracker.createProject({ name: "Trail log", key: "TRL", repos });
     let now = T0;
-    const service = new BriefService(tracker, host, () => now);
+    let n = 0;
+    const service = new BriefService(
+      tracker,
+      host,
+      () => now,
+      () => `tail000${++n}`,
+    );
     const tick = (ms: number) => (now = new Date(now.getTime() + ms));
     return { tracker, host, project, service, tick };
   };
@@ -177,7 +183,7 @@ describe("BriefService", () => {
       path: BRIEF_PATH,
       content: rendered(full),
       title: "TRL: Project brief",
-      branch: `brief/${project.id}-20261112080000`,
+      branch: `brief/${project.id}-20261112080000-tail0001`,
     });
   });
 
@@ -244,5 +250,26 @@ describe("BriefService", () => {
     tick(60 * 60_000);
     await service.submit(project.id, { ...full, vision: "Later." }, OWNER);
     expect(host.proposals).toHaveLength(BRIEF_PRS_PER_HOUR + 1);
+  });
+
+  it("GivenTwoSubmissionsInTheSameSecond_WhenSubmitted_ThenBothOpenOnDifferentBranches", async () => {
+    const { host, project, service } = await setup();
+    await service.submit(project.id, full, OWNER);
+    await service.submit(project.id, { ...full, vision: "Another vision." }, OWNER);
+    const branches = host.proposals.map((p) => p.proposal.branch);
+    expect(new Set(branches).size).toBe(2);
+  });
+
+  it("GivenTheHostFails_WhenSubmitted_ThenTheErrorSurfacesAndTheHourlySlotIsGivenBack", async () => {
+    const { host, project, service } = await setup();
+    host.failPropose = new Error("GitHub 502");
+    for (let i = 0; i <= BRIEF_PRS_PER_HOUR; i++) {
+      await expect(
+        service.submit(project.id, { ...full, vision: `V ${i}.` }, OWNER),
+      ).rejects.toThrow("GitHub 502");
+    }
+    host.failPropose = null;
+    await service.submit(project.id, full, OWNER);
+    expect(host.proposals).toHaveLength(1);
   });
 });
