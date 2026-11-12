@@ -403,6 +403,19 @@ export function usePromoteAssumption(path: TicketPath) {
   );
 }
 
+/** Andy lets a held gap stand as an assumption (AI-75); the ticket is re-checked for Ready. */
+export function useAcceptAssumption(path: TicketPath) {
+  const api = useApi();
+  return useWrite(async (assumptionId: string) =>
+    unwrap(
+      await api.POST(
+        "/api/projects/{projectId}/tickets/{ticketId}/assumptions/{assumptionId}/accept",
+        { params: { path: { ...path, assumptionId } } },
+      ),
+    ),
+  );
+}
+
 /** Quick add: a title alone; refine drafts the rest (ADR-0058). */
 export function useQuickAdd(projectId: string) {
   const api = useApi();
