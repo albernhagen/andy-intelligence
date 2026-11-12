@@ -846,8 +846,14 @@ export const FileProposal = z.object({
     .string()
     .regex(/^[A-Za-z0-9._-]+(\/[A-Za-z0-9._-]+)*$/)
     .max(200)
+    // Only plain relative segments: no `.` or `..` (the pattern already refuses a leading or
+    // doubled `/`, backslashes and `%`, so nothing can be encoded or normalised around the
+    // guard below).
+    .refine((p) => p.split("/").every((seg) => seg !== "." && seg !== ".."), {
+      message: "a proposal path can't have . or .. segments",
+    })
     // Never workflows or agent settings, whoever calls it (defense in depth).
-    .refine((p) => !/^\.(github|claude)\//i.test(p), {
+    .refine((p) => !/^\.(github|claude)(\/|$)/i.test(p), {
       message: "a proposal can't write under .github/ or .claude/",
     }),
   content: z.string().max(100_000),
