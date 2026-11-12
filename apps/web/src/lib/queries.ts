@@ -45,6 +45,19 @@ export function useDigest(projectId: string, hours: number) {
   });
 }
 
+/**
+ * A project's setup checklist (AI-95: M5.15): five steps read from the repo. Each read is 14
+ * code-host calls, so it isn't polled; it refetches on focus.
+ */
+export function useSetupChecklist(projectId: string) {
+  const api = useApi();
+  return useQuery({
+    queryKey: ["setup", projectId],
+    queryFn: async () =>
+      unwrap(await api.GET("/api/projects/{projectId}/setup", { params: { path: { projectId } } })),
+  });
+}
+
 export function useProjects() {
   const api = useApi();
   return useQuery({
