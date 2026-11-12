@@ -17,6 +17,7 @@ import { mcpUrls } from "./oauth";
 import type { FixedWindowLimiter } from "./rate-limit";
 import { hashToken, isTokenShaped } from "./tokens";
 import { registerTools } from "./tools";
+import type { NightDeps } from "../night";
 
 const MCP_BODY_BYTES = 256 * 1024;
 
@@ -37,6 +38,8 @@ export interface McpEndpointDeps {
   quota: QuotaClearer;
   /** Config proposals (ADR-0097); null: the store isn't configured, so no tools. */
   configProposals: ConfigProposals | null;
+  /** The night launch step (M4.17); null: no launch store, so no night tools. */
+  night: NightDeps | null;
 }
 
 /**
@@ -94,6 +97,7 @@ export function registerMcpEndpoint(app: Hono<AuthEnv>, deps: McpEndpointDeps) {
       notifyEmail: deps.notifyEmail,
       quota: deps.quota,
       configProposals: deps.configProposals,
+      night: deps.night,
       email: identity.email,
       actor: actorOf(identity),
     });
