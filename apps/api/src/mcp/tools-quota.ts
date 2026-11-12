@@ -14,7 +14,7 @@ export function registerQuotaTools(
     "clear_quota_idle",
     {
       description:
-        "Discards the Claude quota reading that holds dispatch at the reserve (idle reason quota_reserve), when Andy doesn't believe it. Quota then reads unknown until the next run reports, and dispatch resumes under its other caps. The reading is kept, marked with who and when, and the clear shows in the digest. Refused when no reading is at the reserve or it was already cleared.",
+        "Discards the Claude quota reading that holds dispatch at the reserve (idle reason quota_reserve), when Andy doesn't believe it. Quota then reads unknown until the next agent task reports, and dispatch resumes under its other caps. The reading is kept, marked with who and when, and the clear shows in the digest. Refused when no reading is at the reserve or it was already cleared.",
       inputSchema: {},
       annotations: { destructiveHint: false, idempotentHint: false, openWorldHint: false },
     },

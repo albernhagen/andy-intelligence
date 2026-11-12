@@ -48,18 +48,18 @@ describe("runs UI", () => {
   it("GivenAConnectedProject_WhenAndyStartsARefineRun_ThenTheQueuedRunIsListedWithItsLog", async () => {
     const { user, open, runs, ticket } = await setup();
     const section = await open();
-    await user.click(await within(section).findByRole("button", { name: "Start refine run" }));
+    await user.click(await within(section).findByRole("button", { name: "Start refine task" }));
 
     expect(await within(section).findByText("queued")).toBeTruthy();
     expect(within(section).getByText("sonnet")).toBeTruthy();
-    const log = within(section).getByRole("link", { name: "Run log" });
+    const log = within(section).getByRole("link", { name: "Task log" });
     expect(log.getAttribute("href")).toMatch(
       /^https:\/\/github\.com\/albernhagen\/.+\/actions\/runs\//,
     );
     expect(log.getAttribute("target")).toBe("_blank");
     expect(log.getAttribute("rel")).toBe("noopener noreferrer");
     expect(
-      within(section).getByRole("button", { name: "Start refine run" }).hasAttribute("disabled"),
+      within(section).getByRole("button", { name: "Start refine task" }).hasAttribute("disabled"),
     ).toBe(true);
     expect(await runs.listForTicket("ai", ticket.id)).toHaveLength(1);
   });
@@ -74,7 +74,7 @@ describe("runs UI", () => {
     const section = await harness.open(other.id);
 
     await harness.user.click(
-      await within(section).findByRole("button", { name: "Start refine run" }),
+      await within(section).findByRole("button", { name: "Start refine task" }),
     );
 
     expect((await within(section).findByRole("alert")).textContent).toMatch(/runs-at-once dial/);
@@ -105,7 +105,7 @@ describe("runs UI", () => {
     expect(within(section).getByText("succeeded")).toBeTruthy();
     expect(within(section).getByText(/~\$0\.02 \(estimate\)/)).toBeTruthy();
     expect(
-      within(section).getByRole("button", { name: "Start refine run" }).hasAttribute("disabled"),
+      within(section).getByRole("button", { name: "Start refine task" }).hasAttribute("disabled"),
     ).toBe(false);
   });
 
@@ -232,7 +232,7 @@ describe("ticket cost line", () => {
     const section = await open();
 
     expect((await screen.findByLabelText("Ticket cost")).textContent).toBe(
-      "Cost ~$1.25 (estimate) · quota 5h +3.5%, weekly +0.5% · 1 run unknown",
+      "Cost ~$1.25 (estimate) · quota 5h +3.5%, weekly +0.5% · 1 agent task unknown",
     );
     await within(section).findByText(
       "900 cache read · 100 cache write · 4 turns · 62s · quota 5h +3.5%, weekly +0.5%",
@@ -248,7 +248,7 @@ describe("ticket cost line", () => {
     const section = await open();
 
     expect((await screen.findByLabelText("Ticket cost")).textContent).toBe(
-      "Cost unknown · 1 run unknown",
+      "Cost unknown · 1 agent task unknown",
     );
     await within(section).findByText("Cost unknown");
     expect(within(section).queryByText(/cost —/)).toBeNull();

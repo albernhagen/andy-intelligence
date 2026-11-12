@@ -108,12 +108,17 @@ const AutoBuildInput = {
 };
 
 const PlanInput = {
-  ticket: TicketKey.describe('Ticket key, e.g. "AI-42". Its latest plan run is decided.'),
+  ticket: TicketKey.describe('Ticket key, e.g. "AI-42". Its latest plan task is decided.'),
 };
 
 const RejectPlanInput = {
   ...PlanInput,
-  reason: z.string().trim().min(1).max(PLAN_REASON_MAX).describe("Why: the next plan run sees it."),
+  reason: z
+    .string()
+    .trim()
+    .min(1)
+    .max(PLAN_REASON_MAX)
+    .describe("Why: the next plan task sees it."),
 };
 
 const PlanApprovalInput = {
@@ -262,7 +267,7 @@ export function registerTools(server: McpServer, deps: ToolDeps): void {
     "refine",
     {
       description:
-        "Starts a refine run on an Up-next ticket now: an agent reads the ticket and the repo, proposes values for the fields still empty, and records assumptions or asks up to 3 questions, which arrive in `list_needs_me` when the run ends (a few minutes). With nothing to ask, the ticket moves to Ready. Only needed when auto-refine is off or a refine failed.",
+        "Starts a refine task on an Up-next ticket now: an agent reads the ticket and the repo, proposes values for the fields still empty, and records assumptions or asks up to 3 questions, which arrive in `list_needs_me` when the task ends (a few minutes). With nothing to ask, the ticket moves to Ready. Only needed when auto-refine is off or a refine failed.",
       inputSchema: RefineInput,
       annotations: { destructiveHint: false, idempotentHint: false, openWorldHint: true },
     },
@@ -287,7 +292,7 @@ export function registerTools(server: McpServer, deps: ToolDeps): void {
     "build",
     {
       description:
-        "Starts a build run on a ticket now: an agent plans read-only, implements the ticket, runs the project's checks and opens a PR titled `<KEY>: <title>` (about 15-60 minutes). The ticket moves to In progress, then Ready for review when the PR opens. When the project's plan approval covers the ticket, a read-only plan run starts instead and waits for `approve_plan` or `reject_plan`. Refused while the project is at its runs-at-once dial. Only needed when auto-build is off or a build failed.",
+        "Starts a build task on a ticket now: an agent plans read-only, implements the ticket, runs the project's checks and opens a PR titled `<KEY>: <title>` (about 15-60 minutes). The ticket moves to In progress, then Ready for review when the PR opens. When the project's plan approval covers the ticket, a read-only plan task starts instead and waits for `approve_plan` or `reject_plan`. Refused while the project is at its agent-tasks-at-once dial. Only needed when auto-build is off or a build failed.",
       inputSchema: BuildInput,
       annotations: { destructiveHint: false, idempotentHint: false, openWorldHint: true },
     },
@@ -312,7 +317,7 @@ export function registerTools(server: McpServer, deps: ToolDeps): void {
     "set_auto_build",
     {
       description:
-        "Turns a project's auto-build on or off (default off). On: when a ticket reaches Ready or a run ends, waiting Ready tickets are built from the top, up to the project's runs-at-once dial and the caps (`status` shows why dispatch is idle).",
+        "Turns a project's auto-build on or off (default off). On: when a ticket reaches Ready or an agent task ends, waiting Ready tickets are built from the top, up to the project's runs-at-once dial and the caps (`status` shows why dispatch is idle).",
       inputSchema: AutoBuildInput,
       annotations: { destructiveHint: false, idempotentHint: true, openWorldHint: true },
     },
@@ -331,7 +336,7 @@ export function registerTools(server: McpServer, deps: ToolDeps): void {
     "approve_plan",
     {
       description:
-        "Approves a ticket's latest plan run (projects with plan approval on) and starts its build with that plan in the prompt. Andy only. Refused if the plan is stale (the ticket or the project's plan approval changed, or it is over 72 hours old): start `build` again to re-plan.",
+        "Approves a ticket's latest plan task (projects with plan approval on) and starts its build with that plan in the prompt. Andy only. Refused if the plan is stale (the ticket or the project's plan approval changed, or it is over 72 hours old): start `build` again to re-plan.",
       inputSchema: PlanInput,
       annotations: { destructiveHint: false, idempotentHint: false, openWorldHint: true },
     },
@@ -342,7 +347,7 @@ export function registerTools(server: McpServer, deps: ToolDeps): void {
     "reject_plan",
     {
       description:
-        "Rejects a ticket's latest plan run with a reason. Andy only. Nothing starts; the ticket stays flagged until Andy starts `build` again, and the new plan run sees the reason.",
+        "Rejects a ticket's latest plan task with a reason. Andy only. Nothing starts; the ticket stays flagged until Andy starts `build` again, and the new plan task sees the reason.",
       inputSchema: RejectPlanInput,
       annotations: { destructiveHint: false, idempotentHint: false },
     },
@@ -391,7 +396,7 @@ export function registerTools(server: McpServer, deps: ToolDeps): void {
     "cancel_ticket",
     {
       description:
-        "Cancels a ticket from any stage, stopping its runs in flight first. Andy only. Reopen by moving it to Backlog in the UI.",
+        "Cancels a ticket from any stage, stopping its agent tasks in flight first. Andy only. Reopen by moving it to Backlog in the UI.",
       inputSchema: CancelInput,
       annotations: { destructiveHint: true, idempotentHint: false },
     },
@@ -429,7 +434,7 @@ export function registerTools(server: McpServer, deps: ToolDeps): void {
     "set_auto_refine",
     {
       description:
-        "Turns a project's auto-refine on or off. On: refine starts on its own when a ticket is created or its questions are answered, one run at a time per project.",
+        "Turns a project's auto-refine on or off. On: refine starts on its own when a ticket is created or its questions are answered, one agent task at a time per project.",
       inputSchema: AutoRefineInput,
       annotations: { destructiveHint: false, idempotentHint: true },
     },

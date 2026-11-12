@@ -15,7 +15,7 @@ export function ClearQuotaIdle() {
       <button
         type="button"
         className="rounded-md border border-border bg-background px-2 py-0.5 text-xs font-medium text-foreground hover:bg-muted disabled:opacity-50"
-        title="Discard the quota reading holding dispatch at the reserve, if you don't believe it. Quota reads unknown until the next run reports."
+        title="Discard the quota reading holding dispatch at the reserve, if you don't believe it. Quota reads unknown until the next agent task reports."
         disabled={clear.isPending}
         onClick={() => clear.mutate()}
       >
