@@ -24,7 +24,7 @@ All records carry `project_id` where applicable. Zod schemas in `packages/contra
 | **ConfigChange** | entity, diff, actor (andy / ui / agent / scout), reason, status (pending/accepted/applied/reverted/rejected), project, dedupe key, decided by/at, timestamps |
 | **Release** | project, image digest, tickets included, notes, status |
 | **CodeHostEvent** | delivery ID (document ID), project, repo, kind (pull_request / check_run / workflow_run), action, normalized PR / check / workflow fields, received_at; TTL 30 days (ADR-0041) |
-| **NightLaunch** | epic, project, budget (agent tasks, tokens, USD), stop time (≤ 16 h away), status (planned to ended), started/ended, end reason, story keys, epic branch and start sha (ADR-0049) |
+| **NightLaunch** | epic, project, budget (agent tasks, tokens, USD), stop time (≤ 16 h away), status (planned to ended), started/ended, end reason, story keys, epic branch, start sha (ADR-0049) |
 
 ### Configuration rules
 - **Global config is the ceiling; project config can only narrow** (disable providers, lower caps, raise reserves, pin tiers).
