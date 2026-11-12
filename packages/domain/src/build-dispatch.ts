@@ -20,6 +20,7 @@ import { quotaStatus, readingsForDispatch } from "./quota";
 import { blockersDoneAt, replanNote, staleBlocker, writtenPlan } from "./replan";
 import type { RunService } from "./runs";
 import { isDispatchable } from "./worker";
+import { epicOf, withEpicOverrides } from "./overrides";
 import { ACTIONS_ROUTE, routeTakes, type DispatchRoute } from "./executor";
 import { DomainError } from "./tickets";
 
@@ -124,8 +125,10 @@ export class BuildDispatcher {
     for (const ticket of tickets.filter((t) => t.stage === "ready")) {
       if (verdict !== "start") break;
       // An epic never runs (ADR-0058); refine can leave one in Ready. Andy's own work never builds.
-      if (ticket.type === "epic" || isAndysWork(ticket)) continue;
-      if (!isDispatchable(ticket, project)) continue; // AI-32: Who does the work (ADR-0082).
+      // AI-116: an epic's overrides hold its children too, unless a child has its own pick.
+      const effective = withEpicOverrides(ticket, epicOf(ticket, tickets));
+      if (ticket.type === "epic" || isAndysWork(effective)) continue;
+      if (!isDispatchable(effective, project)) continue; // AI-32: Who does the work (ADR-0082).
       if (!routeTakes(route, ticket, project, runnerPresent)) continue; // ADR-0089.
       if (ticket.archived || ticket.needsAttention) continue;
       const blocker = blockingRun(ticket, inFlight);
