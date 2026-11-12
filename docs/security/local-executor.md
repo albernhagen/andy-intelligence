@@ -23,6 +23,7 @@ Every process below runs as the runner's macOS user (`ai-runner`) under a Seatbe
 
 ## Residual risk
 
+- One push token per run is read-then-write: two requests in the same instant could both pass, and only the claiming runner can send them.
 - A 1-hour App token for one repo is on the Mac during publish: agent branches and PRs on that repo, never `main` (ruleset).
 - A process the build agent leaves behind can outlive it during publish. It keeps the agent's profile, so it can't read the work directory, where git's credential file lives for the push. It can read other same-user processes' environments (Seatbelt can't deny that), which is why no process gets the token in its environment.
 - Platform code from `main` runs in the platform and publish children (ADR-0098); the publish child holds the push token, as the Actions publish job does.

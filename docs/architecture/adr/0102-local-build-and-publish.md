@@ -20,6 +20,7 @@ AI-133: Local executor: local build and publish (ADR-0089 slice 6). The runner n
 
 ## Residual risk (R-AI-44)
 
+- "Once per run" is read-then-write, as on Actions (`claimPushGrant`): two requests in the same instant could both get a token. Only the runner that claimed the run holds its per-run token, and it already has the run's push authority.
 - A 1-hour App token for one repo is on the Mac during publish (ADR-0089 open question 4). It can push agent branches and open PRs, never `main` (ruleset).
 - A process an injected agent leaves behind (`setsid`) can outlive it while publish runs. It stays in the agent's Seatbelt profile, which can't read the work directory where git's credential file lives, and it can't read the publish child's memory. It can read other same-user processes' arguments and environments (Seatbelt can't deny that), which hold no token.
 - Whether Claude Code's sandbox starts inside Seatbelt is unproven: if it doesn't, every local build fails at the Bash check until Andy decides (open question).
