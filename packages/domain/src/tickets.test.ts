@@ -213,6 +213,16 @@ describe("TicketService", () => {
     expect(inbox.tickets.map((x) => x.id)).toEqual([t.id]);
   });
 
+  it("GivenAnEpic_WhenCreatedInOrMovedToUpNext_ThenItIsAccepted", async () => {
+    const created = await service.create(projectId, { title: "Boards", type: "epic" }, "andy", {
+      upNext: true,
+    });
+    expect(created.upNextRank).not.toBeNull();
+    const idea = await service.create(projectId, { title: "Night", type: "epic" }, "andy");
+    const moved = await service.setUpNext(projectId, idea.id, { upNext: true }, "andy");
+    expect(moved.upNextRank).not.toBeNull();
+  });
+
   it("GivenTheLastOpenQuestion_WhenAnswered_ThenNeedsYouClearsAndDorRechecked", async () => {
     const t = await service.create(projectId, readyStory, "andy");
     const q = await service.ask(projectId, t.id, { text: "Which board?" }, "agent:r1");
