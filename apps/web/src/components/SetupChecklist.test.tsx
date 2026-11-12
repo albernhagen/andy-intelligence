@@ -33,6 +33,9 @@ describe("setup checklist", () => {
     expect(row(list, "Deploy proven").getByText("not yet (M6: Dev → prod releases)")).toBeTruthy();
     expect(row(list, "Budget caps set").getByText("Not yet")).toBeTruthy();
     expect(screen.getByText(/Setup: 3 of 5 left/)).toBeTruthy();
+    expect(
+      screen.getByText(/^Deploy proven and Budget caps set: nothing to do here yet/),
+    ).toBeTruthy();
   });
 
   it("GivenTheRepoCannotBeRead_WhenTheProjectPageOpens_ThenRepoItemsShowUnknownWithTheError", async () => {

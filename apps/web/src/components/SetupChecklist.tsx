@@ -27,6 +27,7 @@ export function SetupChecklist({ projectId }: { projectId: string }) {
   if (setup.data === undefined || showsError(setup)) return <QueryError error={setup.error} />;
   if (setup.data.complete) return null;
   const left = setup.data.items.filter((i) => i.status !== "done").length;
+  const waiting = setup.data.items.filter((i) => i.status === "not_yet").map((i) => i.label);
 
   return (
     <section aria-labelledby="setup-heading" className="space-y-1">
@@ -51,6 +52,12 @@ export function SetupChecklist({ projectId }: { projectId: string }) {
           );
         })}
       </ul>
+      {waiting.length > 0 && (
+        <p className="text-xs text-muted-foreground">
+          {waiting.join(" and ")}: nothing to do here yet; they wait on M6: Dev → prod releases, so
+          this checklist stays visible until then.
+        </p>
+      )}
     </section>
   );
 }
