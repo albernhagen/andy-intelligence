@@ -192,10 +192,14 @@ export function latestPullRequest(
   return state === "open" || state === "closed" || state === "merged" ? { number, state } : null;
 }
 
-/** Blockers that are not finished yet (Done or Cancelled), as tickets on this board. */
+/**
+ * Blockers that are not finished yet (Done or Cancelled), as tickets on this board. Entries are
+ * keys, or ids written before AI-96; a blocker in another project isn't on the board.
+ */
 export function openBlockers(ticket: Ticket, byId: ReadonlyMap<string, Ticket>): Ticket[] {
+  const find = (ref: string) => byId.get(ref) ?? [...byId.values()].find((t) => t.key === ref);
   return ticket.blockedBy
-    .map((id) => byId.get(id))
+    .map(find)
     .filter((t): t is Ticket => !!t && t.stage !== "done" && t.stage !== "cancelled");
 }
 
