@@ -1,4 +1,5 @@
 import { Buffer } from "node:buffer";
+import { execFileSync } from "node:child_process";
 import {
   existsSync,
   lstatSync,
@@ -31,6 +32,14 @@ import {
   protectedGlobs,
   pullRequest,
 } from "./executor-publish.mjs";
+import { cleanGitEnv } from "./git-env.mjs";
+
+// Git hooks run tests with GIT_DIR, GIT_INDEX_FILE and the like set for the outer repo, and
+// `gitRunner` passes the process environment on: none of them may reach a git call here, or it
+// commits to the outer repo (AI-135). Same rule as executor-publish-sync.test.mjs.
+for (const key of Object.keys(process.env)) {
+  if (key.startsWith("GIT_")) delete process.env[key];
+}
 
 const profile = JSON.parse(readFileSync(DEFAULT_PROFILE, "utf8"));
 const OWNERS = "* @andy\n/infra/ @andy\npayments.ts @andy\n";
@@ -328,7 +337,9 @@ describe("executor publish job", () => {
   });
 
   it("GivenAGitCommitThatFails_WhenReported_ThenTheTitleAndArgumentsAreNotInTheMessage", () => {
+    // Its own repository, so the commit can't find another one by walking up from the temp dir.
     const dir = mkdtempSync(join(tmpdir(), "publish-git-"));
+    execFileSync("git", ["init", "-q", dir], { env: cleanGitEnv(), stdio: "ignore" });
     const git = gitRunner(dir);
     const title = "AI-3: RecognisableSecretTitle";
     let error;
