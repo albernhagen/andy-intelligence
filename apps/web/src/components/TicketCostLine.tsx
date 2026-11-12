@@ -18,7 +18,7 @@ export function formatTicketCost(cost: TicketCost): string {
     allUnknown ? "Cost unknown" : `Cost ~$${cost.estimatedCostUsd.toFixed(2)} (estimate)`,
     quota && `quota ${quota}`,
     cost.unknownRuns > 0 &&
-      `${cost.unknownRuns} ${cost.unknownRuns === 1 ? "run" : "runs"} unknown`,
+      `${cost.unknownRuns} ${cost.unknownRuns === 1 ? "agent task" : "agent tasks"} unknown`,
   ]
     .filter(Boolean)
     .join(" · ");

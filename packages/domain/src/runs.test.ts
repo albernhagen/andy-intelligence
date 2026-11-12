@@ -555,7 +555,7 @@ describe("RunService", () => {
         const comment = (await tracker.listEvents(projectId, ticketId)).findLast(
           (e) => e.kind === "comment",
         );
-        expect(comment?.body).toMatch(/^The refine run failed\. Its result was rejected/);
+        expect(comment?.body).toMatch(/^The refine task failed\. Its result was rejected/);
       },
     );
 

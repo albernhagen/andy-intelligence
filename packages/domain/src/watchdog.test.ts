@@ -199,7 +199,7 @@ describe("RunService watchdog", () => {
     const [retry] = await runs.listActive(projectId);
     expect(retry).toMatchObject({ attempt: 2, retryOf: run.id, executor: { externalId: "2" } });
     expect(queue.checks.get(retry!.id)).toEqual({ runId: retry!.id, at: retry!.deadline });
-    expect(await lastComment()).toMatch(/^Retrying the refine run \(attempt 2 of 2\)/);
+    expect(await lastComment()).toMatch(/^Retrying the refine task \(attempt 2 of 2\)/);
   });
 
   it("GivenAWorkflowStillRunningAtItsDeadline_WhenTheCheckArrives_ThenItIsStoppedAndRetried", async () => {
@@ -210,7 +210,7 @@ describe("RunService watchdog", () => {
     expect(workflow("1").run.conclusion).toBe("cancelled");
     expect(await runs.get(run.id)).toMatchObject({
       status: "cancelled",
-      error: "the run passed its deadline",
+      error: "the agent task passed its deadline",
     });
   });
 
@@ -235,7 +235,7 @@ describe("RunService watchdog", () => {
     expect(host.workflowRuns.size).toBe(2);
     expect(await runs.listActive(projectId)).toEqual([]);
     expect((await ticket()).needsAttention).toBe(true);
-    expect(await lastComment()).toMatch(/^Needs you: The refine run failed without reporting/);
+    expect(await lastComment()).toMatch(/^Needs you: The refine task failed without reporting/);
   });
 
   it("GivenAFirstRunReportsAFailure_WhenRecorded_ThenItIsRetried", async () => {
@@ -294,7 +294,7 @@ describe("RunService watchdog", () => {
     expect(await offline.checkDeadline(run.id)).toBe("flagged");
     expect(await runs.get(run.id)).toMatchObject({
       status: "failed",
-      error: "the run couldn't be checked: no executor",
+      error: "the agent task couldn't be checked: no executor",
     });
     expect((await ticket()).needsAttention).toBe(true);
   });
