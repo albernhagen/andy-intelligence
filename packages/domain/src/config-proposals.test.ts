@@ -292,6 +292,65 @@ describe("ConfigProposals", () => {
     );
   });
 
+  it("GivenMoreRepeatedKindsThanDecisionLookups_WhenSweptRepeatedly_ThenEveryKindIsProposedWithinBoundedSweepsAndReadsStayCapped", async () => {
+    const { tracker, findings, changes, projectId, repeated, advance } = await setup();
+    let n = 0;
+    const service = new ConfigProposals(
+      tracker,
+      findings,
+      changes,
+      () => NOW,
+      () => `cc-${++n}`,
+      { ...CONFIG_PROPOSAL_LIMITS, maxDecisionLookups: 1, minSweepIntervalMs: 0 },
+    );
+    const lookups = vi.spyOn(changes, "latestDecision");
+    const kinds = ["a-kind", "b-kind", "c-kind"];
+    for (const kind of kinds) findings.add(...repeated(kind));
+
+    // Bounded: ceil(kinds / maxDecisionLookups) sweeps cover every kind.
+    for (let sweep = 0; sweep < kinds.length; sweep++) {
+      lookups.mockClear();
+      await service.sweep(projectId);
+      expect(lookups.mock.calls.length).toBeLessThanOrEqual(1);
+      advance(1);
+    }
+
+    const pending = await changes.listPending(projectId);
+    expect(pending.map((c) => c.dedupeKey).sort()).toEqual(
+      kinds.map((k) => proposalKey(projectId, "AGENTS.md", k)),
+    );
+  });
+
+  it("GivenAKindDeferredByTheLookupCap_WhenItsTurnComes_ThenAnEarlierDecisionStillHoldsIt", async () => {
+    const { tracker, findings, changes, projectId, repeated, advance } = await setup();
+    let n = 0;
+    const make = (maxDecisionLookups: number) =>
+      new ConfigProposals(
+        tracker,
+        findings,
+        changes,
+        () => NOW,
+        () => `cc-${++n}`,
+        { ...CONFIG_PROPOSAL_LIMITS, maxDecisionLookups, minSweepIntervalMs: 0 },
+      );
+    findings.add(...repeated("b-kind"));
+    await make(20).sweep(projectId);
+    const [b] = await changes.listPending(projectId);
+    await make(20).decide(b!.id, "rejected", "user:uid-1");
+    findings.add(...repeated("a-kind"));
+
+    const service = make(1);
+    for (let sweep = 0; sweep < 2; sweep++) {
+      await service.sweep(projectId);
+      advance(1);
+    }
+
+    const pending = await changes.listPending(projectId);
+    expect(pending.map((c) => c.dedupeKey)).toEqual([
+      proposalKey(projectId, "AGENTS.md", "a-kind"),
+    ]);
+  });
+
   it("GivenNoFindingsStoredYet_WhenSwept_ThenNothingIsProposed", async () => {
     const { service, projectId } = await setup();
     expect(await service.sweep(projectId)).toMatchObject({ findingsRead: 0, created: [] });
