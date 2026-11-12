@@ -36,9 +36,14 @@ export function isDispatchable(
   return resolveWorker(ticket, project, epic) === "agent";
 }
 
-export function workerView(ticket: WorkerTicket, project: WorkerProject): WorkerView {
+/** `override` is the ticket's own pick; `worker` also counts its epic's. */
+export function workerView(
+  ticket: WorkerTicket,
+  project: WorkerProject,
+  epic?: WorkerEpic,
+): WorkerView {
   return {
-    worker: resolveWorker(ticket, project),
+    worker: resolveWorker(ticket, project, epic),
     override: override(ticket),
     projectDefault: project.defaultWorker,
   };

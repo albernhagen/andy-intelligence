@@ -37,6 +37,7 @@ import {
 import { MAX_OPEN_QUESTIONS_PER_TICKET, assumptionQuestion } from "./refine-gate";
 import { rankBetween } from "./ranks";
 import { isDispatchable, resolveWorker, workerView } from "./worker";
+import { cascadesFrom } from "./overrides";
 import { executorView } from "./executor";
 import { canTransition, isForwardMove, pullRequestPath, type PullRequestTarget } from "./stages";
 
@@ -420,7 +421,13 @@ export class TicketService {
       this.require(projectId, ticketId),
       this.requireProject(projectId),
     ]);
-    return workerView(ticket, project);
+    return workerView(ticket, project, await this.epicFor(ticket));
+  }
+
+  /** The ticket's epic when its overrides cascade (AI-116); one read when it has a parent. */
+  private async epicFor(ticket: Ticket): Promise<Ticket | null> {
+    if (!ticket.parentId) return null;
+    return cascadesFrom(await this.tracker.getTicket(ticket.projectId, ticket.parentId));
   }
 
   /** The resolved worker of each ticket, by id; reads each project once. */
@@ -460,8 +467,9 @@ export class TicketService {
       { fields: { overrides }, ifUpdatedAt: ticket.updatedAt },
       actor,
     );
-    if (isDispatchable(updated, project)) await this.dispatchNext?.(projectId);
-    return workerView(updated, project);
+    const epic = await this.epicFor(updated);
+    if (isDispatchable(updated, project, epic)) await this.dispatchNext?.(projectId);
+    return workerView(updated, project, epic);
   }
 
   /** Where the ticket's runs execute (ADR-0089). */
@@ -915,7 +923,7 @@ export class TicketService {
       readiness: checkDor(ticket, open),
       questions,
       recentEvents: events.slice(-RECENT_EVENTS),
-      worker: resolveWorker(ticket, project),
+      worker: resolveWorker(ticket, project, await this.epicFor(ticket)),
       executor: executorView(ticket, project, await this.runnerPresent(project.id)),
     };
   }

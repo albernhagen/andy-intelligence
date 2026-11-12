@@ -44,12 +44,29 @@ export function inheritedOverrides(
   );
 }
 
-/** The ticket's epic among `tickets`: its parent, when that is an epic. */
-export function epicOf<T extends Pick<Ticket, "id" | "type">>(
+/** Whether `parent` passes its overrides down: an epic, not archived (a finished epic doesn't). */
+export function cascadesFrom<T extends Pick<Ticket, "type" | "archived">>(
+  parent: T | null | undefined,
+): T | null {
+  return parent && parent.type === "epic" && !parent.archived ? parent : null;
+}
+
+/** The ticket's epic among `tickets`: its parent, when that cascades (`cascadesFrom`). */
+export function epicOf<T extends Pick<Ticket, "id" | "type" | "archived">>(
   ticket: Pick<Ticket, "parentId">,
   tickets: readonly T[],
 ): T | null {
   if (!ticket.parentId) return null;
-  const parent = tickets.find((t) => t.id === ticket.parentId);
-  return parent?.type === "epic" ? parent : null;
+  return cascadesFrom(tickets.find((t) => t.id === ticket.parentId));
+}
+
+/**
+ * The ticket with its effective overrides, for the rules that read `ticket.overrides` (build
+ * route, Andy's own work). In memory only: never stored, so the child keeps its own values.
+ */
+export function withEpicOverrides<T extends WithOverrides>(
+  ticket: T,
+  epic: WithOverrides | null | undefined,
+): T {
+  return epic ? { ...ticket, overrides: effectiveOverrides(ticket, epic) } : ticket;
 }
