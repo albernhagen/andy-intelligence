@@ -17,6 +17,7 @@ import {
   QuotaReading,
   Question,
   Release,
+  ReviewVerdict,
   Run,
   Ticket,
   TicketEvent,
@@ -62,6 +63,8 @@ export const collections = {
   quotaReadings: { path: () => "quotaReadings", schema: QuotaReading },
   quotaClears: { path: () => "quotaClears", schema: QuotaClear },
   configChanges: { path: () => "configChanges", schema: ConfigChange },
+  /** Each reviewer's latest verdict per PR (ADR-0097), server-only; capped per project. */
+  reviewVerdicts: { path: () => "reviewVerdicts", schema: ReviewVerdict },
   releases: { path: () => "releases", schema: Release },
   oauthGrants: { path: () => "oauthGrants", schema: OAuthGrant },
   codeHostEvents: { path: () => "codeHostEvents", schema: CodeHostEvent },
@@ -136,3 +139,4 @@ export {
 export { FirestoreNotifyLedger } from "./notify-ledger";
 export { CloudTasksNotifyFlushQueue, notifyFlushUrl } from "./notify-flush-queue";
 export { CONFIG_CHANGE_PENDING_READ_MAX, FirestoreConfigChangeStore } from "./config-change-store";
+export { FirestoreReviewFindingLog, REVIEW_VERDICT_READ_MAX } from "./review-finding-log";

@@ -1,7 +1,11 @@
 import { describe, expect, it } from "vitest";
 import { ConfigChange } from "../entities";
-import { ReviewFinding } from "../entities/config-proposals";
-import type { ConfigChangeStore, ReviewFindingSource } from "../ports/config-proposals";
+import { ReviewFinding, type ReviewVerdict } from "../entities/config-proposals";
+import type {
+  ConfigChangeStore,
+  ReviewFindingLog,
+  ReviewFindingSource,
+} from "../ports/config-proposals";
 
 export interface ConfigChangeStoreContractOptions {
   /** Per-test timeout for the concurrent case: emulator transactions retry under contention. */
@@ -227,6 +231,96 @@ export function reviewFindingSourceContract(
     it("GivenNoFindings_WhenRead_ThenEmpty", async () => {
       const source = await make([]);
       expect(await source.recent("ai", { maxPulls: 10, maxFindings: 10 })).toEqual([]);
+    });
+  });
+}
+
+/** A verdict for tests: its findings get the verdict's identity fields. */
+export function reviewVerdict(
+  overrides: Partial<Omit<ReviewVerdict, "findings">> = {},
+  findings: Partial<ReviewFinding>[] = [{}],
+): ReviewVerdict {
+  const base = {
+    projectId: "ai",
+    repo: "albernhagen/andy-intelligence",
+    pullNumber: 1,
+    reviewer: "adversarial" as const,
+    headSha: "abc1234",
+    recordedAt: "2026-11-12T10:00:00.000Z",
+    ...overrides,
+  };
+  return {
+    ...base,
+    findings: findings.map((f) =>
+      reviewFinding({
+        ...f,
+        projectId: base.projectId,
+        repo: base.repo,
+        pullNumber: base.pullNumber,
+        reviewer: base.reviewer,
+        headSha: base.headSha,
+        recordedAt: base.recordedAt,
+      }),
+    ),
+  };
+}
+
+/** `make` must return an empty log. */
+export function reviewFindingLogContract(
+  name: string,
+  make: () => Promise<ReviewFindingLog>,
+): void {
+  describe(`ReviewFindingLog contract: ${name}`, () => {
+    const at = (minute: number) => `2026-11-12T11:${String(minute).padStart(2, "0")}:00.000Z`;
+    const all = { maxPulls: 100, maxFindings: 500 };
+
+    it("GivenAVerdict_WhenRecorded_ThenRecentReturnsItsFindings", async () => {
+      const log = await make();
+      const verdict = reviewVerdict({ recordedAt: at(1) }, [
+        { kind: "missing-test" },
+        { kind: "authz" },
+      ]);
+      await log.recordVerdict(verdict, 100);
+      const read = await log.recent("ai", all);
+      expect(read.map((f) => f.kind).sort()).toEqual(["authz", "missing-test"]);
+    });
+
+    it("GivenALaterVerdictOnTheSamePullByTheSameReviewer_WhenRecorded_ThenItReplacesTheFirst", async () => {
+      const log = await make();
+      await log.recordVerdict(
+        reviewVerdict({ recordedAt: at(1) }, [{ kind: "missing-test" }]),
+        100,
+      );
+      await log.recordVerdict(reviewVerdict({ recordedAt: at(2), headSha: "def5678" }, []), 100);
+      expect(await log.recent("ai", all)).toEqual([]);
+    });
+
+    it("GivenTwoReviewersOnOnePull_WhenBothRecord_ThenBothAreKept", async () => {
+      const log = await make();
+      await log.recordVerdict(
+        reviewVerdict({ recordedAt: at(1), reviewer: "security" }, [
+          { severity: "low", kind: "authz" },
+        ]),
+        100,
+      );
+      await log.recordVerdict(
+        reviewVerdict({ recordedAt: at(2) }, [{ kind: "missing-test" }]),
+        100,
+      );
+      expect((await log.recent("ai", all)).map((f) => f.reviewer)).toEqual([
+        "adversarial",
+        "security",
+      ]);
+    });
+
+    it("GivenMoreVerdictsThanTheCap_WhenRecorded_ThenTheOldestOfThatProjectGo", async () => {
+      const log = await make();
+      await log.recordVerdict(reviewVerdict({ projectId: "other", recordedAt: at(0) }), 2);
+      for (const n of [1, 2, 3]) {
+        await log.recordVerdict(reviewVerdict({ pullNumber: n, recordedAt: at(n) }), 2);
+      }
+      expect((await log.recent("ai", all)).map((f) => f.pullNumber)).toEqual([3, 2]);
+      expect(await log.recent("other", all)).toHaveLength(1);
     });
   });
 }
