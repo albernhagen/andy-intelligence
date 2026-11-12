@@ -45,6 +45,21 @@ export function useDigest(projectId: string, hours: number) {
   });
 }
 
+/**
+ * A project's setup checklist (AI-95: M5.15): five steps read from the repo. Each read is 14
+ * code-host calls, so it isn't polled and stays fresh for 5 minutes (ADR-0028 cap): views and
+ * focus within that reuse it.
+ */
+export function useSetupChecklist(projectId: string) {
+  const api = useApi();
+  return useQuery({
+    queryKey: ["setup", projectId],
+    staleTime: 5 * 60_000,
+    queryFn: async () =>
+      unwrap(await api.GET("/api/projects/{projectId}/setup", { params: { path: { projectId } } })),
+  });
+}
+
 export function useProjects() {
   const api = useApi();
   return useQuery({
@@ -577,5 +592,45 @@ export function useConnectGitHub() {
   const api = useApi();
   return useWrite(async (code: string) =>
     unwrap(await api.POST("/api/github/connect", { body: { code } })),
+  );
+}
+
+/** Pending config changes from review findings (ADR-0097), of one project when given. */
+export function useConfigChanges(projectId?: string) {
+  const api = useApi();
+  return useQuery({
+    ...useLivePoll("slow"),
+    queryKey: ["config-changes", projectId ?? null],
+    queryFn: async () =>
+      unwrap(await api.GET("/api/config-changes", { params: { query: { projectId } } })),
+  });
+}
+
+/** Checks a project's review findings for repeated kinds; writes pending proposals only. */
+export function useSweepConfigProposals() {
+  const api = useApi();
+  return useWrite(async (projectId: string) =>
+    unwrap(
+      await api.POST("/api/projects/{projectId}/config-proposals/sweep", {
+        params: { path: { projectId } },
+      }),
+    ),
+  );
+}
+
+/** Andy's accept or reject of a pending config change; neither applies it. */
+export function useDecideConfigChange() {
+  const api = useApi();
+  return useWrite(
+    async ({ changeId, decision }: { changeId: string; decision: "accept" | "reject" }) =>
+      unwrap(
+        decision === "accept"
+          ? await api.POST("/api/config-changes/{changeId}/accept", {
+              params: { path: { changeId } },
+            })
+          : await api.POST("/api/config-changes/{changeId}/reject", {
+              params: { path: { changeId } },
+            }),
+      ),
   );
 }

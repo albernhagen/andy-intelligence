@@ -28,4 +28,4 @@ Detail on Actions triggers, review agents and executors. Risk register, assets a
 
 ## Local executor (ADR-0089)
 
-Built: control-plane side (entry-points-and-credentials.md). Not built: runner, sandbox, publish. R-AI-44.
+Runner built (refine, plan); agent and platform scripts in Seatbelt (ADR-0098). R-AI-44.
