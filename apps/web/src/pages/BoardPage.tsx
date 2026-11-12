@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
+import { Fragment, useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import { Outlet, useNavigate, useParams, useSearch } from "@tanstack/react-router";
 import {
   DndContext,
@@ -16,7 +16,8 @@ import { sortByStartScore } from "@andy/domain";
 import { BoardCard } from "@/components/board/BoardCard";
 import { BoardDispatchStatus } from "@/components/DispatchControls";
 import { InFlightPanel } from "@/components/InFlightPanel";
-import { Lane, LaneZone, ReadySortToggle } from "@/components/board/Lane";
+import { EpicControls } from "@/components/board/EpicControls";
+import { EpicGroupHeader, Lane, LaneZone, ReadySortToggle } from "@/components/board/Lane";
 import { Loading, QueryError } from "@/components/Status";
 import {
   COLLAPSED_STAGES,
@@ -29,6 +30,16 @@ import {
   planUpNextDrop,
   splitBacklog,
 } from "@/lib/board";
+import {
+  boardEpics,
+  epicProgress,
+  type EpicGroup,
+  groupByEpic,
+  inEpic,
+  loadGroupByEpic,
+  sameGroup,
+  saveGroupByEpic,
+} from "@/lib/board-groups";
 import { useBoard, useBoardMove, useQuickAdd, useRankTicket, useSetUpNext } from "@/lib/queries";
 import { STAGES, dropMove, groupByStage, visibleTickets } from "@/lib/tickets";
 import { showsError } from "@/lib/live";
@@ -38,13 +49,19 @@ import { showsError } from "@/lib/live";
  * Ready as a numbered queue with the next card marked. Drag within a lane to reorder (the order
  * is the priority, ADR-0058), across lanes to move: an allowed transition is a normal move, any
  * other a forced one (ADR-0057). Backlog has two parts (ADR-0075): a drop into Up next starts refine, Ideas costs nothing. Moves and reorders show at once and roll back with the API's
- * message on the card. Child routes (the ticket panel) render in the Outlet.
+ * message on the card. Group by epic (AI-86) puts a header per epic inside each lane; the epic
+ * filter shows one epic's tickets. Child routes (the ticket panel) render in the Outlet.
  */
 export function BoardPage() {
   const { projectId } = useParams({ from: "/p/$projectId" });
   const board = useBoard(projectId);
   const [showArchived, setShowArchived] = useState(false);
   const { sort } = useSearch({ from: "/p/$projectId" });
+  const [grouped, setGrouped] = useState(loadGroupByEpic);
+  const [chosenEpic, setChosenEpic] = useState<string | null>(null);
+  const epics = useMemo(() => boardEpics(board.data ?? []), [board.data]);
+  // An epic that left the board (another project's data, or deleted) stops filtering.
+  const epicId = epics.some((e) => e.id === chosenEpic) ? chosenEpic : null;
 
   return (
     <section className="space-y-4">
@@ -52,14 +69,26 @@ export function BoardPage() {
         <h2 className="text-lg font-medium">
           Board <BoardDispatchStatus projectId={projectId} />
         </h2>
-        <label className="flex items-center gap-1 text-sm">
-          <input
-            type="checkbox"
-            checked={showArchived}
-            onChange={(e) => setShowArchived(e.target.checked)}
+        <div className="flex items-center gap-4">
+          <EpicControls
+            epics={epics}
+            grouped={grouped}
+            onGroupedChange={(on) => {
+              setGrouped(on);
+              saveGroupByEpic(on);
+            }}
+            epicId={epicId}
+            onEpicChange={setChosenEpic}
           />
-          Show cancelled and archived
-        </label>
+          <label className="flex items-center gap-1 text-sm">
+            <input
+              type="checkbox"
+              checked={showArchived}
+              onChange={(e) => setShowArchived(e.target.checked)}
+            />
+            Show cancelled and archived
+          </label>
+        </div>
       </div>
 
       <InFlightPanel projectId={projectId} />
@@ -71,6 +100,9 @@ export function BoardPage() {
           showCancelled={showArchived}
           projectId={projectId}
           sortedByScore={sort === "score"}
+          all={board.data}
+          grouped={grouped}
+          epicId={epicId}
         />
       )}
       <Outlet />
@@ -86,11 +118,19 @@ function Lanes({
   showCancelled,
   projectId,
   sortedByScore,
+  all,
+  grouped,
+  epicId,
 }: {
   tickets: BoardTicket[];
   showCancelled: boolean;
   projectId: string;
   sortedByScore: boolean;
+  /** Every ticket the board read returned, archived ones too: epics and their progress. */
+  all: readonly BoardTicket[];
+  grouped: boolean;
+  /** Show only this epic's children; null shows every ticket. */
+  epicId: string | null;
 }) {
   const navigate = useNavigate({ from: "/p/$projectId" });
   const move = useBoardMove(projectId);
@@ -117,6 +157,7 @@ function Lanes({
   );
   const lanes = groupByStage(shown);
   const byId = useMemo(() => new Map(shown.map((t) => [t.id, t])), [shown]);
+  const allById = useMemo(() => new Map(all.map((t) => [t.id, t])), [all]);
   const next = nextUp(
     lanes.ready.filter((t) => t.summary.worker === "agent"),
     byId,
@@ -125,6 +166,9 @@ function Lanes({
   const readyShown = sortedByScore ? sortByStartScore(lanes.ready) : lanes.ready;
   const shownIn = (stage: Stage) => (stage === "ready" ? readyShown : lanes[stage]);
   const now = Date.now();
+  // Ungrouped is one group with no header.
+  const groupCards = (cards: BoardTicket[]): EpicGroup<BoardTicket>[] =>
+    grouped ? groupByEpic(cards, allById) : [{ epic: null, cards }];
   const stages = STAGES.filter((s) => s !== "cancelled" || showCancelled);
 
   function laneOf(id: string | number | undefined): Stage | null {
@@ -137,6 +181,17 @@ function Lanes({
     setOverLane(null);
     const ticket = byId.get(String(active.id));
     if (!ticket || !over) return;
+    // Grouped, a drop on a card under another epic's header in the same lane part would reorder
+    // the lane but leave the card where it is: nothing happens. Moving between epics isn't a drag.
+    const overCard = byId.get(String(over.id));
+    if (
+      grouped &&
+      overCard &&
+      overCard.stage === ticket.stage &&
+      (overCard.upNextRank === null) === (ticket.upNextRank === null) &&
+      !sameGroup(ticket, overCard, allById)
+    )
+      return;
     // Sorted by score, a card's place isn't its queue place: a drop on Ready means the lane (the
     // end of the queue, or nothing for a card already there) and never reorders it.
     const overId = sortedByScore && laneOf(over.id) === "ready" ? "ready" : String(over.id);
@@ -216,8 +271,27 @@ function Lanes({
               error={errors[t.id] ?? null}
             />
           );
-          const backlog = stage === "backlog" ? splitBacklog(lanes.backlog) : null;
-          const ordered = backlog ? [...backlog.upNext, ...backlog.ideas] : shownIn(stage);
+          // Backlog shows two parts (Up next, then Ideas); each is grouped on its own.
+          const split = stage === "backlog" ? splitBacklog(lanes.backlog) : null;
+          const parts = (split ? [split.upNext, split.ideas] : [shownIn(stage)]).map((cards) =>
+            groupCards(cards.filter((t) => inEpic(t, epicId))),
+          );
+          // `ids` follows the order shown, so dnd-kit sorts what you see.
+          const ordered = parts.flat().flatMap((g) => g.cards);
+          const list = (groups: EpicGroup<BoardTicket>[]) =>
+            groups.map(({ epic, cards }) => (
+              <Fragment key={epic?.id ?? "none"}>
+                {grouped && (
+                  <EpicGroupHeader
+                    epic={epic}
+                    progress={epic ? epicProgress(epic.id, all) : null}
+                  />
+                )}
+                {cards.map(card)}
+              </Fragment>
+            ));
+          const count = (groups: EpicGroup<BoardTicket>[]) =>
+            groups.reduce((n, g) => n + g.cards.length, 0);
           return (
             <Lane
               key={stage}
@@ -239,15 +313,15 @@ function Lanes({
                 ) : undefined
               }
             >
-              {!collapsed && backlog && (
+              {!collapsed && split && (
                 <>
-                  <LaneZone id={UP_NEXT_ZONE} label="Up next" count={backlog.upNext.length} />
-                  {backlog.upNext.map(card)}
-                  <LaneZone id={IDEAS_ZONE} label="Ideas" count={backlog.ideas.length} />
-                  {backlog.ideas.map(card)}
+                  <LaneZone id={UP_NEXT_ZONE} label="Up next" count={count(parts[0]!)} />
+                  {list(parts[0]!)}
+                  <LaneZone id={IDEAS_ZONE} label="Ideas" count={count(parts[1]!)} />
+                  {list(parts[1]!)}
                 </>
               )}
-              {!collapsed && !backlog && shownIn(stage).map(card)}
+              {!collapsed && !split && list(parts[0]!)}
             </Lane>
           );
         })}
