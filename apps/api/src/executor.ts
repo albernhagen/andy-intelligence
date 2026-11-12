@@ -27,7 +27,7 @@ const getExecutor = createRoute({
   method: "get",
   path,
   request: { params },
-  responses: { 200: json(ExecutorView, "Where the ticket's runs execute"), ...errors },
+  responses: { 200: json(ExecutorView, "Where the ticket's agent tasks run"), ...errors },
 });
 
 const putExecutor = createRoute({
@@ -38,7 +38,10 @@ const putExecutor = createRoute({
     params,
     body: { content: { "application/json": { schema: SetExecutor } }, required: true },
   },
-  responses: { 200: json(ExecutorView, "Stored; applies to the ticket's next run"), ...errors },
+  responses: {
+    200: json(ExecutorView, "Stored; applies to the ticket's next agent task"),
+    ...errors,
+  },
 });
 
 export function registerExecutorRoutes(app: OpenAPIHono<AuthEnv>, service: TicketService): void {

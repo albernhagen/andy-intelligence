@@ -161,7 +161,7 @@ describe("statusLine", () => {
   });
 
   it("GivenInProgressWithoutARun_WhenComputed_ThenItSaysSo", () => {
-    expect(line({ stage: "in_progress" }).text).toBe("In progress · no run in flight");
+    expect(line({ stage: "in_progress" }).text).toBe("In progress · no agent task in flight");
     expect(line({ stage: "in_progress", pr: { number: 7, state: "open" } }).text).toBe(
       "In progress · PR #7 open",
     );
@@ -320,7 +320,7 @@ describe("syncWaiting", () => {
       "not checked yet (more open PRs than one check covers); next in line",
     );
     expect(syncWaiting([build({ pendingSince: null, waiting: "builds_off" })])).toBe(
-      "builds are off, so no sync runs",
+      "builds are off, so no sync tasks",
     );
     expect(syncWaiting([build({ pendingSince: null, waiting: "global_cap" })])).toBeNull();
     expect(syncWaiting([build({ pendingSince: null, waiting: null })])).toBeNull();

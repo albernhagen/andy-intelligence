@@ -186,7 +186,9 @@ describe("local executor: claim, lease and routing", () => {
       true,
     );
     const events = await s.json<{ body: string | null }[]>(s.t.call(`${ticket.path}/events`));
-    expect(events.some((e) => e.body?.includes("Local run lost: the runner went away"))).toBe(true);
+    expect(
+      events.some((e) => e.body?.includes("Local agent task lost: the runner went away")),
+    ).toBe(true);
     expect(s.t.host.workflowRuns.size).toBe(0);
 
     // The laptop wakes: its heartbeat is refused and its report changes nothing.

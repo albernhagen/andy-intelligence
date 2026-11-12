@@ -16,14 +16,14 @@ const ProjectKey = z
 
 const RunsAtOnceInput = {
   project: ProjectKey,
-  runs: Project.shape.runsAtOnce.unwrap().describe("Runs at once in this project: 1 to 4."),
+  runs: Project.shape.runsAtOnce.unwrap().describe("Agent tasks at once in this project: 1 to 4."),
 };
 
 const PausedInput = {
   project: ProjectKey,
   paused: z
     .boolean()
-    .describe("true: dispatch starts nothing in this project; runs in flight finish."),
+    .describe("true: dispatch starts nothing in this project; agent tasks in flight finish."),
 };
 
 export function registerDispatchTools(server: McpServer, deps: ToolDeps, run: Run): void {
@@ -31,7 +31,7 @@ export function registerDispatchTools(server: McpServer, deps: ToolDeps, run: Ru
     "set_runs_at_once",
     {
       description:
-        "Sets how many runs a project may have in flight at once: 1 to 4, default 2. Applies to the next dispatch decision; a global cap across projects still holds.",
+        "Sets how many agent tasks a project may have in flight at once: 1 to 4, default 2. Applies to the next dispatch decision; a global cap across projects still holds.",
       inputSchema: RunsAtOnceInput,
       annotations: { destructiveHint: false, idempotentHint: true, openWorldHint: true },
     },
@@ -50,7 +50,7 @@ export function registerDispatchTools(server: McpServer, deps: ToolDeps, run: Ru
     "set_paused",
     {
       description:
-        "Pauses or resumes a project's dispatch. Paused: refine and build start nothing on their own, runs in flight finish, and starting one by hand still works.",
+        "Pauses or resumes a project's dispatch. Paused: refine and build start nothing on their own, agent tasks in flight finish, and starting one by hand still works.",
       inputSchema: PausedInput,
       annotations: { destructiveHint: false, idempotentHint: true, openWorldHint: true },
     },

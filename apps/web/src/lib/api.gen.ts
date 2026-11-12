@@ -3985,7 +3985,7 @@ export interface paths {
       };
       requestBody?: never;
       responses: {
-        /** @description Where the ticket's runs execute */
+        /** @description Where the ticket's agent tasks run */
         200: {
           headers: {
             [name: string]: unknown;
@@ -4073,7 +4073,7 @@ export interface paths {
         };
       };
       responses: {
-        /** @description Stored; applies to the ticket's next run */
+        /** @description Stored; applies to the ticket's next agent task */
         200: {
           headers: {
             [name: string]: unknown;

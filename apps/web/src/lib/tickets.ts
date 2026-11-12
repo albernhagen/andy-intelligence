@@ -113,7 +113,7 @@ export function describeEvent(event: TicketEvent): string {
     case "question_withdrawn":
       return "withdrew a question";
     case "run_linked":
-      return "linked a run";
+      return "linked an agent task";
     case "pr_linked":
       return typeof d.number === "number" && typeof d.state === "string"
         ? `linked pull request #${d.number} (${d.state})`

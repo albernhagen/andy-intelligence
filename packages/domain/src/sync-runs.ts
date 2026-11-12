@@ -305,7 +305,7 @@ export class SyncRuns {
     await this.tracker.addComment(
       ticket.projectId,
       ticket.id,
-      `Needs you: the PR has had ${MAX_SYNC_RUNS_PER_PR_PER_DAY} sync runs in 24 hours and still lacks main. Merge main into it by hand, or wait: the next sync starts once the 24 hours pass.`,
+      `Needs you: the PR has had ${MAX_SYNC_RUNS_PER_PR_PER_DAY} sync tasks in 24 hours and still lacks main. Merge main into it by hand, or wait: the next sync starts once the 24 hours pass.`,
       "system",
     );
     await this.tracker.updateTicket(

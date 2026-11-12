@@ -228,7 +228,7 @@ describe("local run lease and heartbeat", () => {
 
     expect(await s.runStore.get(claimed.runId)).toMatchObject({
       status: "failed",
-      error: "the run passed its deadline",
+      error: "the agent task passed its deadline",
     });
     expect(await s.runStore.listForTicket(s.project.id, ticket.id)).toHaveLength(1);
   });

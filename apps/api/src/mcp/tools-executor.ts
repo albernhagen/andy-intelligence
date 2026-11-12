@@ -38,7 +38,7 @@ export function registerExecutorTools(server: McpServer, deps: ExecutorToolDeps,
     "set_executor",
     {
       description:
-        "Sets where a ticket's runs execute: actions, local (Andy's local runner; the ticket waits while no runner is present), or null to follow the project's default. A run in flight keeps its executor.",
+        "Sets where a ticket's agent tasks run: actions, local (Andy's local runner; the ticket waits while no runner is present), or null to follow the project's default. An agent task in flight keeps its executor.",
       inputSchema: SetExecutorInput,
       annotations: { destructiveHint: false, idempotentHint: true, openWorldHint: true },
     },

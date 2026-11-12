@@ -147,7 +147,7 @@ export type RunCaller = RunExecutor | LocalCaller;
 const isLocalCaller = (caller: RunCaller): caller is LocalCaller => "runnerId" in caller;
 
 /** Why a local run ended when its runner stopped heartbeating (ADR-0089). */
-export const LEASE_LOST_ERROR = "lease_lost: Local run lost: the runner went away";
+export const LEASE_LOST_ERROR = "lease_lost: Local agent task lost: the runner went away";
 
 /**
  * What the lease check did. `renewed`: a heartbeat moved the lease, the next check is queued.
@@ -260,7 +260,7 @@ export class RunService {
     opts: { avoidOverlap?: boolean; runner?: Runner } = {},
   ): Promise<Run> {
     if (!STARTABLE_STEPS.includes(step as StartableStep)) {
-      throw new DomainError("invalid_step", `can't start a ${step} run yet`, [
+      throw new DomainError("invalid_step", `can't start a ${step} task yet`, [
         `startable steps: ${STARTABLE_STEPS.join(", ")}`,
       ]);
     }
@@ -299,16 +299,17 @@ export class RunService {
     const everywhere = await this.inFlightEverywhere();
     const active = everywhere.filter((r) => r.projectId === projectId);
     if (active.some((r) => r.ticketId === ticketId)) {
-      throw new DomainError("run_limit", `${ticket.key} already has a run in flight`);
+      throw new DomainError("run_limit", `${ticket.key} already has an agent task in flight`);
     }
     if (active.filter(countsForDial).length >= project.runsAtOnce) {
-      throw new DomainError("run_limit", `project ${project.key} is at its runs-at-once dial`, [
-        `limit: ${project.runsAtOnce}`,
-        ...active.map((r) => `run ${r.id} (${r.status})`),
-      ]);
+      throw new DomainError(
+        "run_limit",
+        `project ${project.key} is at its agent-tasks-at-once dial`,
+        [`limit: ${project.runsAtOnce}`, ...active.map((r) => `agent task ${r.id} (${r.status})`)],
+      );
     }
     if (everywhere.length >= MAX_ACTIVE_RUNS_GLOBAL) {
-      throw new DomainError("run_limit", "the cap on runs across all projects is reached", [
+      throw new DomainError("run_limit", "the cap on agent tasks across all projects is reached", [
         `limit: ${MAX_ACTIVE_RUNS_GLOBAL}`,
       ]);
     }
@@ -376,16 +377,16 @@ export class RunService {
       throw new DomainError("run_limit", `${ticket.key} overlaps a build that just started`);
     }
     if (!won) {
-      await this.fail(run.id, "another run started at the same time");
-      throw new DomainError("run_limit", `project ${project.key} has no free run slot`, [
+      await this.fail(run.id, "another agent task started at the same time");
+      throw new DomainError("run_limit", `project ${project.key} has no free agent task slot`, [
         `dial: ${project.runsAtOnce}`,
         `global cap: ${MAX_ACTIVE_RUNS_GLOBAL}`,
       ]);
     }
 
     const started = retryOf
-      ? `Retrying the ${startable} run (attempt ${run.attempt} of ${MAX_RUN_ATTEMPTS})`
-      : `Started a ${startable} run (${run.route.model})`;
+      ? `Retrying the ${startable} task (attempt ${run.attempt} of ${MAX_RUN_ATTEMPTS})`
+      : `Started a ${startable} task (${run.route.model})`;
     const dispatched = opts.runner
       ? await this.claimLocal(run, ticket, opts.runner, started)
       : await this.dispatchRun(run, ticket, repo, started);
@@ -412,10 +413,10 @@ export class RunService {
     if (!repo) throw new DomainError("invalid_repo", `project ${project.key} has no repo`);
     const everywhere = await this.inFlightEverywhere();
     if (everywhere.some((r) => r.projectId === projectId && r.ticketId === ticketId)) {
-      throw new DomainError("run_limit", `${ticket.key} already has a run in flight`);
+      throw new DomainError("run_limit", `${ticket.key} already has an agent task in flight`);
     }
     if (everywhere.length >= MAX_ACTIVE_RUNS_GLOBAL) {
-      throw new DomainError("run_limit", "the cap on runs across all projects is reached");
+      throw new DomainError("run_limit", "the cap on agent tasks across all projects is reached");
     }
     const build = buildRoute(ticket);
     const prompt = syncPrompt(ticket, repo, target);
@@ -447,14 +448,14 @@ export class RunService {
       after.slice(0, MAX_ACTIVE_RUNS_GLOBAL).some((r) => r.id === run.id) &&
       after.find((r) => r.projectId === projectId && r.ticketId === ticketId)?.id === run.id;
     if (!won) {
-      await this.fail(run.id, "another run started at the same time");
-      throw new DomainError("run_limit", "the cap on runs across all projects is reached");
+      await this.fail(run.id, "another agent task started at the same time");
+      throw new DomainError("run_limit", "the cap on agent tasks across all projects is reached");
     }
     return this.dispatchRun(
       run,
       ticket,
       repo,
-      `Started a sync run: merging main into PR #${target.number} (${run.route.model})`,
+      `Started a sync task: merging main into PR #${target.number} (${run.route.model})`,
     );
   }
 
@@ -553,7 +554,7 @@ export class RunService {
       const message = err instanceof Error ? err.message : String(err);
       log("ERROR", "run dispatch failed", { runId: run.id, ticket: ticket.key, error: message });
       await this.fail(run.id, `dispatch failed: ${message}`);
-      throw new DomainError("dispatch_failed", `couldn't start the run: ${message}`);
+      throw new DomainError("dispatch_failed", `couldn't start the agent task: ${message}`);
     }
 
     let dispatched: Run;
@@ -578,7 +579,7 @@ export class RunService {
           log("ERROR", "cancel after a failed record failed", { runId: run.id, error: String(e) }),
         );
       await this.fail(run.id, `dispatched but not recorded: ${message}`);
-      throw new DomainError("dispatch_failed", `couldn't record the run: ${message}`);
+      throw new DomainError("dispatch_failed", `couldn't record the agent task: ${message}`);
     }
     log("INFO", "run dispatched", {
       runId: run.id,
@@ -756,8 +757,8 @@ export class RunService {
       const body = synced
         ? `${syncComment(done, synced, status, error, summary)}${syncTooling}`
         : status === "succeeded"
-          ? `${summary ?? "The run finished without a summary."}${asks}${lateRefine}${pr}${tooling}${decide}`
-          : `The ${done.step} run failed.${error ? ` ${error}` : ""}${summary ? `\n\n${summary}` : ""}${kept}`;
+          ? `${summary ?? "The agent task finished without a summary."}${asks}${lateRefine}${pr}${tooling}${decide}`
+          : `The ${done.step} task failed.${error ? ` ${error}` : ""}${summary ? `\n\n${summary}` : ""}${kept}`;
       await this.tracker.addComment(done.projectId, done.ticketId, body, `agent:${run.id}`);
     }
     // A reported failure gets the watchdog policy (one retry, then Needs-you); a refine result
@@ -866,7 +867,7 @@ export class RunService {
     const reason = input.reason?.trim() || null;
     if (input.decision === "rejected" && !reason) {
       throw new DomainError("plan_not_decidable", "a rejection needs a reason", [
-        "the next plan run sees it",
+        "the next plan task sees it",
       ]);
     }
     if (reason && reason.length > PLAN_REASON_MAX) {
@@ -878,7 +879,7 @@ export class RunService {
     const ticket = await this.requireTicket(projectId, ticketId);
     const run = await this.runs.get(runId);
     if (!run || run.projectId !== projectId || run.ticketId !== ticketId || run.step !== "plan") {
-      throw notFound("plan run", runId);
+      throw notFound("plan task", runId);
     }
     const questions = await this.tracker.listQuestions({ ticketId, status: "answered" });
     const state = await this.planStateOf(ticket, questions);
@@ -890,10 +891,10 @@ export class RunService {
       throw new DomainError("plan_not_decidable", `this plan was already ${state.kind}`);
     }
     if (state.kind === "planning") {
-      throw new DomainError("plan_not_decidable", "the plan run hasn't finished");
+      throw new DomainError("plan_not_decidable", "the plan task hasn't finished");
     }
     if (state.kind === "stale" && input.decision === "approved") {
-      throw new DomainError("plan_not_decidable", "this plan is stale: start a new plan run", [
+      throw new DomainError("plan_not_decidable", "this plan is stale: start a new plan task", [
         "the ticket or the project's plan approval changed since it was planned, or the plan is over 72 hours old",
       ]);
     }
@@ -975,13 +976,13 @@ export class RunService {
   /** At most MAX_PLAN_RUNS_PER_TICKET plan runs; none while one is in flight. */
   private async checkPlannable(ticket: Ticket, state: PlanState): Promise<void> {
     if (state.kind === "planning") {
-      throw new DomainError("run_limit", `${ticket.key} already has a plan run in flight`);
+      throw new DomainError("run_limit", `${ticket.key} already has a plan task in flight`);
     }
     const plans = (await this.runs.listForTicket(ticket.projectId, ticket.id)).filter(
       (r) => r.step === "plan" && wasDispatched(r),
     );
     if (plans.length >= MAX_PLAN_RUNS_PER_TICKET) {
-      throw new DomainError("run_limit", `${ticket.key} has had ${plans.length} plan runs`, [
+      throw new DomainError("run_limit", `${ticket.key} has had ${plans.length} plan tasks`, [
         `limit: ${MAX_PLAN_RUNS_PER_TICKET} per ticket; finish it by hand or set planApproval to none`,
       ]);
     }
@@ -1045,7 +1046,7 @@ export class RunService {
       (r) => r.step === "build" && wasDispatched(r),
     );
     if (builds.length >= MAX_BUILD_RUNS_PER_TICKET) {
-      throw new DomainError("run_limit", `${ticket.key} has had ${builds.length} build runs`, [
+      throw new DomainError("run_limit", `${ticket.key} has had ${builds.length} build tasks`, [
         `limit: ${MAX_BUILD_RUNS_PER_TICKET} per ticket; finish it by hand`,
       ]);
     }
@@ -1206,7 +1207,7 @@ export class RunService {
       (r) => r.step === "refine" && wasDispatched(r),
     );
     if (refines.length >= MAX_REFINE_RUNS_PER_TICKET) {
-      throw new DomainError("run_limit", `${ticket.key} has had ${refines.length} refine runs`, [
+      throw new DomainError("run_limit", `${ticket.key} has had ${refines.length} refine tasks`, [
         `limit: ${MAX_REFINE_RUNS_PER_TICKET} per ticket; refine it by hand or ask Andy to raise it`,
       ]);
     }
@@ -1225,14 +1226,14 @@ export class RunService {
       const handle = handleOf(run);
       if (handle) {
         if (!this.executor) {
-          throw new DomainError("cancel_failed", `can't stop run ${run.id}: no executor`);
+          throw new DomainError("cancel_failed", `can't stop agent task ${run.id}: no executor`);
         }
         try {
           await this.executor.cancel(handle);
         } catch (err) {
           const message = err instanceof Error ? err.message : String(err);
           log("ERROR", "run cancel failed", { runId: run.id, error: message });
-          throw new DomainError("cancel_failed", `couldn't stop run ${run.id}: ${message}`);
+          throw new DomainError("cancel_failed", `couldn't stop agent task ${run.id}: ${message}`);
         }
       }
       // A queued run without an executor handle is mid-dispatch: once it is cancelled here,
@@ -1320,7 +1321,7 @@ export class RunService {
     });
     await this.flagNeedsYou(
       ended,
-      `Local run lost: the runner went away (lease_lost, the ${ended.step} run). It isn't retried. Start it again once the runner is back, set the ticket's executor to actions to run it on GitHub Actions, or take it over`,
+      `Local agent task lost: the runner went away (lease_lost, the ${ended.step} task). It isn't retried. Start it again once the runner is back, set the ticket's executor to actions to run it on GitHub Actions, or take it over`,
     );
     await this.runEnded(ended);
     return "lost";
@@ -1379,7 +1380,7 @@ export class RunService {
     const error =
       action.kind === "heal"
         ? "the report never arrived; status taken from the executor"
-        : `the run ${action.error}`;
+        : `the agent task ${action.error}`;
     let ended: Run;
     try {
       ended = await this.runs.update(
@@ -1403,7 +1404,7 @@ export class RunService {
         await this.tracker.addComment(
           ended.projectId,
           ended.ticketId,
-          `The ${ended.step} run finished, but its report never arrived (${run.id}).`,
+          `The ${ended.step} task finished, but its report never arrived (${run.id}).`,
           "system",
         );
       }
@@ -1437,14 +1438,14 @@ export class RunService {
    */
   private async retryOrFlag(run: Run, reason: string): Promise<"retried" | "flagged"> {
     if (!run.ticketId) return "flagged";
-    let why = `The ${run.step} run ${reason}`;
+    let why = `The ${run.step} task ${reason}`;
     if (run.step === "sync") {
       // No automatic retry (ADR-0083): the next move of main, or a run ending, queues another.
-      why += "; sync runs aren't retried";
+      why += "; sync tasks aren't retried";
     } else if (run.localRun) {
       // ADR-0089: a local run that failed is never re-run on its own; Andy decides.
       why +=
-        "; local runs aren't retried. Start it again, set its executor to actions to run it on GitHub Actions, or take it over";
+        "; local agent tasks aren't retried. Start it again, set its executor to actions to run it on GitHub Actions, or take it over";
     } else if (afterFailure(run) === "retry") {
       try {
         const retry = await this.start(run.projectId, run.ticketId, run.step, run);
@@ -1459,7 +1460,7 @@ export class RunService {
       why += ` on its retry (attempt ${run.attempt} of ${MAX_RUN_ATTEMPTS})`;
     }
     if (run.branch) why += `; its branch ${run.branch} is kept`;
-    await this.flagNeedsYou(run, `${why} (${run.id}). Check the run log, then start it again`);
+    await this.flagNeedsYou(run, `${why} (${run.id}). Check the task log, then start it again`);
     return "flagged";
   }
 
@@ -1633,7 +1634,7 @@ export function buildGate(
   if (!required) return { step: "build", approved: null };
   if (retryOf) {
     throw new DomainError("not_buildable", `${ticket.key}'s approved plan is no longer valid`, [
-      "start the build again: a new plan run goes first",
+      "start the build again: a new plan task goes first",
     ]);
   }
   return { step: "plan", approved: null };
@@ -1657,7 +1658,8 @@ export function checkSync(
   result: RunResult,
 ): { record: SyncRunRecord | null; summary: string | null; error: string | null } {
   const base = run.syncRun;
-  if (!base) return { record: null, summary: null, error: "The run has no pull request recorded." };
+  if (!base)
+    return { record: null, summary: null, error: "The agent task has no pull request recorded." };
   if (result.alreadyCurrent === true && result.status === "succeeded") {
     return {
       record: { ...base, outcome: "already_current" },
@@ -1722,12 +1724,12 @@ function syncComment(
     case "synced":
       return `Merged main into ${pr} and pushed ${synced.pushedSha!.slice(0, 7)}${files ? ` (resolved conflicts in ${files}${more})` : ""}; its checks and reviews rerun on the new head.${detail}`;
     case "already_current":
-      return `${pr} already contained main; the sync run did nothing.`;
+      return `${pr} already contained main; the sync task did nothing.`;
     case "conflict_unresolved":
     case "checks_failed":
-      return `Needs you: the sync run couldn't bring ${pr} up to date with main (${synced.outcome === "conflict_unresolved" ? "a conflict it couldn't resolve" : "the project's checks failed after the merge"})${files ? `. Files: ${files}${more}` : ""}.${synced.reason ? ` ${synced.reason}` : ""} Nothing was pushed; no sync runs on this head again. Merge main into the branch by hand (runbook agent-runs.md).${detail}`;
+      return `Needs you: the sync task couldn't bring ${pr} up to date with main (${synced.outcome === "conflict_unresolved" ? "a conflict it couldn't resolve" : "the project's checks failed after the merge"})${files ? `. Files: ${files}${more}` : ""}.${synced.reason ? ` ${synced.reason}` : ""} Nothing was pushed; no sync runs on this head again. Merge main into the branch by hand (runbook agent-runs.md).${detail}`;
     default:
-      return `The sync run of ${pr} failed.${error ? ` ${error}` : ""} Nothing was pushed (${run.id}).${detail}`;
+      return `The sync task of ${pr} failed.${error ? ` ${error}` : ""} Nothing was pushed (${run.id}).${detail}`;
   }
 }
 

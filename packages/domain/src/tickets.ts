@@ -561,7 +561,7 @@ export class TicketService {
       await this.tracker.addComment(
         projectId,
         ticketId,
-        `Cancelled the ${run.step} run ${run.links.executorRun ?? run.id} ${why}.`,
+        `Cancelled the ${run.step} task ${run.links.executorRun ?? run.id} ${why}.`,
         "system",
       );
     }

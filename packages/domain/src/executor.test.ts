@@ -88,7 +88,7 @@ describe("TicketService.setExecutor", () => {
     vi.spyOn(console, "log").mockImplementation(() => {});
 
     await expect(service.setExecutor("ai", created.id, "local", "agent:run-1")).rejects.toThrow(
-      "only the owner can choose where a ticket's runs execute",
+      "only the owner can choose where a ticket's agent tasks run",
     );
     expect((await tracker.getTicket("ai", created.id))?.overrides.executor).toBeUndefined();
   });
