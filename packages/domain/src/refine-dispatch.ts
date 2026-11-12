@@ -24,7 +24,7 @@ function log(severity: "INFO" | "WARNING" | "ERROR", message: string, fields: ob
  * project's one-run-in-flight cap (ADR-0028) queues the rest until the next run ends.
  *
  * Ideas are never refined. An Up-next ticket waits when it has no open questions, isn't flagged
- * Needs-you, isn't an epic, and any of: it entered Up next since its last refine; Andy answered a
+ * Needs-you, and any of: it entered Up next since its last refine; Andy answered a
  * promoted assumption; or its last refine succeeded and the Definition of Ready is still unmet
  * after his answers. A failed refine is never retried here: it flags Needs-you and Andy decides.
  *
@@ -73,8 +73,9 @@ export class RefineDispatcher {
     const runnerPresent = local || (await this.runs.runnerPresent(projectId));
 
     for (const ticket of await this.upNext(projectId)) {
-      // Backlog only, so Done and cancelled tickets never qualify; nor do hidden ones or epics.
-      if (ticket.archived || ticket.type === "epic" || ticket.needsAttention) continue;
+      // Backlog only, so Done and cancelled tickets never qualify; nor do hidden ones. Epics do
+      // (AI-115): their refine splits them into stories.
+      if (ticket.archived || ticket.needsAttention) continue;
       if (!routeTakes(route, ticket, project, runnerPresent)) continue; // ADR-0089.
       if (!(await this.waiting(ticket))) continue;
       try {
@@ -137,7 +138,7 @@ export class RefineDispatcher {
     const gate = new RefineGate(this.tracker, this.now);
     let asked = 0;
     for (const ticket of await this.upNext(projectId)) {
-      if (ticket.archived || ticket.type === "epic") continue;
+      if (ticket.archived) continue;
       try {
         asked += await gate.askHeld(ticket);
       } catch (err) {
