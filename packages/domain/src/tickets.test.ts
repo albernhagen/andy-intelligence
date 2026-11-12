@@ -25,6 +25,25 @@ describe("TicketService", () => {
   const rejects = (p: Promise<unknown>, code: DomainError["code"]) =>
     expect(p).rejects.toMatchObject({ name: "DomainError", code });
 
+  it("GivenAChildOfAnEpicAssignedToAndy_WhenWorkersAreListedWithoutTheEpic_ThenTheChildIsAndys", async () => {
+    const epic = await service.create(projectId, { title: "Boards", type: "epic" }, "andy");
+    await tracker.updateTicket(
+      projectId,
+      epic.id,
+      { fields: { overrides: { assignee: "me" } } },
+      "andy",
+    );
+    const child = await service.create(projectId, { ...readyStory, parentId: epic.id }, "andy");
+    const own = await service.create(
+      projectId,
+      { ...readyStory, parentId: epic.id, overrides: { assignee: "claude-code" } },
+      "andy",
+    );
+    const workers = await service.workersFor([child, own]);
+    expect(workers.get(child.id)).toBe("me");
+    expect(workers.get(own.id)).toBe("agent");
+  });
+
   it("GivenACompleteStory_WhenCreated_ThenDorMet", async () => {
     expect((await service.create(projectId, readyStory, "andy")).dorStatus).toBe("met");
     expect((await service.create(projectId, { type: "chore", title: "x" }, "andy")).dorStatus).toBe(

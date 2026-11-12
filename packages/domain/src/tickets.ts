@@ -37,7 +37,7 @@ import {
 import { MAX_OPEN_QUESTIONS_PER_TICKET, assumptionQuestion } from "./refine-gate";
 import { rankBetween } from "./ranks";
 import { isDispatchable, resolveWorker, workerView } from "./worker";
-import { cascadesFrom } from "./overrides";
+import { cascadesFrom, epicOf, withEpicOverrides } from "./overrides";
 import { executorView } from "./executor";
 import { canTransition, isForwardMove, pullRequestPath, type PullRequestTarget } from "./stages";
 
@@ -455,7 +455,23 @@ export class TicketService {
     const projects = new Map(
       await Promise.all(ids.map(async (id) => [id, await this.requireProject(id)] as const)),
     );
-    return new Map(tickets.map((t) => [t.id, resolveWorker(t, projects.get(t.projectId)!)]));
+    // AI-116: a child takes its epic's pick, so read parents the list doesn't hold (once each).
+    const listed = new Set(tickets.map((t) => t.id));
+    const missing = [
+      ...new Map(
+        tickets
+          .filter((t) => t.parentId && !listed.has(t.parentId))
+          .map((t) => [t.parentId!, t.projectId] as const),
+      ),
+    ];
+    const parents = await Promise.all(missing.map(([id, p]) => this.tracker.getTicket(p, id)));
+    const pool = [...tickets, ...parents.filter((p): p is Ticket => p !== null)];
+    return new Map(
+      tickets.map((t) => [
+        t.id,
+        resolveWorker(withEpicOverrides(t, epicOf(t, pool)), projects.get(t.projectId)!),
+      ]),
+    );
   }
 
   /**
