@@ -40,6 +40,8 @@ Scope and "Done when": ADR-0060. Safe deploy and rollback, then `autoMerge` on f
 ### M3: New UI and MCP
 The UX foundation (ADR-0059), ticket-organizing MCP tools and AI-19: One permission function (ADR-0060).
 
+**AI-44: Local executor** (ADR-0089): a runner on Andy's Mac polls the control plane and claims runs. Slice 1 is the design; slices 2 to 7 (setting and override, runner registration, claim and lease, runner CLI, local publish, runbook) are the ADR's table.
+
 ### M4: Epics + story board
 Epics with child tickets and dependencies; just-in-time re-planning; config editing and audit/revert in UI and MCP; epic grouping on the board; dedicated run-detail screen; pluggable design skills with a Hallmark trial and a Dashboards screen (ADR-0045; `design.md` earlier, ADR-0059) including tokens per run and per step (ADR-0046); **overnight runs** (ADR-0049: launch step with batched answers and plan approvals, one-night epic branch, night budget and stop time, morning report as a Needs-you item). Slice at milestone start.
 
@@ -66,7 +68,7 @@ After M6: Dev → prod releases: **per-project custom domains**. (The control pl
 
 **Control plane in dev + prod** (last; Andy, 2026-11-03): deploy the control plane itself to separate environments, reusing M6: Dev → prod releases' pipeline. Terraform roots parameterized per environment (GCP project ID, state prefix, domain as settings, not defaults); one image built once and promoted dev → prod; separate Firebase sign-in, GitHub App, MCP connector URL and budget per environment; data moved by export/import with the same upgraders (§10.4).
 
-**Devkit standalone + local mode** (ADR-0032): phase 1 devkit in Claude Code with markdown tickets; phase 2 full control plane locally. Designed after M1: First end-to-end flow.
+**Devkit standalone + local mode** (ADR-0032): phase 1 devkit in Claude Code with markdown tickets; phase 2 full control plane locally. Designed after M1: First end-to-end flow; the local executor in ADR-0089.
 
 **Context sources** (ADR-0033, §7.6): `ContextSource` port, project manifest, MCP and skill sources (Notion first, when wanted). Designed after M1: First end-to-end flow.
 

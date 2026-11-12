@@ -271,7 +271,7 @@ Remaining:
 8. ~~First real side project to onboard in M1: First end-to-end flow~~ — **answered in M1.5: GitHub App + project registration**: andy-intelligence itself is project #1 (ADR-0041); side projects in M5: Multi-project in parallel.
 9. ~~Claude custom-connector OAuth mechanism currently supported (dynamic client registration vs static client)~~ — **answered by M1.1: MCP OAuth spike**: CIMD against our own authorization server (ADR-0039).
 10. Whether the Jules GitHub integration or the Jules REST API should be the dispatch path (REST preferred for run tracking; must support auto-PR creation for the completion signal).
-11. Local mode design (ADR-0032): markdown ticket format, local executor (Claude Code CLI) and its trust boundary, local storage/queue/auth adapters, devkit packaging and versioning. Due after M1: First end-to-end flow.
+11. Local mode design (ADR-0032): markdown ticket format, local executor (Claude Code CLI) and its trust boundary, local storage/queue/auth adapters, devkit packaging and versioning. Local executor **answered by ADR-0089** (AI-44: the runner polls); the rest due later.
 12. Context sources design (ADR-0033): markdown kind **answered by ADR-0053** (brief, interview, step mapping). Port shape and MCP registration: after M5: Multi-project in parallel.
 
 ---

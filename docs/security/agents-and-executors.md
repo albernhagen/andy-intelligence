@@ -1,6 +1,6 @@
 # Threat model: Agents and executors
 
-Detail on GitHub Actions triggers, review agents and the executor. Risk register (every `R<n>` id), assets and mitigations: [threat-model.md](threat-model.md). PRs that change this area update this file; the weekly system review edits only the main file. In the System security-review agent row, "this file" means `docs/security/threat-model.md`.
+Detail on Actions triggers, review agents and executors. Risk register, assets and mitigations: [threat-model.md](threat-model.md). PRs that change this area update this file; the weekly system review edits only the main file. In the System security-review agent row, "this file" means `docs/security/threat-model.md`.
 
 ## Trust boundaries and entry points
 
@@ -25,3 +25,7 @@ Detail on GitHub Actions triggers, review agents and the executor. Risk register
 | ------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------ |
 | `CLAUDE_CODE_OAUTH_TOKEN` | Andy's Claude subscription. Local copy for the sandbox test bed (`~/.config/andy-intelligence/sandbox-lab.env`, mode 600, trusted code only; AI-58) | Any same-repo workflow run (not forks, not Dependabot); agent runs (`claude-executor.yml` `agent` job) |
 | `GITHUB_TOKEN`            | Per-job, least privilege (`permissions:` in each workflow)                                                                                          | That job                                                                                               |
+
+## Planned (not built)
+
+Local executor (ADR-0089): `POST /runner/claim` and `POST /runs/{id}/heartbeat`; outbound only. Risk R-AI-44.
