@@ -44,6 +44,7 @@ import { buildBaseBranch } from "./night-branch";
 import { MAX_ACTIVE_RUNS_GLOBAL, isInFlight, wasDispatched } from "./dispatch-caps";
 import { blockingRun, editingRuns, highestAdrInIndex, runTouches } from "./dispatch-conflicts";
 import { isDispatchable, resolveWorker } from "./worker";
+import { cascadesFrom, withEpicOverrides } from "./overrides";
 import { resolveExecutor, wantedExecutor } from "./executor";
 import { runCost } from "./cost";
 import {
@@ -325,7 +326,7 @@ export class RunService {
           "Andy turns them on in /projects after the live sandbox proof (runbook agent-runs.md §9)",
         ]);
       }
-      await this.checkBuildable(ticket, project);
+      await this.checkBuildable(await this.withEpic(ticket), project);
       const plan = await this.planStateOf(ticket, questions, project.planApproval);
       if (startable === "build") {
         const gate = buildGate(planRequired(project.planApproval, ticket), plan, ticket, retryOf);
@@ -356,7 +357,7 @@ export class RunService {
 
     const limits = STEP_LIMITS[startable];
     // A plan run is routed like the build it plans: the same model reads the same code.
-    const build = startable === "refine" ? null : buildRoute(ticket);
+    const build = startable === "refine" ? null : buildRoute(await this.withEpic(ticket));
     // ADR-0080: what the run may edit, and a build's ADR number (a retry keeps its run's).
     const touches = runTouches(ticket.touches, approved?.plan?.files);
     const reservedAdr =
@@ -460,7 +461,7 @@ export class RunService {
     if (everywhere.length >= MAX_ACTIVE_RUNS_GLOBAL) {
       throw new DomainError("run_limit", "the cap on agent tasks across all projects is reached");
     }
-    const build = buildRoute(ticket);
+    const build = buildRoute(await this.withEpic(ticket));
     const prompt = syncPrompt(ticket, repo, target);
     const run = await this.runs.create({
       projectId,
@@ -1647,6 +1648,16 @@ export class RunService {
       throw new DomainError("forbidden", "this run was not dispatched to the caller");
     }
     return run;
+  }
+
+  /**
+   * The ticket with its epic's overrides (AI-116), for the build checks and route only: one read
+   * when it has a parent. Never stored.
+   */
+  private async withEpic(ticket: Ticket): Promise<Ticket> {
+    if (!ticket.parentId) return ticket;
+    const parent = await this.tracker.getTicket(ticket.projectId, ticket.parentId);
+    return withEpicOverrides(ticket, cascadesFrom(parent));
   }
 
   private async requireTicket(projectId: string, ticketId: string): Promise<Ticket> {
