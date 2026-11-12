@@ -21,7 +21,12 @@ import {
   type WorkTracker,
 } from "@andy/contracts";
 import { ticketCost } from "./cost";
-import { MAX_ACTIVE_RUNS_GLOBAL, MAX_PRS_WAITING_PER_PROJECT, isInFlight } from "./dispatch-caps";
+import {
+  MAX_ACTIVE_RUNS_AT_WARN,
+  MAX_ACTIVE_RUNS_GLOBAL,
+  MAX_PRS_WAITING_PER_PROJECT,
+  isInFlight,
+} from "./dispatch-caps";
 import { quotaStatus } from "./quota";
 import { openBlockerKeys, runLabel, syncWaiting, ticketStatusLine } from "./status-line";
 import { resolveWorker } from "./worker";
@@ -328,6 +333,8 @@ const IDLE_REASONS: Record<DispatchIdleReason, (p: DigestData["project"]) => str
   global_cap: () => `Dispatch is at the global cap (${MAX_ACTIVE_RUNS_GLOBAL} agent tasks at once)`,
   prs_waiting_cap: () => `Dispatch is idle: ${MAX_PRS_WAITING_PER_PROJECT} PRs wait for Andy`,
   quota_reserve: () => "Dispatch is idle: quota is at the reserve",
+  quota_warn: () =>
+    `Dispatch is at the warn cap (${plural(MAX_ACTIVE_RUNS_AT_WARN, "agent task")} at once while quota is at warn)`,
 };
 
 function dispatchIdle({ project }: DigestData): DigestException[] {

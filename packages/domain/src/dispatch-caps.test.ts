@@ -1,9 +1,11 @@
 import { describe, expect, it } from "vitest";
 import {
+  MAX_ACTIVE_RUNS_AT_WARN,
   MAX_ACTIVE_RUNS_GLOBAL,
   MAX_PRS_WAITING_PER_PROJECT,
   isInFlight,
   mayDispatch,
+  waitsForSlot,
   type DispatchCounts,
 } from "./dispatch-caps";
 
@@ -73,11 +75,48 @@ describe("mayDispatch", () => {
   });
 
   it.each(["ok", "warn", "unknown"] as const)(
-    "GivenQuotaLevel%s_WhenAsked_ThenStart",
+    "GivenQuotaLevel%sAndNothingInFlight_WhenAsked_ThenStart",
     (quotaLevel) => {
       expect(mayDispatch(project, { ...idle, quotaLevel })).toBe("start");
     },
   );
+
+  it("GivenQuotaAtWarnAndOneRunInFlightAnywhere_WhenAsked_ThenQuotaWarn", () => {
+    expect(MAX_ACTIVE_RUNS_AT_WARN).toBe(1);
+    // The run in flight is in another project: the project's own dial has room.
+    expect(mayDispatch(project, { ...idle, quotaLevel: "warn", globalActive: 1 })).toBe(
+      "quota_warn",
+    );
+  });
+
+  it.each(["ok", "unknown"] as const)(
+    "GivenQuotaLevel%sAndRunsInFlightBelowTheGlobalCap_WhenAsked_ThenStartAsToday",
+    (quotaLevel) => {
+      const counts = { ...idle, quotaLevel, globalActive: MAX_ACTIVE_RUNS_GLOBAL - 1 };
+      expect(mayDispatch(project, counts)).toBe("start");
+    },
+  );
+
+  it("GivenQuotaAtPauseAndRunsInFlight_WhenAsked_ThenQuotaReserveAsToday", () => {
+    expect(mayDispatch(project, { ...idle, quotaLevel: "pause", globalActive: 1 })).toBe(
+      "quota_reserve",
+    );
+  });
+
+  it("GivenQuotaAtWarnAndTheProjectDialFull_WhenAsked_ThenTheProjectCapIsNamedFirst", () => {
+    const counts = { ...idle, quotaLevel: "warn" as const, projectActive: 2, globalActive: 2 };
+    expect(mayDispatch(project, counts)).toBe("project_cap");
+  });
+});
+
+describe("waitsForSlot", () => {
+  it("GivenEachDecision_WhenAsked_ThenOnlyTheCapsAcrossProjectsWaitForASlot", () => {
+    expect(waitsForSlot("global_cap")).toBe(true);
+    expect(waitsForSlot("quota_warn")).toBe(true);
+    for (const d of ["paused", "project_cap", "quota_reserve", "started", "nothing_ready"] as const)
+      expect(waitsForSlot(d)).toBe(false);
+    expect(waitsForSlot(undefined)).toBe(false);
+  });
 });
 
 describe("isInFlight", () => {

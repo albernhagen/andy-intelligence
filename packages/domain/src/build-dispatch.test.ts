@@ -457,6 +457,36 @@ describe("BuildDispatcher", () => {
     expect(await decision()).toBe("quota_reserve");
   });
 
+  it("GivenAWarnLevelReading_WhenNext_ThenOneBuildStartsAndTheSecondWaitsOnQuotaWarn", async () => {
+    const quota = new InMemoryQuotaStore();
+    await quota.save([
+      {
+        provider: "claude-sub",
+        window: "5h",
+        usedPct: 75,
+        resetsAt: new Date(ms + 3_600_000).toISOString(),
+        source: "test",
+        takenAt: new Date(ms).toISOString(),
+        confidence: "high",
+      },
+    ]);
+    const { runs } = wire();
+    const dispatcher = new BuildDispatcher(tracker, runStore, runs, now, quota);
+    const a = await inReady("A");
+    const b = await inReady("B");
+    expect(await dispatcher.next(projectId)).not.toBeNull();
+    expect(await builds(a.id)).toHaveLength(1);
+    expect(await builds(b.id)).toHaveLength(0);
+    expect(await decision()).toBe("quota_warn");
+
+    // The run's end frees the slot: the waiter is woken and starts, still one at a time.
+    const [first] = await runStore.listActive(projectId);
+    await succeed(runs, first!);
+    await dispatcher.next(projectId);
+    expect(await builds(b.id)).toHaveLength(1);
+    expect(await runStore.listActive(projectId)).toHaveLength(1);
+  });
+
   it("GivenAPauseLevelReadingOverSixHoursOld_WhenNext_ThenDispatchStarts", async () => {
     const quota = new InMemoryQuotaStore();
     await quota.save([
@@ -514,6 +544,43 @@ describe("BuildDispatcher", () => {
     expect(await decision(b.id)).toBe("global_cap");
 
     await succeed(runs, started[0]!);
+    await dispatcher.wakeGlobalCapWaiters(projectId);
+    expect(await runStore.listActive(b.id)).toHaveLength(1);
+  });
+
+  it("GivenAProjectIdleOnTheWarnCap_WhenARunEndsElsewhere_ThenTheWaiterIsWokenAndStarts", async () => {
+    const quota = new InMemoryQuotaStore();
+    await quota.save([
+      {
+        provider: "claude-sub",
+        window: "weekly",
+        usedPct: 72,
+        resetsAt: new Date(ms + 3 * 86_400_000).toISOString(),
+        source: "test",
+        takenAt: new Date(ms).toISOString(),
+        confidence: "high",
+      },
+    ]);
+    host = new InMemoryCodeHost([REPO, { ...REPO, fullName: "albernhagen/b" }]);
+    const { runs } = wire();
+    const dispatcher = new BuildDispatcher(tracker, runStore, runs, now, quota);
+    await inReady("A1");
+    await dispatcher.next(projectId);
+    const [running] = await runStore.listActive(projectId);
+
+    const b = await tracker.createProject({ name: "B", key: "B", repos: ["albernhagen/b"] });
+    await tracker.updateProject(b.id, { autoBuild: true, buildEnabled: true });
+    const t = await tracker.createTicket(b.id, ready("B1"), "andy");
+    await tracker.updateTicket(
+      b.id,
+      t.id,
+      { stage: { to: "ready", forced: false, reason: null } },
+      "andy",
+    );
+    expect(await dispatcher.next(b.id)).toBeNull();
+    expect(await decision(b.id)).toBe("quota_warn");
+
+    await succeed(runs, running!);
     await dispatcher.wakeGlobalCapWaiters(projectId);
     expect(await runStore.listActive(b.id)).toHaveLength(1);
   });

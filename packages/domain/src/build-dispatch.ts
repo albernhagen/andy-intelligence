@@ -12,7 +12,7 @@ import type {
   WorkTracker,
 } from "@andy/contracts";
 import { MAX_BUILD_RUNS_PER_TICKET, isAndysWork, unfinishedBlockers } from "./builds";
-import { mayDispatch, wasDispatched } from "./dispatch-caps";
+import { mayDispatch, waitsForSlot, wasDispatched } from "./dispatch-caps";
 import { blockingRun, editingRuns } from "./dispatch-conflicts";
 import { checkDor } from "./dor";
 import { MAX_PLAN_RUNS_PER_TICKET, planRequired } from "./plans";
@@ -80,7 +80,7 @@ export class BuildDispatcher {
   async wakeGlobalCapWaiters(exceptProjectId: string): Promise<void> {
     try {
       const waiting = (await this.tracker.listProjects())
-        .filter((p) => p.id !== exceptProjectId && p.lastDispatch?.decision === "global_cap")
+        .filter((p) => p.id !== exceptProjectId && waitsForSlot(p.lastDispatch?.decision))
         .sort((a, b) => a.lastDispatch!.at.localeCompare(b.lastDispatch!.at));
       for (const p of waiting) await this.next(p.id);
     } catch (err) {

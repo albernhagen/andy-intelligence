@@ -15,6 +15,14 @@ describe("dispatchOrder", () => {
     expect(order).toEqual(["B", "A"]);
   });
 
+  it("GivenAProjectIdleOnTheWarnCap_WhenAnotherProjectFreesASlot_ThenTheWaiterComesFirst", () => {
+    const order = dispatchOrder(
+      [project("A", "started", 1), project("C", "nothing_ready", 0), project("B", "quota_warn", 5)],
+      "A",
+    );
+    expect(order).toEqual(["B", "C", "A"]);
+  });
+
   it("GivenSeveralWaiters_WhenOrdered_ThenTheLongestWaitingGoesFirst", () => {
     const order = dispatchOrder(
       [project("A", "global_cap", 1), project("B", "global_cap", 9), project("C", "global_cap", 3)],
