@@ -44,7 +44,16 @@ Pick one:
 
 - `ready`: buildable. List its gaps (zero is valid).
 - `send_back`: too vague to build; `reason` says what's missing. Nothing else is applied.
-- `split`: too big; `children` (at most 5, title and body) land in Ideas; `reason` says why.
+- `split`: too big; `children` (at most 5) land in Ideas; `reason` says why.
+
+## Splitting an epic
+
+An epic never runs; split it:
+
+- Each child: a vertical slice, mergeable on its own.
+- `blockedBy`: indexes (from 0) of siblings that must merge first, only for real dependencies; never itself, no cycles.
+- `touches` per child, disjoint where possible, so slices build in parallel.
+- Over 5: make 5 bigger ones that split again later.
 
 ## Gaps: the measured rule
 
@@ -53,7 +62,7 @@ For each guess, give the question (format below), the `assumption` you'd go with
 - `cost` of a wrong guess: `reversible` (cheap to change), `direction`, `scope`, `trust` or `spend`.
 - `confidence` in your default: `sure` or `unsure`.
 
-Sure and `reversible` becomes an assumption; anything else is asked. **The control plane applies this rule and the caps (3 open per ticket, a daily cap per project), so rate honestly.** Gaps past a cap become assumptions; a costly one holds the ticket until asked or accepted (ADR-0087).
+Sure and `reversible` becomes an assumption; anything else is asked. **The control plane applies this rule and the caps (3 open per ticket, a daily cap per project), so rate honestly.**
 
 `urgency` is `high` only when the ticket can't be built without it. Skip what the code or docs answer. A clear ticket has zero gaps.
 
@@ -84,4 +93,4 @@ End with the structured output the run asks for (the schema `refine.schema.json`
 - `summary`: markdown, at most 300 words: **Ask** (one sentence), **Gaps** (what the Definition of Ready misses), **Files**, **Risks** (security, data, cost, concurrency).
 - `outcome`, `reason`, `children`, `gaps`: as above.
 
-A result that doesn't match the schema fails the run and writes nothing. With nothing to ask and the Definition of Ready met, the ticket moves to Ready; otherwise questions land in the Needs-you inbox and the last answer moves it to Ready or runs refine again (at most 3 runs).
+A result that doesn't match the schema fails the run and writes nothing.
