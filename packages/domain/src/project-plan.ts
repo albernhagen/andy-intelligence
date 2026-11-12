@@ -31,6 +31,8 @@ export interface WaitingPlan {
 }
 
 export class ProjectPlanService {
+  private readonly deciding = new Set<string>();
+
   constructor(
     private readonly tracker: WorkTracker,
     private readonly tickets: Pick<TicketService, "create">,
@@ -48,7 +50,7 @@ export class ProjectPlanService {
     const proposal = ProjectPlanProposal.parse(input);
     const project = await this.project(projectId);
     const current = project.projectPlan?.status;
-    if (current === "proposed") {
+    if (current === "proposed" || current === "approving") {
       throw new DomainError(
         "not_acceptable",
         `project ${project.key} already has a plan waiting for Andy: approve or reject it first`,
@@ -75,7 +77,12 @@ export class ProjectPlanService {
     return plan;
   }
 
-  /** Approves (one epic per milestone, in order) or rejects with a reason (nothing created). */
+  /**
+   * Approves (one epic per milestone, in order) or rejects with a reason (nothing created).
+   * Approval is resumable: the plan is `approving` while its epics are created and records each
+   * epic as it lands, so if a create fails, approving again carries on from the next milestone
+   * instead of starting over. A rejection is only possible before approval starts.
+   */
   async decide(
     projectId: string,
     input: ProjectPlanDecision,
@@ -83,50 +90,74 @@ export class ProjectPlanService {
   ): Promise<{ plan: ProjectPlan; epics: Ticket[] }> {
     requireCan(actor, "decide_plan", projectId);
     const decision = ProjectPlanDecision.parse(input);
+    // One decision per project at a time in this instance (a double click, two tabs).
+    if (this.deciding.has(projectId)) {
+      throw new DomainError("plan_not_decidable", `a decision on ${projectId}'s plan is running`);
+    }
+    this.deciding.add(projectId);
+    try {
+      return await this.decideOnce(projectId, decision, actor);
+    } finally {
+      this.deciding.delete(projectId);
+    }
+  }
+
+  private async decideOnce(
+    projectId: string,
+    decision: ProjectPlanDecision,
+    actor: EventActor,
+  ): Promise<{ plan: ProjectPlan; epics: Ticket[] }> {
     const project = await this.project(projectId);
     const plan = project.projectPlan;
-    if (plan?.status !== "proposed") {
+    const resumable = plan?.status === "approving" && decision.decision === "approved";
+    if (!plan || (plan.status !== "proposed" && !resumable)) {
       throw new DomainError("plan_not_decidable", `project ${project.key} has no plan to decide`);
     }
-    const decided = {
-      ...plan,
-      decidedBy: actor,
-      decidedAt: this.now().toISOString(),
-    };
     if (decision.decision === "rejected") {
-      const rejected: ProjectPlan = { ...decided, status: "rejected", reason: decision.reason };
+      const rejected: ProjectPlan = {
+        ...plan,
+        status: "rejected",
+        reason: decision.reason,
+        decidedBy: actor,
+        decidedAt: this.now().toISOString(),
+      };
       await this.tracker.updateProject(projectId, { projectPlan: rejected });
       log("project plan rejected", { projectId });
       return { plan: rejected, epics: [] };
     }
-    // Marked approved before any epic exists, so a second approval is refused instead of
-    // creating the epics twice.
-    const approved: ProjectPlan = { ...decided, status: "approved" };
-    await this.tracker.updateProject(projectId, { projectPlan: approved });
+    let current: ProjectPlan =
+      plan.status === "approving"
+        ? plan
+        : { ...plan, status: "approving", decidedBy: actor, decidedAt: this.now().toISOString() };
+    if (plan.status !== "approving") {
+      await this.tracker.updateProject(projectId, { projectPlan: current });
+    }
     const epics: Ticket[] = [];
     for (const [i, milestone] of plan.proposal.milestones.entries()) {
-      epics.push(
-        await this.tickets.create(
-          projectId,
-          {
-            type: "epic",
-            title: `M${i + 1}: ${plainAnswer(milestone.title)}`,
-            body: epicBody(milestone),
-          },
-          actor,
-        ),
+      if (i < current.epicIds.length) continue;
+      const epic = await this.tickets.create(
+        projectId,
+        {
+          type: "epic",
+          title: `M${i + 1}: ${plainAnswer(milestone.title)}`,
+          body: epicBody(milestone),
+        },
+        actor,
       );
+      epics.push(epic);
+      current = { ...current, epicIds: [...current.epicIds, epic.id] };
+      await this.tracker.updateProject(projectId, { projectPlan: current });
     }
-    const done: ProjectPlan = { ...approved, epicIds: epics.map((e) => e.id) };
+    const done: ProjectPlan = { ...current, status: "approved" };
     await this.tracker.updateProject(projectId, { projectPlan: done });
-    log("project plan approved", { projectId, epics: epics.map((e) => e.key) });
+    log("project plan approved", { projectId, epics: done.epicIds.length });
     return { plan: done, epics };
   }
 
   /** Every project whose plan waits for Andy, for the Needs-you inbox. */
   async waiting(): Promise<WaitingPlan[]> {
     return (await this.tracker.listProjects())
-      .filter((p) => p.projectPlan?.status === "proposed")
+      .filter((p) => p.projectPlan?.status === "proposed" || p.projectPlan?.status === "approving")
       .map((p) => ({ projectId: p.id, key: p.key, name: p.name, plan: p.projectPlan! }));
   }
 

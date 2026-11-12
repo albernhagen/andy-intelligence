@@ -276,6 +276,7 @@ describe("status", () => {
         },
       ],
       needsYou: { questions: 0, tickets: 0 },
+      projectPlansWaiting: 0,
     });
   });
 

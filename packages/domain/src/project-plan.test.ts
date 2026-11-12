@@ -150,4 +150,48 @@ describe("ProjectPlanService", () => {
     });
     expect(body.split("\n").some((l) => l.startsWith("#"))).toBe(false);
   });
+
+  it("GivenACreateThatFailsMidway_WhenApprovedAgain_ThenItResumesWithoutDuplicates", async () => {
+    const { tracker, project } = await setup();
+    const real = new TicketService(tracker, null, null, () => T0);
+    let calls = 0;
+    const flaky = {
+      create: (...args: Parameters<TicketService["create"]>) => {
+        calls += 1;
+        if (calls === 2) throw new Error("store timeout");
+        return real.create(...args);
+      },
+    };
+    const plans = new ProjectPlanService(tracker, flaky, () => T0);
+    await plans.propose(project.id, proposal, OWNER);
+    await expect(plans.decide(project.id, { decision: "approved" }, OWNER)).rejects.toThrow(
+      "store timeout",
+    );
+    const half = (await tracker.getProject(project.id))?.projectPlan;
+    expect(half).toMatchObject({ status: "approving" });
+    expect(half?.epicIds).toHaveLength(1);
+    expect(await plans.waiting()).toHaveLength(1);
+    await expect(
+      plans.decide(project.id, { decision: "rejected", reason: "no" }, OWNER),
+    ).rejects.toMatchObject({ code: "plan_not_decidable" });
+
+    const { plan } = await plans.decide(project.id, { decision: "approved" }, OWNER);
+    expect(plan.status).toBe("approved");
+    expect((await tracker.listTickets(project.id)).map((t) => t.title)).toEqual([
+      "M1: Walking skeleton",
+      "M2: Log a run",
+      "M3: Weekly summary",
+    ]);
+  });
+
+  it("GivenAnApprovalRunning_WhenASecondArrives_ThenItIsRefusedAndEpicsAreCreatedOnce", async () => {
+    const { tracker, project, plans } = await setup();
+    await plans.propose(project.id, proposal, OWNER);
+    const [a, b] = await Promise.allSettled([
+      plans.decide(project.id, { decision: "approved" }, OWNER),
+      plans.decide(project.id, { decision: "approved" }, OWNER),
+    ]);
+    expect([a.status, b.status].sort()).toEqual(["fulfilled", "rejected"]);
+    expect(await tracker.listTickets(project.id)).toHaveLength(3);
+  });
 });

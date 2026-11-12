@@ -38,7 +38,8 @@ export const ProjectPlanProposal = z.strictObject({
 });
 export type ProjectPlanProposal = z.infer<typeof ProjectPlanProposal>;
 
-export const ProjectPlanStatus = z.enum(["proposed", "approved", "rejected"]);
+/** `approving`: epics are being created; approving again resumes from the next milestone. */
+export const ProjectPlanStatus = z.enum(["proposed", "approving", "approved", "rejected"]);
 export type ProjectPlanStatus = z.infer<typeof ProjectPlanStatus>;
 
 export const ProjectPlan = z.object({

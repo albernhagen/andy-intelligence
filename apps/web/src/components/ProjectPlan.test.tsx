@@ -58,4 +58,11 @@ describe("project plan", () => {
     expect(await within(section).findByText("Too big")).toBeTruthy();
     expect(await h.tracker.listTickets("trl")).toEqual([]);
   });
+
+  it("GivenOnlyAWaitingPlan_WhenTheInboxOpens_ThenItCountsOneAndDoesNotSayNothingNeedsYou", async () => {
+    await open("/all/inbox");
+    await screen.findByRole("region", { name: "Project plans" });
+    expect(screen.queryByText("Nothing needs you.")).toBeNull();
+    expect(screen.getByRole("heading", { name: /Needs you/ }).textContent).toContain("1");
+  });
 });

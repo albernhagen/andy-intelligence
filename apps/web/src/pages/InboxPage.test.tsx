@@ -44,7 +44,10 @@ vi.mock("@/lib/queries", () => ({
   useNeedsYou: () => ({ isPending: false, isError: false, data }),
   useProjects: () => ({ data: [] }),
 }));
-vi.mock("@/components/ProjectPlan", () => ({ ProjectPlansWaiting: () => null }));
+vi.mock("@/components/ProjectPlan", () => ({
+  ProjectPlansWaiting: () => null,
+  useWaitingPlans: () => ({ shown: [], error: null }),
+}));
 vi.mock("@/components/ConfigChanges", () => ({ ConfigChanges: () => null }));
 vi.mock("@/components/inbox/InboxTicketCard", () => ({
   InboxTicketCard: ({ card }: { card: { ticket: Ticket } }) => (

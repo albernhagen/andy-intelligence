@@ -30,7 +30,7 @@ export function ProjectPlanPanel({ projectId }: { projectId: string }) {
           Plan needed: no milestones yet. Run platform/procedures/plan-project.md and submit the
           result with MCP submit_project_plan.
         </p>
-      ) : current.status === "proposed" ? (
+      ) : current.status === "proposed" || current.status === "approving" ? (
         <WaitingPlan projectId={projectId} plan={current} />
       ) : current.status === "approved" ? (
         <p className="text-sm">Approved: {current.epicIds.length} epics created.</p>
@@ -44,15 +44,21 @@ export function ProjectPlanPanel({ projectId }: { projectId: string }) {
   );
 }
 
-/** Every project's waiting plan, for the inbox; with `projectId`, only that project's. */
-export function ProjectPlansWaiting({ projectId }: { projectId?: string }) {
+/** Plans waiting for Andy (every project's, or one project's), for the inbox and its count. */
+export function useWaitingPlans(projectId?: string) {
   const api = useApi();
   const waiting = useQuery({
     queryKey: ["project-plans-waiting"],
     queryFn: async () => unwrap(await api.GET("/api/project-plans/waiting")),
   });
-  if (waiting.error) return <QueryError error={waiting.error} />;
   const shown = (waiting.data ?? []).filter((w) => !projectId || w.projectId === projectId);
+  return { shown, error: waiting.error };
+}
+
+/** Every project's waiting plan, for the inbox; with `projectId`, only that project's. */
+export function ProjectPlansWaiting({ projectId }: { projectId?: string }) {
+  const { shown, error } = useWaitingPlans(projectId);
+  if (error) return <QueryError error={error} />;
   if (shown.length === 0) return null;
   return (
     <section aria-label="Project plans" className="space-y-2">
@@ -72,7 +78,8 @@ export function ProjectPlansWaiting({ projectId }: { projectId?: string }) {
 function WaitingPlan({ projectId, plan }: { projectId: string; plan: Plan }) {
   const api = useApi();
   const queryClient = useQueryClient();
-  const [reason, setReason] = useState("");
+  const approving = plan.status === "approving";
+  const total = plan.proposal.milestones.length;
   const decide = useMutation({
     mutationFn: async (body: { decision: "approved" } | { decision: "rejected"; reason: string }) =>
       unwrap(
@@ -102,25 +109,48 @@ function WaitingPlan({ projectId, plan }: { projectId: string; plan: Plan }) {
           disabled={decide.isPending}
           onClick={() => decide.mutate({ decision: "approved" })}
         >
-          Approve: create {plan.proposal.milestones.length} epics
+          {approving
+            ? `Finish approval: ${plan.epicIds.length} of ${total} epics created`
+            : `Approve: create ${total} epics`}
         </Button>
-        <input
-          aria-label="Reason to reject"
-          className="min-w-48 flex-1 rounded-md border border-border px-2 py-1"
-          placeholder="Why reject? (required)"
-          value={reason}
-          onChange={(e) => setReason(e.target.value)}
-        />
-        <Button
-          size="sm"
-          variant="outline"
-          disabled={decide.isPending || reason.trim() === ""}
-          onClick={() => decide.mutate({ decision: "rejected", reason: reason.trim() })}
-        >
-          Reject
-        </Button>
+        {!approving && (
+          <RejectControls
+            decide={(r) => decide.mutate({ decision: "rejected", reason: r })}
+            pending={decide.isPending}
+          />
+        )}
       </div>
       {decide.error && <QueryError error={decide.error} />}
     </div>
+  );
+}
+
+/** A rejection needs a reason; only before approval starts. */
+function RejectControls({
+  decide,
+  pending,
+}: {
+  decide: (reason: string) => void;
+  pending: boolean;
+}) {
+  const [reason, setReason] = useState("");
+  return (
+    <>
+      <input
+        aria-label="Reason to reject"
+        className="min-w-48 flex-1 rounded-md border border-border px-2 py-1"
+        placeholder="Why reject? (required)"
+        value={reason}
+        onChange={(e) => setReason(e.target.value)}
+      />
+      <Button
+        size="sm"
+        variant="outline"
+        disabled={pending || reason.trim() === ""}
+        onClick={() => decide(reason.trim())}
+      >
+        Reject
+      </Button>
+    </>
   );
 }

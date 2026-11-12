@@ -171,7 +171,7 @@ export interface paths {
               /** @default null */
               projectPlan: {
                 /** @enum {string} */
-                status: "proposed" | "approved" | "rejected";
+                status: "proposed" | "approving" | "approved" | "rejected";
                 proposal: {
                   summary: string;
                   milestones: {
@@ -295,7 +295,7 @@ export interface paths {
               /** @default null */
               projectPlan: {
                 /** @enum {string} */
-                status: "proposed" | "approved" | "rejected";
+                status: "proposed" | "approving" | "approved" | "rejected";
                 proposal: {
                   summary: string;
                   milestones: {
@@ -467,7 +467,7 @@ export interface paths {
               /** @default null */
               projectPlan: {
                 /** @enum {string} */
-                status: "proposed" | "approved" | "rejected";
+                status: "proposed" | "approving" | "approved" | "rejected";
                 proposal: {
                   summary: string;
                   milestones: {
@@ -651,7 +651,7 @@ export interface paths {
               /** @default null */
               projectPlan: {
                 /** @enum {string} */
-                status: "proposed" | "approved" | "rejected";
+                status: "proposed" | "approving" | "approved" | "rejected";
                 proposal: {
                   summary: string;
                   milestones: {
@@ -6997,7 +6997,7 @@ export interface paths {
             "application/json": {
               plan: {
                 /** @enum {string} */
-                status: "proposed" | "approved" | "rejected";
+                status: "proposed" | "approving" | "approved" | "rejected";
                 proposal: {
                   summary: string;
                   milestones: {
@@ -7065,7 +7065,7 @@ export interface paths {
           content: {
             "application/json": {
               /** @enum {string} */
-              status: "proposed" | "approved" | "rejected";
+              status: "proposed" | "approving" | "approved" | "rejected";
               proposal: {
                 summary: string;
                 milestones: {
@@ -7184,7 +7184,7 @@ export interface paths {
             "application/json": {
               plan: {
                 /** @enum {string} */
-                status: "proposed" | "approved" | "rejected";
+                status: "proposed" | "approving" | "approved" | "rejected";
                 proposal: {
                   summary: string;
                   milestones: {
@@ -7410,7 +7410,7 @@ export interface paths {
               name: string;
               plan: {
                 /** @enum {string} */
-                status: "proposed" | "approved" | "rejected";
+                status: "proposed" | "approving" | "approved" | "rejected";
                 proposal: {
                   summary: string;
                   milestones: {
