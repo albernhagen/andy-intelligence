@@ -6,6 +6,7 @@ export default defineConfig({
       "packages/*",
       "apps/api",
       "apps/web",
+      "apps/local-runner",
       { test: { name: "scripts", include: ["scripts/**/*.test.mjs", "platform/**/*.test.mjs"] } },
     ],
   },
