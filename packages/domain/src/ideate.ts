@@ -82,7 +82,7 @@ export class IdeateService {
       {
         type: "epic",
         title: epicInput.title,
-        body: epicBody(epicInput, spec.path),
+        body: ideaEpicBody(epicInput, spec.path),
         acceptanceCriteria: epicInput.acceptanceCriteria,
       },
       actor,
@@ -148,7 +148,7 @@ export class IdeateService {
 }
 
 /** The epic's body: the proposal, where its spec is, and the candidate slices in build order. */
-export function epicBody(epic: IdeateEpic, specPath: string): string {
+export function ideaEpicBody(epic: IdeateEpic, specPath: string): string {
   const slices = epic.slices
     .map((s) => `- ${plainAnswer(s.title)}: ${plainAnswer(s.summary)}`)
     .join("\n");

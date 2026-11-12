@@ -1,6 +1,6 @@
 import { InMemoryCodeHost, InMemoryWorkTracker } from "@andy/contracts";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { IDEATE_PRS_PER_HOUR, IdeateService, epicBody, ideaTitle } from "./ideate";
+import { IDEATE_PRS_PER_HOUR, IdeateService, ideaEpicBody, ideaTitle } from "./ideate";
 import { TicketService } from "./tickets";
 
 const REPO = "albernhagen/trail-log";
@@ -84,7 +84,7 @@ describe("IdeateService", () => {
       upNextRank: null,
     });
     expect(res.epic.acceptanceCriteria).toEqual(epicResult.epic.acceptanceCriteria);
-    expect(res.epic.body).toBe(epicBody(epicResult.epic, "specs/weekly-summary.md"));
+    expect(res.epic.body).toBe(ideaEpicBody(epicResult.epic, "specs/weekly-summary.md"));
     expect(host.proposals[0]).toMatchObject({
       fullName: REPO,
       proposal: {
