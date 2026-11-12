@@ -1,3 +1,4 @@
+import type { Ticket } from "@andy/contracts";
 import { describe, expect, it } from "vitest";
 import { branchFor, buildPrompt, buildRoute, isPullRequestOf, unfinishedBlockers } from "./builds";
 
@@ -86,7 +87,7 @@ describe("build rules", () => {
   });
 
   it("GivenASpikeTicket_WhenPrompted_ThenTheRunIsToldToWriteFindingsAndChangeNothingOutsideDocs", () => {
-    const ticket = {
+    const ticket: Ticket = {
       id: "t",
       projectId: "ai",
       key: "AI-3",
