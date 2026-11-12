@@ -815,6 +815,38 @@ describe("BuildDispatcher", () => {
         .mock.calls.map(([line]) => JSON.parse(String(line)))
         .filter((l) => l.message === "build waits: night launch stopped dispatching");
 
+    it("GivenMaxOneAgentTaskAndTwoReadyStoriesAndTwoSlots_WhenOneNextCall_ThenExactlyOneStarts", async () => {
+      const { dispatcher } = wire(undefined, nights);
+      const a = await inReady("A");
+      const b = await inReady("B");
+      await launch([a, b], { budget: { maxRuns: 1 } });
+
+      expect((await dispatcher.next(projectId))?.ticketId).toBe(a.id);
+      expect(await builds(a.id)).toHaveLength(1);
+      expect(await builds(b.id)).toEqual([]);
+      expect(holds()).toContainEqual(
+        expect.objectContaining({ ticket: b.key, launchId: "launch-1", limit: "max_runs" }),
+      );
+    });
+
+    it("GivenMaxOneAgentTask_WhenTwoStoriesStartConcurrently_ThenOnlyTheOlderStartIsDispatched", async () => {
+      const { runs } = wire(undefined, nights);
+      const a = await inReady("A");
+      const b = await inReady("B");
+      const l = await launch([a, b], { budget: { maxRuns: 1 } });
+      const night = { launch: l, ticketIds: [a.id, b.id] };
+
+      const results = await Promise.allSettled([
+        runs.start(projectId, a.id, "build", undefined, { night }),
+        runs.start(projectId, b.id, "build", undefined, { night }),
+      ]);
+
+      expect(results.map((r) => r.status).sort()).toEqual(["fulfilled", "rejected"]);
+      const all = [...(await builds(a.id)), ...(await builds(b.id))];
+      expect(all.filter((r) => r.executor !== null)).toHaveLength(1);
+      expect(all.filter((r) => r.status === "failed")).toHaveLength(1);
+    });
+
     it("GivenALaunchAtItsMaxAgentTasks_WhenNext_ThenItsStoryWaitsAndTheLaunchIdAndLimitAreLogged", async () => {
       const { dispatcher } = wire(undefined, nights);
       const a = await inReady("A");

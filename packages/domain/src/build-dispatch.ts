@@ -34,12 +34,17 @@ import {
   nightLimitReached,
   nightUsage,
   type NightLimit,
+  type NightUsage,
 } from "./night-budget";
 
-/** A night launch holding its stories back: why, for the log. */
-interface NightHold {
+/** The project's active night launch as this dispatch call found it. */
+interface NightState {
   launch: NightLaunch;
-  limit: NightLimit | "stopped";
+  /** Its story tickets' ids, archived ones included (their agent tasks count too). */
+  storyIds: string[];
+  usage: NightUsage;
+  /** Why its stories are held back already, or null while it may start more. */
+  hold: NightLimit | "stopped" | null;
 }
 
 /** What the dispatcher starts for a ticket; `replanFor` names the blocker that made its plan stale. */
@@ -139,7 +144,9 @@ export class BuildDispatcher {
     };
 
     // Before the caps' verdict, so a launch still ends while dispatch is paused or at a cap.
-    const night = await this.nightHold(projectId, tickets);
+    const night = await this.nightState(projectId);
+    // The launch's stories this call started: each counts against its max agent tasks at once.
+    let nightStarted = 0;
 
     let first: Run | null = null;
     let overlapSkipped = false;
@@ -156,13 +163,18 @@ export class BuildDispatcher {
       if (!isDispatchable(effective, project)) continue; // AI-32: Who does the work (ADR-0082).
       if (!routeTakes(route, ticket, project, runnerPresent)) continue; // ADR-0089.
       if (ticket.archived || ticket.needsAttention) continue;
-      if (night && night.launch.storyKeys.includes(ticket.key)) {
-        log("INFO", "build waits: night launch stopped dispatching", {
-          ticket: ticket.key,
-          launchId: night.launch.id,
-          limit: night.limit,
-        });
-        continue;
+      const story = night !== null && night.launch.storyKeys.includes(ticket.key);
+      if (story) {
+        const usage = { ...night.usage, runs: night.usage.runs + nightStarted };
+        const limit = night.hold ?? nightLimitReached(night.launch, usage, this.now());
+        if (limit) {
+          log("INFO", "build waits: night launch stopped dispatching", {
+            ticket: ticket.key,
+            launchId: night.launch.id,
+            limit,
+          });
+          continue;
+        }
       }
       const blocker = blockingRun(ticket, inFlight);
       if (blocker) {
@@ -181,7 +193,10 @@ export class BuildDispatcher {
         const run = await this.runs.start(projectId, ticket.id, start.step, undefined, {
           avoidOverlap: true,
           ...(local ? { runner: route.runner } : {}),
+          // Re-checked after the run exists, so concurrent calls can't overshoot (ADR-0079).
+          ...(story ? { night: { launch: night.launch, ticketIds: night.storyIds } } : {}),
         });
+        if (story) nightStarted += 1;
         log("INFO", "build started on its own", {
           ticket: ticket.key,
           runId: run.id,
@@ -241,23 +256,25 @@ export class BuildDispatcher {
   }
 
   /**
-   * The project's active night launch, if it must hold its stories back (ADR-0049 "Night
-   * budget"). A running launch that reached a limit moves to `stopping`; a stopping one, or one
-   * whose stories are all finished, ends with the reason once none of its agent tasks is in
-   * flight, and its unfinished stories are flagged for the morning so they don't start later as
-   * plain Ready tickets. Reads one run list per story (at most `NIGHT_LIMITS.maxStories`).
+   * The project's active night launch and what it used (ADR-0049 "Night budget"), or null when
+   * none covers any story now. A running launch that reached a limit moves to `stopping`; a
+   * stopping one, or one whose stories are all finished, ends with the reason once none of its
+   * agent tasks is in flight, and its unfinished stories are flagged for the morning so they
+   * don't start later as plain Ready tickets. With a launch active: one ticket list (archived
+   * included) and one run list per story (at most `NIGHT_LIMITS.maxStories`).
    */
-  private async nightHold(projectId: string, tickets: Ticket[]): Promise<NightHold | null> {
+  private async nightState(projectId: string): Promise<NightState | null> {
     if (!this.nights) return null;
     let launch = await this.nights.findActive(projectId);
     if (!launch) return null;
     const keys = launch.storyKeys;
-    const stories = tickets.filter((t) => keys.includes(t.key));
+    const stories = (await this.tracker.listTickets(projectId)).filter((t) => keys.includes(t.key));
     const runs = (
       await Promise.all(stories.map((t) => this.runStore.listForTicket(projectId, t.id)))
     ).flat();
     const now = this.now();
-    const limit = nightLimitReached(launch, nightUsage(launch, runs), now);
+    const usage = nightUsage(launch, runs);
+    const limit = nightLimitReached(launch, usage, now);
     if (limit && launch.status === "running") {
       launch = await this.moveLaunch(launch, ["running"], { status: "stopping" });
       log("WARNING", "night launch stopping: limit reached", { launchId: launch.id, limit });
@@ -276,7 +293,8 @@ export class BuildDispatcher {
       if (reason !== "done") await this.flagUnfinished(launch, stories, reason);
     }
     if (reason === "done") return null;
-    return limit || launch.status !== "running" ? { launch, limit: limit ?? "stopped" } : null;
+    const hold = limit ?? (launch.status !== "running" ? "stopped" : null);
+    return { launch, storyIds: stories.map((t) => t.id), usage, hold };
   }
 
   /** A launch transition; when another dispatch call moved it first, the launch as it is now. */

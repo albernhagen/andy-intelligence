@@ -1,4 +1,5 @@
 import type { NightEndReason, NightLaunch, Run } from "@andy/contracts";
+import { wasDispatched } from "./dispatch-caps";
 
 /**
  * Night budget (ADR-0049 "Night budget", ADR-0028, M4.18). Pure: `BuildDispatcher` gathers the
@@ -23,16 +24,25 @@ export interface NightUsage {
   usd: number;
 }
 
+type CountedRun = Pick<Run, "createdAt" | "status" | "executor" | "localRun">;
+
 /**
- * The usage of `runs` (the stories' runs) that belongs to the launch: those created since it
- * started. A run with no creation time counts, so a missing field can only hold dispatch back.
+ * Whether a story's run counts against its launch: created since the launch started (a run with
+ * no creation time counts, so a missing field can only hold dispatch back), and queued, running
+ * or dispatched. A start that lost a race is failed before dispatch and doesn't count.
  */
+export function countsForNight(launch: Pick<NightLaunch, "startedAt">, run: CountedRun): boolean {
+  const since = launch.startedAt ? Date.parse(launch.startedAt) : -Infinity;
+  if (run.createdAt && Date.parse(run.createdAt) < since) return false;
+  return run.status === "queued" || run.status === "running" || wasDispatched(run);
+}
+
+/** What the launch's counted runs (`runs`: its stories' runs) have used. */
 export function nightUsage(
   launch: Pick<NightLaunch, "startedAt">,
-  runs: readonly Pick<Run, "createdAt" | "tokensIn" | "tokensOut" | "costUsd">[],
+  runs: readonly (CountedRun & Pick<Run, "tokensIn" | "tokensOut" | "costUsd">)[],
 ): NightUsage {
-  const since = launch.startedAt ? Date.parse(launch.startedAt) : -Infinity;
-  const mine = runs.filter((r) => !r.createdAt || Date.parse(r.createdAt) >= since);
+  const mine = runs.filter((r) => countsForNight(launch, r));
   return {
     runs: mine.length,
     tokens: mine.reduce((n, r) => n + (r.tokensIn ?? 0) + (r.tokensOut ?? 0), 0),
@@ -51,6 +61,32 @@ export function nightLimitReached(
   if (usage.tokens >= launch.budget.maxTokens) return "max_tokens";
   if (usage.usd >= launch.budget.maxUsd) return "max_usd";
   return null;
+}
+
+/**
+ * What `RunService.start` needs to keep concurrent starts under a launch's max agent tasks:
+ * after creating its run it re-reads the stories' runs, and the run wins only if it is among
+ * the first `maxRuns` counted ones (oldest first), like the dispatch caps (ADR-0079).
+ */
+export interface NightSlot {
+  launch: Pick<NightLaunch, "id" | "startedAt" | "budget">;
+  /** The launch's story tickets. */
+  ticketIds: readonly string[];
+}
+
+/** Whether `runId` is among the first `maxRuns` counted runs of the launch, oldest first. */
+export function winsNightSlot(
+  slot: NightSlot,
+  runs: readonly (CountedRun & Pick<Run, "id">)[],
+  runId: string,
+): boolean {
+  const counted = runs
+    .filter((r) => countsForNight(slot.launch, r))
+    .sort(
+      (a, b) => (a.createdAt ?? "").localeCompare(b.createdAt ?? "") || a.id.localeCompare(b.id),
+    );
+  const at = counted.findIndex((r) => r.id === runId);
+  return at !== -1 && at < slot.launch.budget.maxRuns;
 }
 
 /**
