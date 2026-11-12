@@ -66,6 +66,14 @@ export function planWrittenAt(run: Pick<Run, "endedAt" | "createdAt">): number {
   return Date.parse(run.endedAt ?? run.createdAt ?? "");
 }
 
+/**
+ * When the plan run began reading the code (its start, else its creation); ms. A blocker that
+ * reached Done after this was not in the code the plan read, even if the plan ended later.
+ */
+export function planReadFrom(run: Pick<Run, "startedAt" | "createdAt">): number {
+  return Date.parse(run.startedAt ?? run.createdAt ?? "");
+}
+
 function isStale(run: Run, snapshot: string, now: Date): boolean {
   const tooOld = !(now.getTime() - planWrittenAt(run) <= MAX_PLAN_AGE_HOURS * 3_600_000);
   return tooOld || !(run.prompt ?? "").includes(snapshot);

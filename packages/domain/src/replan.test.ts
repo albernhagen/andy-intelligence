@@ -24,7 +24,9 @@ const plan = Run.parse({
   wouldAutoMerge: null,
   createdAt: "2026-11-06T10:00:00.000Z",
 });
-const BEFORE = "2026-11-06T10:30:00.000Z";
+const BEFORE = "2026-11-06T09:30:00.000Z";
+/** Between the plan run's start (10:00) and its end (11:00). */
+const DURING = "2026-11-06T10:30:00.000Z";
 const AFTER = "2026-11-06T11:30:00.000Z";
 const LATER = "2026-11-06T12:00:00.000Z";
 
@@ -67,6 +69,10 @@ describe("staleBlocker", () => {
       expect(staleBlocker(state, new Map([["AI-1", AFTER]]))).toBe("AI-1");
     },
   );
+
+  it("GivenABlockerDoneWhileThePlanRan_WhenChecked_ThenThePlanIsStale", () => {
+    expect(staleBlocker({ kind: "approved", run: plan }, new Map([["AI-1", DURING]]))).toBe("AI-1");
+  });
 
   it("GivenSeveralBlockersDoneAfterThePlan_WhenChecked_ThenTheLatestIsNamed", () => {
     const done = new Map([

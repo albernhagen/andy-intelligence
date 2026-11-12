@@ -659,6 +659,23 @@ describe("BuildDispatcher", () => {
       expect(build).toMatchObject({ step: "build", planRunId: replan.id });
     });
 
+    it("GivenABlockerDoneWhileThePlanTaskRan_WhenNext_ThenThePlanIsReRun", async () => {
+      await tracker.updateProject(projectId, { planApproval: "all" });
+      const { runs, dispatcher } = wire();
+      const blocker = await tracker.createTicket(projectId, ready("Blocker"), "andy");
+      await toStage(blocker.id, "done");
+      const story = await inReady("Story", { blockedBy: [blocker.key] });
+      const plan = await runs.start(projectId, story.id, "plan");
+      // The plan task starts reading; the blocker is reopened and merged again before it ends.
+      await runs.context(plan.id, plan.executor!);
+      await toStage(blocker.id, "in_progress");
+      await toStage(blocker.id, "done");
+      await succeed(runs, plan, { output: planOutput });
+      await approve(plan.id);
+      await unflag(story.id);
+      expect(await dispatcher.next(projectId)).toMatchObject({ step: "plan", ticketId: story.id });
+    });
+
     it("GivenAPlanNewerThanEveryBlockersDone_WhenNext_ThenTheBuildStartsWithThePlan", async () => {
       const { dispatcher, story, plan } = await approvedPlan(false);
       expect(await dispatcher.next(projectId)).toMatchObject({

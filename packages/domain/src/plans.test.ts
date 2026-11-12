@@ -6,6 +6,7 @@ import {
   planPrompt,
   planRequired,
   planState,
+  planReadFrom,
   planWrittenAt,
   renderPlan,
 } from "./plans";
@@ -158,5 +159,17 @@ describe("planWrittenAt", () => {
 
   it("GivenAPlanRunWithoutAnEnd_WhenRead_ThenItIsTheCreationTime", () => {
     expect(planWrittenAt(planRun({ endedAt: null }))).toBe(Date.parse("2026-11-06T10:00:00.000Z"));
+  });
+});
+
+describe("planReadFrom", () => {
+  it("GivenAStartedPlanRun_WhenRead_ThenItIsTheStartTime", () => {
+    expect(planReadFrom(planRun({ startedAt: "2026-11-06T10:05:00.000Z" }))).toBe(
+      Date.parse("2026-11-06T10:05:00.000Z"),
+    );
+  });
+
+  it("GivenAPlanRunThatNeverStarted_WhenRead_ThenItIsTheCreationTime", () => {
+    expect(planReadFrom(planRun({ startedAt: null }))).toBe(Date.parse("2026-11-06T10:00:00.000Z"));
   });
 });

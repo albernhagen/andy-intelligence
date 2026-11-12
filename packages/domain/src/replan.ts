@@ -1,5 +1,5 @@
 import type { Run, Stage, Ticket, TicketEvent, WorkTracker } from "@andy/contracts";
-import { planWrittenAt, type PlanState } from "./plans";
+import { planReadFrom, type PlanState } from "./plans";
 
 /**
  * Just-in-time re-planning (M4.6, `workflow.md` §4.4): a plan written before one of the ticket's
@@ -27,7 +27,7 @@ export function writtenPlan(plan: PlanState): Run | null {
 }
 
 /**
- * The blocker that reached Done after the plan was written (the latest one if several), or null.
+ * The blocker that reached Done after the plan run began reading the code (the latest one if several), or null.
  * `blockersDoneAt`: each `blockedBy` entry's last Done time, null when unknown. Only a
  * `writtenPlan` can be outdated.
  */
@@ -37,11 +37,11 @@ export function staleBlocker(
 ): string | null {
   const run = writtenPlan(plan);
   if (!run) return null;
-  const written = planWrittenAt(run);
+  const read = planReadFrom(run);
   let stale: { key: string; at: number } | null = null;
   for (const [key, at] of blockersDoneAt) {
     const done = at === null ? NaN : Date.parse(at);
-    if (done > written && (!stale || done > stale.at)) stale = { key, at: done };
+    if (done > read && (!stale || done > stale.at)) stale = { key, at: done };
   }
   return stale?.key ?? null;
 }
