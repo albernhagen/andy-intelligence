@@ -44,7 +44,7 @@ As built (PR events, build dispatch, plan approval): [`history/workflow-as-built
 
 ### 4.4 Epics
 - Ticket types (Epic / Feature / Chore / Bug, ADR-0058) + **child tickets** (`parent_id`).
-- Epic refinement produces stories (at most 5 per result) with `blockedBy` on sibling stories and their own `touches` (AI-87: M4.3: Refine an epic: split schema and procedure): vertical slices, independently mergeable behind flags; no long-lived epic branches. Exception: an **overnight run** (ADR-0049) merges its stories into a one-night branch `epic/<key>`, reviewed by Andy as one PR the next morning.
+- Epic refinement produces stories with sibling `blockedBy` and `touches`: vertical slices, independently mergeable behind flags; no long-lived epic branches. Exception: an **overnight run** (ADR-0049) merges its stories into a one-night branch `epic/<key>`, reviewed by Andy as one PR the next morning.
 - **Just-in-time re-planning:** when a story unblocks, a plan pass re-reads the codebase.
 - Epic status, cost and progress roll up; an epic's overrides cascade to its stories.
 
