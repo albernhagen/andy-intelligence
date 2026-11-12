@@ -162,6 +162,7 @@ describe("list_needs_me", () => {
       cards: [],
       questions: [],
       tickets: [],
+      projectPlans: [],
     });
   });
 
@@ -209,6 +210,7 @@ describe("answer_question", () => {
       cards: [],
       questions: [],
       tickets: [],
+      projectPlans: [],
     });
   });
 
@@ -273,7 +275,7 @@ describe("status", () => {
           dispatch: { runsAtOnce: 2, paused: false, lastDispatch: null },
         },
       ],
-      needsYou: { questions: 0, tickets: 0 },
+      needsYou: { questions: 0, tickets: 0, projectPlans: 0 },
     });
   });
 

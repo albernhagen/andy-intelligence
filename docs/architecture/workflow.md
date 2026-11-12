@@ -44,7 +44,7 @@ As built (PR events, build dispatch, plan approval): [`history/workflow-as-built
 
 ### 4.4 Epics
 - Ticket types (Epic / Feature / Chore / Bug, ADR-0058) + **child tickets** (`parent_id`).
-- Epic refinement produces stories with `blockedBy`: vertical slices, independently mergeable behind flags; no long-lived epic branches. Exception: an **overnight run** (ADR-0049) merges its stories into a one-night branch `epic/<key>`, one PR for Andy next morning; built in AI-122.
+- Epic refinement (built) produces stories with `blockedBy`: vertical slices, independently mergeable behind flags; no long-lived branches. Exception: an **overnight run** (ADR-0049) merges its stories into a one-night branch `epic/<key>`, one PR for Andy next morning; built in AI-122.
 - **Just-in-time re-planning** (built, M4.6): dispatch re-runs plans older than a blocker's Done.
 - Epic status, cost and progress roll up; an epic's overrides cascade to its stories.
 
