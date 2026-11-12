@@ -1,4 +1,4 @@
-import type { ConfigChange } from "../entities";
+import type { ConfigChange, Listing } from "../entities";
 import type { ReviewFinding } from "../entities/config-proposals";
 
 // ── ReviewFindingSource ──────────────────────────────────────────────────────
@@ -51,6 +51,12 @@ export interface ConfigChangeStore {
    * `dedupeKey`, or null. Proposals use it so a decided kind comes back only on new evidence.
    */
   latestDecision(dedupeKey: string): Promise<ConfigChange | null>;
+  /**
+   * The project's decided changes (accepted or rejected), in no set order: at most `max`, in one
+   * capped read (AI-137). `complete` is false when more exist, so a caller must not take a
+   * missing key as undecided.
+   */
+  listDecided(projectId: string, max: number): Promise<Listing<ConfigChange>>;
   /**
    * Pending → accepted or rejected, recording who and when; `appliedAt` stays null.
    * `conflict` when the change isn't pending, `not_found` when unknown.

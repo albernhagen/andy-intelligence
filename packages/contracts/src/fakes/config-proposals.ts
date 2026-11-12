@@ -1,4 +1,4 @@
-import { ConfigChange } from "../entities";
+import { ConfigChange, type Listing } from "../entities";
 import { ReviewFinding } from "../entities/config-proposals";
 import { WorkTrackerError } from "../ports";
 import type {
@@ -57,6 +57,13 @@ export class InMemoryConfigChangeStore implements ConfigChangeStore {
     );
     const latest = decided.sort((a, b) => (b.decidedAt ?? "").localeCompare(a.decidedAt ?? ""))[0];
     return latest ? structuredClone(latest) : null;
+  }
+
+  async listDecided(projectId: string, max: number): Promise<Listing<ConfigChange>> {
+    const decided = [...this.changes.values()].filter(
+      (c) => c.projectId === projectId && (c.status === "accepted" || c.status === "rejected"),
+    );
+    return { items: structuredClone(decided.slice(0, max)), complete: decided.length <= max };
   }
 
   async decide(

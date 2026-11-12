@@ -155,6 +155,40 @@ export function configChangeStoreContract(
       expect(await store.latestDecision("other")).toBeNull();
     });
 
+    it("GivenDecidedAndPendingChangesInTwoProjects_WhenDecidedAreListed_ThenOnlyTheProjectsDecidedComeBackComplete", async () => {
+      const store = await make();
+      const accepted = pendingConfigChange();
+      const rejected = pendingConfigChange();
+      const elsewhere = pendingConfigChange({ projectId: "other" });
+      for (const c of [accepted, rejected, elsewhere]) await store.createPending(c, 10);
+      await store.createPending(pendingConfigChange(), 10);
+      await store.decide(accepted.id, "accepted", "andy", at);
+      await store.decide(rejected.id, "rejected", "andy", at);
+      await store.decide(elsewhere.id, "accepted", "andy", at);
+
+      const listed = await store.listDecided("ai", 10);
+
+      expect(listed.complete).toBe(true);
+      expect(listed.items.map((c) => c.id).sort()).toEqual([accepted.id, rejected.id].sort());
+    });
+
+    it("GivenMoreDecidedChangesThanMax_WhenListed_ThenAtMostMaxAndIncomplete", async () => {
+      const store = await make();
+      for (let i = 0; i < 3; i++) {
+        const c = pendingConfigChange();
+        await store.createPending(c, 10);
+        await store.decide(c.id, i % 2 === 0 ? "accepted" : "rejected", "andy", at);
+      }
+
+      const listed = await store.listDecided("ai", 2);
+      const exact = await store.listDecided("ai", 3);
+
+      expect(listed.items).toHaveLength(2);
+      expect(listed.complete).toBe(false);
+      expect(exact).toMatchObject({ complete: true });
+      expect(exact.items).toHaveLength(3);
+    });
+
     it("GivenADecidedOrUnknownChange_WhenDecided_ThenConflictOrNotFound", async () => {
       const store = await make();
       const change = pendingConfigChange();

@@ -2,6 +2,7 @@ import type { Firestore } from "@google-cloud/firestore";
 import {
   ConfigChange,
   WorkTrackerError,
+  type Listing,
   type ConfigChangeDecision,
   type ConfigChangeStore,
   type CreatePendingOutcome,
@@ -84,6 +85,20 @@ export class FirestoreConfigChangeStore implements ConfigChangeStore {
     const decided = snap.docs.map((d) => d.data()).filter((c) => c.decidedAt !== null);
     decided.sort((a, b) => (b.decidedAt ?? "").localeCompare(a.decidedAt ?? ""));
     return decided[0] ?? null;
+  }
+
+  /** Two equality queries, one per decided status (no composite index); `max + 1` each shows overflow. */
+  async listDecided(projectId: string, max: number): Promise<Listing<ConfigChange>> {
+    const read = async (status: "accepted" | "rejected") =>
+      (
+        await this.changes()
+          .where("projectId", "==", projectId)
+          .where("status", "==", status)
+          .limit(max + 1)
+          .get()
+      ).docs.map((d) => d.data());
+    const decided = [...(await read("accepted")), ...(await read("rejected"))];
+    return { items: decided.slice(0, max), complete: decided.length <= max };
   }
 
   async decide(
