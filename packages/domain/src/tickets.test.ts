@@ -378,6 +378,28 @@ describe("TicketService", () => {
       expect(canceller.cancelForTicket).toHaveBeenCalledTimes(1);
     });
 
+    it.each(["agent:r1", "system"])(
+      "GivenTheActor%s_WhenAnsweringPromotingOrPickingTheWorker_ThenForbiddenAndNothingChanges",
+      async (actor) => {
+        const t = await service.create(projectId, readyStory, "andy");
+        const q = await service.ask(projectId, t.id, { text: "Which?" }, "agent:r1");
+        await rejects(service.answer(q.id, "A", "ui", actor), "forbidden");
+        await rejects(service.promoteAssumption(projectId, t.id, "a1", actor), "forbidden");
+        await rejects(service.acceptAssumption(projectId, t.id, "a1", actor), "forbidden");
+        await rejects(service.setWorker(projectId, t.id, "me", actor), "forbidden");
+        expect(await tracker.getQuestion(q.id)).toMatchObject({ status: "open" });
+        expect((await tracker.getTicket(projectId, t.id))?.overrides).toEqual({});
+      },
+    );
+
+    it("GivenTheOwnerAsAUserUid_WhenCancelling_ThenAllowedAndHistoryRecordsTheUid", async () => {
+      const t = await service.create(projectId, readyStory, "user:uid-1");
+      await service.cancel(projectId, t.id, "user:uid-1", "dup");
+      const events = await service.history(projectId, t.id);
+      expect(events.map((e) => e.actor)).toEqual(["user:uid-1", "user:uid-1"]);
+      expect(events.some((e) => e.actor === "andy")).toBe(false);
+    });
+
     it("GivenACancelledTicket_WhenCancelledAgain_ThenInvalidTransition", async () => {
       const t = await cancelled();
       await rejects(service.cancel(projectId, t.id, "andy"), "invalid_transition");

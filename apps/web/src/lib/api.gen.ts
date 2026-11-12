@@ -5100,7 +5100,7 @@ export interface paths {
             };
           };
         };
-        /** @description Only Andy decides plans */
+        /** @description Only the owner decides plans */
         403: {
           headers: {
             [name: string]: unknown;

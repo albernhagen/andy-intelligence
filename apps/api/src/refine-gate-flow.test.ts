@@ -391,6 +391,11 @@ describe("refine gate flow", () => {
       expect(released).toMatchObject({ stage: "ready", needsAttention: false, dorStatus: "met" });
       expect(released.refineAssumptions[0]).toMatchObject({ status: "accepted" });
       expect(await t.questions(second.id)).toEqual([]);
+      // The owner-only rule (AI-19) records the signed-in user, never a fixed "andy".
+      const events = await t.json<
+        { kind: string; actor: string; data: { diff?: Record<string, unknown> } }[]
+      >(t.call(`${t.path(second.id)}/events`));
+      expect(events.findLast((e) => e.data.diff?.refineAssumptions)?.actor).toMatch(/^user:/);
     });
 
     it("GivenAnAssumptionThatIsNotHeld_WhenAccepted_ThenRefused", async () => {

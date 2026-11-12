@@ -1,7 +1,7 @@
 import { createRoute, z, type OpenAPIHono } from "@hono/zod-openapi";
 import { QuotaClearResult, QuotaStatus, type QuotaStore } from "@andy/contracts";
 import { quotaStatus, type QuotaClearer } from "@andy/domain";
-import type { AuthEnv } from "./auth";
+import { signedIn, type AuthEnv } from "./auth";
 
 const ErrorBody = z.object({ error: z.string(), details: z.array(z.string()).optional() });
 
@@ -50,6 +50,6 @@ export function registerQuotaRoutes(
 
   // A refusal is a DomainError `not_clearable`, mapped to 409 by the app's error handler.
   app.openapi(clearRoute, async (c) =>
-    c.json(await clearer.clearIdle(c.get("identity").email), 200),
+    c.json(await clearer.clearIdle(signedIn(c.get("identity"))), 200),
   );
 }

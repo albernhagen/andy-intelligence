@@ -1,9 +1,9 @@
 import { createRoute, z, type OpenAPIHono } from "@hono/zod-openapi";
 import { SetWorker, WorkerView } from "@andy/contracts";
 import type { TicketService } from "@andy/domain";
-import type { AuthEnv } from "./auth";
+import { actorOf, type AuthEnv } from "./auth";
 
-/** Who does a ticket's work (ADR-0082). Every caller here is Andy (allow-list), so actor = "andy". */
+/** Who does a ticket's work (ADR-0082). Every caller here is Andy (allow-list), so actor = actorOf(c.get("identity")). */
 
 const ErrorBody = z.object({ error: z.string(), details: z.array(z.string()).optional() });
 const json = <S extends z.ZodType>(schema: S, description: string) => ({
@@ -49,6 +49,9 @@ export function registerWorkerRoutes(app: OpenAPIHono<AuthEnv>, service: TicketS
   app.openapi(putWorker, async (c) => {
     const { projectId, ticketId } = c.req.valid("param");
     const { worker } = c.req.valid("json");
-    return c.json(await service.setWorker(projectId, ticketId, worker, "andy"), 200);
+    return c.json(
+      await service.setWorker(projectId, ticketId, worker, actorOf(c.get("identity"))),
+      200,
+    );
   });
 }

@@ -17,7 +17,7 @@ import {
   type RunService,
 } from "@andy/domain";
 import { bodyLimit } from "hono/body-limit";
-import type { AuthEnv } from "./auth";
+import { actorOf, signedIn, type AuthEnv } from "./auth";
 import { FixedWindowLimiter } from "./mcp/rate-limit";
 import type { ActionsTokenVerifier } from "./github/token";
 
@@ -88,7 +88,7 @@ const routes = {
     responses: {
       200: ok(PlanDecisionResult, "Decided; on approval, the build started if it could"),
       400: ok(ErrorBody, "Invalid request"),
-      403: ok(ErrorBody, "Only Andy decides plans"),
+      403: ok(ErrorBody, "Only the owner decides plans"),
       404: ok(ErrorBody, "Not found"),
       409: ok(ErrorBody, "Not the latest plan, already decided, stale, or no reason"),
     },
@@ -103,17 +103,21 @@ export function registerRunRoutes(app: OpenAPIHono<AuthEnv>, runs: RunService): 
 
   app.openapi(routes.startRun, async (c) => {
     const { projectId, ticketId } = c.req.valid("param");
-    return c.json(await runs.start(projectId, ticketId, c.req.valid("json").step), 201);
+    const { step } = c.req.valid("json");
+    return c.json(await runs.request(projectId, ticketId, step, actorOf(c.get("identity"))), 201);
   });
 
-  // Owner-only (ADR-0050): every /api caller is the signed-in, allow-listed user, so the actor is
-  // "andy" and the decision records the email; RunService refuses any other actor.
+  // Owner-only (ADR-0050, AI-19): the actor is the signed-in user and the decision records the
+  // email; RunService refuses any actor the policy doesn't allow.
   app.openapi(routes.decidePlan, async (c) => {
     const { projectId, ticketId, runId } = c.req.valid("param");
-    const result = await runs.decidePlan(projectId, ticketId, runId, c.req.valid("json"), {
-      actor: "andy",
-      email: c.get("identity").email,
-    });
+    const result = await runs.decidePlan(
+      projectId,
+      ticketId,
+      runId,
+      c.req.valid("json"),
+      signedIn(c.get("identity")),
+    );
     return c.json(result, 200);
   });
 }

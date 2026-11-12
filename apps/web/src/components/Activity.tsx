@@ -1,5 +1,6 @@
 import { useState } from "react";
 import type { Run, TicketEvent } from "@andy/contracts";
+import { actorLabel } from "@andy/domain";
 import { Markdown } from "@/components/Markdown";
 import { RunItem, StartRuns, latestPlanId } from "@/components/Runs";
 import { useUnsavedDraft } from "@/components/InlineEdit";
@@ -74,7 +75,7 @@ function EventItem({ event: e }: { event: TicketEvent }) {
   return (
     <li className="space-y-1 border-l-2 border-border pl-3 text-sm">
       <p>
-        <span className="font-medium">{e.actor}</span> {describeEvent(e)}{" "}
+        <span className="font-medium">{actorLabel(e.actor)}</span> {describeEvent(e)}{" "}
         <time dateTime={e.createdAt} className="text-xs text-muted-foreground">
           {new Date(e.createdAt).toLocaleString()}
         </time>
