@@ -183,6 +183,33 @@ describe("dashboardFigures (AI-102)", () => {
     expect(figures.weeks[1]!.leadTimeHours).toEqual({ median: 2, p90: 2, count: 1 });
   });
 
+  it("GivenAReopenedTicket_WhenItIsDoneAgain_ThenEachCompletionIsMeasuredFromItsOwnStart", () => {
+    const figures = dashboardFigures(
+      WINDOW,
+      data({
+        tickets: [ticket(1, { stage: "done", updatedAt: WEEK2 })],
+        ticketEvents: new Map([
+          [
+            "t1",
+            [
+              move("t1", "backlog", "ready", "2026-11-03T08:00:00.000Z"),
+              move("t1", "ready", "done", "2026-11-03T12:00:00.000Z"),
+              move("t1", "done", "backlog", "2026-11-04T00:00:00.000Z"),
+              move("t1", "backlog", "ready", "2026-11-10T09:00:00.000Z"),
+              move("t1", "ready", "in_progress", "2026-11-10T10:00:00.000Z"),
+              move("t1", "in_progress", "done", WEEK2),
+            ],
+          ],
+        ]),
+      }),
+    );
+
+    expect(figures.weeks.map((w) => w.leadTimeHours)).toEqual([
+      { median: 4, p90: 4, count: 1 },
+      { median: 3, p90: 3, count: 1 },
+    ]);
+  });
+
   it("GivenAMoveBackFromReview_WhenFiguresAreBuilt_ThenItCountsAsReworkInItsWeek", () => {
     const figures = dashboardFigures(
       WINDOW,

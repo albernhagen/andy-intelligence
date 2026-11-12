@@ -52,7 +52,8 @@ export const DashboardWeek = z.object({
   ticketsByStage: z.record(Stage, z.number().int().nonnegative()),
   /**
    * Hours from a ticket's first move into Ready (or In progress, if it skipped Ready) to its move
-   * into Done, for moves into Done this week; nearest-rank percentiles, null with no samples.
+   * into Done, for moves into Done this week; a re-opened ticket's next completion is measured
+   * from its first such move after the reopen. Nearest-rank percentiles, null with no samples.
    */
   leadTimeHours: z.object({
     median: z.number().nonnegative().nullable(),

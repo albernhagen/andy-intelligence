@@ -193,13 +193,16 @@ export function dashboardFigures(
 }
 
 /**
- * Hours from the ticket's first move into Ready (or In progress, if it never entered Ready
- * first) to `done`; null when it never entered either before it.
+ * Hours from the ticket's first move into Ready (or In progress, if it skipped Ready) since its
+ * previous move into Done, to `done`; null when it entered neither in between. A re-opened
+ * ticket so counts once per completion, each measured from its own start.
  */
 function leadTimeHours(moves: readonly TicketEvent[], done: TicketEvent): number | null {
-  const before = moves.filter((e) => e.createdAt <= done.createdAt);
+  const at = moves.indexOf(done);
+  const previousDone = moves.slice(0, at).findLastIndex((e) => e.data.to === "done");
+  const cycle = moves.slice(previousDone + 1, at);
   const started =
-    before.find((e) => e.data.to === "ready") ?? before.find((e) => e.data.to === "in_progress");
+    cycle.find((e) => e.data.to === "ready") ?? cycle.find((e) => e.data.to === "in_progress");
   if (!started) return null;
   return round((Date.parse(done.createdAt) - Date.parse(started.createdAt)) / HOUR_MS, 1);
 }
