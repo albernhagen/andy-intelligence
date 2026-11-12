@@ -28,6 +28,7 @@ import { z } from "zod";
 import { registerDispatchTools } from "./tools-dispatch";
 import { registerInFlightTools } from "./tools-inflight";
 import { registerWorkerTools } from "./tools-worker";
+import { registerExecutorTools } from "./tools-executor";
 import { listNeedsMe, registerTicketTools, statusLineOf } from "./tools-tickets";
 import { registerScoreTools, withStartScore } from "./tools-scores";
 import { registerSettingsTools } from "./tools-settings";
@@ -171,6 +172,7 @@ export function registerTools(server: McpServer, deps: ToolDeps): void {
   registerDispatchTools(server, deps, run);
   registerInFlightTools(server, deps, run);
   registerWorkerTools(server, deps, run);
+  registerExecutorTools(server, deps, run);
   registerTicketTools(server, deps);
   registerDigestTools(server, deps, run);
   registerQuotaTools(server, deps, run);

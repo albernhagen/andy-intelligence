@@ -8,6 +8,7 @@ import {
   Id,
   Project,
   Worker,
+  ExecutorKind,
   ProviderKey,
   Question,
   questionFormatFields,
@@ -208,6 +209,7 @@ export const ProjectPatch = z.strictObject({
   ...projectDispatchPatch,
   ...projectNotifyPatch,
   defaultWorker: Worker.optional(),
+  executor: ExecutorKind.optional(),
 });
 export type ProjectPatch = z.infer<typeof ProjectPatch>;
 
@@ -222,6 +224,7 @@ export const ProjectSettings = ProjectPatch.pick({
   runsAtOnce: true,
   paused: true,
   defaultWorker: true,
+  executor: true,
   emailNotifications: true,
 });
 export type ProjectSettings = z.infer<typeof ProjectSettings>;

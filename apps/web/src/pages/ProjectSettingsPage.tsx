@@ -6,6 +6,7 @@ import { DispatchControls } from "@/components/DispatchControls";
 import { EmailNotificationsControl } from "@/components/EmailControls";
 import { Loading, QueryError } from "@/components/Status";
 import { DefaultWorkerSelect } from "@/components/WorkerControls";
+import { DefaultExecutorSelect } from "@/components/ExecutorControls";
 import { useProjects, useUpdateProject } from "@/lib/queries";
 import { showsError } from "@/lib/live";
 
@@ -56,6 +57,9 @@ export function ProjectSettingsPage() {
         </Setting>
         <Setting what="Who works a ticket that has no pick of its own; applies to existing tickets too.">
           <DefaultWorkerSelect project={project} />
+        </Setting>
+        <Setting what="Where tickets without their own pick run: GitHub Actions, or your local runner while it is present (else Actions).">
+          <DefaultExecutorSelect project={project} />
         </Setting>
         <Setting what="Email you when a ticket here starts to need you: items within 10 minutes share one email, at most 20 a day.">
           <EmailNotificationsControl project={project} />

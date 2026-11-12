@@ -53,6 +53,7 @@ describe("project settings page", () => {
       runsAtOnce: 3,
       paused: true,
       defaultWorker: "ask",
+      executor: "local",
       lastDispatch: { decision: "paused", at: "2026-11-09T12:00:00.000Z" },
     });
     await h.queryClient.invalidateQueries();
@@ -72,9 +73,10 @@ describe("project settings page", () => {
     expect(value("Runs at once")).toBe("3");
     expect(checkbox("Paused")).toBe(true);
     expect(value("Default worker")).toBe("ask");
+    expect(value("Default executor")).toBe("local");
     expect(within(list).getByText("Dispatch: paused by you")).toBeTruthy();
     // One row per setting group, each with its line on what it does.
-    expect(within(list).getAllByRole("listitem")).toHaveLength(9);
+    expect(within(list).getAllByRole("listitem")).toHaveLength(10);
     expect(within(list).getByText(/never over MCP/)).toBeTruthy();
   });
 

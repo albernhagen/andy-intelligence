@@ -35,6 +35,7 @@ export function buildProject(input: NewProject): Project {
     planApproval: "none",
     dailyQuestionCap: 5,
     defaultWorker: "agent",
+    executor: "actions",
     autoMerge: "s-and-m",
     runsAtOnce: RUNS_AT_ONCE_DEFAULT,
     paused: false,
