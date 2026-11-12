@@ -45,6 +45,7 @@ import {
   type WorkflowRun,
   projectDispatchPatch,
   projectNotifyPatch,
+  projectPlanPatch,
 } from "../entities";
 
 /**
@@ -208,6 +209,7 @@ export const ProjectPatch = z.strictObject({
   autoMerge: AutoMerge.optional(),
   ...projectDispatchPatch,
   ...projectNotifyPatch,
+  ...projectPlanPatch,
   defaultWorker: Worker.optional(),
   executor: ExecutorKind.optional(),
 });
