@@ -73,3 +73,10 @@ test("story panel with a question", async ({ page }) => {
   await page.getByRole("region", { name: "Questions" }).scrollIntoViewIfNeeded();
   await expect(page).toHaveScreenshot("story-panel-question.png");
 });
+
+test("board grouped by epic", async ({ page }) => {
+  await open(page, "/p/ops", "Monthly restore drill");
+  await page.getByRole("checkbox", { name: "Group by epic" }).check();
+  await expect(page.getByText("1 of 3 done").first()).toBeVisible();
+  await expect(page).toHaveScreenshot("board-grouped.png", { fullPage: true });
+});
