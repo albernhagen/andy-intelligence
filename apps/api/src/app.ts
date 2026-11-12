@@ -24,6 +24,7 @@ import {
   DigestReader,
   QuotaClearer,
   BriefService,
+  IdeateService,
   TicketService,
   EmailNotifications,
   notifyOnNeedsYou,
@@ -41,6 +42,7 @@ import { registerInFlightRoutes } from "./in-flight";
 import { registerDigestRoutes } from "./digest";
 import { registerNotifyFlush, registerNotifyRoutes } from "./notify";
 import { registerBriefRoutes } from "./brief";
+import { registerIdeateRoutes } from "./ideate";
 import {
   ConnectedCodeHost,
   GitHubConnection,
@@ -391,6 +393,13 @@ export function createApp(input: AppDeps) {
     now,
   );
   registerBriefRoutes(app, brief);
+  const ideate = new IdeateService(
+    deps.tracker,
+    service,
+    connection ? new ConnectedCodeHost(connection) : null,
+    now,
+  );
+  registerIdeateRoutes(app, ideate);
 
   if (github && connection) {
     registerGitHubSetup(app, {
@@ -415,6 +424,7 @@ export function createApp(input: AppDeps) {
       notifyEmail: email,
       quota: quotaClearer,
       brief,
+      ideate,
     });
   }
 
