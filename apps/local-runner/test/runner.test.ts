@@ -1,13 +1,16 @@
-import { existsSync, readFileSync } from "node:fs";
+import { execFileSync } from "node:child_process";
+import { chmodSync, existsSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { ControlPlane } from "../src/api";
 import { RepoCache } from "../src/git";
 import { runLoop, type KeepAwake } from "../src/runner";
 import { noConfinement, seatbelt, type Confinement } from "../src/seatbelt";
-import { SECRET, startFakeServer, type FakeServer, type FakeTask } from "./fake-server";
+import { PUSH_TOKEN, SECRET, startFakeServer, type FakeServer, type FakeTask } from "./fake-server";
 import {
   PLATFORM_REPO,
+  PROJECT_REPO,
   WORKSPACE,
   makeEnv,
   memoryLogger,
@@ -43,9 +46,12 @@ function loop(
     idleMs?: number;
     signal?: AbortSignal;
     confinement?: Confinement;
+    githubApi?: string;
+    projectFiles?: Record<string, string>;
+    pnpm?: string;
   } = {},
 ) {
-  env = makeEnv(options.stub);
+  env = makeEnv(options.stub, options.projectFiles);
   server.queue.push(...(options.tasks ?? []));
   const log = memoryLogger();
   const awake: boolean[] = [];
@@ -60,6 +66,10 @@ function loop(
       home: env.home,
       claudeCommand: env.claude,
       platformRepo: PLATFORM_REPO,
+      origin: server.origin,
+      gitBase: env.gitBase,
+      githubApi: options.githubApi ?? "http://127.0.0.1:9",
+      ...(options.pnpm ? { pnpmCommand: options.pnpm } : {}),
       confinement: options.confinement ?? CONFINEMENT,
     },
     keepAwake,
@@ -73,7 +83,9 @@ function loop(
 /** Answers `answer` from the n-th heartbeat in the agent phase on, once the stub has started. */
 function afterAgentBeats(n: number, answer: "cancel" | 409) {
   let beats = 0;
-  return (phase: string | undefined) => (phase === "agent" && ++beats >= n ? answer : "ok");
+  // Beats count only once the stub has recorded its call: under load it can start late.
+  return (phase: string | undefined) =>
+    phase === "agent" && env.calls().length > 0 && ++beats >= n ? answer : "ok";
 }
 
 const agentCalls = () => env.calls();
@@ -188,16 +200,196 @@ describe("local-runner start", () => {
     expect(existsSync(join(workDir(t.claim.runId), "project", "README.md"))).toBe(true);
   });
 
-  it("GivenABuildClaim_WhenClaimed_ThenItIsRefusedWithAFailedReportAndNoAgent", async () => {
-    const t = task("build");
+  it("GivenASyncClaim_WhenClaimed_ThenItIsRefusedWithAFailedReportAndNoAgent", async () => {
+    const t = task("sync");
     const { done } = loop({ tasks: [t] });
     expect(await done).toBe("idle");
 
     expect(env.calls()).toEqual([]);
     expect(server.contexts).toEqual([]);
     expect(server.reports[0]!.body.status).toBe("failed");
-    expect(server.reports[0]!.body.summary).toContain("slice 6");
+    expect(server.reports[0]!.body.summary).toContain("stay on GitHub Actions");
     expect(existsSync(workDir(t.claim.runId))).toBe(false);
+  });
+
+  describe("build (AI-133)", () => {
+    const remoteBranch = (runId: string) => {
+      const remote = join(env.root, "remotes", `${PROJECT_REPO}.git`);
+      try {
+        return execFileSync("git", ["rev-parse", "--verify", `refs/heads/agent/AI-7/${runId}`], {
+          cwd: remote,
+          encoding: "utf8",
+          stdio: ["ignore", "pipe", "pipe"],
+          // Not the caller's environment: a git hook running the tests sets GIT_DIR.
+          env: { PATH: process.env.PATH, GIT_CONFIG_NOSYSTEM: "1", GIT_CONFIG_GLOBAL: "/dev/null" },
+        }).trim();
+      } catch {
+        return null;
+      }
+    };
+
+    it("GivenABuildThatChangesAFile_WhenItFinishes_ThenTheRunBranchIsPushedAndThePrOpensAsTheBotAfterOnePushToken", async () => {
+      const t = task("build");
+      const { done, log } = loop({
+        tasks: [t],
+        stub: { edit: { "src/board.ts": "export const board = 1;\n" } },
+        githubApi: server.origin,
+      });
+      expect(await done).toBe("idle");
+
+      const runId = t.claim.runId;
+      expect(server.refused).toEqual([]);
+      expect(server.pushTokens).toEqual([{ runId, granted: true }]);
+      expect(remoteBranch(runId)).toMatch(/^[0-9a-f]{40}$/);
+      expect(server.pulls).toHaveLength(1);
+      expect(server.pulls[0]).toMatchObject({
+        repo: PROJECT_REPO,
+        auth: `Bearer ${PUSH_TOKEN}`,
+        body: { head: `agent/AI-7/${runId}`, base: "main", title: "AI-7: Show the board" },
+      });
+      expect(server.reports[0]!.body).toMatchObject({
+        status: "succeeded",
+        branch: `agent/AI-7/${runId}`,
+        pullRequest: `https://github.com/${PROJECT_REPO}/pull/1`,
+        toolingFiles: [],
+      });
+      // First the Bash check (Haiku, fixed prompt), then the agent.
+      expect(agentCalls()).toHaveLength(2);
+      const [check, agent] = agentCalls();
+      expect(check!.args[check!.args.indexOf("--model") + 1]).toBe("haiku");
+      expect(check!.stdin).not.toContain("Show the board");
+      // A build's tools come from the profile, as on Actions: no read-only flags.
+      expect(agent!.args).not.toContain("--allowedTools");
+      expect(agent!.envNames).not.toContain("GITHUB_TOKEN");
+      expect(agent!.envNames).not.toContain("SANDBOX_CHECK_NONCE");
+      expect(
+        existsSync(join(env.root, "home", "work", runId, "project", ".executor-sandbox-check")),
+      ).toBe(false);
+      const lines = JSON.stringify(log.lines);
+      expect(lines).not.toContain(PUSH_TOKEN);
+      expect(lines).not.toContain(t.claim.token);
+      expect(existsSync(workDir(runId))).toBe(false);
+    });
+
+    it("GivenABuildThatChangesAProtectedPath_WhenItFinishes_ThenNothingIsPushedAndTheRunFails", async () => {
+      const t = task("build");
+      const { done } = loop({
+        tasks: [t],
+        stub: { edit: { "docs/plan.md": "# Plan\n" } },
+        githubApi: server.origin,
+      });
+      expect(await done).toBe("idle");
+
+      expect(remoteBranch(t.claim.runId)).toBeNull();
+      expect(server.pulls).toEqual([]);
+      expect(server.reports[0]!.body.status).toBe("failed");
+      expect(server.reports[0]!.body.summary).toContain("docs/plan.md: protected");
+    });
+
+    it("GivenAPushTokenThatIsRefused_WhenTheBuildFinishes_ThenNothingIsPushedAndTheRunFails", async () => {
+      server.refusePushToken = true;
+      const t = task("build");
+      const { done } = loop({
+        tasks: [t],
+        stub: { edit: { "src/board.ts": "x\n" } },
+        githubApi: server.origin,
+      });
+      expect(await done).toBe("idle");
+
+      expect(server.pushTokens).toEqual([{ runId: t.claim.runId, granted: false }]);
+      expect(remoteBranch(t.claim.runId)).toBeNull();
+      expect(server.reports[0]!.body.status).toBe("failed");
+      expect(server.reports[0]!.body.summary).toContain("push token was refused");
+    });
+
+    it("GivenABuildThatChangesNothing_WhenItFinishes_ThenNoPushTokenIsAskedFor", async () => {
+      const t = task("build");
+      const { done } = loop({ tasks: [t], githubApi: server.origin });
+      expect(await done).toBe("idle");
+
+      expect(server.pushTokens).toEqual([]);
+      expect(server.reports[0]!.body).toMatchObject({ status: "succeeded" });
+      expect(server.reports[0]!.body.branch ?? null).toBeNull();
+    });
+
+    for (const mode of ["refuse", "open", "offline"] as const) {
+      it(`GivenABashCheckThatSees${{ refuse: "BashRefused", open: "OpenNetwork", offline: "NoNetwork" }[mode]}_WhenABuildIsClaimed_ThenTheAgentDoesNotRunAndTheTaskFails`, async () => {
+        const t = task("build");
+        const { done } = loop({
+          tasks: [t],
+          stub: { sandboxCheck: mode, edit: { "src/board.ts": "x\n" } },
+          githubApi: server.origin,
+        });
+        expect(await done).toBe("idle");
+
+        expect(agentCalls()).toHaveLength(1);
+        expect(server.pushTokens).toEqual([]);
+        expect(server.reports[0]!.body.status).toBe("failed");
+        expect(server.reports[0]!.body.summary).toContain("Bash sandbox check failed");
+        expect(server.reports[0]!.body.summary).toContain(
+          {
+            refuse: "didn't run in Bash",
+            open: "off the registry allowlist",
+            offline: "couldn't reach the package registry",
+          }[mode],
+        );
+      });
+    }
+
+    /** A `pnpm` stand-in: exits `code` after `seconds`. */
+    const stubPnpm = (code: number, seconds = 0) => {
+      const dir = mkdtempSync(join(tmpdir(), "lr-pnpm-"));
+      const script = join(dir, "pnpm");
+      writeFileSync(
+        script,
+        `#!/bin/sh\nsleep ${seconds}\necho 'install failed' >&2\nexit ${code}\n`,
+      );
+      chmodSync(script, 0o755);
+      return script;
+    };
+    const lockfile = { "pnpm-lock.yaml": "lockfileVersion: '9.0'\n" };
+
+    it("GivenAnInstallThatFails_WhenABuildIsClaimed_ThenTheAgentDoesNotRunAndTheTaskFails", async () => {
+      const t = task("build");
+      const { done } = loop({
+        tasks: [t],
+        projectFiles: lockfile,
+        pnpm: stubPnpm(1),
+        githubApi: server.origin,
+      });
+      expect(await done).toBe("idle");
+
+      expect(agentCalls()).toEqual([]);
+      expect(server.reports[0]!.body.status).toBe("failed");
+      expect(server.reports[0]!.body.summary).toContain("Installing dependencies failed");
+    });
+
+    it("GivenACancelDuringTheInstall_WhenTheHeartbeatSaysSo_ThenTheTaskIsCancelledNotFailed", async () => {
+      const t = task("build");
+      let beats = 0;
+      const { done } = loop({
+        tasks: [
+          { ...t, heartbeat: (phase) => (phase === "starting" && ++beats >= 30 ? "cancel" : "ok") },
+        ],
+        projectFiles: lockfile,
+        pnpm: stubPnpm(0, 5),
+        githubApi: server.origin,
+      });
+      expect(await done).toBe("idle");
+
+      expect(agentCalls()).toEqual([]);
+      expect(server.reports.map((r) => r.body.status)).toEqual(["cancelled"]);
+    });
+
+    it("GivenABuildContextWithoutTheRunsBranch_WhenClaimed_ThenTheAgentDoesNotRun", async () => {
+      const t = task("build");
+      t.context.branch = "agent/AI-7/someone-else";
+      const { done } = loop({ tasks: [t], githubApi: server.origin });
+      expect(await done).toBe("idle");
+
+      expect(env.calls()).toEqual([]);
+      expect(server.reports[0]!.body.status).toBe("failed");
+    });
   });
 
   it("GivenASandboxCheckThatFails_WhenClaimed_ThenTheAgentDoesNotRunAndTheTaskFails", async () => {

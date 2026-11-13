@@ -7,6 +7,7 @@ import {
 import { LEASE_LOST_ERROR } from "@andy/domain";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { PUBLIC_URL, REPO, createdApp, githubApp } from "./github/test-app";
+import { TOKEN_PATH } from "./github/token";
 import { RUNNER_CLAIM_PATH } from "./runners";
 import { RUN_TOKEN_LOOKUPS_PER_MINUTE } from "./runs";
 
@@ -277,6 +278,49 @@ describe("local executor: claim, lease and routing", () => {
 
     expect(statuses[0]).toBe(401);
     expect(statuses.at(-1)).toBe(429);
+  });
+
+  describe("push token for a local build (AI-133)", () => {
+    const tokenFor = (s: Ctx, runToken: string, runId: string) =>
+      s.send(TOKEN_PATH, "POST", { runId }, runToken);
+
+    it("GivenARunningLocalBuild_WhenItsRunnerAsksTwice_ThenTheFirstGetsATokenForTheRepoAndTheSecondIsRefused", async () => {
+      const s = await setup();
+      await s.readyTicket("Board", "local");
+      const { secret } = await s.mint();
+      const claimed = (await s.claim(secret))!;
+      expect(
+        (await s.send(`/runs/${claimed.runId}/context`, "GET", undefined, claimed.token)).status,
+      ).toBe(200);
+
+      const first = await tokenFor(s, claimed.token, claimed.runId);
+      expect(first.status).toBe(200);
+      expect(await first.json()).toMatchObject({ token: `fake-token-${REPO}` });
+      const second = await tokenFor(s, claimed.token, claimed.runId);
+      expect(second.status).toBe(403);
+      expect(await second.json()).toEqual({
+        error: `run ${claimed.runId} already got its push token`,
+      });
+    });
+
+    it("GivenAQueuedLocalBuild_WhenItsRunnerAsksBeforeTheContext_ThenRefused", async () => {
+      const s = await setup();
+      await s.readyTicket("Board", "local");
+      const { secret } = await s.mint();
+      const claimed = (await s.claim(secret))!;
+      expect((await tokenFor(s, claimed.token, claimed.runId)).status).toBe(403);
+    });
+
+    it("GivenAPerRunTokenForAnotherRunOrARevokedRunner_WhenItAsks_Then401", async () => {
+      const s = await setup();
+      await s.readyTicket("Board", "local");
+      const { secret, runner } = await s.mint();
+      const claimed = (await s.claim(secret))!;
+      await s.send(`/runs/${claimed.runId}/context`, "GET", undefined, claimed.token);
+      expect((await tokenFor(s, claimed.token, "another-run")).status).toBe(401);
+      await s.send(`/api/runners/${runner.id}/revoke`, "POST");
+      expect((await tokenFor(s, claimed.token, claimed.runId)).status).toBe(401);
+    });
   });
 
   it("GivenARevokedRunner_WhenItsRunCallsBack_Then401", async () => {

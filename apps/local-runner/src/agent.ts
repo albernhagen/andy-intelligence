@@ -15,9 +15,11 @@ export interface AgentArgsInput {
   settingsPath: string;
   /** Compact JSON schema for structured output, or null. */
   schema: string | null;
-  /** The tools the agent may use (`--allowedTools`) and must not (`--disallowedTools`). */
-  allowedTools: string;
-  disallowedTools: string;
+  /**
+   * Read-only steps: the tools the agent may use (`--allowedTools`) and must not
+   * (`--disallowedTools`). A build passes none: the profile's rules decide, as on Actions.
+   */
+  tools?: { allowed: string; disallowed: string };
 }
 
 /**
@@ -46,10 +48,9 @@ export function agentArgs(input: AgentArgsInput): string[] {
     "--no-session-persistence",
     "--permission-mode",
     "default",
-    "--allowedTools",
-    input.allowedTools,
-    "--disallowedTools",
-    input.disallowedTools,
+    ...(input.tools
+      ? ["--allowedTools", input.tools.allowed, "--disallowedTools", input.tools.disallowed]
+      : []),
     ...(input.schema === null ? [] : ["--json-schema", input.schema]),
   ];
 }

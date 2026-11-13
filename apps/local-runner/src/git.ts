@@ -11,7 +11,11 @@ const run = promisify(execFile);
  * git with no system or global config, no hooks, no fsmonitor and no prompts: a repository's
  * content can't make the runner's own git run code (as in the Actions executor's git steps).
  */
-export async function git(args: string[], cwd?: string): Promise<string> {
+export async function git(
+  args: string[],
+  cwd?: string,
+  extraEnv: Record<string, string> = {},
+): Promise<string> {
   const { stdout } = await run(
     "git",
     ["-c", "core.hooksPath=/dev/null", "-c", "core.fsmonitor=false", ...args],
@@ -23,6 +27,7 @@ export async function git(args: string[], cwd?: string): Promise<string> {
         GIT_CONFIG_NOSYSTEM: "1",
         GIT_CONFIG_GLOBAL: "/dev/null",
         GIT_TERMINAL_PROMPT: "0",
+        ...extraEnv,
       },
       maxBuffer: 16 * 1024 * 1024,
     },
@@ -52,6 +57,18 @@ export class RepoCache {
     private readonly home: string,
     private readonly gitBase: string,
   ) {}
+
+  /** The bare clone of `repo` (worktrees' git directories live under it). */
+  path(repo: string): string {
+    return this.dir(repo);
+  }
+
+  /** The default branch's name (the bare clone's HEAD), e.g. "main". */
+  async defaultBranch(repo: string): Promise<string> {
+    const name = await git(["symbolic-ref", "--short", "HEAD"], this.dir(repo));
+    if (!/^[A-Za-z0-9._/-]{1,100}$/.test(name)) throw new Error("unexpected default branch name");
+    return name;
+  }
 
   private dir(repo: string): string {
     return join(this.home, "repos", `${checkRepo(repo).replace("/", "__")}.git`);
@@ -90,4 +107,9 @@ export class RepoCache {
 /** The worktree's uncommitted changes, one path per line ("" when clean). */
 export function status(path: string): Promise<string> {
   return git(["status", "--porcelain", "--untracked-files=all"], path);
+}
+
+/** A worktree's own git directory, read before the agent runs (the agent can rewrite `.git`). */
+export function gitDirOf(path: string): Promise<string> {
+  return git(["rev-parse", "--absolute-git-dir"], path);
 }

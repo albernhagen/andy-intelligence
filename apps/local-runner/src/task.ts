@@ -1,12 +1,16 @@
-import { mkdir, rm, writeFile } from "node:fs/promises";
+import { chmod, lstat, mkdir, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import type { ClaimedRun, RunPhase, RunReportRequest } from "@andy/contracts";
 import { READ_ONLY_ALLOWED, READ_ONLY_DENIED, agentArgs, agentEnv, spawnAgent } from "./agent";
 import type { ControlPlane } from "./api";
+import { checkBash } from "./bash-check";
+import { collectChange } from "./change";
 import { LOCAL_LIMITS, LOCAL_STEPS } from "./config";
-import type { RepoCache } from "./git";
+import { gitDirOf, type RepoCache } from "./git";
+import { installDependencies } from "./install";
 import { errorText, type Logger } from "./log";
 import { loadPlatform } from "./platform";
+import { publishChange } from "./publish";
 import { seatbeltProfile, type Confinement } from "./seatbelt";
 
 /**
@@ -17,7 +21,12 @@ import { seatbeltProfile, type Confinement } from "./seatbelt";
  * - Heartbeat `cancel: true`: stop the agent, report `cancelled`, remove the work directory.
  * - Heartbeat 409 (or a dead token): the task ended on the control plane (lease lost, deadline,
  *   revoke); stop the agent, report nothing, keep the work directory for inspection.
- * - Build and sync are refused with a failed report (slice 6: local build and publish).
+ * - Build (slice 6): the checkout is writable, dependencies are installed first (scripts off),
+ *   the profile decides the tools; afterwards the change is collected, the run's one push token
+ *   is fetched and the platform's own publish script pushes `agent/<KEY>/<runId>` and opens the
+ *   PR (`publish.ts`). The token lives only in this function's memory until the publish child
+ *   has it on stdin; it is never logged, stored or reported.
+ * - Sync is refused with a failed report: it stays on GitHub Actions (ADR-0094).
  */
 
 export type TaskOutcome =
@@ -37,6 +46,13 @@ export interface TaskDeps {
   home: string;
   claudeCommand: string;
   platformRepo: string;
+  /** The control plane's origin: the ticket link on a build's PR. */
+  origin: string;
+  /** Where a build pushes and opens its PR (tests: local fakes). */
+  gitBase: string;
+  githubApi: string;
+  /** The pnpm command for a build's install; tests pass a stub. */
+  pnpmCommand?: string;
   /** How often to heartbeat (the claim's heartbeatSeconds, in ms). */
   heartbeatMs: number;
   log: Logger;
@@ -46,6 +62,24 @@ export interface TaskDeps {
 }
 
 class Stopped extends Error {}
+
+/** The build profile's writable scratch directory (its sandbox `allowWrite`), as on Actions. */
+const AGENT_TMP = "/tmp/agent";
+
+/**
+ * `/tmp/agent` must be this user's own real directory (not a symlink, not another user's, mode
+ * 0700) before a task's subdirectory is made in it: another user could pre-create it.
+ */
+async function ownScratch(dir: string): Promise<void> {
+  await mkdir(AGENT_TMP, { recursive: true, mode: 0o700 });
+  const info = await lstat(AGENT_TMP);
+  if (!info.isDirectory() || info.isSymbolicLink() || info.uid !== process.getuid?.()) {
+    throw new Error(`${AGENT_TMP} isn't this user's own directory`);
+  }
+  if ((info.mode & 0o077) !== 0) await chmod(AGENT_TMP, 0o700);
+  await rm(dir, { recursive: true, force: true });
+  await mkdir(dir, { mode: 0o700 });
+}
 
 const emptyReport = (status: RunReportRequest["status"], summary: string): RunReportRequest => ({
   status,
@@ -65,6 +99,10 @@ export async function runTask(
   const runDir = join(deps.home, "work", claimed.runId);
   const projectDir = join(runDir, "project");
   const platformDir = join(runDir, "platform");
+  const publishDir = join(runDir, "publish");
+  const build = claimed.step === "build";
+  // The build profile's scratch (`/tmp/agent`), one subdirectory per task (ADR-0102).
+  const scratchDir = join(AGENT_TMP, claimed.runId);
   const worktrees: { repo: string; path: string }[] = [];
   const stop = new AbortController();
   let why: "cancel" | "ended" | "shutdown" | null = null;
@@ -112,6 +150,7 @@ export async function runTask(
   const removeWork = async () => {
     for (const w of worktrees) await deps.repos.removeWorktree(w.repo, w.path);
     await rm(runDir, { recursive: true, force: true });
+    if (build) await rm(scratchDir, { recursive: true, force: true });
   };
 
   const report = async (body: RunReportRequest): Promise<TaskOutcome> => {
@@ -147,7 +186,7 @@ export async function runTask(
       await report(
         emptyReport(
           "failed",
-          `The local runner can't run ${claimed.step} agent tasks yet (local build and publish is ADR-0089 slice 6), so nothing ran. Set this ticket's executor to actions to run it on GitHub Actions.`,
+          `The local runner doesn't run ${claimed.step} agent tasks (they stay on GitHub Actions), so nothing ran. Set this ticket's executor to actions to run it there.`,
         ),
       );
       await removeWork();
@@ -156,6 +195,10 @@ export async function runTask(
 
     const context = await deps.api.context(claimed.runId, claimed.token);
     if (context.step !== claimed.step) throw new Error("context step differs from the claim");
+    const branch = `agent/${claimed.ticketKey}/${claimed.runId}`;
+    if (build && (context.branch !== branch || context.ticket?.key !== claimed.ticketKey)) {
+      throw new Error("the build's context doesn't name this run's branch and ticket");
+    }
     checkpoint();
 
     const platformSha = await deps.repos.fetch(deps.platformRepo);
@@ -165,6 +208,11 @@ export async function runTask(
     await deps.repos.addWorktree(claimed.repo, projectSha, projectDir);
     worktrees.push({ repo: claimed.repo, path: projectDir });
     deps.log("INFO", "checkouts ready", { ...ids, platformSha, projectSha, workDir: runDir });
+    // Read before the agent: it can rewrite the checkout's `.git` file, never this directory.
+    const gitDir = build ? await gitDirOf(projectDir) : null;
+    const repoCache = deps.repos.path(claimed.repo);
+    // Before the profiles: Seatbelt matches real paths, so the directory must exist.
+    if (build) await ownScratch(scratchDir);
     checkpoint();
 
     // Two Seatbelt profiles, both the runner's own (ADR-0098): the platform child reads only the
@@ -183,19 +231,31 @@ export async function runTask(
       }),
       { mode: 0o600 },
     );
+    // A build writes its checkout; git there reads (never writes) the repository cache.
     await writeFile(
       agentProfile,
-      seatbeltProfile({
-        runnerHome: deps.home,
-        read: [projectDir, settingsPath],
-        claude: { command: deps.claudeCommand },
-      }),
+      seatbeltProfile(
+        build
+          ? {
+              runnerHome: deps.home,
+              read: [settingsPath, repoCache],
+              readWrite: [projectDir],
+              scratch: { root: AGENT_TMP, own: scratchDir },
+              claude: { command: deps.claudeCommand },
+            }
+          : {
+              runnerHome: deps.home,
+              read: [projectDir, settingsPath],
+              claude: { command: deps.claudeCommand },
+            },
+      ),
       { mode: 0o600 },
     );
     const confinementProblem = await deps.confinement.check({
       profilePath: agentProfile,
       checkout: projectDir,
       runDir,
+      writable: build,
     });
     if (confinementProblem) {
       deps.log("ERROR", "sandbox check failed; the agent did not run", {
@@ -225,11 +285,72 @@ export async function runTask(
     const { prompt, schema } = await platform.prompt(context.step, context.prompt);
     checkpoint();
 
+    if (build) {
+      const installed = await installDependencies({
+        checkout: projectDir,
+        runDir,
+        runnerHome: deps.home,
+        confinement: deps.confinement,
+        timeoutMs: LOCAL_LIMITS.installMinutes * 60_000,
+        signal: stop.signal,
+        ...(deps.pnpmCommand ? { pnpm: deps.pnpmCommand } : {}),
+      });
+      // A cancel or lost lease during the install stops the task, never reports it failed.
+      checkpoint();
+      if (installed.kind === "failed") {
+        deps.log("ERROR", "dependency install failed; the agent did not run", {
+          ...ids,
+          reason: installed.reason,
+          workDir: runDir,
+        });
+        await report(
+          emptyReport(
+            "failed",
+            `Installing dependencies failed, so the agent did not run: ${installed.reason}.`,
+          ),
+        );
+        return "reported";
+      }
+      deps.log("INFO", "dependencies ready", { ...ids, install: installed.kind });
+      checkpoint();
+      // Fail closed (ADR-0102): Bash runs in Claude Code's sandbox, or no build agent runs.
+      const bashProblem = await checkBash({
+        claudeCommand: deps.claudeCommand,
+        confinement: deps.confinement,
+        profilePath: agentProfile,
+        settingsPath,
+        checkout: projectDir,
+        runDir,
+        gitDir: gitDir!,
+        signal: stop.signal,
+        extraEnv: { TMPDIR: scratchDir },
+      });
+      checkpoint();
+      if (bashProblem) {
+        deps.log("ERROR", "Bash sandbox check failed; the agent did not run", {
+          ...ids,
+          problem: bashProblem,
+          workDir: runDir,
+        });
+        await report(
+          emptyReport(
+            "failed",
+            `The Bash sandbox check failed, so the build agent did not run: ${bashProblem}. See the local runner's log; set this ticket's executor to actions to build it on GitHub Actions.`,
+          ),
+        );
+        return "reported";
+      }
+      deps.log("INFO", "Bash sandbox check passed", ids);
+    }
+
     phase = "agent";
     const untilDeadline = Date.parse(claimed.deadline) - now().getTime() - 60_000;
     const timeoutMs = Math.max(
       1000,
-      Math.min(LOCAL_LIMITS.readOnlyAgentMinutes * 60_000, untilDeadline),
+      Math.min(
+        (build ? LOCAL_LIMITS.buildAgentMinutes : LOCAL_LIMITS.readOnlyAgentMinutes) * 60_000,
+        untilDeadline,
+      ),
     );
     deps.log("INFO", "agent started", { ...ids, model: context.model, maxTurns: context.maxTurns });
     const command = deps.confinement.wrap(
@@ -240,14 +361,13 @@ export async function runTask(
         maxTurns: context.maxTurns,
         settingsPath,
         schema,
-        allowedTools: READ_ONLY_ALLOWED,
-        disallowedTools: READ_ONLY_DENIED,
+        tools: build ? undefined : { allowed: READ_ONLY_ALLOWED, disallowed: READ_ONLY_DENIED },
       }),
     );
     const agent = await spawnAgent({
       ...command,
       cwd: projectDir,
-      env: agentEnv(),
+      env: agentEnv(build ? { TMPDIR: scratchDir } : {}),
       prompt,
       outputPath: streamPath,
       timeoutMs,
@@ -272,11 +392,22 @@ export async function runTask(
         : agent.exitCode === 0
           ? ""
           : `The agent exited with code ${agent.exitCode ?? "none"}`;
-    const body = await platform.report({
+    let body = await platform.report({
       outcome: ok ? "success" : "failure",
       streamPath,
       reason,
     });
+    if (build) {
+      checkpoint();
+      body = await publishBuild(body, {
+        gitDir: gitDir!,
+        repoCache,
+        projectSha,
+        branch,
+        model: context.model,
+        ticket: context.ticket!,
+      });
+    }
     const outcome = await report(body);
     if (outcome === "reported" && body.status === "succeeded") await removeWork();
     else deps.log("INFO", "work directory kept for inspection", { ...ids, workDir: runDir });
@@ -298,6 +429,123 @@ export async function runTask(
   } finally {
     clearInterval(heartbeats);
     shutdown.removeEventListener("abort", onShutdown);
+  }
+
+  /**
+   * A build's change, published as on Actions (ADR-0063): nothing to publish leaves the report
+   * as the agent made it; a change that can't be collected, a refused push token or refused
+   * publish checks fail the run with the reason; a pushed branch and PR go with the report.
+   */
+  async function publishBuild(
+    body: RunReportRequest,
+    run: {
+      gitDir: string;
+      repoCache: string;
+      projectSha: string;
+      branch: string;
+      model: string;
+      ticket: { projectId: string; key: string; title: string };
+    },
+  ): Promise<RunReportRequest> {
+    const failed = (why: string): RunReportRequest => ({
+      ...body,
+      status: "failed",
+      summary: `${why}\n\n${body.summary ?? ""}`.trim(),
+    });
+    const patchPath = join(runDir, "change.patch");
+    const change = await collectChange({
+      checkout: projectDir,
+      gitDir: run.gitDir,
+      patchPath,
+      maxBytes: LOCAL_LIMITS.maxPatchBytes,
+    });
+    if (change.kind === "none") {
+      deps.log("INFO", "the build made no change; nothing to publish", ids);
+      return body;
+    }
+    if (change.kind === "error") {
+      deps.log("ERROR", "the build's change couldn't be collected", {
+        ...ids,
+        reason: change.reason,
+      });
+      return failed(change.reason);
+    }
+    deps.log("INFO", "change collected", { ...ids, bytes: change.bytes });
+    phase = "publishing";
+    await deps.repos.addWorktree(claimed.repo, run.projectSha, publishDir);
+    worktrees.push({ repo: claimed.repo, path: publishDir });
+    const base = await deps.repos.defaultBranch(claimed.repo);
+    // Cancelled or ended meanwhile: publish nothing (the heartbeat contract).
+    checkpoint();
+    const granted = await deps.api.pushToken(claimed.runId, claimed.token);
+    if (granted.kind !== "ok") {
+      deps.log("ERROR", "push token refused; nothing published", {
+        ...ids,
+        reason: granted.reason,
+        ...(granted.kind === "refused" ? { status: granted.status } : {}),
+      });
+      return failed(
+        `The push token was refused (${granted.reason}), so the change was not pushed.`,
+      );
+    }
+    const publishProfile = join(runDir, "publish.sb");
+    // git's credential file: under the work directory, which the agent's profile can't read.
+    const credDir = join(runDir, "cred");
+    await mkdir(credDir, { mode: 0o700 });
+    await writeFile(
+      publishProfile,
+      seatbeltProfile({
+        runnerHome: deps.home,
+        read: [platformDir, patchPath],
+        readWrite: [publishDir, run.repoCache, credDir],
+        noKeychain: true,
+      }),
+      { mode: 0o600 },
+    );
+    const { result, log } = await publishChange({
+      platformDir,
+      publishDir,
+      patchPath,
+      runId: claimed.runId,
+      branch: run.branch,
+      repo: claimed.repo,
+      base,
+      projectId: run.ticket.projectId,
+      ticketKey: run.ticket.key,
+      ticketTitle: run.ticket.title,
+      model: run.model,
+      report: body,
+      controlPlaneOrigin: deps.origin,
+      pushToken: granted.token,
+      credDir,
+      gitBase: deps.gitBase,
+      githubApi: deps.githubApi,
+      confinement: deps.confinement,
+      profilePath: publishProfile,
+      timeoutMs: LOCAL_LIMITS.publishMinutes * 60_000,
+    });
+    for (const line of log) deps.log("INFO", "publish", { ...ids, line });
+    if (result.kind === "refused") {
+      deps.log("ERROR", "publish checks refused the change", { ...ids, reasons: result.reasons });
+      return failed(
+        `The publish checks refused the change, so nothing was pushed: ${result.reasons.join("; ")}.`,
+      );
+    }
+    if (result.kind === "error") {
+      deps.log("ERROR", "publish failed", { ...ids, reason: result.reason });
+      return failed(`The publish step failed: ${result.reason}.`);
+    }
+    deps.log("INFO", "published", {
+      ...ids,
+      branch: result.branch,
+      pullRequest: result.pullRequest,
+    });
+    return {
+      ...body,
+      branch: result.branch,
+      pullRequest: result.pullRequest,
+      toolingFiles: result.tooling,
+    };
   }
 
   async function settleStopped(): Promise<TaskOutcome> {

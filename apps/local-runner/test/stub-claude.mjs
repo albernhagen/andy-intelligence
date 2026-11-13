@@ -4,7 +4,7 @@
 // Code does: all three unless `--setting-sources` names fewer, and runs the hooks found in the
 // project's (.claude/settings.json) and local (.claude/settings.local.json) settings.
 import { execFileSync } from "node:child_process";
-import { appendFileSync, existsSync, readFileSync } from "node:fs";
+import { appendFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import process from "node:process";
 import { setInterval, setTimeout } from "node:timers";
@@ -37,6 +37,30 @@ for (const source of sources) {
 
 emit({ type: "system", subtype: "init", tools: ["Read"] });
 
+if (stdin.startsWith("This is a sandbox check.")) {
+  // The Bash check (ADR-0102): "pass" writes the facts a sandboxed Bash would; "open" as if the
+  // network were open; "offline" as if nothing answered; "refuse" as if Bash were refused.
+  const mode = config.sandboxCheck ?? "pass";
+  const command = stdin.trim().split("\n").at(-1);
+  emit({
+    type: "assistant",
+    message: { content: [{ type: "tool_use", name: "Bash", input: { command } }] },
+  });
+  if (mode !== "refuse") {
+    writeFileSync(
+      join(process.cwd(), ".executor-sandbox-check"),
+      `nonce=${process.env.SANDBOX_CHECK_NONCE}\ncanary=denied\n` +
+        (mode === "open"
+          ? "registry=200\nother_exit=0\nother_connect=000\n"
+          : mode === "offline"
+            ? "registry=000\nother_exit=6\nother_connect=000\n"
+            : "registry=200\nother_exit=56\nother_connect=403\n"),
+    );
+  }
+  emit({ type: "result", subtype: "success", is_error: false, result: "0" });
+  process.exit(0);
+}
+
 if (stdin.includes("read README.md")) {
   const first = readFileSync(join(process.cwd(), "README.md"), "utf8").split("\n")[0];
   emit({ type: "result", subtype: "success", is_error: false, result: first });
@@ -51,6 +75,10 @@ if (config.agent === "hang") {
 } else {
   // Lets the runner's heartbeats run while the "agent" works.
   await new Promise((resolve) => setTimeout(resolve, config.agentDelayMs ?? 0));
+  for (const [path, text] of Object.entries(config.edit ?? {})) {
+    mkdirSync(dirname(join(process.cwd(), path)), { recursive: true });
+    writeFileSync(join(process.cwd(), path), text);
+  }
   emit({
     type: "assistant",
     message: { content: [{ type: "text", text: "Reading the ticket." }] },

@@ -130,6 +130,23 @@ describe("LocalClaims", () => {
     ]);
   });
 
+  it("GivenARunningLocalRefine_WhenItsRunnerAsksForAPushToken_ThenForbidden", async () => {
+    const s = await setup();
+    await s.upNext("A");
+    const claimed = (await s.claims.claim(s.runner))!;
+    const caller = { runnerId: s.runner.id };
+    await s.runs.context(claimed.runId, caller);
+
+    await expect(s.runs.claimLocalPushGrant(claimed.runId, caller)).rejects.toMatchObject({
+      code: "forbidden",
+      message: `run ${claimed.runId} is a refine run; local runs push only builds`,
+    });
+    await expect(
+      s.runs.claimLocalPushGrant(claimed.runId, { runnerId: "another-runner" }),
+    ).rejects.toMatchObject({ code: "forbidden" });
+    expect((await s.runStore.get(claimed.runId))!.pushGrantedAt ?? null).toBeNull();
+  });
+
   it("GivenClaimsWithinOneMinute_WhenEachQueuesItsAwayCheck_ThenOnlyOneCheckIsQueued", async () => {
     const s = await setup();
     await s.claims.claim(s.runner);

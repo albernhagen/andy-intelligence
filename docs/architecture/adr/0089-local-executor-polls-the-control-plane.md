@@ -1,5 +1,5 @@
 ---
-status: accepted (design; built in AI-44 slices 2 to 7); amended by 0094, 0098
+status: accepted (design; built in AI-44 slices 2 to 7); amended by 0094, 0098, 0102
 date: 2026-11-11
 amends: 0032 (local executor design), 0019 (a second callback identity), 0055 (a lost local run doesn't retry), 0063 (push grant for a local run)
 ---
