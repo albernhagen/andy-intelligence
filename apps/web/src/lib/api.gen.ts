@@ -6970,6 +6970,161 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  "/api/projects/{projectId}/brief": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    post: {
+      parameters: {
+        query?: never;
+        header?: never;
+        path: {
+          projectId: string;
+        };
+        cookie?: never;
+      };
+      requestBody: {
+        content: {
+          "application/json": {
+            projectName: string;
+            idea: string;
+            problem: string;
+            users: string;
+            business: string;
+            vision: string;
+            goals: string[];
+            nonGoals: string[];
+            stack: string;
+            cloud: string;
+            environments: string;
+            constraints: string;
+            qualityBar: string;
+            openQuestions: string[];
+          };
+        };
+      };
+      responses: {
+        /** @description The brief on the default branch is already this; no PR */
+        200: {
+          headers: {
+            [name: string]: unknown;
+          };
+          content: {
+            "application/json":
+              | {
+                  /** @enum {string} */
+                  status: "opened";
+                  pullRequest: {
+                    number: number;
+                    /** Format: uri */
+                    url: string;
+                    branch: string;
+                  };
+                  revised: boolean;
+                }
+              | {
+                  /** @enum {string} */
+                  status: "unchanged";
+                };
+          };
+        };
+        /** @description A PR proposes the rendered brief */
+        201: {
+          headers: {
+            [name: string]: unknown;
+          };
+          content: {
+            "application/json":
+              | {
+                  /** @enum {string} */
+                  status: "opened";
+                  pullRequest: {
+                    number: number;
+                    /** Format: uri */
+                    url: string;
+                    branch: string;
+                  };
+                  revised: boolean;
+                }
+              | {
+                  /** @enum {string} */
+                  status: "unchanged";
+                };
+          };
+        };
+        /** @description Invalid answers */
+        400: {
+          headers: {
+            [name: string]: unknown;
+          };
+          content: {
+            "application/json": {
+              error: string;
+              details?: string[];
+            };
+          };
+        };
+        /** @description Only the owner submits a brief */
+        403: {
+          headers: {
+            [name: string]: unknown;
+          };
+          content: {
+            "application/json": {
+              error: string;
+              details?: string[];
+            };
+          };
+        };
+        /** @description No such project */
+        404: {
+          headers: {
+            [name: string]: unknown;
+          };
+          content: {
+            "application/json": {
+              error: string;
+              details?: string[];
+            };
+          };
+        };
+        /** @description A section is over its word cap (details name it), or no repo with the App (GitHub not connected) */
+        422: {
+          headers: {
+            [name: string]: unknown;
+          };
+          content: {
+            "application/json": {
+              error: string;
+              details?: string[];
+            };
+          };
+        };
+        /** @description The hourly cap on brief PRs is reached */
+        429: {
+          headers: {
+            [name: string]: unknown;
+          };
+          content: {
+            "application/json": {
+              error: string;
+              details?: string[];
+            };
+          };
+        };
+      };
+    };
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   "/api/projects/{projectId}/plan": {
     parameters: {
       query?: never;
