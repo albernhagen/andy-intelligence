@@ -12,7 +12,7 @@ import {
   type Ticket,
   type WorkTracker,
 } from "@andy/contracts";
-import { MAX_ACTIVE_RUNS_GLOBAL, isInFlight, wasDispatched } from "./dispatch-caps";
+import { MAX_ACTIVE_RUNS_GLOBAL, atWarnCap, isInFlight, wasDispatched } from "./dispatch-caps";
 import { quotaStatus, readingsForDispatch } from "./quota";
 import type { RunService } from "./runs";
 import { DomainError } from "./tickets";
@@ -46,7 +46,7 @@ export interface SyncCounts {
 
 /**
  * Whether a sync run may start for a PR, or why not (ADR-0083). Sync runs count against the
- * global cap, not the project's dial, and respect pause and the quota reserve like builds.
+ * global cap, not the project's dial, and respect pause, the quota reserve and the warn cap (AI-92) like builds.
  */
 export function maySync(
   project: Pick<Project, "paused" | "buildEnabled">,
@@ -56,6 +56,7 @@ export function maySync(
   if (project.paused) return "paused";
   if (counts.globalActive >= MAX_ACTIVE_RUNS_GLOBAL) return "global_cap";
   if (counts.quotaLevel === "pause") return "quota_reserve";
+  if (atWarnCap(counts)) return "quota_warn";
   if (counts.syncsToday >= MAX_SYNC_RUNS_PER_PR_PER_DAY) return "daily_cap";
   if (counts.ticketBusy) return "ticket_busy";
   return "start";
