@@ -8,6 +8,7 @@ import {
 import {
   CodeHostEvent,
   ConfigChange,
+  ProposalLookupCursor,
   Model,
   OAuthGrant,
   Policy,
@@ -65,6 +66,7 @@ export const collections = {
   configChanges: { path: () => "configChanges", schema: ConfigChange },
   /** Each reviewer's latest verdict per PR (ADR-0097), server-only; capped per project. */
   reviewVerdicts: { path: () => "reviewVerdicts", schema: ReviewVerdict },
+  proposalLookupCursors: { path: () => "proposalLookupCursors", schema: ProposalLookupCursor },
   releases: { path: () => "releases", schema: Release },
   oauthGrants: { path: () => "oauthGrants", schema: OAuthGrant },
   codeHostEvents: { path: () => "codeHostEvents", schema: CodeHostEvent },

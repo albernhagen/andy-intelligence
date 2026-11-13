@@ -26,6 +26,8 @@ import {
   ConfigProposals,
   DigestReader,
   QuotaClearer,
+  BriefService,
+  ProjectPlanService,
   TicketService,
   EmailNotifications,
   wakeAfterRunEnd,
@@ -48,6 +50,8 @@ import { registerSetupRoutes } from "./setup";
 import { noReviewFindings, registerConfigProposalRoutes } from "./config-proposals";
 import { registerNotifyFlush, registerNotifyRoutes } from "./notify";
 import { registerReviewFindings } from "./review-findings";
+import { registerBriefRoutes } from "./brief";
+import { registerProjectPlanRoutes } from "./project-plan";
 import {
   ConnectedCodeHost,
   GitHubConnection,
@@ -187,6 +191,9 @@ const DOMAIN_STATUS = {
   not_acceptable: 409,
   runner_limit: 409,
   runs_elsewhere: 409,
+  brief_too_long: 422,
+  code_host_unavailable: 503,
+  rate_limited: 429,
 } as const;
 
 export function createApp(input: AppDeps) {
@@ -430,6 +437,19 @@ export function createApp(input: AppDeps) {
   registerDashboardRoutes(app, deps, now);
   registerSetupRoutes(app, deps.tracker, connection ? new ConnectedCodeHost(connection) : null);
   registerNotifyRoutes(app, email);
+  const brief = new BriefService(
+    deps.tracker,
+    connection ? new ConnectedCodeHost(connection) : null,
+    now,
+  );
+  registerBriefRoutes(app, brief);
+  const plans = new ProjectPlanService(
+    deps.tracker,
+    service,
+    now,
+    email ? (id, plan) => email.planNeedsYou(id, plan.proposal.milestones.length) : undefined,
+  );
+  registerProjectPlanRoutes(app, plans);
   const configProposals = deps.configChanges
     ? new ConfigProposals(
         deps.tracker,
@@ -462,6 +482,8 @@ export function createApp(input: AppDeps) {
       digest,
       notifyEmail: email,
       quota: quotaClearer,
+      brief,
+      plans,
       configProposals,
     });
   }
