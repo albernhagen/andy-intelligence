@@ -4,6 +4,7 @@ import type {
   EmailNotifications,
   ProjectService,
   QuotaClearer,
+  BriefService,
   ProjectPlanService,
   ConfigProposals,
   RunService,
@@ -34,6 +35,7 @@ export function registerMcp(
     digest: DigestReader;
     notifyEmail: EmailNotifications | null;
     quota: QuotaClearer;
+    brief: BriefService;
     plans: ProjectPlanService;
     configProposals: ConfigProposals | null;
     night: NightDeps | null;

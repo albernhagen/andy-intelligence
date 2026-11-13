@@ -32,11 +32,13 @@ import {
   type AnsweredVia,
   type CodeHostConnection,
   type ChangedFile,
+  type FileProposal,
   type CodeHostEvent,
   type HeadCheck,
   type Listing,
   type PullRequest,
   type PullRequestCommit,
+  type ProposedPullRequest,
   type Repo,
   type RepoToken,
   type RequiredCheck,
@@ -608,6 +610,12 @@ export interface CodeHost {
    * ahead of it or the same. Null when the repo or a ref isn't known.
    */
   headContains(fullName: string, head: string, base: string): Promise<boolean | null>;
+  /**
+   * Commits one file on a new branch cut from the default branch, with the App's identity, and
+   * opens a pull request into the default branch (AI-107). Null when the App isn't installed.
+   * Throws when the branch already exists or the host refuses.
+   */
+  proposeFile(fullName: string, proposal: FileProposal): Promise<ProposedPullRequest | null>;
 }
 
 // ── CodeHostConnectionStore ──────────────────────────────────────────────────
