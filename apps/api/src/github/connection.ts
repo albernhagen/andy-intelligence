@@ -1,4 +1,9 @@
-import type { CodeHost, CodeHostConnection, CodeHostConnectionStore } from "@andy/contracts";
+import type {
+  CodeHost,
+  CodeHostConnection,
+  CodeHostConnectionStore,
+  FileProposal,
+} from "@andy/contracts";
 import { GitHubCodeHost } from "@andy/github";
 
 /** How long a read connection is reused; Secret Manager is read at most this often. */
@@ -112,5 +117,9 @@ export class ConnectedCodeHost implements CodeHost {
 
   async headContains(fullName: string, head: string, base: string) {
     return (await this.connection.codeHost())?.headContains(fullName, head, base) ?? null;
+  }
+
+  async proposeFile(fullName: string, proposal: FileProposal) {
+    return (await this.connection.codeHost())?.proposeFile(fullName, proposal) ?? null;
   }
 }

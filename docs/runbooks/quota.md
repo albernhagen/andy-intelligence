@@ -2,7 +2,7 @@
 
 M1.9: Quota capture. Design: ARCHITECTURE §5 and [observability-and-cost.md](../architecture/observability-and-cost.md) §10.5. What headless Claude Code exposes: `docs/build-log/2026-11-08-quota-capture.md`.
 
-Claude subscription only, best-effort. A fresh reading at the pause level, taken in the last 6 hours, stops dispatch (ADR-0079); stale, older or missing readings don't.
+Claude subscription only, best-effort. A fresh reading at the pause level, taken in the last 6 hours, stops dispatch (ADR-0079); a fresh one at warn holds dispatch to one agent task in flight across all projects (idle reason `quota_warn`, AI-92). Stale, older or missing readings do neither. **Clear quota idle** acts on pause only.
 
 | Step      | What                                                                                                                                                                                                                  |
 | --------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
