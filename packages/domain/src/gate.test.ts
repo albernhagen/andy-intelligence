@@ -292,7 +292,13 @@ describe("spike PRs (AI-99)", () => {
   it("GivenAFileMovedFromDocsIntoCode_WhenListed_ThenBothNamesCountAndOnlyTheCodeOneIsOutside", () => {
     expect(outsideDocs([file("src/notes.ts", "docs/notes.md")])).toEqual(["src/notes.ts"]);
     expect(outsideDocs([file("docs/notes.md", "src/notes.ts")])).toEqual(["src/notes.ts"]);
-    expect(outsideDocs([file("docsx/a.md"), file("Docs/b.md")])).toEqual(["docsx/a.md"]);
+  });
+
+  it("GivenLookalikeDirectories_WhenListed_ThenOnlyExactDocsCountsAsInside", () => {
+    expect(outsideDocs([file("docsx/a.md"), file("Docs/b.ts"), file("docs/c.md")])).toEqual([
+      "docsx/a.md",
+      "Docs/b.ts",
+    ]);
   });
 
   it("GivenAnyFacts_WhenTheTicketIsASpike_ThenTheVetoOnlyAddsReasonsAndNeverAllowsAMerge", () => {
