@@ -8,6 +8,9 @@ export default defineProject({
     // a busy machine stretches them far past vitest's 5 s default. Same budget as the Firestore
     // race tests.
     testTimeout: 30_000,
+    // Its two files spawn git, node and (on macOS) sandbox-exec processes: running them side by
+    // side doubled their wall time and starved the other projects' workers.
+    fileParallelism: false,
     hookTimeout: 30_000,
   },
 });
