@@ -131,6 +131,7 @@ async function main(argv: string[]): Promise<number> {
       process.stderr.write(`No runner secret for ${origin}: run local-runner login first.\n`);
       return 1;
     }
+    const shutdown = new AbortController();
     const lock = await acquireRunnerLock(home);
     if ("heldBy" in lock) {
       process.stderr.write(
@@ -139,15 +140,30 @@ async function main(argv: string[]): Promise<number> {
       return 1;
     }
     process.on("exit", lock.release);
+    // Losing the lock (a three-way start race, a deleted file) stops this runner: no claim after
+    // it (checked before each claim) and its tasks in flight are stopped. Its own controller, so
+    // a Ctrl-C afterwards is still a first signal.
+    const lockLost = new AbortController();
+    const ownsLock = () => {
+      if (lock.held()) return true;
+      if (!lockLost.signal.aborted) {
+        log("ERROR", "the runner lock is no longer this runner's; stopping");
+        lockLost.abort();
+      }
+      return false;
+    };
+    const lockCheck = setInterval(ownsLock, 30_000);
+    lockCheck.unref();
     for (const runId of await cleanLeftoverAgents(home)) {
       log("WARNING", "stopped an agent a previous runner left running", { runId });
     }
     for (const name of pruneWork(home)) log("INFO", "old work directory removed", { name });
-    const shutdown = new AbortController();
     // First signal: stop agents and report. Second: kill every agent now and exit.
+    let signals = 0;
     for (const signal of ["SIGINT", "SIGTERM"] as const) {
       process.on(signal, () => {
-        if (!shutdown.signal.aborted) {
+        signals += 1;
+        if (signals === 1) {
           log("INFO", "stopping: finishing up the agent tasks in flight", { signal });
           shutdown.abort();
           return;
@@ -164,9 +180,10 @@ async function main(argv: string[]): Promise<number> {
       log,
       task: { repos, home, claudeCommand: values.claude, platformRepo, confinement: seatbelt },
       keepAwake: caffeinate(log),
-      signal: shutdown.signal,
+      signal: AbortSignal.any([shutdown.signal, lockLost.signal]),
+      mayClaim: ownsLock,
     });
-    return end === "unauthorized" ? 1 : 0;
+    return end === "unauthorized" || end === "lock_lost" || lockLost.signal.aborted ? 1 : 0;
   }
 
   process.stderr.write(`Unknown command "${command}".\n\n${USAGE}`);
