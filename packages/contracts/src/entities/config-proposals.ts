@@ -55,6 +55,18 @@ export const ReviewFinding = z.object({
 });
 export type ReviewFinding = z.infer<typeof ReviewFinding>;
 
+/**
+ * Where a project's decision lookups resume (AI-137): the last repeated kind one sweep looked
+ * up. The next sweep starts after it, by name, so every kind is looked up within a bounded
+ * number of sweeps while each sweep's lookups stay capped. Stored, so a restart doesn't reset it.
+ */
+export const ProposalLookupCursor = z.object({
+  projectId: Id,
+  lastKind: FindingKind,
+  updatedAt: Timestamp,
+});
+export type ProposalLookupCursor = z.infer<typeof ProposalLookupCursor>;
+
 /** Caps on what a proposal carries (ADR-0028). */
 export const CONFIG_PROPOSAL_TEXT_MAX = 4_000;
 export const CONFIG_PROPOSAL_MAX_PRS = 20;

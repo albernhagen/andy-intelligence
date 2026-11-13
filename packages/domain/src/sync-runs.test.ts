@@ -49,6 +49,8 @@ describe("maySync", () => {
     );
     expect(maySync(project, { ...counts, quotaLevel: "pause" })).toBe("quota_reserve");
     expect(maySync(project, { ...counts, quotaLevel: "unknown" })).toBe("start");
+    expect(maySync(project, { ...counts, quotaLevel: "warn" })).toBe("start");
+    expect(maySync(project, { ...counts, quotaLevel: "warn", globalActive: 1 })).toBe("quota_warn");
     expect(maySync(project, { ...counts, syncsToday: MAX_SYNC_RUNS_PER_PR_PER_DAY })).toBe(
       "daily_cap",
     );

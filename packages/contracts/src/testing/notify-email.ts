@@ -12,7 +12,19 @@ const state = (sent: number): EmailNotifyState => ({
 });
 
 /** `make` must return a ledger with nothing stored. */
-export function notifyLedgerContract(name: string, make: () => Promise<NotifyLedger>): void {
+export interface NotifyLedgerContractOptions {
+  /** Timeout (ms) for the case that races increments; see `RunStoreContractOptions` (AI-71). */
+  raceTimeoutMs?: number;
+}
+
+export function notifyLedgerContract(
+  name: string,
+  make: () => Promise<NotifyLedger>,
+  options: NotifyLedgerContractOptions = {},
+): void {
+  /** A case that races updates of the one ledger: gets the adapter's race timeout (AI-138). */
+  const itRaces = (title: string, fn: () => Promise<void>) => it(title, fn, options.raceTimeoutMs);
+
   describe(`NotifyLedger contract: ${name}`, () => {
     it("GivenNothingStored_WhenRead_ThenNull", async () => {
       expect(await (await make()).get()).toBeNull();
@@ -28,7 +40,7 @@ export function notifyLedgerContract(name: string, make: () => Promise<NotifyLed
       expect(await ledger.get()).toEqual(state(1));
     });
 
-    it("GivenConcurrentIncrements_WhenAllFinish_ThenNoneIsLost", async () => {
+    itRaces("GivenConcurrentIncrements_WhenAllFinish_ThenNoneIsLost", async () => {
       const ledger = await make();
       await Promise.all(
         Array.from({ length: 5 }, () =>
