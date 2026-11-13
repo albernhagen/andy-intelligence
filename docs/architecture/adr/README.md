@@ -1,6 +1,6 @@
 # Architecture decision records — index
 
-One line per ADR (MADR, bodies immutable). Open only what you need (ADR-0046). Add a line in the ADR's PR; a test checks it. Milestone numbers before 0060 are older; 0060 maps them.
+One line per ADR (MADR, bodies immutable); open only what you need (ADR-0046). Each ADR's PR adds its line (tested). ADRs before 0060 use old milestone numbers; 0060 maps them.
 
 | ADR                                                               | Decision                                                                                            | Status                                                                      |
 | ----------------------------------------------------------------- | --------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------- |
@@ -51,7 +51,7 @@ One line per ADR (MADR, bodies immutable). Open only what you need (ADR-0046). A
 | [0045](0045-ui-design-system-and-dashboards.md)                   | UI design system, pluggable design skills (Hallmark first) and dashboards, in M5                    | accepted, amended by 0059                                                   |
 | [0046](0046-context-budget.md)                                    | Context budget: small always-loaded docs, everything else on demand                                 | accepted, amended by 0061                                                   |
 | [0048](0048-firestore-suite-in-ci.md)                             | Firestore contract suites run in CI when the adapters change                                        | accepted                                                                    |
-| [0047](0047-coordinating-parallel-work.md)                        | Coordinating parallel work: deterministic supervisor, no LLM parent; self-building                  | accepted, amended by 0060, 0080, 0083                                       |
+| [0047](0047-coordinating-parallel-work.md)                        | Coordinating parallel work: deterministic supervisor, no LLM parent                                 | accepted, amended by 0060, 0080, 0083                                       |
 | [0049](0049-overnight-runs.md)                                    | Overnight runs: epic launched at night, one PR reviewed next morning                                | accepted                                                                    |
 | [0050](0050-m1-resequenced-loop-first.md)                         | M1 re-sequenced: loop first; plan in PR, S/M auto-merge, Claude-only through M6                     | accepted, amended by 0052, 0060                                             |
 | [0051](0051-claude-code-executor-run-protocol.md)                 | Claude Code executor: prompt over OIDC, three jobs, managed settings, subscription billing verified | accepted, amended by 0063                                                   |
@@ -66,7 +66,7 @@ One line per ADR (MADR, bodies immutable). Open only what you need (ADR-0046). A
 | [0060](0060-milestones-in-completion-order-self-hosting-first.md) | Milestones in completion order; M2: Self-hosting; every ticket under a milestone                    | accepted                                                                    |
 | [0061](0061-architecture-split-into-overview-and-topic-files.md)  | ARCHITECTURE split into an overview and per-topic files                                             | accepted, amends 0022, 0046                                                 |
 | [0062](0062-stored-tier-dropped.md)                               | Tier is computed from size; `overrides.tier` pins one                                               | accepted, amends ARCHITECTURE §4.2, §5, §10.4                               |
-| [0063](0063-build-run-protocol.md)                                | Build run: event-driven dispatcher (`autoBuild`), sandboxed Bash, App token per run                 | accepted, amends 0051; amended by 0071, 0072                                |
+| [0063](0063-build-run-protocol.md)                                | Build run: `autoBuild` dispatcher, sandboxed Bash, App token per run                                | accepted, amends 0051; amended by 0071, 0072                                |
 | [0067](0067-pr-events-move-ticket-from-any-open-stage.md)         | PR events move a ticket from any open stage                                                         | accepted, amends 0056, §4.1; amended by 0069                                |
 | [0069](0069-no-monitoring-stage-until-m6.md)                      | No Monitoring stage until M6: Dev → prod releases                                                   | accepted, amends 0056, 0067, §4.1                                           |
 | [0070](0070-ux-direction-not-a-shortcut-clone.md)                 | UX direction: Shortcut's simplicity, minimalist design                                              | accepted, amends 0059 (direction)                                           |
