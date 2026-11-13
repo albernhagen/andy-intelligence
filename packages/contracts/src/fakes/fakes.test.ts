@@ -48,18 +48,22 @@ quotaStoreContract("in-memory", async () => new InMemoryQuotaStore());
 
 oauthGrantStoreContract("in-memory", async (now) => new InMemoryOAuthGrantStore(now));
 
-codeHostContract("in-memory", async () => ({
-  host: new InMemoryCodeHost([
-    {
-      fullName: "Owner/Repo",
-      defaultBranch: "main",
-      private: false,
-      url: "https://github.com/Owner/Repo",
-    },
-  ]),
-  knownRepo: "owner/repo",
-  unknownRepo: "owner/other",
-}));
+codeHostContract(
+  "in-memory",
+  async () => ({
+    host: new InMemoryCodeHost([
+      {
+        fullName: "Owner/Repo",
+        defaultBranch: "main",
+        private: false,
+        url: "https://github.com/Owner/Repo",
+      },
+    ]),
+    knownRepo: "owner/repo",
+    unknownRepo: "owner/other",
+  }),
+  { proposals: true },
+);
 
 runStoreContract("in-memory", async () => new InMemoryRunStore());
 

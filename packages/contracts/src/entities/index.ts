@@ -18,6 +18,7 @@ import {
 } from "./common";
 import { projectDispatchFields } from "./dispatch-caps";
 import { projectNotifyFields } from "./notify-email";
+import { projectPlanFields } from "./project-plan";
 import { configChangeProposalFields } from "./config-proposals";
 
 export * from "./common";
@@ -43,6 +44,7 @@ export * from "./scores";
 export * from "./notify-email";
 export * from "./question-format";
 export * from "./brief";
+export * from "./project-plan";
 
 /** ARCHITECTURE §5 — domain model. Vendor concepts must not appear here. */
 
@@ -99,6 +101,7 @@ export const Project = z.object({
   autoMerge: AutoMerge.default("none"),
   ...projectDispatchFields,
   ...projectNotifyFields,
+  ...projectPlanFields,
   /** Who does a ticket's work when it has no pick of its own (ADR-0082). */
   defaultWorker: Worker.default("agent"),
   /** Where a ticket's runs execute when it has no pick of its own (ADR-0089). */
@@ -834,6 +837,40 @@ export const PullRequest = z.object({
   url: z.url(),
 });
 export type PullRequest = z.infer<typeof PullRequest>;
+
+/**
+ * One file proposed as a pull request (AI-107): committed on a new branch cut from the default
+ * branch, then opened into it. `content` is untrusted text; nothing reads it as instructions.
+ */
+export const FileProposal = z.object({
+  branch: z.string().regex(/^[a-z][a-z0-9-]{0,30}\/[a-z0-9-]{1,60}$/),
+  path: z
+    .string()
+    .regex(/^[A-Za-z0-9._-]+(\/[A-Za-z0-9._-]+)*$/)
+    .max(200)
+    // Only plain relative segments: no `.` or `..` (the pattern already refuses a leading or
+    // doubled `/`, backslashes and `%`, so nothing can be encoded or normalised around the
+    // guard below).
+    .refine((p) => p.split("/").every((seg) => seg !== "." && seg !== ".."), {
+      message: "a proposal path can't have . or .. segments",
+    })
+    // Never workflows or agent settings, whoever calls it (defense in depth).
+    .refine((p) => !/^\.(github|claude)(\/|$)/i.test(p), {
+      message: "a proposal can't write under .github/ or .claude/",
+    }),
+  content: z.string().max(100_000),
+  message: z.string().min(1).max(200),
+  title: z.string().min(1).max(200),
+  body: z.string().max(2000),
+});
+export type FileProposal = z.infer<typeof FileProposal>;
+
+export const ProposedPullRequest = z.object({
+  number: z.number().int().positive(),
+  url: z.url(),
+  branch: z.string().min(1),
+});
+export type ProposedPullRequest = z.infer<typeof ProposedPullRequest>;
 
 export const CheckStatus = z.enum(["queued", "in_progress", "completed"]);
 export type CheckStatus = z.infer<typeof CheckStatus>;

@@ -24,6 +24,8 @@ export const SyncWaitReason = z.enum([
   "paused",
   "global_cap",
   "quota_reserve",
+  /** Quota at warn and an agent task in flight somewhere (AI-92). */
+  "quota_warn",
   "daily_cap",
   /** Another run of the ticket is in flight. */
   "ticket_busy",
