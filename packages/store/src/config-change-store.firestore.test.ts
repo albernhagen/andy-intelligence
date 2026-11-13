@@ -10,8 +10,11 @@ if (process.env.FIRESTORE_EMULATOR_HOST) {
   configChangeStoreContract(
     "firestore (emulator)",
     async () => {
-      const existing = await db.collection("configChanges").get();
-      await Promise.all(existing.docs.map((d) => d.ref.delete()));
+      // Every collection the store writes, so a reused emulator starts empty (AI-137 cursors too).
+      for (const name of ["configChanges", "proposalLookupCursors"]) {
+        const existing = await db.collection(name).get();
+        await Promise.all(existing.docs.map((d) => d.ref.delete()));
+      }
       return new FirestoreConfigChangeStore(db);
     },
     // Three transactions on one query: the emulator's lock wait plus client backoff (AI-71).

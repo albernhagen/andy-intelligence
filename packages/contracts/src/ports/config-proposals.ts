@@ -1,6 +1,6 @@
 import type { ConfigChange } from "../entities";
 import type { ConfigChangeLog } from "./config-changes";
-import type { ReviewFinding } from "../entities/config-proposals";
+import type { ProposalLookupCursor, ReviewFinding } from "../entities/config-proposals";
 
 // ── ReviewFindingSource ──────────────────────────────────────────────────────
 // The PR review agents' findings, as stored by the control plane (ADR-0097). Read-only here:
@@ -53,6 +53,10 @@ export interface ConfigChangeStore extends ConfigChangeLog {
    * `dedupeKey`, or null. Proposals use it so a decided kind comes back only on new evidence.
    */
   latestDecision(dedupeKey: string): Promise<ConfigChange | null>;
+  /** The project's lookup cursor (AI-137), or null before its first capped sweep. */
+  getLookupCursor(projectId: string): Promise<ProposalLookupCursor | null>;
+  /** Replaces the project's lookup cursor; last write wins (a lost race repeats one page). */
+  setLookupCursor(cursor: ProposalLookupCursor): Promise<void>;
   /**
    * Pending → accepted or rejected, recording who and when; `appliedAt` stays null.
    * `conflict` when the change isn't pending, `not_found` when unknown.

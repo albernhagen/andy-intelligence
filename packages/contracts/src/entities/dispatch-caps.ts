@@ -17,6 +17,8 @@ export const DispatchIdleReason = z.enum([
   "global_cap",
   "prs_waiting_cap",
   "quota_reserve",
+  // Quota at warn: one agent task in flight across all projects (AI-92).
+  "quota_warn",
 ]);
 export type DispatchIdleReason = z.infer<typeof DispatchIdleReason>;
 

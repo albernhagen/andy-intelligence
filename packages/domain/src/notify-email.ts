@@ -235,6 +235,32 @@ export class EmailNotifications {
     }
   }
 
+  /**
+   * A new project's plan waits for Andy (AI-108): one item per project, linked to its settings
+   * page where the plan is decided. Never throws, like `ticketNeedsYou`.
+   */
+  async planNeedsYou(projectId: string, milestones: number): Promise<void> {
+    try {
+      const project = await this.deps.tracker.getProject(projectId);
+      if (!project?.emailNotifications) return;
+      const item: PendingNotice = {
+        projectId,
+        ticketId: `plan-${projectId}`,
+        key: `${project.key}-plan`,
+        title: "Project plan",
+        line: `Plan waiting: ${milestones} milestone${milestones === 1 ? "" : "s"} to approve or reject.`,
+        link: `${this.deps.appUrl}/p/${encodeURIComponent(projectId)}/settings`,
+      };
+      const now = this.now();
+      const outcome = await this.deps.ledger.update((s) => addPending(s, item, now));
+      log("INFO", "needs-you item queued for email", { key: item.key, outcome: outcome.kind });
+      if (outcome.kind === "opened") await this.scheduleFlushOrTimer(outcome.flushAt);
+      if (outcome.kind === "overdue") await this.flush();
+    } catch (err) {
+      log("ERROR", "email notification failed", { projectId, error: String(err) });
+    }
+  }
+
   /** Sends the window's batch if it has ended. Idempotent: a second call finds it empty. */
   async flush(): Promise<FlushOutcome> {
     const now = this.now();

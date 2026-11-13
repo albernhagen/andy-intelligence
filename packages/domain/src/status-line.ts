@@ -151,6 +151,7 @@ export const SYNC_WAIT_WORDS: Record<SyncWaitReason, string> = {
   paused: "dispatch is paused",
   global_cap: "the global cap is reached",
   quota_reserve: "quota is at the reserve",
+  quota_warn: "quota is at warn: one agent task at a time",
   daily_cap: "3 syncs in 24 hours",
   ticket_busy: "another agent task of the ticket is in flight",
   builds_off: "builds are off, so no sync tasks",
