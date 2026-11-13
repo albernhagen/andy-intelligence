@@ -1,5 +1,13 @@
 import type { Stage, TicketType } from "@andy/contracts";
-import { Bug, CircleDashed, Flag, Sparkles, Wrench, type LucideIcon } from "lucide-react";
+import {
+  Bug,
+  CircleDashed,
+  Flag,
+  FlaskConical,
+  Sparkles,
+  Wrench,
+  type LucideIcon,
+} from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { STAGE_LABELS, typeLabel } from "@/lib/tickets";
 
@@ -10,6 +18,7 @@ const TYPE_ICONS: Record<TicketType, LucideIcon> = {
   bug: Bug,
   chore: Wrench,
   epic: Flag,
+  spike: FlaskConical,
 };
 
 /** Type: a muted icon with the type name as its label. */

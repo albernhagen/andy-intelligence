@@ -20,6 +20,12 @@ const chore: DorInput = {
   body: "Bump Vite to 8.",
   acceptanceCriteria: ["CI is green", "no lockfile drift"],
 };
+const spike: DorInput = {
+  ...feature,
+  type: "spike",
+  body: "Can the board render 1,000 cards without virtualising?",
+  acceptanceCriteria: ["Render time at 1,000 cards", "Which list library, if any"],
+};
 const bare = { body: " ", acceptanceCriteria: [] as string[], size: null, sizeReason: null };
 
 describe("checkDor", () => {
@@ -27,6 +33,7 @@ describe("checkDor", () => {
     ["feature", feature],
     ["bug", bug],
     ["chore", chore],
+    ["spike", spike],
   ])("GivenACompleteTicketOfType%s_WhenChecked_ThenMetWithoutATier", (_, ticket) => {
     expect(checkDor(ticket, 0)).toEqual({ met: true, missing: [] });
   });
@@ -136,5 +143,15 @@ describe("held gaps (AI-75)", () => {
     expect(checkDor({ ...feature, refineAssumptions: [assumption(over)] as never }, 0).met).toBe(
       true,
     );
+  });
+
+  it("GivenASpikeWithoutWhatTheFindingsMustAnswer_WhenChecked_ThenThatIsMissing", () => {
+    expect(checkDor({ ...spike, acceptanceCriteria: [] }, 0).missing).toEqual([
+      "what the findings must answer, as acceptance criteria",
+    ]);
+  });
+
+  it("GivenASpikeWithoutASize_WhenChecked_ThenTheSizeIsMissingAsItsTimebox", () => {
+    expect(checkDor({ ...spike, size: null }, 0).missing).toEqual(["size"]);
   });
 });

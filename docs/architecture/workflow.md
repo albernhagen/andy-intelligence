@@ -24,12 +24,12 @@ As built (PR events, build dispatch, plan approval): [`history/workflow-as-built
 **Needs-you is a flag, not a stage:** flagged items stay put and appear in the Needs-you inbox (UI + MCP).
 
 ### 4.2 Definition of Ready (per type, ADR-0058)
-- **Type** set: feature, chore, bug or epic; refine fills it.
-- Problem/intent stated (a non-empty body; for a bug, refine asks for steps to reproduce and the actual behaviour, which are not checked mechanically).
-- Acceptance criteria: **feature**, at least one, each in **EARS** form, any sentence with "… shall …" ("WHEN … the API shall …"); **bug**, at least one stating the expected behaviour; **chore**, a "done when" checklist in any wording.
-- Size tagged S/M/L with one-line justification (`sizeReason`) (rubric in `docs/agent/size-rubric.md`).
+- **Type** set: feature, chore, bug, spike or epic; refine fills it.
+- Problem/intent stated (a non-empty body; for a bug, refine asks for steps to reproduce and actual behaviour, not checked mechanically).
+- Acceptance criteria: **feature**, at least one, each in **EARS** form, any sentence with "… shall …" ("WHEN … the API shall …"); **bug**, at least one stating the expected behaviour; **chore**, a "done when" checklist, any wording; **spike**, what its findings answer.
+- Size S/M/L with one-line justification (`sizeReason`) (rubric in `docs/agent/size-rubric.md`).
 - Dependencies declared (ticket "blocked by" links).
-- **No open questions** and no held gaps (§4.3). Assumptions listed explicitly.
+- **No open questions** and no held gaps (§4.3). Assumptions listed.
 - Tier is not a readiness item: `tierFor` derives it from size (S → `fast`, Sonnet; M and L → `strong`, Opus; ADR-0050); `overrides.tier` pins one (ADR-0062).
 - Per-project policy may allow "proceed on documented assumptions" for S tasks only; default is **require Andy's answers**. Overnight runs (ADR-0049) answer everything before launch; later ambiguity is decided on recorded assumptions.
 - **Epics** need only a stated intent and no open questions (no criteria or size).

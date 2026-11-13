@@ -87,7 +87,7 @@ export class PullRequestGate {
     const agent = await this.agentPr(pr, project);
     if (!agent || agent.run.outcome) return { result: "ignored", pr: number };
 
-    const decision = await this.assess(repo, pr, agent.run);
+    const decision = await this.assess(repo, pr, agent.run, agent.ticket);
     const run = await this.runs.update(
       agent.run.id,
       {
@@ -162,7 +162,7 @@ export class PullRequestGate {
 
     let decision: GateDecision | null = null;
     try {
-      decision = await this.assess(repo, pr, run);
+      decision = await this.assess(repo, pr, run, ticket);
     } catch (err) {
       log("WARNING", "gate read failed at close", { runId: run.id, error: errorText(err) });
     }
@@ -254,7 +254,12 @@ export class PullRequestGate {
     }
   }
 
-  private async assess(repo: string, pr: PullRequest, run: Run): Promise<GateDecision> {
+  private async assess(
+    repo: string,
+    pr: PullRequest,
+    run: Run,
+    ticket: Ticket,
+  ): Promise<GateDecision> {
     const [files, codeowners, required, checks, active] = await Promise.all([
       this.host.listChangedFiles(repo, pr.number),
       // The base branch's file: a PR can't unprotect a path by editing CODEOWNERS.
@@ -273,6 +278,7 @@ export class PullRequestGate {
       checks,
       // AI-72 (ADR-0083): never merge a head a queued or running sync run is about to replace.
       syncPending: syncPendingFor(run, active, this.now()),
+      ticketType: ticket.type,
     });
   }
 
@@ -280,7 +286,9 @@ export class PullRequestGate {
     if (run.gateFlaggedAt) return;
     await this.runs.update(run.id, { gateFlaggedAt: this.now().toISOString() }, ["succeeded"]);
     await this.tickets.flag(ticket.projectId, ticket.id, "system");
-    const files = decision.protectedFiles.slice(0, MAX_LISTED_FILES).join(", ");
+    const files = [...decision.protectedFiles, ...decision.outsideDocs]
+      .slice(0, MAX_LISTED_FILES)
+      .join(", ");
     await this.tracker.addComment(
       ticket.projectId,
       ticket.id,

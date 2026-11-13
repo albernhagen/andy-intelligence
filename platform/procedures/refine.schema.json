@@ -10,7 +10,7 @@
     },
     "type": {
       "type": "string",
-      "enum": ["epic", "feature", "chore", "bug"],
+      "enum": ["epic", "feature", "chore", "bug", "spike"],
       "description": "Your type for the ticket. Used only if the ticket has none."
     },
     "size": {

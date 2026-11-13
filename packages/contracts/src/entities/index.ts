@@ -504,6 +504,8 @@ export const GateReason = z.enum([
   "not_default_branch",
   // A sync run is queued or running for the PR (AI-72, ADR-0083).
   "sync_pending",
+  // A spike's PR changes files outside docs/ (AI-99): a deviation for Andy.
+  "spike_outside_docs",
 ]);
 export type GateReason = z.infer<typeof GateReason>;
 

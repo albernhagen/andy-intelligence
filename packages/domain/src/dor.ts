@@ -68,6 +68,10 @@ export function checkDor(ticket: DorInput, openQuestions: number): DorResult {
     missing.push("expected behaviour as an acceptance criterion");
   }
   if (ticket.type === "chore" && criteria.length === 0) missing.push('"done when" checklist');
+  // A spike's body is its question and its size the timebox (AI-99); criteria say what to answer.
+  if (ticket.type === "spike" && criteria.length === 0) {
+    missing.push("what the findings must answer, as acceptance criteria");
+  }
   if (ticket.size === null) missing.push("size");
   if (!ticket.sizeReason?.trim()) missing.push("size justification");
   return result(missing);
