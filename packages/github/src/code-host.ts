@@ -1,8 +1,10 @@
 import {
   ChangedFile,
+  FileProposal,
   HeadCheck,
   PullRequest,
   PullRequestCommit,
+  ProposedPullRequest,
   Repo,
   RepoName,
   RepoToken,
@@ -386,6 +388,63 @@ export class GitHubCodeHost implements CodeHost {
       // GitHub answers 422 "Reference already exists" for a branch that is there.
       const { status, message } = err as { status?: number; message?: string };
       if (status === 422 && /already exists/i.test(message ?? "")) return "exists";
+      throw err;
+    }
+  }
+
+  async proposeFile(fullName: string, proposal: FileProposal): Promise<ProposedPullRequest | null> {
+    const client = await this.repoClient(fullName);
+    if (!client) return null;
+    const p = FileProposal.parse(proposal);
+    const { data: repo } = await client.octokit.request("GET /repos/{owner}/{repo}", client.repo);
+    const base = repo.default_branch;
+    const { data: ref } = await client.octokit.request(
+      "GET /repos/{owner}/{repo}/git/ref/heads/{branch}",
+      { ...client.repo, branch: base },
+    );
+    // Fails (422) when the branch exists: a proposal never writes onto someone else's branch.
+    await client.octokit.request("POST /repos/{owner}/{repo}/git/refs", {
+      ...client.repo,
+      ref: `refs/heads/${p.branch}`,
+      sha: ref.object.sha,
+    });
+    // The file's blob sha when it exists already: GitHub needs it to replace the file.
+    const existing = await this.notFoundAsNull(() =>
+      client.octokit.request("GET /repos/{owner}/{repo}/contents/{path}", {
+        ...client.repo,
+        path: p.path,
+        ref: p.branch,
+      }),
+    );
+    const sha =
+      existing && !Array.isArray(existing.data) && existing.data.type === "file"
+        ? existing.data.sha
+        : undefined;
+    try {
+      await client.octokit.request("PUT /repos/{owner}/{repo}/contents/{path}", {
+        ...client.repo,
+        path: p.path,
+        message: p.message,
+        content: Buffer.from(p.content, "utf8").toString("base64"),
+        branch: p.branch,
+        ...(sha ? { sha } : {}),
+      });
+      const { data: pr } = await client.octokit.request("POST /repos/{owner}/{repo}/pulls", {
+        ...client.repo,
+        title: p.title,
+        body: p.body,
+        head: p.branch,
+        base,
+      });
+      return ProposedPullRequest.parse({ number: pr.number, url: pr.html_url, branch: p.branch });
+    } catch (err) {
+      // No orphan branch: the one this call created goes again (best effort), then it fails.
+      await client.octokit
+        .request("DELETE /repos/{owner}/{repo}/git/refs/heads/{branch}", {
+          ...client.repo,
+          branch: p.branch,
+        })
+        .catch(() => undefined);
       throw err;
     }
   }

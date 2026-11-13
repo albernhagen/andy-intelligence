@@ -21,7 +21,10 @@ export class DomainError extends Error {
       | "not_clearable"
       | "not_acceptable"
       | "runner_limit"
-      | "runs_elsewhere",
+      | "runs_elsewhere"
+      | "brief_too_long"
+      | "code_host_unavailable"
+      | "rate_limited",
     message: string,
     readonly details: string[] = [],
   ) {

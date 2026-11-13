@@ -27,6 +27,7 @@ import {
   ConfigProposals,
   DigestReader,
   QuotaClearer,
+  BriefService,
   ProjectPlanService,
   TicketService,
   EmailNotifications,
@@ -49,6 +50,7 @@ import { registerDashboardRoutes } from "./dashboard";
 import { registerSetupRoutes } from "./setup";
 import { noReviewFindings, registerConfigProposalRoutes } from "./config-proposals";
 import { registerNotifyFlush, registerNotifyRoutes } from "./notify";
+import { registerBriefRoutes } from "./brief";
 import { registerProjectPlanRoutes } from "./project-plan";
 import {
   ConnectedCodeHost,
@@ -188,6 +190,9 @@ const DOMAIN_STATUS = {
   not_acceptable: 409,
   runner_limit: 409,
   runs_elsewhere: 409,
+  brief_too_long: 422,
+  code_host_unavailable: 503,
+  rate_limited: 429,
 } as const;
 
 export function createApp(input: AppDeps) {
@@ -424,6 +429,12 @@ export function createApp(input: AppDeps) {
   registerDashboardRoutes(app, deps, now);
   registerSetupRoutes(app, deps.tracker, connection ? new ConnectedCodeHost(connection) : null);
   registerNotifyRoutes(app, email);
+  const brief = new BriefService(
+    deps.tracker,
+    connection ? new ConnectedCodeHost(connection) : null,
+    now,
+  );
+  registerBriefRoutes(app, brief);
   const plans = new ProjectPlanService(
     deps.tracker,
     service,
@@ -463,6 +474,7 @@ export function createApp(input: AppDeps) {
       digest,
       notifyEmail: email,
       quota: quotaClearer,
+      brief,
       plans,
       configProposals,
     });

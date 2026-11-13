@@ -19,6 +19,7 @@ import {
   type EmailNotifications,
   type ProjectService,
   type QuotaClearer,
+  type BriefService,
   type ProjectPlanService,
   type ConfigProposals,
   type RunService,
@@ -37,6 +38,7 @@ import { registerSettingsTools } from "./tools-settings";
 import { registerNotifyTools } from "./tools-notify";
 import { registerDigestTools } from "./tools-digest";
 import { registerQuotaTools } from "./tools-quota";
+import { registerBriefTools } from "./tools-brief";
 import { registerProjectPlanTools } from "./tools-project-plan";
 import { registerProjectTools } from "./tools-projects";
 import { registerConfigTools } from "./tools-config";
@@ -60,6 +62,8 @@ export interface ToolDeps {
   notifyEmail?: EmailNotifications | null;
   /** Clears a quota idle (AI-74); the app always passes it, unit tests may not. */
   quota?: QuotaClearer;
+  /** The project brief's write (AI-107); the app always passes it, unit tests may not. */
+  brief?: BriefService;
   /** Project plans (AI-108); the app always passes it, unit tests may not. */
   plans?: ProjectPlanService;
   /** Config proposals from review findings (ADR-0097); absent or null: no config tools. */
@@ -191,6 +195,7 @@ export function registerTools(server: McpServer, deps: ToolDeps): void {
   registerTicketTools(server, deps);
   registerDigestTools(server, deps, run);
   registerQuotaTools(server, deps, run);
+  registerBriefTools(server, deps, run);
   registerProjectPlanTools(server, deps, run);
   registerProjectTools(server, deps, run);
   registerConfigTools(server, deps, run);

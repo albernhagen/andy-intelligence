@@ -40,7 +40,11 @@ export const CONFIG_PROPOSAL_LIMITS = {
   exampleChars: 120,
   /** A project's sweeps are this far apart at least, per instance (max 2 instances). */
   minSweepIntervalMs: 60_000,
-  /** Kinds per sweep whose last decision is looked up (one read each). */
+  /**
+   * Kinds per sweep whose last decision is looked up (one read each). With more repeated kinds,
+   * a stored cursor pages through them by name, so each is looked up within
+   * ceil(kinds / this) sweeps; the rest wait, undecided (AI-137).
+   */
   maxDecisionLookups: 20,
 } as const;
 
@@ -99,7 +103,7 @@ export function proposeFromFindings(
     .map(([kind, pulls]) => proposal(projectId, kind, [...pulls.values()], limits.exampleChars));
 }
 
-/** Kinds seen on `minPulls`+ distinct PRs, ignoring decisions: the ones worth a decision lookup. */
+/** Kinds seen on `minPulls`+ distinct PRs, ignoring decisions: the ones whose decisions matter. */
 export function repeatedKinds(
   projectId: string,
   findings: readonly ReviewFinding[],
@@ -109,6 +113,21 @@ export function repeatedKinds(
     .filter(([, pulls]) => pulls.size >= minPulls)
     .map(([kind]) => kind)
     .sort();
+}
+
+/**
+ * The kinds one sweep looks up (AI-137): up to `max` of the sorted `kinds`, starting after
+ * `lastKind` by name and wrapping to the start, so consecutive sweeps cover every kind.
+ */
+export function lookupPage(
+  kinds: readonly string[],
+  lastKind: string | null,
+  max: number,
+): string[] {
+  if (kinds.length <= max) return [...kinds];
+  const after = lastKind === null ? 0 : kinds.findIndex((k) => k > lastKind);
+  const start = after === -1 ? 0 : after;
+  return Array.from({ length: max }, (_, i) => kinds[(start + i) % kinds.length]!);
 }
 
 function pullsByKind(
@@ -211,8 +230,12 @@ export class ConfigProposals {
       maxFindings: this.limits.maxFindings,
     });
     result.findingsRead = findings.length;
-    const decidedAt = await this.lastDecisions(projectId, findings);
-    for (const p of proposeFromFindings(projectId, findings, this.limits, decidedAt)) {
+    const { decidedAt, deferred } = await this.lastDecisions(projectId, findings);
+    // Deferred kinds weren't looked up: they wait for their page rather than risk re-proposing
+    // a kind Andy decided (AI-137).
+    const lookedUp = findings.filter((f) => !deferred.has(f.kind));
+    const proposals = proposeFromFindings(projectId, lookedUp, this.limits, decidedAt);
+    for (const p of proposals) {
       // The store checks duplicates and the pending cap in one transaction.
       const written = await this.changes.createPending(
         ConfigChange.parse({
@@ -239,27 +262,40 @@ export class ConfigProposals {
   }
 
   /**
-   * When Andy last decided each repeated kind's proposal. Kinds past `maxDecisionLookups` (the
-   * last by name) aren't looked up and are left out of this sweep, so a decided
-   * kind is never re-proposed unread.
+   * When Andy last decided each repeated kind, at most `maxDecisionLookups` reads. With more
+   * kinds than that, the stored cursor picks this sweep's page and advances past it; the kinds
+   * left out are `deferred`: undecided, and not proposed this sweep (AI-137).
    */
   private async lastDecisions(
     projectId: string,
     findings: readonly ReviewFinding[],
-  ): Promise<Map<string, string>> {
+  ): Promise<{ decidedAt: Map<string, string>; deferred: Set<string> }> {
     const decidedAt = new Map<string, string>();
     const kinds = repeatedKinds(projectId, findings, this.limits.minPulls);
-    for (const kind of kinds.slice(0, this.limits.maxDecisionLookups)) {
+    let page = kinds;
+    if (kinds.length > this.limits.maxDecisionLookups) {
+      const cursor = await this.changes.getLookupCursor(projectId);
+      page = lookupPage(kinds, cursor?.lastKind ?? null, this.limits.maxDecisionLookups);
+      await this.changes.setLookupCursor({
+        projectId,
+        lastKind: page.at(-1)!,
+        updatedAt: this.now().toISOString(),
+      });
+      log("config proposal lookups paged", {
+        projectId,
+        kinds: kinds.length,
+        from: page[0],
+        to: page.at(-1),
+      });
+    }
+    for (const kind of page) {
       const last = await this.changes.latestDecision(
         proposalKey(projectId, PROPOSAL_TARGET_FILE, kind),
       );
       if (last?.decidedAt) decidedAt.set(kind, last.decidedAt);
     }
-    // Unlooked-up kinds: treated as decided now, so none of their findings count this sweep.
-    for (const kind of kinds.slice(this.limits.maxDecisionLookups)) {
-      decidedAt.set(kind, this.now().toISOString());
-    }
-    return decidedAt;
+    const inPage = new Set(page);
+    return { decidedAt, deferred: new Set(kinds.filter((k) => !inPage.has(k))) };
   }
 
   /** Every pending change (of one project when given), newest first. */
