@@ -1,6 +1,7 @@
 import type { Firestore } from "@google-cloud/firestore";
 import {
   ConfigChange,
+  ProposalLookupCursor,
   WorkTrackerError,
   type ConfigChangeDecision,
   type ConfigChangeStore,
@@ -21,6 +22,7 @@ const newestFirst = (a: ConfigChange, b: ConfigChange) =>
  * ConfigChangeStore on Firestore (ADR-0097): `configChanges/{id}`. The duplicate check, the
  * pending cap and decisions run inside transactions (serializable, queries included), so
  * concurrent proposals can't both pass. Queries use equality filters only: no composite index.
+ * Each project's lookup cursor (AI-137) is one document in `proposalLookupCursors/{projectId}`.
  */
 export class FirestoreConfigChangeStore implements ConfigChangeStore {
   constructor(private readonly db: Firestore) {}
@@ -84,6 +86,21 @@ export class FirestoreConfigChangeStore implements ConfigChangeStore {
     const decided = snap.docs.map((d) => d.data()).filter((c) => c.decidedAt !== null);
     decided.sort((a, b) => (b.decidedAt ?? "").localeCompare(a.decidedAt ?? ""));
     return decided[0] ?? null;
+  }
+
+  private cursors() {
+    return typedCollection(this.db, collections.proposalLookupCursors.path(), ProposalLookupCursor);
+  }
+
+  /** One document read: `proposalLookupCursors/{projectId}`. */
+  async getLookupCursor(projectId: string): Promise<ProposalLookupCursor | null> {
+    const snap = await this.cursors().doc(projectId).get();
+    return snap.exists ? (snap.data() ?? null) : null;
+  }
+
+  async setLookupCursor(cursor: ProposalLookupCursor): Promise<void> {
+    const parsed = ProposalLookupCursor.parse(cursor);
+    await this.cursors().doc(parsed.projectId).set(parsed);
   }
 
   async decide(

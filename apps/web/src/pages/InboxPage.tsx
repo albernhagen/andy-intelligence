@@ -2,6 +2,7 @@ import { useParams } from "@tanstack/react-router";
 import type { Project } from "@andy/contracts";
 import { ConfigChanges } from "@/components/ConfigChanges";
 import { InboxTicketCard } from "@/components/inbox/InboxTicketCard";
+import { ProjectPlansWaiting, useWaitingPlans } from "@/components/ProjectPlan";
 import { Loading, QueryError } from "@/components/Status";
 import { cardCount, inboxCards, type InboxCard } from "@/lib/needs-you";
 import { useNeedsYou, useProjects } from "@/lib/queries";
@@ -16,18 +17,20 @@ export function InboxPage() {
   const { projectId } = useParams({ strict: false });
   const needsYou = useNeedsYou();
   const projects = useProjects();
+  const plans = useWaitingPlans(projectId);
   if (needsYou.isPending) return <Loading />;
   if (needsYou.data === undefined || showsError(needsYou))
     return <QueryError error={needsYou.error} />;
 
   const { active, stale } = inboxCards(needsYou.data, projectId);
-  const total = sum([...active, ...stale]);
+  const total = sum([...active, ...stale]) + plans.shown.length;
 
   return (
     <section className="space-y-4">
       <h2 className="text-lg font-medium">
         Needs you <span className="text-muted-foreground tabular-nums">{total}</span>
       </h2>
+      <ProjectPlansWaiting projectId={projectId} />
       {total === 0 && <p className="text-muted-foreground">Nothing needs you.</p>}
       {projectId ? (
         <Cards cards={active} />

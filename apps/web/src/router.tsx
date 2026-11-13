@@ -8,6 +8,7 @@ import {
 import { AppShell } from "@/components/AppShell";
 import { loadScope, scopePath } from "@/lib/scope";
 import { BoardPage } from "@/pages/BoardPage";
+import { DashboardsPage } from "@/pages/DashboardsPage";
 import { DigestPage } from "@/pages/DigestPage";
 import { PickProjectPage } from "@/pages/PickProjectPage";
 import { GitHubCallbackPage, GitHubPage } from "@/pages/GitHubPage";
@@ -51,6 +52,12 @@ const routeTree = rootRoute.addChildren([
   }),
   createRoute({ getParentRoute: () => rootRoute, path: "/all/inbox", component: InboxPage }),
   createRoute({ getParentRoute: () => rootRoute, path: "/all/board", component: PickProjectPage }),
+  // Dashboards (AI-117): both scopes.
+  createRoute({
+    getParentRoute: () => rootRoute,
+    path: "/all/dashboards",
+    component: DashboardsPage,
+  }),
   // `/projects` opens the current project's settings, or offers a first project (AI-46).
   createRoute({ getParentRoute: () => rootRoute, path: "/projects", component: ProjectsPage }),
   createRoute({
@@ -76,6 +83,11 @@ const routeTree = rootRoute.addChildren([
     getParentRoute: () => rootRoute,
     path: "/p/$projectId/digest",
     component: DigestPage,
+  }),
+  createRoute({
+    getParentRoute: () => rootRoute,
+    path: "/p/$projectId/dashboards",
+    component: DashboardsPage,
   }),
   // An agent task's own screen (AI-101); project-scoped only, as its URL names its project.
   createRoute({

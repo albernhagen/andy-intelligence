@@ -155,6 +155,25 @@ export function configChangeStoreContract(
       expect(await store.latestDecision("other")).toBeNull();
     });
 
+    it("GivenNoCursorYet_WhenSetAndReadForTwoProjects_ThenEachReadsItsOwnAndTheLatestWins", async () => {
+      const store = await make();
+      expect(await store.getLookupCursor("ai")).toBeNull();
+      await store.setLookupCursor({ projectId: "ai", lastKind: "a-kind", updatedAt: at });
+      await store.setLookupCursor({ projectId: "ops", lastKind: "z-kind", updatedAt: at });
+      await store.setLookupCursor({
+        projectId: "ai",
+        lastKind: "b-kind",
+        updatedAt: "2026-11-12T12:00:00.000Z",
+      });
+
+      expect(await store.getLookupCursor("ai")).toEqual({
+        projectId: "ai",
+        lastKind: "b-kind",
+        updatedAt: "2026-11-12T12:00:00.000Z",
+      });
+      expect(await store.getLookupCursor("ops")).toMatchObject({ lastKind: "z-kind" });
+    });
+
     it("GivenADecidedOrUnknownChange_WhenDecided_ThenConflictOrNotFound", async () => {
       const store = await make();
       const change = pendingConfigChange();

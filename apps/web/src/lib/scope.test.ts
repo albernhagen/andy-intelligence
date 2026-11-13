@@ -22,6 +22,8 @@ describe("scope", () => {
     ["/all/board", "board"],
     ["/p/ai/inbox", "inbox"],
     ["/all/inbox", "inbox"],
+    ["/p/ai/dashboards", "dashboards"],
+    ["/all/dashboards", "dashboards"],
     ["/p/ai/digest", null],
     ["/settings/github", null],
   ])("GivenPath%s_WhenParsed_ThenSectionIs%s", (path, section) => {
@@ -34,6 +36,8 @@ describe("scope", () => {
     expect(scopePath(ai, "inbox")).toBe("/p/ai/inbox");
     expect(scopePath({ kind: "all" }, "board")).toBe("/all/board");
     expect(scopePath({ kind: "all" }, "inbox")).toBe("/all/inbox");
+    expect(scopePath(ai, "dashboards")).toBe("/p/ai/dashboards");
+    expect(scopePath({ kind: "all" }, "dashboards")).toBe("/all/dashboards");
   });
 
   it("GivenNothingStored_WhenLoaded_ThenAllProjects", () => {

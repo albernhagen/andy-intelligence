@@ -1,5 +1,5 @@
 import { ConfigChange } from "../entities";
-import { ReviewFinding } from "../entities/config-proposals";
+import { ProposalLookupCursor, ReviewFinding } from "../entities/config-proposals";
 import { WorkTrackerError } from "../ports";
 import type {
   ConfigChangeDecision,
@@ -18,6 +18,7 @@ const newestFirst = (a: ConfigChange, b: ConfigChange) =>
  */
 export class InMemoryConfigChangeStore implements ConfigChangeStore {
   private readonly changes = new Map<string, ConfigChange>();
+  private readonly cursors = new Map<string, ProposalLookupCursor>();
 
   async createPending(change: ConfigChange, maxPending: number): Promise<CreatePendingOutcome> {
     const parsed = ConfigChange.parse(change);
@@ -57,6 +58,16 @@ export class InMemoryConfigChangeStore implements ConfigChangeStore {
     );
     const latest = decided.sort((a, b) => (b.decidedAt ?? "").localeCompare(a.decidedAt ?? ""))[0];
     return latest ? structuredClone(latest) : null;
+  }
+
+  async getLookupCursor(projectId: string): Promise<ProposalLookupCursor | null> {
+    const cursor = this.cursors.get(projectId);
+    return cursor ? structuredClone(cursor) : null;
+  }
+
+  async setLookupCursor(cursor: ProposalLookupCursor): Promise<void> {
+    const parsed = ProposalLookupCursor.parse(cursor);
+    this.cursors.set(parsed.projectId, parsed);
   }
 
   async decide(

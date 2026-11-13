@@ -8,6 +8,7 @@ import {
 import {
   CodeHostEvent,
   ConfigChange,
+  ProposalLookupCursor,
   Model,
   OAuthGrant,
   Policy,
@@ -62,6 +63,7 @@ export const collections = {
   quotaReadings: { path: () => "quotaReadings", schema: QuotaReading },
   quotaClears: { path: () => "quotaClears", schema: QuotaClear },
   configChanges: { path: () => "configChanges", schema: ConfigChange },
+  proposalLookupCursors: { path: () => "proposalLookupCursors", schema: ProposalLookupCursor },
   releases: { path: () => "releases", schema: Release },
   oauthGrants: { path: () => "oauthGrants", schema: OAuthGrant },
   codeHostEvents: { path: () => "codeHostEvents", schema: CodeHostEvent },

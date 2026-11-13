@@ -768,11 +768,35 @@ describe("refine gate flow", () => {
     expect((await t.ticket(created.id)).needsAttention).toBe(false);
   });
 
-  it("GivenAnEpic_WhenMovedToUpNext_ThenRefused", async () => {
+  it("GivenAnEpic_WhenMovedToUpNext_ThenARefineRunStarts", async () => {
     const t = await setup();
     const epic = await t.create({ type: "epic" });
-    expect((await t.toUpNext(epic.id)).status).toBe(422);
-    expect(await t.runs(epic.id)).toEqual([]);
+    expect((await t.toUpNext(epic.id)).status).toBe(200);
+    expect(await t.runs(epic.id)).toHaveLength(1);
+  });
+
+  it("GivenAnEpicSplitReport_WhenReported_ThenChildrenAreIdeasUnderTheEpicBlockedBySiblingKeys", async () => {
+    const t = await setup();
+    const epic = await t.create({ type: "epic", title: "Boards", upNext: true });
+    await t.report(
+      epic.id,
+      output({
+        type: "epic",
+        outcome: "split",
+        reason: "Two slices",
+        children: [
+          { title: "Lanes", body: "Show lanes", blockedBy: [], touches: ["apps/web/**"] },
+          { title: "Drag", body: "Drag cards", blockedBy: [0], touches: [] },
+        ],
+      }),
+    );
+    const all = await t.json<Ticket[]>(t.call(`${t.base}/tickets`));
+    const lanes = all.find((x) => x.title === "Lanes")!;
+    const drag = all.find((x) => x.title === "Drag")!;
+    expect(lanes).toMatchObject({ parentId: epic.id, upNextRank: null, touches: ["apps/web/**"] });
+    expect(drag).toMatchObject({ parentId: epic.id, blockedBy: [lanes.key] });
+    expect(await t.ticket(epic.id)).toMatchObject({ stage: "backlog", upNextRank: null });
+    expect((await t.comments(epic.id)).join()).toContain(drag.key);
   });
 
   it("GivenARankInTheBody_WhenPatchingATicket_ThenUpNextFieldsCantBeSetThatWay", async () => {

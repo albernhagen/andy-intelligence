@@ -59,6 +59,9 @@ export function AppShell() {
           <NavLink to={scopePath(scope, "inbox")} current={section === "inbox"}>
             Inbox
           </NavLink>
+          <NavLink to={scopePath(scope, "dashboards")} current={section === "dashboards"}>
+            Dashboards
+          </NavLink>
           {scope.kind === "project" && (
             <NavLink
               to={projectSettingsPath(scope.projectId)}

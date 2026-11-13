@@ -35,7 +35,7 @@ export function MoveControls({ ticket }: { ticket: Ticket }) {
             Move to {STAGE_LABELS[s]}
           </Button>
         ))}
-        {ticket.stage === "backlog" && ticket.type !== "epic" && (
+        {ticket.stage === "backlog" && (
           <Button
             size="sm"
             variant="outline"

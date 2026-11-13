@@ -41,6 +41,7 @@ export function buildProject(input: NewProject): Project {
     paused: false,
     lastDispatch: null,
     emailNotifications: true,
+    projectPlan: null,
   };
 }
 

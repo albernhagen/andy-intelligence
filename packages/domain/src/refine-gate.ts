@@ -4,6 +4,7 @@ import {
   WorkTrackerError,
   runQuestionId,
   type Assumption,
+  type EventActor,
   type NewQuestion,
   type Question,
   type RefineGap,
@@ -184,12 +185,23 @@ export class RefineGate {
     return { summary: output.summary, asked: 0, notice: `Back to Ideas: ${output.reason}` };
   }
 
-  /** Too big: children land in Ideas under the same epic; the parent goes back with the links. */
+  /**
+   * Too big: children land in Ideas under the same epic; the parent goes back with the links.
+   * An epic's children land under the epic itself, with `touches` and with `blockedBy` naming
+   * the sibling keys its indexes point at (AI-115); a non-epic's ignore both fields.
+   */
   private async split(run: Run, ticket: Ticket, output: RefineOutput): Promise<RefineApplied> {
+    const epic = ticket.type === "epic";
+    const parentId = epic ? ticket.id : ticket.parentId;
     const since = run.createdAt ?? ticket.createdAt;
-    const existing = (await this.tracker.listTickets(ticket.projectId)).filter(
-      (t) => t.createdAt >= since && t.parentId === ticket.parentId,
-    );
+    const all = await this.tracker.listTickets(ticket.projectId);
+    const existing = all.filter((t) => t.createdAt >= since && t.parentId === parentId);
+    // An epic refined again keeps the stories it already has: a child whose title matches one
+    // (an earlier split's, or Andy's) is that story, not a new one, and its blockers stay as set.
+    const earlier = epic
+      ? all.filter((t) => t.parentId === ticket.id && !t.archived && t.stage !== "cancelled")
+      : [];
+    const sameTitle = (a: string, b: string) => a.trim().toLowerCase() === b.trim().toLowerCase();
     const actor = `agent:${run.id}`;
     // A replay finds what this run already created, by its own `created` event; a same-titled
     // ticket Andy made meanwhile isn't adopted. Taken from the pool so duplicate titles both stay.
@@ -198,25 +210,74 @@ export class RefineGate {
       const [created] = await this.tracker.listEvents(t.projectId, t.id);
       if (created?.actor === actor) pool.push(t);
     }
-    const keys: string[] = [];
+    const made: Ticket[] = [];
+    const kept = new Set<string>();
     for (const child of output.children) {
       const at = pool.findIndex((t) => t.title === child.title);
-      const made =
-        (at >= 0 ? pool.splice(at, 1)[0] : undefined) ??
-        (await this.tracker.createTicket(
-          ticket.projectId,
-          { title: child.title, body: child.body, parentId: ticket.parentId },
-          actor,
-        ));
-      keys.push(made.key);
+      const mine = at >= 0 ? pool.splice(at, 1)[0] : undefined;
+      const had = mine
+        ? undefined
+        : earlier.find((t) => sameTitle(t.title, child.title) && !made.some((m) => m.id === t.id));
+      if (had) kept.add(had.id);
+      made.push(
+        mine ??
+          had ??
+          (await this.tracker.createTicket(
+            ticket.projectId,
+            {
+              title: child.title,
+              body: child.body,
+              parentId,
+              ...(epic ? { touches: child.touches } : {}),
+            },
+            actor,
+          )),
+      );
     }
-    await this.toIdeas(ticket, output.reason);
-    log("INFO", "refine split a ticket", { ticket: ticket.key, children: keys });
+    const keys = made.map((t) => t.key);
+    if (epic) await this.linkSiblings(output, made, kept, actor);
+    await this.toIdeas(ticket, epic ? null : output.reason);
+    log("INFO", "refine split a ticket", {
+      ticket: ticket.key,
+      children: keys,
+      epic,
+      kept: kept.size,
+    });
+    const already = made.filter((t) => kept.has(t.id)).map((t) => t.key);
     return {
       summary: output.summary,
       asked: 0,
-      notice: `Split into ${keys.join(", ")}; back to Ideas: ${output.reason}`,
+      notice: `Split into ${keys.join(", ")}; back to Ideas: ${output.reason}${
+        already.length > 0
+          ? ` (${already.join(", ")} already existed and were kept as they are)`
+          : ""
+      }`,
     };
+  }
+
+  /**
+   * Sets each child's `blockedBy` to the keys of the siblings its indexes name. After every
+   * child exists, since an index may point at a later one; a replay rewrites nothing that matches.
+   * A story the epic already had (`kept`) keeps its blockers.
+   */
+  private async linkSiblings(
+    output: RefineOutput,
+    made: Ticket[],
+    kept: ReadonlySet<string>,
+    actor: EventActor,
+  ) {
+    for (const [i, child] of output.children.entries()) {
+      const ticket = made[i]!;
+      if (kept.has(ticket.id)) continue;
+      const blockedBy = child.blockedBy.map((b) => made[b]!.key);
+      if (blockedBy.join() === ticket.blockedBy.join()) continue;
+      await this.tracker.updateTicket(
+        ticket.projectId,
+        ticket.id,
+        { fields: { blockedBy } },
+        actor,
+      );
+    }
   }
 
   private async toIdeas(ticket: Ticket, sentBackReason: string | null): Promise<void> {

@@ -1,5 +1,5 @@
 import type { Project } from "@andy/contracts";
-import { MAX_ACTIVE_RUNS_GLOBAL } from "./dispatch-caps";
+import { MAX_ACTIVE_RUNS_GLOBAL, waitsForSlot } from "./dispatch-caps";
 
 /** Other projects one run's end may dispatch before its own (ADR-0028: every fan-out capped). */
 export const MAX_PROJECTS_WOKEN_PER_RUN_END = 10;
@@ -23,7 +23,7 @@ export function dispatchOrder(
 ): string[] {
   const others = projects.filter((p) => p.id !== freedBy);
   const waiting = (p: Pick<Project, "lastDispatch">) =>
-    p.lastDispatch?.decision === "global_cap" ? 0 : 1;
+    waitsForSlot(p.lastDispatch?.decision) ? 0 : 1;
   const since = (p: Pick<Project, "lastDispatch">) => p.lastDispatch?.at ?? "";
   const ordered = [...others].sort(
     (a, b) => waiting(a) - waiting(b) || since(a).localeCompare(since(b)),
@@ -46,6 +46,8 @@ export interface RunEndWake {
  * freeing project (AI-91). Bounded: others are woken only when the global cap was full before
  * this end (otherwise none could be waiting on it), the walk stops once the cap is full again,
  * and at most `MAX_PROJECTS_WOKEN_PER_RUN_END` are tried. Returns the other projects woken.
+ * Below a full cap, waiters on the warn cap (AI-92: one task in flight) are reached only through
+ * `dispatch(freedBy, true)`, which wakes `waitsForSlot` projects first (`wakeGlobalCapWaiters`).
  */
 export async function wakeAfterRunEnd(wake: RunEndWake): Promise<string[]> {
   const woken: string[] = [];
