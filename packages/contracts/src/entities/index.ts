@@ -44,6 +44,7 @@ export * from "./scores";
 export * from "./notify-email";
 export * from "./question-format";
 export * from "./brief";
+export * from "./ideate";
 export * from "./project-plan";
 
 /** ARCHITECTURE §5 — domain model. Vendor concepts must not appear here. */

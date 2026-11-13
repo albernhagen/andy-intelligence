@@ -7134,6 +7134,437 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  "/api/projects/{projectId}/ideate": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    post: {
+      parameters: {
+        query?: never;
+        header?: never;
+        path: {
+          projectId: string;
+        };
+        cookie?: never;
+      };
+      requestBody: {
+        content: {
+          "application/json": {
+            idea: string;
+            result: {
+              summary: string;
+              /** @enum {string} */
+              outcome: "epic" | "question";
+              epic: {
+                title: string;
+                body: string;
+                acceptanceCriteria: string[];
+                slices: {
+                  title: string;
+                  summary: string;
+                }[];
+              } | null;
+              spec: {
+                path: string;
+                markdown: string;
+              } | null;
+              questions: {
+                question: string;
+                context: string;
+                options: {
+                  label: string;
+                  consequence: string;
+                }[];
+                recommendation: {
+                  answer: string;
+                  reason: string;
+                };
+              }[];
+            };
+          };
+        };
+      };
+      responses: {
+        /** @description An epic and its spec PR, or a ticket with one question */
+        201: {
+          headers: {
+            [name: string]: unknown;
+          };
+          content: {
+            "application/json":
+              | {
+                  /** @enum {string} */
+                  outcome: "epic";
+                  epic: {
+                    id: string;
+                    projectId: string;
+                    key: string;
+                    /** @enum {string|null} */
+                    type: "epic" | "feature" | "chore" | "bug" | null;
+                    parentId: string | null;
+                    title: string;
+                    body: string;
+                    acceptanceCriteria: string[];
+                    assumptions: string[];
+                    /** @enum {string} */
+                    stage:
+                      | "backlog"
+                      | "ready"
+                      | "in_progress"
+                      | "ready_for_review"
+                      | "done"
+                      | "cancelled";
+                    rank: string;
+                    /** @enum {string|null} */
+                    size: "S" | "M" | "L" | null;
+                    sizeReason: string | null;
+                    overrides: {
+                      assignee?: "me" | "agent" | ("claude-code" | "jules" | "opencode" | "direct");
+                      /** @enum {string} */
+                      tier?: "frontier" | "strong" | "fast" | "cheap";
+                      modelPin?: {
+                        /** @enum {string} */
+                        harness: "claude-code" | "jules" | "opencode" | "direct";
+                        /** @enum {string} */
+                        provider: "claude-sub" | "google-sub" | "openrouter";
+                        model: string;
+                      };
+                      /** @enum {string} */
+                      autonomy?: "autonomous" | "gated" | "manual";
+                      /** @enum {string} */
+                      targetEnv?: "dev" | "prod";
+                      /** @enum {string} */
+                      executor?: "actions" | "local";
+                    };
+                    needsAttention: boolean;
+                    /** @enum {string} */
+                    dorStatus: "not_met" | "met";
+                    blockedBy: string[];
+                    /** @default false */
+                    archived: boolean;
+                    /** @default [] */
+                    outOfScope: string[];
+                    /** @default [] */
+                    touches: string[];
+                    /** @default null */
+                    upNextRank: string | null;
+                    /**
+                     * Format: date-time
+                     * @default null
+                     */
+                    upNextAt: string | null;
+                    /** @default null */
+                    sentBackReason: string | null;
+                    /** @default [] */
+                    refineAssumptions: {
+                      id: string;
+                      text: string;
+                      question: string;
+                      /** @default [] */
+                      options: string[];
+                      /** @enum {string} */
+                      cost: "reversible" | "direction" | "scope" | "trust" | "spend";
+                      /** @enum {string} */
+                      confidence: "sure" | "unsure";
+                      /**
+                       * @default null
+                       * @enum {string|null}
+                       */
+                      demotedBy: "ticket_cap" | "daily_cap" | null;
+                      runId: string;
+                      /**
+                       * @default assumed
+                       * @enum {string}
+                       */
+                      status: "assumed" | "promoted" | "answered" | "settled" | "accepted";
+                      /** @default null */
+                      questionId: string | null;
+                      /**
+                       * Format: date-time
+                       * @default null
+                       */
+                      answeredAt: string | null;
+                      /** @default null */
+                      settledBy: string | null;
+                      /** Format: date-time */
+                      createdAt: string;
+                      /** @default null */
+                      context: string | null;
+                      /** @default [] */
+                      choices: {
+                        label: string;
+                        consequence: string;
+                      }[];
+                      /** @default null */
+                      recommendation: {
+                        answer: string;
+                        reason: string;
+                      } | null;
+                    }[];
+                    /**
+                     * @default null
+                     * @enum {string|null}
+                     */
+                    risk: "low" | "medium" | "high" | null;
+                    /** @default null */
+                    riskReason: string | null;
+                    /**
+                     * @default null
+                     * @enum {string|null}
+                     */
+                    confidence: "high" | "medium" | "low" | null;
+                    /** @default null */
+                    confidenceReason: string | null;
+                    /** Format: date-time */
+                    createdAt: string;
+                    /** Format: date-time */
+                    updatedAt: string;
+                  };
+                  specPullRequest: {
+                    number: number;
+                    /** Format: uri */
+                    url: string;
+                    branch: string;
+                  } | null;
+                }
+              | {
+                  /** @enum {string} */
+                  outcome: "question";
+                  ticket: {
+                    id: string;
+                    projectId: string;
+                    key: string;
+                    /** @enum {string|null} */
+                    type: "epic" | "feature" | "chore" | "bug" | null;
+                    parentId: string | null;
+                    title: string;
+                    body: string;
+                    acceptanceCriteria: string[];
+                    assumptions: string[];
+                    /** @enum {string} */
+                    stage:
+                      | "backlog"
+                      | "ready"
+                      | "in_progress"
+                      | "ready_for_review"
+                      | "done"
+                      | "cancelled";
+                    rank: string;
+                    /** @enum {string|null} */
+                    size: "S" | "M" | "L" | null;
+                    sizeReason: string | null;
+                    overrides: {
+                      assignee?: "me" | "agent" | ("claude-code" | "jules" | "opencode" | "direct");
+                      /** @enum {string} */
+                      tier?: "frontier" | "strong" | "fast" | "cheap";
+                      modelPin?: {
+                        /** @enum {string} */
+                        harness: "claude-code" | "jules" | "opencode" | "direct";
+                        /** @enum {string} */
+                        provider: "claude-sub" | "google-sub" | "openrouter";
+                        model: string;
+                      };
+                      /** @enum {string} */
+                      autonomy?: "autonomous" | "gated" | "manual";
+                      /** @enum {string} */
+                      targetEnv?: "dev" | "prod";
+                      /** @enum {string} */
+                      executor?: "actions" | "local";
+                    };
+                    needsAttention: boolean;
+                    /** @enum {string} */
+                    dorStatus: "not_met" | "met";
+                    blockedBy: string[];
+                    /** @default false */
+                    archived: boolean;
+                    /** @default [] */
+                    outOfScope: string[];
+                    /** @default [] */
+                    touches: string[];
+                    /** @default null */
+                    upNextRank: string | null;
+                    /**
+                     * Format: date-time
+                     * @default null
+                     */
+                    upNextAt: string | null;
+                    /** @default null */
+                    sentBackReason: string | null;
+                    /** @default [] */
+                    refineAssumptions: {
+                      id: string;
+                      text: string;
+                      question: string;
+                      /** @default [] */
+                      options: string[];
+                      /** @enum {string} */
+                      cost: "reversible" | "direction" | "scope" | "trust" | "spend";
+                      /** @enum {string} */
+                      confidence: "sure" | "unsure";
+                      /**
+                       * @default null
+                       * @enum {string|null}
+                       */
+                      demotedBy: "ticket_cap" | "daily_cap" | null;
+                      runId: string;
+                      /**
+                       * @default assumed
+                       * @enum {string}
+                       */
+                      status: "assumed" | "promoted" | "answered" | "settled" | "accepted";
+                      /** @default null */
+                      questionId: string | null;
+                      /**
+                       * Format: date-time
+                       * @default null
+                       */
+                      answeredAt: string | null;
+                      /** @default null */
+                      settledBy: string | null;
+                      /** Format: date-time */
+                      createdAt: string;
+                      /** @default null */
+                      context: string | null;
+                      /** @default [] */
+                      choices: {
+                        label: string;
+                        consequence: string;
+                      }[];
+                      /** @default null */
+                      recommendation: {
+                        answer: string;
+                        reason: string;
+                      } | null;
+                    }[];
+                    /**
+                     * @default null
+                     * @enum {string|null}
+                     */
+                    risk: "low" | "medium" | "high" | null;
+                    /** @default null */
+                    riskReason: string | null;
+                    /**
+                     * @default null
+                     * @enum {string|null}
+                     */
+                    confidence: "high" | "medium" | "low" | null;
+                    /** @default null */
+                    confidenceReason: string | null;
+                    /** Format: date-time */
+                    createdAt: string;
+                    /** Format: date-time */
+                    updatedAt: string;
+                  };
+                  question: {
+                    id: string;
+                    projectId: string;
+                    ticketId: string;
+                    text: string;
+                    options: string[];
+                    suggestedAnswer: string | null;
+                    assumptions: string[];
+                    /** @enum {string} */
+                    urgency: "low" | "normal" | "high";
+                    /** @enum {string} */
+                    status: "open" | "answered" | "withdrawn";
+                    answer: string | null;
+                    /** @enum {string|null} */
+                    answeredVia: "ui" | "mcp" | null;
+                    /** Format: date-time */
+                    createdAt: string;
+                    /** Format: date-time */
+                    answeredAt: string | null;
+                    /** @default null */
+                    runId: string | null;
+                    /** @default null */
+                    context: string | null;
+                    /** @default [] */
+                    choices: {
+                      label: string;
+                      consequence: string;
+                    }[];
+                    /** @default null */
+                    recommendation: {
+                      answer: string;
+                      reason: string;
+                    } | null;
+                  };
+                };
+          };
+        };
+        /** @description Invalid result (fields that don't fit the outcome included) */
+        400: {
+          headers: {
+            [name: string]: unknown;
+          };
+          content: {
+            "application/json": {
+              error: string;
+              details?: string[];
+            };
+          };
+        };
+        /** @description Only the owner */
+        403: {
+          headers: {
+            [name: string]: unknown;
+          };
+          content: {
+            "application/json": {
+              error: string;
+              details?: string[];
+            };
+          };
+        };
+        /** @description No such project */
+        404: {
+          headers: {
+            [name: string]: unknown;
+          };
+          content: {
+            "application/json": {
+              error: string;
+              details?: string[];
+            };
+          };
+        };
+        /** @description No repo with the App (GitHub not connected) */
+        422: {
+          headers: {
+            [name: string]: unknown;
+          };
+          content: {
+            "application/json": {
+              error: string;
+              details?: string[];
+            };
+          };
+        };
+        /** @description The hourly cap on spec PRs is reached */
+        429: {
+          headers: {
+            [name: string]: unknown;
+          };
+          content: {
+            "application/json": {
+              error: string;
+              details?: string[];
+            };
+          };
+        };
+      };
+    };
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   "/api/projects/{projectId}/plan": {
     parameters: {
       query?: never;
