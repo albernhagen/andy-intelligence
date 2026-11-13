@@ -94,6 +94,7 @@ export class PullRequestGate {
         wouldAutoMerge: decision.wouldAutoMerge,
         gateReasons: decision.reasons,
         protectedFiles: decision.protectedFiles,
+        outsideDocs: decision.outsideDocs,
         metrics: progress(agent.run.metrics, decision, pr.headSha),
       },
       ["succeeded"],
@@ -179,6 +180,7 @@ export class PullRequestGate {
               wouldAutoMerge: decision.wouldAutoMerge,
               gateReasons: decision.reasons,
               protectedFiles: decision.protectedFiles,
+              outsideDocs: decision.outsideDocs,
             }
           : {}),
       },
@@ -286,7 +288,8 @@ export class PullRequestGate {
     if (run.gateFlaggedAt) return;
     await this.runs.update(run.id, { gateFlaggedAt: this.now().toISOString() }, ["succeeded"]);
     await this.tickets.flag(ticket.projectId, ticket.id, "system");
-    const files = [...decision.protectedFiles, ...decision.outsideDocs]
+    // A spike's protected path is also outside docs/: list it once.
+    const files = [...new Set([...decision.protectedFiles, ...decision.outsideDocs])]
       .slice(0, MAX_LISTED_FILES)
       .join(", ");
     await this.tracker.addComment(

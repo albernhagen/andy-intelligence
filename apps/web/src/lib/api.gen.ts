@@ -4666,6 +4666,8 @@ export interface paths {
               )[];
               /** @default [] */
               protectedFiles: string[];
+              /** @default [] */
+              outsideDocs: string[];
               /**
                * Format: date-time
                * @default null
@@ -4912,6 +4914,8 @@ export interface paths {
               )[];
               /** @default [] */
               protectedFiles: string[];
+              /** @default [] */
+              outsideDocs: string[];
               /**
                * Format: date-time
                * @default null
@@ -5223,6 +5227,8 @@ export interface paths {
               )[];
               /** @default [] */
               protectedFiles: string[];
+              /** @default [] */
+              outsideDocs: string[];
               /**
                * Format: date-time
                * @default null
@@ -5488,6 +5494,8 @@ export interface paths {
                 )[];
                 /** @default [] */
                 protectedFiles: string[];
+                /** @default [] */
+                outsideDocs: string[];
                 /**
                  * Format: date-time
                  * @default null
@@ -5692,6 +5700,8 @@ export interface paths {
                 )[];
                 /** @default [] */
                 protectedFiles: string[];
+                /** @default [] */
+                outsideDocs: string[];
                 /**
                  * Format: date-time
                  * @default null

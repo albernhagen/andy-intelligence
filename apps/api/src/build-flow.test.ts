@@ -568,6 +568,7 @@ describe("build run flow", () => {
       expect(await f.latestRun()).toMatchObject({
         wouldAutoMerge: false,
         gateReasons: ["spike_outside_docs"],
+        outsideDocs: ["apps/web/src/pages/BoardPage.tsx"],
       });
       expect((await f.readTicket()).needsAttention).toBe(true);
       const events = await f.json<{ kind: string; body: string | null }[]>(
@@ -576,6 +577,19 @@ describe("build run flow", () => {
       expect(events.map((e) => e.body ?? "")).toContainEqual(
         expect.stringContaining("(spike_outside_docs): apps/web/src/pages/BoardPage.tsx"),
       );
+    });
+
+    it("GivenASpikePrThatChangesAProtectedPath_WhenFlagged_ThenThePathIsListedOnce", async () => {
+      const f = await builtPr("s-and-m", { type: "spike", files: [".github/workflows/ci.yml"] });
+      expect(await f.latestRun()).toMatchObject({
+        protectedFiles: [".github/workflows/ci.yml"],
+        outsideDocs: [".github/workflows/ci.yml"],
+      });
+      const events = await f.json<{ kind: string; body: string | null }[]>(
+        f.t.call(`${f.ticketPath}/events`),
+      );
+      const flag = events.map((e) => e.body ?? "").find((b) => b.includes("spike_outside_docs"));
+      expect(flag?.match(/\.github\/workflows\/ci\.yml/g)).toHaveLength(1);
     });
 
     it("GivenTwoFinishedChecks_WhenBothPass_ThenOnlyOneMergeIsAttempted", async () => {
