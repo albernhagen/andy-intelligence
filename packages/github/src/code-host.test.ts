@@ -350,8 +350,8 @@ describe("GitHubCodeHost", () => {
     );
 
     const SHA = "a".repeat(40);
-    // Octokit encodes the ref's slashes in the path; GitHub reads them either way.
-    const refPath = (branch: string) => `GET ${R}/git/ref/${encodeURIComponent(`heads/${branch}`)}`;
+    // The fake matches decoded paths, so the ref's encoded slashes read as `/` here.
+    const refPath = (branch: string) => `GET ${R}/git/ref/heads/${branch}`;
 
     it("GivenABranch_WhenItsTipIsRead_ThenTheShaComesBackAndAMissingOneIsNull", async () => {
       const fetch = fakeGitHub({
