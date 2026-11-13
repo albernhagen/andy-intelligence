@@ -1,4 +1,5 @@
-import { WorkTrackerError, type RunExecutor } from "@andy/contracts";
+import { WorkTrackerError, type Project, type RunExecutor } from "@andy/contracts";
+import { AGENT_RUN_WORKFLOW, CLAUDE_EXECUTOR_REF } from "@andy/github";
 import { DomainError } from "@andy/domain";
 import type { Hono } from "hono";
 import { bodyLimit } from "hono/body-limit";
@@ -12,8 +13,9 @@ import type { GitHubConnection } from "./connection";
  * Repo tokens for CI jobs (ADR-0043). A workflow proves who it is with its GitHub Actions
  * OIDC token (audience = this service's URL); only workflows in TOKEN_POLICY get a 1-hour
  * token with contents + pull requests write on their own repo. No secret is stored in GitHub.
- * The executor's entry is narrower (ADR-0063): one token per build run in flight, for the
- * workflow run it was dispatched to; the body names the run (`{"runId": "..."}`).
+ * The executor's rule is narrower (ADR-0063, ADR-0096): a registered project's caller running the
+ * platform executor gets one token per build run in flight, for the workflow run it was
+ * dispatched to; the body names the run (`{"runId": "..."}`).
  */
 
 export const TOKEN_PATH = "/github/token";
@@ -44,9 +46,8 @@ export interface TokenPolicyEntry {
 }
 
 /**
- * Workflows that may get a repo token: the system security review, and the Claude Code
- * executor's `publish` job (called from this repo's agent-run.yml on main) for build runs.
- * Until M5: Multi-project in parallel only this repo runs agents (ADR-0051).
+ * Fixed workflows that may get a repo token: the system security review (this repo only).
+ * Agent tasks' publish jobs go through `executorEntry` instead (ADR-0096).
  */
 export const TOKEN_POLICY: readonly TokenPolicyEntry[] = [
   {
@@ -54,14 +55,28 @@ export const TOKEN_POLICY: readonly TokenPolicyEntry[] = [
     workflow_ref:
       "albernhagen/andy-intelligence/.github/workflows/system-security-review.yml@refs/heads/main",
   },
-  {
-    repository: "albernhagen/andy-intelligence",
-    workflow_ref: "albernhagen/andy-intelligence/.github/workflows/agent-run.yml@refs/heads/main",
-    job_workflow_ref:
-      "albernhagen/andy-intelligence/.github/workflows/claude-executor.yml@refs/heads/main",
-    runGrant: true,
-  },
 ];
+
+/** The project a repo is registered to, or null (case-insensitive; cached by the caller). */
+export type RegisteredProject = (repo: string) => Promise<Project | null>;
+
+/**
+ * The executor rule (ADR-0096): the caller is `agent-run.yml` on `main` in its own repo, the job
+ * runs the platform's `claude-executor.yml@refs/heads/main`, and the repo is registered to an
+ * enabled project. Null when any part differs. The run grant then checks the run itself.
+ */
+export async function executorEntry(
+  claims: ActionsClaims,
+  registered: RegisteredProject,
+): Promise<TokenPolicyEntry | null> {
+  const callerRef = `${claims.repository}/.github/workflows/${AGENT_RUN_WORKFLOW}@refs/heads/main`;
+  if (claims.job_workflow_ref !== CLAUDE_EXECUTOR_REF || claims.workflow_ref !== callerRef) {
+    return null;
+  }
+  const project = await registered(claims.repository);
+  if (!project?.enabled) return null;
+  return { ...claims, job_workflow_ref: CLAUDE_EXECUTOR_REF, runGrant: true };
+}
 
 /** Claims a build run's one push grant; throws DomainError when refused. */
 export type RunGrant = (runId: string, caller: RunExecutor) => Promise<unknown>;
@@ -95,6 +110,8 @@ export interface TokenDeps {
   policy?: readonly TokenPolicyEntry[];
   /** For `runGrant` entries; without it they get no token. */
   claimRunGrant?: RunGrant;
+  /** Which project owns a repo; without it no agent task gets a token. */
+  registeredProject?: RegisteredProject;
   now?: () => Date;
 }
 
@@ -120,12 +137,13 @@ export function registerGitHubToken(app: Hono<AuthEnv>, deps: TokenDeps): void {
         log("WARNING", "actions token rejected");
         return c.json({ error: "unauthenticated" }, 401);
       }
-      const entry = policy.find(
-        (p) =>
-          p.repository === claims.repository &&
-          p.workflow_ref === claims.workflow_ref &&
-          (p.job_workflow_ref === undefined || p.job_workflow_ref === claims.job_workflow_ref),
-      );
+      const entry =
+        policy.find(
+          (p) =>
+            p.repository === claims.repository &&
+            p.workflow_ref === claims.workflow_ref &&
+            (p.job_workflow_ref === undefined || p.job_workflow_ref === claims.job_workflow_ref),
+        ) ?? (deps.registeredProject ? await executorEntry(claims, deps.registeredProject) : null);
       if (!entry) {
         log("WARNING", "workflow not allowed a repo token", { ...claims });
         return c.json({ error: "forbidden" }, 403);
