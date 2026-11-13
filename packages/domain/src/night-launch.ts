@@ -238,6 +238,7 @@ export class NightLaunches {
       startedAt: at,
       endedAt: null,
       endReason: null,
+      stoppedStories: [],
     });
     log("INFO", "night launch started", { projectId, epic: epic.key, launchId: launch.id });
     return launch;

@@ -224,6 +224,7 @@ describe("NightLaunches", () => {
       startedAt: NOW.toISOString(),
       endedAt: null,
       endReason: null,
+      stoppedStories: [],
     });
     expect(await store.findActive("ai")).toEqual(launch);
   });

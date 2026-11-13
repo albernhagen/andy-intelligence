@@ -838,6 +838,8 @@ export interface paths {
                  * @enum {string|null}
                  */
                 demotedBy: "ticket_cap" | "daily_cap" | null;
+                /** @default null */
+                nightLaunchId: string | null;
                 runId: string;
                 /**
                  * @default assumed
@@ -1081,6 +1083,8 @@ export interface paths {
                  * @enum {string|null}
                  */
                 demotedBy: "ticket_cap" | "daily_cap" | null;
+                /** @default null */
+                nightLaunchId: string | null;
                 runId: string;
                 /**
                  * @default assumed
@@ -1284,6 +1288,8 @@ export interface paths {
                  * @enum {string|null}
                  */
                 demotedBy: "ticket_cap" | "daily_cap" | null;
+                /** @default null */
+                nightLaunchId: string | null;
                 runId: string;
                 /**
                  * @default assumed
@@ -1534,6 +1540,8 @@ export interface paths {
                  * @enum {string|null}
                  */
                 demotedBy: "ticket_cap" | "daily_cap" | null;
+                /** @default null */
+                nightLaunchId: string | null;
                 runId: string;
                 /**
                  * @default assumed
@@ -1732,6 +1740,8 @@ export interface paths {
                  * @enum {string|null}
                  */
                 demotedBy: "ticket_cap" | "daily_cap" | null;
+                /** @default null */
+                nightLaunchId: string | null;
                 runId: string;
                 /**
                  * @default assumed
@@ -2048,6 +2058,8 @@ export interface paths {
                  * @enum {string|null}
                  */
                 demotedBy: "ticket_cap" | "daily_cap" | null;
+                /** @default null */
+                nightLaunchId: string | null;
                 runId: string;
                 /**
                  * @default assumed
@@ -2261,6 +2273,8 @@ export interface paths {
                  * @enum {string|null}
                  */
                 demotedBy: "ticket_cap" | "daily_cap" | null;
+                /** @default null */
+                nightLaunchId: string | null;
                 runId: string;
                 /**
                  * @default assumed
@@ -2587,6 +2601,8 @@ export interface paths {
                  * @enum {string|null}
                  */
                 demotedBy: "ticket_cap" | "daily_cap" | null;
+                /** @default null */
+                nightLaunchId: string | null;
                 runId: string;
                 /**
                  * @default assumed
@@ -2799,6 +2815,8 @@ export interface paths {
                  * @enum {string|null}
                  */
                 demotedBy: "ticket_cap" | "daily_cap" | null;
+                /** @default null */
+                nightLaunchId: string | null;
                 runId: string;
                 /**
                  * @default assumed
@@ -3011,6 +3029,8 @@ export interface paths {
                  * @enum {string|null}
                  */
                 demotedBy: "ticket_cap" | "daily_cap" | null;
+                /** @default null */
+                nightLaunchId: string | null;
                 runId: string;
                 /**
                  * @default assumed
@@ -3843,6 +3863,8 @@ export interface paths {
                    * @enum {string|null}
                    */
                   demotedBy: "ticket_cap" | "daily_cap" | null;
+                  /** @default null */
+                  nightLaunchId: string | null;
                   runId: string;
                   /**
                    * @default assumed
@@ -4336,6 +4358,8 @@ export interface paths {
                  * @enum {string|null}
                  */
                 demotedBy: "ticket_cap" | "daily_cap" | null;
+                /** @default null */
+                nightLaunchId: string | null;
                 runId: string;
                 /**
                  * @default assumed
@@ -7438,6 +7462,8 @@ export interface paths {
                    * @enum {string|null}
                    */
                   demotedBy: "ticket_cap" | "daily_cap" | null;
+                  /** @default null */
+                  nightLaunchId: string | null;
                   runId: string;
                   /**
                    * @default assumed
