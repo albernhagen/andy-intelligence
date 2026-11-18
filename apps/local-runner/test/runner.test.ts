@@ -46,6 +46,7 @@ function loop(
     tasks?: FakeTask[];
     secret?: string;
     idleMs?: number;
+    now?: () => Date;
     signal?: AbortSignal;
     confinement?: Confinement;
   } = {},
@@ -72,6 +73,7 @@ function loop(
     signal: options.signal ?? new AbortController().signal,
     msPerSecond: MS_PER_SECOND,
     idleMs: options.idleMs ?? 400,
+    ...(options.now ? { now: options.now } : {}),
   });
   return { done, log, awake };
 }
@@ -88,12 +90,16 @@ const workDir = (runId: string) => join(env.home, "work", runId);
 describe("local-runner start", () => {
   it("GivenNoWork_WhenPolling_ThenItClaimsAtTheContractIntervalAndExitsAfterTheIdleLimit", async () => {
     server.pollSeconds = 5; // 100 ms here
-    const { done } = loop({ idleMs: 450 });
+    // The idle limit runs on a clock that moves one poll interval per claim, not on wall time,
+    // so a busy machine can't squeeze polls out of it: it ends after 5 claims (450 ms / 100 ms).
+    const { done } = loop({
+      idleMs: 450,
+      now: () => new Date(server.claims.length * 5 * MS_PER_SECOND),
+    });
 
     expect(await done).toBe("idle");
     const gaps = server.claims.slice(1).map((c, i) => c.at - server.claims[i]!.at);
-    expect(server.claims.length).toBeGreaterThanOrEqual(3);
-    expect(server.claims.length).toBeLessThanOrEqual(6);
+    expect(server.claims.length).toBe(5);
     for (const gap of gaps) expect(gap).toBeGreaterThanOrEqual(5 * MS_PER_SECOND - 5);
     expect(server.claims[0]!.body).toEqual({ version: "test" });
     expect(server.refused).toEqual([]);
