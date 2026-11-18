@@ -65,12 +65,18 @@ describe("executor tests inside a git hook", () => {
       GIT_PREFIX: "",
     };
 
-    const result = spawnSync(process.execPath, [VITEST, "run", "--project", "scripts", ...SUITES], {
-      cwd: ROOT,
-      env: hookEnv,
-      encoding: "utf8",
-      timeout: 150_000,
-    });
+    // The nested suites get the same per-test budget as the slow suites here: on a busy machine
+    // their real git calls run past vitest's 5 s default and the whole check would fail.
+    const result = spawnSync(
+      process.execPath,
+      [VITEST, "run", "--project", "scripts", "--testTimeout=30000", ...SUITES],
+      {
+        cwd: ROOT,
+        env: hookEnv,
+        encoding: "utf8",
+        timeout: 150_000,
+      },
+    );
 
     expect(result.status, `${result.stdout}\n${result.stderr}`).toBe(0);
     expect(snapshot(outer.git)).toEqual(before);

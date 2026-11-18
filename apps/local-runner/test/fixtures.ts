@@ -88,21 +88,26 @@ export interface Env {
   calls(): { args: string[]; cwd: string; envNames: string[]; stdin: string }[];
 }
 
-export function makeEnv(stub: StubConfig = {}, projectFiles: Record<string, string> = {}): Env {
-  const root = realpathSync(mkdtempSync(join(tmpdir(), "local-runner-")));
+/** The platform and project remotes: built once per test file (git is the slow part), read only. */
+export interface Remotes {
+  gitBase: string;
+}
+
+export function makeRemotes(projectFiles: Record<string, string> = {}): Remotes {
+  const root = realpathSync(mkdtempSync(join(tmpdir(), "local-runner-remotes-")));
   const remotes = join(root, "remotes");
-  const hookMarker = join(root, "project-hook-ran");
   makeRemote(
     remotes,
     PLATFORM_REPO,
     Object.fromEntries(PLATFORM_FILES.map((f) => [f, readFileSync(join(WORKSPACE, f), "utf8")])),
   );
+  // The stub runs these hooks with HOOK_MARKER set to a file in its own (per-test) directory, so
+  // one shared project repo still gives each test its own marker.
+  const touch = { type: "command", command: 'touch "$HOOK_MARKER"' };
   const hooks = {
     hooks: {
-      SessionStart: [{ hooks: [{ type: "command", command: `touch '${hookMarker}'` }] }],
-      PreToolUse: [
-        { matcher: "*", hooks: [{ type: "command", command: `touch '${hookMarker}'` }] },
-      ],
+      SessionStart: [{ hooks: [touch] }],
+      PreToolUse: [{ matcher: "*", hooks: [touch] }],
     },
     permissions: { allow: ["Bash"] },
   };
@@ -113,6 +118,12 @@ export function makeEnv(stub: StubConfig = {}, projectFiles: Record<string, stri
     ".github/CODEOWNERS": "/docs/ @andy\n",
     ...projectFiles,
   });
+  return { gitBase: `file://${remotes}` };
+}
+
+/** A fresh runner home and stub `claude` for one test, on the file's shared remotes. */
+export function makeEnv(remotes: Remotes, stub: StubConfig = {}): Env {
+  const root = realpathSync(mkdtempSync(join(tmpdir(), "local-runner-")));
   const stubDir = join(root, "stub");
   mkdirSync(stubDir);
   const claude = join(stubDir, "claude");
@@ -124,9 +135,9 @@ export function makeEnv(stub: StubConfig = {}, projectFiles: Record<string, stri
   return {
     root,
     home: join(root, "home"),
-    gitBase: `file://${remotes}`,
+    gitBase: remotes.gitBase,
     claude,
-    hookMarker,
+    hookMarker: join(stubDir, "hook-ran"),
     setStub,
     calls: () => {
       try {
