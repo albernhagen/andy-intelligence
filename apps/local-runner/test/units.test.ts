@@ -15,7 +15,7 @@ import {
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { RUN_REPORT_MAX_BYTES, type RunContextResponse } from "@andy/contracts";
-import { describe, expect, it } from "vitest";
+import { beforeAll, describe, expect, it } from "vitest";
 import { agentArgs, agentEnv, parseStream } from "../src/agent";
 import { checkContext, fitReport } from "../src/api";
 import { checkSettings } from "../src/check-settings";
@@ -34,7 +34,7 @@ import {
   writePidFile,
 } from "../src/processes";
 import { SECRET } from "./fake-server";
-import { WORKSPACE, makeEnv } from "./fixtures";
+import { WORKSPACE, makeEnv, makeRemotes, type Remotes } from "./fixtures";
 
 /** A `security` stand-in: a JSON file next to it is the "Keychain"; argv is logged. */
 function stubSecurity() {
@@ -221,11 +221,15 @@ describe("kept work directories", () => {
 });
 
 describe("local-runner check-settings", () => {
+  let remotes: Remotes;
+  beforeAll(() => {
+    remotes = makeRemotes();
+  });
   const platform = () =>
     loadPlatform({ root: WORKSPACE, confinement: noConfinement, profilePath: "/nonexistent" });
 
   it("GivenAnAgentThatHonoursSettingSources_WhenChecked_ThenItPasses", async () => {
-    const env = makeEnv();
+    const env = makeEnv(remotes);
     const problem = await checkSettings({
       platform: platform(),
       claudeCommand: env.claude,
@@ -237,7 +241,7 @@ describe("local-runner check-settings", () => {
   });
 
   it("GivenAnAgentThatLoadsProjectSettings_WhenChecked_ThenItFailsNamingTheSources", async () => {
-    const env = makeEnv({ ignoreSettingSources: true });
+    const env = makeEnv(remotes, { ignoreSettingSources: true });
     const problem = await checkSettings({
       platform: platform(),
       claudeCommand: env.claude,
@@ -514,12 +518,11 @@ describe("agents never outlive the runner", () => {
     const runner = spawn("/bin/sleep", ["60"], { detached: true, stdio: "ignore" });
     runner.unref();
     const agent = detachedSleep();
-    startWatchdog(agent, runner.pid!);
-    await new Promise((r) => setTimeout(r, 300));
+    startWatchdog(agent, runner.pid!, 0.05);
     expect(alive(agent)).toBe(true);
     process.kill(runner.pid!, "SIGKILL");
-    await expect.poll(() => alive(agent), { timeout: 8000, interval: 200 }).toBe(false);
-  }, 15_000);
+    await expect.poll(() => alive(agent), { timeout: 5000, interval: 50 }).toBe(false);
+  });
 
   const deadRunner = { pid: 999_999, started: "Mon Jan  1 00:00:00 2001" };
   const pidFile = (home: string, run: string, record: unknown) => {

@@ -47,13 +47,26 @@ export function killAllAgents(): number {
 
 /** Every 2 s: while the runner and the agent both live, wait; runner gone → kill the agent's group. */
 const WATCHDOG = `
-while kill -0 "$1" 2>/dev/null && kill -0 -"$2" 2>/dev/null; do sleep 2; done
+while kill -0 "$1" 2>/dev/null && kill -0 -"$2" 2>/dev/null; do sleep "$3"; done
 kill -0 "$1" 2>/dev/null || kill -KILL -"$2" 2>/dev/null
 exit 0
 `;
 
-export function startWatchdog(pgid: number, runnerPid: number = process.pid): void {
-  const child = spawn("/bin/sh", ["-c", WATCHDOG, "watchdog", String(runnerPid), String(pgid)], {
+/** `intervalSeconds`: how often it checks (tests pass a fraction of a second). */
+export function startWatchdog(
+  pgid: number,
+  runnerPid: number = process.pid,
+  intervalSeconds = 2,
+): void {
+  const args = [
+    "-c",
+    WATCHDOG,
+    "watchdog",
+    String(runnerPid),
+    String(pgid),
+    String(intervalSeconds),
+  ];
+  const child = spawn("/bin/sh", args, {
     detached: true,
     stdio: "ignore",
   });

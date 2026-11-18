@@ -1,6 +1,6 @@
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { ControlPlane } from "../src/api";
 import { RepoCache } from "../src/git";
 import { runLoop, type KeepAwake } from "../src/runner";
@@ -10,9 +10,11 @@ import {
   PLATFORM_REPO,
   WORKSPACE,
   makeEnv,
+  makeRemotes,
   memoryLogger,
   task,
   type Env,
+  type Remotes,
   type StubConfig,
 } from "./fixtures";
 
@@ -22,12 +24,15 @@ import {
  */
 
 const MS_PER_SECOND = 20;
-/** The real Seatbelt sandbox on macOS (the agent and platform child run under it); none on Linux CI. */
-const CONFINEMENT = process.platform === "darwin" ? seatbelt : noConfinement;
 
 let server: FakeServer;
+let remotes: Remotes;
 let env: Env;
 
+// The remotes are read only, so one set serves every test; each test gets its own home.
+beforeAll(() => {
+  remotes = makeRemotes();
+});
 beforeEach(async () => {
   server = await startFakeServer();
 });
@@ -41,12 +46,13 @@ function loop(
     tasks?: FakeTask[];
     secret?: string;
     idleMs?: number;
+    now?: () => Date;
     signal?: AbortSignal;
     confinement?: Confinement;
     mayClaim?: () => boolean;
   } = {},
 ) {
-  env = makeEnv(options.stub);
+  env = makeEnv(remotes, options.stub);
   server.queue.push(...(options.tasks ?? []));
   const log = memoryLogger();
   const awake: boolean[] = [];
@@ -61,13 +67,15 @@ function loop(
       home: env.home,
       claudeCommand: env.claude,
       platformRepo: PLATFORM_REPO,
-      confinement: options.confinement ?? CONFINEMENT,
+      // No sandbox in the loop tests (it is process-heavy); the Seatbelt test below opts in.
+      confinement: options.confinement ?? noConfinement,
     },
     keepAwake,
     signal: options.signal ?? new AbortController().signal,
     msPerSecond: MS_PER_SECOND,
     idleMs: options.idleMs ?? 400,
     ...(options.mayClaim ? { mayClaim: options.mayClaim } : {}),
+    ...(options.now ? { now: options.now } : {}),
   });
   return { done, log, awake };
 }
@@ -84,12 +92,16 @@ const workDir = (runId: string) => join(env.home, "work", runId);
 describe("local-runner start", () => {
   it("GivenNoWork_WhenPolling_ThenItClaimsAtTheContractIntervalAndExitsAfterTheIdleLimit", async () => {
     server.pollSeconds = 5; // 100 ms here
-    const { done } = loop({ idleMs: 450 });
+    // The idle limit runs on a clock that moves one poll interval per claim, not on wall time,
+    // so a busy machine can't squeeze polls out of it: it ends after 5 claims (450 ms / 100 ms).
+    const { done } = loop({
+      idleMs: 450,
+      now: () => new Date(server.claims.length * 5 * MS_PER_SECOND),
+    });
 
     expect(await done).toBe("idle");
     const gaps = server.claims.slice(1).map((c, i) => c.at - server.claims[i]!.at);
-    expect(server.claims.length).toBeGreaterThanOrEqual(3);
-    expect(server.claims.length).toBeLessThanOrEqual(6);
+    expect(server.claims.length).toBe(5);
     for (const gap of gaps) expect(gap).toBeGreaterThanOrEqual(5 * MS_PER_SECOND - 5);
     expect(server.claims[0]!.body).toEqual({ version: "test" });
     expect(server.refused).toEqual([]);
@@ -266,8 +278,10 @@ describe("local-runner start", () => {
     const t = task("refine");
     const { done } = loop({ tasks: [t], stub: { agent: "hang" }, signal: stop.signal });
     await expect.poll(() => agentCalls().length, { timeout: 5000 }).toBe(1);
+    // Several heartbeat intervals pass (each one is also a poll interval) with no claim.
     const claims = server.claims.length;
-    await new Promise((r) => setTimeout(r, 10 * MS_PER_SECOND));
+    const beats = server.heartbeats.length;
+    await expect.poll(() => server.heartbeats.length, { timeout: 5000 }).toBeGreaterThan(beats + 5);
     expect(server.claims.length).toBe(claims);
 
     stop.abort();

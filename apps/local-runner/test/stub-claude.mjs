@@ -33,7 +33,11 @@ for (const source of sources) {
   if (!file || !existsSync(file)) continue;
   const hooks = JSON.parse(readFileSync(file, "utf8")).hooks ?? {};
   for (const entries of Object.values(hooks)) {
-    for (const entry of entries) for (const h of entry.hooks) execFileSync("sh", ["-c", h.command]);
+    for (const entry of entries)
+      for (const h of entry.hooks)
+        execFileSync("sh", ["-c", h.command], {
+          env: { ...process.env, HOOK_MARKER: join(here, "hook-ran") },
+        });
   }
 }
 
