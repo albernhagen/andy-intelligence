@@ -12,7 +12,9 @@ import { setInterval, setTimeout } from "node:timers";
 const here = dirname(process.argv[1]);
 const config = JSON.parse(readFileSync(join(here, "config.json"), "utf8"));
 const args = process.argv.slice(2);
-const stdin = readFileSync(0, "utf8");
+// Async: a synchronous read of a pipe can fail with EAGAIN on Linux.
+let stdin = "";
+for await (const chunk of process.stdin) stdin += chunk;
 appendFileSync(
   join(here, "calls.jsonl"),
   `${JSON.stringify({ args, cwd: process.cwd(), envNames: Object.keys(process.env), stdin })}\n`,
@@ -31,7 +33,11 @@ for (const source of sources) {
   if (!file || !existsSync(file)) continue;
   const hooks = JSON.parse(readFileSync(file, "utf8")).hooks ?? {};
   for (const entries of Object.values(hooks)) {
-    for (const entry of entries) for (const h of entry.hooks) execFileSync("sh", ["-c", h.command]);
+    for (const entry of entries)
+      for (const h of entry.hooks)
+        execFileSync("sh", ["-c", h.command], {
+          env: { ...process.env, HOOK_MARKER: join(here, "hook-ran") },
+        });
   }
 }
 
