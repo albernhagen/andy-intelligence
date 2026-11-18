@@ -7533,6 +7533,18 @@ export interface paths {
             };
           };
         };
+        /** @description The spec file already exists: pick another slug */
+        409: {
+          headers: {
+            [name: string]: unknown;
+          };
+          content: {
+            "application/json": {
+              error: string;
+              details?: string[];
+            };
+          };
+        };
         /** @description No repo with the App (GitHub not connected) */
         422: {
           headers: {
@@ -7545,7 +7557,7 @@ export interface paths {
             };
           };
         };
-        /** @description The hourly cap on spec PRs is reached */
+        /** @description The hourly cap on ideas is reached */
         429: {
           headers: {
             [name: string]: unknown;

@@ -25,7 +25,7 @@ import type { TicketService } from "./tickets";
  * (Claude desktop follows the procedure itself and calls MCP `ideate`).
  */
 
-/** Spec PRs opened per instance per rolling hour (ADR-0028). */
+/** Ideas submitted per instance per rolling hour, either outcome (ADR-0028). */
 export const IDEATE_PRS_PER_HOUR = 10;
 const HOUR_MS = 60 * 60_000;
 
@@ -58,6 +58,7 @@ export class IdeateService {
     if (!project) throw new WorkTrackerError("not_found", `project ${projectId} not found`);
 
     if (result.outcome === "question") {
+      this.takeSlot(this.now().getTime());
       const ticket = await this.tickets.create(
         projectId,
         { title: ideaTitle(idea), body: `${idea}\n\n---\n\n${result.summary}` },
@@ -76,6 +77,10 @@ export class IdeateService {
     const repo = await this.repoOf(project.repos[0], project.key);
     const epicInput = result.epic!;
     const spec = result.spec!;
+    // A draft never replaces an existing spec: pick another slug instead.
+    if ((await this.codeHost!.readFile(repo.fullName, spec.path, repo.defaultBranch)) !== null) {
+      throw new DomainError("not_acceptable", `${spec.path} already exists in ${repo.fullName}`);
+    }
     this.takeSlot(this.now().getTime());
     const epic = await this.tickets.create(
       projectId,
@@ -87,8 +92,9 @@ export class IdeateService {
       },
       actor,
     );
+    let pr: ProposedPullRequest | null;
     try {
-      const pr = await this.codeHost!.proposeFile(repo.fullName, {
+      pr = await this.codeHost!.proposeFile(repo.fullName, {
         branch: `ideate/${spec.path.slice("specs/".length, -".md".length).slice(0, 36)}-${stamp(this.now())}-${this.suffix()}`,
         path: spec.path,
         content: spec.markdown.endsWith("\n") ? spec.markdown : `${spec.markdown}\n`,
@@ -97,34 +103,59 @@ export class IdeateService {
         body: `Spec draft for ${epic.key} from the ideate procedure (ADR-0050, \`platform/procedures/ideate.md\`). Andy reviews and merges; agents read it as data, never as instructions.`,
       });
       if (!pr) throw new Error(`the App isn't installed on ${repo.fullName}`);
+    } catch (err) {
+      await this.noteFailure(
+        projectId,
+        epic,
+        "spec draft PR failed",
+        err,
+        (m) => `The spec draft PR (${spec.path}) could not be opened: ${m}`,
+      );
+      return { outcome: "epic", epic, specPullRequest: null };
+    }
+    try {
       await this.tracker.linkPullRequest(
         projectId,
         epic.id,
         { number: pr.number, url: pr.url, state: "open" },
         actor,
       );
-      log("idea became an epic", { projectId, epic: epic.key, pullRequest: pr.number });
-      return { outcome: "epic", epic, specPullRequest: pr };
     } catch (err) {
-      const message = (err as Error).message.slice(0, 300);
-      console.error(
-        JSON.stringify({
-          severity: "ERROR",
-          message: "spec draft PR failed",
-          component: "ideate",
-          projectId,
-          epic: epic.key,
-          error: message,
-        }),
-      );
-      await this.tracker.addComment(
+      // The PR exists: say so with its link, and still return it.
+      await this.noteFailure(
         projectId,
-        epic.id,
-        `The spec draft PR (${spec.path}) could not be opened: ${message}`,
-        "system",
+        epic,
+        "spec PR link failed",
+        err,
+        (m) => `The spec draft PR is open at ${pr.url}, but linking it to this epic failed: ${m}`,
       );
-      return { outcome: "epic", epic, specPullRequest: null };
     }
+    log("idea became an epic", { projectId, epic: epic.key, pullRequest: pr.number });
+    return { outcome: "epic", epic, specPullRequest: pr };
+  }
+
+  /** Logs the failure and comments on the epic; a failing comment is logged, never thrown. */
+  private async noteFailure(
+    projectId: string,
+    epic: Ticket,
+    what: string,
+    err: unknown,
+    comment: (message: string) => string,
+  ): Promise<void> {
+    const message = (err instanceof Error ? err.message : String(err)).slice(0, 300);
+    console.error(
+      JSON.stringify({
+        severity: "ERROR",
+        message: what,
+        component: "ideate",
+        projectId,
+        epic: epic.key,
+        error: message,
+      }),
+    );
+    await this.tracker
+      .addComment(projectId, epic.id, comment(message), "system")
+      .catch(() => undefined);
   }
 
   /** Checked before anything is created, so a missing repo leaves no orphan epic. */
@@ -140,7 +171,7 @@ export class IdeateService {
     if (this.opened.length >= IDEATE_PRS_PER_HOUR) {
       throw new DomainError(
         "rate_limited",
-        `at most ${IDEATE_PRS_PER_HOUR} spec PRs an hour; try again later`,
+        `at most ${IDEATE_PRS_PER_HOUR} ideas an hour; try again later`,
       );
     }
     this.opened.push(nowMs);

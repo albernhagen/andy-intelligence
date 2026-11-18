@@ -38,8 +38,9 @@ const ideateRoute = createRoute({
     400: json(ErrorBody, "Invalid result (fields that don't fit the outcome included)"),
     403: json(ErrorBody, "Only the owner"),
     404: json(ErrorBody, "No such project"),
+    409: json(ErrorBody, "The spec file already exists: pick another slug"),
     422: json(ErrorBody, "No repo with the App (GitHub not connected)"),
-    429: json(ErrorBody, "The hourly cap on spec PRs is reached"),
+    429: json(ErrorBody, "The hourly cap on ideas is reached"),
   },
 });
 

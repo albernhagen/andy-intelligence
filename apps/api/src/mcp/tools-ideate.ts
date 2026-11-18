@@ -32,7 +32,7 @@ export function registerIdeateTools(server: McpServer, deps: IdeateToolDeps, run
     "ideate",
     {
       description:
-        "Owner only. Turns an idea into an epic: first follow platform/procedures/ideate.md yourself (read the project's brief), then call this with the idea and your result. outcome epic: creates the epic in Ideas and opens a PR with the specs/<slug>.md draft. outcome question (the idea contradicts the brief): creates an Ideas ticket with the question in Needs-you, no epic. At most 10 spec PRs an hour.",
+        "Owner only. Turns an idea into an epic: first follow platform/procedures/ideate.md yourself (read the project's brief), then call this with the idea and your result. outcome epic: creates the epic in Ideas and opens a PR with the specs/<slug>.md draft. outcome question (the idea contradicts the brief): creates an Ideas ticket with the question in Needs-you, no epic. Refused if the spec file already exists. At most 10 ideas an hour.",
       inputSchema: IdeateInput,
       annotations: { destructiveHint: false, idempotentHint: false, openWorldHint: true },
     },

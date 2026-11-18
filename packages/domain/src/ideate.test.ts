@@ -176,4 +176,41 @@ describe("IdeateService", () => {
     expect(ideaTitle("x".repeat(200)).length).toBeLessThanOrEqual(96);
     expect(ideaTitle("# heading idea")).toBe("Idea: \\# heading idea");
   });
+
+  it("GivenThePrOpensButLinkingFails_WhenSubmitted_ThenThePrIsReturnedAndTheCommentGivesItsUrl", async () => {
+    const { tracker, project, ideate } = await setup();
+    vi.spyOn(tracker, "linkPullRequest").mockRejectedValueOnce(new Error("store timeout"));
+    const res = await ideate.submit(project.id, { idea: "x", result: epicResult }, OWNER);
+    expect(res).toMatchObject({ outcome: "epic", specPullRequest: { number: 1000 } });
+    if (res.outcome !== "epic") return;
+    const comment = (await tracker.listEvents(project.id, res.epic.id)).find(
+      (e) => e.kind === "comment",
+    );
+    expect(comment?.body).toContain(
+      "is open at https://github.com/albernhagen/trail-log/pull/1000",
+    );
+    expect(comment?.body).not.toContain("could not be opened");
+  });
+
+  it("GivenTheHourlyCapReachedWithQuestions_WhenAnotherQuestionIsSubmitted_ThenRateLimited", async () => {
+    const { tracker, project, ideate, tick } = await setup();
+    for (let i = 0; i < IDEATE_PRS_PER_HOUR; i++) {
+      await ideate.submit(project.id, { idea: `Idea ${i}`, result: questionResult }, OWNER);
+      tick(1000);
+    }
+    await expect(
+      ideate.submit(project.id, { idea: "One more", result: questionResult }, OWNER),
+    ).rejects.toMatchObject({ code: "rate_limited" });
+    expect(await tracker.listTickets(project.id)).toHaveLength(IDEATE_PRS_PER_HOUR);
+  });
+
+  it("GivenTheSpecPathExists_WhenAnEpicIsSubmitted_ThenRefusedAndNothingCreated", async () => {
+    const { tracker, host, project, ideate } = await setup();
+    host.files.set("specs/weekly-summary.md", "# existing\n");
+    await expect(
+      ideate.submit(project.id, { idea: "x", result: epicResult }, OWNER),
+    ).rejects.toMatchObject({ code: "not_acceptable" });
+    expect(await tracker.listTickets(project.id)).toEqual([]);
+    expect(host.proposals).toEqual([]);
+  });
 });
