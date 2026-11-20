@@ -282,6 +282,7 @@ export function createApp(input: AppDeps) {
     async (projectId) => runEnded(projectId),
     connection ? new ConnectedCodeHost(connection) : null,
     runnerPresence,
+    deps.nightLaunches ?? null,
   );
   const refiner = new RefineDispatcher(deps.tracker, deps.runs, runs, now);
   const builder = new BuildDispatcher(deps.tracker, deps.runs, runs, now, deps.quota ?? null);
