@@ -4,7 +4,7 @@ date: 2026-11-12
 amends: 0089 (publish and the push token for a local build), 0098 (the pre-agent Bash check for builds)
 ---
 
-# 0102 — Local build and publish: the platform's own publish script, one push token, a fail-closed Bash check
+# 0103 — Local build and publish: the platform's own publish script, one push token, a fail-closed Bash check
 
 AI-133: Local executor: local build and publish (ADR-0089 slice 6). The runner now runs build tasks. Sync tasks stay on GitHub Actions (ADR-0094: the claim never hands one out).
 

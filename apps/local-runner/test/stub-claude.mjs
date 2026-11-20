@@ -44,7 +44,7 @@ for (const source of sources) {
 emit({ type: "system", subtype: "init", tools: ["Read"] });
 
 if (stdin.startsWith("This is a sandbox check.")) {
-  // The Bash check (ADR-0102): "pass" writes the facts a sandboxed Bash would; "open" as if the
+  // The Bash check (ADR-0103): "pass" writes the facts a sandboxed Bash would; "open" as if the
   // network were open; "offline" as if nothing answered; "refuse" as if Bash were refused.
   const mode = config.sandboxCheck ?? "pass";
   const command = stdin.trim().split("\n").at(-1);
