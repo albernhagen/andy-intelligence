@@ -63,7 +63,15 @@ export class NightUnattended {
       if (!launch) return null;
       if (launch.stoppedStories.some((s) => s.key === ticket.key)) return launch;
       const tickets = await this.tracker.listTickets(projectId);
-      const skipped = launchDependants(launch.storyKeys, tickets, ticket.key);
+      // A dependant that is already finished or hidden isn't skipped: nothing of it waits.
+      const open = new Set(
+        tickets
+          .filter((t) => !t.archived && t.stage !== "done" && t.stage !== "cancelled")
+          .map((t) => t.key),
+      );
+      const skipped = launchDependants(launch.storyKeys, tickets, ticket.key).filter((k) =>
+        open.has(k),
+      );
       const text = reason.replace(/\s+/g, " ").trim().slice(0, 500) || "stopped";
       const stopped = await this.store.stopStory(launch.id, {
         key: ticket.key,

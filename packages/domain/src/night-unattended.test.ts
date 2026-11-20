@@ -311,6 +311,33 @@ describe("a story that stops for the night", () => {
     expect(await t.runStore.listForTicket(t.projectId, b.id)).toEqual([]);
   });
 
+  it("GivenADependantAlreadyDoneOrArchived_WhenItsBlockerStops_ThenItIsNotSkippedOrFlagged", async () => {
+    const t = await withRuns();
+    const a = await t.story("Schema");
+    const done = await t.story("API", [a.key]);
+    const hidden = await t.story("UI", [a.key]);
+    const open = await t.story("Docs", [a.key]);
+    await t.tracker.updateTicket(
+      t.projectId,
+      done.id,
+      { stage: { to: "done", forced: true, reason: "done by hand" } },
+      "andy",
+    );
+    await t.tracker.updateTicket(t.projectId, hidden.id, { fields: { archived: true } }, "andy");
+    await t.launch([a.key, done.key, hidden.key, open.key]);
+
+    await t.night.stopStory(t.projectId, a.id, "its build failed");
+
+    const launch = (await t.store.get("launch-1"))!;
+    expect(launch.stoppedStories[0]!.skipped).toEqual([open.key]);
+    for (const x of [done, hidden]) {
+      expect((await t.tracker.getTicket(t.projectId, x.id))!.needsAttention).toBe(false);
+      const events = await t.tracker.listEvents(t.projectId, x.id);
+      expect(events.some((e) => e.body?.startsWith("Skipped for the night"))).toBe(false);
+    }
+    expect((await t.tracker.getTicket(t.projectId, open.id))!.needsAttention).toBe(true);
+  });
+
   it("GivenAStoryNoLaunchCovers_WhenItsBuildFailsForGood_ThenNothingIsStopped", async () => {
     const t = await withRuns();
     const a = await t.story("Schema");
