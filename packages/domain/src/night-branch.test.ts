@@ -12,6 +12,8 @@ import {
 } from "@andy/contracts";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { EpicBranches, buildBaseBranch, type EpicBranchHost } from "./night-branch";
+import { NightLaunches } from "./night-launch";
+import type { PlanState } from "./plans";
 import { RunService } from "./runs";
 import { WorkflowExecutor } from "./test-executor";
 
@@ -357,4 +359,59 @@ describe("RunService build base branch (AI-122)", () => {
       message: expect.stringContaining("local runner"),
     });
   });
+});
+
+describe("epic branch across night launches (AI-122 with AI-121's budget)", () => {
+  it.each(["max_runs", "max_tokens", "max_usd", "stop_time"] as const)(
+    "GivenALaunchThatEndedOn%s_WhenTheEpicIsLaunchedAgain_ThenItsBranchIsReused",
+    async (reason) => {
+      vi.spyOn(console, "log").mockImplementation(() => {});
+      const tracker = new InMemoryWorkTracker(() => NOW);
+      await tracker.createProject({ name: "AI", key: "AI", repos: [REPO.fullName] });
+      const epic = await tracker.createTicket("ai", { type: "epic", title: "Night" }, "andy");
+      const story = await tracker.createTicket(
+        "ai",
+        { type: "feature", title: "Story", size: "M", parentId: epic.id },
+        "andy",
+      );
+      await tracker.updateTicket(
+        "ai",
+        story.id,
+        { stage: { to: "ready", forced: true, reason: null } },
+        "andy",
+      );
+      const store = new InMemoryNightLaunchStore();
+      const host = new FakeBranchHost();
+      let now = NOW;
+      let n = 0;
+      const launches = new NightLaunches(
+        store,
+        tracker,
+        { planStateOf: async () => ({ kind: "approved" }) as PlanState },
+        () => now,
+        () => `launch-${++n}`,
+        new EpicBranches(tracker, host, store),
+      );
+      const input = () => ({
+        epicId: epic.id,
+        budget: { maxRuns: 5, maxTokens: 1_000_000, maxUsd: 10 },
+        stopAt: new Date(now.getTime() + 8 * 3_600_000).toISOString(),
+      });
+
+      const first = await launches.start("ai", input(), "andy");
+      // As the build dispatcher ends a launch on a limit (M4.18): stopping, then ended.
+      await store.transition(first.id, ["running"], { status: "stopping" });
+      await store.transition(first.id, ["stopping"], {
+        status: "ended",
+        endedAt: now.toISOString(),
+        endReason: reason,
+      });
+      now = new Date(NOW.getTime() + 24 * 3_600_000);
+      const second = await launches.start("ai", input(), "andy");
+
+      expect(host.created).toEqual([`epic/${epic.key}`]);
+      expect(second.epicBranch).toEqual(first.epicBranch);
+      expect(second.epicBranch).toEqual({ name: `epic/${epic.key}`, sha: MAIN_SHA });
+    },
+  );
 });
