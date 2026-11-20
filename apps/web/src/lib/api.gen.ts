@@ -8433,6 +8433,11 @@ export interface components {
        * @enum {string|null}
        */
       endReason: "done" | "stopped" | "stop_time" | "max_runs" | "max_tokens" | "max_usd" | null;
+      /** @default null */
+      epicBranch: {
+        name: string;
+        sha: string;
+      } | null;
     } | null;
     LaunchNight: {
       budget: {
