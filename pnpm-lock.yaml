@@ -57,8 +57,8 @@ importers:
         specifier: ^9.4.1
         version: 9.4.1
       '@google-cloud/secret-manager':
-        specifier: ^7.2.0
-        version: 7.2.0
+        specifier: ^8.0.0
+        version: 8.0.0
       '@google-cloud/tasks':
         specifier: ^7.3.1
         version: 7.3.1
@@ -258,8 +258,8 @@ importers:
         specifier: ^9.4.1
         version: 9.4.1
       '@google-cloud/secret-manager':
-        specifier: ^7.2.0
-        version: 7.2.0
+        specifier: ^8.0.0
+        version: 8.0.0
       '@google-cloud/tasks':
         specifier: ^7.3.1
         version: 7.3.1
@@ -823,8 +823,8 @@ packages:
     resolution: {integrity: sha512-/+RvLJ5u+WhGay6Z3aY6OApDQmNqq1427Mmt7Eov9kYp69gdUiGSwFnygeTxfz69XBtYZLAnWikGMIoFXtKt+A==}
     engines: {node: '>=22'}
 
-  '@google-cloud/secret-manager@7.2.0':
-    resolution: {integrity: sha512-SQ/e9mo7Pl5QpFIn3GOa8K/PhS+3HgQnlWpMZbaE1UiZBa42AFB+EqxWQZOljv0kNwemo/PWiesAh8TywU9uVw==}
+  '@google-cloud/secret-manager@8.0.0':
+    resolution: {integrity: sha512-RUvUiFBuhsNvK8Mj9Mo116rLB3TsS+8r+LufOWiFvyF8r4A8m/l5Tx5+8PcfL4OTrHjGdCBdcERsvuDFGD/pMw==}
     engines: {node: '>=22'}
 
   '@google-cloud/storage@8.4.0':
@@ -4513,9 +4513,9 @@ snapshots:
   '@google-cloud/promisify@6.2.1':
     optional: true
 
-  '@google-cloud/secret-manager@7.2.0':
+  '@google-cloud/secret-manager@8.0.0':
     dependencies:
-      google-gax: 6.13.0
+      google-gax: 6.17.0
     transitivePeerDependencies:
       - supports-color
 

@@ -261,6 +261,7 @@ describe("a story that stops for the night", () => {
       null,
       null,
       null,
+      null,
       t.night,
     );
     return { ...t, runs };
