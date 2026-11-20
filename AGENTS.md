@@ -24,7 +24,7 @@ Update these in the **same PR** as the code:
 | If you changed…                                | Update                                                                                                                                       |
 | ---------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------- |
 | Commands, env vars, packages/apps, layout      | `README.md`                                                                                                                                  |
-| A feature, component, or how to use the system | `README.md` "How it works today" (one screen); its row in `docs/features.md`                                                                 |
+| A feature, component, or how to use the system | `README.md` "How it works today" (one screen); its file in `docs/features/`                                                                  |
 | Design, components, data model, scope, plan    | The topic file in `docs/architecture/`; `ARCHITECTURE.md` only if design intent, components or milestones change (ADR-0061)                  |
 | A decision, or deviated from ARCHITECTURE.md   | New ADR + its line in `adr/README.md`; update the old ADR's status                                                                           |
 | Any step Andy runs by hand                     | `docs/runbooks/*.md`                                                                                                                         |
