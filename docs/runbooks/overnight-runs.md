@@ -1,6 +1,6 @@
 # Overnight runs — runbook (Andy)
 
-Launch an epic for the night and stop it early (ADR-0049: Overnight runs). Built so far: the launch step (AI-120: M4.17) and the budget in dispatch (AI-121: M4.18). A launch starts nothing itself: its stories start as usual (auto-build and the dial), and once it reaches its budget or stop time, or you stop it, they wait. Still to come: the epic branch (M4.20) and the morning report (M4.22).
+Launch an epic for the night and stop it early (ADR-0049: Overnight runs). Built so far: the launch step (AI-120: M4.17), the budget in dispatch (AI-121: M4.18) and the epic branch (AI-122: M4.20): a launch creates `epic/<KEY>` from the default branch's tip and its stories build on it. A launch starts nothing itself: its stories start as usual (auto-build and the dial), and once it reaches its budget or stop time, or you stop it, they wait. Still to come: the morning report (M4.22).
 
 | Term      | Meaning                                                                                                                             |
 | --------- | ----------------------------------------------------------------------------------------------------------------------------------- |
