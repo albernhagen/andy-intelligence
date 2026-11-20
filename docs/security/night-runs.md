@@ -1,6 +1,6 @@
 # Threat model: Night runs
 
-Overnight launches (ADR-0049, AI-104, AI-123). Risk register: [threat-model.md](threat-model.md) (R27). Night launches aren't wired into the API yet (M4.18): until then nothing here runs.
+Overnight launches (ADR-0049, AI-104, AI-123). Risk register: [threat-model.md](threat-model.md) (R-AI-123). Night launches aren't wired into the API yet (M4.18): until then nothing here runs.
 
 ## What an unattended night may decide by itself
 
