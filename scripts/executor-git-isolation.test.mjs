@@ -24,6 +24,7 @@ const SUITES = [
   "scripts/executor-publish-sync.test.mjs",
   "scripts/executor-sync-steps.test.mjs",
   "scripts/executor-sandbox.test.mjs",
+  "scripts/executor-base-branch.test.mjs",
 ];
 
 /** An outer repository like a developer's worktree: committed, identity set, changes staged. */
