@@ -4748,6 +4748,8 @@ export interface paths {
                 /** Format: date-time */
                 heartbeatAt: string | null;
               } | null;
+              /** @default null */
+              baseBranch: string | null;
             }[];
           };
         };
@@ -4993,6 +4995,8 @@ export interface paths {
                 /** Format: date-time */
                 heartbeatAt: string | null;
               } | null;
+              /** @default null */
+              baseBranch: string | null;
             };
           };
         };
@@ -5303,6 +5307,8 @@ export interface paths {
                 /** Format: date-time */
                 heartbeatAt: string | null;
               } | null;
+              /** @default null */
+              baseBranch: string | null;
             };
           };
         };
@@ -5567,6 +5573,8 @@ export interface paths {
                   /** Format: date-time */
                   heartbeatAt: string | null;
                 } | null;
+                /** @default null */
+                baseBranch: string | null;
               };
               build: {
                 id: string;
@@ -5770,6 +5778,8 @@ export interface paths {
                   /** Format: date-time */
                   heartbeatAt: string | null;
                 } | null;
+                /** @default null */
+                baseBranch: string | null;
               } | null;
               buildError: string | null;
             };

@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { Id, Timestamp } from "./common";
+import { BaseBranch } from "./build";
 
 /**
  * Overnight runs (ADR-0049): Andy launches an epic in the evening with a night budget and a
@@ -69,6 +70,15 @@ export const NightLaunchFields = z.object({
   startedAt: Timestamp.nullable().default(null),
   endedAt: Timestamp.nullable().default(null),
   endReason: NightEndReason.nullable().default(null),
+  /**
+   * The `epic/<KEY>` branch the launch created from the default branch's tip, and that tip
+   * (AI-122). Null when no code host was connected at launch; its stories then build on the
+   * default branch. The default keeps older documents readable.
+   */
+  epicBranch: z
+    .strictObject({ name: BaseBranch, sha: z.string().regex(/^[0-9a-f]{40}$/) })
+    .nullable()
+    .default(null),
 });
 
 /**
