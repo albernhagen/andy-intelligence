@@ -14,6 +14,7 @@ import {
   type LaunchRequest,
 } from "./night-launch";
 import type { PlanState } from "./plans";
+import { DomainError } from "./errors";
 
 const NOW = new Date("2026-11-12T22:00:00.000Z");
 const inHours = (h: number) => new Date(NOW.getTime() + h * 3_600_000).toISOString();
@@ -224,8 +225,56 @@ describe("NightLaunches", () => {
       startedAt: NOW.toISOString(),
       endedAt: null,
       endReason: null,
+      epicBranch: null,
     });
     expect(await store.findActive("ai")).toEqual(launch);
+  });
+
+  it("GivenAnEpicBranchOpener_WhenALaunchStarts_ThenTheBranchIsOpenedOnceAndStoredOnTheLaunch", async () => {
+    await story();
+    const opened: string[] = [];
+    const sha = "a".repeat(40);
+    const withBranches = new NightLaunches(
+      store,
+      tracker,
+      { planStateOf: async () => ({ kind: "approved" }) as PlanState },
+      () => now,
+      () => "launch-b",
+      {
+        open: async (_projectId, { id, key }) => {
+          expect(id).toBe(epic.id);
+          opened.push(key);
+          return { name: `epic/${key}` as const, sha };
+        },
+      },
+    );
+
+    const launch = await withBranches.start("ai", input(), "andy");
+
+    expect(opened).toEqual([epic.key]);
+    expect(launch.epicBranch).toEqual({ name: `epic/${epic.key}`, sha });
+    expect((await store.get("launch-b"))!.epicBranch).toEqual(launch.epicBranch);
+  });
+
+  it("GivenTheEpicBranchIsRefused_WhenALaunchStarts_ThenNoLaunchIsStored", async () => {
+    await story();
+    const refusing = new NightLaunches(
+      store,
+      tracker,
+      { planStateOf: async () => ({ kind: "approved" }) as PlanState },
+      () => now,
+      () => "launch-r",
+      {
+        open: async () => {
+          throw new DomainError("not_buildable", "epic/AI-1 already exists");
+        },
+      },
+    );
+
+    await expect(refusing.start("ai", input(), "andy")).rejects.toMatchObject({
+      code: "not_buildable",
+    });
+    expect(await store.findActive("ai")).toBeNull();
   });
 
   it("GivenStoriesWithOpenItems_WhenStarted_ThenRefusedWithEachProblemByKeyAndNothingStored", async () => {
