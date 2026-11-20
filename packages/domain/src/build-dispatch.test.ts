@@ -887,6 +887,7 @@ describe("BuildDispatcher", () => {
         startedAt: at,
         endedAt: null,
         endReason: null,
+        epicBranch: null,
       });
     };
     const holds = () =>
