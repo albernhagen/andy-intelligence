@@ -69,6 +69,7 @@ import { requireCan } from "./permissions";
 import { TIER_ROUTES } from "./tiers";
 import { afterFailure, deadlineAction, MAX_RUN_ATTEMPTS } from "./watchdog";
 import { syncPrompt, type SyncTarget } from "./sync-runs";
+import { winsNightSlot, type NightSlot } from "./night-budget";
 
 /**
  * Agent runs (M1.6a: Claude Code executor, ARCHITECTURE §7.1–7.2, §9). Andy starts a run on a
@@ -252,13 +253,17 @@ export class RunService {
    * `runner` (a local runner's claim, ADR-0089): the run is claimed by that runner instead of
    * dispatched to the cloud executor; without it, a ticket that resolves to `local` (or waits for
    * the runner) is refused, so a runner and the cloud executor never both take it.
+   * `night` (the dispatcher's start of a night launch's story, M4.18): the run must also be among
+   * the launch's first `maxRuns` agent tasks, so concurrent dispatches can't overshoot it.
+   * Retries (`retryOf`, the watchdog's) carry no slot on purpose: each story's retries are bounded
+   * by MAX_RUN_ATTEMPTS, and they count toward the launch's usage, so no new story starts after.
    */
   async start(
     projectId: string,
     ticketId: string,
     step: string,
     retryOf?: Run,
-    opts: { avoidOverlap?: boolean; runner?: Runner } = {},
+    opts: { avoidOverlap?: boolean; runner?: Runner; night?: NightSlot } = {},
   ): Promise<Run> {
     if (!STARTABLE_STEPS.includes(step as StartableStep)) {
       throw new DomainError("invalid_step", `can't start a ${step} task yet`, [
@@ -383,6 +388,23 @@ export class RunService {
         `dial: ${project.runsAtOnce}`,
         `global cap: ${MAX_ACTIVE_RUNS_GLOBAL}`,
       ]);
+    }
+    if (opts.night) {
+      const ids = opts.night.ticketIds;
+      const storyRuns = (
+        await Promise.all(ids.map((id) => this.runs.listForTicket(projectId, id)))
+      ).flat();
+      if (!winsNightSlot(opts.night, storyRuns, run.id)) {
+        await this.fail(run.id, "the night launch's max agent tasks was reached at the same time");
+        throw new DomainError(
+          "run_limit",
+          `${ticket.key}: its night launch is at max agent tasks`,
+          [
+            `launch: ${opts.night.launch.id}`,
+            `max agent tasks: ${opts.night.launch.budget.maxRuns}`,
+          ],
+        );
+      }
     }
 
     const started = retryOf
@@ -824,9 +846,10 @@ export class RunService {
 
   /**
    * The publish step's one repo token per build run (ADR-0063): the caller must be the build
-   * run's own executor run, or the local runner that claimed it (ADR-0089), still in flight.
-   * Read-then-write, so two calls racing in the same instant could both pass; both come from
-   * the run's own executor.
+   * run's own executor run, in a repo of the run's project (ADR-0096), or the local runner that
+   * claimed it (ADR-0089; its token is for the project's repo, never one it names), still in
+   * flight. Read-then-write, so two calls racing in the same instant could both pass; both come
+   * from the run's own executor.
    */
   async claimPushGrant(runId: string, caller: RunCaller): Promise<Run> {
     const run = await this.requireCaller(runId, caller);
@@ -1627,6 +1650,21 @@ export class RunService {
     if (!matches) {
       log("WARNING", "run callback from the wrong caller", { runId, caller, expected });
       throw new DomainError("forbidden", "this run was not dispatched to the caller");
+    }
+    // ADR-0096: the repo must still be registered to the run's own project, so a run of one
+    // project never acts through another project's repo.
+    const project = await this.tracker.getProject(run.projectId);
+    const lower = caller.repo.toLowerCase();
+    if (!project?.repos.some((r) => r.toLowerCase() === lower)) {
+      log("WARNING", "run callback from a repo outside the run's project", {
+        runId,
+        projectId: run.projectId,
+        repo: caller.repo,
+      });
+      throw new DomainError(
+        "forbidden",
+        "the caller's repo is not registered to the run's project",
+      );
     }
     return run;
   }

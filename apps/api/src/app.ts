@@ -63,7 +63,7 @@ import {
   registerGitHubToken,
   type ActionsTokenVerifier,
 } from "./github/token";
-import { registerGitHubWebhook } from "./github/webhooks";
+import { RepoIndex, registerGitHubWebhook } from "./github/webhooks";
 import { invokerTokenVerifier, registerRunWatchdog, type InvokerTokenVerifier } from "./watchdog";
 
 /** Request body cap for /api/* (ADR-0028: everything that can grow gets a cap). */
@@ -373,6 +373,7 @@ export function createApp(input: AppDeps) {
       onDefaultBranchMoved: (projectId) => syncer.defaultBranchMoved(projectId),
       now,
     });
+    const repoIndex = new RepoIndex(deps.tracker, () => now().getTime());
     registerGitHubToken(app, {
       connection,
       verify: verifyActionsToken,
@@ -386,6 +387,7 @@ export function createApp(input: AppDeps) {
             },
           }
         : {}),
+      registeredProject: (repo) => repoIndex.projectFor(repo),
       now,
     });
     registerRunCallbacks(app, {
