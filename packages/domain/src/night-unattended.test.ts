@@ -300,6 +300,9 @@ describe("a story that stops for the night", () => {
       true,
     );
     expect((await t.tracker.getTicket(t.projectId, a.id))!.needsAttention).toBe(true);
+    // The skipped dependant is flagged for the morning; the independent story isn't.
+    expect((await t.tracker.getTicket(t.projectId, b.id))!.needsAttention).toBe(true);
+    expect((await t.tracker.getTicket(t.projectId, c.id))!.needsAttention).toBe(false);
 
     // The dependant never starts (its blocker isn't Done); the independent story does.
     const dispatcher = new BuildDispatcher(t.tracker, t.runStore, t.runs, () => NOW);

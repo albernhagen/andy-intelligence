@@ -11,7 +11,7 @@ Overnight launches (ADR-0049, AI-104, AI-123). Risk register: [threat-model.md](
 
 - Answer a question that was open before the launch: the launch refuses to start while any story has one, misses the Definition of Ready or waits for a plan approval (AI-104).
 - Merge outside the merge gate: the auto-merge policy, required checks, both review agents and the protected paths are unchanged. A veto stops the story.
-- Start a story whose blocker failed, was rejected or was vetoed: it waits on `blockedBy`, and the launch lists it as skipped.
+- Start a story whose blocker failed, was rejected or was vetoed: it waits on `blockedBy`, the launch lists it as skipped and it is flagged for the morning. When only stopped or skipped stories are left, the launch ends instead of idling to its stop time (with the night budget, AI-121).
 - Keep going once the launch is `stopping` or ended: questions are asked again as usual.
 
 ## Caps (ADR-0028)

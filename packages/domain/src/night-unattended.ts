@@ -71,6 +71,24 @@ export class NightUnattended {
         at: this.now().toISOString(),
         skipped,
       });
+      // Skipped stories are flagged for the morning, so they don't start later as plain Ready
+      // tickets once the stopped one is fixed (the same rule as a launch's unfinished stories).
+      for (const key of skipped) {
+        const t = tickets.find((x) => x.key === key);
+        if (!t || t.needsAttention) continue;
+        await this.tracker.updateTicket(
+          projectId,
+          t.id,
+          { fields: { needsAttention: true } },
+          "system",
+        );
+        await this.tracker.addComment(
+          projectId,
+          t.id,
+          `Skipped for the night (launch ${launch.id}): it waits on ${ticket.key}, which stopped. Build it by hand once ${ticket.key} is done, or launch again.`,
+          "system",
+        );
+      }
       await this.tracker.addComment(
         projectId,
         ticket.id,
