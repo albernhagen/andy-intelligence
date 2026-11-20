@@ -33,7 +33,12 @@ export function parseFeature(text) {
   return { name: title[1].trim(), what, how };
 }
 
-const cell = (s) => s.replace(/\s*\n\s*/g, " ").replace(/\|/g, "\\|");
+// Backslashes first, so an escaped pipe in the source can't end a cell.
+const cell = (s) =>
+  s
+    .replace(/\s*\n\s*/g, " ")
+    .replace(/\\/g, "\\\\")
+    .replace(/\|/g, "\\|");
 
 /** @param {{ name: string, what: string, how: string, file: string }[]} features */
 export function renderIndex(features) {

@@ -54,6 +54,13 @@ describe("renderIndex", () => {
       "| [A](docs/features/a.md) | x \\| y z | h |",
     ]);
   });
+
+  it("GivenBackslashBeforePipe_WhenRendered_ThenBothEscaped", () => {
+    const [, , row] = renderIndex([{ name: "A", what: "a \\| b", how: "h", file: "a.md" }]).split(
+      "\n",
+    );
+    expect(row).toBe("| [A](docs/features/a.md) | a \\\\\\| b | h |");
+  });
 });
 
 describe("loadFeatures", () => {

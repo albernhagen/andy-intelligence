@@ -27,6 +27,6 @@ Docs are part of the change, not a follow-up. Every slice PR updates the docs it
 | §8.1 Project baseline inventory | Every guardrail and how managed projects get it | A quality, security, cost or scaling guardrail is added or changed |
 | Package/app `README.md` | Only when a package has setup or usage the root README can't cover in a line | That package's usage changes |
 
-Managed projects get the same rule through the template (§8): `docs/features.md` is updated on merge, `docs/architecture/overview.md` when the design changes, ADRs for decisions.
+Managed projects get the same rule through the template (§8): `docs/features.md` (here: `docs/features/`, one file each) is updated on merge, `docs/architecture/overview.md` when the design changes, ADRs for decisions.
 
 The claude.ai Project holds reference copies of `ARCHITECTURE.md` (with the topic files planning needs) and `BUILD-PROMPT.md` for planning conversations. **The repo is canonical**; refresh the Project copies when `docs/architecture/` changes on `main`.
