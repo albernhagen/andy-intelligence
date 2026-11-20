@@ -824,7 +824,7 @@ export class RunService {
 
   /**
    * The publish job's one repo token per build run (ADR-0063): the caller must be the build
-   * run's own executor run, still in flight. Read-then-write, so two calls racing in the same
+   * run's own executor run, still in flight, in a repo of the run's project (ADR-0096). Read-then-write, so two calls racing in the same
    * instant could both pass; both come from the platform's own workflow run.
    */
   async claimPushGrant(runId: string, caller: RunExecutor): Promise<Run> {
@@ -1603,6 +1603,21 @@ export class RunService {
     if (!matches) {
       log("WARNING", "run callback from the wrong caller", { runId, caller, expected });
       throw new DomainError("forbidden", "this run was not dispatched to the caller");
+    }
+    // ADR-0096: the repo must still be registered to the run's own project, so a run of one
+    // project never acts through another project's repo.
+    const project = await this.tracker.getProject(run.projectId);
+    const lower = caller.repo.toLowerCase();
+    if (!project?.repos.some((r) => r.toLowerCase() === lower)) {
+      log("WARNING", "run callback from a repo outside the run's project", {
+        runId,
+        projectId: run.projectId,
+        repo: caller.repo,
+      });
+      throw new DomainError(
+        "forbidden",
+        "the caller's repo is not registered to the run's project",
+      );
     }
     return run;
   }
