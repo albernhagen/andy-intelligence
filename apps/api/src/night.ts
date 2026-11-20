@@ -21,7 +21,8 @@ import { actorOf, type AuthEnv } from "./auth";
  * The night launch step (M4.17, ADR-0049 "Launch step"): an epic's launch checklist, start and
  * stop, under /api (Firebase sign-in + allow-list), the same reads and rules as the MCP tools.
  * Starting and stopping are owner-only through `NightLaunches` (the permission function, `start_run`).
- * Nothing dispatches from a launch yet: budget enforcement is M4.18.
+ * A launch starts nothing itself; the build dispatcher holds its stories back past the budget,
+ * the stop time or a stop (AI-121: M4.18).
  */
 
 /** What the night routes and tools read and write. */

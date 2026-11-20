@@ -62,7 +62,7 @@ export function registerNightTools(
     "launch_night",
     {
       description:
-        "Launches an epic for the night with a budget and a stop time (ADR-0049). Refused, listing every problem by ticket key, while any story has an open question, isn't Ready or (size M, L or unsized) lacks an approved plan, or while the budget or stop time is missing or over the caps, or another launch runs in the project. Only Andy. Nothing dispatches from a launch yet (M4.18).",
+        "Launches an epic for the night with a budget and a stop time (ADR-0049). Refused, listing every problem by ticket key, while any story has an open question, isn't Ready or (size M, L or unsized) lacks an approved plan, or while the budget or stop time is missing or over the caps, or another launch runs in the project. Only Andy. A launch starts nothing itself: its stories build under auto-build and wait once the budget or stop time is reached.",
       inputSchema: LaunchInput,
       annotations: { destructiveHint: false, idempotentHint: false, openWorldHint: false },
     },
