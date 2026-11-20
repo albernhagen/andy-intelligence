@@ -1,4 +1,5 @@
 ---
+title: Conflict-aware dispatch, reserved ADR numbers
 status: accepted
 date: 2026-11-09
 amends: 0047 (collision handling), 0058 (Ready skips overlapping tickets)

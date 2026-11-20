@@ -1,4 +1,5 @@
 ---
+title: "Project brief: a living context source, written at onboarding"
 status: accepted (built in M5: Multi-project in parallel)
 date: 2026-11-04
 amends: 0033

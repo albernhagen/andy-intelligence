@@ -1,4 +1,5 @@
 ---
+title: "Run watchdog: one check per run at its deadline; retries are new Runs"
 status: accepted
 date: 2026-11-04
 ---

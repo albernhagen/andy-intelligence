@@ -1,4 +1,5 @@
 ---
+title: UI design system, pluggable design skills (Hallmark first) and dashboards, in M5
 status: accepted, amended by 0059 (timing of design.md, tokens and screenshot checks)
 date: 2026-11-03
 ---

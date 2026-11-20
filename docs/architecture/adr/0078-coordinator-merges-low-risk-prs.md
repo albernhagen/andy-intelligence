@@ -1,7 +1,8 @@
 ---
+title: Coordinator merges low-risk PRs
 status: accepted, amended by 0084, 0088
 date: 2026-11-08
-amends: 0047 (who merges while a coordinator session runs the batch); AGENTS.md rule 2 (ask before touching `main`)
+amends: 0047 (who merges while a coordinator session runs the batch), 0058; AGENTS.md rule 2 (ask before touching `main`)
 ---
 
 # 0078 — The coordinator merges low-risk PRs itself; medium and high stay with Andy

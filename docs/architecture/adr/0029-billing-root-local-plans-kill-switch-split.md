@@ -1,4 +1,5 @@
 ---
+title: Billing root plans locally; default alert recipients; kill switch, usage alerts in own slices
 status: accepted
 date: 2026-10-27
 ---

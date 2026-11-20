@@ -1,4 +1,5 @@
 ---
+title: "M1 re-sequenced: loop first; plan in PR, S/M auto-merge, Claude-only through M6"
 status: accepted, amended by 0052, 0060 (milestone order)
 date: 2026-11-04
 amends: 0021, 0035, 0040
