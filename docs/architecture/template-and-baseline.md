@@ -69,7 +69,7 @@ Build runs (plan approval, sandbox, publish limits) and read caps (AI-222): [`ba
 | Spend notices: 80% of a cap and a stop, once per cap and window, 10 a day, no agent text | 0028 | `packages/domain/src/spend-notices.ts` | — | control plane |
 | Membership caps: 20 members per project, 100 in all, checked inside `put`'s transaction; member reads capped to match | 0028, 0126 | `packages/store/src/membership-store.ts` | — | control plane |
 | API request body cap (256 KB); UI poll floor 5 s | 0028, 0091 | `apps/api/src/app.ts`, `apps/web/src/lib/live.ts` | — | control plane only |
-| Context budget: agent-loaded docs within size budgets (`context-budget.json`; default `AGENTS.md`/`CLAUDE.md` ≤ 200 lines) | 0046 | `scripts/context-budget.mjs` in `platform/actions/ci-check` | A | carried (next baseline tag) |
+| Context budgets, PR ≤ half room (`context-budget.json`; default `AGENTS.md`/`CLAUDE.md` ≤ 200 lines) | 0046 | `scripts/context-budget.mjs` in `platform/actions/ci-check` | A | carried (next baseline tag) |
 | Review agents: lockfiles out of the diff (code first, 120 KB cap with truncation note); lockfile sources must be the npm registry with integrity | 0046 | `platform/actions/agent-review-prepare`; `scripts/lockfile-sources.mjs` in `platform/actions/ci-check` | A | carried (next baseline tag) |
 | Agent evals (`agent-evals` check) | 0040, 0086 | `platform/actions/agent-evals` | A | control plane only, not required |
 | Executor permission profile (headless Claude Code) | 0040, 0051 | `platform/executor/profile.json` + `scripts/executor-profile.mjs`, installed by the reusable `claude-executor.yml` | — | built (M1.6a); managed repos call the reusable workflow from M5: Multi-project in parallel |
