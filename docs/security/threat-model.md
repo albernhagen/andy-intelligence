@@ -40,6 +40,7 @@ Trust boundaries, entry points and credentials, moved by area (ADR-0046). PRs th
 | Night runs                   | [`night-runs.md`](night-runs.md)                                     |
 | Project context in prompts   | [`project-context.md`](project-context.md)                           |
 | Web Push                     | [`push.md`](push.md)                                                 |
+| Model gateway (OpenRouter)   | [`model-gateway.md`](model-gateway.md)                               |
 | Project settings             | [`project-settings.md`](project-settings.md)                         |
 
 ## Mitigations in place

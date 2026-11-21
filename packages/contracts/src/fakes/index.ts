@@ -857,6 +857,7 @@ export class InMemoryEvaluator implements Evaluator {
 export * from "./config-proposals";
 export * from "./deployments";
 export * from "./membership";
+export * from "./model-gateway";
 export * from "./night";
 export * from "./notify-email";
 export * from "./project-versions";
