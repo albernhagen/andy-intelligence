@@ -126,6 +126,27 @@ describe("spend caps routes (AI-249)", () => {
     });
   });
 
+  it("GivenTwoCaps_WhenOnlyAThirdIsSet_ThenTheFirstTwoStayAndNullClearsOne", async () => {
+    const { call, tracker } = await setup();
+    await call("PUT", "/api/projects/ai/spend-caps", {
+      caps: { dailyMicroUsd: 1_000_000, monthlyMicroUsd: 10_000_000 },
+    });
+    await call("PUT", "/api/projects/ai/spend-caps", { caps: { perTaskMicroUsd: 500_000 } });
+    expect((await tracker.getProject("ai"))?.spendCaps).toEqual({
+      dailyMicroUsd: 1_000_000,
+      monthlyMicroUsd: 10_000_000,
+      perTaskMicroUsd: 500_000,
+    });
+    const cleared = await call("PUT", "/api/projects/ai/spend-caps", {
+      caps: { dailyMicroUsd: null },
+    });
+    expect(cleared.json.effective.project_daily).toBe(DEFAULT_SPEND_CAPS.dailyMicroUsd);
+    expect((await tracker.getProject("ai"))?.spendCaps).toMatchObject({
+      dailyMicroUsd: null,
+      monthlyMicroUsd: 10_000_000,
+    });
+  });
+
   it("GivenACapAboveGlobal_WhenSet_Then422WithTheReasonAndNothingStored", async () => {
     const { call, tracker } = await setup();
     const res = await call("PUT", "/api/projects/ai/spend-caps", {
@@ -186,6 +207,17 @@ describe("spend caps MCP tools (AI-249)", () => {
     expect(isError).toBe(true);
     expect(text).toContain("above the global monthly cap $50.00");
     expect((await tracker.getProject("ai"))?.spendCaps).toEqual({});
+  });
+
+  it("GivenADailyCap_WhenSetSpendCapsGivesOnlyPerTask_ThenTheDailyCapStays", async () => {
+    const { mcp, tracker } = await setup();
+    const caller = await mcp();
+    await caller("set_spend_caps", { project: "ai", dailyMicroUsd: 1_000_000 });
+    await caller("set_spend_caps", { project: "ai", perTaskMicroUsd: 500_000 });
+    expect((await tracker.getProject("ai"))?.spendCaps).toEqual({
+      dailyMicroUsd: 1_000_000,
+      perTaskMicroUsd: 500_000,
+    });
   });
 
   it("GivenALowerCap_WhenSetSpendCapsIsCalled_ThenStoredAndUnknownSpendSaysSo", async () => {

@@ -46,7 +46,7 @@ export const SpendSettings = z
 
 export const SetSpendCaps = z
   .object({
-    /** The project's own caps in micro-dollars; null or missing takes the global value. */
+    /** The project's own caps in micro-dollars: a field left out stays as it is; null takes the global cap. */
     caps: ProjectSpendCaps,
     reason: z.string().max(500).optional(),
   })
@@ -100,9 +100,16 @@ export class SpendSettingsService {
     input: z.infer<typeof SetSpendCaps>,
     by: { actor: EventActor; email: string },
   ): Promise<SpendView> {
+    const current = await this.read(projectId);
+    if (current === null) throw notFound("project", projectId);
+    // A field left out stays as it is; null takes the global cap. So setting one cap never
+    // clears the others.
+    const given = Object.fromEntries(
+      Object.entries(input.caps).filter(([, v]) => v !== undefined),
+    ) as ProjectSpendCaps;
     const project = await this.projects.update(
       projectId,
-      { spendCaps: input.caps },
+      { spendCaps: { ...current, ...given } },
       by,
       input.reason,
     );

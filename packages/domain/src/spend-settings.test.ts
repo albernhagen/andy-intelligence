@@ -124,6 +124,30 @@ describe("ProjectService spend caps (AI-249)", () => {
     expect(project.spendCaps).toEqual({});
   });
 
+  // Intended: a project cap is never stored above global, a revert included (it goes through
+  // the same write). The refusal names the cap, so the owner sees why the revert didn't apply.
+  it("GivenGlobalCapsLoweredSince_WhenACapChangeIsReverted_ThenRefusedWithTheReason", async () => {
+    await tracker.updateProject("ai", { spendCaps: { dailyMicroUsd: 4_000_000 } });
+    await projects.update("ai", { spendCaps: { dailyMicroUsd: 1_000_000 } }, OWNER);
+    let global = DEFAULT_SPEND_CAPS;
+    const lowered = new ProjectService(
+      tracker,
+      null,
+      null,
+      now,
+      changes,
+      () => `change-${++ids}`,
+      () => global,
+    );
+    global = { ...DEFAULT_SPEND_CAPS, dailyMicroUsd: 3_000_000 };
+    const revert = new ConfigRevert(tracker, lowered, changes, now);
+    await expect(revert.revert("ai", "change-1", OWNER, "app")).rejects.toMatchObject({
+      code: "invalid_field",
+      message: expect.stringContaining("daily cap $4.00 is above the global daily cap $3.00"),
+    });
+    expect((await tracker.getProject("ai"))?.spendCaps).toEqual({ dailyMicroUsd: 1_000_000 });
+  });
+
   it("GivenANonOwner_WhenSettingCaps_ThenForbiddenAndNothingStored", async () => {
     await expect(
       projects.update("ai", { spendCaps: { dailyMicroUsd: 0 } }, AGENT),

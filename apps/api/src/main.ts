@@ -19,7 +19,6 @@ import {
   FirestoreNotifyLedger,
   createFirestore,
 } from "@andy/store";
-import { InMemorySpendLedger } from "@andy/contracts";
 import { createApp } from "./app";
 import { parseAllowList } from "./auth";
 import { firebaseVerifier } from "./firebase";
@@ -93,9 +92,8 @@ async function main() {
     projectVersions: new FirestoreProjectVersions(db),
     deployments: new FirestoreDeploymentStore(db),
     routing: new FirestoreRoutingConfigStore(db),
-    // Empty in-memory spend ledger until AI-247: M10.6 (Firestore ledger): nothing spends yet,
-    // so the settings read $0.00. Per instance, so it must not stay once paid routes exist.
-    spendLedger: new InMemorySpendLedger(),
+    // No spend ledger until AI-247: M10.6 (Firestore ledger): spend reads "unknown", never a
+    // per-instance $0.00 that a cap could be set from.
     configChanges: new FirestoreConfigChangeStore(db),
     // Serve only the public URL's host; the run.app URLs answer /health alone (ADR-0044).
     publicHost: publicUrl ? new URL(publicUrl).host : undefined,
