@@ -9,6 +9,7 @@ import {
   RunnerService,
   LocalClaims,
   ConfigProposals,
+  ConfigRevert,
   DigestReader,
   QuotaClearer,
   BriefService,
@@ -205,6 +206,9 @@ export function createServices(input: AppDeps): Services {
         now,
       )
     : null;
+  const configRevert = deps.configChanges
+    ? new ConfigRevert(deps.tracker, projects, deps.configChanges, now)
+    : null;
 
   return {
     deps,
@@ -229,6 +233,7 @@ export function createServices(input: AppDeps): Services {
     ideate,
     plans,
     configProposals,
+    configRevert,
     night,
   };
 }
