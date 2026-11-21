@@ -5,7 +5,7 @@ Overview and reading map: [ARCHITECTURE.md](ARCHITECTURE.md). Section numbers ma
 ## 9. Security
 
 - **Identity:**
-  - Andy: Google identity with an email allow-list (Andy only). UI via Firebase Auth (Google provider); MCP via our own OAuth server whose sign-in step is that same Firebase Google sign-in + allow-list (CIMD clients from `claude.ai`/`claude.com`, PKCE, hashed opaque tokens; ADR-0039).
+  - Andy: Google identity with an email allow-list (Andy only). Project members (M8: Project members, ADR-0127, proposed): a per-project email allow-list with role contributor or viewer, resolved per request; non-members get 404 on a project. UI via Firebase Auth (Google provider); MCP via our own OAuth server whose sign-in step is that same Firebase Google sign-in + allow-list (CIMD clients from `claude.ai`/`claude.com`, PKCE, hashed opaque tokens; ADR-0039).
   - GitHub webhooks: HMAC-SHA256 signature with the webhook secret (ADR-0041).
   - Cloud Scheduler **and Cloud Tasks** (watchdog) → API: OIDC tokens for a dedicated invoker service account, sent to and with audience = `PUBLIC_URL` (the run.app host refuses them, ADR-0044); the API verifies issuer, audience, and SA email.
   - **Agent callbacks from Actions runs:** the workflow requests a GitHub Actions OIDC token (`id-token: write`, audience = control plane). The API verifies it against GitHub's JWKS and checks `repository`, `job_workflow_ref` (must be the platform's reusable workflow), and `run_id` against the dispatched Run. No secret is passed through `workflow_dispatch` inputs (they are visible in public repos' run UI).
