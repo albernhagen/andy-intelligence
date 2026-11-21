@@ -33,6 +33,8 @@ This repo's Dependabot bumps third-party pins in `platform/actions/`; managed re
 
 GitHub settings rows (ruleset, merge settings, `autoMerge`, `planApproval`, Dependabot auto-merge, CODEOWNERS, security and analysis, Actions, labels): [`baseline-github-settings.md`](baseline-github-settings.md).
 
+Build runs (plan approval, sandbox, publish limits) and read caps (AI-222): [`baseline-build-and-reads.md`](baseline-build-and-reads.md).
+
 | Guardrail | ADR | Source in this repo | Carried by | Status |
 |---|---|---|---|---|
 | Lint, typecheck, test, build | 0022 | `ci.yml` (`check`) → `platform/actions/ci-check` | A | carried (M1.16) |
@@ -67,12 +69,10 @@ GitHub settings rows (ruleset, merge settings, `autoMerge`, `planApproval`, Depe
 | Spend notices: 80% of a cap and a stop, once per cap and window, 10 a day, no agent text | 0028 | `packages/domain/src/spend-notices.ts` | — | control plane |
 | Membership caps: 20 members per project, 100 in all, checked inside `put`'s transaction; member reads capped to match | 0028, 0126 | `packages/store/src/membership-store.ts` | — | control plane |
 | API request body cap (256 KB); UI poll floor 5 s | 0028, 0091 | `apps/api/src/app.ts`, `apps/web/src/lib/live.ts` | — | control plane only |
-| Read caps (AI-222): `status` reads a ticket, its blockers and its lane, never the project; an unchanged board or ticket list is one counter read (cache 5 min, 200 views per instance); blocker and epic chains capped at 200 reads; the google-sub task count reads at most 500 runs and reads as 100% used past it (AI-232); tests count reads | 0028, 0126 | `packages/domain/src/{project-versions,ticket-reads,jules-quota}.ts`, `apps/api/src/reads.test.ts` | — | control plane only |
 | Context budget: agent-loaded docs within size budgets (`context-budget.json`; default `AGENTS.md`/`CLAUDE.md` ≤ 200 lines) | 0046 | `scripts/context-budget.mjs` in `platform/actions/ci-check` | A | carried (next baseline tag) |
 | Review agents: lockfiles out of the diff (code first, 120 KB cap with truncation note); lockfile sources must be the npm registry with integrity | 0046 | `platform/actions/agent-review-prepare`; `scripts/lockfile-sources.mjs` in `platform/actions/ci-check` | A | carried (next baseline tag) |
 | Agent evals (`agent-evals` check) | 0040, 0086 | `platform/actions/agent-evals` | A | control plane only, not required |
 | Executor permission profile (headless Claude Code) | 0040, 0051 | `platform/executor/profile.json` + `scripts/executor-profile.mjs`, installed by the reusable `claude-executor.yml` | — | built (M1.6a); managed repos call the reusable workflow from M5: Multi-project in parallel |
-| Build runs: `autoBuild` switch; `planApproval`: an approved read-only plan first, owner-only decision, ≤ 3 plan runs, stale after a ticket or policy change or 72 h; Bash only in the sandbox (registry-only network, credentials unset and scrubbed), live-checked by one sandboxed Bash call before the agent; `.git` paths that steer git checked and `.git` restored after it; sandbox placeholders dropped; publish job refuses protected paths, symlinks, > 200 files or > 5 MB; one App token per build run; ≤ 4 builds per ticket | 0028, 0063, 0071 | `packages/domain/src/build{s,-dispatch}.ts`, `profile.json` `steps.build`, `claude-executor.yml` (`publish`), `scripts/executor-{publish,sandbox}.mjs`, `apps/api/src/github/token.ts`, `packages/domain/src/plans.ts` | — | built (M1.8a); managed repos with the reusable workflow (M5) |
 | Webhook caps (1 MB body, 300 signed deliveries/minute per instance) + HMAC + 30-day TTL on records | 0028, 0041 | `apps/api/src/webhooks.ts`, `infra/control-plane` | — | control plane only (managed repos only send webhooks) |
 | Bot-opened PRs run their checks (repo token from the control plane via Actions OIDC; agent job holds no write credential) | 0041, 0043 | `system-security-review.yml` (`publish` job), `apps/api/src/github/token.ts` | — | not yet carried (until M6: Dev → prod releases) |
 | Re-sync open PRs (clean merges only, capped; `no-auto-sync` label) | 0111 | `platform/actions/resync-prs` | A, G | label carried; caller needs per-project tokens |
