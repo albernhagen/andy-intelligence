@@ -1,5 +1,7 @@
 import { createRoute, z, type OpenAPIHono } from "@hono/zod-openapi";
 import {
+  CONFIG_CHANGE_LIST_MAX,
+  ConfigChange,
   EffectiveSpendCaps,
   ProjectSpendCaps,
   SpendCaps,
@@ -8,8 +10,8 @@ import {
   type EventActor,
   type SpendLedger,
 } from "@andy/contracts";
-import { spendView, type ProjectService, type SpendView } from "@andy/domain";
-import { signedIn, type AuthEnv } from "./auth";
+import { spendView, type GlobalSpendCaps, type ProjectService, type SpendView } from "@andy/domain";
+import { actorOf, signedIn, type AuthEnv } from "./auth";
 import type { RouteModule } from "./services";
 
 /**
@@ -37,7 +39,12 @@ const ProjectParams = z.object({ projectId: z.string().regex(/^[a-z][a-z0-9]{0,9
 
 export const SpendSettings = z
   .object({
-    global: z.object({ caps: SpendCaps, source: z.literal("default") }),
+    global: z.object({
+      caps: SpendCaps,
+      /** `default`: nothing stored yet (the code defaults); `stored`: set by the owner (AI-276). */
+      source: z.enum(["default", "stored"]),
+      updatedAt: z.string().nullable(),
+    }),
     project: ProjectSpendCaps,
     effective: EffectiveSpendCaps,
     spent: SpendSoFar.nullable(),
@@ -87,12 +94,14 @@ export class SpendSettingsService {
     private readonly read: (projectId: string) => Promise<ProjectSpendCaps | null>,
     private readonly ledger: SpendTotalsReader | null,
     private readonly now: () => Date,
+    private readonly global: GlobalSpendCaps,
   ) {}
 
+  /** Throws when the global caps can't be read: never shown as the defaults (fail closed). */
   async view(projectId: string): Promise<SpendView> {
     const own = await this.read(projectId);
     if (own === null) throw notFound("project", projectId);
-    return spendView(own, await this.spent(projectId));
+    return spendView(own, await this.spent(projectId), await this.global.read());
   }
 
   async set(
@@ -114,7 +123,7 @@ export class SpendSettingsService {
       by,
       input.reason,
     );
-    return spendView(project.spendCaps, await this.spent(projectId));
+    return spendView(project.spendCaps, await this.spent(projectId), await this.global.read());
   }
 
   /** Today's and this month's totals; null (unknown, never zero) when the ledger can't be read. */
@@ -151,5 +160,105 @@ export function registerSpendRoutes(app: OpenAPIHono<AuthEnv>, spend: SpendSetti
   });
 }
 
+// ── Global spend caps (AI-276) ───────────────────────────────────────────────
+// Owner-only (`change_spend_caps`); cross-project routes, listed in `project-access.ts`.
+
+export const GlobalSpendCapsView = z
+  .object({
+    caps: SpendCaps,
+    source: z.enum(["default", "stored"]),
+    /** Pass back as `ifUpdatedAt` to save; null while the defaults are in force. */
+    updatedAt: z.string().nullable(),
+  })
+  .openapi("GlobalSpendCaps");
+
+export const SetGlobalSpendCaps = z
+  .object({
+    caps: SpendCaps,
+    /** The `updatedAt` read with the caps (null for the defaults); a save since is a 409. */
+    ifUpdatedAt: z.string().nullable(),
+    reason: z.string().max(500).optional(),
+  })
+  .strict()
+  .openapi("SetGlobalSpendCaps");
+
+const ChangeParams = z.object({ changeId: z.string().regex(/^[A-Za-z0-9-]{1,64}$/) });
+const ListQuery = z.object({
+  limit: z.coerce.number().int().min(1).max(CONFIG_CHANGE_LIST_MAX).optional(),
+});
+
+const globalRoutes = {
+  get: createRoute({
+    ...secured,
+    method: "get",
+    path: "/api/spend-caps",
+    responses: {
+      200: json(GlobalSpendCapsView, "The global caps: stored, or the code defaults"),
+    },
+  }),
+  set: createRoute({
+    ...secured,
+    method: "put",
+    path: "/api/spend-caps",
+    request: {
+      body: { content: { "application/json": { schema: SetGlobalSpendCaps } }, required: true },
+    },
+    responses: {
+      200: json(GlobalSpendCapsView, "Stored and logged as a global ConfigChange"),
+      403: json(ErrorBody, "Only the owner changes the global spend caps"),
+      409: json(ErrorBody, "Saved by someone else since they were read: read again"),
+      422: json(ErrorBody, "No spend caps store is configured"),
+    },
+  }),
+  changes: createRoute({
+    ...secured,
+    method: "get",
+    path: "/api/spend-caps/changes",
+    request: { query: ListQuery },
+    responses: {
+      200: json(z.array(ConfigChange), "The global caps' changes, newest first (capped)"),
+      403: json(ErrorBody, "Only the owner reads the global caps' log"),
+    },
+  }),
+  revert: createRoute({
+    ...secured,
+    method: "post",
+    path: "/api/spend-caps/changes/{changeId}/revert",
+    request: { params: ChangeParams },
+    responses: {
+      200: json(
+        z.object({ global: GlobalSpendCapsView, reverted: ConfigChange }),
+        "Before values saved (logged as a new change); original reverted",
+      ),
+      403: json(ErrorBody, "Only the owner changes the global spend caps"),
+      404: json(ErrorBody, "Unknown change"),
+      409: json(ErrorBody, "Not revertible: not applied, or a cap changed since"),
+    },
+  }),
+};
+
+export function registerGlobalSpendCapsRoutes(
+  app: OpenAPIHono<AuthEnv>,
+  global: GlobalSpendCaps,
+): void {
+  app.openapi(globalRoutes.get, async (c) => c.json(await global.read(), 200));
+
+  app.openapi(globalRoutes.set, async (c) => {
+    const { caps, ifUpdatedAt, reason } = c.req.valid("json");
+    return c.json(await global.put(caps, ifUpdatedAt, actorOf(c.get("identity")), reason), 200);
+  });
+
+  app.openapi(globalRoutes.changes, async (c) =>
+    c.json(await global.changeLog(actorOf(c.get("identity")), c.req.valid("query").limit), 200),
+  );
+
+  app.openapi(globalRoutes.revert, async (c) =>
+    c.json(await global.revert(c.req.valid("param").changeId, actorOf(c.get("identity"))), 200),
+  );
+}
+
 /** Listed in `api-routes.ts` (AI-145). */
-export const apiRoutes: RouteModule = (app, s) => registerSpendRoutes(app, s.spend);
+export const apiRoutes: RouteModule = (app, s) => {
+  registerSpendRoutes(app, s.spend);
+  registerGlobalSpendCapsRoutes(app, s.globalSpendCaps);
+};

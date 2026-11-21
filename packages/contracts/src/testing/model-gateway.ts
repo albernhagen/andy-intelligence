@@ -22,13 +22,23 @@ export function modelGatewayContract(
 
     it("GivenTheProviderAnswers_WhenCompleted_ThenTextAndUsage", async () => {
       const h = await make({ text: "ok", usage });
-      expect(await h.gateway.complete(request)).toEqual({ outcome: "ok", text: "ok", usage });
+      expect(await h.gateway.complete(request)).toEqual({
+        outcome: "ok",
+        text: "ok",
+        usage,
+        attempts: 1,
+      });
       expect(h.delivered()).toBe(1);
     });
 
     it("GivenTheProviderReportsNoUsage_WhenCompleted_ThenUsageIsNull", async () => {
       const h = await make({ text: "ok", usage: null });
-      expect(await h.gateway.complete(request)).toEqual({ outcome: "ok", text: "ok", usage: null });
+      expect(await h.gateway.complete(request)).toEqual({
+        outcome: "ok",
+        text: "ok",
+        usage: null,
+        attempts: 1,
+      });
     });
 
     it.each([400, 401, 402, 429])(
