@@ -1377,6 +1377,7 @@ export function evaluatorContract(
 }
 export * from "./config-changes";
 export * from "./config-proposals";
+export * from "./deployments";
 export * from "./night";
 export * from "./notify-email";
 export * from "./push";

@@ -804,6 +804,7 @@ export class InMemoryEvaluator implements Evaluator {
   }
 }
 export * from "./config-proposals";
+export * from "./deployments";
 export * from "./night";
 export * from "./notify-email";
 export * from "./push";
