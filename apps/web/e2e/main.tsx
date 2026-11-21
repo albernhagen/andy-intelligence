@@ -22,7 +22,7 @@ createRoot(document.getElementById("root")!).render(
       <ApiContext.Provider value={api}>
         <HeaderEndContext.Provider
           value={
-            <Button variant="ghost" size="sm">
+            <Button variant="ghost" size="sm" className="h-11 sm:h-8">
               Sign out
             </Button>
           }

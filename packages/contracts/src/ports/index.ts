@@ -1,6 +1,7 @@
 import { z } from "zod";
 import {
   Assumption,
+  EpicOutcome,
   AutoMerge,
   BillingType,
   DorStatus,
@@ -88,6 +89,7 @@ export const NewTicket = Ticket.pick({ title: true }).extend({
   assumptions: z.array(z.string()).default([]),
   size: Ticket.shape.size.default(null),
   sizeReason: Ticket.shape.sizeReason.default(null),
+  outcome: Ticket.shape.outcome,
   outOfScope: Ticket.shape.outOfScope,
   touches: Ticket.shape.touches,
   overrides: Ticket.shape.overrides.default({}),
@@ -123,6 +125,7 @@ export const TicketFields = Ticket.pick({
   riskReason: true,
   confidence: true,
   confidenceReason: true,
+  outcome: true,
 })
   .partial()
   // Zod 4 applies defaults inside `.partial()`, which would turn "not given" into "reset":
@@ -135,6 +138,7 @@ export const TicketFields = Ticket.pick({
     upNextAt: Timestamp.nullable().optional(),
     sentBackReason: z.string().max(300).nullable().optional(),
     refineAssumptions: z.array(Assumption).optional(),
+    outcome: EpicOutcome.nullable().optional(),
     ...TicketScoreFields,
   });
 export type TicketFields = z.infer<typeof TicketFields>;
@@ -749,6 +753,7 @@ export * from "./deployments";
 export * from "./digest";
 export * from "./night";
 export * from "./notify-email";
+export * from "./project-versions";
 export * from "./push";
 export * from "./push-sender";
 export * from "./runner";
