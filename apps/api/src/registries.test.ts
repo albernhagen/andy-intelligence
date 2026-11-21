@@ -5,7 +5,7 @@ import { describe, expect, it } from "vitest";
 import * as apiRoutes from "./api-routes";
 import * as toolGroups from "./mcp/tool-groups";
 import * as publicRoutes from "./public-routes";
-import { registrySnapshot } from "./registry-snapshot";
+import { fullApp, registrySnapshot } from "./registry-snapshot";
 
 /**
  * AI-145: routes, MCP tools and package exports register from their own modules, listed one line
@@ -124,6 +124,52 @@ describe("code registries (AI-145)", () => {
     const signIn = routes.indexOf("ALL /api/*");
     expect(signIn).toBeGreaterThan(0);
     expect(routes.slice(0, signIn).filter((r) => r.includes(" /api/"))).toEqual([]);
+  });
+
+  it("GivenEveryFeatureOn_WhenEachPublicRouteIsCalledWithoutCredentials_ThenItIsRefused", async () => {
+    // Public routes skip the /api sign-in, so each must refuse an anonymous caller itself:
+    // 401, or 503 while its secret isn't configured (the webhook without the GitHub App's).
+    const open = new Set(["/health", "/config.json"]);
+    const { routes } = await registrySnapshot();
+    const { app } = fullApp();
+    const publicHandlers = [
+      ...new Set(routes.slice(0, routes.indexOf("ALL /api/*")).filter((r) => !r.includes("*"))),
+    ];
+    const accepted: string[] = [];
+    for (const route of publicHandlers) {
+      const [method, path] = route.split(" ") as [string, string];
+      if (open.has(path)) continue;
+      const res = await app.request(`http://localhost${path.replace(/:[^/]+/g, "x")}`, {
+        method,
+        headers: { "content-type": "application/json" },
+        body: method === "GET" ? undefined : "{}",
+      });
+      if (![401, 403, 503].includes(res.status)) accepted.push(`${route}: ${res.status}`);
+    }
+    expect(publicHandlers.length).toBeGreaterThan(open.size);
+    expect(accepted).toEqual([]);
+  });
+
+  it("GivenASourceFileThatRegistersRoutesOrTools_WhenRead_ThenARegistryReachesIt", () => {
+    // Catches a module that registers routes under another export name: it must declare
+    // `apiRoutes`/`publicRoutes` or be imported by a module that does. main.ts serves the SPA.
+    const text = (f: string) => readFileSync(join(SRC, `${f}.ts`), "utf8");
+    const files = sourceFiles(SRC);
+    const declaring = files.filter((f) =>
+      /^export const (apiRoutes|publicRoutes)\b/m.test(text(f)),
+    );
+    const importedBy = (f: string, by: string) => {
+      const rel = relative(join(SRC, by, ".."), join(SRC, f));
+      const spec = rel.startsWith(".") ? rel : `./${rel}`;
+      return text(by).includes(`from "${spec}"`);
+    };
+    const orphans = files
+      .filter((f) => /\bapp\.(openapi|get|post|put|patch|delete|all)\(/.test(text(f)))
+      .filter((f) => !["app", "main"].includes(f) && !declaring.includes(f))
+      .filter((f) => !declaring.some((d) => importedBy(f, d)));
+    expect(orphans).toEqual([]);
+    const toolFiles = files.filter((f) => /\.registerTool\(/.test(text(f)));
+    expect(toolFiles.filter((f) => !/^mcp\/tools-/.test(f))).toEqual([]);
   });
 
   it("GivenEveryFeatureOn_WhenRoutesAfterSignInAreListed_ThenEachIsUnderApiOrAKnownSelfCheckingPath", async () => {
