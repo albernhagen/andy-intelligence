@@ -1,7 +1,8 @@
 import { createRoute, z, type OpenAPIHono } from "@hono/zod-openapi";
 import { Stage, TicketKey } from "@andy/contracts";
-import type { MilestoneMapReader, MilestoneMap as MilestoneMapValue } from "@andy/domain";
+import { MilestoneMapReader, type MilestoneMap as MilestoneMapValue } from "@andy/domain";
 import type { AuthEnv } from "./auth";
+import type { RouteModule } from "./services";
 
 /** The milestone map (AI-148): each open epic's children by state, from tickets. Read-only. */
 
@@ -72,3 +73,7 @@ export function registerMilestoneMapRoutes(
     return c.json(await reader.map(projectId, c.req.valid("query").epic), 200);
   });
 }
+
+/** Listed in `api-routes.ts` (AI-145). */
+export const apiRoutes: RouteModule = (app, s) =>
+  registerMilestoneMapRoutes(app, new MilestoneMapReader(s.tracker));

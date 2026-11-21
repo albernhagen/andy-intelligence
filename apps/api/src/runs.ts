@@ -29,6 +29,7 @@ import { FixedWindowLimiter } from "./mcp/rate-limit";
 import type { ActionsTokenVerifier } from "./github/token";
 import { KnownCredentials } from "./known-credentials";
 import { KNOWN_CREDENTIALS, RUN_TOKEN_SHAPE } from "./runners";
+import type { RouteModule } from "./services";
 
 /**
  * Agent runs (M1.6a: Claude Code executor). Andy starts and lists runs under /api. The run
@@ -357,3 +358,18 @@ export function registerRunCallbacks(app: OpenAPIHono<AuthEnv>, deps: RunCallbac
     },
   );
 }
+
+/** Listed in `api-routes.ts` (AI-145). */
+export const apiRoutes: RouteModule = (app, s) => registerRunRoutes(app, s.runs, s.deps.runs);
+
+/** Listed in `public-routes.ts` (AI-145): CI jobs present an Actions OIDC token. Needs the GitHub App. */
+export const publicRoutes: RouteModule = (app, s) => {
+  if (!s.verifyActionsToken) return;
+  registerRunCallbacks(app, {
+    runs: s.runs,
+    runners: s.runners,
+    verify: s.verifyActionsToken,
+    now: s.now,
+    quota: s.deps.quota,
+  });
+};
