@@ -198,6 +198,7 @@ describe("MCP OAuth flow (MCP SDK client)", () => {
       "reject_project_plan",
       "reorder_ticket",
       "revert_spend_cap_change",
+      "roadmap",
       "set_auto_build",
       "set_auto_refine",
       "set_default_executor",
@@ -216,6 +217,7 @@ describe("MCP OAuth flow (MCP SDK client)", () => {
       "status",
       "submit_brief",
       "submit_project_plan",
+      "test_email",
     ]);
   });
 
