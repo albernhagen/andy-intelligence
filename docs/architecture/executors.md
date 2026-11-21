@@ -15,5 +15,5 @@ Overview and reading map: [ARCHITECTURE.md](ARCHITECTURE.md). Sections match the
 - **Local** (ADR-0089): a runner on Andy's Mac polls `POST /runner/claim`, which starts a `local` ticket's agent task with a per-run token (context, heartbeat, report; 5-minute lease).
   - **Built (AI-131):** `apps/local-runner` runs refine and plan (build: slice 6) per worktree: profile via `--settings`, setting sources off, agent in Seatbelt (ADR-0098).
 - **OpenCode**: Actions workflow, per-project OpenRouter key, non-Claude models.
-- **Jules**: REST API; its PR is detected by the PR webhook (§7.1).
+- **Jules** (ADR-0128): REST API, build only, `packages/jules`; its PR finishes the run via the PR webhook (§7.1).
 - **Direct**: in-process OpenRouter calls for single-call steps (sizing, digests, scout analysis).
