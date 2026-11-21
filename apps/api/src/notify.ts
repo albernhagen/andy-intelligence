@@ -71,6 +71,26 @@ export async function emailStatus(email: EmailNotifications | null): Promise<Ema
   };
 }
 
+/**
+ * Sends the test email, or says why not: the one rule for `POST /api/notify/email/test` and MCP
+ * `test_email` (AI-289). It counts toward the daily cap like any email; a provider refusal gives
+ * the slot back (`sendTest`). Status: 409 not configured or cap reached, 502 the provider refused.
+ */
+export async function sendTestEmail(
+  email: EmailNotifications | null,
+): Promise<{ sent: true } | { sent: false; status: 409 | 502; error: string }> {
+  if (!email) return { sent: false, status: 409, error: "email is not configured" };
+  const outcome = await email.sendTest();
+  if (outcome.result === "cap_reached") {
+    return { sent: false, status: 409, error: `today's ${EMAIL_DAILY_CAP} emails are used` };
+  }
+  if (outcome.result === "failed") {
+    // The provider's error names the cause (key, domain); it never holds the key itself.
+    return { sent: false, status: 502, error: `test email not sent: ${outcome.error}` };
+  }
+  return { sent: true };
+}
+
 export function registerNotifyRoutes(
   app: OpenAPIHono<AuthEnv>,
   email: EmailNotifications | null,
@@ -78,16 +98,11 @@ export function registerNotifyRoutes(
   app.openapi(statusRoute, async (c) => c.json(await emailStatus(email), 200));
 
   app.openapi(testRoute, async (c) => {
-    if (!email) return c.json({ error: "email is not configured" }, 409);
-    const outcome = await email.sendTest();
-    if (outcome.result === "cap_reached") {
-      return c.json({ error: `today's ${EMAIL_DAILY_CAP} emails are used` }, 409);
-    }
-    if (outcome.result === "failed") {
-      // The provider's error names the cause (key, domain); it never holds the key itself.
-      return c.json({ error: `test email not sent: ${outcome.error}` }, 502);
-    }
-    return c.json({ sent: true as const }, 200);
+    const outcome = await sendTestEmail(email);
+    if (outcome.sent) return c.json({ sent: true as const }, 200);
+    return outcome.status === 409
+      ? c.json({ error: outcome.error }, 409)
+      : c.json({ error: outcome.error }, 502);
   });
 }
 

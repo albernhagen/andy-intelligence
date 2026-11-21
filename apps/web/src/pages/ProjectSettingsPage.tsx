@@ -1,7 +1,14 @@
 import type { ReactNode } from "react";
 import { useParams } from "@tanstack/react-router";
 import { LayerOrderHint } from "@/components/RouteLayers";
-import { AutoMerge, EnvironmentPolicy, PlanApproval, type Project } from "@andy/contracts";
+import {
+  AutoMerge,
+  EnvironmentPolicy,
+  MergeMode,
+  PlanApproval,
+  type Project,
+} from "@andy/contracts";
+import { MERGE_MODE_TEXT, effectiveMergeMode } from "@andy/domain";
 import { ClearQuotaIdle } from "@/components/ClearQuotaIdle";
 import { ConfigHistory } from "@/components/ConfigHistory";
 import { DispatchControls } from "@/components/DispatchControls";
@@ -58,6 +65,9 @@ export function ProjectSettingsPage() {
         </Setting>
         <Setting what="Which tickets' agent PRs merge on their own once every check and both reviews pass.">
           <AutoMergeSelect project={project} />
+        </Setting>
+        <Setting what="Who merges this project's PRs (ADR-0124), strictest first. Nothing merges by it yet: auto-merge above decides until the gate switches over. Loosen it only here; over MCP it can only be tightened.">
+          <MergeModeSelect project={project} />
         </Setting>
         <Setting what="Agent tasks at once: agent tasks this project may have in flight (1 to 4). Paused: dispatch starts nothing here; agent tasks in flight finish.">
           <DispatchControls project={project} />
@@ -243,6 +253,39 @@ const AUTO_MERGE_LABELS: Record<AutoMerge, string> = {
   "s-and-m": "S and M tickets",
   all: "all tickets",
 };
+
+/**
+ * The merge mode (ADR-0124): the one in force, with what merges without Andy in it. A project
+ * stored before the setting shows the mode read from auto-merge until one is picked.
+ */
+function MergeModeSelect({ project }: { project: Project }) {
+  const update = useUpdateProject(project.id);
+  const mode = effectiveMergeMode(project);
+  return (
+    <div className="ml-3 space-y-1 text-sm">
+      <label className="inline-flex items-center gap-1">
+        Merge mode
+        <select
+          className="rounded border border-border bg-background px-1"
+          value={mode}
+          disabled={update.isPending}
+          onChange={(e) => update.mutate({ mergeMode: MergeMode.parse(e.target.value) })}
+        >
+          {MergeMode.options.map((o) => (
+            <option key={o} value={o}>
+              {o}
+            </option>
+          ))}
+        </select>
+      </label>
+      {project.mergeMode === null && (
+        <span className="ml-1 text-xs text-muted-foreground">(read from auto-merge)</span>
+      )}
+      <p className="text-xs">{MERGE_MODE_TEXT[mode]}</p>
+      {update.error && <QueryError error={update.error} />}
+    </div>
+  );
+}
 
 /** Which tickets' agent PRs merge on their own once the gate passes (ADR-0050). */
 function AutoMergeSelect({ project }: { project: Project }) {

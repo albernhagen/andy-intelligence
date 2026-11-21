@@ -1,4 +1,5 @@
-import { EnvironmentPolicy, Project, WorkTrackerError } from "@andy/contracts";
+import { EnvironmentPolicy, MergeMode, Project, WorkTrackerError } from "@andy/contracts";
+import { MERGE_MODE_TEXT, effectiveMergeMode } from "@andy/domain";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import { z } from "zod";
@@ -31,6 +32,9 @@ export const settingsOf = (p: Project) => ({
   autoRefine: p.autoRefine,
   dailyQuestionCap: p.dailyQuestionCap,
   autoMerge: p.autoMerge,
+  // ADR-0124: the mode in force, and whether it is stored or read from `autoMerge`.
+  mergeMode: effectiveMergeMode(p),
+  mergeModeSet: p.mergeMode !== null,
   runsAtOnce: p.runsAtOnce,
   paused: p.paused,
   defaultWorker: p.defaultWorker,
@@ -57,6 +61,13 @@ const DailyQuestionCapInput = {
     ),
 };
 
+const MergeModeInput = {
+  project: SettingsInput.project,
+  mode: MergeMode.describe(
+    `Strictest first. ${MergeMode.options.map((m) => `${m}: ${MERGE_MODE_TEXT[m]}`).join(" ")}`,
+  ),
+};
+
 export function registerSettingsTools(
   server: McpServer,
   deps: Pick<ToolDeps, "tracker" | "projects" | "actor" | "email">,
@@ -66,7 +77,7 @@ export function registerSettingsTools(
     "get_project_settings",
     {
       description:
-        "Reads every setting of one project: Builds (buildEnabled, with who turned it on or off and when; set only in the app), auto-build, plan approval, auto-refine, questions per day, auto-merge, agent tasks at once (runsAtOnce), paused, default worker, default executor (actions or local), email notifications (sent only once email is configured: set_email_notifications says), release environments (prod-only or dev-and-prod), and the dispatcher's last decision (lastDispatch: why it is idle, or what it did). Each setting has its own set_* tool except Builds.",
+        "Reads every setting of one project: Builds (buildEnabled, with who turned it on or off and when; set only in the app), auto-build, plan approval, auto-refine, questions per day, auto-merge, merge mode (mergeMode, and mergeModeSet: false when it is still read from auto-merge), agent tasks at once (runsAtOnce), paused, default worker, default executor (actions or local), email notifications (sent only once email is configured: set_email_notifications says), release environments (prod-only or dev-and-prod), and the dispatcher's last decision (lastDispatch: why it is idle, or what it did). Each setting has its own set_* tool except Builds.",
       inputSchema: SettingsInput,
       annotations: { readOnlyHint: true },
     },
@@ -98,6 +109,7 @@ export function registerSettingsTools(
       }),
   );
 
+  // AI-292: the settings page's "Questions per day"; same rule as PATCH /api/projects/{id}.
   server.registerTool(
     "set_daily_question_cap",
     {
@@ -114,6 +126,25 @@ export function registerSettingsTools(
           { actor: deps.actor, email: deps.email },
         );
         return { project: updated.key, dailyQuestionCap: updated.dailyQuestionCap };
+      }),
+  );
+
+  // ADR-0124: merge modes. Tighten only over MCP; loosening is done on the settings page.
+  server.registerTool(
+    "set_merge_mode",
+    {
+      description:
+        "Sets a project's merge mode (who merges its PRs, ADR-0124), strictest first: manual, epic, low-risk, all-clean. Only Andy, and over MCP only to the same or a stricter mode: loosening is refused, change it on the project settings page. Logged in the config change log. Nothing merges by it yet: the gate still follows auto-merge until AI-215.",
+      inputSchema: MergeModeInput,
+      annotations: { destructiveHint: false, idempotentHint: true, openWorldHint: false },
+    },
+    ({ project, mode }) =>
+      run(async () => {
+        const updated = await deps.projects.tightenMergeMode(project.toLowerCase(), mode, {
+          actor: deps.actor,
+          email: deps.email,
+        });
+        return { project: updated.key, mergeMode: effectiveMergeMode(updated) };
       }),
   );
 }

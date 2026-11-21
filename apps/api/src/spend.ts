@@ -4,6 +4,7 @@ import {
   ConfigChange,
   EffectiveSpendCaps,
   ProjectSpendCaps,
+  type ProviderSpendTotals,
   SpendCaps,
   SpendSoFar,
   notFound,
@@ -23,7 +24,7 @@ import type { RouteModule } from "./services";
  */
 
 /** What the settings read from the spend ledger (AI-234: M10.2). */
-export type SpendTotalsReader = Pick<SpendLedger, "totals">;
+export type SpendTotalsReader = Pick<SpendLedger, "totals" | "totalsByProvider">;
 
 function log(severity: "WARNING", message: string, fields: object) {
   console.log(JSON.stringify({ severity, message, component: "spend", ...fields }));
@@ -88,6 +89,12 @@ const routes = {
   }),
 };
 
+/** Spend per provider for a project and for all projects; null: the ledger can't be read. */
+export interface SpendByProviderView {
+  project: ProviderSpendTotals[] | null;
+  global: ProviderSpendTotals[] | null;
+}
+
 export class SpendSettingsService {
   constructor(
     private readonly projects: ProjectService,
@@ -124,6 +131,27 @@ export class SpendSettingsService {
       input.reason,
     );
     return spendView(project.spendCaps, await this.spent(projectId), await this.global.read());
+  }
+
+  /**
+   * Spend per provider today and this month, for the project and for all projects (AI-280's
+   * totals): the Spend panel's `GET …/spend/providers` and MCP `get_spend` read it here (AI-288).
+   * Null (unknown, never zero) when the ledger can't be read. Two bounded reads (ADR-0126).
+   */
+  async byProvider(projectId: string): Promise<SpendByProviderView> {
+    if ((await this.read(projectId)) === null) throw notFound("project", projectId);
+    if (!this.ledger) return { project: null, global: null };
+    const at = this.now().toISOString();
+    try {
+      const [project, global] = await Promise.all([
+        this.ledger.totalsByProvider({ projectId }, at),
+        this.ledger.totalsByProvider({}, at),
+      ]);
+      return { project, global };
+    } catch (err) {
+      log("WARNING", "spend by provider unreadable", { projectId, error: String(err) });
+      return { project: null, global: null };
+    }
   }
 
   /** Today's and this month's totals; null (unknown, never zero) when the ledger can't be read. */
