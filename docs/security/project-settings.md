@@ -30,3 +30,14 @@ Residual risks:
 
 - **Two reverts at once** of the same change can both write the same before-values (both logged); `markReverted` is transactional, so only one marks it and the other gets `409`. Accepted: the values are identical.
 - **What a revert can change:** any project setting the change touched, including `autoBuild`, `autoMerge` and `executor`, as the owner could by hand. `buildEnabled` only from the app.
+
+## Spend caps (AI-249: M10.8)
+
+A project's own caps on paid-model spend (ADR-0129); they can only lower the global caps, which are the code defaults (`DEFAULT_SPEND_CAPS`) until AI-276: M10: Global spend caps store and editing. Risk: [R-AI-249](risks/R-AI-249.md).
+
+| Entry point                                                                                             | Who can reach it              | Authn/authz                                                                         | Notes                                                                                                                                                                           |
+| ------------------------------------------------------------------------------------------------------- | ----------------------------- | ----------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `GET /api/projects/{id}/spend`; MCP `get_spend`                                                         | Signed-in, allow-listed users | `/api/*` or `/mcp` sign-in plus the allow-list                                      | Caps, effective caps, spend today and this month; spend reads `null` ("unknown"), never zero, when the ledger can't be read                                                     |
+| `PUT /api/projects/{id}/spend-caps`, `PATCH /api/projects/{id}` field `spendCaps`; MCP `set_spend_caps` | Signed-in, allow-listed users | Owner-only through `change_project_settings` (AI-19); agents and the system get 403 | Whole micro-dollars only (a fraction or negative is a 400); a cap above global is refused (422) on every path, in `ProjectService.update`; each change is logged and revertable |
+
+Nothing here spends money or reaches a provider: the caps are read by the spend gate (AI-248: M10.7) before a paid task starts.
