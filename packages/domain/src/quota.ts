@@ -193,7 +193,8 @@ function log(severity: "INFO" | "WARNING" | "ERROR", message: string, fields: ob
  * Andy's clear of a quota idle (AI-74): discards the readings holding dispatch at the reserve, so
  * quota reads unknown until the next reading and dispatch resumes under its other caps. The
  * readings stay, marked with who and when; each clear is kept in the store's history. At most
- * one clear per reading: the store refuses a reading already discarded.
+ * one clear per reading: the store refuses a reading already discarded. It also serves the
+ * status the clear acts on (`status`), so the quota panel and MCP `get_quota` read one way.
  */
 export class QuotaClearer {
   constructor(
@@ -207,6 +208,15 @@ export class QuotaClearer {
      */
     private readonly thresholds: () => Promise<QuotaThresholds> = async () => CLAUDE_SUB_THRESHOLDS,
   ) {}
+
+  /**
+   * The Claude subscription quota now (AI-286): the latest reading per window, its freshness and
+   * level. One read of the store's latest readings (one per window). No store: unknown.
+   */
+  async status(): Promise<ReturnType<typeof quotaStatus>> {
+    const readings = this.store ? await this.store.latest("claude-sub") : [];
+    return quotaStatus("claude-sub", readings, this.now());
+  }
 
   /** Owner-only (`clear_quota_idle`, AI-19); `by.email` is recorded on the discarded readings. */
   async clearIdle(by: { actor: EventActor; email: string }): Promise<QuotaClearResult> {
