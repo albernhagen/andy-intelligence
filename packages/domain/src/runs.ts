@@ -1592,11 +1592,11 @@ export class RunService {
    */
   async inFlight(projectId: string): Promise<InFlightRun[]> {
     if (!(await this.tracker.getProject(projectId))) throw notFound("project", projectId);
-    const [active, tickets] = await Promise.all([
-      this.runs.listActive(projectId),
-      this.tracker.listTickets(projectId),
-    ]);
-    const byId = new Map(tickets.map((t) => [t.id, t]));
+    const active = await this.runs.listActive(projectId);
+    // Only the tickets with a run in flight, by id (AI-222); runs are capped, the project isn't.
+    const ids = [...new Set(active.flatMap((r) => r.ticketId ?? []))];
+    const tickets = await Promise.all(ids.map((id) => this.tracker.getTicket(projectId, id)));
+    const byId = new Map(tickets.flatMap((t) => (t ? [[t.id, t] as const] : [])));
     const now = this.now();
     // By start time, as the view shows it; runs created in the same instant still order stably.
     const since = (r: Run) => r.startedAt ?? r.createdAt ?? "";

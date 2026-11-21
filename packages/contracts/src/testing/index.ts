@@ -1379,4 +1379,6 @@ export * from "./config-changes";
 export * from "./config-proposals";
 export * from "./night";
 export * from "./notify-email";
+export * from "./project-versions";
+export * from "./read-counter";
 export * from "./runner";
