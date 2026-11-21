@@ -1,0 +1,31 @@
+name: Agent review — record findings
+description: >-
+  Posts one PR review verdict's findings to the control plane (ADR-0097) with the job's Actions
+  OIDC token (scripts/review-findings.mjs). Best effort: a failure is a warning, never a failed
+  job. The caller's job needs `id-token: write` and must not run PR code (check out the base).
+
+inputs:
+  role:
+    description: security | adversarial.
+    required: true
+  findings:
+    description: The agent's structured output (the review job's `findings` output).
+    required: true
+  head-sha:
+    description: The PR head the verdict reviewed.
+    required: true
+  control-plane-url:
+    description: The control plane's public URL, also the OIDC audience. Empty skips.
+    default: ""
+
+runs:
+  using: composite
+  steps:
+    - name: Record findings
+      shell: bash
+      env:
+        ROLE: ${{ inputs.role }}
+        FINDINGS: ${{ inputs.findings }}
+        HEAD_SHA: ${{ inputs.head-sha }}
+        CONTROL_PLANE_URL: ${{ inputs.control-plane-url }}
+      run: node "$GITHUB_ACTION_PATH/../../../scripts/review-findings.mjs"

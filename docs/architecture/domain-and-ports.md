@@ -44,7 +44,7 @@ Contracts live in `packages/contracts` (Zod schemas, TypeScript interfaces; Open
 | `Evaluator` | Suite, Case, Score, per-case result | Agent evals (M1.17: Agent evals v1, ADR-0086); Ori Eval for scout smoke tests | Claude Code runner (`scripts/evals/evaluator.mjs`) |
 | `OAuthGrantStore` | OAuthGrant (code, access token, refresh token; keyed by token hash) | **Firestore** (ADR-0039) | Local store (ADR-0032) |
 | `RunnerStore` | Runner, per-run token (hashes only; ADR-0089) | **Firestore** | — |
-| `ConfigChangeStore`, `ReviewFindingSource`, `ReleaseNoteStore` | ConfigChange, ReviewFinding (ADR-0097), ReleaseNote | **Firestore** | — |
+| `ConfigChangeStore`, `ReviewFindingLog`, `ReleaseNoteStore` | ConfigChange, ReviewVerdict (ADR-0097), ReleaseNote | **Firestore** | — |
 | `NightLaunchStore` | NightLaunch; one active per project, checked atomically | **Firestore** | — |
 | `DeploymentStore` | Deployment (AI-161: M6.3): record, finish once, list one environment newest first (≤ 100), latest good | **Firestore** (`deployments`, server-only) | — |
 | `ProjectVersions` | A change counter per project, bumped by every tracker and run write; unchanged board and ticket-list polls are served from a per-instance cache (AI-222) | **Firestore** | — |

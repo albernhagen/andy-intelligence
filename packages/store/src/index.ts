@@ -9,6 +9,7 @@ import {
   CodeHostEvent,
   ConfigChange,
   ProposalLookupCursor,
+  ReviewVerdict,
   Model,
   OAuthGrant,
   Policy,
@@ -68,6 +69,7 @@ export const collections = {
   quotaClears: { path: () => "quotaClears", schema: QuotaClear },
   configChanges: { path: () => "configChanges", schema: ConfigChange },
   proposalLookupCursors: { path: () => "proposalLookupCursors", schema: ProposalLookupCursor },
+  reviewVerdicts: { path: () => "reviewVerdicts", schema: ReviewVerdict },
   releases: { path: () => "releases", schema: Release },
   releaseNotes: {
     path: (projectId: string) => `projects/${projectId}/releaseNotes`,

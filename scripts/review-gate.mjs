@@ -34,6 +34,27 @@ export const ROLES = {
   },
 };
 
+/**
+ * The fixed finding categories (`kind`) both review schemas list (ADR-0097). Stored findings are
+ * grouped by kind; a kind on 3+ PRs becomes a proposed rule. A test keeps the schemas in step.
+ */
+export const FINDING_KINDS = [
+  "logic-error",
+  "edge-case",
+  "missing-test",
+  "missing-docs",
+  "contract-drift",
+  "spec-gap",
+  "unbounded",
+  "injection",
+  "authz",
+  "secret-exposure",
+  "unsafe-workflow",
+  "dependency",
+  "concurrency",
+  "other",
+];
+
 /** Kept for callers of the M1.10 gate. */
 export const MARKER = ROLES.security.marker;
 export const LABEL = ROLES.security.label;
