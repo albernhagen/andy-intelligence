@@ -10,6 +10,7 @@ import { createApp } from "./app";
 import { parseAllowList, type TokenVerifier } from "./auth";
 import { ClientMetadataResolver } from "./mcp/client-metadata";
 import { mcpCaller } from "./mcp/test-client";
+import { ownerOnlyAccess } from "./project-access";
 
 /**
  * AI-222: Firestore reads grow with project size. Andy's usage alert fired at 25,063 reads in
@@ -52,6 +53,7 @@ async function setup(others: number) {
   const versions = countReads(new InMemoryProjectVersions());
   const grants = new InMemoryOAuthGrantStore();
   const app = createApp({
+    projectAccess: ownerOnlyAccess(),
     verifier,
     allowedEmails: parseAllowList("andy@example.com"),
     version: "test",
@@ -110,6 +112,17 @@ describe("reads per call (AI-222)", () => {
     });
     expect(large).toBe(small);
     expect(large).toBe(1);
+  });
+
+  it("GivenAnUnchangedProject_WhenWorkIsPolledAgain_ThenItReadsTheProjectsAndOneCounterEach", async () => {
+    const [small, large] = await readsAt(async (s) => {
+      await s.get("/api/work?view=needs-me");
+      s.reset();
+      await s.get("/api/work?view=blocked");
+    });
+    expect(large).toBe(small);
+    // AI-198: the project list (one project here) and its version counter (ADR-0126).
+    expect(large).toBe(2);
   });
 
   it("GivenAnUnchangedTicketList_WhenPolledAgain_ThenAtMostFiveReadsAtAnySize", async () => {
