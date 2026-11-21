@@ -11,6 +11,7 @@ import type {
   ProjectDashboard,
   Stage,
 } from "@andy/contracts";
+import { DoraPanel } from "@/components/DoraPanel";
 import { Loading, QueryError } from "@/components/Status";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -109,6 +110,7 @@ export function DashboardsPage() {
       ) : (
         <DashboardBody data={dashboard.data} />
       )}
+      {projectId && <DoraPanel projectId={projectId} />}
     </section>
   );
 }

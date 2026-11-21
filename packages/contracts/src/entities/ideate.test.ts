@@ -1,6 +1,7 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
-import { IDEATE_LIMITS, IdeateOutput, SPEC_PATH } from "./ideate";
+import { IDEATE_LIMITS, IdeateEpic, IdeateOutput, SPEC_PATH } from "./ideate";
+import { EPIC_OUTCOME_MAX } from "./index";
 
 // The schema the ideate agent gets; IdeateOutput is the control plane's check.
 const schema = JSON.parse(
@@ -16,6 +17,7 @@ const epicResult = {
   outcome: "epic" as const,
   epic: {
     title: "Andy sees his week",
+    outcome: "Andy sees his weekly running totals at a glance.",
     body: "Runs pile up with no overview.",
     acceptanceCriteria: ["WHEN Andy opens the week THE SYSTEM SHALL show totals"],
     slices: [{ title: "Totals", summary: "Sum the week." }],
@@ -48,6 +50,9 @@ describe("IdeateOutput", () => {
     expect(Object.keys(IdeateOutput.shape).sort()).toEqual([...schema.required].sort());
     expect(p.summary.maxLength).toBe(IDEATE_LIMITS.summary);
     expect(p.epic.properties.title.maxLength).toBe(IDEATE_LIMITS.title);
+    expect(p.epic.properties.outcome.maxLength).toBe(IDEATE_LIMITS.outcome);
+    expect(IDEATE_LIMITS.outcome).toBe(EPIC_OUTCOME_MAX);
+    expect([...p.epic.required].sort()).toEqual(Object.keys(IdeateEpic.shape).sort());
     expect(p.epic.properties.body.maxLength).toBe(IDEATE_LIMITS.body);
     expect(p.epic.properties.acceptanceCriteria.maxItems).toBe(IDEATE_LIMITS.criteria);
     expect(p.epic.properties.slices.maxItems).toBe(IDEATE_LIMITS.slices);

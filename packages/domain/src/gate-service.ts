@@ -18,6 +18,7 @@ import {
   policyAllows,
   type GateDecision,
 } from "./gate";
+import { intoEpicBranch, passesIntoEpic, type EpicMerges } from "./night-merge";
 import { syncPendingFor } from "./sync-runs";
 import type { NightUnattended } from "./night-unattended";
 import type { TicketService } from "./tickets";
@@ -27,6 +28,9 @@ import type { TicketService } from "./tickets";
  * finished-check delivery it re-reads the PR's current state from the host, records what the gate
  * decides on the Run, and merges when the project's policy allows. On close it records outcome and
  * metrics. Only PRs on a build run's own branch are touched. Every failure leaves the PR unmerged.
+ * A night story's PR into its launch's `epic/<KEY>` branch merges there when the gate's only
+ * reason is `not_default_branch`, whatever the policy, and the story moves to Done (AI-124,
+ * ADR-0107); its required checks and CODEOWNERS are read from the default branch.
  */
 
 const AGENT_BRANCH = /^agent\/([A-Z][A-Z0-9]{0,9}-\d+)\/([^/]+)$/;
@@ -62,6 +66,8 @@ export class PullRequestGate {
     private readonly now: () => Date = () => new Date(),
     /** Night launches (AI-123): a vetoed PR stops its story for the night; null: none. */
     private readonly night: NightUnattended | null = null,
+    /** Night launches' epic branches (AI-124); null: PRs into them never merge. */
+    private readonly epicMerges: EpicMerges | null = null,
   ) {}
 
   /** One recorded delivery. Replays never get here; a second delivery of a close is a no-op. */
@@ -112,7 +118,15 @@ export class PullRequestGate {
         `the merge gate vetoed its PR #${pr.number}: ${decision.reasons.join(", ")}`,
       );
     }
-    if (!decision.wouldAutoMerge) return { result: "assessed", ...base };
+    // `wouldAutoMerge` needs the default branch, so a PR into an epic branch never takes it.
+    if (!decision.wouldAutoMerge) {
+      const launch =
+        this.epicMerges && passesIntoEpic(decision)
+          ? await this.epicMerges.target(pr, run, agent.ticket)
+          : null;
+      if (!launch) return { result: "assessed", ...base };
+      return this.merge(repo, pr, run, agent.ticket, launch.epicKey);
+    }
 
     // The repo index caches projects for a minute: read the policy now.
     const policy = (await this.tracker.getProject(project.id))?.autoMerge ?? "none";
@@ -131,6 +145,8 @@ export class PullRequestGate {
     pr: PullRequest,
     run: Run,
     ticket: Ticket,
+    /** The launch's epic key when merging into its epic branch (AI-124); null: the default branch. */
+    epicKey: string | null = null,
   ): Promise<GateResult> {
     const base = { pr: pr.number, runId: run.id };
     if (run.mergeAttemptedSha === pr.headSha) return { result: "assessed", ...base };
@@ -142,8 +158,9 @@ export class PullRequestGate {
       }
       throw err;
     }
+    let sha: string | null;
     try {
-      await this.host.mergePullRequest(repo, pr.number, pr.headSha);
+      sha = await this.host.mergePullRequest(repo, pr.number, pr.headSha);
     } catch (err) {
       const mergeError = errorText(err);
       log("ERROR", "auto-merge failed", { ...base, error: mergeError });
@@ -157,8 +174,57 @@ export class PullRequestGate {
       );
       return { result: "merge_failed", ...base };
     }
+    if (epicKey) {
+      log("INFO", "merged into the epic branch", { ...base, branch: pr.baseRef, epicKey });
+      await this.recordEpicMerge(run, ticket, pr, sha);
+      return { result: "merged", ...base };
+    }
     log("INFO", "auto-merged", base);
     return { result: "merged", ...base };
+  }
+
+  /**
+   * After a merge into the epic branch: records it on the run, for the morning PR, and moves the
+   * story to Done (ADR-0107), so its dependants build on the branch and the launch can finish.
+   * Both steps are idempotent; the PR's close webhook runs them again, so a failure here is
+   * flagged on the story and retried there instead of lost. Never throws.
+   */
+  private async recordEpicMerge(
+    run: Run,
+    ticket: Ticket,
+    pr: PullRequest,
+    sha: string | null,
+  ): Promise<boolean> {
+    try {
+      const current = (await this.runs.get(run.id)) ?? run;
+      if (!current.epicMerge) {
+        await this.runs.update(run.id, { epicMerge: { at: this.now().toISOString(), sha } }, [
+          "succeeded",
+        ]);
+      }
+      await this.tickets.followPullRequest(
+        ticket.projectId,
+        ticket.id,
+        "done",
+        `PR #${pr.number} merged into ${pr.baseRef} (night launch): ${pr.url}`,
+      );
+      return true;
+    } catch (err) {
+      const error = errorText(err);
+      log("ERROR", "epic merge bookkeeping failed", { pr: pr.number, runId: run.id, error });
+      try {
+        await this.tickets.flag(ticket.projectId, ticket.id, "system");
+        await this.tracker.addComment(
+          ticket.projectId,
+          ticket.id,
+          `PR #${pr.number} merged into ${pr.baseRef}, but recording it failed (retried when its close arrives): ${error}`,
+          "system",
+        );
+      } catch (flagErr) {
+        log("ERROR", "flag after epic merge failed", { runId: run.id, error: errorText(flagErr) });
+      }
+      return false;
+    }
   }
 
   private async closed(repo: string, pr: PullRequest, project: Project): Promise<GateResult[]> {
@@ -170,6 +236,15 @@ export class PullRequestGate {
     const agent = await this.agentPr(pr, project);
     if (!agent || agent.run.outcome) return results;
     const { run, ticket } = agent;
+    // Recovers a night merge whose bookkeeping failed after the merge call (AI-124).
+    if (
+      pr.state === "merged" &&
+      this.epicMerges &&
+      intoEpicBranch(pr) &&
+      run.baseBranch === pr.baseRef
+    ) {
+      await this.recordEpicMerge(run, ticket, pr, null);
+    }
 
     let decision: GateDecision | null = null;
     try {
@@ -272,11 +347,12 @@ export class PullRequestGate {
     run: Run,
     ticket: Ticket,
   ): Promise<GateDecision> {
+    const rules = await this.rulesBranch(repo, pr);
     const [files, codeowners, required, checks, active] = await Promise.all([
       this.host.listChangedFiles(repo, pr.number),
       // The base branch's file: a PR can't unprotect a path by editing CODEOWNERS.
-      Promise.all(CODEOWNERS_PATHS.map((p) => this.host.readFile(repo, p, pr.baseRef))),
-      this.host.listRequiredChecks(repo, pr.baseRef),
+      Promise.all(CODEOWNERS_PATHS.map((p) => this.host.readFile(repo, p, rules))),
+      this.host.listRequiredChecks(repo, rules),
       this.host.listHeadChecks(repo, pr.headSha),
       this.runs.listActive(run.projectId),
     ]);
@@ -292,6 +368,18 @@ export class PullRequestGate {
       syncPending: syncPendingFor(run, active, this.now()),
       ticketType: ticket.type,
     });
+  }
+
+  /**
+   * The branch whose CODEOWNERS and required checks apply: the PR's base, except an epic branch
+   * (no rules of its own), which takes the default branch's, so a night merge needs what a merge
+   * into the default branch needs (AI-124).
+   */
+  private async rulesBranch(repo: string, pr: PullRequest): Promise<string> {
+    if (!intoEpicBranch(pr)) return pr.baseRef;
+    const defaultBranch = (await this.host.getRepo(repo))?.defaultBranch;
+    if (!defaultBranch) throw new Error(`couldn't read the default branch of ${repo}`);
+    return defaultBranch;
   }
 
   private async flagOnce(run: Run, ticket: Ticket, decision: GateDecision): Promise<void> {
