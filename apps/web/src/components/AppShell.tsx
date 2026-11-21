@@ -138,7 +138,10 @@ function navLinks(scope: Scope, pathname: string, section: Section | null): NavI
   return items;
 }
 
-/** Phone navigation: a bottom bar in thumb reach, 44px targets, the rest under More. */
+/**
+ * Phone navigation: a bottom bar in thumb reach, 44px targets, the rest under More. Below the
+ * ticket panel (z-30), so a panel opened full-screen covers it until closed.
+ */
 function PhoneNav({ links }: { links: NavItem[] }) {
   const navigate = useNavigate();
   const more = links.filter((l) => !l.icon);
@@ -146,7 +149,7 @@ function PhoneNav({ links }: { links: NavItem[] }) {
   return (
     <nav
       aria-label="Main"
-      className="fixed inset-x-0 bottom-0 z-40 flex border-t border-border bg-background px-2 pb-[env(safe-area-inset-bottom)]"
+      className="fixed inset-x-0 bottom-0 z-20 flex border-t border-border bg-background px-2 pb-[env(safe-area-inset-bottom)]"
     >
       {links
         .filter((l) => l.icon)
