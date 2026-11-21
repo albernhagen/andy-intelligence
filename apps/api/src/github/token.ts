@@ -35,6 +35,8 @@ export interface ActionsClaims {
   job_workflow_ref?: string;
   /** The workflow run's ID (agent run callbacks). */
   run_id?: string;
+  /** The commit the workflow run is for (deployment callbacks, AI-180). */
+  sha?: string;
 }
 
 export type ActionsTokenVerifier = (jwt: string) => Promise<ActionsClaims>;
@@ -103,6 +105,7 @@ export function actionsTokenVerifier(
       workflow_ref: payload.workflow_ref,
       job_workflow_ref: optional(payload.job_workflow_ref),
       run_id: optional(payload.run_id),
+      sha: optional(payload.sha),
     };
   };
 }

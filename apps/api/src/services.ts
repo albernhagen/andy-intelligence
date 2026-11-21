@@ -22,6 +22,8 @@ import {
   NightLaunches,
   EpicBranches,
   MorningPullRequests,
+  MorningReports,
+  MorningSteps,
   ProjectReadCache,
   RoutingSettings,
   SpendAlerts,
@@ -207,16 +209,26 @@ export function createServices(input: AppDeps): Services {
           now,
           undefined,
           connection ? connectedEpicBranches(connection, deps.tracker, deps.nightLaunches) : null,
-          // AI-124: when a launch ends, its morning PR opens (or an empty epic branch goes).
-          connection && deps.github
-            ? new MorningPullRequests(
-                deps.tracker,
-                deps.runs,
-                new ConnectedCodeHost(connection),
-                deps.github.publicUrl,
-                service,
-              )
-            : null,
+          // AI-124: when a launch ends, its morning PR opens (or an empty epic branch goes);
+          // AI-125: then the morning report goes on the epic, with or without GitHub.
+          new MorningSteps(
+            connection && deps.github
+              ? new MorningPullRequests(
+                  deps.tracker,
+                  deps.runs,
+                  new ConnectedCodeHost(connection),
+                  deps.github.publicUrl,
+                  service,
+                )
+              : null,
+            new MorningReports(
+              deps.tracker,
+              deps.runs,
+              service,
+              deps.github?.publicUrl ?? "",
+              deps.reviewFindings ?? null,
+            ),
+          ),
         ),
         store: deps.nightLaunches,
         tracker: deps.tracker,
