@@ -198,6 +198,7 @@ describe("MCP OAuth flow (MCP SDK client)", () => {
       "set_auto_build",
       "set_auto_merge",
       "set_auto_refine",
+      "set_daily_question_cap",
       "set_default_executor",
       "set_default_worker",
       "set_email_notifications",
