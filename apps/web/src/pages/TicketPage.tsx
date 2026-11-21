@@ -9,6 +9,7 @@ import { AskQuestionForm } from "@/components/AskQuestionForm";
 import { CancelArchiveControls } from "@/components/CancelArchiveControls";
 import { EpicChildren } from "@/components/EpicChildren";
 import { OverridesEditor } from "@/components/OverridesEditor";
+import { PullRequestLink } from "@/components/PullRequestLink";
 import {
   EditableList,
   InlineText,
@@ -190,8 +191,10 @@ function StatusLine({ ticket }: { ticket: Ticket }) {
 function Story({ ticket: t }: { ticket: Ticket }) {
   const title = useTicketSave(t);
   const body = useTicketSave(t);
+  const events = useEvents(pathOf(t)).data ?? [];
   return (
     <article className="space-y-6">
+      <PullRequestLink events={events} />
       <TicketCostLine {...pathOf(t)} />
       <InlineText
         label="Title"
