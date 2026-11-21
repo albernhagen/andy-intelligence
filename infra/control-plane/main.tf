@@ -52,7 +52,8 @@ locals {
 resource "google_project_service" "apis" {
   for_each = toset([
     "artifactregistry.googleapis.com",
-    "cloudtasks.googleapis.com", # run watchdog queue (M1.2: Ticket core)
+    "cloudscheduler.googleapis.com", # weekly model scout (AI-268: M10.17)
+    "cloudtasks.googleapis.com",     # run watchdog queue (M1.2: Ticket core)
     "cloudtrace.googleapis.com",
     "firebase.googleapis.com",
     "firebaserules.googleapis.com",
@@ -331,6 +332,11 @@ resource "google_cloud_run_v2_service" "control_plane" {
       env {
         name  = "WATCHDOG_INVOKER_EMAIL"
         value = google_service_account.tasks_invoker.email
+      }
+      # Weekly model scout (AI-268: M10.17): the identity the scheduler's OIDC token must be for.
+      env {
+        name  = "MODEL_SCOUT_INVOKER_EMAIL"
+        value = google_service_account.scout_scheduler.email
       }
       # Email for the Needs-you inbox (AI-77): set only once Andy turns email_enabled on, after
       # adding the API key's version (runbook email-notifications.md). Until then the API sends
@@ -668,4 +674,39 @@ resource "google_service_account_iam_member" "runtime_acts_as_invoker" {
   service_account_id = google_service_account.tasks_invoker.name
   role               = "roles/iam.serviceAccountUser"
   member             = "serviceAccount:${google_service_account.runtime.email}"
+}
+
+# ── Weekly model scout (AI-268: M10.17: Weekly model scout job) ──────────────
+# Once a week Cloud Scheduler POSTs /jobs/model-scout with an OIDC token for this account; the
+# API checks the token's email and audience. The job fetches OpenRouter's public models list
+# (no key, no spend) and records at most one pending tier change. The account has no roles:
+# it only proves "this call came from our scheduler".
+resource "google_service_account" "scout_scheduler" {
+  account_id   = "scout-scheduler"
+  display_name = "Cloud Scheduler invoker (weekly model scout)"
+}
+
+resource "google_cloud_scheduler_job" "model_scout" {
+  name             = "model-scout-weekly"
+  description      = "Weekly model scout: one pending tier change or none (AI-268)"
+  region           = var.region
+  schedule         = "0 6 * * 1" # Mondays 06:00 UTC
+  time_zone        = "Etc/UTC"
+  attempt_deadline = "120s"
+
+  # One retry: the API is a no-op for the rest of the ISO week once it has proposed.
+  retry_config {
+    retry_count = 1
+  }
+
+  http_target {
+    http_method = "POST"
+    uri         = "${local.public_url}/jobs/model-scout"
+    oidc_token {
+      service_account_email = google_service_account.scout_scheduler.email
+      audience              = local.public_url
+    }
+  }
+
+  depends_on = [google_project_service.apis]
 }

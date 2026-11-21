@@ -49,11 +49,13 @@ import type { AppDeps } from "./app";
 import type { AuthEnv } from "./auth";
 import { noReviewFindings } from "./config-proposals";
 import { ConnectedCodeHost, GitHubConnection, gitHubCodeHost } from "./github/connection";
+import { DirectExecutor } from "./direct-executor";
 import { actionsTokenVerifier, type ActionsTokenVerifier } from "./github/token";
 import type { ToolServices } from "./mcp/tools";
 import type { NightDeps } from "./night";
 import { measureReads, meterReads } from "./read-meter";
 import { runnerCredentials } from "./runners";
+import { OpenRouterGateway } from "./openrouter";
 import { SetupChecklistReader } from "./setup";
 import { SpendSettingsService } from "./spend";
 
@@ -77,6 +79,8 @@ export interface Services extends Required<ToolServices> {
   verifyActionsToken: ActionsTokenVerifier | null;
   /** Unchanged board and ticket-list polls served per project version (AI-222); null without versions. */
   readCache: ProjectReadCache | null;
+  /** Single-call steps on a `direct` route (AI-258); null without a spend ledger. */
+  direct: DirectExecutor | null;
 }
 
 /** A module's routes: registered from its own file and listed once in `public-routes.ts` or `api-routes.ts`. */
@@ -188,6 +192,33 @@ export function createServices(raw: AppDeps): Services {
         now,
       })
     : null;
+  // AI-248: no price source yet (M10.5), so the gate refuses every pay_per_use start. Caps:
+  // the defaults, narrowed by the project's own (AI-249).
+  const spendGate = deps.spendLedger
+    ? new SpendGate(
+        deps.spendLedger,
+        NO_PRICES,
+        async (id) => ({
+          // Unreadable global caps throw here, and the gate starts no paid task (fail closed).
+          global: await globalSpendCaps.caps(),
+          project: (await deps.tracker.getProject(id))?.spendCaps ?? null,
+        }),
+        now,
+        spendAlerts ? (event) => spendAlerts.handle(event) : null,
+      )
+    : null;
+  // AI-258/AI-268: single-call steps routed to `direct`. The gateway has no key until AI-266:
+  // M10.15, and no price source exists, so every direct call fails closed for now.
+  const direct = spendGate
+    ? new DirectExecutor(
+        deps.runs,
+        new OpenRouterGateway({ readKey: async () => null }),
+        spendGate,
+        NO_PRICES,
+        deps.routing ?? null,
+        now,
+      )
+    : null;
   const runs = new RunService(
     deps.tracker,
     deps.runs,
@@ -200,21 +231,7 @@ export function createServices(raw: AppDeps): Services {
     deps.nightLaunches ?? null,
     null,
     deps.routing ?? null,
-    // AI-248: no price source yet (M10.5), so the gate refuses every pay_per_use start. Caps:
-    // the defaults, narrowed by the project's own (AI-249).
-    deps.spendLedger
-      ? new SpendGate(
-          deps.spendLedger,
-          NO_PRICES,
-          async (id) => ({
-            // Unreadable global caps throw here, and the gate starts no paid task (fail closed).
-            global: await globalSpendCaps.caps(),
-            project: (await deps.tracker.getProject(id))?.spendCaps ?? null,
-          }),
-          now,
-          spendAlerts ? (event) => spendAlerts.handle(event) : null,
-        )
-      : null,
+    spendGate,
   );
   const refiner = new RefineDispatcher(deps.tracker, deps.runs, runs, now);
   // AI-124/AI-125: when a launch ends, its morning PR opens (or an empty epic branch goes),
@@ -436,6 +453,7 @@ export function createServices(raw: AppDeps): Services {
     routing,
     night,
     readCache,
+    direct,
     setup: new SetupChecklistReader(
       deps.tracker,
       connection ? new ConnectedCodeHost(connection) : null,

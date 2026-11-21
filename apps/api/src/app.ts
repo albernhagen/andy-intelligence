@@ -123,6 +123,18 @@ export interface AppDeps {
     /** Test seam; defaults to Google's ID token verification. */
     verifyInvokerToken?: InvokerTokenVerifier;
   };
+  /**
+   * Weekly model scout (AI-268: M10.17): Cloud Scheduler calls `/jobs/model-scout` with its
+   * service account's OIDC token. Off (route absent) when not configured, e.g. local dev.
+   */
+  modelScout?: {
+    /** The OIDC audience: `PUBLIC_URL`. */
+    publicUrl: string;
+    /** The scheduler's service account the tokens must be for. */
+    invokerEmail: string;
+    /** Test seam; defaults to Google's ID token verification. */
+    verifyInvokerToken?: InvokerTokenVerifier;
+  };
   /** MCP endpoint + its OAuth server; off (routes absent) when not configured. */
   mcp?: {
     publicUrl: string;
