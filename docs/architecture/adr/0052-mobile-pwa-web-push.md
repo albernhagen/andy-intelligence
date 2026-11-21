@@ -1,6 +1,6 @@
 ---
 title: "Mobile: installable web app with push (M7)"
-status: accepted (direction; sliced at M7 start), amended by 0060 (milestone order)
+status: accepted (direction; sliced at M7 start), amended by 0060 (milestone order), 0115 (M7 build choices)
 date: 2026-11-04
 amends: 0050 (milestone order only)
 ---
