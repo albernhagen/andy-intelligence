@@ -10,6 +10,7 @@ import {
   loadRisks,
   parseRisk,
   renderRegister,
+  statusOf,
 } from "./risks.mjs";
 
 const risk = (id, { severity = "low", status = "open", owner = "Andy" } = {}, body) =>
@@ -66,6 +67,21 @@ describe("parseRisk", () => {
     ],
   ])("GivenFileWith%s_WhenParsed_ThenThrows", (_, file, text, message) => {
     expect(() => parseRisk(file, text)).toThrow(message);
+  });
+});
+
+describe("statusOf", () => {
+  it.each([
+    ["status: accepted", "accepted"],
+    ["status:accepted", "accepted"],
+    [" status : accepted ", "accepted"],
+    ["status: open", "open"],
+  ])("GivenFrontmatterLine%s_WhenRead_ThenReturnsParsedStatus", (line, status) => {
+    expect(statusOf(`---\nid: R1\n${line}\n---\n\nbody\n`)).toBe(status);
+  });
+
+  it("GivenNoFrontmatter_WhenRead_ThenReturnsEmpty", () => {
+    expect(statusOf("# R1\n")).toBe("");
   });
 });
 
@@ -139,6 +155,15 @@ describe("CLI", () => {
     const result = run(repo({ "R1.md": risk("R1") }));
     expect(result.status).toBe(0);
     expect(result.stdout).toContain("| [R1](docs/security/risks/R1.md) | low | open | Andy |");
+  });
+
+  it("GivenStatusFlagAndStdin_WhenRun_ThenPrintsParsedStatus", () => {
+    const result = spawnSync(process.execPath, [script, "--status", "-"], {
+      encoding: "utf8",
+      input: risk("R1", { status: "accepted" }),
+    });
+    expect(result.status).toBe(0);
+    expect(result.stdout).toBe("accepted\n");
   });
 
   it("GivenMalformedFile_WhenRun_ThenExitsOneNamingIt", () => {

@@ -19,6 +19,8 @@
 //
 // Usage: node scripts/risks.mjs [repo-dir]. Prints the open register (every status but
 // `closed`), then the closed risks; exit 1 when a file is malformed or two ids collide.
+//        node scripts/risks.mjs --status <file | ->. Prints the frontmatter `status` exactly as
+//        this parser reads it (empty if none); `-` reads stdin. The system review's CI uses it.
 import { readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -40,6 +42,11 @@ export function parseFrontmatter(text) {
     if (at > 0) fields[line.slice(0, at).trim()] = line.slice(at + 1).trim();
   }
   return fields;
+}
+
+/** The `status` this parser reads from a risk file's text; "" when there is none. */
+export function statusOf(text) {
+  return parseFrontmatter(text.replace(/\r\n/g, "\n"))?.status ?? "";
 }
 
 /** @returns {{ id: string, severity: string, status: string, owner: string, risk: string, mitigation: string }} */
@@ -138,7 +145,14 @@ export function duplicateIds(risks) {
   return errors;
 }
 
-if (process.argv[1] === fileURLToPath(import.meta.url)) {
+if (process.argv[1] === fileURLToPath(import.meta.url) && process.argv[2] === "--status") {
+  const source = process.argv[3];
+  if (!source) {
+    process.stderr.write("risks: --status needs a file or -\n");
+    process.exit(2);
+  }
+  process.stdout.write(`${statusOf(readFileSync(source === "-" ? 0 : source, "utf8"))}\n`);
+} else if (process.argv[1] === fileURLToPath(import.meta.url)) {
   const { risks, errors } = loadRisks(process.argv[2] ?? ".");
   if (errors.length > 0) {
     process.stderr.write(`risks: ${errors.join("\nrisks: ")}\n`);

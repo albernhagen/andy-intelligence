@@ -152,9 +152,10 @@ jobs:
           fi
           # Only Andy sets `accepted` (platform/procedures/threat-model.md).
           while read -r f; do
-            # Same value scripts/risks.mjs parses: any spacing around it.
-            accepted='^status:[[:space:]]*accepted[[:space:]]*$'
-            if grep -Eq "$accepted" "$f" && ! git show "HEAD:$f" 2>/dev/null | grep -Eq "$accepted"; then
+            # Status as scripts/risks.mjs parses it, before and after (empty for a new file).
+            now=$(node scripts/risks.mjs --status "$f")
+            before=$(git show "HEAD:$f" 2>/dev/null | node scripts/risks.mjs --status - || true)
+            if [ "$now" = accepted ] && [ "$before" != accepted ]; then
               echo "::error title=system-security-review::Agent set $f to accepted; only Andy does."
               exit 1
             fi
