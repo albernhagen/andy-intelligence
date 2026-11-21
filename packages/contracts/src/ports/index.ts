@@ -3,6 +3,7 @@ import {
   Assumption,
   EpicOutcome,
   AutoMerge,
+  EnvironmentPolicy,
   BillingType,
   DorStatus,
   EventActor,
@@ -218,6 +219,7 @@ export const ProjectPatch = z.strictObject({
   ...projectPlanPatch,
   defaultWorker: Worker.optional(),
   executor: ExecutorKind.optional(),
+  environments: EnvironmentPolicy.optional(),
 });
 export type ProjectPatch = z.infer<typeof ProjectPatch>;
 
@@ -234,6 +236,7 @@ export const ProjectSettings = ProjectPatch.pick({
   defaultWorker: true,
   executor: true,
   emailNotifications: true,
+  environments: true,
 });
 export type ProjectSettings = z.infer<typeof ProjectSettings>;
 
@@ -451,6 +454,17 @@ export interface RunStore {
     to: string,
     limit: number,
   ): Promise<{ runs: Run[]; complete: boolean }>;
+  /**
+   * How many runs on `provider` were created at or after `since`, in any project (AI-232:
+   * google-sub quota by task counting). Reads at most `limit` runs created since `since`, of
+   * every provider (the provider filter comes after the cap). `complete` is false when `limit`
+   * runs were read, so the count may be low: callers must fail closed.
+   */
+  countCreatedSince(
+    provider: ProviderKey,
+    since: string,
+    limit: number,
+  ): Promise<{ count: number; complete: boolean }>;
   /**
    * Applies the patch atomically, only if the run's status is one of `from` and, for a patch
    * that sets `planDecision`, the run has none yet, and for one that sets `mergeAttemptedSha`, it
@@ -768,8 +782,10 @@ export * from "./config-changes";
 export * from "./config-proposals";
 export * from "./deployments";
 export * from "./digest";
+export * from "./membership";
 export * from "./night";
 export * from "./notify-email";
 export * from "./project-versions";
 export * from "./push";
+export * from "./push-sender";
 export * from "./runner";

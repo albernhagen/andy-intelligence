@@ -83,6 +83,7 @@ describe("get_project_settings", () => {
       defaultWorker: "ask",
       executor: "local",
       emailNotifications: false,
+      environments: "dev-and-prod",
       lastDispatch: { decision: "paused", at: "2026-11-09T12:00:00.000Z" },
     });
 
@@ -105,6 +106,7 @@ describe("get_project_settings", () => {
       defaultWorker: "ask",
       executor: "local",
       emailNotifications: false,
+      environments: "dev-and-prod",
       lastDispatch: { decision: "paused", at: "2026-11-09T12:00:00.000Z" },
     });
   });
@@ -133,5 +135,38 @@ describe("get_project_settings", () => {
     const res = await ctx.call("set_build_enabled", { project: "AI", enabled: true });
     expect(res.isError).toBe(true);
     expect((await ctx.tracker.getProject("ai"))?.buildEnabled).toBe(false);
+  });
+});
+
+describe("set_environments (AI-160)", () => {
+  it("GivenAProdOnlyProject_WhenSetToDevAndProd_ThenSavedAndReadBack", async () => {
+    const ctx = await setup();
+    expect((await ctx.call("get_project_settings", { project: "AI" })).data).toMatchObject({
+      environments: "prod-only",
+    });
+
+    const res = await ctx.call("set_environments", { project: "ai", environments: "dev-and-prod" });
+
+    expect(res.data).toEqual({ project: "AI", environments: "dev-and-prod" });
+    expect((await ctx.tracker.getProject("ai"))?.environments).toBe("dev-and-prod");
+    expect((await ctx.tracker.getProject("ops"))?.environments).toBe("prod-only");
+  });
+
+  it("GivenAnUnknownPolicyOrProject_WhenSet_ThenRefusedAndNothingChanges", async () => {
+    const ctx = await setup();
+    expect(
+      (await ctx.call("set_environments", { project: "AI", environments: "staging" })).isError,
+    ).toBe(true);
+    expect(
+      (await ctx.call("set_environments", { project: "NOPE", environments: "prod-only" })).isError,
+    ).toBe(true);
+    expect((await ctx.tracker.getProject("ai"))?.environments).toBe("prod-only");
+  });
+
+  it("GivenTheSettingsPageRoute_WhenPatched_ThenTheSameFieldIsSaved", async () => {
+    const ctx = await setup();
+    expect((await ctx.rest("/api/projects/ai", { environments: "dev-and-prod" })).status).toBe(200);
+    expect((await ctx.rest("/api/projects/ai", { environments: "staging" })).status).toBe(400);
+    expect((await ctx.tracker.getProject("ai"))?.environments).toBe("dev-and-prod");
   });
 });

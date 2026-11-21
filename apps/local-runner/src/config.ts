@@ -7,6 +7,9 @@ export const DEFAULT_URL = "https://ai.andybernhagen.com";
 /** Where project and platform repositories are fetched from. */
 export const DEFAULT_GIT_BASE = "https://github.com";
 
+/** The GitHub API the publish step opens the PR with. */
+export const DEFAULT_GITHUB_API = "https://api.github.com";
+
 /** The platform repository: profile, procedures, schemas and report parsing come from it. */
 export const DEFAULT_PLATFORM_REPO = "albernhagen/andy-intelligence";
 
@@ -22,6 +25,13 @@ export const LOCAL_LIMITS = {
   maxPromptChars: 200_000,
   /** A read-only agent's time limit, as on Actions (25 minutes), and the sandbox check's. */
   readOnlyAgentMinutes: 25,
+  /** A build agent's time limit, as on Actions (55 minutes). */
+  buildAgentMinutes: 55,
+  /** Dependency install before a build (scripts off), and the publish step. */
+  installMinutes: 10,
+  publishMinutes: 10,
+  /** A build's change, as on Actions' collect step (5 MiB). */
+  maxPatchBytes: 5 * 1024 * 1024,
   sandboxCheckMinutes: 5,
   /** The agent's stream is cut here; the report then says so. */
   maxAgentOutputBytes: 32 * 1024 * 1024,
@@ -33,8 +43,8 @@ export const LOCAL_LIMITS = {
   reportAttempts: 3,
 } as const;
 
-/** The steps this runner runs (ADR-0089 slice 5); build and sync are slice 6. */
-export const LOCAL_STEPS = ["refine", "plan"] as const;
+/** The steps this runner runs: read-only ones (slice 5) and build (slice 6). Sync stays on Actions. */
+export const LOCAL_STEPS = ["refine", "plan", "build"] as const;
 
 export function defaultHome(): string {
   return process.env.LOCAL_RUNNER_HOME ?? join(homedir(), ".local-runner");

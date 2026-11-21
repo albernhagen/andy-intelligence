@@ -136,6 +136,11 @@ export {
   FirestoreConfigChangeStore,
 } from "./config-change-store";
 export { DEPLOYMENTS_COLLECTION, FirestoreDeploymentStore } from "./deployments-store";
+export {
+  FirestoreMembershipStore,
+  MEMBERSHIPS_COLLECTION,
+  membershipDocId,
+} from "./membership-store";
 export { FirestoreNightLaunchStore } from "./night-launch-store";
 export { CloudTasksNotifyFlushQueue, notifyFlushUrl } from "./notify-flush-queue";
 export { FirestoreNotifyLedger } from "./notify-ledger";
