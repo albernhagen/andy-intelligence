@@ -10,7 +10,7 @@ import type { FixedWindowLimiter } from "./rate-limit";
 import { hashToken, isTokenShaped } from "./tokens";
 import { registerTools, type ToolServices } from "./tools";
 
-const MCP_BODY_BYTES = 256 * 1024;
+export const MCP_BODY_BYTES = 256 * 1024;
 
 export interface McpEndpointDeps {
   publicUrl: string;

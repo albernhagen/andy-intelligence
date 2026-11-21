@@ -1,6 +1,7 @@
 import { AsyncLocalStorage } from "node:async_hooks";
 import type { MiddlewareHandler } from "hono";
 import { routePath } from "hono/route";
+import { MCP_BODY_BYTES } from "./mcp/endpoint";
 
 /**
  * Documents read, per request and per dispatch event (AI-315: Firestore reads still scale with
@@ -47,8 +48,15 @@ export async function measureReads<T>(fn: () => Promise<T>): Promise<{ value: T;
   return { value, reads: meter.reads };
 }
 
-/** The MCP tool a `/mcp` request calls, or null (any other method, or a body that isn't JSON). */
+/**
+ * The MCP tool a `/mcp` request calls, or null (any other method, or a body that isn't JSON).
+ * This runs before sign-in and the endpoint's body cap, so it reads only bodies that carry a
+ * bearer token and declare a length within that cap: an anonymous or oversized post isn't parsed.
+ */
 async function toolOf(request: Request): Promise<string | null> {
+  const length = Number(request.headers.get("content-length") ?? NaN);
+  const bearer = /^Bearer\s/i.test(request.headers.get("authorization") ?? "");
+  if (!bearer || !(length > 0 && length <= MCP_BODY_BYTES)) return null;
   try {
     const body = (await request.clone().json()) as {
       method?: unknown;
