@@ -3,12 +3,14 @@ import type { Firestore, Transaction } from "@google-cloud/firestore";
 import { z } from "zod";
 import {
   MicroUsd,
+  ProviderKey,
   SpendCapLimits,
   SpendEntry,
   WorkTrackerError,
   sameSpendReservation,
   spendCapPassed,
   spendCounted,
+  type ProviderSpendTotals,
   type ReserveOutcome,
   type SpendLedger,
   type SpendTotals,
@@ -19,7 +21,8 @@ import { typedCollection } from "./index";
  * SpendLedger on Firestore (AI-247: M10.6), server-only (the rules deny every client read and
  * write). Entries live in `spend/{sha256(id)}`; running totals in `spendTotals/{scope}|{window}`,
  * one document per scope (`global`, or `project:<id>`) and UTC window (`day:YYYY-MM-DD`,
- * `month:YYYY-MM`). `reserve`, `settle` and `release` read the entry and its four totals and
+ * `month:YYYY-MM`), and the same split by provider (`{scope}|provider:<key>|{window}`, AI-280).
+ * `reserve`, `settle` and `release` read the entry and its eight totals and
  * write them in one transaction, so concurrent reservations can't pass a cap together and a read
  * is a fixed number of documents, never a scan (ADR-0126). A missing total is zero; a total
  * that can't be read or doesn't parse fails the call, so nothing is recorded (fails closed).
@@ -40,14 +43,25 @@ const monthOf = (at: string) => new Date(at).toISOString().slice(0, 7);
 const scopeOf = (projectId?: string) =>
   projectId === undefined ? "global" : `project:${encodeURIComponent(projectId)}`;
 
-/** The total document ids an entry reserved at `at` for `projectId` counts in. */
-export function spendTotalDocIds(projectId: string, at: string) {
+/** A provider's part of a total document id (AI-280). */
+const providerOf = (provider: string) => `provider:${encodeURIComponent(provider)}`;
+
+/**
+ * The total document ids an entry reserved at `at` for `projectId` on `provider` counts in: the
+ * project's and the global totals, and the same two split by provider (AI-280).
+ */
+export function spendTotalDocIds(projectId: string, at: string, provider: string) {
   const project = scopeOf(projectId);
+  const p = providerOf(provider);
   return {
     projectDay: `${project}|day:${dayOf(at)}`,
     projectMonth: `${project}|month:${monthOf(at)}`,
     globalDay: `global|day:${dayOf(at)}`,
     globalMonth: `global|month:${monthOf(at)}`,
+    projectProviderDay: `${project}|${p}|day:${dayOf(at)}`,
+    projectProviderMonth: `${project}|${p}|month:${monthOf(at)}`,
+    globalProviderDay: `global|${p}|day:${dayOf(at)}`,
+    globalProviderMonth: `global|${p}|month:${monthOf(at)}`,
   };
 }
 
@@ -64,9 +78,9 @@ export class FirestoreSpendLedger implements SpendLedger {
     return typedCollection(this.db, SPEND_TOTALS_COLLECTION, SpendTotalDoc);
   }
 
-  /** Reads an entry's four totals inside `tx`; a missing document is zero. */
-  private async readTotals(tx: Transaction, projectId: string, at: string) {
-    const ids = spendTotalDocIds(projectId, at);
+  /** Reads an entry's eight totals inside `tx`; a missing document is zero. */
+  private async readTotals(tx: Transaction, entry: SpendEntry) {
+    const ids = spendTotalDocIds(entry.projectId, entry.at, entry.provider);
     const keys = Object.keys(ids) as TotalKey[];
     const snaps = await tx.getAll(...keys.map((k) => this.totalsCol().doc(ids[k])));
     const values = Object.fromEntries(
@@ -95,7 +109,7 @@ export class FirestoreSpendLedger implements SpendLedger {
     return this.db.runTransaction(async (tx): Promise<ReserveOutcome> => {
       // Every read before any write, as Firestore transactions require.
       const existing = (await tx.get(ref)).data();
-      const totals = await this.readTotals(tx, parsed.projectId, parsed.at);
+      const totals = await this.readTotals(tx, parsed);
       if (existing) {
         if (!sameSpendReservation(existing, parsed)) {
           throw new WorkTrackerError(
@@ -149,6 +163,27 @@ export class FirestoreSpendLedger implements SpendLedger {
     };
   }
 
+  async totalsByProvider(
+    scope: { projectId?: string },
+    at: string,
+  ): Promise<ProviderSpendTotals[]> {
+    const s = scopeOf(scope.projectId);
+    const providers = ProviderKey.options;
+    const snaps = await this.db.getAll(
+      ...providers.flatMap((p) => [
+        this.totalsCol().doc(`${s}|${providerOf(p)}|day:${dayOf(at)}`),
+        this.totalsCol().doc(`${s}|${providerOf(p)}|month:${monthOf(at)}`),
+      ]),
+    );
+    return providers.map((provider, i) => ({
+      provider,
+      day: dayOf(at),
+      dayMicroUsd: snaps[2 * i]!.data()?.microUsd ?? 0,
+      month: monthOf(at),
+      monthMicroUsd: snaps[2 * i + 1]!.data()?.microUsd ?? 0,
+    }));
+  }
+
   /** Moves a reserved entry to settled or released and adjusts its totals by the difference. */
   private async close(
     id: string,
@@ -159,7 +194,7 @@ export class FirestoreSpendLedger implements SpendLedger {
     return this.db.runTransaction(async (tx) => {
       const e = (await tx.get(ref)).data();
       if (!e) return null;
-      const totals = await this.readTotals(tx, e.projectId, e.at);
+      const totals = await this.readTotals(tx, e);
       if (e.state !== "reserved") return e;
       const next = SpendEntry.parse({ ...change(e), settledAt: at });
       tx.set(ref, next);

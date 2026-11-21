@@ -68,6 +68,10 @@ export const SpendTotals = z.object({
 });
 export type SpendTotals = z.infer<typeof SpendTotals>;
 
+/** One provider's totals in a scope (AI-280): what its entries count in the day and month. */
+export const ProviderSpendTotals = SpendTotals.extend({ provider: ProviderKey });
+export type ProviderSpendTotals = z.infer<typeof ProviderSpendTotals>;
+
 /** How much an entry counts now: its reservation, its actual cost, or nothing once released. */
 export function spendCounted(entry: SpendEntry): number {
   if (entry.state === "released") return 0;
