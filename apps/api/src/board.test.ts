@@ -3,6 +3,7 @@ import { rankBetween } from "@andy/domain";
 import { beforeEach, describe, expect, it } from "vitest";
 import { createApp } from "./app";
 import type { TokenVerifier } from "./auth";
+import { ownerOnlyAccess } from "./project-access";
 
 const verifier: TokenVerifier = {
   async verify(token) {
@@ -18,6 +19,7 @@ describe("board API (AI-28: Board v2)", () => {
   beforeEach(async () => {
     tracker = new InMemoryWorkTracker();
     app = createApp({
+      projectAccess: ownerOnlyAccess(),
       verifier,
       allowedEmails: new Set(["andy@example.com"]),
       version: "test",

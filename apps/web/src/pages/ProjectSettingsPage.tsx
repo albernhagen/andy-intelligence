@@ -7,6 +7,7 @@ import { DispatchControls } from "@/components/DispatchControls";
 import { ProjectPlanPanel } from "@/components/ProjectPlan";
 import { EmailNotificationsControl } from "@/components/EmailControls";
 import { SetupChecklist } from "@/components/SetupChecklist";
+import { SpendCaps } from "@/components/spend/SpendCaps";
 import { Loading, QueryError } from "@/components/Status";
 import { DefaultWorkerSelect } from "@/components/WorkerControls";
 import { DefaultExecutorSelect } from "@/components/ExecutorControls";
@@ -73,6 +74,7 @@ export function ProjectSettingsPage() {
           <EnvironmentsSelect project={project} />
         </Setting>
       </ul>
+      <SpendCaps projectId={project.id} />
       <ConfigHistory projectId={project.id} />
     </section>
   );
