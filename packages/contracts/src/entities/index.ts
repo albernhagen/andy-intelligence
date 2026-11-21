@@ -44,13 +44,17 @@ export * from "./dispatch-caps";
 export * from "./executor";
 export * from "./ideate";
 export * from "./in-flight";
+export * from "./membership";
+export * from "./model-scout";
 export * from "./night";
 export * from "./notify-email";
 export * from "./project-plan";
 export * from "./push";
 export * from "./question-format";
+export * from "./routing";
 export * from "./runner";
 export * from "./scores";
+export * from "./spend-caps";
 export * from "./sync";
 export * from "./worker";
 
@@ -72,6 +76,14 @@ export type PlanApproval = z.infer<typeof PlanApproval>;
  */
 export const AutoMerge = z.enum(["none", "s", "s-and-m", "all"]);
 export type AutoMerge = z.infer<typeof AutoMerge>;
+
+/**
+ * Where a project's releases go (ADR-0050, AI-160: M6.2): `prod-only` (one prod project plus PR
+ * previews; the default) or `dev-and-prod` (dev first, then a promote to prod). Nothing deploys
+ * from it yet; M6 slices read it.
+ */
+export const EnvironmentPolicy = z.enum(["prod-only", "dev-and-prod"]);
+export type EnvironmentPolicy = z.infer<typeof EnvironmentPolicy>;
 
 export const Project = z.object({
   id: Id,
@@ -114,6 +126,8 @@ export const Project = z.object({
   defaultWorker: Worker.default("agent"),
   /** Where a ticket's runs execute when it has no pick of its own (ADR-0089). */
   executor: ExecutorKind.default("actions"),
+  /** Release environments (AI-160); projects stored before it read as `prod-only`, unrewritten. */
+  environments: EnvironmentPolicy.default("prod-only"),
 });
 export type Project = z.infer<typeof Project>;
 

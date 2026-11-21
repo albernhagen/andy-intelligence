@@ -112,6 +112,17 @@ describe("reads per call (AI-222)", () => {
     expect(large).toBe(1);
   });
 
+  it("GivenAnUnchangedProject_WhenWorkIsPolledAgain_ThenItReadsTheProjectsAndOneCounterEach", async () => {
+    const [small, large] = await readsAt(async (s) => {
+      await s.get("/api/work?view=needs-me");
+      s.reset();
+      await s.get("/api/work?view=blocked");
+    });
+    expect(large).toBe(small);
+    // AI-198: the project list (one project here) and its version counter (ADR-0126).
+    expect(large).toBe(2);
+  });
+
   it("GivenAnUnchangedTicketList_WhenPolledAgain_ThenAtMostFiveReadsAtAnySize", async () => {
     const [small, large] = await readsAt(async (s) => {
       await s.get("/api/projects/ai/tickets");
