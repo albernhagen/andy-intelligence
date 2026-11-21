@@ -53,6 +53,7 @@ import type { ToolServices } from "./mcp/tools";
 import type { NightDeps } from "./night";
 import { measureReads, meterReads } from "./read-meter";
 import { runnerCredentials } from "./runners";
+import { SetupChecklistReader } from "./setup";
 import { SpendSettingsService } from "./spend";
 
 /**
@@ -432,6 +433,10 @@ export function createServices(raw: AppDeps): Services {
     routing,
     night,
     readCache,
+    setup: new SetupChecklistReader(
+      deps.tracker,
+      connection ? new ConnectedCodeHost(connection) : null,
+    ),
     spend: new SpendSettingsService(
       projects,
       async (id) => (await deps.tracker.getProject(id))?.spendCaps ?? null,
