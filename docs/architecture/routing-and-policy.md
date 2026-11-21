@@ -22,7 +22,7 @@ Who sets a ticket's worker, tier and route; first match wins (`packages/domain/s
 | Layer | What it is |
 |---|---|
 | Ticket override | Set on the ticket itself. |
-| Epic override | Set on its epic; its stories inherit. A milestone is an epic titled `M<N>: …`. |
+| Epic override | Set on its epic; the tickets under it inherit. A milestone is an epic titled `M<N>: …`. |
 | Project default | The project's default worker and its routing config, which can only narrow global. |
 | Global | Andy's routing config: the ceiling. A tier from size (S → fast, M/L → strong) counts here. |
 

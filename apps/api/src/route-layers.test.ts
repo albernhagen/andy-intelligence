@@ -51,12 +51,12 @@ async function setup() {
     { type: "epic", title: "M9: Routing", ...fields, size: "L", overrides: { tier: "strong" } },
     "system",
   );
-  const story = await tracker.createTicket(
+  const child = await tracker.createTicket(
     project.id,
     { type: "feature", title: "Layers", ...fields, size: "S", parentId: epic.id },
     "system",
   );
-  return { get, call, routing, project, epic, story };
+  return { get, call, routing, project, epic, child };
 }
 
 describe("ticket routing layers (AI-282)", () => {
@@ -65,8 +65,8 @@ describe("ticket routing layers (AI-282)", () => {
   });
 
   it("GivenAnEpicTier_WhenReadOverRestAndMcp_ThenBothNameTheEpicAndTheSameRoute", async () => {
-    const { get, call, project, epic, story } = await setup();
-    const res = await get(`/api/projects/${project.id}/tickets/${story.id}/routing`);
+    const { get, call, project, epic, child } = await setup();
+    const res = await get(`/api/projects/${project.id}/tickets/${child.id}/routing`);
     expect(res.status).toBe(200);
     const rest = (await res.json()) as Record<string, unknown>;
     expect(rest).toMatchObject({
@@ -77,12 +77,12 @@ describe("ticket routing layers (AI-282)", () => {
       skipped: [],
     });
 
-    const status = await call("status", { ticket: story.key });
+    const status = await call("status", { ticket: child.key });
     expect(status.data.routing).toEqual(rest);
   });
 
   it("GivenAProjectConfigWithTheProviderOff_WhenRead_ThenTheSkipsCarryTheResolversReason", async () => {
-    const { get, routing, project, story } = await setup();
+    const { get, routing, project, child } = await setup();
     const sonnetOverRouter = {
       harness: "claude-code",
       provider: "openrouter",
@@ -110,7 +110,7 @@ describe("ticket routing layers (AI-282)", () => {
       },
       null,
     );
-    const res = await get(`/api/projects/${project.id}/tickets/${story.id}/routing`);
+    const res = await get(`/api/projects/${project.id}/tickets/${child.id}/routing`);
     const body = (await res.json()) as {
       route: { layer: string };
       skipped: { reason: string }[];
