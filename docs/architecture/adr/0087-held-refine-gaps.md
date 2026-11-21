@@ -1,4 +1,5 @@
 ---
+title: Costly capped gaps hold the ticket
 status: accepted
 date: 2026-11-11
 amends: 0075 (refine as the gate into the queue)

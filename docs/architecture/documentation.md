@@ -11,13 +11,13 @@ Docs are part of the change, not a follow-up. Every slice PR updates the docs it
 | Doc | Owns | Update when |
 |---|---|---|
 | `context-budget.json` | Size budgets for agent-loaded docs, checked in CI (ADR-0046) | A budgeted doc is added; never raise a number without Andy |
-| `docs/features.md` | Catalog of shipped features, one row each, and how to use them | A feature is added or changed |
-| `README.md` | What the repo is; **How it works today** (a summary linking to `docs/features.md`; one screen, ADR-0040); how to develop/run/test, layout table, links to the docs below | Commands, env vars, packages/apps, or layout change; a feature, component or way of using the system is added or changed |
+| `docs/features/` | Catalog of shipped features, one file each, and how to use them (`pnpm features` prints the table; AI-141) | A feature is added or changed |
+| `README.md` | What the repo is; **How it works today** (a summary linking to `docs/features/`; one screen, ADR-0040); how to develop/run/test, layout table, links to the docs below | Commands, env vars, packages/apps, or layout change; a feature, component or way of using the system is added or changed |
 | `docs/architecture/ARCHITECTURE.md` | Overview of the target design: goals, principles, system diagram, one summary per numbered section, technology, milestone table, open questions, reading map (ADR-0061) | Design intent, a component list or the milestone table changes. No revision counter: `git log` is its history (ADR-0046). |
 | `docs/architecture/<topic>.md` | Detail per topic, numbered like the overview (ADR-0061): `workflow`, `domain-and-ports`, `api-and-mcp`, `executors`, `skills-and-scout`, `ui`, `context-sources`, `template-and-baseline`, `security`, `observability-and-cost`, `milestones` (milestone/slice plan), `documentation` (this doc) | The design, scope, or plan in that topic changes. Never let it describe something the code contradicts. |
 | `docs/architecture/history/` | As-built notes and merged-slice plans moved out of topic files (unbudgeted, ADR-0061) | A finished slice's notes would crowd the rules |
 | `docs/architecture/adr/NNNN-*.md` | Why a decision was made (MADR) | Any architecture decision or deviation. ADR bodies are immutable; to change a decision write a new ADR and update the old one's `status` (`superseded by` / `amended by`). |
-| `docs/architecture/adr/README.md` | One line per ADR: number, decision, status (ADR-0046) | With every new ADR or status change (a test checks) |
+| `docs/architecture/adr/` | One file per ADR; frontmatter `title` and `status` feed the index `pnpm adr` prints (ADR-0046, ADR-0104) | With every new ADR or status change (a test checks) |
 | `docs/build-log.md` | Slice → ticket map, decisions pending, blockers (≤ 1 page, ADR-0046); slice status is in tickets in project `AI` (ADR-0047 phase 1) | When a decision or blocker changes. What happened goes in a new file per entry, `docs/build-log/YYYY-MM-DD-<slug>.md` (never append to a shared file). |
 | `docs/runbooks/*.md` | Steps Andy runs by hand (setup, secrets, apply, release) | Any manual step is added, changed, or removed |
 | `docs/security/threat-model.md` | Assets, mitigations, risk register (`R<n>`), index of area files | A risk changes; after each system security review |
@@ -27,6 +27,6 @@ Docs are part of the change, not a follow-up. Every slice PR updates the docs it
 | §8.1 Project baseline inventory | Every guardrail and how managed projects get it | A quality, security, cost or scaling guardrail is added or changed |
 | Package/app `README.md` | Only when a package has setup or usage the root README can't cover in a line | That package's usage changes |
 
-Managed projects get the same rule through the template (§8): `docs/features.md` is updated on merge, `docs/architecture/overview.md` when the design changes, ADRs for decisions.
+Managed projects get the same rule through the template (§8): `docs/features.md` (here: `docs/features/`, one file each) is updated on merge, `docs/architecture/overview.md` when the design changes, ADRs for decisions.
 
 The claude.ai Project holds reference copies of `ARCHITECTURE.md` (with the topic files planning needs) and `BUILD-PROMPT.md` for planning conversations. **The repo is canonical**; refresh the Project copies when `docs/architecture/` changes on `main`.

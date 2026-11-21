@@ -42,7 +42,7 @@ import {
 } from "@andy/contracts";
 import { buildBaseBranch } from "./night-branch";
 import { MAX_ACTIVE_RUNS_GLOBAL, isInFlight, wasDispatched } from "./dispatch-caps";
-import { blockingRun, editingRuns, highestAdrInIndex, runTouches } from "./dispatch-conflicts";
+import { blockingRun, editingRuns, highestAdrNumber, runTouches } from "./dispatch-conflicts";
 import { isDispatchable, resolveWorker } from "./worker";
 import { cascadesFrom, withEpicOverrides } from "./overrides";
 import { resolveExecutor, wantedExecutor } from "./executor";
@@ -68,6 +68,7 @@ import {
 import { checkDor } from "./dor";
 import { BRIEF_PATH } from "./brief";
 import { briefContext } from "./brief-context";
+import type { NightUnattended } from "./night-unattended";
 import { RefineGate } from "./refine-gate";
 import { DomainError } from "./errors";
 import { requireCan } from "./permissions";
@@ -101,8 +102,8 @@ function oldestFirst(a: Run, b: Run): number {
   return (a.createdAt ?? "").localeCompare(b.createdAt ?? "") || a.id.localeCompare(b.id);
 }
 
-/** Where a repo keeps its ADR index; build runs' ADR numbers are reserved above it (ADR-0080). */
-export const ADR_INDEX_PATH = "docs/architecture/adr/README.md";
+/** Where a repo keeps its ADRs (`NNNN-*.md`); build runs' numbers are reserved above them (ADR-0080, ADR-0104). */
+export const ADR_DIR = "docs/architecture/adr";
 
 /**
  * How each provider is billed (ARCHITECTURE §5 Provider). The executor takes the run's
@@ -212,10 +213,10 @@ export class RunService {
      */
     private readonly onRunEnded: ((projectId: string) => Promise<void>) | null = null,
     /**
-     * Reads the repo's ADR index to reserve build runs' ADR numbers (ADR-0080) and the project
-     * brief for the prompt (AI-112); null: neither.
+     * Lists the repo's ADR folder to reserve build runs' ADR numbers (ADR-0080) and reads the
+     * project brief for the prompt (AI-112); null: neither.
      */
-    private readonly codeHost: Pick<CodeHost, "getRepo" | "readFile"> | null = null,
+    private readonly codeHost: Pick<CodeHost, "getRepo" | "listFiles" | "readFile"> | null = null,
     /**
      * Whether a local runner that serves the project is present (ADR-0089); null: no runners,
      * so a `local` default runs on the cloud executor and a `local` override waits.
@@ -223,7 +224,14 @@ export class RunService {
     private readonly runnerPresence: ((projectId: string) => Promise<boolean>) | null = null,
     /** Night launches (AI-122): a launched story's build gets its epic branch; null: none. */
     private readonly launches: Pick<NightLaunchStore, "findActive"> | null = null,
+    /** Night launches (AI-123): stories stop for the night; null: no launches. */
+    private readonly night: NightUnattended | null = null,
   ) {}
+
+  /** The refine gate with this service's tracker, clock and night launches. */
+  refineGate(): RefineGate {
+    return new RefineGate(this.tracker, this.now, this.night);
+  }
 
   /**
    * A build's base branch (AI-122): its night launch's `epic/<KEY>` while that launch is active
@@ -728,7 +736,7 @@ export class RunService {
     // The outcome is applied before the run is closed: the write is idempotent per run, so a
     // report replayed after a crash here finishes the job instead of duplicating it.
     if (run.step === "refine" && status === "succeeded") {
-      const refined = await new RefineGate(this.tracker, this.now).apply(run, result.output);
+      const refined = await this.refineGate().apply(run, result.output);
       if ("error" in refined) {
         status = "failed";
         error = refined.error;
@@ -838,7 +846,10 @@ export class RunService {
     else if (result.status === "failed") await this.retryOrFlag(done, "reported a failure");
     else if (done.step === "sync" && status === "failed") await this.flagTicket(done);
     else if (done.step === "refine" && status === "failed") await this.flagFailedRefine(done);
-    else if (done.step === "build" && status === "failed") await this.flagTicket(done);
+    else if (done.step === "build" && status === "failed") {
+      await this.flagTicket(done);
+      await this.stopForTheNight(done, `its build was rejected: ${error ?? "no reason recorded"}`);
+    }
     // A plan waits for Andy (ADR-0050): the ticket is flagged and nothing starts. A rejected
     // plan result is flagged at once, like a rejected build.
     else if (done.step === "plan") await this.flagTicket(done);
@@ -1555,7 +1566,14 @@ export class RunService {
     }
     if (run.branch) why += `; its branch ${run.branch} is kept`;
     await this.flagNeedsYou(run, `${why} (${run.id}). Check the task log, then start it again`);
+    await this.stopForTheNight(run, why);
     return "flagged";
+  }
+
+  /** A run that failed for good stops its story for the night, if a launch covers it (AI-123). */
+  private async stopForTheNight(run: Run, reason: string): Promise<void> {
+    if (!this.night || !run.ticketId) return;
+    await this.night.stopStory(run.projectId, run.ticketId, reason);
   }
 
   /** Flags the run's ticket Needs-you with `why` as a comment. Logs, never throws. */
@@ -1577,17 +1595,15 @@ export class RunService {
 
   /**
    * The next ADR number for a build run (ADR-0080), reserved atomically on the project's counter:
-   * above the index on the default branch and every number reserved before. Null, never a
-   * guess, when the repo has no index or it can't be read.
+   * above the highest `NNNN-*.md` in the ADR folder on the default branch and every number
+   * reserved before. Null, never a guess, when the repo has no ADR files or they can't be listed.
    */
   private async reserveAdr(projectId: string, repo: string): Promise<number | null> {
     if (!this.codeHost) return null;
     try {
       const info = await this.codeHost.getRepo(repo);
-      const index = info
-        ? await this.codeHost.readFile(repo, ADR_INDEX_PATH, info.defaultBranch)
-        : null;
-      const highest = index === null ? null : highestAdrInIndex(index);
+      const files = info ? await this.codeHost.listFiles(repo, ADR_DIR, info.defaultBranch) : null;
+      const highest = files === null ? null : highestAdrNumber(files);
       if (highest === null) return null;
       if (highest >= ADR_NUMBER_MAX) return null;
       const next = await this.tracker.reserveAdrNumber(projectId, highest);

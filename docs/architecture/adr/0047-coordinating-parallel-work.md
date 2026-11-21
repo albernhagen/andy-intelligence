@@ -1,5 +1,6 @@
 ---
-status: accepted, amended by 0060 (single-project coordination moves to M2: Self-hosting)
+title: "Coordinating parallel work: deterministic supervisor, no LLM parent"
+status: accepted, amended by 0060 (single-project coordination moves to M2: Self-hosting), 0080, 0083
 date: 2026-11-03
 ---
 

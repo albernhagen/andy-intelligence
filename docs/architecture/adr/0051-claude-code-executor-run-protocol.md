@@ -1,4 +1,5 @@
 ---
+title: "Claude Code executor: prompt over OIDC, three jobs, managed settings, subscription billing verified"
 status: accepted, amended by 0063 (permission profile, token policy)
 date: 2026-11-04
 ---
