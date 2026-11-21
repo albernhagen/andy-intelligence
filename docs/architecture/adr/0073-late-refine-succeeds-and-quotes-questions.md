@@ -1,4 +1,5 @@
 ---
+title: A late refine succeeds, writes nothing, comments its unasked questions
 status: accepted
 date: 2026-11-08
 amends: 0054 (Guards)

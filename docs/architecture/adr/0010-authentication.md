@@ -1,4 +1,5 @@
 ---
+title: "Authentication: Identity Platform Google sign-in + email allow-list"
 status: accepted, amended by 0039
 date: 2026-10-21
 ---

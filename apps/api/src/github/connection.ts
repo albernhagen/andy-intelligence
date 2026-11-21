@@ -109,6 +109,10 @@ export class ConnectedCodeHost implements CodeHost {
     return (await this.connection.codeHost())?.readFile(fullName, path, ref) ?? null;
   }
 
+  async listFiles(fullName: string, dir: string, ref: string) {
+    return (await this.connection.codeHost())?.listFiles(fullName, dir, ref) ?? null;
+  }
+
   async mergePullRequest(fullName: string, number: number, expectedHeadSha: string) {
     const host = await this.connection.codeHost();
     if (!host) throw new Error("GitHub is not connected");
