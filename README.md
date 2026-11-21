@@ -28,7 +28,7 @@ What is built on `main` now. Target design: [ARCHITECTURE.md](docs/architecture/
 | ------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------- |
 | [`docs/architecture/ARCHITECTURE.md`](docs/architecture/ARCHITECTURE.md) | Design overview, milestone table, reading map — source of truth; detail in topic files beside it (ADR-0061)    |
 | [`docs/architecture/adr/`](docs/architecture/adr/)                       | Architecture decisions (MADR)                                                                                  |
-| [`docs/build-log.md`](docs/build-log.md)                                 | Slice → ticket map (status: tickets in project `AI`), pending decisions, blockers (history: `docs/build-log/`) |
+| [`docs/build-log.md`](docs/build-log.md)                                 | Pending decisions, blockers (history: `docs/build-log/`); the milestone map: MCP `milestone_map`, from tickets |
 | [`docs/product/brief.md`](docs/product/brief.md)                         | Project brief for project `AI`: idea, users, vision, goals, architectural expectations (ADR-0053)              |
 | [`docs/features/`](docs/features/)                                       | Shipped features, one file each, and how to use them                                                           |
 | [`docs/security/threat-model.md`](docs/security/threat-model.md)         | Threat model; risks: `docs/security/risks/`, `pnpm risks`                                                      |
