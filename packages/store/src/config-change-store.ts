@@ -1,6 +1,7 @@
 import type { Firestore } from "@google-cloud/firestore";
 import {
   CONFIG_CHANGE_LIST_MAX,
+  GLOBAL_ENTITY_ID,
   ConfigChange,
   ProposalLookupCursor,
   WorkTrackerError,
@@ -105,6 +106,33 @@ export class FirestoreConfigChangeStore implements ConfigChangeStore {
     }
     return snaps
       .flatMap((s) => s.docs.map((d) => d.data()))
+      .sort(newestFirst)
+      .slice(0, Math.min(limit, CONFIG_CHANGE_LIST_MAX));
+  }
+
+  /**
+   * AI-275: one entity's global changes. Equality filters only, sorted in memory (no composite
+   * index); the same read guard as `listForProject` (ADR-0126: bounded reads).
+   */
+  async listGlobal(entity: string, limit = CONFIG_CHANGE_LIST_MAX): Promise<ConfigChange[]> {
+    const snap = await this.changes()
+      .where("entity", "==", entity)
+      .where("entityId", "==", GLOBAL_ENTITY_ID)
+      .limit(CONFIG_CHANGE_LOG_READ_MAX)
+      .get();
+    if (snap.size >= CONFIG_CHANGE_LOG_READ_MAX) {
+      console.error(
+        JSON.stringify({
+          severity: "ERROR",
+          message: "config changes reached the read guard; the newest may be missing",
+          component: "config-change-store",
+          entity,
+          read: snap.size,
+        }),
+      );
+    }
+    return snap.docs
+      .map((d) => d.data())
       .sort(newestFirst)
       .slice(0, Math.min(limit, CONFIG_CHANGE_LIST_MAX));
   }

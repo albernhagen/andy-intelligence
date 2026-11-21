@@ -25,6 +25,7 @@ import { runInFlightFields } from "./in-flight";
 import { runSyncFields } from "./sync";
 import { runLocalFields } from "./runner";
 import { runBaseFields } from "./build";
+import { ProjectSpendCaps } from "./spend-caps";
 import { RefineScores, TicketScores } from "./scores";
 import {
   questionFormatFields,
@@ -105,6 +106,11 @@ export const Project = z.object({
   executor: ExecutorKind.default("actions"),
   /** Release environments (AI-160); projects stored before it read as `prod-only`, unrewritten. */
   environments: EnvironmentPolicy.default("prod-only"),
+  /**
+   * The project's own spend caps (AI-249: M10.8); each can only lower the global cap, and a
+   * missing field takes the global value. Projects stored before it read as `{}`, unrewritten.
+   */
+  spendCaps: ProjectSpendCaps.default({}),
 });
 export type Project = z.infer<typeof Project>;
 

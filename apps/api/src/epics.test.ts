@@ -7,6 +7,7 @@ import { createApp } from "./app";
 import type { TokenVerifier } from "./auth";
 import { ClientMetadataResolver } from "./mcp/client-metadata";
 import { hashToken, newToken } from "./mcp/tokens";
+import { ownerOnlyAccess } from "./project-access";
 
 const PUBLIC_URL = "https://control-plane.example.run.app";
 const RESOURCE = `${PUBLIC_URL}/mcp`;
@@ -30,6 +31,7 @@ describe("epic roll-up API and MCP status (AI-85)", () => {
     runs = new InMemoryRunStore();
     grants = new InMemoryOAuthGrantStore();
     app = createApp({
+      projectAccess: ownerOnlyAccess(),
       verifier,
       allowedEmails: new Set(["andy@example.com"]),
       version: "test",

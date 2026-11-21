@@ -25,12 +25,13 @@ import {
   ProjectReadCache,
   RoutingSettings,
   SpendGate,
+  NO_PRICES,
   BoardReader,
   WorkReader,
   bumpOnWrite,
   type EpicBranchOpener,
 } from "@andy/domain";
-import type { NightLaunchStore, WorkTracker } from "@andy/contracts";
+import { DEFAULT_SPEND_CAPS, type NightLaunchStore, type WorkTracker } from "@andy/contracts";
 import type { AppDeps } from "./app";
 import type { AuthEnv } from "./auth";
 import { noReviewFindings } from "./config-proposals";
@@ -39,6 +40,7 @@ import { actionsTokenVerifier, type ActionsTokenVerifier } from "./github/token"
 import type { ToolServices } from "./mcp/tools";
 import type { NightDeps } from "./night";
 import { runnerCredentials } from "./runners";
+import { SpendSettingsService } from "./spend";
 
 /**
  * The domain services every route module and MCP tool share, built once per app (one
@@ -112,8 +114,14 @@ export function createServices(input: AppDeps): Services {
     deps.nightLaunches ?? null,
     null,
     deps.routing ?? null,
-    // AI-248: no price source yet (M10.5), so the gate refuses every pay_per_use start.
-    deps.spendLedger ? new SpendGate(deps.spendLedger) : null,
+    // AI-248: no price source yet (M10.5), so the gate refuses every pay_per_use start. Caps:
+    // the defaults, narrowed by the project's own (AI-249).
+    deps.spendLedger
+      ? new SpendGate(deps.spendLedger, NO_PRICES, async (id) => ({
+          global: DEFAULT_SPEND_CAPS,
+          project: (await deps.tracker.getProject(id))?.spendCaps ?? null,
+        }))
+      : null,
   );
   const refiner = new RefineDispatcher(deps.tracker, deps.runs, runs, now);
   const builder = new BuildDispatcher(deps.tracker, deps.runs, runs, now, deps.quota ?? null);
@@ -235,12 +243,13 @@ export function createServices(input: AppDeps): Services {
         now,
       )
     : null;
-  const configRevert = deps.configChanges
-    ? new ConfigRevert(deps.tracker, projects, deps.configChanges, now)
-    : null;
   // AI-239: routing settings; each save is logged when the change log is configured.
   const routing = deps.routing
     ? new RoutingSettings(deps.routing, deps.tracker, deps.configChanges ?? null, now)
+    : null;
+  // AI-275: a routing change in a project's log reverts through routing settings.
+  const configRevert = deps.configChanges
+    ? new ConfigRevert(deps.tracker, projects, deps.configChanges, now, routing)
     : null;
 
   return {
@@ -270,6 +279,12 @@ export function createServices(input: AppDeps): Services {
     routing,
     night,
     readCache,
+    spend: new SpendSettingsService(
+      projects,
+      async (id) => (await deps.tracker.getProject(id))?.spendCaps ?? null,
+      deps.spendLedger ?? null,
+      now,
+    ),
     // AI-198: each project's board through the same read cache as board polls.
     work: new WorkReader(deps.tracker, new BoardReader(deps.tracker, deps.runs, readCache)),
   };

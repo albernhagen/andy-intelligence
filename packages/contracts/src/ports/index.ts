@@ -4,6 +4,7 @@ import {
   EpicOutcome,
   AutoMerge,
   EnvironmentPolicy,
+  ProjectSpendCaps,
   BillingType,
   DorStatus,
   EventActor,
@@ -220,6 +221,7 @@ export const ProjectPatch = z.strictObject({
   defaultWorker: Worker.optional(),
   executor: ExecutorKind.optional(),
   environments: EnvironmentPolicy.optional(),
+  spendCaps: ProjectSpendCaps.optional(),
 });
 export type ProjectPatch = z.infer<typeof ProjectPatch>;
 
@@ -237,6 +239,7 @@ export const ProjectSettings = ProjectPatch.pick({
   executor: true,
   emailNotifications: true,
   environments: true,
+  spendCaps: true,
 });
 export type ProjectSettings = z.infer<typeof ProjectSettings>;
 
@@ -696,17 +699,6 @@ export interface CodeEventLog {
 }
 
 // ── Plain interfaces (no contract suite yet) ─────────────────────────────────
-
-export interface Completion {
-  text: string;
-  tokensIn: number;
-  tokensOut: number;
-  costUsd: number;
-}
-
-export interface ModelGateway {
-  complete(model: string, prompt: string, opts?: { maxTokens?: number }): Promise<Completion>;
-}
 
 export interface Notice {
   title: string;

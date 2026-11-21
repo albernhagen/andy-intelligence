@@ -11,6 +11,7 @@ import { createApp } from "./app";
 import { parseAllowList, type TokenVerifier } from "./auth";
 import { ClientMetadataResolver } from "./mcp/client-metadata";
 import { mcpCaller } from "./mcp/test-client";
+import { ownerOnlyAccess } from "./project-access";
 
 /** AI-239: M9.7: routing settings over REST and MCP, against the in-memory stores. */
 
@@ -37,6 +38,7 @@ async function setup() {
   const changes = new InMemoryConfigChangeStore();
   const grants = new InMemoryOAuthGrantStore();
   const app = createApp({
+    projectAccess: ownerOnlyAccess(),
     verifier,
     allowedEmails: parseAllowList("andy@example.com"),
     version: "test",
@@ -183,13 +185,71 @@ describe("routing settings (AI-239)", () => {
     expect(step.data.steps.review).toBe("cheap");
   });
 
-  it("GivenARoutingChangeInTheLog_WhenRevertedAsSettings_ThenA409SayingSo", async () => {
+  it("GivenAProjectsFirstRoutingSave_WhenRevertedFromItsSettingsLog_ThenA409SayingWhy", async () => {
     const { request, changes } = await setup();
     const steps = { ...DEFAULT_ROUTING.steps, refine: "cheap" };
     await request("PUT", "/api/projects/ai/routing", save({ steps }));
     const [change] = await changes.listForProject("ai");
     const res = await request("POST", `/api/projects/ai/config-changes/${change!.id}/revert`);
     expect(res.status).toBe(409);
-    expect(((await res.json()) as { error: string }).error).toContain("routing change");
+    expect(((await res.json()) as { error: string }).error).toContain("first save");
+  });
+
+  it("GivenAProjectsLaterRoutingSave_WhenRevertedFromItsSettingsLog_ThenTheRoutingIsBack", async () => {
+    const { request, changes } = await setup();
+    const first = await request(
+      "PUT",
+      "/api/projects/ai/routing",
+      save({ steps: { ...DEFAULT_ROUTING.steps, refine: "cheap" } }),
+    );
+    const { updatedAt } = (await first.json()) as { updatedAt: string };
+    await request(
+      "PUT",
+      "/api/projects/ai/routing",
+      save({ steps: { ...DEFAULT_ROUTING.steps, refine: "strong" }, ifUpdatedAt: updatedAt }),
+    );
+    // By content, not position: two saves in one millisecond tie on time.
+    const latest = (await changes.listForProject("ai")).find(
+      (c) => (c.diff.steps as { to: { refine: string } }).to.refine === "strong",
+    );
+    const res = await request("POST", `/api/projects/ai/config-changes/${latest!.id}/revert`);
+    expect(res.status).toBe(200);
+    const view = (await (await request("GET", "/api/routing?projectId=ai")).json()) as {
+      projects: { config: { steps: { refine: string } } }[];
+    };
+    expect(view.projects[0]!.config.steps.refine).toBe("cheap");
+  });
+
+  it("GivenGlobalSaves_WhenListedAndRevertedOverRest_ThenTheLogShowsBothAndTheRoutingIsBack", async () => {
+    const { request } = await setup();
+    await request(
+      "PUT",
+      "/api/routing",
+      save({ steps: { ...DEFAULT_ROUTING.steps, refine: "cheap" } }),
+    );
+    const listed = await request("GET", "/api/routing/changes");
+    expect(listed.status).toBe(200);
+    const [change] = (await listed.json()) as { id: string; entityId: string }[];
+    expect(change!.entityId).toBe("global");
+    const res = await request("POST", `/api/routing/changes/${change!.id}/revert`);
+    expect(res.status).toBe(200);
+    expect(
+      ((await res.json()) as { config: { steps: { refine: string } } }).config.steps.refine,
+    ).toBe("fast");
+    const after = (await (await request("GET", "/api/routing/changes")).json()) as unknown[];
+    expect(after).toHaveLength(2);
+    expect((await request("POST", `/api/routing/changes/${change!.id}/revert`)).status).toBe(409);
+  });
+
+  it("GivenGlobalChangesOverMcp_WhenListedAndReverted_ThenBothToolsWork", async () => {
+    const { call } = await setup();
+    await call("set_step_tier", { step: "review", tier: "cheap" });
+    const listed = await call("list_routing_changes");
+    expect(listed.isError).toBe(false);
+    const id = listed.data.changes[0].id as string;
+    const reverted = await call("revert_routing_change", { id });
+    expect(reverted.isError).toBe(false);
+    expect(reverted.data.config.steps.review).toBe("fast");
+    expect(reverted.data.reverted.status).toBe("reverted");
   });
 });
