@@ -1,6 +1,7 @@
 import { WorkTrackerError, type EventActor, type Ticket, type WorkTracker } from "@andy/contracts";
 import {
-  MilestoneService,
+  type MilestoneReader,
+  type MilestoneService,
   DomainError,
   type DigestReader,
   type EmailNotifications,
@@ -67,7 +68,7 @@ export interface ToolDeps {
   /** Model routing settings (AI-239); absent or null: no routing tools. */
   routing?: RoutingSettings | null;
   /** Milestones (AI-304); absent or null: no milestone tools. Never in an agent's tool list. */
-  milestones?: MilestoneService | null;
+  milestoneService?: MilestoneService | null;
   /** The night launch step (M4.17); absent or null: no night tools. */
   night?: NightDeps | null;
   /** Work across projects (AI-198); the app always passes it, unit tests may not. */
@@ -91,6 +92,8 @@ export interface ToolDeps {
   whatsNew?: WhatsNewReader | null;
   /** The app's public URL for page links in tool text (the digest links What's new); null in dev. */
   publicUrl?: string | null;
+  /** Milestones (ADR-0131): `status` shows a ticket's milestone hold (AI-306); null holds any. */
+  milestones?: MilestoneReader | null;
   /** A project's tickets through the ticket snapshot (AI-318); absent: a full read each call. */
   tickets?: ProjectTickets;
   /** Signed-in email, shown by `status` so it doubles as the connection check. */

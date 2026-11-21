@@ -15,6 +15,7 @@ const DECISION_TEXT: Record<DispatchDecision, string> = {
   started: "started an agent task",
   nothing_ready: "no Ready ticket can start",
   touches_overlap: "Ready tickets overlap agent tasks in flight",
+  milestone_held: "Ready tickets wait: their milestone isn't approved",
 };
 
 /** Why dispatch last did what it did (ADR-0079); nothing while auto-build is off. */

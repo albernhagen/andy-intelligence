@@ -34,7 +34,7 @@ const Outcome = z
 const Order = z.number().int().min(0).max(10_000).describe("Position on the roadmap, from 0.");
 
 export function registerMilestoneTools(server: McpServer, deps: ToolDeps, run: Run): void {
-  const milestones = deps.milestones;
+  const milestones = deps.milestoneService;
   if (!milestones) return;
 
   server.registerTool(

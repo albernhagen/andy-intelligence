@@ -148,5 +148,5 @@ export function registerMilestoneRoutes(
 
 /** Listed in `api-routes.ts` (AI-145). Absent without a milestone store. */
 export const apiRoutes: RouteModule = (app, s) => {
-  if (s.milestones) registerMilestoneRoutes(app, s.milestones);
+  if (s.milestoneService) registerMilestoneRoutes(app, s.milestoneService);
 };

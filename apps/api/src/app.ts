@@ -72,6 +72,11 @@ export interface AppDeps {
    * route, no MCP tool) when unset.
    */
   releaseNotes?: ReleaseNoteStore;
+  /**
+   * Milestones (ADR-0131). Dispatch and night launches read them (AI-306); unset, a ticket with a
+   * milestone is held and one without runs as before. Absent: no milestone routes or tools (AI-304).
+   */
+  milestones?: MilestoneStore;
   /** Subscription quota readings (M1.9). Without it every window reads unknown. */
   quota?: QuotaStore;
   /** Night launches (ADR-0049): a launched story's build gets its `epic/<KEY>` base (AI-122). */
@@ -83,8 +88,6 @@ export interface AppDeps {
   deployments?: DeploymentStore;
   /** Model routing (AI-230, AI-238); without it every run takes `DEFAULT_ROUTING`. */
   routing?: RoutingConfigStore;
-  /** Milestones (ADR-0131, AI-304); absent: no milestone routes or tools. */
-  milestones?: MilestoneStore;
   /**
    * Paid spend: the gate reserves pay_per_use agent tasks (AI-248) and the caps settings read its
    * totals (AI-249). Without it every pay_per_use task is refused and spend reads unknown.
