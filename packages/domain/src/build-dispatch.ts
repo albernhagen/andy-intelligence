@@ -17,6 +17,7 @@ import {
   type Ticket,
   type WorkTracker,
 } from "@andy/contracts";
+import { MilestoneHolds, type MilestoneReader } from "./milestone-holds";
 import { MAX_BUILD_RUNS_PER_TICKET, isAndysWork, unfinishedBlockers } from "./builds";
 import { isInFlight, mayDispatch, waitsForSlot, wasDispatched } from "./dispatch-caps";
 import { blockingRun, editingRuns } from "./dispatch-conflicts";
@@ -88,6 +89,8 @@ export class BuildDispatcher {
     private readonly nights: NightLaunchStore | null = null,
     /** Opens the morning PR once a launch ends here (AI-124); null: none opens. */
     private readonly morning: MorningPrOpener | null = null,
+    /** Milestones (ADR-0131); null: a ticket with a milestone is held, one without runs. */
+    private readonly milestones: MilestoneReader | null = null,
   ) {}
 
   /** Starts waiting builds in the project up to the caps; the first run, or null. Never throws. */
@@ -135,7 +138,9 @@ export class BuildDispatcher {
     if (!project?.autoBuild || !project.buildEnabled) return null;
     // The claiming runner is present by definition; the cloud dispatcher asks (ADR-0089).
     const runnerPresent = local || (await this.runs.runnerPresent(projectId));
-    const tickets = await this.tracker.listTickets(projectId, { archived: false });
+    // AI-315: only the lanes dispatch uses, by stage, never the whole project (Done, Cancelled
+    // and archived tickets would be read on every dispatch event).
+    const tickets = await this.dispatchTickets(projectId);
     const prsWaiting = await this.prsWaiting(tickets);
     // AI-261: M10.14: each subscription's level under the project's routing. Dispatch idles at
     // the reserve only when no provider on has room; each start then skips routes without it.
@@ -159,6 +164,9 @@ export class BuildDispatcher {
 
     let first: Run | null = null;
     let overlapSkipped = false;
+    // AI-306: tickets whose milestone isn't approved stay in Ready; one read per milestone.
+    const holds = new MilestoneHolds(this.milestones, projectId);
+    let milestoneHeld = false;
     // Build runs in flight here, kept current as this call starts more (ADR-0080).
     const inFlight = editingRuns(await this.runStore.listActive(projectId), this.now());
     let verdict = await check();
@@ -172,6 +180,12 @@ export class BuildDispatcher {
       if (!isDispatchable(effective, project)) continue; // AI-32: Who does the work (ADR-0082).
       if (!routeTakes(route, ticket, project, runnerPresent)) continue; // ADR-0089.
       if (ticket.archived || ticket.needsAttention) continue;
+      const hold = await holds.reasonFor(ticket, tickets);
+      if (hold) {
+        milestoneHeld = true;
+        log("INFO", "build waits: milestone not approved", { ticket: ticket.key, reason: hold });
+        continue;
+      }
       const story = night !== null && night.launch.storyKeys.includes(ticket.key);
       if (story) {
         const usage = { ...night.usage, runs: night.usage.runs + nightStarted };
@@ -246,7 +260,9 @@ export class BuildDispatcher {
           ? "started"
           : overlapSkipped
             ? "touches_overlap"
-            : "nothing_ready";
+            : milestoneHeld
+              ? "milestone_held"
+              : "nothing_ready";
     await this.record(project, decision, first !== null);
     return first;
   }
@@ -274,15 +290,18 @@ export class BuildDispatcher {
    * none covers any story now. A running launch that reached a limit moves to `stopping`; a
    * stopping one, or one whose stories are all finished, ends with the reason once none of its
    * agent tasks is in flight, and its unfinished stories are flagged for the morning so they
-   * don't start later as plain Ready tickets. With a launch active: one ticket list (archived
-   * included) and one run list per story (at most `NIGHT_LIMITS.maxStories`).
+   * don't start later as plain Ready tickets. With a launch active: one read and one run list
+   * per story (at most `NIGHT_LIMITS.maxStories`).
    */
   private async nightState(projectId: string): Promise<NightState | null> {
     if (!this.nights) return null;
     let launch = await this.nights.findActive(projectId);
     if (!launch) return null;
     const keys = launch.storyKeys;
-    const stories = (await this.tracker.listTickets(projectId)).filter((t) => keys.includes(t.key));
+    // One read per story (at most NIGHT_LIMITS.maxStories), not the whole project (AI-315).
+    const stories = (
+      await Promise.all(keys.map((key) => this.tracker.getTicketByKey(projectId, key)))
+    ).filter((t): t is Ticket => t !== null);
     const runs = (
       await Promise.all(stories.map((t) => this.runStore.listForTicket(projectId, t.id)))
     ).flat();
@@ -348,6 +367,40 @@ export class BuildDispatcher {
   }
 
   /** Tickets in Ready for review (an open PR, by the stage rules) whose PR a build run opened. */
+  /**
+   * What one dispatch reads (AI-315): the Ready lane (rank order), Ready for review (PRs
+   * waiting), In progress (the tickets runs in flight belong to), and each Ready ticket's epic
+   * for its overrides (AI-116), by id, and a child epic's parent for its milestone (AI-306).
+   * Lanes outside Done and Cancelled hold no archived tickets.
+   */
+  private async dispatchTickets(projectId: string): Promise<Ticket[]> {
+    const [ready, review, building] = await Promise.all(
+      (["ready", "ready_for_review", "in_progress"] as const).map((stage) =>
+        this.tracker.listTickets(projectId, { stage }),
+      ),
+    );
+    const lanes = [...ready!, ...review!, ...building!];
+    const parents = await this.parentsOf(projectId, ready!, lanes);
+    // ADR-0131: epics nest one level, so a child epic's parent is the top-level epic. A Ready
+    // ticket's epic may be in a lane already (a child epic in Ready), not only fetched.
+    const known = new Map([...lanes, ...parents].map((t) => [t.id, t]));
+    const epics = ready!.flatMap((t) =>
+      t.parentId && known.has(t.parentId) ? [known.get(t.parentId)!] : [],
+    );
+    const tops = await this.parentsOf(projectId, epics, [...known.values()]);
+    return [...lanes, ...parents, ...tops];
+  }
+
+  /** The parents of `of` missing from `known`, one `getTicket` each; absent ones left out. */
+  private async parentsOf(projectId: string, of: Ticket[], known: Ticket[]): Promise<Ticket[]> {
+    const ids = new Set(known.map((t) => t.id));
+    const missing = [
+      ...new Set(of.flatMap((t) => (t.parentId && !ids.has(t.parentId) ? [t.parentId] : []))),
+    ];
+    const found = await Promise.all(missing.map((id) => this.tracker.getTicket(projectId, id)));
+    return found.filter((t): t is Ticket => t !== null);
+  }
+
   private async prsWaiting(tickets: Ticket[]): Promise<number> {
     const waiting = await Promise.all(
       tickets

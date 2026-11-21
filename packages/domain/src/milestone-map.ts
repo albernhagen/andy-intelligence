@@ -1,7 +1,7 @@
 import { notFound, type Project, type Stage, type Ticket, type WorkTracker } from "@andy/contracts";
-import { lastPrNumber } from "./digest";
 import { epicChildren, type EpicChild } from "./epic-rollup";
 import { DomainError } from "./errors";
+import { ProjectTickets } from "./ticket-snapshots";
 
 /**
  * The milestone map (AI-148): for each open epic of a project, which children are done, in
@@ -80,6 +80,25 @@ export function inReviewUnder(epics: readonly Ticket[], tickets: readonly Ticket
   );
 }
 
+/** Where a child stands, the groups the map and the roadmap (AI-193) both count by. */
+export type ChildGroup =
+  "done" | "inReview" | "inProgress" | "blocked" | "notStarted" | "cancelled";
+
+/** Backlog or Ready is blocked with a blocker not yet Done, else not started. */
+export function childGroup(c: Pick<EpicChild, "stage" | "openBlockers">): ChildGroup {
+  switch (c.stage) {
+    case "done":
+    case "cancelled":
+      return c.stage;
+    case "ready_for_review":
+      return "inReview";
+    case "in_progress":
+      return "inProgress";
+    default:
+      return c.openBlockers.length > 0 ? "blocked" : "notStarted";
+  }
+}
+
 function item(c: EpicChild, byId: Map<string, Ticket>, prs: ReadonlyMap<string, number>): MapItem {
   return {
     key: c.key,
@@ -97,9 +116,8 @@ function epicEntry(
   prs: ReadonlyMap<string, number>,
 ): MilestoneMapEpic {
   const children = epicChildren(epic, tickets);
-  const of = (pred: (c: EpicChild) => boolean) =>
-    children.filter(pred).map((c) => item(c, byId, prs));
-  const waiting = (c: EpicChild) => c.stage === "backlog" || c.stage === "ready";
+  const of = (group: ChildGroup) =>
+    children.filter((c) => childGroup(c) === group).map((c) => item(c, byId, prs));
   const counted = children.filter((c) => c.stage !== "cancelled");
   return {
     key: epic.key,
@@ -107,10 +125,10 @@ function epicEntry(
     stage: epic.stage,
     progress: { done: counted.filter((c) => c.stage === "done").length, total: counted.length },
     done: children.filter((c) => c.stage === "done").map((c) => c.key),
-    inReview: of((c) => c.stage === "ready_for_review"),
-    inProgress: of((c) => c.stage === "in_progress"),
-    blocked: of((c) => waiting(c) && c.openBlockers.length > 0),
-    notStarted: of((c) => waiting(c) && c.openBlockers.length === 0),
+    inReview: of("inReview"),
+    inProgress: of("inProgress"),
+    blocked: of("blocked"),
+    notStarted: of("notStarted"),
     cancelled: children.length - counted.length,
   };
 }
@@ -190,18 +208,24 @@ export function renderMilestoneMapText(map: Omit<MilestoneMap, "text">): string 
 /** Reads a project's map: its ticket list, then histories of tickets in review (capped). */
 export class MilestoneMapReader {
   constructor(
-    private readonly tracker: Pick<WorkTracker, "getProject" | "listTickets" | "listEvents">,
+    private readonly tracker: Pick<
+      WorkTracker,
+      "getProject" | "listTickets" | "getLatestPullRequest"
+    >,
+    /** AI-318: the project's tickets through the snapshot, so a call reads only what changed. */
+    private readonly tickets: ProjectTickets = new ProjectTickets(tracker),
   ) {}
 
   async map(projectId: string, epicKey?: string): Promise<MilestoneMap> {
     const project = await this.tracker.getProject(projectId);
     if (!project) throw notFound("project", projectId);
-    const tickets = await this.tracker.listTickets(projectId);
+    const tickets = await this.tickets.list(projectId);
     const all = mapEpics(tickets, epicKey).slice(0, MAX_MAP_EPICS);
     const review = inReviewUnder(all, tickets).sort(byRank);
     const read = review.slice(0, MAX_MAP_PR_READS);
     const numbers = await Promise.all(
-      read.map(async (t) => lastPrNumber(await this.tracker.listEvents(projectId, t.id))),
+      // Only the ticket's PR links, not its whole history (AI-318).
+      read.map(async (t) => (await this.tracker.getLatestPullRequest(projectId, t.id))?.number),
     );
     const prs = new Map<string, number>();
     read.forEach((t, i) => {

@@ -10,6 +10,7 @@ import {
 } from "@andy/contracts";
 import { revertPatch, revertReason, revertRefusal } from "./config-changes";
 import { DomainError } from "./errors";
+import { effectiveMergeMode, requireAutoMergeNotLoosening, requireTightening } from "./merge-mode";
 import { requireCan } from "./permissions";
 import type { ProjectService } from "./projects";
 import type { RoutingSettings } from "./routing-settings";
@@ -96,6 +97,15 @@ export class ConfigRevert {
       const reverted = await this.mark(change, by.actor);
       log("INFO", "config change revert completed", { projectId, configChangeId: change.id });
       return { project, reverted };
+    }
+    // ADR-0124: over MCP a merge mode may only tighten; a revert that loosens it is refused. After
+    // the finish-a-written-revert path above, so a retry that only needs its mark isn't blocked.
+    if (via === "mcp" && "mergeMode" in patch) {
+      const target = effectiveMergeMode({ ...project, mergeMode: patch.mergeMode ?? null });
+      requireTightening(target, project);
+    }
+    if (via === "mcp" && patch.autoMerge !== undefined && !("mergeMode" in patch)) {
+      requireAutoMergeNotLoosening(patch.autoMerge, project);
     }
     const refusal = revertRefusal(change, project, logged);
     if (refusal) throw refusal;

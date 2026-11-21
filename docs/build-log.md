@@ -20,11 +20,12 @@ Generated from tickets, never edited here (AI-148). Every ticket sits under a mi
 - Context sources design (open question 12).
 - ADR-0094: Local executor build choices (AI-79, PR review): accept the six, or change any?
 - ADR-0097: Review findings → config proposals (AI-100): accept the two-PR plan, the 3-PR threshold and `AGENTS.md` as the only target?
-- ADR-0096: Managed repos call one executor (AI-83): Claude token in an environment on `main`, executor at `@main`, one repo per project?
+- ADR-0096: Managed repos call one executor (AI-83): executor at `@main`, one repo per project? (Question 1 answered 2026-11-21: environment `agent` on `main`; built in AI-106.)
 - ADR-0099: Agent read access (AI-97): steps, tools, live or bundled?
 - ADR-0108: Roadmap view over epics, and fixed work views (M4.24 to M4.31): accept one new epic field (`outcome`), Done-when as the epic's acceptance criteria, and the five views?
 - AI-144: Threat model: one file per risk: cap each risk file at 300 words and `threat-model.md` at 1000 (was 3600)?
 - ADR-0111: Re-sync open PRs: its App token?
+- ADR-0133: Board and ticket list read changed tickets (AI-317): accept the 60 s overlap and the hourly full re-read?
 
 ## Blocked on Andy
 
@@ -33,4 +34,4 @@ Generated from tickets, never edited here (AI-148). Every ticket sits under a mi
 - M2: Self-hosting: the "Done when" trial (auto-build on), Andy's to start.
 - M3: New UI and MCP: local executor slice 7 (runbook, live proof) needs Andy's Mac (ADR-0089).
 - AI-111: M5.4 needs a second repo.
-- M4 questions, each in its ticket body: AI-126: M4.13: Hallmark trial (how to run it), AI-128: M4.15: Pluggable design skills (build now or move to Later), AI-129: M4.23: First overnight run trial (which epic and budget).
+- M4 questions, each in its ticket body: AI-128: M4.15: Pluggable design skills (build now or move to Later), AI-129: M4.23: First overnight run trial (which epic and budget).

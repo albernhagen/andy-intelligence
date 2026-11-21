@@ -28,6 +28,8 @@ import {
   MorningReports,
   MorningSteps,
   ProjectReadCache,
+  TicketSnapshots,
+  ProjectTickets,
   RoutingSettings,
   GlobalSpendCaps,
   SpendAlerts,
@@ -35,10 +37,18 @@ import {
   NO_PRICES,
   BoardReader,
   WorkReader,
+  DashboardReader,
+  DoraReader,
+  RoadmapReader,
   bumpOnWrite,
   type EpicBranchOpener,
 } from "@andy/domain";
-import { type NightLaunchStore, type WorkTracker } from "@andy/contracts";
+import {
+  type EventActor,
+  type NightLaunchStore,
+  type Ticket,
+  type WorkTracker,
+} from "@andy/contracts";
 import type { AppDeps } from "./app";
 import type { AuthEnv } from "./auth";
 import { noReviewFindings } from "./config-proposals";
@@ -46,7 +56,9 @@ import { ConnectedCodeHost, GitHubConnection, gitHubCodeHost } from "./github/co
 import { actionsTokenVerifier, type ActionsTokenVerifier } from "./github/token";
 import type { ToolServices } from "./mcp/tools";
 import type { NightDeps } from "./night";
+import { measureReads, meterReads } from "./read-meter";
 import { runnerCredentials } from "./runners";
+import { SetupChecklistReader } from "./setup";
 import { SpendSettingsService } from "./spend";
 
 /**
@@ -69,12 +81,66 @@ export interface Services extends Required<ToolServices> {
   verifyActionsToken: ActionsTokenVerifier | null;
   /** Unchanged board and ticket-list polls served per project version (AI-222); null without versions. */
   readCache: ProjectReadCache | null;
+  snapshots: TicketSnapshots | null;
 }
 
 /** A module's routes: registered from its own file and listed once in `public-routes.ts` or `api-routes.ts`. */
 export type RouteModule = (app: OpenAPIHono<AuthEnv>, services: Services) => void;
 
-export function createServices(input: AppDeps): Services {
+/** The stores whose reads the read meter counts (AI-315). */
+/**
+ * Each metered store's read methods (AI-315), listed so a write is never counted and a new read
+ * isn't missed: `read-meter.test.ts` checks the lists against every store's methods.
+ */
+export const METERED_READS = {
+  tracker: [
+    "getProject",
+    "listProjects",
+    "getTicket",
+    "listTickets",
+    "listTicketsChangedSince",
+    "getTicketByKey",
+    "countByStage",
+    "listEvents",
+    "getLatestPullRequest",
+    "getQuestion",
+    "listQuestions",
+  ],
+  runs: ["get", "listForTicket", "listActive", "listEndedBetween", "countCreatedSince"],
+  runners: ["get", "list", "findBySecretHash", "getRunToken"],
+  configChanges: [
+    "get",
+    "listForProject",
+    "listGlobal",
+    "listPending",
+    "latestDecision",
+    "getLookupCursor",
+  ],
+  reviewFindings: ["recent"],
+  releaseNotes: ["get", "listForProject"],
+  milestones: ["list", "get"],
+  quota: ["latest", "clearsSince"],
+  nightLaunches: ["get", "listForProject", "findActive"],
+  deployments: ["get", "list", "latestGood"],
+  routing: ["getGlobal", "getProject"],
+  spendLedger: ["get", "totals", "totalsByProvider"],
+  spendCapsStore: ["getGlobal"],
+  spendNotices: ["get"],
+  projectVersions: ["get"],
+} satisfies { [K in keyof AppDeps]?: readonly (keyof NonNullable<AppDeps[K]> & string)[] };
+
+/** `deps` with each store's reads counted per request and per dispatch (AI-315). */
+function metered(deps: AppDeps): AppDeps {
+  const out: Record<string, unknown> = { ...deps };
+  for (const [key, reads] of Object.entries(METERED_READS)) {
+    const store = deps[key as keyof typeof METERED_READS];
+    if (store) out[key] = meterReads(store, reads as never);
+  }
+  return out as unknown as AppDeps;
+}
+
+export function createServices(raw: AppDeps): Services {
+  const input = metered(raw);
   // AI-77: with email configured, every service below writes through the tracker's email hook.
   const email = input.email
     ? new EmailNotifications({ tracker: input.tracker, ...input.email })
@@ -88,6 +154,12 @@ export function createServices(input: AppDeps): Services {
     ? { ...notified, ...bumpOnWrite(notified.tracker, notified.runs, versions) }
     : notified;
   const readCache = versions ? new ProjectReadCache(versions) : null;
+  // AI-317: the board and ticket list refresh from changed tickets, not the whole project.
+  const snapshots = readCache ? new TicketSnapshots(deps.tracker) : null;
+  // AI-318: the readers that need every ticket read them through the same snapshots.
+  const tickets = new ProjectTickets(deps.tracker, versions ?? null, snapshots);
+  // Board reads served through the read cache: board polls, work lists and roadmaps (ADR-0126).
+  const board = new BoardReader(deps.tracker, deps.runs, readCache, snapshots);
 
   const github = deps.github;
   const now = github?.now ?? (() => new Date());
@@ -156,8 +228,47 @@ export function createServices(input: AppDeps): Services {
         )
       : null,
   );
-  const refiner = new RefineDispatcher(deps.tracker, deps.runs, runs, now);
-  const builder = new BuildDispatcher(deps.tracker, deps.runs, runs, now, deps.quota ?? null);
+  const refiner = new RefineDispatcher(deps.tracker, deps.runs, runs, now, deps.milestones ?? null);
+  // AI-124/AI-125: when a launch ends, its morning PR opens (or an empty epic branch goes),
+  // then the morning report goes on the epic, with or without GitHub. One instance for both
+  // places a launch ends: `NightLaunches.end` (stop, stop time) and the build dispatcher (done,
+  // a budget limit). `flag` is looked up when a launch ends: `service` is built further down.
+  const flagger: Pick<TicketService, "flag"> = {
+    flag: (projectId: string, ticketId: string, actor: EventActor): Promise<Ticket> =>
+      service.flag(projectId, ticketId, actor),
+  };
+  const morning = deps.nightLaunches
+    ? new MorningSteps(
+        connection && deps.github
+          ? new MorningPullRequests(
+              deps.tracker,
+              deps.runs,
+              new ConnectedCodeHost(connection),
+              deps.github.publicUrl,
+              flagger,
+            )
+          : null,
+        new MorningReports(
+          deps.tracker,
+          deps.runs,
+          flagger,
+          deps.github?.publicUrl ?? "",
+          deps.reviewFindings ?? null,
+        ),
+      )
+    : null;
+  // AI-279: with the launch store and the morning steps, dispatch holds a launch's stories at
+  // its budget or once stopped, and ends the launch when its stories finish or a limit is hit.
+  const builder = new BuildDispatcher(
+    deps.tracker,
+    deps.runs,
+    runs,
+    now,
+    deps.quota ?? null,
+    deps.nightLaunches ?? null,
+    morning,
+    deps.milestones ?? null,
+  );
   // AI-72 (ADR-0083): queued sync runs go first, so open PRs catch up with main before new work.
   const syncer = new SyncRuns(
     deps.tracker,
@@ -167,12 +278,26 @@ export function createServices(input: AppDeps): Services {
     now,
     deps.quota ?? null,
   );
-  const dispatchNext = async (projectId: string, wakeWaiters = true) => {
+  const dispatchOnce = async (projectId: string, wakeWaiters: boolean) => {
     // AI-75 (ADR-0087): held gaps are asked first, as the question caps allow; no run needed.
     await refiner.askHeld(projectId);
     await syncer.next(projectId);
     if (wakeWaiters) await builder.wakeGlobalCapWaiters(projectId);
     return (await builder.next(projectId)) ?? (await refiner.next(projectId));
+  };
+  // AI-315: one line per dispatch event with the documents it read (also counted in its request).
+  const dispatchNext = async (projectId: string, wakeWaiters = true) => {
+    const { value, reads } = await measureReads(() => dispatchOnce(projectId, wakeWaiters));
+    console.log(
+      JSON.stringify({
+        severity: "INFO",
+        message: "dispatch reads",
+        component: "read-meter",
+        projectId,
+        reads,
+      }),
+    );
+    return value;
   };
   const runEnded = async (projectId: string) => {
     await wakeAfterRunEnd({
@@ -195,7 +320,15 @@ export function createServices(input: AppDeps): Services {
         ),
     });
   };
-  const service = new TicketService(deps.tracker, runs, dispatchNext, now, runnerPresence);
+  const service = new TicketService(
+    deps.tracker,
+    runs,
+    dispatchNext,
+    now,
+    runnerPresence,
+    deps.routing ?? null,
+    tickets,
+  );
   const claims = runners
     ? new LocalClaims(
         deps.tracker,
@@ -220,26 +353,8 @@ export function createServices(input: AppDeps): Services {
           now,
           undefined,
           connection ? connectedEpicBranches(connection, deps.tracker, deps.nightLaunches) : null,
-          // AI-124: when a launch ends, its morning PR opens (or an empty epic branch goes);
-          // AI-125: then the morning report goes on the epic, with or without GitHub.
-          new MorningSteps(
-            connection && deps.github
-              ? new MorningPullRequests(
-                  deps.tracker,
-                  deps.runs,
-                  new ConnectedCodeHost(connection),
-                  deps.github.publicUrl,
-                  service,
-                )
-              : null,
-            new MorningReports(
-              deps.tracker,
-              deps.runs,
-              service,
-              deps.github?.publicUrl ?? "",
-              deps.reviewFindings ?? null,
-            ),
-          ),
+          morning,
+          deps.milestones ?? null,
         ),
         store: deps.nightLaunches,
         tracker: deps.tracker,
@@ -272,7 +387,7 @@ export function createServices(input: AppDeps): Services {
       return lowestThresholds("claude-sub", routings, CLAUDE_SUB_THRESHOLDS);
     },
   );
-  const digest = new DigestReader(deps.tracker, deps.runs, deps.quota ?? null, now);
+  const digest = new DigestReader(deps.tracker, deps.runs, deps.quota ?? null, now, tickets);
   const brief = new BriefService(
     deps.tracker,
     connection ? new ConnectedCodeHost(connection) : null,
@@ -299,7 +414,9 @@ export function createServices(input: AppDeps): Services {
       )
     : null;
   // AI-159: the What's new read; absent without a release-note store (route and tool both).
-  const whatsNew = deps.releaseNotes ? new WhatsNewReader(deps.tracker, deps.releaseNotes) : null;
+  const whatsNew = deps.releaseNotes
+    ? new WhatsNewReader(deps.tracker, deps.releaseNotes, tickets)
+    : null;
   // AI-239: routing settings; each save is logged when the change log is configured.
   const routing = deps.routing
     ? new RoutingSettings(deps.routing, deps.tracker, deps.configChanges ?? null, now)
@@ -336,6 +453,12 @@ export function createServices(input: AppDeps): Services {
     routing,
     night,
     readCache,
+    snapshots,
+    tickets,
+    setup: new SetupChecklistReader(
+      deps.tracker,
+      connection ? new ConnectedCodeHost(connection) : null,
+    ),
     spend: new SpendSettingsService(
       projects,
       async (id) => (await deps.tracker.getProject(id))?.spendCaps ?? null,
@@ -344,9 +467,16 @@ export function createServices(input: AppDeps): Services {
       globalSpendCaps,
     ),
     globalSpendCaps,
-    // AI-198: each project's board through the same read cache as board polls.
-    work: new WorkReader(deps.tracker, new BoardReader(deps.tracker, deps.runs, readCache)),
+    // AI-296: the board route and MCP `board` share one reader (cache and snapshots).
+    board,
+    // AI-198, AI-193: each project's board through the same read cache as board polls.
+    work: new WorkReader(deps.tracker, board),
+    roadmap: new RoadmapReader(deps.tracker, board, deps.milestones ?? null),
     whatsNew,
+    milestones: deps.milestones ?? null,
+    // AI-295: one reader each for the Dashboards routes and MCP `dashboard`.
+    dashboard: new DashboardReader(deps.tracker, deps.runs, tickets),
+    dora: new DoraReader(deps.tracker, deps.deployments ?? null, now),
     publicUrl: deps.mcp?.publicUrl ?? null,
   };
 }

@@ -155,6 +155,18 @@ describe("statusLine", () => {
     );
   });
 
+  it("GivenAMilestoneHoldsTheTicket_WhenComputed_ThenItSaysWhyInBacklogAndReadyOnly", () => {
+    const milestoneHold = "Milestone M6: Dev to prod is parked";
+    const waiting = "Waiting: Milestone M6: Dev to prod is parked";
+    expect(line({ stage: "ready", queuePosition: 1, overlaps: "AI-12", milestoneHold }).text).toBe(
+      waiting,
+    );
+    expect(line({ milestoneHold }).text).toBe(waiting);
+    expect(line({ stage: "in_progress", milestoneHold }).text).toBe(
+      "In progress · no agent task in flight",
+    );
+  });
+
   it("GivenBacklog_WhenComputed_ThenItSaysWhetherItIsReadyToMove", () => {
     expect(line({}).text).toBe("Backlog · needs refining");
     expect(line({ dorMet: true }).text).toBe("Backlog · ready to move to Ready");
@@ -225,6 +237,7 @@ const ticket = (over: Partial<Ticket>): Ticket => ({
   sentBackReason: null,
   refineAssumptions: [],
   outcome: null,
+  milestoneId: null,
   outOfScope: [],
   touches: [],
   createdAt: NOW.toISOString(),

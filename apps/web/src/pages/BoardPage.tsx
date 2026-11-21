@@ -1,5 +1,5 @@
 import { Fragment, useEffect, useMemo, useRef, useState, type FormEvent } from "react";
-import { Outlet, useNavigate, useParams, useSearch } from "@tanstack/react-router";
+import { Link, Outlet, useNavigate, useParams, useSearch } from "@tanstack/react-router";
 import {
   DndContext,
   KeyboardSensor,
@@ -13,6 +13,7 @@ import {
 } from "@dnd-kit/core";
 import { Stage, type BoardTicket } from "@andy/contracts";
 import {
+  boardStages,
   parseWorkView,
   sortByStartScore,
   workViewCounts,
@@ -48,7 +49,7 @@ import {
   saveGroupByEpic,
 } from "@/lib/board-groups";
 import { useBoard, useBoardMove, useQuickAdd, useRankTicket, useSetUpNext } from "@/lib/queries";
-import { STAGES, dropMove, groupByStage, visibleTickets } from "@/lib/tickets";
+import { dropMove, groupByStage, visibleTickets } from "@/lib/tickets";
 import { showsError } from "@/lib/live";
 
 /**
@@ -203,7 +204,7 @@ function Lanes({
   // Ungrouped is one group with no header.
   const groupCards = (cards: BoardTicket[]): EpicGroup<BoardTicket>[] =>
     grouped ? groupByEpic(cards, allById) : [{ epic: null, cards }];
-  const stages = STAGES.filter((s) => s !== "cancelled" || showCancelled);
+  const stages = boardStages(showCancelled);
 
   function laneOf(id: string | number | undefined): Stage | null {
     if (typeof id === "string" && isBacklogZone(id)) return "backlog";
@@ -338,17 +339,27 @@ function Lanes({
                 stage === "backlog" ? (
                   <QuickAdd projectId={projectId} />
                 ) : stage === "ready" ? (
-                  <ReadySortToggle
-                    sorted={sortedByScore}
-                    onToggle={() =>
-                      void navigate({
-                        search: {
-                          sort: sortedByScore ? undefined : "score",
-                          view: view ?? undefined,
-                        },
-                      })
-                    }
-                  />
+                  <div className="flex flex-wrap items-center gap-2">
+                    <ReadySortToggle
+                      sorted={sortedByScore}
+                      onToggle={() =>
+                        void navigate({
+                          search: {
+                            sort: sortedByScore ? undefined : "score",
+                            view: view ?? undefined,
+                          },
+                        })
+                      }
+                    />
+                    {/* The same list as MCP list_ready, with scores, reasons and filters (AI-298). */}
+                    <Link
+                      to="/p/$projectId/ready"
+                      params={{ projectId }}
+                      className="rounded-md px-1 text-xs text-muted-foreground hover:bg-foreground/10"
+                    >
+                      Ranked list
+                    </Link>
+                  </div>
                 ) : undefined
               }
             >

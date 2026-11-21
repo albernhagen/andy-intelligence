@@ -9,13 +9,12 @@ import {
 } from "@andy/domain";
 import type { AuthEnv } from "./auth";
 import type { RouteModule } from "./services";
-import { ConnectedCodeHost } from "./github/connection";
 
 /**
  * A project's setup checklist (AI-95: M5.15): the five steps from AI-65, decided by the domain
  * from repo facts read here through the `CodeHost` port. Signed-in read only; it never does a
  * step. Each view reads the project's first repo once plus one file per baseline file and the
- * threat model (a fixed 14 calls, ADR-0028), in parallel.
+ * threat model (a fixed 15 calls, ADR-0028), in parallel.
  */
 
 const ErrorBody = z.object({ error: z.string(), details: z.array(z.string()).optional() });
@@ -95,20 +94,28 @@ export async function readRepoFacts(
   }
 }
 
-export function registerSetupRoutes(
-  app: OpenAPIHono<AuthEnv>,
-  tracker: WorkTracker,
-  codeHost: CodeHost | null,
-): void {
-  app.openapi(setupRoute, async (c) => {
-    const { projectId } = c.req.valid("param");
-    const project = await tracker.getProject(projectId);
+/**
+ * The project's setup checklist (AI-95), read one way for the settings page and MCP
+ * `project_setup` (AI-287). An unknown project is `not_found`.
+ */
+export class SetupChecklistReader {
+  constructor(
+    private readonly tracker: WorkTracker,
+    private readonly codeHost: CodeHost | null,
+  ) {}
+
+  async read(projectId: string): Promise<ReturnType<typeof setupChecklist>> {
+    const project = await this.tracker.getProject(projectId);
     if (!project) throw notFound("project", projectId);
-    const facts = await readRepoFacts(codeHost, project.repos[0]);
-    return c.json(setupChecklist(project, facts), 200);
-  });
+    return setupChecklist(project, await readRepoFacts(this.codeHost, project.repos[0]));
+  }
+}
+
+export function registerSetupRoutes(app: OpenAPIHono<AuthEnv>, reader: SetupChecklistReader): void {
+  app.openapi(setupRoute, async (c) =>
+    c.json(await reader.read(c.req.valid("param").projectId), 200),
+  );
 }
 
 /** Listed in `api-routes.ts` (AI-145). */
-export const apiRoutes: RouteModule = (app, s) =>
-  registerSetupRoutes(app, s.tracker, s.connection ? new ConnectedCodeHost(s.connection) : null);
+export const apiRoutes: RouteModule = (app, s) => registerSetupRoutes(app, s.setup);

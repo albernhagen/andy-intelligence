@@ -12,6 +12,7 @@ import {
   type WorkTracker,
   type QuotaStore,
   type DeploymentStore,
+  type MilestoneStore,
   type RoutingConfigStore,
   type NightLaunchStore,
   type ProjectVersions,
@@ -29,6 +30,7 @@ import type { CodeHostFactory } from "./github/connection";
 import type { ActionsTokenVerifier } from "./github/token";
 import type { ClientMetadataResolver } from "./mcp";
 import { requireProjectAccess, type ProjectAccess } from "./project-access";
+import { readMeterMiddleware } from "./read-meter";
 // Callers outside the package (web tests, e2e, gen:api) pass today's rule explicitly.
 export { ownerOnlyAccess } from "./project-access";
 import * as publicRoutes from "./public-routes";
@@ -70,6 +72,12 @@ export interface AppDeps {
    * route, no MCP tool) when unset.
    */
   releaseNotes?: ReleaseNoteStore;
+  /**
+   * Milestones (ADR-0131). Dispatch, night launches (AI-306) and the roadmap (AI-305) read them;
+   * unset, a ticket with a milestone is held and one without runs as before, and the roadmap lists
+   * every epic under No milestone.
+   */
+  milestones?: MilestoneStore;
   /** Subscription quota readings (M1.9). Without it every window reads unknown. */
   quota?: QuotaStore;
   /** Night launches (ADR-0049): a launched story's build gets its `epic/<KEY>` base (AI-122). */
@@ -237,6 +245,9 @@ export function createApp(input: AppDeps) {
     );
     return c.json({ error: "internal error" }, 500);
   });
+
+  // AI-315: one log line per request with the documents it read (`read-meter.ts`).
+  app.use("*", readMeterMiddleware());
 
   // No page of ours may be framed: the OAuth consent page must not be clickjacked.
   app.use("*", async (c, next) => {

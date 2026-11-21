@@ -145,6 +145,14 @@ export class InMemoryWorkTracker implements WorkTracker {
         (t) => filter.needsAttention === undefined || t.needsAttention === filter.needsAttention,
       )
       .filter((t) => filter.archived === undefined || t.archived === filter.archived)
+      .filter((t) => !filter.upNext || (t.stage === "backlog" && t.upNextRank !== null))
+      .sort((a, b) => compareRanks(a.rank, b.rank))
+      .map((t) => structuredClone(t));
+  }
+
+  async listTicketsChangedSince(projectId: string, since: string): Promise<Ticket[]> {
+    return [...this.tickets.values()]
+      .filter((t) => t.projectId === projectId && t.updatedAt >= since)
       .sort((a, b) => compareRanks(a.rank, b.rank))
       .map((t) => structuredClone(t));
   }
@@ -204,6 +212,12 @@ export class InMemoryWorkTracker implements WorkTracker {
   async listEvents(projectId: string, ticketId: string): Promise<TicketEvent[]> {
     this.requireTicket(projectId, ticketId);
     return structuredClone(this.events.get(ticketId) ?? []);
+  }
+
+  async getLatestPullRequest(projectId: string, ticketId: string): Promise<PullRequestLink | null> {
+    if (this.tickets.get(ticketId)?.projectId !== projectId) return null;
+    const linked = (this.events.get(ticketId) ?? []).filter((e) => e.kind === "pr_linked").at(-1);
+    return linked ? PullRequestLink.parse(linked.data) : null;
   }
 
   async askQuestion(

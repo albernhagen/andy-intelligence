@@ -1,6 +1,11 @@
-import { InMemoryRunStore, InMemoryWorkTracker } from "@andy/contracts";
+import {
+  InMemoryRunStore,
+  InMemoryWorkTracker,
+  type BoardTicket,
+  type Stage,
+} from "@andy/contracts";
 import { beforeEach, describe, expect, it } from "vitest";
-import { BoardReader, MAX_PR_LOOKUPS } from "./board";
+import { BoardReader, MAX_PR_LOOKUPS, boardLanes } from "./board";
 
 const NOW = new Date("2026-11-05T12:00:00.000Z");
 const route = { harness: "claude-code", provider: "claude-sub", model: "sonnet" } as const;
@@ -86,7 +91,7 @@ describe("BoardReader", () => {
     });
   });
 
-  it("GivenALinkedPrOnABacklogTicket_WhenRead_ThenTheHistoryIsNotRead", async () => {
+  it("GivenALinkedPrOnABacklogTicket_WhenRead_ThenNoPullRequestIsShown", async () => {
     const t = await tracker.createTicket("ai", { title: "PR" }, "andy");
     await tracker.linkPullRequest(
       "ai",
@@ -98,7 +103,7 @@ describe("BoardReader", () => {
     expect((await board.tickets("ai"))[0]?.summary.pullRequest).toBeNull();
   });
 
-  it("GivenMoreCardsInFlightThanTheCap_WhenRead_ThenHistoryReadsStopAtTheCap", async () => {
+  it("GivenMoreCardsInFlightThanTheCap_WhenRead_ThenPullRequestReadsStopAtTheCap", async () => {
     for (let i = 0; i < MAX_PR_LOOKUPS + 2; i++) {
       const t = await tracker.createTicket("ai", { title: `T${i}` }, "andy");
       await tracker.updateTicket(
@@ -109,8 +114,8 @@ describe("BoardReader", () => {
       );
     }
     let reads = 0;
-    const listEvents = tracker.listEvents.bind(tracker);
-    tracker.listEvents = (p, t) => (reads++, listEvents(p, t));
+    const latest = tracker.getLatestPullRequest.bind(tracker);
+    tracker.getLatestPullRequest = (p, t) => (reads++, latest(p, t));
 
     expect(await board.tickets("ai")).toHaveLength(MAX_PR_LOOKUPS + 2);
     expect(reads).toBe(MAX_PR_LOOKUPS);
@@ -118,5 +123,42 @@ describe("BoardReader", () => {
 
   it("GivenAnUnknownProject_WhenRead_ThenNotFound", async () => {
     await expect(board.tickets("nope")).rejects.toMatchObject({ code: "not_found" });
+  });
+});
+
+describe("boardLanes (AI-296)", () => {
+  const t = (key: string, stage: Stage, rank: string, archived = false) =>
+    ({ id: key, key, stage, rank, archived }) as unknown as BoardTicket;
+  const tickets = [
+    t("AI-3", "ready", "0000000003"),
+    t("AI-1", "ready", "0000000001"),
+    t("AI-2", "backlog", "0000000002"),
+    t("AI-4", "done", "0000000004", true),
+    t("AI-5", "cancelled", "0000000005"),
+  ];
+
+  it("GivenTickets_WhenGrouped_ThenEveryLaneButCancelledInWorkflowOrderByRank", () => {
+    const lanes = boardLanes(tickets);
+
+    expect(lanes.map((l) => l.stage)).toEqual([
+      "backlog",
+      "ready",
+      "in_progress",
+      "ready_for_review",
+      "done",
+    ]);
+    expect(lanes[1]!.tickets.map((x) => x.key)).toEqual(["AI-1", "AI-3"]);
+    expect(lanes[4]!.tickets).toEqual([]);
+  });
+
+  it("GivenShowArchived_WhenGrouped_ThenArchivedTicketsAndTheCancelledLaneShow", () => {
+    const lanes = boardLanes(tickets, { showArchived: true });
+
+    expect(lanes.map((l) => l.stage)).toContain("cancelled");
+    expect(lanes.find((l) => l.stage === "done")!.tickets.map((x) => x.key)).toEqual(["AI-4"]);
+  });
+
+  it("GivenAStage_WhenGrouped_ThenOnlyThatLane", () => {
+    expect(boardLanes(tickets, { stage: "ready" }).map((l) => l.stage)).toEqual(["ready"]);
   });
 });

@@ -1,6 +1,6 @@
 import { createRoute, z, type OpenAPIHono } from "@hono/zod-openapi";
 import { BoardTicket } from "@andy/contracts";
-import { BoardReader } from "@andy/domain";
+import type { BoardReader } from "@andy/domain";
 import type { AuthEnv } from "./auth";
 import type { RouteModule } from "./services";
 
@@ -32,5 +32,4 @@ export function registerBoardRoutes(app: OpenAPIHono<AuthEnv>, board: BoardReade
 }
 
 /** Listed in `api-routes.ts` (AI-145). */
-export const apiRoutes: RouteModule = (app, s) =>
-  registerBoardRoutes(app, new BoardReader(s.tracker, s.deps.runs, s.readCache));
+export const apiRoutes: RouteModule = (app, s) => registerBoardRoutes(app, s.board);

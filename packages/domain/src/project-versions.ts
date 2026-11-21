@@ -101,10 +101,15 @@ export class ProjectReadCache {
 
   /**
    * The cached view while the project's counter is unchanged and the entry is young enough;
-   * otherwise `load`'s result, cached under the counter read before loading (a write during the
+   * otherwise `load`'s result (given that counter), cached under the counter read before loading (a write during the
    * load bumps past it, so the next call loads again).
    */
-  async get<T>(projectId: string, view: string, load: () => Promise<T>): Promise<T> {
+  async get<T>(
+    projectId: string,
+    view: string,
+    /** Given the version read, or nothing when that read failed (load without the cache). */
+    load: (version?: number) => Promise<T>,
+  ): Promise<T> {
     const key = `${projectId}\u0000${view}`;
     let version: number;
     try {
@@ -127,7 +132,7 @@ export class ProjectReadCache {
     if (hit && hit.version === version && this.now() - hit.at < PROJECT_CACHE_MAX_AGE_MS) {
       return hit.value as T;
     }
-    const value = await load();
+    const value = await load(version);
     this.entries.delete(key);
     this.entries.set(key, { version, at: this.now(), value });
     if (this.entries.size > PROJECT_CACHE_MAX_ENTRIES) {

@@ -1,4 +1,5 @@
 import {
+  InMemoryMilestoneStore,
   InMemoryOAuthGrantStore,
   InMemoryProjectVersions,
   InMemoryRunStore,
@@ -51,6 +52,7 @@ async function setup(others: number) {
   const tracker = countReads(raw);
   const runs = countReads(new InMemoryRunStore());
   const versions = countReads(new InMemoryProjectVersions());
+  const milestones = countReads(new InMemoryMilestoneStore());
   const grants = new InMemoryOAuthGrantStore();
   const app = createApp({
     projectAccess: ownerOnlyAccess(),
@@ -61,14 +63,16 @@ async function setup(others: number) {
     tracker: tracker.store,
     runs: runs.store,
     projectVersions: versions.store,
+    milestones: milestones.store,
     mcp: { publicUrl: PUBLIC_URL, grants, clients: new ClientMetadataResolver() },
   });
   const call = await mcpCaller(app, grants, `${PUBLIC_URL}/mcp`);
-  const reads = () => tracker.reads() + runs.reads() + versions.reads();
+  const reads = () => tracker.reads() + runs.reads() + versions.reads() + milestones.reads();
   const reset = () => {
     tracker.reset();
     runs.reset();
     versions.reset();
+    milestones.reset();
   };
   const get = (path: string) =>
     Promise.resolve(app.request(path, { headers: { authorization: "Bearer andy" } })).then(
@@ -112,6 +116,31 @@ describe("reads per call (AI-222)", () => {
     });
     expect(large).toBe(small);
     expect(large).toBe(1);
+  });
+
+  it("GivenAnUnchangedBoard_WhenMcpBoardIsCalled_ThenItSharesTheRoutesReadAndReadsOneCounter", async () => {
+    const [small, large] = await readsAt(async (s) => {
+      await s.get("/api/projects/ai/board");
+      s.reset();
+      const result = await s.call("board", { project: "AI" });
+      expect(result.isError).toBe(false);
+    });
+    expect(large).toBe(small);
+    // AI-296: the same reader and read cache as the route (ADR-0126): the version counter only.
+    expect(large).toBe(1);
+  });
+
+  it("GivenAnUnchangedBoard_WhenTheRoadmapIsRead_ThenItReadsTheProjectOneCounterAndOneMilestoneList", async () => {
+    const [small, large] = await readsAt(async (s) => {
+      await s.get("/api/projects/ai/board");
+      s.reset();
+      await s.app.request("/api/projects/ai/roadmap", {
+        headers: { authorization: "Bearer andy" },
+      });
+    });
+    expect(large).toBe(small);
+    // AI-305: the project, its version counter (ADR-0126) and its milestone list.
+    expect(large).toBe(3);
   });
 
   it("GivenAnUnchangedProject_WhenWorkIsPolledAgain_ThenItReadsTheProjectsAndOneCounterEach", async () => {

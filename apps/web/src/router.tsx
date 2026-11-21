@@ -17,10 +17,13 @@ import { InboxPage } from "@/pages/InboxPage";
 import { NewProjectPage, ProjectsPage } from "@/pages/ProjectsPage";
 import { ModelsPage } from "@/pages/ModelsPage";
 import { ProjectSettingsPage } from "@/pages/ProjectSettingsPage";
+import { ReadyPage } from "@/pages/ReadyPage";
+import { readySearch } from "@/lib/ready";
 import { RunnersPage } from "@/pages/RunnersPage";
 import { RunPage } from "@/pages/RunPage";
 import { TicketPage } from "@/pages/TicketPage";
 import { WhatsNewPage } from "@/pages/WhatsNewPage";
+import { RoadmapPage } from "@/pages/RoadmapPage";
 import { WorkPage } from "@/pages/WorkPage";
 
 const rootRoute = createRootRoute({
@@ -71,6 +74,8 @@ const routeTree = rootRoute.addChildren([
     component: WorkPage,
     validateSearch: workSearch,
   }),
+  // Roadmap (AI-202): milestones and their epics, both scopes.
+  createRoute({ getParentRoute: () => rootRoute, path: "/all/roadmap", component: RoadmapPage }),
   // Dashboards (AI-117): both scopes.
   createRoute({
     getParentRoute: () => rootRoute,
@@ -98,6 +103,18 @@ const routeTree = rootRoute.addChildren([
     path: "/p/$projectId/work",
     component: WorkPage,
     validateSearch: workSearch,
+  }),
+  createRoute({
+    getParentRoute: () => rootRoute,
+    path: "/p/$projectId/roadmap",
+    component: RoadmapPage,
+  }),
+  // Ready, ranked (AI-298): project-scoped only, like MCP `list_ready` and the board's lane.
+  createRoute({
+    getParentRoute: () => rootRoute,
+    path: "/p/$projectId/ready",
+    component: ReadyPage,
+    validateSearch: readySearch,
   }),
   createRoute({
     getParentRoute: () => rootRoute,
