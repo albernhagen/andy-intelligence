@@ -1,4 +1,5 @@
 ---
+title: "MCP OAuth facade: own authorization server, Firebase Google sign-in, CIMD clients"
 status: accepted
 date: 2026-11-02
 amends: 0010

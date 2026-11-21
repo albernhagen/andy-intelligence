@@ -1,4 +1,5 @@
 ---
+title: Spike tickets
 status: proposed
 date: 2026-11-12
 amends: 0058 (ticket types: spike), 0050 (gate vetoes)

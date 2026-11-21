@@ -226,6 +226,7 @@ describe("NightLaunches", () => {
       endedAt: null,
       endReason: null,
       epicBranch: null,
+      stoppedStories: [],
     });
     expect(await store.findActive("ai")).toEqual(launch);
   });

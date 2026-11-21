@@ -1,4 +1,5 @@
 ---
+title: "Project baseline: composite actions, a manifest, a local apply script"
 status: accepted
 date: 2026-11-02
 ---

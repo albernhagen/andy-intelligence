@@ -1,5 +1,6 @@
 ---
-status: accepted
+title: Ideas and Up next; refine asks only when needed
+status: accepted, amended by 0087
 date: 2026-11-08
 amends: 0054
 ---
