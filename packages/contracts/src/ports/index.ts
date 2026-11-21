@@ -269,6 +269,11 @@ export interface WorkTracker {
   getTicket(projectId: string, ticketId: string): Promise<Ticket | null>;
   /** Sorted by rank. */
   listTickets(projectId: string, filter?: TicketFilter): Promise<Ticket[]>;
+  /**
+   * Every ticket of the project (archived ones too) last changed at or after `since` (ISO time),
+   * sorted by rank. Reads only those tickets: the board and ticket list refresh with it (AI-317).
+   */
+  listTicketsChangedSince(projectId: string, since: string): Promise<Ticket[]>;
   /** The project's ticket with this key (e.g. "AI-7"), or null. Reads only that ticket. */
   getTicketByKey(projectId: string, key: string): Promise<Ticket | null>;
   /**
@@ -298,6 +303,11 @@ export interface WorkTracker {
   ): Promise<TicketEvent>;
   /** Oldest first. */
   listEvents(projectId: string, ticketId: string): Promise<TicketEvent[]>;
+  /**
+   * The newest `pr_linked` link of the ticket, or null (also for an unknown ticket). Reads only
+   * the ticket's `pr_linked` events, not its whole history (AI-317).
+   */
+  getLatestPullRequest(projectId: string, ticketId: string): Promise<PullRequestLink | null>;
 
   /** Appends `question_asked` to the ticket. */
   askQuestion(

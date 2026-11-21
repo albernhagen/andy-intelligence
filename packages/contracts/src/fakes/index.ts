@@ -149,6 +149,13 @@ export class InMemoryWorkTracker implements WorkTracker {
       .map((t) => structuredClone(t));
   }
 
+  async listTicketsChangedSince(projectId: string, since: string): Promise<Ticket[]> {
+    return [...this.tickets.values()]
+      .filter((t) => t.projectId === projectId && t.updatedAt >= since)
+      .sort((a, b) => compareRanks(a.rank, b.rank))
+      .map((t) => structuredClone(t));
+  }
+
   async getTicketByKey(projectId: string, key: string): Promise<Ticket | null> {
     const ticket = [...this.tickets.values()].find(
       (t) => t.projectId === projectId && t.key === key,
@@ -204,6 +211,12 @@ export class InMemoryWorkTracker implements WorkTracker {
   async listEvents(projectId: string, ticketId: string): Promise<TicketEvent[]> {
     this.requireTicket(projectId, ticketId);
     return structuredClone(this.events.get(ticketId) ?? []);
+  }
+
+  async getLatestPullRequest(projectId: string, ticketId: string): Promise<PullRequestLink | null> {
+    if (this.tickets.get(ticketId)?.projectId !== projectId) return null;
+    const linked = (this.events.get(ticketId) ?? []).filter((e) => e.kind === "pr_linked").at(-1);
+    return linked ? PullRequestLink.parse(linked.data) : null;
   }
 
   async askQuestion(

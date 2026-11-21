@@ -28,6 +28,7 @@ import {
   MorningReports,
   MorningSteps,
   ProjectReadCache,
+  TicketSnapshots,
   RoutingSettings,
   GlobalSpendCaps,
   SpendAlerts,
@@ -74,6 +75,7 @@ export interface Services extends Required<ToolServices> {
   verifyActionsToken: ActionsTokenVerifier | null;
   /** Unchanged board and ticket-list polls served per project version (AI-222); null without versions. */
   readCache: ProjectReadCache | null;
+  snapshots: TicketSnapshots | null;
 }
 
 /** A module's routes: registered from its own file and listed once in `public-routes.ts` or `api-routes.ts`. */
@@ -93,6 +95,8 @@ export function createServices(input: AppDeps): Services {
     ? { ...notified, ...bumpOnWrite(notified.tracker, notified.runs, versions) }
     : notified;
   const readCache = versions ? new ProjectReadCache(versions) : null;
+  // AI-317: the board and ticket list refresh from changed tickets, not the whole project.
+  const snapshots = readCache ? new TicketSnapshots(deps.tracker) : null;
 
   const github = deps.github;
   const now = github?.now ?? (() => new Date());
@@ -367,6 +371,7 @@ export function createServices(input: AppDeps): Services {
     routing,
     night,
     readCache,
+    snapshots,
     spend: new SpendSettingsService(
       projects,
       async (id) => (await deps.tracker.getProject(id))?.spendCaps ?? null,
@@ -376,7 +381,10 @@ export function createServices(input: AppDeps): Services {
     ),
     globalSpendCaps,
     // AI-198: each project's board through the same read cache as board polls.
-    work: new WorkReader(deps.tracker, new BoardReader(deps.tracker, deps.runs, readCache)),
+    work: new WorkReader(
+      deps.tracker,
+      new BoardReader(deps.tracker, deps.runs, readCache, snapshots),
+    ),
     whatsNew,
     publicUrl: deps.mcp?.publicUrl ?? null,
   };

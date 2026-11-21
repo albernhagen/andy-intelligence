@@ -162,6 +162,12 @@ export class FirestoreWorkTracker implements WorkTracker {
     return tickets.sort((a, b) => compareRanks(a.rank, b.rank));
   }
 
+  /** One range filter on `updatedAt`: a single-field index, no composite one (AI-317). */
+  async listTicketsChangedSince(projectId: string, since: string): Promise<Ticket[]> {
+    const snap = await this.tickets(projectId).where("updatedAt", ">=", since).get();
+    return snap.docs.map((d) => d.data()).sort((a, b) => compareRanks(a.rank, b.rank));
+  }
+
   async getTicketByKey(projectId: string, key: string): Promise<Ticket | null> {
     const found = await this.tickets(projectId).where("key", "==", key).limit(1).get();
     return found.docs[0]?.data() ?? null;
@@ -245,6 +251,16 @@ export class FirestoreWorkTracker implements WorkTracker {
     // Event ids sort in write order (see eventId).
     const snap = await this.events(projectId, ticketId).orderBy(FieldPath.documentId()).get();
     return snap.docs.map((d) => d.data());
+  }
+
+  /** An equality filter on `kind` (single-field index); the newest is the highest id. */
+  async getLatestPullRequest(projectId: string, ticketId: string): Promise<PullRequestLink | null> {
+    const snap = await this.events(projectId, ticketId).where("kind", "==", "pr_linked").get();
+    const newest = snap.docs
+      .map((d) => d.data())
+      .sort((a, b) => (a.id < b.id ? -1 : 1))
+      .at(-1);
+    return newest ? PullRequestLink.parse(newest.data) : null;
   }
 
   async askQuestion(
