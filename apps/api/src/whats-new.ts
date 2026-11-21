@@ -2,6 +2,7 @@ import { createRoute, z, type OpenAPIHono } from "@hono/zod-openapi";
 import { WHATS_NEW_DEFAULT_DAYS, WHATS_NEW_MAX_DAYS, WhatsNew } from "@andy/contracts";
 import { whatsNewWindow, type WhatsNewReader } from "@andy/domain";
 import type { AuthEnv } from "./auth";
+import type { RouteModule } from "./services";
 
 /** What's new (AI-159, ADR-0121): status per milestone epic, then merged changes. Read-only. */
 
@@ -54,3 +55,8 @@ export function registerWhatsNewRoutes(
     return c.json(await reader.read(c.req.valid("param").projectId, window, epic), 200);
   });
 }
+
+/** Listed in `api-routes.ts` (AI-145); absent without a release-note store. */
+export const apiRoutes: RouteModule = (app, s) => {
+  if (s.whatsNew) registerWhatsNewRoutes(app, s.whatsNew, s.now);
+};

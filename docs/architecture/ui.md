@@ -10,11 +10,10 @@ v1.x screens:
 - **Phone** (M7: Mobile, ADR-0052): the SPA installed from Safari, phone layout for the inbox, ticket detail, releases and quota banner; push deep-links to the item; answer, approve, promote, pause from the phone.
 - **Quota & spend** (per provider gauges with reset times; paid spend vs caps; banner on warn/pause/unknown; built: header gauge, banner).
 - **Project settings** (AI-46, built): `/p/:projectId/settings`, header link; switches explained, saved by PATCH; setup checklist first (AI-95). `/projects` opens the current project's; `/projects/new` adds one.
-- **Digest** (AI-70, ADR-0081): `/p/:projectId/digest`, header link (project scope).
-- **What's new** (ADR-0121): `/p/:projectId/whats-new`, likewise.
+- **Digest**, **What's new** (ADR-0081, ADR-0121): `/p/:projectId/digest`, `…/whats-new`, header links.
 - **Tickets** — M1: board, ticket detail with history and linked runs/PRs/cost. M3 (ADR-0059): status on cards, story panel, command palette. M5: filter and group by project. M4: overrides editing; roadmap, work views (ADR-0108).
 - **Run detail** — built (AI-101: M4.7: Run detail screen): `/p/:projectId/runs/:runId`, opened from Activity; another project's task: not found. Jules links M9.
-- **Config** (providers, harnesses, models, tiers, policies; audit log with revert; pending approvals).
+- **Config** (providers, harnesses, models, tiers, policies; audit log with revert (M4.12); pending approvals).
 - **Releases** (dev status, promote to prod, rollback).
 - **Dashboards** — built (AI-117, ADR-0045), `/p/:id/dashboards`, `/all/dashboards`: delivery (tickets by stage over time, lead time, rework, CI green on first try, review blockers), cost, quota and tokens per week by step and size (ADR-0046); `chart.tsx` (AI-103). DORA metrics from M6.
 
@@ -23,7 +22,7 @@ v1.x screens:
 **Built in M1.3: UI: tickets + inbox:**
 - Routes: `/p/:projectId` board; `/p/:projectId/t/:ticketRef` ticket panel (ref = key, e.g. `AI-2`; an id or wrong project redirects).
 - Moves: one button per move in `TRANSITIONS` (`packages/domain`), plus "Force move…" (recorded). Cancel (optional reason), Archive/Unarchive. The API enforces rules; errors show inline.
-- Client: `openapi-fetch` typed by `src/lib/api.gen.ts`, generated from the API's OpenAPI document (`gen:api`; a test fails when stale). Every write refetches all queries.
+- Client: `openapi-fetch` typed by `src/lib/api.gen.ts`, generated from the API's OpenAPI document by `typecheck` (`gen:api`); not committed. Every write refetches all queries.
 - Tests render the UI against the in-process API.
 - Not yet: the kill switch item.
 
@@ -53,3 +52,5 @@ v1.x screens:
 **Built in M1.19: GitHub App setup from the UI:** `/settings/github` (connect, install link, installed repos); the new-project form suggests installed repos.
 
 **Built in AI-9: Live updates (ADR-0091):** `lib/live.ts` sets every polled query's interval: 5 s in use or with a run in flight, else 60 s; none hidden. Failed polls back off; the shell shows "Updates delayed".
+
+Night launch: AI-120 (`NightLaunch.tsx`).
