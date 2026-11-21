@@ -1,6 +1,7 @@
 import {
   CodeHostConnection,
   CodeHostEvent,
+  EPIC_BRANCH_PATTERN,
   FileProposal,
   Repo,
   RepoName,
@@ -562,6 +563,9 @@ export class InMemoryCodeHost implements CodeHost {
   }[] = [];
   /** Test seam: make `proposeFile` fail. */
   failPropose: Error | null = null;
+  /** Branch tips by `<repo, lower-cased>#<branch>`; a default branch not set here is at `DEFAULT_TIP`. */
+  readonly branches = new Map<string, string>();
+  static readonly DEFAULT_TIP = "d".repeat(40);
 
   constructor(
     repos: Repo[] = [],
@@ -707,6 +711,25 @@ export class InMemoryCodeHost implements CodeHost {
     this.proposals.push({ fullName: repo.fullName, proposal: parsed, opened });
     return structuredClone(opened);
   }
+
+  async branchSha(fullName: string, branch: string): Promise<string | null> {
+    const repo = await this.getRepo(fullName);
+    if (!repo) return null;
+    const tip = this.branches.get(`${repo.fullName.toLowerCase()}#${branch}`);
+    if (tip) return tip;
+    return branch === repo.defaultBranch ? InMemoryCodeHost.DEFAULT_TIP : null;
+  }
+
+  async createBranch(fullName: string, branch: string, sha: string): Promise<"created" | "exists"> {
+    if (!EPIC_BRANCH_PATTERN.test(branch)) throw new Error("only epic/<KEY> branches are created");
+    if (!/^[0-9a-f]{40}$/.test(sha)) throw new Error("unexpected commit sha");
+    const repo = await this.getRepo(fullName);
+    if (!repo) throw new Error(`the App isn't installed on ${fullName}`);
+    const key = `${repo.fullName.toLowerCase()}#${branch}`;
+    if (this.branches.has(key)) return "exists";
+    this.branches.set(key, sha);
+    return "created";
+  }
 }
 
 export interface FakePullRequest {
@@ -780,7 +803,7 @@ export class InMemoryEvaluator implements Evaluator {
     };
   }
 }
+export * from "./config-proposals";
+export * from "./night";
 export * from "./notify-email";
 export * from "./runner";
-export * from "./night";
-export * from "./config-proposals";
