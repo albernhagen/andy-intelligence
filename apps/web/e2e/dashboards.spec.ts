@@ -84,10 +84,36 @@ const DASHBOARD: ProjectDashboard = {
   partial: ["reworks"],
 };
 
+/** AI-200: a fixed DORA report, so the panel shows its four metrics, not the empty state. */
+const dist = (median: number | null, p90: number | null, count: number) => ({ median, p90, count });
+const DORA = {
+  projectKey: "AI",
+  windows: [30, 90].map((days) => ({
+    days,
+    from: new Date(Date.UTC(2026, 10, 4) - days * 86_400_000).toISOString(),
+    to: new Date(Date.UTC(2026, 10, 4)).toISOString(),
+    metrics: {
+      deployments: days === 30 ? 18 : 51,
+      deployFrequency:
+        days === 30 ? { perDay: 0.6, perWeek: 4.2 } : { perDay: 0.57, perWeek: 3.97 },
+      leadTimeHours: dist(null, null, 0),
+      changeFailureRate: days === 30 ? 0.111 : 0.098,
+      failedDeployments: days === 30 ? 2 : 5,
+      timeToRestoreHours: { ...dist(0.75, 1.5, days === 30 ? 2 : 5), open: 0 },
+      ignored: 0,
+    },
+  })),
+  leadTimeMeasured: false,
+  latestGood: { gitSha: "b".repeat(40), finishedAt: "2026-11-03T18:00:00.000Z" },
+  partial: false,
+};
+
 test("dashboards: a project's eight weeks", async ({ page }) => {
   await page.route("**/api/projects/ai/dashboard*", (route) => route.fulfill({ json: DASHBOARD }));
+  await page.route("**/api/projects/ai/dora", (route) => route.fulfill({ json: DORA }));
   await page.goto("/p/ai/dashboards");
   await expect(page.getByRole("region", { name: "Most expensive agent tasks" })).toBeVisible();
   await expect(page.getByRole("link", { name: "Needs you 6" })).toBeVisible();
+  await expect(page.getByText("18 deployments")).toBeVisible();
   await expect(page).toHaveScreenshot("dashboards.png", { fullPage: true });
 });

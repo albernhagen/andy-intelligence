@@ -16,6 +16,8 @@ test("phone inbox: busy project", async ({ page }) => {
   });
   expect(overflow).toBe(0);
   // The page content only: the shell has its own phone screenshots (AI-173: M7.3: Phone shell).
+  // A capture taller than the screen is stitched, and the fixed bottom bar would land mid-page.
+  await page.addStyleTag({ content: "nav[aria-label=Main] { display: none !important; }" });
   await expect(page.locator("main section").first()).toHaveScreenshot("phone-inbox-busy.png");
 });
 
