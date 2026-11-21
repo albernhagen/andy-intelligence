@@ -7,7 +7,7 @@ amends: 0050 (Claude-only through M6 ends with M9), 0062 (tier → route comes f
 
 # 0128 — Routing config, route resolver and Jules as a second executor
 
-AI-228: M9.1: Routing and Jules design, for M9: Add Jules + model routing (epic AI-225, slice table `docs/architecture/m9-slices.md`). Two questions below are Andy's; until he answers, they stay open and the slices build the recommended option behind its setting.
+AI-228: M9.1: Routing and Jules design, for M9: Add Jules + model routing (epic AI-225, slice table `docs/architecture/m9-slices.md`). Andy answered both questions below on 2026-11-21: (a) for each.
 
 ## Context and Problem Statement
 
@@ -29,22 +29,35 @@ Today `domain/tiers.ts` hard-codes two routes (fast = Claude Sonnet, strong = Cl
 | Contract           | The `Executor` port is frozen when the GitHub Actions executor and the Jules adapter both pass its contract suite in CI (ADR-0006).                                                                                                                                                                                       |
 | Cross-model review | Not decided here: AI-241: M9.13: Cross-model review carries its own question.                                                                                                                                                                                                                                             |
 
-### Open questions (Andy's)
+### Questions (answered)
 
-**Q2:** Should Jules take work only when a ticket or epic opts in?
+**Q2:** Should Jules take work only when a ticket or epic opts in? **Answered: (a), Andy, 2026-11-21.**
 Context: Jules's quality on this codebase is unknown, and its PRs go through the same gate and reviews as Claude's.
 
 - (a) Opt-in only: a ticket or epic sets `overrides.assignee: jules` or pins a Jules route. Nothing changes until Andy chooses; slowest to learn.
 - (b) A tier: a new `cheap` tier routed to Jules for S chores. More Jules work at once; a bad route affects many tickets.
 - (c) Fallback when Claude is paused on quota: moves M10's fallback into M9, about one M slice.
-  Recommendation: (a) for two weeks, then revisit (b). Until answered, the default config enables nothing for Jules, which is (a).
+  Recommendation: (a) for two weeks, then revisit (b).
 
-**Q4:** Should a project be able to turn Jules on for itself, or only Andy, globally?
+**Q4:** Should a project be able to turn Jules on for itself, or only Andy, globally? **Answered: (a), Andy, 2026-11-21.**
 Context: under the narrowing rule a project can switch a provider off but not on. This matters once project members exist (M8: Project members).
 
 - (a) Global only: matches the narrowing rule; no extra code.
 - (b) Per-project opt-in: google-sub off globally by default and on per project; one more setting and an exception to the rule.
-  Recommendation: (a). Until answered, the narrowing rule as written applies, which is (a).
+  Recommendation: (a).
+
+### Layers (terminology)
+
+Who sets a ticket's worker, tier and route, first match wins (AI-116: M4.5: Epic overrides cascade and overrides editor, `packages/domain/src/overrides.ts`; unchanged here):
+
+| Layer           | What it is                                                                     |
+| --------------- | ------------------------------------------------------------------------------ |
+| Ticket override | Set on the ticket itself.                                                      |
+| Epic override   | Set on its epic; its stories inherit. A milestone is an epic titled `M<N>: …`. |
+| Project default | The project's routing config; can only narrow global.                          |
+| Global          | Andy's routing config: the ceiling.                                            |
+
+The UI must show which layer set a ticket's worker, tier and route: AI-282: M9: Show which layer set a ticket's worker, tier and route.
 
 ### Consequences
 
