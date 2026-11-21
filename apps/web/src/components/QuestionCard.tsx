@@ -40,6 +40,7 @@ export function QuestionCard({
       key={o}
       type="button"
       size="sm"
+      className="h-11 sm:h-8"
       variant={o === answer ? "default" : "outline"}
       aria-pressed={o === answer}
       onClick={() => setAnswer(o)}
@@ -96,8 +97,13 @@ export function QuestionCard({
               value={answer}
               onChange={(e) => setAnswer(e.target.value)}
               placeholder="Your answer"
+              className="h-11 text-base sm:h-9 sm:text-sm"
             />
-            <Button type="submit" disabled={!answer.trim() || submit.isPending}>
+            <Button
+              type="submit"
+              className="h-11 sm:h-9"
+              disabled={!answer.trim() || submit.isPending}
+            >
               Answer
             </Button>
           </div>

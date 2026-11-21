@@ -1,6 +1,6 @@
 # Threat model: Local executor
 
-The runner on Andy's Mac (`apps/local-runner`, ADR-0089, ADR-0098, ADR-0122). Risk register: [threat-model.md](threat-model.md) (R-AI-44). Control-plane entry points (claim, callbacks, `POST /github/token`): [entry-points-and-credentials.md](entry-points-and-credentials.md).
+The runner on Andy's Mac (`apps/local-runner`, ADR-0089, ADR-0098, ADR-0122). Risk: [R-AI-44](risks/R-AI-44.md). Control-plane entry points (claim, callbacks, `POST /github/token`): [entry-points-and-credentials.md](entry-points-and-credentials.md).
 
 ## Processes and what each can reach
 
