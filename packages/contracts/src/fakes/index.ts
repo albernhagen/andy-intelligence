@@ -854,14 +854,4 @@ export class InMemoryEvaluator implements Evaluator {
     };
   }
 }
-export * from "./config-proposals";
-export * from "./deployments";
-export * from "./membership";
-export * from "./night";
-export * from "./notify-email";
-export * from "./project-versions";
-export * from "./push";
-export * from "./push-sender";
-export * from "./routing";
-export * from "./runner";
-export * from "./spend";
+export * from "./exports.gen";
