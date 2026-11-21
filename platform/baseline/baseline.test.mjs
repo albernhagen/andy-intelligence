@@ -63,7 +63,9 @@ describe("baseline consistency", () => {
   it("GivenTheAgentRulesTemplate_WhenRead_ThenUiTicketsFollowTheDesignFile", () => {
     const rules = read("template/AGENTS.md.template");
     expect(rules).toMatch(/changes a UI follows `design\.md`/);
-    expect(rules).toMatch(/contradicts it, ask a question/);
+    expect(rules).toMatch(
+      /interactive session, ask; an unattended build records the conflict as a deviation/,
+    );
   });
 
   it("GivenPinnedWorkflows_WhenRendered_ThenNoLocalActionsRemain", () => {

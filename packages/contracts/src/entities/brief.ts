@@ -52,6 +52,8 @@ export const BRIEF_SECTIONS = [
   { title: "Goals and non-goals", maxWords: 150, fields: ["goals", "nonGoals"] },
   {
     title: "Architectural expectations",
+    // Shared by its six answers, the design answer included (AI-128): raising it would push a
+    // brief at every cap past BRIEF_MAX_WORDS.
     maxWords: 200,
     fields: ["stack", "cloud", "environments", "constraints", "qualityBar", "design"],
   },

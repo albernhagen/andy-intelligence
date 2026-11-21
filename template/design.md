@@ -1,6 +1,6 @@
 # Design
 
-How this project's user interface looks and behaves. Agents follow it on every ticket that changes a UI; a ticket that contradicts it gets a question, not a guess. The project owner edits this file: the andy-intelligence baseline writes it once and never overwrites it.
+How this project's user interface looks and behaves. Agents follow it on every ticket that changes a UI; when a ticket contradicts it, an interactive session asks and an unattended build records the conflict as a deviation. The project owner edits this file: the andy-intelligence baseline writes it once and never overwrites it.
 
 Replace each default below with this project's choice, or delete the sections that don't apply.
 

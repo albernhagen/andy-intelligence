@@ -43,7 +43,7 @@ Every answer has an id: the field name in `BriefAnswers` (`packages/contracts/sr
 
 ## Word caps
 
-The brief's whole budget is 800 words (`context-budget.json`). Per section: Idea 100, Users and business 100, Vision 80, Goals and non-goals 150, Architectural expectations 200, Open questions 80. Lists hold at most 10 items of 300 characters; other answers at most 2000 characters.
+The brief's whole budget is 800 words (`context-budget.json`). Per section: Idea 100, Users and business 100, Vision 80, Goals and non-goals 150, Architectural expectations 200 (its six answers share it, the design answer included: keep that one to a line), Open questions 80. Lists hold at most 10 items of 300 characters; other answers at most 2000 characters.
 
 ## Result
 

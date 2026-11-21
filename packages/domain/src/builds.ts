@@ -137,7 +137,7 @@ export function escapedJson(value: unknown): string {
  * so the agent reads the file itself.
  */
 export const DESIGN_FILE_LINE =
-  "If the ticket changes a user interface, follow the project's design file: `design.md` at the repo root, or the path the project brief's Design line or AGENTS.md names. Where the ticket contradicts it, don't guess: keep to the design file and record the conflict in deviations so Andy decides.";
+  "If the ticket changes a user interface, follow the project's design file: `design.md` at the repo root, or the path the project brief's Design line or AGENTS.md names. Where the ticket contradicts it, don't guess: this build is unattended, so keep to the design file, record the conflict in deviations and carry on (an interactive session would ask instead).";
 
 /**
  * The build run's instructions. The procedure (`platform/procedures/build.md`) and the result

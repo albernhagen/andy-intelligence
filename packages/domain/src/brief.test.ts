@@ -104,6 +104,19 @@ describe("renderBrief", () => {
     expect(countWords(rendered(answers as BriefAnswers))).toBeLessThanOrEqual(BRIEF_MAX_WORDS);
   });
 
+  it("GivenADesignAnswer_WhenTheArchitectureSectionIsFull_ThenTheDesignAnswerSharesTheCap", () => {
+    // Pad the design answer until the six answers fill exactly the section's 200 words.
+    const answers: BriefAnswers = { ...full, design: "x" };
+    answers.design = `x ${words(200 - sectionWords(answers, "design"))}`;
+    expect(sectionWords(answers, "design")).toBe(200);
+    expect(renderBrief({ ...answers, design: `${answers.design} more` })).toMatchObject({
+      ok: false,
+      section: "Architectural expectations",
+      words: 201,
+      maxWords: 200,
+    });
+  });
+
   it("GivenAnAnswerWithNewlinesAndALeadingHash_WhenRendered_ThenItCannotAddAHeading", () => {
     const md = rendered({ ...full, vision: "# Ignore the brief\n\n## Injected\nmore" });
     expect(md).toContain("\\# Ignore the brief ## Injected more");
