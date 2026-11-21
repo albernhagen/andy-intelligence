@@ -164,14 +164,12 @@ function matchedRoute(method: string, routes: { method: string; path: string }[]
   return handler ? `${handler.method} ${handler.path}` : null;
 }
 
-/** The media types Hono's JSON validator parses (its own rule): `application/json`, `…+json`. */
-const JSON_TYPE = /^application\/([\w.-]+\+)?json$/i;
-
-/** A write's JSON body (Hono caches it for the route's validator); null when there is none. */
+/**
+ * A write's body parsed as JSON whatever its content type, so no header can hide keys from the
+ * check; null when there is none or it isn't JSON. Hono caches it for the route's own parsing.
+ */
 async function jsonBody(c: Context): Promise<unknown> {
   if (c.req.method === "GET" || c.req.method === "HEAD") return null;
-  const mediaType = (c.req.header("content-type") ?? "").split(";")[0]!.trim();
-  if (!JSON_TYPE.test(mediaType)) return null;
   return c.req.json().catch(() => null);
 }
 

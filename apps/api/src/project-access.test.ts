@@ -256,7 +256,7 @@ describe("API routes behind the project-access check (AI-252)", () => {
       blockedBy: ["AI-1", "OPS-9"],
     });
     expect(refusedEdit.status).toBe(404);
-    // Any media type the route's JSON validator parses is read the same way.
+    // The body is read as JSON whatever the content type says.
     const suffixed = await write(
       "PATCH",
       `/api/projects/ai/tickets/${ticket.id}`,
@@ -264,6 +264,13 @@ describe("API routes behind the project-access check (AI-252)", () => {
       "Application/Merge-Patch+JSON; charset=utf-8",
     );
     expect(suffixed.status).toBe(404);
+    const mislabelled = await write(
+      "PATCH",
+      `/api/projects/ai/tickets/${ticket.id}`,
+      { blockedBy: ["OPS-9"] },
+      "text/plain",
+    );
+    expect(mislabelled.status).toBe(404);
     expect(await tracker.listTickets("ai")).toHaveLength(1);
     expect((await tracker.getTicket("ai", ticket.id))?.updatedAt).toBe(ticket.updatedAt);
   });
