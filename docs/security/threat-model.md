@@ -38,6 +38,7 @@ Trust boundaries, entry points and credentials, moved by area (ADR-0046). PRs th
 | UI and MCP                   | [`ui-and-mcp.md`](ui-and-mcp.md)                                     |
 | Infrastructure               | [`infrastructure.md`](infrastructure.md)                             |
 | Night runs                   | [`night-runs.md`](night-runs.md)                                     |
+| Deployment reports           | [`deployments.md`](deployments.md)                                   |
 | Project context in prompts   | [`project-context.md`](project-context.md)                           |
 | Web Push                     | [`push.md`](push.md)                                                 |
 | Model gateway (OpenRouter)   | [`model-gateway.md`](model-gateway.md)                               |
