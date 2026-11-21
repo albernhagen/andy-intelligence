@@ -47,6 +47,16 @@ const EnvironmentsInput = {
   ),
 };
 
+// AI-292: the settings page's "Questions per day"; the same limits as PATCH /api/projects/{id}.
+const DailyQuestionCapInput = {
+  project: SettingsInput.project,
+  dailyQuestionCap: Project.shape.dailyQuestionCap
+    .unwrap()
+    .describe(
+      "How many questions refine may ask in this project per rolling 24 hours (0 to 50, default 5); extra ones become assumptions. 0: refine asks none.",
+    ),
+};
+
 export function registerSettingsTools(
   server: McpServer,
   deps: Pick<ToolDeps, "tracker" | "projects" | "actor" | "email">,
@@ -85,6 +95,25 @@ export function registerSettingsTools(
           { actor: deps.actor, email: deps.email },
         );
         return { project: updated.key, environments: updated.environments };
+      }),
+  );
+
+  server.registerTool(
+    "set_daily_question_cap",
+    {
+      description:
+        "Sets how many questions refine may ask in a project per rolling 24 hours: 0 to 50 (default 5); past it, refine records assumptions instead. Only Andy. Logged in the config change log, as on the settings page.",
+      inputSchema: DailyQuestionCapInput,
+      annotations: { destructiveHint: false, idempotentHint: true, openWorldHint: false },
+    },
+    ({ project, dailyQuestionCap }) =>
+      run(async () => {
+        const updated = await deps.projects.update(
+          project.toLowerCase(),
+          { dailyQuestionCap },
+          { actor: deps.actor, email: deps.email },
+        );
+        return { project: updated.key, dailyQuestionCap: updated.dailyQuestionCap };
       }),
   );
 }
