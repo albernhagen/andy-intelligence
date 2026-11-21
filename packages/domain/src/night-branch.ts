@@ -27,9 +27,12 @@ export interface EpicBranchHost extends Pick<CodeHost, "getRepo" | "headContains
 
 export type EpicBranch = NonNullable<NightLaunch["epicBranch"]>;
 
-/** Opens a launch's epic branch; `NightLaunches.start` calls it once, before storing the launch. */
+/**
+ * Opens a launch's epic branch; `NightLaunches.start` calls it once, before storing the launch.
+ * Null: no code host is connected yet, so the stories build on the default branch.
+ */
 export interface EpicBranchOpener {
-  open(projectId: string, epic: { id: string; key: string }): Promise<EpicBranch>;
+  open(projectId: string, epic: { id: string; key: string }): Promise<EpicBranch | null>;
 }
 
 function log(severity: "INFO" | "WARNING", message: string, fields: object = {}) {
