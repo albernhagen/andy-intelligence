@@ -7,7 +7,12 @@ import {
   type Route,
 } from "@andy/contracts";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { RoutingSettings, widerThanGlobal, type RoutingFields } from "./routing-settings";
+import {
+  ROUTING_VIEW_MAX_PROJECTS,
+  RoutingSettings,
+  widerThanGlobal,
+  type RoutingFields,
+} from "./routing-settings";
 
 const OWNER = "user:uid-1" as const;
 const T0 = new Date("2026-11-21T10:00:00.000Z");
@@ -177,6 +182,51 @@ describe("RoutingSettings", () => {
     await expect(settings.putProject("ops", fields(), null, OWNER)).rejects.toMatchObject({
       code: "not_found",
     });
+  });
+});
+
+describe("RoutingSettings edits and overview", () => {
+  beforeEach(() => {
+    vi.spyOn(console, "log").mockImplementation(() => {});
+  });
+
+  it("GivenMoreProjectsThanTheCap_WhenOverviewed_ThenGlobalOnceAndCappedAndSaysSo", async () => {
+    const { settings, store } = await setup();
+    const getGlobal = vi.spyOn(store, "getGlobal");
+    const ids = Array.from({ length: ROUTING_VIEW_MAX_PROJECTS + 3 }, (_, i) => `p${i}`);
+    const view = await settings.overview(ids);
+    expect(view.projects).toHaveLength(ROUTING_VIEW_MAX_PROJECTS);
+    expect(view.truncated).toBe(true);
+    expect(getGlobal).toHaveBeenCalledTimes(1);
+  });
+
+  it("GivenAProviderAndAStepTier_WhenSetGlobally_ThenBothSavedAndEachLogged", async () => {
+    const { settings, changes } = await setup();
+    await settings.setProvider(
+      null,
+      "google-sub",
+      { ...DEFAULT_ROUTING.providers["google-sub"], enabled: true, dailyTaskLimit: 15 },
+      OWNER,
+    );
+    const saved = await settings.setStepTier(null, "review", "cheap", OWNER);
+    expect(saved.providers["google-sub"]).toMatchObject({ enabled: true, dailyTaskLimit: 15 });
+    expect(saved.steps.review).toBe("cheap");
+    expect(await (changes as InMemoryConfigChangeStore).get("change-2")).toMatchObject({
+      entityId: "global",
+      diff: { steps: expect.anything() },
+    });
+  });
+
+  it("GivenAProjectTurningOnAProviderGlobalHasOff_WhenSet_ThenRefused", async () => {
+    const { settings } = await setup();
+    await expect(
+      settings.setProvider(
+        "ai",
+        "google-sub",
+        { ...DEFAULT_ROUTING.providers["google-sub"], enabled: true },
+        OWNER,
+      ),
+    ).rejects.toMatchObject({ code: "invalid_field" });
   });
 });
 

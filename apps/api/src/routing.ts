@@ -27,6 +27,8 @@ const ProjectRoutingView = z.object({
 export const RoutingView = z.object({
   global: RoutingConfig,
   projects: z.array(ProjectRoutingView),
+  /** True when more projects exist than one view reads (ROUTING_VIEW_MAX_PROJECTS). */
+  truncated: z.boolean(),
 });
 
 const RoutingSave = z.object({
@@ -49,8 +51,13 @@ const routes = {
     ...secured,
     method: "get",
     path: "/api/routing",
+    request: { query: z.object({ projectId: RoutingProjectId.optional() }) },
     responses: {
-      200: json(RoutingView, "Global routing, and each project's own and effective routing"),
+      200: json(
+        RoutingView,
+        "Global routing, and each project's own and effective routing (one project with `projectId`; at most 50)",
+      ),
+      404: json(ErrorBody, "Unknown project"),
     },
   }),
   putGlobal: createRoute({
@@ -82,9 +89,13 @@ export function registerRoutingRoutes(
   listProjectIds: () => Promise<string[]>,
 ): void {
   app.openapi(routes.get, async (c) => {
-    const [global, ids] = await Promise.all([routing.global(), listProjectIds()]);
-    const projects = await Promise.all(ids.map((id) => routing.project(id)));
-    return c.json({ global, projects }, 200);
+    const { projectId } = c.req.valid("query");
+    if (projectId) {
+      const [global, project] = await Promise.all([routing.global(), routing.project(projectId)]);
+      return c.json({ global, projects: [project], truncated: false }, 200);
+    }
+    // Global once, then one config read per project, capped (ADR-0028).
+    return c.json(await routing.overview(await listProjectIds()), 200);
   });
 
   app.openapi(routes.putGlobal, async (c) => {

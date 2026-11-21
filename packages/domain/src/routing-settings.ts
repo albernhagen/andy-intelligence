@@ -5,7 +5,10 @@ import {
   notFound,
   type ConfigChangeLog,
   type EventActor,
+  type ProviderRouting,
   type Route,
+  type RunStep,
+  type StepTier,
   type RoutingConfig,
   type RoutingConfigStore,
   type TierKey,
@@ -40,6 +43,9 @@ export interface ProjectRouting {
 
 const FIELDS = ["providers", "tiers", "steps"] as const;
 
+/** Projects one routing overview reads (ADR-0028); past it the view says it was cut short. */
+export const ROUTING_VIEW_MAX_PROJECTS = 50;
+
 export class RoutingSettings {
   constructor(
     private readonly store: RoutingConfigStore,
@@ -51,6 +57,28 @@ export class RoutingSettings {
 
   async global(): Promise<RoutingConfig> {
     return this.store.getGlobal();
+  }
+
+  /**
+   * Global and the routing of each of `projectIds` (at most ROUTING_VIEW_MAX_PROJECTS, ADR-0028):
+   * global is read once, then one config read per project. `truncated` when ids were dropped.
+   */
+  async overview(
+    projectIds: string[],
+  ): Promise<{ global: RoutingConfig; projects: ProjectRouting[]; truncated: boolean }> {
+    const ids = projectIds.slice(0, ROUTING_VIEW_MAX_PROJECTS);
+    const [global, configs] = await Promise.all([
+      this.store.getGlobal(),
+      Promise.all(ids.map((id) => this.store.getProject(id))),
+    ]);
+    return {
+      global,
+      projects: ids.map((projectId, i) => {
+        const config = configs[i] ?? null;
+        return { projectId, config, effective: config ?? global };
+      }),
+      truncated: projectIds.length > ids.length,
+    };
   }
 
   async project(projectId: string): Promise<ProjectRouting> {
@@ -77,7 +105,12 @@ export class RoutingSettings {
     return saved;
   }
 
-  /** Saves a project's config; refused unless every part of it narrows global. */
+  /**
+   * Saves a project's config; refused unless every part of it narrows global. The check reads
+   * global outside the store's write, so a global save in between can leave a stored project
+   * config wider than global: the route resolver (AI-238: M9.6) narrows to the current global
+   * at run time, so a wider stored config never widens what runs.
+   */
   async putProject(
     projectId: string,
     fields: RoutingFields,
@@ -101,10 +134,7 @@ export class RoutingSettings {
     return saved;
   }
 
-  /**
-   * Replaces one tier's routes, global (`projectId` null) or a project's (starting from global
-   * when it has none). Reads the config first and saves against what it read.
-   */
+  /** Replaces one tier's routes, global (`projectId` null) or a project's. */
   async setTierRoutes(
     projectId: string | null,
     tier: TierKey,
@@ -112,15 +142,63 @@ export class RoutingSettings {
     actor: EventActor,
     reason?: string,
   ): Promise<RoutingConfig> {
+    return this.edit(projectId, actor, reason, (f) => ({
+      ...f,
+      tiers: { ...f.tiers, [tier]: routes },
+    }));
+  }
+
+  /** Sets one provider's switch and levels, global or a project's. */
+  async setProvider(
+    projectId: string | null,
+    provider: ProviderKey,
+    settings: ProviderRouting,
+    actor: EventActor,
+    reason?: string,
+  ): Promise<RoutingConfig> {
+    return this.edit(projectId, actor, reason, (f) => ({
+      ...f,
+      providers: { ...f.providers, [provider]: settings },
+    }));
+  }
+
+  /** Sets which tier one step uses, global or a project's. */
+  async setStepTier(
+    projectId: string | null,
+    step: RunStep,
+    tier: StepTier,
+    actor: EventActor,
+    reason?: string,
+  ): Promise<RoutingConfig> {
+    return this.edit(projectId, actor, reason, (f) => ({
+      ...f,
+      steps: { ...f.steps, [step]: tier },
+    }));
+  }
+
+  /**
+   * One change to global (`projectId` null) or a project's config (starting from global when it
+   * has none), saved against what was read, so a concurrent save is a conflict.
+   */
+  private async edit(
+    projectId: string | null,
+    actor: EventActor,
+    reason: string | undefined,
+    change: (fields: RoutingFields) => RoutingFields,
+  ): Promise<RoutingConfig> {
     requireCan(actor, "change_routing", projectId);
     if (projectId === null) {
       const current = await this.store.getGlobal();
-      const fields = { ...pick(current), tiers: { ...current.tiers, [tier]: routes } };
-      return this.putGlobal(fields, current.updatedAt, actor, reason);
+      return this.putGlobal(change(pick(current)), current.updatedAt, actor, reason);
     }
     const { config, effective } = await this.project(projectId);
-    const fields = { ...pick(effective), tiers: { ...effective.tiers, [tier]: routes } };
-    return this.putProject(projectId, fields, config?.updatedAt ?? null, actor, reason);
+    return this.putProject(
+      projectId,
+      change(pick(effective)),
+      config?.updatedAt ?? null,
+      actor,
+      reason,
+    );
   }
 
   /** The config to store, checked: its shape, then every route's compatibility. */

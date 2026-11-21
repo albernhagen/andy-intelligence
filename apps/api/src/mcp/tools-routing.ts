@@ -1,4 +1,14 @@
-import { Project, Route, ROUTING_LIMITS, TierKey, type RoutingConfig } from "@andy/contracts";
+import {
+  Project,
+  ProviderKey,
+  ProviderRouting,
+  Route,
+  ROUTING_LIMITS,
+  RunStep,
+  StepTier,
+  TierKey,
+  type RoutingConfig,
+} from "@andy/contracts";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import { z } from "zod";
@@ -79,6 +89,42 @@ export function registerRoutingTools(
             reason,
           ),
         ),
+      ),
+  );
+
+  const scope = (project: string | undefined) => (project ? project.toLowerCase() : null);
+  const why = z.string().max(500).optional().describe("Why, shown in the change log.");
+
+  server.registerTool(
+    "set_provider_routing",
+    {
+      description:
+        "Sets one provider's switch and quota levels as Andy (owner only): enabled, reservePct, warnPct, pausePct (warn at most pause), dailyTaskLimit (google-sub only, else null). Global without a project; a project may only narrow global (stay off where global is off, keep a larger reserve, lower levels and limit). Logged as a settings change.",
+      inputSchema: {
+        project: ProjectKey.optional(),
+        provider: ProviderKey,
+        settings: ProviderRouting,
+        reason: why,
+      },
+      annotations: { destructiveHint: false, idempotentHint: true, openWorldHint: false },
+    },
+    ({ project, provider, settings, reason }) =>
+      run(async () =>
+        view(await routing.setProvider(scope(project), provider, settings, deps.actor, reason)),
+      ),
+  );
+
+  server.registerTool(
+    "set_step_tier",
+    {
+      description:
+        "Sets which tier a run step uses as Andy (owner only): frontier, strong, fast, cheap, or by_size (the ticket's tier from its size or pin). Global without a project, else the project's config. Logged as a settings change.",
+      inputSchema: { project: ProjectKey.optional(), step: RunStep, tier: StepTier, reason: why },
+      annotations: { destructiveHint: false, idempotentHint: true, openWorldHint: false },
+    },
+    ({ project, step, tier, reason }) =>
+      run(async () =>
+        view(await routing.setStepTier(scope(project), step, tier, deps.actor, reason)),
       ),
   );
 }

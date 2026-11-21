@@ -158,6 +158,31 @@ describe("routing settings (AI-239)", () => {
     expect((await changes.listForProject("ai"))[0]).toMatchObject({ entity: "routing" });
   });
 
+  it("GivenOneProjectAsked_WhenRead_ThenOnlyThatProject", async () => {
+    const { request } = await setup();
+    const res = await request("GET", "/api/routing?projectId=ai");
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as { projects: { projectId: string }[]; truncated: boolean };
+    expect(body.projects.map((p) => p.projectId)).toEqual(["ai"]);
+    expect(body.truncated).toBe(false);
+    expect((await request("GET", "/api/routing?projectId=ops")).status).toBe(404);
+  });
+
+  it("GivenProviderAndStepEditsOverMcp_WhenCalled_ThenSavedOrRefusedWithTheReason", async () => {
+    const { call } = await setup();
+    const off = { ...DEFAULT_ROUTING.providers["google-sub"], enabled: true };
+    const refused = await call("set_provider_routing", {
+      project: "ai",
+      provider: "google-sub",
+      settings: off,
+    });
+    expect(refused.isError).toBe(true);
+    expect(refused.text).toContain("provider google-sub is off globally");
+    const step = await call("set_step_tier", { step: "review", tier: "cheap" });
+    expect(step.isError).toBe(false);
+    expect(step.data.steps.review).toBe("cheap");
+  });
+
   it("GivenARoutingChangeInTheLog_WhenRevertedAsSettings_ThenA409SayingSo", async () => {
     const { request, changes } = await setup();
     const steps = { ...DEFAULT_ROUTING.steps, refine: "cheap" };
