@@ -1,6 +1,6 @@
-# Web UI and MCP parity — inventory and slices
+# Web UI and MCP parity — inventory
 
-Step 1 of AI-285: Web UI and MCP parity: every action in both, enforced by a test. Taken from `main` at `8a635f1` on 2026-11-21: the 79 signed-in `/api/*` routes and 62 MCP tools (`pnpm --filter @andy/api snapshot`), and every route the web calls (`apps/web/src`). **Parity** means Andy can do the same thing in the web UI and from Claude over MCP. Nothing here is built yet; Andy reviews the list first.
+Step 1 of AI-285: Web UI and MCP parity: every action in both, enforced by a test. Taken from `main` at `8a635f1` on 2026-11-21: the 79 signed-in `/api/*` routes and 62 MCP tools (`pnpm --filter @andy/api snapshot`), and every route the web calls (`apps/web/src`). **Parity** means Andy can do the same thing in the web UI and from Claude over MCP. Nothing here is built yet; Andy reviews the list first. Gaps in parked milestones (M6: Dev → prod releases, M7: Mobile, M8: Project members, M9: Add Jules + model routing) are listed apart and get no tickets.
 
 ## Matched: in both
 
@@ -12,7 +12,7 @@ Step 1 of AI-285: Web UI and MCP parity: every action in both, enforced by a tes
 | Ticket: create, read, edit, parent, comment              | `POST …/tickets`, `GET /tickets/:key`, `…/readiness`, `…/questions`, `PATCH …`  | `create_ticket`, `status`, `edit_ticket`, `set_ticket_parent`, `comment_ticket`                                            |
 | Ticket: move, rank, Up next, cancel, archive             | `POST …/stage`, `…/up-next`, `…/cancel`, `…/archive`, `PATCH` rank              | `move_ticket`, `reorder_ticket`, `cancel_ticket`, `archive_ticket`                                                         |
 | Assumptions                                              | `POST …/assumptions/:id/accept`, `…/promote`                                    | `accept_assumption`, `promote_assumption`                                                                                  |
-| Epic stories and progress                                | `GET …/tickets/:id/epic`                                                        | `status` (epic key)                                                                                                        |
+| Epic tickets and progress                                 | `GET …/tickets/:id/epic`                                                        | `status` (epic key)                                                                                                        |
 | Start refine or build                                    | `POST …/tickets/:id/runs`                                                       | `refine`, `build`                                                                                                          |
 | Worker and executor                                      | `GET`/`PUT …/worker`, `…/executor`                                              | `status`, `set_worker`, `set_executor`                                                                                     |
 | Night launch, its status, stop; the morning report       | `GET`/`POST …/night`, `POST …/night/stop`; report arrives as an epic comment    | `night_status`, `launch_night`, `stop_night`; report in `status` and `list_needs_me`                                       |
@@ -26,9 +26,9 @@ Step 1 of AI-285: Web UI and MCP parity: every action in both, enforced by a tes
 | Routing: read, edit (global, project), history, revert   | `GET`/`PUT /routing`, `PUT …/routing`, `GET /routing/changes`, revert           | `get_routing`, `set_tier_routes`, `set_provider_routing`, `set_step_tier`, `list_routing_changes`, `revert_routing_change` |
 | Who am I                                                 | `GET /me`                                                                       | `status` (`signedInAs`)                                                                                                    |
 
-## Gaps and their stories (smallest first)
+## Gaps and their tickets (smallest first)
 
-| Story                                                                  | Direction | Size | Missing side                                                 |
+| Ticket                                                                 | Direction | Size | Missing side                                                 |
 | ---------------------------------------------------------------------- | --------- | ---- | ------------------------------------------------------------ |
 | AI-286: Parity: quota readings over MCP                                | UI-only   | S    | `GET /quota` → `get_quota`                                   |
 | AI-287: Parity: project setup checklist over MCP                       | UI-only   | S    | `GET …/setup` → `project_setup`                              |
@@ -46,15 +46,22 @@ Step 1 of AI-285: Web UI and MCP parity: every action in both, enforced by a tes
 | AI-299: Parity: ideate from the web UI                                 | MCP-only  | M    | `ideate` (route exists, web never calls it) → a form         |
 | AI-300: Parity: registry test that every action has a route and a tool | test      | M    | Step 2: fails when a new action ships in one side only       |
 
-## Gaps already owned by a ticket
+## Gaps owned elsewhere
 
-| Action                              | Today                      | Ticket                                                                                             |
-| ----------------------------------- | -------------------------- | -------------------------------------------------------------------------------------------------- |
-| Merge a gated PR                    | Neither (Andy uses GitHub) | AI-220: Merge modes: coordinator sessions merge through MCP merge_pr; web stays on GitHub (AI-159) |
-| What's new (release notes)          | Neither                    | AI-159: What's new (page and `whats_new` tool; PR #234 open)                                       |
-| Roadmap; milestone map              | MCP `milestone_map` only   | AI-193: M4.25: Roadmap data API and MCP tool; AI-202: M4.26: Roadmap screen                        |
-| Approve or park a milestone         | Neither                    | AI-281: Milestone review and approval before its work starts                                       |
-| Which layer set worker, tier, route | Neither                    | AI-282: M9: Show which layer set a ticket's worker, tier and route (its MCP side is `status`)      |
+| Action                      | Today                      | Where                                                                                             |
+| --------------------------- | -------------------------- | ------------------------------------------------------------------------------------------------- |
+| Merge a gated PR            | Neither (Andy uses GitHub) | AI-220: Merge modes: coordinator sessions merge through MCP merge_pr; the web links to GitHub     |
+| What's new (release notes)  | Neither                    | AI-159: What's new (page and `whats_new` tool; PR #234 open)                                      |
+| Roadmap; milestone map      | MCP `milestone_map` only   | ADR-0131 (in design, with AI-148: Milestone map): no ticket here                                  |
+| Approve or park a milestone | Neither                    | ADR-0131 (in design): no ticket here                                                              |
+
+## Parked (no tickets)
+
+| Action                              | Today   | Milestone                                                                                              |
+| ----------------------------------- | ------- | ------------------------------------------------------------------------------------------------------ |
+| Which layer set worker, tier, route | Neither | M9: Add Jules + model routing (AI-282: M9: Show which layer set a ticket's worker, tier and route, PR #301) |
+
+M6, M7 and M8 add no gap today: their settings that exist (environments) are already in both.
 
 ## One side on purpose (the parity test records the reason)
 
@@ -66,4 +73,4 @@ Step 1 of AI-285: Web UI and MCP parity: every action in both, enforced by a tes
 | GitHub App setup (`/github`, `/manifest`, `/connect`) | Web only | GitHub's manifest flow needs a browser                                                                   |
 | `submit_brief`, `submit_project_plan`                 | MCP only | Written by a Claude session following `onboard.md` and `plan-project.md`; the web shows and decides them |
 
-Not covered here: step 4 of AI-285 (refreshing a long-lived Claude session's tool list) has no story yet.
+Not covered here: step 4 of AI-285 (refreshing a long-lived Claude session's tool list) has no ticket yet.
