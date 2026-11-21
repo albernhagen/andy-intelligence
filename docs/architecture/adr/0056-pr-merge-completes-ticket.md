@@ -1,6 +1,6 @@
 ---
 title: "A merged PR completes its ticket until M6: Dev → prod releases"
-status: accepted, amended by 0067, 0069
+status: accepted, amended by 0067, 0069, 0107 (proposed)
 date: 2026-11-04
 ---
 
