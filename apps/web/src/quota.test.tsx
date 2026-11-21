@@ -77,3 +77,37 @@ describe("quota gauge and banner", () => {
     await waitFor(() => expect(screen.queryByRole("alert")).toBeNull());
   });
 });
+
+/** AI-176: M7.6: on a phone the header shows the fullest window and a one-tap pause. */
+describe("phone quota and pause", () => {
+  it("GivenTwoWindows_WhenTheShellOpens_ThenThePhoneGaugeShowsTheFullest", async () => {
+    await open([reading("5h", 42), reading("weekly", 61)]);
+    expect(await screen.findByText("Quota 61%")).toBeTruthy();
+  });
+
+  it("GivenNoReadings_WhenTheShellOpens_ThenThePhoneGaugeSaysUnknown", async () => {
+    await open([]);
+    expect(await screen.findByText("Quota unknown")).toBeTruthy();
+  });
+
+  it("GivenTheInbox_WhenAndyTapsPauseThenResume_ThenDispatchPausesAndResumes", async () => {
+    const harness = await open([reading("5h", 42), reading("weekly", 10)]);
+    fireEvent.click(await screen.findByRole("button", { name: "Pause dispatch for AI" }));
+    const resume = await screen.findByRole("button", { name: "Resume dispatch for AI" });
+    expect(resume.getAttribute("aria-pressed")).toBe("true");
+    expect((await harness.tracker.getProject("ai"))?.paused).toBe(true);
+
+    fireEvent.click(resume);
+    await screen.findByRole("button", { name: "Pause dispatch for AI" });
+    expect((await harness.tracker.getProject("ai"))?.paused).toBe(false);
+  });
+
+  it("GivenTwoProjectsAndTheAllScope_WhenTheShellOpens_ThenNoPauseButton", async () => {
+    const harness = await open([reading("5h", 42)]);
+    await screen.findByRole("button", { name: "Pause dispatch for AI" });
+    await harness.tracker.createProject({ name: "Other", key: "OT" });
+    await harness.queryClient.invalidateQueries();
+    await screen.findByText("Quota 42%");
+    await waitFor(() => expect(screen.queryByRole("button", { name: /dispatch for/ })).toBeNull());
+  });
+});

@@ -102,6 +102,10 @@ export function refineFills(ticket: Ticket, output: RefineOutput): TicketFields 
     ...(ticket.acceptanceCriteria.length === 0
       ? { acceptanceCriteria: output.acceptanceCriteria }
       : {}),
+    // An epic's outcome (ADR-0108): only an epic, as typed or as refine types it, and never over one.
+    ...(ticket.outcome === null && (ticket.type ?? output.type) === "epic" && output.epicOutcome
+      ? { outcome: output.epicOutcome }
+      : {}),
   };
 }
 

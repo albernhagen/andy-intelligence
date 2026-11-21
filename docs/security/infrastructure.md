@@ -1,6 +1,6 @@
 # Threat model: Infrastructure
 
-Detail on GCP service accounts, billing, DNS and admin logins. Risk register (every `R<n>` id), assets and mitigations: [threat-model.md](threat-model.md). PRs that change this area update this file; the weekly system review edits only the main file.
+Detail on GCP service accounts, billing, DNS and admin logins. Risks: [risks/](risks/), one per id; assets, mitigations: [threat-model.md](threat-model.md). PRs that change this area update this file; the weekly system review edits only the main file and risks.
 
 ## Trust boundaries and entry points
 

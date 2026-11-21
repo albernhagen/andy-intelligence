@@ -15,7 +15,7 @@ import {
   TicketFields,
   Timestamp,
 } from "@andy/contracts";
-import type { ProjectService, RunService, TicketService } from "@andy/domain";
+import type { ProjectReadCache, ProjectService, RunService, TicketService } from "@andy/domain";
 import type { WorkTracker } from "@andy/contracts";
 import { actorOf, signedIn, type AuthEnv } from "./auth";
 import { registerWorkerRoutes } from "./worker";
@@ -264,6 +264,7 @@ export function registerTicketRoutes(
   service: TicketService,
   projects: ProjectService,
   runs: RunService,
+  readCache: ProjectReadCache | null = null,
 ): void {
   const withCost = async (t: Ticket) => ({ ...t, cost: await costOfTicket(runs, t) });
 
@@ -294,7 +295,13 @@ export function registerTicketRoutes(
   app.openapi(routes.listTickets, async (c) => {
     const { projectId } = c.req.valid("param");
     if (!(await tracker.getProject(projectId))) return c.json(notFound("project"), 404);
-    return c.json(await tracker.listTickets(projectId, c.req.valid("query")), 200);
+    const query = c.req.valid("query");
+    const list = () => tracker.listTickets(projectId, query);
+    // AI-222: an unchanged list is the project read plus one version read.
+    const tickets = readCache
+      ? await readCache.get(projectId, `tickets:${JSON.stringify(query)}`, list)
+      : await list();
+    return c.json(tickets, 200);
   });
 
   app.openapi(routes.createTicket, async (c) => {
@@ -442,4 +449,4 @@ export function registerTicketRoutes(
 
 /** Listed in `api-routes.ts` (AI-145). */
 export const apiRoutes: RouteModule = (app, s) =>
-  registerTicketRoutes(app, s.tracker, s.service, s.projects, s.runs);
+  registerTicketRoutes(app, s.tracker, s.service, s.projects, s.runs, s.readCache);

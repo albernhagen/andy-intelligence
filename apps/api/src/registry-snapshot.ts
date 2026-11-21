@@ -25,6 +25,7 @@ export function fullApp() {
     reviewFindings: new contracts.InMemoryReviewFindingSource(),
     quota: new contracts.InMemoryQuotaStore(),
     nightLaunches: new contracts.InMemoryNightLaunchStore(),
+    projectVersions: new contracts.InMemoryProjectVersions(),
     publicHost: "localhost",
     watchdog: {
       queue: new contracts.InMemoryWatchdogQueue(),

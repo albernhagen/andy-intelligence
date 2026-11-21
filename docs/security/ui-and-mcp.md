@@ -1,6 +1,6 @@
 # Threat model: UI and MCP
 
-Browser sign-in, GitHub setup and MCP. Risk register (`R<n>` ids), assets, mitigations: [threat-model.md](threat-model.md). PRs changing this area update this file; the weekly system review edits only the main one.
+Browser sign-in, GitHub setup and MCP. Risks: [risks/](risks/); assets, mitigations: [threat-model.md](threat-model.md). PRs changing this area update this file; the weekly review edits only the main one and risks.
 
 ## Trust boundaries and entry points
 
