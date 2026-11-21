@@ -17,6 +17,7 @@ export { registerProjectPlanTools as projectPlan } from "./tools-project-plan";
 export { registerProjectTools as projects } from "./tools-projects";
 export { registerQuotaTools as quota } from "./tools-quota";
 export { registerRoutingTools as routing } from "./tools-routing";
+export { registerRunnerTools as runners } from "./tools-runners";
 export { registerScoreTools as scores } from "./tools-scores";
 export { registerSettingsTools as settings } from "./tools-settings";
 export { registerSpendTools as spend } from "./tools-spend";

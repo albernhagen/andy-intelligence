@@ -18,6 +18,7 @@ Step 1 of AI-285: Web UI and MCP parity: every action in both, enforced by a tes
 | Night launch, its status, stop; the morning report       | `GET`/`POST …/night`, `POST …/night/stop`; report arrives as an epic comment    | `night_status`, `launch_night`, `stop_night`; report in `status` and `list_needs_me`                                       |
 | In flight; work across projects; digest                  | `GET …/in-flight`, `GET /work`, `GET …/digest`                                  | `list_in_flight`, `list_work`, `digest`                                                                                    |
 | Project list; settings (except below)                    | `GET /projects`, `GET`/`PATCH /projects/:id`                                    | `list_projects`, `get_project_settings`, ten `set_*` tools, `set_spend_caps`                                               |
+| List local runners | `GET /runners` | `list_runners` (AI-294) |
 | Settings changes: list, revert                           | `GET …/config-changes`, `POST …/config-changes/:id/revert`                      | `list_settings_changes`, `revert_settings_change`                                                                          |
 | Config proposals: list, accept, reject, sweep            | `GET /config-changes`, `POST …/accept`, `…/reject`, `…/config-proposals/sweep`  | `list_config_changes`, `accept_config_change`, `reject_config_change`, `sweep_config_proposals`                            |
 | Pause, runs at once                                      | `PATCH /projects/:id`                                                           | `set_paused`, `set_runs_at_once`                                                                                           |
@@ -37,7 +38,6 @@ Step 1 of AI-285: Web UI and MCP parity: every action in both, enforced by a tes
 | AI-291: Parity: edit_ticket sets needs-attention, risk and confidence  | done      | S    | `PATCH` fields → `edit_ticket`                               |
 | AI-292: Parity: set the daily question cap over MCP                    | UI-only   | S    | `PATCH dailyQuestionCap` → `set_daily_question_cap`          |
 | AI-293: Parity: a ticket's full history and runs over MCP              | UI-only   | S    | `…/events`, `…/runs`, `…/runs/:runId` → three reads          |
-| AI-294: Parity: list and revoke runners over MCP                       | UI-only   | S    | `GET /runners`, revoke → two tools (register stays app-only) |
 | AI-295: Parity: dashboards and DORA metrics over MCP                   | UI-only   | S    | `GET /dashboard`, `…/dashboard`, `…/dora` → `dashboard`      |
 | AI-296: Parity: the board, every stage, over MCP                       | UI-only   | S    | `GET …/board` → `board`                                      |
 | AI-297: Parity: create a project over MCP                              | UI-only   | S    | `POST /projects` → `create_project`                          |
@@ -68,6 +68,7 @@ M6, M7 and M8 add no gap today: their settings that exist (environments) are alr
 | ----------------------------------------------------- | -------- | -------------------------------------------------------------------------------------------------------- |
 | Turn Builds on or off                                 | Web only | ADR-0063: Builds is set only in the app                                                                  |
 | Register a runner                                     | Web only | Returns the runner token once; a token should not land in a chat transcript                              |
+| Revoke a runner | Web only | Revoking stays where a person signs in (ADR-0089); pending Andy's decision on ADR-0089 (AI-294) |
 | OAuth consent (`POST /oauth/approve`)                 | Web only | The browser half of MCP sign-in                                                                          |
 | GitHub App setup (`/github`, `/manifest`, `/connect`) | Web only | GitHub's manifest flow needs a browser                                                                   |
 | `submit_brief`, `submit_project_plan`                 | MCP only | Written by a Claude session following `onboard.md` and `plan-project.md`; the web shows and decides them |

@@ -79,6 +79,7 @@ export const CROSS_PROJECT_TOOLS: Readonly<Record<string, string>> = {
   list_projects: "Every project: keep readable projects.",
   list_routing_changes:
     "Global routing's change log (AI-275): owner only (`change_routing`, enforced).",
+  list_runners: "Local runners: owner only (read-only; register and revoke stay in the app).",
   list_work: "Without `project`, every project's open tickets: keep readable projects.",
   reject_config_change: "Check the change's project.",
   revert_routing_change:

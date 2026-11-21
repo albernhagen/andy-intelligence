@@ -17,6 +17,7 @@ import {
   type GlobalSpendCaps,
   type WhatsNewReader,
 } from "@andy/domain";
+import type { RunnerService } from "@andy/domain";
 import type { SpendSettingsService } from "../spend";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
@@ -63,6 +64,8 @@ export interface ToolDeps {
   night?: NightDeps | null;
   /** Work across projects (AI-198); the app always passes it, unit tests may not. */
   work?: WorkReader;
+  /** Local runners (ADR-0089); null without a runner store. MCP reads them only (AI-294). */
+  runners?: RunnerService | null;
   /** Spend caps settings (AI-249); the app always passes it, unit tests may not. */
   spend?: SpendSettingsService;
   /** The global spend caps (AI-276); the app always passes it, unit tests may not. */
