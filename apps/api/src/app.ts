@@ -13,6 +13,7 @@ import {
   type QuotaStore,
   type DeploymentStore,
   type NightLaunchStore,
+  type ProjectVersions,
 } from "@andy/contracts";
 import type { CreatedApp } from "@andy/github";
 import { DomainError, type EmailNotificationsDeps } from "@andy/domain";
@@ -65,6 +66,11 @@ export interface AppDeps {
    * unset) and read by the DORA panel (AI-200, empty when unset).
    */
   deployments?: DeploymentStore;
+  /**
+   * Per-project change counters (AI-222): with them, every tracker and run write bumps its
+   * project, and the board and ticket list serve unchanged polls from a cache. Without, no cache.
+   */
+  projectVersions?: ProjectVersions;
   /**
    * The only host served (ADR-0044), e.g. `ai.andybernhagen.com`. Requests for any other host
    * (the default run.app URLs) get 404, except /health for monitoring. Unset: every host (local dev).

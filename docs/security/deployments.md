@@ -20,7 +20,7 @@ Detail on the deployment record's entry point (AI-180: M6.4, part of M6: Dev →
 
 No new credential. The deploy job already holds `id-token: write` (for Workload Identity Federation); the same job token, with the control plane as audience, signs the reports. The report step masks it and never logs it (`platform/actions/report-deployment`).
 
-## Residual risks
+## Residual risks (R-AI-180)
 
 - **Push access to `main` can write records.** Whoever can change `deploy.yml` on `main` (Andy; later collaborators) can report deployments with any digest and status. The record is informational until verification and promotion read it (M6.5 on); those slices recheck what they act on.
 - **Rerun of an old workflow run.** A rerun of an earlier `deploy.yml` run on `main` reports a new deployment of that earlier commit, which is true: it did deploy it again.

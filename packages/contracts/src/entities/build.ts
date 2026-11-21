@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { Timestamp } from "./common";
 
 /**
  * Epic branch builds (AI-122, ADR-0049): a build for a story in a running night launch branches
@@ -20,4 +21,18 @@ export function epicBranchName(epicKey: string): BaseBranch {
 export const runBaseFields = {
   /** A build's base branch; null means the repo's default branch, as before. */
   baseBranch: BaseBranch.nullable().default(null),
+  /**
+   * The control plane's merge of the build's PR into its `epic/<KEY>` base (AI-124): when, and
+   * the squash commit's sha when the code host reported one. Null for anything else.
+   */
+  epicMerge: z
+    .strictObject({
+      at: Timestamp,
+      sha: z
+        .string()
+        .regex(/^[0-9a-f]{40}$/)
+        .nullable(),
+    })
+    .nullable()
+    .default(null),
 };
