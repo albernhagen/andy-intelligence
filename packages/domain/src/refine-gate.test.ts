@@ -271,6 +271,7 @@ describe("RefineGate split of an epic (AI-115)", () => {
     touches: [],
     body: null,
     acceptanceCriteria: [],
+    epicOutcome: null,
     outcome: "split",
     reason: "Three slices",
     children,
