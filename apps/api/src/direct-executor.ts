@@ -237,6 +237,7 @@ export class DirectExecutor {
     let sent = false;
     let usage: RunUsage | null | undefined;
     let costed: object = {};
+    let succeeded: { run: Run; output: T } | undefined;
     try {
       await this.runs.update(run.id, { status: "running" }, ["queued"]);
       const sentAt = this.now();
@@ -274,9 +275,8 @@ export class DirectExecutor {
         { status: "succeeded", endedAt: this.now().toISOString(), ...costed },
         ["running"],
       );
-      await this.gate.close(run.id, done, usage);
-      log("INFO", "direct call done", { runId: run.id, step: call.step, model: route.model });
-      return { kind: "done", run: done, output: answer.value };
+      // Outside the error path: once the run is stored `succeeded`, the answer is returned.
+      succeeded = { run: done, output: answer.value };
     } catch (err) {
       log("ERROR", "direct call broke", { runId: run.id, error: String(err) });
       // Before the call: released. After it: settled at the usage if known, else in full.
@@ -286,6 +286,26 @@ export class DirectExecutor {
         sent ? { startedAt: this.now().toISOString(), ...costed } : {},
         sent ? (usage ?? null) : undefined,
       );
+    }
+    // Reached only after the succeeded write: a close problem is logged, never turned into a failure.
+    if (!succeeded) throw new Error("unreachable: direct call ended without an outcome");
+    await this.closeSpend(run.id, succeeded.run, usage);
+    log("INFO", "direct call done", { runId: run.id, step: call.step, model: route.model });
+    return { kind: "done", ...succeeded };
+  }
+
+  /**
+   * Closes the run's spend; never throws (`SpendGate.close` doesn't either, this guards it). If it
+   * fails the reservation stays open and is settled in full once its deadline passes (ADR-0129).
+   */
+  private async closeSpend(runId: string, run: Run | null, usage?: RunUsage | null): Promise<void> {
+    try {
+      await this.gate.close(runId, run, usage);
+    } catch (err) {
+      log("ERROR", "direct call spend close failed; it stays reserved", {
+        runId,
+        error: String(err),
+      });
     }
   }
 
@@ -329,7 +349,7 @@ export class DirectExecutor {
         error: String(err),
       });
     }
-    await this.gate.close(run.id, ended, usage);
+    await this.closeSpend(run.id, ended, usage);
     return { kind: "failed", run: ended ?? run, reason };
   }
 

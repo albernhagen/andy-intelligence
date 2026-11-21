@@ -315,6 +315,32 @@ describe("DirectExecutor", () => {
     });
   });
 
+  it("GivenTheSpendCloseThrowsAfterSuccess_WhenAStepRuns_ThenDoneWithTheAnswerAndClosedOnce", async () => {
+    await routeFastToDirect();
+    const gate = new SpendGate(ledger, PRICED, undefined, () => NOW);
+    const close = vi.spyOn(gate, "close").mockRejectedValue(new Error("ledger down"));
+    const outcome = await new DirectExecutor(runs, gateway, gate, PRICED, routing, () => NOW).run(
+      call,
+    );
+    expect(outcome).toMatchObject({
+      kind: "done",
+      output: { ranked: ["a", "b"] },
+      run: { status: "succeeded" },
+    });
+    expect(close).toHaveBeenCalledTimes(1);
+  });
+
+  it("GivenTheSpendCloseThrowsOnFailure_WhenAStepRuns_ThenStillAFailedOutcome", async () => {
+    await routeFastToDirect();
+    gateway.answer = { status: 500 };
+    const gate = new SpendGate(ledger, PRICED, undefined, () => NOW);
+    vi.spyOn(gate, "close").mockRejectedValue(new Error("ledger down"));
+    const outcome = await new DirectExecutor(runs, gateway, gate, PRICED, routing, () => NOW).run(
+      call,
+    );
+    expect(outcome).toMatchObject({ kind: "failed", run: { status: "failed" } });
+  });
+
   it("GivenAnyOutcome_WhenLogged_ThenNeitherThePromptNorTheAnswerAppears", async () => {
     const logs: string[] = [];
     vi.spyOn(console, "log").mockImplementation((line: string) => void logs.push(line));
