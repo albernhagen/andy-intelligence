@@ -24,7 +24,7 @@ Step 1 of AI-285: Web UI and MCP parity: every action in both, enforced by a tes
 | Project setup checklist | `GET …/setup` | `project_setup` (AI-287) |
 | The board, every stage | `GET …/board` | `board` (AI-296) |
 | Create a project | `POST /projects` | `create_project` (AI-297) |
-| Milestones: list, set status, attach an epic | `GET …/milestones`, `PATCH …/milestones/:id`, `PUT …/tickets/:id/milestone` | `list_milestones`, `set_milestone_status`, `set_epic_milestone` (AI-304) |
+| Milestones: list, create, edit, set status, attach an epic | `GET`/`POST …/milestones`, `PATCH …/milestones/:id`, `PUT …/tickets/:id/milestone` | `list_milestones`, `create_milestone`, `edit_milestone`, `set_milestone_status`, `set_epic_milestone` (AI-304; create and edit go past ADR-0131's three tools: both surfaces are first-class, and AI-307 creates AI's milestones over MCP) |
 | Settings changes: list, revert                           | `GET …/config-changes`, `POST …/config-changes/:id/revert`                      | `list_settings_changes`, `revert_settings_change`                                                                          |
 | Config proposals: list, accept, reject, sweep            | `GET /config-changes`, `POST …/accept`, `…/reject`, `…/config-proposals/sweep`  | `list_config_changes`, `accept_config_change`, `reject_config_change`, `sweep_config_proposals`                            |
 | Pause, runs at once                                      | `PATCH /projects/:id`                                                           | `set_paused`, `set_runs_at_once`                                                                                           |
@@ -74,7 +74,6 @@ The registry `apps/api/src/parity.ts` (AI-300) holds every action with its route
 | ----------------------------------------------------- | -------- | -------------------------------------------------------------------------------------------------------- |
 | Turn Builds on or off                                 | Web only | ADR-0063: Builds is set only in the app                                                                  |
 | Register a runner                                     | Web only | Returns the runner token once; a token should not land in a chat transcript                              |
-| Create, rename, reorder a milestone | Web only | ADR-0131 names three MCP milestone tools: list, set status, attach an epic (AI-304) |
 | OAuth consent (`POST /oauth/approve`)                 | Web only | The browser half of MCP sign-in                                                                          |
 | GitHub App setup (`/github`, `/manifest`, `/connect`) | Web only | GitHub's manifest flow needs a browser                                                                   |
 | `submit_brief`, `submit_project_plan`                 | MCP only | Written by a Claude session following `onboard.md` and `plan-project.md`; the web shows and decides them |

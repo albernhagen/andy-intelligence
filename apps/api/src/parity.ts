@@ -257,10 +257,21 @@ export const PARITY: readonly ParityEntry[] = [
     },
   },
   {
-    action: "Milestones: list, set status, attach or detach an epic",
-    routes: [`GET ${P}/milestones`, `PATCH ${P}/milestones/:milestoneId`, `PUT ${T}/milestone`],
-    tools: ["list_milestones", "set_milestone_status", "set_epic_milestone"],
-    note: "PATCH also renames, rewords and reorders: web only today (see Create a milestone).",
+    action: "Milestones: list, create, edit, set status, attach or detach an epic",
+    routes: [
+      `GET ${P}/milestones`,
+      `POST ${P}/milestones`,
+      `PATCH ${P}/milestones/:milestoneId`,
+      `PUT ${T}/milestone`,
+    ],
+    tools: [
+      "list_milestones",
+      "create_milestone",
+      "edit_milestone",
+      "set_milestone_status",
+      "set_epic_milestone",
+    ],
+    note: "PATCH covers edit_milestone and set_milestone_status.",
   },
   // ── One side on purpose ─────────────────────────────────────────────────────
   {
@@ -280,12 +291,6 @@ export const PARITY: readonly ParityEntry[] = [
     routes: ["GET /api/github", "GET /api/github/manifest", "POST /api/github/connect"],
     tools: [],
     oneSide: "GitHub's manifest flow needs a browser.",
-  },
-  {
-    action: "Create a milestone",
-    routes: [`POST ${P}/milestones`],
-    tools: [],
-    oneSide: "ADR-0131 names three MCP milestone tools: list, set status, attach an epic.",
   },
   // ── Open gaps, each with its ticket ─────────────────────────────────────────
   {
