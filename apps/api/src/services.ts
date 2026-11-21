@@ -29,6 +29,7 @@ import {
   ProjectReadCache,
   RoutingSettings,
   GlobalSpendCaps,
+  SpendAlerts,
   SpendGate,
   NO_PRICES,
   BoardReader,
@@ -113,6 +114,19 @@ export function createServices(input: AppDeps): Services {
     ? new RunnerService(deps.runners, deps.tracker, runnerCredentials, now)
     : null;
   const runnerPresence = runners ? (projectId: string) => runners.presentFor(projectId) : null;
+  // AI-257: spend notices (80% of a cap, a stop) go to the Needs-you email when it is on, else
+  // to the logs; their dedupe and daily cap live in the stored notice ledger.
+  const spendAlerts = deps.spendNotices
+    ? new SpendAlerts({
+        tracker: deps.tracker,
+        ledger: deps.spendNotices,
+        notifier: deps.email?.notifier ?? null,
+        appUrl:
+          deps.email?.appUrl ??
+          (deps.publicHost ? `https://${deps.publicHost}` : "http://localhost"),
+        now,
+      })
+    : null;
   const runs = new RunService(
     deps.tracker,
     deps.runs,
@@ -128,11 +142,17 @@ export function createServices(input: AppDeps): Services {
     // AI-248: no price source yet (M10.5), so the gate refuses every pay_per_use start. Caps:
     // the defaults, narrowed by the project's own (AI-249).
     deps.spendLedger
-      ? new SpendGate(deps.spendLedger, NO_PRICES, async (id) => ({
-          // Unreadable global caps throw here, and the gate starts no paid task (fail closed).
-          global: await globalSpendCaps.caps(),
-          project: (await deps.tracker.getProject(id))?.spendCaps ?? null,
-        }))
+      ? new SpendGate(
+          deps.spendLedger,
+          NO_PRICES,
+          async (id) => ({
+            // Unreadable global caps throw here, and the gate starts no paid task (fail closed).
+            global: await globalSpendCaps.caps(),
+            project: (await deps.tracker.getProject(id))?.spendCaps ?? null,
+          }),
+          now,
+          spendAlerts ? (event) => spendAlerts.handle(event) : null,
+        )
       : null,
   );
   const refiner = new RefineDispatcher(deps.tracker, deps.runs, runs, now);
