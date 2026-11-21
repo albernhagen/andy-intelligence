@@ -16,6 +16,8 @@ import {
   type NightLaunchStore,
   type ProjectVersions,
   type SpendLedger,
+  type SpendCapsStore,
+  type SpendNoticeLedger,
 } from "@andy/contracts";
 import type { CreatedApp } from "@andy/github";
 import { DomainError, type EmailNotificationsDeps } from "@andy/domain";
@@ -66,7 +68,10 @@ export interface AppDeps {
   quota?: QuotaStore;
   /** Night launches (ADR-0049): a launched story's build gets its `epic/<KEY>` base (AI-122). */
   nightLaunches?: NightLaunchStore;
-  /** Deployment records (AI-161); without it the DORA panel reads empty (AI-200). */
+  /**
+   * Deployment records (AI-161): written by deploy workflows' reports (AI-180, routes absent when
+   * unset) and read by the DORA panel (AI-200, empty when unset).
+   */
   deployments?: DeploymentStore;
   /** Model routing (AI-230, AI-238); without it every run takes `DEFAULT_ROUTING`. */
   routing?: RoutingConfigStore;
@@ -75,6 +80,13 @@ export interface AppDeps {
    * totals (AI-249). Without it every pay_per_use task is refused and spend reads unknown.
    */
   spendLedger?: SpendLedger;
+  /** The global spend caps (AI-276); without it the code defaults, read-only. */
+  spendCapsStore?: SpendCapsStore;
+  /**
+   * What the spend notices have sent (AI-257: M10.9): their dedupe and daily cap. Absent: the
+   * gate sends no spend notices.
+   */
+  spendNotices?: SpendNoticeLedger;
   /**
    * Per-project change counters (AI-222): with them, every tracker and run write bumps its
    * project, and the board and ticket list serve unchanged polls from a cache. Without, no cache.
@@ -167,6 +179,7 @@ const DOMAIN_STATUS = {
   not_buildable: 422,
   run_limit: 409,
   spend_cap: 409,
+  quota_reserve: 409,
   run_finished: 409,
   executor_unavailable: 503,
   dispatch_failed: 502,

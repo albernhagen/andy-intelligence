@@ -53,7 +53,7 @@ describe("spendView", () => {
       global: { dayMicroUsd: 3, monthMicroUsd: 4 },
     };
     expect(spendView({ dailyMicroUsd: 1_000_000 }, spent)).toEqual({
-      global: { caps: DEFAULT_SPEND_CAPS, source: "default" },
+      global: { caps: DEFAULT_SPEND_CAPS, source: "default", updatedAt: null },
       project: { dailyMicroUsd: 1_000_000 },
       effective: {
         per_task: 2_000_000,
@@ -137,7 +137,7 @@ describe("ProjectService spend caps (AI-249)", () => {
       now,
       changes,
       () => `change-${++ids}`,
-      () => global,
+      async () => global,
     );
     global = { ...DEFAULT_SPEND_CAPS, dailyMicroUsd: 3_000_000 };
     const revert = new ConfigRevert(tracker, lowered, changes, now);

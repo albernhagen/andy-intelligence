@@ -398,6 +398,7 @@ export const NewRun = Run.pick({
   syncRun: true,
   localRun: true,
   baseBranch: true,
+  routeSkips: true,
 });
 export type NewRun = z.input<typeof NewRun>;
 

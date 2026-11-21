@@ -14,6 +14,7 @@ import {
   type RunService,
   type TicketService,
   type WorkReader,
+  type GlobalSpendCaps,
 } from "@andy/domain";
 import type { SpendSettingsService } from "../spend";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
@@ -63,6 +64,8 @@ export interface ToolDeps {
   work?: WorkReader;
   /** Spend caps settings (AI-249); the app always passes it, unit tests may not. */
   spend?: SpendSettingsService;
+  /** The global spend caps (AI-276); the app always passes it, unit tests may not. */
+  globalSpendCaps?: GlobalSpendCaps;
   /** Signed-in email, shown by `status` so it doubles as the connection check. */
   email: string;
   /** The signed-in user as an actor, `user:<uid>` (AI-19): every write is recorded as this. */
