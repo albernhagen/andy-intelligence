@@ -36,7 +36,7 @@ Step 1 of AI-285: Web UI and MCP parity: every action in both, enforced by a tes
 | AI-288: Parity: spend per provider in get_spend                        | UI-only   | S    | `GET …/spend/providers` → `get_spend`                        |
 | AI-289: Parity: send a test email over MCP                             | UI-only   | S    | `GET /notify/email`, `POST …/test` → `test_email`            |
 | AI-290: Parity: ask a question on a ticket over MCP                    | done      | S    | `POST …/tickets/:id/questions` → `ask_question`              |
-| AI-291: Parity: edit_ticket sets needs-attention, risk and confidence  | UI-only   | S    | `PATCH` fields → `edit_ticket`                               |
+| AI-291: Parity: edit_ticket sets needs-attention, risk and confidence  | done      | S    | `PATCH` fields → `edit_ticket`                               |
 | AI-292: Parity: set the daily question cap over MCP                    | UI-only   | S    | `PATCH dailyQuestionCap` → `set_daily_question_cap`          |
 | AI-293: Parity: a ticket's full history and runs over MCP              | UI-only   | S    | Built: `ticket_history`, `list_runs`, `get_run` (now matched) |
 | AI-294: Parity: list and revoke runners over MCP                       | UI-only   | S    | `GET /runners`, revoke → two tools (register stays app-only) |
