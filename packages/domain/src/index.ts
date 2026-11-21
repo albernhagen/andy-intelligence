@@ -21,6 +21,7 @@ export * from "./gate-service";
 export * from "./ideate";
 export * from "./inbox-order";
 export * from "./local-claims";
+export * from "./model-scout";
 export * from "./night-branch";
 export * from "./night-end";
 export * from "./night-launch";
