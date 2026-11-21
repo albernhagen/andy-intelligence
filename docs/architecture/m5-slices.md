@@ -1,6 +1,6 @@
 # M5: Multi-project in parallel — slices
 
-Slice table for [milestones.md §M5](milestones.md#m5-multi-project-in-parallel) (AI-81: Slice M5). Epic: AI-82: M5: Multi-project in parallel. Each slice's ticket holds its acceptance criteria, out of scope and `touches` (files it owns). **Risk** is the merge class from ADR-0092: medium = the coordinator may merge; high = Andy merges.
+Slice table for [milestones.md §M5](milestones.md#m5-multi-project-in-parallel) (AI-81: Slice M5). Epic: AI-82: M5: Multi-project in parallel. Each slice's ticket holds its acceptance criteria, out of scope and `touches` (files it owns). **Risk** marks where reviewers look hardest (ADR-0092); who merges is ADR-0120: the coordinator merges clean PRs, Andy keeps four kinds.
 
 **Already built, not sliced:** project create with a repo; per-project settings and `get_project_settings`; per-project `runsAtOnce`; global cap (4) and pause (ADR-0079); dispatch stops at the quota reserve; inbox grouped by project (`/all/inbox`); conflict-aware dispatch and sync runs (M2).
 
