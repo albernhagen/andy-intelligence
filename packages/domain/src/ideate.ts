@@ -87,6 +87,7 @@ export class IdeateService {
       {
         type: "epic",
         title: epicInput.title,
+        outcome: epicInput.outcome,
         body: ideaEpicBody(epicInput, spec.path),
         acceptanceCriteria: epicInput.acceptanceCriteria,
       },

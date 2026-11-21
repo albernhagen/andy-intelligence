@@ -77,9 +77,7 @@ Each gap stands alone, for Andy away from the desk:
 
 No `?`, no context or an option without a consequence fails the result.
 
-Bad: `AI-6: M1.17: Agent evals v1, q1: who pays for model calls in CI.`
-
-Good: "Should the agent evals CI job (AI-6: Agent evals v1) pay for model calls from Andy's Claude subscription or an API key?" Context: "Agent evals replay fixed tickets through each agent to catch regressions. Nothing runs them today. The workflow needs a payer before it can land." Options: Subscription (no new spend; uses the weekly quota), API key (about $2 a run; a new secret). Recommendation: Subscription, no new secret or bill.
+A worked bad and good example: [`refine-question-example.md`](refine-question-example.md).
 
 ## Re-refine
 
@@ -91,6 +89,7 @@ End with the structured output (schema: `refine.schema.json`, next to this file)
 
 - The ticket fields (`type` … `acceptanceCriteria`): your proposal, always given. Each is written only where the ticket's is empty (Andy's values win); a set value you think is wrong is a gap.
 - `summary`: markdown, at most 300 words: **Ask** (one sentence), **Gaps** (what the Definition of Ready misses), **Files**, **Risks** (security, data, cost, concurrency).
+- `epicOutcome`: for an epic only, one sentence, at most 300 characters, in Andy's words: what is true when it is done; no implementation detail. `null` for any other type. Kept only where the epic has none (ADR-0108).
 - `outcome`, `reason`, `children`, `gaps`: as above.
 
 A result not matching the schema fails the run and writes nothing.
