@@ -3,7 +3,13 @@ import { Link, useBlocker, useNavigate, useParams } from "@tanstack/react-router
 import { useQueryClient } from "@tanstack/react-query";
 import { X } from "lucide-react";
 import { Size, TicketType, type Ticket } from "@andy/contracts";
-import { isHeld, projectOfKey, ticketStatusLine, ticketsByRef } from "@andy/domain";
+import {
+  isHeld,
+  listedMilestoneHold,
+  projectOfKey,
+  ticketStatusLine,
+  ticketsByRef,
+} from "@andy/domain";
 import { Activity } from "@/components/Activity";
 import { AskQuestionForm } from "@/components/AskQuestionForm";
 import { CancelArchiveControls } from "@/components/CancelArchiveControls";
@@ -21,6 +27,7 @@ import {
 import { WorkerControl } from "@/components/WorkerControls";
 import { ExecutorControl } from "@/components/ExecutorControls";
 import { useInFlight } from "@/components/InFlightPanel";
+import { TicketMilestone } from "@/components/MilestoneControls";
 import { MoveControls } from "@/components/MoveControls";
 import { QuestionCard } from "@/components/QuestionCard";
 import { ScoreReasons } from "@/components/ScoreReasons";
@@ -43,6 +50,7 @@ import {
   useExecutor,
   useTickets,
   useProjects,
+  useMilestones,
 } from "@/lib/queries";
 import { STAGE_LABELS, TYPE_LABELS } from "@/lib/tickets";
 import { showsError } from "@/lib/live";
@@ -161,7 +169,9 @@ const pathOf = (t: Ticket): TicketPath => ({ projectId: t.projectId, ticketId: t
 /** "Waiting for you: 2 questions", "Refining · 1 min" … from data the API already returns. */
 function StatusLine({ ticket }: { ticket: Ticket }) {
   const path = pathOf(ticket);
-  const tickets = useTickets(ticket.projectId).data ?? [];
+  const loadedTickets = useTickets(ticket.projectId).data;
+  const tickets = loadedTickets ?? [];
+  const milestones = useMilestones(ticket.projectId).data;
   const runs = useRuns(path).data ?? [];
   const questions = useTicketQuestions(path).data ?? [];
   const events = useEvents(path).data ?? [];
@@ -178,6 +188,9 @@ function StatusLine({ ticket }: { ticket: Ticket }) {
       worker,
       inFlight,
       executor,
+      // Dispatch's own rule (AI-306), once both lists are in; the API holds the same tickets.
+      milestoneHold:
+        loadedTickets && milestones ? listedMilestoneHold(ticket, loadedTickets, milestones) : null,
     },
     new Date(),
   );
@@ -285,7 +298,10 @@ function Outcome({ ticket: t }: { ticket: Ticket }) {
   );
 }
 
-/** Stage and moves, then the facts: type, size, tier, epic, blocked by; cancel and archive. */
+/**
+ * Stage and moves, then the facts: type, size, tier, epic, milestone, blocked by; cancel and
+ * archive.
+ */
 function Rail({ ticket: t }: { ticket: Ticket }) {
   const tickets = useTickets(t.projectId).data ?? [];
   const epics = tickets.filter((o) => o.type === "epic" && o.id !== t.id);
@@ -339,6 +355,7 @@ function Rail({ ticket: t }: { ticket: Ticket }) {
         options={[["", "None"], ...epics.map((e) => [e.id, `${e.key}: ${e.title}`] as const)]}
         patch={(v) => ({ parentId: v === "" ? null : v })}
       />
+      <TicketMilestone ticket={t} />
       <BlockedBy ticket={t} tickets={tickets} />
       <CancelArchiveControls ticket={t} />
     </aside>

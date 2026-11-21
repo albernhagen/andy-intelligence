@@ -9,6 +9,7 @@ import {
   type WorkTracker,
 } from "@andy/contracts";
 import { revertPatch, revertReason, revertRefusal } from "./config-changes";
+import { MILESTONE_ENTITY, type MilestoneService } from "./milestone-service";
 import { DomainError } from "./errors";
 import { effectiveMergeMode, requireTightening } from "./merge-mode";
 import { requireCan } from "./permissions";
@@ -44,6 +45,8 @@ export class ConfigRevert {
     private readonly now: () => Date = () => new Date(),
     /** Routing changes in the project's log revert through routing settings (AI-275). */
     private readonly routing: Pick<RoutingSettings, "revert"> | null = null,
+    /** Milestone changes in the project's log revert through the milestone service (AI-304). */
+    private readonly milestones: Pick<MilestoneService, "revert"> | null = null,
   ) {}
 
   /** The project's changes, newest first, at most `limit` (capped, ADR-0028). */
@@ -71,6 +74,18 @@ export class ConfigRevert {
         ]);
       }
       const { reverted } = await this.routing.revert(change.id, by.actor);
+      return { project, reverted };
+    }
+    // A milestone change (AI-304) reverts through the milestone service, owner-only there too.
+    if (change?.entity === MILESTONE_ENTITY && change.projectId === projectId) {
+      if (!this.milestones) {
+        throw new DomainError(
+          "not_revertible",
+          `config change ${change.id} is a milestone change`,
+          ["milestones aren't configured here"],
+        );
+      }
+      const { reverted } = await this.milestones.revert(change, by.actor);
       return { project, reverted };
     }
     if (!change || change.entity !== "project" || change.entityId !== projectId) {

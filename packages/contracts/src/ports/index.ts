@@ -10,6 +10,7 @@ import {
   DorStatus,
   EventActor,
   Id,
+  MilestoneId,
   Project,
   Worker,
   ExecutorKind,
@@ -143,6 +144,11 @@ export const TicketFields = Ticket.pick({
     sentBackReason: z.string().max(300).nullable().optional(),
     refineAssumptions: z.array(Assumption).optional(),
     outcome: EpicOutcome.nullable().optional(),
+    /**
+     * A top-level epic's milestone (ADR-0131). Set only through the milestone service (AI-304):
+     * the ticket edit paths (REST PATCH, `edit_ticket`, `TicketService.edit`) leave it out.
+     */
+    milestoneId: MilestoneId.nullable().optional(),
     ...TicketScoreFields,
   });
 export type TicketFields = z.infer<typeof TicketFields>;

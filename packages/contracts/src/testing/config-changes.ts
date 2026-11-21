@@ -71,6 +71,22 @@ export function configChangeLogContract(name: string, make: () => Promise<Config
       expect(await store.listForProject("none")).toEqual([]);
     });
 
+    it("GivenMilestoneChanges_WhenListedForAProject_ThenTheyShowByProjectId", async () => {
+      const store = await make();
+      const mine = change({
+        entity: "milestone",
+        entityId: "m1",
+        projectId: "ai",
+        createdAt: at(3),
+      });
+      const settings = change({ createdAt: at(1) });
+      await store.append(mine);
+      await store.append(settings);
+      await store.append(change({ entity: "milestone", entityId: "m2", projectId: "other" }));
+      expect((await store.listForProject("ai")).map((c) => c.id)).toEqual([mine.id, settings.id]);
+      expect((await store.listForProject("other")).map((c) => c.entityId)).toEqual(["m2"]);
+    });
+
     it("GivenGlobalAndProjectChanges_WhenListingGlobalForAnEntity_ThenOnlyItsGlobalOnesNewestFirst", async () => {
       const store = await make();
       const old = change({
