@@ -6,6 +6,7 @@ import {
   RELEASE_NOTE_MAX_CHARS,
   releaseNoteWords,
   firstSentence,
+  labelOf,
   parseReleaseNote,
   stripComments,
 } from "./release-note";
@@ -106,6 +107,23 @@ describe("parseReleaseNote", () => {
   it("GivenAHeadingRightAfterAField_WhenParsed_ThenTheFieldStopsThere", () => {
     const body = "What changed: a\n## Summary\nmore\nHow it works: b";
     expect(parseReleaseNote(body).note?.whatChanged).toBe("a");
+  });
+});
+
+describe("labelOf", () => {
+  it("GivenLabelForms_WhenRead_ThenFieldAndText", () => {
+    expect(labelOf("What changed: a")).toEqual(["whatChanged", "a"]);
+    expect(labelOf("- **How it works**: b")).toEqual(["howItWorks", "b"]);
+    expect(labelOf("**Needs you:** c")).toEqual(["needsYou", "c"]);
+    expect(labelOf("* needs you : d")).toEqual(["needsYou", "d"]);
+    expect(labelOf("What changed a")).toBeNull();
+    expect(labelOf("Nothing: here")).toBeNull();
+  });
+
+  it("GivenManySpacesAfterALabel_WhenRead_ThenFast", () => {
+    const start = performance.now();
+    expect(labelOf(`needs you${" ".repeat(100_000)}x`)).toBeNull();
+    expect(performance.now() - start).toBeLessThan(500);
   });
 });
 

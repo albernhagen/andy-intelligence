@@ -39,14 +39,30 @@ const LABELS: Record<Field, string> = {
   needsYou: "Needs you",
 };
 
-/** `What changed:`, `**What changed:**`, `- **What changed**:` … at the start of a line. */
-const LABEL_LINE =
-  /^\s*(?:[-*]\s+)?(?:\*\*|__)?\s*(what changed|how it works|needs you)\s*(?:\*\*|__)?\s*:\s*(?:\*\*|__)?(.*)$/i;
 const FIELD_BY_LABEL: Record<string, Field> = {
   "what changed": "whatChanged",
   "how it works": "howItWorks",
   "needs you": "needsYou",
 };
+
+const dropBold = (s: string) => (s.startsWith("**") || s.startsWith("__") ? s.slice(2) : s);
+
+/**
+ * `What changed:`, `**What changed:**`, `- **What changed**:` … at the start of a line, read
+ * step by step (no backtracking regex on PR text). Returns the field and the text after it.
+ */
+export function labelOf(line: string): [Field, string] | null {
+  let s = line.trimStart();
+  if ((s.startsWith("- ") || s.startsWith("* ")) && !s.startsWith("**")) s = s.slice(2).trimStart();
+  s = dropBold(s).trimStart();
+  const lower = s.slice(0, 12).toLowerCase();
+  const name = Object.keys(FIELD_BY_LABEL).find((n) => lower.startsWith(n));
+  if (!name) return null;
+  let rest = dropBold(s.slice(name.length).trimStart()).trimStart();
+  if (!rest.startsWith(":")) return null;
+  rest = dropBold(rest.slice(1).trimStart()).trimStart();
+  return [FIELD_BY_LABEL[name]!, rest];
+}
 
 export const releaseNoteWords = (text: string) => text.split(/\s+/).filter(Boolean).length;
 
@@ -88,11 +104,10 @@ function extract(body: string): Partial<Record<Field, string>> {
       continue;
     }
     if (fenced) continue;
-    const label = LABEL_LINE.exec(line);
+    const label = labelOf(line);
     if (label) {
       close();
-      current = FIELD_BY_LABEL[label[1]!.toLowerCase()]!;
-      parts = [label[2] ?? ""];
+      [current, parts] = [label[0], [label[1]]];
       continue;
     }
     if (!current) continue;
