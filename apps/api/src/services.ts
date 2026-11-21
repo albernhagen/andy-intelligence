@@ -22,6 +22,8 @@ import {
   NightLaunches,
   EpicBranches,
   MorningPullRequests,
+  ProjectReadCache,
+  bumpOnWrite,
   type EpicBranchOpener,
 } from "@andy/domain";
 import type { NightLaunchStore, WorkTracker } from "@andy/contracts";
@@ -52,6 +54,8 @@ export interface Services extends Required<ToolServices> {
   dispatchNext: (projectId: string, wakeWaiters?: boolean) => Promise<unknown>;
   /** The Actions OIDC verifier for CI callbacks; null without the GitHub App. */
   verifyActionsToken: ActionsTokenVerifier | null;
+  /** Unchanged board and ticket-list polls served per project version (AI-222); null without versions. */
+  readCache: ProjectReadCache | null;
 }
 
 /** A module's routes: registered from its own file and listed once in `public-routes.ts` or `api-routes.ts`. */
@@ -62,9 +66,15 @@ export function createServices(input: AppDeps): Services {
   const email = input.email
     ? new EmailNotifications({ tracker: input.tracker, ...input.email })
     : null;
-  const deps = email
+  const notified = email
     ? { ...input, tracker: notifyOnNeedsYou(input.tracker, (t) => email.ticketNeedsYou(t)) }
     : input;
+  // AI-222: every write bumps its project's counter, so cached board and list reads stay fresh.
+  const versions = notified.projectVersions;
+  const deps = versions
+    ? { ...notified, ...bumpOnWrite(notified.tracker, notified.runs, versions) }
+    : notified;
+  const readCache = versions ? new ProjectReadCache(versions) : null;
 
   const github = deps.github;
   const now = github?.now ?? (() => new Date());
@@ -246,6 +256,7 @@ export function createServices(input: AppDeps): Services {
     configProposals,
     configRevert,
     night,
+    readCache,
   };
 }
 

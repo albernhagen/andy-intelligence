@@ -229,7 +229,7 @@ export class MorningPullRequests implements MorningPrOpener {
   constructor(
     private readonly tracker: Pick<
       WorkTracker,
-      "getProject" | "getTicket" | "listTickets" | "addComment"
+      "getProject" | "getTicket" | "getTicketByKey" | "addComment"
     >,
     private readonly runs: Pick<RunStore, "listForTicket">,
     private readonly host: MorningPrHost,
@@ -282,11 +282,13 @@ export class MorningPullRequests implements MorningPrOpener {
     const repo = fullName ? await this.host.getRepo(fullName) : null;
     if (!project || !fullName || !repo) return { result: "skipped", reason: "no_repo" };
 
-    const keys = new Set(launch.storyKeys);
-    const stories = (await this.tracker.listTickets(launch.projectId)).filter((t) =>
-      keys.has(t.key),
-    );
-    // One run list per story, at most `NIGHT_LIMITS.maxStories` (ADR-0028).
+    // By key, not the whole project (ADR-0126): one ticket read and one run list per story, at
+    // most `NIGHT_LIMITS.maxStories` (ADR-0028).
+    const stories = (
+      await Promise.all(
+        launch.storyKeys.map((k) => this.tracker.getTicketByKey(launch.projectId, k)),
+      )
+    ).filter((t): t is Ticket => t !== null);
     const runs = (
       await Promise.all(stories.map((t) => this.runs.listForTicket(launch.projectId, t.id)))
     ).flat();
