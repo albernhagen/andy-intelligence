@@ -220,6 +220,68 @@ describe("ModelScoutJob research", () => {
     });
   });
 
+  it("GivenTwoConcurrentCalls_WhenBothRun_ThenOneChangeAndOneResearchCall", async () => {
+    await routing.put(
+      { ...DEFAULT_ROUTING, tiers: { ...DEFAULT_ROUTING.tiers, fast: [OLD] } },
+      null,
+    );
+    const direct = {
+      run: vi.fn(async () => ({
+        kind: "done" as const,
+        run: {} as Run,
+        output: { notes: [{ tier: "fast" as const, note: "Fine." }] },
+      })),
+    };
+    let n = 0;
+    const make = () =>
+      new ModelScoutJob({
+        tracker: { listProjects: async () => [{ id: "ai" } as Project] },
+        runs: { listEndedBetween: async () => ({ runs: endedRuns(), complete: true }) },
+        routing,
+        changes,
+        direct: direct as unknown as ModelScoutDeps["direct"],
+        fetchList: async () => ({ ok: true, data: LIST }),
+        newId: () => `00000000-0000-4000-8000-00000000000${++n}`,
+        now: () => NOW,
+      });
+    const results = await Promise.all([make().run(), make().run()]);
+    expect(results.map((r) => r.outcome).sort()).toEqual(["already_done", "created"]);
+    expect(direct.run).toHaveBeenCalledTimes(1);
+    expect(await changes.listPending()).toHaveLength(1);
+  });
+
+  it("GivenTheChangeIsDecidedBeforeResearchReturns_WhenTheJobRuns_ThenTheDecisionStands", async () => {
+    await routing.put(
+      { ...DEFAULT_ROUTING, tiers: { ...DEFAULT_ROUTING.tiers, fast: [OLD] } },
+      null,
+    );
+    const direct = {
+      run: vi.fn(async () => {
+        const [pending] = await changes.listPending();
+        await changes.decide(pending!.id, "rejected", "andy", NOW.toISOString());
+        return {
+          kind: "done" as const,
+          run: {} as Run,
+          output: { notes: [{ tier: "fast" as const, note: "Late." }] },
+        };
+      }),
+    };
+    const result = await new ModelScoutJob({
+      tracker: { listProjects: async () => [{ id: "ai" } as Project] },
+      runs: { listEndedBetween: async () => ({ runs: endedRuns(), complete: true }) },
+      routing,
+      changes,
+      direct: direct as unknown as ModelScoutDeps["direct"],
+      fetchList: async () => ({ ok: true, data: LIST }),
+      newId: () => "00000000-0000-4000-8000-000000000009",
+      now: () => NOW,
+    }).run();
+    expect(result).toMatchObject({ outcome: "created" });
+    const change = await changes.get("00000000-0000-4000-8000-000000000009");
+    expect(change).toMatchObject({ status: "rejected" });
+    expect(change!.reason).not.toContain("Late.");
+  });
+
   it("GivenTheScoutDoesNotRouteToDirect_WhenTheJobRuns_ThenTheProposalHasNoResearch", async () => {
     const direct = { run: vi.fn(async () => ({ kind: "not_direct" as const, route: null })) };
     const change = await run(direct as unknown as ModelScoutDeps["direct"]);

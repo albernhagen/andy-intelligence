@@ -134,7 +134,10 @@ export interface ModelScoutDeps {
   tracker: Pick<WorkTracker, "listProjects">;
   runs: Pick<RunStore, "listEndedBetween">;
   routing: Pick<RoutingConfigStore, "getGlobal">;
-  changes: Pick<ConfigChangeStore, "createPending" | "latestDecision" | "listPending">;
+  changes: Pick<
+    ConfigChangeStore,
+    "createPending" | "latestDecision" | "listPending" | "appendReason"
+  >;
   /**
    * Research sentences (step 3 of `model-scout.md`): only when the `scout` step routes to
    * `direct`; otherwise, or when the call fails (closed), the proposal goes without them.
@@ -189,12 +192,8 @@ export class ModelScoutJob {
       return { outcome: "no_change", week, unchecked: result.unchecked };
     }
 
-    const scoutProject = this.deps.scoutProjectId ?? SCOUT_PROJECT_ID;
-    const proposal = await this.withResearch(
-      result.proposal,
-      week,
-      projects.some((p) => p.id === scoutProject) ? scoutProject : null,
-    );
+    const { proposal } = result;
+    // Claim the week first: only the call whose change is created goes on to (paid) research.
     const written = await this.deps.changes.createPending(
       ConfigChange.parse({
         id: (this.deps.newId ?? (() => crypto.randomUUID()))(),
@@ -223,27 +222,39 @@ export class ModelScoutJob {
       changeId: written.change.id,
       tiers: proposal.changes.map((c) => `${c.tier}:${c.kind}`),
     });
+    const scoutProject = this.deps.scoutProjectId ?? SCOUT_PROJECT_ID;
+    const research = await this.research(
+      proposal,
+      week,
+      projects.some((p) => p.id === scoutProject) ? scoutProject : null,
+    );
+    if (research) {
+      await this.deps.changes.appendReason(written.change.id, research).catch((err: unknown) =>
+        // Decided before the research came back: the decision stands without it.
+        log("WARNING", "model scout research not added", { week, error: String(err) }),
+      );
+    }
     return { outcome: "created", week, changeId: written.change.id, unchecked: result.unchecked };
   }
 
   /**
-   * The proposal with at most two model-written sentences per tier appended to its reason, when
-   * the `scout` step routes to `direct` and the call succeeds; else the proposal unchanged. The
-   * sentences are untrusted model output, labelled as such; they never change the diff.
+   * At most two model-written sentences per proposed tier, labelled, when the `scout` step routes
+   * to `direct` and the call succeeds; else null. Run only by the call that created the week's
+   * change. Untrusted model output: appended to the reason, never to the diff.
    */
-  private async withResearch(
+  private async research(
     proposal: ScoutProposal,
     week: string,
     projectId: string | null,
-  ): Promise<ScoutProposal> {
+  ): Promise<string | null> {
     const direct = this.deps.direct;
-    if (!direct) return proposal;
+    if (!direct) return null;
     if (projectId === null) {
       log("WARNING", "model scout research skipped: its project doesn't exist", {
         week,
         projectId: this.deps.scoutProjectId ?? SCOUT_PROJECT_ID,
       });
-      return proposal;
+      return null;
     }
     const changes = proposal.changes.map((c) => ({
       tier: c.tier,
@@ -273,27 +284,20 @@ export class ModelScoutJob {
         week,
         error: String(err),
       });
-      return proposal;
+      return null;
     }
-    if (outcome.kind === "not_direct") return proposal;
+    if (outcome.kind === "not_direct") return null;
     if (outcome.kind === "failed") {
       log("WARNING", "model scout research failed; proposing without it", {
         week,
         reason: outcome.reason,
       });
-      return proposal;
+      return null;
     }
     const tiers = new Set(proposal.changes.map((c) => c.tier));
     const notes = outcome.output.notes.filter((n) => tiers.has(n.tier));
-    if (notes.length === 0) return proposal;
-    const research = notes.map((n) => `${n.tier}: ${n.note}`).join("\n");
-    return {
-      ...proposal,
-      reason: `${proposal.reason}\n\nResearch (model-written, unverified):\n${research}`.slice(
-        0,
-        2000,
-      ),
-    };
+    if (notes.length === 0) return null;
+    return `Research (model-written, unverified):\n${notes.map((n) => `${n.tier}: ${n.note}`).join("\n")}`;
   }
 
   /** This week's scout change, pending or decided; null when it hasn't proposed one. */
@@ -341,8 +345,8 @@ export interface ModelScoutRouteDeps {
 export function registerModelScout(app: Hono<AuthEnv>, deps: ModelScoutRouteDeps): void {
   const now = deps.now ?? (() => new Date());
   let hour = "";
-  // One scout call at a time per instance: a scheduler retry or a manual run that overlaps the
-  // first must not pay for research twice (cross-instance overlap: R-AI-268).
+  // One scout call at a time per instance, so an overlapping retry doesn't fetch twice. Paid
+  // research is guarded by the week's claim (only the call that creates the change researches).
   let running = false;
   let calls = 0;
   app.post(MODEL_SCOUT_PATH, async (c) => {
