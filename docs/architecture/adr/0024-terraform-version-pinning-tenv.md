@@ -1,4 +1,5 @@
 ---
+title: Pin Terraform with `.terraform-version`; manage it with tenv
 status: accepted
 date: 2026-10-22
 ---

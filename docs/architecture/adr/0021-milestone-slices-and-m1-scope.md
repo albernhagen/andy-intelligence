@@ -1,4 +1,5 @@
 ---
+title: Milestones built as slices; M1 scope cuts
 status: accepted, amended by 0040, 0049, 0050, 0060
 date: 2026-10-22
 ---

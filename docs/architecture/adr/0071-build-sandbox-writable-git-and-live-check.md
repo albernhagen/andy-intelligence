@@ -1,4 +1,5 @@
 ---
+title: "Build sandbox: writable `.git`, live Bash check first, no placeholders"
 status: accepted
 date: 2026-11-06
 amends: 0063 (Bash containment, Change out)
