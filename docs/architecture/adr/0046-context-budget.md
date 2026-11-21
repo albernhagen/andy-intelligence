@@ -1,6 +1,6 @@
 ---
 title: "Context budget: small always-loaded docs, everything else on demand"
-status: accepted, amended by 0061
+status: accepted, amended by 0061, 0104
 date: 2026-11-03
 amends: 0022
 ---

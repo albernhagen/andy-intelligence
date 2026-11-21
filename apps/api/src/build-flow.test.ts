@@ -896,10 +896,8 @@ describe("build run flow", () => {
     // AI-69: Conflict-aware dispatch (ADR-0080).
     it("GivenOverlappingReadyTickets_WhenDispatched_ThenOnlyTheFirstStartsTheInFlightViewShowsItAndEachBuildReservesTheNextAdrNumber", async () => {
       const f = await setup();
-      f.t.host.files.set(
-        "docs/architecture/adr/README.md",
-        "| [0079](0079-dispatch-caps.md) | Dispatch caps | accepted |\n| [0082](0082-worker-role.md) | Worker role | accepted |",
-      );
+      f.t.host.files.set("docs/architecture/adr/0079-dispatch-caps.md", "Dispatch caps");
+      f.t.host.files.set("docs/architecture/adr/0082-worker-role.md", "Worker role");
       const p = await f.project("AI", REPO, { runsAtOnce: 3 });
       // A sibling build already in flight, holding ADR-0085 and touching only the runbooks.
       const siblingAdr = await f.t.tracker.reserveAdrNumber(p, 84);
