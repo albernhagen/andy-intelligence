@@ -21,6 +21,7 @@ import {
   notifyOnNeedsYou,
   NightLaunches,
   EpicBranches,
+  MorningPullRequests,
   ProjectReadCache,
   bumpOnWrite,
   type EpicBranchOpener,
@@ -170,6 +171,16 @@ export function createServices(input: AppDeps): Services {
           now,
           undefined,
           connection ? connectedEpicBranches(connection, deps.tracker, deps.nightLaunches) : null,
+          // AI-124: when a launch ends, its morning PR opens (or an empty epic branch goes).
+          connection && deps.github
+            ? new MorningPullRequests(
+                deps.tracker,
+                deps.runs,
+                new ConnectedCodeHost(connection),
+                deps.github.publicUrl,
+                service,
+              )
+            : null,
         ),
         store: deps.nightLaunches,
         tracker: deps.tracker,

@@ -45,6 +45,15 @@ export async function mcpToolNames(
   grants: InMemoryOAuthGrantStore,
   url: string,
 ): Promise<string[]> {
+  return (await mcpTools(app, grants, url)).map((t) => t.name);
+}
+
+/** Every MCP tool the app serves (name and description), in the order `tools/list` gives. */
+export async function mcpTools(
+  app: { fetch: (req: Request) => Response | Promise<Response> },
+  grants: InMemoryOAuthGrantStore,
+  url: string,
+): Promise<{ name: string; description: string }[]> {
   const token = newToken();
   await grants.put(hashToken(token), {
     kind: "access",
@@ -66,5 +75,5 @@ export async function mcpToolNames(
     }),
   );
   const { tools } = await client.listTools();
-  return tools.map((t) => t.name);
+  return tools.map((t) => ({ name: t.name, description: t.description ?? "" }));
 }

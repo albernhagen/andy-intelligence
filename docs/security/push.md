@@ -1,6 +1,6 @@
 # Threat model: Web Push
 
-Push subscriptions for the installed web app (M7: Mobile, ADR-0052). Risk register: [threat-model.md](threat-model.md) (R-AI-177, its row waits for AI-144: one file per risk). PRs that change this area update this file. Today only storage exists (AI-177: M7.7: PushSubscriptionStore port): nothing sends, no route accepts a subscription.
+Push subscriptions for the installed web app (M7: Mobile, ADR-0052). Risk: [R-AI-177](risks/R-AI-177.md). PRs that change this area update this file. Built: storage (AI-177: M7.7: PushSubscriptionStore port) and the sender (AI-178: M7.9: web-push sender, `apps/api/src/push-sender.ts`). Nothing calls the sender until M7.13: Push notices, it is off until the VAPID keys exist (AI-179: M7.10), and no route accepts a subscription yet.
 
 ## Credentials stored
 
@@ -11,14 +11,13 @@ Push subscriptions for the installed web app (M7: Mobile, ADR-0052). Risk regist
 
 Never logged, never in a notice or the UI: the endpoint and keys stay in the store and the sender (AI-178: M7.9).
 
-## Risk R-AI-177: push subscriptions
+## Outbound requests (AI-178)
 
-**Risk:** The endpoint is client-supplied, so a send to it is an outbound call to an arbitrary URL (SSRF) unless checked. A leaked endpoint and keys plus the VAPID key let someone push to Andy's phone. `save` replaces a subscription by endpoint whoever holds it, so a route that took the uid from the request could move or silence another user's device.
+The sender POSTs to each subscription's `endpoint`, a URL the client chose. Unchecked, a stored endpoint could aim signed requests at an internal host (SSRF).
 
-**Mitigation / next step:**
-
-- Built (AI-177): endpoint must be `https`, ≤ 2,048 characters; keys base64url; at most 10 subscriptions per user (least recently used evicted), 50 per read; stored only.
-- AI-185: M7.11: accept only endpoints on the push-service host allow-list (Apple, Google, Mozilla, Microsoft), checked again before every send; the uid comes from the session, never the body, with a test.
-- AI-192: M7.13: delete a subscription on 404/410 or when off the allow-list; `deleteAllForUid` when a user leaves the sign-in allow-list.
-- AI-179: M7.10: VAPID private key in Secret Manager.
-- Severity: low (no route or sender yet). Status: open until AI-185 lands.
+- **Host allow-list in the sender:** only `fcm.googleapis.com`, `push.apple.com`, `push.services.mozilla.com`, `notify.windows.com` and their subdomains, https on the default port, no credentials in the URL (`isPushServiceEndpoint`, `packages/contracts`). Anything else is refused before any work. The subscribe API (M7.11) checks the same list when storing.
+- **No redirects** (`redirect: "error"`), so an allowed host can't bounce the request elsewhere.
+- **Caps (ADR-0028):** 10 s timeout, payload ≤ 3072 bytes, TTL ≤ 1 day, ≤ 60 sends per instance per hour.
+- **Logs:** the push service's host and status only; the endpoint path identifies a device and is never logged.
+- **Payload:** encrypted per subscription (aes128gcm); content rules (no agent text) are M7.8: Push policy's.
+- **VAPID key:** signs every request; a leaked key alone reaches no device (a push also needs a stored subscription). Read from env `VAPID_PRIVATE_KEY`; where it lives and how to rotate: AI-179.

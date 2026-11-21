@@ -31,7 +31,7 @@ What is built on `main` now. Target design: [ARCHITECTURE.md](docs/architecture/
 | [`docs/build-log.md`](docs/build-log.md)                                 | Slice → ticket map (status: tickets in project `AI`), pending decisions, blockers (history: `docs/build-log/`) |
 | [`docs/product/brief.md`](docs/product/brief.md)                         | Project brief for project `AI`: idea, users, vision, goals, architectural expectations (ADR-0053)              |
 | [`docs/features/`](docs/features/)                                       | Shipped features, one file each, and how to use them                                                           |
-| [`docs/security/threat-model.md`](docs/security/threat-model.md)         | Threat model and open security risks                                                                           |
+| [`docs/security/threat-model.md`](docs/security/threat-model.md)         | Threat model; risks: `docs/security/risks/`, `pnpm risks`                                                      |
 | [`docs/runbooks/`](docs/runbooks/)                                       | Manual steps (setup, secrets, apply)                                                                           |
 | [`AGENTS.md`](AGENTS.md)                                                 | Rules for agents working in this repo (`CLAUDE.md` symlink)                                                    |
 | [`docs/BUILD-PROMPT.md`](docs/BUILD-PROMPT.md)                           | Session prompt for the building agent                                                                          |
@@ -52,6 +52,7 @@ pnpm format      # prettier --write
 pnpm context:check   # agent-loaded docs within their size budgets (ADR-0046)
 pnpm adr             # ADR index, from each ADR's frontmatter
 pnpm features        # features table
+pnpm reference       # every MCP tool and API route, from the code
 pnpm test:firestore  # Firestore adapters on the emulator (Java 21+; CI runs them on adapter changes, ADR-0048)
 node apps/local-runner/dist/main.js login|start|check-settings  # local runner (macOS, after pnpm build)
 scripts/sandbox-lab/run.sh  # build sandbox in Docker; CI job sandbox-self-test runs it on executor changes (runbook agent-runs.md §9a)
@@ -74,7 +75,7 @@ Run watchdog (M1.6b: Claude Code executor: watchdog + retry): on when `PUBLIC_UR
 
 Needs-you email (AI-77): on when `RESEND_API_KEY`, `EMAIL_FROM` and `EMAIL_TO` are set (Terraform, with `email_enabled`); else off, logged once. Flushes ride the `run-watchdog` queue. Setup: [`docs/runbooks/email-notifications.md`](docs/runbooks/email-notifications.md).
 
-Each MCP tool module (`apps/api/src/mcp/tools-*.ts`) has one sorted line in `tool-groups.ts`; each route module exports `apiRoutes` or `publicRoutes`, one sorted line in `api-routes.ts` or `public-routes.ts` (AI-145). Tools call the same `TicketService` as the REST API.
+Each MCP tool module (`apps/api/src/mcp/tools-*.ts`) has one sorted line in `tool-groups.ts`; each route module exports `apiRoutes` or `publicRoutes`, one sorted line in `api-routes.ts` or `public-routes.ts` (AI-145). Tools call the same `TicketService` as the REST API. `pnpm reference` lists every tool and route.
 
 GitHub (ADR-0043: GitHub App setup from the UI) is on when `PUBLIC_URL` is set: connect it from `/settings/github`. The App's key and webhook secret live in Secret Manager (written by the API, read at runtime); CI jobs get repo tokens from `POST /github/token` with their Actions OIDC token. Locally without `PUBLIC_URL`, repos on projects are only format-checked. Setup: [`docs/runbooks/github-app.md`](docs/runbooks/github-app.md).
 
