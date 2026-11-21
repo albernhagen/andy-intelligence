@@ -16,7 +16,7 @@ import {
   InMemoryWorkTracker,
 } from "@andy/contracts";
 import { TicketService } from "@andy/domain";
-import { createApp } from "@andy/api/app";
+import { createApp, ownerOnlyAccess } from "@andy/api/app";
 import { ApiContext, createApi } from "@/lib/api";
 import { makeRouter } from "@/router";
 
@@ -62,6 +62,7 @@ export function renderApp(
     },
   ]);
   const app = createApp({
+    projectAccess: ownerOnlyAccess(),
     verifier: {
       async verify(token) {
         if (token !== "andy-token") throw new Error("bad token");

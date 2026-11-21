@@ -24,6 +24,8 @@ import type { CodeHostFactory } from "./github/connection";
 import type { ActionsTokenVerifier } from "./github/token";
 import type { ClientMetadataResolver } from "./mcp";
 import { requireProjectAccess, type ProjectAccess } from "./project-access";
+// Callers outside the package (web tests, e2e, gen:api) pass today's rule explicitly.
+export { ownerOnlyAccess } from "./project-access";
 import * as publicRoutes from "./public-routes";
 import { createServices, type RouteModule } from "./services";
 import type { InvokerTokenVerifier } from "./watchdog";
