@@ -1,12 +1,14 @@
 import { TicketKey, notFound, projectIdFor, type EventActor } from "@andy/contracts";
-import type { MiddlewareHandler } from "hono";
+import type { Context, MiddlewareHandler } from "hono";
+import { matchedRoutes } from "hono/route";
 import { actorOf, type AuthEnv } from "./auth";
 
 /**
  * One project-access check for every API route and MCP tool that names a project (AI-252: M8.3).
  * A project the caller can't read looks the same as one that doesn't exist: 404 on the API, a
- * "not found" tool error on MCP, never 403. Cross-project routes and tools are listed in
- * `registries.test.ts` (M8.7 filters them). Today every allow-listed caller is the owner.
+ * "not found" tool error on MCP, never 403. A route or tool names its project in its path or
+ * input; the rest are listed below as cross-project (M8.7 filters them), and anything else is
+ * refused (fail closed). Today every allow-listed caller is the owner.
  */
 export interface ProjectAccess {
   canRead(actor: EventActor, projectId: string): Promise<boolean>;
@@ -14,6 +16,49 @@ export interface ProjectAccess {
 
 /** Today's rule: one owner, so every signed-in (allow-listed) caller reads every project. */
 export const ALLOW_SIGNED_IN: ProjectAccess = { canRead: () => Promise.resolve(true) };
+
+/**
+ * `/api` routes that name no project in their path, each with how M8.7 (cross-project lists per
+ * member) will filter it. Any other route without a project in its path is refused.
+ */
+export const CROSS_PROJECT_ROUTES: Readonly<Record<string, string>> = {
+  "GET /api/config-changes": "Pending changes of every project: keep readable projects.",
+  "GET /api/dashboard": "Every project's counts: keep readable projects.",
+  "GET /api/github": "GitHub App connection: owner only.",
+  "GET /api/github/manifest": "GitHub App setup: owner only.",
+  "GET /api/me": "The caller's own identity: nothing to filter.",
+  "GET /api/needs-you": "Every project's inbox: keep readable projects.",
+  "GET /api/notify/email": "Needs-you email setting: owner only.",
+  "GET /api/project-plans/waiting": "Every project's waiting plan: keep readable projects.",
+  "GET /api/projects": "Every project: keep readable projects.",
+  "GET /api/quota": "Subscription quota: owner only.",
+  "GET /api/runners": "Local runners: owner only.",
+  "POST /api/config-changes/:changeId/accept": "Check the change's project.",
+  "POST /api/config-changes/:changeId/reject": "Check the change's project.",
+  "POST /api/github/connect": "GitHub App setup: owner only.",
+  "POST /api/notify/email/test": "Needs-you email: owner only.",
+  "POST /api/oauth/approve": "The caller's own MCP grant: nothing to filter.",
+  "POST /api/projects": "Creates a project: owner only.",
+  "POST /api/questions/:questionId/answer": "Check the question's ticket's project.",
+  "POST /api/quota/clear": "Subscription quota: owner only.",
+  "POST /api/runners": "Local runners: owner only.",
+  "POST /api/runners/:runnerId/revoke": "Local runners: owner only.",
+};
+
+/**
+ * MCP tools that may run without naming a project (an optional `project` or `ticket` given is
+ * still checked). Any other tool called without one is refused.
+ */
+export const CROSS_PROJECT_TOOLS: Readonly<Record<string, string>> = {
+  accept_config_change: "Check the change's project.",
+  answer_question: "Check the question's ticket's project.",
+  clear_quota_idle: "Subscription quota: owner only.",
+  list_config_changes: "Without `project`, every project's changes: keep readable projects.",
+  list_needs_me: "Every project's inbox: keep readable projects.",
+  list_projects: "Every project: keep readable projects.",
+  reject_config_change: "Check the change's project.",
+  status: "Without `ticket`, every project's counts: keep readable projects.",
+};
 
 /** What a refused lookup names, and the body an unknown one gets. */
 export interface ProjectTarget {
@@ -35,25 +80,26 @@ export function projectOfPath(path: string): ProjectTarget | null {
 }
 
 /**
- * MCP input fields that hold ticket keys (one, or a list). `registries.test.ts` fails when a tool
- * takes a ticket key in any other field.
+ * Input fields (MCP tool input, API request body) that hold ticket keys, one or a list.
+ * `registries.test.ts` fails when a tool takes a ticket key in any other field.
  */
 export const TICKET_KEY_FIELDS = ["ticket", "parent", "parentId", "blockedBy", "above", "below"];
 
 /**
- * The projects a tool's parsed input names: its `project`, and the prefix of every ticket key in
- * a `TICKET_KEY_FIELDS` field. A value that isn't a key (a ticket id, null) names nothing.
+ * The projects an input (MCP tool input or API request body) names: its `project`, and the
+ * prefix of every ticket key in a `TICKET_KEY_FIELDS` field. A value that isn't a key (a ticket
+ * id, which only ever resolves in the path's own project, or null) names nothing.
  */
-export function projectsOfToolInput(args: unknown): ProjectTarget[] {
-  if (typeof args !== "object" || args === null) return [];
-  const input = args as Record<string, unknown>;
+export function projectsOfInput(input: unknown): ProjectTarget[] {
+  if (typeof input !== "object" || input === null || Array.isArray(input)) return [];
+  const fields = input as Record<string, unknown>;
   const targets: ProjectTarget[] = [];
-  if (typeof input.project === "string") {
-    const project = input.project;
+  if (typeof fields.project === "string") {
+    const project = fields.project;
     targets.push({ projectId: projectIdFor(project), error: `project ${project} not found` });
   }
   for (const field of TICKET_KEY_FIELDS) {
-    const value = input[field];
+    const value = fields[field];
     for (const key of Array.isArray(value) ? value : [value]) {
       const target = typeof key === "string" ? ticketTarget(key) : null;
       if (target) targets.push(target);
@@ -62,17 +108,28 @@ export function projectsOfToolInput(args: unknown): ProjectTarget[] {
   return targets;
 }
 
-/** Refuses an `/api` request for a project the caller can't read, with the unknown-one 404. */
+/**
+ * The `/api` check, after sign-in and the body cap. A route whose path names a project checks it,
+ * and every project its JSON body names; a refusal is that thing's unknown-one 404. A route with
+ * no project in its path passes only when listed in `CROSS_PROJECT_ROUTES`; any other is refused
+ * with 404 (fail closed). A path no route matches falls through to the router's 404.
+ */
 export function requireProjectAccess(
   access: ProjectAccess = ALLOW_SIGNED_IN,
 ): MiddlewareHandler<AuthEnv> {
   return async (c, next) => {
-    const target = projectOfPath(c.req.path);
-    if (!target) return next();
+    const route = matchedRoute(c.req.method, matchedRoutes(c));
+    if (!route) return next();
     const actor = actorOf(c.get("identity"));
-    if (await access.canRead(actor, target.projectId)) return next();
-    logRefusal("api", actor, target.projectId);
-    return c.json({ error: target.error }, 404);
+    // A malformed ticket key names no project; its route still answers it (404) as before.
+    const pathTarget = projectOfPath(c.req.path);
+    if (!isProjectRoute(route) && !(route in CROSS_PROJECT_ROUTES)) {
+      log("ERROR", "route has no project scope", { actor, route });
+      return c.json({ error: "not found" }, 404);
+    }
+    const targets = [...(pathTarget ? [pathTarget] : []), ...projectsOfInput(await jsonBody(c))];
+    const refused = await refusedTarget(access, actor, targets, "api");
+    return refused ? c.json({ error: refused.error }, 404) : next();
   };
 }
 
@@ -81,14 +138,33 @@ export async function refusedTarget(
   access: ProjectAccess,
   actor: EventActor,
   targets: ProjectTarget[],
+  via: "api" | "mcp" = "mcp",
 ): Promise<ProjectTarget | null> {
   for (const target of targets) {
     if (!(await access.canRead(actor, target.projectId))) {
-      logRefusal("mcp", actor, target.projectId);
+      log("WARNING", "project access refused", { via, actor, projectId: target.projectId });
       return target;
     }
   }
   return null;
+}
+
+/** True for a route pattern under `/api/projects/:projectId` or `/api/tickets/:key`. */
+export function isProjectRoute(route: string): boolean {
+  return /^[A-Z]+ \/api\/(projects\/:projectId|tickets\/:key)(\/|$)/.test(route);
+}
+
+/** The handler route a request matched, as `METHOD /pattern`; null when only middleware did. */
+function matchedRoute(method: string, routes: { method: string; path: string }[]): string | null {
+  const handler = routes.findLast((r) => r.method === method && !r.path.endsWith("*"));
+  return handler ? `${handler.method} ${handler.path}` : null;
+}
+
+/** A write's JSON body (Hono caches it for the route's validator); null when there is none. */
+async function jsonBody(c: Context): Promise<unknown> {
+  if (c.req.method === "GET" || c.req.method === "HEAD") return null;
+  if (!c.req.header("content-type")?.includes("application/json")) return null;
+  return c.req.json().catch(() => null);
 }
 
 function ticketTarget(key: string): ProjectTarget | null {
@@ -107,16 +183,7 @@ function decode(segment: string): string {
   }
 }
 
-/** WARNING with the actor (`user:<uid>`) and project; never the email (ADR-0015). */
-function logRefusal(via: "api" | "mcp", actor: EventActor, projectId: string): void {
-  console.log(
-    JSON.stringify({
-      severity: "WARNING",
-      message: "project access refused",
-      component: "project-access",
-      via,
-      actor,
-      projectId,
-    }),
-  );
+/** A structured log line; refusals carry the actor (`user:<uid>`), never the email (ADR-0015). */
+function log(severity: "WARNING" | "ERROR", message: string, fields: Record<string, unknown>) {
+  console.log(JSON.stringify({ severity, message, component: "project-access", ...fields }));
 }

@@ -18,7 +18,8 @@ import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import type { NightDeps } from "../night";
 import {
   ALLOW_SIGNED_IN,
-  projectsOfToolInput,
+  CROSS_PROJECT_TOOLS,
+  projectsOfInput,
   refusedTarget,
   type ProjectAccess,
 } from "../project-access";
@@ -90,30 +91,47 @@ export function registerTools(server: McpServer, deps: ToolDeps): void {
 type ToolCallback = (...args: unknown[]) => unknown;
 
 /**
- * The server every tool group registers on (AI-252: M8.3): a tool whose input names a `project`
- * or a `ticket` (its key's prefix is the project) checks the caller may read that project before
- * its handler runs; a refusal is the same "not found" an unknown one gets. Tools without input
- * are cross-project (listed in `registries.test.ts`).
+ * The server every tool group registers on (AI-252: M8.3). Before a handler runs, every project
+ * its input names (`project`, and each ticket key's prefix) is checked; a refusal is the same "not
+ * found" an unknown one gets. A call that names no project runs only for a tool listed in
+ * `CROSS_PROJECT_TOOLS`; any other is refused (fail closed).
  */
-function withProjectAccess(server: McpServer, access: ProjectAccess, actor: EventActor): McpServer {
+export function withProjectAccess(
+  server: McpServer,
+  access: ProjectAccess,
+  actor: EventActor,
+): McpServer {
   const checked = Object.create(server) as McpServer;
   const register = server.registerTool.bind(server) as (
     name: string,
     config: { inputSchema?: unknown },
     cb: ToolCallback,
   ) => unknown;
-  const guarded = (name: string, config: { inputSchema?: unknown }, cb: ToolCallback) => {
-    if (!config.inputSchema) return register(name, config, cb);
-    return register(name, config, async (args: unknown, ...rest: unknown[]) => {
-      const refused = await refusedTarget(access, actor, projectsOfToolInput(args));
-      if (refused)
-        return run(() => Promise.reject(new WorkTrackerError("not_found", refused.error)));
-      return cb(args, ...rest);
+  const guarded = (name: string, config: { inputSchema?: unknown }, cb: ToolCallback) =>
+    // A tool without input gets only `extra`; one with input gets its parsed args first.
+    register(name, config, async (...callArgs: unknown[]) => {
+      const targets = config.inputSchema ? projectsOfInput(callArgs[0]) : [];
+      if (targets.length === 0 && !(name in CROSS_PROJECT_TOOLS)) {
+        console.error(
+          JSON.stringify({
+            severity: "ERROR",
+            component: "project-access",
+            message: "tool has no project scope",
+            tool: name,
+            actor,
+          }),
+        );
+        return refuse("not found");
+      }
+      const refused = await refusedTarget(access, actor, targets);
+      return refused ? refuse(refused.error) : cb(...callArgs);
     });
-  };
   checked.registerTool = guarded as unknown as McpServer["registerTool"];
   return checked;
 }
+
+const refuse = (error: string) =>
+  run(() => Promise.reject(new WorkTrackerError("not_found", error)));
 
 /**
  * Rule violations and not-found/conflict come back as tool errors Claude can read and act on.

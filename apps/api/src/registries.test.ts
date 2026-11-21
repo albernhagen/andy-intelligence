@@ -7,7 +7,13 @@ import { describe, expect, it } from "vitest";
 import * as apiRoutes from "./api-routes";
 import * as toolGroups from "./mcp/tool-groups";
 import { hashToken, newToken } from "./mcp/tokens";
-import { projectOfPath, TICKET_KEY_FIELDS } from "./project-access";
+import {
+  CROSS_PROJECT_ROUTES,
+  CROSS_PROJECT_TOOLS,
+  isProjectRoute,
+  projectOfPath,
+  TICKET_KEY_FIELDS,
+} from "./project-access";
 import * as publicRoutes from "./public-routes";
 import { fullApp, registrySnapshot } from "./registry-snapshot";
 
@@ -203,46 +209,10 @@ describe("code registries (AI-145)", () => {
 
 /**
  * AI-252: M8.3: every `/api` route and MCP tool that names a project goes through the one
- * project-access check (`project-access.ts`). The rest don't name one; each is listed here with
- * how M8.7 (cross-project lists per member) will filter it. A new route or tool must be one or
- * the other.
+ * project-access check (`project-access.ts`). The rest are listed there (`CROSS_PROJECT_ROUTES`,
+ * `CROSS_PROJECT_TOOLS`) with how M8.7 will filter each; at runtime anything else is refused, and
+ * these tests catch it first.
  */
-const CROSS_PROJECT_ROUTES: Record<string, string> = {
-  "GET /api/config-changes": "Pending changes of every project: keep readable projects.",
-  "GET /api/dashboard": "Every project's counts: keep readable projects.",
-  "GET /api/github": "GitHub App connection: owner only.",
-  "GET /api/github/manifest": "GitHub App setup: owner only.",
-  "GET /api/me": "The caller's own identity: nothing to filter.",
-  "GET /api/needs-you": "Every project's inbox: keep readable projects.",
-  "GET /api/notify/email": "Needs-you email setting: owner only.",
-  "GET /api/project-plans/waiting": "Every project's waiting plan: keep readable projects.",
-  "GET /api/projects": "Every project: keep readable projects.",
-  "GET /api/quota": "Subscription quota: owner only.",
-  "GET /api/runners": "Local runners: owner only.",
-  "POST /api/config-changes/:changeId/accept": "Check the change's project.",
-  "POST /api/config-changes/:changeId/reject": "Check the change's project.",
-  "POST /api/github/connect": "GitHub App setup: owner only.",
-  "POST /api/notify/email/test": "Needs-you email: owner only.",
-  "POST /api/oauth/approve": "The caller's own MCP grant: nothing to filter.",
-  "POST /api/projects": "Creates a project: owner only.",
-  "POST /api/questions/:questionId/answer": "Check the question's ticket's project.",
-  "POST /api/quota/clear": "Subscription quota: owner only.",
-  "POST /api/runners": "Local runners: owner only.",
-  "POST /api/runners/:runnerId/revoke": "Local runners: owner only.",
-};
-
-/** Tools with no required `project` or `ticket` input (an optional one is still checked). */
-const CROSS_PROJECT_TOOLS: Record<string, string> = {
-  accept_config_change: "Check the change's project.",
-  answer_question: "Check the question's ticket's project.",
-  clear_quota_idle: "Subscription quota: owner only.",
-  list_config_changes: "Without `project`, every project's changes: keep readable projects.",
-  list_needs_me: "Every project's inbox: keep readable projects.",
-  list_projects: "Every project: keep readable projects.",
-  reject_config_change: "Check the change's project.",
-  status: "Without `ticket`, every project's counts: keep readable projects.",
-};
-
 /** A concrete path for a route pattern: a ticket key for `:key`, "x" for other params. */
 const samplePath = (pattern: string) => pattern.replace(":key", "AI-1").replace(/:[^/]+/g, "x");
 
@@ -283,7 +253,8 @@ describe("project-access registry (AI-252)", () => {
   it("GivenEveryFeatureOn_WhenApiRoutesAreListed_ThenEachIsProjectCheckedOrListedAsCrossProject", async () => {
     const { routes } = await registrySnapshot();
     const api = [...new Set(routes.filter((r) => r.includes(" /api/") && !r.includes("*")))];
-    const checked = (route: string) => projectOfPath(samplePath(route.split(" ")[1]!)) !== null;
+    const checked = (route: string) =>
+      isProjectRoute(route) && projectOfPath(samplePath(route.split(" ")[1]!)) !== null;
     expect(api.filter((r) => checked(r)).length).toBeGreaterThan(40);
     expect(api.filter((r) => !checked(r) && !(r in CROSS_PROJECT_ROUTES))).toEqual([]);
     const listed = Object.keys(CROSS_PROJECT_ROUTES);

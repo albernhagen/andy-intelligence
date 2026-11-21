@@ -3,16 +3,17 @@ import { Hono } from "hono";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { z } from "zod";
 import type { AppDeps } from "./app";
 import type { AuthEnv, TokenVerifier } from "./auth";
 import * as toolGroups from "./mcp/tool-groups";
 import { mcpCaller } from "./mcp/test-client";
 import { hashToken, newToken } from "./mcp/tokens";
-import { registerTools, run, type ToolDeps, type ToolGroup } from "./mcp/tools";
+import { registerTools, run, withProjectAccess, type ToolDeps, type ToolGroup } from "./mcp/tools";
 import {
   ALLOW_SIGNED_IN,
   projectOfPath,
-  projectsOfToolInput,
+  projectsOfInput,
   requireProjectAccess,
   type ProjectAccess,
 } from "./project-access";
@@ -112,35 +113,30 @@ describe("projectOfPath (AI-252)", () => {
   });
 });
 
-describe("projectsOfToolInput (AI-252)", () => {
+describe("projectsOfInput (AI-252)", () => {
   it("GivenAProjectOrTicketInput_WhenRead_ThenEachProjectIsNamed", () => {
-    expect(projectsOfToolInput({ project: "AI" })).toEqual([
+    expect(projectsOfInput({ project: "AI" })).toEqual([
       { projectId: "ai", error: "project AI not found" },
     ]);
-    expect(projectsOfToolInput({ ticket: "OPS-7" })).toEqual([
+    expect(projectsOfInput({ ticket: "OPS-7" })).toEqual([
       { projectId: "ops", error: "ticket not found: OPS-7" },
     ]);
-    expect(projectsOfToolInput({ project: "AI", ticket: "OPS-7" }).map((t) => t.projectId)).toEqual(
-      ["ai", "ops"],
-    );
+    expect(projectsOfInput({ project: "AI", ticket: "OPS-7" }).map((t) => t.projectId)).toEqual([
+      "ai",
+      "ops",
+    ]);
   });
 
   it("GivenOtherTicketKeyFields_WhenRead_ThenEachKeysProjectIsNamed", () => {
     const input = { ticket: "AI-1", parent: "OPS-2", blockedBy: ["WEB-3", "AI-4"], above: "X-5" };
-    expect(projectsOfToolInput(input).map((t) => t.projectId)).toEqual([
-      "ai",
-      "ops",
-      "web",
-      "ai",
-      "x",
-    ]);
-    expect(projectsOfToolInput({ parentId: "t-123", parent: null })).toEqual([]);
+    expect(projectsOfInput(input).map((t) => t.projectId)).toEqual(["ai", "ops", "web", "ai", "x"]);
+    expect(projectsOfInput({ parentId: "t-123", parent: null })).toEqual([]);
   });
 
   it("GivenInputWithoutAProjectOrTicket_WhenRead_ThenNothingIsNamed", () => {
-    expect(projectsOfToolInput(undefined)).toEqual([]);
-    expect(projectsOfToolInput({ questionId: "q1" })).toEqual([]);
-    expect(projectsOfToolInput({ ticket: "not a key" })).toEqual([]);
+    expect(projectsOfInput(undefined)).toEqual([]);
+    expect(projectsOfInput({ questionId: "q1" })).toEqual([]);
+    expect(projectsOfInput({ ticket: "not a key" })).toEqual([]);
   });
 });
 
@@ -153,9 +149,27 @@ describe("requireProjectAccess (AI-252)", () => {
       await next();
     });
     app.use("/api/*", requireProjectAccess(access));
-    app.all("*", handler);
+    app.get("/api/projects/:projectId/board", handler);
+    app.get("/api/me", handler);
+    app.get("/api/unlisted", handler);
     return { app, handler };
   }
+
+  it("GivenARouteWithNoProjectInItsPathThatIsNotListed_WhenCalled_ThenRefusedWithoutItsHandler", async () => {
+    const error = vi.spyOn(console, "log").mockImplementation(() => undefined);
+    const { app, handler } = miniApp(ALLOW_SIGNED_IN);
+    const res = await app.request("http://localhost/api/unlisted");
+    expect(res.status).toBe(404);
+    expect(await res.json()).toEqual({ error: "not found" });
+    expect(handler).not.toHaveBeenCalled();
+    expect(String(error.mock.calls[0]?.[0])).toContain("route has no project scope");
+  });
+
+  it("GivenAListedCrossProjectRoute_WhenCalled_ThenItsHandlerRuns", async () => {
+    const { app, handler } = miniApp(recordingAccess().access);
+    expect((await app.request("http://localhost/api/me")).status).toBe(201);
+    expect(handler).toHaveBeenCalledOnce();
+  });
 
   it("GivenTodaysAllowAll_WhenAProjectRouteIsCalled_ThenTheHandlersResponseIsUnchanged", async () => {
     const { app, handler } = miniApp(ALLOW_SIGNED_IN);
@@ -200,6 +214,39 @@ describe("API routes behind the project-access check (AI-252)", () => {
     expect(asked.every(([actor, projectId]) => actor === ANDY && projectId === "ai")).toBe(true);
     // No handler ran: the POST to create a ticket created nothing.
     expect(await tracker.listTickets("ai")).toEqual([]);
+  });
+
+  it("GivenABodyKeyFromAnUnreadableProject_WhenATicketIsCreatedOrEdited_ThenTheUnknownTicket404AndNothingWritten", async () => {
+    vi.spyOn(console, "log").mockImplementation(() => undefined);
+    const access: ProjectAccess = {
+      canRead: (_, projectId) => Promise.resolve(projectId !== "ops"),
+    };
+    const { app, tracker } = await seededApp({ projectAccess: access });
+    const write = (method: string, path: string, body: unknown) =>
+      app.request(`http://localhost${path}`, {
+        method,
+        headers: { "content-type": "application/json", authorization: "Bearer andy" },
+        body: JSON.stringify(body),
+      });
+    const created = await write("POST", "/api/projects/ai/tickets", {
+      title: "Readable",
+      type: "chore",
+    });
+    expect(created.status).toBe(201);
+    const ticket = (await created.json()) as { id: string; updatedAt: string };
+
+    const refusedCreate = await write("POST", "/api/projects/ai/tickets", {
+      title: "Blocked elsewhere",
+      blockedBy: ["OPS-9"],
+    });
+    expect(refusedCreate.status).toBe(404);
+    expect(await refusedCreate.json()).toEqual({ error: "ticket not found: OPS-9" });
+    const refusedEdit = await write("PATCH", `/api/projects/ai/tickets/${ticket.id}`, {
+      blockedBy: ["AI-1", "OPS-9"],
+    });
+    expect(refusedEdit.status).toBe(404);
+    expect(await tracker.listTickets("ai")).toHaveLength(1);
+    expect((await tracker.getTicket("ai", ticket.id))?.updatedAt).toBe(ticket.updatedAt);
   });
 
   it("GivenARefusingAccess_WhenEachCrossProjectRouteIsCalled_ThenTheCheckIsNotAsked", async () => {
@@ -321,6 +368,30 @@ describe("MCP tools behind the project-access check (AI-252)", () => {
     expect(result.isError).toBe(true);
     expect((result.content[0] as { text: string }).text).toBe("ticket not found: OPS-9");
     expect(calls).toEqual([]);
+  });
+
+  it("GivenAToolNotListedAsCrossProject_WhenCalledWithoutAProject_ThenRefusedWithoutItsHandler", async () => {
+    vi.spyOn(console, "error").mockImplementation(() => undefined);
+    const { server, tools } = recordingServer();
+    const checked = withProjectAccess(server, ALLOW_SIGNED_IN, ANDY);
+    const handler = vi.fn(() => run(() => Promise.resolve({ ran: true })));
+    checked.registerTool("new_tool", {}, handler);
+    checked.registerTool(
+      "new_optional",
+      { inputSchema: { project: z.string().optional() } },
+      handler,
+    );
+    checked.registerTool("list_projects", {}, handler);
+    const text = (r: unknown) => ((r as CallToolResult).content[0] as { text: string }).text;
+    expect(text(await tools.get("new_tool")!.cb({}))).toBe("not found");
+    expect(text(await tools.get("new_optional")!.cb({}, {}))).toBe("not found");
+    expect(handler).not.toHaveBeenCalled();
+    expect(await tools.get("new_optional")!.cb({ project: "AI" }, {})).toMatchObject({
+      structuredContent: { ran: true },
+    });
+    expect(await tools.get("list_projects")!.cb({})).toMatchObject({
+      structuredContent: { ran: true },
+    });
   });
 
   it("GivenTodaysAllowAll_WhenAToolNamingAProjectIsCalled_ThenItsHandlerRuns", async () => {
