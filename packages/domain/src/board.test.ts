@@ -86,7 +86,7 @@ describe("BoardReader", () => {
     });
   });
 
-  it("GivenALinkedPrOnABacklogTicket_WhenRead_ThenTheHistoryIsNotRead", async () => {
+  it("GivenALinkedPrOnABacklogTicket_WhenRead_ThenNoPullRequestIsShown", async () => {
     const t = await tracker.createTicket("ai", { title: "PR" }, "andy");
     await tracker.linkPullRequest(
       "ai",
@@ -98,7 +98,7 @@ describe("BoardReader", () => {
     expect((await board.tickets("ai"))[0]?.summary.pullRequest).toBeNull();
   });
 
-  it("GivenMoreCardsInFlightThanTheCap_WhenRead_ThenHistoryReadsStopAtTheCap", async () => {
+  it("GivenMoreCardsInFlightThanTheCap_WhenRead_ThenPullRequestReadsStopAtTheCap", async () => {
     for (let i = 0; i < MAX_PR_LOOKUPS + 2; i++) {
       const t = await tracker.createTicket("ai", { title: `T${i}` }, "andy");
       await tracker.updateTicket(
@@ -109,8 +109,8 @@ describe("BoardReader", () => {
       );
     }
     let reads = 0;
-    const listEvents = tracker.listEvents.bind(tracker);
-    tracker.listEvents = (p, t) => (reads++, listEvents(p, t));
+    const latest = tracker.getLatestPullRequest.bind(tracker);
+    tracker.getLatestPullRequest = (p, t) => (reads++, latest(p, t));
 
     expect(await board.tickets("ai")).toHaveLength(MAX_PR_LOOKUPS + 2);
     expect(reads).toBe(MAX_PR_LOOKUPS);
