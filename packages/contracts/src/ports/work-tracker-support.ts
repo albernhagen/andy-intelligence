@@ -119,6 +119,7 @@ export function buildTicket(
     upNextAt: null,
     sentBackReason: null,
     refineAssumptions: [],
+    milestoneId: null,
     risk: null,
     riskReason: null,
     confidence: null,
