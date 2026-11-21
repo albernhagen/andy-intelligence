@@ -68,10 +68,10 @@ function subscription(endpoint: string): PushTarget {
 }
 
 const vapid = webpush.generateVAPIDKeys();
-const config = (over: Partial<PushConfig> = {}): PushConfig => ({
+const config = (service: FakePushService, over: Partial<PushConfig> = {}): PushConfig => ({
   publicKey: vapid.publicKey,
   privateKey: vapid.privateKey,
-  allowHttp: true,
+  testOrigin: service.url,
   ...over,
 });
 const message = { payload: '{"key":"AI-1","category":"question"}', urgency: "high" as const };
@@ -80,7 +80,7 @@ const DEVICE_PATH = "/push/v1/secret-device-token";
 pushSenderContract("web-push against a local fake push service", async (status) => {
   const service = await fakePushService(status);
   return {
-    sender: new WebPushSender(config()),
+    sender: new WebPushSender(config(service)),
     target: subscription(`${service.url}${DEVICE_PATH}`),
     delivered: () => service.requests.length,
   };
@@ -115,7 +115,10 @@ describe("web-push sender (AI-178)", () => {
   it("GivenASend_WhenItReachesTheService_ThenEncryptedWithVapidTtlAndUrgency", async () => {
     const service = await fakePushService(201);
 
-    await new WebPushSender(config()).send(subscription(`${service.url}${DEVICE_PATH}`), message);
+    await new WebPushSender(config(service)).send(
+      subscription(`${service.url}${DEVICE_PATH}`),
+      message,
+    );
 
     const [req] = service.requests;
     expect(req!.path).toBe(DEVICE_PATH);
@@ -133,7 +136,7 @@ describe("web-push sender (AI-178)", () => {
   it("GivenATtlOverTheCap_WhenSent_ThenTheTtlIsCapped", async () => {
     const service = await fakePushService(201);
 
-    await new WebPushSender(config()).send(subscription(service.url), {
+    await new WebPushSender(config(service)).send(subscription(service.url), {
       ...message,
       ttlSeconds: PUSH_MAX_TTL_SECONDS * 10,
     });
@@ -146,7 +149,7 @@ describe("web-push sender (AI-178)", () => {
     const service = await fakePushService(null);
     const started = Date.now();
 
-    const result = await new WebPushSender(config({ timeoutMs: 200 })).send(
+    const result = await new WebPushSender(config(service, { timeoutMs: 200 })).send(
       subscription(service.url),
       message,
     );
@@ -159,7 +162,10 @@ describe("web-push sender (AI-178)", () => {
     const lines = vi.spyOn(console, "log").mockImplementation(() => {});
     const service = await fakePushService(500);
 
-    await new WebPushSender(config()).send(subscription(`${service.url}${DEVICE_PATH}`), message);
+    await new WebPushSender(config(service)).send(
+      subscription(`${service.url}${DEVICE_PATH}`),
+      message,
+    );
 
     const logged = lines.mock.calls.map((c) => c[0] as string);
     expect(logged.map((l) => JSON.parse(l))).toContainEqual(
@@ -168,16 +174,35 @@ describe("web-push sender (AI-178)", () => {
     expect(logged.join("\n")).not.toContain("secret-device-token");
   });
 
-  it("GivenAPlainHttpEndpointInProduction_WhenSent_ThenRefusedWithoutARequest", async () => {
+  it.each([
+    "https://169.254.169.254/computeMetadata/v1/",
+    "https://control-plane-abc.a.run.app/api/x",
+    "https://fcm.googleapis.com.evil.example/x",
+    "https://fcm.googleapis.com:8443/x",
+    "http://fcm.googleapis.com/x",
+  ])("GivenAnEndpointOffThePushServices_WhenSent_ThenRefusedWithoutARequest", async (endpoint) => {
+    vi.spyOn(console, "log").mockImplementation(() => {});
+    const fetchSpy = vi.spyOn(globalThis, "fetch");
+
+    const result = await new WebPushSender({
+      publicKey: vapid.publicKey,
+      privateKey: vapid.privateKey,
+    }).send(subscription(endpoint), message);
+
+    expect(result).toMatchObject({ outcome: "error", reason: "endpoint is not a push service" });
+    expect(fetchSpy).not.toHaveBeenCalled();
+  });
+
+  it("GivenTheFakeServiceWithoutTheTestOrigin_WhenSent_ThenRefusedWithoutARequest", async () => {
     vi.spyOn(console, "log").mockImplementation(() => {});
     const service = await fakePushService(201);
 
-    const result = await new WebPushSender(config({ allowHttp: false })).send(
+    const result = await new WebPushSender(config(service, { testOrigin: undefined })).send(
       subscription(service.url),
       message,
     );
 
-    expect(result).toMatchObject({ outcome: "error", reason: "endpoint is not https" });
+    expect(result).toMatchObject({ outcome: "error", reason: "endpoint is not a push service" });
     expect(service.requests).toHaveLength(0);
   });
 
@@ -185,7 +210,7 @@ describe("web-push sender (AI-178)", () => {
     vi.spyOn(console, "log").mockImplementation(() => {});
     const service = await fakePushService(201);
 
-    const result = await new WebPushSender(config()).send(subscription(service.url), {
+    const result = await new WebPushSender(config(service)).send(subscription(service.url), {
       ...message,
       payload: "x".repeat(PUSH_MAX_PAYLOAD_BYTES + 1),
     });
@@ -198,7 +223,7 @@ describe("web-push sender (AI-178)", () => {
     vi.spyOn(console, "log").mockImplementation(() => {});
     const service = await fakePushService(201);
     let now = new Date("2026-11-21T10:00:00Z");
-    const sender = new WebPushSender(config({ now: () => now }));
+    const sender = new WebPushSender(config(service, { now: () => now }));
     const target = subscription(service.url);
     for (let i = 0; i < MAX_PUSH_SENDS_PER_HOUR; i++) await sender.send(target, message);
 
@@ -213,7 +238,7 @@ describe("web-push sender (AI-178)", () => {
     const service = await fakePushService(201);
     const target = { endpoint: service.url, keys: { p256dh: "short", auth: "short" } };
 
-    const result = await new WebPushSender(config()).send(target, message);
+    const result = await new WebPushSender(config(service)).send(target, message);
 
     expect(result).toMatchObject({ outcome: "error", status: null });
     expect(service.requests).toHaveLength(0);

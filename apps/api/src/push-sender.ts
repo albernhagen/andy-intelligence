@@ -1,4 +1,5 @@
 import {
+  isPushServiceEndpoint,
   pushResultForStatus,
   type PushMessage,
   type PushSendResult,
@@ -34,8 +35,12 @@ export interface PushConfig {
   /** VAPID key pair, base64url, as `web-push generate-vapid-keys` prints them. */
   publicKey: string;
   privateKey: string;
-  /** Test seams: a plain-HTTP fake push service, a shorter timeout, a clock. */
-  allowHttp?: boolean;
+  /**
+   * Test seam: a plain-HTTP fake push service at this origin (e.g. `http://127.0.0.1:1234`),
+   * allowed besides the push-service hosts. Never set in production.
+   */
+  testOrigin?: string;
+  /** Test seams: a shorter timeout, a clock. */
   timeoutMs?: number;
   now?: () => Date;
 }
@@ -143,11 +148,12 @@ export class WebPushSender implements PushSender {
 
   /** Why the send is refused before any work, or null. */
   private refusal(target: PushTarget, message: PushMessage): string | null {
-    const url = URL.canParse(target.endpoint) ? new URL(target.endpoint) : null;
-    if (!url) return "invalid subscription";
-    if (url.protocol !== "https:" && !(this.config.allowHttp && url.protocol === "http:")) {
-      return "endpoint is not https";
-    }
+    if (!URL.canParse(target.endpoint)) return "invalid subscription";
+    const testing =
+      this.config.testOrigin !== undefined &&
+      new URL(target.endpoint).origin === this.config.testOrigin;
+    if (!testing && !isPushServiceEndpoint(target.endpoint))
+      return "endpoint is not a push service";
     if (Buffer.byteLength(message.payload) > PUSH_MAX_PAYLOAD_BYTES) return "payload too large";
     return null;
   }

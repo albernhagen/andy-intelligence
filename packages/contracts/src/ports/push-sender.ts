@@ -46,3 +46,28 @@ export function pushResultForStatus(status: number): PushSendResult {
   if (status === 404 || status === 410) return { outcome: "gone", status };
   return { outcome: "error", status, reason: `push service answered ${status}` };
 }
+
+/**
+ * Hosts of the browsers' push services (Google, Apple, Mozilla, Microsoft). A push goes only to
+ * one of these or a subdomain, on the default https port: an endpoint is client-supplied, so
+ * anything else could aim the control plane's requests at an internal host (SSRF). The sender
+ * enforces it; the subscribe API (M7.11) checks it too.
+ */
+export const PUSH_SERVICE_HOSTS = [
+  "fcm.googleapis.com",
+  "push.apple.com",
+  "push.services.mozilla.com",
+  "notify.windows.com",
+] as const;
+
+/** Whether `endpoint` is an https URL on a push-service host (or one of `hosts`). */
+export function isPushServiceEndpoint(
+  endpoint: string,
+  hosts: readonly string[] = PUSH_SERVICE_HOSTS,
+): boolean {
+  if (!URL.canParse(endpoint)) return false;
+  const url = new URL(endpoint);
+  if (url.protocol !== "https:" || url.port !== "" || url.username || url.password) return false;
+  const host = url.hostname.toLowerCase();
+  return hosts.some((h) => host === h || host.endsWith(`.${h}`));
+}
