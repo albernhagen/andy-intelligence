@@ -1,6 +1,7 @@
 import type { OAuthGrantStore, WorkTracker } from "@andy/contracts";
 import type {
   BriefService,
+  IdeateService,
   ProjectPlanService,
   DigestReader,
   EmailNotifications,
@@ -38,6 +39,7 @@ export interface McpEndpointDeps {
   notifyEmail: EmailNotifications | null;
   quota: QuotaClearer;
   brief: BriefService;
+  ideate: IdeateService;
   plans: ProjectPlanService;
   /** Config proposals (ADR-0097); null: the store isn't configured, so no tools. */
   configProposals: ConfigProposals | null;
@@ -98,6 +100,7 @@ export function registerMcpEndpoint(app: Hono<AuthEnv>, deps: McpEndpointDeps) {
       notifyEmail: deps.notifyEmail,
       quota: deps.quota,
       brief: deps.brief,
+      ideate: deps.ideate,
       plans: deps.plans,
       configProposals: deps.configProposals,
       email: identity.email,

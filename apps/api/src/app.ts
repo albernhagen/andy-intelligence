@@ -28,6 +28,7 @@ import {
   DigestReader,
   QuotaClearer,
   BriefService,
+  IdeateService,
   ProjectPlanService,
   TicketService,
   EmailNotifications,
@@ -51,6 +52,7 @@ import { registerSetupRoutes } from "./setup";
 import { noReviewFindings, registerConfigProposalRoutes } from "./config-proposals";
 import { registerNotifyFlush, registerNotifyRoutes } from "./notify";
 import { registerBriefRoutes } from "./brief";
+import { registerIdeateRoutes } from "./ideate";
 import { registerProjectPlanRoutes } from "./project-plan";
 import {
   ConnectedCodeHost,
@@ -441,6 +443,13 @@ export function createApp(input: AppDeps) {
     now,
   );
   registerBriefRoutes(app, brief);
+  const ideate = new IdeateService(
+    deps.tracker,
+    service,
+    connection ? new ConnectedCodeHost(connection) : null,
+    now,
+  );
+  registerIdeateRoutes(app, ideate);
   const plans = new ProjectPlanService(
     deps.tracker,
     service,
@@ -481,6 +490,7 @@ export function createApp(input: AppDeps) {
       notifyEmail: email,
       quota: quotaClearer,
       brief,
+      ideate,
       plans,
       configProposals,
     });

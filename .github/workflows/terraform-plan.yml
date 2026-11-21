@@ -25,9 +25,12 @@ permissions:
 jobs:
   plan:
     runs-on: ubuntu-latest
-    # Never run for fork PRs, and skip until infra variables exist.
+    # Never run for fork PRs, and skip until infra variables exist. Skip Dependabot's PRs too:
+    # they can't read Actions secrets, so the job could only fail at "Check variable secrets", and
+    # giving Dependabot the plan's secrets and GCP sign-in would widen threat-model risk R1. A
+    # provider bump is planned by Andy locally after merge.
     if: >-
-      vars.GCP_WIF_PROVIDER != '' &&
+      vars.GCP_WIF_PROVIDER != '' && github.actor != 'dependabot[bot]' &&
       (github.event_name == 'workflow_dispatch' || github.event_name == 'schedule' ||
        github.event.pull_request.head.repo.full_name == github.repository)
     outputs:
