@@ -11,6 +11,7 @@ import { createApp } from "./app";
 import type { TokenVerifier } from "./auth";
 import { ClientMetadataResolver } from "./mcp/client-metadata";
 import { hashToken, newToken } from "./mcp/tokens";
+import { ownerOnlyAccess } from "./project-access";
 
 const PUBLIC_URL = "https://control-plane.example.run.app";
 const RESOURCE = `${PUBLIC_URL}/mcp`;
@@ -39,6 +40,7 @@ describe("milestone map API and MCP (AI-148)", () => {
       webConfig: { firebaseApiKey: "k", firebaseAuthDomain: "d", projectId: "p" },
       tracker,
       runs,
+      projectAccess: ownerOnlyAccess(),
       mcp: { publicUrl: PUBLIC_URL, grants, clients: new ClientMetadataResolver() },
     });
     await tracker.createProject({ name: "AI", key: "AI" });
