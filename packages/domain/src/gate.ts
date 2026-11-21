@@ -1,12 +1,10 @@
 import type {
-  AutoMerge,
   ChangedFile,
   GateReason,
   HeadCheck,
   Listing,
   RequiredCheck,
   Run,
-  Size,
   TicketType,
 } from "@andy/contracts";
 
@@ -184,21 +182,6 @@ export function protectedFiles(files: ChangedFile[], extraGlobs: string[]): stri
 export function outsideDocs(files: ChangedFile[]): string[] {
   const paths = files.flatMap((f) => (f.previousPath ? [f.path, f.previousPath] : [f.path]));
   return [...new Set(paths.filter((p) => !p.startsWith(SPIKE_DIR)))];
-}
-
-/** Whether the project's policy lets the control plane merge a ticket of this size. */
-export function policyAllows(policy: AutoMerge, size: Size | null): boolean {
-  if (!size) return false;
-  switch (policy) {
-    case "none":
-      return false;
-    case "s":
-      return size === "S";
-    case "s-and-m":
-      return size === "S" || size === "M";
-    case "all":
-      return true;
-  }
 }
 
 export interface GateFacts {

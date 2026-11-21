@@ -71,7 +71,6 @@ describe("project settings page", () => {
     expect(value("Plan approval")).toBe("m-and-l");
     expect(checkbox("Auto-refine")).toBe(false);
     expect(value("Questions per day")).toBe("7");
-    expect(value("Auto-merge")).toBe("s");
     expect(value("Merge mode")).toBe("epic");
     expect(within(list).getByText(/you merge one PR per epic/)).toBeTruthy();
     expect(value("Agent tasks at once")).toBe("3");
@@ -81,7 +80,8 @@ describe("project settings page", () => {
     expect(value("Environments")).toBe("dev-and-prod");
     expect(within(list).getByText("Dispatch: paused by you")).toBeTruthy();
     // One row per setting group, each with its line on what it does.
-    expect(within(list).getAllByRole("listitem")).toHaveLength(12);
+    expect(within(list).getAllByRole("listitem")).toHaveLength(11);
+    expect(within(list).queryByLabelText("Auto-merge")).toBeNull();
     expect(within(list).getByText(/never over MCP/)).toBeTruthy();
   });
 
@@ -239,7 +239,7 @@ describe("/projects", () => {
     });
   });
 
-  it("GivenAProjectStoredBeforeMergeModes_WhenAModeIsPicked_ThenItIsSavedAndNoLongerReadFromAutoMerge", async () => {
+  it("GivenAProjectStoredBeforeMergeModes_WhenAModeIsPicked_ThenItIsSavedAndTheSuggestionGoes", async () => {
     const h = renderApp("/p/ops/settings");
     await h.tracker.createProject({ name: "Ops", key: "OPS" });
     await h.tracker.updateProject("ops", { mergeMode: null, autoMerge: "none" });
@@ -247,14 +247,17 @@ describe("/projects", () => {
     const list = await settings();
     const select = () => within(list).getByLabelText("Merge mode") as HTMLSelectElement;
 
-    expect(select().value).toBe("manual");
-    expect(within(list).getByText("(read from auto-merge)")).toBeTruthy();
+    // ADR-0134: not set means the gate merges nothing; the old setting only suggests a mode.
+    expect(select().value).toBe("");
+    expect(
+      within(list).getByText(/Not set: the gate merges nothing\. Suggested: manual/),
+    ).toBeTruthy();
 
     await h.user.selectOptions(select(), "low-risk");
 
     await waitFor(async () =>
       expect((await h.tracker.getProject("ops"))?.mergeMode).toBe("low-risk"),
     );
-    await waitFor(() => expect(within(list).queryByText("(read from auto-merge)")).toBeNull());
+    await waitFor(() => expect(within(list).queryByText(/Not set/)).toBeNull());
   });
 });

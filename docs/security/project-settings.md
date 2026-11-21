@@ -8,7 +8,7 @@ Per-project settings Andy changes after registration. PRs that change this area 
 | ---------------------------------------------------------------------------------------- | --------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `PATCH /api/projects/:id` field `environments` (the settings page's Environments select) | Allow-listed users (Firebase ID token on `/api`)    | Owner-only through the project-settings rule (`change_project_settings` in `permissions.ts`, unchanged); agents and the system get 403 | A fixed two-value list, `prod-only` (default) or `dev-and-prod`; anything else is a 400. Each change goes into the config change log with who and when, and can be reverted there under the same rule |
 | MCP `set_environments`                                                                   | Allow-listed users, with our access token on `/mcp` | Same rule; the tool acts as the signed-in user (`user:<uid>`)                                                                          | Same value list and log; `get_project_settings` reads it                                                                                                                                              |
-| `PATCH …` field `mergeMode`; MCP `set_merge_mode` (AI-214, ADR-0124)                     | Same                                                | Same rule                                                                                                                              | Stored only until AI-215; over MCP (also reverts) only tightens. R-AI-214                                                                                                                             |
+| `PATCH …` field `mergeMode`; MCP `set_merge_mode` (AI-214, ADR-0124)                     | Same                                                | Same rule                                                                                                                              | Gate merges by it (AI-215); unset: none; MCP only tightens. R-AI-214                                                                                                                                  |
 
 ## What it changes
 
@@ -30,7 +30,7 @@ Every settings write (this file's and those in `ui-and-mcp.md`) is logged; the l
 Residual risks:
 
 - **Two reverts at once** of the same change can both write the same before-values (both logged); `markReverted` is transactional, so only one marks it and the other gets `409`. Accepted: the values are identical.
-- **What a revert can change:** any project setting the change touched, including `autoBuild`, `autoMerge` and `executor`, as the owner could by hand. `buildEnabled` only from the app.
+- **What a revert can change:** any project setting the change touched, including `autoBuild`, `mergeMode` and `executor`, as the owner could by hand. `buildEnabled` only from the app.
 
 ## Spend caps (AI-249: M10.8)
 
