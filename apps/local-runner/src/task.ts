@@ -101,7 +101,7 @@ export async function runTask(
   const platformDir = join(runDir, "platform");
   const publishDir = join(runDir, "publish");
   const build = claimed.step === "build";
-  // The build profile's scratch (`/tmp/agent`), one subdirectory per task (ADR-0105).
+  // The build profile's scratch (`/tmp/agent`), one subdirectory per task (ADR-0122).
   const scratchDir = join(AGENT_TMP, claimed.runId);
   const worktrees: { repo: string; path: string }[] = [];
   const stop = new AbortController();
@@ -313,7 +313,7 @@ export async function runTask(
       }
       deps.log("INFO", "dependencies ready", { ...ids, install: installed.kind });
       checkpoint();
-      // Fail closed (ADR-0105): Bash runs in Claude Code's sandbox, or no build agent runs.
+      // Fail closed (ADR-0122): Bash runs in Claude Code's sandbox, or no build agent runs.
       const bashProblem = await checkBash({
         claudeCommand: deps.claudeCommand,
         confinement: deps.confinement,

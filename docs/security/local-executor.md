@@ -1,6 +1,6 @@
 # Threat model: Local executor
 
-The runner on Andy's Mac (`apps/local-runner`, ADR-0089, ADR-0098, ADR-0105). Risk register: [threat-model.md](threat-model.md) (R-AI-44). Control-plane entry points (claim, callbacks, `POST /github/token`): [entry-points-and-credentials.md](entry-points-and-credentials.md).
+The runner on Andy's Mac (`apps/local-runner`, ADR-0089, ADR-0098, ADR-0122). Risk register: [threat-model.md](threat-model.md) (R-AI-44). Control-plane entry points (claim, callbacks, `POST /github/token`): [entry-points-and-credentials.md](entry-points-and-credentials.md).
 
 ## Processes and what each can reach
 
@@ -15,7 +15,7 @@ Every process below runs as the runner's macOS user (`ai-runner`) under a Seatbe
 | Install child (build, `pnpm-lock.yaml`)   | pnpm                                                                 | Checkout, its own store and home           | On; no Keychain    | None; scripts and pnpmfile off                                                                                 |
 | Publish child (build with a change)       | Platform checkout, the patch, its credential file                    | Its fresh worktree, the repo's cache       | On; no Keychain    | Push token (stdin; to git as a mode-600 file in the work directory, never in an environment)                   |
 
-## The push token (ADR-0105)
+## The push token (ADR-0122)
 
 - Asked for only after the build agent exited and its change was collected, with the run's per-run token. The control plane grants it once per run, only while the run is `running`, only to the runner that claimed it, for the run's project repo; a second request is `403`.
 - The publish child runs the platform's own `scripts/executor-publish.mjs` `publish()` unchanged: path and protected-path rules, symlinks and submodules refused, 200 files, `agent/<KEY>/<runId>` branch, never forced, PR as the App bot. A refused change pushes nothing and fails the run.
@@ -27,11 +27,11 @@ Every process below runs as the runner's macOS user (`ai-runner`) under a Seatbe
 - A 1-hour App token for one repo is on the Mac during publish: agent branches and PRs on that repo, never `main` (ruleset).
 - A process the build agent leaves behind can outlive it during publish. It keeps the agent's profile, so it can't read the work directory, where git's credential file lives for the push. It can read other same-user processes' environments (Seatbelt can't deny that), which is why no process gets the token in its environment.
 - Platform code from `main` runs in the platform and publish children (ADR-0098); the publish child holds the push token, as the Actions publish job does.
-- Whether Claude Code's sandbox starts inside Seatbelt is unproven. If not, the pre-agent Bash check fails and no local build runs (ADR-0105).
+- Whether Claude Code's sandbox starts inside Seatbelt is unproven. If not, the pre-agent Bash check fails and no local build runs (ADR-0122).
 
 ## Manual live checks (Andy, before builds go local)
 
 1. A `local` build of a small ticket opens `agent/<KEY>/<runId>` as the App bot; the runner's log has no token.
 2. Cloud Logging shows `push token granted` once for that run (with its `runnerId`); no `second push token request` warning.
-3. The runner's log for that build says "Bash sandbox check passed" (nesting works). If the task fails with "the check command didn't run in Bash", nesting doesn't: ADR-0105's open question.
+3. The runner's log for that build says "Bash sandbox check passed" (nesting works). If the task fails with "the check command didn't run in Bash", nesting doesn't: ADR-0122's open question.
 4. A build that edits `.github/` fails with "protected" and pushes nothing.
