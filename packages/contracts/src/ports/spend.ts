@@ -1,4 +1,10 @@
-import type { SpendCapName, SpendCapLimits, SpendEntry, SpendTotals } from "../entities/spend";
+import type {
+  ProviderSpendTotals,
+  SpendCapName,
+  SpendCapLimits,
+  SpendEntry,
+  SpendTotals,
+} from "../entities/spend";
 
 // ── SpendLedger ──────────────────────────────────────────────────────────────
 // Errors are WorkTrackerError (`conflict`), mapped the same way by the API.
@@ -34,6 +40,12 @@ export interface SpendLedger {
    * with no `projectId`. Entries count in the window they were reserved in.
    */
   totals(scope: { projectId?: string }, at: string): Promise<SpendTotals>;
+  /**
+   * The same totals split by provider (AI-280): one row per `ProviderKey`, in its declared
+   * order, zero for a provider with no spend. Every entry names its provider (required since
+   * AI-234), so there is no unknown row. Bounded: one total per provider and window.
+   */
+  totalsByProvider(scope: { projectId?: string }, at: string): Promise<ProviderSpendTotals[]>;
 }
 
 /** A retried reserve matches the recorded one: same run, project, provider, model, amount and time. */
