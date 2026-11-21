@@ -8,10 +8,9 @@ import {
   Stage,
   TicketKey,
 } from "@andy/contracts";
-import { DomainError, type RunService, type TicketService } from "@andy/domain";
+import { DomainError, ticketCost, type RunService, type TicketService } from "@andy/domain";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
-import { costOfTicket } from "../ticket-cost";
 import { summary, type Run, type ToolDeps } from "./tools";
 import { listNeedsMe, statusLineOf } from "./tools-tickets";
 import { withStartScore } from "./tools-scores";
@@ -422,7 +421,7 @@ export function registerCoreTools(server: McpServer, deps: ToolDeps, run: Run): 
       run(async () =>
         ticket
           ? withStartScore(
-              await statusLineOf(deps, await statusWithCost(service, deps.runs, ticket)),
+              await statusLineOf(deps, ...(await statusWithCost(service, deps.runs, ticket))),
             )
           : await (async () => {
               const overview = await service.overview();
@@ -437,7 +436,9 @@ export function registerCoreTools(server: McpServer, deps: ToolDeps, run: Run): 
   );
 }
 
+/** The status with its cost, and the agent tasks the cost was read from, for the line too. */
 async function statusWithCost(service: TicketService, runs: RunService, key: string) {
   const status = await service.status(key);
-  return { ...status, cost: await costOfTicket(runs, status.ticket) };
+  const ticketRuns = await runs.list(status.ticket.projectId, status.ticket.id);
+  return [{ ...status, cost: ticketCost(ticketRuns) }, ticketRuns] as const;
 }

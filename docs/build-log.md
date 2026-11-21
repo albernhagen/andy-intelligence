@@ -32,7 +32,8 @@ Every ticket sits under a milestone. Milestones are epic tickets in project `AI`
 - ADR-0096: Managed repos call one executor (AI-83): Claude token in an environment on `main`, executor at `@main`, one repo per project?
 - ADR-0099: Agent read access (AI-97): steps, tools, live or bundled?
 - ADR-0108: Roadmap view over epics, and fixed work views (M4.24 to M4.31): accept one new epic field (`outcome`), Done-when as the epic's acceptance criteria, and the five views?
-- ADR-0111: Re-sync open PRs (AI-147): the App token for `resync-prs.yml` (recommended), or another credential?
+- AI-144: Threat model: one file per risk: cap each risk file at 300 words and `threat-model.md` at 1000 (was 3600)?
+- ADR-0111: Re-sync open PRs: its App token?
 
 ## Blocked on Andy
 

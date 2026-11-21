@@ -5,11 +5,13 @@ import {
   type ResolvedExecutor,
   type Ticket,
   type Worker,
+  type Run as AgentTask,
 } from "@andy/contracts";
 import {
   DomainError,
   inboxCards,
   readEpicRollup,
+  statusLineTickets,
   ticketStatusLine,
   type InboxCard,
   type TicketStatus,
@@ -42,6 +44,9 @@ const EditInput = {
     touches: true,
     overrides: true,
   }).shape,
+  outcome: TicketFields.shape.outcome.describe(
+    "Epics only: what is true when the epic is done, at most 300 characters; null clears it.",
+  ),
   blockedBy: z
     .array(TicketKey)
     .optional()
@@ -77,12 +82,21 @@ const ReorderInput = {
  * `status` for a ticket with the status line the UI shows; an epic also gets its children and
  * roll-up (AI-85), the same the epic panel reads.
  */
-export async function statusLineOf<S extends TicketStatus>(deps: ToolDeps, status: S) {
+export async function statusLineOf<S extends TicketStatus>(
+  deps: ToolDeps,
+  status: S,
+  /** The ticket's agent tasks, when the caller already read them (AI-222: no second read). */
+  ticketRuns?: AgentTask[],
+) {
   const { ticket, questions } = status;
-  const tickets = await deps.tracker.listTickets(ticket.projectId);
+  // An epic's roll-up needs its project; any other ticket reads only what its line names (AI-222).
+  const tickets =
+    ticket.type === "epic"
+      ? await deps.tracker.listTickets(ticket.projectId)
+      : await statusLineTickets(deps.tracker, ticket);
   const open = questions.filter((q) => q.status === "open").length;
   const [line, epic] = await Promise.all([
-    lineFor(deps, ticket, tickets, open, status.worker, status.executor.next),
+    lineFor(deps, ticket, tickets, open, status.worker, status.executor.next, ticketRuns),
     ticket.type === "epic"
       ? readEpicRollup(
           ticket,
@@ -102,9 +116,10 @@ async function lineFor(
   openQuestions: number,
   worker?: Worker,
   executor?: ResolvedExecutor,
+  ticketRuns?: AgentTask[],
 ) {
   const [runs, events, inFlight] = await Promise.all([
-    deps.runs.list(ticket.projectId, ticket.id),
+    ticketRuns ?? deps.runs.list(ticket.projectId, ticket.id),
     deps.tracker.listEvents(ticket.projectId, ticket.id),
     deps.runs.inFlight(ticket.projectId),
   ]);
@@ -125,15 +140,15 @@ export async function listNeedsMe(deps: ToolDeps) {
   const inbox = await deps.service.needsYou();
   const { active, stale } = inboxCards(inbox);
   const ordered = [...active, ...stale];
-  const projectIds = [...new Set(ordered.map((c) => c.projectId))];
-  const listed = await Promise.all(projectIds.map((id) => deps.tracker.listTickets(id)));
-  const byProject = new Map(projectIds.map((id, i) => [id, listed[i]!]));
-
   const cards = await Promise.all(
     ordered.map(async (card, index) => {
-      const tickets = byProject.get(card.projectId) ?? [];
-      const ticket = card.ticket ?? tickets.find((t) => t.id === card.ticketId);
+      // One read per card, not one project list per card's project (AI-222).
+      const ticket =
+        card.ticket ??
+        (card.ticketId ? await deps.tracker.getTicket(card.projectId, card.ticketId) : null) ??
+        undefined;
       const detailed = ticket && index < MAX_INBOX_CARD_DETAILS;
+      const tickets = detailed ? await statusLineTickets(deps.tracker, ticket) : [];
       return {
         ticket: ticket ? summary(ticket) : null,
         stale: stale.includes(card),
@@ -177,7 +192,7 @@ export function registerTicketTools(server: McpServer, deps: ToolDeps): void {
     "edit_ticket",
     {
       description:
-        "Edits a ticket's fields, as the ticket page does. Only the fields given change; lists replace the whole list. Re-checks the Definition of Ready.",
+        "Edits a ticket's fields, as the ticket page does. Only the fields given change; lists replace the whole list. An epic's `acceptanceCriteria` are its Done-when list. Re-checks the Definition of Ready.",
       inputSchema: EditInput,
       annotations: { destructiveHint: false, idempotentHint: true },
     },
