@@ -67,6 +67,29 @@ describe("reserveFor", () => {
     expect(reserveFor({ priceInPerMTokUsd: 5e-7, priceOutPerMTokUsd: 0 }, call(1e6, 0))).toBe(1);
   });
 
+  it.each([1e-13, 1e-20, 5e-324, 0.000001])(
+    "GivenATinyNonZeroPriceOf%s_WhenOneTokenIsReserved_ThenTheReserveIsNeverZero",
+    (price) => {
+      expect(reserveFor({ priceInPerMTokUsd: price, priceOutPerMTokUsd: 0 }, call(1, 0))).toBe(1);
+      expect(reserveFor({ priceInPerMTokUsd: 0, priceOutPerMTokUsd: price }, call(0, 1))).toBe(1);
+    },
+  );
+
+  it("GivenAPriceWithManyDecimals_WhenReserved_ThenItIsExactToTwelveDecimals", () => {
+    // $1.23456789012/M × 1M tokens = $1.23456789012 → 1,234,568 micro-USD (rounded up).
+    const model = { priceInPerMTokUsd: 1.23456789012, priceOutPerMTokUsd: 0 };
+    expect(reserveFor(model, call(1e6, 0))).toBe(1_234_568);
+  });
+
+  it("GivenAHugePrice_WhenReserved_ThenItIsExactWhileSafeAndNullPastThat", () => {
+    // $1e15/M is $1e9 per token: 1e15 micro-USD, still a safe integer.
+    expect(reserveFor({ priceInPerMTokUsd: 1e15, priceOutPerMTokUsd: 0 }, call(1, 0))).toBe(1e15);
+    // $1e21/M (String gives "1e+21") is 1e21 micro-USD per token: past the safe range.
+    expect(reserveFor({ priceInPerMTokUsd: 1e21, priceOutPerMTokUsd: 0 }, call(1, 0))).toBeNull();
+    const max = { priceInPerMTokUsd: Number.MAX_VALUE, priceOutPerMTokUsd: 0 };
+    expect(reserveFor(max, call(1, 0))).toBeNull();
+  });
+
   it("GivenAnAgenticTask_WhenReserved_ThenTheReserveIsItsPerTaskCap", () => {
     expect(reserveFor(priced, { kind: "task", taskCapMicroUsd: 2_000_000 })).toBe(2_000_000);
   });
@@ -88,6 +111,20 @@ describe("reserveFor", () => {
 describe("settleFor", () => {
   it("GivenNoUsage_WhenSettled_ThenThereIsNoCostSoTheReservationIsKept", () => {
     expect(settleFor(priced, null)).toBeNull();
+  });
+
+  it.each([
+    ["negative input tokens", { inputTokens: -1 }],
+    ["fractional output tokens", { outputTokens: 1.5 }],
+    ["NaN cache reads", { cacheReadTokens: Number.NaN }],
+    ["unsafe cache writes", { cacheWriteTokens: 2 ** 53 }],
+  ])("GivenUsageWith%s_WhenSettled_ThenThereIsNoCostSoTheReservationIsKept", (_name, bad) => {
+    expect(settleFor(priced, usage(bad))).toBeNull();
+  });
+
+  it("GivenATinyCacheWritePrice_WhenSettled_ThenOneTokenStillCosts", () => {
+    const model = { priceInPerMTokUsd: 0, priceOutPerMTokUsd: 0, priceCacheWritePerMTokUsd: 1e-13 };
+    expect(settleFor(model, usage({ cacheWriteTokens: 1 }))).toBe(1);
   });
 
   it("GivenAModelWithNoPrice_WhenSettled_ThenThereIsNoCost", () => {

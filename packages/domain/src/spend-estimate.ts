@@ -29,17 +29,23 @@ export type SpendLimits =
   | { kind: "call"; inputTokens: number; maxOutputTokens: number }
   | { kind: "task"; taskCapMicroUsd: number };
 
-const TOKENS_PER_PRICE_UNIT = 1_000_000n; // prices are per million tokens
+/**
+ * Prices are kept as integer pico-USD per million tokens (1 USD = 10^12): a price is exact to
+ * 12 decimals, and anything finer rounds up. Tokens × that price is pico-USD × 10^6, so the
+ * total is divided by 10^12 to get micro-USD.
+ */
+const PICO_PER_MICRO_TIMES_MTOK = 1_000_000_000_000n;
+const PRICE_DECIMALS = 12;
 
 /**
  * The worst case to reserve, in micro-USD. A call: its input tokens at the input price plus its
  * max output tokens (never a smaller expected count) at the output price. An agentic task: its
  * per-task cap, since its turns and tokens aren't known up front. Null when the model has no
- * input or output price, for both kinds.
+ * input or output price, for both kinds. Bad limits are a caller bug and throw.
  */
 export function reserveFor(model: PricedModel, limits: SpendLimits): number | null {
-  const input = microUsdPerMTok(model.priceInPerMTokUsd);
-  const output = microUsdPerMTok(model.priceOutPerMTokUsd);
+  const input = picoUsdPerMTok(model.priceInPerMTokUsd);
+  const output = picoUsdPerMTok(model.priceOutPerMTokUsd);
   if (input === null || output === null) return null;
   if (limits.kind === "task") return requireCount(limits.taskCapMicroUsd, "taskCapMicroUsd");
   return costMicroUsd([
@@ -50,55 +56,73 @@ export function reserveFor(model: PricedModel, limits: SpendLimits): number | nu
 
 /**
  * The actual cost from a run's usage, in micro-USD, cache reads and writes included. Null when
- * usage is missing (the ledger keeps the full reservation) or the model has no price.
+ * usage is missing or malformed (the ledger keeps the full reservation) or the model has no price.
  */
 export function settleFor(model: PricedModel, usage: RunUsage | null): number | null {
   if (usage === null) return null;
-  const input = microUsdPerMTok(model.priceInPerMTokUsd);
-  const output = microUsdPerMTok(model.priceOutPerMTokUsd);
+  const { inputTokens, outputTokens, cacheReadTokens, cacheWriteTokens } = usage;
+  if (![inputTokens, outputTokens, cacheReadTokens, cacheWriteTokens].every(isCount)) return null;
+  const input = picoUsdPerMTok(model.priceInPerMTokUsd);
+  const output = picoUsdPerMTok(model.priceOutPerMTokUsd);
   if (input === null || output === null) return null;
   const cacheRead = cachePrice(model.priceCacheReadPerMTokUsd, input);
-  const cacheWrite = cachePrice(model.priceCacheWritePerMTokUsd, input * CACHE_WRITE_FALLBACK);
+  const cacheWrite = cachePrice(
+    model.priceCacheWritePerMTokUsd,
+    input * BigInt(CACHE_WRITE_FALLBACK),
+  );
   if (cacheRead === null || cacheWrite === null) return null;
   return costMicroUsd([
-    [requireCount(usage.inputTokens, "inputTokens"), input],
-    [requireCount(usage.outputTokens, "outputTokens"), output],
-    [requireCount(usage.cacheReadTokens, "cacheReadTokens"), cacheRead],
-    [requireCount(usage.cacheWriteTokens, "cacheWriteTokens"), cacheWrite],
+    [inputTokens, input],
+    [outputTokens, output],
+    [cacheReadTokens, cacheRead],
+    [cacheWriteTokens, cacheWrite],
   ]);
 }
 
 /**
- * A USD-per-million-tokens price as integer micro-USD per million tokens. A price finer than one
- * micro-USD rounds up; float noise (0.00391 × 1e6 = 3910.0000000000005) doesn't. Null for a missing,
- * negative or non-finite price.
+ * A USD-per-million-tokens price as integer pico-USD per million tokens, with no float
+ * arithmetic: the number's own decimal form (`String(0.00391)` is "0.00391", `String(1e-13)` is
+ * "1e-13") is read digit by digit, and any digit past the 12th decimal rounds up, so a non-zero
+ * price is never 0. Null for a missing, negative or non-finite price.
  */
-function microUsdPerMTok(usdPerMTok: number | null | undefined): number | null {
+function picoUsdPerMTok(usdPerMTok: number | null | undefined): bigint | null {
   if (usdPerMTok == null || !Number.isFinite(usdPerMTok) || usdPerMTok < 0) return null;
-  const scaled = usdPerMTok * MICRO_USD_PER_USD;
-  const nearest = Math.round(scaled);
-  const micro = Math.abs(scaled - nearest) < 1e-6 ? nearest : Math.ceil(scaled);
-  return Number.isSafeInteger(micro) ? micro : null;
+  const match = /^(\d+)(?:\.(\d+))?(?:e([+-]\d+))?$/.exec(String(usdPerMTok));
+  if (!match) return null;
+  const [, whole = "", fraction = "", exponent = "0"] = match;
+  // value = digits × 10^shift, where shift counts the fraction digits and the exponent.
+  const digits = BigInt(whole + fraction);
+  const shift = Number(exponent) - fraction.length + PRICE_DECIMALS;
+  if (shift >= 0) return digits * 10n ** BigInt(shift);
+  return ceilDiv(digits, 10n ** BigInt(-shift));
 }
 
 /** An explicit cache price, or the fallback when the model has none. A bad explicit price: null. */
-function cachePrice(explicit: number | null | undefined, fallback: number): number | null {
-  return explicit == null ? fallback : microUsdPerMTok(explicit);
+function cachePrice(explicit: number | null | undefined, fallback: bigint): bigint | null {
+  return explicit == null ? fallback : picoUsdPerMTok(explicit);
 }
 
 /**
- * Sum of tokens × micro-USD per million tokens, divided once and rounded up. BigInt keeps the
- * products exact; a total past Number's safe range can't be reserved, so it is null.
+ * Sum of tokens × price, divided once and rounded up to micro-USD. A total past Number's safe
+ * range can't be reserved, so it is null.
  */
-function costMicroUsd(lines: [tokens: number, microPerMTok: number][]): number | null {
-  const sum = lines.reduce((acc, [tokens, price]) => acc + BigInt(tokens) * BigInt(price), 0n);
-  const total = (sum + TOKENS_PER_PRICE_UNIT - 1n) / TOKENS_PER_PRICE_UNIT;
+function costMicroUsd(lines: [tokens: number, picoPerMTok: bigint][]): number | null {
+  const sum = lines.reduce((acc, [tokens, price]) => acc + BigInt(tokens) * price, 0n);
+  const total = ceilDiv(sum, PICO_PER_MICRO_TIMES_MTOK);
   return total <= BigInt(Number.MAX_SAFE_INTEGER) ? Number(total) : null;
 }
 
-/** Token counts and caps are non-negative safe integers; anything else is a caller bug. */
+function ceilDiv(numerator: bigint, denominator: bigint): bigint {
+  return (numerator + denominator - 1n) / denominator;
+}
+
+function isCount(value: number): boolean {
+  return Number.isSafeInteger(value) && value >= 0;
+}
+
+/** Token counts and caps for a reserve are non-negative safe integers; else a caller bug. */
 function requireCount(value: number, name: string): number {
-  if (!Number.isSafeInteger(value) || value < 0) {
+  if (!isCount(value)) {
     throw new RangeError(`${name} must be a non-negative integer, got ${value}`);
   }
   return value;
