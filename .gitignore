@@ -26,3 +26,6 @@ firestore-debug.log
 # Playwright screenshot checks (apps/web/e2e): actual images and reports
 test-results/
 playwright-report/
+
+# Generated API client types (AI-145): `pnpm --filter @andy/web gen:api`, or any `pnpm typecheck`
+apps/web/src/lib/api.gen.ts

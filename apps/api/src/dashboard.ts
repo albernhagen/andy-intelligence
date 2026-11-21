@@ -9,6 +9,7 @@ import {
 } from "@andy/contracts";
 import { DashboardReader, dashboardWindow } from "@andy/domain";
 import type { AuthEnv } from "./auth";
+import type { RouteModule } from "./services";
 
 /** The Dashboards data reads (AI-102, ADR-0045): computed on request, never stored. */
 
@@ -69,3 +70,6 @@ export function registerDashboardRoutes(
     return c.json(await reader.all(window), 200);
   });
 }
+
+/** Listed in `api-routes.ts` (AI-145). */
+export const apiRoutes: RouteModule = (app, s) => registerDashboardRoutes(app, s.deps, s.now);
