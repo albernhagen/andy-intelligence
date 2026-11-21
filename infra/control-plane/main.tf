@@ -562,6 +562,68 @@ resource "google_monitoring_alert_policy" "usage" {
   depends_on = [google_project_service.apis]
 }
 
+# ── Config change not recorded (AI-136) ────────────────────────────────────
+# A settings write succeeds even when its change-log entry fails; the API then logs this
+# ERROR. The message must equal CONFIG_CHANGE_NOT_RECORDED in packages/domain/src/
+# config-changes.ts; config-changes.test.ts reads this file and fails if they drift.
+
+resource "google_logging_metric" "config_change_not_recorded" {
+  name        = "config-change-not-recorded"
+  description = "Settings changes that succeeded without a change-log entry (AI-136)"
+  filter      = <<-EOT
+    resource.type = "cloud_run_revision"
+    AND resource.labels.service_name = "${local.service_name}"
+    AND severity = "ERROR"
+    AND jsonPayload.component = "projects"
+    AND jsonPayload.message = "config change not recorded"
+  EOT
+
+  metric_descriptor {
+    metric_kind = "DELTA"
+    value_type  = "INT64"
+    unit        = "1"
+  }
+
+  depends_on = [google_project_service.apis]
+}
+
+resource "google_monitoring_alert_policy" "config_change_not_recorded" {
+  display_name          = "Config change not recorded in the change log"
+  combiner              = "OR"
+  severity              = "ERROR"
+  notification_channels = [google_monitoring_notification_channel.alert_email.id]
+
+  # Any failure in a 5-minute window opens one incident; quiet windows count as "not firing",
+  # so it closes on its own and a burst of failures sends one email, not one per failure.
+  conditions {
+    display_name = "At least one unrecorded config change in 5 minutes"
+    condition_threshold {
+      filter                  = "resource.type = \"cloud_run_revision\" AND metric.type = \"logging.googleapis.com/user/${google_logging_metric.config_change_not_recorded.name}\""
+      comparison              = "COMPARISON_GT"
+      threshold_value         = 0
+      duration                = "0s"
+      evaluation_missing_data = "EVALUATION_MISSING_DATA_INACTIVE"
+      aggregations {
+        alignment_period     = "300s"
+        per_series_aligner   = "ALIGN_SUM"
+        cross_series_reducer = "REDUCE_SUM"
+      }
+      trigger {
+        count = 1
+      }
+    }
+  }
+
+  alert_strategy {
+    auto_close = "86400s"
+  }
+
+  documentation {
+    mime_type = "text/markdown"
+    content   = "A project-settings change succeeded but its change-log entry was not written, so the log has a gap. In Logs Explorer, search jsonPayload.message=\"config change not recorded\": each entry has projectId, diff, by and error. Steps: docs/runbooks/billing.md section 7 in the repo."
+  }
+}
+
 
 # ── Run watchdog queue (ARCHITECTURE §7.1; used from M1.6: Claude Code executor) ──
 # One task per dispatched run, delivered at the run's deadline. Capped (ADR-0028): a bug
