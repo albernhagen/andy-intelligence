@@ -57,7 +57,7 @@ Environments as per-project policy (ADR-0050): MVPs get one prod project + PR pr
 The control-plane UI as an installable web app with push (ADR-0052 has the design): verify Web Push on Andy's iPhone first; `web-push` `Notifier` adapter and `PushSubscriptionStore` port; notice types with deep links, caps, quiet hours; phone layout for the inbox, ticket detail, releases; answer, approve, promote, pause from the phone; no agent-written text in a notification. Slice at milestone start.
 
 ### M8: Project members
-Other users on a project with basic roles (AI-18). Designed at milestone start.
+Other users on a project with basic roles (AI-18). **Sliced** 2026-11-20: 15 slices under AI-18: M8: Project members (design: ADR-0127, proposed); table and order in [`m8-slices.md`](m8-slices.md).
 
 ### M9: Add Jules + model routing
 After M6: Dev → prod releases (ADR-0050). Jules adapter (completion via PR webhook); freeze `Executor` contract (two adapters pass contract tests); harness/provider/model/tier config with compatibility rules; cross-model review; google-sub quota (task counting) and reserves. **Sliced** 2026-11-21: 14 slices under AI-225: M9: Add Jules + model routing; table and order in [`m9-slices.md`](m9-slices.md).
