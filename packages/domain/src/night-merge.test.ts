@@ -20,6 +20,7 @@ import {
   MorningPullRequests,
   mergedStories,
   morningPrBody,
+  morningPrTitle,
   passesIntoEpic,
   type MorningPrHost,
 } from "./night-merge";
@@ -655,6 +656,10 @@ describe("mergedStories and morningPrBody", () => {
     expect(mergedStories(launch, stories, [run({ baseBranch: null })])).toEqual([]);
     expect(mergedStories(launch, stories, [run({ step: "sync" })])).toEqual([]);
     expect(mergedStories(launch, stories, [run({ epicMerge: null })])).toEqual([]);
+  });
+
+  it("GivenAnEpicTitleWithAMentionAndNewlines_WhenTheTitleIsWritten_ThenNeitherSurvives", () => {
+    expect(morningPrTitle("AI-1", "Ping @someone\nnow")).toBe("AI-1: Ping someone now (overnight)");
   });
 
   it("GivenAMergeWithoutASha_WhenTheBodyIsWritten_ThenItsRangeSaysNotReported", () => {

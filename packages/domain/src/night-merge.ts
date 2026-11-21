@@ -160,6 +160,15 @@ export function morningPrBody(
   return lines.join("\n");
 }
 
+/**
+ * `<epic key>: <epic title> (overnight)`, capped. The title is Andy's ticket text; `@` is dropped
+ * so it can't notify anyone, and line breaks are flattened.
+ */
+export function morningPrTitle(epicKey: string, epicTitle: string): string {
+  const title = epicTitle.replace(/@/g, "").replace(/\s+/g, " ").trim().slice(0, 200);
+  return `${epicKey}: ${title} (overnight)`;
+}
+
 /** The code host writes the morning step needs: the App token, `epic/<KEY>` branches only. */
 export interface MorningPrHost extends Pick<CodeHost, "getRepo"> {
   branchSha(fullName: string, branch: string): Promise<string | null>;
@@ -247,7 +256,7 @@ export class MorningPullRequests implements MorningPrOpener {
     const opened = await this.host.openEpicPullRequest(fullName, {
       head: branch.name,
       base: repo.defaultBranch,
-      title: `${launch.epicKey}: ${epic?.title ?? "epic"} (overnight)`.slice(0, 256),
+      title: morningPrTitle(launch.epicKey, epic?.title ?? "epic"),
       body: morningPrBody(epicLink, launch, merged),
     });
     if (opened === "exists") {
