@@ -1,0 +1,75 @@
+# Web UI and MCP parity — inventory
+
+Step 1 of AI-285: Web UI and MCP parity: every action in both, enforced by a test. Taken from `main` at `8a635f1` on 2026-11-21: the 79 signed-in `/api/*` routes and 62 MCP tools (`pnpm --filter @andy/api snapshot`), and every route the web calls (`apps/web/src`). **Parity** means Andy can do the same thing in the web UI and from Claude over MCP. Nothing here is built yet; Andy reviews the list first. Gaps in parked milestones (M6: Dev → prod releases, M7: Mobile, M8: Project members, M9: Add Jules + model routing) are listed apart and get no tickets.
+
+## Matched: in both
+
+| Action                                                   | Web route(s)                                                                    | MCP tool(s)                                                                                                                |
+| -------------------------------------------------------- | ------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------- |
+| Needs-you inbox; answer a question                       | `GET /needs-you`, `POST /questions/:id/answer`                                  | `list_needs_me`, `answer_question`                                                                                         |
+| Approve or reject an agent's plan                        | `POST …/runs/:id/plan-decision`                                                 | `approve_plan`, `reject_plan`                                                                                              |
+| Project plan: read, decide                               | `GET …/plan`, `GET /project-plans/waiting`, `POST …/plan/decision`              | `list_needs_me`, `approve_project_plan`, `reject_project_plan`                                                             |
+| Ticket: create, read, edit, parent, comment              | `POST …/tickets`, `GET /tickets/:key`, `…/readiness`, `…/questions`, `PATCH …`  | `create_ticket`, `status`, `edit_ticket`, `set_ticket_parent`, `comment_ticket`                                            |
+| Ticket: move, rank, Up next, cancel, archive             | `POST …/stage`, `…/up-next`, `…/cancel`, `…/archive`, `PATCH` rank              | `move_ticket`, `reorder_ticket`, `cancel_ticket`, `archive_ticket`                                                         |
+| Assumptions                                              | `POST …/assumptions/:id/accept`, `…/promote`                                    | `accept_assumption`, `promote_assumption`                                                                                  |
+| Epic tickets and progress                                 | `GET …/tickets/:id/epic`                                                        | `status` (epic key)                                                                                                        |
+| Start refine or build                                    | `POST …/tickets/:id/runs`                                                       | `refine`, `build`                                                                                                          |
+| Worker and executor                                      | `GET`/`PUT …/worker`, `…/executor`                                              | `status`, `set_worker`, `set_executor`                                                                                     |
+| Night launch, its status, stop; the morning report       | `GET`/`POST …/night`, `POST …/night/stop`; report arrives as an epic comment    | `night_status`, `launch_night`, `stop_night`; report in `status` and `list_needs_me`                                       |
+| In flight; work across projects; digest                  | `GET …/in-flight`, `GET /work`, `GET …/digest`                                  | `list_in_flight`, `list_work`, `digest`                                                                                    |
+| Project list; settings (except below)                    | `GET /projects`, `GET`/`PATCH /projects/:id`                                    | `list_projects`, `get_project_settings`, ten `set_*` tools, `set_spend_caps`                                               |
+| Settings changes: list, revert                           | `GET …/config-changes`, `POST …/config-changes/:id/revert`                      | `list_settings_changes`, `revert_settings_change`                                                                          |
+| Config proposals: list, accept, reject, sweep            | `GET /config-changes`, `POST …/accept`, `…/reject`, `…/config-proposals/sweep`  | `list_config_changes`, `accept_config_change`, `reject_config_change`, `sweep_config_proposals`                            |
+| Pause, runs at once                                      | `PATCH /projects/:id`                                                           | `set_paused`, `set_runs_at_once`                                                                                           |
+| Quota: read, clear idle | `GET /quota`, `POST /quota/clear` | `get_quota` (AI-286), `clear_quota_idle` |
+| Spend caps: read, set, history, revert (project, global) | `GET …/spend`, `PUT …/spend-caps`, `GET`/`PUT /spend-caps`, `…/changes`, revert | `get_spend`, `set_spend_caps`, `set_global_spend_caps`, `list_spend_cap_changes`, `revert_spend_cap_change`                |
+| Routing: read, edit (global, project), history, revert   | `GET`/`PUT /routing`, `PUT …/routing`, `GET /routing/changes`, revert           | `get_routing`, `set_tier_routes`, `set_provider_routing`, `set_step_tier`, `list_routing_changes`, `revert_routing_change` |
+| Who am I                                                 | `GET /me`                                                                       | `status` (`signedInAs`)                                                                                                    |
+
+## Gaps and their tickets (smallest first)
+
+| Ticket                                                                 | Direction | Size | Missing side                                                 |
+| ---------------------------------------------------------------------- | --------- | ---- | ------------------------------------------------------------ |
+| AI-287: Parity: project setup checklist over MCP                       | UI-only   | S    | `GET …/setup` → `project_setup`                              |
+| AI-288: Parity: spend per provider in get_spend                        | UI-only   | S    | `GET …/spend/providers` → `get_spend`                        |
+| AI-289: Parity: send a test email over MCP                             | UI-only   | S    | `GET /notify/email`, `POST …/test` → `test_email`            |
+| AI-290: Parity: ask a question on a ticket over MCP                    | UI-only   | S    | `POST …/tickets/:id/questions` → `ask_question`              |
+| AI-291: Parity: edit_ticket sets needs-attention, risk and confidence  | UI-only   | S    | `PATCH` fields → `edit_ticket`                               |
+| AI-292: Parity: set the daily question cap over MCP                    | UI-only   | S    | `PATCH dailyQuestionCap` → `set_daily_question_cap`          |
+| AI-293: Parity: a ticket's full history and runs over MCP              | UI-only   | S    | `…/events`, `…/runs`, `…/runs/:runId` → three reads          |
+| AI-294: Parity: list and revoke runners over MCP                       | UI-only   | S    | `GET /runners`, revoke → two tools (register stays app-only) |
+| AI-295: Parity: dashboards and DORA metrics over MCP                   | UI-only   | S    | `GET /dashboard`, `…/dashboard`, `…/dora` → `dashboard`      |
+| AI-296: Parity: the board, every stage, over MCP                       | UI-only   | S    | `GET …/board` → `board`                                      |
+| AI-297: Parity: create a project over MCP                              | UI-only   | S    | `POST /projects` → `create_project`                          |
+| AI-298: Parity: ranked Ready list in the web UI                        | MCP-only  | S    | `list_ready` → a web view                                    |
+| AI-299: Parity: ideate from the web UI                                 | MCP-only  | M    | `ideate` (route exists, web never calls it) → a form         |
+| AI-300: Parity: registry test that every action has a route and a tool | test      | M    | Step 2: fails when a new action ships in one side only       |
+
+## Gaps owned elsewhere
+
+| Action                      | Today                      | Where                                                                                             |
+| --------------------------- | -------------------------- | ------------------------------------------------------------------------------------------------- |
+| Merge a gated PR            | Neither (Andy uses GitHub) | AI-220: Merge modes: coordinator sessions merge through MCP merge_pr; the web links to GitHub     |
+| What's new (release notes)  | Neither                    | AI-159: What's new (page and `whats_new` tool; PR #234 open)                                      |
+| Roadmap; milestone map      | MCP `milestone_map` only   | ADR-0131 (in design, with AI-148: Milestone map): no ticket here                                  |
+| Approve or park a milestone | Neither                    | ADR-0131 (in design): no ticket here                                                              |
+
+## Parked (no tickets)
+
+| Action                              | Today   | Milestone                                                                                              |
+| ----------------------------------- | ------- | ------------------------------------------------------------------------------------------------------ |
+| Which layer set worker, tier, route | Neither | M9: Add Jules + model routing (AI-282: M9: Show which layer set a ticket's worker, tier and route, PR #301) |
+
+M6, M7 and M8 add no gap today: their settings that exist (environments) are already in both.
+
+## One side on purpose (the parity test records the reason)
+
+| Action                                                | Side     | Reason                                                                                                   |
+| ----------------------------------------------------- | -------- | -------------------------------------------------------------------------------------------------------- |
+| Turn Builds on or off                                 | Web only | ADR-0063: Builds is set only in the app                                                                  |
+| Register a runner                                     | Web only | Returns the runner token once; a token should not land in a chat transcript                              |
+| OAuth consent (`POST /oauth/approve`)                 | Web only | The browser half of MCP sign-in                                                                          |
+| GitHub App setup (`/github`, `/manifest`, `/connect`) | Web only | GitHub's manifest flow needs a browser                                                                   |
+| `submit_brief`, `submit_project_plan`                 | MCP only | Written by a Claude session following `onboard.md` and `plan-project.md`; the web shows and decides them |
+
+Not covered here: step 4 of AI-285 (refreshing a long-lived Claude session's tool list) has no ticket yet.
