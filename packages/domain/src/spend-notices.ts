@@ -94,6 +94,24 @@ function roll(state: SpendNoticeState | null, now: Date): SpendNoticeState {
 }
 
 /**
+ * Takes back a notice that was recorded but not delivered: its key goes, and today's count
+ * gives the slot back if it is still the same day. So the next event in the window retries it.
+ */
+export function unrecordSpendNotice(
+  state: SpendNoticeState | null,
+  key: string,
+  now: Date,
+): SpendNoticeState {
+  const s = roll(state, now);
+  const had = s.sent.includes(key);
+  return {
+    day: s.day,
+    sentToday: had && state?.day === s.day ? Math.max(0, s.sentToday - 1) : s.sentToday,
+    sent: s.sent.filter((k) => k !== key),
+  };
+}
+
+/**
  * The notices to send now for one project, and the state to keep. Global caps are keyed without
  * the project, so the global 80% notice goes out once whichever project reaches it first.
  */
@@ -101,7 +119,7 @@ export function spendNotices(
   input: SpendNoticeInput,
   state: SpendNoticeState | null,
   now: Date,
-): { state: SpendNoticeState; notices: Notice[] } {
+): { state: SpendNoticeState; notices: Notice[]; keys: string[] } {
   if (!PROJECT_KEY.test(input.project.key) || !PROJECT_ID.test(input.project.id)) {
     throw new Error("spend notice needs a project key and id");
   }
@@ -113,6 +131,8 @@ export function spendNotices(
     new URL(input.appUrl).origin,
   ).toString();
   const notices: Notice[] = [];
+  /** Each notice's dedupe key, in the same order, so a failed send can be un-recorded. */
+  const keys: string[] = [];
   const sent = new Set(s.sent);
   let sentToday = s.sentToday;
 
@@ -121,6 +141,7 @@ export function spendNotices(
     sent.add(key);
     sentToday += 1;
     notices.push(notice);
+    keys.push(key);
   };
   const keyOf = (kind: "warn" | "stop", cap: SpendCapKey) =>
     `${kind}|${cap}|${isGlobal(cap) ? "global" : input.project.id}|${isDaily(cap) ? day : month}`;
@@ -160,7 +181,11 @@ export function spendNotices(
     }
   }
 
-  return { state: { day, sentToday, sent: [...sent].slice(-SPEND_NOTICE_KEYS_MAX) }, notices };
+  return {
+    state: { day, sentToday, sent: [...sent].slice(-SPEND_NOTICE_KEYS_MAX) },
+    notices,
+    keys,
+  };
 }
 
 function log(severity: "INFO" | "WARNING" | "ERROR", message: string, fields: object = {}) {
@@ -224,11 +249,31 @@ export class SpendAlerts {
         appUrl: this.deps.appUrl,
       };
       const now = this.now();
-      const notices = await this.deps.ledger.update((state) => {
+      const due = await this.deps.ledger.update((state) => {
         const out = spendNotices(input, state, now);
-        return { state: out.state, result: out.notices };
+        return {
+          state: out.state,
+          result: out.notices.map((notice, i) => ({ notice, key: out.keys[i]! })),
+        };
       });
-      for (const notice of notices) await this.send(notice, event.run.id);
+      for (const { notice, key } of due) {
+        try {
+          await this.send(notice, event.run.id);
+        } catch (err) {
+          // Recorded before sending (so two instances can't both send it); a failed send is
+          // taken back, so the next event in the window tries again instead of losing it.
+          log("ERROR", "spend notice not delivered; it will be retried", {
+            runId: event.run.id,
+            title: notice.title,
+            error: String(err),
+          });
+          await this.deps.ledger
+            .update((state) => ({ state: unrecordSpendNotice(state, key, now), result: null }))
+            .catch((e: unknown) =>
+              log("ERROR", "spend notice could not be taken back", { key, error: String(e) }),
+            );
+        }
+      }
     } catch (err) {
       log("ERROR", "spend notice failed", { runId: event.run.id, error: String(err) });
     }

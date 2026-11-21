@@ -15,6 +15,7 @@ import {
   SPEND_NOTICES_PER_DAY,
   SpendAlerts,
   spendNotices,
+  unrecordSpendNotice,
   type SpendEvent,
   type SpendNoticeInput,
 } from "./spend-notices";
@@ -278,6 +279,56 @@ describe("SpendGate → spend notices (AI-257 wiring)", () => {
     expect(lines).toContainEqual(
       expect.objectContaining({ severity: "WARNING", message: "spend notice (email off)" }),
     );
+    logs.mockRestore();
+  });
+});
+
+describe("spend notices: a failed send is retried, not lost", () => {
+  it("GivenARecordedNotice_WhenUnrecorded_ThenItsKeyGoesAndTodaysSlotComesBack", () => {
+    const sent = spendNotices(input({ spent: spent(4 * USD) }), null, NOW);
+    const [key] = sent.keys;
+    expect(sent.state.sentToday).toBe(1);
+    expect(unrecordSpendNotice(sent.state, key!, NOW)).toEqual({
+      day: "2026-11-21",
+      sentToday: 0,
+      sent: [],
+    });
+    // Unknown key: nothing changes.
+    expect(unrecordSpendNotice(sent.state, "warn|nope|ai|2026-11-21", NOW)).toEqual(sent.state);
+  });
+
+  it("GivenTheNotifierThrowsOnce_WhenTheNextEventInTheWindowComes_ThenTheNoticeIsSentThen", async () => {
+    const tracker = new InMemoryWorkTracker(() => NOW);
+    const project = await tracker.createProject({ name: "Andy Intelligence", key: "AI" });
+    const ledger = new InMemorySpendNoticeLedger();
+    const delivered: Notice[] = [];
+    let fail = true;
+    const logs = vi.spyOn(console, "log").mockImplementation(() => {});
+    const alerts = new SpendAlerts({
+      tracker,
+      ledger,
+      notifier: {
+        notify: async (n) => {
+          if (fail) throw new Error("email down");
+          delivered.push(n);
+        },
+      },
+      appUrl: "https://ai.example.com",
+      now: () => NOW,
+    });
+    const event: SpendEvent = {
+      kind: "reserved",
+      run: { id: "run-1", projectId: project.id, ticketId: null },
+      caps: CAPS,
+      spent: spent(4 * USD),
+    };
+    await alerts.handle(event);
+    expect(delivered).toEqual([]);
+    expect(await ledger.get()).toMatchObject({ sentToday: 0, sent: [] });
+    fail = false;
+    await alerts.handle(event);
+    expect(delivered.map((n) => n.title)).toEqual(["AI: 80% of the daily spend cap"]);
+    expect((await ledger.get())?.sentToday).toBe(1);
     logs.mockRestore();
   });
 });
