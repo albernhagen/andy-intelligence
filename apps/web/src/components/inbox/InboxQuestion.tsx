@@ -52,9 +52,10 @@ export function InboxQuestion({ question, locked }: { question: Question; locked
 
   return (
     <li aria-label={`Question: ${question.text}`} className="space-y-2 py-2">
-      <div className="flex items-start justify-between gap-2">
-        <p className="whitespace-pre-wrap">{question.text}</p>
+      {/* The mark sits beside what it marks (AI-316). */}
+      <div className="flex flex-wrap items-start gap-2">
         {question.urgency === "high" && <Badge variant="attention">Urgent</Badge>}
+        <p className="whitespace-pre-wrap">{question.text}</p>
       </div>
       {!formatted && assumptions}
       <QuestionContext question={question} />
@@ -87,12 +88,21 @@ export function InboxQuestion({ question, locked }: { question: Question; locked
       >
         <Input
           aria-label="Your answer"
+          name="answer"
+          autoComplete="off"
           value={text}
           onChange={(e) => setText(e.target.value)}
           placeholder="Or type an answer"
           className="h-11 text-base sm:h-8 sm:text-sm"
         />
-        <Button type="submit" size="sm" className="h-11 sm:h-8" disabled={!text.trim() || locked}>
+        {/* A per-row submit is outline: primary is the screen's one main action (design.md). */}
+        <Button
+          type="submit"
+          size="sm"
+          variant="outline"
+          className="h-11 sm:h-8"
+          disabled={!text.trim() || locked}
+        >
           Answer
         </Button>
       </form>

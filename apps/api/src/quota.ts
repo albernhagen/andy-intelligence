@@ -1,6 +1,6 @@
 import { createRoute, z, type OpenAPIHono } from "@hono/zod-openapi";
-import { QuotaClearResult, QuotaStatus, type QuotaStore } from "@andy/contracts";
-import { quotaStatus, type QuotaClearer } from "@andy/domain";
+import { QuotaClearResult, QuotaStatus } from "@andy/contracts";
+import type { QuotaClearer } from "@andy/domain";
 import { signedIn, type AuthEnv } from "./auth";
 import type { RouteModule } from "./services";
 
@@ -38,16 +38,9 @@ const clearRoute = createRoute({
  * The gauge and banner's data (§5), and Andy's clear of a quota idle (AI-74; owner only, like
  * the other setters: every /api caller is on the allow-list). A null store reads as unknown.
  */
-export function registerQuotaRoutes(
-  app: OpenAPIHono<AuthEnv>,
-  quota: QuotaStore | null,
-  clearer: QuotaClearer,
-  now: () => Date,
-): void {
-  app.openapi(route, async (c) => {
-    const readings = quota ? await quota.latest("claude-sub") : [];
-    return c.json(quotaStatus("claude-sub", readings, now()), 200);
-  });
+export function registerQuotaRoutes(app: OpenAPIHono<AuthEnv>, clearer: QuotaClearer): void {
+  // AI-286: the same read as MCP `get_quota`.
+  app.openapi(route, async (c) => c.json(await clearer.status(), 200));
 
   // A refusal is a DomainError `not_clearable`, mapped to 409 by the app's error handler.
   app.openapi(clearRoute, async (c) =>
@@ -56,5 +49,4 @@ export function registerQuotaRoutes(
 }
 
 /** Listed in `api-routes.ts` (AI-145). */
-export const apiRoutes: RouteModule = (app, s) =>
-  registerQuotaRoutes(app, s.deps.quota ?? null, s.quota, s.now);
+export const apiRoutes: RouteModule = (app, s) => registerQuotaRoutes(app, s.quota);
