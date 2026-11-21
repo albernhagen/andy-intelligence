@@ -1,5 +1,5 @@
 import { createRoute, z, type OpenAPIHono } from "@hono/zod-openapi";
-import { SetWorker, WorkerView } from "@andy/contracts";
+import { SetWorker, TicketRouting, WorkerView } from "@andy/contracts";
 import type { TicketService } from "@andy/domain";
 import { actorOf, type AuthEnv } from "./auth";
 
@@ -40,10 +40,27 @@ const putWorker = createRoute({
   responses: { 200: json(WorkerView, "Stored; an agent ticket may start building"), ...errors },
 });
 
+/** Which layer set the ticket's worker, tier and route (AI-282: M9). Read-only. */
+const getRouting = createRoute({
+  security: [{ bearer: [] }],
+  method: "get",
+  path: "/api/projects/{projectId}/tickets/{ticketId}/routing",
+  request: { params },
+  responses: {
+    200: json(TicketRouting, "The ticket's build worker, tier and route, each with its layer"),
+    ...errors,
+  },
+});
+
 export function registerWorkerRoutes(app: OpenAPIHono<AuthEnv>, service: TicketService): void {
   app.openapi(getWorker, async (c) => {
     const { projectId, ticketId } = c.req.valid("param");
     return c.json(await service.worker(projectId, ticketId), 200);
+  });
+
+  app.openapi(getRouting, async (c) => {
+    const { projectId, ticketId } = c.req.valid("param");
+    return c.json(await service.routing(projectId, ticketId), 200);
   });
 
   app.openapi(putWorker, async (c) => {
