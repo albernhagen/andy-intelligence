@@ -680,6 +680,16 @@ export class RunService {
         this.spendRefusal(ticket.projectId, route, local),
       ),
     );
+    if (!chosen.route && chosen.idle === "spend_cap" && this.spendGate && !local) {
+      // AI-257: no run exists to refuse at `reserve`, so the stop notice is sent from here.
+      await this.spendGate.alertStopped(
+        ticket.projectId,
+        ticket.id,
+        chosen.skipped
+          .map((s) => s.route)
+          .filter((r) => PROVIDER_BILLING[r.provider] === "pay_per_use"),
+      );
+    }
     return chosen.route
       ? { route: chosen.route, tier, skipped: chosen.skipped, idle: null }
       : { route: null, tier, skipped: chosen.skipped, idle: chosen.idle };
