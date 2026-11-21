@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { act, screen, waitFor, within } from "@testing-library/react";
 import { DEFAULT_ROUTE, ticketSnapshot } from "@andy/domain";
-import { renderApp } from "@/test/harness";
+import { PAGE_LOAD, renderApp } from "@/test/harness";
 import { LIVE_POLL_MS } from "@/lib/live";
 import { formatCost } from "@/components/Runs";
 
@@ -35,7 +35,7 @@ async function setup() {
     });
   const open = async (ticketId = ticket.id) => {
     await harness.router.navigate({ to: `/p/ai/t/${ticketId}` });
-    return screen.findByRole("region", { name: "Activity" });
+    return screen.findByRole("region", { name: "Activity" }, PAGE_LOAD);
   };
   return { ...harness, ticket, queueRun, open };
 }

@@ -36,19 +36,19 @@ v1.x screens:
 - Screenshot checks: Playwright over the API with seeded fakes (`apps/web/e2e/`), CI job `ui-screenshots` (§8.1).
 
 **Built in AI-28: Board v2 (M3, ADR-0059 row "Board"):**
-- One read, `GET /api/projects/:id/board`: tickets with question count, run in flight, latest PR (≤ 50 history reads, ADR-0028).
+- One read, `GET /api/projects/:id/board`: tickets with questions, run in flight, latest PR (≤ 50 history reads, ADR-0028).
 - Cards: type icon, key, title, markers (size, worker (ADR-0082), questions, run step and minutes, PR, "Blocked by"). Ready is numbered; the first unblocked agent card says "Next".
 - Drag (mouse, touch, keyboard) within a lane sets `rank` (`rankBetween`); across lanes moves (forced if not allowed, not onto Cancelled), then ranks. Optimistic; a refusal rolls back with the reason. A drop never opens the ticket (AI-25).
-- Quick add atop Backlog. Up next above Ideas (ADR-0075). Done: a counted strip; Cancelled and archived behind a toggle.
+- Quick add atop Backlog. Up next above Ideas (ADR-0075). Done: a counted strip; Cancelled, archived behind a toggle.
 - Group by epic (AI-86, remembered): per lane, a header per epic (key, title, done of total), No epic last; rank stays per lane. Epic filter.
-- Work view chips (AI-187, ADR-0108, `workViews`): All plus five fixed views with open counts; one at a time, `?view=`, with the epic filter.
+- Work view chips (AI-187, ADR-0108, `workViews`): All plus five fixed views, counted; one at a time, `?view=`, with the epic filter.
 
 **Built in AI-29: Story panel (M3, ADR-0059):**
-- The ticket route is the board's child (`<Outlet />`): a 640px panel, full page under 900px; Esc or Close returns.
-- Status line (`lib/status-line.ts`): "Waiting for you: 2 questions".
-- One document (markdown with Write / Preview, checklist, scope lists), a rail of moves and facts, questions, one timeline.
+- The ticket route is the board's child (`<Outlet />`): a 640px panel, full page under 900px; Esc closes.
+- Status line (`lib/status-line.ts`), e.g. "Waiting for you: 2 questions".
+- One document (markdown with Write / Preview, checklist, scope lists), a rail of moves and facts, questions, one timeline. Epics: outcome, checklist "Done when" (AI-186).
 - Fields save in place, queued per ticket with the latest `updatedAt`; a 409 offers Reload; leaving unsaved typing asks first.
-- Descriptions, comments and questions render as safe markdown (`components/Markdown.tsx`).
+- Descriptions, comments and questions are safe markdown (`components/Markdown.tsx`).
 
 **Built in M1.19: GitHub App setup from the UI:** `/settings/github` (connect, install link, installed repos); the new-project form suggests installed repos.
 
