@@ -22,7 +22,7 @@ v1.x screens:
 **Built in M1.3: UI: tickets + inbox:**
 - Routes: `/p/:projectId` board; `/p/:projectId/t/:ticketRef` ticket panel (ref = key, e.g. `AI-2`; an id or wrong project redirects).
 - Moves: one button per move in `TRANSITIONS` (`packages/domain`), plus "Force move…" (recorded). Cancel (optional reason), Archive/Unarchive. The API enforces rules; errors show inline.
-- Client: `openapi-fetch` typed by `src/lib/api.gen.ts`, generated from the API's OpenAPI document (`gen:api`; a test fails when stale). Every write refetches all queries.
+- Client: `openapi-fetch` typed by `src/lib/api.gen.ts`, generated from the API's OpenAPI document by `typecheck` (`gen:api`); not committed. Every write refetches all queries.
 - Tests render the UI against the in-process API.
 - Not yet: the kill switch item.
 
@@ -52,3 +52,5 @@ v1.x screens:
 **Built in M1.19: GitHub App setup from the UI:** `/settings/github` (connect, install link, installed repos); the new-project form suggests installed repos.
 
 **Built in AI-9: Live updates (ADR-0091):** `lib/live.ts` sets every polled query's interval: 5 s in use or with a run in flight, else 60 s; none hidden. Failed polls back off; the shell shows "Updates delayed".
+
+Night launch: AI-120 (`NightLaunch.tsx`).

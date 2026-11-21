@@ -2,6 +2,7 @@ import { createRoute, z, type OpenAPIHono } from "@hono/zod-openapi";
 import { BriefAnswers, ProposedPullRequest } from "@andy/contracts";
 import type { BriefService } from "@andy/domain";
 import { actorOf, type AuthEnv } from "./auth";
+import type { RouteModule } from "./services";
 
 /**
  * The project brief's one write (AI-107, ADR-0053 "What the API does"): owner-only answers in,
@@ -57,3 +58,6 @@ export function registerBriefRoutes(app: OpenAPIHono<AuthEnv>, brief: BriefServi
     return result.status === "opened" ? c.json(result, 201) : c.json(result, 200);
   });
 }
+
+/** Listed in `api-routes.ts` (AI-145). */
+export const apiRoutes: RouteModule = (app, s) => registerBriefRoutes(app, s.brief);

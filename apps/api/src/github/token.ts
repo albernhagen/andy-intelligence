@@ -9,6 +9,8 @@ import { z } from "zod";
 import { FixedWindowLimiter } from "../mcp/rate-limit";
 import { RUN_TOKEN_SHAPE } from "../runners";
 import type { GitHubConnection } from "./connection";
+import type { RouteModule } from "../services";
+import { RepoIndex } from "./webhooks";
 
 /**
  * Repo tokens for CI jobs (ADR-0043). A workflow proves who it is with its GitHub Actions
@@ -242,3 +244,27 @@ export function registerGitHubToken(app: Hono<AuthEnv>, deps: TokenDeps): void {
     return issue(c, repo, { runId, ...caller });
   }
 }
+
+/** Listed in `public-routes.ts` (AI-145): CI jobs present an Actions OIDC token. Needs the GitHub App. */
+export const publicRoutes: RouteModule = (app, s) => {
+  const { connection, verifyActionsToken } = s;
+  if (!connection || !verifyActionsToken) return;
+  const repoIndex = new RepoIndex(s.tracker, () => s.now().getTime());
+  registerGitHubToken(app, {
+    connection,
+    verify: verifyActionsToken,
+    claimRunGrant: (runId, caller) => s.runs.claimPushGrant(runId, caller),
+    registeredProject: (repo) => repoIndex.projectFor(repo),
+    ...(s.runners
+      ? {
+          local: {
+            authenticate: (token: string, runId: string) =>
+              s.runners!.authenticateRun(token, runId),
+            claim: (runId: string, caller: { runnerId: string }) =>
+              s.runs.claimLocalPushGrant(runId, caller),
+          },
+        }
+      : {}),
+    now: s.now,
+  });
+};

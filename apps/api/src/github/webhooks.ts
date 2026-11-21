@@ -25,6 +25,8 @@ import {
 } from "@andy/github";
 import type { AuthEnv } from "../auth";
 import { FixedWindowLimiter } from "../mcp/rate-limit";
+import type { RouteModule } from "../services";
+import { ConnectedCodeHost } from "./connection";
 
 /**
  * GitHub App webhook receiver (ADR-0041, ADR-0043: secret read from the connection). Order of checks: body cap → HMAC → rate cap →
@@ -227,3 +229,20 @@ export function registerGitHubWebhook(app: Hono<AuthEnv>, deps: WebhookDeps): vo
     },
   );
 }
+
+/** Listed in `public-routes.ts` (AI-145): GitHub signs webhooks (HMAC). Needs the GitHub App. */
+export const publicRoutes: RouteModule = (app, s) => {
+  const { connection } = s;
+  const github = s.deps.github;
+  if (!github || !connection) return;
+  registerGitHubWebhook(app, {
+    secret: async () => (await connection.get())?.webhookSecret ?? null,
+    events: github.events,
+    tracker: s.tracker,
+    tickets: s.service,
+    codeHost: new ConnectedCodeHost(connection),
+    runs: s.deps.runs,
+    onDefaultBranchMoved: (projectId) => s.syncer.defaultBranchMoved(projectId),
+    now: s.now,
+  });
+};
