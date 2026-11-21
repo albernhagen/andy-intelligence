@@ -1,4 +1,5 @@
 ---
+title: Rollups computed with Firestore aggregation queries
 status: accepted
 date: 2026-10-22
 amends: 0017

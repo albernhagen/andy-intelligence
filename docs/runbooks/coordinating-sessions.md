@@ -28,7 +28,7 @@ A new session gets the MCP connector's current tools. A long-lived one keeps the
 ## 3. What the coordinator does that the procedure doesn't say
 
 - **Tickets first, over MCP:** `create_ticket` with the milestone epic as `parentId` (AI-21: M1, AI-22: M2, AI-23: M3). Refine runs on each new ticket and may ask questions; a worker builds from the ticket and brief, not from those answers.
-- **Reserve ADR numbers** in each brief; the next free number is the highest in `docs/architecture/adr/README.md` plus those already handed out.
+- **Reserve ADR numbers** in each brief; the next free number is the highest `NNNN-*.md` in `docs/architecture/adr/` (`pnpm adr`) plus those already handed out.
 - **Owned by the coordinator:** the milestone map in `docs/build-log.md` and `context-budget.json` budgets. Workers add only their own `docs/build-log/<date>-<slug>.md`.
 - **Budgets:** architecture detail goes in the topic files (ADR-0061); a worker replaces the as-built lines it supersedes. A budget is raised only when Andy agrees, in a PR he merges.
 - **After each merge:** `gh run list --branch main` for the checks on `main`; message every open worker; send the upkeep worker any ticket the PR event did not move.

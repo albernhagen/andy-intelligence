@@ -1,4 +1,5 @@
 ---
+title: One Cloud Run service, us-central1, default run.app URL
 status: accepted, amended by 0044
 date: 2026-10-21
 ---

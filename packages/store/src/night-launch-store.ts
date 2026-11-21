@@ -1,8 +1,10 @@
 import type { Firestore, Transaction } from "@google-cloud/firestore";
 import {
   NightLaunch,
+  NightStoppedStory,
   WorkTrackerError,
   nightLaunchIsActive,
+  withStoppedStory,
   type NightLaunchStatus,
   type NightLaunchStore,
   type NightLaunchTransition,
@@ -72,6 +74,18 @@ export class FirestoreNightLaunchStore implements NightLaunchStore {
       const next = NightLaunch.parse({ ...current, ...change });
       if (nightLaunchIsActive(next)) await this.refuseIfActive(tx, next.projectId, next.id);
       tx.set(ref, next);
+      return next;
+    });
+  }
+
+  async stopStory(launchId: string, story: NightStoppedStory): Promise<NightLaunch> {
+    const parsed = NightStoppedStory.parse(story);
+    const ref = this.launches().doc(launchId);
+    return this.db.runTransaction(async (tx) => {
+      const current = (await tx.get(ref)).data();
+      if (!current) throw new WorkTrackerError("not_found", `night launch ${launchId} not found`);
+      const next = withStoppedStory(current, parsed);
+      if (next !== current) tx.set(ref, next);
       return next;
     });
   }

@@ -1,5 +1,6 @@
 ---
-status: accepted
+title: "Sync runs: open agent PRs merge main"
+status: accepted, amended by 0100
 date: 2026-11-10
 amends: 0047 (sync runs), 0079 (what counts against the dial), 0063 (a second step pushes)
 ---

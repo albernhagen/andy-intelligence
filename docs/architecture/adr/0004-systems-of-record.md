@@ -1,4 +1,5 @@
 ---
+title: GitHub owns work, Postgres the rest
 status: superseded by 0016
 date: 2026-10-21
 ---
