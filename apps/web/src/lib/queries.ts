@@ -2,6 +2,7 @@ import { useEffect, useRef } from "react";
 import { type QueryClient, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type {
   AutoMerge,
+  MergeMode,
   EnvironmentPolicy,
   ExecutorKind,
   PlanApproval,
@@ -34,6 +35,24 @@ export function useQuota() {
 }
 
 /** A project's digest for the last `hours` (AI-70); computed on read, refetched on focus. */
+/** What's new (AI-159): the last `days` days, optionally one milestone epic's changes. */
+export function useWhatsNew(projectId: string, days: number, epic: string | null) {
+  const api = useApi();
+  return useQuery({
+    queryKey: ["whats-new", projectId, days, epic],
+    queryFn: async () => {
+      // Both ends from the browser clock, so the window is exactly `days` long.
+      const until = new Date(Date.now()).toISOString();
+      const since = new Date(Date.now() - days * 86_400_000).toISOString();
+      return unwrap(
+        await api.GET("/api/projects/{projectId}/whats-new", {
+          params: { path: { projectId }, query: { since, until, ...(epic ? { epic } : {}) } },
+        }),
+      );
+    },
+  });
+}
+
 export function useDigest(projectId: string, hours: number) {
   const api = useApi();
   return useQuery({
@@ -170,6 +189,19 @@ export function useWorker(path: TicketPath) {
     queryFn: async () =>
       unwrap(
         await api.GET("/api/projects/{projectId}/tickets/{ticketId}/worker", { params: { path } }),
+      ),
+  });
+}
+
+/** Its build worker, tier and route, and the layer that set each (AI-282: M9). */
+export function useTicketRouting(path: TicketPath) {
+  const api = useApi();
+  return useQuery({
+    ...useLivePoll("slow"),
+    queryKey: ["ticket-routing", path],
+    queryFn: async () =>
+      unwrap(
+        await api.GET("/api/projects/{projectId}/tickets/{ticketId}/routing", { params: { path } }),
       ),
   });
 }
@@ -387,6 +419,7 @@ export function useUpdateProject(projectId: string) {
       buildEnabled?: boolean;
       planApproval?: PlanApproval;
       autoMerge?: AutoMerge;
+      mergeMode?: MergeMode;
       runsAtOnce?: number;
       paused?: boolean;
       defaultWorker?: Worker;

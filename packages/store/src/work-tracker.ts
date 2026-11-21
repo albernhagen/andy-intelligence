@@ -141,6 +141,19 @@ export class FirestoreWorkTracker implements WorkTracker {
 
   async listTickets(projectId: string, filter: TicketFilter = {}): Promise<Ticket[]> {
     let query: Query<Ticket> = this.tickets(projectId);
+    // AI-315: Up next is a single-field inequality on `upNextRank` (automatic index; a document
+    // without the field is in Ideas, so it is rightly left out). An equality on another field
+    // would need a composite index, so the stage and the other filters apply in memory then.
+    if (filter.upNext) {
+      const found = (await query.where("upNextRank", "!=", null).get()).docs.map((d) => d.data());
+      return found
+        .filter((t) => t.stage === "backlog" && t.upNextRank !== null)
+        .filter((t) => filter.archived === undefined || t.archived === filter.archived)
+        .filter(
+          (t) => filter.needsAttention === undefined || t.needsAttention === filter.needsAttention,
+        )
+        .sort((a, b) => compareRanks(a.rank, b.rank));
+    }
     // v2 documents may still store `monitoring` for Done until their next write (ticketV2toV3),
     // so a Done filter matches both stored values; the converter returns them as Done.
     if (filter.stage !== undefined) {
@@ -160,6 +173,12 @@ export class FirestoreWorkTracker implements WorkTracker {
         (t) => filter.needsAttention === undefined || t.needsAttention === filter.needsAttention,
       );
     return tickets.sort((a, b) => compareRanks(a.rank, b.rank));
+  }
+
+  /** One range filter on `updatedAt`: a single-field index, no composite one (AI-317). */
+  async listTicketsChangedSince(projectId: string, since: string): Promise<Ticket[]> {
+    const snap = await this.tickets(projectId).where("updatedAt", ">=", since).get();
+    return snap.docs.map((d) => d.data()).sort((a, b) => compareRanks(a.rank, b.rank));
   }
 
   async getTicketByKey(projectId: string, key: string): Promise<Ticket | null> {
@@ -245,6 +264,16 @@ export class FirestoreWorkTracker implements WorkTracker {
     // Event ids sort in write order (see eventId).
     const snap = await this.events(projectId, ticketId).orderBy(FieldPath.documentId()).get();
     return snap.docs.map((d) => d.data());
+  }
+
+  /** An equality filter on `kind` (single-field index); the newest is the highest id. */
+  async getLatestPullRequest(projectId: string, ticketId: string): Promise<PullRequestLink | null> {
+    const snap = await this.events(projectId, ticketId).where("kind", "==", "pr_linked").get();
+    const newest = snap.docs
+      .map((d) => d.data())
+      .sort((a, b) => (a.id < b.id ? -1 : 1))
+      .at(-1);
+    return newest ? PullRequestLink.parse(newest.data) : null;
   }
 
   async askQuestion(

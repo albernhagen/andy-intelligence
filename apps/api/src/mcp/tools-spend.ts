@@ -2,6 +2,7 @@ import { Project, ProjectSpendCaps, SpendCaps } from "@andy/contracts";
 import { formatMicroUsd, type SpendView } from "@andy/domain";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
+import type { SpendByProviderView } from "../spend";
 import type { Run, ToolDeps } from "./tools";
 
 /**
@@ -30,7 +31,7 @@ const SetSpendCapsInput = {
 };
 
 /** The view with dollar amounts beside the micro-dollars, so a reader needn't convert. */
-function shown(project: string, v: SpendView) {
+function shown(project: string, v: SpendView, byProvider?: SpendByProviderView) {
   const usd = (n: number) => formatMicroUsd(n);
   return {
     project,
@@ -47,6 +48,7 @@ function shown(project: string, v: SpendView) {
           allProjectsThisMonth: usd(v.spent.global.monthMicroUsd),
         }
       : "unknown",
+    ...(byProvider ? { byProvider } : {}),
   };
 }
 
@@ -58,11 +60,17 @@ export function registerSpendTools(server: McpServer, deps: ToolDeps, run: Run):
     "get_spend",
     {
       description:
-        "A project's spend caps and what it spent: the global caps (code defaults until they can be edited), the project's own caps, the effective caps a paid call is checked against, and spend today and this month for the project and all projects (\"unknown\" when the spend ledger can't be read, never zero). Amounts in micro-dollars (1 USD = 1,000,000), with dollar strings beside them.",
+        "A project's spend caps and what it spent: the global caps (code defaults until they can be edited), the project's own caps, the effective caps a paid call is checked against, spend today and this month for the project and all projects, and the same split by provider (byProvider: project and global rows per provider; null when the spend ledger can't be read). Spend reads \"unknown\" when the ledger can't be read, never zero. Amounts in micro-dollars (1 USD = 1,000,000), with dollar strings beside them.",
       inputSchema: { project: ProjectKey },
       annotations: { readOnlyHint: true, openWorldHint: false },
     },
-    ({ project }) => run(async () => shown(project, await spend.view(project.toLowerCase()))),
+    ({ project }) =>
+      run(async () => {
+        const id = project.toLowerCase();
+        // AI-288: the per-provider figures from the same read as GET …/spend/providers.
+        const [view, byProvider] = await Promise.all([spend.view(id), spend.byProvider(id)]);
+        return shown(project, view, byProvider);
+      }),
   );
 
   server.registerTool(
