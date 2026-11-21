@@ -22,8 +22,8 @@ AI-146: API, MCP and README reference tables generated from the code (epic AI-14
 Option 2.
 
 - `pnpm reference` (`apps/api/src/reference.ts`) prints every MCP tool with the first sentence of its description, the owner-only actions (`OWNER_ACTIONS`, AI-19) and every route with whether it sits behind the `/api` sign-in (from registration order).
-- `apps/api/src/reference.test.ts` (in `pnpm test`, so the `check` job) fails, naming `pnpm reference`, when a route outside the sign-in isn't named in `docs/security/`, so every entry point still says who can reach it and how. It found `GET /openapi.json` undocumented; it is now listed as public.
-- The design docs, the security area file, the README and the feature file keep their rules and point at `pnpm reference` in place of tool and route lists.
+- `apps/api/src/reference.test.ts` (in `pnpm test`, so the `check` job) fails, naming `pnpm reference`, when a route outside the sign-in has no row in an entry-point table in `docs/security/` (a mention in prose or another table doesn't count; a method, if the row gives one, must match), so every entry point still says who can reach it and how. It found `GET /openapi.json` undocumented; it is now listed as public. Another test calls every signed-in route without a token and expects 401, so the "Signed in" column is checked, not just read from registration order.
+- The design doc, the README and the feature file keep their rules and point at `pnpm reference` in place of tool and route lists. The security area files keep their own lists: the security reviewer reads them and can't run `pnpm`.
 
 ### Consequences
 

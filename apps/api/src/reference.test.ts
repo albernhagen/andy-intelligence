@@ -2,9 +2,10 @@ import { mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
+import { fullApp } from "./registry-snapshot";
 import {
   REGENERATE,
-  documentedPatterns,
+  documentedEntries,
   reference,
   renderReference,
   routeRows,
@@ -73,21 +74,45 @@ describe("documented entry points", () => {
   const docs = (text: string) => {
     const dir = mkdtempSync(join(tmpdir(), "reference-docs-"));
     writeFileSync(join(dir, "area.md"), text);
-    return documentedPatterns(dir);
+    return documentedEntries(dir);
   };
+  const entryTable = (...rows: string[]) =>
+    ["| Entry point | Who | Authn |", "| --- | --- | --- |", ...rows].join("\n");
+  const route = (method: string, path: string) => ({ method, path, signedIn: false });
 
-  it("GivenDocsNamingPathsWithParamsAndGlobs_WhenMatched_ThenOnlyUnnamedPublicRoutesAreReported", () => {
-    const patterns = docs("| `POST /runs/{id}/report` | `/.well-known/oauth-*` | `GET …/context`");
-    const missing = undocumentedRoutes(
-      [
-        { method: "POST", path: "/runs/:runId/report", signedIn: false },
-        { method: "GET", path: "/.well-known/oauth-authorization-server", signedIn: false },
-        { method: "GET", path: "/openapi.json", signedIn: false },
-        { method: "GET", path: "/api/undocumented", signedIn: true },
-      ],
-      patterns,
+  it("GivenEntryRowsWithParamsAndATrailingGlob_WhenMatched_ThenThoseRoutesAreDocumented", () => {
+    const entries = docs(
+      entryTable(
+        "| Run callbacks `POST /runs/{id}/report`, `GET …/context` | Internet | OIDC |",
+        "| MCP (`/.well-known/oauth-*`) | Internet | OAuth |",
+      ),
     );
-    expect(missing).toEqual(["GET /openapi.json"]);
+    const routes = [
+      route("POST", "/runs/:runId/report"),
+      route("GET", "/.well-known/oauth-protected-resource/mcp"),
+    ];
+    expect(undocumentedRoutes(routes, entries)).toEqual([]);
+  });
+
+  it.each([
+    ["only in prose", `Prose naming \`/admin/export\`.\n\n${entryTable("| Other `/x` | a | b |")}`],
+    [
+      "only in another table",
+      "| Identity / secret | Grants |\n| --- | --- |\n| Token | `/admin/export` |",
+    ],
+    ["in an entry row with another method", entryTable("| Export `POST /admin/export` | a | b |")],
+    ["only as a pattern with no literal segment", entryTable("| Anything `/*`, `/{id}` | a | b |")],
+  ])("GivenAPublicRouteNamed%s_WhenMatched_ThenItIsReported", (_, text) => {
+    expect(undocumentedRoutes([route("GET", "/admin/export")], docs(text))).toEqual([
+      "GET /admin/export",
+    ]);
+  });
+
+  it("GivenAGlobInTheMiddleOfAPath_WhenMatched_ThenItStaysWithinOneSegment", () => {
+    const entries = docs(entryTable("| Hooks `/hooks/*/in` | a | b |"));
+    expect(
+      undocumentedRoutes([route("POST", "/hooks/a/in"), route("POST", "/hooks/a/b/in")], entries),
+    ).toEqual(["POST /hooks/a/b/in"]);
   });
 });
 
@@ -102,10 +127,23 @@ describe("this app's reference", () => {
 
   it("GivenEveryRouteOutsideTheSignIn_WhenTheSecurityDocsAreRead_ThenEachIsNamedThere", async () => {
     const { routes } = await reference();
-    const missing = undocumentedRoutes(routes, documentedPatterns(SECURITY_DOCS));
+    const missing = undocumentedRoutes(routes, documentedEntries(SECURITY_DOCS));
     expect(
       missing,
-      `Routes outside the /api sign-in must say who can reach them and how in docs/security/ (list: ${REGENERATE})`,
+      `Routes outside the /api sign-in need a row in an entry-point table in docs/security/ saying who can reach them and how (list: ${REGENERATE})`,
     ).toEqual([]);
+  });
+
+  // The "Signed in" column comes from registration order; prove each such route refuses no token.
+  it("GivenEverySignedInRoute_WhenCalledWithoutAToken_Then401", async () => {
+    const { routes } = await reference();
+    const { app } = fullApp();
+    const open: string[] = [];
+    for (const r of routes.filter((x) => x.signedIn)) {
+      const path = r.path.replace(/:\w+/g, "x");
+      const res = await app.request(`http://localhost${path}`, { method: r.method });
+      if (res.status !== 401) open.push(`${r.method} ${r.path} → ${res.status}`);
+    }
+    expect(open).toEqual([]);
   });
 });

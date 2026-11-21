@@ -97,35 +97,76 @@ export async function reference(): Promise<{ tools: ToolRow[]; routes: RouteRow[
   return { tools, routes: routeRows(app.routes) };
 }
 
-/** Path patterns named in the security docs: `{id}` and `:id` match one segment, `*` any text. */
-export function documentedPatterns(dir: string): RegExp[] {
-  const text = readdirSync(dir)
-    .filter((f) => f.endsWith(".md"))
-    .map((f) => readFileSync(join(dir, f), "utf8"))
-    .join("\n");
-  const paths = text.match(/(?<![\w.:/])\/[\w.{}:*…-]+(?:\/[\w.{}:*…-]+)*/g) ?? [];
-  return [...new Set(paths)].map(
-    (p) =>
-      new RegExp(
-        `^${p
-          .split(/(\{[^}]*\}|:\w+|\*)/)
-          .map((part) =>
-            part.startsWith("{") || part.startsWith(":")
-              ? "[^/]+"
-              : part === "*"
-                ? ".*"
-                : part.replace(/[.+?^${}()|[\]\\]/g, "\\$&"),
-          )
-          .join("")}$`,
-      ),
-  );
+/** An entry point a security doc names: an optional method and a path pattern. */
+export interface DocumentedEntry {
+  method: string | null;
+  pattern: RegExp;
 }
 
-/** Routes outside the sign-in that no security doc names (each must say who and how). */
-export function undocumentedRoutes(routes: RouteRow[], patterns: RegExp[]): string[] {
+const PATH =
+  /(?:\b(GET|POST|PUT|PATCH|DELETE|ALL)\s+)?(?<![\w.:/…])(\/[\w.{}:*-]+(?:\/[\w.{}:*-]+)*)/g;
+
+/**
+ * Entry points named in the security docs' entry-point tables: any cell of a row in a table whose
+ * first header is "Entry point". Prose, risks and other tables don't count. `{id}` and `:id`
+ * match one segment; `*` matches within one segment, or anything when it ends the path
+ * (`/.well-known/oauth-*`); a path needs at least one literal segment, so `/*` or `/{id}` can't
+ * cover every route.
+ */
+export function documentedEntries(dir: string): DocumentedEntry[] {
+  const entries: DocumentedEntry[] = [];
+  for (const file of readdirSync(dir).filter((f) => f.endsWith(".md"))) {
+    let inEntryTable = false;
+    for (const line of readFileSync(join(dir, file), "utf8").split("\n")) {
+      if (!line.startsWith("|")) {
+        inEntryTable = false;
+        continue;
+      }
+      const firstCell = line.split("|")[1]?.trim() ?? "";
+      if (/^-+$/.test(firstCell)) continue;
+      if (/^Entry point\b/.test(firstCell)) {
+        inEntryTable = true;
+        continue;
+      }
+      if (!inEntryTable) continue;
+      for (const [, method, path] of line.matchAll(PATH)) {
+        const segments = path!.split("/").filter(Boolean);
+        if (!segments.some((s) => /^[\w.-]+$/.test(s))) continue;
+        entries.push({ method: method ?? null, pattern: toPattern(path!) });
+      }
+    }
+  }
+  return entries;
+}
+
+function toPattern(path: string): RegExp {
+  const parts = path.split(/(\{[^}]*\}|:\w+|\*)/);
+  const body = parts
+    .map((part, i) =>
+      part.startsWith("{") || part.startsWith(":")
+        ? "[^/]+"
+        : part === "*"
+          ? i >= parts.length - 2 && !parts.slice(i + 1).join("")
+            ? ".*"
+            : "[^/]*"
+          : part.replace(/[.+?^${}()|[\]\\]/g, "\\$&"),
+    )
+    .join("");
+  return new RegExp(`^${body}$`);
+}
+
+/** Routes outside the sign-in that no entry-point row names (each must say who and how). */
+export function undocumentedRoutes(routes: RouteRow[], entries: DocumentedEntry[]): string[] {
   return routes
     .filter((r) => !r.signedIn)
-    .filter((r) => !patterns.some((re) => re.test(r.path.replace(/:\w+/g, "x"))))
+    .filter((r) => {
+      const path = r.path.replace(/:\w+/g, "x");
+      return !entries.some(
+        (e) =>
+          e.pattern.test(path) &&
+          (e.method === null || r.method === "ALL" || e.method === r.method),
+      );
+    })
     .map((r) => `${r.method} ${r.path}`);
 }
 
