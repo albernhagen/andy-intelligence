@@ -28,6 +28,7 @@ import {
   MorningReports,
   MorningSteps,
   ProjectReadCache,
+  TicketSnapshots,
   RoutingSettings,
   GlobalSpendCaps,
   SpendAlerts,
@@ -83,6 +84,7 @@ export interface Services extends Required<ToolServices> {
   readCache: ProjectReadCache | null;
   /** Single-call steps on a `direct` route (AI-258); null without a spend ledger. */
   direct: DirectExecutor | null;
+  snapshots: TicketSnapshots | null;
 }
 
 /** A module's routes: registered from its own file and listed once in `public-routes.ts` or `api-routes.ts`. */
@@ -99,9 +101,11 @@ export const METERED_READS = {
     "listProjects",
     "getTicket",
     "listTickets",
+    "listTicketsChangedSince",
     "getTicketByKey",
     "countByStage",
     "listEvents",
+    "getLatestPullRequest",
     "getQuestion",
     "listQuestions",
   ],
@@ -152,8 +156,10 @@ export function createServices(raw: AppDeps): Services {
     ? { ...notified, ...bumpOnWrite(notified.tracker, notified.runs, versions) }
     : notified;
   const readCache = versions ? new ProjectReadCache(versions) : null;
+  // AI-317: the board and ticket list refresh from changed tickets, not the whole project.
+  const snapshots = readCache ? new TicketSnapshots(deps.tracker) : null;
   // Board reads served through the read cache: board polls, work lists and roadmaps (ADR-0126).
-  const board = new BoardReader(deps.tracker, deps.runs, readCache);
+  const board = new BoardReader(deps.tracker, deps.runs, readCache, snapshots);
 
   const github = deps.github;
   const now = github?.now ?? (() => new Date());
@@ -456,6 +462,7 @@ export function createServices(raw: AppDeps): Services {
     night,
     readCache,
     direct,
+    snapshots,
     setup: new SetupChecklistReader(
       deps.tracker,
       connection ? new ConnectedCodeHost(connection) : null,
