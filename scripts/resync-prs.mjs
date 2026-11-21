@@ -68,6 +68,15 @@ export function pickPrs(prs, ctx) {
   return { candidates: eligible.slice(0, MAX_PRS_PER_RUN), skipped: [...skipped, ...overCap] };
 }
 
+/**
+ * The start of the message GitHub's update-branch (and `gh pr update-branch`, and a local
+ * `git merge main`) gives its merge commit. The daily cap counts these on the branch: any merge of
+ * the default branch in 24 hours, whoever made it.
+ */
+export function mergeMessage(defaultBranch) {
+  return `Merge branch '${defaultBranch}' into `;
+}
+
 /** "owner/repo/.github/workflows/x.yml@refs/heads/main" → "x.yml". */
 export function workflowFile(workflowRef) {
   const match = /^[^/]+\/[^/]+\/\.github\/workflows\/([A-Za-z0-9._-]+\.ya?ml)@/.exec(
@@ -183,7 +192,7 @@ async function writeToken({ env, fetchImpl, emit }) {
     );
   }
   emit(`::add-mask::${data.token}`);
-  // The actor names our merge commits (daily cap) and our comment; without it neither is safe.
+  // The actor finds our own comment; without it we'd edit or duplicate someone else's.
   if (typeof data.actor !== "string" || data.actor === "") {
     throw new Error("the control plane's token response names no actor");
   }
@@ -264,7 +273,7 @@ async function resyncOne({ pr, env, git, github, write, mainSha, auth }) {
     "--merges",
     "--since=24 hours ago",
     "--fixed-strings",
-    `--author=${write.actor}`,
+    `--grep=${mergeMessage(env.DEFAULT_BRANCH)}`,
     `${mainSha}..${headSha}`,
   ]);
   const recent = Number.parseInt(counted.stdout.trim(), 10);
@@ -274,7 +283,7 @@ async function resyncOne({ pr, env, git, github, write, mainSha, auth }) {
   if (recent >= MAX_UPDATES_PER_PR_PER_DAY) {
     return {
       outcome: "skipped",
-      detail: `${recent} re-syncs in 24 hours: cap ${MAX_UPDATES_PER_PR_PER_DAY}`,
+      detail: `${recent} merges of ${env.DEFAULT_BRANCH} in 24 hours: cap ${MAX_UPDATES_PER_PR_PER_DAY}`,
     };
   }
 
@@ -330,7 +339,7 @@ export async function resync({ env, git, github, fetchImpl = globalThis.fetch, e
     emit(`#${r.number}: ${r.outcome}: ${r.detail}`);
   };
 
-  const since = new Date(now().getTime() - 3_600_000).toISOString();
+  const since = new Date(now().getTime() - 3_600_000).toISOString().replace(/\.\d{3}Z$/, "Z");
   const file = workflowFile(env.WORKFLOW_REF);
   const runs = await github(
     "GET",

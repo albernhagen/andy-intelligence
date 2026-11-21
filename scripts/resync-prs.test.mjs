@@ -10,6 +10,7 @@ import {
   OPT_OUT_LABEL,
   conflictFiles,
   gitRunner,
+  mergeMessage,
   pickPrs,
   resync,
   skipReason,
@@ -236,7 +237,7 @@ describe("resync", () => {
     });
     expect(writes(w.calls)).toEqual([]);
     const revList = w.gitCalls.find((a) => a[0] === "rev-list");
-    expect(revList).toContain(`--author=${ACTOR}`);
+    expect(revList).toContain("--grep=Merge branch 'main' into ");
     expect(revList).toContain("--fixed-strings");
   });
 
@@ -363,7 +364,7 @@ describe("summaryTable", () => {
 });
 
 describe("gitRunner against a real repository", () => {
-  /** A repo with `main` and a branch that both changed line 1 of a.txt; the branch has one bot merge. */
+  /** A repo with `main` and a branch that both changed line 1 of a.txt; the branch merged `main` once. */
   function repoWithConflict() {
     const dir = mkdtempSync(join(tmpdir(), "resync-"));
     const git = gitRunner(dir);
@@ -391,7 +392,7 @@ describe("gitRunner against a real repository", () => {
     ok(["add", "."]);
     ok(["commit", "--quiet", "-m", "main work"], as("dev"));
     ok(["checkout", "--quiet", "side"]);
-    ok(["merge", "--quiet", "--no-ff", "-m", "bot merge", "main"], as(ACTOR));
+    ok(["merge", "--quiet", "--no-ff", "--no-edit", "main"], as(ACTOR));
     writeFileSync(join(dir, "a.txt"), "side\n");
     ok(["commit", "--quiet", "-am", "side edit"], as("dev"));
     ok(["checkout", "--quiet", "main"]);
@@ -408,10 +409,14 @@ describe("gitRunner against a real repository", () => {
     expect(git(["merge-base", "--is-ancestor", main, side]).status).toBe(1);
   });
 
-  it("GivenABotMergeOnTheBranch_WhenCountedByFixedAuthor_ThenOne", () => {
+  it("GivenOneMergeOfMainOnTheBranch_WhenCountedByMessage_ThenOne", () => {
     const { git, main, side } = repoWithConflict();
     const args = ["rev-list", "--count", "--merges", "--since=24 hours ago", "--fixed-strings"];
-    expect(git([...args, `--author=${ACTOR}`, `${main}..${side}`]).stdout.trim()).toBe("1");
-    expect(git([...args, "--author=dev", `${main}..${side}`]).stdout.trim()).toBe("0");
+    expect(git([...args, `--grep=${mergeMessage("main")}`, `${main}..${side}`]).stdout.trim()).toBe(
+      "1",
+    );
+    expect(
+      git([...args, `--grep=${mergeMessage("trunk")}`, `${main}..${side}`]).stdout.trim(),
+    ).toBe("0");
   });
 });

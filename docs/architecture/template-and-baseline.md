@@ -21,7 +21,7 @@ infra/                            # Terraform: dev/prod Cloud Run, Cloud Deploy 
 ```
 **Required CI checks** on `main`: tests, lint, typecheck, protected-path check, secret scan, security scans and security-review agent (§9.1), "PR references a ticket" (ticket key in branch name or PR body, verified against the control-plane API).
 
-Onboarding a project = UI/MCP "Add project" → onboarding interview → brief PR (ADR-0053) → bootstrap (applies the project baseline, §8.1; until then `platform/baseline/baseline.mjs onboard`, runbook `docs/runbooks/onboard-a-repo.md`: branch ruleset, repo settings, labels, template files, secrets refs, App install check, Terraform PR for GCP) → Andy approves Terraform PR.
+Onboarding a project = UI/MCP "Add project" → onboarding interview → brief PR (ADR-0053) → bootstrap (applies the project baseline, §8.1; until then `platform/baseline/baseline.mjs onboard`, runbook `docs/runbooks/onboard-a-repo.md`) → Andy approves Terraform PR.
 
 ### 8.1 Project baseline (ADR-0031)
 
@@ -74,6 +74,7 @@ This repo's Dependabot bumps third-party pins in `platform/actions/`; managed re
 | Agent evals (`agent-evals` check) | 0040, 0086 | `platform/actions/agent-evals` | A | control plane only, not required |
 | Executor permission profile (headless Claude Code) | 0040, 0051 | `platform/executor/profile.json` + `scripts/executor-profile.mjs`, installed by the reusable `claude-executor.yml` | — | built (M1.6a); managed repos call the reusable workflow from M5: Multi-project in parallel |
 | Build runs: `autoBuild` switch; `planApproval`: an approved read-only plan first, owner-only decision, ≤ 3 plan runs, stale after a ticket or policy change or 72 h; Bash only in the sandbox (registry-only network, credentials unset and scrubbed), live-checked by one sandboxed Bash call before the agent; `.git` paths that steer git checked and `.git` restored after it; sandbox placeholders dropped; publish job refuses protected paths, symlinks, > 200 files or > 5 MB; one App token per build run; ≤ 4 builds per ticket | 0028, 0063, 0071 | `packages/domain/src/build{s,-dispatch}.ts`, `profile.json` `steps.build`, `claude-executor.yml` (`publish`), `scripts/executor-{publish,sandbox}.mjs`, `apps/api/src/github/token.ts`, `packages/domain/src/plans.ts` | — | built (M1.8a); managed repos with the reusable workflow (M5) |
-| Webhook caps (1 MB body, 300 signed deliveries/minute per instance) + HMAC + 30-day TTL on records | 0028, 0041 | `apps/api/src/webhooks.ts`, `infra/control-plane` | — | control plane only (managed repos send webhooks; they don't receive them) |
-| Bot-opened PRs run their checks (repo token from the control plane via Actions OIDC; agent job holds no write credential) | 0041, 0043 | `system-security-review.yml` (`publish` job), `apps/api/src/github/token.ts` | — | not yet carried (the system review itself isn't carried until M6: Dev → prod releases) |
+| Webhook caps (1 MB body, 300 signed deliveries/minute per instance) + HMAC + 30-day TTL on records | 0028, 0041 | `apps/api/src/webhooks.ts`, `infra/control-plane` | — | control plane only (managed repos only send webhooks) |
+| Bot-opened PRs run their checks (repo token from the control plane via Actions OIDC; agent job holds no write credential) | 0041, 0043 | `system-security-review.yml` (`publish` job), `apps/api/src/github/token.ts` | — | not yet carried (until M6: Dev → prod releases) |
+| Re-sync open PRs (clean merges only, capped; `no-auto-sync` label) | 0111 | `platform/actions/resync-prs` | A, G | label carried; caller needs per-project tokens |
 | Sandbox self-test on executor changes | 0071 | `platform/actions/sandbox-self-test` | A | platform only; a project hosting an executor pins the action |
