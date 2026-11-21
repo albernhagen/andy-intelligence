@@ -11,7 +11,6 @@ import {
   FirestoreRoutingConfigStore,
   FirestoreNightLaunchStore,
   FirestoreProjectVersions,
-  FirestoreRoutingConfigStore,
   FirestoreRunStore,
   FirestoreRunnerStore,
   FirestoreWorkTracker,
