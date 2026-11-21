@@ -166,6 +166,12 @@ describe("baseRefFrom", () => {
     expect(baseRefFrom([], { GITHUB_BASE_REF: "main" })).toEqual({ ref: "main", fetch: true });
   });
 
+  it("GivenTheOptOut_WhenRead_ThenNullButAnExplicitBaseStillWins", () => {
+    const env = { GITHUB_BASE_REF: "main", CONTEXT_BUDGET_BASE: "none" };
+    expect(baseRefFrom([], env)).toBeNull();
+    expect(baseRefFrom(["--base", "x"], env)).toEqual({ ref: "x", fetch: false });
+  });
+
   it("GivenNeither_WhenRead_ThenNull", () => {
     expect(baseRefFrom(["."], {})).toBeNull();
   });
@@ -174,8 +180,18 @@ describe("baseRefFrom", () => {
 describe("CLI", () => {
   const script = join(import.meta.dirname, "context-budget.mjs");
   // `git ls-files` in the CLI must read the temp repo, not a hook's GIT_DIR.
-  const run = (dir) =>
-    spawnSync(process.execPath, [script, dir], { encoding: "utf8", env: cleanGitEnv() });
+  // Without the Actions base branch, so a run behaves the same locally and in CI.
+  const noBaseEnv = () => {
+    const env = cleanGitEnv();
+    delete env.GITHUB_BASE_REF;
+    delete env.CONTEXT_BUDGET_BASE;
+    return env;
+  };
+  const run = (dir, extra = {}) =>
+    spawnSync(process.execPath, [script, dir], {
+      encoding: "utf8",
+      env: { ...noBaseEnv(), ...extra },
+    });
 
   it("GivenSmallAgentsFile_WhenRun_ThenPassesAndSkipsSymlink", () => {
     const result = run(repo({ "AGENTS.md": "rules\n" }));
@@ -199,6 +215,14 @@ describe("CLI", () => {
     expect(result.status).toBe(1);
     expect(result.stdout).toContain("ROOM AGENTS.md: grew 2 lines (18 → 20/20)");
     expect(run(dir).status).toBe(0);
+  });
+
+  it("GivenAPullRequestWhoseBaseCantBeFetched_WhenRun_ThenExitsTwoUnlessOptedOut", () => {
+    const dir = repo({ "AGENTS.md": "rules\n" });
+    const failed = run(dir, { GITHUB_BASE_REF: "main" });
+    expect(failed.status).toBe(2);
+    expect(failed.stderr).toContain("CONTEXT_BUDGET_BASE=none");
+    expect(run(dir, { GITHUB_BASE_REF: "main", CONTEXT_BUDGET_BASE: "none" }).status).toBe(0);
   });
 
   it("GivenOversizedFile_WhenRun_ThenExitsOne", () => {
