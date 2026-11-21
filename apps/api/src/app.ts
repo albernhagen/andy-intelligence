@@ -16,6 +16,7 @@ import {
   type NightLaunchStore,
   type ProjectVersions,
   type SpendLedger,
+  type MilestoneStore,
   type ReleaseNoteStore,
   type SpendCapsStore,
   type SpendNoticeLedger,
@@ -71,6 +72,11 @@ export interface AppDeps {
    * route, no MCP tool) when unset.
    */
   releaseNotes?: ReleaseNoteStore;
+  /**
+   * Milestones (ADR-0131). Dispatch and night launches read them (AI-306); unset, a ticket with a
+   * milestone is held and one without runs as before.
+   */
+  milestones?: MilestoneStore;
   /** Subscription quota readings (M1.9). Without it every window reads unknown. */
   quota?: QuotaStore;
   /** Night launches (ADR-0049): a launched story's build gets its `epic/<KEY>` base (AI-122). */
