@@ -1,7 +1,14 @@
 import { createRoute, z, type OpenAPIHono } from "@hono/zod-openapi";
-import { RoutingConfig, RoutingProjectId, Timestamp } from "@andy/contracts";
+import {
+  CONFIG_CHANGE_LIST_MAX,
+  ConfigChange,
+  RoutingConfig,
+  RoutingProjectId,
+  Timestamp,
+} from "@andy/contracts";
 import type { RoutingSettings } from "@andy/domain";
 import { signedIn, type AuthEnv } from "./auth";
+import type { ProjectAccess } from "./project-access";
 import type { RouteModule } from "./services";
 
 /**
@@ -67,6 +74,35 @@ const routes = {
     request: { body: { content: { "application/json": { schema: RoutingSave } } } },
     responses: { 200: json(RoutingConfig, "The saved global routing"), ...errors },
   }),
+  globalChanges: createRoute({
+    ...secured,
+    method: "get",
+    path: "/api/routing/changes",
+    request: {
+      query: z.object({
+        limit: z.coerce.number().int().min(1).max(CONFIG_CHANGE_LIST_MAX).optional(),
+      }),
+    },
+    responses: {
+      200: json(z.array(ConfigChange), "Global routing's changes, newest first (at most 100)"),
+    },
+  }),
+  revert: createRoute({
+    ...secured,
+    method: "post",
+    path: "/api/routing/changes/{changeId}/revert",
+    request: { params: z.object({ changeId: z.string().regex(/^[A-Za-z0-9-]{1,64}$/) }) },
+    responses: {
+      200: json(
+        z.object({ config: RoutingConfig, reverted: ConfigChange }),
+        "Before values saved (logged as a new change); original marked reverted",
+      ),
+      403: json(ErrorBody, "Only the owner changes routing"),
+      404: json(ErrorBody, "Unknown routing change"),
+      409: json(ErrorBody, "Not revertible: not applied, a first save, or changed since"),
+      422: json(ErrorBody, "The before values aren't valid routing any more"),
+    },
+  }),
   putProject: createRoute({
     ...secured,
     method: "put",
@@ -87,6 +123,7 @@ export function registerRoutingRoutes(
   app: OpenAPIHono<AuthEnv>,
   routing: RoutingSettings,
   listProjectIds: () => Promise<string[]>,
+  access: ProjectAccess,
 ): void {
   app.openapi(routes.get, async (c) => {
     const { projectId } = c.req.valid("query");
@@ -104,6 +141,21 @@ export function registerRoutingRoutes(
     return c.json(await routing.putGlobal(fields, ifUpdatedAt, actor, reason), 200);
   });
 
+  app.openapi(routes.globalChanges, async (c) =>
+    c.json(
+      await routing.globalChanges(signedIn(c.get("identity")).actor, c.req.valid("query").limit),
+      200,
+    ),
+  );
+
+  // Global and project routing changes alike (a project's also revert from its settings log).
+  app.openapi(routes.revert, async (c) => {
+    const { actor } = signedIn(c.get("identity"));
+    // The change's project is checked here: its path names none (AI-252).
+    const canRead = (projectId: string) => access.canRead(actor, projectId);
+    return c.json(await routing.revert(c.req.valid("param").changeId, actor, canRead), 200);
+  });
+
   app.openapi(routes.putProject, async (c) => {
     const { ifUpdatedAt, reason, ...fields } = c.req.valid("json");
     const { actor } = signedIn(c.get("identity"));
@@ -115,7 +167,10 @@ export function registerRoutingRoutes(
 /** Listed in `api-routes.ts` (AI-145); absent when the routing store is not configured. */
 export const apiRoutes: RouteModule = (app, s) => {
   if (!s.routing) return;
-  registerRoutingRoutes(app, s.routing, async () =>
-    (await s.tracker.listProjects()).map((p) => p.id),
+  registerRoutingRoutes(
+    app,
+    s.routing,
+    async () => (await s.tracker.listProjects()).map((p) => p.id),
+    s.deps.projectAccess,
   );
 };

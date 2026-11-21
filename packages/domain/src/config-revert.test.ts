@@ -201,6 +201,19 @@ describe("ConfigRevert (M4.12)", () => {
     expect((await changes.get("routing-1"))?.status).toBe("applied");
   });
 
+  it("GivenARoutingChangeAndRoutingConfigured_WhenReverted_ThenRoutingRevertsItAndSettingsStay", async () => {
+    await changes.append(applied({ id: "routing-2", entity: "routing" }));
+    const reverted = applied({ id: "routing-2", entity: "routing", status: "reverted" });
+    const routing = { revert: vi.fn(async () => ({ config: {} as never, reverted })) };
+    const withRouting = new ConfigRevert(tracker, projects, changes, now, routing);
+    const before = await tracker.getProject("ai");
+    const result = await withRouting.revert("ai", "routing-2", OWNER, "app");
+    expect(routing.revert).toHaveBeenCalledWith("routing-2", OWNER.actor);
+    expect(result).toEqual({ project: before, reverted });
+    expect(await tracker.getProject("ai")).toEqual(before);
+    expect(await changes.listForProject("ai")).toHaveLength(1);
+  });
+
   it("GivenMarkingFailedOnce_WhenRetried_ThenTheMarkCompletesWithoutWritingAgain", async () => {
     await projects.update("ai", { paused: true }, OWNER);
     vi.spyOn(changes, "markReverted").mockRejectedValueOnce(new Error("unavailable"));
