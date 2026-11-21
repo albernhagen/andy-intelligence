@@ -251,3 +251,65 @@ describe("spend caps MCP tools (AI-249)", () => {
     expect((await tracker.getProject("ai"))?.spendCaps).toEqual({ dailyMicroUsd: 0 });
   });
 });
+
+describe("get_spend by provider (AI-288 parity with GET …/spend/providers)", () => {
+  beforeEach(() => {
+    vi.spyOn(console, "log").mockImplementation(() => {});
+  });
+  afterEach(() => vi.restoreAllMocks());
+
+  const none = {
+    per_task: null,
+    project_daily: null,
+    project_monthly: null,
+    global_daily: null,
+    global_monthly: null,
+  };
+  const entry = (n: number, projectId: string, provider: "openrouter" | "claude-sub") => ({
+    id: `s${n}`,
+    runId: `r${n}`,
+    projectId,
+    provider,
+    model: "m",
+    state: "reserved" as const,
+    reservedMicroUsd: n * 1_000_000,
+    settledMicroUsd: null,
+    at: new Date().toISOString(),
+    settledAt: null,
+  });
+
+  it("GivenSpendOnTwoProviders_WhenGetSpendIsCalled_ThenByProviderEqualsTheRoute", async () => {
+    const spendLedger = new InMemorySpendLedger();
+    await spendLedger.reserve(entry(1, "ai", "openrouter"), none);
+    await spendLedger.reserve(entry(2, "ai", "claude-sub"), none);
+    await spendLedger.reserve(entry(3, "other", "openrouter"), none);
+    const { mcp, call } = await setup(spendLedger);
+    const { isError, data } = await (await mcp())("get_spend", { project: "ai" });
+    expect(isError).toBe(false);
+    const route = await call("GET", "/api/projects/ai/spend/providers");
+    expect(route.status).toBe(200);
+    expect(data.byProvider).toEqual(route.json);
+    const day = (rows: { provider: string; dayMicroUsd: number }[]) =>
+      Object.fromEntries(rows.map((r) => [r.provider, r.dayMicroUsd]));
+    expect(day(data.byProvider.project)).toMatchObject({
+      openrouter: 1_000_000,
+      "claude-sub": 2_000_000,
+    });
+    expect(day(data.byProvider.global)).toMatchObject({ openrouter: 4_000_000 });
+  });
+
+  it("GivenNoLedger_WhenGetSpendIsCalled_ThenByProviderIsUnknownLikeTheRoute", async () => {
+    const { mcp, call } = await setup();
+    const { data } = await (await mcp())("get_spend", { project: "ai" });
+    expect(data.byProvider).toEqual({ project: null, global: null });
+    expect((await call("GET", "/api/projects/ai/spend/providers")).json).toEqual(data.byProvider);
+  });
+
+  it("GivenAnUnknownProject_WhenRead_ThenBothRefuseAsNotFound", async () => {
+    const { mcp, call } = await setup(new InMemorySpendLedger());
+    expect((await call("GET", "/api/projects/nope/spend/providers")).status).toBe(404);
+    const { isError, text } = await (await mcp())("get_spend", { project: "nope" });
+    expect(isError).toBe(true);
+    expect(text).toMatch(/not found/i);
+  });
+});

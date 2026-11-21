@@ -24,6 +24,7 @@ Step 1 of AI-285: Web UI and MCP parity: every action in both, enforced by a tes
 | Pause, runs at once                                      | `PATCH /projects/:id`                                                           | `set_paused`, `set_runs_at_once`                                                                                           |
 | Quota: read, clear idle | `GET /quota`, `POST /quota/clear` | `get_quota` (AI-286), `clear_quota_idle` |
 | Spend caps: read, set, history, revert (project, global) | `GET …/spend`, `PUT …/spend-caps`, `GET`/`PUT /spend-caps`, `…/changes`, revert | `get_spend`, `set_spend_caps`, `set_global_spend_caps`, `list_spend_cap_changes`, `revert_spend_cap_change`                |
+| Spend per provider | `GET …/spend/providers` | `get_spend` (`byProvider`, AI-288) |
 | Routing: read, edit (global, project), history, revert   | `GET`/`PUT /routing`, `PUT …/routing`, `GET /routing/changes`, revert           | `get_routing`, `set_tier_routes`, `set_provider_routing`, `set_step_tier`, `list_routing_changes`, `revert_routing_change` |
 | Who am I                                                 | `GET /me`                                                                       | `status` (`signedInAs`)                                                                                                    |
 | Ranked Ready list with scores and filters                | `GET …/ready` (the Ready view, AI-298)                                           | `list_ready`                                                                                                               |
@@ -32,7 +33,6 @@ Step 1 of AI-285: Web UI and MCP parity: every action in both, enforced by a tes
 
 | Ticket                                                                 | Direction | Size | Missing side                                                 |
 | ---------------------------------------------------------------------- | --------- | ---- | ------------------------------------------------------------ |
-| AI-288: Parity: spend per provider in get_spend                        | UI-only   | S    | `GET …/spend/providers` → `get_spend`                        |
 | AI-289: Parity: send a test email over MCP                             | UI-only   | S    | `GET /notify/email`, `POST …/test` → `test_email`            |
 | AI-290: Parity: ask a question on a ticket over MCP                    | done      | S    | `POST …/tickets/:id/questions` → `ask_question`              |
 | AI-291: Parity: edit_ticket sets needs-attention, risk and confidence  | done      | S    | `PATCH` fields → `edit_ticket`                               |
