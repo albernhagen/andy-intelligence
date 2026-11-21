@@ -1,5 +1,11 @@
 Ticket: <!-- https://ai.andybernhagen.com/p/<project>/t/<KEY>; PR title: `<KEY>: <ticket title>` -->
 
+<!-- Release note (ADR-0121), shown on What's new; CI checks the caps. Delete "Needs you" if none. -->
+
+What changed: <!-- one plain sentence, ≤ 25 words: what Andy can now do or see -->
+How it works: <!-- ≤ 45 words: the mechanism -->
+Needs you: <!-- ≤ 25 words: a step only Andy can take -->
+
 ## What
 
 ## Why

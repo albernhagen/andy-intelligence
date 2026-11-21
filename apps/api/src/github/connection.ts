@@ -87,6 +87,10 @@ export class ConnectedCodeHost implements CodeHost {
     return (await this.connection.codeHost())?.getPullRequest(fullName, number) ?? null;
   }
 
+  async getPullRequestDetails(fullName: string, number: number) {
+    return (await this.connection.codeHost())?.getPullRequestDetails(fullName, number) ?? null;
+  }
+
   async listChangedFiles(fullName: string, number: number) {
     return (await this.connection.codeHost())?.listChangedFiles(fullName, number) ?? EMPTY_LISTING;
   }
