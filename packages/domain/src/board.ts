@@ -1,15 +1,14 @@
 import {
-  PullRequestLink,
   notFound,
   type BoardTicket,
   type Run,
   type RunStore,
   type Stage,
-  type Ticket,
   type WorkTracker,
 } from "@andy/contracts";
 
 import type { ProjectReadCache } from "./project-versions";
+import type { TicketSnapshots } from "./ticket-snapshots";
 import { resolveWorker } from "./worker";
 import { epicOf } from "./overrides";
 
@@ -17,17 +16,18 @@ import { epicOf } from "./overrides";
 export const PR_STAGES: readonly Stage[] = ["in_progress", "ready_for_review"];
 
 /**
- * Cap on history reads per board request (ADR-0028): one per card in `PR_STAGES`. Cards past it
- * show no PR. A board with more work in flight than this is not a board Andy can read anyway.
+ * Cap on pull request reads per board request (ADR-0028): one per card in `PR_STAGES`, reading
+ * only that card's `pr_linked` events. Cards past it show no PR. A board with more work in flight than this is not a board Andy can read anyway.
  */
 export const MAX_PR_LOOKUPS = 50;
 
 /**
  * The board's tickets with what each card shows (AI-28: Board v2): open questions, the run in
  * flight, the latest pull request. A fixed number of reads per board (tickets, open questions,
- * active runs) plus one history read per card in `PR_STAGES`, so the UI makes one request, not
+ * active runs) plus one PR link read per card in `PR_STAGES`, so the UI makes one request, not
  * one per card. With the read cache, a poll while nothing changed reads only the project's
- * version (AI-222).
+ * version (AI-222); with the snapshots too, a poll after a write reads only the changed tickets
+ * (AI-317).
  */
 export class BoardReader {
   constructor(
@@ -35,19 +35,23 @@ export class BoardReader {
     private readonly runs: RunStore,
     /** AI-222: with it, an unchanged board (same project version) is one document read. */
     private readonly cache: ProjectReadCache | null = null,
+    /** AI-317: with it (and the cache), a changed board reads only the changed tickets. */
+    private readonly snapshots: TicketSnapshots | null = null,
   ) {}
 
   async tickets(projectId: string): Promise<BoardTicket[]> {
     return this.cache
-      ? this.cache.get(projectId, "board", () => this.read(projectId))
+      ? this.cache.get(projectId, "board", (version) => this.read(projectId, version))
       : this.read(projectId);
   }
 
-  private async read(projectId: string): Promise<BoardTicket[]> {
+  private async read(projectId: string, version?: number): Promise<BoardTicket[]> {
     const project = await this.tracker.getProject(projectId);
     if (!project) throw notFound("project", projectId);
     const [tickets, questions, active] = await Promise.all([
-      this.tracker.listTickets(projectId),
+      this.snapshots && version !== undefined
+        ? this.snapshots.tickets(projectId, version)
+        : this.tracker.listTickets(projectId),
       this.tracker.listQuestions({ projectId, status: "open" }),
       this.runs.listActive(projectId),
     ]);
@@ -64,7 +68,11 @@ export class BoardReader {
       .filter((t) => !t.archived && PR_STAGES.includes(t.stage))
       .slice(0, MAX_PR_LOOKUPS);
     const prs = new Map(
-      await Promise.all(withPr.map(async (t) => [t.id, await this.latestPr(t)] as const)),
+      await Promise.all(
+        withPr.map(
+          async (t) => [t.id, await this.tracker.getLatestPullRequest(projectId, t.id)] as const,
+        ),
+      ),
     );
 
     return tickets.map((t) => {
@@ -88,15 +96,5 @@ export class BoardReader {
         },
       };
     });
-  }
-
-  private async latestPr(ticket: Ticket): Promise<PullRequestLink | null> {
-    const events = await this.tracker.listEvents(ticket.projectId, ticket.id);
-    for (let i = events.length - 1; i >= 0; i--) {
-      if (events[i]!.kind !== "pr_linked") continue;
-      const link = PullRequestLink.safeParse(events[i]!.data);
-      if (link.success) return link.data;
-    }
-    return null;
   }
 }

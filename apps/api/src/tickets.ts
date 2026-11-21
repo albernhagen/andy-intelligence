@@ -15,7 +15,14 @@ import {
   TicketFields,
   Timestamp,
 } from "@andy/contracts";
-import type { ProjectReadCache, ProjectService, RunService, TicketService } from "@andy/domain";
+import {
+  matchesTicketFilter,
+  type ProjectReadCache,
+  type ProjectService,
+  type RunService,
+  type TicketService,
+  type TicketSnapshots,
+} from "@andy/domain";
 import type { WorkTracker } from "@andy/contracts";
 import { actorOf, signedIn, type AuthEnv } from "./auth";
 import { registerWorkerRoutes } from "./worker";
@@ -265,6 +272,7 @@ export function registerTicketRoutes(
   projects: ProjectService,
   runs: RunService,
   readCache: ProjectReadCache | null = null,
+  snapshots: TicketSnapshots | null = null,
 ): void {
   const withCost = async (t: Ticket) => ({ ...t, cost: await costOfTicket(runs, t) });
 
@@ -296,8 +304,12 @@ export function registerTicketRoutes(
     const { projectId } = c.req.valid("param");
     if (!(await tracker.getProject(projectId))) return c.json(notFound("project"), 404);
     const query = c.req.valid("query");
-    const list = () => tracker.listTickets(projectId, query);
-    // AI-222: an unchanged list is the project read plus one version read.
+    // AI-222: an unchanged list is the project read plus one version read. AI-317: a changed one
+    // reads only the tickets changed since, through the snapshot the board shares.
+    const list = async (version?: number) =>
+      snapshots && version !== undefined
+        ? (await snapshots.tickets(projectId, version)).filter((t) => matchesTicketFilter(t, query))
+        : tracker.listTickets(projectId, query);
     const tickets = readCache
       ? await readCache.get(projectId, `tickets:${JSON.stringify(query)}`, list)
       : await list();
@@ -449,4 +461,4 @@ export function registerTicketRoutes(
 
 /** Listed in `api-routes.ts` (AI-145). */
 export const apiRoutes: RouteModule = (app, s) =>
-  registerTicketRoutes(app, s.tracker, s.service, s.projects, s.runs, s.readCache);
+  registerTicketRoutes(app, s.tracker, s.service, s.projects, s.runs, s.readCache, s.snapshots);
