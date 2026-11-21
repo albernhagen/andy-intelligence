@@ -1,4 +1,5 @@
 ---
+title: Cost kill switch runs on Cloud Workflows, not a function
 status: accepted
 date: 2026-11-01
 amends: 0028

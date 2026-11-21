@@ -1,4 +1,5 @@
 ---
+title: "No Monitoring stage until M6: Dev → prod releases"
 status: accepted
 date: 2026-11-06
 amends: 0056, 0067, ARCHITECTURE §4.1

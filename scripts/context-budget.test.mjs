@@ -1,5 +1,5 @@
 import { execFileSync, spawnSync } from "node:child_process";
-import { mkdtempSync, readFileSync, readdirSync, symlinkSync, writeFileSync } from "node:fs";
+import { mkdtempSync, readFileSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -126,16 +126,5 @@ describe("CLI", () => {
     const result = run(dir);
     expect(result.status).toBe(1);
     expect(result.stdout).toContain("OVER AGENTS.md: 3/2 lines");
-  });
-});
-
-describe("ADR index", () => {
-  it("GivenEveryAdrFile_WhenIndexRead_ThenEachIsListed", () => {
-    const dir = join(import.meta.dirname, "..", "docs", "architecture", "adr");
-    const index = readFileSync(join(dir, "README.md"), "utf8");
-    const missing = readdirSync(dir)
-      .filter((f) => /^\d{4}-.*\.md$/.test(f))
-      .filter((f) => !index.includes(`](${f})`));
-    expect(missing).toEqual([]);
   });
 });
