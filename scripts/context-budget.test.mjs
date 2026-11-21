@@ -225,6 +225,43 @@ describe("CLI", () => {
     expect(run(dir, { GITHUB_BASE_REF: "main", CONTEXT_BUDGET_BASE: "none" }).status).toBe(0);
   });
 
+  // CI found it: GitHub's merge commit is built on an older main; main then trimmed the file.
+  it("GivenAMergeCommitBuiltOnAnOlderMain_WhenMainTrimmedTheFileSince_ThenItIsNotThisPrsGrowth", () => {
+    const env = noBaseEnv();
+    const sh = (cwd, ...args) =>
+      execFileSync("git", ["-c", "user.name=t", "-c", "user.email=t@example.com", ...args], {
+        cwd,
+        env,
+        encoding: "utf8",
+      });
+    const origin = mkdtempSync(join(tmpdir(), "budget-origin-"));
+    sh(origin, "init", "-q", "--bare", "-b", "main");
+    sh(origin, "config", "uploadpack.allowReachableSHA1InWant", "true");
+    const dir = mkdtempSync(join(tmpdir(), "budget-merge-"));
+    sh(dir, "init", "-q", "-b", "main");
+    sh(dir, "remote", "add", "origin", origin);
+    const budget = '{"budgets":[{"pattern":"AGENTS.md","maxLines":20}]}';
+    writeFileSync(join(dir, "context-budget.json"), budget);
+    writeFileSync(join(dir, "AGENTS.md"), "a\n".repeat(18));
+    sh(dir, "add", "-A");
+    sh(dir, "commit", "-qm", "base");
+    const base = sh(dir, "rev-parse", "HEAD").trim();
+    sh(dir, "checkout", "-qb", "pr");
+    writeFileSync(join(dir, "other.txt"), "pr change\n");
+    sh(dir, "add", "-A");
+    sh(dir, "commit", "-qm", "pr");
+    sh(dir, "checkout", "-q", "main");
+    writeFileSync(join(dir, "AGENTS.md"), "a\n".repeat(10));
+    sh(dir, "commit", "-qam", "main trims");
+    sh(dir, "push", "-q", "origin", "main");
+    sh(dir, "checkout", "-q", "--detach", base);
+    sh(dir, "merge", "-q", "--no-ff", "--no-edit", "pr");
+
+    const result = run(dir, { GITHUB_BASE_REF: "main" });
+    expect(result.stdout).not.toContain("ROOM");
+    expect(result.status).toBe(0);
+  });
+
   it("GivenOversizedFile_WhenRun_ThenExitsOne", () => {
     const dir = repo({
       "AGENTS.md": "a\nb\nc\n",

@@ -8,8 +8,9 @@
 // `main` doesn't require PRs to be up to date. So a PR that grows a budgeted file that already
 // exists on the base may use at most half the room left in it: floor((budget - base) / 2). Any
 // two open PRs growing one file then fit together. New files are exempt (two PRs can't both add
-// one path without a conflict). The base is `--base <ref>`, or on a pull request
-// `origin/$GITHUB_BASE_REF`, fetched here; without one, only budgets apply. A base that can't be
+// one path without a conflict). The base is `--base <ref>`, or on a pull request the base the
+// checked-out merge commit was built on (else `origin/$GITHUB_BASE_REF`), fetched here; without
+// one, only budgets apply. A base that can't be
 // read fails the check (exit 2): a skipped check would let two PRs push `main` over. A repo whose
 // CI can't fetch its base (private, no credentials) sets CONTEXT_BUDGET_BASE=none to opt out.
 //
@@ -132,7 +133,14 @@ function baseReader(dir, base) {
     execFileSync("git", args, { cwd: dir, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] });
   let ref = base.ref;
   if (base.fetch) {
-    const fetch = () => git(["fetch", "--no-tags", "--depth=1", "origin", base.ref]);
+    // A pull request checks out GitHub's merge commit; its first parent is the base it was
+    // built on. Comparing with the branch's current tip instead would count main's later trims
+    // as this PR's growth. No merge commit (another checkout): the branch tip.
+    const parents = git(["cat-file", "-p", "HEAD"])
+      .split("\n")
+      .flatMap((l) => l.match(/^parent ([0-9a-f]{40})$/)?.[1] ?? []);
+    const want = parents.length === 2 ? parents[0] : base.ref;
+    const fetch = () => git(["fetch", "--no-tags", "--depth=1", "origin", want]);
     try {
       fetch();
     } catch {
