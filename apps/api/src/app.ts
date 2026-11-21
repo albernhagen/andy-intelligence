@@ -11,6 +11,7 @@ import {
   type WatchdogQueue,
   type WorkTracker,
   type QuotaStore,
+  type NightLaunchStore,
 } from "@andy/contracts";
 import { ClaudeCodeActionsExecutor, exchangeManifestCode, type CreatedApp } from "@andy/github";
 import {
@@ -27,6 +28,7 @@ import {
   DigestReader,
   QuotaClearer,
   BriefService,
+  IdeateService,
   ProjectPlanService,
   TicketService,
   EmailNotifications,
@@ -50,6 +52,7 @@ import { registerSetupRoutes } from "./setup";
 import { noReviewFindings, registerConfigProposalRoutes } from "./config-proposals";
 import { registerNotifyFlush, registerNotifyRoutes } from "./notify";
 import { registerBriefRoutes } from "./brief";
+import { registerIdeateRoutes } from "./ideate";
 import { registerProjectPlanRoutes } from "./project-plan";
 import {
   ConnectedCodeHost,
@@ -89,12 +92,17 @@ export interface AppDeps {
    * when not configured.
    */
   runners?: RunnerStore;
-  /** Pending config changes from review findings (ADR-0097); off (routes absent) when unset. */
+  /**
+   * Config changes: pending ones from review findings (ADR-0097; routes absent when unset) and
+   * the log every project-settings write appends to (M4.11; off when unset).
+   */
   configChanges?: ConfigChangeStore;
   /** Stored review findings (ADR-0097 PR B); until then none, so sweeps propose nothing. */
   reviewFindings?: ReviewFindingSource;
   /** Subscription quota readings (M1.9). Without it every window reads unknown. */
   quota?: QuotaStore;
+  /** Night launches (ADR-0049): a launched story's build gets its `epic/<KEY>` base (AI-122). */
+  nightLaunches?: NightLaunchStore;
   /**
    * The only host served (ADR-0044), e.g. `ai.andybernhagen.com`. Requests for any other host
    * (the default run.app URLs) get 404, except /health for monitoring. Unset: every host (local dev).
@@ -277,6 +285,7 @@ export function createApp(input: AppDeps) {
     async (projectId) => runEnded(projectId),
     connection ? new ConnectedCodeHost(connection) : null,
     runnerPresence,
+    deps.nightLaunches ?? null,
   );
   const refiner = new RefineDispatcher(deps.tracker, deps.runs, runs, now);
   const builder = new BuildDispatcher(deps.tracker, deps.runs, runs, now, deps.quota ?? null);
@@ -409,6 +418,7 @@ export function createApp(input: AppDeps) {
     connection ? new ConnectedCodeHost(connection) : null,
     dispatchNext,
     now,
+    deps.configChanges ?? null,
   );
   registerTicketRoutes(app, deps.tracker, service, projects, runs);
   registerBoardRoutes(app, new BoardReader(deps.tracker, deps.runs));
@@ -433,6 +443,13 @@ export function createApp(input: AppDeps) {
     now,
   );
   registerBriefRoutes(app, brief);
+  const ideate = new IdeateService(
+    deps.tracker,
+    service,
+    connection ? new ConnectedCodeHost(connection) : null,
+    now,
+  );
+  registerIdeateRoutes(app, ideate);
   const plans = new ProjectPlanService(
     deps.tracker,
     service,
@@ -473,6 +490,7 @@ export function createApp(input: AppDeps) {
       notifyEmail: email,
       quota: quotaClearer,
       brief,
+      ideate,
       plans,
       configProposals,
     });

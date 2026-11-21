@@ -1,5 +1,6 @@
 ---
-status: accepted, amended by 0101
+title: "Local runner: Seatbelt, platform from main"
+status: accepted; amended by 0101
 date: 2026-11-12
 amends: 0089 (what the runner confines, and which platform commit it runs)
 ---

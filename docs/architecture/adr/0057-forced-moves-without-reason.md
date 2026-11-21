@@ -1,4 +1,5 @@
 ---
+title: Forced stage moves no longer need a reason
 status: accepted
 date: 2026-11-04
 amends: ARCHITECTURE §4.1

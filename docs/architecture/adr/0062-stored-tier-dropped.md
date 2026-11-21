@@ -1,4 +1,5 @@
 ---
+title: Tier is computed from size; `overrides.tier` pins one
 status: accepted
 date: 2026-11-05
 amends: ARCHITECTURE §4.2, §5, §10.4

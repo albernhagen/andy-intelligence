@@ -1,4 +1,5 @@
 ---
+title: Contract-first ports
 status: accepted
 date: 2026-10-21
 ---

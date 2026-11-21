@@ -1,4 +1,5 @@
 ---
+title: "Local runner: HTTPS-only agent, atomic lock"
 status: proposed (AI-131 follow-up; Andy decides at review)
 date: 2026-11-12
 amends: 0098 (the agent's sandbox, and one runner per home)
