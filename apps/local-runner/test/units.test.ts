@@ -1,4 +1,6 @@
 import { spawn } from "node:child_process";
+import { createServer } from "node:http";
+import type { AddressInfo } from "node:net";
 import {
   chmodSync,
   existsSync,
@@ -22,7 +24,16 @@ import { KEYCHAIN_SERVICE, controlPlaneOrigin, checkRepo } from "../src/config";
 import { login, logout, readSecret } from "../src/keychain";
 import { checkAgentSettings, loadPlatform } from "../src/platform";
 import { pruneWork } from "../src/runner";
-import { noConfinement, seatbelt, seatbeltProfile } from "../src/seatbelt";
+import {
+  CURL_COULDNT_CONNECT,
+  networkProblem,
+  networkVerdict,
+  noConfinement,
+  outcomeOf,
+  seatbelt,
+  seatbeltProfile,
+  type ProbeOutcome,
+} from "../src/seatbelt";
 import {
   acquireRunnerLock,
   cleanLeftoverAgents,
@@ -50,8 +61,13 @@ fs.appendFileSync(path.join(dir, "argv.log"), JSON.stringify(args) + "\\n");
 const items = fs.existsSync(store) ? JSON.parse(fs.readFileSync(store, "utf8")) : {};
 const key = args[args.indexOf("-s") + 1] + "|" + args[args.indexOf("-a") + 1];
 if (args[0] === "add-generic-password") {
-  items[key] = fs.readFileSync(0, "utf8").split("\\n")[0];
-  fs.writeFileSync(store, JSON.stringify(items));
+  // Async: a synchronous read of a pipe can fail with EAGAIN on Linux.
+  let input = "";
+  process.stdin.on("data", (d) => (input += d));
+  process.stdin.on("end", () => {
+    items[key] = input.split("\\n")[0];
+    fs.writeFileSync(store, JSON.stringify(items));
+  });
 } else if (args[0] === "find-generic-password") {
   if (!(key in items)) process.exit(44);
   process.stdout.write(items[key] + "\\n");
@@ -246,6 +262,91 @@ describe("local-runner check-settings", () => {
   });
 });
 
+describe("network live check (AI-278)", () => {
+  const exited = (code: number): ProbeOutcome => ({ kind: "exited", code });
+  const refused = exited(CURL_COULDNT_CONNECT);
+  const verdict = (o: Partial<Record<"outside" | "control" | "inside", ProbeOutcome>>) =>
+    networkVerdict({ outside: exited(0), control: exited(0), inside: refused, ...o });
+
+  it("GivenARefusedProbeAndAPassingControl_WhenJudged_ThenTheCheckPasses", () => {
+    expect(verdict({})).toBeNull();
+  });
+
+  it("GivenTheProbeConnects_WhenJudged_ThenTheCheckFails", () => {
+    expect(verdict({ inside: exited(0) })).toMatch(/non-HTTPS port was allowed/);
+  });
+
+  it("GivenTheProbeTimesOut_WhenJudged_ThenTheCheckFails", () => {
+    expect(verdict({ inside: { kind: "timed-out" } })).toMatch(/timed out/);
+    expect(verdict({ inside: exited(28) })).toMatch(/timed out/);
+  });
+
+  it("GivenTheProbeCouldNotRun_WhenJudged_ThenTheCheckFails", () => {
+    expect(verdict({ inside: { kind: "not-run", reason: "ENOENT" } })).toMatch(/couldn't run/);
+    // sandbox-exec's own failures: 65 (bad profile), 71 (exec refused or missing binary).
+    expect(verdict({ inside: exited(65) })).toMatch(/another reason.*exit 65/);
+    expect(verdict({ inside: exited(71) })).toMatch(/another reason.*exit 71/);
+  });
+
+  it("GivenTheControlFails_WhenJudged_ThenTheCheckFailsAndSaysTheProfileIsBroken", () => {
+    expect(verdict({ control: exited(71) })).toMatch(/profile is broken.*exit 71/);
+    expect(verdict({ control: { kind: "timed-out" } })).toMatch(/profile is broken/);
+  });
+
+  it("GivenTheServerIsUnreachableOutside_WhenJudged_ThenTheCheckFails", () => {
+    expect(verdict({ outside: exited(7) })).toMatch(/couldn't reach its own server/);
+  });
+
+  it("GivenExecFileErrors_WhenClassified_ThenExitTimeoutAndNotRunAreToldApart", () => {
+    expect(outcomeOf(null)).toEqual({ kind: "exited", code: 0 });
+    expect(outcomeOf({ code: 7 })).toEqual({ kind: "exited", code: 7 });
+    expect(outcomeOf({ killed: true, signal: "SIGTERM", code: null })).toEqual({
+      kind: "timed-out",
+    });
+    expect(outcomeOf({ code: "ENOENT" })).toEqual({ kind: "not-run", reason: "ENOENT" });
+    expect(outcomeOf({ signal: "SIGKILL" })).toEqual({ kind: "not-run", reason: "signal SIGKILL" });
+  });
+
+  it("GivenAProbeRunner_WhenChecked_ThenTheControlAndTheProbeRunUnderTheProfile", async () => {
+    const calls: string[][] = [];
+    const problem = await networkProblem("/p.sb", "/tmp", async (cmd, args) => {
+      calls.push([cmd, ...args]);
+      if (cmd === "/usr/bin/curl") return exited(0);
+      return args.includes("--version") ? exited(0) : refused;
+    });
+    expect(problem).toBeNull();
+    expect(calls.map((c) => c.slice(0, 4))).toEqual([
+      ["/usr/bin/curl", "-s", "-o", "/dev/null"],
+      ["/usr/bin/sandbox-exec", "-f", "/p.sb", "/usr/bin/curl"],
+      ["/usr/bin/sandbox-exec", "-f", "/p.sb", "/usr/bin/curl"],
+    ]);
+    expect(calls[1]).toContain("--version");
+  });
+
+  it.runIf(process.platform === "darwin")(
+    "GivenAProfileThatRefusesEveryExec_WhenCheckedLive_ThenItFailsAsBrokenNotAsRefused",
+    async () => {
+      const dir = mkdtempSync(join(tmpdir(), "lr-noexec-"));
+      const profilePath = join(dir, "noexec.sb");
+      writeFileSync(profilePath, "(version 1)\n(allow default)\n(deny process-exec)\n");
+      expect(await networkProblem(profilePath, "/tmp")).toMatch(/profile is broken/);
+    },
+  );
+
+  it.runIf(process.platform === "darwin")(
+    "GivenTheAgentsProfile_WhenCheckedLive_ThenTheCheckPasses",
+    async () => {
+      const dir = mkdtempSync(join(tmpdir(), "lr-netok-"));
+      const profilePath = join(dir, "agent.sb");
+      writeFileSync(
+        profilePath,
+        seatbeltProfile({ runnerHome: dir, read: [], claude: { command: "/bin/sh" } }),
+      );
+      expect(await networkProblem(profilePath, "/tmp")).toBeNull();
+    },
+  );
+});
+
 describe("seatbelt profile", () => {
   it("GivenATask_WhenBuildingTheAgentsProfile_ThenHomesAndTheRunnerDirAreDeniedAndOnlyTheCheckoutReopened", () => {
     const profile = seatbeltProfile({
@@ -269,6 +370,110 @@ describe("seatbelt profile", () => {
     expect(profile).toContain("(deny network*)");
     expect(profile).toContain('(global-name "com.apple.SecurityServer")');
   });
+
+  /**
+   * The profile's forms, checked the way Seatbelt reads them, without `sandbox-exec` (Linux CI):
+   * one balanced form per line, strings closed, a known head. Later rules win in Seatbelt.
+   */
+  function forms(profile: string): string[] {
+    const lines = profile.trim().split("\n");
+    for (const line of lines) {
+      let depth = 0;
+      let inString = false;
+      for (const ch of line) {
+        if (ch === '"') inString = !inString;
+        else if (!inString && ch === "(") depth += 1;
+        else if (!inString && ch === ")") depth -= 1;
+        expect(depth).toBeGreaterThanOrEqual(0);
+      }
+      expect(inString).toBe(false);
+      expect(depth).toBe(0);
+      expect(line).toMatch(/^\((version 1\)|allow |deny )/);
+    }
+    return lines;
+  }
+
+  it("GivenTheAgentsProfile_WhenParsed_ThenEveryAllowComesAfterTheDenyItReopens", () => {
+    const lines = forms(
+      seatbeltProfile({
+        runnerHome: "/opt/h",
+        read: ["/opt/h/work/r1/project"],
+        readWrite: ["/opt/h/work/r1/markers"],
+        claude: { command: "/bin/sh" },
+      }),
+    );
+    expect(lines.slice(0, 2)).toEqual(["(version 1)", "(allow default)"]);
+    const at = (prefix: string) => lines.findIndex((l) => l.startsWith(prefix));
+    const lastAt = (prefix: string) => lines.findLastIndex((l) => l.startsWith(prefix));
+    // Files: the one deny, then only allows (each reopens a path under it).
+    expect(at("(deny file-read-data")).toBe(2);
+    expect(at("(allow file-read-data")).toBeGreaterThan(2);
+    expect(lines.filter((l) => l.startsWith("(deny file"))).toHaveLength(1);
+    // Network: deny all outbound first, then exactly HTTPS and DNS, and nothing after them.
+    const deny = at("(deny network-outbound)");
+    expect(deny).toBeGreaterThan(lastAt("(allow file-read-data"));
+    expect(lines.slice(deny + 1)).toEqual([
+      '(allow network-outbound (remote tcp "*:443"))',
+      '(allow network-outbound (literal "/private/var/run/mDNSResponder"))',
+    ]);
+  });
+
+  it("GivenThePlatformChildsProfile_WhenParsed_ThenNetworkAndKeychainAreDeniedLast", () => {
+    const lines = forms(
+      seatbeltProfile({ runnerHome: "/opt/h", read: ["/opt/h/p"], offline: true }),
+    );
+    expect(lines.at(-2)).toBe("(deny network*)");
+    expect(lines.at(-1)).toMatch(
+      /^\(deny mach-lookup \(global-name "com\.apple\.SecurityServer"\)/,
+    );
+    expect(lines.some((l) => l.startsWith("(allow network"))).toBe(false);
+  });
+
+  it("GivenTheAgentsProfile_WhenBuilt_ThenOutboundNetworkIsHttpsAndDnsOnly", () => {
+    const profile = seatbeltProfile({
+      runnerHome: "/opt/h",
+      read: [],
+      claude: { command: "/bin/sh" },
+    });
+    expect(profile).toContain("(deny network-outbound)");
+    expect(profile).toContain('(allow network-outbound (remote tcp "*:443"))');
+    expect(profile).toContain('(subpath "/Volumes")');
+  });
+
+  it.runIf(process.platform === "darwin")(
+    "GivenTheAgentsProfile_WhenAConfinedProcessCallsANon443Port_ThenItIsRefused",
+    async () => {
+      const server = createServer((_req, res) => res.end("ok"));
+      await new Promise<void>((r) => server.listen(0, "127.0.0.1", r));
+      const port = (server.address() as AddressInfo).port;
+      const dir = mkdtempSync(join(tmpdir(), "lr-net-"));
+      const profilePath = join(dir, "agent.sb");
+      writeFileSync(
+        profilePath,
+        seatbeltProfile({ runnerHome: dir, read: [], claude: { command: "/bin/sh" } }),
+      );
+      const curl = (args: string[]) =>
+        new Promise<number | null>((resolve) => {
+          const child = spawn(args[0]!, args.slice(1), { cwd: "/tmp", stdio: "ignore" });
+          child.on("close", resolve);
+        });
+      const url = `http://127.0.0.1:${port}/`;
+      expect(await curl(["/usr/bin/curl", "-s", "--max-time", "3", url])).toBe(0);
+      expect(
+        await curl([
+          "/usr/bin/sandbox-exec",
+          "-f",
+          profilePath,
+          "/usr/bin/curl",
+          "-s",
+          "--max-time",
+          "3",
+          url,
+        ]),
+      ).not.toBe(0);
+      server.close();
+    },
+  );
 
   it("GivenAPathWithAQuote_WhenBuildingAProfile_ThenItIsRefused", () => {
     expect(() => seatbeltProfile({ runnerHome: '/opt/a"b', read: [] })).toThrow(/not allowed/);
@@ -297,6 +502,13 @@ describe("seatbelt profile", () => {
   );
 });
 
+/** A real live process's identity (pid and start time), standing in for another runner. */
+async function liveId() {
+  const child = spawn("/bin/sleep", ["60"], { detached: true, stdio: "ignore" });
+  child.unref();
+  return { pid: child.pid!, started: (await startTime(child.pid!))! };
+}
+
 describe("one runner per home", () => {
   it("GivenALiveRunnerHoldingTheLock_WhenAnotherStarts_ThenItIsRefused", async () => {
     const home = mkdtempSync(join(tmpdir(), "lr-lock-"));
@@ -305,6 +517,35 @@ describe("one runner per home", () => {
     expect(await acquireRunnerLock(home)).toEqual({ heldBy: process.pid });
     if ("release" in first) first.release();
     expect(existsSync(join(home, "runner.lock"))).toBe(false);
+  });
+
+  it("GivenAStaleLock_WhenTwoRunnersStartTogether_ThenExactlyOneHoldsIt", async () => {
+    const ids = await Promise.all([liveId(), liveId()]);
+    for (let round = 0; round < 20; round += 1) {
+      const home = mkdtempSync(join(tmpdir(), "lr-race-"));
+      writeFileSync(join(home, "runner.lock"), JSON.stringify({ pid: 999_999, started: "x" }));
+      const locks = await Promise.all(ids.map((id) => acquireRunnerLock(home, id)));
+      const winners = locks.filter((l) => "release" in l);
+      expect(winners).toHaveLength(1);
+      const winner = winners[0] as { held: () => boolean };
+      expect(winner.held()).toBe(true);
+      const loser = locks.find((l) => "heldBy" in l) as { heldBy: number };
+      expect(ids.map((i) => i.pid)).toContain(loser.heldBy);
+      // Only the lock itself is left: no private or moved-aside files.
+      expect(readdirSync(home)).toEqual(["runner.lock"]);
+    }
+    for (const id of ids) process.kill(id.pid, "SIGKILL");
+  });
+
+  it("GivenAHeldLock_WhenTheFileIsReplaced_ThenHeldTurnsFalse", async () => {
+    const home = mkdtempSync(join(tmpdir(), "lr-held-"));
+    const lock = await acquireRunnerLock(home);
+    if (!("held" in lock)) throw new Error("not taken");
+    expect(lock.held()).toBe(true);
+    writeFileSync(join(home, "runner.lock"), JSON.stringify({ pid: 1, started: "y" }));
+    expect(lock.held()).toBe(false);
+    lock.release(); // not ours: left in place
+    expect(existsSync(join(home, "runner.lock"))).toBe(true);
   });
 
   it("GivenAStaleLockOfADeadRunner_WhenStarting_ThenItIsTakenOver", async () => {

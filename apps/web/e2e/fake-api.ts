@@ -2,6 +2,7 @@ import {
   ConfigChange,
   InMemoryConfigChangeStore,
   InMemoryNightLaunchStore,
+  InMemoryRoutingConfigStore,
   InMemoryRunStore,
   InMemoryWorkTracker,
 } from "@andy/contracts";
@@ -193,6 +194,8 @@ export async function createFakeApp() {
     // ADR-0097: no findings, so a project inbox shows the empty "Config proposals" row.
     configChanges,
     nightLaunches: new InMemoryNightLaunchStore(),
+    // AI-243: Settings → Models reads the default routing.
+    routing: new InMemoryRoutingConfigStore(),
   });
 }
 

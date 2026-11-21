@@ -45,7 +45,7 @@ export function RunnersPage() {
 }
 
 /** Links between the settings pages. */
-export function SettingsNav({ current }: { current: "github" | "runners" }) {
+export function SettingsNav({ current }: { current: "github" | "runners" | "models" }) {
   const link = (to: string, label: string, here: boolean) =>
     here ? (
       <span aria-current="page" className="font-medium">
@@ -60,6 +60,7 @@ export function SettingsNav({ current }: { current: "github" | "runners" }) {
     <nav aria-label="Settings pages" className="flex gap-3 text-sm">
       {link("/settings/github", "GitHub", current === "github")}
       {link("/settings/runners", "Local runners", current === "runners")}
+      {link("/settings/models", "Models", current === "models")}
     </nav>
   );
 }

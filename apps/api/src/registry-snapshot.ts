@@ -36,6 +36,7 @@ export function fullAppDeps(
     reviewFindings: new contracts.InMemoryReviewFindingSource(),
     quota: new contracts.InMemoryQuotaStore(),
     nightLaunches: new contracts.InMemoryNightLaunchStore(),
+    routing: new contracts.InMemoryRoutingConfigStore(),
     projectVersions: new contracts.InMemoryProjectVersions(),
     publicHost: "localhost",
     watchdog: {

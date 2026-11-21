@@ -23,6 +23,9 @@ import {
   EpicBranches,
   MorningPullRequests,
   ProjectReadCache,
+  RoutingSettings,
+  BoardReader,
+  WorkReader,
   bumpOnWrite,
   type EpicBranchOpener,
 } from "@andy/domain";
@@ -106,6 +109,8 @@ export function createServices(input: AppDeps): Services {
     connection ? new ConnectedCodeHost(connection) : null,
     runnerPresence,
     deps.nightLaunches ?? null,
+    null,
+    deps.routing ?? null,
   );
   const refiner = new RefineDispatcher(deps.tracker, deps.runs, runs, now);
   const builder = new BuildDispatcher(deps.tracker, deps.runs, runs, now, deps.quota ?? null);
@@ -230,6 +235,10 @@ export function createServices(input: AppDeps): Services {
   const configRevert = deps.configChanges
     ? new ConfigRevert(deps.tracker, projects, deps.configChanges, now)
     : null;
+  // AI-239: routing settings; each save is logged when the change log is configured.
+  const routing = deps.routing
+    ? new RoutingSettings(deps.routing, deps.tracker, deps.configChanges ?? null, now)
+    : null;
 
   return {
     deps,
@@ -255,8 +264,11 @@ export function createServices(input: AppDeps): Services {
     plans,
     configProposals,
     configRevert,
+    routing,
     night,
     readCache,
+    // AI-198: each project's board through the same read cache as board polls.
+    work: new WorkReader(deps.tracker, new BoardReader(deps.tracker, deps.runs, readCache)),
   };
 }
 

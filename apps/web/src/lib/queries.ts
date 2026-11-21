@@ -13,6 +13,7 @@ import type {
   Worker,
   WorkerChoice,
 } from "@andy/contracts";
+import { RoutingConfig } from "@andy/contracts";
 import { unwrap, useApi } from "./api";
 import { useLivePoll } from "./live";
 import { withoutQuestion, type NeedsYou } from "./needs-you";
@@ -277,6 +278,48 @@ function useWrite<V, R>(
 export function useClearQuotaIdle() {
   const api = useApi();
   return useWrite(async () => unwrap(await api.POST("/api/quota/clear")));
+}
+
+/** Model routing (AI-243: M9.8): global, and each project's own and effective routing. */
+export function useRouting() {
+  const api = useApi();
+  return useQuery({
+    ...useLivePoll("slow"),
+    queryKey: ["routing"],
+    // The generated types read enum-keyed records as partial; the contract's schema restores them.
+    queryFn: async () => {
+      const view = unwrap(await api.GET("/api/routing"));
+      return {
+        global: RoutingConfig.parse(view.global),
+        projects: view.projects.map((p) => ({
+          projectId: p.projectId,
+          config: p.config ? RoutingConfig.parse(p.config) : null,
+          effective: RoutingConfig.parse(p.effective),
+        })),
+        truncated: view.truncated,
+      };
+    },
+  });
+}
+
+type RoutingSaveBody = Pick<RoutingConfig, "providers" | "tiers" | "steps"> & {
+  ifUpdatedAt: string | null;
+  reason?: string;
+};
+
+/** Saves global (`projectId` null) or one project's routing; refusals carry the API's details. */
+export function useSaveRouting(projectId: string | null) {
+  const api = useApi();
+  return useWrite(async (body: RoutingSaveBody) =>
+    projectId === null
+      ? unwrap(await api.PUT("/api/routing", { body }))
+      : unwrap(
+          await api.PUT("/api/projects/{projectId}/routing", {
+            params: { path: { projectId } },
+            body,
+          }),
+        ),
+  );
 }
 
 /** Local runners (ADR-0089): never their secrets. */

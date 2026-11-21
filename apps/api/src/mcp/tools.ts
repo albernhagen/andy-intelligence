@@ -10,8 +10,10 @@ import {
   type ProjectPlanService,
   type ConfigProposals,
   type ConfigRevert,
+  type RoutingSettings,
   type RunService,
   type TicketService,
+  type WorkReader,
 } from "@andy/domain";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
@@ -52,8 +54,12 @@ export interface ToolDeps {
   configProposals?: ConfigProposals | null;
   /** The settings change log and revert (M4.12); absent or null: no change-log tools. */
   configRevert?: ConfigRevert | null;
+  /** Model routing settings (AI-239); absent or null: no routing tools. */
+  routing?: RoutingSettings | null;
   /** The night launch step (M4.17); absent or null: no night tools. */
   night?: NightDeps | null;
+  /** Work across projects (AI-198); the app always passes it, unit tests may not. */
+  work?: WorkReader;
   /** Signed-in email, shown by `status` so it doubles as the connection check. */
   email: string;
   /** The signed-in user as an actor, `user:<uid>` (AI-19): every write is recorded as this. */
