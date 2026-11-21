@@ -7,6 +7,7 @@ import { checkSettings } from "./check-settings";
 import {
   DEFAULT_GIT_BASE,
   DEFAULT_PLATFORM_REPO,
+  DEFAULT_GITHUB_API,
   DEFAULT_URL,
   checkRepo,
   controlPlaneOrigin,
@@ -28,7 +29,7 @@ Commands:
   login           Store the runner secret (minted at /settings/runners) in the macOS Keychain.
                   security prompts for it twice; it never touches a file or the shell history.
   logout          Delete the stored runner secret.
-  start           Poll for agent tasks (refine and plan) and run them; exits after 12 hours idle.
+  start           Poll for agent tasks (refine, plan, build) and run them; exits after 12 hours idle.
   check-settings  Live check: an agent with the runner's arguments loads no project or local
                   settings and no hooks (one short Haiku call).
 
@@ -162,7 +163,16 @@ async function main(argv: string[]): Promise<number> {
       secret,
       runsAtOnce,
       log,
-      task: { repos, home, claudeCommand: values.claude, platformRepo, confinement: seatbelt },
+      task: {
+        repos,
+        home,
+        claudeCommand: values.claude,
+        platformRepo,
+        origin,
+        gitBase: values["git-base"],
+        githubApi: DEFAULT_GITHUB_API,
+        confinement: seatbelt,
+      },
       keepAwake: caffeinate(log),
       signal: shutdown.signal,
     });
