@@ -3,6 +3,7 @@
 // when a `tools-*.ts` file is missing. Order is not significant: tool names are unique.
 export { registerBriefTools as brief } from "./tools-brief";
 export { registerConfigTools as config } from "./tools-config";
+export { registerConfigLogTools as configLog } from "./tools-config-log";
 export { registerCoreTools as core } from "./tools-core";
 export { registerDigestTools as digest } from "./tools-digest";
 export { registerDispatchTools as dispatch } from "./tools-dispatch";
