@@ -2,6 +2,7 @@ import { InMemoryConfigChangeStore, InMemoryRunStore, InMemoryWorkTracker } from
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createApp } from "./app";
 import type { TokenVerifier } from "./auth";
+import { ownerOnlyAccess } from "./project-access";
 
 /** M4.12: flip a setting, list the log, revert from the settings route; the revert is logged. */
 
@@ -16,6 +17,7 @@ async function setup(options: { store?: boolean } = {}) {
   const tracker = new InMemoryWorkTracker();
   await tracker.createProject({ name: "AI", key: "AI" });
   const app = createApp({
+    projectAccess: ownerOnlyAccess(),
     verifier,
     allowedEmails: new Set(["andy@example.com"]),
     version: "test",

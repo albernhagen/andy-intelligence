@@ -3,12 +3,14 @@ import {
   InMemoryConfigChangeStore,
   InMemoryNightLaunchStore,
   InMemoryReleaseNoteStore,
+  InMemoryRoutingConfigStore,
+  InMemorySpendLedger,
   InMemoryRunStore,
   InMemoryWorkTracker,
 } from "@andy/contracts";
 import type { NewTicket, Stage } from "@andy/contracts";
 import { TicketService, buildReleaseNote, rankBetween } from "@andy/domain";
-import { createApp } from "@andy/api/app";
+import { createApp, ownerOnlyAccess } from "@andy/api/app";
 import { E2E_TOKEN } from "./token";
 
 /** A fixed clock, so history timestamps (and the screenshots) never change. */
@@ -179,6 +181,7 @@ export async function createFakeApp() {
   await seedSettingsChanges(configChanges);
 
   return createApp({
+    projectAccess: ownerOnlyAccess(),
     verifier: {
       async verify(token) {
         if (token !== E2E_TOKEN) throw new Error("bad token");
@@ -193,6 +196,10 @@ export async function createFakeApp() {
     // ADR-0097: no findings, so a project inbox shows the empty "Config proposals" row.
     configChanges,
     nightLaunches: new InMemoryNightLaunchStore(),
+    // AI-243: Settings → Models reads the default routing.
+    routing: new InMemoryRoutingConfigStore(),
+    // AI-249: empty, so the settings page's Spend caps panel shows $0.00 spent.
+    spendLedger: new InMemorySpendLedger(),
     releaseNotes: await seedReleaseNotes(),
   });
 }

@@ -16,6 +16,9 @@ import {
 
 export const SECRET = `air_${"a".repeat(43)}`;
 
+/** The push token the fake grants a build (once per run). */
+export const PUSH_TOKEN = "ghs_fakePushTokenForTheLocalRunnerTest01";
+
 export interface FakeTask {
   claim: ClaimedRun;
   context: RunContextResponse;
@@ -29,6 +32,12 @@ export interface FakeServer {
   contexts: string[];
   heartbeats: { runId: string; body: unknown }[];
   reports: { runId: string; body: RunReportRequest }[];
+  /** `POST /github/token` calls: run id and whether it was granted. */
+  pushTokens: { runId: string; granted: boolean }[];
+  /** Refuse every push token request (403). */
+  refusePushToken: boolean;
+  /** Pull requests opened on the fake GitHub API (`POST /repos/:repo/pulls`). */
+  pulls: { repo: string; auth: string | null; body: Record<string, unknown> }[];
   /** Any request the fake refused (bad schema or credential): a test expects none. */
   refused: string[];
   queue: FakeTask[];
@@ -54,6 +63,9 @@ export async function startFakeServer(): Promise<FakeServer> {
     contexts: [],
     heartbeats: [],
     reports: [],
+    pushTokens: [],
+    refusePushToken: false,
+    pulls: [],
     refused: [],
     queue: [],
     revoked: false,
@@ -83,6 +95,35 @@ export async function startFakeServer(): Promise<FakeServer> {
           run: next ? ClaimedRun.parse(next.claim) : null,
           pollSeconds: state.pollSeconds,
           heartbeatSeconds: state.heartbeatSeconds,
+        });
+      }
+      if (req.method === "POST" && url.pathname === "/github/token") {
+        const runId = (data as { runId?: unknown }).runId;
+        const owner = typeof runId === "string" ? tasks.get(runId) : undefined;
+        if (!owner || auth !== owner.claim.token) {
+          state.refused.push("push token credential");
+          return send(401, { error: "unauthenticated" });
+        }
+        const again = state.pushTokens.some((p) => p.runId === runId && p.granted);
+        const granted = !again && !state.refusePushToken;
+        state.pushTokens.push({ runId: runId as string, granted });
+        if (!granted)
+          return send(403, { error: `run ${String(runId)} already got its push token` });
+        return send(200, {
+          token: PUSH_TOKEN,
+          expiresAt: new Date(Date.now() + 3600_000).toISOString(),
+          actor: "fake-app[bot]",
+        });
+      }
+      const pulls = /^\/repos\/([^/]+\/[^/]+)\/pulls$/.exec(url.pathname);
+      if (req.method === "POST" && pulls) {
+        state.pulls.push({
+          repo: pulls[1]!,
+          auth: req.headers.authorization ?? null,
+          body: data as Record<string, unknown>,
+        });
+        return send(201, {
+          html_url: `https://github.com/${pulls[1]!}/pull/${state.pulls.length}`,
         });
       }
       const match = /^\/runs\/([A-Za-z0-9-]+)\/(context|heartbeat|report)$/.exec(url.pathname);

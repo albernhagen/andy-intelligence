@@ -1,9 +1,19 @@
 import { readdirSync, readFileSync } from "node:fs";
 import { join, relative } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
+import { Client } from "@modelcontextprotocol/sdk/client/index.js";
+import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
 import { describe, expect, it } from "vitest";
 import * as apiRoutes from "./api-routes";
 import * as toolGroups from "./mcp/tool-groups";
+import { hashToken, newToken } from "./mcp/tokens";
+import {
+  CROSS_PROJECT_ROUTES,
+  CROSS_PROJECT_TOOLS,
+  isProjectRoute,
+  projectOfPath,
+  TICKET_KEY_FIELDS,
+} from "./project-access";
 import * as publicRoutes from "./public-routes";
 import { fullApp, registrySnapshot } from "./registry-snapshot";
 
@@ -83,17 +93,12 @@ describe("code registries (AI-145)", () => {
     expect(missing).toEqual([]);
   });
 
-  it("GivenTheRegistryAndBarrelFiles_WhenRead_ThenEachListIsSortedByModulePath", () => {
+  // Package barrels are generated from their folders (ADR-0130): scripts/gen-exports.test.mjs.
+  it("GivenTheRegistryFiles_WhenRead_ThenEachListIsSortedByModulePath", () => {
     const files = [
       "apps/api/src/api-routes.ts",
       "apps/api/src/public-routes.ts",
       "apps/api/src/mcp/tool-groups.ts",
-      "packages/domain/src/index.ts",
-      "packages/store/src/index.ts",
-      "packages/contracts/src/entities/index.ts",
-      "packages/contracts/src/ports/index.ts",
-      "packages/contracts/src/fakes/index.ts",
-      "packages/contracts/src/testing/index.ts",
     ];
     for (const file of files) {
       const modules = exportedModules(join(REPO, file));
@@ -194,5 +199,99 @@ describe("code registries (AI-145)", () => {
     const { tools } = await registrySnapshot();
     expect(tools.length).toBeGreaterThan(40);
     expect(new Set(tools).size).toBe(tools.length);
+  });
+});
+
+/**
+ * AI-252: M8.3: every `/api` route and MCP tool that names a project goes through the one
+ * project-access check (`project-access.ts`). The rest are listed there (`CROSS_PROJECT_ROUTES`,
+ * `CROSS_PROJECT_TOOLS`) with how M8.7 will filter each; at runtime anything else is refused, and
+ * these tests catch it first.
+ */
+/** A concrete path for a route pattern: a ticket key for `:key`, "x" for other params. */
+const samplePath = (pattern: string) => pattern.replace(":key", "AI-1").replace(/:[^/]+/g, "x");
+
+/** Every MCP tool the full app serves, with its input's fields and the required ones. */
+async function toolInputs(): Promise<
+  { name: string; properties: Record<string, unknown>; required: string[] }[]
+> {
+  const { app, grants } = fullApp();
+  const token = newToken();
+  await grants.put(hashToken(token), {
+    kind: "access",
+    clientId: "https://claude.ai/oauth/mcp-client-metadata",
+    email: "andy@example.com",
+    uid: "andy",
+    resource: "http://localhost/mcp",
+    scope: "",
+    redirectUri: null,
+    codeChallenge: null,
+    expiresAt: "2999-01-01T00:00:00.000Z",
+  });
+  const client = new Client({ name: "test", version: "1" });
+  await client.connect(
+    new StreamableHTTPClientTransport(new URL("http://localhost/mcp"), {
+      requestInit: { headers: { authorization: `Bearer ${token}` } },
+      fetch: async (input, init) =>
+        app.fetch(input instanceof Request ? input : new Request(input, init)),
+    }),
+  );
+  const { tools } = await client.listTools();
+  return tools.map((t) => ({
+    name: t.name,
+    properties: t.inputSchema.properties ?? {},
+    required: t.inputSchema.required ?? [],
+  }));
+}
+
+describe("project-access registry (AI-252)", () => {
+  it("GivenEveryFeatureOn_WhenApiRoutesAreListed_ThenEachIsProjectCheckedOrListedAsCrossProject", async () => {
+    const { routes } = await registrySnapshot();
+    const api = [...new Set(routes.filter((r) => r.includes(" /api/") && !r.includes("*")))];
+    const checked = (route: string) =>
+      isProjectRoute(route) && projectOfPath(samplePath(route.split(" ")[1]!)) !== null;
+    expect(api.filter((r) => checked(r)).length).toBeGreaterThan(40);
+    expect(api.filter((r) => !checked(r) && !(r in CROSS_PROJECT_ROUTES))).toEqual([]);
+    const listed = Object.keys(CROSS_PROJECT_ROUTES);
+    expect(listed.filter((r) => !api.includes(r) || checked(r))).toEqual([]);
+  });
+
+  it("GivenEveryFeatureOn_WhenToolsAreListed_ThenEachIsProjectCheckedOrListedAsCrossProject", async () => {
+    const tools = await toolInputs();
+    const names = tools.map((t) => t.name);
+    const checked = new Set(
+      tools
+        .filter((t) => t.required.includes("project") || t.required.includes("ticket"))
+        .map((t) => t.name),
+    );
+    expect(checked.size).toBeGreaterThan(35);
+    expect(names.filter((n) => !checked.has(n) && !(n in CROSS_PROJECT_TOOLS))).toEqual([]);
+    const listed = Object.keys(CROSS_PROJECT_TOOLS);
+    expect(listed.filter((n) => !names.includes(n) || checked.has(n))).toEqual([]);
+  });
+
+  it("GivenEveryFeatureOn_WhenToolInputsAreRead_ThenEveryTicketKeyFieldIsOneTheCheckReads", async () => {
+    // A field whose JSON schema (or its items, or a nullable branch) has the ticket-key pattern.
+    const KEY_PATTERN = "^[A-Z][A-Z0-9]{0,9}-\\d+$";
+    const holdsKey = (schema: unknown): boolean =>
+      typeof schema === "object" && schema !== null
+        ? Object.entries(schema).some(
+            ([k, v]) => (k === "pattern" && v === KEY_PATTERN) || holdsKey(v),
+          )
+        : false;
+    const keyed = (await toolInputs()).flatMap((t) =>
+      Object.entries(t.properties)
+        .filter(([, schema]) => holdsKey(schema))
+        .map(([field]) => ({ field, at: `${t.name}.${field}` })),
+    );
+    expect(keyed.map((k) => k.at)).toEqual(
+      expect.arrayContaining([
+        "edit_ticket.blockedBy",
+        "set_ticket_parent.parent",
+        "reorder_ticket.above",
+      ]),
+    );
+    const unchecked = keyed.filter((k) => !TICKET_KEY_FIELDS.includes(k.field)).map((k) => k.at);
+    expect(unchecked).toEqual([]);
   });
 });

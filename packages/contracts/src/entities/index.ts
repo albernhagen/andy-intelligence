@@ -25,6 +25,7 @@ import { runInFlightFields } from "./in-flight";
 import { runSyncFields } from "./sync";
 import { runLocalFields } from "./runner";
 import { runBaseFields } from "./build";
+import { ProjectSpendCaps } from "./spend-caps";
 import { RefineScores, TicketScores } from "./scores";
 import {
   questionFormatFields,
@@ -33,27 +34,7 @@ import {
   refineQuestionFields,
 } from "./question-format";
 
-export * from "./brief";
-export * from "./build";
-export * from "./common";
-export * from "./config-proposals";
-export * from "./cost";
-export * from "./dashboard";
-export * from "./deployment";
-export * from "./dispatch-caps";
-export * from "./executor";
-export * from "./ideate";
-export * from "./in-flight";
-export * from "./night";
-export * from "./notify-email";
-export * from "./project-plan";
-export * from "./push";
-export * from "./question-format";
-export * from "./release-notes";
-export * from "./runner";
-export * from "./scores";
-export * from "./sync";
-export * from "./worker";
+export * from "./exports.gen";
 
 /** ARCHITECTURE §5 — domain model. Vendor concepts must not appear here. */
 
@@ -73,6 +54,14 @@ export type PlanApproval = z.infer<typeof PlanApproval>;
  */
 export const AutoMerge = z.enum(["none", "s", "s-and-m", "all"]);
 export type AutoMerge = z.infer<typeof AutoMerge>;
+
+/**
+ * Where a project's releases go (ADR-0050, AI-160: M6.2): `prod-only` (one prod project plus PR
+ * previews; the default) or `dev-and-prod` (dev first, then a promote to prod). Nothing deploys
+ * from it yet; M6 slices read it.
+ */
+export const EnvironmentPolicy = z.enum(["prod-only", "dev-and-prod"]);
+export type EnvironmentPolicy = z.infer<typeof EnvironmentPolicy>;
 
 export const Project = z.object({
   id: Id,
@@ -115,6 +104,13 @@ export const Project = z.object({
   defaultWorker: Worker.default("agent"),
   /** Where a ticket's runs execute when it has no pick of its own (ADR-0089). */
   executor: ExecutorKind.default("actions"),
+  /** Release environments (AI-160); projects stored before it read as `prod-only`, unrewritten. */
+  environments: EnvironmentPolicy.default("prod-only"),
+  /**
+   * The project's own spend caps (AI-249: M10.8); each can only lower the global cap, and a
+   * missing field takes the global value. Projects stored before it read as `{}`, unrewritten.
+   */
+  spendCaps: ProjectSpendCaps.default({}),
 });
 export type Project = z.infer<typeof Project>;
 

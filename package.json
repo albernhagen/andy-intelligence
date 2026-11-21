@@ -8,17 +8,19 @@
   },
   "scripts": {
     "prepare": "test -e .git || exit 0; lefthook install",
-    "build": "pnpm -r --if-present build",
-    "typecheck": "pnpm -r --if-present typecheck",
-    "test": "vitest run",
+    "postinstall": "node scripts/gen-exports.mjs",
+    "gen:exports": "node scripts/gen-exports.mjs",
+    "build": "node scripts/gen-exports.mjs && pnpm -r --if-present build",
+    "typecheck": "node scripts/gen-exports.mjs && pnpm -r --if-present typecheck",
+    "test": "node scripts/gen-exports.mjs && vitest run",
     "context:check": "node scripts/context-budget.mjs",
     "risks": "node scripts/risks.mjs",
     "adr": "node scripts/adr-index.mjs",
     "features": "node scripts/features.mjs",
     "reference": "pnpm --filter @andy/api -s reference",
-    "lint": "eslint . && prettier --check .",
+    "lint": "node scripts/gen-exports.mjs && eslint . && prettier --check .",
     "format": "prettier --write .",
-    "test:firestore": "npx -y firebase-tools@15.34.0 emulators:exec --only firestore --project demo-andy-intelligence \"vitest run --project store\""
+    "test:firestore": "node scripts/gen-exports.mjs && npx -y firebase-tools@15.34.0 emulators:exec --only firestore --project demo-andy-intelligence \"vitest run --project store\""
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",

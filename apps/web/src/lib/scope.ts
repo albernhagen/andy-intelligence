@@ -8,7 +8,7 @@ export type Scope = { kind: "all" } | { kind: "project"; projectId: string };
 export const ALL: Scope = { kind: "all" };
 
 /** The screens the header links to. Settings is global, so it is not a scoped section. */
-export type Section = "inbox" | "board" | "dashboards";
+export type Section = "inbox" | "board" | "dashboards" | "work";
 
 const PROJECT_ID = /^[a-z][a-z0-9]{0,9}$/;
 const STORAGE_KEY = "andy.scope";
@@ -36,6 +36,7 @@ export function sectionFromPath(pathname: string): Section | null {
   if (/^\/p\/[^/]+\/whats-new\/?$/.test(pathname)) return null; // So is What's new (AI-159).
   if (/^\/(all|p\/[^/]+)\/inbox\/?$/.test(pathname)) return "inbox";
   if (/^\/(all|p\/[^/]+)\/dashboards\/?$/.test(pathname)) return "dashboards";
+  if (/^\/(all|p\/[^/]+)\/work\/?$/.test(pathname)) return "work"; // AI-198
   if (/^\/(all\/board|p\/[^/]+)(\/|$)/.test(pathname)) return "board";
   return null;
 }
