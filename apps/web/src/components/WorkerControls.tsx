@@ -3,7 +3,8 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { QueryError } from "@/components/Status";
 import { workerStatus } from "@/lib/needs-you";
-import { useSetWorker, useUpdateProject, useWorker } from "@/lib/queries";
+import { useSetWorker, useTicketRouting, useUpdateProject, useWorker } from "@/lib/queries";
+import { layerText } from "@/lib/route-layers";
 
 /** Who does the work (ADR-0082): markers, the ticket's one-click switch, the project default. */
 
@@ -23,6 +24,8 @@ export function WorkerBadges(props: { worker: Worker; stage: Stage; type: Ticket
 export function WorkerControl({ ticket }: { ticket: Ticket }) {
   const path = { projectId: ticket.projectId, ticketId: ticket.id };
   const view = useWorker(path).data;
+  // Where an unpicked worker comes from: its epic or the project (AI-282: M9).
+  const source = useTicketRouting(path).data?.worker;
   const set = useSetWorker(path);
   if (!view) return null;
   return (
@@ -32,7 +35,9 @@ export function WorkerControl({ ticket }: { ticket: Ticket }) {
         {view.worker === "agent" && <Badge>Agent</Badge>}
         <WorkerBadges worker={view.worker} stage={ticket.stage} type={ticket.type} />
         {view.override === null && (
-          <span className="text-xs text-muted-foreground">(project default)</span>
+          <span className="text-xs text-muted-foreground">
+            ({source ? layerText(source) : "project default"})
+          </span>
         )}
       </p>
       <p className="flex flex-wrap gap-2">
