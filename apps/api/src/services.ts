@@ -38,6 +38,7 @@ import { actionsTokenVerifier, type ActionsTokenVerifier } from "./github/token"
 import type { ToolServices } from "./mcp/tools";
 import type { NightDeps } from "./night";
 import { runnerCredentials } from "./runners";
+import { SpendSettingsService } from "./spend";
 
 /**
  * The domain services every route module and MCP tool share, built once per app (one
@@ -267,6 +268,12 @@ export function createServices(input: AppDeps): Services {
     routing,
     night,
     readCache,
+    spend: new SpendSettingsService(
+      projects,
+      async (id) => (await deps.tracker.getProject(id))?.spendCaps ?? null,
+      deps.spendLedger ?? null,
+      now,
+    ),
     // AI-198: each project's board through the same read cache as board polls.
     work: new WorkReader(deps.tracker, new BoardReader(deps.tracker, deps.runs, readCache)),
   };

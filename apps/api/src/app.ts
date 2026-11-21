@@ -15,6 +15,7 @@ import {
   type RoutingConfigStore,
   type NightLaunchStore,
   type ProjectVersions,
+  type SpendLedger,
 } from "@andy/contracts";
 import type { CreatedApp } from "@andy/github";
 import { DomainError, type EmailNotificationsDeps } from "@andy/domain";
@@ -69,6 +70,8 @@ export interface AppDeps {
   deployments?: DeploymentStore;
   /** Model routing (AI-230, AI-238); without it every run takes `DEFAULT_ROUTING`. */
   routing?: RoutingConfigStore;
+  /** Spend totals for the caps settings (AI-249); without it spend reads unknown, never zero. */
+  spendLedger?: SpendLedger;
   /**
    * Per-project change counters (AI-222): with them, every tracker and run write bumps its
    * project, and the board and ticket list serve unchanged polls from a cache. Without, no cache.
