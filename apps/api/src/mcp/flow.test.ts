@@ -194,6 +194,7 @@ describe("MCP OAuth flow (MCP SDK client)", () => {
       "set_default_executor",
       "set_default_worker",
       "set_email_notifications",
+      "set_environments",
       "set_executor",
       "set_paused",
       "set_plan_approval",
