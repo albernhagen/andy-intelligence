@@ -121,12 +121,18 @@ export function isoWeek(at: Date): string {
 
 export const scoutDedupeKey = (week: string) => `model-scout:${week}`;
 
+/** A pending tier change the scout proposed (any week). */
+const isScoutTierChange = (c: ConfigChange) =>
+  c.actor === "scout" && c.entity === "tiers" && c.dedupeKey?.startsWith("model-scout:") === true;
+
 export type ScoutJobResult =
   | { outcome: "skipped"; week: string; reason: string }
   | { outcome: "no_change"; week: string; unchecked: UncheckedTier[] }
   | { outcome: "already_done"; week: string; changeId: string }
   | { outcome: "created"; week: string; changeId: string; unchecked: UncheckedTier[] }
   | { outcome: "capped"; week: string }
+  /** An earlier week's scout proposal is still pending: nothing new until Andy decides it. */
+  | { outcome: "awaiting_decision"; week: string; changeId: string }
   /** Another scout call is still running on this instance; this one did nothing. */
   | { outcome: "busy" };
 
@@ -161,10 +167,21 @@ export class ModelScoutJob {
     const at = this.now();
     const week = isoWeek(at);
     const key = scoutDedupeKey(week);
-    const done = await this.thisWeeksChange(key);
+    const pending = await this.deps.changes.listPending();
+    const done = await this.thisWeeksChange(key, pending);
     if (done) {
       log("INFO", "model scout already ran this week", { week, changeId: done });
       return { outcome: "already_done", week, changeId: done };
+    }
+    // One open scout proposal at a time: a pending one from an earlier week would otherwise be
+    // proposed again every week, and accepting one would leave stale duplicates.
+    const open = pending.find(isScoutTierChange);
+    if (open) {
+      log("INFO", "model scout waits for Andy to decide its open proposal", {
+        week,
+        changeId: open.id,
+      });
+      return { outcome: "awaiting_decision", week, changeId: open.id };
     }
 
     const list = await (this.deps.fetchList ?? (() => fetchModelList()))();
@@ -301,9 +318,12 @@ export class ModelScoutJob {
   }
 
   /** This week's scout change, pending or decided; null when it hasn't proposed one. */
-  private async thisWeeksChange(key: string): Promise<string | null> {
-    const pending = (await this.deps.changes.listPending()).find((c) => c.dedupeKey === key);
-    if (pending) return pending.id;
+  private async thisWeeksChange(
+    key: string,
+    pending: readonly ConfigChange[],
+  ): Promise<string | null> {
+    const same = pending.find((c) => c.dedupeKey === key);
+    if (same) return same.id;
     return (await this.deps.changes.latestDecision(key))?.id ?? null;
   }
 

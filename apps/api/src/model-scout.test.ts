@@ -1,5 +1,6 @@
 import { Hono } from "hono";
 import {
+  ConfigChange,
   DEFAULT_ROUTING,
   InMemoryConfigChangeStore,
   InMemoryRoutingConfigStore,
@@ -155,6 +156,69 @@ describe("ModelScoutJob", () => {
     });
     expect(fetchList).not.toHaveBeenCalled();
     expect(await changes.listPending()).toHaveLength(1);
+  });
+
+  it("GivenLastWeeksProposalIsStillPending_WhenTheJobRunsTwoWeeksRunning_ThenNoNewProposalAndTheListIsNotFetched", async () => {
+    await scoutableFastTier();
+    const first = (await job().run()) as { changeId: string };
+    for (const days of [7, 14]) {
+      const later = new Date(NOW.getTime() + days * 86_400_000);
+      const fetchList = vi.fn(async (): Promise<ModelListFetch> => ({ ok: true, data: LIST }));
+      const result = await new ModelScoutJob({
+        tracker: { listProjects: async () => [{ id: "ai" } as Project] },
+        runs: { listEndedBetween: async () => ({ runs: endedRuns(), complete: true }) },
+        routing,
+        changes,
+        fetchList,
+        newId: () => crypto.randomUUID(),
+        now: () => later,
+      }).run();
+      expect(result).toEqual({
+        outcome: "awaiting_decision",
+        week: isoWeek(later),
+        changeId: first.changeId,
+      });
+      expect(fetchList).not.toHaveBeenCalled();
+    }
+    expect(await changes.listPending()).toHaveLength(1);
+  });
+
+  it("GivenLastWeeksProposalWasDecided_WhenTheJobRunsTheNextWeek_ThenItProposesAgain", async () => {
+    await scoutableFastTier();
+    const first = (await job().run()) as { changeId: string };
+    await changes.decide(first.changeId, "rejected", "andy", NOW.toISOString());
+    const later = new Date(NOW.getTime() + 7 * 86_400_000);
+    const result = await new ModelScoutJob({
+      tracker: { listProjects: async () => [{ id: "ai" } as Project] },
+      runs: { listEndedBetween: async () => ({ runs: endedRuns(), complete: true }) },
+      routing,
+      changes,
+      fetchList: async () => ({ ok: true, data: LIST }),
+      newId: () => crypto.randomUUID(),
+      now: () => later,
+    }).run();
+    expect(result).toMatchObject({ outcome: "created", week: "2026-W48" });
+  });
+
+  it("GivenAPendingNonScoutChange_WhenTheJobRuns_ThenItStillProposes", async () => {
+    await scoutableFastTier();
+    await changes.createPending(
+      ConfigChange.parse({
+        id: crypto.randomUUID(),
+        entity: "agents-md",
+        entityId: "AGENTS.md",
+        diff: { file: "AGENTS.md" },
+        actor: "agent",
+        reason: "r",
+        status: "pending",
+        createdAt: NOW.toISOString(),
+        appliedAt: null,
+        projectId: null,
+        dedupeKey: "finding:x",
+      }),
+      10,
+    );
+    expect(await job().run()).toMatchObject({ outcome: "created" });
   });
 
   it("GivenThisWeeksChangeWasRejected_WhenTheJobRunsAgain_ThenItIsNotProposedAgain", async () => {

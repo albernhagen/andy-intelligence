@@ -17,7 +17,7 @@ In `infra/control-plane`: `terraform plan`, expect **3 to add, 1 to change, 0 to
 ## 2. Check it
 
 1. `gcloud scheduler jobs run model-scout-weekly --location <region>`.
-2. Logs (`component: model-scout`): `model scout: no change`, `... proposed a tier change`, or `... skipped this week` with the reason. A second run in the same week logs `already ran this week`.
+2. Logs (`component: model-scout`): `model scout: no change`, `... proposed a tier change`, or `... skipped this week` with the reason. A second run in the same week logs `already ran this week`; while a proposal waits for you, later weeks log `waits for Andy to decide its open proposal`.
 3. A proposal shows in the Needs-you inbox. Accepting it records your decision; edit the tier in Settings → Models to apply it.
 
 ## Turn it off
