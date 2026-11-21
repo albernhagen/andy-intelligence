@@ -26,7 +26,7 @@ Option 3.
 - One file per risk: `docs/security/risks/<ID>.md`, frontmatter `id` (equal to the file name), `severity`, `status`, `owner`; body `**Risk:**` then `**Mitigation / next step:**`. A closed risk keeps its file with `status: closed`; `closed-risks.md` is gone.
 - `pnpm risks` (`scripts/risks.mjs`) prints the open register (every status but `closed`), then the closed risks. `pnpm test` fails on a malformed file, an id unlike its file name, or a reused id.
 - `threat-model.md` keeps assets, area index, mitigations in place and the file format. Budgets: 300 words per risk file, `threat-model.md` lowered from 3600 to 1000.
-- The per-PR security review gets the base branch's risk files in `.review/risks/` (`agent-review-prepare` now copies a folder). The system review may edit risk files and write new ones; its CI step still rejects any other change and any deletion.
+- The per-PR security review gets the base branch's risk files in `.review/risks/` and every file in `docs/security/` in `.review/security/` (`agent-review-prepare` now copies a folder, not its sub-folders), so a new area file reaches it without a workflow change. The system review may edit risk files and write new ones; its CI step still rejects any other change and any deletion.
 - Managed repos keep the template's single table; both procedures say so.
 
 ### Consequences
