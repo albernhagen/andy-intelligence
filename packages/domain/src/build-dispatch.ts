@@ -135,7 +135,9 @@ export class BuildDispatcher {
     if (!project?.autoBuild || !project.buildEnabled) return null;
     // The claiming runner is present by definition; the cloud dispatcher asks (ADR-0089).
     const runnerPresent = local || (await this.runs.runnerPresent(projectId));
-    const tickets = await this.tracker.listTickets(projectId, { archived: false });
+    // AI-315: only the lanes dispatch uses, by stage, never the whole project (Done, Cancelled
+    // and archived tickets would be read on every dispatch event).
+    const tickets = await this.dispatchTickets(projectId);
     const prsWaiting = await this.prsWaiting(tickets);
     // AI-261: M10.14: each subscription's level under the project's routing. Dispatch idles at
     // the reserve only when no provider on has room; each start then skips routes without it.
@@ -274,15 +276,18 @@ export class BuildDispatcher {
    * none covers any story now. A running launch that reached a limit moves to `stopping`; a
    * stopping one, or one whose stories are all finished, ends with the reason once none of its
    * agent tasks is in flight, and its unfinished stories are flagged for the morning so they
-   * don't start later as plain Ready tickets. With a launch active: one ticket list (archived
-   * included) and one run list per story (at most `NIGHT_LIMITS.maxStories`).
+   * don't start later as plain Ready tickets. With a launch active: one read and one run list
+   * per story (at most `NIGHT_LIMITS.maxStories`).
    */
   private async nightState(projectId: string): Promise<NightState | null> {
     if (!this.nights) return null;
     let launch = await this.nights.findActive(projectId);
     if (!launch) return null;
     const keys = launch.storyKeys;
-    const stories = (await this.tracker.listTickets(projectId)).filter((t) => keys.includes(t.key));
+    // One read per story (at most NIGHT_LIMITS.maxStories), not the whole project (AI-315).
+    const stories = (
+      await Promise.all(keys.map((key) => this.tracker.getTicketByKey(projectId, key)))
+    ).filter((t): t is Ticket => t !== null);
     const runs = (
       await Promise.all(stories.map((t) => this.runStore.listForTicket(projectId, t.id)))
     ).flat();
@@ -348,6 +353,26 @@ export class BuildDispatcher {
   }
 
   /** Tickets in Ready for review (an open PR, by the stage rules) whose PR a build run opened. */
+  /**
+   * What one dispatch reads (AI-315): the Ready lane (rank order), Ready for review (PRs
+   * waiting), In progress (the tickets runs in flight belong to), and each Ready ticket's epic
+   * for its overrides (AI-116), by id. Lanes outside Done and Cancelled hold no archived tickets.
+   */
+  private async dispatchTickets(projectId: string): Promise<Ticket[]> {
+    const [ready, review, building] = await Promise.all(
+      (["ready", "ready_for_review", "in_progress"] as const).map((stage) =>
+        this.tracker.listTickets(projectId, { stage }),
+      ),
+    );
+    const lanes = [...ready!, ...review!, ...building!];
+    const known = new Set(lanes.map((t) => t.id));
+    const parentIds = [
+      ...new Set(ready!.flatMap((t) => (t.parentId && !known.has(t.parentId) ? [t.parentId] : []))),
+    ];
+    const parents = await Promise.all(parentIds.map((id) => this.tracker.getTicket(projectId, id)));
+    return [...lanes, ...parents.filter((t): t is Ticket => t !== null)];
+  }
+
   private async prsWaiting(tickets: Ticket[]): Promise<number> {
     const waiting = await Promise.all(
       tickets
