@@ -13,7 +13,7 @@ v1.x screens:
 - **Digest** (AI-70, ADR-0081): `/p/:projectId/digest`, header link in a project scope.
 - **Tickets** — M1: board, ticket detail with history and linked runs/PRs/cost. M3 (ADR-0059): status on cards, story panel, command palette. M5: filter and group by project. M4: overrides editing; roadmap, work views (ADR-0108).
 - **Run detail** — built (AI-101: M4.7: Run detail screen): `/p/:projectId/runs/:runId`, opened from Activity; another project's task: not found. Jules links M9.
-- **Config** (providers, harnesses, models, tiers, policies; audit log with revert; pending approvals).
+- **Config** (providers, harnesses, models, tiers, policies; audit log with revert (M4.12); pending approvals).
 - **Releases** (dev status, promote to prod, rollback).
 - **Dashboards** — built (AI-117, ADR-0045), `/p/:id/dashboards`, `/all/dashboards`: delivery (tickets by stage over time, lead time, rework, CI green on first try, review blockers), cost, quota and tokens per week by step and size (ADR-0046); `chart.tsx` (AI-103). DORA metrics from M6.
 
@@ -22,7 +22,7 @@ v1.x screens:
 **Built in M1.3: UI: tickets + inbox:**
 - Routes: `/p/:projectId` board; `/p/:projectId/t/:ticketRef` ticket panel (ref = key, e.g. `AI-2`; an id or wrong project redirects).
 - Moves: one button per move in `TRANSITIONS` (`packages/domain`), plus "Force move…" (recorded). Cancel (optional reason), Archive/Unarchive. The API enforces rules; errors show inline.
-- Client: `openapi-fetch` typed by `src/lib/api.gen.ts`, generated from the API's OpenAPI document (`gen:api`; a test fails when stale). Every write refetches all queries.
+- Client: `openapi-fetch` typed by `src/lib/api.gen.ts`, generated from the API's OpenAPI document by `typecheck` (`gen:api`); not committed. Every write refetches all queries.
 - Tests render the UI against the in-process API.
 - Not yet: the kill switch item.
 
@@ -43,12 +43,14 @@ v1.x screens:
 - Group by epic (AI-86, remembered): per lane, a header per epic (key, title, done of total), No epic last; rank stays per lane. Epic filter.
 
 **Built in AI-29: Story panel (M3, ADR-0059):**
-- The ticket route is the board's child (`<Outlet />`): a 640px panel, full page under 900px; Esc or Close returns.
-- Status line (`lib/status-line.ts`): "Waiting for you: 2 questions", "Refining · 1 min".
-- One document (markdown with Write / Preview, checklist, scope lists), a rail of moves and facts, questions, one timeline.
+- The ticket route is the board's child (`<Outlet />`): a 640px panel, full page under 900px; Esc closes.
+- Status line (`lib/status-line.ts`), e.g. "Waiting for you: 2 questions".
+- One document (markdown with Write / Preview, checklist, scope lists), a rail of moves and facts, questions, one timeline. Epics: outcome, checklist "Done when" (AI-186).
 - Fields save in place, queued per ticket with the latest `updatedAt`; a 409 offers Reload; leaving with unsaved typing asks first.
-- Descriptions, comments and questions render as safe markdown (`components/Markdown.tsx`).
+- Descriptions, comments and questions are safe markdown (`components/Markdown.tsx`).
 
 **Built in M1.19: GitHub App setup from the UI:** `/settings/github` (connect, install link, installed repos); the new-project form suggests installed repos.
 
 **Built in AI-9: Live updates (ADR-0091):** `lib/live.ts` sets every polled query's interval: 5 s in use or with a run in flight, else 60 s; none hidden. Failed polls back off; the shell shows "Updates delayed".
+
+Night launch: AI-120 (`NightLaunch.tsx`).

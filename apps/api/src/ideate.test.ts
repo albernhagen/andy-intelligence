@@ -13,6 +13,7 @@ const epicResult = {
   outcome: "epic",
   epic: {
     title: "Andy sees his week",
+    outcome: "Andy sees his weekly running totals at a glance.",
     body: "Runs pile up.",
     acceptanceCriteria: ["WHEN Andy opens the week THE SYSTEM SHALL show totals"],
     slices: [{ title: "Totals", summary: "Sum the week." }],
@@ -89,7 +90,12 @@ describe("POST /api/projects/{projectId}/ideate", () => {
     expect(res.status).toBe(201);
     expect(await res.json()).toMatchObject({
       outcome: "epic",
-      epic: { key: "AI-1", type: "epic", upNextRank: null },
+      epic: {
+        key: "AI-1",
+        type: "epic",
+        upNextRank: null,
+        outcome: "Andy sees his weekly running totals at a glance.",
+      },
       specPullRequest: { number: 1000 },
     });
     expect(s.host.proposals[0]!.proposal.path).toBe("specs/weekly-summary.md");

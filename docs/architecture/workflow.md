@@ -44,17 +44,12 @@ As built (PR events, build dispatch, plan approval): [`history/workflow-as-built
 
 ### 4.4 Epics
 - Ticket types (Epic / Feature / Chore / Bug, ADR-0058) + **child tickets** (`parent_id`).
-- Epic refinement (built) produces stories with `blockedBy`: vertical slices, independently mergeable behind flags; no long-lived branches. Exception: an **overnight run** (ADR-0049) merges its stories into a one-night branch `epic/<key>`, one PR for Andy next morning; built in AI-122.
+- Epic refinement (built) produces stories with `blockedBy`: vertical slices, independently mergeable behind flags; no long-lived branches. Exception: an **overnight run** (ADR-0049) merges stories into `epic/<key>`, one PR for Andy next morning; AI-122 builds on it, AI-124 merges there (ADR-0107).
 - **Just-in-time re-planning** (built, M4.6): dispatch re-runs plans older than a blocker's Done.
 - Epic status, cost and progress roll up; an epic's overrides cascade to its stories.
 
 ### 4.5 Review gate (v1.x: rules only)
-- **Hard vetoes → Andy reviews:** protected paths (CODEOWNERS: auth, payments, migrations, infra), dependency changes, CI not green, new behavior without new tests, no verification output in the run summary (ADR-0040), diff > N lines, any agent-raised concern.
-- **Otherwise:** agent PRs merge on their own once every required check and both review agents pass (from M1.8: Build + gate, ADR-0050), per the project's `autoMerge` policy: `none` / `s` / `s-and-m` (default) / `all`.
-- **Built (M1.8: Build + gate):** vetoes for no verification output, protected or tooling path, and a required or review check not passing; diff size and new-behaviour-without-tests are a follow-up. Facts: the host's PR and check webhooks, never PR text. `wouldAutoMerge` is the gate's own answer, recorded with `gateReasons` under every policy; the policy only decides whether to merge. Merge: squash with the App token, pinned to the assessed head, one attempt per head; a failure flags the ticket; no merge while a sync is pending (`sync_pending`). Outcome and metrics come from the close webhook, on the Run.
-- **Dependabot** (ADR-0042): npm patches and 1.0+ minors auto-merge once checks pass, deploying with Andy's next merge; the rest go to Andy. CODEOWNERS (`* @albernhagen`) requests Andy's review on every PR he didn't author; paths listed after `*` are the protected paths above.
-- **Adversarial review** on every PR (ADR-0026): a fresh reviewer session looks for reasons not to merge, each finding with a concrete failing scenario. Three passes: bugs and logic, plus (from M1.8: Build + gate) compliance with the ticket's acceptance criteria and approved plan; nits capped at 5 (ADR-0040). The implementer answers every finding. An unresolved `blocker` vetoes unless Andy labels `review-accepted`. From M9 the reviewer is a different vendor than the implementer.
-- Security review on every PR (§9.1). A high/critical security finding is a hard veto unless Andy marks it `security-accepted`.
+Detail: [`review-gate.md`](review-gate.md).
 
 ### 4.6 Environments and release
 - Per project: GCP projects `<app>-dev` and `<app>-prod`.

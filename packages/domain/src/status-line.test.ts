@@ -224,6 +224,7 @@ const ticket = (over: Partial<Ticket>): Ticket => ({
   upNextAt: null,
   sentBackReason: null,
   refineAssumptions: [],
+  outcome: null,
   outOfScope: [],
   touches: [],
   createdAt: NOW.toISOString(),

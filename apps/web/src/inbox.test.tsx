@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { screen, waitFor, within } from "@testing-library/react";
 import type { NewQuestion } from "@andy/contracts";
-import { readyStory, renderApp } from "@/test/harness";
+import { PAGE_LOAD, readyStory, renderApp } from "@/test/harness";
 
 /** AI-30: Inbox v2: questions grouped by ticket, one-click suggested answers. */
 
@@ -297,7 +297,11 @@ describe("inbox v2", () => {
       await askAsRun(h, t.id, "run1", [formatted]);
       await open(h, "/p/ai/t/AI-1");
 
-      const item = await screen.findByRole("article", { name: `Question: ${formatted.text}` });
+      const item = await screen.findByRole(
+        "article",
+        { name: `Question: ${formatted.text}` },
+        PAGE_LOAD,
+      );
       expect(within(item).getByLabelText("Context").textContent).toBe(formatted.context);
       const options = within(item).getByRole("list", { name: "Options" });
       expect(

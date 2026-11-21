@@ -2,6 +2,7 @@ import { createRoute, z, type OpenAPIHono } from "@hono/zod-openapi";
 import { ConfigChange, ConfigProposalSweep, type ReviewFindingSource } from "@andy/contracts";
 import type { ConfigProposals } from "@andy/domain";
 import { actorOf, type AuthEnv } from "./auth";
+import type { RouteModule } from "./services";
 
 /**
  * Pending config changes from repeated review findings (ADR-0097), under /api (Firebase sign-in
@@ -98,3 +99,8 @@ export function registerConfigProposalRoutes(
     return c.json(await proposals.decide(changeId, "rejected", actorOf(c.get("identity"))), 200);
   });
 }
+
+/** Listed in `api-routes.ts` (AI-145); absent when the config-change store is not configured. */
+export const apiRoutes: RouteModule = (app, s) => {
+  if (s.configProposals) registerConfigProposalRoutes(app, s.configProposals);
+};
