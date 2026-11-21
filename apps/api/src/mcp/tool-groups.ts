@@ -18,4 +18,5 @@ export { registerQuotaTools as quota } from "./tools-quota";
 export { registerScoreTools as scores } from "./tools-scores";
 export { registerSettingsTools as settings } from "./tools-settings";
 export { registerTicketTools as tickets } from "./tools-tickets";
+export { registerWorkTools as work } from "./tools-work";
 export { registerWorkerTools as worker } from "./tools-worker";
