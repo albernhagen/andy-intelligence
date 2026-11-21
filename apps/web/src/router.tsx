@@ -15,6 +15,7 @@ import { PickProjectPage } from "@/pages/PickProjectPage";
 import { GitHubCallbackPage, GitHubPage } from "@/pages/GitHubPage";
 import { InboxPage } from "@/pages/InboxPage";
 import { NewProjectPage, ProjectsPage } from "@/pages/ProjectsPage";
+import { ModelsPage } from "@/pages/ModelsPage";
 import { ProjectSettingsPage } from "@/pages/ProjectSettingsPage";
 import { RunnersPage } from "@/pages/RunnersPage";
 import { RunPage } from "@/pages/RunPage";
@@ -124,6 +125,7 @@ const routeTree = rootRoute.addChildren([
     path: "/settings/runners",
     component: RunnersPage,
   }),
+  createRoute({ getParentRoute: () => rootRoute, path: "/settings/models", component: ModelsPage }),
   createRoute({
     getParentRoute: () => rootRoute,
     path: "/settings/github/callback",

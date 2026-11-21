@@ -5,6 +5,7 @@ import {
   InMemoryCodeHostConnectionStore,
   InMemoryConfigChangeStore,
   InMemoryNightLaunchStore,
+  InMemoryRoutingConfigStore,
   InMemoryRunStore,
   InMemoryRunnerStore,
   InMemoryWorkTracker,
@@ -31,6 +32,7 @@ export async function apiDocument(): Promise<OpenAPI3> {
     runners: new InMemoryRunnerStore(),
     configChanges: new InMemoryConfigChangeStore(),
     nightLaunches: new InMemoryNightLaunchStore(),
+    routing: new InMemoryRoutingConfigStore(),
     // Fakes only, so the GitHub setup routes are in the document.
     github: {
       publicUrl: "http://localhost",
