@@ -15,30 +15,14 @@ All records carry `project_id` where applicable. Zod schemas in `packages/contra
 | **TicketEvent** | ticket, kind (comment / stage_change / field_change / run_linked / pr_linked …), actor (`user:<uid>` for a signed-in user by auth uid, never an email (AI-19); legacy `andy`, read as the owner; agent:<run> / system; label derived on read), body/diff, timestamp; the ticket's full history |
 | **Question** | ticket, text (the question line), context, choices (label, consequence), recommendation (answer, reason), options, suggested_answer, assumptions, urgency, status, answer, answered_via, run (if an agent asked), timestamps; the format fields are null or empty on questions from before AI-73 |
 | **Run** | ticket, step (refine/plan/build/review/verify/scout), harness, provider, model, tier, status, started/ended, deadline, attempt + retry_of, tokens, usage (input, output, cache read and write tokens, turns, wall time; null = cost unknown), cost_usd (actual or API-equivalent estimate), quota delta (percentage points per window since the previous reading), quota snapshot, links (Action run, Jules session, PR), build plan, branch, base (AI-122; ADR-0063), plan decision (who, when, reason) and a build's approved plan run (ADR-0050), executor identity (Actions `run_id`, Jules session id) to correlate completion signals, **outcome** (merged_clean / reworked / reverted / failed), would_auto_merge |
-| **Provider** | key (claude-sub, google-sub, openrouter), billing_type (subscription / pay_per_use), credential secret ref, quota_source, reserve_pct, warn_pct, pause_pct, caps (daily/monthly USD), enabled |
-| **Harness** | key (claude-code, jules, opencode, direct), runtime (actions / api / in-process), compatible providers, capabilities (agentic, skills, subagents) |
-| **Model** | id, provider, price in/out, context, metadata, last_scouted |
-| **Tier** | key (frontier, strong, fast, cheap), ordered **routes** of (harness, provider, model) |
-| **Policy** | scope (global / project / epic / ticket), gates, autonomy, auto-merge rules, write policy, step→tier mapping |
 | **QuotaReading** | provider, window (5h / weekly / daily-tasks), used_pct, resets_at, source, taken_at, confidence |
 | **ConfigChange** | entity, diff, actor (andy/ui/agent/scout), reason, status (pending/accepted/applied/reverted/rejected), project, dedupe key, decided by/at, timestamps; project-settings writes log one (built, M4.11) |
 | **Release** | project, image digest, tickets included, notes, status |
 | **CodeHostEvent** | delivery ID (document ID), project, repo, kind (pull_request / check_run / workflow_run), action, normalized PR / check / workflow fields, received_at; TTL 30 days (ADR-0041) |
 | **NightLaunch** | epic, project, budget (agent tasks, tokens, USD), stop time (≤ 16 h away), status (planned to ended), started/ended, end reason, story keys, epic branch, start sha (ADR-0049) |
 
-### Configuration rules
-- **Global config is the ceiling; project config can only narrow** (disable providers, lower caps, raise reserves, pin tiers).
-- **Compatibility enforced on save:** `claude-code` ↔ `claude-sub` + Claude models; `jules` ↔ `google-sub`; `opencode` / `direct` ↔ `openrouter` + any model.
-- **Override precedence:** ticket → epic (not `executor`) → project → global.
-- Every change is a ConfigChange (audited, revertable). Agent/scout proposals are `pending` until Andy approves.
+Provider, Harness, Model, Tier, Policy; configuration rules; default quota policy: [`routing-and-policy.md`](routing-and-policy.md).
 
-### Default global quota policy
-```
-claude-sub:  reserve 20% (5h and weekly windows) → warn at 70%, pause dispatch at 80%
-google-sub:  reserve 20% of daily Jules tasks     → warn at 70%, pause at 80%
-openrouter:  hard daily/monthly USD caps (also enforced on the OpenRouter key itself)
-```
-Missing or stale quota reading ⇒ treat as **unknown**: warn in UI, prefer next route, never assume headroom.
 
 ## 6. Ports (contracts) and adapters
 
