@@ -108,7 +108,7 @@ describe("RunService routing", () => {
     expect((await service.start(projectId, t.id, "build")).route.model).toBe("sonnet");
   });
 
-  it("GivenAPinOnADisabledProvider_WhenABuildStarts_ThenTheStartCommentSaysWhyItWasSkipped", async () => {
+  it("GivenAPinOutsideTheRouting_WhenABuildStarts_ThenTheStartCommentSaysWhyItWasSkipped", async () => {
     const t = await readyTicket("M");
     await tracker.updateTicket(
       projectId,
@@ -125,7 +125,7 @@ describe("RunService routing", () => {
     const run = await service.start(projectId, t.id, "build");
     expect(run.route.model).toBe("opus");
     expect((await comments(t.id)).join("\n")).toContain(
-      "jules/google-sub/gemini-pro skipped: the ticket's model pin: provider google-sub is off",
+      "jules/google-sub/gemini-pro skipped: the ticket's model pin: not a route in this project's routing",
     );
   });
 
@@ -145,7 +145,85 @@ describe("RunService routing", () => {
     });
     const told = (await comments(t.id)).filter((c) => c?.startsWith("Couldn't start a build task"));
     expect(told).toEqual([
-      "Couldn't start a build task: no usable route for the strong tier: claude-code/claude-sub/opus skipped: provider claude-sub is off. Change the routing in Settings or the ticket's model pin, then start it again.",
+      "Couldn't start a build task: no usable route for the strong tier: claude-code/claude-sub/opus skipped: provider claude-sub is off. Fix the routing (Settings) or the ticket's model pin, then start it again from the ticket: dispatch skips it while it needs you.",
     ]);
+  });
+
+  const claudeOff = () => projectConfig((c) => (c.providers["claude-sub"].enabled = false));
+
+  it("GivenNoUsableRoute_WhenARefineStarts_ThenNotRefinableAndToldOnTheTicket", async () => {
+    await routing.put(claudeOff(), null);
+    const t = await tracker.createTicket(projectId, { title: "Board" }, "andy");
+    await tracker.updateTicket(projectId, t.id, { fields: { upNextRank: "0000000001" } }, "andy");
+    await expect(service.start(projectId, t.id, "refine")).rejects.toMatchObject({
+      code: "not_refinable",
+      message: expect.stringContaining("no usable route for the fast tier"),
+    });
+    expect((await comments(t.id)).some((c) => c?.startsWith("Couldn't start a refine task"))).toBe(
+      true,
+    );
+  });
+
+  it("GivenNoUsableRoute_WhenASyncStarts_ThenRefusedAndTheTicketFlagged", async () => {
+    await routing.put(claudeOff(), null);
+    const t = await readyTicket("M");
+    await expect(
+      service.startSync(projectId, t.id, {
+        buildRunId: "run-1",
+        pullRequest: `${REPO.url}/pull/7`,
+        number: 7,
+        branch: "agent/AI-1/run-1",
+        headSha: "a".repeat(40),
+      }),
+    ).rejects.toMatchObject({
+      code: "not_buildable",
+      message: expect.stringContaining("no usable route"),
+    });
+    expect((await tracker.getTicket(projectId, t.id))?.needsAttention).toBe(true);
+  });
+
+  it("GivenAnAlreadyFlaggedTicket_WhenNoRouteIsUsable_ThenRefusedWithoutAnotherComment", async () => {
+    await routing.put(claudeOff(), null);
+    const t = await readyTicket("M");
+    await tracker.updateTicket(projectId, t.id, { fields: { needsAttention: true } }, "andy");
+    await expect(service.start(projectId, t.id, "build")).rejects.toMatchObject({
+      code: "not_buildable",
+    });
+    expect(await comments(t.id)).toEqual([]);
+  });
+
+  it("GivenARefusedTicket_WhenTheRoutingIsFixedAndItIsStartedByHand_ThenItRunsAndIsUnflagged", async () => {
+    const off = await routing.put(claudeOff(), null);
+    const t = await readyTicket("M");
+    await expect(service.start(projectId, t.id, "build")).rejects.toMatchObject({
+      code: "not_buildable",
+    });
+    await routing.put(
+      projectConfig(() => {}),
+      off.updatedAt,
+    );
+    const run = await service.start(projectId, t.id, "build");
+    expect(run.route.model).toBe("opus");
+    expect((await tracker.getTicket(projectId, t.id))?.needsAttention).toBe(false);
+  });
+
+  it("GivenAFailedBuildAndRoutingTurnedOffSince_WhenItsRetryStarts_ThenOneFlagWithTheRetryReason", async () => {
+    const t = await readyTicket("M");
+    const run = await service.start(projectId, t.id, "build");
+    await service.context(run.id, run.executor!);
+    await routing.put(claudeOff(), null);
+    await service.report(run.id, run.executor!, {
+      status: "failed",
+      summary: "tests failed",
+      tokensIn: 1,
+      tokensOut: 1,
+      costUsd: 0,
+    });
+    expect((await tracker.getTicket(projectId, t.id))?.needsAttention).toBe(true);
+    const notes = await comments(t.id);
+    expect(
+      notes.filter((c) => c?.includes("the retry couldn't start") && c.includes("no usable route")),
+    ).toHaveLength(1);
+    expect(notes.some((c) => c?.startsWith("Couldn't start a build task"))).toBe(false);
   });
 });

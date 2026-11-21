@@ -135,6 +135,13 @@ describe("effectiveRouting: a project only narrows", () => {
     expect(routing.tiers.strong).toEqual([claude("sonnet"), claude("opus")]);
   });
 
+  it("GivenGlobalStepsChangedAfterAProjectSavedItsOwn_WhenNarrowed_ThenTheProjectStepsStand", () => {
+    const global = config((c) => (c.steps.build = "strong"));
+    const routing = effectiveRouting(global, project());
+    expect(routing.steps.build).toBe("by_size");
+    expect(effectiveRouting(global, null).steps.build).toBe("strong");
+  });
+
   it("GivenAProjectThatPicksAnotherTierForAStep_WhenNarrowed_ThenTheProjectStepWins", () => {
     const routing = effectiveRouting(
       DEFAULT_ROUTING,
@@ -191,20 +198,49 @@ describe("resolveRoute: the first usable route", () => {
 });
 
 describe("resolveRoute: the ticket's model pin", () => {
-  it("GivenACompatiblePin_WhenABuildResolves_ThenThePinIsUsed", () => {
-    const resolved = buildRoute({ size: "S", overrides: { modelPin: claude("haiku") } }, defaults);
-    expect(resolved).toMatchObject({ route: claude("haiku"), tier: "fast", skipped: [] });
+  it("GivenACompatiblePinInTheRouting_WhenABuildResolves_ThenThePinIsUsed", () => {
+    const resolved = buildRoute({ size: "S", overrides: { modelPin: claude("opus") } }, defaults);
+    expect(resolved).toMatchObject({ route: claude("opus"), tier: "fast", skipped: [] });
   });
 
-  it("GivenAPinOnADisabledProvider_WhenABuildResolves_ThenTheTierRouteAndWhyThePinWasSkipped", () => {
-    const resolved = buildRoute({ size: "M", overrides: { modelPin: jules() } }, defaults);
+  it("GivenAPinNoTierHas_WhenABuildResolves_ThenTheTierRouteAndWhyThePinWasSkipped", () => {
+    const resolved = buildRoute({ size: "S", overrides: { modelPin: claude("haiku") } }, defaults);
+    expect(resolved.route).toEqual(claude("sonnet"));
+    expect(resolved.skipped[0]?.reason).toBe(
+      "the ticket's model pin: not a route in this project's routing",
+    );
+  });
+
+  it("GivenAProjectThatDropsOpus_WhenATicketPinsOpus_ThenThePinIsSkipped", () => {
+    const routing = effectiveRouting(
+      DEFAULT_ROUTING,
+      project((c) => {
+        c.tiers.frontier = [claude("sonnet")];
+        c.tiers.strong = [claude("sonnet")];
+        c.tiers.fast = [claude("sonnet")];
+        c.tiers.cheap = [claude("sonnet")];
+      }),
+    );
+    // Global's frontier and strong hold only Opus, so the project keeps no route there; fast and
+    // cheap keep Sonnet. Opus is in no tier the project has.
+    const resolved = buildRoute({ size: "S", overrides: { modelPin: claude("opus") } }, routing);
+    expect(resolved.route).toEqual(claude("sonnet"));
+    expect(resolved.skipped[0]?.reason).toContain("not a route in this project's routing");
+  });
+
+  it("GivenAPinInATierButOnADisabledProvider_WhenABuildResolves_ThenSkippedForTheProvider", () => {
+    const routing = effectiveRouting(
+      config((c) => (c.tiers.strong = [jules(), claude("opus")])),
+      null,
+    );
+    const resolved = buildRoute({ size: "M", overrides: { modelPin: jules() } }, routing);
     expect(resolved.route).toEqual(claude("opus"));
     expect(resolved.skipped[0]?.reason).toBe("the ticket's model pin: provider google-sub is off");
   });
 
   it("GivenAPin_WhenAFixedTierStepResolves_ThenThePinIsIgnoredLikeTheTierPin", () => {
     expect(
-      buildRoute({ size: "M", overrides: { modelPin: claude("haiku") } }, defaults, "refine").route,
+      buildRoute({ size: "M", overrides: { modelPin: claude("opus") } }, defaults, "refine").route,
     ).toEqual(claude("sonnet"));
   });
 });

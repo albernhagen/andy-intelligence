@@ -46,8 +46,9 @@ function narrowProvider(global: ProviderRouting, project: ProviderRouting): Prov
  * "Global is the ceiling; a project can only narrow it." A provider is on only if both have it
  * on; the higher reserve and the lower warn, pause and task limit win. A project's tier keeps
  * only routes global's tier also has, in the project's order (it may drop or reorder, never
- * add); none left means the tier has no route for that project. A project may pick a different
- * tier for a step.
+ * add); none left means the tier has no route for that project. A project's `steps` are an
+ * explicit override, not a narrowing: a project config holds every step, so a later change to
+ * global's steps doesn't reach a project that has its own config.
  */
 export function effectiveRouting(
   global: RoutingConfig,
@@ -86,10 +87,17 @@ function unusable(route: Route, routing: EffectiveRouting): string | null {
   return routeProblem(route);
 }
 
+/** A pin must be one of the routes some tier allows: global is the ceiling for pins too. */
+function pinProblem(pin: Route, routing: EffectiveRouting): string | null {
+  const allowed = TierKey.options.some((k) => routing.tiers[k].some((r) => sameRoute(r, pin)));
+  return allowed ? unusable(pin, routing) : "not a route in this project's routing";
+}
+
 /**
  * The route a step runs on. Its tier is the step's (`steps[step]`), or the ticket's (`ticketTier`,
  * from size or pin) when the step is `by_size`. On a `by_size` step a ticket's `modelPin` comes
- * first when it is usable; then the tier's routes in order. Every route passed over is returned
+ * first when it is usable and is a route of some tier in `routing` (so a pin can't reach a model
+ * the project's routing leaves out); then the tier's routes in order. Every route passed over is returned
  * with its reason. `route: null` when none is usable: the caller refuses to start.
  */
 export function resolveRoute(
@@ -106,7 +114,7 @@ export function resolveRoute(
   ];
   const skipped: SkippedRoute[] = [];
   for (const { route, pinned } of candidates) {
-    const problem = unusable(route, routing);
+    const problem = pinned ? pinProblem(route, routing) : unusable(route, routing);
     if (problem === null) return { route, tier, skipped };
     skipped.push({ route, reason: pinned ? `the ticket's model pin: ${problem}` : problem });
   }

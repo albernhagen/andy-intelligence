@@ -396,6 +396,8 @@ export class RunService {
     const resolved = await this.routeFor(
       startable === "refine" ? ticket : await this.withEpic(ticket),
       startable,
+      // A retry that can't route is reported by retryOrFlag, with the failed run's reason.
+      { quiet: !!retryOf },
     );
     // ADR-0080: what the run may edit, and a build's ADR number (a retry keeps its run's).
     const touches = runTouches(ticket.touches, approved?.plan?.files);
@@ -570,10 +572,15 @@ export class RunService {
 
   /**
    * The route `step` runs on for this ticket (pass it with its epic's overrides). When no route
-   * of its tier is usable the start is refused: the ticket gets one comment naming each skipped
-   * route and is flagged Needs-you (once: a flagged ticket isn't dispatched again).
+   * of its tier is usable the start is refused: unless `quiet`, the ticket gets one comment
+   * naming each skipped route and is flagged Needs-you. Dispatch skips a flagged ticket, so the
+   * comment isn't repeated; a start by hand after the fix runs it (a build's start clears the flag).
    */
-  private async routeFor(ticket: Ticket, step: RunStep): Promise<ResolvedRoute & { route: Route }> {
+  private async routeFor(
+    ticket: Ticket,
+    step: RunStep,
+    opts: { quiet?: boolean } = {},
+  ): Promise<ResolvedRoute & { route: Route }> {
     const resolved = buildRoute(ticket, await this.routingOf(ticket.projectId), step);
     if (resolved.skipped.length > 0) {
       log("INFO", "routes skipped", {
@@ -585,11 +592,11 @@ export class RunService {
     }
     if (resolved.route) return resolved;
     const reason = `no usable route for the ${resolved.tier} tier${resolved.skipped.length > 0 ? `: ${skippedText(resolved.skipped)}` : ""}`;
-    if (!ticket.needsAttention) {
+    if (!opts.quiet && !ticket.needsAttention) {
       await this.tracker.addComment(
         ticket.projectId,
         ticket.id,
-        `Couldn't start a ${step} task: ${reason}. Change the routing in Settings or the ticket's model pin, then start it again.`,
+        `Couldn't start a ${step} task: ${reason}. Fix the routing (Settings) or the ticket's model pin, then start it again from the ticket: dispatch skips it while it needs you.`,
         "system",
       );
       await this.tracker.updateTicket(
