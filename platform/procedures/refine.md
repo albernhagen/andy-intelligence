@@ -1,6 +1,6 @@
 # /refine — refine one ticket before work starts
 
-Procedure for the refine step (ARCHITECTURE §4.2–4.3, ADR-0054: Refine run protocol, ADR-0075: Ideas and Up next).
+Procedure for the refine step. Sources: [`refine-sources.md`](refine-sources.md).
 
 **Find what stops this ticket from being built right the first time, and ask Andy only when his guidance beats your guess.**
 
@@ -11,7 +11,7 @@ Procedure for the refine step (ARCHITECTURE §4.2–4.3, ADR-0054: Refine run pr
 - Read `AGENTS.md` first, then only what you need: turns are capped.
 - Answered questions are settled: use the answers.
 
-## What to check (the Definition of Ready, §4.2; per type, ADR-0058: Ticket model)
+## What to check (the Definition of Ready)
 
 1. **Type**: `feature` (new or changed behaviour), `bug` (wrong behaviour), `chore` (no user-visible change), `spike` (findings, no code) or `epic` (a container that never runs).
 2. **Intent**: the problem and who has it. For a bug: steps to reproduce and the actual behaviour.
@@ -66,7 +66,7 @@ Sure and `reversible` becomes an assumption; anything else is asked. **The contr
 
 `urgency` is `high` only when the ticket can't be built without it. Skip what the code or docs answer. A clear ticket has zero gaps.
 
-## Questions Andy can answer (AI-73)
+## Questions Andy can answer
 
 Each gap stands alone, for Andy away from the desk:
 
@@ -77,7 +77,9 @@ Each gap stands alone, for Andy away from the desk:
 
 No `?`, no context or an option without a consequence fails the result.
 
-A worked bad and good example: [`refine-question-example.md`](refine-question-example.md).
+Bad: `AI-6: M1.17: Agent evals v1, q1: who pays for model calls in CI.`
+
+Good: "Should the agent evals CI job (AI-6: Agent evals v1) pay for model calls from Andy's Claude subscription or an API key?" Context: "Agent evals replay fixed tickets through each agent to catch regressions. Nothing runs them today. The workflow needs a payer before it can land." Options: Subscription (no new spend; uses the weekly quota), API key (about $2 a run; a new secret). Recommendation: Subscription, no new secret or bill.
 
 ## Re-refine
 
@@ -89,7 +91,7 @@ End with the structured output (schema: `refine.schema.json`, next to this file)
 
 - The ticket fields (`type` … `acceptanceCriteria`): your proposal, always given. Each is written only where the ticket's is empty (Andy's values win); a set value you think is wrong is a gap.
 - `summary`: markdown, at most 300 words: **Ask** (one sentence), **Gaps** (what the Definition of Ready misses), **Files**, **Risks** (security, data, cost, concurrency).
-- `epicOutcome`: for an epic only, one sentence, at most 300 characters, in Andy's words: what is true when it is done; no implementation detail. `null` for any other type. Kept only where the epic has none (ADR-0108).
+- `epicOutcome`: epics only (else `null`), as the schema's description says.
 - `outcome`, `reason`, `children`, `gaps`: as above.
 
 A result not matching the schema fails the run and writes nothing.
