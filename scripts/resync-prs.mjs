@@ -7,7 +7,8 @@
 //
 // Skipped: forks, drafts, the opt-out label, agent PRs (sync tasks own them, ADR-0083), Dependabot
 // (it rebases its own). Caps (ADR-0028): runs per hour, PRs per run, updates per PR per day.
-// Fails closed: anything unexpected stops the run before the next PR, with a non-zero exit.
+// Fails closed: a shared failure (token, main fetch, run count) stops the run; one PR's failure
+// writes nothing more for that PR, the rest go on, and the run exits non-zero.
 //
 // Env: REPO (owner/name), DEFAULT_BRANCH, READ_TOKEN (the job's GITHUB_TOKEN: list, fetch, count
 // runs), WORKFLOW_REF (github.workflow_ref), CONTROL_PLANE_URL, ACTIONS_ID_TOKEN_REQUEST_URL,
@@ -384,11 +385,18 @@ export async function resync({ env, git, github, fetchImpl = globalThis.fetch, e
   if (candidates.length === 0) return { capped: false, results };
 
   const write = await writeToken({ env, fetchImpl, emit });
+  // A failure on one PR (locked conversation, a 403, a failed fetch) writes nothing more for it
+  // and doesn't hold back the PRs after it; the run still ends red. Shared failures above (token,
+  // main fetch, run count) stop the whole run.
   for (const pr of candidates) {
-    record({
-      number: pr.number,
-      ...(await resyncOne({ pr, env, git, github, write, mainSha, auth })),
-    });
+    try {
+      record({
+        number: pr.number,
+        ...(await resyncOne({ pr, env, git, github, write, mainSha, auth })),
+      });
+    } catch (err) {
+      record({ number: pr.number, outcome: "error", detail: oneLine(err?.message) });
+    }
   }
   return { capped: false, results };
 }
@@ -417,6 +425,11 @@ async function main() {
   }
   if (process.env.GITHUB_STEP_SUMMARY) {
     appendFileSync(process.env.GITHUB_STEP_SUMMARY, `${summaryTable(outcome.results)}\n`);
+  }
+  const failed = outcome.results.filter((r) => r.outcome === "error");
+  if (failed.length > 0) {
+    emit(`::error title=resync-prs::${failed.length} PR(s) failed: see the job summary`);
+    process.exitCode = 1;
   }
 }
 

@@ -1,6 +1,7 @@
 import { mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { URL } from "node:url";
 import { describe, expect, it } from "vitest";
 import {
   COMMENT_MARKER,
@@ -97,22 +98,23 @@ function world({
   };
   const fetchImpl = async (url) => {
     calls.push({ method: "FETCH", path: url });
-    if (url.startsWith("https://oidc.example")) {
+    if (new URL(url).host === "oidc.example") {
       return { ok: true, status: 200, json: async () => ({ value: "oidc-jwt" }) };
     }
     return { ok: token.status === 200, status: token.status, json: async () => token.body };
   };
   const lines = [];
+  const self = { github };
   const run = () =>
     resync({
       env,
       git,
-      github,
+      github: (...args) => self.github(...args),
       fetchImpl,
       emit: (l) => lines.push(l),
       now: () => new Date("2026-11-20T12:00:00Z"),
     });
-  return { run, calls, gitCalls, lines };
+  return Object.assign(self, { run, calls, gitCalls, lines });
 }
 
 const writes = (calls) => calls.filter((c) => ["PUT", "POST", "PATCH"].includes(c.method));
@@ -329,10 +331,24 @@ describe("resync", () => {
     expect(writes(w.calls)).toEqual([]);
   });
 
-  it("GivenGitFetchFails_WhenRun_ThenThrowsAndWritesNothing", async () => {
+  it("GivenTheMainFetchFails_WhenRun_ThenThrowsAndWritesNothing", async () => {
     const w = world({ fetchStatus: 128 });
-    await expect(w.run()).rejects.toThrow(/git fetch/);
+    await expect(w.run()).rejects.toThrow(/git fetch of main/);
     expect(writes(w.calls)).toEqual([]);
+  });
+
+  it("GivenOnePrFails_WhenRun_ThenItIsAnErrorAndTheNextPrIsStillUpdated", async () => {
+    const w = world({
+      prs: [pr({ number: 1, updated_at: "2026-11-01T00:00:00Z" }), pr({ number: 2 })],
+    });
+    const github = w.github;
+    w.github = async (method, path, opts) => {
+      if (path.endsWith("/pulls/1/update-branch")) throw new Error("PUT returned HTTP 403: locked");
+      return github(method, path, opts);
+    };
+    const { results } = await w.run();
+    expect(results.map((r) => `${r.number} ${r.outcome}`)).toEqual(["1 error", "2 updated"]);
+    expect(results[0].detail).toContain("403");
   });
 
   it("GivenTheHeadMovedSinceTheListing_WhenFetched_ThenSkipped", async () => {
