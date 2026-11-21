@@ -11,8 +11,8 @@ v1.x screens:
 - **Quota & spend** (per provider gauges with reset times; paid spend vs caps; banner on warn/pause/unknown; built: header gauge, banner).
 - **Project settings** (AI-46, built): `/p/:projectId/settings`, header link; switches explained, saved by PATCH; setup checklist first (AI-95). `/projects` opens the current project's; `/projects/new` adds one.
 - **Digest** (AI-70, ADR-0081): `/p/:projectId/digest`, header link in a project scope.
-- **Tickets** — M1: board, ticket detail with history and linked runs/PRs/cost. M3 (ADR-0059): status on cards, story panel, command palette. M5: filter and group by project. M4: overrides editing.
-- **Run detail** — M4, built (AI-101); Jules links M9.
+- **Tickets** — M1: board, ticket detail with history and linked runs/PRs/cost. M3 (ADR-0059): status on cards, story panel, command palette. M5: filter and group by project. M4: overrides editing; roadmap, work views (ADR-0108).
+- **Run detail** — built (AI-101: M4.7: Run detail screen): `/p/:projectId/runs/:runId`, opened from Activity; another project's task: not found. Jules links M9.
 - **Config** (providers, harnesses, models, tiers, policies; audit log with revert (settings: built, M4.12); pending approvals).
 - **Releases** (dev status, promote to prod, rollback).
 - **Dashboards** — built (AI-117, ADR-0045), `/p/:id/dashboards`, `/all/dashboards`: delivery (tickets by stage over time, lead time, rework, CI green on first try, review blockers), cost, quota and tokens per week by step and size (ADR-0046); `chart.tsx` (AI-103). DORA metrics from M6.
@@ -52,5 +52,3 @@ v1.x screens:
 **Built in M1.19: GitHub App setup from the UI:** `/settings/github` (connect, install link, installed repos); the new-project form suggests installed repos.
 
 **Built in AI-9: Live updates (ADR-0091):** `lib/live.ts` sets every polled query's interval: 5 s in use or with a run in flight, else 60 s; none hidden. Failed polls back off; the shell shows "Updates delayed".
-
-**Built in AI-101: M4.7: Run detail screen:** `/p/:projectId/runs/:runId`, opened from Activity; another project's task: not found.
