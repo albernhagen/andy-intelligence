@@ -10,6 +10,7 @@ import { describe, expect, it, vi } from "vitest";
 import {
   chooseRoute,
   dispatchQuotaLevel,
+  lowestThresholds,
   routeAvailability,
   subscriptionLevel,
   type RouteAvailability,
@@ -237,5 +238,23 @@ describe("subscriptionLevel", () => {
 
   it("GivenNoReadings_WhenRead_ThenUnknown", () => {
     expect(subscriptionLevel("claude-sub", [], claude, NOW)).toBe("unknown");
+  });
+});
+
+describe("lowestThresholds", () => {
+  const FALLBACK = { warnPct: 70, pausePct: 80 };
+
+  it("GivenOneProjectNarrowingClaudeSub_WhenAsked_ThenItsLowerLevels", () => {
+    const narrowed = providers({});
+    narrowed["claude-sub"] = { ...narrowed["claude-sub"], warnPct: 50, pausePct: 60 };
+    const routings = [{ providers: providers({}) }, { providers: narrowed }];
+    expect(lowestThresholds("claude-sub", routings, FALLBACK)).toEqual({
+      warnPct: 50,
+      pausePct: 60,
+    });
+  });
+
+  it("GivenNoProjects_WhenAsked_ThenTheDefaults", () => {
+    expect(lowestThresholds("claude-sub", [], FALLBACK)).toEqual(FALLBACK);
   });
 });

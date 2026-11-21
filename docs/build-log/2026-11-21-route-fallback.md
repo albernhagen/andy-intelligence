@@ -5,3 +5,5 @@
 - `SpendGate.refusal(projectId, route)` runs the reserve's checks without writing. `reserve` still decides, so a race is refused there.
 - New `Run.routeSkips` (route and reason, at most 6; defaults to empty, so no schema version bump). The start comment lists the skips too.
 - Unchanged: starts by hand, retries, refine and sync dispatch. They take the resolver's first usable route and the global claude-sub gate, as before. With only claude-sub on (the default) dispatch decides exactly as before.
+- Clearing a quota idle (AI-74) discards readings at the lowest claude-sub pause level in any project's routing (`lowestThresholds`), so an idle that dispatch reports can always be cleared. The quota header and digest still show the §5 defaults (70/80).
+- A local runner's claim skips paid routes (no budget harness). With no route left the claim returns nothing, flags nothing, and leaves the project's last decision alone, as for `spend_cap` before.

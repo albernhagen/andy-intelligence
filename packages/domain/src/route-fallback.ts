@@ -6,8 +6,8 @@ import type {
   QuotaWindow,
   Route,
 } from "@andy/contracts";
-import { quotaStatus, readingsForDispatch } from "./quota";
-import type { RouteCandidate, SkippedRoute } from "./route-resolver";
+import { quotaStatus, readingsForDispatch, type QuotaThresholds } from "./quota";
+import type { EffectiveRouting, RouteCandidate, SkippedRoute } from "./route-resolver";
 import { PROVIDER_BILLING } from "./runs";
 
 /**
@@ -173,4 +173,21 @@ export function dispatchQuotaLevel(
   if (on.includes("pause") && withRoom.length === 0) return "pause";
   const rest: QuotaLevel[] = on.filter((l) => l !== "pause");
   return SEVERITY.find((l) => rest.includes(l)) ?? "unknown";
+}
+
+/**
+ * The lowest warn and pause levels `provider` has in any of `routings` (global and each
+ * project's): the readings at that pause level hold at least one project at its reserve, so
+ * clearing a quota idle (AI-74) discards them all. With none, the §5 defaults.
+ */
+export function lowestThresholds(
+  provider: ProviderKey,
+  routings: Pick<EffectiveRouting, "providers">[],
+  fallback: QuotaThresholds,
+): QuotaThresholds {
+  if (routings.length === 0) return fallback;
+  return {
+    warnPct: Math.min(...routings.map((r) => r.providers[provider].warnPct)),
+    pausePct: Math.min(...routings.map((r) => r.providers[provider].pausePct)),
+  };
 }

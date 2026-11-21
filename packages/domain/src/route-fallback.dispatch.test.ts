@@ -9,6 +9,7 @@ import {
   InMemoryWorkTracker,
   type QuotaReading,
   type Route,
+  type Runner,
 } from "@andy/contracts";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { BuildDispatcher } from "./build-dispatch";
@@ -199,5 +200,44 @@ describe("quota-aware route fallback at dispatch", () => {
     const t = await readyTicket();
     const run = await dispatcher().runs.start(projectId, t.id, "build");
     expect(run.route).toEqual(OPUS);
+  });
+
+  describe("a local runner's claim", () => {
+    const runner = () => ({ id: "r1", name: "mac", projectIds: [projectId] }) as Runner;
+
+    it("GivenTheReserveReachedAndOnlyAPaidRouteLeft_WhenTheRunnerClaims_ThenNothingStartsAndNothingIsFlagged", async () => {
+      await tracker.updateProject(projectId, { executor: "local" });
+      await routeOpusThenPaid();
+      await quota.save([claudeReading(85)]);
+      const t = await readyTicket();
+      const before = await decision();
+      // The paid route is skipped on the local runner (no budget harness), so the reserve idles it.
+      expect(await dispatcher().dispatch.claimFor(projectId, runner())).toBeNull();
+      expect(await runsOf(t.id)).toEqual([]);
+      expect((await tracker.getTicket(projectId, t.id))!.needsAttention).toBe(false);
+      // A claim never rewrites the project's last decision (the cloud's), as before.
+      expect(await decision()).toBe(before);
+    });
+
+    it("GivenOnlyAPaidRoute_WhenTheRunnerClaims_ThenItIsNeverStarted", async () => {
+      await tracker.updateProject(projectId, { executor: "local" });
+      await routeOpusThenPaid();
+      const global = (await routing.getGlobal())!;
+      global.providers["claude-sub"].enabled = false;
+      await routing.put(
+        {
+          scope: "global",
+          projectId: null,
+          providers: global.providers,
+          tiers: global.tiers,
+          steps: global.steps,
+        },
+        global.updatedAt,
+      );
+      const t = await readyTicket();
+      expect(await dispatcher().dispatch.claimFor(projectId, runner())).toBeNull();
+      expect(await runsOf(t.id)).toEqual([]);
+      expect((await tracker.getTicket(projectId, t.id))!.needsAttention).toBe(false);
+    });
   });
 });
