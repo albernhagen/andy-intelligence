@@ -129,6 +129,21 @@ Your next merge deploys the update. If `Deploy control plane` did deploy the bot
 
 Managed repos get both with the next baseline tag (§4: Update a repo to a newer baseline).
 
+## 7. Require branches to be up to date (AI-284)
+
+Once, after the PR that sets `strict_required_status_checks_policy: true` merges. Best together with or after AI-147 (re-sync open PRs on Actions): from then on every open PR must merge the latest `main` and rerun its checks before it can merge.
+
+```sh
+git switch main && git pull
+node platform/baseline/baseline.mjs apply albernhagen/andy-intelligence --dry-run   # expect only: ruleset strict_required_status_checks_policy false → true
+node platform/baseline/baseline.mjs apply albernhagen/andy-intelligence
+node platform/baseline/baseline.mjs check albernhagen/andy-intelligence --only ruleset   # exit 0
+```
+
+If the dry run shows anything else, stop and ask: `apply` replaces the whole ruleset. In the UI instead: Settings → Rules → Rulesets → `protect-main` → Require status checks to pass → tick **Require branches to be up to date before merging** → Save changes; then run the `check` line above.
+
+Check on the next PR that is behind `main`: the merge box says the branch is out of date and the merge button is off until it is updated. Managed repos get it with the next baseline tag (§4).
+
 ## Troubleshooting
 
 | Symptom                                                                          | Fix                                                                                                                                       |
