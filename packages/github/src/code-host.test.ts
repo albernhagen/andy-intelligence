@@ -308,6 +308,25 @@ describe("GitHubCodeHost", () => {
       ).rejects.toThrow(/too large/);
     });
 
+    it("GivenAFolder_WhenListed_ThenFileNamesSortedAndAMissingOneNull", async () => {
+      const fetch = fakeGitHub({
+        ...installed,
+        [`GET ${R}/contents/docs/adr`]: () =>
+          json(200, [
+            { type: "file", name: "0002-b.md" },
+            { type: "dir", name: "history" },
+            { type: "file", name: "0001-a.md" },
+          ]),
+        [`GET ${R}/contents/missing`]: () => json(404, { message: "Not Found" }),
+      });
+      const gh = host(fetch);
+      expect(await gh.listFiles("albernhagen/andy-intelligence", "docs/adr", "main")).toEqual([
+        "0001-a.md",
+        "0002-b.md",
+      ]);
+      expect(await gh.listFiles("albernhagen/andy-intelligence", "missing", "main")).toBeNull();
+    });
+
     it("GivenAMerge_WhenCalled_ThenItSquashesPinnedToTheHeadSha", async () => {
       const put = vi.fn((_init?: RequestInit) => json(200, { merged: true }));
       const fetch = fakeGitHub({ ...installed, [`PUT ${R}/pulls/5/merge`]: put });

@@ -1,4 +1,5 @@
 ---
+title: GitHub App setup in UI; CI uses repo tokens, no review-bot App
 status: accepted
 date: 2026-11-03
 amends: 0041

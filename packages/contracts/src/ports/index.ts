@@ -604,6 +604,11 @@ export interface CodeHost {
   /** The file's text at `ref`; null when there is no such file. */
   readFile(fullName: string, path: string, ref: string): Promise<string | null>;
   /**
+   * Names of the files directly in `dir` at `ref` (no subfolders), sorted; null when the repo or
+   * the folder doesn't exist (AI-142).
+   */
+  listFiles(fullName: string, dir: string, ref: string): Promise<string[] | null>;
+  /**
    * Squash-merges with the App's identity, only if the head is still `expectedHeadSha`. Throws
    * when the host refuses (conflict, branch rules, a moved head).
    */

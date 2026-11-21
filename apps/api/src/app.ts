@@ -296,6 +296,7 @@ export function createApp(input: AppDeps) {
     connection ? new ConnectedCodeHost(connection) : null,
     runnerPresence,
     deps.nightLaunches ?? null,
+    null, // night (AI-123): not wired here on main either
     projectTasks,
   );
   const refiner = new RefineDispatcher(deps.tracker, deps.runs, runs, now);

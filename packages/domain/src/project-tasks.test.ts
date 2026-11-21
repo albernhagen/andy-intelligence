@@ -108,6 +108,7 @@ describe("project-level agent tasks (AI-134)", () => {
       null,
       null,
       null,
+      null,
       new ProjectTaskResults(plans, ideate),
     );
   });
