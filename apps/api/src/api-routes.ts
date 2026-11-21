@@ -20,6 +20,7 @@ export { apiRoutes as night } from "./night";
 export { apiRoutes as notify } from "./notify";
 export { apiRoutes as projectPlan } from "./project-plan";
 export { apiRoutes as quota } from "./quota";
+export { apiRoutes as routing } from "./routing";
 export { apiRoutes as runners } from "./runners";
 export { apiRoutes as runs } from "./runs";
 export { apiRoutes as setup } from "./setup";
