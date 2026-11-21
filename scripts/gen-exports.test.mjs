@@ -7,6 +7,7 @@ import {
   BARRELS,
   GEN_FILE,
   INDEX_LINE,
+  REPO,
   generate,
   modulesIn,
   renderBarrel,
@@ -82,6 +83,11 @@ describe("generate", () => {
     generate(root);
 
     expect(exported(barrel(root))).toEqual(["a", "b"]);
+  });
+
+  // The Playwright web server runs the script from apps/web (AI-277: the first CI run wrote nothing).
+  it("GivenNoRoot_WhenResolved_ThenItIsThisRepoNotTheWorkingDirectory", () => {
+    expect(existsSync(join(REPO, "scripts", "gen-exports.mjs"))).toBe(true);
   });
 
   it("GivenAMissingFolder_WhenGenerated_ThenItIsSkipped", () => {

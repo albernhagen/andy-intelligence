@@ -3,16 +3,17 @@
 // sorted `export * from` line next to the same neighbour in a shared index file conflicted on
 // GitHub, which ignores `.gitattributes merge=union`. Now each folder below gets a git-ignored
 // `exports.gen.ts` with one `export * from "./<module>"` per sibling `.ts` file (not tests, not
-// `index.ts`, not `*.gen.ts`, not subfolders, not the folder's internal list below), sorted, and its `index.ts` holds the single line
-// `export * from "./exports.gen";`. Adding a module adds a file and edits nothing shared.
+// `index.ts`, not `*.gen.ts`, not subfolders, not the folder's internal list below), sorted,
+// and its `index.ts` holds the single line `export * from "./exports.gen";`. Adding a module adds a file and edits nothing shared.
 //
 // Runs on `pnpm install` (root `postinstall`) and first in the root `lint`, `typecheck`, `test`
 // and `build`, so installs that skip scripts still get it. Writes only a file whose content
 // changed, through a rename, so parallel runs (lefthook pre-push) never read half a file.
 //
-// Usage: node scripts/gen-exports.mjs [repo-dir]
+// Usage: node scripts/gen-exports.mjs [repo-dir]. The default is this repo, whatever the working
+// directory (the Playwright web server runs it from apps/web).
 import { existsSync, readFileSync, readdirSync, renameSync, writeFileSync } from "node:fs";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 // Folder → modules kept internal (imported inside the package, not re-exported; some would
@@ -27,6 +28,8 @@ export const BARRELS = {
   "packages/store/src": [],
 };
 export const GEN_FILE = "exports.gen.ts";
+/** This repo, whatever the working directory. */
+export const REPO = join(dirname(fileURLToPath(import.meta.url)), "..");
 export const INDEX_LINE = 'export * from "./exports.gen";';
 
 /** Module names (file names without `.ts`) a barrel in `dir` re-exports, sorted. */
@@ -49,7 +52,7 @@ export function renderBarrel(modules) {
 }
 
 /** Writes each folder's barrel when it changed; returns the paths written. */
-export function generate(root = ".") {
+export function generate(root = REPO) {
   const written = [];
   for (const [rel, internal] of Object.entries(BARRELS)) {
     const dir = join(root, rel);
@@ -66,6 +69,6 @@ export function generate(root = ".") {
 }
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
-  for (const path of generate(process.argv[2] ?? "."))
+  for (const path of generate(process.argv[2] ?? REPO))
     process.stdout.write(`gen-exports: wrote ${path}\n`);
 }
