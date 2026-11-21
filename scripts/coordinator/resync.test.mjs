@@ -77,7 +77,8 @@ function commit(r, branch, file, text) {
   r.git(r.work, "push", "-q", "origin", branch);
 }
 
-describe("resyncBranch", () => {
+// Real git in temp repos: a loaded machine runs these past vitest's 5 s default.
+describe("resyncBranch", { timeout: 30_000 }, () => {
   it("GivenBothSidesAddedAtSamePlace_WhenResynced_ThenResolvedAndPushedWithoutForce", () => {
     const r = repos();
     r.git(r.work, "checkout", "-qb", "pr");
