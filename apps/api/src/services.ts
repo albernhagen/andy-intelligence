@@ -52,6 +52,7 @@ import { actionsTokenVerifier, type ActionsTokenVerifier } from "./github/token"
 import type { ToolServices } from "./mcp/tools";
 import type { NightDeps } from "./night";
 import { runnerCredentials } from "./runners";
+import { SetupChecklistReader } from "./setup";
 import { SpendSettingsService } from "./spend";
 
 /**
@@ -367,6 +368,10 @@ export function createServices(input: AppDeps): Services {
     routing,
     night,
     readCache,
+    setup: new SetupChecklistReader(
+      deps.tracker,
+      connection ? new ConnectedCodeHost(connection) : null,
+    ),
     spend: new SpendSettingsService(
       projects,
       async (id) => (await deps.tracker.getProject(id))?.spendCaps ?? null,
