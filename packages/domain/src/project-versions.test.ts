@@ -98,6 +98,20 @@ describe("ProjectReadCache", () => {
     expect(await cache.get("ai", "board", c.load)).toBe(2);
   });
 
+  it("GivenTheVersionReadFails_WhenRead_ThenLoadedUncachedAndLogged", async () => {
+    const error = vi.spyOn(console, "error").mockImplementation(() => {});
+    const failing: ProjectVersions = {
+      get: () => Promise.reject(new Error("unavailable")),
+      bump: async () => {},
+    };
+    const cache = new ProjectReadCache(failing);
+    const c = counting();
+    await cache.get("ai", "board", c.load);
+    expect(await cache.get("ai", "board", c.load)).toBe(2);
+    expect(error.mock.calls[0]![0]).toContain("project version read failed");
+    vi.restoreAllMocks();
+  });
+
   it("GivenTwoViewsOrProjects_WhenRead_ThenEachIsCachedApart", async () => {
     const cache = new ProjectReadCache(new InMemoryProjectVersions());
     expect(await cache.get("ai", "board", async () => "ai board")).toBe("ai board");

@@ -106,7 +106,23 @@ export class ProjectReadCache {
    */
   async get<T>(projectId: string, view: string, load: () => Promise<T>): Promise<T> {
     const key = `${projectId}\u0000${view}`;
-    const version = await this.versions.get(projectId);
+    let version: number;
+    try {
+      version = await this.versions.get(projectId);
+    } catch (err) {
+      // The view still loads, uncached, as it did before the cache (AI-222).
+      console.error(
+        JSON.stringify({
+          severity: "ERROR",
+          message: "project version read failed; loading without the cache",
+          component: "project-versions",
+          projectId,
+          view,
+          error: String(err),
+        }),
+      );
+      return load();
+    }
     const hit = this.entries.get(key);
     if (hit && hit.version === version && this.now() - hit.at < PROJECT_CACHE_MAX_AGE_MS) {
       return hit.value as T;
