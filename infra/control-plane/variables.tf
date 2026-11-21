@@ -53,6 +53,12 @@ variable "usage_alert_thresholds" {
   default     = {}
 }
 
+variable "jules_enabled" {
+  type        = bool
+  description = "Jules executor (AI-233): sets JULES_API_KEY on the service from the jules-api-key secret. Turn on only after that secret has a version (runbook jules.md)."
+  default     = false
+}
+
 variable "email_enabled" {
   type        = bool
   description = "Needs-you email (AI-77): sets EMAIL_FROM, EMAIL_TO and RESEND_API_KEY on the service. Turn on only after the resend-api-key secret has a version (runbook email-notifications.md)."

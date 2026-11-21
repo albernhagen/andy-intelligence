@@ -42,6 +42,8 @@ jobs:
     env:
       TF_VAR_allowed_emails: ${{ secrets.TF_VAR_ALLOWED_EMAILS }}
       TF_VAR_alert_email: ${{ secrets.TF_VAR_ALERT_EMAIL }}
+      # Jules executor (AI-233): optional repository variable (a public bool); unset means off.
+      TF_VAR_jules_enabled: ${{ vars.TF_VAR_JULES_ENABLED || 'false' }}
       # Needs-you email (AI-77): optional; unset means off. Set all three once email is on, so the plan matches.
       TF_VAR_email_enabled: ${{ secrets.TF_VAR_EMAIL_ENABLED || 'false' }}
       TF_VAR_email_from: ${{ secrets.TF_VAR_EMAIL_FROM }}
