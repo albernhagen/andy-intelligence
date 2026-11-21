@@ -1,6 +1,16 @@
-import { createContext, useContext, useEffect, type ReactNode } from "react";
+import { createContext, isValidElement, useContext, useEffect, type ReactNode } from "react";
 import { Link, Outlet, useNavigate, useRouterState } from "@tanstack/react-router";
-import { Check, ChevronsUpDown, Layers, Plus } from "lucide-react";
+import {
+  ChartColumn,
+  Check,
+  ChevronsUpDown,
+  Ellipsis,
+  Inbox,
+  Layers,
+  Plus,
+  SquareKanban,
+  type LucideIcon,
+} from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -11,6 +21,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { PhonePauseButton } from "@/components/DispatchControls";
 import { LiveUpdatesBanner } from "@/components/LiveUpdatesBanner";
 import { QuotaBanner } from "@/components/QuotaBanner";
 import { QuotaGauge } from "@/components/QuotaGauge";
@@ -28,6 +39,7 @@ import {
   type Scope,
   type Section,
 } from "@/lib/scope";
+import { useIsPhone } from "@/lib/use-phone";
 import { cn } from "@/lib/utils";
 
 /** Extra header controls from outside the router (the signed-in App adds Sign out). */
@@ -48,60 +60,152 @@ export function AppShell() {
     if (seen) saveScope(seen);
   }, [pathname]);
 
+  const phone = useIsPhone();
+  const headerEnd = useContext(HeaderEndContext);
+  const links = navLinks(scope, pathname, section);
+
   return (
     <div className="min-h-screen">
-      <header className="flex h-12 items-center gap-4 border-b border-border px-4 sm:px-6">
+      {/* Safe-area insets keep the header clear of the iPhone status bar when installed. */}
+      <header className="flex h-[calc(3rem+env(safe-area-inset-top))] items-center gap-2 border-b border-border px-4 pt-[env(safe-area-inset-top)] sm:gap-4 sm:px-6">
         <ProjectPicker scope={scope} section={section ?? "inbox"} />
-        <nav aria-label="Main" className="flex items-center gap-1">
-          <NavLink to={scopePath(scope, "board")} current={section === "board"}>
-            Board
-          </NavLink>
-          <NavLink to={scopePath(scope, "inbox")} current={section === "inbox"}>
-            Inbox
-          </NavLink>
-          <NavLink to={scopePath(scope, "dashboards")} current={section === "dashboards"}>
-            Dashboards
-          </NavLink>
-          {scope.kind === "project" && (
-            <NavLink
-              to={projectSettingsPath(scope.projectId)}
-              current={pathname === projectSettingsPath(scope.projectId)}
-            >
-              Project settings
-            </NavLink>
-          )}
-          {scope.kind === "project" && (
-            <NavLink
-              to={`/p/${encodeURIComponent(scope.projectId)}/digest`}
-              current={/\/digest\/?$/.test(pathname)}
-            >
-              Digest
-            </NavLink>
-          )}
-          {scope.kind === "project" && (
-            <NavLink
-              to={`/p/${encodeURIComponent(scope.projectId)}/whats-new`}
-              current={/\/whats-new\/?$/.test(pathname)}
-            >
-              What's new
-            </NavLink>
-          )}
-          <NavLink to="/settings/github" current={pathname.startsWith("/settings")}>
-            Settings
-          </NavLink>
-        </nav>
+        {!phone && (
+          <nav aria-label="Main" className="flex items-center gap-1">
+            {links.map((l) => (
+              <NavLink key={l.label} to={l.to} current={l.current}>
+                {l.label}
+              </NavLink>
+            ))}
+          </nav>
+        )}
         <div className="ml-auto flex items-center gap-2">
           <QuotaGauge />
+          <PhonePauseButton scope={scope} />
           <NeedsYouCount />
-          {useContext(HeaderEndContext)}
+          {/* On a phone it moves under More, so the header fits 390px. */}
+          {!phone && headerEnd}
         </div>
       </header>
       <LiveUpdatesBanner />
       <QuotaBanner />
-      <main className="px-4 py-4 sm:px-6">
+      <main
+        className={cn("px-4 py-4 sm:px-6", phone && "pb-[calc(5rem+env(safe-area-inset-bottom))]")}
+      >
         <Outlet />
       </main>
+      {phone && <PhoneNav links={links} headerEnd={headerEnd} />}
     </div>
+  );
+}
+
+interface NavItem {
+  label: string;
+  to: string;
+  current: boolean;
+  /** Shown in the phone's bottom bar; the rest go under More. */
+  icon?: LucideIcon;
+}
+
+/** One list for both layouts, so desktop and phone never offer different screens. */
+function navLinks(scope: Scope, pathname: string, section: Section | null): NavItem[] {
+  const items: NavItem[] = [
+    {
+      label: "Board",
+      to: scopePath(scope, "board"),
+      current: section === "board",
+      icon: SquareKanban,
+    },
+    { label: "Inbox", to: scopePath(scope, "inbox"), current: section === "inbox", icon: Inbox },
+    {
+      label: "Dashboards",
+      to: scopePath(scope, "dashboards"),
+      current: section === "dashboards",
+      icon: ChartColumn,
+    },
+  ];
+  if (scope.kind === "project") {
+    const settings = projectSettingsPath(scope.projectId);
+    items.push(
+      { label: "Project settings", to: settings, current: pathname === settings },
+      {
+        label: "Digest",
+        to: `/p/${encodeURIComponent(scope.projectId)}/digest`,
+        current: /\/digest\/?$/.test(pathname),
+      },
+      {
+        label: "What's new",
+        to: `/p/${encodeURIComponent(scope.projectId)}/whats-new`,
+        current: /\/whats-new\/?$/.test(pathname),
+      },
+    );
+  }
+  items.push({
+    label: "Settings",
+    to: "/settings/github",
+    current: pathname.startsWith("/settings"),
+  });
+  return items;
+}
+
+/**
+ * Phone navigation: a bottom bar in thumb reach, 44px targets, the rest under More. Below the
+ * ticket panel (z-30), so a panel opened full-screen covers it until closed.
+ */
+function PhoneNav({ links, headerEnd }: { links: NavItem[]; headerEnd: ReactNode }) {
+  const navigate = useNavigate();
+  const more = links.filter((l) => !l.icon);
+  const target = "flex min-h-11 flex-1 flex-col items-center justify-center gap-0.5 text-xs";
+  return (
+    <nav
+      aria-label="Main"
+      className="fixed inset-x-0 bottom-0 z-20 flex border-t border-border bg-background px-2 pb-[env(safe-area-inset-bottom)]"
+    >
+      {links
+        .filter((l) => l.icon)
+        .map(({ label, to, current, icon: Icon }) => (
+          <Link
+            key={label}
+            to={to}
+            aria-current={current ? "page" : undefined}
+            className={cn(target, current ? "text-foreground" : "text-muted-foreground")}
+          >
+            {Icon && <Icon aria-hidden className="size-5" />}
+            {label}
+          </Link>
+        ))}
+      <DropdownMenu>
+        <DropdownMenuTrigger
+          className={cn(
+            target,
+            more.some((l) => l.current) ? "text-foreground" : "text-muted-foreground",
+          )}
+        >
+          <Ellipsis aria-hidden className="size-5" />
+          More
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="end" side="top">
+          {more.map((l) => (
+            <DropdownMenuItem
+              key={l.label}
+              className="min-h-11"
+              aria-current={l.current ? "page" : undefined}
+              onSelect={() => void navigate({ to: l.to })}
+            >
+              {l.label}
+            </DropdownMenuItem>
+          ))}
+          {isValidElement(headerEnd) && (
+            <>
+              <DropdownMenuSeparator />
+              {/* The signed-in app's Sign out, as a menu item. */}
+              <DropdownMenuItem asChild className="min-h-11 w-full justify-start">
+                {headerEnd}
+              </DropdownMenuItem>
+            </>
+          )}
+        </DropdownMenuContent>
+      </DropdownMenu>
+    </nav>
   );
 }
 
@@ -133,7 +237,7 @@ function ProjectPicker({ scope, section }: { scope: Scope; section: Section }) {
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
-        <Button variant="ghost" size="sm" className="-ml-2 gap-2 px-2 font-medium">
+        <Button variant="ghost" size="sm" className="-ml-2 h-11 gap-2 px-2 font-medium sm:h-8">
           {scope.kind === "all" ? (
             <>
               <Layers aria-hidden className="size-4 text-muted-foreground" />
@@ -142,7 +246,9 @@ function ProjectPicker({ scope, section }: { scope: Scope; section: Section }) {
           ) : (
             <>
               <KeyBadge>{current?.key ?? scope.projectId.toUpperCase()}</KeyBadge>{" "}
-              <span className="max-w-48 truncate">{current?.name ?? scope.projectId}</span>
+              <span className="max-w-48 truncate max-sm:sr-only">
+                {current?.name ?? scope.projectId}
+              </span>
             </>
           )}
           <ChevronsUpDown aria-hidden className="size-3.5 text-muted-foreground" />
@@ -222,7 +328,7 @@ function NeedsYouCount() {
     <Link
       to={scopePath(ALL, "inbox")}
       className={cn(
-        "inline-flex h-7 items-center gap-1.5 rounded-md px-2 text-xs font-medium tabular-nums",
+        "inline-flex h-11 items-center gap-1.5 whitespace-nowrap sm:h-7 rounded-md px-2 text-xs font-medium tabular-nums",
         total ? "bg-attention/15 text-attention" : "text-muted-foreground hover:bg-muted",
       )}
     >

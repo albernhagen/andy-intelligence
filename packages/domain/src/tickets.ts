@@ -28,6 +28,7 @@ import { inboxCards } from "./inbox-order";
 import {
   blockerKeys,
   blockerProblem,
+  outcomeProblem,
   parentProblem,
   projectOfKey,
   reorderRank,
@@ -124,6 +125,8 @@ export class TicketService {
     { upNext = false }: { upNext?: boolean } = {},
   ): Promise<Ticket> {
     const parsed = NewTicket.parse(input);
+    const badOutcome = outcomeProblem(parsed);
+    if (badOutcome) throw new DomainError("invalid_field", badOutcome);
     const parentId = parsed.parentId && (await this.parentIdOf(projectId, parsed.parentId));
     const dorStatus = checkDor(parsed, 0).met ? "met" : "not_met";
     const ticket = await this.tracker.createTicket(
@@ -355,6 +358,8 @@ export class TicketService {
       fields = { ...fields, blockedBy: await this.checkedBlockers(current, fields.blockedBy) };
     }
     const merged = { ...current, ...stripUndefined(fields) };
+    const badOutcome = outcomeProblem(merged);
+    if (badOutcome) throw new DomainError("invalid_field", badOutcome);
     const dor = checkDor(merged, await this.openQuestionCount(ticketId));
     const updated = await this.tracker.updateTicket(
       projectId,

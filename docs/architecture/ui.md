@@ -43,11 +43,11 @@ v1.x screens:
 - Group by epic (AI-86, remembered): per lane, a header per epic (key, title, done of total), No epic last; rank stays per lane. Epic filter.
 
 **Built in AI-29: Story panel (M3, ADR-0059):**
-- The ticket route is the board's child (`<Outlet />`): a 640px panel, full page under 900px; Esc or Close returns.
-- Status line (`lib/status-line.ts`): "Waiting for you: 2 questions", "Refining · 1 min".
-- One document (markdown with Write / Preview, checklist, scope lists), a rail of moves and facts, questions, one timeline.
+- The ticket route is the board's child (`<Outlet />`): a 640px panel, full page under 900px; Esc closes.
+- Status line (`lib/status-line.ts`), e.g. "Waiting for you: 2 questions".
+- One document (markdown with Write / Preview, checklist, scope lists), a rail of moves and facts, questions, one timeline. Epics: outcome, checklist "Done when" (AI-186).
 - Fields save in place, queued per ticket with the latest `updatedAt`; a 409 offers Reload; leaving with unsaved typing asks first.
-- Descriptions, comments and questions render as safe markdown (`components/Markdown.tsx`).
+- Descriptions, comments and questions are safe markdown (`components/Markdown.tsx`).
 
 **Built in M1.19: GitHub App setup from the UI:** `/settings/github` (connect, install link, installed repos); the new-project form suggests installed repos.
 

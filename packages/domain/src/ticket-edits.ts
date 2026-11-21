@@ -1,6 +1,18 @@
 import { TicketKey, compareRanks, type Ticket } from "@andy/contracts";
 import { rankBetween } from "./ranks";
 
+/**
+ * Why this ticket can't carry its outcome, or null. Only an epic has one (ADR-0108): set on any
+ * other type, or kept while the type changes away from epic, it is refused.
+ */
+export function outcomeProblem(ticket: Pick<Ticket, "type" | "outcome">): string | null {
+  if (ticket.outcome === null || ticket.outcome === undefined || ticket.type === "epic")
+    return null;
+  return ticket.type
+    ? `only an epic has an outcome; this ticket is a ${ticket.type} (clear the outcome to change an epic's type)`
+    : "only an epic has an outcome; set the type to epic first";
+}
+
 /** Where a reordered ticket goes: directly above or below another ticket's key. */
 export type ReorderAnchor = { above: string } | { below: string };
 
