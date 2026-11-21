@@ -9,6 +9,7 @@ import { AskQuestionForm } from "@/components/AskQuestionForm";
 import { CancelArchiveControls } from "@/components/CancelArchiveControls";
 import { EpicChildren } from "@/components/EpicChildren";
 import { OverridesEditor } from "@/components/OverridesEditor";
+import { RouteLayers } from "@/components/RouteLayers";
 import { PullRequestLink } from "@/components/PullRequestLink";
 import {
   EditableList,
@@ -330,6 +331,7 @@ function Rail({ ticket: t }: { ticket: Ticket }) {
       </div>
       {/* Tier comes from size; an override pins it, on the ticket or its epic (AI-116). */}
       <OverridesEditor ticket={t} tickets={tickets} />
+      <RouteLayers ticket={t} />
       <SelectField
         ticket={t}
         label="Epic"
