@@ -36,7 +36,7 @@ Contracts are defined in `packages/contracts` (Zod schemas + TypeScript interfac
 | `CodeHostConnectionStore` | CodeHostConnection (our App: IDs + private key + webhook secret; one per control plane) | **Firestore + Secret Manager** (ADR-0043) | Local store (ADR-0032) |
 | `Executor` | RunRequest, RunStatus, RunResult, CompletionSignal, Artifact links | **Claude Code via Actions**, **Jules REST API**, **OpenCode via Actions** | Cloud Run Jobs, Agent SDK, Replicas |
 | `RunStore` | Run (status changes conditional on the current one: a late callback can't undo an ended run) | **Firestore** (M1.6a) | Local store (ADR-0032) |
-| `ModelGateway` | Completion, Usage, Cost | OpenRouter (direct single-call steps) | LiteLLM, direct providers |
+| `ModelGateway` | Completion, Usage, Cost | **OpenRouter** (AI-250: built, unwired; direct single-call steps) | LiteLLM, direct providers |
 | `QuotaSource` (`QuotaStore` adds `save`) | QuotaReading | Claude `rate_limit_event` capture from run reports (§10.5), Jules task counter | Official APIs when available |
 | `Notifier` | Notice, Urgency | UI (banner + Needs-you inbox); **Email** on Resend (AI-77: batched, 20 a day; `NotifyLedger`, `NotifyFlushQueue`) | Web Push (`PushSender`: AI-178), `PushSubscriptionStore` (ADR-0052), Slack |
 | `Deployer` | Release, Promotion, Rollback | Cloud Deploy | — |
