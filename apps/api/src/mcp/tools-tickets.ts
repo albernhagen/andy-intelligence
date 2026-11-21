@@ -1,4 +1,5 @@
 import {
+  NewQuestion,
   TicketFields,
   TicketKey,
   Timestamp,
@@ -43,6 +44,12 @@ const EditInput = {
     outOfScope: true,
     touches: true,
     overrides: true,
+    // AI-291: the PATCH route's flag and scores, with the same schemas.
+    needsAttention: true,
+    risk: true,
+    riskReason: true,
+    confidence: true,
+    confidenceReason: true,
   }).shape,
   outcome: TicketFields.shape.outcome.describe(
     "Epics only: what is true when the epic is done, at most 300 characters; null clears it.",
@@ -57,6 +64,18 @@ const EditInput = {
 };
 
 const CommentInput = { ticket: Key, body: z.string().trim().min(1) };
+
+/** The route's question fields (`NewQuestion`), so the tool takes what the ticket page sends. */
+const AskInput = {
+  ticket: Key,
+  text: NewQuestion.shape.text.describe("The question, one plain sentence ending in `?`."),
+  options: NewQuestion.shape.options
+    .optional()
+    .describe("Answers Andy can pick with one click; empty or left out: free text only."),
+  suggestedAnswer: NewQuestion.shape.suggestedAnswer
+    .optional()
+    .describe("The answer you'd pick, shown first; null or left out: none."),
+};
 
 const ParentInput = {
   ticket: Key,
@@ -192,7 +211,7 @@ export function registerTicketTools(server: McpServer, deps: ToolDeps): void {
     "edit_ticket",
     {
       description:
-        "Edits a ticket's fields, as the ticket page does. Only the fields given change; lists replace the whole list. An epic's `acceptanceCriteria` are its Done-when list. Re-checks the Definition of Ready.",
+        "Edits a ticket's fields, as the ticket page does. Only the fields given change; lists replace the whole list. An epic's `acceptanceCriteria` are its Done-when list. Also sets Needs-you (`needsAttention`) and the risk and confidence scores with their reasons. Re-checks the Definition of Ready.",
       inputSchema: EditInput,
       annotations: { destructiveHint: false, idempotentHint: true },
     },
@@ -225,6 +244,32 @@ export function registerTicketTools(server: McpServer, deps: ToolDeps): void {
       run(async () => {
         const found = await service.findByKey(ticket);
         return { comment: await service.comment(found.projectId, found.id, body, deps.actor) };
+      }),
+  );
+
+  // AI-290: the ticket page's "Ask a question" (POST …/tickets/{id}/questions), same service call.
+  server.registerTool(
+    "ask_question",
+    {
+      description:
+        "Asks an open question on a ticket, as the signed-in user: the ticket is flagged Needs-you and can't move to Ready until it is answered, as on the ticket page. Refused for a cancelled ticket. Answer it with answer_question.",
+      inputSchema: AskInput,
+      annotations: { destructiveHint: false, idempotentHint: false },
+    },
+    ({ ticket, text, options, suggestedAnswer }) =>
+      run(async () => {
+        const found = await service.findByKey(ticket);
+        const question = await service.ask(
+          found.projectId,
+          found.id,
+          {
+            text,
+            ...(options === undefined ? {} : { options }),
+            ...(suggestedAnswer === undefined ? {} : { suggestedAnswer }),
+          },
+          deps.actor,
+        );
+        return { ticket: found.key, question };
       }),
   );
 

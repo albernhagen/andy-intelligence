@@ -149,7 +149,8 @@ export class RefineDispatcher {
   }
 
   private async upNext(projectId: string): Promise<Ticket[]> {
-    return (await this.tracker.listTickets(projectId, { stage: "backlog" }))
+    // Up next only, not all of the Backlog (AI-315).
+    return (await this.tracker.listTickets(projectId, { upNext: true }))
       .filter((t) => t.upNextRank !== null)
       .sort((a, b) => compareRanks(a.upNextRank!, b.upNextRank!));
   }

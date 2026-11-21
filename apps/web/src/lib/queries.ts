@@ -2,6 +2,7 @@ import { useEffect, useRef } from "react";
 import { type QueryClient, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type {
   AutoMerge,
+  MergeMode,
   EnvironmentPolicy,
   ExecutorKind,
   PlanApproval,
@@ -188,6 +189,19 @@ export function useWorker(path: TicketPath) {
     queryFn: async () =>
       unwrap(
         await api.GET("/api/projects/{projectId}/tickets/{ticketId}/worker", { params: { path } }),
+      ),
+  });
+}
+
+/** Its build worker, tier and route, and the layer that set each (AI-282: M9). */
+export function useTicketRouting(path: TicketPath) {
+  const api = useApi();
+  return useQuery({
+    ...useLivePoll("slow"),
+    queryKey: ["ticket-routing", path],
+    queryFn: async () =>
+      unwrap(
+        await api.GET("/api/projects/{projectId}/tickets/{ticketId}/routing", { params: { path } }),
       ),
   });
 }
@@ -405,6 +419,7 @@ export function useUpdateProject(projectId: string) {
       buildEnabled?: boolean;
       planApproval?: PlanApproval;
       autoMerge?: AutoMerge;
+      mergeMode?: MergeMode;
       runsAtOnce?: number;
       paused?: boolean;
       defaultWorker?: Worker;

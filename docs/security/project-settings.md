@@ -1,6 +1,6 @@
 # Threat model: Project settings
 
-Per-project settings Andy changes after registration. No risk file: until an M6 slice reads the setting it changes nothing (see the end of this file). PRs that change this area update this file. This file starts with the environment policy (AI-160); the other settings' entry points are in [ui-and-mcp.md](ui-and-mcp.md).
+Per-project settings Andy changes; their PRs update this file. Environments (AI-160), merge mode (AI-214); questions per day: MCP `set_daily_question_cap` (AI-292), rules and log as `PATCH`; others: [ui-and-mcp.md](ui-and-mcp.md).
 
 ## Entry points
 
@@ -8,6 +8,7 @@ Per-project settings Andy changes after registration. No risk file: until an M6 
 | ---------------------------------------------------------------------------------------- | --------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `PATCH /api/projects/:id` field `environments` (the settings page's Environments select) | Allow-listed users (Firebase ID token on `/api`)    | Owner-only through the project-settings rule (`change_project_settings` in `permissions.ts`, unchanged); agents and the system get 403 | A fixed two-value list, `prod-only` (default) or `dev-and-prod`; anything else is a 400. Each change goes into the config change log with who and when, and can be reverted there under the same rule |
 | MCP `set_environments`                                                                   | Allow-listed users, with our access token on `/mcp` | Same rule; the tool acts as the signed-in user (`user:<uid>`)                                                                          | Same value list and log; `get_project_settings` reads it                                                                                                                                              |
+| `PATCH …` field `mergeMode`; MCP `set_merge_mode` (AI-214, ADR-0124)                     | Same                                                | Same rule                                                                                                                              | Stored only until AI-215; over MCP (also reverts) only tightens. R-AI-214                                                                                                                             |
 
 ## What it changes
 

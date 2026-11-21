@@ -36,52 +36,71 @@ describe("ProjectService", () => {
   );
 
   it("GivenAnInstalledRepo_WhenRegistered_ThenTheProjectStoresTheHostSpelling", async () => {
-    const project = await service.register({
-      name: "andy-intelligence",
-      key: "AI",
-      repos: ["ALBERNHAGEN/Andy-Intelligence"],
-    });
+    const project = await service.register(
+      {
+        name: "andy-intelligence",
+        key: "AI",
+        repos: ["ALBERNHAGEN/Andy-Intelligence"],
+      },
+      "andy",
+    );
     expect(project.repos).toEqual(["albernhagen/andy-intelligence"]);
     expect(await tracker.getProject("ai")).toEqual(project);
   });
 
   it("GivenARepoWithoutTheApp_WhenRegistered_ThenInvalidRepoAndNothingIsCreated", async () => {
     await rejects(
-      service.register({ name: "x", key: "X", repos: ["albernhagen/other"] }),
+      service.register({ name: "x", key: "X", repos: ["albernhagen/other"] }, "andy"),
       "invalid_repo",
     );
     expect(await tracker.listProjects()).toEqual([]);
   });
 
   it("GivenAMalformedRepo_WhenRegistered_ThenInvalidRepo", async () => {
-    await rejects(service.register({ name: "x", key: "X", repos: ["nope"] }), "invalid_repo");
+    await rejects(
+      service.register({ name: "x", key: "X", repos: ["nope"] }, "andy"),
+      "invalid_repo",
+    );
   });
 
   it("GivenARepoOfAnotherProject_WhenRegistered_ThenRepoTaken", async () => {
-    await service.register({ name: "a", key: "A", repos: ["albernhagen/andy-intelligence"] });
+    await service.register(
+      { name: "a", key: "A", repos: ["albernhagen/andy-intelligence"] },
+      "andy",
+    );
     await rejects(
-      service.register({ name: "b", key: "B", repos: ["Albernhagen/andy-intelligence"] }),
+      service.register({ name: "b", key: "B", repos: ["Albernhagen/andy-intelligence"] }, "andy"),
       "repo_taken",
     );
   });
 
   it("GivenTheSameRepoTwice_WhenRegistered_ThenItIsStoredOnce", async () => {
-    const project = await service.register({
-      name: "a",
-      key: "A",
-      repos: ["albernhagen/andy-intelligence", "albernhagen/Andy-Intelligence"],
-    });
+    const project = await service.register(
+      {
+        name: "a",
+        key: "A",
+        repos: ["albernhagen/andy-intelligence", "albernhagen/Andy-Intelligence"],
+      },
+      "andy",
+    );
     expect(project.repos).toEqual(["albernhagen/andy-intelligence"]);
   });
 
   it("GivenNoCodeHost_WhenRegistered_ThenReposAreOnlyFormatChecked", async () => {
     const local = new ProjectService(tracker, null);
-    const project = await local.register({ name: "a", key: "A", repos: ["me/anything"] });
+    const project = await local.register({ name: "a", key: "A", repos: ["me/anything"] }, "andy");
     expect(project.repos).toEqual(["me/anything"]);
   });
 
   it("GivenNoRepos_WhenRegistered_ThenTheProjectIsCreated", async () => {
-    expect((await service.register({ name: "a", key: "A" })).repos).toEqual([]);
+    expect((await service.register({ name: "a", key: "A" }, "andy")).repos).toEqual([]);
+  });
+
+  it("GivenANonOwner_WhenItRegistersAProject_ThenForbiddenAndNothingIsCreated", async () => {
+    await expect(service.register({ name: "a", key: "A" }, "agent:run-1")).rejects.toMatchObject({
+      code: "forbidden",
+    });
+    expect(await tracker.listProjects()).toEqual([]);
   });
 });
 
