@@ -5,6 +5,7 @@ import type { ConfigChange } from "../entities";
 // every project-settings write appends an `applied` change (M4.11: Config change log). M4.12
 // reverts one: the settings go back through the normal write (logged as a new change) and the
 // original is marked `reverted`. A project's changes are `entity: "project"`, `entityId` and `projectId` the project id.
+// A project's routing changes (AI-239) are `entity: "routing"` with the same `entityId`; global ones `entityId: "global"`.
 // Errors are WorkTrackerError (`conflict`), mapped the same way by the API.
 
 /** At most this many changes per `listForProject` call (ADR-0028). */
@@ -14,7 +15,10 @@ export interface ConfigChangeLog {
   /** Stores the change; a duplicate id is a `conflict` and nothing is written. */
   append(change: ConfigChange): Promise<ConfigChange>;
   get(id: string): Promise<ConfigChange | null>;
-  /** The project's changes, newest first, at most `limit` (capped at CONFIG_CHANGE_LIST_MAX). */
+  /**
+   * The project's settings and routing changes, newest first, at most `limit` (capped at
+   * CONFIG_CHANGE_LIST_MAX).
+   */
   listForProject(projectId: string, limit?: number): Promise<ConfigChange[]>;
   /**
    * Applied → reverted, recording who (`decidedBy`, an actor such as `user:<uid>`) and when

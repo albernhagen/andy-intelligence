@@ -77,6 +77,8 @@ Needs-you email (AI-77): on when `RESEND_API_KEY`, `EMAIL_FROM` and `EMAIL_TO` a
 
 Each MCP tool module (`apps/api/src/mcp/tools-*.ts`) has one sorted line in `tool-groups.ts`; each route module exports `apiRoutes` or `publicRoutes`, one sorted line in `api-routes.ts` or `public-routes.ts` (AI-145). Tools call the same `TicketService` as the REST API. `pnpm reference` lists every tool and route.
 
+Package barrels (ADR-0130): `exports.gen.ts` beside the `index.ts` of `packages/domain/src`, `packages/store/src` and the `packages/contracts` folders re-exports every module file in its folder. It is generated (not committed) by `pnpm install`, `lint`, `typecheck`, `test` and `build`, or `pnpm gen:exports`. A new module is a new file; nothing shared to edit. Modules kept internal are listed in `scripts/gen-exports.mjs`.
+
 GitHub (ADR-0043: GitHub App setup from the UI) is on when `PUBLIC_URL` is set: connect it from `/settings/github`. The App's key and webhook secret live in Secret Manager (written by the API, read at runtime); CI jobs get repo tokens from `POST /github/token` with their Actions OIDC token. Locally without `PUBLIC_URL`, repos on projects are only format-checked. Setup: [`docs/runbooks/github-app.md`](docs/runbooks/github-app.md).
 
 ### Web UI (M1.3: UI: tickets + inbox; AI-26: Design source and app shell)

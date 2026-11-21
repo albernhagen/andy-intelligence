@@ -131,6 +131,7 @@ export function renderApp(
   return {
     runners,
     reviewFindings,
+    configChanges,
     user,
     router,
     queryClient,
