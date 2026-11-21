@@ -28,6 +28,7 @@ import { runBaseFields } from "./build";
 import { runIdeaFields } from "./ideate";
 import { runRouteFields } from "./routing";
 import { ProjectSpendCaps } from "./spend-caps";
+import { MilestoneId } from "./milestone";
 import { RefineScores, TicketScores } from "./scores";
 import {
   questionFormatFields,
@@ -259,6 +260,11 @@ export const Ticket = z.object({
   refineAssumptions: z.array(Assumption).default([]),
   /** Epics only: what is true when it is done, one line (ADR-0108); null on older documents. */
   outcome: EpicOutcome.nullable().default(null),
+  /**
+   * Top-level epics only (domain rule, ADR-0131): the milestone it belongs to. A child epic and
+   * every ticket take their top-level epic's (`milestoneOf`). Null on older documents.
+   */
+  milestoneId: MilestoneId.nullable().default(null),
   ...TicketScores,
   createdAt: Timestamp,
   updatedAt: Timestamp,
