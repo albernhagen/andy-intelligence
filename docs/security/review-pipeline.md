@@ -1,6 +1,6 @@
 # Threat model: Review pipeline
 
-Detail on how PR review findings reach the control plane (ADR-0097: review findings become config proposals). Risk register (`R<n>` ids), assets, mitigations: [threat-model.md](threat-model.md). PRs that change this area update this file; the weekly system review edits only the main file.
+How PR review findings reach the control plane (ADR-0097: review findings become config proposals). Risk: [R5](risks/R5.md). PRs that change this area update this file.
 
 ## Trust boundaries and entry points
 

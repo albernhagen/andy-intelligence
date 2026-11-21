@@ -8,7 +8,9 @@ import {
   SecretManagerVersions,
   FirestoreOAuthGrantStore,
   FirestoreQuotaStore,
+  FirestoreDeploymentStore,
   FirestoreNightLaunchStore,
+  FirestoreProjectVersions,
   FirestoreRunStore,
   FirestoreRunnerStore,
   FirestoreWorkTracker,
@@ -87,6 +89,8 @@ async function main() {
     runners: new FirestoreRunnerStore(db),
     quota: new FirestoreQuotaStore(db),
     nightLaunches: new FirestoreNightLaunchStore(db),
+    projectVersions: new FirestoreProjectVersions(db),
+    deployments: new FirestoreDeploymentStore(db),
     configChanges: new FirestoreConfigChangeStore(db),
     reviewFindings: new FirestoreReviewFindingLog(db),
     // Serve only the public URL's host; the run.app URLs answer /health alone (ADR-0044).
