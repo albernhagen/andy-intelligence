@@ -325,6 +325,7 @@ export function createServices(raw: AppDeps): Services {
     now,
     runnerPresence,
     deps.routing ?? null,
+    tickets,
   );
   const claims = runners
     ? new LocalClaims(

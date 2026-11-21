@@ -17,7 +17,7 @@ import { ownerOnlyAccess } from "./project-access";
 
 /**
  * AI-318: Dashboard, digest, epic status, What's new and milestone map read the whole project per
- * call. Documents each reads, cold, unchanged, and after one and ten ticket writes, at two project
+ * call; AI-319: Needs-you reads every flagged ticket and open question across projects per call. Documents each reads, cold, unchanged, and after one and ten ticket writes, at two project
  * sizes: after the first read they must not grow with the number of tickets, and each returns
  * what a full read (no snapshot) returns.
  */
@@ -57,16 +57,25 @@ async function setup(size: number) {
       "system",
     );
   }
+  // Waiting on Andy (AI-319): a flagged ticket with a question, and one asked on a ticket since
+  // archived, which Needs-you hides.
+  for (const archived of [false, true]) {
+    step();
+    const t = await raw.createTicket("ai", { title: "Asks", type: "chore" }, "andy");
+    await raw.askQuestion("ai", t.id, { text: "Which way?" }, "andy");
+    await raw.updateTicket("ai", t.id, { fields: { needsAttention: true, archived } }, "andy");
+  }
+  // Finished tickets: a tenth cancelled, a third archived, as in project AI. The last ten, which
+  // `write` edits, stay plain so their histories are alike at both sizes.
   const filler: string[] = [];
   for (let i = 0; i < size; i++) {
     step();
     const t = await raw.createTicket("ai", { title: `T${i}`, type: "chore" }, "andy");
-    await raw.updateTicket(
-      "ai",
-      t.id,
-      { stage: { to: "done", forced: true, reason: null } },
-      "andy",
-    );
+    const old = i < size - 10;
+    const to = old && i % 10 === 0 ? "cancelled" : "done";
+    await raw.updateTicket("ai", t.id, { stage: { to, forced: true, reason: null } }, "andy");
+    if (old && i % 3 === 0)
+      await raw.updateTicket("ai", t.id, { fields: { archived: true } }, "andy");
     filler.push(t.id);
   }
   clock.at = Date.parse("2026-11-01T00:00:00.000Z");
@@ -116,7 +125,7 @@ async function setup(size: number) {
   const read = async (entry: Entry) => {
     reset();
     const body = entry.mcp
-      ? await call(entry.mcp, { ticket: epic.key })
+      ? await call(entry.mcp, entry.onEpic ? { ticket: epic.key } : {})
       : await fetch(app, entry.path);
     return { reads: reads(), body };
   };
@@ -134,11 +143,13 @@ async function setup(size: number) {
 interface Entry {
   name: string;
   path: string;
-  /** Called as this MCP tool on the epic instead of a GET. */
+  /** Called as this MCP tool instead of a GET. */
   mcp?: string;
+  /** The MCP tool is given the epic as its `ticket`. */
+  onEpic?: boolean;
 }
 
-describe("whole-project reads (AI-318)", () => {
+describe("whole-project reads (AI-318, AI-319)", () => {
   afterEach(() => vi.restoreAllMocks());
 
   it("GivenTwoProjectSizes_WhenEachEntryPointIsReadThroughWrites_ThenReadsAfterTheColdStartDoNotGrowWithTheProject", async () => {
@@ -151,9 +162,13 @@ describe("whole-project reads (AI-318)", () => {
         { name: "dashboard", path: "/api/projects/ai/dashboard" },
         { name: "digest", path: "/api/projects/ai/digest" },
         { name: "epic status", path: `/api/projects/ai/tickets/${s.epic.id}/epic` },
-        { name: "epic status (MCP)", path: "", mcp: "status" },
+        { name: "epic status (MCP)", path: "", mcp: "status", onEpic: true },
         { name: "what's new", path: "/api/projects/ai/whats-new" },
         { name: "milestone map", path: "/api/projects/ai/milestone-map" },
+        // AI-319: Needs-you, across projects, and the inbox count in the overview.
+        { name: "needs-you", path: "/api/needs-you" },
+        { name: "needs-you (MCP)", path: "", mcp: "list_needs_me" },
+        { name: "overview status (MCP)", path: "", mcp: "status" },
       ];
       const round = async (label: string) => {
         for (const e of entries) note(`${e.name}, ${label}`, (await s.read(e)).reads);
