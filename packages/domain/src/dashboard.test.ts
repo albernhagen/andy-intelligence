@@ -7,7 +7,7 @@ import {
   type Ticket,
   type TicketEvent,
 } from "@andy/contracts";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import {
   DashboardReader,
   MAX_DASHBOARD_PROJECTS,
@@ -16,6 +16,7 @@ import {
   dashboardWindow,
   type DashboardData,
 } from "./dashboard";
+import { SNAPSHOT_FULL_READ_MS } from "./ticket-snapshots";
 
 // A Thursday; with two weeks the window is Mon 2 Nov to now, split at Mon 9 Nov.
 const NOW = new Date("2026-11-12T12:00:00.000Z");
@@ -385,6 +386,50 @@ describe("DashboardReader (AI-102)", () => {
     const now = dash.weeks.at(-1)!;
     expect(now.ticketsByStage.ready).toBe(1);
     expect(now.cost).toMatchObject({ runs: 1, estimatedCostUsd: 2 });
+  });
+
+  it("GivenAnUnchangedTicket_WhenTheDashboardIsReadAgain_ThenOnlyChangedTicketsHistoriesAreRead", async () => {
+    let at = Date.now() - 60_000;
+    const tracker = new InMemoryWorkTracker(() => new Date((at += 10)));
+    const runs = new InMemoryRunStore();
+    await seed(tracker, runs, "AI");
+    const [ticket] = await tracker.listTickets("ai");
+    const reader = new DashboardReader(tracker, runs);
+    await reader.project("ai", window());
+    const histories = vi.spyOn(tracker, "listEvents");
+
+    await reader.project("ai", window());
+    expect(histories).not.toHaveBeenCalled();
+
+    await tracker.updateTicket(
+      "ai",
+      ticket!.id,
+      { stage: { to: "done", forced: true, reason: null } },
+      "andy",
+    );
+    const w = window();
+    const dash = await reader.project("ai", w);
+    expect(histories).toHaveBeenCalledTimes(1);
+    expect(dash).toEqual(await new DashboardReader(tracker, runs).project("ai", w));
+  });
+
+  it("GivenACachedHistoryAnHourOld_WhenTheDashboardIsRead_ThenItIsReadAgainThoughTheTicketIsUnchanged", async () => {
+    const tracker = new InMemoryWorkTracker();
+    const runs = new InMemoryRunStore();
+    await seed(tracker, runs, "AI");
+    let now = 0;
+    const reader = new DashboardReader(tracker, runs, undefined, () => now);
+    const w = window();
+    await reader.project("ai", w);
+    const histories = vi.spyOn(tracker, "listEvents");
+
+    now = SNAPSHOT_FULL_READ_MS - 1;
+    await reader.project("ai", w);
+    expect(histories).not.toHaveBeenCalled();
+
+    now = SNAPSHOT_FULL_READ_MS;
+    await reader.project("ai", w);
+    expect(histories).toHaveBeenCalled();
   });
 
   it("GivenAnUnknownProject_WhenItsDashboardIsRead_ThenNotFound", async () => {

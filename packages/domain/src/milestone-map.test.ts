@@ -176,16 +176,16 @@ describe("milestone map reader (AI-148)", () => {
     expect(map.epics[0]!.inReview[0]).toMatchObject({ key: t.key, prNumber: 9 });
   });
 
-  it("GivenMoreTicketsInReviewThanTheCap_WhenRead_ThenHistoriesAreCappedAndMarkedPartial", async () => {
+  it("GivenMoreTicketsInReviewThanTheCap_WhenRead_ThenPrLookupsAreCappedAndMarkedPartial", async () => {
     const { tracker, child } = await seed();
     for (let i = 0; i <= MAX_MAP_PR_READS; i++) await child(`R${i}`);
     let reads = 0;
     const counting = {
       getProject: (id: string) => tracker.getProject(id),
       listTickets: (id: string) => tracker.listTickets(id),
-      listEvents: (p: string, t: string) => {
+      getLatestPullRequest: (p: string, t: string) => {
         reads++;
-        return tracker.listEvents(p, t);
+        return tracker.getLatestPullRequest(p, t);
       },
     };
 

@@ -19,6 +19,7 @@ import {
   type BoardReader,
   type GlobalSpendCaps,
   type WhatsNewReader,
+  type ProjectTickets,
   type DashboardReader,
   type DoraReader,
 } from "@andy/domain";
@@ -90,6 +91,8 @@ export interface ToolDeps {
   publicUrl?: string | null;
   /** Milestones (ADR-0131): `status` shows a ticket's milestone hold (AI-306); null holds any. */
   milestones?: MilestoneReader | null;
+  /** A project's tickets through the ticket snapshot (AI-318); absent: a full read each call. */
+  tickets?: ProjectTickets;
   /** Signed-in email, shown by `status` so it doubles as the connection check. */
   email: string;
   /** The signed-in user as an actor, `user:<uid>` (AI-19): every write is recorded as this. */

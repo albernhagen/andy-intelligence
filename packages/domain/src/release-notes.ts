@@ -22,6 +22,7 @@ import {
 } from "@andy/contracts";
 import { ticketKeyFor } from "./pull-requests";
 import { parseReleaseNote } from "./release-note";
+import { ProjectTickets } from "./ticket-snapshots";
 
 /**
  * Release notes and the What's new read model (AI-159, ADR-0121). A PR merged into the default
@@ -239,13 +240,15 @@ export class WhatsNewReader {
   constructor(
     private readonly tracker: WorkTracker,
     private readonly notes: ReleaseNoteStore,
+    /** AI-318: the project's tickets through the snapshot, so a call reads only what changed. */
+    private readonly tickets: ProjectTickets = new ProjectTickets(tracker),
   ) {}
 
   async read(projectId: string, window: WhatsNewWindow, epic?: string): Promise<WhatsNew> {
     const project = await this.tracker.getProject(projectId);
     if (!project) throw notFound("project", projectId);
     const [tickets, notes] = await Promise.all([
-      this.tracker.listTickets(projectId),
+      this.tickets.list(projectId),
       this.notes.listForProject(projectId, {
         since: window.from.toISOString(),
         until: window.to.toISOString(),
