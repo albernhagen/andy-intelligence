@@ -38,7 +38,14 @@ export interface ModelUsage {
  *   usage is unknown, so the spend gate settles the full reservation.
  */
 export type ModelResult =
-  | { outcome: "ok"; text: string; usage: ModelUsage | null }
+  | {
+      outcome: "ok";
+      text: string;
+      /** The answering request's usage only; an earlier failed attempt's isn't in it. */
+      usage: ModelUsage | null;
+      /** Requests sent for this answer (1, or 2 after a retry); each one may have been billed. */
+      attempts: number;
+    }
   | { outcome: "off" }
   | { outcome: "error"; status: number | null; reason: string };
 
