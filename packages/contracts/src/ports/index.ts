@@ -745,6 +745,7 @@ export interface Telemetry {
 
 export * from "./config-changes";
 export * from "./config-proposals";
+export * from "./deployments";
 export * from "./digest";
 export * from "./night";
 export * from "./notify-email";
