@@ -191,26 +191,86 @@ export const seatbelt: Confinement = {
   },
 };
 
+/** curl's exit code for "couldn't connect": what the sandbox's network deny produces. */
+export const CURL_COULDNT_CONNECT = 7;
+/** curl's exit code for its own `--max-time`. */
+const CURL_TIMED_OUT = 28;
+
+/** How a probe command ended: an exit code, killed by its timeout, or never started. */
+export type ProbeOutcome =
+  { kind: "exited"; code: number } | { kind: "timed-out" } | { kind: "not-run"; reason: string };
+
+/** Runs a probe command; never throws. */
+export type ProbeRunner = (cmd: string, args: string[], cwd: string) => Promise<ProbeOutcome>;
+
+/** The outcome of an `execFile` call from its error (null: it exited 0). */
+export function outcomeOf(err: unknown): ProbeOutcome {
+  if (err === null || err === undefined) return { kind: "exited", code: 0 };
+  const e = err as { code?: unknown; killed?: unknown; signal?: unknown };
+  if (e.killed === true) return { kind: "timed-out" };
+  if (typeof e.code === "number") return { kind: "exited", code: e.code };
+  if (typeof e.code === "string") return { kind: "not-run", reason: e.code };
+  return { kind: "not-run", reason: e.signal ? `signal ${String(e.signal)}` : "unknown error" };
+}
+
+const runProbe: ProbeRunner = (cmd, args, cwd) =>
+  run(cmd, args, { cwd, timeout: 10_000 }).then(
+    () => outcomeOf(null),
+    (err: unknown) => outcomeOf(err),
+  );
+
+function describeOutcome(o: ProbeOutcome): string {
+  if (o.kind === "exited") return `exit ${o.code}`;
+  if (o.kind === "timed-out") return "timed out";
+  return o.reason;
+}
+
+/**
+ * The network check's verdict (fail closed, AI-278). It passes only when the server answers
+ * outside the profile, an allowed command (the control) succeeds inside it, and the probe inside
+ * is refused cleanly (curl's "couldn't connect"). A probe that couldn't run, timed out or failed
+ * any other way fails the check: it proves nothing about the network.
+ */
+export function networkVerdict(r: {
+  outside: ProbeOutcome;
+  control: ProbeOutcome;
+  inside: ProbeOutcome;
+}): string | null {
+  const ok = (o: ProbeOutcome) => o.kind === "exited" && o.code === 0;
+  if (!ok(r.outside)) return "the network check couldn't reach its own server";
+  if (!ok(r.control))
+    return `the sandbox profile is broken: an allowed command failed under it (${describeOutcome(r.control)})`;
+  const inside = r.inside;
+  if (inside.kind === "exited" && inside.code === 0)
+    return "a connection to a non-HTTPS port was allowed";
+  if (inside.kind === "timed-out" || (inside.kind === "exited" && inside.code === CURL_TIMED_OUT))
+    return "the network probe timed out under the profile";
+  if (inside.kind === "not-run")
+    return `the network probe couldn't run under the profile (${inside.reason})`;
+  if (inside.code !== CURL_COULDNT_CONNECT)
+    return `the network probe failed for another reason under the profile (exit ${inside.code})`;
+  return null;
+}
+
 /**
  * Outbound network other than HTTPS is refused: a local HTTP server on a random (non-443) port
- * answers `curl` outside the profile and must not answer it inside. Null when that holds.
+ * answers `curl` outside the profile, `curl --version` (the positive control) runs inside it, and
+ * the same request inside it is refused. Null when that holds.
  */
-async function networkProblem(profilePath: string, cwd: string): Promise<string | null> {
+export async function networkProblem(
+  profilePath: string,
+  cwd: string,
+  probe: ProbeRunner = runProbe,
+): Promise<string | null> {
   const server = createServer((_req, res) => res.end("ok"));
   await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
   const url = `http://127.0.0.1:${(server.address() as AddressInfo).port}/`;
   const curl = ["/usr/bin/curl", "-s", "-o", "/dev/null", "--max-time", "3", url];
-  const runs = async (cmd: string, args: string[]) =>
-    run(cmd, args, { cwd, timeout: 10_000 }).then(
-      () => true,
-      () => false,
-    );
   try {
-    if (!(await runs(curl[0]!, curl.slice(1))))
-      return "the network check couldn't reach its own server";
-    if (await runs(SANDBOX_EXEC, ["-f", profilePath, ...curl]))
-      return "a connection to a non-HTTPS port was allowed";
-    return null;
+    const outside = await probe(curl[0]!, curl.slice(1), cwd);
+    const control = await probe(SANDBOX_EXEC, ["-f", profilePath, curl[0]!, "--version"], cwd);
+    const inside = await probe(SANDBOX_EXEC, ["-f", profilePath, ...curl], cwd);
+    return networkVerdict({ outside, control, inside });
   } finally {
     server.close();
   }

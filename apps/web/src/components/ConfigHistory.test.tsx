@@ -48,4 +48,28 @@ describe("settings Changes list", () => {
     expect(await within(changes()).findByText(/changed since, by config change/)).toBeTruthy();
     expect((autoRefine() as HTMLInputElement).checked).toBe(true);
   });
+
+  it("GivenARoutingChange_WhenListed_ThenSummarisedWithoutRevert", async () => {
+    const { h, changes } = await settingsPage();
+    const at = new Date().toISOString();
+    await h.configChanges.append({
+      id: "routing-1",
+      entity: "routing",
+      entityId: "ai",
+      projectId: "ai",
+      diff: { tiers: { from: null, to: { fast: [] } } },
+      actor: "andy",
+      reason: "",
+      status: "applied",
+      createdAt: at,
+      appliedAt: at,
+      dedupeKey: null,
+      decidedBy: null,
+      decidedAt: null,
+    });
+    await h.queryClient.invalidateQueries();
+    const row = (await within(changes()).findByText("Routing: tiers changed")).closest("li")!;
+    expect(within(row).getByText("Routing change")).toBeTruthy();
+    expect(within(row).queryByRole("button", { name: "Revert" })).toBeNull();
+  });
 });

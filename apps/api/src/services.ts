@@ -23,6 +23,7 @@ import {
   EpicBranches,
   MorningPullRequests,
   ProjectReadCache,
+  RoutingSettings,
   BoardReader,
   WorkReader,
   bumpOnWrite,
@@ -235,6 +236,10 @@ export function createServices(input: AppDeps): Services {
   const configRevert = deps.configChanges
     ? new ConfigRevert(deps.tracker, projects, deps.configChanges, now)
     : null;
+  // AI-239: routing settings; each save is logged when the change log is configured.
+  const routing = deps.routing
+    ? new RoutingSettings(deps.routing, deps.tracker, deps.configChanges ?? null, now)
+    : null;
 
   return {
     deps,
@@ -260,6 +265,7 @@ export function createServices(input: AppDeps): Services {
     plans,
     configProposals,
     configRevert,
+    routing,
     night,
     readCache,
     spend: new SpendSettingsService(
