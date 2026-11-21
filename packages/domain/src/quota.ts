@@ -201,13 +201,20 @@ export class QuotaClearer {
     private readonly now: () => Date = () => new Date(),
     /** Dispatches every project again. */
     private readonly wake: () => Promise<void> = async () => {},
+    /**
+     * The levels dispatch pauses claude-sub at (AI-261: M10.14): the lowest in any project's
+     * routing, so every reading holding some project at its reserve is cleared.
+     */
+    private readonly thresholds: () => Promise<QuotaThresholds> = async () => CLAUDE_SUB_THRESHOLDS,
   ) {}
 
   /** Owner-only (`clear_quota_idle`, AI-19); `by.email` is recorded on the discarded readings. */
   async clearIdle(by: { actor: EventActor; email: string }): Promise<QuotaClearResult> {
     requireCan(by.actor, "clear_quota_idle", null);
     const now = this.now();
-    const held = this.store ? readingsAtReserve(await this.store.latest("claude-sub"), now) : [];
+    const held = this.store
+      ? readingsAtReserve(await this.store.latest("claude-sub"), now, await this.thresholds())
+      : [];
     const cleared =
       this.store && held.length > 0
         ? await this.store.discard(

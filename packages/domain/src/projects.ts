@@ -41,7 +41,7 @@ export class ProjectService {
     private readonly configChanges: ConfigChangeLog | null = null,
     private readonly newId: () => string = () => crypto.randomUUID(),
     /** The global spend caps a project's own may not pass (AI-249); defaults until AI-276. */
-    private readonly globalSpendCaps: () => SpendCaps = () => DEFAULT_SPEND_CAPS,
+    private readonly globalSpendCaps: () => Promise<SpendCaps> = async () => DEFAULT_SPEND_CAPS,
   ) {}
 
   /**
@@ -62,7 +62,8 @@ export class ProjectService {
     const current = await this.tracker.getProject(projectId);
     if (!current) throw notFound("project", projectId);
     if (patch.spendCaps !== undefined) {
-      const refused = projectCapsRefusal(this.globalSpendCaps(), patch.spendCaps);
+      // Global caps unreadable: this throws, so a project cap that can't be checked isn't saved.
+      const refused = projectCapsRefusal(await this.globalSpendCaps(), patch.spendCaps);
       if (refused.length > 0) {
         log("WARNING", "project spend cap refused", { projectId, reasons: refused, by: by.actor });
         throw new DomainError("invalid_field", refused[0]!, refused);
