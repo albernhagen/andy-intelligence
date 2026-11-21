@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { Timestamp } from "./common";
 
 /**
  * Spend caps for paid models (M10: Paid models + spend caps, AI-235: M10.3). Integer
@@ -18,6 +19,19 @@ export const SpendCaps = z.object({
 });
 export type SpendCaps = z.infer<typeof SpendCaps>;
 
+/**
+ * The global caps as stored (AI-276), stamped with when they were last saved. Nothing stored
+ * means the code defaults (`DEFAULT_SPEND_CAPS`).
+ */
+export const StoredSpendCaps = SpendCaps.extend({ updatedAt: Timestamp });
+export type StoredSpendCaps = z.infer<typeof StoredSpendCaps>;
+
+/** A stamp later than `previous` and not before `now`, so a save never reuses a stamp. */
+export function nextSpendCapsStamp(previous: string | null, now: Date): string {
+  const floor = previous === null ? 0 : Date.parse(previous) + 1;
+  return new Date(Math.max(now.getTime(), floor)).toISOString();
+}
+
 /** A project's own caps; a missing or null field takes the global value. */
 export const ProjectSpendCaps = z.object({
   dailyMicroUsd: amount.nullable().optional(),
@@ -27,8 +41,9 @@ export const ProjectSpendCaps = z.object({
 export type ProjectSpendCaps = z.infer<typeof ProjectSpendCaps>;
 
 /**
- * Until Andy answers M10.1's question 1 (AI-227: M10.1: Spend design): $5 a day, $50 a month,
- * $2 per task. His answer changes these three numbers.
+ * The shipped defaults, used while no global caps are stored (AI-276): $5 a day, $50 a month,
+ * $2 per task. Andy chose them on AI-227: M10.1: Spend design, question 1 (2026-11-21).
+ * Projects take the global caps unless they set lower ones; paid providers stay disabled.
  */
 export const DEFAULT_SPEND_CAPS: SpendCaps = {
   dailyMicroUsd: 5_000_000,
