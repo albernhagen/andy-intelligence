@@ -1,12 +1,14 @@
 import {
   ACTIVE_RUN_STATUSES,
   ADR_NUMBER_MAX,
+  DEFAULT_ROUTING,
   BuildOutput,
   IdeateTaskRequest,
   RUNNER_LIMITS,
   PLAN_REASON_MAX,
   PlanOutput,
   PR_SYNC_EMPTY,
+  RUN_PROMPT_MAX,
   RUN_SUMMARY_MAX,
   SYNC_LIMITS,
   SYNC_STOP_OUTCOMES,
@@ -33,6 +35,7 @@ import {
   type Runner,
   type RunStep,
   type RunStore,
+  type RoutingConfigStore,
   type Stage,
   type SyncRunRecord,
   type Ticket,
@@ -67,12 +70,20 @@ import {
   type PlanState,
 } from "./plans";
 import { checkDor } from "./dor";
+import { BRIEF_PATH } from "./brief";
+import { briefContext } from "./brief-context";
 import type { NightUnattended } from "./night-unattended";
 import { RefineGate } from "./refine-gate";
 import { DomainError } from "./errors";
 import { ticketByRef } from "./ticket-reads";
 import { requireCan } from "./permissions";
 import { TIER_ROUTES } from "./tiers";
+import {
+  effectiveRouting,
+  skippedText,
+  type EffectiveRouting,
+  type ResolvedRoute,
+} from "./route-resolver";
 import { afterFailure, deadlineAction, MAX_RUN_ATTEMPTS } from "./watchdog";
 import { syncPrompt, type SyncTarget } from "./sync-runs";
 import { winsNightSlot, type NightSlot } from "./night-budget";
@@ -83,6 +94,7 @@ import {
   projectTaskPrompt,
   type ProjectTaskResults,
 } from "./project-tasks";
+import type { SpendGate } from "./spend-gate";
 
 /**
  * Agent runs (M1.6a: Claude Code executor, ARCHITECTURE §7.1–7.2, §9). Andy starts a run on a
@@ -205,6 +217,11 @@ function log(severity: "INFO" | "WARNING" | "ERROR", message: string, fields: ob
   console.log(JSON.stringify({ severity, message, component: "runs", ...fields }));
 }
 
+/** The start comment's tail when earlier routes were passed over (AI-238). */
+function skippedNote(resolved: ResolvedRoute): string {
+  return resolved.skipped.length > 0 ? `; ${skippedText(resolved.skipped)}` : "";
+}
+
 export class RunService {
   constructor(
     private readonly tracker: WorkTracker,
@@ -219,8 +236,11 @@ export class RunService {
      * waiting ticket can start (the refine dispatcher, ADR-0054). Its errors are logged only.
      */
     private readonly onRunEnded: ((projectId: string) => Promise<void>) | null = null,
-    /** Lists the repo's ADR folder to reserve build runs' ADR numbers (ADR-0080); null: none. */
-    private readonly codeHost: Pick<CodeHost, "getRepo" | "listFiles"> | null = null,
+    /**
+     * Lists the repo's ADR folder to reserve build runs' ADR numbers (ADR-0080) and reads the
+     * project brief for the prompt (AI-112); null: neither.
+     */
+    private readonly codeHost: Pick<CodeHost, "getRepo" | "listFiles" | "readFile"> | null = null,
     /**
      * Whether a local runner that serves the project is present (ADR-0089); null: no runners,
      * so a `local` default runs on the cloud executor and a `local` override waits.
@@ -230,6 +250,10 @@ export class RunService {
     private readonly launches: Pick<NightLaunchStore, "findActive"> | null = null,
     /** Night launches (AI-123): stories stop for the night; null: no launches. */
     private readonly night: NightUnattended | null = null,
+    /** Model routing (AI-238: M9.6), read once per start; null: `DEFAULT_ROUTING`. */
+    private readonly routing: Pick<RoutingConfigStore, "getGlobal" | "getProject"> | null = null,
+    /** AI-248: reserves pay_per_use tasks' spend; without it every pay_per_use start is refused. */
+    private readonly spendGate: SpendGate | null = null,
     /** Stores plan-project and ideate results (AI-134); null: those tasks can't start. */
     private readonly projectTasks: ProjectTaskResults | null = null,
   ) {}
@@ -376,7 +400,19 @@ export class RunService {
       await this.fail(run.id, "another agent task started at the same time");
       throw new DomainError("run_limit", `project ${project.key} has no free agent task slot`);
     }
-    return this.dispatchRun(run, null, repo, `Started a ${step} task (${run.route.model})`);
+    const budget = await this.reserveSpend(run);
+    try {
+      return await this.dispatchRun(
+        run,
+        null,
+        repo,
+        `Started a ${step} task (${run.route.model})`,
+        budget,
+      );
+    } catch (err) {
+      await this.closeSpend(run);
+      throw err;
+    }
   }
 
   /**
@@ -455,8 +491,14 @@ export class RunService {
     }
 
     const limits = STEP_LIMITS[startable];
-    // A plan run is routed like the build it plans: the same model reads the same code.
-    const build = startable === "refine" ? null : buildRoute(await this.withEpic(ticket));
+    // AI-238: the step's route under the project's routing. A plan run is routed like the build
+    // it plans (both `by_size` by default): the same model reads the same code.
+    const resolved = await this.routeFor(
+      startable === "refine" ? ticket : await this.withEpic(ticket),
+      startable,
+      // A retry that can't route is reported by retryOrFlag, with the failed run's reason.
+      { quiet: !!retryOf },
+    );
     // ADR-0080: what the run may edit, and a build's ADR number (a retry keeps its run's).
     const touches = runTouches(ticket.touches, approved?.plan?.files);
     const reservedAdr =
@@ -469,8 +511,8 @@ export class RunService {
       projectId,
       ticketId,
       step: startable,
-      route: build?.route ?? DEFAULT_ROUTE,
-      tier: build?.tier ?? null,
+      route: resolved.route,
+      tier: startable === "refine" ? null : resolved.tier,
       deadline: new Date(this.now().getTime() + limits.timeoutMinutes * 60_000).toISOString(),
       prompt,
       maxTurns: limits.maxTurns,
@@ -545,10 +587,17 @@ export class RunService {
 
     const started = retryOf
       ? `Retrying the ${startable} task (attempt ${run.attempt} of ${MAX_RUN_ATTEMPTS})`
-      : `Started a ${startable} task (${run.route.model})`;
-    const dispatched = opts.runner
-      ? await this.claimLocal(run, ticket, opts.runner, started)
-      : await this.dispatchRun(run, ticket, repo, started);
+      : `Started a ${startable} task (${run.route.model})${skippedNote(resolved)}`;
+    const budget = await this.reserveSpend(run);
+    let dispatched: Run;
+    try {
+      dispatched = opts.runner
+        ? await this.claimLocal(run, ticket, opts.runner, started)
+        : await this.dispatchRun(run, ticket, repo, started, budget);
+    } catch (err) {
+      await this.closeSpend(run);
+      throw err;
+    }
     if (startable === "build") await this.markInProgress(ticket);
     return dispatched;
   }
@@ -577,7 +626,7 @@ export class RunService {
     if (everywhere.length >= MAX_ACTIVE_RUNS_GLOBAL) {
       throw new DomainError("run_limit", "the cap on agent tasks across all projects is reached");
     }
-    const build = buildRoute(await this.withEpic(ticket));
+    const build = await this.routeFor(await this.withEpic(ticket), "sync");
     const prompt = syncPrompt(ticket, repo, target);
     const run = await this.runs.create({
       projectId,
@@ -610,11 +659,70 @@ export class RunService {
       await this.fail(run.id, "another agent task started at the same time");
       throw new DomainError("run_limit", "the cap on agent tasks across all projects is reached");
     }
-    return this.dispatchRun(
-      run,
-      ticket,
-      repo,
-      `Started a sync task: merging main into PR #${target.number} (${run.route.model})`,
+    const budget = await this.reserveSpend(run);
+    try {
+      return await this.dispatchRun(
+        run,
+        ticket,
+        repo,
+        `Started a sync task: merging main into PR #${target.number} (${run.route.model})${skippedNote(build)}`,
+        budget,
+      );
+    } catch (err) {
+      await this.closeSpend(run);
+      throw err;
+    }
+  }
+
+  /** The project's routing (AI-238): global narrowed by the project's config. */
+  private async routingOf(projectId: string): Promise<EffectiveRouting> {
+    if (!this.routing) return effectiveRouting(DEFAULT_ROUTING, null);
+    const [global, project] = await Promise.all([
+      this.routing.getGlobal(),
+      this.routing.getProject(projectId),
+    ]);
+    return effectiveRouting(global, project);
+  }
+
+  /**
+   * The route `step` runs on for this ticket (pass it with its epic's overrides). When no route
+   * of its tier is usable the start is refused: unless `quiet`, the ticket gets one comment
+   * naming each skipped route and is flagged Needs-you. Dispatch skips a flagged ticket, so the
+   * comment isn't repeated; a start by hand after the fix runs it (a build's start clears the flag).
+   */
+  private async routeFor(
+    ticket: Ticket,
+    step: RunStep,
+    opts: { quiet?: boolean } = {},
+  ): Promise<ResolvedRoute & { route: Route }> {
+    const resolved = buildRoute(ticket, await this.routingOf(ticket.projectId), step);
+    if (resolved.skipped.length > 0) {
+      log("INFO", "routes skipped", {
+        ticket: ticket.key,
+        step,
+        tier: resolved.tier,
+        skipped: skippedText(resolved.skipped),
+      });
+    }
+    if (resolved.route) return resolved;
+    const reason = `no usable route for the ${resolved.tier} tier${resolved.skipped.length > 0 ? `: ${skippedText(resolved.skipped)}` : ""}`;
+    if (!opts.quiet && !ticket.needsAttention) {
+      await this.tracker.addComment(
+        ticket.projectId,
+        ticket.id,
+        `Couldn't start a ${step} task: ${reason}. Fix the routing (Settings) or the ticket's model pin, then start it again from the ticket: dispatch skips it while it needs you.`,
+        "system",
+      );
+      await this.tracker.updateTicket(
+        ticket.projectId,
+        ticket.id,
+        { fields: { needsAttention: true } },
+        "system",
+      );
+    }
+    throw new DomainError(
+      step === "refine" ? "not_refinable" : "not_buildable",
+      `${ticket.key}: ${reason}`,
     );
   }
 
@@ -689,6 +797,7 @@ export class RunService {
   async abandonClaim(run: Run, reason: string): Promise<void> {
     log("ERROR", "claimed run abandoned", { runId: run.id, reason });
     await this.fail(run.id, `the local runner's claim failed: ${reason}`);
+    await this.closeSpend(run);
     await this.runEnded(run);
   }
 
@@ -698,6 +807,7 @@ export class RunService {
     ticket: Ticket | null,
     repo: string,
     started: string,
+    budgetMicroUsd: number | null = null,
   ): Promise<Run> {
     const executor = this.executor;
     if (!executor)
@@ -711,6 +821,7 @@ export class RunService {
         step: run.step,
         route: run.route,
         billingType: PROVIDER_BILLING[run.route.provider],
+        budgetMicroUsd,
         instructions: run.prompt ?? "",
         callbackUrl: null,
       });
@@ -810,7 +921,11 @@ export class RunService {
     result: RunResult,
   ): Promise<"recorded" | "duplicate"> {
     const run = await this.requireCaller(runId, caller);
-    if (!ACTIVE_RUN_STATUSES.includes(run.status)) return "duplicate";
+    if (!ACTIVE_RUN_STATUSES.includes(run.status)) {
+      // A replay after a crash between ending the run and closing its spend closes it now.
+      await this.closeSpend(run, result.usage ?? null);
+      return "duplicate";
+    }
     if (result.status === "cancelled") return this.recordCancelled(run);
     const at = this.now().toISOString();
     let status: "succeeded" | "failed" = result.status;
@@ -919,6 +1034,7 @@ export class RunService {
       tokensOut: result.tokensOut,
       costUsd: cost.costUsd,
     });
+    await this.closeSpend(run, usage);
     if (done.ticketId) {
       const asks = asked > 0 ? `\n\nAsked ${asked} question(s): answer them in Needs you.` : "";
       const pr = built?.pullRequest ? `\n\nPull request: ${built.pullRequest}` : "";
@@ -976,6 +1092,7 @@ export class RunService {
       throw err;
     }
     log("WARNING", "run reported cancelled", { runId: run.id });
+    await this.closeSpend(run);
     await this.runEnded(run);
     return "recorded";
   }
@@ -1005,11 +1122,13 @@ export class RunService {
   }
 
   /**
-   * The publish job's one repo token per build run (ADR-0063): the caller must be the build
-   * run's own executor run, still in flight, in a repo of the run's project (ADR-0096). Read-then-write, so two calls racing in the same
-   * instant could both pass; both come from the platform's own workflow run.
+   * The publish step's one repo token per build run (ADR-0063): the caller must be the build
+   * run's own executor run, in a repo of the run's project (ADR-0096), or the local runner that
+   * claimed it (ADR-0089; its token is for the project's repo, never one it names), still in
+   * flight. Read-then-write, so two calls racing in the same instant could both pass; both come
+   * from the run's own executor.
    */
-  async claimPushGrant(runId: string, caller: RunExecutor): Promise<Run> {
+  async claimPushGrant(runId: string, caller: RunCaller): Promise<Run> {
     const run = await this.requireCaller(runId, caller);
     if (run.step !== "build" && run.step !== "sync") {
       throw new DomainError(
@@ -1026,8 +1145,32 @@ export class RunService {
     const granted = await this.runs.update(run.id, { pushGrantedAt: this.now().toISOString() }, [
       "running",
     ]);
-    log("INFO", "push token granted", { runId, repo: caller.repo });
+    log("INFO", "push token granted", {
+      runId,
+      ...(isLocalCaller(caller) ? { runnerId: caller.runnerId } : { repo: caller.repo }),
+    });
     return granted;
+  }
+
+  /**
+   * A local runner's push grant (ADR-0089): `claimPushGrant`, then the repo the token is for,
+   * the run's project repo (the claim named it to the runner). Local runs are build runs only
+   * (sync stays on Actions, ADR-0094).
+   */
+  async claimLocalPushGrant(runId: string, caller: LocalCaller): Promise<{ repo: string }> {
+    const claimed = await this.requireCaller(runId, caller);
+    if (claimed.step !== "build") {
+      throw new DomainError(
+        "forbidden",
+        `run ${runId} is a ${claimed.step} run; local runs push only builds`,
+      );
+    }
+    // The repo first, so a project without one doesn't spend the run's one grant.
+    const project = await this.tracker.getProject(claimed.projectId);
+    const repo = project?.repos[0];
+    if (!repo) throw new DomainError("invalid_repo", `run ${runId}'s project has no repo`);
+    await this.claimPushGrant(runId, caller);
+    return { repo };
   }
 
   /**
@@ -1179,12 +1322,53 @@ export class RunService {
     approved: Run | null,
     reservedAdr: number | null,
   ): Promise<string> {
+    const prompt = await this.basePrompt(step, ticket, repo, questions, approved, reservedAdr);
+    const brief = briefContext(await this.readBrief(ticket.projectId, repo), step);
+    if (brief.length === 0) return prompt;
+    const withBrief = [prompt, ...brief].join("\n");
+    if (withBrief.length <= RUN_PROMPT_MAX) return withBrief;
+    // The brief is optional context: it must never make a run's prompt too long to store.
+    log("WARNING", "project brief left out: the prompt would pass its cap", {
+      ticket: ticket.key,
+      promptChars: prompt.length,
+      max: RUN_PROMPT_MAX,
+    });
+    return prompt;
+  }
+
+  private async basePrompt(
+    step: StartableStep,
+    ticket: Ticket,
+    repo: string,
+    questions: Question[],
+    approved: Run | null,
+    reservedAdr: number | null,
+  ): Promise<string> {
     if (step === "build") {
       return buildPrompt(ticket, repo, questions, approved?.plan ?? null, reservedAdr);
     }
     if (step === "refine") return refinePrompt(ticket, repo, questions);
     const runs = await this.runs.listForTicket(ticket.projectId, ticket.id);
     return planPrompt(ticket, repo, questions, runs);
+  }
+
+  /**
+   * The project brief from the repo's default branch (AI-112, ADR-0053), read through the code
+   * host at dispatch, never by the agent. Missing, or unreadable: null, and the task starts.
+   */
+  private async readBrief(projectId: string, repo: string): Promise<string | null> {
+    if (!this.codeHost) return null;
+    try {
+      const info = await this.codeHost.getRepo(repo);
+      return info ? await this.codeHost.readFile(repo, BRIEF_PATH, info.defaultBranch) : null;
+    } catch (err) {
+      log("WARNING", "project brief not read; the agent task starts without it", {
+        projectId,
+        repo,
+        error: String(err),
+      });
+      return null;
+    }
   }
 
   /**
@@ -1430,6 +1614,7 @@ export class RunService {
         if (!(err instanceof WorkTrackerError && err.code === "conflict")) throw err;
       }
       log("INFO", "run cancelled with its ticket", { runId: run.id, ticketId });
+      await this.closeSpend(run);
     }
     return cancelled;
   }
@@ -1499,6 +1684,7 @@ export class RunService {
       runnerId: run.localRun.runnerId,
       leaseExpiresAt: run.localRun.leaseExpiresAt,
     });
+    await this.closeSpend(run);
     await this.flagNeedsYou(
       ended,
       `Local agent task lost: the runner went away (lease_lost, the ${ended.step} task). It isn't retried. Start it again once the runner is back, set the ticket's executor to actions to run it on GitHub Actions, or take it over`,
@@ -1539,7 +1725,13 @@ export class RunService {
       log("WARNING", "watchdog check for an unknown run", { runId });
       return "unknown";
     }
-    if (!ACTIVE_RUN_STATUSES.includes(run.status)) return "settled";
+    if (!ACTIVE_RUN_STATUSES.includes(run.status)) {
+      // AI-248: every dispatched run gets this check, so a reservation left open by a crash
+      // between ending the run and closing its spend is closed here (kept in full, or released
+      // if the run never started). Closing is idempotent.
+      await this.closeSpend(run);
+      return "settled";
+    }
     if (run.deadline && Date.parse(run.deadline) > this.now().getTime()) {
       log("WARNING", "watchdog check before the deadline", { runId, deadline: run.deadline });
       return "early";
@@ -1579,6 +1771,7 @@ export class RunService {
       throw err;
     }
     log("WARNING", "watchdog ended a run", { runId, executorStatus: status, error });
+    await this.closeSpend(run);
     if (action.kind === "heal") {
       if (ended.ticketId) {
         await this.tracker.addComment(
@@ -1751,6 +1944,49 @@ export class RunService {
       .flat()
       .filter((r) => isInFlight(r, now))
       .sort(oldestFirst);
+  }
+
+  /**
+   * AI-248: a pay_per_use run reserves its worst case before it is handed to an executor; the
+   * per-task budget it returns goes into the run request. Subscription runs reserve nothing
+   * (null). Refused or unknown: the run is failed and `spend_cap` thrown, so dispatch idles.
+   */
+  private async reserveSpend(run: Run): Promise<number | null> {
+    if (PROVIDER_BILLING[run.route.provider] !== "pay_per_use") return null;
+    try {
+      if (!this.spendGate) {
+        throw new DomainError("spend_cap", "no paid agent task: no spend ledger is configured");
+      }
+      // The local runner has no harness that enforces a budget yet: no paid task runs there.
+      if (run.localRun) {
+        throw new DomainError(
+          "spend_cap",
+          "no paid agent task: the local runner can't enforce a budget",
+        );
+      }
+      return (await this.spendGate.reserve(run)).budgetMicroUsd;
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      await this.fail(run.id, message);
+      if (err instanceof DomainError && err.code === "spend_cap") throw err;
+      log("ERROR", "spend reserve failed", { runId: run.id, error: message });
+      throw new DomainError("spend_cap", `no paid agent task: ${message}`);
+    }
+  }
+
+  /**
+   * AI-248: closes an ended run's reservation, if it has one; never throws. `usage` is the
+   * report's (null when missing): settled at the actual cost or the full reservation. Without a
+   * report it is released only if the run never fetched its instructions, else kept in full.
+   */
+  private async closeSpend(ended: Run, usage?: RunUsage | null): Promise<void> {
+    if (!this.spendGate || PROVIDER_BILLING[ended.route.provider] !== "pay_per_use") return;
+    const runId = ended.id;
+    const fresh = await this.runs.get(runId).catch((err: unknown) => {
+      log("ERROR", "run unreadable while closing its spend", { runId, error: String(err) });
+      return null;
+    });
+    await this.spendGate.close(runId, fresh, usage);
   }
 
   /** Marks a queued run failed; logs (doesn't throw) if that write fails too. */

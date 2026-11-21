@@ -1,20 +1,19 @@
-import type { Route, Size, Ticket, TierKey } from "@andy/contracts";
+import { DEFAULT_ROUTING, type Route, type Size, type Ticket, type TierKey } from "@andy/contracts";
 import { effectiveOverrides } from "./overrides";
 
 /**
  * Model tier policy (ADR-0058: tier derived from size; ADR-0050: tiers start inside Claude).
- * The one place that maps size → tier → model; M1.8: Build + gate routes build runs by it.
+ * Size → tier lives here; tier → route comes from the stored routing config (AI-238: M9.6,
+ * `resolveRoute` in route-resolver.ts).
  */
-const claude = (model: string): Route => ({
-  harness: "claude-code",
-  provider: "claude-sub",
-  model,
-});
 
-/** Routes for the tiers in use today; `frontier` and `cheap` get theirs with M5 tier config. */
+/**
+ * The default config's first route for the two tiers sizes map to (Sonnet, Opus). For labels and
+ * fixtures only: runs are routed by `resolveRoute`.
+ */
 export const TIER_ROUTES = {
-  fast: claude("sonnet"),
-  strong: claude("opus"),
+  fast: DEFAULT_ROUTING.tiers.fast[0]!,
+  strong: DEFAULT_ROUTING.tiers.strong[0]!,
 } as const satisfies Partial<Record<TierKey, Route>>;
 
 /** Typed so every size's tier has a route. */
