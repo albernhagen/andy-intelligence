@@ -1,5 +1,5 @@
 ---
-status: accepted
+status: accepted, amended by 0105 (refresh-token grace window)
 date: 2026-11-02
 amends: 0010
 ---
