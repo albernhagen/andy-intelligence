@@ -2,6 +2,7 @@ import { useState } from "react";
 import { Link, useParams } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import { ChevronDown, ChevronRight } from "lucide-react";
+import { MILESTONE_STATUS, MilestoneStatusSelect } from "@/components/MilestoneControls";
 import { Loading, QueryError } from "@/components/Status";
 import { Badge } from "@/components/ui/badge";
 import { unwrap, useApi } from "@/lib/api";
@@ -43,8 +44,8 @@ function useRoadmap(projectId: string | undefined) {
 /**
  * Roadmap (AI-202: M4.26, ADR-0131): a project's milestones in order, each with its status and
  * progress, expanding in place to its epics; parked ones dimmed, done ones compact, epics with
- * no milestone last. Under All projects, one section per project. Read-only for now: setting a
- * milestone's status from a row comes with AI-311.
+ * no milestone last. Under All projects, one section per project. An open row sets the
+ * milestone's status (AI-311), through the milestone route, so only the owner can and it's logged.
  */
 export function RoadmapPage() {
   const { projectId } = useParams({ strict: false });
@@ -106,16 +107,6 @@ function ProjectSection({ roadmap: r, heading }: { roadmap: ProjectRoadmap; head
   );
 }
 
-const STATUS: Record<
-  Milestone["status"] | "done",
-  { label: string; variant: "default" | "success" | "attention" }
-> = {
-  not_reviewed: { label: "Not reviewed", variant: "attention" },
-  approved: { label: "Approved", variant: "default" },
-  parked: { label: "Parked", variant: "default" },
-  done: { label: "Done", variant: "success" },
-};
-
 function MilestoneRow({
   milestone: m,
   epics,
@@ -126,7 +117,7 @@ function MilestoneRow({
   projectId: string;
 }) {
   const [open, setOpen] = useState(false);
-  const status = STATUS[m.done ? "done" : m.status];
+  const status = MILESTONE_STATUS[m.done ? "done" : m.status];
   const Chevron = open ? ChevronDown : ChevronRight;
   return (
     <li
@@ -154,6 +145,9 @@ function MilestoneRow({
       {open && (
         <div className="space-y-2 px-2 pb-2 pl-8">
           {m.done && <p className="text-sm text-muted-foreground">{m.outcome}</p>}
+          <div className="max-w-48">
+            <MilestoneStatusSelect projectId={projectId} milestone={m} />
+          </div>
           {epics.length === 0 ? (
             <p className="text-sm text-muted-foreground">No epics in this milestone yet.</p>
           ) : (

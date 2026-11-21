@@ -14,6 +14,7 @@ import {
 import { Stage, type BoardTicket } from "@andy/contracts";
 import {
   boardStages,
+  milestoneOf,
   parseWorkView,
   sortByStartScore,
   workViewCounts,
@@ -48,7 +49,14 @@ import {
   sameGroup,
   saveGroupByEpic,
 } from "@/lib/board-groups";
-import { useBoard, useBoardMove, useQuickAdd, useRankTicket, useSetUpNext } from "@/lib/queries";
+import {
+  useBoard,
+  useBoardMove,
+  useMilestones,
+  useQuickAdd,
+  useRankTicket,
+  useSetUpNext,
+} from "@/lib/queries";
 import { dropMove, groupByStage, visibleTickets } from "@/lib/tickets";
 import { showsError } from "@/lib/live";
 
@@ -169,6 +177,8 @@ function Lanes({
   const move = useBoardMove(projectId);
   const rank = useRankTicket(projectId);
   const setUpNext = useSetUpNext(projectId);
+  // Group headers show each epic's milestone (AI-311); read only while grouped.
+  const milestones = useMilestones(projectId, grouped).data;
   // A drop shows at once: the card's new stage and rank until the API answers.
   const [pending, setPending] = useState<
     Record<string, { stage: Stage; rank: string; upNextRank: string | null }>
@@ -320,6 +330,9 @@ function Lanes({
                   <EpicGroupHeader
                     epic={epic}
                     progress={epic ? epicProgress(epic.id, all) : null}
+                    milestone={
+                      epic ? milestones?.find((m) => m.id === milestoneOf(epic, all)) : null
+                    }
                   />
                 )}
                 {cards.map(card)}

@@ -2,6 +2,7 @@ import type { Milestone, Ticket } from "@andy/contracts";
 import { describe, expect, it, vi } from "vitest";
 import {
   epicChainOf,
+  listedMilestoneHold,
   milestoneHoldReason,
   MilestoneHolds,
   ticketMilestoneHold,
@@ -146,5 +147,38 @@ describe("epic chain reads (AI-306)", () => {
     const idea = { ...child, stage: "backlog" as const, upNextRank: null };
     expect(await ticketMilestoneHold(tr, store, idea)).toBeNull();
     expect(tr.getTicket).not.toHaveBeenCalled();
+  });
+});
+
+describe("milestone hold from loaded data (AI-311)", () => {
+  const childEpic = t({ id: "4", type: "epic", parentId: "1" });
+  const story = t({ id: "6", parentId: "4" });
+  const all = [epic, childEpic, story];
+
+  it("GivenAStoryUnderAParkedMilestone_WhenItsHoldIsListed_ThenTheReasonNamesTheMilestone", () => {
+    expect(listedMilestoneHold(story, all, [milestone("5", "parked")])).toBe(
+      "Milestone M5: Things is parked",
+    );
+    expect(listedMilestoneHold(story, all, [milestone("5", "not_reviewed")])).toBe(
+      "Milestone M5: Things is not reviewed",
+    );
+  });
+
+  it("GivenAnApprovedMilestoneOrNone_WhenItsHoldIsListed_ThenThereIsNone", () => {
+    expect(listedMilestoneHold(story, all, [milestone("5", "approved")])).toBeNull();
+    expect(listedMilestoneHold(t({ id: "10" }), all, [])).toBeNull();
+  });
+
+  it("GivenAMilestoneMissingFromTheList_WhenItsHoldIsListed_ThenTheTicketIsHeld", () => {
+    expect(listedMilestoneHold(story, all, [])).toBe("Milestone 5 can't be read");
+    expect(listedMilestoneHold(story, [story], [milestone("5", "approved")])).toBe(
+      "Milestone can't be read: its epic wasn't found",
+    );
+  });
+
+  it("GivenAnIdeaOrADoneTicket_WhenItsHoldIsListed_ThenThereIsNone", () => {
+    const parked = [milestone("5", "parked")];
+    expect(listedMilestoneHold({ ...story, stage: "backlog" }, all, parked)).toBeNull();
+    expect(listedMilestoneHold({ ...story, stage: "done" }, all, parked)).toBeNull();
   });
 });
