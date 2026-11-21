@@ -41,6 +41,7 @@ import {
 import { blockerChain, parentChain } from "./ticket-reads";
 import { MAX_OPEN_QUESTIONS_PER_TICKET, assumptionQuestion } from "./refine-gate";
 import { rankBetween } from "./ranks";
+import { ProjectTickets } from "./ticket-snapshots";
 import { isDispatchable, resolveWorker, workerView } from "./worker";
 import { cascadesFrom, epicOf, withEpicOverrides } from "./overrides";
 import { requireOverrideNotLooser } from "./merge-mode";
@@ -124,6 +125,8 @@ export class TicketService {
     private readonly runnerPresence: ((projectId: string) => Promise<boolean>) | null = null,
     /** The routing configs (AI-230: M9.3); null reads `DEFAULT_ROUTING`, as runs do. */
     private readonly routingStore: RoutingConfigStore | null = null,
+    /** AI-319: each project's tickets through the snapshot, so Needs-you reads only what changed. */
+    private readonly projectTickets: ProjectTickets = new ProjectTickets(tracker),
   ) {}
 
   private async runnerPresent(projectId: string): Promise<boolean> {
@@ -925,29 +928,28 @@ export class TicketService {
    */
   async needsYou(): Promise<{ questions: Question[]; tickets: Ticket[] }> {
     const projects = await this.tracker.listProjects();
-    const [questions, flagged, archived, cancelled] = await Promise.all([
+    // Each project's tickets come from its snapshot (AI-319): flags, archives and cancels are
+    // filtered in memory, so a call reads the changed tickets, not every archived one.
+    const [questions, all] = await Promise.all([
       this.tracker.listQuestions({ status: "open" }),
-      Promise.all(
-        projects.map((p) =>
-          this.tracker.listTickets(p.id, { needsAttention: true, archived: false }),
-        ),
-      ),
-      Promise.all(projects.map((p) => this.tracker.listTickets(p.id, { archived: true }))),
-      Promise.all(projects.map((p) => this.tracker.listTickets(p.id, { stage: "cancelled" }))),
+      Promise.all(projects.map((p) => this.projectTickets.list(p.id))),
     ]);
-    const hidden = new Set([...archived.flat(), ...cancelled.flat()].map((t) => t.id));
+    const tickets = all.flat();
+    const hidden = new Set(
+      tickets.filter((t) => t.archived || t.stage === "cancelled").map((t) => t.id),
+    );
     const visible = questions.filter((q) => !hidden.has(q.ticketId));
     // A flag left on a finished ticket (AI-2) isn't waiting on anyone, unless a question is open
     // (the inbox lists those under Stale).
-    const tickets = flagged
-      .flat()
+    const flagged = tickets
+      .filter((t) => t.needsAttention && !t.archived)
       .filter(
         (t) =>
           !hidden.has(t.id) && (t.stage !== "done" || questions.some((q) => q.ticketId === t.id)),
       );
     // Every reader gets the inbox's order (AI-40).
-    const { active, stale } = inboxCards({ questions: visible, tickets });
-    return { questions: [...active, ...stale].flatMap((c) => c.questions), tickets };
+    const { active, stale } = inboxCards({ questions: visible, tickets: flagged });
+    return { questions: [...active, ...stale].flatMap((c) => c.questions), tickets: flagged };
   }
 
   /** "AI-42" → the ticket. A project's id is its key lowercased (WorkTracker contract). */
