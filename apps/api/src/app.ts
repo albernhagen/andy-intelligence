@@ -16,6 +16,7 @@ import {
   type NightLaunchStore,
   type ProjectVersions,
   type SpendLedger,
+  type SpendCapsStore,
 } from "@andy/contracts";
 import type { CreatedApp } from "@andy/github";
 import { DomainError, type EmailNotificationsDeps } from "@andy/domain";
@@ -78,6 +79,8 @@ export interface AppDeps {
    * totals (AI-249). Without it every pay_per_use task is refused and spend reads unknown.
    */
   spendLedger?: SpendLedger;
+  /** The global spend caps (AI-276); without it the code defaults, read-only. */
+  spendCapsStore?: SpendCapsStore;
   /**
    * Per-project change counters (AI-222): with them, every tracker and run write bumps its
    * project, and the board and ticket list serve unchanged polls from a cache. Without, no cache.
@@ -170,6 +173,7 @@ const DOMAIN_STATUS = {
   not_buildable: 422,
   run_limit: 409,
   spend_cap: 409,
+  quota_reserve: 409,
   run_finished: 409,
   executor_unavailable: 503,
   dispatch_failed: 502,

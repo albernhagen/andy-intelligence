@@ -127,7 +127,11 @@ describe("OpenRouterGateway", () => {
 
   it("GivenA5xxThenSuccess_WhenCompleted_ThenRetriesOnceAndReturnsTheReply", async () => {
     const f = mockFetch(json(502, "bad gateway"), json(200, bodyFor("ok", null)));
-    expect(await gateway(f).complete(request)).toMatchObject({ outcome: "ok", text: "ok" });
+    expect(await gateway(f).complete(request)).toMatchObject({
+      outcome: "ok",
+      text: "ok",
+      attempts: 2,
+    });
     expect(f).toHaveBeenCalledTimes(2);
   });
 
@@ -217,6 +221,7 @@ describe("OpenRouterGateway", () => {
       outcome: "ok",
       text: "ok",
       usage: { inputTokens: 5, outputTokens: 1, cachedTokens: 0, costUsd: null },
+      attempts: 1,
     });
   });
 
