@@ -36,11 +36,7 @@ Hooks install with `pnpm install` (root `prepare` script; skipped when there is 
 - **Backups:** Firestore is the only copy of tickets, so a daily Firestore backup schedule with 7-day retention (`infra/control-plane`, M1.2: Ticket core; pennies at this size). Optional BigQuery export for ad-hoc analytics later.
 
 ### 10.4 Data evolution (ADR-0035)
-The control plane's Firestore holds real data from M1.2: Ticket core on; there is no separate dev copy.
-- **Additive by default:** new optional/defaulted fields need no migration.
-- **Breaking change:** bump `SCHEMA_VERSION`, add a tested upgrader `_v N → N+1` applied on read (and rewritten on next write); record it in an ADR. v2: ticket model (`ticketV1toV2`: story → feature, task → chore, `needsYou` → `needsAttention`, stored tier dropped; ADR-0058, ADR-0062). v3: no Monitoring stage (`ticketV2toV3`, `ticketEventV2toV3`: `monitoring` → `done` on tickets and stage events; ADR-0069).
-- **Backups** (§10.3): before a risky deploy, run a manual export (runbook); restore drill once per milestone.
-- A separate control-plane dev environment comes last (§12 Later: Control plane in dev + prod); moving data then = export/import + the same upgraders.
+Detail: [`data-evolution.md`](data-evolution.md).
 
 ### 10.5 Quota capture (M1.9)
 Claude readings from run reports drive a gauge and banner; dispatch ignores them until M2. As built: [`runbooks/quota.md`](../runbooks/quota.md).
