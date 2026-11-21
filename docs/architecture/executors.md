@@ -13,7 +13,7 @@ Overview and reading map: [ARCHITECTURE.md](ARCHITECTURE.md). Sections match the
   - **Built (M1.8a, ADR-0050):** the `plan` step: read-only like refine, no publish job; `plan.md` + `plan.schema.json` (the build plan). An approved plan goes into the build's prompt; deviations are recorded.
 - **Ticket context for agents** (all executors): the dispatch request carries the ticket snapshot (title, body, acceptance criteria, assumptions, answered questions). Planned (ADR-0099): a read-only token per run for `/mcp/agent`: three read tools, its project only, dead when the run settles.
 - **Local** (ADR-0089): a runner on Andy's Mac polls `POST /runner/claim`, which starts a `local` ticket's agent task with a per-run token (context, heartbeat, report; 5-minute lease).
-  - **Built (AI-131):** `apps/local-runner` runs refine and plan (build: slice 6) per worktree: profile via `--settings`, setting sources off, agent in Seatbelt (ADR-0098).
+  - **Built (AI-131):** `apps/local-runner` runs refine, plan, build (ADR-0122) per worktree: profile via `--settings`, setting sources off, agent in Seatbelt (ADR-0098).
 - **OpenCode**: Actions workflow, per-project OpenRouter key, non-Claude models.
 - **Jules** (ADR-0128): REST API, build only, `packages/jules`; its PR finishes the run via the PR webhook (§7.1).
 - **Direct**: in-process OpenRouter calls for single-call steps (sizing, digests, scout analysis).

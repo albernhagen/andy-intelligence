@@ -12,7 +12,7 @@ Moved unchanged from [domain-and-ports.md](domain-and-ports.md) (AI-221): the ro
 
 ### Configuration rules
 - **Global config is the ceiling; project config can only narrow** (disable providers, lower caps, raise reserves, pin tiers).
-- **Compatibility enforced on save:** `claude-code` ↔ `claude-sub` + Claude models; `jules` ↔ `google-sub`; `opencode` / `direct` ↔ `openrouter` + any model.
+- **Compatibility enforced on save:** `claude-code` ↔ `claude-sub` + Claude models; `jules` ↔ `google-sub`; `opencode` / `direct` ↔ `openrouter` + any model. Rule: `routeProblem` in `packages/domain/src/routing-rules.ts` (AI-231).
 - **Override precedence:** ticket → epic (not `executor`) → project → global.
 - Every change is a ConfigChange (audited, revertable). Agent/scout proposals are `pending` until Andy approves.
 

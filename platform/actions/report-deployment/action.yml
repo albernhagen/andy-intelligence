@@ -1,0 +1,56 @@
+name: Baseline — report a deployment
+description: >-
+  Reports a deployment to the control plane (AI-180: M6.4): `start` before the deploy
+  (image digest; the commit comes from the job's OIDC token), `finish` after it (status and the
+  serving revision). Authenticated with the job's GitHub Actions OIDC token (ADR-0019), so the
+  calling job needs `id-token: write`. Never fails the job: any error becomes a warning and a line
+  in the job summary saying the deployment was not recorded.
+
+inputs:
+  control-plane-url:
+    description: The control plane's origin, also the OIDC audience.
+    required: true
+  phase:
+    description: "`start` or `finish`."
+    required: true
+  image-digest:
+    description: "`start`: the deployed image's digest (`sha256:…`)."
+    required: false
+    default: ""
+  deployment-id:
+    description: "`finish`: the id the `start` report returned."
+    required: false
+    default: ""
+  status:
+    description: "`finish`: `succeeded` or `failed`."
+    required: false
+    default: ""
+  service:
+    description: "`finish`: the Cloud Run service, to read the serving revision (optional)."
+    required: false
+    default: ""
+  region:
+    description: "`finish`: the Cloud Run region (with `service`)."
+    required: false
+    default: ""
+
+outputs:
+  deployment-id:
+    description: The recorded deployment's id (`start`); empty when it was not recorded.
+    value: ${{ steps.report.outputs.deployment_id }}
+
+runs:
+  using: composite
+  steps:
+    - name: Report the deployment
+      id: report
+      shell: bash
+      env:
+        CONTROL_PLANE_URL: ${{ inputs.control-plane-url }}
+        PHASE: ${{ inputs.phase }}
+        IMAGE_DIGEST: ${{ inputs.image-digest }}
+        DEPLOYMENT_ID: ${{ inputs.deployment-id }}
+        STATUS: ${{ inputs.status }}
+        SERVICE: ${{ inputs.service }}
+        REGION: ${{ inputs.region }}
+      run: bash "$GITHUB_ACTION_PATH/report.sh"

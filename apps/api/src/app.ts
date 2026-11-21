@@ -12,8 +12,10 @@ import {
   type WorkTracker,
   type QuotaStore,
   type DeploymentStore,
+  type RoutingConfigStore,
   type NightLaunchStore,
   type ProjectVersions,
+  type SpendLedger,
 } from "@andy/contracts";
 import type { CreatedApp } from "@andy/github";
 import { DomainError, type EmailNotificationsDeps } from "@andy/domain";
@@ -23,6 +25,9 @@ import { requireAllowedUser, type AuthEnv, type TokenVerifier } from "./auth";
 import type { CodeHostFactory } from "./github/connection";
 import type { ActionsTokenVerifier } from "./github/token";
 import type { ClientMetadataResolver } from "./mcp";
+import { requireProjectAccess, type ProjectAccess } from "./project-access";
+// Callers outside the package (web tests, e2e, gen:api) pass today's rule explicitly.
+export { ownerOnlyAccess } from "./project-access";
 import * as publicRoutes from "./public-routes";
 import { createServices, type RouteModule } from "./services";
 import type { InvokerTokenVerifier } from "./watchdog";
@@ -61,13 +66,28 @@ export interface AppDeps {
   quota?: QuotaStore;
   /** Night launches (ADR-0049): a launched story's build gets its `epic/<KEY>` base (AI-122). */
   nightLaunches?: NightLaunchStore;
-  /** Deployment records (AI-161); without it the DORA panel reads empty (AI-200). */
+  /**
+   * Deployment records (AI-161): written by deploy workflows' reports (AI-180, routes absent when
+   * unset) and read by the DORA panel (AI-200, empty when unset).
+   */
   deployments?: DeploymentStore;
+  /** Model routing (AI-230, AI-238); without it every run takes `DEFAULT_ROUTING`. */
+  routing?: RoutingConfigStore;
+  /**
+   * Paid spend: the gate reserves pay_per_use agent tasks (AI-248) and the caps settings read its
+   * totals (AI-249). Without it every pay_per_use task is refused and spend reads unknown.
+   */
+  spendLedger?: SpendLedger;
   /**
    * Per-project change counters (AI-222): with them, every tracker and run write bumps its
    * project, and the board and ticket list serve unchanged polls from a cache. Without, no cache.
    */
   projectVersions?: ProjectVersions;
+  /**
+   * Who may read which project (AI-252: M8.3), for `/api` and MCP alike. Required, with no
+   * default, so a wiring omission can't turn the check off: `main.ts` passes `ownerOnlyAccess()`.
+   */
+  projectAccess: ProjectAccess;
   /**
    * The only host served (ADR-0044), e.g. `ai.andybernhagen.com`. Requests for any other host
    * (the default run.app URLs) get 404, except /health for monitoring. Unset: every host (local dev).
@@ -149,6 +169,7 @@ const DOMAIN_STATUS = {
   not_refinable: 422,
   not_buildable: 422,
   run_limit: 409,
+  spend_cap: 409,
   run_finished: 409,
   executor_unavailable: 503,
   dispatch_failed: 502,
@@ -168,6 +189,8 @@ const DOMAIN_STATUS = {
 } as const;
 
 export function createApp(input: AppDeps) {
+  // The type requires it; this stops a caller that slips past the type (fail closed).
+  if (!input.projectAccess) throw new Error("createApp needs a projectAccess rule");
   const services = createServices(input);
   const deps = services.deps;
   const app = new OpenAPIHono<AuthEnv>({
@@ -230,6 +253,7 @@ export function createApp(input: AppDeps) {
       onError: (c) => c.json({ error: "request body too large" }, 413),
     }),
   );
+  app.use("/api/*", requireProjectAccess(deps.projectAccess));
 
   app.openapi(meRoute, (c) => {
     const { email, uid } = c.get("identity");

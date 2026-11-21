@@ -761,5 +761,9 @@ describe("mergedStories and morningPrBody", () => {
     );
     expect(body).toContain("| AI-2 | not reported | https://x/pull/1 |");
     expect(body).toContain("every story finished");
+    // AI-125: the PR points at the morning report on the epic.
+    expect(body).toContain(
+      "The morning report (what merged, what stopped and why, night assumptions, cost) is a comment on https://x/p/ai/t/AI-1.",
+    );
   });
 });

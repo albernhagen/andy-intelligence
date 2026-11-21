@@ -2,6 +2,7 @@ import { InMemoryWorkTracker, InMemoryRunStore } from "@andy/contracts";
 import { describe, expect, it } from "vitest";
 import { createApp } from "./app";
 import { parseAllowList, type TokenVerifier } from "./auth";
+import { ownerOnlyAccess } from "./project-access";
 
 const verifier: TokenVerifier = {
   async verify(token) {
@@ -17,6 +18,7 @@ const verifier: TokenVerifier = {
 };
 
 const app = createApp({
+  projectAccess: ownerOnlyAccess(),
   verifier,
   allowedEmails: parseAllowList(" andy@example.com "),
   version: "test",
@@ -53,6 +55,7 @@ describe("api", () => {
 
   describe("public host only (ADR-0044)", () => {
     const guarded = createApp({
+      projectAccess: ownerOnlyAccess(),
       verifier,
       allowedEmails: parseAllowList("andy@example.com"),
       version: "test",

@@ -5,11 +5,12 @@ import {
   InMemoryCodeHostConnectionStore,
   InMemoryConfigChangeStore,
   InMemoryNightLaunchStore,
+  InMemoryRoutingConfigStore,
   InMemoryRunStore,
   InMemoryRunnerStore,
   InMemoryWorkTracker,
 } from "@andy/contracts";
-import { createApp } from "@andy/api/app";
+import { createApp, ownerOnlyAccess } from "@andy/api/app";
 import openapiTS, { astToString, type OpenAPI3 } from "openapi-typescript";
 import { format, resolveConfig } from "prettier";
 
@@ -22,6 +23,7 @@ export const GENERATED_PATH = fileURLToPath(new URL("../src/lib/api.gen.ts", imp
  */
 export async function apiDocument(): Promise<OpenAPI3> {
   const app = createApp({
+    projectAccess: ownerOnlyAccess(),
     verifier: { verify: () => Promise.reject(new Error("unused")) },
     allowedEmails: new Set(),
     version: "gen",
@@ -31,6 +33,7 @@ export async function apiDocument(): Promise<OpenAPI3> {
     runners: new InMemoryRunnerStore(),
     configChanges: new InMemoryConfigChangeStore(),
     nightLaunches: new InMemoryNightLaunchStore(),
+    routing: new InMemoryRoutingConfigStore(),
     // Fakes only, so the GitHub setup routes are in the document.
     github: {
       publicUrl: "http://localhost",
