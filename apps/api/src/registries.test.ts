@@ -1,6 +1,6 @@
 import { readdirSync, readFileSync } from "node:fs";
 import { join, relative } from "node:path";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 import { describe, expect, it } from "vitest";
 import * as apiRoutes from "./api-routes";
 import * as toolGroups from "./mcp/tool-groups";
@@ -54,7 +54,10 @@ describe("code registries (AI-145)", () => {
     );
     expect(declaring.length).toBeGreaterThan(10);
     for (const file of declaring) {
-      const mod = (await import(`./${file}`)) as Record<string, unknown>;
+      const mod = (await import(pathToFileURL(join(SRC, `${file}.ts`)).href)) as Record<
+        string,
+        unknown
+      >;
       for (const kind of ["apiRoutes", "publicRoutes"] as const) {
         if (kind in mod && !listed[kind].includes(mod[kind] as never)) {
           missing.push(`${file}: ${kind}`);
@@ -68,7 +71,10 @@ describe("code registries (AI-145)", () => {
     const listed: unknown[] = Object.values(toolGroups);
     const missing: string[] = [];
     for (const file of sourceFiles(join(SRC, "mcp")).filter((f) => /^mcp\/tools-/.test(f))) {
-      const mod = (await import(`./${file}`)) as Record<string, unknown>;
+      const mod = (await import(pathToFileURL(join(SRC, `${file}.ts`)).href)) as Record<
+        string,
+        unknown
+      >;
       const registers = Object.entries(mod).filter(([name]) => /^register\w*Tools$/.test(name));
       if (registers.length === 0 || !registers.every(([, fn]) => listed.includes(fn))) {
         missing.push(file);
