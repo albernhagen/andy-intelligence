@@ -11,6 +11,7 @@ import { createApp } from "../app";
 import { parseAllowList, type TokenVerifier } from "../auth";
 import { ClientMetadataResolver } from "./client-metadata";
 import { LOOKUPS_PER_MINUTE } from "./index";
+import { REFRESH_GRACE_S } from "./oauth";
 import { hashToken, newToken } from "./tokens";
 
 const PUBLIC_URL = "https://control-plane.example.run.app";
@@ -239,9 +240,10 @@ describe("MCP OAuth flow (MCP SDK client)", () => {
     const second = provider.tokens()!;
     expect(second.access_token).not.toBe(first.access_token);
     expect(second.refresh_token).not.toBe(first.refresh_token);
-    expect(await ctx.grants.get(hashToken(first.refresh_token!))).toBeNull();
 
-    // The used refresh token is dead: replaying it fails.
+    // The used refresh token dies when its grace window ends: replaying it then fails.
+    ctx.advance((REFRESH_GRACE_S + 1) * 1000);
+    expect(await ctx.grants.get(hashToken(first.refresh_token!))).toBeNull();
     const replay = await ctx.appFetch(`${PUBLIC_URL}/oauth/token`, {
       method: "POST",
       headers: { "content-type": "application/x-www-form-urlencoded" },
@@ -287,6 +289,78 @@ describe("MCP OAuth refresh checks", () => {
     );
     expect(res.status).toBe(400);
     expect(await res.json()).toMatchObject({ error: "invalid_grant" });
+  });
+});
+
+describe("MCP OAuth refresh grace window (ADR-0105)", () => {
+  const refresh = (ctx: ReturnType<typeof setup>, token: string) =>
+    ctx.appFetch(`${PUBLIC_URL}/oauth/token`, {
+      method: "POST",
+      headers: { "content-type": "application/x-www-form-urlencoded" },
+      body: new URLSearchParams({
+        grant_type: "refresh_token",
+        refresh_token: token,
+        client_id: CLIENT_ID,
+      }),
+    });
+  const callMcp = (ctx: ReturnType<typeof setup>, token: string) =>
+    ctx.appFetch(RESOURCE, {
+      method: "POST",
+      headers: { authorization: `Bearer ${token}`, "content-type": "application/json" },
+      body: "{}",
+    });
+
+  it("GivenTwoSessionsSharingARefreshToken_WhenBothRefreshWithinTheWindow_ThenBothGetAWorkingPair", async () => {
+    const ctx = setup();
+    const shared = (await authorize(ctx)).tokens()!.refresh_token!;
+
+    const first = await refresh(ctx, shared);
+    ctx.advance((REFRESH_GRACE_S - 1) * 1000);
+    const second = await refresh(ctx, shared);
+
+    expect(first.status).toBe(200);
+    expect(second.status).toBe(200);
+    const pairs = [(await first.json()) as OAuthTokens, (await second.json()) as OAuthTokens];
+    expect(pairs[0]!.refresh_token).not.toBe(pairs[1]!.refresh_token);
+    for (const pair of pairs) {
+      // 401 would mean the access token is unknown; anything else got past the token check.
+      expect((await callMcp(ctx, pair.access_token)).status).not.toBe(401);
+      expect((await refresh(ctx, pair.refresh_token!)).status).toBe(200);
+    }
+  });
+
+  it("GivenAUsedRefreshToken_WhenReplayedAfterTheWindow_ThenInvalidGrant", async () => {
+    const ctx = setup();
+    const used = (await authorize(ctx)).tokens()!.refresh_token!;
+    expect((await refresh(ctx, used)).status).toBe(200);
+
+    ctx.advance((REFRESH_GRACE_S + 1) * 1000);
+    const replay = await refresh(ctx, used);
+
+    expect(replay.status).toBe(400);
+    expect(await replay.json()).toMatchObject({ error: "invalid_grant" });
+  });
+
+  it("GivenARefreshTokenReusedInsideTheWindow_WhenTheWindowEnds_ThenReuseDidNotExtendIt", async () => {
+    const ctx = setup();
+    const used = (await authorize(ctx)).tokens()!.refresh_token!;
+    expect((await refresh(ctx, used)).status).toBe(200);
+    ctx.advance((REFRESH_GRACE_S - 10) * 1000);
+    expect((await refresh(ctx, used)).status).toBe(200);
+
+    ctx.advance(11 * 1000);
+
+    expect((await refresh(ctx, used)).status).toBe(400);
+  });
+
+  it("GivenAUserRemovedFromTheAllowList_WhenReusingATokenInsideTheWindow_ThenInvalidGrant", async () => {
+    const ctx = setup();
+    const used = (await authorize(ctx)).tokens()!.refresh_token!;
+    expect((await refresh(ctx, used)).status).toBe(200);
+
+    (ctx.allowedEmails as Set<string>).clear();
+
+    expect((await refresh(ctx, used)).status).toBe(400);
   });
 });
 
