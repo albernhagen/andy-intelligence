@@ -58,7 +58,7 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
-      # Deployment record (AI-180: M6.4; ADR-0114, proposed in PR #227). Never fails the deploy: a failed report is a
+      # Deployment record (AI-180: M6.4, ADR-0019). Never fails the deploy: a failed report is a
       # warning and a job-summary line. The OIDC token proves the repo, workflow, branch and commit.
       - id: report-start
         uses: ./platform/actions/report-deployment

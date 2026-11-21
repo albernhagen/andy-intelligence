@@ -1,6 +1,6 @@
 # Threat model: Deployment reports
 
-Detail on the deployment record's entry point (AI-180: M6.4; ADR-0114, proposed in PR #227). Risk register, assets and mitigations: [threat-model.md](threat-model.md). PRs that change this area update this file; the weekly system review edits only the main file.
+Detail on the deployment record's entry point (AI-180: M6.4, part of M6: Dev → prod releases in `docs/architecture/milestones.md`). Each deploy reports `started` and then `succeeded` or `failed` (environment, commit, image digest, revision), so release notes, verification and the DORA metrics (ADR-0040) read one record the control plane keeps. The report is authenticated like the run callbacks (ADR-0019) and never fails the deploy. Risk register, assets and mitigations: [threat-model.md](threat-model.md). PRs that change this area update this file; the weekly system review edits only the main file.
 
 ## Trust boundaries and entry points
 
