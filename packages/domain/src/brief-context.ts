@@ -1,4 +1,4 @@
-import { BRIEF_CONTEXT_MAX_CHARS, type BriefSectionTitle } from "@andy/contracts";
+import { BRIEF_CONTEXT_MAX_CHARS, BRIEF_SECTIONS, type BriefSectionTitle } from "@andy/contracts";
 import { BRIEF_PATH } from "./brief";
 
 /**
@@ -16,13 +16,16 @@ export const BRIEF_PART_BY_STEP = {
 } as const satisfies Record<string, "whole" | BriefSectionTitle>;
 export type BriefStep = keyof typeof BRIEF_PART_BY_STEP;
 
-/** The body under a `## <title>` heading, up to the next `## ` heading; null if absent. */
+/** The brief's own section headings: only these end a section, not `#` lines inside answers. */
+const SECTION_HEADINGS = new Set(BRIEF_SECTIONS.map((s) => `## ${s.title}`));
+
+/** The body under a `## <title>` heading, up to the next section heading; null if absent. */
 export function briefSection(markdown: string, title: BriefSectionTitle): string | null {
   const lines = markdown.split(/\r?\n/);
   const start = lines.findIndex((l) => l.trim() === `## ${title}`);
   if (start === -1) return null;
   const rest = lines.slice(start + 1);
-  const end = rest.findIndex((l) => /^##?\s/.test(l));
+  const end = rest.findIndex((l) => SECTION_HEADINGS.has(l.trim()));
   const body = (end === -1 ? rest : rest.slice(0, end)).join("\n").trim();
   return body === "" ? null : body;
 }
@@ -35,13 +38,17 @@ const encode = (value: unknown) => JSON.stringify(value, null, 2).replace(/</g, 
  * what reaches the prompt, so a brief of `<` (six characters each, escaped) can't overflow it.
  */
 function withinCap(text: string): string {
-  let kept = text;
-  let over = encode(kept).length - BRIEF_CONTEXT_MAX_CHARS;
-  while (over > 0) {
-    kept = kept.slice(0, kept.length - over);
-    over = encode(kept).length - BRIEF_CONTEXT_MAX_CHARS;
+  const fits = (n: number) => encode(text.slice(0, n)).length <= BRIEF_CONTEXT_MAX_CHARS;
+  if (fits(text.length)) return text;
+  // Binary search for the longest prefix that fits: a character encodes to 1 to 6 characters.
+  let lo = 0;
+  let hi = text.length;
+  while (lo < hi) {
+    const mid = Math.ceil((lo + hi) / 2);
+    if (fits(mid)) lo = mid;
+    else hi = mid - 1;
   }
-  return kept;
+  return text.slice(0, lo);
 }
 
 /**

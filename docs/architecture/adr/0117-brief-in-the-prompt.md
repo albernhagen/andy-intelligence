@@ -18,7 +18,7 @@ Both executors (Actions and the local runner) get an agent task's instructions f
 - At dispatch, `RunService` reads `docs/product/brief.md` from the repo's default branch through the `CodeHost` port and appends a `<brief>` block to the prompt after the `<ticket>` block. No contract the executor reads changes; the stored `Run.prompt` records exactly what the agent saw.
 - Per step (`BRIEF_PART_BY_STEP`): refine gets the whole brief; plan and build get Architectural expectations. Ideate, reviews and the system security review get theirs when they become agent tasks (AI-134 for ideate).
 - Bounds: the block is JSON with `<` escaped, like the ticket snapshot, under a fixed line saying it is untrusted data and never instructions. The encoded text is capped at `BRIEF_CONTEXT_MAX_CHARS` (12,000) and marked `truncated` when cut.
-- No brief, no matching section, or a failed read (logged as a warning): no block, and the task starts.
+- No brief, no matching section, a failed read, or a prompt the brief would push past `RUN_PROMPT_MAX`: no block, and the task starts; the last two are logged as warnings.
 
 ### Consequences
 

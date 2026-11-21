@@ -51,6 +51,22 @@ describe("briefSection", () => {
     );
   });
 
+  it("GivenHashLinesInsideTheSection_WhenItIsRead_ThenOnlyTheNextBriefSectionEndsIt", () => {
+    const md = [
+      "## Architectural expectations",
+      "",
+      "## Notes",
+      "```sh",
+      "# comment",
+      "```",
+      "",
+      "## Open questions",
+      "",
+      "None.",
+    ].join("\n");
+    expect(briefSection(md, "Architectural expectations")).toBe("## Notes\n```sh\n# comment\n```");
+  });
+
   it("GivenASubheadingInsideTheSection_WhenItIsRead_ThenTheSubheadingStaysInTheBody", () => {
     const md = "## Architectural expectations\n\n### Cloud\n\nGCP.\n\n## Open questions\n\nNone.";
     expect(briefSection(md, "Architectural expectations")).toBe("### Cloud\n\nGCP.");
@@ -93,12 +109,12 @@ describe("briefContext", () => {
   });
 
   it("GivenABriefOverTheCap_WhenItIsCarried_ThenItIsCutToTheCapAndMarkedTruncated", () => {
-    const lines = briefContext("<".repeat(BRIEF_CONTEXT_MAX_CHARS), "refine");
+    const lines = briefContext("<".repeat(3 * BRIEF_CONTEXT_MAX_CHARS), "refine");
     const block = blockOf(lines);
     expect(block.truncated).toBe(true);
-    expect(JSON.stringify(block.text).replace(/</g, "\\u003c").length).toBeLessThanOrEqual(
-      BRIEF_CONTEXT_MAX_CHARS,
-    );
+    const encoded = JSON.stringify(block.text).replace(/</g, "\\u003c").length;
+    expect(encoded).toBeLessThanOrEqual(BRIEF_CONTEXT_MAX_CHARS);
+    expect(encoded).toBeGreaterThan(BRIEF_CONTEXT_MAX_CHARS - 6);
     expect(lines.join("\n").length).toBeLessThan(BRIEF_CONTEXT_MAX_CHARS + 1_000);
   });
 });

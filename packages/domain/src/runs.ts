@@ -6,6 +6,7 @@ import {
   PLAN_REASON_MAX,
   PlanOutput,
   PR_SYNC_EMPTY,
+  RUN_PROMPT_MAX,
   RUN_SUMMARY_MAX,
   SYNC_LIMITS,
   SYNC_STOP_OUTCOMES,
@@ -1078,16 +1079,34 @@ export class RunService {
     approved: Run | null,
     reservedAdr: number | null,
   ): Promise<string> {
+    const prompt = await this.basePrompt(step, ticket, repo, questions, approved, reservedAdr);
     const brief = briefContext(await this.readBrief(ticket.projectId, repo), step);
+    if (brief.length === 0) return prompt;
+    const withBrief = [prompt, ...brief].join("\n");
+    if (withBrief.length <= RUN_PROMPT_MAX) return withBrief;
+    // The brief is optional context: it must never make a run's prompt too long to store.
+    log("WARNING", "project brief left out: the prompt would pass its cap", {
+      ticket: ticket.key,
+      promptChars: prompt.length,
+      max: RUN_PROMPT_MAX,
+    });
+    return prompt;
+  }
+
+  private async basePrompt(
+    step: StartableStep,
+    ticket: Ticket,
+    repo: string,
+    questions: Question[],
+    approved: Run | null,
+    reservedAdr: number | null,
+  ): Promise<string> {
     if (step === "build") {
-      return [
-        buildPrompt(ticket, repo, questions, approved?.plan ?? null, reservedAdr),
-        ...brief,
-      ].join("\n");
+      return buildPrompt(ticket, repo, questions, approved?.plan ?? null, reservedAdr);
     }
-    if (step === "refine") return [refinePrompt(ticket, repo, questions), ...brief].join("\n");
+    if (step === "refine") return refinePrompt(ticket, repo, questions);
     const runs = await this.runs.listForTicket(ticket.projectId, ticket.id);
-    return [planPrompt(ticket, repo, questions, runs), ...brief].join("\n");
+    return planPrompt(ticket, repo, questions, runs);
   }
 
   /**

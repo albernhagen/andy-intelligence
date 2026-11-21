@@ -1,4 +1,9 @@
-import { InMemoryCodeHost, InMemoryRunStore, InMemoryWorkTracker } from "@andy/contracts";
+import {
+  InMemoryCodeHost,
+  InMemoryRunStore,
+  InMemoryWorkTracker,
+  RUN_PROMPT_MAX,
+} from "@andy/contracts";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { BRIEF_PATH } from "./brief";
 import { RunService } from "./runs";
@@ -64,8 +69,8 @@ describe("RunService brief in context (AI-112)", () => {
       "andy",
     );
   };
-  const refineTicket = async () => {
-    const t = await tracker.createTicket(projectId, { title: "Log a run" }, "andy");
+  const refineTicket = async (body?: string) => {
+    const t = await tracker.createTicket(projectId, { title: "Log a run", body }, "andy");
     await tracker.updateTicket(projectId, t.id, { fields: { upNextRank: "0000000001" } }, "andy");
     return t;
   };
@@ -122,6 +127,28 @@ describe("RunService brief in context (AI-112)", () => {
     expect(run.prompt).not.toContain("<brief>");
     expect(console.log).toHaveBeenCalledWith(
       expect.stringContaining("project brief not read; the agent task starts without it"),
+    );
+  });
+
+  it("GivenABriefWithoutArchitecturalExpectations_WhenABuildTaskIsDispatched_ThenItStartsWithNoBriefBlock", async () => {
+    host.files.set(BRIEF_PATH, "# Project brief\n\n## Idea\n\nA log of trail runs.\n");
+    const run = await service.start(projectId, (await readyTicket()).id, "build");
+    expect(run.status).toBe("queued");
+    expect(run.prompt).not.toContain("<brief>");
+  });
+
+  it("GivenATicketThatLeavesNoRoomForTheBrief_WhenARefineTaskIsDispatched_ThenItStartsWithoutTheBriefUnderThePromptCap", async () => {
+    host.files.set(BRIEF_PATH, `## Idea\n\n${"<".repeat(20_000)}`);
+    const run = await service.start(
+      projectId,
+      (await refineTicket("x".repeat(95_000))).id,
+      "refine",
+    );
+    expect(run.status).toBe("queued");
+    expect(run.prompt).not.toContain("<brief>");
+    expect(run.prompt!.length).toBeLessThanOrEqual(RUN_PROMPT_MAX);
+    expect(console.log).toHaveBeenCalledWith(
+      expect.stringContaining("project brief left out: the prompt would pass its cap"),
     );
   });
 });

@@ -35,6 +35,7 @@ Every ticket sits under a milestone. Milestones are epic tickets in project `AI`
 
 ## Blocked on Andy
 
+- After PR #228 (AI-144: one file per risk) merges: add the "Project context in prompts" row to `threat-model.md` "Area detail" (held in PR #238, AI-112).
 - Firestore export before the next schema-changing deploy (runbook `ticket-core.md`); the bucket exists.
 - For AI-77: Email notifications: a Resend account, a verified domain, one secret, then `terraform apply` (runbook `email-notifications.md`).
 - M4 questions, each in its ticket body: AI-126: M4.13: Hallmark trial (how to run it), AI-128: M4.15: Pluggable design skills (build now or move to Later), AI-129: M4.23: First overnight run trial (which epic and budget).
