@@ -71,11 +71,11 @@ export function configChangeLogContract(name: string, make: () => Promise<Config
     it("GivenAnAppliedChange_WhenMarkedReverted_ThenRevertedWithWhoAndWhen", async () => {
       const store = await make();
       const c = await store.append(change());
-      const reverted = await store.markReverted(c.id, "user:uid-1", at(3));
+      const reverted = await store.markReverted(c.id, "andy", at(3));
       expect(reverted).toEqual({
         ...c,
         status: "reverted",
-        decidedBy: "user:uid-1",
+        decidedBy: "andy",
         decidedAt: at(3),
       });
       expect(await store.get(c.id)).toEqual(reverted);
@@ -84,12 +84,12 @@ export function configChangeLogContract(name: string, make: () => Promise<Config
     it("GivenARevertedOrUnknownChange_WhenMarkedReverted_ThenConflictOrNotFound", async () => {
       const store = await make();
       const c = await store.append(change());
-      await store.markReverted(c.id, "user:uid-1", at(3));
-      await expect(store.markReverted(c.id, "user:uid-1", at(4))).rejects.toMatchObject({
+      await store.markReverted(c.id, "andy", at(3));
+      await expect(store.markReverted(c.id, "andy", at(4))).rejects.toMatchObject({
         name: "WorkTrackerError",
         code: "conflict",
       });
-      await expect(store.markReverted("missing", "user:uid-1", at(4))).rejects.toMatchObject({
+      await expect(store.markReverted("missing", "andy", at(4))).rejects.toMatchObject({
         name: "WorkTrackerError",
         code: "not_found",
       });
