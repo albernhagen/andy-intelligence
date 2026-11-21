@@ -49,6 +49,7 @@ export * from "./notify-email";
 export * from "./project-plan";
 export * from "./push";
 export * from "./question-format";
+export * from "./routing";
 export * from "./runner";
 export * from "./scores";
 export * from "./sync";
