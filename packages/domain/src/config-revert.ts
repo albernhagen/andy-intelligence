@@ -58,6 +58,13 @@ export class ConfigRevert {
     const project = await this.tracker.getProject(projectId);
     if (!project) throw notFound("project", projectId);
     const change = await this.changes.get(changeId);
+    // A routing change (AI-239) shows in its project's log but isn't settings: refuse, don't
+    // replay its diff as settings. Reverting routing is AI-275.
+    if (change?.entity === "routing" && change.projectId === projectId) {
+      throw new DomainError("not_revertible", `config change ${change.id} is a routing change`, [
+        "routing changes can't be reverted yet; save the routing again instead",
+      ]);
+    }
     if (!change || change.entity !== "project" || change.entityId !== projectId) {
       throw notFound("config change", changeId);
     }
