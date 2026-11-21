@@ -25,6 +25,7 @@ import type { ActionsTokenVerifier } from "./github/token";
 import type { ClientMetadataResolver } from "./mcp";
 import * as publicRoutes from "./public-routes";
 import { createServices, type RouteModule } from "./services";
+import type { SpendTotalsReader } from "./spend";
 import type { InvokerTokenVerifier } from "./watchdog";
 
 /** Request body cap for /api/* (ADR-0028: everything that can grow gets a cap). */
@@ -63,6 +64,8 @@ export interface AppDeps {
   nightLaunches?: NightLaunchStore;
   /** Deployment records (AI-161); without it the DORA panel reads empty (AI-200). */
   deployments?: DeploymentStore;
+  /** Spend totals for the caps settings (AI-249); without it spend reads unknown, never zero. */
+  spendLedger?: SpendTotalsReader;
   /**
    * Per-project change counters (AI-222): with them, every tracker and run write bumps its
    * project, and the board and ticket list serve unchanged polls from a cache. Without, no cache.

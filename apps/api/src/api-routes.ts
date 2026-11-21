@@ -22,5 +22,6 @@ export { apiRoutes as quota } from "./quota";
 export { apiRoutes as runners } from "./runners";
 export { apiRoutes as runs } from "./runs";
 export { apiRoutes as setup } from "./setup";
+export { apiRoutes as spend } from "./spend";
 export { apiRoutes as tickets } from "./tickets";
 export { apiRoutes as work } from "./work";
