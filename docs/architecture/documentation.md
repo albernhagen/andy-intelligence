@@ -20,7 +20,7 @@ Docs are part of the change, not a follow-up. Every slice PR updates the docs it
 | `docs/architecture/adr/` | One file per ADR; frontmatter `title` and `status` feed the index `pnpm adr` prints (ADR-0046, ADR-0104) | With every new ADR or status change (a test checks) |
 | `docs/build-log.md` | Slice → ticket map, decisions pending, blockers (≤ 1 page, ADR-0046); slice status is in tickets in project `AI` (ADR-0047 phase 1) | When a decision or blocker changes. What happened goes in a new file per entry, `docs/build-log/YYYY-MM-DD-<slug>.md` (never append to a shared file). |
 | `docs/runbooks/*.md` | Steps Andy runs by hand (setup, secrets, apply, release) | Any manual step is added, changed, or removed |
-| `docs/security/threat-model.md` | Assets, mitigations, risk register (`R<n>`), index of area files | A risk changes; after each system security review |
+| `docs/security/threat-model.md`, `risks/<ID>.md` | Assets, mitigations, area index; one file per risk (`pnpm risks`) | A risk changes; after each system security review |
 | `docs/security/<area>.md` | Trust boundaries, entry points and credentials for one area (`entry-points-and-credentials`, `agents-and-executors`, `ui-and-mcp`, `infrastructure`) | A trust boundary, entry point, credential, or IAM grant in that area is added or changed (never by the system review) |
 | `docs/BUILD-PROMPT.md` | How a building agent behaves | Operating rules change |
 | `AGENTS.md` (`CLAUDE.md` → symlink) | Short, always-loaded rules for agents working in the repo; nested `AGENTS.md` in `infra/`, `.github/`, `packages/contracts/` load only when working there (ADR-0046) | Rules or doc map change |

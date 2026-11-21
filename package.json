@@ -12,6 +12,7 @@
     "typecheck": "pnpm -r --if-present typecheck",
     "test": "vitest run",
     "context:check": "node scripts/context-budget.mjs",
+    "risks": "node scripts/risks.mjs",
     "adr": "node scripts/adr-index.mjs",
     "features": "node scripts/features.mjs",
     "reference": "pnpm --filter @andy/api -s reference",
