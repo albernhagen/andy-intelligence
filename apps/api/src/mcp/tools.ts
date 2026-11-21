@@ -17,7 +17,6 @@ import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import type { NightDeps } from "../night";
 import {
-  ALLOW_SIGNED_IN,
   CROSS_PROJECT_TOOLS,
   projectsOfInput,
   refusedTarget,
@@ -59,8 +58,8 @@ export interface ToolDeps {
   email: string;
   /** The signed-in user as an actor, `user:<uid>` (AI-19): every write is recorded as this. */
   actor: EventActor;
-  /** Who may read which project (AI-252: M8.3); absent: every signed-in caller reads every one. */
-  projectAccess?: ProjectAccess;
+  /** Who may read which project (AI-252: M8.3); the app's one rule, no default. */
+  projectAccess: ProjectAccess;
 }
 
 /** The app's shared services the tools use: `ToolDeps` without the caller. */
@@ -84,7 +83,7 @@ export const summary = (t: Ticket) => ({
 
 export function registerTools(server: McpServer, deps: ToolDeps): void {
   const groups: Record<string, ToolGroup> = toolGroups;
-  const checked = withProjectAccess(server, deps.projectAccess ?? ALLOW_SIGNED_IN, deps.actor);
+  const checked = withProjectAccess(server, deps.projectAccess, deps.actor);
   for (const register of Object.values(groups)) register(checked, deps, run);
 }
 

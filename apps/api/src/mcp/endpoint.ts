@@ -22,7 +22,7 @@ export interface McpEndpointDeps {
   /** The app's shared services: every tool call uses these (AI-145). */
   services: ToolServices;
   /** The app's project-access check (AI-252: M8.3), the same one `/api` uses. */
-  projectAccess?: ProjectAccess;
+  projectAccess: ProjectAccess;
 }
 
 /**

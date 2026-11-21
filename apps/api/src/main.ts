@@ -23,6 +23,7 @@ import { parseAllowList } from "./auth";
 import { firebaseVerifier } from "./firebase";
 import { ClientMetadataResolver } from "./mcp";
 import { ResendNotifier, emailConfigFromEnv } from "./notifier-email";
+import { ownerOnlyAccess } from "./project-access";
 
 function requireEnv(name: string): string {
   const value = process.env[name];
@@ -74,6 +75,7 @@ async function main() {
       : undefined;
 
   const app = createApp({
+    projectAccess: ownerOnlyAccess(),
     email,
     verifier: firebaseVerifier(projectId),
     allowedEmails,

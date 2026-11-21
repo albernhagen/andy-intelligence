@@ -69,8 +69,11 @@ export interface AppDeps {
    * project, and the board and ticket list serve unchanged polls from a cache. Without, no cache.
    */
   projectVersions?: ProjectVersions;
-  /** Who may read which project (AI-252: M8.3); absent: every signed-in caller reads every one. */
-  projectAccess?: ProjectAccess;
+  /**
+   * Who may read which project (AI-252: M8.3), for `/api` and MCP alike. Required, with no
+   * default, so a wiring omission can't turn the check off: `main.ts` passes `ownerOnlyAccess()`.
+   */
+  projectAccess: ProjectAccess;
   /**
    * The only host served (ADR-0044), e.g. `ai.andybernhagen.com`. Requests for any other host
    * (the default run.app URLs) get 404, except /health for monitoring. Unset: every host (local dev).
@@ -171,6 +174,8 @@ const DOMAIN_STATUS = {
 } as const;
 
 export function createApp(input: AppDeps) {
+  // The type requires it; this stops a caller that slips past the type (fail closed).
+  if (!input.projectAccess) throw new Error("createApp needs a projectAccess rule");
   const services = createServices(input);
   const deps = services.deps;
   const app = new OpenAPIHono<AuthEnv>({

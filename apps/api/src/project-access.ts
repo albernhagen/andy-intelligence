@@ -14,8 +14,13 @@ export interface ProjectAccess {
   canRead(actor: EventActor, projectId: string): Promise<boolean>;
 }
 
-/** Today's rule: one owner, so every signed-in (allow-listed) caller reads every project. */
-export const ALLOW_SIGNED_IN: ProjectAccess = { canRead: () => Promise.resolve(true) };
+/**
+ * Today's rule, passed explicitly by `main.ts` and the tests (there is no default): one owner, so
+ * every caller past the allow-list reads every project. M8.5 replaces it with membership lookups.
+ */
+export function ownerOnlyAccess(): ProjectAccess {
+  return { canRead: () => Promise.resolve(true) };
+}
 
 /**
  * `/api` routes that name no project in their path, each with how M8.7 (cross-project lists per
@@ -114,9 +119,7 @@ export function projectsOfInput(input: unknown): ProjectTarget[] {
  * no project in its path passes only when listed in `CROSS_PROJECT_ROUTES`; any other is refused
  * with 404 (fail closed). A path no route matches falls through to the router's 404.
  */
-export function requireProjectAccess(
-  access: ProjectAccess = ALLOW_SIGNED_IN,
-): MiddlewareHandler<AuthEnv> {
+export function requireProjectAccess(access: ProjectAccess): MiddlewareHandler<AuthEnv> {
   return async (c, next) => {
     const route = matchedRoute(c.req.method, matchedRoutes(c));
     const actor = actorOf(c.get("identity"));

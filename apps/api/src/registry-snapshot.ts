@@ -6,6 +6,7 @@ import * as domain from "@andy/domain";
 import * as store from "@andy/store";
 import { createApp, type AppDeps } from "./app";
 import { ClientMetadataResolver } from "./mcp";
+import { ownerOnlyAccess } from "./project-access";
 import { mcpToolNames } from "./mcp/test-client";
 
 const PUBLIC_URL = "http://localhost";
@@ -23,6 +24,7 @@ export function fullAppDeps(
   overrides: Partial<AppDeps> = {},
 ): AppDeps {
   return {
+    projectAccess: ownerOnlyAccess(),
     verifier: { verify: () => Promise.reject(new Error("unused")) },
     allowedEmails: new Set(["andy@example.com"]),
     version: "snapshot",

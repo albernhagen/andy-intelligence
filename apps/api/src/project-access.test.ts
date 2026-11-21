@@ -4,14 +4,14 @@ import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { z } from "zod";
-import type { AppDeps } from "./app";
+import { createApp, type AppDeps } from "./app";
 import type { AuthEnv, TokenVerifier } from "./auth";
 import * as toolGroups from "./mcp/tool-groups";
 import { mcpCaller } from "./mcp/test-client";
 import { hashToken, newToken } from "./mcp/tokens";
 import { registerTools, run, withProjectAccess, type ToolDeps, type ToolGroup } from "./mcp/tools";
 import {
-  ALLOW_SIGNED_IN,
+  ownerOnlyAccess,
   projectOfPath,
   projectsOfInput,
   requireProjectAccess,
@@ -92,6 +92,17 @@ function call(
 
 afterEach(() => vi.restoreAllMocks());
 
+describe("createApp's project-access rule (AI-252)", () => {
+  it("GivenNoRule_WhenTheAppIsCreated_ThenItDoesNotTypecheckAndThrowsAtStartUp", () => {
+    const copy: Partial<AppDeps> = fullAppDeps();
+    delete copy.projectAccess;
+    // Every other field is there, so the only type error below is the missing rule.
+    const withoutRule = copy as Omit<AppDeps, "projectAccess">;
+    // @ts-expect-error -- projectAccess is required: there is no default rule (fail closed).
+    expect(() => createApp(withoutRule)).toThrow("createApp needs a projectAccess rule");
+  });
+});
+
 describe("projectOfPath (AI-252)", () => {
   it("GivenProjectAndTicketPaths_WhenRead_ThenTheirProjectAndUnknownBodyAreNamed", () => {
     expect(projectOfPath("/api/projects/ai")).toEqual({
@@ -168,7 +179,7 @@ describe("requireProjectAccess (AI-252)", () => {
 
   it("GivenARouteWithNoProjectInItsPathThatIsNotListed_WhenCalled_ThenRefusedWithoutItsHandler", async () => {
     const error = vi.spyOn(console, "log").mockImplementation(() => undefined);
-    const { app, handler } = miniApp(ALLOW_SIGNED_IN);
+    const { app, handler } = miniApp(ownerOnlyAccess());
     const res = await app.request("http://localhost/api/unlisted");
     expect(res.status).toBe(404);
     expect(await res.json()).toEqual({ error: "not found" });
@@ -183,7 +194,7 @@ describe("requireProjectAccess (AI-252)", () => {
   });
 
   it("GivenTodaysAllowAll_WhenAProjectRouteIsCalled_ThenTheHandlersResponseIsUnchanged", async () => {
-    const { app, handler } = miniApp(ALLOW_SIGNED_IN);
+    const { app, handler } = miniApp(ownerOnlyAccess());
     const res = await app.request("http://localhost/api/projects/ai/board");
     expect(res.status).toBe(201);
     expect(await res.text()).toBe("handled");
@@ -399,7 +410,7 @@ describe("MCP tools behind the project-access check (AI-252)", () => {
   it("GivenAToolNotListedAsCrossProject_WhenCalledWithoutAProject_ThenRefusedWithoutItsHandler", async () => {
     vi.spyOn(console, "error").mockImplementation(() => undefined);
     const { server, tools } = recordingServer();
-    const checked = withProjectAccess(server, ALLOW_SIGNED_IN, ANDY);
+    const checked = withProjectAccess(server, ownerOnlyAccess(), ANDY);
     const handler = vi.fn(() => run(() => Promise.resolve({ ran: true })));
     checked.registerTool("new_tool", {}, handler);
     checked.registerTool(
@@ -421,7 +432,7 @@ describe("MCP tools behind the project-access check (AI-252)", () => {
   });
 
   it("GivenTodaysAllowAll_WhenAToolNamingAProjectIsCalled_ThenItsHandlerRuns", async () => {
-    const { tools } = await toolsWith(ALLOW_SIGNED_IN);
+    const { tools } = await toolsWith(ownerOnlyAccess());
     const result = (await tools
       .get("get_project_settings")!
       .cb({ project: "AI" }, {})) as CallToolResult;
@@ -460,7 +471,11 @@ describe("MCP tools behind the project-access check (AI-252)", () => {
     for (const [group, register] of Object.entries(groups)) {
       const { server, tools } = recordingServer();
       const deps = createServices(fullAppDeps());
-      register(server, { ...deps, email: "", actor: ANDY } as ToolDeps, run);
+      register(
+        server,
+        { ...deps, email: "", actor: ANDY, projectAccess: ownerOnlyAccess() } as ToolDeps,
+        run,
+      );
       const [name] = [...tools.keys()];
       const body = JSON.stringify({
         jsonrpc: "2.0",

@@ -13,6 +13,7 @@ import { ClientMetadataResolver } from "./client-metadata";
 import { LOOKUPS_PER_MINUTE } from "./index";
 import { REFRESH_GRACE_S } from "./oauth";
 import { hashToken, newToken } from "./tokens";
+import { ownerOnlyAccess } from "../project-access";
 
 const PUBLIC_URL = "https://control-plane.example.run.app";
 const RESOURCE = `${PUBLIC_URL}/mcp`;
@@ -45,6 +46,7 @@ function setup(allowList = "andy@example.com") {
   };
   const allowedEmails = parseAllowList(allowList);
   const app = createApp({
+    projectAccess: ownerOnlyAccess(),
     verifier,
     allowedEmails,
     version: "test",
@@ -539,6 +541,7 @@ describe("MCP OAuth endpoints", () => {
 describe("MCP off", () => {
   it("GivenNoPublicUrl_WhenCallingMcpRoutes_ThenTheyDoNotExist", async () => {
     const app = createApp({
+      projectAccess: ownerOnlyAccess(),
       verifier,
       allowedEmails: parseAllowList("andy@example.com"),
       version: "test",

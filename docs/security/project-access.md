@@ -21,10 +21,9 @@ One check decides whether a caller may read a project, for API routes and MCP to
 
 ## Today
 
-`ALLOW_SIGNED_IN`: every allow-listed caller is the owner and reads every project, so nothing changes. The app passes one `projectAccess` to both the `/api` middleware and the MCP endpoint; M8.5 (Members sign in) sets it to membership lookups.
+`ownerOnlyAccess()`: every allow-listed caller is the owner and reads every project, so nothing changes. `projectAccess` is a required `createApp` argument with no default: `main.ts` and the tests pass the rule explicitly, and an app without one doesn't typecheck and throws at start-up. The app hands the same rule to the `/api` middleware and the MCP endpoint; M8.5 (Members sign in) swaps it for membership lookups.
 
 ## What it doesn't cover yet
 
 - **Cross-project routes and tools** (lists, dashboard, inbox, question answers, config changes by id, owner settings): allowed by the lists above, each with how M8.7 (Cross-project lists per member) filters it.
-- **The access rule itself:** `projectAccess` is optional and defaults to `ALLOW_SIGNED_IN`, today's real rule. M8.5 makes it required when it adds membership lookups.
 - **Writes:** roles decide them in the permission function (M8.4, M8.6), not here.

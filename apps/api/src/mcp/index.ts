@@ -16,7 +16,7 @@ export type { McpAuthDeps } from "./oauth";
 /** Registers the MCP OAuth server and the /mcp endpoint (ADR-0039: MCP OAuth facade). */
 export function registerMcp(
   app: Hono<AuthEnv>,
-  deps: McpAuthDeps & { version: string; services: ToolServices; projectAccess?: ProjectAccess },
+  deps: McpAuthDeps & { version: string; services: ToolServices; projectAccess: ProjectAccess },
 ) {
   const lookups = new FixedWindowLimiter(LOOKUPS_PER_MINUTE, 60 * 1000);
   registerOAuthRoutes(app, { ...deps, lookups });
