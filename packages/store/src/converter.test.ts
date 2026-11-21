@@ -27,6 +27,7 @@ const ticket: Ticket = {
   sentBackReason: null,
   refineAssumptions: [],
   outcome: null,
+  milestoneId: null,
   risk: null,
   riskReason: null,
   confidence: null,
