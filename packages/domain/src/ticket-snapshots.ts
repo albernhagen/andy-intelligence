@@ -1,4 +1,10 @@
-import { compareRanks, type Ticket, type TicketFilter, type WorkTracker } from "@andy/contracts";
+import {
+  compareRanks,
+  type ProjectVersions,
+  type Ticket,
+  type TicketFilter,
+  type WorkTracker,
+} from "@andy/contracts";
 import { PROJECT_CACHE_MAX_AGE_MS } from "./project-versions";
 
 /**
@@ -92,4 +98,38 @@ export function matchesTicketFilter(ticket: Ticket, filter: TicketFilter): boole
     (filter.archived === undefined || ticket.archived === filter.archived) &&
     (!filter.upNext || (ticket.stage === "backlog" && ticket.upNextRank != null))
   );
+}
+
+/**
+ * A project's tickets for the readers that need all of them (AI-318: dashboard, digest, epic
+ * status, What's new, milestone map): with versions and snapshots, one version read plus the
+ * tickets changed since the last call; without them, or when the version read fails, a full read.
+ */
+export class ProjectTickets {
+  constructor(
+    private readonly tracker: Pick<WorkTracker, "listTickets">,
+    private readonly versions: Pick<ProjectVersions, "get"> | null = null,
+    private readonly snapshots: TicketSnapshots | null = null,
+  ) {}
+
+  /** Every ticket of the project (archived too), sorted by rank, as `listTickets` returns them. */
+  async list(projectId: string): Promise<Ticket[]> {
+    if (!this.versions || !this.snapshots) return this.tracker.listTickets(projectId);
+    let version: number;
+    try {
+      version = await this.versions.get(projectId);
+    } catch (err) {
+      console.error(
+        JSON.stringify({
+          severity: "ERROR",
+          message: "project version read failed; reading every ticket",
+          component: "project-tickets",
+          projectId,
+          error: String(err),
+        }),
+      );
+      return this.tracker.listTickets(projectId);
+    }
+    return this.snapshots.tickets(projectId, version);
+  }
 }
