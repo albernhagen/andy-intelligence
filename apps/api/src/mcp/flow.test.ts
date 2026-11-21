@@ -178,16 +178,19 @@ describe("MCP OAuth flow (MCP SDK client)", () => {
       "comment_ticket",
       "create_project",
       "create_ticket",
+      "dashboard",
       "digest",
       "edit_ticket",
       "get_project_settings",
       "get_quota",
+      "get_run",
       "get_spend",
       "ideate",
       "list_in_flight",
       "list_needs_me",
       "list_projects",
       "list_ready",
+      "list_runs",
       "list_spend_cap_changes",
       "list_work",
       "milestone_map",
@@ -221,6 +224,7 @@ describe("MCP OAuth flow (MCP SDK client)", () => {
       "submit_brief",
       "submit_project_plan",
       "test_email",
+      "ticket_history",
     ]);
   });
 
