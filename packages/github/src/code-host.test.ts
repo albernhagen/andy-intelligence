@@ -344,9 +344,11 @@ describe("GitHubCodeHost", () => {
     });
 
     it("GivenAMerge_WhenCalled_ThenItSquashesPinnedToTheHeadSha", async () => {
-      const put = vi.fn((_init?: RequestInit) => json(200, { merged: true }));
+      const put = vi.fn((_init?: RequestInit) => json(200, { merged: true, sha: SHA }));
       const fetch = fakeGitHub({ ...installed, [`PUT ${R}/pulls/5/merge`]: put });
-      await host(fetch).mergePullRequest("albernhagen/andy-intelligence", 5, "abc");
+      expect(await host(fetch).mergePullRequest("albernhagen/andy-intelligence", 5, "abc")).toBe(
+        SHA,
+      );
       expect(JSON.parse(String(put.mock.calls[0]![0]!.body))).toMatchObject({
         merge_method: "squash",
         sha: "abc",
@@ -445,6 +447,60 @@ describe("GitHubCodeHost", () => {
         expect(fetch).not.toHaveBeenCalled();
       },
     );
+
+    it("GivenAnEpicBranch_WhenTheMorningPrOpens_ThenItTargetsTheBaseAndReturnsThePr", async () => {
+      const post = vi.fn((_init?: RequestInit) =>
+        json(201, { number: 900, html_url: "https://github.com/a/b/pull/900" }),
+      );
+      const fetch = fakeGitHub({ ...installed, [`POST ${R}/pulls`]: post });
+      const pr = { head: "epic/AI-84", base: "main", title: "AI-84: X (overnight)", body: "b" };
+      expect(await host(fetch).openEpicPullRequest("albernhagen/andy-intelligence", pr)).toEqual({
+        number: 900,
+        url: "https://github.com/a/b/pull/900",
+      });
+      expect(JSON.parse(String(post.mock.calls[0]![0]!.body))).toEqual(pr);
+    });
+
+    it("GivenAnOpenPrForTheHeadAlready_WhenTheMorningPrOpens_ThenExists", async () => {
+      const fetch = fakeGitHub({
+        ...installed,
+        [`POST ${R}/pulls`]: () =>
+          json(422, { message: "A pull request already exists for albernhagen:epic/AI-84." }),
+      });
+      const pr = { head: "epic/AI-84", base: "main", title: "t", body: "b" };
+      expect(await host(fetch).openEpicPullRequest("albernhagen/andy-intelligence", pr)).toBe(
+        "exists",
+      );
+    });
+
+    it.each(["main", "agent/AI-1/run", "epic/AI-84/x"])(
+      "GivenTheHead%s_WhenAMorningPrOrDeleteIsAsked_ThenRefusedWithoutCallingGitHub",
+      async (branch) => {
+        const fetch = fakeGitHub(installed);
+        const pr = { head: branch, base: "main", title: "t", body: "b" };
+        await expect(
+          host(fetch).openEpicPullRequest("albernhagen/andy-intelligence", pr),
+        ).rejects.toThrow(/only epic/);
+        await expect(
+          host(fetch).deleteEpicBranch("albernhagen/andy-intelligence", branch),
+        ).rejects.toThrow(/only epic/);
+        expect(fetch).not.toHaveBeenCalled();
+      },
+    );
+
+    it("GivenAnEpicBranch_WhenDeleted_ThenItsRefGoesAndAMissingOneIsFine", async () => {
+      const del = vi.fn(() => new Response(null, { status: 204 }));
+      const fetch = fakeGitHub({ ...installed, [`DELETE ${R}/git/refs/heads/epic/AI-84`]: del });
+      await host(fetch).deleteEpicBranch("albernhagen/andy-intelligence", "epic/AI-84");
+      expect(del).toHaveBeenCalledTimes(1);
+      const gone = fakeGitHub({
+        ...installed,
+        [`DELETE ${R}/git/refs/heads/epic/AI-84`]: () => json(404, { message: "Not Found" }),
+      });
+      await expect(
+        host(gone).deleteEpicBranch("albernhagen/andy-intelligence", "epic/AI-84"),
+      ).resolves.toBeUndefined();
+    });
 
     it("GivenAnUnknownRef_WhenAskedIfTheHeadContainsMain_ThenNull", async () => {
       const fetch = fakeGitHub({

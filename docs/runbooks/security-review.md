@@ -74,8 +74,8 @@ gh run watch --repo albernhagen/andy-intelligence
 - If the threat model changed, a PR "Security: system review YYYY-MM-DD" opens. The `publish` job opens it with a repo token from the control plane (ADR-0043), so its checks run on their own; review and merge. Needs GitHub connected and the App installed here: `docs/runbooks/github-app.md`.
 - To check only the token path (no agent, no quota, no PR): `gh workflow run system-security-review.yml --repo albernhagen/andy-intelligence -f token_check=true` (`docs/runbooks/github-app.md` §5).
 - No changes → a notice, no PR.
-- Milestone gate: no `open` high/critical risk in `docs/security/threat-model.md`, unless you set it to `accepted` with a reason.
-- The review edits only `docs/security/threat-model.md`; the area files beside it are updated by the PRs that change those areas.
+- Milestone gate: no `open` high/critical risk in `docs/security/risks/` (`pnpm risks`), unless you set it to `accepted` with a reason.
+- The review edits only `docs/security/threat-model.md` and the risk files in `docs/security/risks/` (it may add one, never delete one); the area files beside it are updated by the PRs that change those areas.
 
 The run also calls `terraform-plan.yml` for a drift summary (addresses only, no values) with the read-only `tf-plan` identity.
 

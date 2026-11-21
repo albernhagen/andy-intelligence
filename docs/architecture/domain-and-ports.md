@@ -46,6 +46,7 @@ Contracts live in `packages/contracts` (Zod schemas, TypeScript interfaces; Open
 | `RunnerStore` | Runner, per-run token (hashes only; ADR-0089) | **Firestore** | — |
 | `ConfigChangeStore`, `ReviewFindingSource`, `ReleaseNoteStore` | ConfigChange, ReviewFinding (ADR-0097), ReleaseNote | **Firestore** | — |
 | `NightLaunchStore` | NightLaunch; one active per project, checked atomically | **Firestore** | — |
+| `ProjectVersions` | A change counter per project, bumped by every tracker and run write; unchanged board and ticket-list polls are served from a per-instance cache (AI-222) | **Firestore** | — |
 | `Telemetry` | Trace, Span, CostEvent | OTel → Cloud Trace / Cloud Logging | BigQuery sink |
 
 **Rule:** freeze the `Executor` contract only after **two real adapters** (Claude Code + Jules) work. Vendor terms map to domain terms (a Jules *session* is a `Run`; its *activities* are run events).

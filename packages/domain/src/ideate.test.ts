@@ -12,6 +12,7 @@ const epicResult = {
   outcome: "epic" as const,
   epic: {
     title: "Andy sees his week",
+    outcome: "Andy sees his weekly running totals at a glance.",
     body: "Runs pile up with no overview.",
     acceptanceCriteria: ["WHEN Andy opens the week THE SYSTEM SHALL show totals"],
     slices: [{ title: "Totals", summary: "Sum the week." }],
@@ -84,6 +85,7 @@ describe("IdeateService", () => {
       upNextRank: null,
     });
     expect(res.epic.acceptanceCriteria).toEqual(epicResult.epic.acceptanceCriteria);
+    expect(res.epic.outcome).toBe(epicResult.epic.outcome);
     expect(res.epic.body).toBe(ideaEpicBody(epicResult.epic, "specs/weekly-summary.md"));
     expect(host.proposals[0]).toMatchObject({
       fullName: REPO,

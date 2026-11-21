@@ -5,12 +5,14 @@ import {
   type CodeEventLog,
   type CodeHost,
   type CodeHostEvent,
+  type NightLaunchStore,
   type Project,
   type ReleaseNoteStore,
   type RunStore,
   type WorkTracker,
 } from "@andy/contracts";
 import {
+  EpicMerges,
   PullRequestGate,
   PullRequestTickets,
   ReleaseNoteRecorder,
@@ -62,6 +64,8 @@ export interface WebhookDeps {
    * Resolves false when the tick failed (it logs why). Must not throw.
    */
   onDefaultBranchMoved?: (projectId: string) => Promise<boolean>;
+  /** Night launches: a story PR into its launch's epic branch merges there (AI-124). */
+  nightLaunches?: NightLaunchStore;
   /** Release notes (AI-159): a PR merged into the default branch stores one. Off when unset. */
   releaseNotes?: ReleaseNoteStore;
   now?: () => Date;
@@ -99,7 +103,16 @@ export function registerGitHubWebhook(app: Hono<AuthEnv>, deps: WebhookDeps): vo
   const limiter = new FixedWindowLimiter(WEBHOOK_RATE_LIMIT, 60_000, () => now().getTime());
   const repos = new RepoIndex(deps.tracker, () => now().getTime());
   const prTickets = new PullRequestTickets(deps.tickets, deps.tracker);
-  const gate = new PullRequestGate(deps.codeHost, deps.tracker, deps.runs, deps.tickets, now);
+  const epicMerges = deps.nightLaunches ? new EpicMerges(deps.nightLaunches, deps.runs) : null;
+  const gate = new PullRequestGate(
+    deps.codeHost,
+    deps.tracker,
+    deps.runs,
+    deps.tickets,
+    now,
+    null,
+    epicMerges,
+  );
   const notes = deps.releaseNotes
     ? new ReleaseNoteRecorder(deps.codeHost, deps.tracker, deps.releaseNotes, now)
     : null;
@@ -269,6 +282,7 @@ export const publicRoutes: RouteModule = (app, s) => {
     codeHost: new ConnectedCodeHost(connection),
     runs: s.deps.runs,
     onDefaultBranchMoved: (projectId) => s.syncer.defaultBranchMoved(projectId),
+    nightLaunches: s.deps.nightLaunches,
     releaseNotes: s.deps.releaseNotes,
     now: s.now,
   });

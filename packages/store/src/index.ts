@@ -81,6 +81,8 @@ export const collections = {
   runTokens: { path: () => "runTokens" },
   /** Overnight launches (ADR-0049), server-only; validated by `FirestoreNightLaunchStore`. */
   nightLaunches: { path: () => "nightLaunches" },
+  /** Per-project change counters (AI-222), server-only; read by `FirestoreProjectVersions`. */
+  projectVersions: { path: () => "projectVersions" },
   /** Web Push (M7.7), server-only; subscriptions keyed by SHA-256 of the endpoint, the rest by uid. */
   pushSubscriptions: { path: () => "pushSubscriptions", schema: PushSubscription },
   pushSettings: { path: () => "pushSettings", schema: PushSettings },
@@ -144,6 +146,7 @@ export { FirestoreNightLaunchStore } from "./night-launch-store";
 export { CloudTasksNotifyFlushQueue, notifyFlushUrl } from "./notify-flush-queue";
 export { FirestoreNotifyLedger } from "./notify-ledger";
 export { FirestoreOAuthGrantStore, OAUTH_GRANT_TTL_FIELD } from "./oauth-grant-store";
+export { FirestoreProjectVersions } from "./project-versions";
 export {
   FirestorePushSubscriptionStore,
   PUSH_SUBSCRIPTION_READ_MAX,

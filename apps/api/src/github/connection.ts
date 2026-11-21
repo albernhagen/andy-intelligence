@@ -120,7 +120,7 @@ export class ConnectedCodeHost implements CodeHost {
   async mergePullRequest(fullName: string, number: number, expectedHeadSha: string) {
     const host = await this.connection.codeHost();
     if (!host) throw new Error("GitHub is not connected");
-    await host.mergePullRequest(fullName, number, expectedHeadSha);
+    return host.mergePullRequest(fullName, number, expectedHeadSha);
   }
 
   async headContains(fullName: string, head: string, base: string) {
@@ -139,5 +139,20 @@ export class ConnectedCodeHost implements CodeHost {
     const host = await this.connection.codeHost();
     if (!host) throw new Error("GitHub is not connected");
     return host.createBranch(fullName, branch, sha);
+  }
+
+  async openEpicPullRequest(
+    fullName: string,
+    pr: { head: string; base: string; title: string; body: string },
+  ) {
+    const host = await this.connection.codeHost();
+    if (!host) throw new Error("GitHub is not connected");
+    return host.openEpicPullRequest(fullName, pr);
+  }
+
+  async deleteEpicBranch(fullName: string, branch: string) {
+    const host = await this.connection.codeHost();
+    if (!host) throw new Error("GitHub is not connected");
+    await host.deleteEpicBranch(fullName, branch);
   }
 }

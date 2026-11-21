@@ -423,6 +423,11 @@ export const RefineOutput = z
     /** Written only where the ticket has none, like the proposals above. */
     body: capped(REFINE_LIMITS.body).nullable(),
     acceptanceCriteria: z.array(capped(REFINE_LIMITS.criterion)).max(REFINE_LIMITS.maxCriteria),
+    /**
+     * For an epic: what is true when it is done, one sentence (ADR-0108). Stored only when the epic
+     * has none. Defaults to null so a result without it still parses.
+     */
+    epicOutcome: EpicOutcome.nullable().default(null),
     outcome: RefineOutcome,
     /** One line for Andy: why it went back, or why it was split. */
     reason: capped(REFINE_LIMITS.reason).nullable(),

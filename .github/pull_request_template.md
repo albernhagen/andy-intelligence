@@ -31,5 +31,5 @@ Needs you: <!-- ≤ 25 words: a step only Andy can take -->
 - [ ] ADR added or status updated
 - [ ] Runbook — manual steps
 - [ ] `docs/build-log.md` — decisions, blockers; new entry file in `docs/build-log/`; ticket in project `AI` named in "Why"
-- [ ] `docs/security/threat-model.md` and its area file — trust boundary / IAM / credentials changed
+- [ ] `docs/security/` area file and risk file in `docs/security/risks/` — trust boundary / IAM / credentials changed
 - [ ] `AGENTS.md` / `docs/BUILD-PROMPT.md` — agent rules
