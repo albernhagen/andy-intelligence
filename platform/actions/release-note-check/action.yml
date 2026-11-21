@@ -1,0 +1,16 @@
+name: Baseline — release-note check
+description: >-
+  Fails a pull request into the default branch whose description lacks the release-note block
+  ("What changed:", "How it works:", optional "Needs you:") or breaks a word cap (AI-159,
+  ADR-0121). Dependabot PRs are skipped. Reads the PR from the event file, never from an
+  expression. Needs no checkout of the caller (the parser ships with this action's repo).
+
+runs:
+  using: composite
+  steps:
+    - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+      with:
+        node-version: 24
+    - name: Release note (ADR-0121)
+      shell: bash
+      run: node "$GITHUB_ACTION_PATH/../../../scripts/release-note-check.mjs"
