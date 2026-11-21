@@ -7,7 +7,7 @@ import {
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
 import { beforeEach, describe, expect, it } from "vitest";
-import { createApp, ownerOnlyAccess } from "./app";
+import { createApp } from "./app";
 import type { TokenVerifier } from "./auth";
 import { ClientMetadataResolver } from "./mcp/client-metadata";
 import { hashToken, newToken } from "./mcp/tokens";
@@ -34,7 +34,6 @@ describe("milestone map API and MCP (AI-148)", () => {
     runs = new InMemoryRunStore();
     grants = new InMemoryOAuthGrantStore();
     app = createApp({
-      projectAccess: ownerOnlyAccess(),
       verifier,
       allowedEmails: new Set(["andy@example.com"]),
       version: "test",

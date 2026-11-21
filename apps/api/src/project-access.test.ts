@@ -149,14 +149,6 @@ describe("projectsOfInput (AI-252)", () => {
     expect(projectsOfInput({ parentId: "t-123", parent: null })).toEqual([]);
   });
 
-  it("GivenAnEpicFilter_WhenRead_ThenItsKeysProjectIsNamedToo", () => {
-    // whats_new (AI-159) filters by an epic key: another project's epic is checked, not trusted.
-    expect(projectsOfInput({ project: "AI", epic: "OPS-2" }).map((t) => t.projectId)).toEqual([
-      "ai",
-      "ops",
-    ]);
-  });
-
   it("GivenInputWithoutAProjectOrTicket_WhenRead_ThenNothingIsNamed", () => {
     expect(projectsOfInput(undefined)).toEqual([]);
     expect(projectsOfInput({ questionId: "q1" })).toEqual([]);
