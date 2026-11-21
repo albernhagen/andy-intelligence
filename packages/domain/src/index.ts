@@ -23,6 +23,7 @@ export * from "./local-claims";
 export * from "./night-branch";
 export * from "./night-end";
 export * from "./night-launch";
+export * from "./night-merge";
 export * from "./night-unattended";
 export * from "./notify-email";
 export * from "./notify-push";
