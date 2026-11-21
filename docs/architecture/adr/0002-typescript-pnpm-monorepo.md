@@ -1,4 +1,5 @@
 ---
+title: TypeScript pnpm-workspaces monorepo
 status: accepted
 date: 2026-10-21
 ---

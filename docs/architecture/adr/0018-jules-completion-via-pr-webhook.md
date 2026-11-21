@@ -1,4 +1,5 @@
 ---
+title: Jules run completion via the PR webhook, deadline watchdog
 status: accepted
 date: 2026-10-22
 ---

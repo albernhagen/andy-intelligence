@@ -1,4 +1,5 @@
 ---
+title: "Refresh-token grace window: a used MCP refresh token works 60 s more"
 status: accepted
 date: 2026-11-20
 amends: 0039 (refresh-token rotation)

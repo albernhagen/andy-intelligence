@@ -1,6 +1,15 @@
-import { NightLaunch, nightLaunchIsActive, type NightLaunchStatus } from "../entities/night";
+import {
+  NightLaunch,
+  NightStoppedStory,
+  nightLaunchIsActive,
+  type NightLaunchStatus,
+} from "../entities/night";
 import { WorkTrackerError } from "../ports";
-import type { NightLaunchStore, NightLaunchTransition } from "../ports/night";
+import {
+  withStoppedStory,
+  type NightLaunchStore,
+  type NightLaunchTransition,
+} from "../ports/night";
 
 /**
  * In-memory NightLaunchStore. Every method reads and writes without an await in between, so
@@ -50,6 +59,14 @@ export class InMemoryNightLaunchStore implements NightLaunchStore {
     }
     const next = NightLaunch.parse({ ...current, ...change });
     if (nightLaunchIsActive(next)) this.refuseIfActive(next.projectId, next.id);
+    this.launches.set(launchId, next);
+    return structuredClone(next);
+  }
+
+  async stopStory(launchId: string, story: NightStoppedStory): Promise<NightLaunch> {
+    const current = this.launches.get(launchId);
+    if (!current) throw new WorkTrackerError("not_found", `night launch ${launchId} not found`);
+    const next = withStoppedStory(current, NightStoppedStory.parse(story));
     this.launches.set(launchId, next);
     return structuredClone(next);
   }

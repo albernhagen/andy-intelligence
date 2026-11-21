@@ -1,4 +1,5 @@
 ---
+title: Contract suites only for WorkTracker, Executor and QuotaSource
 status: rejected (superseded by 0023)
 date: 2026-10-21
 ---

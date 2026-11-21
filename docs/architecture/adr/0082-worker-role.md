@@ -1,4 +1,5 @@
 ---
+title: Single-user worker role
 status: accepted
 date: 2026-11-09
 amends: ADR-0058 (the "worker" role, single-user form)
