@@ -66,6 +66,8 @@ import {
   type PlanState,
 } from "./plans";
 import { checkDor } from "./dor";
+import { BRIEF_PATH } from "./brief";
+import { briefContext } from "./brief-context";
 import { RefineGate } from "./refine-gate";
 import { DomainError } from "./errors";
 import { requireCan } from "./permissions";
@@ -209,7 +211,10 @@ export class RunService {
      * waiting ticket can start (the refine dispatcher, ADR-0054). Its errors are logged only.
      */
     private readonly onRunEnded: ((projectId: string) => Promise<void>) | null = null,
-    /** Reads the repo's ADR index to reserve build runs' ADR numbers (ADR-0080); null: none. */
+    /**
+     * Reads the repo's ADR index to reserve build runs' ADR numbers (ADR-0080) and the project
+     * brief for the prompt (AI-112); null: neither.
+     */
     private readonly codeHost: Pick<CodeHost, "getRepo" | "readFile"> | null = null,
     /**
      * Whether a local runner that serves the project is present (ADR-0089); null: no runners,
@@ -1062,12 +1067,35 @@ export class RunService {
     approved: Run | null,
     reservedAdr: number | null,
   ): Promise<string> {
+    const brief = briefContext(await this.readBrief(ticket.projectId, repo), step);
     if (step === "build") {
-      return buildPrompt(ticket, repo, questions, approved?.plan ?? null, reservedAdr);
+      return [
+        buildPrompt(ticket, repo, questions, approved?.plan ?? null, reservedAdr),
+        ...brief,
+      ].join("\n");
     }
-    if (step === "refine") return refinePrompt(ticket, repo, questions);
+    if (step === "refine") return [refinePrompt(ticket, repo, questions), ...brief].join("\n");
     const runs = await this.runs.listForTicket(ticket.projectId, ticket.id);
-    return planPrompt(ticket, repo, questions, runs);
+    return [planPrompt(ticket, repo, questions, runs), ...brief].join("\n");
+  }
+
+  /**
+   * The project brief from the repo's default branch (AI-112, ADR-0053), read through the code
+   * host at dispatch, never by the agent. Missing, or unreadable: null, and the task starts.
+   */
+  private async readBrief(projectId: string, repo: string): Promise<string | null> {
+    if (!this.codeHost) return null;
+    try {
+      const info = await this.codeHost.getRepo(repo);
+      return info ? await this.codeHost.readFile(repo, BRIEF_PATH, info.defaultBranch) : null;
+    } catch (err) {
+      log("WARNING", "project brief not read; the agent task starts without it", {
+        projectId,
+        repo,
+        error: String(err),
+      });
+      return null;
+    }
   }
 
   /**
