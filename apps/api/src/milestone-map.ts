@@ -76,4 +76,4 @@ export function registerMilestoneMapRoutes(
 
 /** Listed in `api-routes.ts` (AI-145). */
 export const apiRoutes: RouteModule = (app, s) =>
-  registerMilestoneMapRoutes(app, new MilestoneMapReader(s.tracker));
+  registerMilestoneMapRoutes(app, new MilestoneMapReader(s.tracker, s.tickets));

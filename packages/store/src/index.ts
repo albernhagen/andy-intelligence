@@ -20,6 +20,7 @@ import {
   QuotaClear,
   QuotaReading,
   Question,
+  Milestone,
   Release,
   ReleaseNote,
   Run,
@@ -72,6 +73,10 @@ export const collections = {
   releaseNotes: {
     path: (projectId: string) => `projects/${projectId}/releaseNotes`,
     schema: ReleaseNote,
+  },
+  milestones: {
+    path: (projectId: string) => `projects/${projectId}/milestones`,
+    schema: Milestone,
   },
   oauthGrants: { path: () => "oauthGrants", schema: OAuthGrant },
   codeHostEvents: { path: () => "codeHostEvents", schema: CodeHostEvent },
