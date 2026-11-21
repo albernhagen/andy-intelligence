@@ -3,6 +3,7 @@ import {
   InMemoryConfigChangeStore,
   InMemoryNightLaunchStore,
   InMemoryRoutingConfigStore,
+  InMemorySpendLedger,
   InMemoryRunStore,
   InMemoryWorkTracker,
 } from "@andy/contracts";
@@ -196,6 +197,8 @@ export async function createFakeApp() {
     nightLaunches: new InMemoryNightLaunchStore(),
     // AI-243: Settings → Models reads the default routing.
     routing: new InMemoryRoutingConfigStore(),
+    // AI-249: empty, so the settings page's Spend caps panel shows $0.00 spent.
+    spendLedger: new InMemorySpendLedger(),
   });
 }
 
