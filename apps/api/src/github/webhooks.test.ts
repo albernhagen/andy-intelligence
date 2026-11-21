@@ -11,6 +11,7 @@ import { beforeEach, describe, expect, it } from "vitest";
 import { createApp } from "../app";
 import type { TokenVerifier } from "../auth";
 import { MAX_WEBHOOK_BYTES, REPO_INDEX_TTL_MS, WEBHOOK_PATH, WEBHOOK_RATE_LIMIT } from "./webhooks";
+import { ownerOnlyAccess } from "../project-access";
 
 const SECRET = "test-webhook-secret";
 const REPO = "albernhagen/andy-intelligence";
@@ -59,6 +60,7 @@ describe("GitHub webhook receiver", () => {
       connectedAt: "2026-11-03T00:00:00.000Z",
     });
     app = createApp({
+      projectAccess: ownerOnlyAccess(),
       verifier,
       allowedEmails: new Set(["andy@example.com"]),
       version: "test",
@@ -422,6 +424,7 @@ describe("GitHub webhook receiver", () => {
 
   it("GivenGitHubIsNotConnectedYet_WhenDelivered_Then503AndNothingIsStored", async () => {
     const notConnected = createApp({
+      projectAccess: ownerOnlyAccess(),
       verifier,
       allowedEmails: new Set(["andy@example.com"]),
       version: "test",
@@ -450,6 +453,7 @@ describe("GitHub webhook receiver", () => {
 
   it("GivenNoGitHubConfig_WhenDelivered_ThenTheRouteDoesNotExist", async () => {
     const off = createApp({
+      projectAccess: ownerOnlyAccess(),
       verifier,
       allowedEmails: new Set(["andy@example.com"]),
       version: "test",
