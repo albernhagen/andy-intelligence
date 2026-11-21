@@ -256,6 +256,12 @@ export const PARITY: readonly ParityEntry[] = [
       missing: "a web form: the route exists but the web never calls it (PR #240)",
     },
   },
+  {
+    action: "Milestones: list, set status, attach or detach an epic",
+    routes: [`GET ${P}/milestones`, `PATCH ${P}/milestones/:milestoneId`, `PUT ${T}/milestone`],
+    tools: ["list_milestones", "set_milestone_status", "set_epic_milestone"],
+    note: "PATCH also renames, rewords and reorders: web only today (see Create a milestone).",
+  },
   // ── One side on purpose ─────────────────────────────────────────────────────
   {
     action: "Register a runner",
@@ -274,6 +280,12 @@ export const PARITY: readonly ParityEntry[] = [
     routes: ["GET /api/github", "GET /api/github/manifest", "POST /api/github/connect"],
     tools: [],
     oneSide: "GitHub's manifest flow needs a browser.",
+  },
+  {
+    action: "Create a milestone",
+    routes: [`POST ${P}/milestones`],
+    tools: [],
+    oneSide: "ADR-0131 names three MCP milestone tools: list, set status, attach an epic.",
   },
   // ── Open gaps, each with its ticket ─────────────────────────────────────────
   {

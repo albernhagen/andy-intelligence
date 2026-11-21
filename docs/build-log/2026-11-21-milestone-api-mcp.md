@@ -1,0 +1,10 @@
+# 2026-11-21 — AI-304: M4.34: Milestone API and MCP tools
+
+ADR-0131: Milestones, after AI-302: M4.33 (the store). One domain service for the API and MCP.
+
+- **`MilestoneService`** (`packages/domain/src/milestone-service.ts`): list; create; edit name, outcome, order and status; attach or detach a top-level epic (by key or id). Writes need the new owner action `change_milestones`. Attaching refuses anything but a top-level epic (`milestoneTargetProblem`) and a milestone of another project (AI-302's review note).
+- **Change log:** every write is a config change, entity `milestone`, with the milestone (or the epic, for an attach) as `entityId` and the project as `projectId`. The project log now also lists milestone changes by `projectId`: one more equality query in the Firestore adapter, the same rule in the fake, a contract case. A revert goes through the existing revert route and `revert_settings_change`, handed to `MilestoneService.revert`, like routing (AI-275); a creation can't be reverted (park it instead), and a change overtaken by a later one is refused.
+- **Routes** (`apps/api/src/milestones.ts`): `GET`/`POST /api/projects/:projectId/milestones`, `PATCH …/milestones/:milestoneId`, `PUT …/tickets/:ticketId/milestone`. **MCP** (`tools-milestones.ts`): `list_milestones`, `set_milestone_status`, `set_epic_milestone`.
+- **Only through the service:** `milestoneId` joins `TicketFields` so the store can write it, and the ticket edit paths (REST `PATCH`, `TicketService.edit`, `edit_ticket`) leave it out.
+- **Parity:** entries in `apps/api/src/parity.ts`; create, rename and reorder are web only for now (ADR-0131 names three MCP tools), pending the coordinator's answer on adding two. Agent tasks have no MCP tools, so none gets these.
+- **Tests:** 16 domain, 7 API (REST and MCP: the same list, same refusals, revert from the change log, a ticket PATCH can't set a milestone), the config change contract case on the fake and the emulator.

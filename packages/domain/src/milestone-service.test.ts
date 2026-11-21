@@ -1,0 +1,195 @@
+import {
+  InMemoryConfigChangeStore,
+  InMemoryMilestoneStore,
+  InMemoryWorkTracker,
+} from "@andy/contracts";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+import { MILESTONE_ENTITY, MilestoneService } from "./milestone-service";
+
+/** AI-304: M4.34: the milestone service the API and MCP share (ADR-0131). */
+
+const NOW = new Date("2026-11-21T12:00:00.000Z");
+const OWNER = "user:uid-1" as const;
+const AGENT = "agent:run-1" as const;
+
+describe("MilestoneService", () => {
+  let tracker: InMemoryWorkTracker;
+  let changes: InMemoryConfigChangeStore;
+  let service: MilestoneService;
+  let ids: number;
+
+  beforeEach(async () => {
+    vi.spyOn(console, "log").mockImplementation(() => {});
+    tracker = new InMemoryWorkTracker(() => NOW);
+    changes = new InMemoryConfigChangeStore();
+    ids = 0;
+    service = new MilestoneService(
+      tracker,
+      new InMemoryMilestoneStore(),
+      changes,
+      () => NOW,
+      () => `id${++ids}`,
+    );
+    await tracker.createProject({ name: "Andy Intelligence", key: "AI" });
+    await tracker.createProject({ name: "Ops", key: "OPS" });
+  });
+
+  const epic = (title = "Roadmap", parentId: string | null = null) =>
+    tracker.createTicket("ai", { title, type: "epic", parentId }, "andy");
+  const logged = async () =>
+    (await changes.listForProject("ai")).filter((c) => c.entity === MILESTONE_ENTITY);
+
+  describe("create and list", () => {
+    it("GivenTheOwner_WhenCreatingTwo_ThenListedInOrderNotReviewedAndEachLogged", async () => {
+      const m1 = await service.create("ai", { name: "M4", outcome: "Epics on a roadmap" }, OWNER);
+      const m2 = await service.create("ai", { name: "M5", outcome: "Many projects" }, OWNER);
+      expect([m1.order, m2.order]).toEqual([0, 1]);
+      expect(m1.status).toBe("not_reviewed");
+      expect((await service.list("ai")).map((m) => m.name)).toEqual(["M4", "M5"]);
+      expect((await logged()).map((c) => Object.keys(c.diff))).toEqual([["created"], ["created"]]);
+    });
+
+    it("GivenANonOwner_WhenCreating_ThenForbiddenAndNothingStored", async () => {
+      await expect(service.create("ai", { name: "M4", outcome: "x" }, AGENT)).rejects.toMatchObject(
+        { code: "forbidden" },
+      );
+      expect(await service.list("ai")).toEqual([]);
+      expect(await logged()).toEqual([]);
+    });
+
+    it("GivenAnUnknownProject_WhenListed_ThenNotFound", async () => {
+      await expect(service.list("nope")).rejects.toMatchObject({ code: "not_found" });
+    });
+  });
+
+  describe("update", () => {
+    it("GivenAMilestone_WhenItsStatusIsSet_ThenSavedAndLoggedWithWhoAndBeforeAfter", async () => {
+      const m = await service.create("ai", { name: "M4", outcome: "x" }, OWNER);
+      const approved = await service.update("ai", m.id, { status: "approved" }, OWNER, "go");
+      expect(approved.status).toBe("approved");
+      const last = (await logged()).find((c) => "status" in c.diff)!;
+      expect(last).toMatchObject({
+        entityId: m.id,
+        projectId: "ai",
+        diff: { status: { from: "not_reviewed", to: "approved" } },
+        reason: "go",
+        status: "applied",
+      });
+      expect(last.actor).toBe("andy");
+    });
+
+    it("GivenNothingChanges_WhenUpdated_ThenNothingIsLogged", async () => {
+      const m = await service.create("ai", { name: "M4", outcome: "x" }, OWNER);
+      await service.update("ai", m.id, { name: "M4" }, OWNER);
+      expect((await logged()).length).toBe(1);
+    });
+
+    it("GivenANonOwnerOrAnUnknownMilestone_WhenUpdated_ThenRefused", async () => {
+      const m = await service.create("ai", { name: "M4", outcome: "x" }, OWNER);
+      await expect(service.update("ai", m.id, { status: "parked" }, AGENT)).rejects.toMatchObject({
+        code: "forbidden",
+      });
+      await expect(service.update("ai", "nope", { status: "parked" }, OWNER)).rejects.toMatchObject(
+        { code: "not_found" },
+      );
+      // Another project's milestone is not found here.
+      await expect(service.update("ops", m.id, { status: "parked" }, OWNER)).rejects.toMatchObject({
+        code: "not_found",
+      });
+    });
+  });
+
+  describe("attach an epic", () => {
+    it("GivenATopLevelEpic_WhenAttached_ThenItsMilestoneIsSetAndLogged", async () => {
+      const m = await service.create("ai", { name: "M4", outcome: "x" }, OWNER);
+      const e = await epic();
+      const updated = await service.setEpicMilestone("ai", e.key, m.id, OWNER);
+      expect(updated.milestoneId).toBe(m.id);
+      expect((await tracker.getTicket("ai", e.id))?.milestoneId).toBe(m.id);
+      expect((await logged()).at(-1)).toMatchObject({
+        entityId: e.id,
+        diff: { milestoneId: { from: null, to: m.id } },
+      });
+    });
+
+    it("GivenAFeatureOrAChildEpic_WhenAttached_ThenRefusedWithTheReason", async () => {
+      const m = await service.create("ai", { name: "M4", outcome: "x" }, OWNER);
+      const parent = await epic();
+      const child = await epic("Child", parent.id);
+      const feature = await tracker.createTicket("ai", { title: "Chips", type: "feature" }, "andy");
+      await expect(service.setEpicMilestone("ai", feature.key, m.id, OWNER)).rejects.toThrow(
+        /only a top-level epic/,
+      );
+      await expect(service.setEpicMilestone("ai", child.key, m.id, OWNER)).rejects.toThrow(
+        /child epic/,
+      );
+    });
+
+    it("GivenAnotherProjectsMilestone_WhenAttached_ThenNotFoundAndNothingChanges", async () => {
+      const theirs = await service.create("ops", { name: "Ops 1", outcome: "x" }, OWNER);
+      const e = await epic();
+      await expect(service.setEpicMilestone("ai", e.key, theirs.id, OWNER)).rejects.toMatchObject({
+        code: "not_found",
+      });
+      expect((await tracker.getTicket("ai", e.id))?.milestoneId).toBeNull();
+    });
+
+    it("GivenAnAttachedEpic_WhenDetached_ThenNoMilestone", async () => {
+      const m = await service.create("ai", { name: "M4", outcome: "x" }, OWNER);
+      const e = await epic();
+      await service.setEpicMilestone("ai", e.key, m.id, OWNER);
+      expect((await service.setEpicMilestone("ai", e.key, null, OWNER)).milestoneId).toBeNull();
+    });
+
+    it("GivenANonOwner_WhenAttaching_ThenForbidden", async () => {
+      const m = await service.create("ai", { name: "M4", outcome: "x" }, OWNER);
+      const e = await epic();
+      await expect(service.setEpicMilestone("ai", e.key, m.id, AGENT)).rejects.toMatchObject({
+        code: "forbidden",
+      });
+    });
+  });
+
+  describe("revert", () => {
+    it("GivenAStatusChange_WhenReverted_ThenThePreviousStatusIsBackAndTheChangeMarked", async () => {
+      const m = await service.create("ai", { name: "M4", outcome: "x" }, OWNER);
+      await service.update("ai", m.id, { status: "approved" }, OWNER);
+      const change = (await logged()).find((c) => "status" in c.diff)!;
+      const { reverted, milestone } = await service.revert(change, OWNER);
+      expect(milestone?.status).toBe("not_reviewed");
+      expect(reverted.status).toBe("reverted");
+    });
+
+    it("GivenAnAttach_WhenReverted_ThenTheEpicHasItsPreviousMilestone", async () => {
+      const m = await service.create("ai", { name: "M4", outcome: "x" }, OWNER);
+      const e = await epic();
+      await service.setEpicMilestone("ai", e.key, m.id, OWNER);
+      const change = (await logged()).find((c) => "milestoneId" in c.diff)!;
+      const { epic: restored } = await service.revert(change, OWNER);
+      expect(restored?.milestoneId).toBeNull();
+    });
+
+    it("GivenALaterChange_WhenTheEarlierOneIsReverted_ThenRefused", async () => {
+      const m = await service.create("ai", { name: "M4", outcome: "x" }, OWNER);
+      await service.update("ai", m.id, { status: "approved" }, OWNER);
+      await service.update("ai", m.id, { status: "parked" }, OWNER);
+      const first = (await logged()).find(
+        (c) => (c.diff as { status?: { to: string } }).status?.to === "approved",
+      )!;
+      await expect(service.revert(first, OWNER)).rejects.toMatchObject({ code: "not_revertible" });
+    });
+
+    it("GivenACreation_WhenReverted_ThenRefusedParkItInstead", async () => {
+      await service.create("ai", { name: "M4", outcome: "x" }, OWNER);
+      const created = (await logged())[0]!;
+      await expect(service.revert(created, OWNER)).rejects.toThrow(/created a milestone/);
+    });
+
+    it("GivenANonOwner_WhenReverting_ThenForbidden", async () => {
+      const m = await service.create("ai", { name: "M4", outcome: "x" }, OWNER);
+      await service.update("ai", m.id, { status: "approved" }, OWNER);
+      const change = (await logged()).find((c) => "status" in c.diff)!;
+      await expect(service.revert(change, AGENT)).rejects.toMatchObject({ code: "forbidden" });
+    });
+  });
+});

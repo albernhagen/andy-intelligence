@@ -12,6 +12,7 @@ import {
   type WorkTracker,
   type QuotaStore,
   type DeploymentStore,
+  type MilestoneStore,
   type RoutingConfigStore,
   type NightLaunchStore,
   type ProjectVersions,
@@ -82,6 +83,8 @@ export interface AppDeps {
   deployments?: DeploymentStore;
   /** Model routing (AI-230, AI-238); without it every run takes `DEFAULT_ROUTING`. */
   routing?: RoutingConfigStore;
+  /** Milestones (ADR-0131, AI-304); absent: no milestone routes or tools. */
+  milestones?: MilestoneStore;
   /**
    * Paid spend: the gate reserves pay_per_use agent tasks (AI-248) and the caps settings read its
    * totals (AI-249). Without it every pay_per_use task is refused and spend reads unknown.
