@@ -122,4 +122,14 @@ export class ConnectedCodeHost implements CodeHost {
   async proposeFile(fullName: string, proposal: FileProposal) {
     return (await this.connection.codeHost())?.proposeFile(fullName, proposal) ?? null;
   }
+
+  async branchSha(fullName: string, branch: string) {
+    return (await this.connection.codeHost())?.branchSha(fullName, branch) ?? null;
+  }
+
+  async createBranch(fullName: string, branch: string, sha: string) {
+    const host = await this.connection.codeHost();
+    if (!host) throw new Error("GitHub is not connected");
+    return host.createBranch(fullName, branch, sha);
+  }
 }

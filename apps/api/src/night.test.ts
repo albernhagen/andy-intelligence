@@ -1,4 +1,7 @@
 import {
+  InMemoryCodeEventLog,
+  InMemoryCodeHost,
+  InMemoryCodeHostConnectionStore,
   InMemoryNightLaunchStore,
   InMemoryRunStore,
   InMemoryWorkTracker,
@@ -33,11 +36,29 @@ const story = (title: string, extra: Partial<NewTicket> = {}): NewTicket => ({
 const inHours = (h: number) => new Date(Date.now() + h * 3_600_000).toISOString();
 const BUDGET = { maxRuns: 10, maxTokens: 1_000_000, maxUsd: 20 };
 
-async function setup() {
+const REPO = "albernhagen/andy-intelligence";
+
+/** `github`: the App is connected and installed on the project's repo (AI-122: epic branch). */
+async function setup(opts: { github?: boolean } = {}) {
   const tracker = new InMemoryWorkTracker();
   const runs = new InMemoryRunStore();
   const store = new InMemoryNightLaunchStore();
-  await tracker.createProject({ name: "AI", key: "AI" });
+  const host = new InMemoryCodeHost([
+    { fullName: REPO, defaultBranch: "main", private: false, url: `https://github.com/${REPO}` },
+  ]);
+  const connections = new InMemoryCodeHostConnectionStore();
+  if (opts.github) {
+    await connections.save({
+      appId: "1",
+      slug: "andy-intelligence",
+      clientId: "Iv1",
+      owner: "albernhagen",
+      privateKey: "PEM",
+      webhookSecret: "secret",
+      connectedAt: "2026-11-03T00:00:00.000Z",
+    });
+  }
+  await tracker.createProject({ name: "AI", key: "AI", repos: opts.github ? [REPO] : [] });
   const epic = await tracker.createTicket("ai", { title: "Night", type: "epic" }, "andy");
   const ready = async (title: string, extra: Partial<NewTicket> = {}) => {
     const t = await tracker.createTicket(
@@ -60,6 +81,16 @@ async function setup() {
     tracker,
     runs,
     nightLaunches: store,
+    ...(opts.github
+      ? {
+          github: {
+            publicUrl: "https://cp.example",
+            connections,
+            events: new InMemoryCodeEventLog(),
+            codeHostFor: () => host,
+          },
+        }
+      : {}),
   });
   const call = async (method: string, path: string, body?: unknown) => {
     const res = await app.request(path, {
@@ -81,7 +112,7 @@ async function setup() {
       plans: service,
     };
   };
-  return { tracker, runs, store, epic, ready, call, path, deps };
+  return { tracker, runs, store, epic, ready, call, path, deps, host };
 }
 
 describe("night launch API", () => {
@@ -200,6 +231,33 @@ describe("night launch API", () => {
     expect(after.launch).toMatchObject({ status: "ended", endReason: "stopped" });
     expect(after.problems).toEqual([]);
     expect(relaunch.json).toMatchObject({ status: "running" });
+  });
+
+  it("GivenGitHubConnected_WhenLaunchedThenStopped_ThenTheEpicBranchIsOpenedAtMainsTipAndTheLaunchEnds", async () => {
+    const { ready, call, path, host, epic } = await setup({ github: true });
+    await ready("First");
+
+    const launched = await call("POST", path, { budget: BUDGET, stopAt: inHours(4) });
+    const stopped = await call("POST", `${path}/stop`);
+
+    const branch = { name: `epic/${epic.key}`, sha: InMemoryCodeHost.DEFAULT_TIP };
+    expect(launched.status).toBe(200);
+    expect(launched.json).toMatchObject({ status: "running", epicBranch: branch });
+    expect(await host.branchSha(REPO, branch.name)).toBe(branch.sha);
+    expect(stopped.json).toMatchObject({
+      status: "ended",
+      endReason: "stopped",
+      epicBranch: branch,
+    });
+  });
+
+  it("GivenNoGitHub_WhenLaunched_ThenNoEpicBranchAndStoriesBuildOnTheDefaultBranch", async () => {
+    const { ready, call, path } = await setup();
+    await ready("First");
+
+    const launched = await call("POST", path, { budget: BUDGET, stopAt: inHours(4) });
+
+    expect(launched.json).toMatchObject({ status: "running", epicBranch: null });
   });
 
   it("GivenNothingInFlight_WhenStopped_ThenTheLaunchEndsAtOnce", async () => {

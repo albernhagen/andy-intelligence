@@ -26,6 +26,7 @@ import {
   BoardReader,
   ConfigProposals,
   NightLaunches,
+  EpicBranches,
   DigestReader,
   QuotaClearer,
   BriefService,
@@ -424,7 +425,17 @@ export function createApp(input: AppDeps) {
   // M4.17: the night launch step; absent without a launch store (routes and tools both).
   const night: NightDeps | null = deps.nightLaunches
     ? {
-        nights: new NightLaunches(deps.nightLaunches, deps.tracker, runs, now),
+        // AI-122: with GitHub connected, a launch opens its `epic/<KEY>` branch for the stories.
+        nights: new NightLaunches(
+          deps.nightLaunches,
+          deps.tracker,
+          runs,
+          now,
+          undefined,
+          connection
+            ? new EpicBranches(deps.tracker, new ConnectedCodeHost(connection), deps.nightLaunches)
+            : null,
+        ),
         store: deps.nightLaunches,
         tracker: deps.tracker,
         runs: deps.runs,
