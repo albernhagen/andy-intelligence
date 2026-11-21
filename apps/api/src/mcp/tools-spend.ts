@@ -1,4 +1,4 @@
-import { Project, ProjectSpendCaps } from "@andy/contracts";
+import { Project, ProjectSpendCaps, SpendCaps } from "@andy/contracts";
 import { formatMicroUsd, type SpendView } from "@andy/domain";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
@@ -84,5 +84,73 @@ export function registerSpendTools(server: McpServer, deps: ToolDeps, run: Run):
           ),
         ),
       ),
+  );
+
+  const global = deps.globalSpendCaps;
+  if (!global) return;
+  const globalCap = (what: string) =>
+    SpendCaps.shape.dailyMicroUsd
+      .optional()
+      .describe(
+        `The global ${what} cap in micro-dollars (1 USD = 1,000,000; whole numbers only). Left out: unchanged.`,
+      );
+
+  server.registerTool(
+    "set_global_spend_caps",
+    {
+      description:
+        "Sets the global spend caps (daily, monthly, per-task) in micro-dollars: the ceiling every project's own caps can only lower. A cap left out stays as it is. Andy only. Saved against the caps just read, so a save by someone else in between is refused (read again). Logged in the global spend caps change log and revertable there. Nothing spends money from this.",
+      inputSchema: {
+        dailyMicroUsd: globalCap("daily"),
+        monthlyMicroUsd: globalCap("monthly"),
+        perTaskMicroUsd: globalCap("per-task"),
+        reason: z.string().max(500).optional().describe("Why; kept in the change log."),
+      },
+      annotations: { destructiveHint: false, idempotentHint: true, openWorldHint: false },
+    },
+    ({ reason, ...given }) =>
+      run(async () => {
+        const current = await global.read();
+        const caps = {
+          ...current.caps,
+          ...Object.fromEntries(Object.entries(given).filter(([, v]) => v !== undefined)),
+        };
+        const saved = await global.put(caps, current.updatedAt, deps.actor, reason);
+        return {
+          ...saved,
+          capsUsd: Object.fromEntries(
+            Object.entries(saved.caps).map(([k, n]) => [k, formatMicroUsd(n)]),
+          ),
+        };
+      }),
+  );
+
+  server.registerTool(
+    "list_spend_cap_changes",
+    {
+      description:
+        "The global spend caps' change log, newest first (at most 100): each change's id, the caps' before and after (diff, micro-dollars), who, when, why and status (applied or reverted). Andy only. A project's own caps changes are in list_settings_changes.",
+      inputSchema: {
+        limit: z.number().int().min(1).max(100).optional().describe("At most this many (100)."),
+      },
+      annotations: { readOnlyHint: true, openWorldHint: false },
+    },
+    ({ limit }) => run(async () => ({ changes: await global.changeLog(deps.actor, limit) })),
+  );
+
+  server.registerTool(
+    "revert_spend_cap_change",
+    {
+      description:
+        "Reverts one applied global spend caps change (an id from list_spend_cap_changes): each cap it changed goes back to its before value, logged as a new change, and the original is marked reverted. Andy only. Refused when a later change touched the same caps, or the change was already reverted.",
+      inputSchema: {
+        change: z
+          .string()
+          .regex(/^[A-Za-z0-9-]{1,64}$/)
+          .describe("The change's id."),
+      },
+      annotations: { destructiveHint: false, idempotentHint: false, openWorldHint: false },
+    },
+    ({ change }) => run(async () => await global.revert(change, deps.actor)),
   );
 }

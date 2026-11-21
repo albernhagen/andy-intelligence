@@ -10,7 +10,7 @@ import { effectiveCaps } from "./spend-caps";
 /**
  * Spend caps settings (AI-249: M10.8): what Andy sees and may set. A project's caps can only be
  * lower than the global ones (ADR-0129); a higher one is refused with the reason, never stored.
- * Global caps are the code defaults until AI-276: M10: Global spend caps store and editing.
+ * The global caps come from `GlobalSpendCaps` (AI-276): stored, or the code defaults.
  */
 
 const FIELDS = [
@@ -38,11 +38,8 @@ export function projectCapsRefusal(global: SpendCaps, project: ProjectSpendCaps)
   });
 }
 
-/** Where the global caps come from: the code defaults until AI-276 stores them. */
-export type GlobalCapsSource = "default";
-
 export interface SpendView {
-  global: { caps: SpendCaps; source: GlobalCapsSource };
+  global: { caps: SpendCaps; source: "default" | "stored"; updatedAt: string | null };
   /** The project's own caps as stored; a missing field takes the global value. */
   project: ProjectSpendCaps;
   /** What a paid call in this project is checked against. */
@@ -54,13 +51,18 @@ export interface SpendView {
 export function spendView(
   project: ProjectSpendCaps | null | undefined,
   spent: SpendSoFar | null,
-  global: SpendCaps = DEFAULT_SPEND_CAPS,
+  global: { caps: SpendCaps; source: "default" | "stored"; updatedAt: string | null } = {
+    caps: DEFAULT_SPEND_CAPS,
+    source: "default",
+    updatedAt: null,
+  },
 ): SpendView {
   const own = ProjectSpendCaps.parse(project ?? {});
+  const caps = SpendCaps.parse(global.caps);
   return {
-    global: { caps: SpendCaps.parse(global), source: "default" },
+    global: { caps, source: global.source, updatedAt: global.updatedAt },
     project: own,
-    effective: effectiveCaps(global, own),
+    effective: effectiveCaps(caps, own),
     spent,
   };
 }

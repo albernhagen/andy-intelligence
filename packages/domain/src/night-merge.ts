@@ -177,6 +177,8 @@ export function morningPrBody(
     "",
     "This PR never merges on its own: Andy merges it.",
     "",
+    `The morning report (what merged, what stopped and why, night assumptions, cost) is a comment on ${epicLink}.`,
+    "",
     "| Story | Commits | PR |",
     "| ----- | ------- | -- |",
   ];
