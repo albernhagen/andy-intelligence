@@ -57,6 +57,7 @@ GitHub settings rows (ruleset, merge settings, `autoMerge`, `planApproval`, Depe
 | GCP budget + alerts | 0028, 0029 | `infra/billing` | TF | not yet carried (M6: Dev → prod releases) |
 | Cloud Run caps, log exclusions, usage alerts | 0028 | `infra/control-plane` | TF | not yet carried (M6: Dev → prod releases) |
 | Cost kill switch (opt-in) | 0028, 0036 | `infra/billing/kill-switch.tf` + workflow YAML | TF | not yet carried (M6: Dev → prod releases) |
+| Model spend caps: reserve before each paid start, per-task, daily and monthly, fail closed; provider-side key limits | 0028, 0129 | planned: `domain/spend-caps.ts`, `domain/spend-gate.ts` (AI-235: M10.3, AI-248: M10.7) | — | control plane only (planned, M10: Paid models + spend caps) |
 | Daily Firestore backup (7-day retention) | 0028 | `infra/control-plane` | TF | not yet carried (M6: Dev → prod releases) |
 | Cloud Tasks queue caps (rate, concurrency, retries) | 0028 | `infra/control-plane` | TF | not yet carried (M6: Dev → prod releases) |
 | Safe deploy: no-traffic revision, smoke test, then traffic | 0076 | `platform/actions/cloud-run-safe-deploy` | A | control plane only until M6: Dev → prod releases |

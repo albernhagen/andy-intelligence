@@ -23,3 +23,5 @@ google-sub:  reserve 20% of daily Jules tasks     → warn at 70%, pause at 80%
 openrouter:  hard daily/monthly USD caps (also enforced on the OpenRouter key itself)
 ```
 Missing or stale quota reading ⇒ treat as **unknown**: warn in UI, prefer next route, never assume headroom.
+
+Paid spend (ledger, caps, fail-closed rules): [`spend-and-caps.md`](spend-and-caps.md) (ADR-0129).
