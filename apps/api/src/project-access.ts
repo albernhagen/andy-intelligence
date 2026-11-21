@@ -38,6 +38,7 @@ export const CROSS_PROJECT_ROUTES: Readonly<Record<string, string>> = {
   "GET /api/projects": "Every project: keep readable projects.",
   "GET /api/routing":
     "Every project's routing (a `projectId` query is checked): keep readable projects.",
+  "GET /api/routing/changes": "Global routing's change log (AI-275): owner only.",
   "GET /api/work":
     "Every project's open tickets (a `project` query is checked): keep readable projects.",
   "GET /api/quota": "Subscription quota: owner only.",
@@ -50,6 +51,8 @@ export const CROSS_PROJECT_ROUTES: Readonly<Record<string, string>> = {
   "POST /api/projects": "Creates a project: owner only.",
   "POST /api/questions/:questionId/answer": "Check the question's ticket's project.",
   "POST /api/quota/clear": "Subscription quota: owner only.",
+  "POST /api/routing/changes/:changeId/revert":
+    "Reverts a global or project routing change (AI-275): check the change's project.",
   "POST /api/runners": "Local runners: owner only.",
   "POST /api/runners/:runnerId/revoke": "Local runners: owner only.",
   "PUT /api/routing": "Global model routing: owner only.",
@@ -67,8 +70,11 @@ export const CROSS_PROJECT_TOOLS: Readonly<Record<string, string>> = {
   list_config_changes: "Without `project`, every project's changes: keep readable projects.",
   list_needs_me: "Every project's inbox: keep readable projects.",
   list_projects: "Every project: keep readable projects.",
+  list_routing_changes: "Global routing's change log (AI-275): owner only.",
   list_work: "Without `project`, every project's open tickets: keep readable projects.",
   reject_config_change: "Check the change's project.",
+  revert_routing_change:
+    "Reverts a global or project routing change (AI-275): check the change's project.",
   set_provider_routing: "Without `project`, the global routing: owner only.",
   set_step_tier: "Without `project`, the global routing: owner only.",
   set_tier_routes: "Without `project`, the global routing: owner only.",
