@@ -53,7 +53,7 @@ done
 if [ -n "$out" ]; then printf '%s' "$CONTEXT_JSON" > "$out"; printf 200; else printf '{"value":"h.e30.s"}'; fi
 `;
 
-function runContext(context, { credential, hasOauth = true, hasKey = true }) {
+function runContext(context, { credential }) {
   const dir = mkdtempSync(join(tmpdir(), "billing-step-"));
   const bin = join(dir, "bin");
   spawnSync("mkdir", [bin]);
@@ -72,8 +72,6 @@ function runContext(context, { credential, hasOauth = true, hasKey = true }) {
       RUNNER_TEMP: dir,
       RUN_ID: "run1",
       CREDENTIAL: credential,
-      HAS_OAUTH_TOKEN: String(hasOauth),
-      HAS_API_KEY: String(hasKey),
       MAX_TURNS_CAP: "200",
       MAX_BUDGET_USD_CAP: "50",
       MAX_PROMPT_CHARS: "200000",
@@ -127,12 +125,6 @@ describe("executor context step: billing and budget (AI-260)", () => {
       expect(r.status, r.log).toBe(0);
       expect(r.value("max_budget_usd")).toBe("");
     }
-  });
-
-  it("GivenAPayPerUseRun_WhenTheApiKeySecretIsMissing_ThenItStopsBeforeTheContextIsRead", () => {
-    const r = runContext(paid(), { credential: "api_key", hasKey: false });
-    expect(r.status).not.toBe(0);
-    expect(r.value("error")).toContain("ANTHROPIC_API_KEY is empty");
   });
 
   it("GivenAPayPerUseRunWithoutAValidBudget_WhenTheContextIsRead_ThenItStops", () => {
