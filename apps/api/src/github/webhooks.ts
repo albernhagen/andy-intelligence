@@ -5,11 +5,13 @@ import {
   type CodeEventLog,
   type CodeHost,
   type CodeHostEvent,
+  type NightLaunchStore,
   type Project,
   type RunStore,
   type WorkTracker,
 } from "@andy/contracts";
 import {
+  EpicMerges,
   PullRequestGate,
   PullRequestTickets,
   projectForRepo,
@@ -25,6 +27,8 @@ import {
 } from "@andy/github";
 import type { AuthEnv } from "../auth";
 import { FixedWindowLimiter } from "../mcp/rate-limit";
+import type { RouteModule } from "../services";
+import { ConnectedCodeHost } from "./connection";
 
 /**
  * GitHub App webhook receiver (ADR-0041, ADR-0043: secret read from the connection). Order of checks: body cap → HMAC → rate cap →
@@ -58,6 +62,8 @@ export interface WebhookDeps {
    * Resolves false when the tick failed (it logs why). Must not throw.
    */
   onDefaultBranchMoved?: (projectId: string) => Promise<boolean>;
+  /** Night launches: a story PR into its launch's epic branch merges there (AI-124). */
+  nightLaunches?: NightLaunchStore;
   now?: () => Date;
 }
 
@@ -93,7 +99,16 @@ export function registerGitHubWebhook(app: Hono<AuthEnv>, deps: WebhookDeps): vo
   const limiter = new FixedWindowLimiter(WEBHOOK_RATE_LIMIT, 60_000, () => now().getTime());
   const repos = new RepoIndex(deps.tracker, () => now().getTime());
   const prTickets = new PullRequestTickets(deps.tickets, deps.tracker);
-  const gate = new PullRequestGate(deps.codeHost, deps.tracker, deps.runs, deps.tickets, now);
+  const epicMerges = deps.nightLaunches ? new EpicMerges(deps.nightLaunches, deps.runs) : null;
+  const gate = new PullRequestGate(
+    deps.codeHost,
+    deps.tracker,
+    deps.runs,
+    deps.tickets,
+    now,
+    null,
+    epicMerges,
+  );
 
   /**
    * The delivery is already recorded, so a failure here is logged, not retried: a redelivery
@@ -227,3 +242,21 @@ export function registerGitHubWebhook(app: Hono<AuthEnv>, deps: WebhookDeps): vo
     },
   );
 }
+
+/** Listed in `public-routes.ts` (AI-145): GitHub signs webhooks (HMAC). Needs the GitHub App. */
+export const publicRoutes: RouteModule = (app, s) => {
+  const { connection } = s;
+  const github = s.deps.github;
+  if (!github || !connection) return;
+  registerGitHubWebhook(app, {
+    secret: async () => (await connection.get())?.webhookSecret ?? null,
+    events: github.events,
+    tracker: s.tracker,
+    tickets: s.service,
+    codeHost: new ConnectedCodeHost(connection),
+    runs: s.deps.runs,
+    onDefaultBranchMoved: (projectId) => s.syncer.defaultBranchMoved(projectId),
+    nightLaunches: s.deps.nightLaunches,
+    now: s.now,
+  });
+};

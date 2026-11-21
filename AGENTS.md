@@ -15,7 +15,7 @@ Always loaded (`CLAUDE.md` is a symlink to this file). Full operating rules: [`d
 - ADRs: grep `^title:` and `^status:` in `docs/architecture/adr/*.md` (one line each; with a shell, `pnpm adr`), then open only the ones you need.
 - Build-log history (`docs/build-log/`, one file per entry): only when you need why something happened.
 - Broad searches or reading many files: use a subagent and keep its summary, not the file dumps.
-- `pnpm context:check` enforces size budgets (`context-budget.json`); a PR may use at most half the room left in a file it grows (AI-143). Trim, don't raise a budget, unless Andy agrees.
+- `pnpm context:check` enforces size budgets (`context-budget.json`); a PR may grow a file by at most half its room left (AI-143). Trim, don't raise a budget, unless Andy agrees.
 
 ## Docs ship with the change (ADR-0022)
 
@@ -29,7 +29,7 @@ Update these in the **same PR** as the code:
 | A decision, or deviated from ARCHITECTURE.md   | New ADR (frontmatter `title`, `status`); update the old ADR's status                                                                         |
 | Any step Andy runs by hand                     | `docs/runbooks/*.md`                                                                                                                         |
 | Slice status, pending decisions, blockers      | Ticket in project `AI` (Andy moves it); `docs/build-log.md` (decisions, blockers); what happened → new `docs/build-log/YYYY-MM-DD-<slug>.md` |
-| Trust boundary, entry point, credential, IAM   | `docs/security/threat-model.md` and its area file in `docs/security/`                                                                        |
+| Trust boundary, entry point, credential, IAM   | Its area file in `docs/security/`; a risk: its own file in `docs/security/risks/`                                                            |
 | Agent rules or this table                      | `AGENTS.md` (root or nested), `docs/BUILD-PROMPT.md`                                                                                         |
 | A quality, security, cost or scaling guardrail | ARCHITECTURE §8.1 project baseline inventory (ADR-0031)                                                                                      |
 
@@ -47,7 +47,7 @@ If code and the architecture docs disagree, ask which is wrong — don't silentl
 ## Security (ADR-0025, ARCHITECTURE §9.1)
 
 - Every PR gets security scans and a security-review agent (`platform/procedures/security-review.md`); fix high/critical findings or ask Andy to label `security-accepted` (removed on every push).
-- Changed a trust boundary, entry point, credential, or IAM grant? Update `docs/security/threat-model.md` and its area file in the same PR.
+- Changed a trust boundary, entry point, credential, or IAM grant? Update its area file in `docs/security/` and add or edit its risk file in `docs/security/risks/` (format: `threat-model.md`) in the same PR.
 - Answer every adversarial-review finding on your PR: fixed (commit) or why not (ADR-0026). Only a fix clears a `blocker`; if you disagree, say why and ask Andy for `review-accepted`. Never argue a reviewer out of a finding (`docs/runbooks/adversarial-review.md`).
 - Anything that can scale or spend (instances, queues, jobs, API calls) needs an explicit cap (ADR-0028).
 - Built a guardrail (check, hook, scan, cap, alert, repo setting)? Record in ARCHITECTURE §8.1 how managed projects get it (ADR-0031), and build it so it can be carried: composite action in `platform/actions/`, a file in `platform/baseline/manifest.json`, GitHub config in `platform/baseline/github/`, or a Terraform module (ADR-0038).

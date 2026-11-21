@@ -24,6 +24,12 @@
           "maxLength": 100,
           "description": "What someone can do when it ships."
         },
+        "outcome": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 300,
+          "description": "One sentence, in the words of whoever asked for it: what is true when the epic is done. No implementation detail."
+        },
         "body": {
           "type": "string",
           "minLength": 1,
@@ -66,7 +72,7 @@
           }
         }
       },
-      "required": ["title", "body", "acceptanceCriteria", "slices"]
+      "required": ["title", "outcome", "body", "acceptanceCriteria", "slices"]
     },
     "spec": {
       "type": ["object", "null"],
