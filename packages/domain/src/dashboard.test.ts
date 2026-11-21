@@ -7,7 +7,7 @@ import {
   type Ticket,
   type TicketEvent,
 } from "@andy/contracts";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import {
   DashboardReader,
   MAX_DASHBOARD_PROJECTS,
@@ -385,6 +385,31 @@ describe("DashboardReader (AI-102)", () => {
     const now = dash.weeks.at(-1)!;
     expect(now.ticketsByStage.ready).toBe(1);
     expect(now.cost).toMatchObject({ runs: 1, estimatedCostUsd: 2 });
+  });
+
+  it("GivenAnUnchangedTicket_WhenTheDashboardIsReadAgain_ThenOnlyChangedTicketsHistoriesAreRead", async () => {
+    let at = Date.now() - 60_000;
+    const tracker = new InMemoryWorkTracker(() => new Date((at += 10)));
+    const runs = new InMemoryRunStore();
+    await seed(tracker, runs, "AI");
+    const [ticket] = await tracker.listTickets("ai");
+    const reader = new DashboardReader(tracker, runs);
+    await reader.project("ai", window());
+    const histories = vi.spyOn(tracker, "listEvents");
+
+    await reader.project("ai", window());
+    expect(histories).not.toHaveBeenCalled();
+
+    await tracker.updateTicket(
+      "ai",
+      ticket!.id,
+      { stage: { to: "done", forced: true, reason: null } },
+      "andy",
+    );
+    const w = window();
+    const dash = await reader.project("ai", w);
+    expect(histories).toHaveBeenCalledTimes(1);
+    expect(dash).toEqual(await new DashboardReader(tracker, runs).project("ai", w));
   });
 
   it("GivenAnUnknownProject_WhenItsDashboardIsRead_ThenNotFound", async () => {
