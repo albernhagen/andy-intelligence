@@ -5,6 +5,7 @@ import {
   redirect,
   type RouterHistory,
 } from "@tanstack/react-router";
+import { parseWorkView, type WorkView } from "@andy/domain";
 import { AppShell } from "@/components/AppShell";
 import { loadScope, scopePath } from "@/lib/scope";
 import { BoardPage } from "@/pages/BoardPage";
@@ -28,9 +29,11 @@ const boardRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/p/$projectId",
   component: BoardPage,
-  // The Ready lane's view (AI-37); anything else in the URL reads as queue order.
-  validateSearch: (search: Record<string, unknown>): { sort?: "score" } =>
-    search.sort === "score" ? { sort: "score" } : {},
+  // The Ready lane's view (AI-37) and the work view chip (AI-187); unknown values read as unset.
+  validateSearch: (search: Record<string, unknown>): { sort?: "score"; view?: WorkView } => {
+    const view = parseWorkView(search.view);
+    return { ...(search.sort === "score" && { sort: "score" }), ...(view && { view }) };
+  },
 });
 
 /** URLs carry the picker's scope (lib/scope.ts): `/p/<project>/…` or `/all/…`. */
