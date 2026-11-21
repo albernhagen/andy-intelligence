@@ -38,6 +38,7 @@ export * from "./quota";
 export * from "./ranks";
 export * from "./refine-dispatch";
 export * from "./refine-gate";
+export * from "./routing-rules";
 export * from "./runners";
 export * from "./runs";
 export * from "./scores";
