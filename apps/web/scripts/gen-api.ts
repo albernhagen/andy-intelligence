@@ -4,6 +4,7 @@ import {
   InMemoryCodeEventLog,
   InMemoryCodeHostConnectionStore,
   InMemoryConfigChangeStore,
+  InMemoryReleaseNoteStore,
   InMemoryRunStore,
   InMemoryRunnerStore,
   InMemoryWorkTracker,
@@ -29,6 +30,7 @@ export async function generateApiTypes(): Promise<string> {
     runs: new InMemoryRunStore(),
     runners: new InMemoryRunnerStore(),
     configChanges: new InMemoryConfigChangeStore(),
+    releaseNotes: new InMemoryReleaseNoteStore(),
     // Fakes only, so the GitHub setup routes are in the document.
     github: {
       publicUrl: "http://localhost",

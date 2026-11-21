@@ -8,6 +8,7 @@ import type {
   IdeateService,
   ProjectPlanService,
   ConfigProposals,
+  WhatsNewReader,
   RunService,
   TicketService,
 } from "@andy/domain";
@@ -39,6 +40,7 @@ export function registerMcp(
     ideate: IdeateService;
     plans: ProjectPlanService;
     configProposals: ConfigProposals | null;
+    whatsNew: WhatsNewReader | null;
   },
 ) {
   const lookups = new FixedWindowLimiter(LOOKUPS_PER_MINUTE, 60 * 1000);

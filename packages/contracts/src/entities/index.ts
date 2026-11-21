@@ -1034,3 +1034,4 @@ export * from "./runner";
 export * from "./build";
 export * from "./night";
 export * from "./config-proposals";
+export * from "./release-notes";

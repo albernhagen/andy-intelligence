@@ -9,6 +9,7 @@ import {
   type HeadCheck,
   type Listing,
   type PullRequest,
+  type PullRequestDetails,
   type PullRequestCommit,
   type ProposedPullRequest,
   type RepoToken,
@@ -646,6 +647,16 @@ export class InMemoryCodeHost implements CodeHost {
     return pr ? structuredClone(pr.pullRequest) : null;
   }
 
+  async getPullRequestDetails(
+    fullName: string,
+    number: number,
+  ): Promise<PullRequestDetails | null> {
+    if (!(await this.getRepo(fullName))) return null;
+    const pr = this.pullRequests.get(number);
+    if (!pr) return null;
+    return structuredClone(pr.details ?? { body: "", mergedBy: null, mergedAt: null });
+  }
+
   async listChangedFiles(_fullName: string, number: number): Promise<Listing<ChangedFile>> {
     return structuredClone(this.pullRequests.get(number)?.files ?? { items: [], complete: true });
   }
@@ -714,6 +725,8 @@ export interface FakePullRequest {
   files: Listing<ChangedFile>;
   checks: Listing<HeadCheck>;
   commits: Listing<PullRequestCommit>;
+  /** Description and merge (AI-159); an empty body and no merge when unset. */
+  details?: PullRequestDetails;
 }
 
 /** In-memory CodeHostConnectionStore. */
@@ -784,3 +797,4 @@ export * from "./notify-email";
 export * from "./runner";
 export * from "./night";
 export * from "./config-proposals";
+export * from "./release-notes";

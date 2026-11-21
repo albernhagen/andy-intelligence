@@ -6,12 +6,14 @@ import {
   type CodeHost,
   type CodeHostEvent,
   type Project,
+  type ReleaseNoteStore,
   type RunStore,
   type WorkTracker,
 } from "@andy/contracts";
 import {
   PullRequestGate,
   PullRequestTickets,
+  ReleaseNoteRecorder,
   projectForRepo,
   type TicketService,
 } from "@andy/domain";
@@ -29,7 +31,7 @@ import { FixedWindowLimiter } from "../mcp/rate-limit";
 /**
  * GitHub App webhook receiver (ADR-0041, ADR-0043: secret read from the connection). Order of checks: body cap → HMAC → rate cap →
  * event type → registered repo → record once by delivery ID → (pull requests, first delivery
- * only) move the linked ticket (AI-14). Nothing is stored before the signature checks out, and
+ * only) move the linked ticket (AI-14), run the gate, store a release note on merge (AI-159). Nothing is stored before the signature checks out, and
  * only deliveries about registered repos are stored. The rate cap counts signed deliveries
  * only, so unsigned floods can't lock GitHub out.
  */
@@ -58,6 +60,8 @@ export interface WebhookDeps {
    * Resolves false when the tick failed (it logs why). Must not throw.
    */
   onDefaultBranchMoved?: (projectId: string) => Promise<boolean>;
+  /** Release notes (AI-159): a PR merged into the default branch stores one. Off when unset. */
+  releaseNotes?: ReleaseNoteStore;
   now?: () => Date;
 }
 
@@ -94,6 +98,9 @@ export function registerGitHubWebhook(app: Hono<AuthEnv>, deps: WebhookDeps): vo
   const repos = new RepoIndex(deps.tracker, () => now().getTime());
   const prTickets = new PullRequestTickets(deps.tickets, deps.tracker);
   const gate = new PullRequestGate(deps.codeHost, deps.tracker, deps.runs, deps.tickets, now);
+  const notes = deps.releaseNotes
+    ? new ReleaseNoteRecorder(deps.codeHost, deps.tracker, deps.releaseNotes, now)
+    : null;
 
   /**
    * The delivery is already recorded, so a failure here is logged, not retried: a redelivery
@@ -119,6 +126,20 @@ export function registerGitHubWebhook(app: Hono<AuthEnv>, deps: WebhookDeps): vo
     } catch (err) {
       const error = err instanceof Error ? err : new Error(String(err));
       log("ERROR", "webhook gate failed", { deliveryId: record.deliveryId, error: error.message });
+    }
+  }
+
+  /** As above: logged, never retried. A missing note shows as a gap on the What's new page. */
+  async function recordNote(record: CodeHostEvent, project: Project) {
+    if (!notes || record.kind !== "pull_request") return;
+    const fields = { deliveryId: record.deliveryId, pr: record.pullRequest.number };
+    try {
+      const outcome = await notes.record(record, project);
+      if (outcome.result === "recorded")
+        log("INFO", "webhook release note", { ...fields, ...outcome });
+    } catch (err) {
+      const error = err instanceof Error ? err : new Error(String(err));
+      log("ERROR", "webhook release note failed", { ...fields, error: error.message });
     }
   }
 
@@ -214,6 +235,7 @@ export function registerGitHubWebhook(app: Hono<AuthEnv>, deps: WebhookDeps): vo
         if (result === "recorded") {
           await moveTicket(record, project);
           await applyGate(record, project);
+          await recordNote(record, project);
         }
         if (!(await syncOnMove(record, project))) {
           return c.json({ error: "sync queueing failed; redeliver to retry" }, 500);

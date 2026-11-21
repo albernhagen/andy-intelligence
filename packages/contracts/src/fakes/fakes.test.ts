@@ -12,10 +12,12 @@ import {
   runnerStoreContract,
   watchdogQueueContract,
   workTrackerContract,
+  releaseNoteStoreContract,
 } from "../testing";
 import {
   InMemoryCodeEventLog,
   InMemoryConfigChangeStore,
+  InMemoryReleaseNoteStore,
   InMemoryReviewFindingSource,
   InMemoryCodeHost,
   InMemoryCodeHostConnectionStore,
@@ -92,6 +94,8 @@ evaluatorContract("in-memory", async (script) => {
 runnerStoreContract("in-memory", async (now) => new InMemoryRunnerStore(now));
 
 configChangeStoreContract("in-memory", async () => new InMemoryConfigChangeStore());
+
+releaseNoteStoreContract("in-memory", async () => new InMemoryReleaseNoteStore());
 
 reviewFindingSourceContract("in-memory", async (findings) => {
   const source = new InMemoryReviewFindingSource();

@@ -1353,3 +1353,4 @@ export * from "./runner";
 export * from "./night";
 export * from "./config-proposals";
 export * from "./config-changes";
+export * from "./release-notes";

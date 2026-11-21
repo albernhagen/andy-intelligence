@@ -12,6 +12,7 @@ import {
   type WorkTracker,
   type QuotaStore,
   type NightLaunchStore,
+  type ReleaseNoteStore,
 } from "@andy/contracts";
 import { ClaudeCodeActionsExecutor, exchangeManifestCode, type CreatedApp } from "@andy/github";
 import {
@@ -31,6 +32,7 @@ import {
   IdeateService,
   ProjectPlanService,
   TicketService,
+  WhatsNewReader,
   EmailNotifications,
   wakeAfterRunEnd,
   notifyOnNeedsYou,
@@ -47,6 +49,7 @@ import { registerBoardRoutes } from "./board";
 import { registerEpicRoutes } from "./epics";
 import { registerInFlightRoutes } from "./in-flight";
 import { registerDigestRoutes } from "./digest";
+import { registerWhatsNewRoutes } from "./whats-new";
 import { registerDashboardRoutes } from "./dashboard";
 import { registerSetupRoutes } from "./setup";
 import { noReviewFindings, registerConfigProposalRoutes } from "./config-proposals";
@@ -99,6 +102,11 @@ export interface AppDeps {
   configChanges?: ConfigChangeStore;
   /** Stored review findings (ADR-0097 PR B); until then none, so sweeps propose nothing. */
   reviewFindings?: ReviewFindingSource;
+  /**
+   * Release notes (AI-159): merged PRs store one (webhook) and What's new reads them. Off (no
+   * route, no MCP tool) when unset.
+   */
+  releaseNotes?: ReleaseNoteStore;
   /** Subscription quota readings (M1.9). Without it every window reads unknown. */
   quota?: QuotaStore;
   /** Night launches (ADR-0049): a launched story's build gets its `epic/<KEY>` base (AI-122). */
@@ -380,6 +388,7 @@ export function createApp(input: AppDeps) {
       codeHost: new ConnectedCodeHost(connection),
       runs: deps.runs,
       onDefaultBranchMoved: (projectId) => syncer.defaultBranchMoved(projectId),
+      releaseNotes: deps.releaseNotes,
       now,
     });
     const repoIndex = new RepoIndex(deps.tracker, () => now().getTime());
@@ -434,6 +443,8 @@ export function createApp(input: AppDeps) {
   registerQuotaRoutes(app, deps.quota ?? null, quotaClearer, now);
   const digest = new DigestReader(deps.tracker, deps.runs, deps.quota ?? null, now);
   registerDigestRoutes(app, digest, now);
+  const whatsNew = deps.releaseNotes ? new WhatsNewReader(deps.tracker, deps.releaseNotes) : null;
+  if (whatsNew) registerWhatsNewRoutes(app, whatsNew, now);
   registerDashboardRoutes(app, deps, now);
   registerSetupRoutes(app, deps.tracker, connection ? new ConnectedCodeHost(connection) : null);
   registerNotifyRoutes(app, email);
@@ -493,6 +504,7 @@ export function createApp(input: AppDeps) {
       ideate,
       plans,
       configProposals,
+      whatsNew,
     });
   }
 

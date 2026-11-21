@@ -78,6 +78,14 @@ export function AppShell() {
               Digest
             </NavLink>
           )}
+          {scope.kind === "project" && (
+            <NavLink
+              to={`/p/${encodeURIComponent(scope.projectId)}/whats-new`}
+              current={/\/whats-new\/?$/.test(pathname)}
+            >
+              What's new
+            </NavLink>
+          )}
           <NavLink to="/settings/github" current={pathname.startsWith("/settings")}>
             Settings
           </NavLink>

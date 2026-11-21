@@ -6475,6 +6475,130 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  "/api/projects/{projectId}/whats-new": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get: {
+      parameters: {
+        query?: {
+          /** @description Start of the window (ISO date-time). Default 14 days before `until`; at most 90 days back. */
+          since?: string;
+          /** @description End of the window (ISO date-time). Default now; a later time reads as now. */
+          until?: string;
+          /** @description Only changes under this milestone epic, by key, e.g. "AI-84". */
+          epic?: string;
+        };
+        header?: never;
+        path: {
+          projectId: string;
+        };
+        cookie?: never;
+      };
+      requestBody?: never;
+      responses: {
+        /** @description Status per milestone epic, what needs Andy, then merged changes */
+        200: {
+          headers: {
+            [name: string]: unknown;
+          };
+          content: {
+            "application/json": {
+              projectKey: string;
+              window: {
+                /** Format: date-time */
+                from: string;
+                /** Format: date-time */
+                to: string;
+              };
+              milestones: {
+                key: string;
+                title: string;
+                done: number;
+                inReview: number;
+                inProgress: number;
+                notStarted: number;
+                needsYou: number;
+              }[];
+              needsYou: {
+                count: number;
+                tickets: {
+                  key: string;
+                  title: string;
+                }[];
+              };
+              notes: {
+                id: string;
+                projectId: string;
+                prNumber: number;
+                /** Format: uri */
+                prUrl: string;
+                prTitle: string;
+                ticketKey: string | null;
+                ticketTitle: string | null;
+                /** @enum {string|null} */
+                risk: "low" | "medium" | "high" | null;
+                /** Format: date-time */
+                mergedAt: string;
+                mergedBy: string | null;
+                /** @enum {string} */
+                source: "note" | "no_note" | "backfill";
+                whatChanged: string | null;
+                howItWorks: string | null;
+                needsYou: string | null;
+                links: {
+                  /** @enum {string} */
+                  kind: "feature" | "adr" | "runbook";
+                  path: string;
+                  /** Format: uri */
+                  url: string;
+                }[];
+                /** Format: date-time */
+                recordedAt: string;
+                epicKey: string | null;
+                epicTitle: string | null;
+              }[];
+              truncated: boolean;
+            };
+          };
+        };
+        /** @description Invalid request */
+        400: {
+          headers: {
+            [name: string]: unknown;
+          };
+          content: {
+            "application/json": {
+              error: string;
+              details?: string[];
+            };
+          };
+        };
+        /** @description Not found */
+        404: {
+          headers: {
+            [name: string]: unknown;
+          };
+          content: {
+            "application/json": {
+              error: string;
+              details?: string[];
+            };
+          };
+        };
+      };
+    };
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   "/api/projects/{projectId}/dashboard": {
     parameters: {
       query?: never;

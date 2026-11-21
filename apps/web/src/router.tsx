@@ -18,6 +18,7 @@ import { ProjectSettingsPage } from "@/pages/ProjectSettingsPage";
 import { RunnersPage } from "@/pages/RunnersPage";
 import { RunPage } from "@/pages/RunPage";
 import { TicketPage } from "@/pages/TicketPage";
+import { WhatsNewPage } from "@/pages/WhatsNewPage";
 
 const rootRoute = createRootRoute({
   component: AppShell,
@@ -83,6 +84,12 @@ const routeTree = rootRoute.addChildren([
     getParentRoute: () => rootRoute,
     path: "/p/$projectId/digest",
     component: DigestPage,
+  }),
+  // What's new (AI-159): project-scoped only, as status is per milestone epic of one project.
+  createRoute({
+    getParentRoute: () => rootRoute,
+    path: "/p/$projectId/whats-new",
+    component: WhatsNewPage,
   }),
   createRoute({
     getParentRoute: () => rootRoute,

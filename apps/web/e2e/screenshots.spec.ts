@@ -91,6 +91,14 @@ test("agent task page from the story panel", async ({ page }) => {
 });
 
 /** AI-85: the epic's stories in the panel, on the OPS epic AI-86 seeds (OPS-5). */
+test("what's new: status, then changes by day, one opened", async ({ page }) => {
+  await page.clock.setFixedTime(SEED_NOW);
+  await open(page, "/p/ops/whats-new", "Backups now land in a second region");
+  await page.getByText("Backups now land in a second region").click();
+  await expect(page.getByText("A nightly job copies each snapshot")).toBeVisible();
+  await expect(page).toHaveScreenshot("whats-new.png", { fullPage: true });
+});
+
 test("story panel for an epic", async ({ page }) => {
   await page.clock.setFixedTime(SEED_NOW);
   await open(page, "/p/ops/t/OPS-5", "1 of 3 done");

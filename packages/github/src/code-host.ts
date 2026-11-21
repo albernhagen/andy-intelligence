@@ -3,6 +3,7 @@ import {
   FileProposal,
   HeadCheck,
   PullRequest,
+  PullRequestDetails,
   PullRequestCommit,
   ProposedPullRequest,
   Repo,
@@ -225,6 +226,28 @@ export class GitHubCodeHost implements CodeHost {
       headSha: pr.head.sha,
       baseRef: pr.base.ref,
       url: pr.html_url,
+    });
+  }
+
+  /** The description (capped) and merge facts (AI-159); one request, as `getPullRequest`. */
+  async getPullRequestDetails(
+    fullName: string,
+    number: number,
+  ): Promise<PullRequestDetails | null> {
+    const client = await this.repoClient(fullName);
+    if (!client) return null;
+    const res = await this.notFoundAsNull(() =>
+      client.octokit.request("GET /repos/{owner}/{repo}/pulls/{pull_number}", {
+        ...client.repo,
+        pull_number: number,
+      }),
+    );
+    if (!res) return null;
+    const pr = res.data;
+    return PullRequestDetails.parse({
+      body: (pr.body ?? "").slice(0, 20_000),
+      mergedBy: pr.merged_by?.login?.slice(0, 100) ?? null,
+      mergedAt: pr.merged_at ?? null,
     });
   }
 

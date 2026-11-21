@@ -32,6 +32,24 @@ export function useQuota() {
 }
 
 /** A project's digest for the last `hours` (AI-70); computed on read, refetched on focus. */
+/** What's new (AI-159): the last `days` days, optionally one milestone epic's changes. */
+export function useWhatsNew(projectId: string, days: number, epic: string | null) {
+  const api = useApi();
+  return useQuery({
+    queryKey: ["whats-new", projectId, days, epic],
+    queryFn: async () => {
+      // Both ends from the browser clock, so the window is exactly `days` long.
+      const until = new Date(Date.now()).toISOString();
+      const since = new Date(Date.now() - days * 86_400_000).toISOString();
+      return unwrap(
+        await api.GET("/api/projects/{projectId}/whats-new", {
+          params: { path: { projectId }, query: { since, until, ...(epic ? { epic } : {}) } },
+        }),
+      );
+    },
+  });
+}
+
 export function useDigest(projectId: string, hours: number) {
   const api = useApi();
   return useQuery({

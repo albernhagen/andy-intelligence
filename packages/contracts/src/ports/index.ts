@@ -37,6 +37,7 @@ import {
   type HeadCheck,
   type Listing,
   type PullRequest,
+  type PullRequestDetails,
   type PullRequestCommit,
   type ProposedPullRequest,
   type Repo,
@@ -595,6 +596,8 @@ export interface CodeHost {
   getPullRequest(fullName: string, number: number): Promise<PullRequest | null>;
   /** Empty and complete when the repo isn't known. */
   listChangedFiles(fullName: string, number: number): Promise<Listing<ChangedFile>>;
+  /** The PR's description and who merged it when (AI-159); null when the PR or repo isn't known. */
+  getPullRequestDetails(fullName: string, number: number): Promise<PullRequestDetails | null>;
   /** The latest result per check on a commit. */
   listHeadChecks(fullName: string, sha: string): Promise<Listing<HeadCheck>>;
   /** The checks `branch` requires before a merge; empty when none are configured. */
@@ -741,3 +744,4 @@ export * from "./runner";
 export * from "./night";
 export * from "./config-proposals";
 export * from "./config-changes";
+export * from "./release-notes";
