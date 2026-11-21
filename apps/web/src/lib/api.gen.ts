@@ -201,6 +201,11 @@ export interface paths {
                * @enum {string}
                */
               executor: "actions" | "local";
+              /**
+               * @default prod-only
+               * @enum {string}
+               */
+              environments: "prod-only" | "dev-and-prod";
             }[];
           };
         };
@@ -326,6 +331,11 @@ export interface paths {
                * @enum {string}
                */
               executor: "actions" | "local";
+              /**
+               * @default prod-only
+               * @enum {string}
+               */
+              environments: "prod-only" | "dev-and-prod";
             };
           };
         };
@@ -499,6 +509,11 @@ export interface paths {
                * @enum {string}
                */
               executor: "actions" | "local";
+              /**
+               * @default prod-only
+               * @enum {string}
+               */
+              environments: "prod-only" | "dev-and-prod";
             };
           };
         };
@@ -584,6 +599,8 @@ export interface paths {
             /** @enum {string} */
             executor?: "actions" | "local";
             emailNotifications?: boolean;
+            /** @enum {string} */
+            environments?: "prod-only" | "dev-and-prod";
           };
         };
       };
@@ -684,6 +701,11 @@ export interface paths {
                * @enum {string}
                */
               executor: "actions" | "local";
+              /**
+               * @default prod-only
+               * @enum {string}
+               */
+              environments: "prod-only" | "dev-and-prod";
             };
           };
         };

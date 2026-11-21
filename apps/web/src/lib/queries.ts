@@ -2,6 +2,7 @@ import { useEffect, useRef } from "react";
 import { type QueryClient, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type {
   AutoMerge,
+  EnvironmentPolicy,
   ExecutorKind,
   PlanApproval,
   Run,
@@ -326,6 +327,7 @@ export function useUpdateProject(projectId: string) {
       defaultWorker?: Worker;
       executor?: ExecutorKind;
       emailNotifications?: boolean;
+      environments?: EnvironmentPolicy;
     }) =>
       unwrap(
         await api.PATCH("/api/projects/{projectId}", { params: { path: { projectId } }, body }),

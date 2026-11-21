@@ -1,6 +1,6 @@
 import type { ReactNode } from "react";
 import { useParams } from "@tanstack/react-router";
-import { AutoMerge, PlanApproval, type Project } from "@andy/contracts";
+import { AutoMerge, EnvironmentPolicy, PlanApproval, type Project } from "@andy/contracts";
 import { ClearQuotaIdle } from "@/components/ClearQuotaIdle";
 import { DispatchControls } from "@/components/DispatchControls";
 import { ProjectPlanPanel } from "@/components/ProjectPlan";
@@ -67,6 +67,9 @@ export function ProjectSettingsPage() {
         </Setting>
         <Setting what="Email you when a ticket here starts to need you: items within 10 minutes share one email, at most 20 a day.">
           <EmailNotificationsControl project={project} />
+        </Setting>
+        <Setting what="Where releases go: prod only (with PR previews), or dev first and then a promote to prod. Nothing deploys from it yet.">
+          <EnvironmentsSelect project={project} />
         </Setting>
       </ul>
     </section>
@@ -192,6 +195,34 @@ function PlanApprovalSelect({ project }: { project: Project }) {
         {PlanApproval.options.map((o) => (
           <option key={o} value={o}>
             {PLAN_APPROVAL_LABELS[o]}
+          </option>
+        ))}
+      </select>
+      {update.error && <QueryError error={update.error} />}
+    </label>
+  );
+}
+
+const ENVIRONMENT_LABELS: Record<EnvironmentPolicy, string> = {
+  "prod-only": "prod only",
+  "dev-and-prod": "dev and prod",
+};
+
+/** Where the project's releases go (ADR-0050, AI-160: M6.2); later M6 slices read it. */
+function EnvironmentsSelect({ project }: { project: Project }) {
+  const update = useUpdateProject(project.id);
+  return (
+    <label className="ml-3 inline-flex items-center gap-1 text-sm">
+      Environments
+      <select
+        className="rounded border border-border bg-background px-1"
+        value={project.environments}
+        disabled={update.isPending}
+        onChange={(e) => update.mutate({ environments: EnvironmentPolicy.parse(e.target.value) })}
+      >
+        {EnvironmentPolicy.options.map((o) => (
+          <option key={o} value={o}>
+            {ENVIRONMENT_LABELS[o]}
           </option>
         ))}
       </select>

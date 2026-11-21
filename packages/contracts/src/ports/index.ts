@@ -2,6 +2,7 @@ import { z } from "zod";
 import {
   Assumption,
   AutoMerge,
+  EnvironmentPolicy,
   BillingType,
   DorStatus,
   EventActor,
@@ -214,6 +215,7 @@ export const ProjectPatch = z.strictObject({
   ...projectPlanPatch,
   defaultWorker: Worker.optional(),
   executor: ExecutorKind.optional(),
+  environments: EnvironmentPolicy.optional(),
 });
 export type ProjectPatch = z.infer<typeof ProjectPatch>;
 
@@ -230,6 +232,7 @@ export const ProjectSettings = ProjectPatch.pick({
   defaultWorker: true,
   executor: true,
   emailNotifications: true,
+  environments: true,
 });
 export type ProjectSettings = z.infer<typeof ProjectSettings>;
 

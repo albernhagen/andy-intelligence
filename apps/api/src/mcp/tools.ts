@@ -35,7 +35,7 @@ import { registerWorkerTools } from "./tools-worker";
 import { registerExecutorTools } from "./tools-executor";
 import { listNeedsMe, registerTicketTools, statusLineOf } from "./tools-tickets";
 import { registerScoreTools, withStartScore } from "./tools-scores";
-import { registerSettingsTools } from "./tools-settings";
+import { registerEnvironmentTools, registerSettingsTools } from "./tools-settings";
 import { registerNotifyTools } from "./tools-notify";
 import { registerDigestTools } from "./tools-digest";
 import { registerQuotaTools } from "./tools-quota";
@@ -515,6 +515,7 @@ export function registerTools(server: McpServer, deps: ToolDeps): void {
   registerScoreTools(server, tracker, run);
   registerSettingsTools(server, tracker, run);
   registerNotifyTools(server, deps, run);
+  registerEnvironmentTools(server, deps, run);
 }
 
 async function statusWithCost(service: TicketService, runs: RunService, key: string) {
