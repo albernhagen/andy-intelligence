@@ -91,7 +91,7 @@ Enterprise-shaped (durable state, policy, gates, least privilege, audit, contrac
                                              │
                Firestore (tickets, config, runs, questions, audit)   Secret Manager   Cloud Logging/Trace (OTel)
 
- Per project (generated from template): repo + AGENTS.md/docs/specs + CI + Cloud Deploy (dev → prod) + GCP dev/prod projects
+ Per project (generated from template): repo + AGENTS.md/docs/specs + CI + Actions deploy (dev → prod) + GCP dev/prod projects
 ```
 
 ---
@@ -122,7 +122,7 @@ Hard vetoes send a PR to Andy; otherwise agent PRs auto-merge per `autoMerge`; D
 
 ### 4.6 Environments and release
 
-Per-project dev/prod GCP projects, build once and promote by digest with Cloud Deploy, verification on dev, prod read-only for agents. [`workflow.md` §4.6](workflow.md#46-environments-and-release)
+Per-project dev/prod GCP projects, build once and promote by digest with GitHub Actions (ADR-0114), verification on dev, prod read-only for agents. [`workflow.md` §4.6](workflow.md#46-environments-and-release)
 
 ---
 
@@ -222,7 +222,7 @@ Additive schema changes by default; breaking ones bump `SCHEMA_VERSION` with a t
 | Work tracker    | Native in Firestore + in-app UI + MCP (ADR-0016)                                                                                               |
 | Code host       | One GitHub App on Andy's personal account, connected from the UI (ADR-0041, ADR-0043); public repos (ADR-0003, ADR-0015)                       |
 | Executors       | GitHub Actions (Claude Code, OpenCode), Jules REST API, OpenRouter                                                                             |
-| Release         | Cloud Deploy (per project)                                                                                                                     |
+| Release | GitHub Actions safe deploy, promote by digest (ADR-0114) |
 | IaC             | Terraform, version pinned in `.terraform-version`, installed with tenv (ADR-0024); provider versions pinned in committed `.terraform.lock.hcl` |
 | Telemetry       | OpenTelemetry → Cloud Trace / Logging                                                                                                          |
 | Evals           | Agent evals in CI from M1.17: Agent evals v1: in-repo runner over Claude Code (ADR-0086); Ori Eval for scout smoke tests           |

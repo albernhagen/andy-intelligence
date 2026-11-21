@@ -17,7 +17,7 @@ specs/NNN-name/{design.md, tech-design.md, tasks.md, stories/*.md, mockups/}
 .github/workflows/                # thin callers → platform composite actions, pinned by SHA (ADR-0038)
 .andy/baseline.json               # baseline version (andy-intelligence commit) this repo is on
 CODEOWNERS                        # `*` requests Andy's review (ADR-0042); further lines = always-gated paths
-infra/                            # Terraform: dev/prod Cloud Run, Cloud Deploy pipeline, read-only agent SAs
+infra/                            # Terraform: dev/prod Cloud Run, deployers, read-only agent SAs
 ```
 **Required CI checks** on `main`: tests, lint, typecheck, protected-path check, secret scan, security scans and security-review agent (§9.1), "PR references a ticket" (ticket key in branch name or PR body, verified against the control-plane API).
 

@@ -11,7 +11,7 @@ Overview and reading map: [ARCHITECTURE.md](ARCHITECTURE.md). Section numbers ma
 | **Backlog** | Refinement agent enriches; splits epics into stories (child tickets with dependencies); sizes; assigns tier; **asks Andy questions** | **Definition of Ready (DoR)** met |
 | **Ready** | Waits for dependencies, a worker that is an agent (ADR-0082), quota/budget | Dispatcher starts a run |
 | **In progress** | Build task: plans read-only, then implements (ADR-0050; plan approval below). One automatic retry, then flags Needs-you | PR opened with structured run summary (plan, deviations, verification output) |
-| **Ready for review** | Rule-based gate decides auto-merge vs. Andy | Merged. No stage after it until M6: Dev → prod releases adds one for dev verification (ADR-0069) |
+| **Ready for review** | Rule-based gate decides auto-merge vs. Andy | Merged. M6 adds **Verifying** after it, per project (ADR-0069, ADR-0114) |
 | **Done** | Summary included in rollups | — |
 | **Cancelled** | Andy cancelled it; runs stop, questions withdrawn | Andy reopens it to Backlog |
 
@@ -52,8 +52,8 @@ As built (PR events, build dispatch, plan approval): [`history/workflow-as-built
 Detail: [`review-gate.md`](review-gate.md).
 
 ### 4.6 Environments and release
-- Per project: GCP projects `<app>-dev` and `<app>-prod`.
-- **Build once, promote the same image digest** via **Cloud Deploy** (dev → prod, approval required for prod, one-click rollback).
-- On merge: deploy to dev → smoke/e2e (Playwright + API) → a verification agent logs the results on the ticket.
-- **Release:** "Promote to prod" from UI or MCP → Cloud Deploy approval → deploy; notes from its tickets.
+- Per project (ADR-0114): `prod-only` (`<app>-prod` + PR previews; default) or `dev-and-prod`.
+- **Build once, promote the same image digest** with the safe-deploy action; promote and rollback (owner, UI or MCP) dispatch `release.yml`.
+- On merge: deploy to the first environment → tests + verification agent → Verifying exits to Done or rework.
+- Deploys are recorded (DORA); release notes from merged PRs' notes.
 - Agent write policy: dev writes per project policy; prod read-only.
