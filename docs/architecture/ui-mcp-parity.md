@@ -34,6 +34,7 @@ Step 1 of AI-285: Web UI and MCP parity: every action in both, enforced by a tes
 | AI-287: Parity: project setup checklist over MCP                       | UI-only   | S    | `GET …/setup` → `project_setup`                              |
 | AI-288: Parity: spend per provider in get_spend                        | UI-only   | S    | `GET …/spend/providers` → `get_spend`                        |
 | AI-289: Parity: send a test email over MCP                             | UI-only   | S    | `GET /notify/email`, `POST …/test` → `test_email`            |
+| AI-294 follow-up: revoke a runner over MCP (pending Andy's decision on ADR-0089) | UI-only | S | `POST /runners/:id/revoke` → `revoke_runner` |
 | AI-290: Parity: ask a question on a ticket over MCP                    | done      | S    | `POST …/tickets/:id/questions` → `ask_question`              |
 | AI-291: Parity: edit_ticket sets needs-attention, risk and confidence  | done      | S    | `PATCH` fields → `edit_ticket`                               |
 | AI-292: Parity: set the daily question cap over MCP                    | UI-only   | S    | `PATCH dailyQuestionCap` → `set_daily_question_cap`          |
@@ -68,7 +69,6 @@ M6, M7 and M8 add no gap today: their settings that exist (environments) are alr
 | ----------------------------------------------------- | -------- | -------------------------------------------------------------------------------------------------------- |
 | Turn Builds on or off                                 | Web only | ADR-0063: Builds is set only in the app                                                                  |
 | Register a runner                                     | Web only | Returns the runner token once; a token should not land in a chat transcript                              |
-| Revoke a runner | Web only | Revoking stays where a person signs in (ADR-0089); pending Andy's decision on ADR-0089 (AI-294) |
 | OAuth consent (`POST /oauth/approve`)                 | Web only | The browser half of MCP sign-in                                                                          |
 | GitHub App setup (`/github`, `/manifest`, `/connect`) | Web only | GitHub's manifest flow needs a browser                                                                   |
 | `submit_brief`, `submit_project_plan`                 | MCP only | Written by a Claude session following `onboard.md` and `plan-project.md`; the web shows and decides them |

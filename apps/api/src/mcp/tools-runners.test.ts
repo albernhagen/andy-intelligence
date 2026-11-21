@@ -23,12 +23,10 @@ const verifier: TokenVerifier = {
   },
 };
 
-/** Tools MCP deliberately doesn't have, with why (recorded for AI-300's registry test). */
+/** What MCP deliberately doesn't have, with why (recorded for AI-300's registry test). */
 export const RUNNER_ACTIONS_WEB_ONLY = {
   register:
     "POST /api/runners shows the runner secret once; a secret must not land in a chat transcript.",
-  revoke:
-    "POST /api/runners/:id/revoke stays where a person signs in (ADR-0089), pending Andy's decision on ADR-0089.",
 } as const;
 
 async function setup() {
@@ -84,12 +82,10 @@ describe("list_runners (AI-294 parity with GET /api/runners)", () => {
     expect((await rest("GET", "/api/runners")).body).toEqual([]);
   });
 
-  it("GivenTheToolList_WhenListed_ThenRegisterAndRevokeAreWebOnlyOnPurpose", async () => {
+  it("GivenTheToolList_WhenListed_ThenRegisteringARunnerIsWebOnlyOnPurpose", async () => {
     const { app, grants } = await setup();
     const names = await mcpToolNames(app, grants, RESOURCE);
     expect(names).toContain("list_runners");
-    for (const action of Object.keys(RUNNER_ACTIONS_WEB_ONLY)) {
-      expect(names.filter((n) => n.includes("runner") && n.includes(action))).toEqual([]);
-    }
+    expect(names.filter((n) => n.includes("runner") && /register|mint/.test(n))).toEqual([]);
   });
 });
