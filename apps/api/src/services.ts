@@ -118,6 +118,7 @@ export const METERED_READS = {
   ],
   reviewFindings: ["recent"],
   releaseNotes: ["get", "listForProject"],
+  milestones: ["list", "get"],
   quota: ["latest", "clearsSince"],
   nightLaunches: ["get", "listForProject", "findActive"],
   deployments: ["get", "list", "latestGood"],
@@ -227,7 +228,7 @@ export function createServices(raw: AppDeps): Services {
         )
       : null,
   );
-  const refiner = new RefineDispatcher(deps.tracker, deps.runs, runs, now);
+  const refiner = new RefineDispatcher(deps.tracker, deps.runs, runs, now, deps.milestones ?? null);
   // AI-124/AI-125: when a launch ends, its morning PR opens (or an empty epic branch goes),
   // then the morning report goes on the epic, with or without GitHub. One instance for both
   // places a launch ends: `NightLaunches.end` (stop, stop time) and the build dispatcher (done,
@@ -266,6 +267,7 @@ export function createServices(raw: AppDeps): Services {
     deps.quota ?? null,
     deps.nightLaunches ?? null,
     morning,
+    deps.milestones ?? null,
   );
   // AI-72 (ADR-0083): queued sync runs go first, so open PRs catch up with main before new work.
   const syncer = new SyncRuns(
@@ -351,6 +353,7 @@ export function createServices(raw: AppDeps): Services {
           undefined,
           connection ? connectedEpicBranches(connection, deps.tracker, deps.nightLaunches) : null,
           morning,
+          deps.milestones ?? null,
         ),
         store: deps.nightLaunches,
         tracker: deps.tracker,
@@ -469,6 +472,7 @@ export function createServices(raw: AppDeps): Services {
     work: new WorkReader(deps.tracker, board),
     roadmap: new RoadmapReader(deps.tracker, board),
     whatsNew,
+    milestones: deps.milestones ?? null,
     // AI-295: one reader each for the Dashboards routes and MCP `dashboard`.
     dashboard: new DashboardReader(deps.tracker, deps.runs, tickets),
     dora: new DoraReader(deps.tracker, deps.deployments ?? null, now),
