@@ -1,5 +1,6 @@
 // Routes registered after the /api sign-in and body-limit middleware: every /api/* path gets
-// it; the others here (MCP, OAuth) check their own caller. One line per module, sorted by module
+// it; the others here (MCP, OAuth) check their own caller and are allow-listed in
+// `registries.test.ts`. One line per module, sorted by module
 // path (AI-145): a module exports `apiRoutes: RouteModule` and gets one line here. Order is not
 // significant: `routes.test.ts` proves no two routes can match the same request.
 export { apiRoutes as board } from "./board";

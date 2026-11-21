@@ -126,6 +126,24 @@ describe("code registries (AI-145)", () => {
     expect(routes.slice(0, signIn).filter((r) => r.includes(" /api/"))).toEqual([]);
   });
 
+  it("GivenEveryFeatureOn_WhenRoutesAfterSignInAreListed_ThenEachIsUnderApiOrAKnownSelfCheckingPath", async () => {
+    // The /api/* middleware only guards /api/ paths. These check their own caller (MCP bearer
+    // token, OAuth flow) or are public by design; a new one is an entry point (threat model).
+    const selfChecking = new Set([
+      "/.well-known/oauth-authorization-server",
+      "/.well-known/oauth-protected-resource",
+      "/.well-known/oauth-protected-resource/mcp",
+      "/mcp",
+      "/oauth/authorize",
+      "/oauth/token",
+      "/openapi.json",
+    ]);
+    const { routes } = await registrySnapshot();
+    const afterSignIn = routes.slice(routes.indexOf("ALL /api/*")).map((r) => r.split(" ")[1]!);
+    const unguarded = afterSignIn.filter((p) => !p.startsWith("/api/") && !selfChecking.has(p));
+    expect(unguarded).toEqual([]);
+  });
+
   it("GivenEveryFeatureOn_WhenToolsAreListed_ThenEachNameIsServedOnce", async () => {
     const { tools } = await registrySnapshot();
     expect(tools.length).toBeGreaterThan(40);
