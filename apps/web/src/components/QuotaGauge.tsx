@@ -1,4 +1,4 @@
-import type { QuotaLevel, QuotaWindow } from "@andy/contracts";
+import type { QuotaLevel, QuotaStatus, QuotaWindow } from "@andy/contracts";
 import { useQuota } from "@/lib/queries";
 import { cn } from "@/lib/utils";
 
@@ -15,13 +15,45 @@ const BAR: Record<QuotaLevel, string> = {
   unknown: "bg-muted",
 };
 
-/** Used % per subscription window. A stale or missing reading shows "unknown", never a number. */
+const TEXT: Record<QuotaLevel, string> = {
+  ok: "text-muted-foreground",
+  warn: "text-attention",
+  pause: "text-destructive",
+  unknown: "text-muted-foreground",
+};
+
+/**
+ * Used % per subscription window. A stale or missing reading shows "unknown", never a number.
+ * Below `md` (phones, AI-176) only the fullest window fits in the header: "Quota 72%".
+ */
 export function QuotaGauge() {
   const quota = useQuota();
   if (!quota.data) return null;
+  const known = quota.data.windows.filter((w) => w.usedPct !== null);
+  const fullest = known.reduce<(typeof known)[number] | undefined>(
+    (top, w) => (top && (top.usedPct ?? 0) >= (w.usedPct ?? 0) ? top : w),
+    undefined,
+  );
+  return (
+    <>
+      <span
+        className={cn(
+          "whitespace-nowrap text-xs tabular-nums md:hidden",
+          TEXT[fullest?.level ?? "unknown"],
+        )}
+        title={fullest ? `${WINDOW_LABEL[fullest.window]} window` : undefined}
+      >
+        {fullest ? `Quota ${Math.round(fullest.usedPct ?? 0)}%` : "Quota unknown"}
+      </span>
+      <QuotaWindows windows={quota.data.windows} />
+    </>
+  );
+}
+
+function QuotaWindows({ windows }: { windows: QuotaStatus["windows"] }) {
   return (
     <ul aria-label="Claude quota" className="hidden items-center gap-3 text-xs md:flex">
-      {quota.data.windows.map((w) => {
+      {windows.map((w) => {
         const label = WINDOW_LABEL[w.window];
         return (
           <li key={w.window} className="flex items-center gap-1.5 text-muted-foreground">
