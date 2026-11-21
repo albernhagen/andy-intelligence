@@ -9,6 +9,8 @@ import { hashToken, newToken } from "./mcp/tokens";
 /** AI-70: the daily digest end to end in-process: seeded stores → REST and MCP. */
 
 const MCP_URL = "https://cp.example/mcp";
+/** The MCP digest links the What's new page (AI-159). */
+const WHATS_NEW_LINK = "\n\nWhat's new: https://cp.example/p/ai/whats-new";
 const ROUTE = { harness: "claude-code", provider: "claude-sub", model: "sonnet" } as const;
 
 async function setup() {
@@ -107,7 +109,7 @@ describe("daily digest", () => {
     expect(text.indexOf("Merged (1)")).toBeLessThan(text.indexOf("Totals"));
 
     const mcp = await mcpDigest({});
-    expect(mcp.text).toBe(digest.text);
+    expect(mcp.text).toBe(`${digest.text}${WHATS_NEW_LINK}`);
     expect(mcp.digest.exceptions).toEqual(digest.exceptions);
     expect(mcp.digest.totals).toEqual(digest.totals);
   });
@@ -123,7 +125,7 @@ describe("daily digest", () => {
       "AI digest · 2025-12-31 00:00 UTC to 2026-01-01 00:00 UTC: nothing happened.",
     );
 
-    expect((await mcpDigest({ until })).text).toBe(digest.text);
+    expect((await mcpDigest({ until })).text).toBe(`${digest.text}${WHATS_NEW_LINK}`);
   });
 
   it("GivenABadWindowOrProject_WhenRead_Then400Or404", async () => {

@@ -21,11 +21,11 @@ infra/                            # Terraform: dev/prod Cloud Run, Cloud Deploy 
 ```
 **Required CI checks** on `main`: tests, lint, typecheck, protected-path check, secret scan, security scans and security-review agent (§9.1), "PR references a ticket" (ticket key in branch name or PR body, verified against the control-plane API).
 
-Onboarding a project = UI/MCP "Add project" → onboarding interview → brief PR (ADR-0053) → bootstrap (applies the project baseline, §8.1; until then `platform/baseline/baseline.mjs onboard`, runbook `docs/runbooks/onboard-a-repo.md`: branch ruleset, repo settings, labels, template files, secrets refs, App install check, Terraform PR for GCP) → Andy approves Terraform PR.
+Onboarding a project = UI/MCP "Add project" → onboarding interview → brief PR (ADR-0053) → bootstrap (applies the project baseline, §8.1; until then `platform/baseline/baseline.mjs onboard`, runbook `docs/runbooks/onboard-a-repo.md`) → Andy approves Terraform PR.
 
 ### 8.1 Project baseline (ADR-0031)
 
-Every guardrail built here reaches each managed project the same way, this repo included. **Every slice that adds or changes a guardrail updates this table in the same PR.**
+Every guardrail built here reaches each managed project the same way, this repo included; a slice that adds or changes one updates this table.
 
 Carried by (ADR-0038): **A** = composite action in `platform/actions/`; managed repos get the caller workflow with the action pinned by SHA · **M** = managed file (kept identical; listed in `platform/baseline/manifest.json`) · **S** = seed file, copied once from `template/` · **G** = GitHub config in `platform/baseline/github/`, applied by `platform/baseline/baseline.mjs` · **TF** = Terraform module in `infra/modules/` · **RB** = runbook step (secrets).
 
@@ -47,6 +47,7 @@ GitHub settings rows (ruleset, merge settings, `autoMerge`, `planApproval`, Depe
 | System security review + drift | 0025, 0030 | `system-security-review.yml`, `platform/procedures/threat-model.md` | — | not yet carried (M6: Dev → prod releases; its drift plan is GCP-specific) |
 | Local hooks (lefthook) + Claude Code format hook + Prettier config | 0027 | `lefthook.yml`, `.claude/settings.json`, `scripts/format-edited-file.mjs`, `.prettierrc.json` | M | carried (M1.16) |
 | Dependabot (npm, Actions; cooldown) | 0025, 0030 | `template/.github/dependabot.yml` (this repo's adds Terraform) | M | carried (M1.16) |
+| PR release-note block | 0121 | `release-note.yml` → `platform/actions/release-note-check` | A | not yet carried |
 | PR template (docs + security checklist) | 0022, 0025 | `template/.github/pull_request_template.md` | M | carried (M1.16) |
 | Agent rules; docs ship with the change | 0022 | `template/AGENTS.md.template` | S | carried (M1.16) |
 | Threat model seed | 0025 | `template/docs/security/threat-model.md` | S | carried (M1.16) |
