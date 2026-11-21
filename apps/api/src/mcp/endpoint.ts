@@ -4,6 +4,7 @@ import { WebStandardStreamableHTTPServerTransport } from "@modelcontextprotocol/
 import type { Hono, MiddlewareHandler } from "hono";
 import { bodyLimit } from "hono/body-limit";
 import { actorOf, type AuthEnv } from "../auth";
+import type { ProjectAccess } from "../project-access";
 import { mcpUrls } from "./oauth";
 import type { FixedWindowLimiter } from "./rate-limit";
 import { hashToken, isTokenShaped } from "./tokens";
@@ -20,6 +21,8 @@ export interface McpEndpointDeps {
   lookups: FixedWindowLimiter;
   /** The app's shared services: every tool call uses these (AI-145). */
   services: ToolServices;
+  /** The app's project-access check (AI-252: M8.3), the same one `/api` uses. */
+  projectAccess?: ProjectAccess;
 }
 
 /**
@@ -72,6 +75,7 @@ export function registerMcpEndpoint(app: Hono<AuthEnv>, deps: McpEndpointDeps) {
       ...deps.services,
       email: identity.email,
       actor: actorOf(identity),
+      projectAccess: deps.projectAccess,
     });
     const transport = new WebStandardStreamableHTTPServerTransport({
       sessionIdGenerator: undefined,

@@ -34,17 +34,30 @@ export function projectOfPath(path: string): ProjectTarget | null {
   return null;
 }
 
-/** The projects a tool's parsed input names: its `project` and the prefix of its `ticket`. */
+/**
+ * MCP input fields that hold ticket keys (one, or a list). `registries.test.ts` fails when a tool
+ * takes a ticket key in any other field.
+ */
+export const TICKET_KEY_FIELDS = ["ticket", "parent", "parentId", "blockedBy", "above", "below"];
+
+/**
+ * The projects a tool's parsed input names: its `project`, and the prefix of every ticket key in
+ * a `TICKET_KEY_FIELDS` field. A value that isn't a key (a ticket id, null) names nothing.
+ */
 export function projectsOfToolInput(args: unknown): ProjectTarget[] {
   if (typeof args !== "object" || args === null) return [];
-  const { project, ticket } = args as { project?: unknown; ticket?: unknown };
+  const input = args as Record<string, unknown>;
   const targets: ProjectTarget[] = [];
-  if (typeof project === "string") {
+  if (typeof input.project === "string") {
+    const project = input.project;
     targets.push({ projectId: projectIdFor(project), error: `project ${project} not found` });
   }
-  if (typeof ticket === "string") {
-    const target = ticketTarget(ticket);
-    if (target) targets.push(target);
+  for (const field of TICKET_KEY_FIELDS) {
+    const value = input[field];
+    for (const key of Array.isArray(value) ? value : [value]) {
+      const target = typeof key === "string" ? ticketTarget(key) : null;
+      if (target) targets.push(target);
+    }
   }
   return targets;
 }

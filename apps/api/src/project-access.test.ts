@@ -6,6 +6,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import type { AppDeps } from "./app";
 import type { AuthEnv, TokenVerifier } from "./auth";
 import * as toolGroups from "./mcp/tool-groups";
+import { mcpCaller } from "./mcp/test-client";
 import { hashToken, newToken } from "./mcp/tokens";
 import { registerTools, run, type ToolDeps, type ToolGroup } from "./mcp/tools";
 import {
@@ -122,6 +123,18 @@ describe("projectsOfToolInput (AI-252)", () => {
     expect(projectsOfToolInput({ project: "AI", ticket: "OPS-7" }).map((t) => t.projectId)).toEqual(
       ["ai", "ops"],
     );
+  });
+
+  it("GivenOtherTicketKeyFields_WhenRead_ThenEachKeysProjectIsNamed", () => {
+    const input = { ticket: "AI-1", parent: "OPS-2", blockedBy: ["WEB-3", "AI-4"], above: "X-5" };
+    expect(projectsOfToolInput(input).map((t) => t.projectId)).toEqual([
+      "ai",
+      "ops",
+      "web",
+      "ai",
+      "x",
+    ]);
+    expect(projectsOfToolInput({ parentId: "t-123", parent: null })).toEqual([]);
   });
 
   it("GivenInputWithoutAProjectOrTicket_WhenRead_ThenNothingIsNamed", () => {
@@ -296,6 +309,20 @@ describe("MCP tools behind the project-access check (AI-252)", () => {
     expect(calls).toEqual([]);
   });
 
+  it("GivenAReadableTicketAndAnUnreadableBlocker_WhenEditTicketIsCalled_ThenTheBlockerIsNotFound", async () => {
+    vi.spyOn(console, "log").mockImplementation(() => undefined);
+    const access: ProjectAccess = {
+      canRead: (_, projectId) => Promise.resolve(projectId !== "ops"),
+    };
+    const { tools, calls } = await toolsWith(access);
+    const result = (await tools
+      .get("edit_ticket")!
+      .cb({ ticket: "AI-1", blockedBy: ["OPS-9"] }, {})) as CallToolResult;
+    expect(result.isError).toBe(true);
+    expect((result.content[0] as { text: string }).text).toBe("ticket not found: OPS-9");
+    expect(calls).toEqual([]);
+  });
+
   it("GivenTodaysAllowAll_WhenAToolNamingAProjectIsCalled_ThenItsHandlerRuns", async () => {
     const { tools } = await toolsWith(ALLOW_SIGNED_IN);
     const result = (await tools
@@ -303,6 +330,17 @@ describe("MCP tools behind the project-access check (AI-252)", () => {
       .cb({ project: "AI" }, {})) as CallToolResult;
     expect(result.isError).toBeUndefined();
     expect(result.structuredContent).toMatchObject({ project: "AI" });
+  });
+
+  it("GivenTheAppsProjectAccessRefuses_WhenAToolIsCalledThroughTheMcpEndpoint_ThenNotFound", async () => {
+    // The app passes its one check to MCP too, not only to /api.
+    vi.spyOn(console, "log").mockImplementation(() => undefined);
+    const { access, asked } = recordingAccess();
+    const { app, grants } = await seededApp({ projectAccess: access });
+    const callTool = await mcpCaller(app, grants, "http://localhost/mcp");
+    const result = await callTool("get_project_settings", { project: "AI" });
+    expect(result).toMatchObject({ isError: true, text: "project AI not found" });
+    expect(asked).toEqual([[ANDY, "ai"]]);
   });
 
   it("GivenEveryToolGroup_WhenItsToolIsCalledSignedOutOrByANonOwner_ThenRefusedAsToday", async () => {

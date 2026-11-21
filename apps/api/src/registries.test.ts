@@ -7,7 +7,7 @@ import { describe, expect, it } from "vitest";
 import * as apiRoutes from "./api-routes";
 import * as toolGroups from "./mcp/tool-groups";
 import { hashToken, newToken } from "./mcp/tokens";
-import { projectOfPath } from "./project-access";
+import { projectOfPath, TICKET_KEY_FIELDS } from "./project-access";
 import * as publicRoutes from "./public-routes";
 import { fullApp, registrySnapshot } from "./registry-snapshot";
 
@@ -246,8 +246,10 @@ const CROSS_PROJECT_TOOLS: Record<string, string> = {
 /** A concrete path for a route pattern: a ticket key for `:key`, "x" for other params. */
 const samplePath = (pattern: string) => pattern.replace(":key", "AI-1").replace(/:[^/]+/g, "x");
 
-/** Every MCP tool the full app serves, with its input's required fields. */
-async function toolInputs(): Promise<{ name: string; required: string[] }[]> {
+/** Every MCP tool the full app serves, with its input's fields and the required ones. */
+async function toolInputs(): Promise<
+  { name: string; properties: Record<string, unknown>; required: string[] }[]
+> {
   const { app, grants } = fullApp();
   const token = newToken();
   await grants.put(hashToken(token), {
@@ -270,7 +272,11 @@ async function toolInputs(): Promise<{ name: string; required: string[] }[]> {
     }),
   );
   const { tools } = await client.listTools();
-  return tools.map((t) => ({ name: t.name, required: t.inputSchema.required ?? [] }));
+  return tools.map((t) => ({
+    name: t.name,
+    properties: t.inputSchema.properties ?? {},
+    required: t.inputSchema.required ?? [],
+  }));
 }
 
 describe("project-access registry (AI-252)", () => {
@@ -296,5 +302,30 @@ describe("project-access registry (AI-252)", () => {
     expect(names.filter((n) => !checked.has(n) && !(n in CROSS_PROJECT_TOOLS))).toEqual([]);
     const listed = Object.keys(CROSS_PROJECT_TOOLS);
     expect(listed.filter((n) => !names.includes(n) || checked.has(n))).toEqual([]);
+  });
+
+  it("GivenEveryFeatureOn_WhenToolInputsAreRead_ThenEveryTicketKeyFieldIsOneTheCheckReads", async () => {
+    // A field whose JSON schema (or its items, or a nullable branch) has the ticket-key pattern.
+    const KEY_PATTERN = "^[A-Z][A-Z0-9]{0,9}-\\d+$";
+    const holdsKey = (schema: unknown): boolean =>
+      typeof schema === "object" && schema !== null
+        ? Object.entries(schema).some(
+            ([k, v]) => (k === "pattern" && v === KEY_PATTERN) || holdsKey(v),
+          )
+        : false;
+    const keyed = (await toolInputs()).flatMap((t) =>
+      Object.entries(t.properties)
+        .filter(([, schema]) => holdsKey(schema))
+        .map(([field]) => ({ field, at: `${t.name}.${field}` })),
+    );
+    expect(keyed.map((k) => k.at)).toEqual(
+      expect.arrayContaining([
+        "edit_ticket.blockedBy",
+        "set_ticket_parent.parent",
+        "reorder_ticket.above",
+      ]),
+    );
+    const unchecked = keyed.filter((k) => !TICKET_KEY_FIELDS.includes(k.field)).map((k) => k.at);
+    expect(unchecked).toEqual([]);
   });
 });

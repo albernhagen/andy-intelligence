@@ -17,10 +17,11 @@ One check decides whether a caller may read a project, for API routes and MCP to
 
 ## Today
 
-`ALLOW_SIGNED_IN`: every allow-listed caller is the owner and reads every project, so nothing changes. M8.5 (Members sign in) replaces it with membership lookups for the API and MCP (`mcp/endpoint.ts` passes `projectAccess`).
+`ALLOW_SIGNED_IN`: every allow-listed caller is the owner and reads every project, so nothing changes. The app passes one `projectAccess` to both the `/api` middleware and the MCP endpoint; M8.5 (Members sign in) sets it to membership lookups.
 
 ## What it doesn't cover yet
 
 - **Cross-project routes and tools** (lists, dashboard, inbox, question answers, config changes by id, owner settings): listed in `apps/api/src/registries.test.ts` with how M8.7 (Cross-project lists per member) filters each. A new route or tool that is neither checked nor listed fails that test.
-- **Other ticket keys in a tool's input** (`parent`, `parentId`, `blockedBy`, `above`, `below`): not checked here. With one owner this changes nothing; M8.5 must check them, or the domain must refuse keys outside the caller's projects, before a member exists.
+- **Ticket keys in API request bodies** (`blockedBy` and `parentId` on ticket create and edit): not checked here (MCP's are; `registries.test.ts` fails on a tool with an unchecked key field). With one owner this changes nothing; M8.5 must check them, or the domain must refuse keys outside the caller's projects, before a member exists.
+- **Fails open:** without a `projectAccess`, both default to `ALLOW_SIGNED_IN`. M8.5 should make it required.
 - **Writes:** roles decide them in the permission function (M8.4, M8.6), not here.
