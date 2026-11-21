@@ -24,6 +24,7 @@ const FAKES: Record<keyof typeof METERED_READS, string> = {
   configChanges: "InMemoryConfigChangeStore",
   reviewFindings: "InMemoryReviewFindingSource",
   releaseNotes: "InMemoryReleaseNoteStore",
+  milestones: "InMemoryMilestoneStore",
   quota: "InMemoryQuotaStore",
   nightLaunches: "InMemoryNightLaunchStore",
   deployments: "InMemoryDeploymentStore",

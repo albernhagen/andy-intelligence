@@ -1,4 +1,5 @@
 import {
+  InMemoryMilestoneStore,
   InMemoryOAuthGrantStore,
   InMemoryRunStore,
   InMemoryWorkTracker,
@@ -38,7 +39,7 @@ const story = (title: string): NewTicket => ({
   sizeReason: "one screen",
 });
 
-async function setup() {
+async function setup(milestones = new InMemoryMilestoneStore()) {
   const tracker = new InMemoryWorkTracker();
   const runs = new InMemoryRunStore();
   const grants = new InMemoryOAuthGrantStore();
@@ -50,6 +51,7 @@ async function setup() {
     webConfig: { firebaseApiKey: "k", firebaseAuthDomain: "d", projectId: "p" },
     tracker,
     runs,
+    milestones,
     mcp: { publicUrl: PUBLIC_URL, grants, clients: new ClientMetadataResolver() },
   });
   const token = newToken();
@@ -561,5 +563,36 @@ describe("reads (ADR-0028)", () => {
     expect(counted).toHaveBeenCalledWith("ops");
     // Only the Needs-you inbox lists tickets: once per project (from its snapshot in the app, AI-319).
     expect(listed.mock.calls.map(([projectId]) => projectId).sort()).toEqual(["ai", "ops"]);
+  });
+});
+
+describe("milestone holds in status (AI-306)", () => {
+  it("GivenAReadyTicketInAParkedMilestone_WhenStatusIsRead_ThenTheLineSaysWhy", async () => {
+    const milestones = new InMemoryMilestoneStore();
+    const at = "2026-11-21T12:00:00.000Z";
+    await milestones.create({
+      ...{ id: "m6", projectId: "ai", name: "M6: Dev to prod", outcome: "Releases reach prod." },
+      ...{ order: 6, status: "parked", createdAt: at, updatedAt: at },
+    });
+    const ctx = await setup(milestones);
+    const epic = await ctx.service.create("ai", { title: "Epic", type: "epic" }, "andy");
+    // Nothing writes a ticket's milestone until AI-304: M4.34; set it as that write will.
+    const stored = (ctx.tracker as unknown as { tickets: Map<string, Ticket> }).tickets;
+    stored.get(epic.id)!.milestoneId = "m6";
+    const held = await ctx.service.create("ai", { ...story("Held"), parentId: epic.id }, "andy");
+    const free = await ctx.service.create("ai", story("Free"), "andy");
+    for (const t of [held, free]) {
+      await ctx.tracker.updateTicket(
+        "ai",
+        t.id,
+        { stage: { to: "ready", forced: true, reason: null } },
+        "andy",
+      );
+    }
+
+    const status = await ctx.call("status", { ticket: held.key });
+    expect(status.data.statusLine.text).toBe("Waiting: Milestone M6: Dev to prod is parked");
+    const other = await ctx.call("status", { ticket: free.key });
+    expect(other.data.statusLine.text).not.toContain("Milestone");
   });
 });
