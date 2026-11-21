@@ -19,7 +19,8 @@ import { typeLabel } from "@/lib/tickets";
 function useReady(projectId: string, filters: ReadyFilters) {
   const api = useApi();
   return useQuery({
-    ...useLivePoll("slow"),
+    // Tickets poll at the live pace; a web write refetches it at once (useWrite invalidates all).
+    ...useLivePoll("live"),
     queryKey: ["ready", projectId, filters],
     queryFn: async () =>
       unwrap(
