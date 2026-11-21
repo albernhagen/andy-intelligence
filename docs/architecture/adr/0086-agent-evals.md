@@ -1,4 +1,5 @@
 ---
+title: "Agent evals: in-repo runner"
 status: accepted
 date: 2026-11-11
 ---

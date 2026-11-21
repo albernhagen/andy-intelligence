@@ -1,4 +1,5 @@
 ---
+title: Pipeline and policy defaults (from ARCHITECTURE §4–§5)
 status: accepted
 date: 2026-10-21
 ---
