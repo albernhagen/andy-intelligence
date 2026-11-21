@@ -325,17 +325,17 @@ export function registerCoreTools(server: McpServer, deps: ToolDeps, run: Run): 
     "set_auto_merge",
     {
       description:
-        "Sets which ticket sizes' agent PRs the control plane merges on its own once the gate passes: none, s, s-and-m (default for new projects) or all. Andy only.",
+        "Sets which ticket sizes' agent PRs the control plane merges on its own once the gate passes: none, s, s-and-m (default for new projects) or all. Andy only. While a project's merge mode is unset it is read from this, so over MCP this may not loosen that mode (ADR-0124): change it on the project settings page.",
       inputSchema: AutoMergeInput,
       annotations: { destructiveHint: false, idempotentHint: true },
     },
     ({ project, policy }) =>
       run(async () => {
-        const updated = await deps.projects.update(
-          project.toLowerCase(),
-          { autoMerge: policy },
-          { actor: deps.actor, email: deps.email },
-        );
+        // ADR-0124: while the merge mode is read from auto-merge, MCP may not loosen it.
+        const updated = await deps.projects.setAutoMergeOverMcp(project.toLowerCase(), policy, {
+          actor: deps.actor,
+          email: deps.email,
+        });
         return { project: updated.key, autoMerge: updated.autoMerge };
       }),
   );

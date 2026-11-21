@@ -93,3 +93,15 @@ export function requireTightening(
     );
   }
 }
+
+/**
+ * While a project's `mergeMode` is unset its mode is read from `autoMerge`, so an `autoMerge`
+ * change over MCP (`set_auto_merge`, a settings revert) must not loosen it either.
+ */
+export function requireAutoMergeNotLoosening(
+  next: AutoMerge,
+  project: Pick<Project, "id" | "key" | "mergeMode" | "autoMerge">,
+): void {
+  if (project.mergeMode !== null) return;
+  requireTightening(effectiveMergeMode({ ...project, autoMerge: next }), project);
+}

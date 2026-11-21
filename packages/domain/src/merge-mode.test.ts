@@ -7,6 +7,7 @@ import {
   effectiveMergeMode,
   effectiveTicketMergeMode,
   isLooser,
+  requireAutoMergeNotLoosening,
   requireOverrideNotLooser,
   requireTightening,
 } from "./merge-mode";
@@ -77,6 +78,21 @@ describe("requireOverrideNotLooser and requireTightening", () => {
   it("GivenManual_WhenLoosening_ThenRefusedAndTighteningAllowed", () => {
     expect(() => requireTightening("low-risk", project({ mergeMode: "manual" }))).toThrow(/looser/);
     expect(() => requireTightening("manual", project({ mergeMode: "all-clean" }))).not.toThrow();
+  });
+});
+
+describe("requireAutoMergeNotLoosening", () => {
+  it("GivenAnUnsetMode_WhenAutoMergeWouldLoosenIt_ThenRefused", () => {
+    expect(() => requireAutoMergeNotLoosening("all", project({ autoMerge: "none" }))).toThrow(
+      /looser/,
+    );
+    expect(() => requireAutoMergeNotLoosening("none", project({ autoMerge: "all" }))).not.toThrow();
+  });
+
+  it("GivenAStoredMode_WhenAutoMergeChanges_ThenItIsNotTheModeAndAllowed", () => {
+    expect(() =>
+      requireAutoMergeNotLoosening("all", project({ mergeMode: "manual", autoMerge: "none" })),
+    ).not.toThrow();
   });
 });
 

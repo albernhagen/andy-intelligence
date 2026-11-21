@@ -242,4 +242,36 @@ describe("set_merge_mode and the settings route", () => {
     expect(res.isError).toBe(true);
     expect((await ctx.tracker.getProject("ai"))?.mergeMode).toBe("manual");
   });
+
+  it("GivenAModeStillReadFromAutoMerge_WhenAutoMergeIsLoosenedOverMcp_ThenRefusedAndTighteningWorks", async () => {
+    const ctx = await setup();
+    await ctx.tracker.updateProject("ops", { mergeMode: null, autoMerge: "s" });
+
+    const loosen = await ctx.call("set_auto_merge", { project: "OPS", policy: "all" });
+    expect(loosen.isError).toBe(true);
+    expect(loosen.text).toContain("project settings page");
+    expect((await ctx.tracker.getProject("ops"))?.autoMerge).toBe("s");
+
+    // Same mode (s-and-m also reads low-risk) and tighter both go through.
+    expect((await ctx.call("set_auto_merge", { project: "OPS", policy: "s-and-m" })).isError).toBe(
+      false,
+    );
+    expect((await ctx.call("set_auto_merge", { project: "OPS", policy: "none" })).isError).toBe(
+      false,
+    );
+  });
+
+  it("GivenAModeStillReadFromAutoMerge_WhenAnAutoMergeTighteningIsRevertedOverMcp_ThenRefused", async () => {
+    const ctx = await setup();
+    await ctx.tracker.updateProject("ops", { mergeMode: null, autoMerge: "all" });
+    expect((await ctx.call("set_auto_merge", { project: "OPS", policy: "none" })).isError).toBe(
+      false,
+    );
+    const [change] = (await ctx.call("list_settings_changes", { project: "OPS" })).data.changes;
+
+    const res = await ctx.call("revert_settings_change", { project: "OPS", id: change.id });
+
+    expect(res.isError).toBe(true);
+    expect((await ctx.tracker.getProject("ops"))?.autoMerge).toBe("none");
+  });
 });
