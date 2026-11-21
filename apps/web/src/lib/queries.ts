@@ -2,6 +2,7 @@ import { useEffect, useRef } from "react";
 import { type QueryClient, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type {
   AutoMerge,
+  MergeMode,
   EnvironmentPolicy,
   ExecutorKind,
   PlanApproval,
@@ -418,6 +419,7 @@ export function useUpdateProject(projectId: string) {
       buildEnabled?: boolean;
       planApproval?: PlanApproval;
       autoMerge?: AutoMerge;
+      mergeMode?: MergeMode;
       runsAtOnce?: number;
       paused?: boolean;
       defaultWorker?: Worker;

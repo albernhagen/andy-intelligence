@@ -57,6 +57,15 @@ export const AutoMerge = z.enum(["none", "s", "s-and-m", "all"]);
 export type AutoMerge = z.infer<typeof AutoMerge>;
 
 /**
+ * Who merges a project's PRs (ADR-0124), strictest first: `manual` (Andy merges everything),
+ * `epic` (an epic's tickets merge into `epic/<KEY>`, Andy merges one PR per epic), `low-risk` (a clean PR
+ * merges unless its diff touches the high-risk list), `all-clean` (a clean PR merges unless it
+ * is a kept kind). Stored only until AI-215 makes the gate read it.
+ */
+export const MergeMode = z.enum(["manual", "epic", "low-risk", "all-clean"]);
+export type MergeMode = z.infer<typeof MergeMode>;
+
+/**
  * Where a project's releases go (ADR-0050, AI-160: M6.2): `prod-only` (one prod project plus PR
  * previews; the default) or `dev-and-prod` (dev first, then a promote to prod). Nothing deploys
  * from it yet; M6 slices read it.
@@ -98,6 +107,11 @@ export const Project = z.object({
    * than the field, such as project AI, which stays `none` until M2: Self-hosting.
    */
   autoMerge: AutoMerge.default("none"),
+  /**
+   * ADR-0124: replaces `autoMerge`. Null (projects stored before it) reads through the ADR's
+   * mapping (`effectiveMergeMode`); new projects start at `low-risk`.
+   */
+  mergeMode: MergeMode.nullable().default(null),
   ...projectDispatchFields,
   ...projectNotifyFields,
   ...projectPlanFields,
@@ -123,6 +137,8 @@ export const TicketOverrides = z.object({
   targetEnv: z.enum(["dev", "prod"]).optional(),
   /** Where this ticket's runs execute; absent follows the project's `executor` (ADR-0089). */
   executor: ExecutorKind.optional(),
+  /** A stricter merge mode than the project's (ADR-0124); never a looser one. */
+  mergeMode: MergeMode.optional(),
 });
 export type TicketOverrides = z.infer<typeof TicketOverrides>;
 

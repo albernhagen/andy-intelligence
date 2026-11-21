@@ -1,4 +1,9 @@
-import { InMemoryOAuthGrantStore, InMemoryRunStore, InMemoryWorkTracker } from "@andy/contracts";
+import {
+  InMemoryConfigChangeStore,
+  InMemoryOAuthGrantStore,
+  InMemoryRunStore,
+  InMemoryWorkTracker,
+} from "@andy/contracts";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
 import { describe, expect, it } from "vitest";
@@ -30,6 +35,7 @@ async function setup() {
     webConfig: { firebaseApiKey: "k", firebaseAuthDomain: "d", projectId: "p" },
     tracker,
     runs: new InMemoryRunStore(),
+    configChanges: new InMemoryConfigChangeStore(),
     mcp: { publicUrl: PUBLIC_URL, grants, clients: new ClientMetadataResolver() },
   });
   const token = newToken();
@@ -80,6 +86,7 @@ describe("get_project_settings", () => {
       autoRefine: false,
       dailyQuestionCap: 7,
       autoMerge: "s",
+      mergeMode: "epic",
       runsAtOnce: 3,
       paused: true,
       defaultWorker: "ask",
@@ -103,6 +110,8 @@ describe("get_project_settings", () => {
       autoRefine: false,
       dailyQuestionCap: 7,
       autoMerge: "s",
+      mergeMode: "epic",
+      mergeModeSet: true,
       runsAtOnce: 3,
       paused: true,
       defaultWorker: "ask",
@@ -170,5 +179,99 @@ describe("set_environments (AI-160)", () => {
     expect((await ctx.rest("/api/projects/ai", { environments: "dev-and-prod" })).status).toBe(200);
     expect((await ctx.rest("/api/projects/ai", { environments: "staging" })).status).toBe(400);
     expect((await ctx.tracker.getProject("ai"))?.environments).toBe("dev-and-prod");
+  });
+});
+
+/** ADR-0124: merge modes, stored only (AI-214). The page's PATCH and MCP share one rule (AI-40). */
+describe("set_merge_mode and the settings route", () => {
+  const log = async (ctx: Awaited<ReturnType<typeof setup>>) =>
+    (await ctx.call("list_settings_changes", { project: "AI" })).data;
+
+  it("GivenAProjectStoredBeforeTheSetting_WhenRead_ThenItsModeComesFromAutoMerge", async () => {
+    const ctx = await setup();
+    await ctx.tracker.updateProject("ops", { mergeMode: null, autoMerge: "none" });
+    await ctx.tracker.updateProject("ai", { mergeMode: null, autoMerge: "none" });
+
+    const ops = (await ctx.call("get_project_settings", { project: "OPS" })).data;
+    const ai = (await ctx.call("get_project_settings", { project: "AI" })).data;
+
+    expect(ops).toMatchObject({ mergeMode: "manual", mergeModeSet: false });
+    // ADR-0124's one exception: project AI reads all-clean, not manual.
+    expect(ai).toMatchObject({ mergeMode: "all-clean", mergeModeSet: false });
+  });
+
+  it("GivenLowRisk_WhenTightenedToManualOverMcp_ThenSavedAndLogged", async () => {
+    const ctx = await setup();
+
+    const res = await ctx.call("set_merge_mode", { project: "ai", mode: "manual" });
+
+    expect(res.isError).toBe(false);
+    expect(res.data).toEqual({ project: "AI", mergeMode: "manual" });
+    expect((await ctx.tracker.getProject("ai"))?.mergeMode).toBe("manual");
+    expect(JSON.stringify(await log(ctx))).toContain("mergeMode");
+  });
+
+  it("GivenManual_WhenLoosenedOverMcp_ThenRefusedWithWhereToDoItAndNothingChanges", async () => {
+    const ctx = await setup();
+    await ctx.call("set_merge_mode", { project: "AI", mode: "manual" });
+
+    const res = await ctx.call("set_merge_mode", { project: "AI", mode: "all-clean" });
+
+    expect(res.isError).toBe(true);
+    expect(res.text).toContain("project settings page");
+    expect((await ctx.tracker.getProject("ai"))?.mergeMode).toBe("manual");
+  });
+
+  it("GivenManual_WhenLoosenedOnTheSettingsPage_ThenSavedAndLogged", async () => {
+    const ctx = await setup();
+    await ctx.call("set_merge_mode", { project: "AI", mode: "manual" });
+
+    expect((await ctx.rest("/api/projects/ai", { mergeMode: "all-clean" })).status).toBe(200);
+
+    expect((await ctx.tracker.getProject("ai"))?.mergeMode).toBe("all-clean");
+    expect((await ctx.rest("/api/projects/ai", { mergeMode: "sometimes" })).status).toBe(400);
+  });
+
+  it("GivenALoosenedMode_WhenItsTighteningIsRevertedOverMcp_ThenRefused", async () => {
+    const ctx = await setup();
+    await ctx.call("set_merge_mode", { project: "AI", mode: "manual" });
+    const [change] = (await log(ctx)).changes;
+
+    const res = await ctx.call("revert_settings_change", { project: "AI", id: change.id });
+
+    expect(res.isError).toBe(true);
+    expect((await ctx.tracker.getProject("ai"))?.mergeMode).toBe("manual");
+  });
+
+  it("GivenAModeStillReadFromAutoMerge_WhenAutoMergeIsLoosenedOverMcp_ThenRefusedAndTighteningWorks", async () => {
+    const ctx = await setup();
+    await ctx.tracker.updateProject("ops", { mergeMode: null, autoMerge: "s" });
+
+    const loosen = await ctx.call("set_auto_merge", { project: "OPS", policy: "all" });
+    expect(loosen.isError).toBe(true);
+    expect(loosen.text).toContain("project settings page");
+    expect((await ctx.tracker.getProject("ops"))?.autoMerge).toBe("s");
+
+    // Same mode (s-and-m also reads low-risk) and tighter both go through.
+    expect((await ctx.call("set_auto_merge", { project: "OPS", policy: "s-and-m" })).isError).toBe(
+      false,
+    );
+    expect((await ctx.call("set_auto_merge", { project: "OPS", policy: "none" })).isError).toBe(
+      false,
+    );
+  });
+
+  it("GivenAModeStillReadFromAutoMerge_WhenAnAutoMergeTighteningIsRevertedOverMcp_ThenRefused", async () => {
+    const ctx = await setup();
+    await ctx.tracker.updateProject("ops", { mergeMode: null, autoMerge: "all" });
+    expect((await ctx.call("set_auto_merge", { project: "OPS", policy: "none" })).isError).toBe(
+      false,
+    );
+    const [change] = (await ctx.call("list_settings_changes", { project: "OPS" })).data.changes;
+
+    const res = await ctx.call("revert_settings_change", { project: "OPS", id: change.id });
+
+    expect(res.isError).toBe(true);
+    expect((await ctx.tracker.getProject("ops"))?.autoMerge).toBe("none");
   });
 });
