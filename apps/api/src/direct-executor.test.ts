@@ -6,6 +6,7 @@ import {
   InMemoryRunStore,
   InMemorySpendLedger,
   MODEL_MAX_ATTEMPTS,
+  type ModelGateway,
   type ModelMessage,
   type Route,
 } from "@andy/contracts";
@@ -181,7 +182,7 @@ describe("DirectExecutor", () => {
     const outcome = await executor().run(call);
     expect(outcome).toMatchObject({ kind: "failed" });
     if (outcome.kind !== "failed") return;
-    expect(outcome.run.error).toContain("fails the step's schema: ranked");
+    expect(outcome.run.error).toContain("fails the step's schema: ranked: too_small");
     expect(outcome.run.costUsd).toBe(0.0004);
     expect(await ledger.get(outcome.run.id)).toMatchObject({
       state: "settled",
@@ -211,14 +212,108 @@ describe("DirectExecutor", () => {
     expect(await ledger.get(outcome.run.id)).toMatchObject({ state: "released" });
   });
 
-  it.each(["refine", "plan", "build", "sync"] as const)(
-    "GivenTheAgenticStep%s_WhenRunDirect_ThenRefusedBeforeAnything",
+  it.each(["refine", "plan", "build", "sync", "review", "verify"] as const)(
+    "GivenTheNonSingleCallStep%s_WhenRunDirect_ThenRefusedBeforeAnything",
     async (step) => {
       await routeFastToDirect();
       await expect(executor().run({ ...call, step })).rejects.toBeInstanceOf(DomainError);
       expect(gateway.calls).toHaveLength(0);
+      expect(await runs.listActive("ai")).toHaveLength(0);
     },
   );
+
+  it("GivenAnEnumSchemaAndASecretBearingAnswer_WhenItFails_ThenTheAnswerIsNeitherStoredNorLogged", async () => {
+    const logs: string[] = [];
+    vi.spyOn(console, "log").mockImplementation((line: string) => void logs.push(line));
+    await routeFastToDirect();
+    gateway.answer = reply('{"pick":"leaked-secret-value"}');
+    const outcome = await executor().run({
+      ...call,
+      schema: z.object({ pick: z.enum(["a", "b"]) }),
+    });
+    expect(outcome).toMatchObject({ kind: "failed" });
+    if (outcome.kind !== "failed") return;
+    expect(outcome.run.error).toContain("pick: invalid_value");
+    expect(outcome.run.error).not.toContain("leaked-secret-value");
+    expect(logs.join("\n")).not.toContain("leaked-secret-value");
+  });
+
+  it("GivenARetriedCall_WhenItAnswers_ThenTheFullReservationIsKept", async () => {
+    await routeFastToDirect();
+    const retried: ModelGateway = {
+      complete: async () => ({ ...reply('{"ranked":["a"]}'), outcome: "ok", attempts: 2 }),
+    };
+    const outcome = await new DirectExecutor(
+      runs,
+      retried,
+      new SpendGate(ledger, PRICED, undefined, () => NOW),
+      PRICED,
+      routing,
+      () => NOW,
+    ).run(call);
+    expect(outcome.kind).toBe("done");
+    if (outcome.kind !== "done") return;
+    expect(outcome.run.usage).toMatchObject({ outputTokens: 30 });
+    const entry = await ledger.get(outcome.run.id);
+    expect(entry!.settledMicroUsd).toBe(entry!.reservedMicroUsd);
+  });
+
+  it("GivenTheRunStoreFailsBeforeTheCall_WhenAStepRuns_ThenFailedAndReleasedWithoutACall", async () => {
+    await routeFastToDirect();
+    const update = runs.update.bind(runs);
+    vi.spyOn(runs, "update")
+      .mockRejectedValueOnce(new Error("store down"))
+      .mockImplementation((...args) => update(...args));
+    const outcome = await executor().run(call);
+    expect(outcome).toMatchObject({
+      kind: "failed",
+      reason: expect.stringContaining("store down"),
+    });
+    if (outcome.kind !== "failed") return;
+    expect(gateway.calls).toHaveLength(0);
+    expect(outcome.run.status).toBe("failed");
+    expect(await ledger.get(outcome.run.id)).toMatchObject({ state: "released" });
+  });
+
+  it("GivenTheGatewayThrows_WhenAStepRuns_ThenFailedAndTheFullReservationIsKept", async () => {
+    await routeFastToDirect();
+    const broken: ModelGateway = {
+      complete: async () => {
+        throw new Error("socket hang up");
+      },
+    };
+    const outcome = await new DirectExecutor(
+      runs,
+      broken,
+      new SpendGate(ledger, PRICED, undefined, () => NOW),
+      PRICED,
+      routing,
+      () => NOW,
+    ).run(call);
+    expect(outcome).toMatchObject({ kind: "failed", run: { status: "failed" } });
+    if (outcome.kind !== "failed") return;
+    const entry = await ledger.get(outcome.run.id);
+    expect(entry).toMatchObject({ state: "settled" });
+    expect(entry!.settledMicroUsd).toBe(entry!.reservedMicroUsd);
+  });
+
+  it("GivenTheSucceededWriteFails_WhenAStepRuns_ThenFailedAndSettledAtItsUsage", async () => {
+    await routeFastToDirect();
+    const update = runs.update.bind(runs);
+    let calls = 0;
+    vi.spyOn(runs, "update").mockImplementation((id, patch, from) => {
+      calls++;
+      if (calls === 2) return Promise.reject(new Error("write lost"));
+      return update(id, patch, from);
+    });
+    const outcome = await executor().run(call);
+    expect(outcome).toMatchObject({ kind: "failed", run: { status: "failed" } });
+    if (outcome.kind !== "failed") return;
+    expect(await ledger.get(outcome.run.id)).toMatchObject({
+      state: "settled",
+      settledMicroUsd: 180,
+    });
+  });
 
   it("GivenAnyOutcome_WhenLogged_ThenNeitherThePromptNorTheAnswerAppears", async () => {
     const logs: string[] = [];

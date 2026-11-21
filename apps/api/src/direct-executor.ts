@@ -42,8 +42,11 @@ import type { z } from "zod";
  * as JSON and schema-checked, never logged, and only the parsed value is returned.
  */
 
-/** Steps that need an agent harness (tools, turns, a repo): never a single call. */
-export const AGENTIC_STEPS: readonly RunStep[] = ["refine", "plan", "build", "sync"];
+/**
+ * The single-call steps (one prompt, one structured answer). Every other step needs an agent
+ * harness (tools, turns, a repo) and is refused, including any step added later.
+ */
+export const DIRECT_STEPS: readonly RunStep[] = ["scout"];
 /** The smallest output cap worth a call; a reservation that affords less fails the run. */
 export const DIRECT_MIN_OUTPUT_TOKENS = 256;
 /** Per-message token overhead (role and separators) in the input estimate. */
@@ -146,7 +149,8 @@ export function parseAnswer<T>(
   if (parsed.success) return { ok: true, value: parsed.data };
   const issues = parsed.error.issues
     .slice(0, 5)
-    .map((i) => `${i.path.join(".") || "(root)"}: ${i.message}`)
+    // Path and code only: a zod message can quote the received value (model output).
+    .map((i) => `${i.path.join(".") || "(root)"}: ${i.code}`)
     .join("; ");
   return {
     ok: false,
@@ -167,11 +171,10 @@ export class DirectExecutor {
   ) {}
 
   async run<T>(call: DirectCall<T>): Promise<DirectOutcome<T>> {
-    if (AGENTIC_STEPS.includes(call.step)) {
-      throw new DomainError(
-        "invalid_step",
-        `${call.step} is agentic: it never runs as a direct call`,
-      );
+    if (!DIRECT_STEPS.includes(call.step)) {
+      throw new DomainError("invalid_step", `${call.step} is not a single-call step`, [
+        `direct steps: ${DIRECT_STEPS.join(", ")}`,
+      ]);
     }
     const resolved = resolveRoute(
       call.step,
@@ -230,46 +233,60 @@ export class DirectExecutor {
       return this.fail(run, reason);
     }
 
-    await this.runs.update(run.id, { status: "running" }, ["queued"]);
-    const sentAt = this.now();
-    const result = await this.gateway.complete({ ...request, maxOutputTokens });
-    const wallMs = Math.max(0, this.now().getTime() - sentAt.getTime());
+    // From here every throw (store, gateway) ends as a failed run, never a stranded reservation.
+    let sent = false;
+    let usage: RunUsage | null | undefined;
+    let costed: object = {};
+    try {
+      await this.runs.update(run.id, { status: "running" }, ["queued"]);
+      const sentAt = this.now();
+      sent = true;
+      const result = await this.gateway.complete({ ...request, maxOutputTokens });
+      const wallMs = Math.max(0, this.now().getTime() - sentAt.getTime());
 
-    if (result.outcome === "off") {
-      // Nothing was sent: startedAt stays null, so the reservation is released.
-      return this.fail(run, "no paid call: the model gateway has no key", ["running"]);
-    }
-    const startedAt = sentAt.toISOString();
-    if (result.outcome === "error") {
-      // Usage unknown: the reservation is kept in full.
+      if (result.outcome === "off") {
+        // Nothing was sent: startedAt stays null, so the reservation is released.
+        sent = false;
+        return this.fail(run, "no paid call: the model gateway has no key");
+      }
+      const startedAt = sentAt.toISOString();
+      if (result.outcome === "error") {
+        // Usage unknown: the reservation is kept in full.
+        return this.fail(run, `the model call failed: ${result.reason}`, { startedAt }, null);
+      }
+
+      const recorded = result.usage ? runUsageOf(result.usage, wallMs) : null;
+      // A retried call may have been billed for the failed attempt too, which its usage
+      // doesn't show: keep the full reservation (fail closed).
+      usage = result.attempts > 1 ? null : recorded;
+      costed = {
+        startedAt,
+        usage: recorded,
+        tokensIn: result.usage?.inputTokens ?? null,
+        tokensOut: result.usage?.outputTokens ?? null,
+        ...this.costOf(result.usage, model, recorded),
+      };
+      const answer = parseAnswer(result.text, call.schema);
+      if (!answer.ok) return this.fail(run, answer.reason, costed, usage);
+
+      const done = await this.runs.update(
+        run.id,
+        { status: "succeeded", endedAt: this.now().toISOString(), ...costed },
+        ["running"],
+      );
+      await this.gate.close(run.id, done, usage);
+      log("INFO", "direct call done", { runId: run.id, step: call.step, model: route.model });
+      return { kind: "done", run: done, output: answer.value };
+    } catch (err) {
+      log("ERROR", "direct call broke", { runId: run.id, error: String(err) });
+      // Before the call: released. After it: settled at the usage if known, else in full.
       return this.fail(
         run,
-        `the model call failed: ${result.reason}`,
-        ["running"],
-        { startedAt },
-        null,
+        `the direct call broke: ${err instanceof Error ? err.message : String(err)}`,
+        sent ? { startedAt: this.now().toISOString(), ...costed } : {},
+        sent ? (usage ?? null) : undefined,
       );
     }
-
-    const usage = result.usage ? runUsageOf(result.usage, wallMs) : null;
-    const costed = {
-      startedAt,
-      usage,
-      tokensIn: result.usage?.inputTokens ?? null,
-      tokensOut: result.usage?.outputTokens ?? null,
-      ...this.costOf(result.usage, model, usage),
-    };
-    const answer = parseAnswer(result.text, call.schema);
-    if (!answer.ok) return this.fail(run, answer.reason, ["running"], costed, usage);
-
-    const done = await this.runs.update(
-      run.id,
-      { status: "succeeded", endedAt: this.now().toISOString(), ...costed },
-      ["running"],
-    );
-    await this.gate.close(run.id, done, usage);
-    log("INFO", "direct call done", { runId: run.id, step: call.step, model: route.model });
-    return { kind: "done", run: done, output: answer.value };
   }
 
   /** Reported cost when the provider gave one, else usage at our prices (an estimate). */
@@ -290,7 +307,6 @@ export class DirectExecutor {
   private async fail(
     run: Run,
     reason: string,
-    from: Run["status"][] = ["queued"],
     patch: object = {},
     usage?: RunUsage | null,
   ): Promise<DirectOutcome<never>> {
@@ -305,7 +321,7 @@ export class DirectExecutor {
           error: reason.slice(0, 2000),
           ...patch,
         },
-        from,
+        ["queued", "running"],
       );
     } catch (err) {
       log("ERROR", "direct run unwritable; its spend stays reserved", {
