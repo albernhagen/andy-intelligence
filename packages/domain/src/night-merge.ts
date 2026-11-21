@@ -78,11 +78,11 @@ export class EpicMerges {
     ) {
       return null;
     }
-    // Once per story, from the recorded merges, not the stage: a story whose move to Done failed
+    // Once per story, from the merge claims, not the stage or the merge record: the claim is
+    // written before the host is called, so a story whose merge record or move to Done failed
     // after its merge never merges again. With at most `maxStories` stories, that bounds the launch.
-    const story = { id: ticket.id, key: ticket.key };
     const runs = await this.runs.listForTicket(run.projectId, ticket.id);
-    if (mergedStories(launch, [story], runs).length > 0) {
+    if (epicMergeAttempted(launch, runs)) {
       log("WARNING", "story already merged into the epic branch", {
         launchId: launch.id,
         pr: pr.number,
@@ -92,6 +92,29 @@ export class EpicMerges {
     }
     return launch;
   }
+}
+
+/**
+ * Whether any of these runs (one story's) claimed a merge into the launch's epic branch since it
+ * started: `mergeAttemptedSha` is set before the merge call, whatever the call did afterwards. A
+ * merge the host refused also counts; it was flagged, and Andy decides.
+ */
+export function epicMergeAttempted(
+  launch: Pick<NightLaunch, "startedAt" | "epicBranch">,
+  runs: readonly Pick<
+    Run,
+    "step" | "baseBranch" | "createdAt" | "mergeAttemptedSha" | "epicMerge"
+  >[],
+): boolean {
+  const since = launch.startedAt ? Date.parse(launch.startedAt) : -Infinity;
+  return runs.some(
+    (r) =>
+      r.step === "build" &&
+      r.baseBranch === launch.epicBranch?.name &&
+      (r.mergeAttemptedSha !== null || r.epicMerge !== null) &&
+      // A run with no creation time counts, so a missing field can only refuse a merge.
+      !(r.createdAt && Date.parse(r.createdAt) < since),
+  );
 }
 
 /** One story merged into the epic branch during a launch. */

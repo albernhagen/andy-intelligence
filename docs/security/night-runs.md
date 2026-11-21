@@ -30,7 +30,7 @@ Residual: a story merged overnight is Done before Andy reviews it, and later sto
 
 ## Caps (ADR-0028)
 
-Per launch, set by Andy and checked at start: agent tasks ≤ 100, tokens ≤ 50 M, ≤ $500 at API prices, stop time ≤ 16 h away, ≤ 50 stories, so ≤ 50 merges into the epic branch (once per story, from the merges recorded on its runs). The dispatch dial, the global cap, the cap on agent PRs waiting and the quota reserve still apply (ADR-0079).
+Per launch, set by Andy and checked at start: agent tasks ≤ 100, tokens ≤ 50 M, ≤ $500 at API prices, stop time ≤ 16 h away, ≤ 50 stories, so ≤ 50 merges into the epic branch (once per story, from the merge claims written before each merge call). The dispatch dial, the global cap, the cap on agent PRs waiting and the quota reserve still apply (ADR-0079).
 
 ## Threat and residual risk
 

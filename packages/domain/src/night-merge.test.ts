@@ -18,6 +18,7 @@ import { NightLaunches } from "./night-launch";
 import {
   EpicMerges,
   MorningPullRequests,
+  epicMergeAttempted,
   mergedStories,
   morningPrBody,
   morningPrTitle,
@@ -98,7 +99,7 @@ describe("night merges into the epic branch (AI-124)", () => {
     ms = Date.parse("2026-11-20T22:00:00.000Z");
     prNumber = 40;
     tracker = new InMemoryWorkTracker();
-    runs = new InMemoryRunStore();
+    runs = new InMemoryRunStore(now);
     host = new NightHost([REPO]);
     host.requiredChecks = REQUIRED.map((name) => ({ name, sourceId: "15368" }));
     host.branches.set("epic/AI-1", START_SHA);
@@ -388,6 +389,33 @@ describe("night merges into the epic branch (AI-124)", () => {
       const [result] = await gate().apply(opened(again.pr), await project());
 
       expect(result).toMatchObject({ result: "assessed" });
+      expect(host.merges).toHaveLength(1);
+    });
+
+    it("GivenTheMergeRecordWriteFailed_WhenANewHeadOfTheStoryPasses_ThenItIsNotMergedAgain", async () => {
+      const a = await story("A");
+      await launch([a.key]);
+      const { pr } = await agentPr(a);
+      const update = runs.update.bind(runs);
+      vi.spyOn(runs, "update").mockImplementation(async (id, patch, from) =>
+        patch.epicMerge ? Promise.reject(new Error("store down")) : update(id, patch, from),
+      );
+      await gate().apply(opened(pr), await project());
+      expect(host.merges).toHaveLength(1);
+
+      // Before the close webhook recovers: a new head on the same PR, and a PR from a new run.
+      const moved = { ...pr, headSha: "newhead" };
+      host.pullRequests.get(pr.number)!.pullRequest = moved;
+      host.pullRequests.get(pr.number)!.pullRequest.state = "open";
+      const [sameRun] = await gate().apply(
+        { ...opened(moved), action: "synchronize" },
+        await project(),
+      );
+      const other = await agentPr((await tracker.getTicket(projectId, a.id))!);
+      const [newRun] = await gate().apply(opened(other.pr), await project());
+
+      expect(sameRun).toMatchObject({ result: "assessed" });
+      expect(newRun).toMatchObject({ result: "assessed" });
       expect(host.merges).toHaveLength(1);
     });
 
@@ -693,6 +721,25 @@ describe("mergedStories and morningPrBody", () => {
         sha: "c".repeat(40),
       },
     ]);
+  });
+
+  it("GivenMergeClaims_WhenAsked_ThenOnlyThisLaunchsEpicBranchBuildsCount", () => {
+    const claim = (over: Partial<Run>) =>
+      ({
+        step: "build",
+        baseBranch: "epic/AI-1",
+        createdAt: "2026-11-20T22:30:00.000Z",
+        mergeAttemptedSha: "head1",
+        epicMerge: null,
+        ...over,
+      }) as Run;
+    expect(epicMergeAttempted(launch, [claim({})])).toBe(true);
+    expect(epicMergeAttempted(launch, [claim({ mergeAttemptedSha: null })])).toBe(false);
+    expect(epicMergeAttempted(launch, [claim({ baseBranch: null })])).toBe(false);
+    expect(epicMergeAttempted(launch, [claim({ createdAt: "2026-11-19T22:00:00.000Z" })])).toBe(
+      false,
+    );
+    expect(epicMergeAttempted(launch, [claim({ createdAt: null })])).toBe(true);
   });
 
   it("GivenRunsOnAnotherBaseOrStep_WhenListed_ThenTheyAreSkipped", () => {
