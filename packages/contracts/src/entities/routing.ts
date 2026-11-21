@@ -148,3 +148,19 @@ export function nextRoutingStamp(previous: string | null, now: Date): string {
   const floor = previous === null ? 0 : Date.parse(previous) + 1;
   return new Date(Math.max(now.getTime(), floor)).toISOString();
 }
+
+/**
+ * A route dispatch passed over for a run, and why (AI-261: M10.14): its provider was off, at its
+ * pause level, or the spend gate would refuse it. Kept on the run so the reason outlives logs.
+ */
+export const RouteSkip = z.strictObject({ route: Route, reason: z.string().max(300) });
+export type RouteSkip = z.infer<typeof RouteSkip>;
+
+/** Spread into `Run`. The default keeps older documents readable (no schema version bump). */
+export const runRouteFields = {
+  /** A pin plus a tier's routes: at most one more than a tier holds. */
+  routeSkips: z
+    .array(RouteSkip)
+    .max(ROUTING_LIMITS.routesPerTier + 1)
+    .default([]),
+};
