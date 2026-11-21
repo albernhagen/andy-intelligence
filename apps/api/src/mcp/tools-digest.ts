@@ -22,7 +22,7 @@ const DigestInput = {
  */
 export function registerDigestTools(
   server: McpServer,
-  deps: Pick<ToolDeps, "digest">,
+  deps: Pick<ToolDeps, "digest" | "publicUrl">,
   run: <T extends object>(fn: () => Promise<T>) => Promise<CallToolResult>,
 ): void {
   const reader = deps.digest;
@@ -41,7 +41,11 @@ export function registerDigestTools(
       );
       const text = (result.structuredContent as { text?: unknown } | undefined)?.text;
       if (result.isError || typeof text !== "string") return result;
-      return { ...result, content: [{ type: "text", text }, ...result.content] };
+      // The digest links What's new (AI-159) rather than repeating release notes.
+      const link = deps.publicUrl
+        ? `\n\nWhat's new: ${deps.publicUrl}/p/${project.toLowerCase()}/whats-new`
+        : "";
+      return { ...result, content: [{ type: "text", text: text + link }, ...result.content] };
     },
   );
 }

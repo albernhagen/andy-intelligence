@@ -51,14 +51,19 @@ export interface TokenPolicyEntry {
 }
 
 /**
- * Fixed workflows that may get a repo token: the system security review (this repo only).
- * Agent tasks' publish jobs go through `executorEntry` instead (ADR-0096).
+ * Fixed workflows that may get a repo token (this repo only): the system security review, and the
+ * PR re-sync on pushes to main (ADR-0111: its pushes must start the PR's checks, which a
+ * GITHUB_TOKEN push doesn't). Agent tasks' publish jobs go through `executorEntry` (ADR-0096).
  */
 export const TOKEN_POLICY: readonly TokenPolicyEntry[] = [
   {
     repository: "albernhagen/andy-intelligence",
     workflow_ref:
       "albernhagen/andy-intelligence/.github/workflows/system-security-review.yml@refs/heads/main",
+  },
+  {
+    repository: "albernhagen/andy-intelligence",
+    workflow_ref: "albernhagen/andy-intelligence/.github/workflows/resync-prs.yml@refs/heads/main",
   },
 ];
 

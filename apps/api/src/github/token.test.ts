@@ -43,6 +43,14 @@ describe("repo token endpoint", () => {
     });
   });
 
+  it("GivenTheResyncWorkflowOnMain_WhenItAsks_ThenItGetsATokenButNotFromAnotherBranch", async () => {
+    const { mint } = await setup();
+    const resync = TOKEN_POLICY.find((p) => p.workflow_ref.includes("/resync-prs.yml@"))!;
+    expect((await mint(resync)).status).toBe(200);
+    const fromPr = resync.workflow_ref.replace("refs/heads/main", "refs/pull/1/merge");
+    expect((await mint({ ...resync, workflow_ref: fromPr })).status).toBe(403);
+  });
+
   it("GivenNoOrAnInvalidToken_WhenAsking_Then401", async () => {
     const { mint } = await setup();
     expect((await mint(null)).status).toBe(401);
