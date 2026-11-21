@@ -196,6 +196,28 @@ describe("ConfigRevert (M4.12)", () => {
     expect(await revert.list("ai")).toHaveLength(2);
   });
 
+  it("GivenAnAgentChangeWithTheRevertReason_WhenReverted_ThenItDoesNotCountAsTheRevert", async () => {
+    await projects.update("ai", { paused: true }, OWNER);
+    await changes.append(
+      ConfigChange.parse({
+        id: "spoof",
+        entity: "project",
+        entityId: "ai",
+        projectId: "ai",
+        diff: { runsAtOnce: { from: 2, to: 2 } },
+        actor: "agent",
+        reason: "Revert of change-1",
+        status: "applied",
+        createdAt: "2026-11-12T11:00:00.000Z",
+        appliedAt: "2026-11-12T11:00:00.000Z",
+      }),
+    );
+
+    const { project } = await revert.revert("ai", "change-1", OWNER, "app");
+
+    expect(project.paused).toBe(false);
+  });
+
   it("GivenTwoRevertsAtOnce_WhenBothRun_ThenOneSucceedsAndTheOtherIsA409NotAnError", async () => {
     await projects.update("ai", { paused: true }, OWNER);
 

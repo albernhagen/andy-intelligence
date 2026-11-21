@@ -68,8 +68,17 @@ export class ConfigRevert {
       ]);
     }
     const logged = await this.changes.listForProject(projectId, CONFIG_CHANGE_LIST_MAX);
-    // A revert whose write was logged but whose mark failed: finish it, don't write again.
-    if (logged.some((c) => c.reason === revertReason(change.id))) {
+    // A revert whose write was logged but whose mark failed: finish it, don't write again. Only a
+    // later applied settings change by the owner with exactly the revert's reason counts.
+    const done = logged.some(
+      (c) =>
+        c.reason === revertReason(change.id) &&
+        c.entity === "project" &&
+        c.actor === "andy" &&
+        (c.status === "applied" || c.status === "reverted") &&
+        c.createdAt >= change.createdAt,
+    );
+    if (done) {
       const reverted = await this.mark(change, by.actor);
       log("INFO", "config change revert completed", { projectId, configChangeId: change.id });
       return { project, reverted };
