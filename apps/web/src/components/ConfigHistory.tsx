@@ -50,9 +50,13 @@ function ChangeRow({
   reverting: boolean;
   onRevert: () => void;
 }) {
-  const fields = Object.entries(change.diff).map(
-    ([field, value]) => `${field}: ${show(value, "from")} → ${show(value, "to")}`,
-  );
+  // A routing change (AI-239) names what it changed; its values are whole routing sections.
+  const routing = change.entity === "routing";
+  const fields = routing
+    ? [`Routing: ${Object.keys(change.diff).join(", ")} changed`]
+    : Object.entries(change.diff).map(
+        ([field, value]) => `${field}: ${show(value, "from")} → ${show(value, "to")}`,
+      );
   return (
     <li aria-label={`Change ${change.id}`} className="flex items-start gap-2 px-3 py-2">
       <div className="min-w-0 flex-1 space-y-0.5">

@@ -337,6 +337,7 @@ const IDLE_REASONS: Record<DispatchIdleReason, (p: DigestData["project"]) => str
   quota_reserve: () => "Dispatch is idle: quota is at the reserve",
   quota_warn: () =>
     `Dispatch is at the warn cap (${plural(MAX_ACTIVE_RUNS_AT_WARN, "agent task")} at once while quota is at warn)`,
+  spend_cap: () => "Dispatch is idle: a paid agent task would pass a spend cap",
 };
 
 function dispatchIdle({ project }: DigestData): DigestException[] {
