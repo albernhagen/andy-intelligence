@@ -28,3 +28,5 @@ One check decides whether a caller may read a project, for API routes and MCP to
 
 - **Cross-project routes and tools** (lists, dashboard, inbox, question answers, config changes by id, owner settings): allowed by the lists above, each with how M8.7 (Cross-project lists per member) filters it.
 - **Writes:** roles decide them in the permission function (M8.4, M8.6), not here.
+
+**Create a project (AI-297):** `POST /api/projects` and MCP `create_project` both call `ProjectService.register`, which requires the owner action `register_project`; it validates the key and repos and stores the project, starting nothing.

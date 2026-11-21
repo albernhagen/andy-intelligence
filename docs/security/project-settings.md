@@ -1,6 +1,6 @@
 # Threat model: Project settings
 
-Per-project settings Andy changes after registration. PRs that change this area update this file. Environments (AI-160) and merge mode (AI-214) here; other settings' entry points: [ui-and-mcp.md](ui-and-mcp.md).
+Per-project settings Andy changes; their PRs update this file. Environments (AI-160), merge mode (AI-214); questions per day: MCP `set_daily_question_cap` (AI-292), rules and log as `PATCH`; others: [ui-and-mcp.md](ui-and-mcp.md).
 
 ## Entry points
 

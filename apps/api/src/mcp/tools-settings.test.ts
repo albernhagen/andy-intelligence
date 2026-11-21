@@ -148,6 +148,43 @@ describe("get_project_settings", () => {
   });
 });
 
+describe("set_daily_question_cap (AI-292)", () => {
+  it("GivenTheDefaultCap_WhenSetOverMcpAndOverTheRoute_ThenTheSameValueIsStored", async () => {
+    const ctx = await setup();
+    expect((await ctx.tracker.getProject("ai"))?.dailyQuestionCap).toBe(5);
+
+    const res = await ctx.call("set_daily_question_cap", { project: "ai", dailyQuestionCap: 12 });
+
+    expect(res.data).toEqual({ project: "AI", dailyQuestionCap: 12 });
+    expect((await ctx.tracker.getProject("ai"))?.dailyQuestionCap).toBe(12);
+    expect((await ctx.tracker.getProject("ops"))?.dailyQuestionCap).toBe(5);
+
+    expect((await ctx.rest("/api/projects/ops", { dailyQuestionCap: 12 })).status).toBe(200);
+    expect((await ctx.tracker.getProject("ops"))?.dailyQuestionCap).toBe(12);
+  });
+
+  it("GivenAnOutOfRangeCapOrUnknownProject_WhenSet_ThenBothRefuseAndNothingChanges", async () => {
+    const ctx = await setup();
+    for (const dailyQuestionCap of [51, -1, 1.5]) {
+      expect(
+        (await ctx.call("set_daily_question_cap", { project: "AI", dailyQuestionCap })).isError,
+      ).toBe(true);
+      expect((await ctx.rest("/api/projects/ai", { dailyQuestionCap })).status).toBe(400);
+    }
+    expect(
+      (await ctx.call("set_daily_question_cap", { project: "NOPE", dailyQuestionCap: 3 })).isError,
+    ).toBe(true);
+    expect((await ctx.tracker.getProject("ai"))?.dailyQuestionCap).toBe(5);
+  });
+
+  it("GivenZero_WhenSet_ThenRefineMayAskNoQuestions", async () => {
+    const ctx = await setup();
+    const res = await ctx.call("set_daily_question_cap", { project: "AI", dailyQuestionCap: 0 });
+    expect(res.data).toEqual({ project: "AI", dailyQuestionCap: 0 });
+    expect((await ctx.tracker.getProject("ai"))?.dailyQuestionCap).toBe(0);
+  });
+});
+
 describe("set_environments (AI-160)", () => {
   it("GivenAProdOnlyProject_WhenSetToDevAndProd_ThenSavedAndReadBack", async () => {
     const ctx = await setup();

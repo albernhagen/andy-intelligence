@@ -15,10 +15,14 @@ Step 1 of AI-285: Web UI and MCP parity: every action in both, enforced by a tes
 | Epic tickets and progress                                 | `GET …/tickets/:id/epic`                                                        | `status` (epic key)                                                                                                        |
 | Start refine or build                                    | `POST …/tickets/:id/runs`                                                       | `refine`, `build`                                                                                                          |
 | Worker and executor                                      | `GET`/`PUT …/worker`, `…/executor`                                              | `status`, `set_worker`, `set_executor`                                                                                     |
+| Ticket history and agent tasks (paged on MCP)            | `…/tickets/:id/events`, `…/tickets/:id/runs`, `…/runs/:runId`                   | `ticket_history`, `list_runs`, `get_run` (AI-293)                                                                          |
+| Which layer set worker, tier, route                      | `GET …/tickets/:id/routing`                                                     | `status` (`routing`) (AI-282, PR #301)                                                                                     |
 | Night launch, its status, stop; the morning report       | `GET`/`POST …/night`, `POST …/night/stop`; report arrives as an epic comment    | `night_status`, `launch_night`, `stop_night`; report in `status` and `list_needs_me`                                       |
 | In flight; work across projects; digest                  | `GET …/in-flight`, `GET /work`, `GET …/digest`                                  | `list_in_flight`, `list_work`, `digest`                                                                                    |
-| Project list; settings (except below)                    | `GET /projects`, `GET`/`PATCH /projects/:id`                                    | `list_projects`, `get_project_settings`, ten `set_*` tools, `set_spend_caps`                                               |
+| Dashboards; DORA metrics                                 | `GET /dashboard`, `…/dashboard`, `…/dora`                                       | `dashboard` (AI-295)                                                                                                       |
+| Project list; settings (except below)                    | `GET /projects`, `GET`/`PATCH /projects/:id`                                    | `list_projects`, `get_project_settings`, the `set_*` tools, `set_spend_caps`                                               |
 | Project setup checklist | `GET …/setup` | `project_setup` (AI-287) |
+| Create a project | `POST /projects` | `create_project` (AI-297) |
 | Settings changes: list, revert                           | `GET …/config-changes`, `POST …/config-changes/:id/revert`                      | `list_settings_changes`, `revert_settings_change`                                                                          |
 | Config proposals: list, accept, reject, sweep            | `GET /config-changes`, `POST …/accept`, `…/reject`, `…/config-proposals/sweep`  | `list_config_changes`, `accept_config_change`, `reject_config_change`, `sweep_config_proposals`                            |
 | Pause, runs at once                                      | `PATCH /projects/:id`                                                           | `set_paused`, `set_runs_at_once`                                                                                           |
@@ -36,15 +40,14 @@ Step 1 of AI-285: Web UI and MCP parity: every action in both, enforced by a tes
 | ---------------------------------------------------------------------- | --------- | ---- | ------------------------------------------------------------ |
 | AI-290: Parity: ask a question on a ticket over MCP                    | done      | S    | `POST …/tickets/:id/questions` → `ask_question`              |
 | AI-291: Parity: edit_ticket sets needs-attention, risk and confidence  | done      | S    | `PATCH` fields → `edit_ticket`                               |
-| AI-292: Parity: set the daily question cap over MCP                    | UI-only   | S    | `PATCH dailyQuestionCap` → `set_daily_question_cap`          |
-| AI-293: Parity: a ticket's full history and runs over MCP              | UI-only   | S    | `…/events`, `…/runs`, `…/runs/:runId` → three reads          |
+| AI-292: Parity: set the daily question cap over MCP                    | done      | S    | `PATCH dailyQuestionCap` → `set_daily_question_cap`          |
+| AI-293: Parity: a ticket's full history and runs over MCP              | done      | S    | Built: `ticket_history`, `list_runs`, `get_run` (now matched) |
 | AI-294: Parity: list and revoke runners over MCP                       | UI-only   | S    | `GET /runners`, revoke → two tools (register stays app-only) |
-| AI-295: Parity: dashboards and DORA metrics over MCP                   | UI-only   | S    | `GET /dashboard`, `…/dashboard`, `…/dora` → `dashboard`      |
+| AI-295: Parity: dashboards and DORA metrics over MCP                   | UI-only   | S    | Built: `dashboard` (now matched)                             |
 | AI-296: Parity: the board, every stage, over MCP                       | UI-only   | S    | `GET …/board` → `board`                                      |
-| AI-297: Parity: create a project over MCP                              | UI-only   | S    | `POST /projects` → `create_project`                          |
 | AI-298: Parity: ranked Ready list in the web UI                        | MCP-only  | S    | Built: `GET …/ready` and the Ready view (now matched)        |
 | AI-299: Parity: ideate from the web UI                                 | MCP-only  | M    | `ideate` (route exists, web never calls it) → a form         |
-| AI-300: Parity: registry test that every action has a route and a tool | test      | M    | Step 2: fails when a new action ships in one side only       |
+| AI-300: Parity: registry test that every action has a route and a tool | done | M | Built: `apps/api/src/parity.ts` and `parity.test.ts` |
 
 ## Gaps owned elsewhere
 
@@ -57,13 +60,13 @@ Step 1 of AI-285: Web UI and MCP parity: every action in both, enforced by a tes
 
 ## Parked (no tickets)
 
-| Action                              | Today   | Milestone                                                                                              |
-| ----------------------------------- | ------- | ------------------------------------------------------------------------------------------------------ |
-| Which layer set worker, tier, route | Neither | M9: Add Jules + model routing (AI-282: M9: Show which layer set a ticket's worker, tier and route, PR #301) |
+None. The one parked row, which layer set worker, tier and route, shipped in both with AI-282 (PR #301) and is listed as matched.
 
 M6, M7 and M8 add no gap today: their settings that exist (environments) are already in both.
 
 ## One side on purpose (the parity test records the reason)
+
+The registry `apps/api/src/parity.ts` (AI-300) holds every action with its routes and tools; `parity.test.ts` fails when a route or tool is in no action, names one that doesn't exist, or has one side without a reason. Open gaps carry their ticket: AI-294, AI-296, AI-299.
 
 | Action                                                | Side     | Reason                                                                                                   |
 | ----------------------------------------------------- | -------- | -------------------------------------------------------------------------------------------------------- |

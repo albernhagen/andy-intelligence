@@ -271,7 +271,7 @@ export function registerTicketRoutes(
   app.openapi(routes.listProjects, async (c) => c.json(await tracker.listProjects(), 200));
 
   app.openapi(routes.createProject, async (c) =>
-    c.json(await projects.register(c.req.valid("json")), 201),
+    c.json(await projects.register(c.req.valid("json"), actorOf(c.get("identity"))), 201),
   );
 
   app.openapi(routes.getProject, async (c) => {

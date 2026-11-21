@@ -1,7 +1,13 @@
 import { createRoute, z, type OpenAPIHono } from "@hono/zod-openapi";
-import { EMAIL_BATCH_WINDOW_MS, EMAIL_DAILY_CAP, type EmailNotifications } from "@andy/domain";
+import type { EventActor } from "@andy/contracts";
+import {
+  EMAIL_BATCH_WINDOW_MS,
+  EMAIL_DAILY_CAP,
+  requireCan,
+  type EmailNotifications,
+} from "@andy/domain";
 import type { Hono } from "hono";
-import type { AuthEnv } from "./auth";
+import { actorOf, type AuthEnv } from "./auth";
 import { FixedWindowLimiter } from "./mcp/rate-limit";
 import { invokerTokenVerifier, type InvokerTokenVerifier } from "./watchdog";
 import type { RouteModule } from "./services";
@@ -78,9 +84,13 @@ export async function emailStatus(email: EmailNotifications | null): Promise<Ema
  */
 export async function sendTestEmail(
   email: EmailNotifications | null,
+  by: EventActor,
 ): Promise<{ sent: true } | { sent: false; status: 409 | 502; error: string }> {
+  // Owner only (`send_test_email`), checked before anything else so a non-owner always gets the
+  // same refusal; `sendTest` checks again for any other caller.
+  requireCan(by, "send_test_email", null);
   if (!email) return { sent: false, status: 409, error: "email is not configured" };
-  const outcome = await email.sendTest();
+  const outcome = await email.sendTest(by);
   if (outcome.result === "cap_reached") {
     return { sent: false, status: 409, error: `today's ${EMAIL_DAILY_CAP} emails are used` };
   }
@@ -98,7 +108,7 @@ export function registerNotifyRoutes(
   app.openapi(statusRoute, async (c) => c.json(await emailStatus(email), 200));
 
   app.openapi(testRoute, async (c) => {
-    const outcome = await sendTestEmail(email);
+    const outcome = await sendTestEmail(email, actorOf(c.get("identity")));
     if (outcome.sent) return c.json({ sent: true as const }, 200);
     return outcome.status === 409
       ? c.json({ error: outcome.error }, 409)
