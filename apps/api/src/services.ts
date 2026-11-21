@@ -249,7 +249,14 @@ export function createServices(input: AppDeps): Services {
         ),
     });
   };
-  const service = new TicketService(deps.tracker, runs, dispatchNext, now, runnerPresence);
+  const service = new TicketService(
+    deps.tracker,
+    runs,
+    dispatchNext,
+    now,
+    runnerPresence,
+    deps.routing ?? null,
+  );
   const claims = runners
     ? new LocalClaims(
         deps.tracker,

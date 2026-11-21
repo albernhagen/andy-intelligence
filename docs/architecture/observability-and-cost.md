@@ -27,10 +27,10 @@ Budgets live in their own Terraform root, `infra/billing`, planned and applied l
 |---|---|---|
 | Agent edits a file | Prettier `--write` + ESLint `--fix`; unfixable lint errors go back to the agent | Claude Code `PostToolUse` hook: `.claude/settings.json` → `scripts/format-edited-file.mjs` |
 | `git commit` | Prettier, ESLint, `terraform fmt -check`, actionlint (workflow linter) on staged files | lefthook `pre-commit` (`lefthook.yml`) |
-| `git push` | `pnpm typecheck` + `pnpm test` | lefthook `pre-push` |
+| `git push` | `pnpm typecheck` + affected tests (ADR-0113) | lefthook `pre-push` |
 | PR | All of the above + build + security scans | CI (`ci.yml`; actionlint is a checksum-verified release binary) |
 
-Hooks install with `pnpm install` (root `prepare` script; skipped when there is no `.git`, e.g. the Docker build) and use the same tools and config as CI. actionlint is skipped locally if not installed (`brew install actionlint`); CI always runs it. `--no-verify` is for emergencies only.
+Hooks install with `pnpm install` (root `prepare` script; skipped when there is no `.git`, e.g. the Docker build) and use the same tools and config as CI. actionlint is skipped locally if not installed; CI always runs it. `--no-verify` is for emergencies only.
 
 ### 10.3 Data
 - **Backups:** Firestore is the only copy of tickets, so a daily Firestore backup schedule with 7-day retention (`infra/control-plane`, M1.2: Ticket core; pennies at this size). Optional BigQuery export for ad-hoc analytics later.
