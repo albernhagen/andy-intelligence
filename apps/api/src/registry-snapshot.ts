@@ -37,6 +37,7 @@ export function fullAppDeps(
     quota: new contracts.InMemoryQuotaStore(),
     nightLaunches: new contracts.InMemoryNightLaunchStore(),
     routing: new contracts.InMemoryRoutingConfigStore(),
+    releaseNotes: new contracts.InMemoryReleaseNoteStore(),
     projectVersions: new contracts.InMemoryProjectVersions(),
     publicHost: "localhost",
     watchdog: {

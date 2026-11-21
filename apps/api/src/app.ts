@@ -16,6 +16,7 @@ import {
   type NightLaunchStore,
   type ProjectVersions,
   type SpendLedger,
+  type ReleaseNoteStore,
   type SpendCapsStore,
   type SpendNoticeLedger,
 } from "@andy/contracts";
@@ -64,6 +65,11 @@ export interface AppDeps {
   configChanges?: ConfigChangeStore;
   /** Stored review findings (ADR-0097 PR B); until then none, so sweeps propose nothing. */
   reviewFindings?: ReviewFindingSource;
+  /**
+   * Release notes (AI-159): merged PRs store one (webhook) and What's new reads them. Off (no
+   * route, no MCP tool) when unset.
+   */
+  releaseNotes?: ReleaseNoteStore;
   /** Subscription quota readings (M1.9). Without it every window reads unknown. */
   quota?: QuotaStore;
   /** Night launches (ADR-0049): a launched story's build gets its `epic/<KEY>` base (AI-122). */
