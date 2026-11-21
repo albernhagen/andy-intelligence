@@ -6,7 +6,7 @@ import {
 } from "@andy/contracts";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { createApp, type AppDeps } from "../app";
 import { parseAllowList, type TokenVerifier } from "../auth";
 import { ClientMetadataResolver } from "./client-metadata";
@@ -72,7 +72,15 @@ async function setup(email?: AppDeps["email"]) {
     });
   await tracker.createProject({ name: "Andy Intelligence", key: "AI" });
   await tracker.createProject({ name: "Ops", key: "OPS" });
-  return { tracker, call, rest };
+  /** POST /api/notify/email/test as Andy (AI-289 parity). */
+  const restTest = async () => {
+    const res = await app.request("/api/notify/email/test", {
+      method: "POST",
+      headers: { authorization: "Bearer andy" },
+    });
+    return { status: res.status, body: (await res.json()) as { error?: string; sent?: true } };
+  };
+  return { tracker, call, rest, restTest };
 }
 
 describe("set_email_notifications", () => {
@@ -102,5 +110,76 @@ describe("set_email_notifications", () => {
     const ctx = await setup();
     const res = await ctx.call("set_email_notifications", { project: "NOPE", enabled: true });
     expect(res.isError).toBe(true);
+  });
+});
+
+describe("test_email (AI-289 parity with POST /api/notify/email/test)", () => {
+  const configured = (
+    notify: () => Promise<void> = async () => {},
+    ledger = new InMemoryNotifyLedger(),
+  ) => ({
+    notifier: { notify },
+    ledger,
+    flushQueue: null,
+    appUrl: PUBLIC_URL,
+  });
+
+  it("GivenEmailIsNotConfigured_WhenTested_ThenBothRefuseWithTheSameReason", async () => {
+    const ctx = await setup();
+    const viaRest = await ctx.restTest();
+    const viaMcp = await ctx.call("test_email");
+    expect(viaRest.status).toBe(409);
+    expect(viaMcp.isError).toBe(true);
+    expect(viaMcp.text).toBe(viaRest.body.error);
+    expect(viaMcp.text).toBe("email is not configured");
+  });
+
+  it("GivenEmailIsConfigured_WhenTested_ThenBothSendOneEmailEach", async () => {
+    let sent = 0;
+    const ctx = await setup(configured(async () => void sent++));
+    expect((await ctx.restTest()).body).toEqual({ sent: true });
+    const viaMcp = await ctx.call("test_email");
+    expect(viaMcp.data).toEqual({ sent: true, emailConfigured: true });
+    expect(sent).toBe(2);
+  });
+
+  it("GivenTodaysCapIsUsed_WhenTested_ThenBothRefuseWithTheSameReasonAndNothingIsSent", async () => {
+    let sent = 0;
+    const ledger = new InMemoryNotifyLedger();
+    const day = new Date().toISOString().slice(0, 10);
+    await ledger.update(() => ({
+      state: {
+        day,
+        sent: 20,
+        overflowSent: false,
+        pending: [],
+        pendingExtra: 0,
+        windowEndsAt: null,
+      },
+      result: null,
+    }));
+    const ctx = await setup(configured(async () => void sent++, ledger));
+    const viaRest = await ctx.restTest();
+    const viaMcp = await ctx.call("test_email");
+    expect(viaRest.status).toBe(409);
+    expect(viaMcp.isError).toBe(true);
+    expect(viaMcp.text).toBe(viaRest.body.error);
+    expect(viaMcp.text).toBe("today's 20 emails are used");
+    expect(sent).toBe(0);
+  });
+
+  it("GivenTheProviderRefuses_WhenTested_ThenBothRefuseWithTheProvidersReason", async () => {
+    const logs = vi.spyOn(console, "log").mockImplementation(() => {});
+    const ctx = await setup(
+      configured(async () => {
+        throw new Error("domain not verified");
+      }),
+    );
+    const viaRest = await ctx.restTest();
+    const viaMcp = await ctx.call("test_email");
+    logs.mockRestore();
+    expect(viaRest.status).toBe(502);
+    expect(viaMcp.text).toBe(viaRest.body.error);
+    expect(viaMcp.text).toBe("test email not sent: domain not verified");
   });
 });

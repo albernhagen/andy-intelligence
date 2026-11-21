@@ -36,6 +36,7 @@ export const CROSS_PROJECT_ROUTES: Readonly<Record<string, string>> = {
   "GET /api/notify/email": "Needs-you email setting: owner only.",
   "GET /api/project-plans/waiting": "Every project's waiting plan: keep readable projects.",
   "GET /api/projects": "Every project: keep readable projects.",
+  "GET /api/roadmap": "Every project's roadmap: readable projects only (canRead, enforced).",
   "GET /api/routing":
     "Every project's routing (a `projectId` query is checked): keep readable projects.",
   "GET /api/routing/changes":
@@ -72,6 +73,7 @@ export const CROSS_PROJECT_TOOLS: Readonly<Record<string, string>> = {
   accept_config_change: "Check the change's project.",
   answer_question: "Check the question's ticket's project.",
   clear_quota_idle: "Subscription quota: owner only.",
+  create_project: "Creates a project: owner only (`register_project`, enforced); no project yet.",
   get_quota: "Subscription quota: owner only.",
   get_routing: "Without `project`, the global routing: nothing to filter.",
   list_config_changes: "Without `project`, every project's changes: keep readable projects.",
@@ -87,10 +89,13 @@ export const CROSS_PROJECT_TOOLS: Readonly<Record<string, string>> = {
     "The global spend caps (AI-276): owner only (`change_spend_caps`, enforced).",
   list_spend_cap_changes: "Global spend caps' change log: owner only (enforced).",
   revert_spend_cap_change: "Reverts a global spend caps change: owner only (enforced); no project.",
+  roadmap:
+    "Without `project`, every project's roadmap: readable projects only (canRead, enforced).",
   set_provider_routing: "Without `project`, the global routing: owner only.",
   set_step_tier: "Without `project`, the global routing: owner only.",
   set_tier_routes: "Without `project`, the global routing: owner only.",
   status: "Without `ticket`, every project's counts: keep readable projects.",
+  test_email: "Needs-you email test send: owner only.",
 };
 
 /** What a refused lookup names, and the body an unknown one gets. */

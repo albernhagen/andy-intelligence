@@ -8,6 +8,7 @@ import {
   notFound,
   type AnsweredVia,
   type EventActor,
+  type MergeMode,
   type ExecutorKind,
   type ExecutorView,
   type NewQuestion,
@@ -42,6 +43,7 @@ import { MAX_OPEN_QUESTIONS_PER_TICKET, assumptionQuestion } from "./refine-gate
 import { rankBetween } from "./ranks";
 import { isDispatchable, resolveWorker, workerView } from "./worker";
 import { cascadesFrom, epicOf, withEpicOverrides } from "./overrides";
+import { requireOverrideNotLooser } from "./merge-mode";
 import { executorView } from "./executor";
 import { routeLayers } from "./route-layers";
 import { canTransition, isForwardMove, pullRequestPath, type PullRequestTarget } from "./stages";
@@ -138,6 +140,7 @@ export class TicketService {
     const parsed = NewTicket.parse(input);
     const badOutcome = outcomeProblem(parsed);
     if (badOutcome) throw new DomainError("invalid_field", badOutcome);
+    await this.checkMergeModeOverride(projectId, parsed.overrides?.mergeMode);
     const parentId = parsed.parentId && (await this.parentIdOf(projectId, parsed.parentId));
     const dorStatus = checkDor(parsed, 0).met ? "met" : "not_met";
     const ticket = await this.tracker.createTicket(
@@ -361,6 +364,7 @@ export class TicketService {
     ifUpdatedAt?: string,
   ): Promise<Ticket> {
     const current = await this.require(projectId, ticketId);
+    await this.checkMergeModeOverride(projectId, fields.overrides?.mergeMode);
     if (fields.parentId && fields.parentId !== current.parentId) {
       const chain = await parentChain(this.tracker, projectId, fields.parentId);
       const problem = parentProblem(current, fields.parentId, chain);
@@ -433,6 +437,11 @@ export class TicketService {
       this.requireProject(projectId),
     ]);
     return workerView(ticket, project, await this.epicFor(ticket));
+  }
+
+  /** ADR-0124: a ticket or epic may set a stricter merge mode than its project, never looser. */
+  private async checkMergeModeOverride(projectId: string, mode: MergeMode | undefined) {
+    if (mode) requireOverrideNotLooser(mode, await this.requireProject(projectId));
   }
 
   /** Its build worker, tier and route, and which layer set each (AI-282: M9). Read-only. */
