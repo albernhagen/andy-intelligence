@@ -113,6 +113,12 @@ describe("survey", () => {
       cleanPr(7, { files: ["platform/procedures/coordinate.md", "apps/web/x.ts"] }),
     );
     expect(report.highRisk).toEqual(["platform/procedures/"]);
+    expect(report.blockers).toContain("touches high-risk paths: platform/procedures/");
+  });
+
+  it("GivenFileListCallFails_WhenSurveyed_ThenBlockedNotTreatedAsLowRisk", () => {
+    const report = survey(cleanPr(7, { filesError: true }));
+    expect(report.blockers.join()).toMatch(/changed files unknown/);
   });
 });
 

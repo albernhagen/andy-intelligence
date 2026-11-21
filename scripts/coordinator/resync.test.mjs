@@ -1,10 +1,11 @@
 import { execFileSync } from "node:child_process";
-import { mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { cleanGitEnv } from "../git-env.mjs";
-import { resolveAddOnly, resyncBranch } from "./resync.mjs";
+import { sh } from "./lib.mjs";
+import { resolveAddOnly, resyncBranch, scrubbedEnv } from "./resync.mjs";
 
 const hunk = (ours, base, theirs) =>
   [
@@ -16,6 +17,21 @@ const hunk = (ours, base, theirs) =>
     ...theirs,
     ">>>>>>> origin/main",
   ].join("\n");
+
+describe("scrubbedEnv", () => {
+  it("GivenTokensInEnv_WhenScrubbed_ThenOnlyHarmlessVariablesKept", () => {
+    const env = {
+      PATH: "/bin",
+      HOME: "/h",
+      GH_TOKEN: "x",
+      GITHUB_TOKEN: "x",
+      ANTHROPIC_API_KEY: "x",
+      CLAUDE_CODE_OAUTH_TOKEN: "x",
+      GOOGLE_APPLICATION_CREDENTIALS: "x",
+    };
+    expect(scrubbedEnv(env)).toEqual({ PATH: "/bin", HOME: "/h" });
+  });
+});
 
 describe("resolveAddOnly", () => {
   it("GivenBothSidesAddedRows_WhenResolved_ThenBothKeptBranchFirst", () => {
@@ -94,6 +110,48 @@ describe("resyncBranch", { timeout: 30_000 }, () => {
     expect(() =>
       r.git(r.work, "merge-base", "--is-ancestor", "origin/main", "origin/pr"),
     ).not.toThrow();
+  });
+
+  it("GivenAddOnlyConflictInCodeFile_WhenResynced_ThenLeftForTheWorker", () => {
+    const r = repos();
+    r.git(r.work, "checkout", "-qb", "pr");
+    commit(r, "pr", "code.txt", "one\nimport a\n");
+    commit(r, "main", "code.txt", "one\nimport a2\n");
+    const before = r.git(r.origin, "rev-parse", "pr");
+
+    const result = resyncBranch({ repo: r.work, branch: "pr", checks: [] });
+
+    expect(result).toMatchObject({
+      ok: false,
+      summary: expect.stringMatching(/code.txt \(not a Markdown file\)/),
+    });
+    expect(r.git(r.origin, "rev-parse", "pr")).toBe(before);
+  });
+
+  it("GivenDefaultChecks_WhenResynced_ThenBudgetScriptComesFromMainNotTheBranch", () => {
+    const r = repos();
+    mkdirSync(join(r.work, "scripts"), { recursive: true });
+    writeFileSync(join(r.work, "scripts/context-budget.mjs"), "process.exit(0);\n");
+    r.git(r.work, "add", ".");
+    r.git(r.work, "commit", "-qm", "main's budget script passes");
+    r.git(r.work, "push", "-q", "origin", "main");
+    r.git(r.work, "checkout", "-qb", "pr");
+    writeFileSync(join(r.work, "scripts/context-budget.mjs"), "process.exit(9);\n");
+    r.git(r.work, "commit", "-qam", "branch's budget script fails");
+    r.git(r.work, "push", "-q", "origin", "pr");
+    commit(r, "main", "list.md", "| a |\n| main |\n| z |\n");
+    const ran = [];
+    const run = (cmd, args, opts) => {
+      if (cmd === "git") return sh(cmd, args, opts);
+      ran.push([cmd, ...args].join(" "));
+      return cmd === "node" ? sh(cmd, args, opts) : { status: 0, stdout: "", stderr: "" };
+    };
+
+    const result = resyncBranch({ repo: r.work, branch: "pr", run, dryRun: true });
+
+    expect(result).toMatchObject({ ok: true });
+    expect(ran[0]).toBe("pnpm install --frozen-lockfile --prefer-offline --ignore-scripts");
+    expect(ran[1]).toMatch(/resync-budget-.*context-budget\.mjs \.$/);
   });
 
   it("GivenRealConflict_WhenResynced_ThenAbortedNothingPushedFilesListed", () => {

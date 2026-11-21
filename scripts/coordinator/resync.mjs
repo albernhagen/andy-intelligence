@@ -4,10 +4,13 @@
 // Not for build agents.
 //
 // Merges origin/main into the PR's branch in a scratch worktree (the worker's own worktree is
-// never touched). A conflict is resolved only where both sides purely added lines at the same
-// place (diff3 base empty): both additions are kept, the branch's first. Anything else aborts and
-// lists the files for the worker. Then it runs the context-budget check and pushes without
-// force, through the pre-push hook. If the worker pushed meanwhile, the push is refused.
+// never touched). A conflict is resolved only in a Markdown file where both sides purely added
+// lines at the same place (diff3 base empty): both additions are kept, the branch's first.
+// Anything else aborts and lists the files for the worker. Then it installs (no lifecycle
+// scripts) and runs main's copy of the context-budget check with no tokens in the environment,
+// and pushes without force through the pre-push hook. The hook runs the branch's typecheck and
+// tests on this machine, as the worker's own push does. If the worker pushed meanwhile, the push
+// is refused.
 //
 // Usage: node scripts/coordinator/resync.mjs <PR> [--dry-run] [--keep]
 import { mkdtempSync, readFileSync, writeFileSync } from "node:fs";
@@ -55,10 +58,29 @@ export function resolveAddOnly(text) {
   return { ok: true, text: out.join("\n"), hunks };
 }
 
-const DEFAULT_CHECKS = [
-  ["pnpm", ["install", "--frozen-lockfile", "--prefer-offline"]],
-  ["node", ["scripts/context-budget.mjs"]],
-];
+/** Auto-resolution is for docs only: two code additions can collide (a duplicate import). */
+export const RESOLVABLE = /\.md$/;
+
+/**
+ * The branch's tree is untrusted. Checks run with no token in their environment; install skips
+ * lifecycle scripts (the hook needs node_modules, not builds); the budget check is main's copy.
+ */
+function defaultChecks(trustedBudgetScript) {
+  return [
+    ["pnpm", ["install", "--frozen-lockfile", "--prefer-offline", "--ignore-scripts"]],
+    ["node", [trustedBudgetScript, "."]],
+  ];
+}
+
+/** Drops credentials from an environment (gh, GitHub, cloud and API tokens). */
+export function scrubbedEnv(env) {
+  return Object.fromEntries(
+    Object.entries(env).filter(
+      ([key]) =>
+        !/^(GH_|GITHUB_|GOOGLE_|CLOUDSDK_|AWS_)|TOKEN|SECRET|PASSWORD|CREDENTIAL|_KEY$/i.test(key),
+    ),
+  );
+}
 
 /**
  * Merges origin/main into `branch` in a scratch worktree of `repo` and pushes it.
@@ -68,7 +90,7 @@ export function resyncBranch({
   repo,
   branch,
   run = sh,
-  checks = DEFAULT_CHECKS,
+  checks,
   dryRun = false,
   keep = false,
   scratch,
@@ -102,9 +124,11 @@ export function resyncBranch({
       const refused = [];
       for (const { code, file } of unmerged) {
         const fixed =
-          code === "UU"
-            ? resolveAddOnly(readFileSync(join(dir, file), "utf8"))
-            : { ok: false, reason: `conflict type ${code}` };
+          code !== "UU"
+            ? { ok: false, reason: `conflict type ${code}` }
+            : !RESOLVABLE.test(file)
+              ? { ok: false, reason: "not a Markdown file" }
+              : resolveAddOnly(readFileSync(join(dir, file), "utf8"));
         if (!fixed.ok) refused.push(`${file} (${fixed.reason})`);
         else {
           writeFileSync(join(dir, file), fixed.text);
@@ -122,8 +146,20 @@ export function resyncBranch({
       must(git(dir, "add", "--", ...resolved), "add failed");
       must(git(dir, "commit", "--no-edit"), "commit failed");
     }
-    for (const [cmd, args] of checks) {
-      const r = run(cmd, args, { cwd: dir, env });
+    let steps = checks;
+    if (!steps) {
+      const trusted = join(mkdtempSync(join(tmpdir(), "resync-budget-")), "context-budget.mjs");
+      writeFileSync(
+        trusted,
+        must(
+          git(repo, "show", "origin/main:scripts/context-budget.mjs"),
+          "read main's budget script",
+        ),
+      );
+      steps = defaultChecks(trusted);
+    }
+    for (const [cmd, args] of steps) {
+      const r = run(cmd, args, { cwd: dir, env: scrubbedEnv(env) });
       if (r.status !== 0) {
         return {
           ok: false,
@@ -159,8 +195,9 @@ const HELP = `Usage: resync.mjs <PR> [--dry-run] [--keep]
 
 CHANGES REMOTE STATE: pushes a merge of origin/main to the PR's branch (no force).
 For a coordinator acting under ADR-0088 only, never for build agents.
-Resolves a conflict only where both sides purely added lines; otherwise aborts and lists
-the files for the worker. Runs the context-budget check and the pre-push hook before pushing.
+Resolves a conflict only in Markdown files where both sides purely added lines; otherwise
+aborts and lists the files for the worker. Runs main's context-budget check and the pre-push
+hook (the branch's own typecheck and tests) before pushing.
 --dry-run merges and checks without pushing; --keep leaves the scratch worktree.
 `;
 

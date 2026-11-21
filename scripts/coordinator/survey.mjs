@@ -2,8 +2,9 @@
 // PR survey for a coordinator (AI-149; runbook `coordinating-sessions.md` §6). Read-only.
 // For each PR: head, merge state, whether the head contains the base branch, checks, each review
 // agent's verdict and blocking findings on that head, labels, and which ADR-0092 high-risk paths
-// the diff touches. `ready` applies coordinate.md §7's mechanical conditions; the risk class is
-// still the coordinator's call.
+// the diff touches. Blockers are coordinate.md §7's mechanical conditions plus any ADR-0092 path;
+// a PR with none may still be high risk (size, an ADR about merging, doubt): the class stays the
+// coordinator's call.
 //
 // Usage: node scripts/coordinator/survey.mjs [PR...] [--json]   (no PR: every open PR)
 import { parseArgs } from "node:util";
@@ -114,6 +115,9 @@ export function blockers(r) {
   if (r.base !== "main") out.push(`base is ${r.base}, not main`);
   if (!["CLEAN", "HAS_HOOKS"].includes(r.mergeState)) out.push(`merge state ${r.mergeState}`);
   if (r.labels.length > 0) out.push(`labels: ${r.labels.join(", ")}`);
+  // ADR-0092's paths are Andy's whatever the coordinator classed (R23): never merged by a tool.
+  if (!Array.isArray(r.highRisk)) out.push(`changed files unknown (${r.highRisk.error})`);
+  else if (r.highRisk.length > 0) out.push(`touches high-risk paths: ${r.highRisk.join(", ")}`);
   if (r.sync.error) out.push(`sync unknown (${r.sync.error})`);
   else if (!r.sync.containsBase) out.push(`head is ${r.sync.behindBy} commit(s) behind ${r.base}`);
   if (r.checks.error) out.push(`checks unknown (${r.checks.error})`);

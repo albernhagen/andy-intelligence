@@ -114,7 +114,7 @@ export function fakeGh(prs, opts = {}) {
       const n = Number(/\/(\d+)\//.exec(path)?.[1]);
       const p = prs[n] ?? pr;
       if (path.includes("/issues/")) return ok(p.comments.map((x) => JSON.stringify(x)).join("\n"));
-      if (path.includes("/pulls/")) return ok(p.files.join("\n"));
+      if (path.includes("/pulls/")) return p.filesError ? fail("HTTP 500") : ok(p.files.join("\n"));
     }
     return fail(`unhandled: ${args.join(" ")}`);
   };

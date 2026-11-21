@@ -37,7 +37,7 @@ describe("cloud-setup.sh", () => {
   it.each(["pnpm install", "pnpm build", "corepack enable"])(
     "GivenStep%sFails_WhenRun_ThenExitsNonZero",
     (step) => {
-      expect(runSetup(step).status).not.toBe(0);
+      expect(runSetup(step).status).toBe(3);
     },
   );
 

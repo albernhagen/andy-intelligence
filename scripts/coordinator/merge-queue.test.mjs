@@ -71,6 +71,19 @@ describe("merge queue", () => {
     expect(merges(calls)).toEqual([]);
   });
 
+  it("GivenPrTouchingHighRiskPath_WhenQueued_ThenRefusedWhateverTheClass", async () => {
+    const gh = fakeGh({ 7: cleanPr(7, { files: [".github/workflows/ci.yml"] }) });
+    const result = await runQueue([7], { run: gh.run, patterns: [".github/"], ...clock() });
+    expect(result.skipped[0].reasons).toContain("touches high-risk paths: .github/");
+    expect(merges(gh.calls)).toEqual([]);
+  });
+
+  it("GivenFileListUnreadable_WhenQueued_ThenRefused", async () => {
+    const { result, calls } = await queue({ 7: cleanPr(7, { filesError: true }) }, [7]);
+    expect(result.skipped[0].reasons.join()).toMatch(/changed files unknown/);
+    expect(merges(calls)).toEqual([]);
+  });
+
   it("GivenMainRedBeforeStart_WhenQueued_ThenStopsWithoutMerging", async () => {
     const runs = () => [{ name: "ci", status: "completed", conclusion: "failure", url: "u" }];
     const { result, calls } = await queue({ 7: cleanPr(7) }, [7], { runs });
