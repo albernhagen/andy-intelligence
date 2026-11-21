@@ -17,6 +17,7 @@ import {
   type Ticket,
   type WorkTracker,
 } from "@andy/contracts";
+import { MilestoneHolds, type MilestoneReader } from "./milestone-holds";
 import { MAX_BUILD_RUNS_PER_TICKET, isAndysWork, unfinishedBlockers } from "./builds";
 import { isInFlight, mayDispatch, waitsForSlot, wasDispatched } from "./dispatch-caps";
 import { blockingRun, editingRuns } from "./dispatch-conflicts";
@@ -88,6 +89,8 @@ export class BuildDispatcher {
     private readonly nights: NightLaunchStore | null = null,
     /** Opens the morning PR once a launch ends here (AI-124); null: none opens. */
     private readonly morning: MorningPrOpener | null = null,
+    /** Milestones (ADR-0131); null: a ticket with a milestone is held, one without runs. */
+    private readonly milestones: MilestoneReader | null = null,
   ) {}
 
   /** Starts waiting builds in the project up to the caps; the first run, or null. Never throws. */
@@ -161,6 +164,9 @@ export class BuildDispatcher {
 
     let first: Run | null = null;
     let overlapSkipped = false;
+    // AI-306: tickets whose milestone isn't approved stay in Ready; one read per milestone.
+    const holds = new MilestoneHolds(this.milestones, projectId);
+    let milestoneHeld = false;
     // Build runs in flight here, kept current as this call starts more (ADR-0080).
     const inFlight = editingRuns(await this.runStore.listActive(projectId), this.now());
     let verdict = await check();
@@ -174,6 +180,12 @@ export class BuildDispatcher {
       if (!isDispatchable(effective, project)) continue; // AI-32: Who does the work (ADR-0082).
       if (!routeTakes(route, ticket, project, runnerPresent)) continue; // ADR-0089.
       if (ticket.archived || ticket.needsAttention) continue;
+      const hold = await holds.reasonFor(ticket, tickets);
+      if (hold) {
+        milestoneHeld = true;
+        log("INFO", "build waits: milestone not approved", { ticket: ticket.key, reason: hold });
+        continue;
+      }
       const story = night !== null && night.launch.storyKeys.includes(ticket.key);
       if (story) {
         const usage = { ...night.usage, runs: night.usage.runs + nightStarted };
@@ -248,7 +260,9 @@ export class BuildDispatcher {
           ? "started"
           : overlapSkipped
             ? "touches_overlap"
-            : "nothing_ready";
+            : milestoneHeld
+              ? "milestone_held"
+              : "nothing_ready";
     await this.record(project, decision, first !== null);
     return first;
   }
@@ -356,7 +370,8 @@ export class BuildDispatcher {
   /**
    * What one dispatch reads (AI-315): the Ready lane (rank order), Ready for review (PRs
    * waiting), In progress (the tickets runs in flight belong to), and each Ready ticket's epic
-   * for its overrides (AI-116), by id. Lanes outside Done and Cancelled hold no archived tickets.
+   * for its overrides (AI-116), by id, and a child epic's parent for its milestone (AI-306).
+   * Lanes outside Done and Cancelled hold no archived tickets.
    */
   private async dispatchTickets(projectId: string): Promise<Ticket[]> {
     const [ready, review, building] = await Promise.all(
@@ -365,12 +380,20 @@ export class BuildDispatcher {
       ),
     );
     const lanes = [...ready!, ...review!, ...building!];
-    const known = new Set(lanes.map((t) => t.id));
-    const parentIds = [
-      ...new Set(ready!.flatMap((t) => (t.parentId && !known.has(t.parentId) ? [t.parentId] : []))),
+    const parents = await this.parentsOf(projectId, ready!, lanes);
+    // ADR-0131: epics nest one level, so a child epic's parent is the top-level epic.
+    const tops = await this.parentsOf(projectId, parents, [...lanes, ...parents]);
+    return [...lanes, ...parents, ...tops];
+  }
+
+  /** The parents of `of` missing from `known`, one `getTicket` each; absent ones left out. */
+  private async parentsOf(projectId: string, of: Ticket[], known: Ticket[]): Promise<Ticket[]> {
+    const ids = new Set(known.map((t) => t.id));
+    const missing = [
+      ...new Set(of.flatMap((t) => (t.parentId && !ids.has(t.parentId) ? [t.parentId] : []))),
     ];
-    const parents = await Promise.all(parentIds.map((id) => this.tracker.getTicket(projectId, id)));
-    return [...lanes, ...parents.filter((t): t is Ticket => t !== null)];
+    const found = await Promise.all(missing.map((id) => this.tracker.getTicket(projectId, id)));
+    return found.filter((t): t is Ticket => t !== null);
   }
 
   private async prsWaiting(tickets: Ticket[]): Promise<number> {
