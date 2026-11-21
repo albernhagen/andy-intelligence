@@ -10,6 +10,7 @@ import {
 } from "@andy/contracts";
 import { revertPatch, revertReason, revertRefusal } from "./config-changes";
 import { DomainError } from "./errors";
+import { effectiveMergeMode, requireTightening } from "./merge-mode";
 import { requireCan } from "./permissions";
 import type { ProjectService } from "./projects";
 import type { RoutingSettings } from "./routing-settings";
@@ -80,6 +81,11 @@ export class ConfigRevert {
       throw new DomainError("not_revertible", `config change ${change.id} switches Builds`, [
         "Builds is set only in the app: revert it on the settings page",
       ]);
+    }
+    // ADR-0124: over MCP a merge mode may only tighten; a revert that loosens it is refused.
+    if (via === "mcp" && "mergeMode" in patch) {
+      const target = effectiveMergeMode({ ...project, mergeMode: patch.mergeMode ?? null });
+      requireTightening(target, project);
     }
     const logged = await this.changes.listForProject(projectId, CONFIG_CHANGE_LIST_MAX);
     // A revert whose write was logged but whose mark failed: finish it, don't write again. Only a
