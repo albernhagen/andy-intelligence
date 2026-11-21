@@ -1,6 +1,6 @@
 ---
 title: Coordinator's high-risk list, in full
-status: accepted, amended by 0120
+status: accepted, amended by 0120, 0116 (proposed)
 date: 2026-11-11
 amends: 0088 (the high-risk list)
 ---
