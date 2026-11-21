@@ -244,12 +244,58 @@ describe("night launch API", () => {
     const branch = { name: `epic/${epic.key}`, sha: InMemoryCodeHost.DEFAULT_TIP };
     expect(launched.status).toBe(200);
     expect(launched.json).toMatchObject({ status: "running", epicBranch: branch });
-    expect(await host.branchSha(REPO, branch.name)).toBe(branch.sha);
     expect(stopped.json).toMatchObject({
       status: "ended",
       endReason: "stopped",
       epicBranch: branch,
     });
+    // AI-124: nothing merged into it, so it goes and no morning PR opens.
+    expect(await host.branchSha(REPO, branch.name)).toBeNull();
+    expect(host.epicPullRequests).toEqual([]);
+  });
+
+  it("GivenAStoryMergedIntoTheEpicBranch_WhenTheLaunchEnds_ThenTheMorningPrOpensIntoMain", async () => {
+    const { ready, call, path, host, epic, runs } = await setup({ github: true });
+    const first = await ready("First");
+    await call("POST", path, { budget: BUDGET, stopAt: inHours(4) });
+    const branch = `epic/${epic.key}` as const;
+    // A story build that merged into the epic branch (the gate's part, `night-merge.test.ts`).
+    const run = await runs.create({
+      projectId: "ai",
+      ticketId: first.id,
+      step: "build",
+      route,
+      tier: "fast",
+      deadline: null,
+      baseBranch: branch,
+    });
+    await runs.update(run.id, { status: "running" }, ["queued"]);
+    const sha = "e".repeat(40);
+    await runs.update(
+      run.id,
+      {
+        status: "succeeded",
+        links: { pullRequest: `https://github.com/${REPO}/pull/41` },
+        epicMerge: { at: new Date().toISOString(), sha },
+      },
+      ["running"],
+    );
+    host.branches.set(`${REPO}#${branch}`, sha);
+
+    const stopped = await call("POST", `${path}/stop`);
+
+    expect(stopped.json).toMatchObject({ status: "ended", endReason: "stopped" });
+    expect(host.epicPullRequests).toHaveLength(1);
+    expect(host.epicPullRequests[0]).toMatchObject({
+      head: branch,
+      base: "main",
+      title: `${epic.key}: Night (overnight)`,
+    });
+    expect(host.epicPullRequests[0]!.body.split("\n")[0]).toBe(
+      `https://cp.example/p/ai/t/${epic.key}`,
+    );
+    expect(host.epicPullRequests[0]!.body).toContain(`| ${first.key} |`);
+    expect(await host.branchSha(REPO, branch)).toBe(sha);
   });
 
   it("GivenGitHubSetUpButNotConnected_WhenLaunched_ThenItLaunchesWithoutAnEpicBranch", async () => {
