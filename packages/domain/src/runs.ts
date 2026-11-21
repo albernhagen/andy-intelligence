@@ -24,6 +24,8 @@ import {
   type QuotaDelta,
   type RunUsage,
   type ProviderKey,
+  type QuotaLevel,
+  type RouteSkip,
   type Question,
   type Route,
   type Run,
@@ -55,6 +57,7 @@ import {
   MAX_BUILD_RUNS_PER_TICKET,
   branchFor,
   buildPrompt,
+  buildCandidates,
   buildRoute,
   isPullRequestOf,
   ticketSnapshot,
@@ -87,6 +90,7 @@ import { afterFailure, deadlineAction, MAX_RUN_ATTEMPTS } from "./watchdog";
 import { syncPrompt, type SyncTarget } from "./sync-runs";
 import { winsNightSlot, type NightSlot } from "./night-budget";
 import type { SpendGate } from "./spend-gate";
+import { chooseRoute, routeAvailability } from "./route-fallback";
 
 /**
  * Agent runs (M1.6a: Claude Code executor, ARCHITECTURE §7.1–7.2, §9). Andy starts a run on a
@@ -214,6 +218,19 @@ function skippedNote(resolved: ResolvedRoute): string {
   return resolved.skipped.length > 0 ? `; ${skippedText(resolved.skipped)}` : "";
 }
 
+/**
+ * Quota-aware route fallback for a dispatched start (AI-261: M10.14): each subscription
+ * provider's level as dispatch read it. A start by hand passes none and keeps the resolver's
+ * first usable route, as before.
+ */
+export interface RouteFallback {
+  levels: Partial<Record<ProviderKey, QuotaLevel>>;
+}
+
+/** What a run keeps of the routes passed over (`Run.routeSkips`). */
+const routeSkips = (resolved: ResolvedRoute): RouteSkip[] =>
+  resolved.skipped.map((s) => ({ route: s.route, reason: s.reason.slice(0, 300) }));
+
 export class RunService {
   constructor(
     private readonly tracker: WorkTracker,
@@ -336,7 +353,12 @@ export class RunService {
     ticketId: string,
     step: string,
     retryOf?: Run,
-    opts: { avoidOverlap?: boolean; runner?: Runner; night?: NightSlot } = {},
+    opts: {
+      avoidOverlap?: boolean;
+      runner?: Runner;
+      night?: NightSlot;
+      fallback?: RouteFallback;
+    } = {},
   ): Promise<Run> {
     if (!STARTABLE_STEPS.includes(step as StartableStep)) {
       throw new DomainError("invalid_step", `can't start a ${step} task yet`, [
@@ -400,7 +422,7 @@ export class RunService {
       startable === "refine" ? ticket : await this.withEpic(ticket),
       startable,
       // A retry that can't route is reported by retryOrFlag, with the failed run's reason.
-      { quiet: !!retryOf },
+      { quiet: !!retryOf, fallback: opts.fallback, local: !!opts.runner },
     );
     // ADR-0080: what the run may edit, and a build's ADR number (a retry keeps its run's).
     const touches = runTouches(ticket.touches, approved?.plan?.files);
@@ -415,6 +437,7 @@ export class RunService {
       ticketId,
       step: startable,
       route: resolved.route,
+      routeSkips: routeSkips(resolved),
       tier: startable === "refine" ? null : resolved.tier,
       deadline: new Date(this.now().getTime() + limits.timeoutMinutes * 60_000).toISOString(),
       prompt,
@@ -578,7 +601,7 @@ export class RunService {
   }
 
   /** The project's routing (AI-238): global narrowed by the project's config. */
-  private async routingOf(projectId: string): Promise<EffectiveRouting> {
+  async routingOf(projectId: string): Promise<EffectiveRouting> {
     if (!this.routing) return effectiveRouting(DEFAULT_ROUTING, null);
     const [global, project] = await Promise.all([
       this.routing.getGlobal(),
@@ -588,17 +611,24 @@ export class RunService {
   }
 
   /**
-   * The route `step` runs on for this ticket (pass it with its epic's overrides). When no route
-   * of its tier is usable the start is refused: unless `quiet`, the ticket gets one comment
-   * naming each skipped route and is flagged Needs-you. Dispatch skips a flagged ticket, so the
-   * comment isn't repeated; a start by hand after the fix runs it (a build's start clears the flag).
+   * The route `step` runs on for this ticket (pass it with its epic's overrides). With
+   * `fallback` (a dispatched start, AI-261: M10.14) a route at its quota reserve or refused by
+   * the spend gate is skipped; when that leaves none, `quota_reserve` or `spend_cap` is thrown
+   * and the ticket isn't flagged: dispatch idles with that reason and tries again later. When no
+   * route of its tier is usable for a routing reason the start is refused: unless `quiet`, the
+   * ticket gets one comment naming each skipped route and is flagged Needs-you. Dispatch skips a
+   * flagged ticket, so the comment isn't repeated; a start by hand after the fix runs it (a
+   * build's start clears the flag).
    */
   private async routeFor(
     ticket: Ticket,
     step: RunStep,
-    opts: { quiet?: boolean } = {},
+    opts: { quiet?: boolean; fallback?: RouteFallback; local?: boolean } = {},
   ): Promise<ResolvedRoute & { route: Route }> {
-    const resolved = buildRoute(ticket, await this.routingOf(ticket.projectId), step);
+    const routing = await this.routingOf(ticket.projectId);
+    const resolved: ResolvedRoute & { idle?: "quota_reserve" | "spend_cap" | null } = opts.fallback
+      ? await this.fallbackRoute(ticket, step, routing, opts.fallback, !!opts.local)
+      : buildRoute(ticket, routing, step);
     if (resolved.skipped.length > 0) {
       log("INFO", "routes skipped", {
         ticket: ticket.key,
@@ -606,6 +636,12 @@ export class RunService {
         tier: resolved.tier,
         skipped: skippedText(resolved.skipped),
       });
+    }
+    if (resolved.route === null && resolved.idle) {
+      throw new DomainError(
+        resolved.idle,
+        `${ticket.key}: no ${step} route with room in the ${resolved.tier} tier: ${skippedText(resolved.skipped)}`,
+      );
     }
     if (resolved.route) return resolved;
     const reason = `no usable route for the ${resolved.tier} tier${resolved.skipped.length > 0 ? `: ${skippedText(resolved.skipped)}` : ""}`;
@@ -627,6 +663,40 @@ export class RunService {
       step === "refine" ? "not_refinable" : "not_buildable",
       `${ticket.key}: ${reason}`,
     );
+  }
+
+  /** `chooseRoute` over the step's routes with dispatch's quota levels and the spend gate. */
+  private async fallbackRoute(
+    ticket: Ticket,
+    step: RunStep,
+    routing: EffectiveRouting,
+    fallback: RouteFallback,
+    local: boolean,
+  ): Promise<ResolvedRoute & { idle: "quota_reserve" | "spend_cap" | null }> {
+    const tier = buildRoute(ticket, routing, step).tier;
+    const chosen = await chooseRoute(
+      buildCandidates(ticket, routing, step),
+      routeAvailability(fallback.levels, routing.providers, (route) =>
+        this.spendRefusal(ticket.projectId, route, local),
+      ),
+    );
+    return chosen.route
+      ? { route: chosen.route, tier, skipped: chosen.skipped, idle: null }
+      : { route: null, tier, skipped: chosen.skipped, idle: chosen.idle };
+  }
+
+  /** Why the spend gate would refuse a paid task on `route` now, or null (AI-261: M10.14). */
+  private async spendRefusal(
+    projectId: string,
+    route: Route,
+    local: boolean,
+  ): Promise<string | null> {
+    if (!this.spendGate) return "no paid agent task: no spend ledger is configured";
+    if (local) return "no paid agent task: the local runner can't enforce a budget";
+    return this.spendGate.refusal(projectId, route).catch((err: unknown) => {
+      log("ERROR", "spend check failed", { projectId, error: String(err) });
+      return "no paid agent task: the spend check failed";
+    });
   }
 
   /**

@@ -11,8 +11,10 @@ import {
 import {
   effectiveRouting,
   resolveRoute,
+  routeCandidates,
   type EffectiveRouting,
   type ResolvedRoute,
+  type RouteCandidate,
 } from "./route-resolver";
 import { tierFor } from "./tiers";
 
@@ -61,6 +63,16 @@ export function buildRoute(
   step: RunStep = "build",
 ): ResolvedRoute {
   return resolveRoute(step, tierFor(ticket) ?? "fast", routing, ticket.overrides.modelPin);
+}
+
+/** Every route `step` may try for the ticket, in order, as `buildRoute` would (AI-261: M10.14). */
+export function buildCandidates(
+  ticket: Pick<Ticket, "size" | "overrides">,
+  routing: EffectiveRouting,
+  step: RunStep,
+): RouteCandidate[] {
+  return routeCandidates(step, tierFor(ticket) ?? "fast", routing, ticket.overrides.modelPin)
+    .candidates;
 }
 
 /**
