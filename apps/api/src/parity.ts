@@ -275,14 +275,14 @@ export const PARITY: readonly ParityEntry[] = [
     tools: [],
     oneSide: "GitHub's manifest flow needs a browser.",
   },
+  // ── Open gaps, each with its ticket ─────────────────────────────────────────
   {
     action: "Start a project agent task (plan-project, ideate)",
     routes: [`POST ${P}/plan/agent-task`, `POST ${P}/ideate/agent-task`],
     tools: [],
-    oneSide:
-      "API only for now (AI-134): no web control or MCP tool starts these yet; a Claude session writes the plan or runs ideate itself (the entries above).",
+    oneSide: "API only until its web control and MCP tool land (AI-134 built the routes).",
+    pending: { ticket: "AI-320", missing: "a web control and an MCP tool to start them" },
   },
-  // ── Open gaps, each with its ticket ─────────────────────────────────────────
   {
     action: "List and revoke runners",
     routes: ["GET /api/runners", "POST /api/runners/:runnerId/revoke"],
