@@ -35,8 +35,9 @@ A new App-token write: the control plane squash-merges a story PR into `epic/<KE
 | Which PRs       | From stored facts only: the active launch's recorded `epicBranch`, equal to the PR's base and the build run's `baseBranch`; a story of the launch, not Done. PR text is never an input. |
 | Branch writes   | The adapter opens PRs from, and deletes, `epic/<KEY>` refs only (pattern-checked before any call). A branch is deleted only when its tip is still the launch's starting commit.         |
 | Morning PR text | Description: keys, links and shas only. Title: the epic's title with `@` dropped, so it notifies no one.                                                                                |
+| Morning report  | One `system` comment per launch (AI-125), stored facts only; agent text one line, ≤ 240 characters, markdown escaped, URLs broken.                                                      |
 
-Residual: a story merged overnight is Done before Andy reviews it, and later stories build on it; a bad early story taints the rest (ADR-0049). Andy sees it all in the morning PR; nothing reaches `main` without him.
+Residual: a story merged overnight is Done before Andy reviews it, and later stories build on it; a bad early story taints the rest (ADR-0049). Andy sees it all in the morning PR and report; nothing reaches `main` without him.
 
 ## Caps (ADR-0028)
 
@@ -44,6 +45,6 @@ Per launch, set by Andy and checked at start: agent tasks ≤ 100, tokens ≤ 50
 
 ## Threat and residual risk
 
-- Gap text comes from refine output, which untrusted ticket content can shape. Overnight, an injected costly guess can therefore build without Andy's answer instead of waiting.
+- Gap text comes from refine output, which untrusted ticket content can shape: overnight, an injected costly guess builds without Andy's answer.
 - Mitigations: the caps above; every agent PR still passes the merge gate, CI and both review agents; Andy reviews each `nightLaunchId` assumption in the morning, and the PR shows the change before he merges.
 - Residual: a wrong night assumption can produce a plausible PR that passes the checks; only the morning review catches it.
