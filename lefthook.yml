@@ -27,6 +27,11 @@ pre-commit:
 # starve each other (ADR-0113). vitest --changed follows imports from every file that differs from
 # origin/main; a changed package.json or vitest config reruns everything. CI still runs the full
 # suite and gates every merge. Without an origin/main ref, the full suite runs here.
+#
+# AI-219: the test run (1) regenerates the package barrels itself, so it never reads ones a merge
+# left stale while `typecheck` (in parallel) is still regenerating them, and (2) caps Vitest at a
+# quarter of the cores. Uncapped, each push started one worker per core, so a few sessions pushing
+# at once oversubscribed the machine (load 50 to 100 on 14 cores) and CPU-bound waits timed out.
 pre-push:
   parallel: true
   commands:
@@ -34,8 +39,10 @@ pre-push:
       run: pnpm typecheck
     test:
       run: |
+        # Carried to managed projects (platform/baseline): only repos with generated barrels regen.
+        if [ -f scripts/gen-exports.mjs ]; then node scripts/gen-exports.mjs; fi
         if git rev-parse --verify --quiet origin/main >/dev/null; then
-          pnpm exec vitest run --changed origin/main --passWithNoTests
+          pnpm exec vitest run --changed origin/main --passWithNoTests --maxWorkers=25%
         else
-          pnpm test
+          pnpm test --maxWorkers=25%
         fi

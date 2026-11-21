@@ -63,10 +63,10 @@ node scripts/coordinator/<tool>.mjs --help  # coordinator tools (runbook coordin
 
 `pnpm install` installs the git hooks ([lefthook](https://lefthook.dev), `lefthook.yml`):
 
-| Hook       | Runs on staged files                                                                 |
-| ---------- | ------------------------------------------------------------------------------------ |
-| pre-commit | `prettier --check`, `eslint`, `terraform fmt -check`, actionlint (skipped if absent) |
-| pre-push   | `pnpm typecheck`, tests the push affects (ADR-0113)                                  |
+| Hook       | Runs on staged files                                                                  |
+| ---------- | ------------------------------------------------------------------------------------- |
+| pre-commit | `prettier --check`, `eslint`, `terraform fmt -check`, actionlint (skipped if absent)  |
+| pre-push   | `pnpm typecheck`, tests the push affects on a quarter of the cores (ADR-0113, AI-219) |
 
 Claude Code runs `scripts/format-edited-file.mjs` after each Edit/Write (`.claude/settings.json`): Prettier + ESLint `--fix` on that file; unfixable lint errors go to the agent. CI runs these plus build and actionlint. Format failure on commit: `pnpm format`, re-stage. `--no-verify` is for emergencies only.
 
