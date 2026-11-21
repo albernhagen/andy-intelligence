@@ -20,16 +20,16 @@ Stack: React, Tailwind v4, shadcn/ui components in `src/components/ui/`, icons f
 
 ## Phone
 
-Below `sm` (640px; `useIsPhone`):
+Below `sm` (640px; `useIsPhone`); screens adopt these in their own M7: Mobile slices:
 
 - Navigation is a bottom bar: Board, Inbox, Dashboards, More.
-- Touch targets at least 44px (`h-11`, desktop size back at `sm:`). Inputs `text-base` (a fifth size) so iOS doesn't zoom.
+- Touch targets at least 44px (`h-11 sm:h-8`). Inputs `text-base` so iOS doesn't zoom.
 - Edge-touching elements pad by `env(safe-area-inset-*)`.
 - No hover-only actions; panels open full-screen.
 
 ## Type
 
-System font stack (Tailwind default). Four sizes only:
+System font stack. Four sizes (phone inputs add `text-base`):
 
 | Use                                               | Class                 |
 | ------------------------------------------------- | --------------------- |
@@ -62,7 +62,7 @@ Data-heavy screens favour density over air:
 - 4px grid: gaps `1`, `2`, `3`, `4`, `6`. Header height `h-12`. List rows `h-8`. Cards `p-2` with `gap-1`.
 - Sections in a page: `space-y-4`. Header controls: `gap-2`, groups `gap-4`.
 - Radius from `--radius` (`rounded-md`). Borders 1px `border-border`. Shadows only on things that float (menus, a dragged card).
-- Show the number, not a chart: lane counts, waiting counts, elapsed minutes.
+- Show the number (lane count, minutes), not a chart.
 
 ## Status markers
 
@@ -83,8 +83,8 @@ No spinners or pulsing in markers: static text keeps screenshots stable.
 ## Copy
 
 - Sentence case everywhere: "New ticket", "All projects", "Add project".
-- "Needs you" for items waiting on the viewer (header count, inbox, badges). "Needs attention" is the ticket fact, used in docs and the API, not in the viewer's UI.
-- Never a bare ID in prose or links: "AI-26: Design source and app shell". A card may show the key beside its title.
+- "Needs you" in the UI for items waiting on the viewer; "Needs attention" is the ticket fact (docs, API).
+- Never a bare ID in prose or links: "AI-26: Design source and app shell".
 - Say "agent task", never "run".
 - Buttons are verbs. Empty states say what's missing: "Nothing needs you."
 - Errors show the API's message (`QueryError`); never swallow one.
@@ -98,6 +98,7 @@ No spinners or pulsing in markers: static text keeps screenshots stable.
 | "Waiting for you: 2 questions"                               | "ACTION REQUIRED!!"                                       |
 | Reuse `Button`, `Badge`, `DropdownMenu` from `components/ui` | Add a second component library or a one-off styled button |
 | Change a colour in `index.css`                               | Hard-code `oklch(...)` or `#hex` in a component           |
+| Put a new screen under `/p/$projectId/…` and `/all/…`        | Add a project dropdown inside one page                    |
 
 ## Checks
 
