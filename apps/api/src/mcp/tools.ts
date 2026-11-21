@@ -16,6 +16,12 @@ import {
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import type { NightDeps } from "../night";
+import {
+  ALLOW_SIGNED_IN,
+  projectsOfToolInput,
+  refusedTarget,
+  type ProjectAccess,
+} from "../project-access";
 import * as toolGroups from "./tool-groups";
 
 /**
@@ -52,10 +58,12 @@ export interface ToolDeps {
   email: string;
   /** The signed-in user as an actor, `user:<uid>` (AI-19): every write is recorded as this. */
   actor: EventActor;
+  /** Who may read which project (AI-252: M8.3); absent: every signed-in caller reads every one. */
+  projectAccess?: ProjectAccess;
 }
 
 /** The app's shared services the tools use: `ToolDeps` without the caller. */
-export type ToolServices = Omit<ToolDeps, "email" | "actor">;
+export type ToolServices = Omit<ToolDeps, "email" | "actor" | "projectAccess">;
 
 /** Wraps a tool's work into an MCP result: `run` below. */
 export type Run = <T extends object>(fn: () => Promise<T>) => Promise<CallToolResult>;
@@ -75,7 +83,36 @@ export const summary = (t: Ticket) => ({
 
 export function registerTools(server: McpServer, deps: ToolDeps): void {
   const groups: Record<string, ToolGroup> = toolGroups;
-  for (const register of Object.values(groups)) register(server, deps, run);
+  const checked = withProjectAccess(server, deps.projectAccess ?? ALLOW_SIGNED_IN, deps.actor);
+  for (const register of Object.values(groups)) register(checked, deps, run);
+}
+
+type ToolCallback = (...args: unknown[]) => unknown;
+
+/**
+ * The server every tool group registers on (AI-252: M8.3): a tool whose input names a `project`
+ * or a `ticket` (its key's prefix is the project) checks the caller may read that project before
+ * its handler runs; a refusal is the same "not found" an unknown one gets. Tools without input
+ * are cross-project (listed in `registries.test.ts`).
+ */
+function withProjectAccess(server: McpServer, access: ProjectAccess, actor: EventActor): McpServer {
+  const checked = Object.create(server) as McpServer;
+  const register = server.registerTool.bind(server) as (
+    name: string,
+    config: { inputSchema?: unknown },
+    cb: ToolCallback,
+  ) => unknown;
+  const guarded = (name: string, config: { inputSchema?: unknown }, cb: ToolCallback) => {
+    if (!config.inputSchema) return register(name, config, cb);
+    return register(name, config, async (args: unknown, ...rest: unknown[]) => {
+      const refused = await refusedTarget(access, actor, projectsOfToolInput(args));
+      if (refused)
+        return run(() => Promise.reject(new WorkTrackerError("not_found", refused.error)));
+      return cb(args, ...rest);
+    });
+  };
+  checked.registerTool = guarded as unknown as McpServer["registerTool"];
+  return checked;
 }
 
 /**

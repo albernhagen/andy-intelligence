@@ -23,6 +23,7 @@ import { requireAllowedUser, type AuthEnv, type TokenVerifier } from "./auth";
 import type { CodeHostFactory } from "./github/connection";
 import type { ActionsTokenVerifier } from "./github/token";
 import type { ClientMetadataResolver } from "./mcp";
+import { requireProjectAccess, type ProjectAccess } from "./project-access";
 import * as publicRoutes from "./public-routes";
 import { createServices, type RouteModule } from "./services";
 import type { InvokerTokenVerifier } from "./watchdog";
@@ -68,6 +69,8 @@ export interface AppDeps {
    * project, and the board and ticket list serve unchanged polls from a cache. Without, no cache.
    */
   projectVersions?: ProjectVersions;
+  /** Who may read which project (AI-252: M8.3); absent: every signed-in caller reads every one. */
+  projectAccess?: ProjectAccess;
   /**
    * The only host served (ADR-0044), e.g. `ai.andybernhagen.com`. Requests for any other host
    * (the default run.app URLs) get 404, except /health for monitoring. Unset: every host (local dev).
@@ -230,6 +233,7 @@ export function createApp(input: AppDeps) {
       onError: (c) => c.json({ error: "request body too large" }, 413),
     }),
   );
+  app.use("/api/*", requireProjectAccess(deps.projectAccess));
 
   app.openapi(meRoute, (c) => {
     const { email, uid } = c.get("identity");
