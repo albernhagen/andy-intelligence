@@ -1,7 +1,7 @@
 import { notFound, type Project, type Stage, type Ticket, type WorkTracker } from "@andy/contracts";
-import { lastPrNumber } from "./digest";
 import { epicChildren, type EpicChild } from "./epic-rollup";
 import { DomainError } from "./errors";
+import { ProjectTickets } from "./ticket-snapshots";
 
 /**
  * The milestone map (AI-148): for each open epic of a project, which children are done, in
@@ -208,18 +208,24 @@ export function renderMilestoneMapText(map: Omit<MilestoneMap, "text">): string 
 /** Reads a project's map: its ticket list, then histories of tickets in review (capped). */
 export class MilestoneMapReader {
   constructor(
-    private readonly tracker: Pick<WorkTracker, "getProject" | "listTickets" | "listEvents">,
+    private readonly tracker: Pick<
+      WorkTracker,
+      "getProject" | "listTickets" | "getLatestPullRequest"
+    >,
+    /** AI-318: the project's tickets through the snapshot, so a call reads only what changed. */
+    private readonly tickets: ProjectTickets = new ProjectTickets(tracker),
   ) {}
 
   async map(projectId: string, epicKey?: string): Promise<MilestoneMap> {
     const project = await this.tracker.getProject(projectId);
     if (!project) throw notFound("project", projectId);
-    const tickets = await this.tracker.listTickets(projectId);
+    const tickets = await this.tickets.list(projectId);
     const all = mapEpics(tickets, epicKey).slice(0, MAX_MAP_EPICS);
     const review = inReviewUnder(all, tickets).sort(byRank);
     const read = review.slice(0, MAX_MAP_PR_READS);
     const numbers = await Promise.all(
-      read.map(async (t) => lastPrNumber(await this.tracker.listEvents(projectId, t.id))),
+      // Only the ticket's PR links, not its whole history (AI-318).
+      read.map(async (t) => (await this.tracker.getLatestPullRequest(projectId, t.id))?.number),
     );
     const prs = new Map<string, number>();
     read.forEach((t, i) => {

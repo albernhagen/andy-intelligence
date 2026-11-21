@@ -1,6 +1,6 @@
 import { createRoute, z, type OpenAPIHono } from "@hono/zod-openapi";
 import { Size, Stage, TicketType, type RunStore, type WorkTracker } from "@andy/contracts";
-import { readEpicRollup, type EpicRollup as EpicRollupValue } from "@andy/domain";
+import { ProjectTickets, readEpicRollup, type EpicRollup as EpicRollupValue } from "@andy/domain";
 import type { AuthEnv } from "./auth";
 import type { RouteModule } from "./services";
 
@@ -57,21 +57,24 @@ export function registerEpicRoutes(
   app: OpenAPIHono<AuthEnv>,
   tracker: WorkTracker,
   runs: RunStore,
+  /** AI-318: the project's tickets through the snapshot. */
+  projectTickets: ProjectTickets = new ProjectTickets(tracker),
 ): void {
   app.openapi(epicRoute, async (c) => {
     const { projectId, ticketId } = c.req.valid("param");
     const epic = await tracker.getTicket(projectId, ticketId);
     if (!epic) return c.json({ error: "ticket not found" }, 404);
-    const tickets = await tracker.listTickets(projectId);
+    const tickets = await projectTickets.list(projectId);
     const rollup = await readEpicRollup(
       epic,
       tickets,
       (p, t) => runs.listForTicket(p, t),
-      (p) => tracker.listTickets(p).catch(() => []),
+      (p) => projectTickets.list(p).catch(() => []),
     );
     return c.json(rollup, 200);
   });
 }
 
 /** Listed in `api-routes.ts` (AI-145). */
-export const apiRoutes: RouteModule = (app, s) => registerEpicRoutes(app, s.tracker, s.deps.runs);
+export const apiRoutes: RouteModule = (app, s) =>
+  registerEpicRoutes(app, s.tracker, s.deps.runs, s.tickets);
