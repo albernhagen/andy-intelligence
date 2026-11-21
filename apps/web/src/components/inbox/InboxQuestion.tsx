@@ -41,6 +41,7 @@ export function InboxQuestion({ question, locked }: { question: Question; locked
       type="button"
       size="sm"
       variant="outline"
+      className="h-11 sm:h-8"
       disabled={locked}
       onClick={() => answer(choice)}
     >
@@ -89,9 +90,9 @@ export function InboxQuestion({ question, locked }: { question: Question; locked
           value={text}
           onChange={(e) => setText(e.target.value)}
           placeholder="Or type an answer"
-          className="h-8"
+          className="h-11 text-base sm:h-8 sm:text-sm"
         />
-        <Button type="submit" size="sm" disabled={!text.trim() || locked}>
+        <Button type="submit" size="sm" className="h-11 sm:h-8" disabled={!text.trim() || locked}>
           Answer
         </Button>
       </form>
