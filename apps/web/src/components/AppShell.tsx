@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, type ReactNode } from "react";
+import { createContext, isValidElement, useContext, useEffect, type ReactNode } from "react";
 import { Link, Outlet, useNavigate, useRouterState } from "@tanstack/react-router";
 import {
   ChartColumn,
@@ -61,6 +61,7 @@ export function AppShell() {
   }, [pathname]);
 
   const phone = useIsPhone();
+  const headerEnd = useContext(HeaderEndContext);
   const links = navLinks(scope, pathname, section);
 
   return (
@@ -81,7 +82,8 @@ export function AppShell() {
           <QuotaGauge />
           <PhonePauseButton scope={scope} />
           <NeedsYouCount />
-          {useContext(HeaderEndContext)}
+          {/* On a phone it moves under More, so the header fits 390px. */}
+          {!phone && headerEnd}
         </div>
       </header>
       <LiveUpdatesBanner />
@@ -91,7 +93,7 @@ export function AppShell() {
       >
         <Outlet />
       </main>
-      {phone && <PhoneNav links={links} />}
+      {phone && <PhoneNav links={links} headerEnd={headerEnd} />}
     </div>
   );
 }
@@ -144,7 +146,7 @@ function navLinks(scope: Scope, pathname: string, section: Section | null): NavI
  * Phone navigation: a bottom bar in thumb reach, 44px targets, the rest under More. Below the
  * ticket panel (z-30), so a panel opened full-screen covers it until closed.
  */
-function PhoneNav({ links }: { links: NavItem[] }) {
+function PhoneNav({ links, headerEnd }: { links: NavItem[]; headerEnd: ReactNode }) {
   const navigate = useNavigate();
   const more = links.filter((l) => !l.icon);
   const target = "flex min-h-11 flex-1 flex-col items-center justify-center gap-0.5 text-xs";
@@ -187,6 +189,15 @@ function PhoneNav({ links }: { links: NavItem[] }) {
               {l.label}
             </DropdownMenuItem>
           ))}
+          {isValidElement(headerEnd) && (
+            <>
+              <DropdownMenuSeparator />
+              {/* The signed-in app's Sign out, as a menu item. */}
+              <DropdownMenuItem asChild className="min-h-11 w-full justify-start">
+                {headerEnd}
+              </DropdownMenuItem>
+            </>
+          )}
         </DropdownMenuContent>
       </DropdownMenu>
     </nav>
@@ -230,7 +241,7 @@ function ProjectPicker({ scope, section }: { scope: Scope; section: Section }) {
           ) : (
             <>
               <KeyBadge>{current?.key ?? scope.projectId.toUpperCase()}</KeyBadge>{" "}
-              <span className="max-w-28 truncate sm:max-w-48">
+              <span className="max-w-48 truncate max-sm:sr-only">
                 {current?.name ?? scope.projectId}
               </span>
             </>
@@ -312,7 +323,7 @@ function NeedsYouCount() {
     <Link
       to={scopePath(ALL, "inbox")}
       className={cn(
-        "inline-flex h-11 items-center gap-1.5 sm:h-7 rounded-md px-2 text-xs font-medium tabular-nums",
+        "inline-flex h-11 items-center gap-1.5 whitespace-nowrap sm:h-7 rounded-md px-2 text-xs font-medium tabular-nums",
         total ? "bg-attention/15 text-attention" : "text-muted-foreground hover:bg-muted",
       )}
     >

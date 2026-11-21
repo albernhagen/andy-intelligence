@@ -23,5 +23,6 @@ test("phone shell: More menu open on the board", async ({ page }) => {
   await expect(page.getByRole("link", { name: "Needs you 6" })).toBeVisible();
   await page.getByRole("button", { name: "More" }).click();
   await expect(page.getByRole("menuitem", { name: "Project settings" })).toBeVisible();
+  await expect(page.getByRole("menuitem", { name: "Sign out" })).toBeVisible();
   await expect(page).toHaveScreenshot("phone-shell-board-more.png");
 });
