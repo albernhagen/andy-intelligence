@@ -44,6 +44,12 @@ const EditInput = {
     outOfScope: true,
     touches: true,
     overrides: true,
+    // AI-291: the PATCH route's flag and scores, with the same schemas.
+    needsAttention: true,
+    risk: true,
+    riskReason: true,
+    confidence: true,
+    confidenceReason: true,
   }).shape,
   outcome: TicketFields.shape.outcome.describe(
     "Epics only: what is true when the epic is done, at most 300 characters; null clears it.",
@@ -205,7 +211,7 @@ export function registerTicketTools(server: McpServer, deps: ToolDeps): void {
     "edit_ticket",
     {
       description:
-        "Edits a ticket's fields, as the ticket page does. Only the fields given change; lists replace the whole list. An epic's `acceptanceCriteria` are its Done-when list. Re-checks the Definition of Ready.",
+        "Edits a ticket's fields, as the ticket page does. Only the fields given change; lists replace the whole list. An epic's `acceptanceCriteria` are its Done-when list. Also sets Needs-you (`needsAttention`) and the risk and confidence scores with their reasons. Re-checks the Definition of Ready.",
       inputSchema: EditInput,
       annotations: { destructiveHint: false, idempotentHint: true },
     },

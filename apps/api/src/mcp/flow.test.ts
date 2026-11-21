@@ -176,6 +176,7 @@ describe("MCP OAuth flow (MCP SDK client)", () => {
       "cancel_ticket",
       "clear_quota_idle",
       "comment_ticket",
+      "create_project",
       "create_ticket",
       "dashboard",
       "digest",
@@ -192,12 +193,14 @@ describe("MCP OAuth flow (MCP SDK client)", () => {
       "list_work",
       "milestone_map",
       "move_ticket",
+      "project_setup",
       "promote_assumption",
       "refine",
       "reject_plan",
       "reject_project_plan",
       "reorder_ticket",
       "revert_spend_cap_change",
+      "roadmap",
       "set_auto_build",
       "set_auto_merge",
       "set_auto_refine",
@@ -207,6 +210,7 @@ describe("MCP OAuth flow (MCP SDK client)", () => {
       "set_environments",
       "set_executor",
       "set_global_spend_caps",
+      "set_merge_mode",
       "set_paused",
       "set_plan_approval",
       "set_runs_at_once",
@@ -216,6 +220,7 @@ describe("MCP OAuth flow (MCP SDK client)", () => {
       "status",
       "submit_brief",
       "submit_project_plan",
+      "test_email",
     ]);
   });
 

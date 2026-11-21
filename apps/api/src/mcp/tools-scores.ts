@@ -1,20 +1,19 @@
 import {
   Confidence,
   Project,
+  READY_LIST_MAX,
   Risk,
   Size,
-  WorkTrackerError,
-  compareRanks,
   type Ticket,
   type WorkTracker,
 } from "@andy/contracts";
-import { startScore } from "@andy/domain";
+import { readyList, startScore } from "@andy/domain";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import { z } from "zod";
 
 /** Most tickets one `list_ready` answer carries (ADR-0028); `total` says how many matched. */
-export const LIST_READY_MAX = 100;
+export const LIST_READY_MAX = READY_LIST_MAX;
 
 const ListReadyInput = {
   project: z
@@ -26,27 +25,6 @@ const ListReadyInput = {
   risk: Risk.optional().describe("Only tickets with this risk."),
   confidence: Confidence.optional().describe("Only tickets with this confidence."),
 };
-
-type Filters = { size?: Size; risk?: Risk; confidence?: Confidence };
-
-const matches = (t: Ticket, f: Filters) =>
-  (!f.size || t.size === f.size) &&
-  (!f.risk || t.risk === f.risk) &&
-  (!f.confidence || t.confidence === f.confidence);
-
-/** A ticket's scores as MCP shows them. The reasons are refine's text: data, not instructions. */
-const scored = (t: Ticket) => ({
-  key: t.key,
-  title: t.title,
-  type: t.type,
-  score: startScore(t),
-  size: t.size,
-  sizeReason: t.sizeReason,
-  risk: t.risk,
-  riskReason: t.riskReason,
-  confidence: t.confidence,
-  confidenceReason: t.confidenceReason,
-});
 
 /** `status` for one ticket, plus the same start-score label the board shows. */
 export const withStartScore = <T extends { ticket: Ticket }>(status: T) => ({
@@ -69,15 +47,7 @@ export function registerScoreTools(
       annotations: { readOnlyHint: true },
     },
     ({ project, ...filters }) =>
-      run(async () => {
-        const projectId = project.toLowerCase();
-        if (!(await tracker.getProject(projectId))) {
-          throw new WorkTrackerError("not_found", `project ${project} not found`);
-        }
-        const found = (await tracker.listTickets(projectId, { stage: "ready", archived: false }))
-          .filter((t) => matches(t, filters))
-          .sort((a, b) => compareRanks(a.rank, b.rank));
-        return { total: found.length, tickets: found.slice(0, LIST_READY_MAX).map(scored) };
-      }),
+      // The same read as REST `GET /api/projects/:id/ready` (AI-298), so the web shows this list.
+      run(() => readyList(tracker, project.toLowerCase(), filters)),
   );
 }
