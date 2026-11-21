@@ -12,6 +12,7 @@ import {
   type ConfigRevert,
   type RunService,
   type TicketService,
+  type WorkReader,
 } from "@andy/domain";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
@@ -48,6 +49,8 @@ export interface ToolDeps {
   configRevert?: ConfigRevert | null;
   /** The night launch step (M4.17); absent or null: no night tools. */
   night?: NightDeps | null;
+  /** Work across projects (AI-198); the app always passes it, unit tests may not. */
+  work?: WorkReader;
   /** Signed-in email, shown by `status` so it doubles as the connection check. */
   email: string;
   /** The signed-in user as an actor, `user:<uid>` (AI-19): every write is recorded as this. */

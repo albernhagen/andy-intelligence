@@ -18,7 +18,7 @@ import { plural, runLabel } from "@/lib/board";
 import { workerStatus } from "@/lib/needs-you";
 import { typeLabel } from "@/lib/tickets";
 
-const TYPE_ICONS: Record<TicketType, LucideIcon> = {
+export const TYPE_ICONS: Record<TicketType, LucideIcon> = {
   feature: Lightbulb,
   bug: Bug,
   chore: Wrench,
@@ -117,7 +117,8 @@ export function BoardCard({
   );
 }
 
-function Markers({
+/** A card's marker line; the Work list (AI-198) shows the same markers. */
+export function Markers({
   ticket,
   openQuestions,
   needsAttention,
@@ -135,7 +136,7 @@ function Markers({
   needsAttention: boolean;
   run: string | null;
   pullRequest: BoardTicket["summary"]["pullRequest"];
-  blockers: Ticket[];
+  blockers: Pick<Ticket, "key">[];
   archived: boolean;
   sentBack: string | null;
   worker: Worker;
