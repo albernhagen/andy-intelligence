@@ -1,5 +1,6 @@
 import { WorkTrackerError, type EventActor, type Ticket, type WorkTracker } from "@andy/contracts";
 import {
+  type MilestoneReader,
   DomainError,
   type DigestReader,
   type EmailNotifications,
@@ -87,6 +88,8 @@ export interface ToolDeps {
   whatsNew?: WhatsNewReader | null;
   /** The app's public URL for page links in tool text (the digest links What's new); null in dev. */
   publicUrl?: string | null;
+  /** Milestones (ADR-0131): `status` shows a ticket's milestone hold (AI-306); null holds any. */
+  milestones?: MilestoneReader | null;
   /** Signed-in email, shown by `status` so it doubles as the connection check. */
   email: string;
   /** The signed-in user as an actor, `user:<uid>` (AI-19): every write is recorded as this. */

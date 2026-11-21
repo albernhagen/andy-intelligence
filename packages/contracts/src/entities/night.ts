@@ -155,6 +155,8 @@ export const LaunchProblemKind = z.enum([
   "stop_time_past",
   "stop_time_too_far",
   "launch_running",
+  // The epic's milestone isn't approved, or can't be read (ADR-0131, AI-306).
+  "milestone_not_approved",
 ]);
 export type LaunchProblemKind = z.infer<typeof LaunchProblemKind>;
 

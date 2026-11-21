@@ -13,6 +13,7 @@ import {
   inboxCards,
   readEpicRollup,
   statusLineTickets,
+  ticketMilestoneHold,
   ticketStatusLine,
   type InboxCard,
   type TicketStatus,
@@ -137,12 +138,13 @@ async function lineFor(
   executor?: ResolvedExecutor,
   ticketRuns?: AgentTask[],
 ) {
-  const [runs, events, inFlight] = await Promise.all([
+  const [runs, events, inFlight, milestoneHold] = await Promise.all([
     ticketRuns ?? deps.runs.list(ticket.projectId, ticket.id),
     deps.tracker.listEvents(ticket.projectId, ticket.id),
     deps.runs.inFlight(ticket.projectId),
+    ticketMilestoneHold(deps.tracker, deps.milestones ?? null, ticket, tickets),
   ]);
-  const facts = { tickets, runs, events, openQuestions, worker, inFlight, executor };
+  const facts = { tickets, runs, events, openQuestions, worker, inFlight, executor, milestoneHold };
   return ticketStatusLine(ticket, facts, new Date());
 }
 
