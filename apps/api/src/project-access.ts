@@ -28,7 +28,7 @@ export function ownerOnlyAccess(): ProjectAccess {
  */
 export const CROSS_PROJECT_ROUTES: Readonly<Record<string, string>> = {
   "GET /api/config-changes": "Pending changes of every project: keep readable projects.",
-  "GET /api/dashboard": "Every project's counts: keep readable projects.",
+  "GET /api/dashboard": "Every project's counts: readable projects only (canRead, enforced).",
   "GET /api/github": "GitHub App connection: owner only.",
   "GET /api/github/manifest": "GitHub App setup: owner only.",
   "GET /api/me": "The caller's own identity: nothing to filter.",
@@ -36,6 +36,7 @@ export const CROSS_PROJECT_ROUTES: Readonly<Record<string, string>> = {
   "GET /api/notify/email": "Needs-you email setting: owner only.",
   "GET /api/project-plans/waiting": "Every project's waiting plan: keep readable projects.",
   "GET /api/projects": "Every project: keep readable projects.",
+  "GET /api/roadmap": "Every project's roadmap: readable projects only (canRead, enforced).",
   "GET /api/routing":
     "Every project's routing (a `projectId` query is checked): keep readable projects.",
   "GET /api/routing/changes":
@@ -47,7 +48,8 @@ export const CROSS_PROJECT_ROUTES: Readonly<Record<string, string>> = {
   "POST /api/config-changes/:changeId/accept": "Check the change's project.",
   "POST /api/config-changes/:changeId/reject": "Check the change's project.",
   "POST /api/github/connect": "GitHub App setup: owner only.",
-  "POST /api/notify/email/test": "Needs-you email: owner only.",
+  "POST /api/notify/email/test":
+    "Needs-you email test send: owner only (`send_test_email`, enforced).",
   "POST /api/oauth/approve": "The caller's own MCP grant: nothing to filter.",
   "POST /api/projects": "Creates a project: owner only.",
   "POST /api/questions/:questionId/answer": "Check the question's ticket's project.",
@@ -72,6 +74,9 @@ export const CROSS_PROJECT_TOOLS: Readonly<Record<string, string>> = {
   accept_config_change: "Check the change's project.",
   answer_question: "Check the question's ticket's project.",
   clear_quota_idle: "Subscription quota: owner only.",
+  create_project: "Creates a project: owner only (`register_project`, enforced); no project yet.",
+  dashboard:
+    "Without `project`, every project's figures: readable projects only (canRead, enforced).",
   get_quota: "Subscription quota: owner only.",
   get_routing: "Without `project`, the global routing: nothing to filter.",
   list_config_changes: "Without `project`, every project's changes: keep readable projects.",
@@ -89,10 +94,13 @@ export const CROSS_PROJECT_TOOLS: Readonly<Record<string, string>> = {
     "The global spend caps (AI-276): owner only (`change_spend_caps`, enforced).",
   list_spend_cap_changes: "Global spend caps' change log: owner only (enforced).",
   revert_spend_cap_change: "Reverts a global spend caps change: owner only (enforced); no project.",
+  roadmap:
+    "Without `project`, every project's roadmap: readable projects only (canRead, enforced).",
   set_provider_routing: "Without `project`, the global routing: owner only.",
   set_step_tier: "Without `project`, the global routing: owner only.",
   set_tier_routes: "Without `project`, the global routing: owner only.",
   status: "Without `ticket`, every project's counts: keep readable projects.",
+  test_email: "Needs-you email test send: owner only (`send_test_email`, enforced).",
 };
 
 /** What a refused lookup names, and the body an unknown one gets. */

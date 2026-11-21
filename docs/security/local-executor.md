@@ -36,3 +36,5 @@ Every process below runs as the runner's macOS user (`ai-runner`) under a Seatbe
 2. Cloud Logging shows `push token granted` once for that run (with its `runnerId`); no `second push token request` warning.
 3. The runner's log for that build says "Bash sandbox check passed" (nesting works). If the task fails with "the check command didn't run in Bash", nesting doesn't: ADR-0122's open question.
 4. A build that edits `.github/` fails with "protected" and pushes nothing.
+
+**Runners over MCP (AI-294):** `list_runners` reads what `GET /api/runners` returns, never a secret; register and revoke stay in the app (ADR-0089).
