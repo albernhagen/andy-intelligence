@@ -57,10 +57,9 @@ GitHub settings rows (ruleset, merge settings, `autoMerge`, `planApproval`, Depe
 | Public-repo hygiene (`.gitignore`: tfvars, state, `.env*`) | 0015 | `template/gitignore.lines` | M (lines) | carried (M1.16) |
 | Reviewer token secret | 0030 | `CLAUDE_CODE_OAUTH_TOKEN` | RB | carried (M1.16: `docs/runbooks/onboard-a-repo.md`) |
 | GCP budget + alerts | 0028, 0029 | `infra/billing` | TF | not yet carried (M6: Dev → prod releases) |
-| Cloud Run caps, log exclusions, usage alerts | 0028 | `infra/control-plane` | TF | not yet carried (M6: Dev → prod releases) |
+| Cloud Run caps, log exclusions, usage alerts, daily Firestore backup (7-day retention), Cloud Tasks queue caps (rate, concurrency, retries) | 0028 | `infra/control-plane` | TF | not yet carried (M6: Dev → prod releases) |
+| Alert: config change not in the change log (AI-136); test keeps filter and message in step | — | `infra/control-plane`, `config-changes.test.ts` | TF | not yet carried (M6: Dev → prod releases) |
 | Cost kill switch (opt-in) | 0028, 0036 | `infra/billing/kill-switch.tf` + workflow YAML | TF | not yet carried (M6: Dev → prod releases) |
-| Daily Firestore backup (7-day retention) | 0028 | `infra/control-plane` | TF | not yet carried (M6: Dev → prod releases) |
-| Cloud Tasks queue caps (rate, concurrency, retries) | 0028 | `infra/control-plane` | TF | not yet carried (M6: Dev → prod releases) |
 | Safe deploy: no-traffic revision, smoke test, then traffic | 0076 | `platform/actions/cloud-run-safe-deploy` | A | control plane only until M6: Dev → prod releases |
 | UI screenshot checks (Playwright): a diff fails, actual images uploaded; 10-minute cap | 0045, 0059 | `ui-screenshots.yml` → `platform/actions/ui-screenshots`; config and images in `apps/web/e2e/` | — | control plane only; a managed web UI can call the action (needs `playwright.config.ts`). Not required yet |
 | Refine caps (questions, children); email (20/day, 10-min batch) | 0028, 0075 | `packages/domain/src/{refine-gate,notify-email}.ts` | — | control plane |
