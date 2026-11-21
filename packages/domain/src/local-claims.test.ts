@@ -130,6 +130,22 @@ describe("LocalClaims", () => {
     ]);
   });
 
+  it("GivenAProjectWithoutARepo_WhenALocalBuildAsksForAPushToken_ThenRefusedAndTheGrantIsNotSpent", async () => {
+    const s = await setup();
+    await s.upNext("A");
+    const claimed = (await s.claims.claim(s.runner))!;
+    const caller = { runnerId: s.runner.id };
+    await s.runs.context(claimed.runId, caller);
+    // A build run whose project has lost its repo since the claim.
+    await s.runStore.update(claimed.runId, { step: "build" } as never, ["running"]);
+    vi.spyOn(s.tracker, "getProject").mockResolvedValue({ ...s.project, repos: [] });
+
+    await expect(s.runs.claimLocalPushGrant(claimed.runId, caller)).rejects.toMatchObject({
+      code: "invalid_repo",
+    });
+    expect((await s.runStore.get(claimed.runId))!.pushGrantedAt ?? null).toBeNull();
+  });
+
   it("GivenARunningLocalRefine_WhenItsRunnerAsksForAPushToken_ThenForbidden", async () => {
     const s = await setup();
     await s.upNext("A");

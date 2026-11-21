@@ -942,10 +942,11 @@ export class RunService {
         `run ${runId} is a ${claimed.step} run; local runs push only builds`,
       );
     }
-    const run = await this.claimPushGrant(runId, caller);
-    const project = await this.tracker.getProject(run.projectId);
+    // The repo first, so a project without one doesn't spend the run's one grant.
+    const project = await this.tracker.getProject(claimed.projectId);
     const repo = project?.repos[0];
     if (!repo) throw new DomainError("invalid_repo", `run ${runId}'s project has no repo`);
+    await this.claimPushGrant(runId, caller);
     return { repo };
   }
 
