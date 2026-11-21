@@ -35,6 +35,8 @@ Actions → _Deploy control plane_ → the run → Summary: one verdict line, th
 | Traffic may have moved | Compare _Serving after_ with _Serving before_; if different, §3.                                                                    |
 | It is serving traffic  | §3 now, then fix forward.                                                                                                           |
 
+**Deployment record (AI-180: M6.4).** The job reports each deploy to the control plane, which records it as a Deployment (`started`, then `succeeded` or `failed` with the serving revision). The summary says "Deployment … recorded as …". "⚠️ Deployment not recorded in the control plane" means the report failed (control plane unreachable, a refused token, or the first deploy that ships this route, which reports to the old revision): the deploy itself is unaffected and nothing needs doing. Checks and caps: [`docs/security/deployments.md`](../security/deployments.md).
+
 ## 3. Roll back
 
 Takes under 5 minutes, usually under one. Copy the command from the summary, or find the last good revision and pin it:

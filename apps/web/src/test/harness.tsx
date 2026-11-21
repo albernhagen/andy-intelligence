@@ -8,7 +8,10 @@ import {
   InMemoryCodeHostConnectionStore,
   InMemoryConfigChangeStore,
   InMemoryDeploymentStore,
+  InMemoryRoutingConfigStore,
+  InMemorySpendCapsStore,
   InMemoryNightLaunchStore,
+  InMemoryReleaseNoteStore,
   InMemoryReviewFindingSource,
   InMemoryQuotaStore,
   InMemoryRunStore,
@@ -16,7 +19,7 @@ import {
   InMemoryWorkTracker,
 } from "@andy/contracts";
 import { TicketService } from "@andy/domain";
-import { createApp } from "@andy/api/app";
+import { createApp, ownerOnlyAccess } from "@andy/api/app";
 import { ApiContext, createApi } from "@/lib/api";
 import { makeRouter } from "@/router";
 
@@ -50,6 +53,9 @@ export function renderApp(
   const configChanges = new InMemoryConfigChangeStore();
   const nightLaunches = new InMemoryNightLaunchStore();
   const deployments = new InMemoryDeploymentStore();
+  const routing = new InMemoryRoutingConfigStore();
+  const spendCapsStore = new InMemorySpendCapsStore();
+  const releaseNotes = new InMemoryReleaseNoteStore();
   const reviewFindings = new InMemoryReviewFindingSource();
   // GitHub fakes (ADR-0043): one installed repo; any manifest code "connects" this App.
   const connections = new InMemoryCodeHostConnectionStore();
@@ -62,6 +68,7 @@ export function renderApp(
     },
   ]);
   const app = createApp({
+    projectAccess: ownerOnlyAccess(),
     verifier: {
       async verify(token) {
         if (token !== "andy-token") throw new Error("bad token");
@@ -78,7 +85,10 @@ export function renderApp(
     configChanges,
     nightLaunches,
     deployments,
+    releaseNotes,
     reviewFindings,
+    routing,
+    spendCapsStore,
     email: opts.email,
     github: {
       publicUrl: "http://localhost",
@@ -130,7 +140,10 @@ export function renderApp(
   );
   return {
     runners,
+    spendCapsStore,
+    releaseNotes,
     reviewFindings,
+    configChanges,
     user,
     router,
     queryClient,
@@ -141,6 +154,7 @@ export function renderApp(
     connections,
     nightLaunches,
     deployments,
+    routing,
     service: new TicketService(tracker),
   };
 }

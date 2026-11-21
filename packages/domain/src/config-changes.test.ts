@@ -5,6 +5,8 @@ import {
   type Project,
 } from "@andy/contracts";
 import { configChangeLogContract } from "@andy/contracts/testing";
+import { readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
   CONFIG_CHANGE_NOT_RECORDED,
@@ -46,6 +48,22 @@ describe("CONFIG_CHANGE_NOT_RECORDED", () => {
   it("GivenTheAlertMatchesIt_WhenRead_ThenTheMessageIsUnchanged", () => {
     // AI-136's log-based alert matches this exact text.
     expect(CONFIG_CHANGE_NOT_RECORDED).toBe("config change not recorded");
+  });
+
+  it("GivenTheAlertMetricInTerraform_WhenItsFilterIsRead_ThenItMatchesTheLoggedLine", () => {
+    // The alert's log-based metric (infra/control-plane) must match what ProjectService logs.
+    const tf = readFileSync(
+      fileURLToPath(new URL("../../../infra/control-plane/main.tf", import.meta.url)),
+      "utf8",
+    );
+    const block =
+      /resource "google_logging_metric" "config_change_not_recorded" \{[\s\S]*?\n\}/.exec(tf)?.[0];
+    expect(block).toBeDefined();
+    const field = (name: string) =>
+      new RegExp(`${name.replace(".", "\\.")} = "([^"]*)"`).exec(block ?? "")?.[1];
+    expect(field("jsonPayload.message")).toBe(CONFIG_CHANGE_NOT_RECORDED);
+    expect(field("jsonPayload.component")).toBe("projects");
+    expect(field("severity")).toBe("ERROR");
   });
 });
 
@@ -127,6 +145,24 @@ describe("ProjectService config change log (M4.11)", () => {
     });
     expect(Object.keys(change!.diff)).toEqual(["runsAtOnce", "paused"]);
   });
+
+  it("GivenTheEnvironmentPolicy_WhenTheOwnerChangesIt_ThenItIsSavedAndLogged", async () => {
+    const updated = await service.update("ai", { environments: "dev-and-prod" }, OWNER);
+    const [change] = await changes.listForProject("ai");
+    expect(updated.environments).toBe("dev-and-prod");
+    expect(change?.diff).toEqual({ environments: { from: "prod-only", to: "dev-and-prod" } });
+  });
+
+  it.each(["agent:r1", "system"] as const)(
+    "GivenTheActor%s_WhenChangingTheEnvironmentPolicy_ThenForbiddenAndNothingLogged",
+    async (actor) => {
+      await expect(
+        service.update("ai", { environments: "dev-and-prod" }, { actor, email: "x@example.com" }),
+      ).rejects.toMatchObject({ code: "forbidden" });
+      expect((await tracker.getProject("ai"))?.environments).toBe("prod-only");
+      expect(await changes.listForProject("ai")).toEqual([]);
+    },
+  );
 
   it("GivenASettingsWrite_WhenNothingChanges_ThenNoChangeIsAppended", async () => {
     const project = (await tracker.getProject("ai"))!;

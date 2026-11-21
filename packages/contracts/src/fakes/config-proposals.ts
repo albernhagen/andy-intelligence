@@ -1,7 +1,7 @@
 import { ConfigChange } from "../entities";
 import { ProposalLookupCursor, ReviewFinding, ReviewVerdict } from "../entities/config-proposals";
 import { WorkTrackerError } from "../ports";
-import { CONFIG_CHANGE_LIST_MAX } from "../ports/config-changes";
+import { CONFIG_CHANGE_LIST_MAX, GLOBAL_ENTITY_ID } from "../ports/config-changes";
 import type {
   ConfigChangeDecision,
   ConfigChangeStore,
@@ -17,6 +17,9 @@ const newestFirst = (a: ConfigChange, b: ConfigChange) =>
  * In-memory ConfigChangeStore. Every method reads and writes without an await in between, so
  * concurrent calls are atomic in one process, like the real store's transactions.
  */
+/** What a project's change log lists: its settings and routing changes (AI-239). */
+const LOGGED_ENTITIES = ["project", "routing"];
+
 export class InMemoryConfigChangeStore implements ConfigChangeStore {
   private readonly changes = new Map<string, ConfigChange>();
   private readonly cursors = new Map<string, ProposalLookupCursor>();
@@ -56,7 +59,15 @@ export class InMemoryConfigChangeStore implements ConfigChangeStore {
 
   async listForProject(projectId: string, limit = CONFIG_CHANGE_LIST_MAX): Promise<ConfigChange[]> {
     return [...this.changes.values()]
-      .filter((c) => c.entity === "project" && c.entityId === projectId)
+      .filter((c) => LOGGED_ENTITIES.includes(c.entity) && c.entityId === projectId)
+      .sort(newestFirst)
+      .slice(0, Math.min(limit, CONFIG_CHANGE_LIST_MAX))
+      .map((c) => structuredClone(c));
+  }
+
+  async listGlobal(entity: string, limit = CONFIG_CHANGE_LIST_MAX): Promise<ConfigChange[]> {
+    return [...this.changes.values()]
+      .filter((c) => c.entity === entity && c.entityId === GLOBAL_ENTITY_ID)
       .sort(newestFirst)
       .slice(0, Math.min(limit, CONFIG_CHANGE_LIST_MAX))
       .map((c) => structuredClone(c));

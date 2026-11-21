@@ -31,15 +31,22 @@ Severity: `critical` (exploitable now, big blast radius) · `high` (exploitable 
 
 Trust boundaries, entry points and credentials, moved by area (ADR-0046). PRs that change an area update its file; the weekly system review edits only this file and the risk files. The per-PR security review reads this file and the area files from the base branch.
 
-| Area                         | File                                                                 |
-| ---------------------------- | -------------------------------------------------------------------- |
-| Entry points and credentials | [`entry-points-and-credentials.md`](entry-points-and-credentials.md) |
-| Agents and executors         | [`agents-and-executors.md`](agents-and-executors.md)                 |
-| UI and MCP                   | [`ui-and-mcp.md`](ui-and-mcp.md)                                     |
-| Infrastructure               | [`infrastructure.md`](infrastructure.md)                             |
-| Night runs                   | [`night-runs.md`](night-runs.md)                                     |
-| Review pipeline              | [`review-pipeline.md`](review-pipeline.md)                           |
-| Web Push                     | [`push.md`](push.md)                                                 |
+| Area                           | File                                                                     |
+| ------------------------------ | ------------------------------------------------------------------------ |
+| Entry points and credentials   | [`entry-points-and-credentials.md`](entry-points-and-credentials.md)     |
+| Agents and executors           | [`agents-and-executors.md`](agents-and-executors.md)                     |
+| UI and MCP                     | [`ui-and-mcp.md`](ui-and-mcp.md)                                         |
+| Infrastructure                 | [`infrastructure.md`](infrastructure.md)                                 |
+| Night runs                     | [`night-runs.md`](night-runs.md)                                         |
+| Deployment reports             | [`deployments.md`](deployments.md)                                       |
+| Project context in prompts     | [`project-context.md`](project-context.md)                               |
+| Review pipeline                | [`review-pipeline.md`](review-pipeline.md)                               |
+| Web Push                       | [`push.md`](push.md)                                                     |
+| Model gateway (OpenRouter)     | [`model-gateway.md`](model-gateway.md)                                   |
+| Project settings               | [`project-settings.md`](project-settings.md)                             |
+| Project access                 | [`project-access.md`](project-access.md)                                 |
+| Paid model spend               | [`spend.md`](spend.md)                                                   |
+| Coordinator and cloud sessions | [`coordinator-and-cloud-sessions.md`](coordinator-and-cloud-sessions.md) |
 
 ## Mitigations in place
 

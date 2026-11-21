@@ -1,10 +1,12 @@
 import {
+  DEFAULT_SPEND_CAPS,
   NewProject,
   ProjectSettings,
   RepoName,
   type CodeHost,
   type ConfigChange,
   type ConfigChangeLog,
+  type SpendCaps,
   type EventActor,
   type Project,
   type WorkTracker,
@@ -13,6 +15,7 @@ import { notFound } from "@andy/contracts";
 import { CONFIG_CHANGE_NOT_RECORDED, projectSettingsChange } from "./config-changes";
 import { DomainError } from "./errors";
 import { requireCan } from "./permissions";
+import { projectCapsRefusal } from "./spend-settings";
 
 function log(severity: "INFO" | "WARNING" | "ERROR", message: string, fields: object = {}) {
   console.log(JSON.stringify({ severity, message, component: "projects", ...fields }));
@@ -37,6 +40,8 @@ export class ProjectService {
     /** The config change log (M4.11); null where none is kept (tests, local dev without one). */
     private readonly configChanges: ConfigChangeLog | null = null,
     private readonly newId: () => string = () => crypto.randomUUID(),
+    /** The global spend caps a project's own may not pass (AI-249); defaults until AI-276. */
+    private readonly globalSpendCaps: () => Promise<SpendCaps> = async () => DEFAULT_SPEND_CAPS,
   ) {}
 
   /**
@@ -56,6 +61,14 @@ export class ProjectService {
     const patch = ProjectSettings.parse(settings);
     const current = await this.tracker.getProject(projectId);
     if (!current) throw notFound("project", projectId);
+    if (patch.spendCaps !== undefined) {
+      // Global caps unreadable: this throws, so a project cap that can't be checked isn't saved.
+      const refused = projectCapsRefusal(await this.globalSpendCaps(), patch.spendCaps);
+      if (refused.length > 0) {
+        log("WARNING", "project spend cap refused", { projectId, reasons: refused, by: by.actor });
+        throw new DomainError("invalid_field", refused[0]!, refused);
+      }
+    }
     const buildEnabled = patch.buildEnabled ?? current.buildEnabled;
     if (patch.autoBuild === true && !buildEnabled) {
       throw new DomainError("not_buildable", `builds are off for project ${current.key}`, [

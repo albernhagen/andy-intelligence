@@ -1,6 +1,6 @@
 # Overnight runs — runbook (Andy)
 
-Launch an epic for the night and stop it early (ADR-0049: Overnight runs). Built so far: the launch step (AI-120: M4.17), the budget in dispatch (AI-121: M4.18) and the epic branch (AI-122: M4.20): a launch creates `epic/<KEY>` from the default branch's tip and its stories build on it. A launch starts nothing itself: its stories start as usual (auto-build and the dial), and once it reaches its budget or stop time, or you stop it, they wait. Still to come: the morning report (M4.22).
+Launch an epic for the night and stop it early (ADR-0049: Overnight runs). Built so far: the launch step (AI-120: M4.17), the budget in dispatch (AI-121: M4.18) and the epic branch (AI-122: M4.20): a launch creates `epic/<KEY>` from the default branch's tip and its stories build on it. A launch starts nothing itself: its stories start as usual (auto-build and the dial), and once it reaches its budget or stop time, or you stop it, they wait. When a launch ends, the morning PR opens (AI-124: M4.21) and the morning report goes on the epic (AI-125: M4.22).
 
 | Term      | Meaning                                                                                                                             |
 | --------- | ----------------------------------------------------------------------------------------------------------------------------------- |
@@ -35,3 +35,24 @@ While it runs, the section shows stories done, running, stopped (stopped for the
 While a launch runs, refine asks nothing on its stories: what would have been a question becomes a night assumption (AI-123). In the morning the section (and `night_status`) shows how many to review, and each stopped story with why and the stories it skipped; review the assumptions on each story's page.
 
 To stop early: **Stop** in the section, or MCP `stop_night` with the epic's key. The launch shows **Stopping** while its stories still have agent tasks in flight, then ends ("stopped"). A launch past its stop time ends too ("stop_time"). Both are checked whenever the section, `night_status`, a launch or a stop reads the launch, so an over night never blocks the next one; the dispatcher ends launches on its own too (AI-121).
+
+## 4. In the morning
+
+When the launch ends, the epic is flagged Needs-you (inbox, and the Needs-you email if it's on) and gets one comment, **Morning report**:
+
+| Part                     | What it says                                                                                                                                               |
+| ------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Summary                  | Why it ended; stories merged, done, stopped, not started, unfinished; spend against the budget (unknown-cost tasks counted, never $0); the morning PR link |
+| Table, one row per story | Result, PR, checks passed, review findings by severity, night assumptions, cost and tokens                                                                 |
+| Stopped or not started   | Each story with why (a stopped story's reason, or the story it waits on)                                                                                   |
+| Night assumptions        | Each assumption made instead of asking, quoted as agent text                                                                                               |
+
+Then:
+
+1. Open the epic from the inbox and read the report.
+2. Review each night assumption on its story's page: accept it, or promote it to a question.
+3. For stopped stories, open the story and its agent task: fix, build by hand or launch again.
+4. Review the morning PR story by story on GitHub (each story's findings and how they were answered are on its PR), then merge it.
+5. Unflag the epic when done.
+
+The report is posted once per launch, from stored facts only; reading the night section again never posts a second one.

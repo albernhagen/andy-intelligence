@@ -9,6 +9,7 @@ import {
 import type { CreatedApp } from "@andy/github";
 import { createApp, type AppDeps } from "../app";
 import type { TokenVerifier } from "../auth";
+import { ownerOnlyAccess } from "../project-access";
 
 /** createApp wired with GitHub fakes, for the github/* route tests. */
 
@@ -42,7 +43,14 @@ export function githubApp(
   overrides: Partial<NonNullable<AppDeps["github"]>> = {},
   extra: Pick<
     AppDeps,
-    "watchdog" | "quota" | "mcp" | "email" | "runners" | "reviewFindings" | "configChanges"
+    | "watchdog"
+    | "quota"
+    | "mcp"
+    | "email"
+    | "runners"
+    | "reviewFindings"
+    | "configChanges"
+    | "releaseNotes"
   > = {},
 ) {
   const connections = new InMemoryCodeHostConnectionStore();
@@ -50,6 +58,7 @@ export function githubApp(
   const tracker = new InMemoryWorkTracker();
   const runs = new InMemoryRunStore();
   const app = createApp({
+    projectAccess: ownerOnlyAccess(),
     verifier,
     allowedEmails: new Set(["andy@example.com"]),
     version: "test",

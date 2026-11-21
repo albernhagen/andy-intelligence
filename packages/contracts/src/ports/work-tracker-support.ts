@@ -36,6 +36,8 @@ export function buildProject(input: NewProject): Project {
     dailyQuestionCap: 5,
     defaultWorker: "agent",
     executor: "actions",
+    environments: "prod-only",
+    spendCaps: {},
     autoMerge: "s-and-m",
     runsAtOnce: RUNS_AT_ONCE_DEFAULT,
     paused: false,

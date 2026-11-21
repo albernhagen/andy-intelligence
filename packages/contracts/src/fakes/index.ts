@@ -11,6 +11,7 @@ import {
   type Listing,
   type PullRequest,
   type PullRequestCommit,
+  type PullRequestDetails,
   type ProposedPullRequest,
   type RepoToken,
   type RequiredCheck,
@@ -407,6 +408,17 @@ export class InMemoryRunStore implements RunStore {
     };
   }
 
+  async countCreatedSince(provider: ProviderKey, since: string, limit: number) {
+    // As in Firestore: the cap applies to every provider's runs, oldest first, before the
+    // provider filter; reading `limit` runs counts as incomplete, so the caller fails closed.
+    const read = [...this.runs.values()]
+      .filter((r) => !!r.createdAt && r.createdAt >= since)
+      .sort((a, b) => a.createdAt!.localeCompare(b.createdAt!))
+      .slice(0, limit);
+    const count = read.filter((r) => r.route.provider === provider).length;
+    return { count, complete: read.length < limit };
+  }
+
   async update(runId: string, patch: RunPatch, from: readonly RunStatus[]): Promise<Run> {
     const current = this.runs.get(runId);
     if (!current) throw notFound("run", runId);
@@ -654,6 +666,16 @@ export class InMemoryCodeHost implements CodeHost {
     this.workflowRuns.get(runId)!.run = { ...run, status: "completed", conclusion: "cancelled" };
   }
 
+  async getPullRequestDetails(
+    fullName: string,
+    number: number,
+  ): Promise<PullRequestDetails | null> {
+    if (!(await this.getRepo(fullName))) return null;
+    const pr = this.pullRequests.get(number);
+    if (!pr) return null;
+    return structuredClone(pr.details ?? { body: "", mergedBy: null, mergedAt: null });
+  }
+
   async getPullRequest(fullName: string, number: number): Promise<PullRequest | null> {
     if (!(await this.getRepo(fullName))) return null;
     const pr = this.pullRequests.get(number);
@@ -777,6 +799,8 @@ export interface FakePullRequest {
   files: Listing<ChangedFile>;
   checks: Listing<HeadCheck>;
   commits: Listing<PullRequestCommit>;
+  /** Description and merge (AI-159); an empty body and no merge when unset. */
+  details?: PullRequestDetails;
 }
 
 /** In-memory CodeHostConnectionStore. */
@@ -843,10 +867,4 @@ export class InMemoryEvaluator implements Evaluator {
     };
   }
 }
-export * from "./config-proposals";
-export * from "./deployments";
-export * from "./night";
-export * from "./notify-email";
-export * from "./project-versions";
-export * from "./push";
-export * from "./runner";
+export * from "./exports.gen";
