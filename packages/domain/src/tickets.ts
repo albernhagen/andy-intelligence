@@ -64,8 +64,11 @@ export interface TicketStatus {
   worker: Worker;
   /** Where its runs execute (ADR-0089), before runner presence is considered. */
   executor: ExecutorView;
-  /** Its build worker, tier and route, and the layer that set each (AI-282: M9). */
-  routing: TicketRouting;
+  /**
+   * Its build worker, tier and route, and the layer that set each (AI-282: M9). null when the
+   * routing configs can't be read: the rest of the status still answers, and the error is logged.
+   */
+  routing: TicketRouting | null;
 }
 
 /** Every project with its unarchived ticket count per stage, plus the size of the Needs-you inbox. */
@@ -968,7 +971,10 @@ export class TicketService {
       recentEvents: events.slice(-RECENT_EVENTS),
       worker: resolveWorker(ticket, project, await this.epicFor(ticket)),
       executor: executorView(ticket, project, await this.runnerPresent(project.id)),
-      routing: await this.routingFor(ticket, project),
+      routing: await this.routingFor(ticket, project).catch((err: unknown) => {
+        log("ERROR", "ticket routing unreadable", { ticket: ticket.key, error: String(err) });
+        return null;
+      }),
     };
   }
 

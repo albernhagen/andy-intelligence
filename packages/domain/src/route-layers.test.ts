@@ -1,6 +1,13 @@
-import { DEFAULT_ROUTING, type RoutingConfig, type TicketOverrides } from "@andy/contracts";
-import { describe, expect, it } from "vitest";
+import {
+  DEFAULT_ROUTING,
+  InMemoryWorkTracker,
+  type RoutingConfig,
+  type RoutingConfigStore,
+  type TicketOverrides,
+} from "@andy/contracts";
+import { describe, expect, it, vi } from "vitest";
 import { routeLayers } from "./route-layers";
+import { TicketService } from "./tickets";
 
 /** AI-282: M9: which layer set a ticket's worker, tier and route. */
 
@@ -85,5 +92,29 @@ describe("routeLayers (AI-282)", () => {
       value: "fast",
       note: "no size yet, so fast",
     });
+  });
+});
+
+describe("TicketService.status routing (AI-282)", () => {
+  it("GivenTheRoutingStoreThrows_WhenStatusIsRead_ThenRoutingIsNullAndTheRestAnswers", async () => {
+    const log = vi.spyOn(console, "log").mockImplementation(() => {});
+    const tracker = new InMemoryWorkTracker();
+    await tracker.createProject({ name: "AI", key: "AI" });
+    const t = await tracker.createTicket("ai", { title: "Layers", type: "feature" }, "andy");
+    const broken: RoutingConfigStore = {
+      getGlobal: () => Promise.reject(new Error("store down")),
+      getProject: () => Promise.reject(new Error("store down")),
+      put: () => Promise.reject(new Error("store down")),
+    };
+    const service = new TicketService(tracker, null, null, () => new Date(), null, broken);
+
+    const status = await service.status(t.key);
+
+    expect(status.ticket.key).toBe(t.key);
+    expect(status.routing).toBeNull();
+    expect(
+      log.mock.calls.some(([line]) => String(line).includes("ticket routing unreadable")),
+    ).toBe(true);
+    log.mockRestore();
   });
 });
