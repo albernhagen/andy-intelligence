@@ -14,6 +14,7 @@ import {
   type RunService,
   type TicketService,
   type WorkReader,
+  type RoadmapReader,
   type GlobalSpendCaps,
 } from "@andy/domain";
 import type { SpendSettingsService } from "../spend";
@@ -62,6 +63,8 @@ export interface ToolDeps {
   night?: NightDeps | null;
   /** Work across projects (AI-198); the app always passes it, unit tests may not. */
   work?: WorkReader;
+  /** Roadmaps over epics (AI-193); the app always passes it, unit tests may not. */
+  roadmap?: RoadmapReader;
   /** Spend caps settings (AI-249); the app always passes it, unit tests may not. */
   spend?: SpendSettingsService;
   /** The global spend caps (AI-276); the app always passes it, unit tests may not. */

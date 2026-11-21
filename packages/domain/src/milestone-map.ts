@@ -80,6 +80,25 @@ export function inReviewUnder(epics: readonly Ticket[], tickets: readonly Ticket
   );
 }
 
+/** Where a child stands, the groups the map and the roadmap (AI-193) both count by. */
+export type ChildGroup =
+  "done" | "inReview" | "inProgress" | "blocked" | "notStarted" | "cancelled";
+
+/** Backlog or Ready is blocked with a blocker not yet Done, else not started. */
+export function childGroup(c: Pick<EpicChild, "stage" | "openBlockers">): ChildGroup {
+  switch (c.stage) {
+    case "done":
+    case "cancelled":
+      return c.stage;
+    case "ready_for_review":
+      return "inReview";
+    case "in_progress":
+      return "inProgress";
+    default:
+      return c.openBlockers.length > 0 ? "blocked" : "notStarted";
+  }
+}
+
 function item(c: EpicChild, byId: Map<string, Ticket>, prs: ReadonlyMap<string, number>): MapItem {
   return {
     key: c.key,
@@ -97,9 +116,8 @@ function epicEntry(
   prs: ReadonlyMap<string, number>,
 ): MilestoneMapEpic {
   const children = epicChildren(epic, tickets);
-  const of = (pred: (c: EpicChild) => boolean) =>
-    children.filter(pred).map((c) => item(c, byId, prs));
-  const waiting = (c: EpicChild) => c.stage === "backlog" || c.stage === "ready";
+  const of = (group: ChildGroup) =>
+    children.filter((c) => childGroup(c) === group).map((c) => item(c, byId, prs));
   const counted = children.filter((c) => c.stage !== "cancelled");
   return {
     key: epic.key,
@@ -107,10 +125,10 @@ function epicEntry(
     stage: epic.stage,
     progress: { done: counted.filter((c) => c.stage === "done").length, total: counted.length },
     done: children.filter((c) => c.stage === "done").map((c) => c.key),
-    inReview: of((c) => c.stage === "ready_for_review"),
-    inProgress: of((c) => c.stage === "in_progress"),
-    blocked: of((c) => waiting(c) && c.openBlockers.length > 0),
-    notStarted: of((c) => waiting(c) && c.openBlockers.length === 0),
+    inReview: of("inReview"),
+    inProgress: of("inProgress"),
+    blocked: of("blocked"),
+    notStarted: of("notStarted"),
     cancelled: children.length - counted.length,
   };
 }

@@ -16,6 +16,7 @@ export { registerNotifyTools as notify } from "./tools-notify";
 export { registerProjectPlanTools as projectPlan } from "./tools-project-plan";
 export { registerProjectTools as projects } from "./tools-projects";
 export { registerQuotaTools as quota } from "./tools-quota";
+export { registerRoadmapTools as roadmap } from "./tools-roadmap";
 export { registerRoutingTools as routing } from "./tools-routing";
 export { registerScoreTools as scores } from "./tools-scores";
 export { registerSettingsTools as settings } from "./tools-settings";

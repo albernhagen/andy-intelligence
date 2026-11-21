@@ -195,6 +195,7 @@ describe("MCP OAuth flow (MCP SDK client)", () => {
       "reject_project_plan",
       "reorder_ticket",
       "revert_spend_cap_change",
+      "roadmap",
       "set_auto_build",
       "set_auto_merge",
       "set_auto_refine",
