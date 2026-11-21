@@ -47,6 +47,7 @@ Contracts are defined in `packages/contracts` (Zod schemas + TypeScript interfac
 | `NightLaunchStore` | NightLaunch; one active per project, checked atomically | **Firestore** | — |
 | `DeploymentStore` | Deployment (AI-161: M6.3): record, finish once, list one environment newest first (≤ 100), latest good | **Firestore** (`deployments`, server-only) | — |
 | `ProjectVersions` | A change counter per project, bumped by every tracker and run write; unchanged board and ticket-list polls are served from a per-instance cache (AI-222) | **Firestore** | — |
+| `RoutingConfigStore` | RoutingConfig: providers, tier routes, step tiers; one global, one per project; puts carry `ifUpdatedAt` (AI-230: M9.3) | **Firestore** | — |
 | `Telemetry` | Trace, Span, CostEvent | OTel → Cloud Trace / Cloud Logging | BigQuery sink |
 
 **Rule:** freeze the `Executor` contract only after **two real adapters** (Claude Code + Jules) work. Vendor terms map to domain terms (a Jules *session* is a `Run`; its *activities* are run events).
