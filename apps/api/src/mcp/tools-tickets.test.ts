@@ -561,8 +561,8 @@ describe("reads (ADR-0028)", () => {
     expect(ai.ticketsByStage).toMatchObject({ backlog: 1, ready: 1, done: 0 });
     expect(counted).toHaveBeenCalledWith("ai");
     expect(counted).toHaveBeenCalledWith("ops");
-    // Only the Needs-you inbox reads tickets, and only its filtered sets.
-    for (const [, filter] of listed.mock.calls) expect(filter).toBeDefined();
+    // Only the Needs-you inbox lists tickets: once per project (from its snapshot in the app, AI-319).
+    expect(listed.mock.calls.map(([projectId]) => projectId).sort()).toEqual(["ai", "ops"]);
   });
 });
 
