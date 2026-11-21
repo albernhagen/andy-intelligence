@@ -4,11 +4,10 @@ import {
   DASHBOARD_MAX_WEEKS,
   Dashboard,
   ProjectDashboard,
-  type RunStore,
-  type WorkTracker,
 } from "@andy/contracts";
-import { DashboardReader, dashboardWindow } from "@andy/domain";
-import type { AuthEnv } from "./auth";
+import { dashboardWindow, type DashboardReader } from "@andy/domain";
+import { signedIn, type AuthEnv } from "./auth";
+import type { ProjectAccess } from "./project-access";
 import type { RouteModule } from "./services";
 
 /** The Dashboards data reads (AI-102, ADR-0045): computed on request, never stored. */
@@ -57,19 +56,21 @@ const allRoute = createRoute({
 
 export function registerDashboardRoutes(
   app: OpenAPIHono<AuthEnv>,
-  deps: { tracker: WorkTracker; runs: RunStore },
+  reader: DashboardReader,
+  access: ProjectAccess,
   now: () => Date,
 ): void {
-  const reader = new DashboardReader(deps.tracker, deps.runs);
   app.openapi(projectRoute, async (c) => {
     const window = dashboardWindow(now(), c.req.valid("query").weeks);
     return c.json(await reader.project(c.req.valid("param").projectId, window), 200);
   });
   app.openapi(allRoute, async (c) => {
     const window = dashboardWindow(now(), c.req.valid("query").weeks);
-    return c.json(await reader.all(window), 200);
+    const { actor } = signedIn(c.get("identity"));
+    return c.json(await reader.all(window, (id) => access.canRead(actor, id)), 200);
   });
 }
 
 /** Listed in `api-routes.ts` (AI-145). */
-export const apiRoutes: RouteModule = (app, s) => registerDashboardRoutes(app, s.deps, s.now);
+export const apiRoutes: RouteModule = (app, s) =>
+  registerDashboardRoutes(app, s.dashboard, s.deps.projectAccess, s.now);
