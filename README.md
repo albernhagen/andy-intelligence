@@ -55,7 +55,8 @@ pnpm features        # features table
 pnpm reference       # every MCP tool and API route, from the code
 pnpm test:firestore  # Firestore adapters on the emulator (Java 21+; CI runs them on adapter changes, ADR-0048)
 node apps/local-runner/dist/main.js login|start|check-settings  # local runner (macOS, after pnpm build)
-scripts/sandbox-lab/run.sh  # build sandbox in Docker; CI job sandbox-self-test runs it on executor changes (runbook agent-runs.md §9a)
+scripts/sandbox-lab/run.sh  # build sandbox in Docker; CI runs it on executor changes (runbook agent-runs.md §9a)
+node scripts/coordinator/<tool>.mjs --help  # coordinator tools (runbook coordinating-sessions.md §7)
 ```
 
 ### Quality gates (ADR-0027)
@@ -65,7 +66,7 @@ scripts/sandbox-lab/run.sh  # build sandbox in Docker; CI job sandbox-self-test 
 | Hook       | Runs on staged files                                                                 |
 | ---------- | ------------------------------------------------------------------------------------ |
 | pre-commit | `prettier --check`, `eslint`, `terraform fmt -check`, actionlint (skipped if absent) |
-| pre-push   | `pnpm typecheck`, `pnpm test` (whole repo)                                           |
+| pre-push   | `pnpm typecheck`, tests the push affects (ADR-0113)                                  |
 
 Claude Code runs `scripts/format-edited-file.mjs` after each Edit/Write (`.claude/settings.json`): Prettier + ESLint `--fix` on that file; unfixable lint errors go to the agent. CI runs these plus build and actionlint. Format failure on commit: `pnpm format`, re-stage. `--no-verify` is for emergencies only.
 
@@ -121,7 +122,7 @@ pnpm --filter @andy/web screenshots          # local run (macOS renders differ)
 | `infra/control-plane` | Control-plane GCP resources                                         |
 | `infra/billing`       | Billing budget, alerts, opt-in kill switch (local plans only)       |
 | `infra/dns`           | Cloudflare records for `ai.andybernhagen.com` (local plans only)    |
-| `scripts`             | Repo tooling (Claude Code format hook, review gate and scope)       |
+| `scripts`             | Repo tooling: format hook, review gate, coordinator tools           |
 | `platform/actions`    | Composite actions behind every required check (baseline)            |
 | `platform/baseline`   | Baseline manifest, GitHub config JSON, `baseline.mjs`               |
 | `platform/executor`   | Permission profile for headless agent tasks (ADR-0051)              |
@@ -131,4 +132,4 @@ pnpm --filter @andy/web screenshots          # local run (macOS renders differ)
 | `lefthook.yml`        | Git hooks: pre-commit lint/format, pre-push checks                  |
 | `firebase.json`       | Firestore emulator config for `pnpm test:firestore`                 |
 
-Runbooks for every manual step (infra setup, billing, reviews, onboarding, MCP, GitHub App, DNS): [`docs/runbooks/`](docs/runbooks/). Deploys and going back to an earlier revision: [`deploy-and-rollback.md`](docs/runbooks/deploy-and-rollback.md).
+Runbooks for every manual step: [`docs/runbooks/`](docs/runbooks/). Deploys and going back to an earlier revision: [`deploy-and-rollback.md`](docs/runbooks/deploy-and-rollback.md).
