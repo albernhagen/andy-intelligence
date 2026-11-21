@@ -132,11 +132,17 @@ const chartLayout = (page: Page) =>
  */
 async function settleCharts(page: Page) {
   await page.evaluate(() => document.fonts.ready);
+  // The config's width; only the height grows to the page's.
+  const width = page.viewportSize()!.width;
+  const pageHeight = () => page.evaluate(() => document.documentElement.scrollHeight);
   for (let i = 0; i < 5; i++) {
-    const height = await page.evaluate(() => document.documentElement.scrollHeight);
+    const height = await pageHeight();
     if (page.viewportSize()?.height === height) break;
-    await page.setViewportSize({ width: 1280, height });
+    await page.setViewportSize({ width, height });
   }
+  expect(page.viewportSize()?.height, "viewport never matched the page height").toBe(
+    await pageHeight(),
+  );
   let last = "";
   let same = 0;
   for (let i = 0; i < 50 && same < 3; i++) {
