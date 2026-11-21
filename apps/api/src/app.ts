@@ -16,6 +16,7 @@ import {
   type NightLaunchStore,
   type ProjectVersions,
   type SpendLedger,
+  type SpendCapsStore,
   type SpendNoticeLedger,
 } from "@andy/contracts";
 import type { CreatedApp } from "@andy/github";
@@ -79,6 +80,8 @@ export interface AppDeps {
    * totals (AI-249). Without it every pay_per_use task is refused and spend reads unknown.
    */
   spendLedger?: SpendLedger;
+  /** The global spend caps (AI-276); without it the code defaults, read-only. */
+  spendCapsStore?: SpendCapsStore;
   /**
    * What the spend notices have sent (AI-257: M10.9): their dedupe and daily cap. Absent: the
    * gate sends no spend notices.
