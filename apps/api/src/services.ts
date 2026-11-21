@@ -35,6 +35,7 @@ import {
   NO_PRICES,
   BoardReader,
   WorkReader,
+  RoadmapReader,
   bumpOnWrite,
   type EpicBranchOpener,
 } from "@andy/domain";
@@ -149,6 +150,8 @@ export function createServices(raw: AppDeps): Services {
     ? { ...notified, ...bumpOnWrite(notified.tracker, notified.runs, versions) }
     : notified;
   const readCache = versions ? new ProjectReadCache(versions) : null;
+  // Board reads served through the read cache: board polls, work lists and roadmaps (ADR-0126).
+  const board = new BoardReader(deps.tracker, deps.runs, readCache);
 
   const github = deps.github;
   const now = github?.now ?? (() => new Date());
@@ -463,8 +466,9 @@ export function createServices(raw: AppDeps): Services {
       globalSpendCaps,
     ),
     globalSpendCaps,
-    // AI-198: each project's board through the same read cache as board polls.
-    work: new WorkReader(deps.tracker, new BoardReader(deps.tracker, deps.runs, readCache)),
+    // AI-198, AI-193: each project's board through the same read cache as board polls.
+    work: new WorkReader(deps.tracker, board),
+    roadmap: new RoadmapReader(deps.tracker, board),
     whatsNew,
     publicUrl: deps.mcp?.publicUrl ?? null,
   };
