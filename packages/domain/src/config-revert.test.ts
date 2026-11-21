@@ -184,6 +184,37 @@ describe("ConfigRevert (M4.12)", () => {
     await expect(revert.list("none")).rejects.toMatchObject({ code: "not_found" });
   });
 
+  it("GivenMarkingFailedOnce_WhenRetried_ThenTheMarkCompletesWithoutWritingAgain", async () => {
+    await projects.update("ai", { paused: true }, OWNER);
+    vi.spyOn(changes, "markReverted").mockRejectedValueOnce(new Error("unavailable"));
+    await expect(revert.revert("ai", "change-1", OWNER, "app")).rejects.toThrow("unavailable");
+
+    const retried = await revert.revert("ai", "change-1", OWNER, "app");
+
+    expect(retried.reverted.status).toBe("reverted");
+    expect(retried.project.paused).toBe(false);
+    expect(await revert.list("ai")).toHaveLength(2);
+  });
+
+  it("GivenTwoRevertsAtOnce_WhenBothRun_ThenOneSucceedsAndTheOtherIsA409NotAnError", async () => {
+    await projects.update("ai", { paused: true }, OWNER);
+
+    const results = await Promise.allSettled([
+      revert.revert("ai", "change-1", OWNER, "app"),
+      revert.revert("ai", "change-1", OWNER, "mcp"),
+    ]);
+
+    expect(results.filter((r) => r.status === "fulfilled")).toHaveLength(1);
+    expect(results.find((r) => r.status === "rejected")).toMatchObject({
+      reason: { code: "not_revertible" },
+    });
+    expect((await tracker.getProject("ai"))?.paused).toBe(false);
+    const errors = vi
+      .mocked(console.log)
+      .mock.calls.filter(([line]) => String(line).includes('"severity":"ERROR"'));
+    expect(errors).toEqual([]);
+  });
+
   it("GivenMarkingFails_WhenReverted_ThenTheErrorIsLoggedAndSurfaced", async () => {
     await projects.update("ai", { paused: true }, OWNER);
     vi.spyOn(changes, "markReverted").mockRejectedValue(new Error("unavailable"));

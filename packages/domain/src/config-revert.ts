@@ -1,6 +1,7 @@
 import {
   CONFIG_CHANGE_LIST_MAX,
   notFound,
+  WorkTrackerError,
   type ConfigChange,
   type ConfigChangeLog,
   type EventActor,
@@ -66,27 +67,19 @@ export class ConfigRevert {
         "Builds is set only in the app: revert it on the settings page",
       ]);
     }
-    const refusal = revertRefusal(
-      change,
-      project,
-      await this.changes.listForProject(projectId, CONFIG_CHANGE_LIST_MAX),
-    );
+    const logged = await this.changes.listForProject(projectId, CONFIG_CHANGE_LIST_MAX);
+    // A revert whose write was logged but whose mark failed: finish it, don't write again.
+    if (logged.some((c) => c.reason === revertReason(change.id))) {
+      const reverted = await this.mark(change, by.actor);
+      log("INFO", "config change revert completed", { projectId, configChangeId: change.id });
+      return { project, reverted };
+    }
+    const refusal = revertRefusal(change, project, logged);
     if (refusal) throw refusal;
 
+    // Two reverts at once can both write the same before values (both logged); only one marks.
     const updated = await this.projects.update(projectId, patch, by, revertReason(change.id));
-    let reverted: ConfigChange;
-    try {
-      reverted = await this.changes.markReverted(change.id, by.actor, this.now().toISOString());
-    } catch (err) {
-      // The settings are back and the revert is logged as its own change; only the mark failed.
-      log("ERROR", "config change not marked reverted", {
-        projectId,
-        configChangeId: change.id,
-        by: by.actor,
-        error: String(err),
-      });
-      throw err;
-    }
+    const reverted = await this.mark(change, by.actor);
     log("INFO", "config change reverted", {
       projectId,
       configChangeId: change.id,
@@ -95,5 +88,27 @@ export class ConfigRevert {
       via,
     });
     return { project: updated, reverted };
+  }
+
+  /**
+   * Marks the original reverted. A `conflict` means another revert marked it first: a 409 for
+   * this caller, not an error. Anything else logs an ERROR (the settings are back and logged;
+   * a retry finishes the mark) and surfaces.
+   */
+  private async mark(change: ConfigChange, by: EventActor): Promise<ConfigChange> {
+    try {
+      return await this.changes.markReverted(change.id, by, this.now().toISOString());
+    } catch (err) {
+      if (err instanceof WorkTrackerError && err.code === "conflict") {
+        throw new DomainError("not_revertible", `config change ${change.id} is already reverted`);
+      }
+      log("ERROR", "config change not marked reverted", {
+        projectId: change.entityId,
+        configChangeId: change.id,
+        by,
+        error: String(err),
+      });
+      throw err;
+    }
   }
 }
