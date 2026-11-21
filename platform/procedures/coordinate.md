@@ -15,7 +15,7 @@ Procedure for a **coordinator**: one session that hands tickets to **worker** se
 ## 1. Pick a batch
 
 - **Only approved milestones.** Skip parked and unreviewed ones; the runbook lists them.
-- **Approved work ran out:** slice the next milestone, then ask the owner once (§8): approve or park, with the slice table and what it needs from them. Build nothing before a yes.
+- **Approved work ran out:** slice the next milestone, then ask the owner once (§8): approve or park, with the slice table and what it needs. Build nothing before a yes.
 - Only tickets whose dependencies have merged, in milestone order; a later one may join if it depends on nothing unfinished and touches other packages.
 - **Two workers never own the same file.** Name each worker's files in its brief. Where two must touch one, one owns it; the other gets one named line.
 - Shared documents (ADR index) belong to the coordinator or one worker.
@@ -57,7 +57,7 @@ Ticket first (under its milestone's epic, with spec and criteria); the brief add
 
 ## 6. Hand over
 
-Hand over between batches, never during one. Write a log entry: what merged, what is open and why, questions waiting on the owner, the next batch. The next coordinator starts from it; one per milestone, or sooner once your context is summarized.
+Hand over between batches, never during one. Write a log entry: what merged, what is open and why, questions waiting on the owner, the next batch. The next coordinator starts from it, the milestone map and this procedure; one per milestone, or sooner once your context is summarized.
 
 ## 7. Merging PRs yourself
 
