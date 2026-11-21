@@ -109,6 +109,8 @@ export function createServices(input: AppDeps): Services {
     connection ? new ConnectedCodeHost(connection) : null,
     runnerPresence,
     deps.nightLaunches ?? null,
+    null,
+    deps.routing ?? null,
   );
   const refiner = new RefineDispatcher(deps.tracker, deps.runs, runs, now);
   const builder = new BuildDispatcher(deps.tracker, deps.runs, runs, now, deps.quota ?? null);
@@ -234,8 +236,8 @@ export function createServices(input: AppDeps): Services {
     ? new ConfigRevert(deps.tracker, projects, deps.configChanges, now)
     : null;
   // AI-239: routing settings; each save is logged when the change log is configured.
-  const routing = deps.routingConfigs
-    ? new RoutingSettings(deps.routingConfigs, deps.tracker, deps.configChanges ?? null, now)
+  const routing = deps.routing
+    ? new RoutingSettings(deps.routing, deps.tracker, deps.configChanges ?? null, now)
     : null;
 
   return {

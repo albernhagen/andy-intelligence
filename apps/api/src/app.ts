@@ -8,11 +8,11 @@ import {
   type OAuthGrantStore,
   type RunStore,
   type RunnerStore,
-  type RoutingConfigStore,
   type WatchdogQueue,
   type WorkTracker,
   type QuotaStore,
   type DeploymentStore,
+  type RoutingConfigStore,
   type NightLaunchStore,
   type ProjectVersions,
 } from "@andy/contracts";
@@ -64,8 +64,8 @@ export interface AppDeps {
   nightLaunches?: NightLaunchStore;
   /** Deployment records (AI-161); without it the DORA panel reads empty (AI-200). */
   deployments?: DeploymentStore;
-  /** Model routing config (AI-230); without it the routing routes and tools are absent (AI-239). */
-  routingConfigs?: RoutingConfigStore;
+  /** Model routing (AI-230, AI-238); without it every run takes `DEFAULT_ROUTING`. */
+  routing?: RoutingConfigStore;
   /**
    * Per-project change counters (AI-222): with them, every tracker and run write bumps its
    * project, and the board and ticket list serve unchanged polls from a cache. Without, no cache.

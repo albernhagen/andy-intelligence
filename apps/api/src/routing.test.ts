@@ -44,7 +44,7 @@ async function setup() {
     tracker,
     runs: new InMemoryRunStore(),
     configChanges: changes,
-    routingConfigs: new InMemoryRoutingConfigStore(),
+    routing: new InMemoryRoutingConfigStore(),
     mcp: { publicUrl: PUBLIC_URL, grants, clients: new ClientMetadataResolver() },
   });
   const request = (method: string, path: string, body?: unknown, token = "andy") =>
