@@ -9,6 +9,7 @@ import {
   type Route,
   type RoutingConfigInput,
   type Run,
+  type Runner,
   type RunUsage,
   type SpendLedger,
 } from "@andy/contracts";
@@ -361,6 +362,88 @@ describe("spend gate at dispatch", () => {
       priced = false;
       await reportFailed(runs, run, usage({ inputTokens: 1 }));
       expect(await ledger.get(run.id)).toMatchObject({ settledMicroUsd: PER_TASK });
+    });
+  });
+
+  describe("a crash between ending a run and closing its spend", () => {
+    beforeEach(routePaid);
+
+    /** The next terminal run write lands, then the process "dies" before anything after it. */
+    const crashAfterTheEndWrite = () => {
+      const real = runStore.update.bind(runStore);
+      const spy = vi.spyOn(runStore, "update").mockImplementation(async (id, patch, from) => {
+        const written = await real(id, patch, from);
+        if (patch.endedAt) {
+          spy.mockRestore();
+          throw new Error("process killed");
+        }
+        return written;
+      });
+    };
+
+    it("GivenAReportThatCrashedAfterEndingTheRun_WhenTheReportIsReplayed_ThenItSettlesAtTheActualCost", async () => {
+      const runs = service(gate());
+      const { run } = await startPlan(runs);
+      await runs.context(run.id, run.executor!);
+      const u = usage({ inputTokens: 100_000, outputTokens: 10_000 });
+      crashAfterTheEndWrite();
+      await expect(reportFailed(runs, run, u)).rejects.toThrow("process killed");
+      expect(await ledger.get(run.id)).toMatchObject({ state: "reserved" });
+      expect(await reportFailed(runs, run, u)).toBe("duplicate");
+      expect(await ledger.get(run.id)).toMatchObject({
+        state: "settled",
+        settledMicroUsd: 120_000,
+      });
+    });
+
+    it("GivenAReportThatCrashedAfterEndingTheRun_WhenTheWatchdogChecks_ThenTheFullReservationIsKept", async () => {
+      const runs = service(gate());
+      const { run } = await startPlan(runs);
+      await runs.context(run.id, run.executor!);
+      crashAfterTheEndWrite();
+      await expect(reportFailed(runs, run, null)).rejects.toThrow("process killed");
+      expect(await runs.checkDeadline(run.id)).toBe("settled");
+      expect(await ledger.get(run.id)).toMatchObject({
+        state: "settled",
+        settledMicroUsd: PER_TASK,
+      });
+    });
+
+    it("GivenACancelThatCrashedBeforeTheRunStarted_WhenTheWatchdogChecks_ThenItIsReleased", async () => {
+      const runs = service(gate());
+      const { run, ticket } = await startPlan(runs);
+      crashAfterTheEndWrite();
+      await expect(runs.cancelForTicket(projectId, ticket.id)).rejects.toThrow("process killed");
+      expect(await ledger.get(run.id)).toMatchObject({ state: "reserved" });
+      await runs.checkDeadline(run.id);
+      expect(await ledger.get(run.id)).toMatchObject({ state: "released" });
+    });
+
+    it("GivenAClosedReservation_WhenTheWatchdogChecksAgain_ThenNothingChanges", async () => {
+      const runs = service(gate());
+      const { run } = await startPlan(runs);
+      await runs.context(run.id, run.executor!);
+      await reportFailed(runs, run, usage({ outputTokens: 1 }));
+      const settled = await ledger.get(run.id);
+      await runs.checkDeadline(run.id);
+      expect(await ledger.get(run.id)).toEqual(settled);
+    });
+  });
+
+  describe("the local runner", () => {
+    beforeEach(routePaid);
+
+    it("GivenAPaidRoute_WhenTheLocalRunnerClaimsATask_ThenItIsRefusedAndNothingIsReserved", async () => {
+      await tracker.updateProject(projectId, { executor: "local" });
+      const runner = { id: "r1", name: "mac", projectIds: [projectId] } as Runner;
+      const t = await readyTicket();
+      const err = await refusal(
+        service(gate()).start(projectId, t.id, "build", undefined, { runner }),
+      );
+      expect(err.message).toContain("local runner");
+      const { all } = await onlyRun();
+      expect(all[0]).toMatchObject({ status: "failed" });
+      expect(await ledger.get(all[0]!.id)).toBeNull();
     });
   });
 

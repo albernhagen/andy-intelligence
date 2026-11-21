@@ -822,7 +822,11 @@ export class RunService {
     result: RunResult,
   ): Promise<"recorded" | "duplicate"> {
     const run = await this.requireCaller(runId, caller);
-    if (!ACTIVE_RUN_STATUSES.includes(run.status)) return "duplicate";
+    if (!ACTIVE_RUN_STATUSES.includes(run.status)) {
+      // A replay after a crash between ending the run and closing its spend closes it now.
+      await this.closeSpend(run, result.usage ?? null);
+      return "duplicate";
+    }
     if (result.status === "cancelled") return this.recordCancelled(run);
     const at = this.now().toISOString();
     let status: "succeeded" | "failed" = result.status;
@@ -1609,7 +1613,13 @@ export class RunService {
       log("WARNING", "watchdog check for an unknown run", { runId });
       return "unknown";
     }
-    if (!ACTIVE_RUN_STATUSES.includes(run.status)) return "settled";
+    if (!ACTIVE_RUN_STATUSES.includes(run.status)) {
+      // AI-248: every dispatched run gets this check, so a reservation left open by a crash
+      // between ending the run and closing its spend is closed here (kept in full, or released
+      // if the run never started). Closing is idempotent.
+      await this.closeSpend(run);
+      return "settled";
+    }
     if (run.deadline && Date.parse(run.deadline) > this.now().getTime()) {
       log("WARNING", "watchdog check before the deadline", { runId, deadline: run.deadline });
       return "early";
@@ -1834,6 +1844,13 @@ export class RunService {
     try {
       if (!this.spendGate) {
         throw new DomainError("spend_cap", "no paid agent task: no spend ledger is configured");
+      }
+      // The local runner has no harness that enforces a budget yet: no paid task runs there.
+      if (run.localRun) {
+        throw new DomainError(
+          "spend_cap",
+          "no paid agent task: the local runner can't enforce a budget",
+        );
       }
       return (await this.spendGate.reserve(run)).budgetMicroUsd;
     } catch (err) {
