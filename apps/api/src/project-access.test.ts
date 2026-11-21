@@ -142,6 +142,10 @@ describe("projectsOfInput (AI-252)", () => {
   it("GivenOtherTicketKeyFields_WhenRead_ThenEachKeysProjectIsNamed", () => {
     const input = { ticket: "AI-1", parent: "OPS-2", blockedBy: ["WEB-3", "AI-4"], above: "X-5" };
     expect(projectsOfInput(input).map((t) => t.projectId)).toEqual(["ai", "ops", "web", "ai", "x"]);
+    expect(projectsOfInput({ project: "AI", epic: "OPS-9" }).map((t) => t.projectId)).toEqual([
+      "ai",
+      "ops",
+    ]);
     expect(projectsOfInput({ parentId: "t-123", parent: null })).toEqual([]);
   });
 
