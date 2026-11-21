@@ -341,6 +341,8 @@ export const RunRequest = z.object({
   route: Route,
   /** From the route's Provider: which credential the run uses (ADR-0050). */
   billingType: BillingType.default("subscription"),
+  /** A pay_per_use task's budget in micro-USD, for the harness to enforce (AI-248); null otherwise. */
+  budgetMicroUsd: z.number().int().min(0).max(Number.MAX_SAFE_INTEGER).nullable().default(null),
   instructions: z.string().min(1),
   callbackUrl: z.url().nullable(),
 });

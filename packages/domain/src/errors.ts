@@ -11,6 +11,7 @@ export class DomainError extends Error {
       | "not_refinable"
       | "not_buildable"
       | "run_limit"
+      | "spend_cap"
       | "run_finished"
       | "executor_unavailable"
       | "dispatch_failed"

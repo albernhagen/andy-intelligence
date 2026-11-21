@@ -22,14 +22,18 @@ import {
   NightLaunches,
   EpicBranches,
   MorningPullRequests,
+  MorningReports,
+  MorningSteps,
   ProjectReadCache,
   RoutingSettings,
+  SpendGate,
+  NO_PRICES,
   BoardReader,
   WorkReader,
   bumpOnWrite,
   type EpicBranchOpener,
 } from "@andy/domain";
-import type { NightLaunchStore, WorkTracker } from "@andy/contracts";
+import { DEFAULT_SPEND_CAPS, type NightLaunchStore, type WorkTracker } from "@andy/contracts";
 import type { AppDeps } from "./app";
 import type { AuthEnv } from "./auth";
 import { noReviewFindings } from "./config-proposals";
@@ -112,6 +116,14 @@ export function createServices(input: AppDeps): Services {
     deps.nightLaunches ?? null,
     null,
     deps.routing ?? null,
+    // AI-248: no price source yet (M10.5), so the gate refuses every pay_per_use start. Caps:
+    // the defaults, narrowed by the project's own (AI-249).
+    deps.spendLedger
+      ? new SpendGate(deps.spendLedger, NO_PRICES, async (id) => ({
+          global: DEFAULT_SPEND_CAPS,
+          project: (await deps.tracker.getProject(id))?.spendCaps ?? null,
+        }))
+      : null,
   );
   const refiner = new RefineDispatcher(deps.tracker, deps.runs, runs, now);
   const builder = new BuildDispatcher(deps.tracker, deps.runs, runs, now, deps.quota ?? null);
@@ -177,16 +189,26 @@ export function createServices(input: AppDeps): Services {
           now,
           undefined,
           connection ? connectedEpicBranches(connection, deps.tracker, deps.nightLaunches) : null,
-          // AI-124: when a launch ends, its morning PR opens (or an empty epic branch goes).
-          connection && deps.github
-            ? new MorningPullRequests(
-                deps.tracker,
-                deps.runs,
-                new ConnectedCodeHost(connection),
-                deps.github.publicUrl,
-                service,
-              )
-            : null,
+          // AI-124: when a launch ends, its morning PR opens (or an empty epic branch goes);
+          // AI-125: then the morning report goes on the epic, with or without GitHub.
+          new MorningSteps(
+            connection && deps.github
+              ? new MorningPullRequests(
+                  deps.tracker,
+                  deps.runs,
+                  new ConnectedCodeHost(connection),
+                  deps.github.publicUrl,
+                  service,
+                )
+              : null,
+            new MorningReports(
+              deps.tracker,
+              deps.runs,
+              service,
+              deps.github?.publicUrl ?? "",
+              deps.reviewFindings ?? null,
+            ),
+          ),
         ),
         store: deps.nightLaunches,
         tracker: deps.tracker,

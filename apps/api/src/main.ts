@@ -13,6 +13,7 @@ import {
   FirestoreProjectVersions,
   FirestoreRunStore,
   FirestoreRunnerStore,
+  FirestoreSpendLedger,
   FirestoreWorkTracker,
   CloudTasksWatchdogQueue,
   CloudTasksNotifyFlushQueue,
@@ -94,8 +95,7 @@ async function main() {
     projectVersions: new FirestoreProjectVersions(db),
     deployments: new FirestoreDeploymentStore(db),
     routing: new FirestoreRoutingConfigStore(db),
-    // No spend ledger until AI-247: M10.6 (Firestore ledger): spend reads "unknown", never a
-    // per-instance $0.00 that a cap could be set from.
+    spendLedger: new FirestoreSpendLedger(db),
     configChanges: new FirestoreConfigChangeStore(db),
     // Serve only the public URL's host; the run.app URLs answer /health alone (ADR-0044).
     publicHost: publicUrl ? new URL(publicUrl).host : undefined,
