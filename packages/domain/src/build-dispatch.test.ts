@@ -869,7 +869,11 @@ describe("BuildDispatcher", () => {
     /** A running launch over `stories`, started now, stopping in an hour unless `stopAt`. */
     const launch = async (
       stories: { key: string }[],
-      over: { budget?: Partial<NightLaunch["budget"]>; stopAt?: string } = {},
+      over: {
+        budget?: Partial<NightLaunch["budget"]>;
+        stopAt?: string;
+        stoppedStories?: NightLaunch["stoppedStories"];
+      } = {},
     ) => {
       const epic = await tracker.createTicket(projectId, { type: "epic", title: "Night" }, "andy");
       const at = new Date(ms).toISOString();
@@ -888,6 +892,7 @@ describe("BuildDispatcher", () => {
         endedAt: null,
         endReason: null,
         epicBranch: null,
+        stoppedStories: over.stoppedStories ?? [],
       });
     };
     const holds = () =>
@@ -1012,6 +1017,32 @@ describe("BuildDispatcher", () => {
         endReason: "stop_time",
       });
       expect((await tracker.getTicket(projectId, a.id))!.needsAttention).toBe(true);
+    });
+
+    it("GivenALaunchWhoseOtherStoriesAreDoneAndOneStoppedWithItsDependant_WhenNext_ThenTheLaunchEndsDone", async () => {
+      const { dispatcher } = wire(undefined, nights);
+      const a = await inReady("A");
+      const b = await inReady("B");
+      const c = await inReady("C");
+      await tracker.updateTicket(
+        projectId,
+        c.id,
+        { stage: { to: "done", forced: true, reason: "x" } },
+        "andy",
+      );
+      for (const t of [a, b]) {
+        await tracker.updateTicket(projectId, t.id, { fields: { needsAttention: true } }, "system");
+      }
+      const at = new Date(ms).toISOString();
+      await launch([a, b, c], {
+        stoppedStories: [{ key: a.key, reason: "its build failed", at, skipped: [b.key] }],
+      });
+
+      expect(await dispatcher.next(projectId)).toBeNull();
+      expect(await nights.get("launch-1")).toMatchObject({ status: "ended", endReason: "done" });
+      // Nothing is left active, so the epic's next launch isn't refused and can reuse its branch
+      // (AI-122 reuses an epic branch only from an ended launch).
+      expect(await nights.findActive(projectId)).toBeNull();
     });
 
     it("GivenATicketOutsideTheLaunch_WhenTheLaunchIsAtItsLimit_ThenItStartsAsToday", async () => {

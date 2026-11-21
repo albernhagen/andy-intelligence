@@ -66,6 +66,7 @@ import {
   type PlanState,
 } from "./plans";
 import { checkDor } from "./dor";
+import type { NightUnattended } from "./night-unattended";
 import { RefineGate } from "./refine-gate";
 import { DomainError } from "./errors";
 import { requireCan } from "./permissions";
@@ -218,7 +219,14 @@ export class RunService {
     private readonly runnerPresence: ((projectId: string) => Promise<boolean>) | null = null,
     /** Night launches (AI-122): a launched story's build gets its epic branch; null: none. */
     private readonly launches: Pick<NightLaunchStore, "findActive"> | null = null,
+    /** Night launches (AI-123): stories stop for the night; null: no launches. */
+    private readonly night: NightUnattended | null = null,
   ) {}
+
+  /** The refine gate with this service's tracker, clock and night launches. */
+  refineGate(): RefineGate {
+    return new RefineGate(this.tracker, this.now, this.night);
+  }
 
   /**
    * A build's base branch (AI-122): its night launch's `epic/<KEY>` while that launch is active
@@ -723,7 +731,7 @@ export class RunService {
     // The outcome is applied before the run is closed: the write is idempotent per run, so a
     // report replayed after a crash here finishes the job instead of duplicating it.
     if (run.step === "refine" && status === "succeeded") {
-      const refined = await new RefineGate(this.tracker, this.now).apply(run, result.output);
+      const refined = await this.refineGate().apply(run, result.output);
       if ("error" in refined) {
         status = "failed";
         error = refined.error;
@@ -833,7 +841,10 @@ export class RunService {
     else if (result.status === "failed") await this.retryOrFlag(done, "reported a failure");
     else if (done.step === "sync" && status === "failed") await this.flagTicket(done);
     else if (done.step === "refine" && status === "failed") await this.flagFailedRefine(done);
-    else if (done.step === "build" && status === "failed") await this.flagTicket(done);
+    else if (done.step === "build" && status === "failed") {
+      await this.flagTicket(done);
+      await this.stopForTheNight(done, `its build was rejected: ${error ?? "no reason recorded"}`);
+    }
     // A plan waits for Andy (ADR-0050): the ticket is flagged and nothing starts. A rejected
     // plan result is flagged at once, like a rejected build.
     else if (done.step === "plan") await this.flagTicket(done);
@@ -1527,7 +1538,14 @@ export class RunService {
     }
     if (run.branch) why += `; its branch ${run.branch} is kept`;
     await this.flagNeedsYou(run, `${why} (${run.id}). Check the task log, then start it again`);
+    await this.stopForTheNight(run, why);
     return "flagged";
+  }
+
+  /** A run that failed for good stops its story for the night, if a launch covers it (AI-123). */
+  private async stopForTheNight(run: Run, reason: string): Promise<void> {
+    if (!this.night || !run.ticketId) return;
+    await this.night.stopStory(run.projectId, run.ticketId, reason);
   }
 
   /** Flags the run's ticket Needs-you with `why` as a comment. Logs, never throws. */
