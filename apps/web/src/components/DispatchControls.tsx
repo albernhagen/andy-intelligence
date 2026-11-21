@@ -11,6 +11,7 @@ const DECISION_TEXT: Record<DispatchDecision, string> = {
   prs_waiting_cap: "too many agent PRs are waiting for you",
   quota_reserve: "subscription quota is at its reserve",
   quota_warn: "subscription quota is at warn: one agent task at a time across all projects",
+  spend_cap: "a paid agent task would pass a spend cap, or its cost is unknown",
   started: "started an agent task",
   nothing_ready: "no Ready ticket can start",
   touches_overlap: "Ready tickets overlap agent tasks in flight",

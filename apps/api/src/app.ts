@@ -70,7 +70,10 @@ export interface AppDeps {
   deployments?: DeploymentStore;
   /** Model routing (AI-230, AI-238); without it every run takes `DEFAULT_ROUTING`. */
   routing?: RoutingConfigStore;
-  /** Spend totals for the caps settings (AI-249); without it spend reads unknown, never zero. */
+  /**
+   * Paid spend: the gate reserves pay_per_use agent tasks (AI-248) and the caps settings read its
+   * totals (AI-249). Without it every pay_per_use task is refused and spend reads unknown.
+   */
   spendLedger?: SpendLedger;
   /**
    * Per-project change counters (AI-222): with them, every tracker and run write bumps its
@@ -163,6 +166,7 @@ const DOMAIN_STATUS = {
   not_refinable: 422,
   not_buildable: 422,
   run_limit: 409,
+  spend_cap: 409,
   run_finished: 409,
   executor_unavailable: 503,
   dispatch_failed: 502,
