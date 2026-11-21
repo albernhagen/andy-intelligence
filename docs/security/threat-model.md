@@ -40,6 +40,7 @@ Trust boundaries, entry points and credentials, moved by area (ADR-0046). PRs th
 | Night runs                   | [`night-runs.md`](night-runs.md)                                     |
 | Web Push                     | [`push.md`](push.md)                                                 |
 | Project settings             | [`project-settings.md`](project-settings.md)                         |
+| Project members              | [`project-members.md`](project-members.md)                           |
 
 ## Mitigations in place
 
