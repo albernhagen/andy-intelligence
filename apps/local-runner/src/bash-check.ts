@@ -7,7 +7,7 @@ import { git } from "./git";
 import type { Confinement } from "./seatbelt";
 
 /**
- * The live Bash check before a local build agent (ADR-0103, as ADR-0071 on Actions). One Bash
+ * The live Bash check before a local build agent (ADR-0105, as ADR-0071 on Actions). One Bash
  * call through Claude Code's own sandbox, under the same Seatbelt profile, settings, env and
  * checkout the build agent gets, with a fixed prompt (no ticket text) and a cheap model, capped
  * at 3 turns and 5 minutes (ADR-0028). The command writes facts into the checkout; the runner
