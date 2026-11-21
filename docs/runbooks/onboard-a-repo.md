@@ -64,6 +64,7 @@ Then:
 2. Open a first PR so every check runs once.
 3. `node platform/baseline/baseline.mjs check albernhagen/<name>` → exit 0.
 4. To manage it from the control plane: Settings → GitHub → **Install on repos** → add it, then create its project with the repo in the UI (`docs/runbooks/github-app.md` §4).
+5. Before agent tasks run there: the `agent` environment with its own token (`docs/runbooks/agent-environment.md`). The baseline's `agent-run.yml` caller reads it.
 
 Use a **public** repo: on a free GitHub plan, rulesets and code scanning only work on public repos.
 
