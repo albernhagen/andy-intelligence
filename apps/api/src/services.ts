@@ -18,13 +18,18 @@ import {
   EmailNotifications,
   wakeAfterRunEnd,
   notifyOnNeedsYou,
+  NightLaunches,
+  EpicBranches,
+  type EpicBranchOpener,
 } from "@andy/domain";
+import type { NightLaunchStore, WorkTracker } from "@andy/contracts";
 import type { AppDeps } from "./app";
 import type { AuthEnv } from "./auth";
 import { noReviewFindings } from "./config-proposals";
 import { ConnectedCodeHost, GitHubConnection, gitHubCodeHost } from "./github/connection";
 import { actionsTokenVerifier, type ActionsTokenVerifier } from "./github/token";
 import type { ToolServices } from "./mcp/tools";
+import type { NightDeps } from "./night";
 import { runnerCredentials } from "./runners";
 
 /**
@@ -143,6 +148,26 @@ export function createServices(input: AppDeps): Services {
       )
     : null;
 
+  // M4.17: the night launch step; absent without a launch store (routes and tools both).
+  const night: NightDeps | null = deps.nightLaunches
+    ? {
+        // AI-122: with GitHub connected, a launch opens its `epic/<KEY>` branch for the stories.
+        nights: new NightLaunches(
+          deps.nightLaunches,
+          deps.tracker,
+          runs,
+          now,
+          undefined,
+          connection ? connectedEpicBranches(connection, deps.tracker, deps.nightLaunches) : null,
+        ),
+        store: deps.nightLaunches,
+        tracker: deps.tracker,
+        runs: deps.runs,
+        plans: runs,
+        now,
+      }
+    : null;
+
   const projects = new ProjectService(
     deps.tracker,
     connection ? new ConnectedCodeHost(connection) : null,
@@ -204,5 +229,22 @@ export function createServices(input: AppDeps): Services {
     ideate,
     plans,
     configProposals,
+    night,
+  };
+}
+
+/**
+ * AI-122 epic branches, once GitHub is connected: before setup (or in local dev) a launch opens
+ * none and its stories build on the default branch, as `NightLaunch.epicBranch` allows.
+ */
+function connectedEpicBranches(
+  connection: GitHubConnection,
+  tracker: WorkTracker,
+  launches: NightLaunchStore,
+): EpicBranchOpener {
+  const branches = new EpicBranches(tracker, new ConnectedCodeHost(connection), launches);
+  return {
+    open: async (projectId, epic) =>
+      (await connection.codeHost()) ? branches.open(projectId, epic) : null,
   };
 }

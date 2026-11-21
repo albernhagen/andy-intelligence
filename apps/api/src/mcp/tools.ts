@@ -14,6 +14,7 @@ import {
 } from "@andy/domain";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
+import type { NightDeps } from "../night";
 import * as toolGroups from "./tool-groups";
 
 /**
@@ -42,6 +43,8 @@ export interface ToolDeps {
   plans?: ProjectPlanService;
   /** Config proposals from review findings (ADR-0097); absent or null: no config tools. */
   configProposals?: ConfigProposals | null;
+  /** The night launch step (M4.17); absent or null: no night tools. */
+  night?: NightDeps | null;
   /** Signed-in email, shown by `status` so it doubles as the connection check. */
   email: string;
   /** The signed-in user as an actor, `user:<uid>` (AI-19): every write is recorded as this. */

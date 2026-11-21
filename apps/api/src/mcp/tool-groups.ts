@@ -9,6 +9,7 @@ export { registerDispatchTools as dispatch } from "./tools-dispatch";
 export { registerExecutorTools as executor } from "./tools-executor";
 export { registerIdeateTools as ideate } from "./tools-ideate";
 export { registerInFlightTools as inFlight } from "./tools-inflight";
+export { registerNightTools as night } from "./tools-night";
 export { registerNotifyTools as notify } from "./tools-notify";
 export { registerProjectPlanTools as projectPlan } from "./tools-project-plan";
 export { registerProjectTools as projects } from "./tools-projects";
