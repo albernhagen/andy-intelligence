@@ -6,6 +6,7 @@ import {
   newestFirst,
   notFound,
   type NewRun,
+  type ProviderKey,
   type Run,
   type RunPatch,
   type RunStatus,
@@ -71,6 +72,16 @@ export class FirestoreRunStore implements RunStore {
       .get();
     const runs = snap.docs.map((d) => d.data()).filter((r) => r.projectId === projectId);
     return { runs, complete: snap.size < limit };
+  }
+
+  async countCreatedSince(provider: ProviderKey, since: string, limit: number) {
+    // Bounded in the query: at most `limit` documents on `createdAt`'s automatic single-field
+    // index. The provider filter runs in memory, as in listEndedBetween: an equality plus a range
+    // would need a composite index (a Terraform change). Other providers' runs count toward the
+    // cap, and `complete` says when it was reached (AI-232).
+    const snap = await this.runs().where("createdAt", ">=", since).limit(limit).get();
+    const count = snap.docs.filter((d) => d.data().route.provider === provider).length;
+    return { count, complete: snap.size < limit };
   }
 
   async update(runId: string, patch: RunPatch, from: readonly RunStatus[]): Promise<Run> {
