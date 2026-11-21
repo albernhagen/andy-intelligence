@@ -259,6 +259,30 @@ export class SpendGate {
     );
   }
 
+  /**
+   * Route fallback found no route because the gate refused them (AI-257, after AI-261): sends
+   * the stop notice for the first route refused at a cap, naming the ticket that waits. Re-reads
+   * like `refusal`; writes nothing but the notice, which the notice ledger dedupes per cap and
+   * window, so a dispatch that keeps idling doesn't repeat it. Never throws.
+   */
+  async alertStopped(projectId: string, ticketId: string, routes: readonly Route[]): Promise<void> {
+    if (!this.alerts) return;
+    try {
+      for (const route of routes) {
+        const checked = await this.check({ id: null, projectId, route });
+        if (checked.ok || !checked.stop) continue;
+        await this.alert({
+          kind: "stopped",
+          run: { id: `dispatch:${ticketId}`, projectId, ticketId },
+          ...stopOf(checked.stop),
+        });
+        return;
+      }
+    } catch (err) {
+      log("ERROR", "spend stop alert failed", { projectId, ticketId, error: String(err) });
+    }
+  }
+
   /** Tells the spend notices; a failure there is logged and never blocks the gate. */
   private async alert(event: SpendEvent): Promise<void> {
     if (!this.alerts) return;
