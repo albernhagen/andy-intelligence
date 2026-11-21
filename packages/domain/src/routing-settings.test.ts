@@ -291,6 +291,21 @@ describe("RoutingSettings revert and global log (AI-275)", () => {
     expect((await store.getProject("ai"))?.providers["claude-sub"].warnPct).toBe(60);
   });
 
+  it("GivenMarkingFailedOnce_WhenTheRevertIsRetried_ThenTheMarkCompletesWithoutSavingAgain", async () => {
+    const { settings, store, changes } = await setup();
+    await settings.putGlobal(cheaperRefine(), null, OWNER);
+    const [change] = await settings.globalChanges();
+    const log = changes as InMemoryConfigChangeStore;
+    vi.spyOn(log, "markReverted").mockRejectedValueOnce(new Error("unavailable"));
+    await expect(settings.revert(change!.id, OWNER)).rejects.toThrow("unavailable");
+    expect((await store.getGlobal()).steps.refine).toBe("fast");
+    const saves = (await settings.globalChanges()).length;
+
+    const { reverted } = await settings.revert(change!.id, OWNER);
+    expect(reverted.status).toBe("reverted");
+    expect(await settings.globalChanges()).toHaveLength(saves);
+  });
+
   it("GivenAPartChangedOutsideTheLog_WhenReverted_ThenRefused", async () => {
     const { settings, store } = await setup();
     await settings.putGlobal(cheaperRefine(), null, OWNER);

@@ -320,6 +320,14 @@ export class RoutingSettings {
       projectId === null
         ? await changes.listGlobal(ROUTING_ENTITY)
         : (await changes.listForProject(projectId)).filter((c) => c.entity === ROUTING_ENTITY);
+    // A revert whose save was logged but whose mark failed: finish the mark, don't save again.
+    // Only a later owner change with exactly this revert's reason, while the config still holds
+    // the change's before values, counts.
+    if (current && revertedEarlier(change, current, logged)) {
+      const reverted = await this.markReverted(change, actor);
+      log("INFO", "routing change revert completed", { projectId, configChangeId: change.id });
+      return { config: current, reverted };
+    }
     const refusal = routingRevertRefusal(change, current, logged);
     if (refusal) throw refusal;
 
@@ -465,4 +473,24 @@ export function routingRevertRefusal(
     );
   }
   return null;
+}
+
+/** Whether `logged` holds this change's own revert and the config still shows its result. */
+function revertedEarlier(
+  change: ConfigChange,
+  current: RoutingConfig,
+  logged: ConfigChange[],
+): boolean {
+  const diff = change.diff as Record<string, { from: unknown; to: unknown }>;
+  const parts = Object.keys(diff);
+  const own = logged.some(
+    (c) =>
+      c.reason === revertReason(change.id) && c.actor === "andy" && c.createdAt >= change.createdAt,
+  );
+  return (
+    own &&
+    parts.every(
+      (f) => JSON.stringify(current[f as keyof RoutingFields]) === JSON.stringify(diff[f]?.from),
+    )
+  );
 }
