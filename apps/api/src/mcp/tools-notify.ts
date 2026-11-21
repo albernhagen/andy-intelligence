@@ -56,7 +56,7 @@ export function registerNotifyTools(server: McpServer, deps: ToolDeps, run: Run)
     },
     () =>
       run(async () => {
-        const outcome = await sendTestEmail(deps.notifyEmail ?? null);
+        const outcome = await sendTestEmail(deps.notifyEmail ?? null, deps.actor);
         if (!outcome.sent) throw new WorkTrackerError("conflict", outcome.error);
         return { sent: true, emailConfigured: true };
       }),

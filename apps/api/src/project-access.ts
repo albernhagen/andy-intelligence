@@ -48,7 +48,8 @@ export const CROSS_PROJECT_ROUTES: Readonly<Record<string, string>> = {
   "POST /api/config-changes/:changeId/accept": "Check the change's project.",
   "POST /api/config-changes/:changeId/reject": "Check the change's project.",
   "POST /api/github/connect": "GitHub App setup: owner only.",
-  "POST /api/notify/email/test": "Needs-you email: owner only.",
+  "POST /api/notify/email/test":
+    "Needs-you email test send: owner only (`send_test_email`, enforced).",
   "POST /api/oauth/approve": "The caller's own MCP grant: nothing to filter.",
   "POST /api/projects": "Creates a project: owner only.",
   "POST /api/questions/:questionId/answer": "Check the question's ticket's project.",
@@ -97,7 +98,7 @@ export const CROSS_PROJECT_TOOLS: Readonly<Record<string, string>> = {
   set_step_tier: "Without `project`, the global routing: owner only.",
   set_tier_routes: "Without `project`, the global routing: owner only.",
   status: "Without `ticket`, every project's counts: keep readable projects.",
-  test_email: "Needs-you email test send: owner only.",
+  test_email: "Needs-you email test send: owner only (`send_test_email`, enforced).",
 };
 
 /** What a refused lookup names, and the body an unknown one gets. */
