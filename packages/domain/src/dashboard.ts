@@ -310,8 +310,14 @@ export class DashboardReader {
   }
 
   /** Projects are read one after another, so at most one project's runs are held at a time. */
-  async all(window: DashboardWindow): Promise<Dashboard> {
-    const projects = (await this.tracker.listProjects()).sort((a, b) => a.key.localeCompare(b.key));
+  /** `canRead` leaves out projects the caller may not read, before the project cap (AI-295). */
+  async all(
+    window: DashboardWindow,
+    canRead: (projectId: string) => Promise<boolean>,
+  ): Promise<Dashboard> {
+    const listed = (await this.tracker.listProjects()).sort((a, b) => a.key.localeCompare(b.key));
+    const allowed = await Promise.all(listed.map((p) => canRead(p.id)));
+    const projects = listed.filter((_, i) => allowed[i]);
     const covered = projects.slice(0, MAX_DASHBOARD_PROJECTS);
     const perProject: ProjectDashboard[] = [];
     const merged = {
