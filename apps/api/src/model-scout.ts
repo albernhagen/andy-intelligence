@@ -4,6 +4,7 @@ import {
   TierKey,
   type ConfigChangeStore,
   type ModelOutcome,
+  type Project,
   type RoutingConfigStore,
   type RunStore,
   type ScoutProposal,
@@ -43,7 +44,10 @@ export const OUTCOME_RUNS_PER_PROJECT = 500;
 export const OUTCOME_PROJECTS_MAX = 50;
 /** Pending global changes allowed; the scout adds at most one a week. */
 export const SCOUT_MAX_PENDING = 10;
-/** The project a direct research call is recorded and capped under: the control plane's own. */
+/**
+ * The project a direct research call is recorded and capped under, by default the control
+ * plane's own. When no such project exists, research is skipped (logged), never run unscoped.
+ */
 export const SCOUT_PROJECT_ID = "ai";
 /** Output ceiling for the research call. */
 const RESEARCH_MAX_OUTPUT_TOKENS = 800;
@@ -122,7 +126,9 @@ export type ScoutJobResult =
   | { outcome: "no_change"; week: string; unchecked: UncheckedTier[] }
   | { outcome: "already_done"; week: string; changeId: string }
   | { outcome: "created"; week: string; changeId: string; unchecked: UncheckedTier[] }
-  | { outcome: "capped"; week: string };
+  | { outcome: "capped"; week: string }
+  /** Another scout call is still running on this instance; this one did nothing. */
+  | { outcome: "busy" };
 
 export interface ModelScoutDeps {
   tracker: Pick<WorkTracker, "listProjects">;
@@ -134,6 +140,8 @@ export interface ModelScoutDeps {
    * `direct`; otherwise, or when the call fails (closed), the proposal goes without them.
    */
   direct?: Pick<DirectExecutor, "run"> | null;
+  /** The project research runs are recorded under; default `SCOUT_PROJECT_ID`. */
+  scoutProjectId?: string;
   fetchList?: () => Promise<ModelListFetch>;
   newId?: () => string;
   now?: () => Date;
@@ -166,7 +174,8 @@ export class ModelScoutJob {
       .filter((k) => global.tiers[k].length > 0)
       .map((k) => ({ key: k, routes: global.tiers[k] }));
     // No model price store yet, so no known prices: `price_change` waits for one.
-    const result = scoutProposal(list.data, tiers, await this.outcomes(at), []);
+    const projects = (await this.deps.tracker.listProjects()).slice(0, OUTCOME_PROJECTS_MAX);
+    const result = scoutProposal(list.data, tiers, await this.outcomes(at, projects), []);
     if (!result.ok) {
       log("WARNING", "model scout skipped this week", { week, reason: result.error });
       return { outcome: "skipped", week, reason: result.error };
@@ -180,7 +189,12 @@ export class ModelScoutJob {
       return { outcome: "no_change", week, unchecked: result.unchecked };
     }
 
-    const proposal = await this.withResearch(result.proposal, week);
+    const scoutProject = this.deps.scoutProjectId ?? SCOUT_PROJECT_ID;
+    const proposal = await this.withResearch(
+      result.proposal,
+      week,
+      projects.some((p) => p.id === scoutProject) ? scoutProject : null,
+    );
     const written = await this.deps.changes.createPending(
       ConfigChange.parse({
         id: (this.deps.newId ?? (() => crypto.randomUUID()))(),
@@ -217,9 +231,20 @@ export class ModelScoutJob {
    * the `scout` step routes to `direct` and the call succeeds; else the proposal unchanged. The
    * sentences are untrusted model output, labelled as such; they never change the diff.
    */
-  private async withResearch(proposal: ScoutProposal, week: string): Promise<ScoutProposal> {
+  private async withResearch(
+    proposal: ScoutProposal,
+    week: string,
+    projectId: string | null,
+  ): Promise<ScoutProposal> {
     const direct = this.deps.direct;
     if (!direct) return proposal;
+    if (projectId === null) {
+      log("WARNING", "model scout research skipped: its project doesn't exist", {
+        week,
+        projectId: this.deps.scoutProjectId ?? SCOUT_PROJECT_ID,
+      });
+      return proposal;
+    }
     const changes = proposal.changes.map((c) => ({
       tier: c.tier,
       kind: c.kind,
@@ -229,7 +254,7 @@ export class ModelScoutJob {
     let outcome;
     try {
       outcome = await direct.run({
-        projectId: SCOUT_PROJECT_ID,
+        projectId,
         ticketId: null,
         step: "scout",
         schema: ScoutNotes,
@@ -279,9 +304,11 @@ export class ModelScoutJob {
   }
 
   /** Finished agent tasks per model over the window: succeeded over succeeded plus failed. */
-  private async outcomes(at: Date): Promise<Map<string, ModelOutcome>> {
+  private async outcomes(
+    at: Date,
+    projects: readonly Pick<Project, "id">[],
+  ): Promise<Map<string, ModelOutcome>> {
     const from = new Date(at.getTime() - OUTCOME_WINDOW_DAYS * 86_400_000).toISOString();
-    const projects = (await this.deps.tracker.listProjects()).slice(0, OUTCOME_PROJECTS_MAX);
     const counts = new Map<string, { tasks: number; ok: number }>();
     for (const p of projects) {
       const { runs, complete } = await this.deps.runs.listEndedBetween(
@@ -314,6 +341,9 @@ export interface ModelScoutRouteDeps {
 export function registerModelScout(app: Hono<AuthEnv>, deps: ModelScoutRouteDeps): void {
   const now = deps.now ?? (() => new Date());
   let hour = "";
+  // One scout call at a time per instance: a scheduler retry or a manual run that overlaps the
+  // first must not pay for research twice (cross-instance overlap: R-AI-268).
+  let running = false;
   let calls = 0;
   app.post(MODEL_SCOUT_PATH, async (c) => {
     const match = /^Bearer\s+(\S+)$/i.exec(c.req.header("authorization") ?? "");
@@ -333,7 +363,14 @@ export function registerModelScout(app: Hono<AuthEnv>, deps: ModelScoutRouteDeps
     if (calls >= MODEL_SCOUT_CALLS_PER_HOUR) return c.json({ error: "rate limited" }, 429);
     calls += 1;
     try {
-      const result = await deps.job.run();
+      if (running) {
+        log("INFO", "model scout already running on this instance");
+        return c.json({ outcome: "busy" as const }, 200);
+      }
+      running = true;
+      const result = await deps.job.run().finally(() => {
+        running = false;
+      });
       return c.json(result, 200);
     } catch (err) {
       log("ERROR", "model scout failed", { error: String(err) });

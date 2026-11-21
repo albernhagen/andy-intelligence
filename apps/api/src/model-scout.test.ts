@@ -170,13 +170,13 @@ describe("ModelScoutJob research", () => {
   let changes: InMemoryConfigChangeStore;
   let routing: InMemoryRoutingConfigStore;
 
-  const run = async (direct: ModelScoutDeps["direct"]) => {
+  const run = async (direct: ModelScoutDeps["direct"], projects = [{ id: "ai" } as Project]) => {
     await routing.put(
       { ...DEFAULT_ROUTING, tiers: { ...DEFAULT_ROUTING.tiers, fast: [OLD] } },
       null,
     );
     await new ModelScoutJob({
-      tracker: { listProjects: async () => [{ id: "ai" } as Project] },
+      tracker: { listProjects: async () => projects },
       runs: { listEndedBetween: async () => ({ runs: endedRuns(), complete: true }) },
       routing,
       changes,
@@ -239,6 +239,18 @@ describe("ModelScoutJob research", () => {
     const change = await run(direct as unknown as ModelScoutDeps["direct"]);
     expect(change.reason).not.toContain("Research");
     expect(logs.join("\n")).toContain("no price for openrouter/vendor/cheap");
+  });
+
+  it("GivenTheScoutProjectIsMissing_WhenTheJobRuns_ThenResearchIsSkippedAndLoggedAndTheProposalStands", async () => {
+    const logs: string[] = [];
+    vi.spyOn(console, "log").mockImplementation((line: string) => void logs.push(line));
+    const direct = { run: vi.fn() };
+    const change = await run(direct as unknown as ModelScoutDeps["direct"], [
+      { id: "other" } as Project,
+    ]);
+    expect(direct.run).not.toHaveBeenCalled();
+    expect(change).toMatchObject({ status: "pending", entity: "tiers" });
+    expect(logs.join("\n")).toContain("research skipped: its project doesn't exist");
   });
 
   it("GivenTheResearchCallThrows_WhenTheJobRuns_ThenTheProposalStands", async () => {
@@ -337,6 +349,26 @@ describe("model scout route", () => {
       expect(run).not.toHaveBeenCalled();
     },
   );
+
+  it("GivenAScoutCallStillRunning_WhenCalledAgain_ThenBusyAndTheJobRunsOnce", async () => {
+    let release!: () => void;
+    const run = vi.fn(
+      () =>
+        new Promise<{ outcome: "no_change"; week: string; unchecked: [] }>((resolve) => {
+          release = () => resolve({ outcome: "no_change", week: "2026-W47", unchecked: [] });
+        }),
+    );
+    const hono = new Hono<AuthEnv>();
+    registerModelScout(hono, { job: { run }, verify: async () => {}, now: () => NOW });
+    const call = () =>
+      hono.request(MODEL_SCOUT_PATH, { method: "POST", headers: { authorization: "Bearer good" } });
+    const first = call();
+    await vi.waitFor(() => expect(run).toHaveBeenCalledTimes(1));
+    expect(await (await call()).json()).toEqual({ outcome: "busy" });
+    release();
+    expect((await first).status).toBe(200);
+    expect(run).toHaveBeenCalledTimes(1);
+  });
 
   it("GivenTooManyCallsInAnHour_WhenCalledAgain_Then429", async () => {
     const { run, call } = app();
