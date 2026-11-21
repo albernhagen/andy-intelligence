@@ -19,6 +19,7 @@ import {
   registerModelScout,
   scoutDedupeKey,
   type ModelListFetch,
+  type ModelScoutDeps,
 } from "./model-scout";
 
 /** AI-268: M10.17: Weekly model scout job. Fakes and a mocked list only: no network, no spend. */
@@ -52,8 +53,13 @@ describe("ModelScoutJob", () => {
   let routing: InMemoryRoutingConfigStore;
   let ids: number;
 
-  const job = (list: ModelListFetch = { ok: true, data: LIST }, runs: Run[] = endedRuns()) =>
+  const job = (
+    list: ModelListFetch = { ok: true, data: LIST },
+    runs: Run[] = endedRuns(),
+    direct: ModelScoutDeps["direct"] = null,
+  ) =>
     new ModelScoutJob({
+      direct,
       tracker: { listProjects: async () => [{ id: "ai" } as Project] },
       runs: { listEndedBetween: async () => ({ runs, complete: true }) },
       routing,
@@ -157,6 +163,92 @@ describe("ModelScoutJob", () => {
     await changes.decide(first.changeId, "rejected", "user:andy", NOW.toISOString());
     expect(await job().run()).toMatchObject({ outcome: "already_done", changeId: first.changeId });
     expect(await changes.listPending()).toHaveLength(0);
+  });
+});
+
+describe("ModelScoutJob research", () => {
+  let changes: InMemoryConfigChangeStore;
+  let routing: InMemoryRoutingConfigStore;
+
+  const run = async (direct: ModelScoutDeps["direct"]) => {
+    await routing.put(
+      { ...DEFAULT_ROUTING, tiers: { ...DEFAULT_ROUTING.tiers, fast: [OLD] } },
+      null,
+    );
+    await new ModelScoutJob({
+      tracker: { listProjects: async () => [{ id: "ai" } as Project] },
+      runs: { listEndedBetween: async () => ({ runs: endedRuns(), complete: true }) },
+      routing,
+      changes,
+      direct,
+      fetchList: async () => ({ ok: true, data: LIST }),
+      newId: () => "00000000-0000-4000-8000-000000000001",
+      now: () => NOW,
+    }).run();
+    return (await changes.listPending())[0]!;
+  };
+
+  beforeEach(() => {
+    changes = new InMemoryConfigChangeStore();
+    routing = new InMemoryRoutingConfigStore(() => NOW);
+  });
+  afterEach(() => vi.restoreAllMocks());
+
+  it("GivenTheScoutRoutesToDirect_WhenResearchAnswers_ThenItsNotesAreAppendedLabelledAndTheDiffIsUnchanged", async () => {
+    const direct = {
+      run: vi.fn(async () => ({
+        kind: "done" as const,
+        run: {} as Run,
+        output: {
+          notes: [
+            { tier: "fast" as const, note: "A small open model; tool use is weaker." },
+            { tier: "frontier" as const, note: "Not a proposed tier." },
+          ],
+        },
+      })),
+    };
+    const change = await run(direct as unknown as ModelScoutDeps["direct"]);
+    expect(direct.run).toHaveBeenCalledWith(
+      expect.objectContaining({ step: "scout", projectId: "ai", ticketId: null }),
+    );
+    expect(change.reason).toContain(
+      "Research (model-written, unverified):\nfast: A small open model",
+    );
+    expect(change.reason).not.toContain("Not a proposed tier");
+    expect(change.diff).toEqual({
+      fast: { kind: "cheaper", from: "vendor/old", to: "vendor/new", prices: null },
+    });
+  });
+
+  it("GivenTheScoutDoesNotRouteToDirect_WhenTheJobRuns_ThenTheProposalHasNoResearch", async () => {
+    const direct = { run: vi.fn(async () => ({ kind: "not_direct" as const, route: null })) };
+    const change = await run(direct as unknown as ModelScoutDeps["direct"]);
+    expect(change.reason).not.toContain("Research");
+  });
+
+  it("GivenTheResearchCallFailsClosed_WhenTheJobRuns_ThenTheReasonIsLoggedAndTheProposalStands", async () => {
+    const logs: string[] = [];
+    vi.spyOn(console, "log").mockImplementation((line: string) => void logs.push(line));
+    const direct = {
+      run: vi.fn(async () => ({
+        kind: "failed" as const,
+        run: {} as Run,
+        reason: "no paid agent task: no price for openrouter/vendor/cheap",
+      })),
+    };
+    const change = await run(direct as unknown as ModelScoutDeps["direct"]);
+    expect(change.reason).not.toContain("Research");
+    expect(logs.join("\n")).toContain("no price for openrouter/vendor/cheap");
+  });
+
+  it("GivenTheResearchCallThrows_WhenTheJobRuns_ThenTheProposalStands", async () => {
+    const direct = {
+      run: vi.fn(async () => {
+        throw new Error("boom");
+      }),
+    };
+    const change = await run(direct as unknown as ModelScoutDeps["direct"]);
+    expect(change).toMatchObject({ status: "pending", entity: "tiers" });
   });
 });
 
