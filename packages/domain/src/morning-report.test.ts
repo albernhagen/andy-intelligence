@@ -77,8 +77,11 @@ const ticket = (key: string, over: Partial<Ticket> = {}): Ticket =>
     ...over,
   }) as Ticket;
 
-const finding = (pullNumber: number, severity: ReviewFinding["severity"]): ReviewFinding =>
-  ({ pullNumber, severity }) as ReviewFinding;
+const finding = (
+  pullNumber: number,
+  severity: ReviewFinding["severity"],
+  repo = "albernhagen/andy-intelligence",
+): ReviewFinding => ({ pullNumber, severity, repo }) as ReviewFinding;
 
 describe("storyReport", () => {
   it("GivenAMergedStory_WhenReported_ThenItHasItsPrChecksFindingsAndCost", () => {
@@ -91,7 +94,13 @@ describe("storyReport", () => {
         ] as Ticket["refineAssumptions"],
       }),
       [run({}), run({ id: "old", createdAt: "2026-11-19T10:00:00.000Z", costUsd: 9 })],
-      [finding(61, "should-fix"), finding(61, "question"), finding(62, "blocker")],
+      [
+        finding(61, "should-fix"),
+        finding(61, "question"),
+        finding(62, "blocker"),
+        // Same number in another repo of the project: not this story's PR.
+        finding(61, "critical", "albernhagen/other"),
+      ],
       new Set(["AI-2"]),
     );
 
@@ -140,8 +149,15 @@ describe("storyReport", () => {
 describe("quoteUntrusted", () => {
   it("GivenMarkupLinksAndLineBreaks_WhenQuoted_ThenNoneSurvive", () => {
     expect(quoteUntrusted("Use **bold** [x](http://e.vil)\n<img> @andy `code`")).toBe(
-      "“Use \\*\\*bold\\*\\* \\[x\\]\\(http://e.vil\\) \\<img\\> \\@andy \\`code\\`”",
+      "“Use \\*\\*bold\\*\\* \\[x\\]\\(http:/\u200b/e.vil\\) \\<img\\> \\@andy \\`code\\`”",
     );
+  });
+
+  it("GivenBareUrlsAndEntities_WhenQuoted_ThenNoAutolinkOrEntitySurvives", () => {
+    const q = quoteUntrusted("see https://e.vil/x and www.e.vil &amp; Www.X.com");
+    expect(q).not.toMatch(/https?:\/\//);
+    expect(q).not.toMatch(/www\./i);
+    expect(q).toContain("\\&amp;");
   });
 
   it("GivenLongText_WhenQuoted_ThenItIsCapped", () => {
@@ -246,6 +262,28 @@ describe("MorningReports", () => {
     await reports.post(launch, null);
     expect(await reports.post(launch, null)).toBe(false);
     expect(await comments()).toHaveLength(1);
+  });
+
+  it("GivenAStoryKeyWithNoTicket_WhenPosted_ThenItIsARowMarkedMissingAndCounted", async () => {
+    const withGone = NightLaunch.parse({ ...launch, storyKeys: [...launch.storyKeys, "AI-99"] });
+    await reports.post(withGone, null);
+    const [comment] = await comments();
+    expect(comment!.body).toContain("Of 2 stories: 1 merged");
+    expect(comment!.body).toContain(", 1 missing.");
+    expect(comment!.body).toContain(
+      "[AI-99](/p/ai/t/AI-99) missing: its ticket isn't in this project any more",
+    );
+  });
+
+  it("GivenTheFlagFailsOnce_WhenPostedTwice_ThenTheEpicEndsFlaggedWithOneReport", async () => {
+    vi.spyOn(console, "log").mockImplementation(() => {});
+    flag.mockRejectedValueOnce(new Error("tracker down"));
+    expect(await reports.post(launch, null)).toBe(false);
+    expect(await comments()).toHaveLength(0);
+
+    expect(await reports.post(launch, null)).toBe(true);
+    expect(await comments()).toHaveLength(1);
+    expect(flag).toHaveBeenCalledTimes(2);
   });
 
   it("GivenALaunchStillRunning_WhenPosted_ThenNothingIsWritten", async () => {

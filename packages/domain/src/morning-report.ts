@@ -29,7 +29,8 @@ export const REPORT_QUOTE_MAX = 240;
 const HEADING = "## Morning report";
 
 /** What happened to one story tonight. */
-export type StoryResult = "merged" | "done" | "stopped" | "skipped" | "not_started" | "unfinished";
+export type StoryResult =
+  "merged" | "done" | "stopped" | "skipped" | "not_started" | "unfinished" | "missing";
 
 export type StoryReport = {
   key: string;
@@ -61,13 +62,24 @@ const RESULT_TEXT: Record<StoryResult, string> = {
   skipped: "skipped",
   not_started: "not started",
   unfinished: "unfinished",
+  missing: "missing",
 };
 
-/** Agent text as one escaped, capped line: no markup, links, mentions or line breaks survive. */
+const ZWSP = "\u200b";
+
+/**
+ * Agent text as one escaped, capped line: no markup, links, mentions or line breaks survive.
+ * Bare URLs are broken with a zero-width space (inside `://` and after `www`) so neither the markdown
+ * renderer's nor a mail client's autolinking makes them clickable.
+ */
 export function quoteUntrusted(text: string, max = REPORT_QUOTE_MAX): string {
   const flat = text.replace(/\s+/g, " ").trim();
   const capped = flat.length > max ? `${flat.slice(0, max - 1)}…` : flat;
-  return `“${capped.replace(/[\\`*_[\]<>#|~!@()]/g, "\\$&")}”`;
+  const escaped = capped
+    .replace(/[\\`*_[\]<>#|~!@()&]/g, "\\$&")
+    .replace(/:\/\//g, `:/${ZWSP}/`)
+    .replace(/\bwww\./gi, (m) => `${m.slice(0, 3)}${ZWSP}.`);
+  return `“${escaped}”`;
 }
 
 const usd = (n: number) => `$${n.toFixed(2)}`;
@@ -122,6 +134,7 @@ export function morningReport({ launch, stories, morning, appUrl }: MorningRepor
   const link = (key: string) =>
     `[${key}](${appUrl}/p/${encodeURIComponent(launch.projectId)}/t/${key})`;
   const count = (r: StoryResult) => stories.filter((s) => s.result === r).length;
+  const missing = count("missing");
   const spent = stories.reduce((n, s) => n + s.usd, 0);
   const used = stories.reduce((n, s) => n + s.tokens, 0);
   const unknown = stories.reduce((n, s) => n + s.unknownCost, 0);
@@ -130,7 +143,7 @@ export function morningReport({ launch, stories, morning, appUrl }: MorningRepor
   const lines = [
     reportMarker(launch),
     "",
-    `Ended because ${ended}. Of ${plural(stories.length, "story", "stories")}: ${count("merged")} merged, ${count("done")} done, ${count("stopped")} stopped, ${count("skipped") + count("not_started")} not started, ${count("unfinished")} unfinished.`,
+    `Ended because ${ended}. Of ${plural(stories.length, "story", "stories")}: ${count("merged")} merged, ${count("done")} done, ${count("stopped")} stopped, ${count("skipped") + count("not_started")} not started, ${count("unfinished")} unfinished${missing > 0 ? `, ${missing} missing` : ""}.`,
     `Spend: ${usd(spent)} of ${usd(launch.budget.maxUsd)}, ${tokens(used)} of ${tokens(launch.budget.maxTokens)} tokens${unknown > 0 ? `, ${plural(unknown, "agent task")} with unknown cost` : ""}.`,
     morningLine(morning),
     "",
@@ -165,7 +178,7 @@ export function morningReport({ launch, stories, morning, appUrl }: MorningRepor
   return lines.join("\n");
 }
 
-const PULL_NUMBER = /\/pull\/(\d+)(?:$|[/?#])/;
+const PULL = /\/([A-Za-z0-9-]+\/[A-Za-z0-9._-]+)\/pull\/(\d+)(?:$|[/?#])/;
 
 /** One story's report from its ticket, its agent tasks since the launch began and the findings. */
 export function storyReport(
@@ -184,7 +197,9 @@ export function storyReport(
     .sort((a, b) => (b.createdAt ?? "").localeCompare(a.createdAt ?? ""));
   const latest = builds[0] ?? null;
   const prUrl = builds.find((r) => r.links.pullRequest)?.links.pullRequest ?? null;
-  const prNumber = prUrl ? Number(PULL_NUMBER.exec(prUrl)?.[1] ?? NaN) : NaN;
+  const pull = prUrl ? PULL.exec(prUrl) : null;
+  const prRepo = pull?.[1] ?? null;
+  const prNumber = pull ? Number(pull[2]) : NaN;
 
   const result: StoryResult = merged.has(story.key)
     ? "merged"
@@ -209,7 +224,8 @@ export function storyReport(
   const counted: StoryReport["findings"] = {};
   if (Number.isInteger(prNumber))
     for (const f of findings)
-      if (f.pullNumber === prNumber) counted[f.severity] = (counted[f.severity] ?? 0) + 1;
+      if (f.pullNumber === prNumber && f.repo === prRepo)
+        counted[f.severity] = (counted[f.severity] ?? 0) + 1;
 
   return {
     key: story.key,
@@ -232,6 +248,22 @@ export function storyReport(
     usd: tonight.reduce((n, r) => n + (r.costUsd ?? 0), 0),
     tokens: tonight.reduce((n, r) => n + (r.tokensIn ?? 0) + (r.tokensOut ?? 0), 0),
     unknownCost: tonight.filter((r) => r.costUsd === null && r.endedAt !== null).length,
+  };
+}
+
+/** A launch story whose ticket is gone (deleted, or moved to another project). */
+function missingStory(key: string): StoryReport {
+  return {
+    key,
+    result: "missing",
+    reason: "its ticket isn't in this project any more",
+    pullRequest: null,
+    checks: null,
+    findings: {},
+    assumptions: [],
+    usd: 0,
+    tokens: 0,
+    unknownCost: 0,
   };
 }
 
@@ -273,11 +305,10 @@ export class MorningReports {
     }
     // By key, not the whole project (ADR-0126): one ticket read and one run list per story, at
     // most `NIGHT_LIMITS.maxStories` (ADR-0028), plus one capped findings read.
-    const stories = (
-      await Promise.all(
-        launch.storyKeys.map((k) => this.tracker.getTicketByKey(launch.projectId, k)),
-      )
-    ).filter((t): t is Ticket => t !== null);
+    const found = await Promise.all(
+      launch.storyKeys.map((k) => this.tracker.getTicketByKey(launch.projectId, k)),
+    );
+    const stories = found.filter((t): t is Ticket => t !== null);
     const runs = await Promise.all(
       stories.map((t) => this.runs.listForTicket(launch.projectId, t.id)),
     );
@@ -288,14 +319,17 @@ export class MorningReports {
         })
       : [];
     const merged = new Set(mergedStories(launch, stories, runs.flat()).map((m) => m.key));
-    const body = morningReport({
-      launch,
-      stories: stories.map((t, i) => storyReport(launch, t, runs[i]!, findings, merged)),
-      morning,
-      appUrl: this.appUrl,
+    const reports = launch.storyKeys.map((key, i) => {
+      const t = found[i];
+      if (!t) return missingStory(key);
+      return storyReport(launch, t, runs[stories.indexOf(t)]!, findings, merged);
     });
-    await this.tracker.addComment(launch.projectId, launch.epicId, body, "system");
+    const body = morningReport({ launch, stories: reports, morning, appUrl: this.appUrl });
+    // Flag first: a flag that fails leaves no report behind, so the next end call tries both
+    // again. The other order could leave a report that is never flagged (the marker stops a
+    // second try). Flagging is idempotent.
     await this.tickets.flag(launch.projectId, launch.epicId, "system");
+    await this.tracker.addComment(launch.projectId, launch.epicId, body, "system");
     log("INFO", "morning report posted", { launchId: launch.id, stories: stories.length });
     return true;
   }
