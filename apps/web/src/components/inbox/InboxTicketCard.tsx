@@ -89,7 +89,7 @@ function AcceptAllSuggested(props: {
         type="button"
         size="sm"
         variant="outline"
-        className="ml-auto"
+        className="ml-auto h-11 sm:h-8"
         disabled={locked}
         onClick={acceptAll}
       >

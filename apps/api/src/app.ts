@@ -11,6 +11,7 @@ import {
   type WatchdogQueue,
   type WorkTracker,
   type QuotaStore,
+  type DeploymentStore,
   type NightLaunchStore,
 } from "@andy/contracts";
 import type { CreatedApp } from "@andy/github";
@@ -59,6 +60,8 @@ export interface AppDeps {
   quota?: QuotaStore;
   /** Night launches (ADR-0049): a launched story's build gets its `epic/<KEY>` base (AI-122). */
   nightLaunches?: NightLaunchStore;
+  /** Deployment records (AI-161); without it the DORA panel reads empty (AI-200). */
+  deployments?: DeploymentStore;
   /**
    * The only host served (ADR-0044), e.g. `ai.andybernhagen.com`. Requests for any other host
    * (the default run.app URLs) get 404, except /health for monitoring. Unset: every host (local dev).
@@ -147,6 +150,7 @@ const DOMAIN_STATUS = {
   plan_not_decidable: 409,
   not_promotable: 409,
   invalid_reference: 422,
+  invalid_field: 422,
   not_clearable: 409,
   not_acceptable: 409,
   runner_limit: 409,
