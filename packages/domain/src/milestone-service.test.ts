@@ -84,6 +84,18 @@ describe("MilestoneService", () => {
       expect((await logged()).length).toBe(1);
     });
 
+    it("GivenTwoConcurrentEdits_WhenBothSave_ThenOneConflictsAndNeitherIsLost", async () => {
+      const m = await service.create("ai", { name: "M4", outcome: "x" }, OWNER);
+      const results = await Promise.allSettled([
+        service.update("ai", m.id, { status: "approved" }, OWNER),
+        service.update("ai", m.id, { name: "M4a" }, OWNER),
+      ]);
+      const failed = results.filter((r) => r.status === "rejected");
+      expect(failed).toHaveLength(1);
+      expect((failed[0] as PromiseRejectedResult).reason).toMatchObject({ code: "conflict" });
+      expect((await logged()).length).toBe(2);
+    });
+
     it("GivenANonOwnerOrAnUnknownMilestone_WhenUpdated_ThenRefused", async () => {
       const m = await service.create("ai", { name: "M4", outcome: "x" }, OWNER);
       await expect(service.update("ai", m.id, { status: "parked" }, AGENT)).rejects.toMatchObject({
@@ -177,6 +189,31 @@ describe("MilestoneService", () => {
         (c) => (c.diff as { status?: { to: string } }).status?.to === "approved",
       )!;
       await expect(service.revert(first, OWNER)).rejects.toMatchObject({ code: "not_revertible" });
+    });
+
+    it("GivenTwoConcurrentReverts_WhenBothRun_ThenOnlyOneAppliesAndOneChangeIsLogged", async () => {
+      const m = await service.create("ai", { name: "M4", outcome: "x" }, OWNER);
+      await service.update("ai", m.id, { status: "approved" }, OWNER);
+      const change = (await logged()).find((c) => "status" in c.diff)!;
+      const before = (await logged()).length;
+      const results = await Promise.allSettled([
+        service.revert(change, OWNER),
+        service.revert(change, OWNER),
+      ]);
+      expect(results.filter((r) => r.status === "fulfilled")).toHaveLength(1);
+      expect((await logged()).length).toBe(before + 1);
+      expect((await service.list("ai"))[0]!.status).toBe("not_reviewed");
+    });
+
+    it("GivenADiffWithNoKnownField_WhenReverted_ThenRefusedAndNotMarked", async () => {
+      const m = await service.create("ai", { name: "M4", outcome: "x" }, OWNER);
+      const created = (await logged())[0]!;
+      for (const diff of [{}, { colour: { from: "red", to: "blue" } }]) {
+        const odd = { ...created, id: `odd${Object.keys(diff).length}`, diff, entityId: m.id };
+        await changes.append(odd);
+        await expect(service.revert(odd, OWNER)).rejects.toMatchObject({ code: "not_revertible" });
+        expect((await changes.get(odd.id))?.status).toBe("applied");
+      }
     });
 
     it("GivenACreation_WhenReverted_ThenRefusedParkItInstead", async () => {

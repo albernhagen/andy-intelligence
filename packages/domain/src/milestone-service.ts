@@ -129,9 +129,10 @@ export class MilestoneService {
     const next = Milestone.parse({
       ...current,
       ...Object.fromEntries(Object.entries(diff).map(([k, v]) => [k, v.to])),
-      updatedAt: this.now().toISOString(),
+      updatedAt: laterThan(current.updatedAt, this.now()),
     });
-    const stored = await this.store.replace(next);
+    // Only if unchanged since the read: a concurrent write is a 409, never silently overwritten.
+    const stored = await this.store.replace(next, current.updatedAt);
     if (!stored) throw notFound("milestone", milestoneId);
     await this.record(projectId, milestoneId, diff, actor, reason);
     return stored;
@@ -165,7 +166,7 @@ export class MilestoneService {
     const updated = await this.tracker.updateTicket(
       projectId,
       epic.id,
-      { fields: { milestoneId } },
+      { fields: { milestoneId }, ifUpdatedAt: epic.updatedAt },
       actor,
     );
     await this.record(
@@ -181,8 +182,10 @@ export class MilestoneService {
   /**
    * Reverts one applied milestone change: each field goes back to its before value through the
    * normal write (validated, logged as a new change), then the original is marked reverted.
-   * Refused when the milestone or epic no longer holds the change's values (a later change), and
-   * for a creation (milestones aren't deleted: park one instead).
+   * Refused when the milestone or epic no longer holds the change's values (a later change), for
+   * a creation (milestones aren't deleted: park one instead), and for a diff it can't fully undo.
+   * Concurrent reverts of one change: each write is conditional on the version it read, so only
+   * the first applies; the other gets a conflict before writing anything.
    */
   async revert(
     change: ConfigChange,
@@ -222,6 +225,12 @@ export class MilestoneService {
     }
     const current = await this.requireMilestone(projectId, change.entityId);
     const fields = Object.keys(diff).filter((k): k is Field => FIELDS.includes(k as Field));
+    // A diff this code can't fully undo (empty, or a field it doesn't know) is never marked reverted.
+    if (fields.length === 0 || fields.length !== Object.keys(diff).length) {
+      throw new DomainError("not_revertible", `config change ${change.id} can't be reverted here`, [
+        "its diff holds no milestone field this version can restore",
+      ]);
+    }
     if (fields.some((f) => current[f] !== diff[f]!.to)) throw changedSince(change);
     const patch = Object.fromEntries(fields.map((f) => [f, diff[f]!.from])) as MilestonePatch;
     const milestone = await this.update(projectId, current.id, patch, actor, reason);
@@ -296,6 +305,15 @@ export class MilestoneService {
     if (!found) throw notFound("milestone", milestoneId);
     return found;
   }
+}
+
+/**
+ * `updatedAt` for a write: now, but always after the read's, so two writes in one millisecond
+ * still differ and the second's `ifUpdatedAt` check sees the first.
+ */
+function laterThan(previous: string, now: Date): string {
+  const floor = Date.parse(previous) + 1;
+  return new Date(Math.max(now.getTime(), floor)).toISOString();
 }
 
 const changedSince = (change: ConfigChange) =>
