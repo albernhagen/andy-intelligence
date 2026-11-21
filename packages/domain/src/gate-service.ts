@@ -1,5 +1,6 @@
 import {
   WorkTrackerError,
+  type ChangedFile,
   type CodeHost,
   type CodeHostEvent,
   type Project,
@@ -7,17 +8,14 @@ import {
   type Run,
   type RunMetrics,
   type RunOutcome,
+  type Listing,
+  type ReviewFindingSource,
   type RunStore,
   type Ticket,
   type WorkTracker,
 } from "@andy/contracts";
-import {
-  CODEOWNERS_PATHS,
-  codeownersGlobs,
-  decideGate,
-  policyAllows,
-  type GateDecision,
-} from "./gate";
+import { CODEOWNERS_PATHS, codeownersGlobs, decideGate, type GateDecision } from "./gate";
+import { mergeVerdict, openFindingsOn, type MergeVerdict } from "./merge-verdict";
 import { intoEpicBranch, passesIntoEpic, type EpicMerges } from "./night-merge";
 import { syncPendingFor } from "./sync-runs";
 import type { NightUnattended } from "./night-unattended";
@@ -26,7 +24,8 @@ import type { TicketService } from "./tickets";
 /**
  * Applies the gate to agent PRs (AI-34: workflow.md §4.5, ADR-0050, ADR-0040). On each PR or
  * finished-check delivery it re-reads the PR's current state from the host, records what the gate
- * decides on the Run, and merges when the project's policy allows. On close it records outcome and
+ * decides on the Run, and merges when the merge verdict under the project's mode says so
+ * (ADR-0124, AI-215; a project with no mode saved merges nothing, ADR-0134). On close it records outcome and
  * metrics. Only PRs on a build run's own branch are touched. Every failure leaves the PR unmerged.
  * A night story's PR into its launch's `epic/<KEY>` branch merges there when the gate's only
  * reason is `not_default_branch`, whatever the policy, and the story moves to Done (AI-124,
@@ -37,6 +36,9 @@ const AGENT_BRANCH = /^agent\/([A-Z][A-Z0-9]{0,9}-\d+)\/([^/]+)$/;
 /** A check can name several PRs; each costs host reads (ADR-0028). */
 const MAX_PRS_PER_CHECK = 3;
 const MAX_LISTED_FILES = 20;
+/** Review findings read per verdict (ADR-0028): the project's latest reviewed PRs only. */
+const FINDING_PULLS = 30;
+const FINDING_LIMIT = 300;
 
 function log(severity: "INFO" | "WARNING" | "ERROR", message: string, fields: object = {}) {
   console.log(JSON.stringify({ severity, message, component: "gate", ...fields }));
@@ -68,6 +70,11 @@ export class PullRequestGate {
     private readonly night: NightUnattended | null = null,
     /** Night launches' epic branches (AI-124); null: PRs into them never merge. */
     private readonly epicMerges: EpicMerges | null = null,
+    /**
+     * Review findings recorded per PR head (ADR-0097); null: unknown, so nothing merges into the
+     * default branch (the verdict fails closed on open should-fix findings it can't see).
+     */
+    private readonly findings: ReviewFindingSource | null = null,
   ) {}
 
   /** One recorded delivery. Replays never get here; a second delivery of a close is a no-op. */
@@ -96,7 +103,7 @@ export class PullRequestGate {
     const agent = await this.agentPr(pr, project);
     if (!agent || agent.run.outcome) return { result: "ignored", pr: number };
 
-    const decision = await this.assess(repo, pr, agent.run, agent.ticket);
+    const { decision, files } = await this.assess(repo, pr, agent.run, agent.ticket);
     const run = await this.runs.update(
       agent.run.id,
       {
@@ -124,16 +131,92 @@ export class PullRequestGate {
         this.epicMerges && passesIntoEpic(decision)
           ? await this.epicMerges.target(pr, run, agent.ticket)
           : null;
-      if (!launch) return { result: "assessed", ...base };
-      return this.merge(repo, pr, run, agent.ticket, launch.epicKey);
-    }
-
-    // The repo index caches projects for a minute: read the policy now.
-    const policy = (await this.tracker.getProject(project.id))?.autoMerge ?? "none";
-    if (!policyAllows(policy, agent.ticket.size) || agent.ticket.stage !== "ready_for_review") {
+      if (launch) return this.merge(repo, pr, run, agent.ticket, launch.epicKey);
+      // Into the default branch: record the verdict for this head too, so it never shows an
+      // older head's. It waits (gate_not_clean) whatever the other facts say.
+      if (pr.intoDefaultBranch) {
+        await this.verdictFor(repo, pr, run, agent.ticket, project, false, files);
+      }
       return { result: "assessed", ...base };
     }
-    return this.merge(repo, pr, run, agent.ticket);
+
+    const { mode, verdict } = await this.verdictFor(
+      repo,
+      pr,
+      run,
+      agent.ticket,
+      project,
+      true,
+      files,
+    );
+    if (verdict.verdict !== "merge") return { result: "assessed", ...base };
+    return this.merge(repo, pr, run, agent.ticket, null, mode);
+  }
+
+  /** The merge verdict for the PR's head under the project's mode, recorded on the Run. */
+  private async verdictFor(
+    repo: string,
+    pr: PullRequest,
+    run: Run,
+    ticket: Ticket,
+    project: Project,
+    gateClean: boolean,
+    files: Listing<ChangedFile>,
+  ): Promise<{ mode: Project["mergeMode"]; verdict: MergeVerdict }> {
+    // The repo index caches projects for a minute: read the mode now. Unset: nothing merges.
+    const mode = (await this.tracker.getProject(project.id))?.mergeMode ?? null;
+    const verdict = mergeVerdict(
+      {
+        gateClean,
+        files,
+        labels: pr.labels ?? null,
+        upToDate: await this.upToDate(repo, pr),
+        openFindings: await this.openFindings(project.id, repo, pr),
+        readyForReview: ticket.stage === "ready_for_review",
+      },
+      mode,
+    );
+    await this.recordVerdict(run, mode, verdict);
+    log("INFO", "merge verdict", { pr: pr.number, runId: run.id, mode, ...verdict });
+    return { mode, verdict };
+  }
+
+  /** The mode and verdict on the PR record (the Run), shown with the PR (ADR-0124 "Record"). */
+  private async recordVerdict(run: Run, mode: Project["mergeMode"], verdict: MergeVerdict) {
+    await this.runs.update(
+      run.id,
+      { mergeMode: mode, mergeVerdict: verdict.verdict, verdictReasons: verdict.reasons },
+      ["succeeded"],
+    );
+  }
+
+  /** Whether the head contains the default branch's tip; null (wait) when the host can't say. */
+  private async upToDate(repo: string, pr: PullRequest): Promise<boolean | null> {
+    try {
+      return await this.host.headContains(repo, pr.headSha, pr.baseRef);
+    } catch (err) {
+      log("WARNING", "up-to-date check failed", { pr: pr.number, error: errorText(err) });
+      return null;
+    }
+  }
+
+  /** Open findings recorded for this head; null (wait) without a source or when it fails. */
+  private async openFindings(
+    projectId: string,
+    repo: string,
+    pr: PullRequest,
+  ): Promise<number | null> {
+    if (!this.findings) return null;
+    try {
+      const recent = await this.findings.recent(projectId, {
+        maxPulls: FINDING_PULLS,
+        maxFindings: FINDING_LIMIT,
+      });
+      return openFindingsOn(recent, { repo, number: pr.number, headSha: pr.headSha });
+    } catch (err) {
+      log("WARNING", "review findings read failed", { pr: pr.number, error: errorText(err) });
+      return null;
+    }
   }
 
   /**
@@ -147,6 +230,8 @@ export class PullRequestGate {
     ticket: Ticket,
     /** The launch's epic key when merging into its epic branch (AI-124); null: the default branch. */
     epicKey: string | null = null,
+    /** The mode that allowed a merge into the default branch, for the ticket's record. */
+    mode: Project["mergeMode"] = null,
   ): Promise<GateResult> {
     const base = { pr: pr.number, runId: run.id };
     if (run.mergeAttemptedSha === pr.headSha) return { result: "assessed", ...base };
@@ -179,7 +264,14 @@ export class PullRequestGate {
       await this.recordEpicMerge(run, ticket, pr, sha);
       return { result: "merged", ...base };
     }
-    log("INFO", "auto-merged", base);
+    log("INFO", "auto-merged", { ...base, mode });
+    // ADR-0124 "Record": each merge without Andy says which mode allowed it.
+    await this.tracker.addComment(
+      ticket.projectId,
+      ticket.id,
+      `The gate merged PR #${pr.number} under merge mode ${mode ?? "unknown"}: every check and both reviews passed and the merge verdict allowed it.`,
+      "system",
+    );
     return { result: "merged", ...base };
   }
 
@@ -248,7 +340,7 @@ export class PullRequestGate {
 
     let decision: GateDecision | null = null;
     try {
-      decision = await this.assess(repo, pr, run, ticket);
+      decision = (await this.assess(repo, pr, run, ticket)).decision;
     } catch (err) {
       log("WARNING", "gate read failed at close", { runId: run.id, error: errorText(err) });
     }
@@ -346,7 +438,7 @@ export class PullRequestGate {
     pr: PullRequest,
     run: Run,
     ticket: Ticket,
-  ): Promise<GateDecision> {
+  ): Promise<{ decision: GateDecision; files: Listing<ChangedFile> }> {
     const rules = await this.rulesBranch(repo, pr);
     const [files, codeowners, required, checks, active] = await Promise.all([
       this.host.listChangedFiles(repo, pr.number),
@@ -356,7 +448,7 @@ export class PullRequestGate {
       this.host.listHeadChecks(repo, pr.headSha),
       this.runs.listActive(run.projectId),
     ]);
-    return decideGate({
+    const decision = decideGate({
       verification: run.verification,
       draft: pr.draft,
       intoDefaultBranch: pr.intoDefaultBranch,
@@ -368,6 +460,7 @@ export class PullRequestGate {
       syncPending: syncPendingFor(run, active, this.now()),
       ticketType: ticket.type,
     });
+    return { decision, files };
   }
 
   /**

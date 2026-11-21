@@ -443,17 +443,10 @@ describe("plan approval tools", () => {
     });
   });
 
-  it("GivenAProject_WhenSetAutoMergeIsCalled_ThenThePolicyIsSavedAndBadValuesRefused", async () => {
+  it("GivenTheMergeModes_WhenToolsAreListed_ThenSetAutoMergeIsGone", async () => {
+    // AI-215: the merge mode replaced the size policy; only the stored value stays (ADR-0124).
     const ctx = await withProject();
-    expect((await ctx.call("set_auto_merge", { project: "ai", policy: "none" })).data).toEqual({
-      project: "AI",
-      autoMerge: "none",
-    });
-    const projects = (await (await ctx.rest("/api/projects")).json()) as { autoMerge: string }[];
-    expect(projects[0]!.autoMerge).toBe("none");
-    expect(await ctx.call("set_auto_merge", { project: "AI", policy: "some" })).toMatchObject({
-      isError: true,
-    });
+    expect((await ctx.call("set_auto_merge", { project: "AI", policy: "all" })).isError).toBe(true);
   });
 
   it("GivenAStoredDispatchDecision_WhenStatusOverview_ThenItShowsTheReason", async () => {

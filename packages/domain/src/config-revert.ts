@@ -10,7 +10,7 @@ import {
 } from "@andy/contracts";
 import { revertPatch, revertReason, revertRefusal } from "./config-changes";
 import { DomainError } from "./errors";
-import { effectiveMergeMode, requireAutoMergeNotLoosening, requireTightening } from "./merge-mode";
+import { effectiveMergeMode, requireTightening } from "./merge-mode";
 import { requireCan } from "./permissions";
 import type { ProjectService } from "./projects";
 import type { RoutingSettings } from "./routing-settings";
@@ -103,9 +103,6 @@ export class ConfigRevert {
     if (via === "mcp" && "mergeMode" in patch) {
       const target = effectiveMergeMode({ ...project, mergeMode: patch.mergeMode ?? null });
       requireTightening(target, project);
-    }
-    if (via === "mcp" && patch.autoMerge !== undefined && !("mergeMode" in patch)) {
-      requireAutoMergeNotLoosening(patch.autoMerge, project);
     }
     const refusal = revertRefusal(change, project, logged);
     if (refusal) throw refusal;

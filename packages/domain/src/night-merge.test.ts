@@ -1,9 +1,10 @@
 import {
   InMemoryCodeHost,
+  InMemoryReviewFindingSource,
   InMemoryNightLaunchStore,
   InMemoryRunStore,
   InMemoryWorkTracker,
-  type AutoMerge,
+  type MergeMode,
   type HeadCheck,
   type NightEndReason,
   type NightLaunch,
@@ -118,10 +119,12 @@ describe("night merges into the epic branch (AI-124)", () => {
       now,
       null,
       withEpics ? new EpicMerges(nights, runs) : null,
+      new InMemoryReviewFindingSource(),
     );
 
-  async function setPolicy(autoMerge: AutoMerge) {
-    await tracker.updateProject(projectId, { autoMerge });
+  /** The project's merge mode (AI-215); null: none saved, so nothing merges into main. */
+  async function setMode(mergeMode: MergeMode | null) {
+    await tracker.updateProject(projectId, { mergeMode });
   }
 
   async function launch(storyKeys: string[], over: Partial<NightLaunch> = {}) {
@@ -211,6 +214,7 @@ describe("night merges into the epic branch (AI-124)", () => {
       headSha: `head${number}`,
       baseRef,
       url,
+      labels: [],
     };
     host.pullRequests.set(number, {
       pullRequest: pr,
@@ -239,7 +243,7 @@ describe("night merges into the epic branch (AI-124)", () => {
 
   describe("PullRequestGate", () => {
     it("GivenAStoryPrIntoItsRunningLaunchsEpicBranch_WhenTheGatePasses_ThenItMergesThereWhateverThePolicy", async () => {
-      await setPolicy("none");
+      await setMode("manual");
       const a = await story("A");
       await launch([a.key]);
       const { run, pr } = await agentPr(a);
@@ -480,7 +484,7 @@ describe("night merges into the epic branch (AI-124)", () => {
     });
 
     it("GivenAPrIntoMain_WhenThePolicyIsNone_ThenItIsNotMergedAsBefore", async () => {
-      await setPolicy("none");
+      await setMode("manual");
       const a = await story("A");
       await tracker.updateTicket(
         projectId,
@@ -500,8 +504,8 @@ describe("night merges into the epic branch (AI-124)", () => {
       expect(required).toHaveBeenCalledWith(REPO.fullName, "main");
     });
 
-    it("GivenAPrIntoMain_WhenThePolicyAllows_ThenItAutoMergesWithoutAnEpicMerge", async () => {
-      await setPolicy("all");
+    it("GivenAPrIntoMain_WhenTheModeAllows_ThenItAutoMergesWithoutAnEpicMerge", async () => {
+      await setMode("all-clean");
       const a = await story("A");
       const review = await tracker.updateTicket(
         projectId,
@@ -567,7 +571,7 @@ describe("night merges into the epic branch (AI-124)", () => {
     });
 
     it("GivenTheMorningPr_WhenItsChecksPass_ThenTheGateNeverMergesIt", async () => {
-      await setPolicy("all");
+      await setMode("all-clean");
       const a = await story("A");
       await launch([a.key]);
       await gate().apply(opened((await agentPr(a)).pr), await project());

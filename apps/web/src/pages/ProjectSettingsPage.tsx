@@ -1,14 +1,8 @@
 import type { ReactNode } from "react";
 import { useParams } from "@tanstack/react-router";
 import { LayerOrderHint } from "@/components/RouteLayers";
-import {
-  AutoMerge,
-  EnvironmentPolicy,
-  MergeMode,
-  PlanApproval,
-  type Project,
-} from "@andy/contracts";
-import { MERGE_MODE_TEXT, effectiveMergeMode } from "@andy/domain";
+import { EnvironmentPolicy, MergeMode, PlanApproval, type Project } from "@andy/contracts";
+import { MERGE_MODE_TEXT, suggestedMergeMode } from "@andy/domain";
 import { ClearQuotaIdle } from "@/components/ClearQuotaIdle";
 import { ConfigHistory } from "@/components/ConfigHistory";
 import { DispatchControls } from "@/components/DispatchControls";
@@ -63,10 +57,7 @@ export function ProjectSettingsPage() {
         <Setting what="Refine questions this project asks per rolling 24 hours; extras become assumptions.">
           <DailyQuestionCap project={project} />
         </Setting>
-        <Setting what="Which tickets' agent PRs merge on their own once every check and both reviews pass.">
-          <AutoMergeSelect project={project} />
-        </Setting>
-        <Setting what="Who merges this project's PRs (ADR-0124), strictest first. Nothing merges by it yet: auto-merge above decides until the gate switches over. Loosen it only here; over MCP it can only be tightened.">
+        <Setting what="Who merges this project's agent PRs once every check and both reviews pass (ADR-0124), strictest first. Until a mode is saved the gate merges nothing. Loosen it only here; over MCP it can only be tightened.">
           <MergeModeSelect project={project} />
         </Setting>
         <Setting what="Agent tasks at once: agent tasks this project may have in flight (1 to 4). Paused: dispatch starts nothing here; agent tasks in flight finish.">
@@ -247,30 +238,25 @@ function EnvironmentsSelect({ project }: { project: Project }) {
   );
 }
 
-const AUTO_MERGE_LABELS: Record<AutoMerge, string> = {
-  none: "none",
-  s: "S tickets",
-  "s-and-m": "S and M tickets",
-  all: "all tickets",
-};
-
 /**
- * The merge mode (ADR-0124): the one in force, with what merges without Andy in it. A project
- * stored before the setting shows the mode read from auto-merge until one is picked.
+ * The merge mode (ADR-0124): the saved one, with what merges without Andy in it. Not set (a
+ * project stored before the setting): the gate merges nothing until Andy picks one (ADR-0134),
+ * and ADR-0124's mapping is shown as a suggestion.
  */
 function MergeModeSelect({ project }: { project: Project }) {
   const update = useUpdateProject(project.id);
-  const mode = effectiveMergeMode(project);
+  const saved = project.mergeMode;
   return (
     <div className="ml-3 space-y-1 text-sm">
       <label className="inline-flex items-center gap-1">
         Merge mode
         <select
           className="rounded border border-border bg-background px-1"
-          value={mode}
+          value={saved ?? ""}
           disabled={update.isPending}
           onChange={(e) => update.mutate({ mergeMode: MergeMode.parse(e.target.value) })}
         >
+          {saved === null && <option value="">not set</option>}
           {MergeMode.options.map((o) => (
             <option key={o} value={o}>
               {o}
@@ -278,34 +264,12 @@ function MergeModeSelect({ project }: { project: Project }) {
           ))}
         </select>
       </label>
-      {project.mergeMode === null && (
-        <span className="ml-1 text-xs text-muted-foreground">(read from auto-merge)</span>
-      )}
-      <p className="text-xs">{MERGE_MODE_TEXT[mode]}</p>
+      <p className="text-xs">
+        {saved === null
+          ? `Not set: the gate merges nothing. Suggested: ${suggestedMergeMode(project)} (from the old auto-merge setting).`
+          : MERGE_MODE_TEXT[saved]}
+      </p>
       {update.error && <QueryError error={update.error} />}
     </div>
-  );
-}
-
-/** Which tickets' agent PRs merge on their own once the gate passes (ADR-0050). */
-function AutoMergeSelect({ project }: { project: Project }) {
-  const update = useUpdateProject(project.id);
-  return (
-    <label className="ml-3 inline-flex items-center gap-1 text-sm">
-      Auto-merge
-      <select
-        className="rounded border border-border bg-background px-1"
-        value={project.autoMerge}
-        disabled={update.isPending}
-        onChange={(e) => update.mutate({ autoMerge: e.target.value as AutoMerge })}
-      >
-        {AutoMerge.options.map((o) => (
-          <option key={o} value={o}>
-            {AUTO_MERGE_LABELS[o]}
-          </option>
-        ))}
-      </select>
-      {update.error && <QueryError error={update.error} />}
-    </label>
   );
 }

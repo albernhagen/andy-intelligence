@@ -199,7 +199,6 @@ describe("MCP OAuth flow (MCP SDK client)", () => {
       "reorder_ticket",
       "revert_spend_cap_change",
       "set_auto_build",
-      "set_auto_merge",
       "set_auto_refine",
       "set_default_executor",
       "set_default_worker",
