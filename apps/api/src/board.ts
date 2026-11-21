@@ -33,4 +33,4 @@ export function registerBoardRoutes(app: OpenAPIHono<AuthEnv>, board: BoardReade
 
 /** Listed in `api-routes.ts` (AI-145). */
 export const apiRoutes: RouteModule = (app, s) =>
-  registerBoardRoutes(app, new BoardReader(s.tracker, s.deps.runs, s.readCache));
+  registerBoardRoutes(app, new BoardReader(s.tracker, s.deps.runs, s.readCache, s.snapshots));
