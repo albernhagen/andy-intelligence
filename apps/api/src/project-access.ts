@@ -94,6 +94,7 @@ export const CROSS_PROJECT_TOOLS: Readonly<Record<string, string>> = {
   set_step_tier: "Without `project`, the global routing: owner only.",
   set_tier_routes: "Without `project`, the global routing: owner only.",
   status: "Without `ticket`, every project's counts: keep readable projects.",
+  test_email: "Needs-you email test send: owner only.",
 };
 
 /** What a refused lookup names, and the body an unknown one gets. */

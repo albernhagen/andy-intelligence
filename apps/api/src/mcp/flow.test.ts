@@ -218,6 +218,7 @@ describe("MCP OAuth flow (MCP SDK client)", () => {
       "status",
       "submit_brief",
       "submit_project_plan",
+      "test_email",
     ]);
   });
 

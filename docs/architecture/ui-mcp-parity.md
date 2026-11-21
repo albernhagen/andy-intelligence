@@ -22,6 +22,7 @@ Step 1 of AI-285: Web UI and MCP parity: every action in both, enforced by a tes
 | Settings changes: list, revert                           | `GET …/config-changes`, `POST …/config-changes/:id/revert`                      | `list_settings_changes`, `revert_settings_change`                                                                          |
 | Config proposals: list, accept, reject, sweep            | `GET /config-changes`, `POST …/accept`, `…/reject`, `…/config-proposals/sweep`  | `list_config_changes`, `accept_config_change`, `reject_config_change`, `sweep_config_proposals`                            |
 | Pause, runs at once                                      | `PATCH /projects/:id`                                                           | `set_paused`, `set_runs_at_once`                                                                                           |
+| Needs-you email: configured?, test send | `GET /notify/email`, `POST /notify/email/test` | `set_email_notifications` and `test_email` (AI-289) report `emailConfigured`; today's count and cap are web-only |
 | Quota: read, clear idle | `GET /quota`, `POST /quota/clear` | `get_quota` (AI-286), `clear_quota_idle` |
 | Spend caps: read, set, history, revert (project, global) | `GET …/spend`, `PUT …/spend-caps`, `GET`/`PUT /spend-caps`, `…/changes`, revert | `get_spend`, `set_spend_caps`, `set_global_spend_caps`, `list_spend_cap_changes`, `revert_spend_cap_change`                |
 | Spend per provider | `GET …/spend/providers` | `get_spend` (`byProvider`, AI-288) |
@@ -33,7 +34,6 @@ Step 1 of AI-285: Web UI and MCP parity: every action in both, enforced by a tes
 
 | Ticket                                                                 | Direction | Size | Missing side                                                 |
 | ---------------------------------------------------------------------- | --------- | ---- | ------------------------------------------------------------ |
-| AI-289: Parity: send a test email over MCP                             | UI-only   | S    | `GET /notify/email`, `POST …/test` → `test_email`            |
 | AI-290: Parity: ask a question on a ticket over MCP                    | done      | S    | `POST …/tickets/:id/questions` → `ask_question`              |
 | AI-291: Parity: edit_ticket sets needs-attention, risk and confidence  | done      | S    | `PATCH` fields → `edit_ticket`                               |
 | AI-292: Parity: set the daily question cap over MCP                    | UI-only   | S    | `PATCH dailyQuestionCap` → `set_daily_question_cap`          |
