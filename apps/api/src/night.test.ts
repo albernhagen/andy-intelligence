@@ -39,7 +39,7 @@ const BUDGET = { maxRuns: 10, maxTokens: 1_000_000, maxUsd: 20 };
 const REPO = "albernhagen/andy-intelligence";
 
 /** `github`: the App is connected and installed on the project's repo (AI-122: epic branch). */
-async function setup(opts: { github?: boolean } = {}) {
+async function setup(opts: { github?: boolean; connected?: boolean } = {}) {
   const tracker = new InMemoryWorkTracker();
   const runs = new InMemoryRunStore();
   const store = new InMemoryNightLaunchStore();
@@ -47,7 +47,7 @@ async function setup(opts: { github?: boolean } = {}) {
     { fullName: REPO, defaultBranch: "main", private: false, url: `https://github.com/${REPO}` },
   ]);
   const connections = new InMemoryCodeHostConnectionStore();
-  if (opts.github) {
+  if (opts.github && opts.connected !== false) {
     await connections.save({
       appId: "1",
       slug: "andy-intelligence",
@@ -184,7 +184,8 @@ describe("night launch API", () => {
     expect(launched.json).toMatchObject({ status: "running", budget: BUDGET });
     expect(night.launch).toMatchObject({ status: "running" });
     expect(night.progress).toEqual({
-      stories: { total: 2, done: 0, running: 1, stopped: 0, waiting: 1 },
+      stories: { total: 2, done: 0, running: 1, stopped: 0, skipped: 0, waiting: 1 },
+      nightAssumptions: 0,
       spend: { runs: 1, tokens: 0, estimatedUsd: 0, unknownRuns: 0 },
     });
   });
@@ -249,6 +250,16 @@ describe("night launch API", () => {
       endReason: "stopped",
       epicBranch: branch,
     });
+  });
+
+  it("GivenGitHubSetUpButNotConnected_WhenLaunched_ThenItLaunchesWithoutAnEpicBranch", async () => {
+    const { ready, call, path } = await setup({ github: true, connected: false });
+    await ready("First");
+
+    const launched = await call("POST", path, { budget: BUDGET, stopAt: inHours(4) });
+
+    expect(launched.status).toBe(200);
+    expect(launched.json).toMatchObject({ status: "running", epicBranch: null });
   });
 
   it("GivenNoGitHub_WhenLaunched_ThenNoEpicBranchAndStoriesBuildOnTheDefaultBranch", async () => {
@@ -371,11 +382,69 @@ describe("progressOf", () => {
       storyKeys: [done.key, flagged.key, waiting.key, "AI-99"],
       startedAt,
       createdAt: startedAt,
-    } as NightLaunch;
+      stoppedStories: [],
+    } as unknown as NightLaunch;
 
     expect(await progressOf({ tracker, runs }, launch)).toEqual({
-      stories: { total: 4, done: 1, running: 0, stopped: 1, waiting: 2 },
+      stories: { total: 4, done: 1, running: 0, stopped: 1, skipped: 0, waiting: 2 },
+      nightAssumptions: 0,
       spend: { runs: 2, tokens: 120, estimatedUsd: 1.23, unknownRuns: 1 },
+    });
+  });
+
+  it("GivenAStoryStoppedForTheNightAndNightAssumptions_WhenRead_ThenStoppedSkippedAndAssumptionsAreCounted", async () => {
+    const tracker = new InMemoryWorkTracker();
+    const runs = new InMemoryRunStore();
+    await tracker.createProject({ name: "AI", key: "AI" });
+    const make = (title: string) => tracker.createTicket("ai", story(title), "andy");
+    const [failed, dependant, assumed] = [await make("Failed"), await make("Dep"), await make("A")];
+    const at = new Date().toISOString();
+    const assumption = (id: string, nightLaunchId: string | null) => ({
+      id,
+      text: "Use the existing table.",
+      question: "Which table?",
+      options: [],
+      cost: "scope" as const,
+      confidence: "sure" as const,
+      demotedBy: null,
+      nightLaunchId,
+      runId: "r1",
+      status: "assumed" as const,
+      questionId: null,
+      answeredAt: null,
+      settledBy: null,
+      createdAt: at,
+      context: null,
+      choices: [],
+      recommendation: null,
+    });
+    await tracker.updateTicket(
+      "ai",
+      assumed.id,
+      {
+        fields: {
+          refineAssumptions: [
+            assumption("r1-a1", "night-1"),
+            assumption("r1-a2", "night-1"),
+            assumption("r1-a3", null),
+            assumption("r1-a4", "night-0"),
+          ],
+        },
+      },
+      "andy",
+    );
+    const launch = {
+      id: "night-1",
+      projectId: "ai",
+      storyKeys: [failed.key, dependant.key, assumed.key],
+      startedAt: at,
+      createdAt: at,
+      stoppedStories: [{ key: failed.key, reason: "build failed", at, skipped: [dependant.key] }],
+    } as unknown as NightLaunch;
+
+    expect(await progressOf({ tracker, runs }, launch)).toMatchObject({
+      stories: { total: 3, done: 0, running: 0, stopped: 1, skipped: 1, waiting: 1 },
+      nightAssumptions: 2,
     });
   });
 });

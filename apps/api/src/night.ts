@@ -71,10 +71,14 @@ export const NightProgress = z.object({
     total: z.number().int(),
     done: z.number().int(),
     running: z.number().int(),
-    /** Flagged Needs-you or cancelled: the night won't move them on. */
+    /** Stopped for the night (AI-123), flagged Needs-you or cancelled: the night won't move them on. */
     stopped: z.number().int(),
+    /** Waiting on a stopped story (AI-123): they don't start tonight. */
+    skipped: z.number().int(),
     waiting: z.number().int(),
   }),
+  /** Assumptions this launch made instead of asking (AI-123), for Andy to review in the morning. */
+  nightAssumptions: z.number().int(),
   /** Spend of the stories' agent tasks created since the launch started, against its budget. */
   spend: z.object({
     runs: z.number().int(),
@@ -175,16 +179,29 @@ export async function progressOf(
   const keys = new Set(launch.storyKeys);
   const stories = (await deps.tracker.listTickets(launch.projectId)).filter((t) => keys.has(t.key));
   const since = launch.startedAt ?? launch.createdAt;
-  const counts = { total: launch.storyKeys.length, done: 0, running: 0, stopped: 0, waiting: 0 };
+  const counts = {
+    total: launch.storyKeys.length,
+    done: 0,
+    running: 0,
+    stopped: 0,
+    skipped: 0,
+    waiting: 0,
+  };
   const spend = { runs: 0, tokens: 0, estimatedUsd: 0, unknownRuns: 0 };
+  const stoppedKeys = new Set(launch.stoppedStories.map((s) => s.key));
+  const skippedKeys = new Set(launch.stoppedStories.flatMap((s) => s.skipped));
+  let nightAssumptions = 0;
   for (const t of stories) {
+    nightAssumptions += t.refineAssumptions.filter((a) => a.nightLaunchId === launch.id).length;
     const runs = (await deps.runs.listForTicket(t.projectId, t.id)).filter(
       (r) => (r.createdAt ?? "") >= since,
     );
     const active = runs.some((r) => ACTIVE_RUN.has(r.status));
     if (t.stage === "done") counts.done++;
     else if (active) counts.running++;
-    else if (t.needsAttention || t.stage === "cancelled") counts.stopped++;
+    else if (stoppedKeys.has(t.key) || t.needsAttention || t.stage === "cancelled")
+      counts.stopped++;
+    else if (skippedKeys.has(t.key)) counts.skipped++;
     else counts.waiting++;
     for (const r of runs) {
       spend.runs++;
@@ -195,7 +212,11 @@ export async function progressOf(
   }
   // A story key no longer under the project (moved or deleted) counts as waiting.
   counts.waiting += counts.total - stories.length;
-  return { stories: counts, spend: { ...spend, estimatedUsd: round2(spend.estimatedUsd) } };
+  return {
+    stories: counts,
+    nightAssumptions,
+    spend: { ...spend, estimatedUsd: round2(spend.estimatedUsd) },
+  };
 }
 
 const round2 = (n: number) => Math.round(n * 100) / 100;

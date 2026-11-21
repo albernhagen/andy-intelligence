@@ -125,6 +125,7 @@ export function renderApp(
     quota,
     codeHost,
     connections,
+    nightLaunches,
     service: new TicketService(tracker),
   };
 }

@@ -78,9 +78,12 @@ export function NightLaunch(path: TicketPath) {
           ) : (
             <>
               {n.launch && (
-                <p className="text-xs text-muted-foreground">
-                  Last launch ended: {n.launch.endReason ?? "unknown"}.
-                </p>
+                <>
+                  <p className="text-xs text-muted-foreground">
+                    Last launch ended: {n.launch.endReason ?? "unknown"}.
+                  </p>
+                  <NightReport night={n} />
+                </>
               )}
               <LaunchForm path={path} night={n} />
             </>
@@ -277,13 +280,14 @@ function Running({ path, night }: { path: TicketPath; night: NightStatus }) {
         <>
           <p aria-label="Night progress" className="tabular-nums">
             {p.stories.done} of {p.stories.total} stories done · {p.stories.running} running ·{" "}
-            {p.stories.stopped} stopped · {p.stories.waiting} waiting
+            {p.stories.stopped} stopped · {p.stories.skipped} skipped · {p.stories.waiting} waiting
           </p>
           <p aria-label="Night spend" className="text-muted-foreground tabular-nums">
             {formatSpend(p.spend, launch.budget)}
           </p>
         </>
       )}
+      <NightReport night={night} />
       {stopping ? (
         <p className="text-xs text-muted-foreground">
           No new agent tasks start; the ones in flight finish.
@@ -299,6 +303,37 @@ function Running({ path, night }: { path: TicketPath; night: NightStatus }) {
         </Button>
       )}
       {stop.error && <QueryError error={stop.error} />}
+    </div>
+  );
+}
+
+/**
+ * What the night decided alone (AI-123), for the morning: stories it stopped, with why and the
+ * dependants it skipped, and how many assumptions it made instead of asking.
+ */
+function NightReport({ night }: { night: NightStatus }) {
+  const stopped = night.launch?.stoppedStories ?? [];
+  const assumptions = night.progress?.nightAssumptions ?? 0;
+  if (stopped.length === 0 && assumptions === 0) return null;
+  return (
+    <div className="space-y-1 text-sm">
+      {assumptions > 0 && (
+        <p aria-label="Night assumptions">
+          {assumptions} night assumption{assumptions === 1 ? "" : "s"} to review on the stories.
+        </p>
+      )}
+      {stopped.length > 0 && (
+        <ul aria-label="Stopped for the night" className="list-disc pl-5">
+          {stopped.map((s) => (
+            <li key={s.key}>
+              <span className="font-medium">{s.key}</span> stopped: {s.reason}
+              {s.skipped.length > 0 && (
+                <span className="text-muted-foreground"> (skipped {s.skipped.join(", ")})</span>
+              )}
+            </li>
+          ))}
+        </ul>
+      )}
     </div>
   );
 }

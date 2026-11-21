@@ -110,7 +110,7 @@ describe("plan the night", () => {
     const running = await within(section).findByLabelText("Night launch");
     expect(within(running).getByText("Running")).toBeTruthy();
     expect(within(running).getByLabelText("Night progress").textContent).toBe(
-      "0 of 2 stories done · 0 running · 0 stopped · 2 waiting",
+      "0 of 2 stories done · 0 running · 0 stopped · 0 skipped · 2 waiting",
     );
     expect(within(running).getByLabelText("Night spend").textContent).toBe(
       "0 of 20 agent tasks · 0 of 5,000,000 tokens · ~$0.00 of $50 (estimate)",
@@ -122,6 +122,34 @@ describe("plan the night", () => {
       expect(within(section).getByText("Last launch ended: stopped.")).toBeTruthy(),
     );
     expect(within(section).getByRole("form", { name: "Launch the night" })).toBeTruthy();
+  });
+
+  it("GivenAStoryStoppedForTheNight_WhenTheLaunchIsShown_ThenItsReasonAndSkippedDependantsAreListed", async () => {
+    const { harness, section, stories } = await withEpic([{}, {}]);
+    const form = await within(section).findByRole("form", { name: "Launch the night" });
+    const stopAt = new Date(Date.now() + 4 * 3_600_000);
+    const local = new Date(stopAt.getTime() - stopAt.getTimezoneOffset() * 60_000)
+      .toISOString()
+      .slice(0, 16);
+    fireEvent.change(within(form).getByLabelText(/^Stop time/), { target: { value: local } });
+    fireEvent.click(within(form).getByRole("button", { name: "Launch" }));
+    await within(section).findByLabelText("Night launch");
+    const [launch] = await harness.nightLaunches.listForProject("ai");
+    await harness.nightLaunches.stopStory(launch!.id, {
+      key: stories[0]!.key,
+      reason: "its build failed for good",
+      at: new Date().toISOString(),
+      skipped: [stories[1]!.key],
+    });
+    await harness.queryClient.invalidateQueries();
+
+    const list = await within(section).findByRole("list", { name: "Stopped for the night" });
+    expect(list.textContent).toBe(
+      `${stories[0]!.key} stopped: its build failed for good (skipped ${stories[1]!.key})`,
+    );
+    expect(within(section).getByLabelText("Night progress").textContent).toBe(
+      "0 of 2 stories done · 0 running · 1 stopped · 1 skipped · 0 waiting",
+    );
   });
 
   it("GivenAStoryNotReady_WhenTheSectionOpens_ThenItsProblemShowsUnderIt", async () => {

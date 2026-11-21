@@ -8873,8 +8873,10 @@ export interface components {
           done: number;
           running: number;
           stopped: number;
+          skipped: number;
           waiting: number;
         };
+        nightAssumptions: number;
         spend: {
           runs: number;
           tokens: number;
@@ -8927,6 +8929,15 @@ export interface components {
         name: string;
         sha: string;
       } | null;
+      /** @default [] */
+      stoppedStories: {
+        key: string;
+        reason: string;
+        /** Format: date-time */
+        at: string;
+        /** @default [] */
+        skipped: string[];
+      }[];
     } | null;
     LaunchNight: {
       budget: {

@@ -27,6 +27,7 @@ import {
   ConfigProposals,
   NightLaunches,
   EpicBranches,
+  type EpicBranchOpener,
   DigestReader,
   QuotaClearer,
   BriefService,
@@ -436,9 +437,7 @@ export function createApp(input: AppDeps) {
           runs,
           now,
           undefined,
-          connection
-            ? new EpicBranches(deps.tracker, new ConnectedCodeHost(connection), deps.nightLaunches)
-            : null,
+          connection ? connectedEpicBranches(connection, deps.tracker, deps.nightLaunches) : null,
         ),
         store: deps.nightLaunches,
         tracker: deps.tracker,
@@ -533,4 +532,20 @@ export function createApp(input: AppDeps) {
   });
 
   return app;
+}
+
+/**
+ * AI-122 epic branches, once GitHub is connected: before setup (or in local dev) a launch opens
+ * none and its stories build on the default branch, as `NightLaunch.epicBranch` allows.
+ */
+function connectedEpicBranches(
+  connection: GitHubConnection,
+  tracker: WorkTracker,
+  launches: NightLaunchStore,
+): EpicBranchOpener {
+  const branches = new EpicBranches(tracker, new ConnectedCodeHost(connection), launches);
+  return {
+    open: async (projectId, epic) =>
+      (await connection.codeHost()) ? branches.open(projectId, epic) : null,
+  };
 }

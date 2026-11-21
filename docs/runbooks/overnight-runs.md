@@ -30,6 +30,8 @@ Over MCP (Claude):
 
 ## 3. Watch and stop
 
-While it runs, the section shows stories done, running, stopped (flagged Needs-you or cancelled) and waiting, and the spend of the stories' agent tasks since the launch against the budget. Tasks without a usage report count as unknown, never $0.
+While it runs, the section shows stories done, running, stopped (stopped for the night, flagged Needs-you or cancelled), skipped (waiting on a stopped story) and waiting, and the spend of the stories' agent tasks since the launch against the budget. Tasks without a usage report count as unknown, never $0.
 
-To stop early: **Stop** in the section, or MCP `stop_night` with the epic's key. The launch shows **Stopping** while its stories still have agent tasks in flight, then ends ("stopped"). A launch past its stop time ends too ("stop_time"). Both are checked whenever the section, `night_status`, a launch or a stop reads the launch, so an over night never blocks the next one. M4.18 will end launches on its own.
+While a launch runs, refine asks nothing on its stories: what would have been a question becomes a night assumption (AI-123). In the morning the section (and `night_status`) shows how many to review, and each stopped story with why and the stories it skipped; review the assumptions on each story's page.
+
+To stop early: **Stop** in the section, or MCP `stop_night` with the epic's key. The launch shows **Stopping** while its stories still have agent tasks in flight, then ends ("stopped"). A launch past its stop time ends too ("stop_time"). Both are checked whenever the section, `night_status`, a launch or a stop reads the launch, so an over night never blocks the next one; the dispatcher ends launches on its own too (AI-121).
