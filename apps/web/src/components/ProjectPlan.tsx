@@ -106,6 +106,7 @@ function WaitingPlan({ projectId, plan }: { projectId: string; plan: Plan }) {
       <div className="flex flex-wrap items-center gap-2">
         <Button
           size="sm"
+          className="h-11 sm:h-8"
           disabled={decide.isPending}
           onClick={() => decide.mutate({ decision: "approved" })}
         >
@@ -138,7 +139,7 @@ function RejectControls({
     <>
       <input
         aria-label="Reason to reject"
-        className="min-w-48 flex-1 rounded-md border border-border px-2 py-1"
+        className="h-11 min-w-48 flex-1 rounded-md border border-border px-2 py-1 text-base sm:h-auto sm:text-sm"
         placeholder="Why reject? (required)"
         value={reason}
         onChange={(e) => setReason(e.target.value)}
@@ -146,6 +147,7 @@ function RejectControls({
       <Button
         size="sm"
         variant="outline"
+        className="h-11 sm:h-8"
         disabled={pending || reason.trim() === ""}
         onClick={() => decide(reason.trim())}
       >
