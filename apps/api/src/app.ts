@@ -11,6 +11,7 @@ import {
   type WatchdogQueue,
   type WorkTracker,
   type QuotaStore,
+  type NightLaunchStore,
 } from "@andy/contracts";
 import { ClaudeCodeActionsExecutor, exchangeManifestCode, type CreatedApp } from "@andy/github";
 import {
@@ -27,6 +28,7 @@ import {
   DigestReader,
   QuotaClearer,
   BriefService,
+  IdeateService,
   ProjectPlanService,
   TicketService,
   EmailNotifications,
@@ -51,6 +53,7 @@ import { noReviewFindings, registerConfigProposalRoutes } from "./config-proposa
 import { registerNotifyFlush, registerNotifyRoutes } from "./notify";
 import { registerReviewFindings } from "./review-findings";
 import { registerBriefRoutes } from "./brief";
+import { registerIdeateRoutes } from "./ideate";
 import { registerProjectPlanRoutes } from "./project-plan";
 import {
   ConnectedCodeHost,
@@ -99,6 +102,8 @@ export interface AppDeps {
   reviewFindings?: ReviewFindingLog;
   /** Subscription quota readings (M1.9). Without it every window reads unknown. */
   quota?: QuotaStore;
+  /** Night launches (ADR-0049): a launched story's build gets its `epic/<KEY>` base (AI-122). */
+  nightLaunches?: NightLaunchStore;
   /**
    * The only host served (ADR-0044), e.g. `ai.andybernhagen.com`. Requests for any other host
    * (the default run.app URLs) get 404, except /health for monitoring. Unset: every host (local dev).
@@ -281,6 +286,7 @@ export function createApp(input: AppDeps) {
     async (projectId) => runEnded(projectId),
     connection ? new ConnectedCodeHost(connection) : null,
     runnerPresence,
+    deps.nightLaunches ?? null,
   );
   const refiner = new RefineDispatcher(deps.tracker, deps.runs, runs, now);
   const builder = new BuildDispatcher(deps.tracker, deps.runs, runs, now, deps.quota ?? null);
@@ -445,6 +451,13 @@ export function createApp(input: AppDeps) {
     now,
   );
   registerBriefRoutes(app, brief);
+  const ideate = new IdeateService(
+    deps.tracker,
+    service,
+    connection ? new ConnectedCodeHost(connection) : null,
+    now,
+  );
+  registerIdeateRoutes(app, ideate);
   const plans = new ProjectPlanService(
     deps.tracker,
     service,
@@ -485,6 +498,7 @@ export function createApp(input: AppDeps) {
       notifyEmail: email,
       quota: quotaClearer,
       brief,
+      ideate,
       plans,
       configProposals,
     });
