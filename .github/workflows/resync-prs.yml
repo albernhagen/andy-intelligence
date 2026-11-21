@@ -1,0 +1,45 @@
+name: Re-sync open PRs
+
+# When main moves, each open same-repo PR that lacks it gets main merged in by GitHub's
+# update-branch API: clean merges only, a conflict gets one comment naming the files (AI-147,
+# ADR-0111). Agent PRs are left to sync tasks (ADR-0083). Project baseline caller (ADR-0038).
+#
+# Off until the repo variable RESYNC_PRS is `on` (also the pause switch). Loop guard: it runs only
+# on pushes to main, and its own updates push to PR branches, never main. Newer pushes cancel an
+# older run (the newer one covers every PR). Caps live in scripts/resync-prs.mjs.
+#
+# The job holds a write token (from the control plane, ADR-0043) but runs only main's code: the
+# event is a push to main, so the checkout is main. PR heads are fetched as git objects for
+# `git merge-tree` only: nothing from a PR is checked out or run.
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions: {}
+
+concurrency:
+  group: resync-prs
+  cancel-in-progress: true
+
+jobs:
+  resync-prs:
+    if: vars.RESYNC_PRS == 'on' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read # check out main; fetch PR heads as objects
+      pull-requests: read # list open PRs and their comments
+      actions: read # count this workflow's runs in the last hour (cap)
+      id-token: write # Actions OIDC token for the control plane's /github/token (the write token)
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: ./platform/actions/resync-prs
+        with:
+          github-token: ${{ github.token }}
+          # The control plane's public URL (also the OIDC audience). Not secret.
+          control-plane-url: https://ai.andybernhagen.com

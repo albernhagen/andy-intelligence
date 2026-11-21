@@ -40,6 +40,13 @@ export function DigestPage() {
             </Button>
           ))}
         </div>
+        <Link
+          to="/p/$projectId/whats-new"
+          params={{ projectId }}
+          className="ml-auto text-sm text-muted-foreground underline-offset-2 hover:underline"
+        >
+          What's new
+        </Link>
       </header>
       {digest.isPending ? (
         <Loading />
