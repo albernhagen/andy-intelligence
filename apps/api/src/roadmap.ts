@@ -1,5 +1,5 @@
 import { createRoute, z, type OpenAPIHono } from "@hono/zod-openapi";
-import { Stage } from "@andy/contracts";
+import { MilestoneStatus, Stage } from "@andy/contracts";
 import type {
   ProjectRoadmap as ProjectRoadmapValue,
   RoadmapEpic as RoadmapEpicValue,
@@ -12,8 +12,9 @@ import type { RouteModule } from "./services";
 
 /**
  * The roadmap (AI-193: M4.25, ADR-0108): top-level epics with outcome, "Done when", state,
- * progress and open-ticket counts, for one project or every readable one. Read-only; computed
- * from each project's board through the read cache (ADR-0126); first 50 projects by key.
+ * progress and open-ticket counts, grouped under the project's milestones in order (AI-305:
+ * M4.35, ADR-0131), for one project or every readable one. Read-only; computed from each
+ * project's board through the read cache (ADR-0126) and one milestone list; first 50 projects.
  */
 
 const ErrorBody = z.object({ error: z.string(), details: z.array(z.string()).optional() });
@@ -49,11 +50,25 @@ const RoadmapEpic = z.object({
   children: z.array(ChildEpic),
 }) satisfies z.ZodType<RoadmapEpicValue>;
 
+const RoadmapMilestone = z.object({
+  id: z.string(),
+  name: z.string(),
+  outcome: z.string(),
+  order: z.number().int(),
+  status: MilestoneStatus,
+  done: z.boolean().describe("Computed: approved, with every epic Done"),
+  progress: z.object({ done: Count, total: Count }),
+  counts: epicFields.counts,
+  epicKeys: z.array(z.string()),
+});
+
 export const ProjectRoadmap = z
   .object({
     projectId: z.string(),
     projectKey: z.string(),
     projectName: z.string(),
+    milestones: z.array(RoadmapMilestone),
+    noMilestone: z.array(z.string()).describe("Top-level epics with no milestone, by key"),
     epics: z.array(RoadmapEpic),
     truncated: z.boolean(),
   })

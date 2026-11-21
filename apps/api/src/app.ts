@@ -73,8 +73,9 @@ export interface AppDeps {
    */
   releaseNotes?: ReleaseNoteStore;
   /**
-   * Milestones (ADR-0131). Dispatch and night launches read them (AI-306); unset, a ticket with a
-   * milestone is held and one without runs as before. Absent: no milestone routes or tools (AI-304).
+   * Milestones (ADR-0131). Dispatch, night launches (AI-306) and the roadmap (AI-305) read them;
+   * unset, a ticket with a milestone is held and one without runs as before, and the roadmap lists
+   * every epic under No milestone. Absent: no milestone routes or tools (AI-304).
    */
   milestones?: MilestoneStore;
   /** Subscription quota readings (M1.9). Without it every window reads unknown. */

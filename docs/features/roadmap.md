@@ -1,6 +1,6 @@
 # Roadmap data
 
-A project's top-level epics from its tickets in rank order (Done ones too), each with its outcome, Done-when lines, state (not started, in progress, done), progress and counts of open tickets (needs you, in review, in progress, blocked, not started). Child epics nest one level and count toward their parent. Computed on read from each project's board through the read cache; never stored (AI-193, ADR-0108). The screen comes with M4.26.
+A project's milestones in order, each with its status (not reviewed, approved, parked), whether it is done (approved, with every epic Done), progress and counts of open tickets summed over its epics, and its epics' keys; epics with no milestone come under "No milestone" (AI-305, ADR-0131). Every top-level epic is listed too, in rank order (Done ones included), with its outcome, Done-when lines, state, progress and counts (needs you, in review, in progress, blocked, not started); child epics nest one level and count toward their parent (AI-193). Computed on read from each project's board through the read cache and one milestone list; never stored. The screen comes with M4.26.
 
 **Milestones** (ADR-0131, AI-304): a project's ordered groups of top-level epics, each not reviewed, approved or parked. Andy creates, renames, reorders and sets their status, and attaches an epic (its child epics and tickets take its milestone); each change is in the project's change log and can be reverted there. Web and MCP do the same; milestones aren't deleted (park one).
 
