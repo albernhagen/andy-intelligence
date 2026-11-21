@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { Timestamp } from "./common";
 
 /**
  * Spend caps for paid models (M10: Paid models + spend caps, AI-235: M10.3). Integer
@@ -17,6 +18,19 @@ export const SpendCaps = z.object({
   perTaskMicroUsd: amount,
 });
 export type SpendCaps = z.infer<typeof SpendCaps>;
+
+/**
+ * The global caps as stored (AI-276), stamped with when they were last saved. Nothing stored
+ * means the code defaults (`DEFAULT_SPEND_CAPS`).
+ */
+export const StoredSpendCaps = SpendCaps.extend({ updatedAt: Timestamp });
+export type StoredSpendCaps = z.infer<typeof StoredSpendCaps>;
+
+/** A stamp later than `previous` and not before `now`, so a save never reuses a stamp. */
+export function nextSpendCapsStamp(previous: string | null, now: Date): string {
+  const floor = previous === null ? 0 : Date.parse(previous) + 1;
+  return new Date(Math.max(now.getTime(), floor)).toISOString();
+}
 
 /** A project's own caps; a missing or null field takes the global value. */
 export const ProjectSpendCaps = z.object({

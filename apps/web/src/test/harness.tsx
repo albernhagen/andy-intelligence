@@ -9,6 +9,7 @@ import {
   InMemoryConfigChangeStore,
   InMemoryDeploymentStore,
   InMemoryRoutingConfigStore,
+  InMemorySpendCapsStore,
   InMemoryNightLaunchStore,
   InMemoryReviewFindingSource,
   InMemoryQuotaStore,
@@ -52,6 +53,7 @@ export function renderApp(
   const nightLaunches = new InMemoryNightLaunchStore();
   const deployments = new InMemoryDeploymentStore();
   const routing = new InMemoryRoutingConfigStore();
+  const spendCapsStore = new InMemorySpendCapsStore();
   const reviewFindings = new InMemoryReviewFindingSource();
   // GitHub fakes (ADR-0043): one installed repo; any manifest code "connects" this App.
   const connections = new InMemoryCodeHostConnectionStore();
@@ -83,6 +85,7 @@ export function renderApp(
     deployments,
     reviewFindings,
     routing,
+    spendCapsStore,
     email: opts.email,
     github: {
       publicUrl: "http://localhost",

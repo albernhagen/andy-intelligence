@@ -96,13 +96,15 @@ export function SpendCaps({ projectId }: { projectId: string }) {
       <h3 className="text-sm font-medium">Spend caps</h3>
       <p className="text-xs text-muted-foreground">
         Paid models only; the Claude subscription never counts. A project cap can only be lower than
-        the global one; empty takes the global cap. Global caps are defaults for now.
+        the global one; empty takes the global cap. Global caps: Settings → Models.
       </p>
       <table className="w-full text-sm">
         <thead className="text-xs text-muted-foreground">
           <tr>
             <th className="text-left font-normal">Cap</th>
-            <th className="text-left font-normal">Global (default)</th>
+            <th className="text-left font-normal">
+              {view.global.source === "default" ? "Global (default)" : "Global"}
+            </th>
             <th className="text-left font-normal">This project ($)</th>
             <th className="text-left font-normal">In force</th>
           </tr>
