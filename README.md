@@ -10,7 +10,7 @@ What is built on `main` now. Target design: [ARCHITECTURE.md](docs/architecture/
  Browser UI ─┐                                   ┌─ Firestore (tickets, questions, history, runs, OAuth grants, webhook events)
              ├─▶ Cloud Run: control-plane ───────┤
  Claude (MCP)┤   API + /mcp + OAuth + SPA        ├─ Cloud Tasks queue (run-watchdog: one check per run at its deadline)
- GitHub App ─┘   + /webhooks/github                ├─ Secret Manager (GitHub App key, webhook secret, Resend key)
+ GitHub App ─┘   + /webhooks/github                ├─ Secret Manager (GitHub App key, webhook secret, Resend and Jules keys)
                                                    └─ Resend (Needs-you email; off until configured)
  GitHub PRs ──▶ CI checks + review agents (GitHub Actions)
  Agent tasks ◀─▶ agent-run.yml → claude-executor.yml (GitHub Actions; dispatched by the App, call back with OIDC)
