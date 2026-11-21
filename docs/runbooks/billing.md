@@ -121,6 +121,8 @@ Windows are rolling; an alert auto-closes a day after usage drops. To tune, set 
 
 **When one fires:** find the cause in Cloud Run metrics, Firestore usage, or Logs Explorer. If it's abuse or a runaway loop, use the emergency stop in section 4.
 
+**Firestore reads (AI-315):** every request and every dispatch event logs the documents it read. In Logs Explorer, query `jsonPayload.component="read-meter"` over the alert's hour, then add up `jsonPayload.reads` by `jsonPayload.route` (and `jsonPayload.tool` for MCP calls on `/mcp`); `message="dispatch reads"` lines are dispatch events (their reads also count in the request that caused them). The biggest total is the cause.
+
 **Test (a few minutes):** `terraform apply -var 'usage_alert_thresholds={run_requests_per_5m=0}'`, open the app (any request), wait for the email, then `terraform apply` to restore.
 
 ## 6. Other caps (in `infra/control-plane`, CI-planned)
