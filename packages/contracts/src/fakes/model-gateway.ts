@@ -31,6 +31,6 @@ export class InMemoryModelGateway implements ModelGateway {
       const { status, reason } = this.answer;
       return { outcome: "error", status, reason: reason ?? `provider answered ${status}` };
     }
-    return { outcome: "ok", text: this.answer.text, usage: this.answer.usage };
+    return { outcome: "ok", text: this.answer.text, usage: this.answer.usage, attempts: 1 };
   }
 }
