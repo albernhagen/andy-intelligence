@@ -105,7 +105,7 @@ The seven stages, their exit criteria, allowed moves (forward, re-refine, retry,
 
 ### 4.2 Definition of Ready (per type)
 
-Per type (feature, chore, bug): intent, criteria ("… shall …" for features), size with reason, dependencies, no open questions; epics need only intent; tier comes from size; checked by `checkDor` in `packages/domain`. [`workflow.md` §4.2](workflow.md#42-definition-of-ready-per-type-adr-0058)
+Per type (feature, chore, bug, spike): intent, criteria ("… shall …" for features), size with reason, dependencies, no open questions; epics need only intent; tier comes from size; checked by `checkDor` in `packages/domain`. [`workflow.md` §4.2](workflow.md#42-definition-of-ready-per-type-adr-0058)
 
 ### 4.3 Refinement and questions
 

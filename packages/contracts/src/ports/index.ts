@@ -414,6 +414,7 @@ export const RunPatch = Run.pick({
   verification: true,
   gateReasons: true,
   protectedFiles: true,
+  outsideDocs: true,
   gateFlaggedAt: true,
   mergeAttemptedSha: true,
   mergeError: true,
