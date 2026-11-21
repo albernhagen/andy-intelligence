@@ -12,6 +12,7 @@ import {
   type WorkTracker,
   type QuotaStore,
   type DeploymentStore,
+  type MilestoneStore,
   type RoutingConfigStore,
   type NightLaunchStore,
   type ProjectVersions,
@@ -71,6 +72,12 @@ export interface AppDeps {
    * route, no MCP tool) when unset.
    */
   releaseNotes?: ReleaseNoteStore;
+  /**
+   * Milestones (ADR-0131). Dispatch, night launches (AI-306) and the roadmap (AI-305) read them;
+   * unset, a ticket with a milestone is held and one without runs as before, and the roadmap lists
+   * every epic under No milestone.
+   */
+  milestones?: MilestoneStore;
   /** Subscription quota readings (M1.9). Without it every window reads unknown. */
   quota?: QuotaStore;
   /** Night launches (ADR-0049): a launched story's build gets its `epic/<KEY>` base (AI-122). */
