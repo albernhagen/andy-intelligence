@@ -155,6 +155,17 @@ describe("requireProjectAccess (AI-252)", () => {
     return { app, handler };
   }
 
+  it("GivenARefusal_WhenAProjectRouteIsCalledWithHead_ThenNotFoundWithoutItsHandler", async () => {
+    vi.spyOn(console, "log").mockImplementation(() => undefined);
+    const { app, handler } = miniApp(recordingAccess().access);
+    const res = await app.request("http://localhost/api/projects/ops/board", { method: "HEAD" });
+    expect(res.status).toBe(404);
+    expect(handler).not.toHaveBeenCalled();
+    const unlisted = await app.request("http://localhost/api/unlisted", { method: "HEAD" });
+    expect(unlisted.status).toBe(404);
+    expect(handler).not.toHaveBeenCalled();
+  });
+
   it("GivenARouteWithNoProjectInItsPathThatIsNotListed_WhenCalled_ThenRefusedWithoutItsHandler", async () => {
     const error = vi.spyOn(console, "log").mockImplementation(() => undefined);
     const { app, handler } = miniApp(ALLOW_SIGNED_IN);
@@ -222,10 +233,10 @@ describe("API routes behind the project-access check (AI-252)", () => {
       canRead: (_, projectId) => Promise.resolve(projectId !== "ops"),
     };
     const { app, tracker } = await seededApp({ projectAccess: access });
-    const write = (method: string, path: string, body: unknown) =>
+    const write = (method: string, path: string, body: unknown, type = "application/json") =>
       app.request(`http://localhost${path}`, {
         method,
-        headers: { "content-type": "application/json", authorization: "Bearer andy" },
+        headers: { "content-type": type, authorization: "Bearer andy" },
         body: JSON.stringify(body),
       });
     const created = await write("POST", "/api/projects/ai/tickets", {
@@ -245,6 +256,14 @@ describe("API routes behind the project-access check (AI-252)", () => {
       blockedBy: ["AI-1", "OPS-9"],
     });
     expect(refusedEdit.status).toBe(404);
+    // Any media type the route's JSON validator parses is read the same way.
+    const suffixed = await write(
+      "PATCH",
+      `/api/projects/ai/tickets/${ticket.id}`,
+      { blockedBy: ["OPS-9"] },
+      "Application/Merge-Patch+JSON; charset=utf-8",
+    );
+    expect(suffixed.status).toBe(404);
     expect(await tracker.listTickets("ai")).toHaveLength(1);
     expect((await tracker.getTicket("ai", ticket.id))?.updatedAt).toBe(ticket.updatedAt);
   });

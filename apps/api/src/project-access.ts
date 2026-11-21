@@ -119,11 +119,11 @@ export function requireProjectAccess(
 ): MiddlewareHandler<AuthEnv> {
   return async (c, next) => {
     const route = matchedRoute(c.req.method, matchedRoutes(c));
-    if (!route) return next();
     const actor = actorOf(c.get("identity"));
     // A malformed ticket key names no project; its route still answers it (404) as before.
     const pathTarget = projectOfPath(c.req.path);
-    if (!isProjectRoute(route) && !(route in CROSS_PROJECT_ROUTES)) {
+    if (!route && !pathTarget) return next();
+    if (route && !isProjectRoute(route) && !(route in CROSS_PROJECT_ROUTES)) {
       log("ERROR", "route has no project scope", { actor, route });
       return c.json({ error: "not found" }, 404);
     }
@@ -154,16 +154,24 @@ export function isProjectRoute(route: string): boolean {
   return /^[A-Z]+ \/api\/(projects\/:projectId|tickets\/:key)(\/|$)/.test(route);
 }
 
-/** The handler route a request matched, as `METHOD /pattern`; null when only middleware did. */
+/**
+ * The handler route a request matched, as `METHOD /pattern`; null when only middleware did. Hono
+ * answers HEAD with the GET handler, so HEAD matches as GET.
+ */
 function matchedRoute(method: string, routes: { method: string; path: string }[]): string | null {
-  const handler = routes.findLast((r) => r.method === method && !r.path.endsWith("*"));
+  const as = method === "HEAD" ? "GET" : method;
+  const handler = routes.findLast((r) => r.method === as && !r.path.endsWith("*"));
   return handler ? `${handler.method} ${handler.path}` : null;
 }
+
+/** The media types Hono's JSON validator parses (its own rule): `application/json`, `…+json`. */
+const JSON_TYPE = /^application\/([\w.-]+\+)?json$/i;
 
 /** A write's JSON body (Hono caches it for the route's validator); null when there is none. */
 async function jsonBody(c: Context): Promise<unknown> {
   if (c.req.method === "GET" || c.req.method === "HEAD") return null;
-  if (!c.req.header("content-type")?.includes("application/json")) return null;
+  const mediaType = (c.req.header("content-type") ?? "").split(";")[0]!.trim();
+  if (!JSON_TYPE.test(mediaType)) return null;
   return c.req.json().catch(() => null);
 }
 

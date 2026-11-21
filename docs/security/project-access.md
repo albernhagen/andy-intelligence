@@ -16,6 +16,7 @@ One check decides whether a caller may read a project, for API routes and MCP to
 - Each refusal logs a `WARNING` with the actor (`user:<uid>`) and project id; never the email (ADR-0015).
 - Never 403: a project you can't read looks like one that doesn't exist.
 - **Fail closed:** an `/api` route with no project in its path runs only if listed in `CROSS_PROJECT_ROUTES`, and an MCP call naming no project only for a tool in `CROSS_PROJECT_TOOLS` (both in `project-access.ts`). Anything else gets `404 not found` and an `ERROR` log; `registries.test.ts` fails on it first.
+- HEAD matches as GET (Hono answers it with the GET handler). A body is read for every media type the route's JSON validator parses (`application/json`, `application/*+json`).
 - A ticket id (not a key) in a body only ever resolves in the path's own project, so it names nothing new.
 
 ## Today
