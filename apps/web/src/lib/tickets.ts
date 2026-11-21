@@ -1,12 +1,5 @@
-import {
-  Stage,
-  compareRanks,
-  type Run,
-  type Ticket,
-  type TicketEvent,
-  type TicketType,
-} from "@andy/contracts";
-import { ARCHIVABLE_STAGES, TRANSITIONS } from "@andy/domain";
+import { Stage, type Run, type Ticket, type TicketEvent, type TicketType } from "@andy/contracts";
+import { ARCHIVABLE_STAGES, TRANSITIONS, boardLanes, onBoard } from "@andy/domain";
 
 export { sortQuestions } from "@andy/domain";
 
@@ -41,7 +34,7 @@ export function visibleTickets<T extends Ticket>(
   tickets: readonly T[],
   showArchived: boolean,
 ): T[] {
-  return showArchived ? [...tickets] : tickets.filter((t) => !t.archived);
+  return tickets.filter((t) => onBoard(t, showArchived));
 }
 
 /** Whether the ticket can be archived now: only Done or Cancelled tickets. */
@@ -49,12 +42,13 @@ export function canArchive(ticket: Pick<Ticket, "stage">): boolean {
   return ARCHIVABLE_STAGES.includes(ticket.stage);
 }
 
-/** Groups tickets into every stage column (empty ones included), each sorted by rank. */
+/**
+ * Groups tickets into every stage column (empty ones included), each sorted by rank: the domain's
+ * `boardLanes`, which MCP `board` uses too (AI-296). Callers filter archived ones first.
+ */
 export function groupByStage<T extends Ticket>(tickets: readonly T[]): Record<Stage, T[]> {
-  const groups = Object.fromEntries(STAGES.map((s) => [s, [] as T[]])) as Record<Stage, T[]>;
-  for (const t of tickets) groups[t.stage].push(t);
-  for (const s of STAGES) groups[s].sort((a, b) => compareRanks(a.rank, b.rank));
-  return groups;
+  const lanes = boardLanes(tickets, { showArchived: true });
+  return Object.fromEntries(lanes.map((l) => [l.stage, l.tickets])) as Record<Stage, T[]>;
 }
 
 /**
