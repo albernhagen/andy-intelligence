@@ -23,6 +23,8 @@ import {
   EpicBranches,
   MorningPullRequests,
   ProjectReadCache,
+  BoardReader,
+  WorkReader,
   bumpOnWrite,
   type EpicBranchOpener,
 } from "@andy/domain";
@@ -257,6 +259,8 @@ export function createServices(input: AppDeps): Services {
     configRevert,
     night,
     readCache,
+    // AI-198: each project's board through the same read cache as board polls.
+    work: new WorkReader(deps.tracker, new BoardReader(deps.tracker, deps.runs, readCache)),
   };
 }
 

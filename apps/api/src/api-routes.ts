@@ -24,3 +24,4 @@ export { apiRoutes as runners } from "./runners";
 export { apiRoutes as runs } from "./runs";
 export { apiRoutes as setup } from "./setup";
 export { apiRoutes as tickets } from "./tickets";
+export { apiRoutes as work } from "./work";

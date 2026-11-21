@@ -55,5 +55,6 @@ export * from "./ticket-reads";
 export * from "./tickets";
 export * from "./tiers";
 export * from "./watchdog";
+export * from "./work-list";
 export * from "./work-views";
 export * from "./worker";
