@@ -241,12 +241,12 @@ describe("RoutingSettings revert and global log (AI-275)", () => {
   it("GivenAGlobalChange_WhenReverted_ThenTheConfigIsBackTheRevertIsLoggedAndTheOriginalMarked", async () => {
     const { settings, store, changes } = await setup();
     await settings.putGlobal(cheaperRefine(), null, OWNER);
-    const [change] = await settings.globalChanges();
+    const [change] = await settings.globalChanges(OWNER);
     const { config, reverted } = await settings.revert(change!.id, OWNER);
     expect(config.steps.refine).toBe("fast");
     expect((await store.getGlobal()).steps.refine).toBe("fast");
     expect(reverted.status).toBe("reverted");
-    const log = await settings.globalChanges();
+    const log = await settings.globalChanges(OWNER);
     expect(log.map((c) => c.reason)).toEqual([`Revert of ${change!.id}`, ""]);
     expect(await (changes as InMemoryConfigChangeStore).get(change!.id)).toMatchObject({
       status: "reverted",
@@ -259,7 +259,7 @@ describe("RoutingSettings revert and global log (AI-275)", () => {
     const again = cheaperRefine();
     again.steps.review = "cheap";
     await settings.putGlobal(again, first.updatedAt, OWNER);
-    const [newer, older] = await settings.globalChanges();
+    const [newer, older] = await settings.globalChanges(OWNER);
     await expect(settings.revert(older!.id, OWNER)).rejects.toMatchObject({
       code: "not_revertible",
       message: expect.stringContaining(`steps changed since, by config change ${newer!.id}`),
@@ -294,22 +294,45 @@ describe("RoutingSettings revert and global log (AI-275)", () => {
   it("GivenMarkingFailedOnce_WhenTheRevertIsRetried_ThenTheMarkCompletesWithoutSavingAgain", async () => {
     const { settings, store, changes } = await setup();
     await settings.putGlobal(cheaperRefine(), null, OWNER);
-    const [change] = await settings.globalChanges();
+    const [change] = await settings.globalChanges(OWNER);
     const log = changes as InMemoryConfigChangeStore;
     vi.spyOn(log, "markReverted").mockRejectedValueOnce(new Error("unavailable"));
     await expect(settings.revert(change!.id, OWNER)).rejects.toThrow("unavailable");
     expect((await store.getGlobal()).steps.refine).toBe("fast");
-    const saves = (await settings.globalChanges()).length;
+    const saves = (await settings.globalChanges(OWNER)).length;
 
     const { reverted } = await settings.revert(change!.id, OWNER);
     expect(reverted.status).toBe("reverted");
-    expect(await settings.globalChanges()).toHaveLength(saves);
+    expect(await settings.globalChanges(OWNER)).toHaveLength(saves);
   });
+
+  it("GivenAProjectChangeTheCallerCantRead_WhenReverted_ThenNotFoundAndNothingSaved", async () => {
+    const { settings, changes, store } = await setup();
+    const first = fields();
+    first.providers["claude-sub"].warnPct = 60;
+    const saved = await settings.putProject("ai", first, null, OWNER);
+    const second = structuredClone(first);
+    second.providers["claude-sub"].warnPct = 50;
+    await settings.putProject("ai", second, saved.updatedAt, OWNER);
+    const [latest] = await changes.listForProject("ai");
+    await expect(settings.revert(latest!.id, OWNER, async () => false)).rejects.toMatchObject({
+      code: "not_found",
+    });
+    expect((await store.getProject("ai"))?.providers["claude-sub"].warnPct).toBe(50);
+  });
+
+  it.each(["agent:run-1", "system"] as const)(
+    "GivenTheCaller%s_WhenListingGlobalChanges_ThenForbidden",
+    async (actor) => {
+      const { settings } = await setup();
+      await expect(settings.globalChanges(actor)).rejects.toMatchObject({ code: "forbidden" });
+    },
+  );
 
   it("GivenAPartChangedOutsideTheLog_WhenReverted_ThenRefused", async () => {
     const { settings, store } = await setup();
     await settings.putGlobal(cheaperRefine(), null, OWNER);
-    const [change] = await settings.globalChanges();
+    const [change] = await settings.globalChanges(OWNER);
     const current = await store.getGlobal();
     await store.put(
       {
@@ -331,7 +354,7 @@ describe("RoutingSettings revert and global log (AI-275)", () => {
     async (actor) => {
       const { settings } = await setup();
       await settings.putGlobal(cheaperRefine(), null, OWNER);
-      const [change] = await settings.globalChanges();
+      const [change] = await settings.globalChanges(OWNER);
       await expect(settings.revert(change!.id, actor)).rejects.toMatchObject({ code: "forbidden" });
     },
   );
@@ -342,7 +365,7 @@ describe("RoutingSettings revert and global log (AI-275)", () => {
     const narrower = fields();
     narrower.providers["claude-sub"].warnPct = 60;
     await settings.putProject("ai", narrower, null, OWNER);
-    expect((await settings.globalChanges()).map((c) => c.entityId)).toEqual(["global"]);
+    expect((await settings.globalChanges(OWNER)).map((c) => c.entityId)).toEqual(["global"]);
     expect(await changes.listForProject("ai")).toHaveLength(1);
   });
 });

@@ -37,7 +37,7 @@ const view = (c: RoutingConfig) => ({
  */
 export function registerRoutingTools(
   server: McpServer,
-  deps: Pick<ToolDeps, "routing" | "actor">,
+  deps: Pick<ToolDeps, "routing" | "actor" | "projectAccess">,
   run: <T extends object>(fn: () => Promise<T>) => Promise<CallToolResult>,
 ): void {
   const routing = deps.routing;
@@ -136,7 +136,7 @@ export function registerRoutingTools(
       inputSchema: { limit: z.number().int().min(1).max(CONFIG_CHANGE_LIST_MAX).optional() },
       annotations: { readOnlyHint: true },
     },
-    ({ limit }) => run(async () => ({ changes: await routing.globalChanges(limit) })),
+    ({ limit }) => run(async () => ({ changes: await routing.globalChanges(deps.actor, limit) })),
   );
 
   server.registerTool(
@@ -154,7 +154,9 @@ export function registerRoutingTools(
     },
     ({ id }) =>
       run(async () => {
-        const { config, reverted } = await routing.revert(id, deps.actor);
+        // The change's project is checked here: the tool names none (AI-252).
+        const canRead = (projectId: string) => deps.projectAccess.canRead(deps.actor, projectId);
+        const { config, reverted } = await routing.revert(id, deps.actor, canRead);
         return { config: view(config), reverted };
       }),
   );

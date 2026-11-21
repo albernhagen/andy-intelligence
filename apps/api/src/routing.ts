@@ -8,6 +8,7 @@ import {
 } from "@andy/contracts";
 import type { RoutingSettings } from "@andy/domain";
 import { signedIn, type AuthEnv } from "./auth";
+import type { ProjectAccess } from "./project-access";
 import type { RouteModule } from "./services";
 
 /**
@@ -122,6 +123,7 @@ export function registerRoutingRoutes(
   app: OpenAPIHono<AuthEnv>,
   routing: RoutingSettings,
   listProjectIds: () => Promise<string[]>,
+  access: ProjectAccess,
 ): void {
   app.openapi(routes.get, async (c) => {
     const { projectId } = c.req.valid("query");
@@ -140,13 +142,18 @@ export function registerRoutingRoutes(
   });
 
   app.openapi(routes.globalChanges, async (c) =>
-    c.json(await routing.globalChanges(c.req.valid("query").limit), 200),
+    c.json(
+      await routing.globalChanges(signedIn(c.get("identity")).actor, c.req.valid("query").limit),
+      200,
+    ),
   );
 
   // Global and project routing changes alike (a project's also revert from its settings log).
   app.openapi(routes.revert, async (c) => {
     const { actor } = signedIn(c.get("identity"));
-    return c.json(await routing.revert(c.req.valid("param").changeId, actor), 200);
+    // The change's project is checked here: its path names none (AI-252).
+    const canRead = (projectId: string) => access.canRead(actor, projectId);
+    return c.json(await routing.revert(c.req.valid("param").changeId, actor, canRead), 200);
   });
 
   app.openapi(routes.putProject, async (c) => {
@@ -160,7 +167,10 @@ export function registerRoutingRoutes(
 /** Listed in `api-routes.ts` (AI-145); absent when the routing store is not configured. */
 export const apiRoutes: RouteModule = (app, s) => {
   if (!s.routing) return;
-  registerRoutingRoutes(app, s.routing, async () =>
-    (await s.tracker.listProjects()).map((p) => p.id),
+  registerRoutingRoutes(
+    app,
+    s.routing,
+    async () => (await s.tracker.listProjects()).map((p) => p.id),
+    s.deps.projectAccess,
   );
 };

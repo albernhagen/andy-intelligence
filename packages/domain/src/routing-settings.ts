@@ -285,8 +285,12 @@ export class RoutingSettings {
     }
   }
 
-  /** Global routing's changes, newest first, at most `limit` (capped, ADR-0028; AI-275). */
-  async globalChanges(limit = CONFIG_CHANGE_LIST_MAX): Promise<ConfigChange[]> {
+  /**
+   * Global routing's changes, newest first, at most `limit` (capped, ADR-0028; AI-275). Global
+   * routing is the owner's (`change_routing`), so is its log.
+   */
+  async globalChanges(actor: EventActor, limit = CONFIG_CHANGE_LIST_MAX): Promise<ConfigChange[]> {
+    requireCan(actor, "change_routing", null);
     return this.requireLog().listGlobal(ROUTING_ENTITY, limit);
   }
 
@@ -301,12 +305,20 @@ export class RoutingSettings {
   async revert(
     changeId: string,
     actor: EventActor,
+    /**
+     * The caller's project access (AI-252): a project's change the caller can't read is not found,
+     * as an unknown one. Callers that already checked the project (its settings log) may omit it.
+     */
+    canRead?: (projectId: string) => Promise<boolean>,
   ): Promise<{ config: RoutingConfig; reverted: ConfigChange }> {
     requireCan(actor, "change_routing", null);
     const changes = this.requireLog();
     const change = await changes.get(changeId);
     if (!change || change.entity !== ROUTING_ENTITY) throw notFound("config change", changeId);
     const projectId = change.entityId === GLOBAL_ENTITY_ID ? null : change.entityId;
+    if (projectId !== null && canRead && !(await canRead(projectId))) {
+      throw notFound("config change", changeId);
+    }
     requireCan(actor, "change_routing", projectId);
     if (change.status !== "applied") {
       throw new DomainError("not_revertible", `config change ${change.id} is ${change.status}`, [
