@@ -81,29 +81,50 @@ export interface Services extends Required<ToolServices> {
 export type RouteModule = (app: OpenAPIHono<AuthEnv>, services: Services) => void;
 
 /** The stores whose reads the read meter counts (AI-315). */
-const METERED = [
-  "tracker",
-  "runs",
-  "runners",
-  "configChanges",
-  "reviewFindings",
-  "releaseNotes",
-  "quota",
-  "nightLaunches",
-  "deployments",
-  "routing",
-  "spendLedger",
-  "spendCapsStore",
-  "spendNotices",
-  "projectVersions",
-] as const satisfies readonly (keyof AppDeps)[];
+/**
+ * Each metered store's read methods (AI-315), listed so a write is never counted and a new read
+ * isn't missed: `read-meter.test.ts` checks the lists against every store's methods.
+ */
+export const METERED_READS = {
+  tracker: [
+    "getProject",
+    "listProjects",
+    "getTicket",
+    "listTickets",
+    "getTicketByKey",
+    "countByStage",
+    "listEvents",
+    "getQuestion",
+    "listQuestions",
+  ],
+  runs: ["get", "listForTicket", "listActive", "listEndedBetween", "countCreatedSince"],
+  runners: ["get", "list", "findBySecretHash", "getRunToken"],
+  configChanges: [
+    "get",
+    "listForProject",
+    "listGlobal",
+    "listPending",
+    "latestDecision",
+    "getLookupCursor",
+  ],
+  reviewFindings: ["recent"],
+  releaseNotes: ["get", "listForProject"],
+  quota: ["latest", "clearsSince"],
+  nightLaunches: ["get", "listForProject", "findActive"],
+  deployments: ["get", "list", "latestGood"],
+  routing: ["getGlobal", "getProject"],
+  spendLedger: ["get", "totals", "totalsByProvider"],
+  spendCapsStore: ["getGlobal"],
+  spendNotices: ["get"],
+  projectVersions: ["get"],
+} satisfies { [K in keyof AppDeps]?: readonly (keyof NonNullable<AppDeps[K]> & string)[] };
 
 /** `deps` with each store's reads counted per request and per dispatch (AI-315). */
 function metered(deps: AppDeps): AppDeps {
   const out: Record<string, unknown> = { ...deps };
-  for (const key of METERED) {
-    const store = deps[key];
-    if (store) out[key] = meterReads(store);
+  for (const [key, reads] of Object.entries(METERED_READS)) {
+    const store = deps[key as keyof typeof METERED_READS];
+    if (store) out[key] = meterReads(store, reads as never);
   }
   return out as unknown as AppDeps;
 }

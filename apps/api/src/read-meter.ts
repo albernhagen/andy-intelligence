@@ -1,33 +1,34 @@
 import { AsyncLocalStorage } from "node:async_hooks";
 import type { MiddlewareHandler } from "hono";
 import { routePath } from "hono/route";
-import { MCP_BODY_BYTES } from "./mcp/endpoint";
 
 /**
  * Documents read, per request and per dispatch event (AI-315: Firestore reads still scale with
- * ticket activity). Every store the app reads through is wrapped by `meterReads`; each read adds
- * the documents it returned (at least one: an empty query or a miss still bills a read) to every
- * meter open in its async context. A request logs one line with its route, MCP tool and reads;
- * a dispatch logs its own line too (its reads also count toward the request that caused it). So
- * the next usage alert can be answered from the logs: sum `reads` by `route` or `tool`.
+ * ticket activity). Each store the app reads through is wrapped by `meterReads` with its list of
+ * read methods; each read adds the documents it returned (at least one: an empty query or a miss
+ * still bills a read) to every meter open in its async context. A request logs one line with its
+ * route, MCP tool and reads; a dispatch logs its own line too (its reads also count toward the
+ * request that caused it). So the next usage alert can be answered from the logs: sum `reads` by
+ * `route` or `tool`. Reads after the response is returned aren't counted (MCP answers in JSON, not
+ * a stream, so its tools finish first). The meter does no work of its own before sign-in.
  */
 
 interface Meter {
   reads: number;
+  tool?: string;
 }
 
 const open = new AsyncLocalStorage<Meter[]>();
 
-const READ = /^(get|list|count)/;
-
-/** The store with each `get*`, `list*` and `count*` call counted into the open meters. */
-export function meterReads<T extends object>(target: T): T {
+/** `target` with each call to one of `reads` counted into the open meters; others pass through. */
+export function meterReads<T extends object>(target: T, reads: readonly (keyof T & string)[]): T {
+  const counted = new Set<string | symbol>(reads);
   return new Proxy(target, {
     get(t, prop, receiver) {
       const value: unknown = Reflect.get(t, prop, receiver);
       if (typeof value !== "function") return value;
       const fn = value as (...args: unknown[]) => unknown;
-      if (typeof prop !== "string" || !READ.test(prop)) return fn.bind(t);
+      if (!counted.has(prop)) return fn.bind(t);
       return async (...args: unknown[]) => {
         const result = await fn.apply(t, args);
         const meters = open.getStore();
@@ -41,41 +42,29 @@ export function meterReads<T extends object>(target: T): T {
   });
 }
 
+function withMeter<T>(meter: Meter, fn: () => Promise<T>): Promise<T> {
+  return open.run([...(open.getStore() ?? []), meter], fn);
+}
+
 /** Runs `fn` with a meter of its own (nested inside any open one) and returns its reads. */
 export async function measureReads<T>(fn: () => Promise<T>): Promise<{ value: T; reads: number }> {
   const meter: Meter = { reads: 0 };
-  const value = await open.run([...(open.getStore() ?? []), meter], fn);
+  const value = await withMeter(meter, fn);
   return { value, reads: meter.reads };
 }
 
-/**
- * The MCP tool a `/mcp` request calls, or null (any other method, or a body that isn't JSON).
- * This runs before sign-in and the endpoint's body cap, so it reads only bodies that carry a
- * bearer token and declare a length within that cap: an anonymous or oversized post isn't parsed.
- */
-async function toolOf(request: Request): Promise<string | null> {
-  const length = Number(request.headers.get("content-length") ?? NaN);
-  const bearer = /^Bearer\s/i.test(request.headers.get("authorization") ?? "");
-  if (!bearer || !(length > 0 && length <= MCP_BODY_BYTES)) return null;
-  try {
-    const body = (await request.clone().json()) as {
-      method?: unknown;
-      params?: { name?: unknown };
-    };
-    return body.method === "tools/call" && typeof body.params?.name === "string"
-      ? body.params.name.slice(0, 100)
-      : null;
-  } catch {
-    return null;
-  }
+/** Names the MCP tool the current request runs, for its log line. Called by the tool itself. */
+export function noteTool(name: string): void {
+  const request = open.getStore()?.[0];
+  if (request) request.tool = name.slice(0, 100);
 }
 
 /** One INFO line per request that read anything: method, route, MCP tool, status, reads. */
 export function readMeterMiddleware(): MiddlewareHandler {
   return async (c, next) => {
-    const tool = c.req.method === "POST" && c.req.path === "/mcp" ? await toolOf(c.req.raw) : null;
-    const { reads } = await measureReads(() => next());
-    if (reads === 0) return;
+    const meter: Meter = { reads: 0 };
+    await withMeter(meter, () => next());
+    if (meter.reads === 0) return;
     console.log(
       JSON.stringify({
         severity: "INFO",
@@ -84,9 +73,9 @@ export function readMeterMiddleware(): MiddlewareHandler {
         method: c.req.method,
         // The matched route's pattern (`/api/projects/:projectId/board`), not the raw path.
         route: routePath(c, -1),
-        ...(tool ? { tool } : {}),
+        ...(meter.tool ? { tool: meter.tool } : {}),
         status: c.res.status,
-        reads,
+        reads: meter.reads,
       }),
     );
   };
