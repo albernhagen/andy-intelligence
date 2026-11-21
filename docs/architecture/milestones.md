@@ -54,7 +54,7 @@ Andy builds several systems at once (ADR-0035). Onboard N projects via M1.5: Git
 Environments as per-project policy (ADR-0050): MVPs get one prod project + PR previews; dev + prod when a project opts in. Project template Terraform + Cloud Deploy dev→prod, with a budget and caps per project (§10.1); dev deploy + verification (Playwright/API tests + verification agent), which adds its own verification stage between Ready for review and Done, named then (ADR-0069); promote/rollback from UI and MCP; release notes; DORA metrics (deploy frequency, lead time, change failure rate, time to restore; ADR-0040). Slice at milestone start.
 
 ### M7: Mobile
-The control-plane UI as an installable web app with push (ADR-0052 has the design): verify Web Push on Andy's iPhone first; `web-push` `Notifier` adapter and `PushSubscriptionStore` port; notice types with deep links, caps, quiet hours; phone layout for the inbox, ticket detail, releases; answer, approve, promote, pause from the phone; no agent-written text in a notification. Slice at milestone start.
+The control-plane UI as an installable web app with push (ADR-0052 has the design): verify Web Push on Andy's iPhone first; `web-push` `Notifier` adapter and `PushSubscriptionStore` port; notice types with deep links, caps, quiet hours; phone layout for the inbox, ticket detail, releases; answer, approve, promote, pause from the phone; no agent-written text in a notification. Sliced: [`m7-slices.md`](m7-slices.md) (epic AI-168: M7: Mobile).
 
 ### M8: Project members
 Other users on a project with basic roles (AI-18). Designed at milestone start.
