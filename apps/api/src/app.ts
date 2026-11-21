@@ -66,7 +66,10 @@ export interface AppDeps {
   quota?: QuotaStore;
   /** Night launches (ADR-0049): a launched story's build gets its `epic/<KEY>` base (AI-122). */
   nightLaunches?: NightLaunchStore;
-  /** Deployment records (AI-161); without it the DORA panel reads empty (AI-200). */
+  /**
+   * Deployment records (AI-161): written by deploy workflows' reports (AI-180, routes absent when
+   * unset) and read by the DORA panel (AI-200, empty when unset).
+   */
   deployments?: DeploymentStore;
   /** Model routing (AI-230, AI-238); without it every run takes `DEFAULT_ROUTING`. */
   routing?: RoutingConfigStore;
