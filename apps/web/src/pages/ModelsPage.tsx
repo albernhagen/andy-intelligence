@@ -47,7 +47,7 @@ export function ModelsPage() {
       {routing.isError && <QueryError error={routing.error} />}
       {data && scope === null && (
         <RoutingEditor
-          key={`global-${data.global.updatedAt}`}
+          key="global"
           projectId={null}
           start={data.global}
           ifUpdatedAt={data.global.updatedAt}
@@ -63,7 +63,7 @@ export function ModelsPage() {
           </p>
           <NarrowedView tiers={effectiveRouting(data.global, project.config).tiers} />
           <RoutingEditor
-            key={`${project.projectId}-${project.config?.updatedAt ?? "none"}`}
+            key={project.projectId}
             projectId={project.projectId}
             start={project.effective}
             ifUpdatedAt={project.config?.updatedAt ?? null}

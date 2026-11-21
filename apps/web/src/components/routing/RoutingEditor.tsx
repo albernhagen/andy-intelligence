@@ -23,7 +23,8 @@ const sameRoute = (a: Route, b: Route) =>
 
 /**
  * The routing editor for global (`projectId` null) or one project (AI-243: M9.8). It edits a
- * draft of `start` and saves it against `ifUpdatedAt`; a refused save keeps the draft and puts
+ * draft of `start` and saves it against the version it started from; a newer version arriving
+ * (another tab, MCP) keeps the draft and offers a reload. A refused save keeps the draft and puts
  * each of the API's reasons next to the route it names. Each route shows why the resolver would
  * skip it (AI-238: M9.6), and for a project, a route global doesn't list for that tier.
  */
@@ -39,8 +40,24 @@ export function RoutingEditor({
   global: RoutingConfig;
 }) {
   const [draft, setDraft] = useState<Fields>(() => fieldsOf(start));
+  // The version the draft started from: saves go against it, so a change elsewhere is a 409.
+  const [base, setBase] = useState(ifUpdatedAt);
   const [reason, setReason] = useState("");
   const save = useSaveRouting(projectId);
+  // Any edit clears an old refusal: its route numbers may no longer match the draft.
+  const edit = (next: Fields) => {
+    save.reset();
+    setDraft(next);
+  };
+  // Bumped by Reload, so the fields that hold typed text start again from the new values.
+  const [loads, setLoads] = useState(0);
+  const reload = () => {
+    setLoads((n) => n + 1);
+    save.reset();
+    setDraft(fieldsOf(start));
+    setBase(ifUpdatedAt);
+  };
+  const changedElsewhere = ifUpdatedAt !== base;
   const errors = routingErrors(save.error);
 
   // The providers a route runs under: the draft's, narrowed to global for a project.
@@ -61,9 +78,29 @@ export function RoutingEditor({
       className="space-y-4"
       onSubmit={(e) => {
         e.preventDefault();
-        save.mutate({ ...draft, ifUpdatedAt, reason: reason.trim() || undefined });
+        save.mutate(
+          { ...draft, ifUpdatedAt: base, reason: reason.trim() || undefined },
+          { onSuccess: (saved) => setBase(saved.updatedAt) },
+        );
       }}
     >
+      {changedElsewhere && (
+        <div
+          role="status"
+          className="flex flex-wrap items-center gap-2 rounded-md bg-attention/15 p-2 text-sm text-attention"
+        >
+          Routing changed since you started editing; saving this draft will be refused.
+          <Button
+            type="button"
+            size="sm"
+            variant="outline"
+            className="h-11 sm:h-8"
+            onClick={reload}
+          >
+            Reload
+          </Button>
+        </div>
+      )}
       {errors.general.length > 0 && (
         <div role="alert" className="rounded-md bg-destructive/15 p-2 text-sm text-destructive">
           {errors.general.map((line) => (
@@ -72,8 +109,9 @@ export function RoutingEditor({
         </div>
       )}
       <ProviderSettings
+        key={loads}
         providers={draft.providers}
-        onChange={(p) => setDraft({ ...draft, providers: p })}
+        onChange={(p) => edit({ ...draft, providers: p })}
       />
       <section aria-label="Tiers" className="space-y-2">
         <h3 className="text-sm font-medium">Tiers</h3>
@@ -86,16 +124,14 @@ export function RoutingEditor({
               key={tier}
               tier={tier}
               routes={draft.tiers[tier]}
-              onChange={(routes) =>
-                setDraft({ ...draft, tiers: { ...draft.tiers, [tier]: routes } })
-              }
+              onChange={(routes) => edit({ ...draft, tiers: { ...draft.tiers, [tier]: routes } })}
               skipReason={skipReason(tier)}
               refusal={(i) => errors.routes.get(routeKey(tier, i))}
             />
           ))}
         </div>
       </section>
-      <StepTiers steps={draft.steps} onChange={(steps) => setDraft({ ...draft, steps })} />
+      <StepTiers steps={draft.steps} onChange={(steps) => edit({ ...draft, steps })} />
       <div className="flex flex-wrap items-center gap-2">
         <Input
           aria-label="Reason for the change"

@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { ProviderKey, type ProviderRouting } from "@andy/contracts";
 import { Input } from "@/components/ui/input";
 
@@ -21,14 +22,10 @@ export function ProviderSettings({
   const pct = (key: ProviderKey, field: "reservePct" | "warnPct" | "pausePct", label: string) => (
     <label className="flex items-center gap-1 text-xs text-muted-foreground">
       {label}
-      <Input
-        type="number"
-        min={0}
-        max={100}
-        aria-label={`${key} ${label}`}
-        className={control}
+      <PercentInput
+        label={`${key} ${label}`}
         value={providers[key][field]}
-        onChange={(e) => set(key, { [field]: Number(e.target.value) })}
+        onChange={(v) => set(key, { [field]: v })}
       />
       %
     </label>
@@ -80,5 +77,43 @@ export function ProviderSettings({
         })}
       </ul>
     </section>
+  );
+}
+
+/**
+ * A 0–100 field that keeps what is typed: a cleared or partial value stays on screen and is
+ * passed on only once it is a whole number in range, so clearing a field never saves a 0.
+ */
+function PercentInput({
+  label,
+  value,
+  onChange,
+}: {
+  label: string;
+  value: number;
+  onChange: (value: number) => void;
+}) {
+  const [text, setText] = useState(String(value));
+  const parsed = Number(text);
+  const valid = text.trim() !== "" && Number.isInteger(parsed) && parsed >= 0 && parsed <= 100;
+  return (
+    <Input
+      type="number"
+      min={0}
+      max={100}
+      aria-label={label}
+      aria-invalid={!valid}
+      className={`${control} ${valid ? "" : "border-destructive"}`}
+      value={text}
+      onChange={(e) => {
+        setText(e.target.value);
+        const n = Number(e.target.value);
+        if (e.target.value.trim() !== "" && Number.isInteger(n) && n >= 0 && n <= 100) onChange(n);
+      }}
+      // Leaving a field that isn't a valid number shows the value the draft still holds.
+      onBlur={() => {
+        if (!valid) setText(String(value));
+      }}
+    />
   );
 }

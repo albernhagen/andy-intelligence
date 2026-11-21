@@ -280,7 +280,6 @@ export function useClearQuotaIdle() {
   return useWrite(async () => unwrap(await api.POST("/api/quota/clear")));
 }
 
-/** Local runners (ADR-0089): never their secrets. */
 /** Model routing (AI-243: M9.8): global, and each project's own and effective routing. */
 export function useRouting() {
   const api = useApi();
@@ -323,6 +322,7 @@ export function useSaveRouting(projectId: string | null) {
   );
 }
 
+/** Local runners (ADR-0089): never their secrets. */
 export function useRunners() {
   const api = useApi();
   return useQuery({

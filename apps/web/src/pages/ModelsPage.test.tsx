@@ -89,4 +89,50 @@ describe("Models settings page", () => {
     expect(within(narrowed).getAllByText(/claude-code\/claude-sub\/opus/)).toHaveLength(2);
     expect(screen.getByRole("form", { name: "Routing for ai" })).toBeTruthy();
   });
+
+  it("GivenRoutingChangedElsewhere_WhenItArrives_ThenTheDraftStaysAndReloadIsOffered", async () => {
+    const { h, form } = await modelsPage();
+    const cheap = within(form).getByRole("region", { name: "Tier cheap" });
+    await h.user.click(within(cheap).getByRole("button", { name: "Add route" }));
+    const current = await h.routing.getGlobal();
+    await h.routing.put(
+      {
+        ...current,
+        scope: "global",
+        projectId: null,
+        steps: { ...current.steps, review: "cheap" },
+      },
+      null,
+    );
+    await h.queryClient.invalidateQueries();
+
+    expect(await within(form).findByText(/Routing changed since you started editing/)).toBeTruthy();
+    expect(routeModels("cheap")).toEqual(["sonnet", "sonnet"]);
+    await h.user.click(within(form).getByRole("button", { name: "Reload" }));
+    expect(routeModels("cheap")).toEqual(["sonnet"]);
+    expect(within(form).queryByText(/Routing changed since/)).toBeNull();
+  });
+
+  it("GivenAClearedPercentage_WhenRetyped_ThenItNeverBecomesZero", async () => {
+    const { h, form } = await modelsPage();
+    const reserve = within(form).getByRole("spinbutton", { name: "claude-sub reserve" });
+    await h.user.clear(reserve);
+    expect((reserve as HTMLInputElement).value).toBe("");
+    await h.user.type(reserve, "5");
+    expect((reserve as HTMLInputElement).value).toBe("5");
+  });
+
+  it("GivenARefusal_WhenTheDraftIsEdited_ThenTheOldReasonIsCleared", async () => {
+    const { h, form } = await modelsPage();
+    const fast = within(form).getByRole("region", { name: "Tier fast" });
+    await h.user.click(within(fast).getByRole("button", { name: "Add route" }));
+    await h.user.selectOptions(
+      within(fast).getByRole("combobox", { name: "fast route 2 harness" }),
+      "jules",
+    );
+    await h.user.click(within(form).getByRole("button", { name: "Save routing" }));
+    await within(fast).findByText("Refused");
+    await h.user.click(within(fast).getByRole("button", { name: "Remove fast route 2" }));
+    expect(within(fast).queryByText("Refused")).toBeNull();
+  });
 });
