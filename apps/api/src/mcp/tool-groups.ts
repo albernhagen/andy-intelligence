@@ -5,6 +5,7 @@ export { registerBriefTools as brief } from "./tools-brief";
 export { registerConfigTools as config } from "./tools-config";
 export { registerConfigLogTools as configLog } from "./tools-config-log";
 export { registerCoreTools as core } from "./tools-core";
+export { registerDashboardTools as dashboard } from "./tools-dashboard";
 export { registerDigestTools as digest } from "./tools-digest";
 export { registerDispatchTools as dispatch } from "./tools-dispatch";
 export { registerExecutorTools as executor } from "./tools-executor";

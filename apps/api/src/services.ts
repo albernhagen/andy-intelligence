@@ -35,6 +35,8 @@ import {
   NO_PRICES,
   BoardReader,
   WorkReader,
+  DashboardReader,
+  DoraReader,
   RoadmapReader,
   bumpOnWrite,
   type EpicBranchOpener,
@@ -452,6 +454,9 @@ export function createServices(raw: AppDeps): Services {
     work: new WorkReader(deps.tracker, board),
     roadmap: new RoadmapReader(deps.tracker, board),
     whatsNew,
+    // AI-295: one reader each for the Dashboards routes and MCP `dashboard`.
+    dashboard: new DashboardReader(deps.tracker, deps.runs),
+    dora: new DoraReader(deps.tracker, deps.deployments ?? null, now),
     publicUrl: deps.mcp?.publicUrl ?? null,
   };
 }
