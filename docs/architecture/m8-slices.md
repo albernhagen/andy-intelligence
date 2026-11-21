@@ -1,6 +1,6 @@
 # M8: Project members — slices
 
-Slice table for [milestones.md §M8](milestones.md#m8-project-members). Epic: AI-18: M8: Project members. Each ticket holds its acceptance criteria, out of scope, full `touches` (files it owns) and merge note. **Risk** is the merge class from ADR-0092 (high = Access: sign-in, allow-list, permissions); the coordinator merges clean PRs (ADR-0120) except where Andy's hands are needed.
+Slice table for [milestones.md §M8](milestones.md#m8-project-members). Epic: AI-18: M8: Project members. Each ticket holds its acceptance criteria, out of scope, full `touches` (files it owns) and merge note. **Risk** says how closely to review (high = sign-in, allow-list or permissions); it does not decide who merges. The coordinator merges every clean PR except Andy's four kinds (ADR-0120): here only AI-242: M8.1 (the design ADR) and AI-272: M8.14 (needs his hands).
 
 **Already built, not sliced:** one permission function (AI-19: `domain/src/permissions.ts`, `can`/`requireCan`); history actors are `user:<uid>`, never an email; push subscriptions keyed by uid with `deleteAllForUid` (M7); the config change log (AI-118).
 
@@ -30,7 +30,7 @@ Slice table for [milestones.md §M8](milestones.md#m8-project-members). Epic: AI
 - **Batch 2:** M8.4 (after M8.1 and M8.2). **Batch 3:** M8.5 and M8.6 (disjoint). **Batch 4:** M8.7 and M8.8. **Batch 5:** M8.9, M8.10, M8.12. **Batch 6:** M8.11, M8.13. **Last:** M8.14 (Andy's hands), then M8.15.
 - **Hot spots:** `domain/permissions.ts` (M8.4, M8.6, M8.10, M8.15, in that order); `api/src/tickets.ts` (M8.4, M8.6, M8.8, M8.10, M8.13, chained); M8.4 touches most domain service files, so it lands before other work there; `apps/web/src/lib/api.gen.ts` (generated: regenerate on conflict).
 - **Critical path:** M8.2 → M8.4 → M8.5 → M8.7 → M8.9 → M8.11 → M8.14, mostly high.
-- **Needs Andy's hands:** only M8.14 (a second Google account). Andy answers the questions in M8.1's review.
+- **Andy merges:** M8.1 (design ADR; he answers the questions on AI-242) and M8.14 (needs a second Google account). Everything else: the coordinator.
 
 ## Questions for Andy
 
