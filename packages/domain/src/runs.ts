@@ -2,6 +2,7 @@ import {
   ACTIVE_RUN_STATUSES,
   ADR_NUMBER_MAX,
   BuildOutput,
+  IdeateTaskRequest,
   RUNNER_LIMITS,
   PLAN_REASON_MAX,
   PlanOutput,
@@ -73,6 +74,13 @@ import { TIER_ROUTES } from "./tiers";
 import { afterFailure, deadlineAction, MAX_RUN_ATTEMPTS } from "./watchdog";
 import { syncPrompt, type SyncTarget } from "./sync-runs";
 import { winsNightSlot, type NightSlot } from "./night-budget";
+import {
+  PROJECT_TASK_LIMITS,
+  checkProjectTaskStartable,
+  isProjectTaskStep,
+  projectTaskPrompt,
+  type ProjectTaskResults,
+} from "./project-tasks";
 
 /**
  * Agent runs (M1.6a: Claude Code executor, ARCHITECTURE §7.1–7.2, §9). Andy starts a run on a
@@ -218,6 +226,8 @@ export class RunService {
     private readonly runnerPresence: ((projectId: string) => Promise<boolean>) | null = null,
     /** Night launches (AI-122): a launched story's build gets its epic branch; null: none. */
     private readonly launches: Pick<NightLaunchStore, "findActive"> | null = null,
+    /** Stores plan-project and ideate results (AI-134); null: those tasks can't start. */
+    private readonly projectTasks: ProjectTaskResults | null = null,
   ) {}
 
   /**
@@ -283,6 +293,81 @@ export class RunService {
   ): Promise<Run> {
     requireCan(actor, "start_run", projectId);
     return this.start(projectId, ticketId, step);
+  }
+
+  /**
+   * A project-level agent task the owner asks for (AI-134): `plan-project`, or `ideate` with the
+   * idea. No ticket; the cloud executor runs it read-only on the project's repo. One of each
+   * step per project in flight; it counts against the project's dial and the global cap, and the
+   * oldest wins a race, as for `start`. Never retried: a failure ends it (see the run's error).
+   */
+  async requestProjectTask(
+    projectId: string,
+    step: string,
+    input: { idea?: string | null },
+    actor: EventActor,
+  ): Promise<Run> {
+    requireCan(actor, "start_run", projectId);
+    if (!isProjectTaskStep(step)) {
+      throw new DomainError("invalid_step", `${step} is not a project-level agent task`);
+    }
+    if (!this.executor || !this.projectTasks) {
+      throw new DomainError("executor_unavailable", "no executor: connect GitHub first");
+    }
+    const project = await this.tracker.getProject(projectId);
+    if (!project) throw notFound("project", projectId);
+    const repo = project.repos[0];
+    if (!repo) throw new DomainError("invalid_repo", `project ${project.key} has no repo`);
+    checkProjectTaskStartable(project, step);
+    const idea = step === "ideate" ? IdeateTaskRequest.parse({ idea: input.idea }).idea : null;
+    const sameStep = (r: Run) => r.ticketId === null && r.step === step;
+    const everywhere = await this.inFlightEverywhere();
+    const active = everywhere.filter((r) => r.projectId === projectId);
+    if (active.some(sameStep)) {
+      throw new DomainError(
+        "run_limit",
+        `project ${project.key} already has a ${step} task in flight`,
+      );
+    }
+    if (active.filter(countsForDial).length >= project.runsAtOnce) {
+      throw new DomainError(
+        "run_limit",
+        `project ${project.key} is at its agent-tasks-at-once dial`,
+        [`limit: ${project.runsAtOnce}`],
+      );
+    }
+    if (everywhere.length >= MAX_ACTIVE_RUNS_GLOBAL) {
+      throw new DomainError("run_limit", "the cap on agent tasks across all projects is reached", [
+        `limit: ${MAX_ACTIVE_RUNS_GLOBAL}`,
+      ]);
+    }
+    const limits = PROJECT_TASK_LIMITS[step];
+    // Shaping a project or an idea reads the whole brief and weighs it: the strong tier.
+    const run = await this.runs.create({
+      projectId,
+      ticketId: null,
+      step,
+      route: TIER_ROUTES.strong,
+      tier: "strong",
+      deadline: new Date(this.now().getTime() + limits.timeoutMinutes * 60_000).toISOString(),
+      prompt: projectTaskPrompt(step, project, repo, idea),
+      maxTurns: limits.maxTurns,
+      idea,
+    });
+    const after = await this.inFlightEverywhere();
+    const inProject = after.filter((r) => r.projectId === projectId);
+    const won =
+      after.slice(0, MAX_ACTIVE_RUNS_GLOBAL).some((r) => r.id === run.id) &&
+      inProject
+        .filter(countsForDial)
+        .slice(0, project.runsAtOnce)
+        .some((r) => r.id === run.id) &&
+      inProject.find(sameStep)?.id === run.id;
+    if (!won) {
+      await this.fail(run.id, "another agent task started at the same time");
+      throw new DomainError("run_limit", `project ${project.key} has no free agent task slot`);
+    }
+    return this.dispatchRun(run, null, repo, `Started a ${step} task (${run.route.model})`);
   }
 
   /**
@@ -599,7 +684,12 @@ export class RunService {
   }
 
   /** Hands a created run to the executor and records its handle and watchdog. */
-  private async dispatchRun(run: Run, ticket: Ticket, repo: string, started: string): Promise<Run> {
+  private async dispatchRun(
+    run: Run,
+    ticket: Ticket | null,
+    repo: string,
+    started: string,
+  ): Promise<Run> {
     const executor = this.executor;
     if (!executor)
       throw new DomainError("executor_unavailable", "no executor: connect GitHub first");
@@ -608,7 +698,7 @@ export class RunService {
       handle = await executor.start({
         runId: run.id,
         projectRef: repo,
-        ticketRef: ticket.key,
+        ticketRef: ticket?.key ?? null,
         step: run.step,
         route: run.route,
         billingType: PROVIDER_BILLING[run.route.provider],
@@ -617,7 +707,7 @@ export class RunService {
       });
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
-      log("ERROR", "run dispatch failed", { runId: run.id, ticket: ticket.key, error: message });
+      log("ERROR", "run dispatch failed", { runId: run.id, ticket: ticket?.key, error: message });
       await this.fail(run.id, `dispatch failed: ${message}`);
       throw new DomainError("dispatch_failed", `couldn't start the agent task: ${message}`);
     }
@@ -648,11 +738,13 @@ export class RunService {
     }
     log("INFO", "run dispatched", {
       runId: run.id,
-      ticket: ticket.key,
+      ticket: ticket?.key ?? null,
+      step: run.step,
       externalId: handle.externalId,
       attempt: run.attempt,
     });
     await this.scheduleWatchdog(dispatched);
+    if (!ticket) return dispatched;
     // Best effort: the run is dispatched and recorded, so a failed comment mustn't read as a
     // failed start (a retry would then be flagged Needs-you while it runs).
     await this.tracker
@@ -742,6 +834,19 @@ export class RunService {
         status = "failed";
         error = `Its result was rejected (${issuesOf(parsed.error)}); no plan was recorded.`;
         log("WARNING", "plan result rejected", { runId: run.id, error });
+      }
+    }
+    // AI-134: stored as the owner-only routes store a submitted result; a rejected one fails.
+    if (isProjectTaskStep(run.step) && status === "succeeded") {
+      const applied = this.projectTasks
+        ? await this.projectTasks.apply(run, result.output)
+        : { error: "project-level agent tasks aren't wired on this instance" };
+      if ("error" in applied) {
+        status = "failed";
+        error = applied.error;
+        log("WARNING", "project task result rejected", { runId: run.id, step: run.step, error });
+      } else {
+        summary = applied.summary.slice(0, RUN_SUMMARY_MAX);
       }
     }
     if (run.step === "build") {

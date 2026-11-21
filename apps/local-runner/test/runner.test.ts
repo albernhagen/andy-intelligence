@@ -191,6 +191,34 @@ describe("local-runner start", () => {
     expect(settings.permissions.deny).toContain(`Edit(/${agent!.cwd}/docs/**)`);
   });
 
+  for (const step of ["plan-project", "ideate"] as const) {
+    it(`Given${step === "ideate" ? "AnIdeate" : "APlanProject"}Claim_WhenItRuns_ThenTheAgentGetsReadOnlyToolsAndProfile`, async () => {
+      const t = task(step);
+      const { done } = loop({ tasks: [t], stub: { agent: "fail" } });
+      expect(await done).toBe("idle");
+
+      const [agent] = agentCalls();
+      const flag = (name: string) => agent!.args[agent!.args.indexOf(name) + 1];
+      expect(flag("--allowedTools")).toBe("Read,Glob,Grep");
+      expect(flag("--disallowedTools")).toContain("Bash");
+      const settings = JSON.parse(readFileSync(flag("--settings")!, "utf8")) as {
+        permissions: { allow: string[]; deny: string[] };
+      };
+      expect(settings.permissions.allow).toEqual(["Read", "Glob", "Grep"]);
+      expect(settings.permissions.deny).toEqual(expect.arrayContaining(["Bash", "Edit", "Write"]));
+    });
+  }
+
+  it("GivenAStepTheRunnerDoesNotList_WhenClaimed_ThenItIsRefusedWithAFailedReportAndNoAgent", async () => {
+    const t = task("scout");
+    const { done } = loop({ tasks: [t] });
+    expect(await done).toBe("idle");
+
+    expect(env.calls()).toEqual([]);
+    expect(server.contexts).toEqual([]);
+    expect(server.reports[0]!.body.status).toBe("failed");
+  });
+
   it("GivenAFailedAgent_WhenItExits_ThenAFailedReportIsPostedAndTheWorktreeKept", async () => {
     const t = task("refine");
     const { done } = loop({ tasks: [t], stub: { agent: "fail" } });

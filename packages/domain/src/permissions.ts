@@ -1,4 +1,4 @@
-import type { EventActor } from "@andy/contracts";
+import type { EventActor, Run, RunStep } from "@andy/contracts";
 import { DomainError } from "./errors";
 
 /**
@@ -69,6 +69,29 @@ export function requireCan(actor: EventActor, action: OwnerAction, projectId: st
     }),
   );
   throw new DomainError("forbidden", `only the owner can ${OWNER_ACTIONS[action]}`);
+}
+
+/**
+ * The agent path's own rule (AI-134), separate from the owner's: a project-level agent task (no
+ * ticket) records only its own step's result, as `agent:<runId>`. The owner started the run
+ * (`start_run`); `can` still refuses every agent. Returns the actor to record the result as.
+ */
+export function requireOwnAgentTask(
+  run: Pick<Run, "id" | "step" | "ticketId">,
+  step: RunStep,
+): EventActor {
+  if (run.step === step && run.ticketId === null) return `agent:${run.id}`;
+  console.log(
+    JSON.stringify({
+      severity: "WARNING",
+      message: "agent task result refused",
+      component: "permissions",
+      runId: run.id,
+      step: run.step,
+      wanted: step,
+    }),
+  );
+  throw new DomainError("forbidden", `only a ${step} agent task can record a ${step} result`);
 }
 
 /** How history shows an actor: the owner (old `andy` or a user uid) by label; others as stored. */

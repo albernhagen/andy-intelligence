@@ -6,12 +6,13 @@ import {
   type PlannedMilestone,
   type Project,
   type ProjectPlan,
+  type Run,
   type Ticket,
   type WorkTracker,
 } from "@andy/contracts";
 import { plainAnswer } from "./brief";
 import { DomainError } from "./errors";
-import { requireCan } from "./permissions";
+import { requireCan, requireOwnAgentTask } from "./permissions";
 import type { TicketService } from "./tickets";
 
 /**
@@ -19,8 +20,8 @@ import type { TicketService } from "./tickets";
  * plan-project procedure's result (`platform/procedures/plan-project.md`), stored on the project
  * as a proposal; no ticket exists until Andy approves it. Approval creates one epic per
  * milestone, in order, titled `M<N>: <title>` (ADR-0060); a rejection records his reason and
- * creates nothing. Until AI-134 wires the plan-project agent task, the result is submitted by
- * the owner through the API or MCP. Re-planning an approved project is not built.
+ * creates nothing. The result comes from a plan-project agent task (AI-134, `proposeFromRun`) or
+ * the owner submits it through the API or MCP. Re-planning an approved project is not built.
  */
 
 export interface WaitingPlan {
@@ -50,8 +51,22 @@ export class ProjectPlanService {
 
   /** Stores a proposal for Andy. One waits at a time; an approved plan isn't replaced. */
   async propose(projectId: string, input: unknown, actor: EventActor): Promise<ProjectPlan> {
-    // The proposal stands in for the plan-project agent task's result (AI-134).
     requireCan(actor, "start_run", projectId);
+    return this.store(projectId, input, actor);
+  }
+
+  /**
+   * A plan-project agent task's result (AI-134): the same check and storage as `propose`, under
+   * the agent path's own rule. A replayed report finds its own proposal and records nothing.
+   */
+  async proposeFromRun(run: Run, output: unknown): Promise<ProjectPlan> {
+    const actor = requireOwnAgentTask(run, "plan-project");
+    const current = (await this.project(run.projectId)).projectPlan;
+    if (current?.proposedBy === actor) return current;
+    return this.store(run.projectId, output, actor);
+  }
+
+  private async store(projectId: string, input: unknown, actor: EventActor): Promise<ProjectPlan> {
     const proposal = ProjectPlanProposal.parse(input);
     const project = await this.project(projectId);
     const current = project.projectPlan?.status;

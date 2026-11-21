@@ -33,8 +33,11 @@ export const LOCAL_LIMITS = {
   reportAttempts: 3,
 } as const;
 
-/** The steps this runner runs (ADR-0089 slice 5); build and sync are slice 6. */
-export const LOCAL_STEPS = ["refine", "plan"] as const;
+/**
+ * The steps this runner runs, all read-only (ADR-0089 slice 5; plan-project and ideate, AI-134);
+ * build and sync are slice 6. Any other step is refused before anything runs.
+ */
+export const LOCAL_STEPS = ["refine", "plan", "plan-project", "ideate"] as const;
 
 export function defaultHome(): string {
   return process.env.LOCAL_RUNNER_HOME ?? join(homedir(), ".local-runner");

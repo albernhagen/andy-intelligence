@@ -386,6 +386,7 @@ export const NewRun = Run.pick({
   syncRun: true,
   localRun: true,
   baseBranch: true,
+  idea: true,
 });
 export type NewRun = z.input<typeof NewRun>;
 

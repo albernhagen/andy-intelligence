@@ -30,6 +30,7 @@ import {
   BriefService,
   IdeateService,
   ProjectPlanService,
+  ProjectTaskResults,
   TicketService,
   EmailNotifications,
   wakeAfterRunEnd,
@@ -276,6 +277,15 @@ export function createApp(input: AppDeps) {
     ? new RunnerService(deps.runners, deps.tracker, runnerCredentials, now)
     : null;
   const runnerPresence = runners ? (projectId: string) => runners.presentFor(projectId) : null;
+  // AI-134: plan-project and ideate results are stored by the plan and ideate services, built
+  // below (they need the ticket service, which needs `runs`); a report only calls these later.
+  const plansLater: Pick<ProjectPlanService, "proposeFromRun"> = {
+    proposeFromRun: (run, output) => plans.proposeFromRun(run, output),
+  };
+  const ideasLater: Pick<IdeateService, "submitFromRun"> = {
+    submitFromRun: (run, output) => ideate.submitFromRun(run, output),
+  };
+  const projectTasks: ProjectTaskResults = new ProjectTaskResults(plansLater, ideasLater);
   const runs = new RunService(
     deps.tracker,
     deps.runs,
@@ -286,6 +296,7 @@ export function createApp(input: AppDeps) {
     connection ? new ConnectedCodeHost(connection) : null,
     runnerPresence,
     deps.nightLaunches ?? null,
+    projectTasks,
   );
   const refiner = new RefineDispatcher(deps.tracker, deps.runs, runs, now);
   const builder = new BuildDispatcher(deps.tracker, deps.runs, runs, now, deps.quota ?? null);
@@ -449,14 +460,14 @@ export function createApp(input: AppDeps) {
     connection ? new ConnectedCodeHost(connection) : null,
     now,
   );
-  registerIdeateRoutes(app, ideate);
+  registerIdeateRoutes(app, ideate, runs);
   const plans = new ProjectPlanService(
     deps.tracker,
     service,
     now,
     email ? (id, plan) => email.planNeedsYou(id, plan.proposal.milestones.length) : undefined,
   );
-  registerProjectPlanRoutes(app, plans);
+  registerProjectPlanRoutes(app, plans, runs);
   const configProposals = deps.configChanges
     ? new ConfigProposals(
         deps.tracker,

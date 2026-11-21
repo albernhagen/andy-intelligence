@@ -4389,7 +4389,16 @@ export interface paths {
                 run: {
                   id: string;
                   /** @enum {string} */
-                  step: "refine" | "plan" | "build" | "review" | "verify" | "scout" | "sync";
+                  step:
+                    | "refine"
+                    | "plan"
+                    | "build"
+                    | "review"
+                    | "verify"
+                    | "scout"
+                    | "sync"
+                    | "plan-project"
+                    | "ideate";
                   /** @enum {string} */
                   status: "queued" | "running" | "succeeded" | "failed" | "cancelled";
                   /** Format: date-time */
@@ -4551,7 +4560,16 @@ export interface paths {
               projectId: string;
               ticketId: string | null;
               /** @enum {string} */
-              step: "refine" | "plan" | "build" | "review" | "verify" | "scout" | "sync";
+              step:
+                | "refine"
+                | "plan"
+                | "build"
+                | "review"
+                | "verify"
+                | "scout"
+                | "sync"
+                | "plan-project"
+                | "ideate";
               route: {
                 /** @enum {string} */
                 harness: "claude-code" | "jules" | "opencode" | "direct";
@@ -4753,6 +4771,8 @@ export interface paths {
               } | null;
               /** @default null */
               baseBranch: string | null;
+              /** @default null */
+              idea: string | null;
             }[];
           };
         };
@@ -4801,7 +4821,16 @@ export interface paths {
               projectId: string;
               ticketId: string | null;
               /** @enum {string} */
-              step: "refine" | "plan" | "build" | "review" | "verify" | "scout" | "sync";
+              step:
+                | "refine"
+                | "plan"
+                | "build"
+                | "review"
+                | "verify"
+                | "scout"
+                | "sync"
+                | "plan-project"
+                | "ideate";
               route: {
                 /** @enum {string} */
                 harness: "claude-code" | "jules" | "opencode" | "direct";
@@ -5003,6 +5032,8 @@ export interface paths {
               } | null;
               /** @default null */
               baseBranch: string | null;
+              /** @default null */
+              idea: string | null;
             };
           };
         };
@@ -5116,7 +5147,16 @@ export interface paths {
               projectId: string;
               ticketId: string | null;
               /** @enum {string} */
-              step: "refine" | "plan" | "build" | "review" | "verify" | "scout" | "sync";
+              step:
+                | "refine"
+                | "plan"
+                | "build"
+                | "review"
+                | "verify"
+                | "scout"
+                | "sync"
+                | "plan-project"
+                | "ideate";
               route: {
                 /** @enum {string} */
                 harness: "claude-code" | "jules" | "opencode" | "direct";
@@ -5318,6 +5358,8 @@ export interface paths {
               } | null;
               /** @default null */
               baseBranch: string | null;
+              /** @default null */
+              idea: string | null;
             };
           };
         };
@@ -5385,7 +5427,16 @@ export interface paths {
                 projectId: string;
                 ticketId: string | null;
                 /** @enum {string} */
-                step: "refine" | "plan" | "build" | "review" | "verify" | "scout" | "sync";
+                step:
+                  | "refine"
+                  | "plan"
+                  | "build"
+                  | "review"
+                  | "verify"
+                  | "scout"
+                  | "sync"
+                  | "plan-project"
+                  | "ideate";
                 route: {
                   /** @enum {string} */
                   harness: "claude-code" | "jules" | "opencode" | "direct";
@@ -5587,13 +5638,24 @@ export interface paths {
                 } | null;
                 /** @default null */
                 baseBranch: string | null;
+                /** @default null */
+                idea: string | null;
               };
               build: {
                 id: string;
                 projectId: string;
                 ticketId: string | null;
                 /** @enum {string} */
-                step: "refine" | "plan" | "build" | "review" | "verify" | "scout" | "sync";
+                step:
+                  | "refine"
+                  | "plan"
+                  | "build"
+                  | "review"
+                  | "verify"
+                  | "scout"
+                  | "sync"
+                  | "plan-project"
+                  | "ideate";
                 route: {
                   /** @enum {string} */
                   harness: "claude-code" | "jules" | "opencode" | "direct";
@@ -5795,6 +5857,8 @@ export interface paths {
                 } | null;
                 /** @default null */
                 baseBranch: string | null;
+                /** @default null */
+                idea: string | null;
               } | null;
               buildError: string | null;
             };
@@ -6131,7 +6195,16 @@ export interface paths {
               ticketKey: string | null;
               ticketTitle: string | null;
               /** @enum {string} */
-              step: "refine" | "plan" | "build" | "review" | "verify" | "scout" | "sync";
+              step:
+                | "refine"
+                | "plan"
+                | "build"
+                | "review"
+                | "verify"
+                | "scout"
+                | "sync"
+                | "plan-project"
+                | "ideate";
               /** @enum {string} */
               status: "queued" | "running";
               branch: string | null;
@@ -6390,7 +6463,16 @@ export interface paths {
                   ticketKey: string | null;
                   title: string | null;
                   /** @enum {string} */
-                  step: "refine" | "plan" | "build" | "review" | "verify" | "scout" | "sync";
+                  step:
+                    | "refine"
+                    | "plan"
+                    | "build"
+                    | "review"
+                    | "verify"
+                    | "scout"
+                    | "sync"
+                    | "plan-project"
+                    | "ideate";
                   /** @enum {string} */
                   status: "queued" | "running" | "succeeded" | "failed" | "cancelled";
                   label: string;
@@ -6534,7 +6616,16 @@ export interface paths {
                     weekly: number | null;
                   };
                   /** @enum {string} */
-                  step: "refine" | "plan" | "build" | "review" | "verify" | "scout" | "sync";
+                  step:
+                    | "refine"
+                    | "plan"
+                    | "build"
+                    | "review"
+                    | "verify"
+                    | "scout"
+                    | "sync"
+                    | "plan-project"
+                    | "ideate";
                 }[];
                 bySize: {
                   runs: number;
@@ -6557,7 +6648,16 @@ export interface paths {
                 ticketId: string | null;
                 ticketKey: string | null;
                 /** @enum {string} */
-                step: "refine" | "plan" | "build" | "review" | "verify" | "scout" | "sync";
+                step:
+                  | "refine"
+                  | "plan"
+                  | "build"
+                  | "review"
+                  | "verify"
+                  | "scout"
+                  | "sync"
+                  | "plan-project"
+                  | "ideate";
                 costUsd: number;
                 costIsEstimate: boolean;
                 /** Format: date-time */
@@ -6689,7 +6789,16 @@ export interface paths {
                     weekly: number | null;
                   };
                   /** @enum {string} */
-                  step: "refine" | "plan" | "build" | "review" | "verify" | "scout" | "sync";
+                  step:
+                    | "refine"
+                    | "plan"
+                    | "build"
+                    | "review"
+                    | "verify"
+                    | "scout"
+                    | "sync"
+                    | "plan-project"
+                    | "ideate";
                 }[];
                 bySize: {
                   runs: number;
@@ -6712,7 +6821,16 @@ export interface paths {
                 ticketId: string | null;
                 ticketKey: string | null;
                 /** @enum {string} */
-                step: "refine" | "plan" | "build" | "review" | "verify" | "scout" | "sync";
+                step:
+                  | "refine"
+                  | "plan"
+                  | "build"
+                  | "review"
+                  | "verify"
+                  | "scout"
+                  | "sync"
+                  | "plan-project"
+                  | "ideate";
                 costUsd: number;
                 costIsEstimate: boolean;
                 /** Format: date-time */
@@ -6784,7 +6902,16 @@ export interface paths {
                       weekly: number | null;
                     };
                     /** @enum {string} */
-                    step: "refine" | "plan" | "build" | "review" | "verify" | "scout" | "sync";
+                    step:
+                      | "refine"
+                      | "plan"
+                      | "build"
+                      | "review"
+                      | "verify"
+                      | "scout"
+                      | "sync"
+                      | "plan-project"
+                      | "ideate";
                   }[];
                   bySize: {
                     runs: number;
@@ -6807,7 +6934,16 @@ export interface paths {
                   ticketId: string | null;
                   ticketKey: string | null;
                   /** @enum {string} */
-                  step: "refine" | "plan" | "build" | "review" | "verify" | "scout" | "sync";
+                  step:
+                    | "refine"
+                    | "plan"
+                    | "build"
+                    | "review"
+                    | "verify"
+                    | "scout"
+                    | "sync"
+                    | "plan-project"
+                    | "ideate";
                   costUsd: number;
                   costIsEstimate: boolean;
                   /** Format: date-time */
@@ -7142,6 +7278,351 @@ export interface paths {
         };
         /** @description The hourly cap on brief PRs is reached */
         429: {
+          headers: {
+            [name: string]: unknown;
+          };
+          content: {
+            "application/json": {
+              error: string;
+              details?: string[];
+            };
+          };
+        };
+      };
+    };
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/projects/{projectId}/ideate/agent-task": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    post: {
+      parameters: {
+        query?: never;
+        header?: never;
+        path: {
+          projectId: string;
+        };
+        cookie?: never;
+      };
+      requestBody: {
+        content: {
+          "application/json": {
+            idea: string;
+          };
+        };
+      };
+      responses: {
+        /** @description An ideate agent task started on the idea */
+        201: {
+          headers: {
+            [name: string]: unknown;
+          };
+          content: {
+            "application/json": {
+              id: string;
+              projectId: string;
+              ticketId: string | null;
+              /** @enum {string} */
+              step:
+                | "refine"
+                | "plan"
+                | "build"
+                | "review"
+                | "verify"
+                | "scout"
+                | "sync"
+                | "plan-project"
+                | "ideate";
+              route: {
+                /** @enum {string} */
+                harness: "claude-code" | "jules" | "opencode" | "direct";
+                /** @enum {string} */
+                provider: "claude-sub" | "google-sub" | "openrouter";
+                model: string;
+              };
+              /** @enum {string|null} */
+              tier: "frontier" | "strong" | "fast" | "cheap" | null;
+              /** @enum {string} */
+              status: "queued" | "running" | "succeeded" | "failed" | "cancelled";
+              /** Format: date-time */
+              startedAt: string | null;
+              /** Format: date-time */
+              endedAt: string | null;
+              tokensIn: number | null;
+              tokensOut: number | null;
+              costUsd: number | null;
+              costIsEstimate: boolean;
+              quotaSnapshot: {
+                [key: string]: unknown;
+              } | null;
+              links: {
+                /** Format: uri */
+                executorRun?: string;
+                /** Format: uri */
+                pullRequest?: string;
+              };
+              /** @enum {string|null} */
+              outcome: "merged_clean" | "reworked" | "reverted" | "failed" | null;
+              wouldAutoMerge: boolean | null;
+              /**
+               * Format: date-time
+               * @default null
+               */
+              createdAt: string | null;
+              /**
+               * Format: date-time
+               * @default null
+               */
+              deadline: string | null;
+              /** @default null */
+              prompt: string | null;
+              /** @default null */
+              maxTurns: number | null;
+              /** @default null */
+              summary: string | null;
+              /** @default null */
+              error: string | null;
+              /** @default null */
+              executor: {
+                repo: string;
+                ref: string;
+                externalId: string;
+              } | null;
+              /** @default 1 */
+              attempt: number;
+              /** @default null */
+              retryOf: string | null;
+              /** @default null */
+              plan: {
+                files: string[];
+                steps: string[];
+                tests: string[];
+                riskiestStep: string;
+                rejectedAlternatives: string[];
+              } | null;
+              /** @default null */
+              branch: string | null;
+              /** @default [] */
+              toolingFiles: string[];
+              /**
+               * Format: date-time
+               * @default null
+               */
+              pushGrantedAt: string | null;
+              /** @default null */
+              planDecision: {
+                /** @enum {string} */
+                decision: "approved" | "rejected";
+                reason: string | null;
+                by: string;
+                /** Format: date-time */
+                at: string;
+              } | null;
+              /** @default null */
+              planRunId: string | null;
+              /**
+               * @default null
+               * @enum {string|null}
+               */
+              planPolicy: "none" | "m-and-l" | "all" | null;
+              /** @default [] */
+              verification: {
+                command: string;
+                passed: boolean;
+                output: string;
+              }[];
+              /** @default [] */
+              gateReasons: (
+                | "no_verification_output"
+                | "protected_path"
+                | "files_incomplete"
+                | "checks_incomplete"
+                | "no_required_checks"
+                | "checks_failed"
+                | "checks_pending"
+                | "draft"
+                | "not_default_branch"
+                | "sync_pending"
+                | "spike_outside_docs"
+              )[];
+              /** @default [] */
+              protectedFiles: string[];
+              /** @default [] */
+              outsideDocs: string[];
+              /**
+               * Format: date-time
+               * @default null
+               */
+              gateFlaggedAt: string | null;
+              /** @default null */
+              mergeAttemptedSha: string | null;
+              /** @default null */
+              mergeError: string | null;
+              /** @default null */
+              metrics: {
+                ciGreenFirstTry: boolean | null;
+                reviewFailures: string[];
+                reviewBlockers: number | null;
+                andyCommits: number | null;
+                reworks: number | null;
+                costEstimateUsd: number | null;
+              } | null;
+              /** @default null */
+              usage: {
+                inputTokens: number;
+                outputTokens: number;
+                cacheReadTokens: number;
+                cacheWriteTokens: number;
+                turns: number | null;
+                wallMs: number | null;
+              } | null;
+              /** @default null */
+              quotaDelta: {
+                "5h": number | null;
+                weekly: number | null;
+              } | null;
+              /** @default [] */
+              touches: string[];
+              /** @default null */
+              reservedAdr: number | null;
+              /** @default null */
+              syncRun: {
+                buildRunId: string;
+                /** Format: uri */
+                pullRequest: string;
+                number: number;
+                branch: string;
+                headSha: string;
+                /** @enum {string|null} */
+                outcome:
+                  "synced" | "already_current" | "conflict_unresolved" | "checks_failed" | null;
+                pushedSha: string | null;
+                conflictFiles: string[];
+                reason: string | null;
+              } | null;
+              /** @default null */
+              prSync: {
+                /** Format: date-time */
+                pendingSince: string | null;
+                /** @enum {string|null} */
+                waiting:
+                  | "paused"
+                  | "global_cap"
+                  | "quota_reserve"
+                  | "quota_warn"
+                  | "daily_cap"
+                  | "ticket_busy"
+                  | "builds_off"
+                  | "pr_cap"
+                  | null;
+                stoppedHeadSha: string | null;
+                stoppedReason: string | null;
+                capFlaggedDay: string | null;
+                /**
+                 * Format: date-time
+                 * @default null
+                 */
+                checkedAt: string | null;
+              } | null;
+              /** @default null */
+              localRun: {
+                runnerId: string;
+                /** Format: date-time */
+                leaseExpiresAt: string;
+                /** Format: date-time */
+                heartbeatAt: string | null;
+              } | null;
+              /** @default null */
+              baseBranch: string | null;
+              /** @default null */
+              idea: string | null;
+            };
+          };
+        };
+        /** @description Invalid idea */
+        400: {
+          headers: {
+            [name: string]: unknown;
+          };
+          content: {
+            "application/json": {
+              error: string;
+              details?: string[];
+            };
+          };
+        };
+        /** @description Only the owner */
+        403: {
+          headers: {
+            [name: string]: unknown;
+          };
+          content: {
+            "application/json": {
+              error: string;
+              details?: string[];
+            };
+          };
+        };
+        /** @description No such project */
+        404: {
+          headers: {
+            [name: string]: unknown;
+          };
+          content: {
+            "application/json": {
+              error: string;
+              details?: string[];
+            };
+          };
+        };
+        /** @description An ideate task is in flight, or the agent-task caps are reached */
+        409: {
+          headers: {
+            [name: string]: unknown;
+          };
+          content: {
+            "application/json": {
+              error: string;
+              details?: string[];
+            };
+          };
+        };
+        /** @description No repo */
+        422: {
+          headers: {
+            [name: string]: unknown;
+          };
+          content: {
+            "application/json": {
+              error: string;
+              details?: string[];
+            };
+          };
+        };
+        /** @description The executor couldn't start it (GitHub not connected) */
+        502: {
+          headers: {
+            [name: string]: unknown;
+          };
+          content: {
+            "application/json": {
+              error: string;
+              details?: string[];
+            };
+          };
+        };
+        /** @description No executor */
+        503: {
           headers: {
             [name: string]: unknown;
           };
@@ -7585,6 +8066,345 @@ export interface paths {
         };
         /** @description The hourly cap on ideas is reached */
         429: {
+          headers: {
+            [name: string]: unknown;
+          };
+          content: {
+            "application/json": {
+              error: string;
+              details?: string[];
+            };
+          };
+        };
+      };
+    };
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/projects/{projectId}/plan/agent-task": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    post: {
+      parameters: {
+        query?: never;
+        header?: never;
+        path: {
+          projectId: string;
+        };
+        cookie?: never;
+      };
+      requestBody?: never;
+      responses: {
+        /** @description A plan-project agent task started; its result waits for Andy */
+        201: {
+          headers: {
+            [name: string]: unknown;
+          };
+          content: {
+            "application/json": {
+              id: string;
+              projectId: string;
+              ticketId: string | null;
+              /** @enum {string} */
+              step:
+                | "refine"
+                | "plan"
+                | "build"
+                | "review"
+                | "verify"
+                | "scout"
+                | "sync"
+                | "plan-project"
+                | "ideate";
+              route: {
+                /** @enum {string} */
+                harness: "claude-code" | "jules" | "opencode" | "direct";
+                /** @enum {string} */
+                provider: "claude-sub" | "google-sub" | "openrouter";
+                model: string;
+              };
+              /** @enum {string|null} */
+              tier: "frontier" | "strong" | "fast" | "cheap" | null;
+              /** @enum {string} */
+              status: "queued" | "running" | "succeeded" | "failed" | "cancelled";
+              /** Format: date-time */
+              startedAt: string | null;
+              /** Format: date-time */
+              endedAt: string | null;
+              tokensIn: number | null;
+              tokensOut: number | null;
+              costUsd: number | null;
+              costIsEstimate: boolean;
+              quotaSnapshot: {
+                [key: string]: unknown;
+              } | null;
+              links: {
+                /** Format: uri */
+                executorRun?: string;
+                /** Format: uri */
+                pullRequest?: string;
+              };
+              /** @enum {string|null} */
+              outcome: "merged_clean" | "reworked" | "reverted" | "failed" | null;
+              wouldAutoMerge: boolean | null;
+              /**
+               * Format: date-time
+               * @default null
+               */
+              createdAt: string | null;
+              /**
+               * Format: date-time
+               * @default null
+               */
+              deadline: string | null;
+              /** @default null */
+              prompt: string | null;
+              /** @default null */
+              maxTurns: number | null;
+              /** @default null */
+              summary: string | null;
+              /** @default null */
+              error: string | null;
+              /** @default null */
+              executor: {
+                repo: string;
+                ref: string;
+                externalId: string;
+              } | null;
+              /** @default 1 */
+              attempt: number;
+              /** @default null */
+              retryOf: string | null;
+              /** @default null */
+              plan: {
+                files: string[];
+                steps: string[];
+                tests: string[];
+                riskiestStep: string;
+                rejectedAlternatives: string[];
+              } | null;
+              /** @default null */
+              branch: string | null;
+              /** @default [] */
+              toolingFiles: string[];
+              /**
+               * Format: date-time
+               * @default null
+               */
+              pushGrantedAt: string | null;
+              /** @default null */
+              planDecision: {
+                /** @enum {string} */
+                decision: "approved" | "rejected";
+                reason: string | null;
+                by: string;
+                /** Format: date-time */
+                at: string;
+              } | null;
+              /** @default null */
+              planRunId: string | null;
+              /**
+               * @default null
+               * @enum {string|null}
+               */
+              planPolicy: "none" | "m-and-l" | "all" | null;
+              /** @default [] */
+              verification: {
+                command: string;
+                passed: boolean;
+                output: string;
+              }[];
+              /** @default [] */
+              gateReasons: (
+                | "no_verification_output"
+                | "protected_path"
+                | "files_incomplete"
+                | "checks_incomplete"
+                | "no_required_checks"
+                | "checks_failed"
+                | "checks_pending"
+                | "draft"
+                | "not_default_branch"
+                | "sync_pending"
+                | "spike_outside_docs"
+              )[];
+              /** @default [] */
+              protectedFiles: string[];
+              /** @default [] */
+              outsideDocs: string[];
+              /**
+               * Format: date-time
+               * @default null
+               */
+              gateFlaggedAt: string | null;
+              /** @default null */
+              mergeAttemptedSha: string | null;
+              /** @default null */
+              mergeError: string | null;
+              /** @default null */
+              metrics: {
+                ciGreenFirstTry: boolean | null;
+                reviewFailures: string[];
+                reviewBlockers: number | null;
+                andyCommits: number | null;
+                reworks: number | null;
+                costEstimateUsd: number | null;
+              } | null;
+              /** @default null */
+              usage: {
+                inputTokens: number;
+                outputTokens: number;
+                cacheReadTokens: number;
+                cacheWriteTokens: number;
+                turns: number | null;
+                wallMs: number | null;
+              } | null;
+              /** @default null */
+              quotaDelta: {
+                "5h": number | null;
+                weekly: number | null;
+              } | null;
+              /** @default [] */
+              touches: string[];
+              /** @default null */
+              reservedAdr: number | null;
+              /** @default null */
+              syncRun: {
+                buildRunId: string;
+                /** Format: uri */
+                pullRequest: string;
+                number: number;
+                branch: string;
+                headSha: string;
+                /** @enum {string|null} */
+                outcome:
+                  "synced" | "already_current" | "conflict_unresolved" | "checks_failed" | null;
+                pushedSha: string | null;
+                conflictFiles: string[];
+                reason: string | null;
+              } | null;
+              /** @default null */
+              prSync: {
+                /** Format: date-time */
+                pendingSince: string | null;
+                /** @enum {string|null} */
+                waiting:
+                  | "paused"
+                  | "global_cap"
+                  | "quota_reserve"
+                  | "quota_warn"
+                  | "daily_cap"
+                  | "ticket_busy"
+                  | "builds_off"
+                  | "pr_cap"
+                  | null;
+                stoppedHeadSha: string | null;
+                stoppedReason: string | null;
+                capFlaggedDay: string | null;
+                /**
+                 * Format: date-time
+                 * @default null
+                 */
+                checkedAt: string | null;
+              } | null;
+              /** @default null */
+              localRun: {
+                runnerId: string;
+                /** Format: date-time */
+                leaseExpiresAt: string;
+                /** Format: date-time */
+                heartbeatAt: string | null;
+              } | null;
+              /** @default null */
+              baseBranch: string | null;
+              /** @default null */
+              idea: string | null;
+            };
+          };
+        };
+        /** @description Invalid request */
+        400: {
+          headers: {
+            [name: string]: unknown;
+          };
+          content: {
+            "application/json": {
+              error: string;
+              details?: string[];
+            };
+          };
+        };
+        /** @description Only the owner */
+        403: {
+          headers: {
+            [name: string]: unknown;
+          };
+          content: {
+            "application/json": {
+              error: string;
+              details?: string[];
+            };
+          };
+        };
+        /** @description No such project */
+        404: {
+          headers: {
+            [name: string]: unknown;
+          };
+          content: {
+            "application/json": {
+              error: string;
+              details?: string[];
+            };
+          };
+        };
+        /** @description A plan waits or is approved, a task is in flight, or the caps are reached */
+        409: {
+          headers: {
+            [name: string]: unknown;
+          };
+          content: {
+            "application/json": {
+              error: string;
+              details?: string[];
+            };
+          };
+        };
+        /** @description No repo */
+        422: {
+          headers: {
+            [name: string]: unknown;
+          };
+          content: {
+            "application/json": {
+              error: string;
+              details?: string[];
+            };
+          };
+        };
+        /** @description The executor couldn't start it (GitHub not connected) */
+        502: {
+          headers: {
+            [name: string]: unknown;
+          };
+          content: {
+            "application/json": {
+              error: string;
+              details?: string[];
+            };
+          };
+        };
+        /** @description No executor */
+        503: {
           headers: {
             [name: string]: unknown;
           };

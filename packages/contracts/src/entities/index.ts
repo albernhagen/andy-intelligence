@@ -28,6 +28,7 @@ import { runInFlightFields } from "./in-flight";
 import { runSyncFields } from "./sync";
 import { runLocalFields } from "./runner";
 import { runBaseFields } from "./build";
+import { runIdeaFields } from "./ideate";
 import { RefineScores, TicketScores } from "./scores";
 import {
   questionFormatFields,
@@ -621,6 +622,7 @@ export const Run = z.object({
   ...runSyncFields,
   ...runLocalFields,
   ...runBaseFields,
+  ...runIdeaFields,
 });
 export type Run = z.infer<typeof Run>;
 
