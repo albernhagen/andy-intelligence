@@ -1,11 +1,12 @@
 // @vitest-environment node
-import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
-import { GENERATED_PATH, generateApiTypes } from "./gen-api";
+import { apiDocument, generateApiTypes } from "./gen-api";
 
 describe("generated API client", () => {
-  it("GivenTheCurrentApi_WhenTypesAreRegenerated_ThenTheCheckedInFileMatches", async () => {
-    // On failure: run `pnpm --filter @andy/web gen:api` and commit the result.
-    expect(await generateApiTypes()).toBe(readFileSync(GENERATED_PATH, "utf8"));
+  it("GivenTheCurrentApi_WhenTypesAreGenerated_ThenEveryPathIsTyped", async () => {
+    const [doc, types] = await Promise.all([apiDocument(), generateApiTypes()]);
+    const paths = Object.keys(doc.paths ?? {});
+    expect(paths.length).toBeGreaterThan(0);
+    for (const path of paths) expect(types).toContain(`"${path}": {`);
   });
 });

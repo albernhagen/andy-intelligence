@@ -872,6 +872,33 @@ export function codeHostContract(
       expect(await host.proposeFile(unknownRepo, proposal)).toBeNull();
     });
 
+    it("GivenAnInstalledRepo_WhenItsDefaultBranchIsRead_ThenItsTipShaComesBack", async () => {
+      const { host, knownRepo } = await make();
+      const repo = await host.getRepo(knownRepo);
+      expect(await host.branchSha(knownRepo, repo!.defaultBranch)).toMatch(/^[0-9a-f]{40}$/);
+    });
+
+    it("GivenAMissingBranchOrRepo_WhenItsTipIsRead_ThenNull", async () => {
+      const { host, knownRepo, unknownRepo } = await make();
+      expect(await host.branchSha(knownRepo, "epic/ZZ-999999999")).toBeNull();
+      expect(await host.branchSha(unknownRepo, "main")).toBeNull();
+    });
+
+    it("GivenABranchThatIsNotAnEpicBranch_WhenCreated_ThenItThrowsBeforeWriting", async () => {
+      const { host, knownRepo } = await make();
+      await expect(host.createBranch(knownRepo, "main", "a".repeat(40))).rejects.toThrow();
+      await expect(host.createBranch(knownRepo, "epic/AI-1", "not-a-sha")).rejects.toThrow();
+    });
+
+    itProposes("GivenAnEpicBranch_WhenCreatedTwice_ThenCreatedThenExists", async () => {
+      const { host, knownRepo } = await make();
+      const repo = await host.getRepo(knownRepo);
+      const tip = (await host.branchSha(knownRepo, repo!.defaultBranch))!;
+      expect(await host.createBranch(knownRepo, "epic/AI-1", tip)).toBe("created");
+      expect(await host.branchSha(knownRepo, "epic/AI-1")).toBe(tip);
+      expect(await host.createBranch(knownRepo, "epic/AI-1", tip)).toBe("exists");
+    });
+
     it("GivenAMalformedName_WhenRead_ThenNull", async () => {
       const { host } = await make();
       expect(await host.getRepo("../etc/passwd")).toBeNull();
@@ -1348,8 +1375,8 @@ export function evaluatorContract(
     });
   });
 }
+export * from "./config-changes";
+export * from "./config-proposals";
+export * from "./night";
 export * from "./notify-email";
 export * from "./runner";
-export * from "./night";
-export * from "./config-proposals";
-export * from "./config-changes";
