@@ -54,6 +54,7 @@ export * from "./question-format";
 export * from "./routing";
 export * from "./runner";
 export * from "./scores";
+export * from "./spend";
 export * from "./spend-caps";
 export * from "./sync";
 export * from "./worker";
