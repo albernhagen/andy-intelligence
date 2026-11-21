@@ -3,6 +3,7 @@ import { TierKey } from "@andy/contracts";
 import { effectiveRouting } from "@andy/domain";
 import { RoutingChanges } from "@/components/routing/RoutingChanges";
 import { RoutingEditor } from "@/components/routing/RoutingEditor";
+import { GlobalSpendCaps } from "@/components/spend/GlobalSpendCaps";
 import { Loading, QueryError } from "@/components/Status";
 import { Select } from "@/components/ui/input";
 import { useProjects, useRouting } from "@/lib/queries";
@@ -58,6 +59,7 @@ export function ModelsPage() {
           />
           {/* A revert Andy chose starts the editor again from the reverted routing. */}
           <RoutingChanges onReverted={() => setReverts((n) => n + 1)} />
+          <GlobalSpendCaps />
         </>
       )}
       {data && project && (

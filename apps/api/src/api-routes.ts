@@ -25,6 +25,7 @@ export { apiRoutes as runners } from "./runners";
 export { apiRoutes as runs } from "./runs";
 export { apiRoutes as setup } from "./setup";
 export { apiRoutes as spend } from "./spend";
+export { apiRoutes as spendProviders } from "./spend-providers";
 export { apiRoutes as tickets } from "./tickets";
 export { apiRoutes as whatsNew } from "./whats-new";
 export { apiRoutes as work } from "./work";

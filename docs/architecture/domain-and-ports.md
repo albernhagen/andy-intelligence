@@ -49,7 +49,8 @@ Contracts live in `packages/contracts` (Zod schemas, TypeScript interfaces; Open
 | `DeploymentStore` | Deployment (AI-161: M6.3): record, finish once, list one environment newest first (≤ 100), latest good | **Firestore** (`deployments`, server-only) | — |
 | `ProjectVersions` | A change counter per project, bumped by every tracker and run write; unchanged board and ticket-list polls are served from a per-instance cache (AI-222) | **Firestore** | — |
 | `RoutingConfigStore` | RoutingConfig: providers, tier routes, step tiers; one global, one per project; puts carry `ifUpdatedAt` (AI-230: M9.3) | **Firestore** | — |
-| `SpendLedger` | SpendEntry: reserve, then settle or release, in integer micro-dollars; append-only; a reservation over a per-task, project or global UTC day or month cap is refused atomically (AI-234: M10.2); totals per project, global and per provider (AI-280) | **Firestore** (AI-247: M10.6); in-memory fake | — |
+| `SpendLedger` | SpendEntry: reserve, then settle or release, in integer micro-dollars; append-only; a reservation over a per-task, project or global UTC day or month cap is refused atomically (AI-234: M10.2); totals per project, global and per provider (AI-280); `SpendNoticeLedger` dedupes cap notices (AI-257) | **Firestore** (AI-247: M10.6); in-memory fake | — |
+| `SpendCapsStore` | SpendCaps: the global caps, one document; nothing stored means the defaults; puts carry `ifUpdatedAt`; an unreadable store fails paid calls closed (AI-276) | **Firestore** | — |
 | `Telemetry` | Trace, Span, CostEvent | OTel → Cloud Trace / Cloud Logging | BigQuery sink |
 
 **Rule:** freeze the `Executor` contract only after **two real adapters** (Claude Code + Jules) work. Vendor terms map to domain terms (a Jules *session* is a `Run`; its *activities* are run events).

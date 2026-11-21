@@ -11,7 +11,9 @@ import {
   ConfigProposals,
   ConfigRevert,
   DigestReader,
+  CLAUDE_SUB_THRESHOLDS,
   QuotaClearer,
+  lowestThresholds,
   BriefService,
   IdeateService,
   ProjectPlanService,
@@ -27,6 +29,8 @@ import {
   MorningSteps,
   ProjectReadCache,
   RoutingSettings,
+  GlobalSpendCaps,
+  SpendAlerts,
   SpendGate,
   NO_PRICES,
   BoardReader,
@@ -34,7 +38,7 @@ import {
   bumpOnWrite,
   type EpicBranchOpener,
 } from "@andy/domain";
-import { DEFAULT_SPEND_CAPS, type NightLaunchStore, type WorkTracker } from "@andy/contracts";
+import { type NightLaunchStore, type WorkTracker } from "@andy/contracts";
 import type { AppDeps } from "./app";
 import type { AuthEnv } from "./auth";
 import { noReviewFindings } from "./config-proposals";
@@ -87,6 +91,12 @@ export function createServices(input: AppDeps): Services {
 
   const github = deps.github;
   const now = github?.now ?? (() => new Date());
+  // AI-276: the global spend caps, read by project cap checks, the spend gate and the settings.
+  const globalSpendCaps = new GlobalSpendCaps(
+    deps.spendCapsStore ?? null,
+    deps.configChanges ?? null,
+    now,
+  );
   const connection = github
     ? new GitHubConnection(github.connections, github.codeHostFor ?? gitHubCodeHost, () =>
         now().getTime(),
@@ -105,6 +115,19 @@ export function createServices(input: AppDeps): Services {
     ? new RunnerService(deps.runners, deps.tracker, runnerCredentials, now)
     : null;
   const runnerPresence = runners ? (projectId: string) => runners.presentFor(projectId) : null;
+  // AI-257: spend notices (80% of a cap, a stop) go to the Needs-you email when it is on, else
+  // to the logs; their dedupe and daily cap live in the stored notice ledger.
+  const spendAlerts = deps.spendNotices
+    ? new SpendAlerts({
+        tracker: deps.tracker,
+        ledger: deps.spendNotices,
+        notifier: deps.email?.notifier ?? null,
+        appUrl:
+          deps.email?.appUrl ??
+          (deps.publicHost ? `https://${deps.publicHost}` : "http://localhost"),
+        now,
+      })
+    : null;
   const runs = new RunService(
     deps.tracker,
     deps.runs,
@@ -120,10 +143,17 @@ export function createServices(input: AppDeps): Services {
     // AI-248: no price source yet (M10.5), so the gate refuses every pay_per_use start. Caps:
     // the defaults, narrowed by the project's own (AI-249).
     deps.spendLedger
-      ? new SpendGate(deps.spendLedger, NO_PRICES, async (id) => ({
-          global: DEFAULT_SPEND_CAPS,
-          project: (await deps.tracker.getProject(id))?.spendCaps ?? null,
-        }))
+      ? new SpendGate(
+          deps.spendLedger,
+          NO_PRICES,
+          async (id) => ({
+            // Unreadable global caps throw here, and the gate starts no paid task (fail closed).
+            global: await globalSpendCaps.caps(),
+            project: (await deps.tracker.getProject(id))?.spendCaps ?? null,
+          }),
+          now,
+          spendAlerts ? (event) => spendAlerts.handle(event) : null,
+        )
       : null,
   );
   const refiner = new RefineDispatcher(deps.tracker, deps.runs, runs, now);
@@ -225,11 +255,23 @@ export function createServices(input: AppDeps): Services {
     dispatchNext,
     now,
     deps.configChanges ?? null,
+    undefined,
+    () => globalSpendCaps.caps(),
   );
-  // AI-74: a clear wakes every project, as a settings change wakes one.
-  const quota = new QuotaClearer(deps.quota ?? null, now, async () => {
-    for (const p of await deps.tracker.listProjects()) await dispatchNext(p.id);
-  });
+  // AI-74: a clear wakes every project, as a settings change wakes one. AI-261: it clears at
+  // the lowest claude-sub pause level any project's routing dispatches under.
+  const quota = new QuotaClearer(
+    deps.quota ?? null,
+    now,
+    async () => {
+      for (const p of await deps.tracker.listProjects()) await dispatchNext(p.id);
+    },
+    async () => {
+      const projects = await deps.tracker.listProjects();
+      const routings = await Promise.all(projects.map((p) => runs.routingOf(p.id)));
+      return lowestThresholds("claude-sub", routings, CLAUDE_SUB_THRESHOLDS);
+    },
+  );
   const digest = new DigestReader(deps.tracker, deps.runs, deps.quota ?? null, now);
   const brief = new BriefService(
     deps.tracker,
@@ -299,7 +341,9 @@ export function createServices(input: AppDeps): Services {
       async (id) => (await deps.tracker.getProject(id))?.spendCaps ?? null,
       deps.spendLedger ?? null,
       now,
+      globalSpendCaps,
     ),
+    globalSpendCaps,
     // AI-198: each project's board through the same read cache as board polls.
     work: new WorkReader(deps.tracker, new BoardReader(deps.tracker, deps.runs, readCache)),
     whatsNew,

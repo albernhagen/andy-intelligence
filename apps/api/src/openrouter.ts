@@ -90,12 +90,14 @@ export class OpenRouterGateway implements ModelGateway {
       usage: { include: true },
     });
 
+    let attempts = 1;
     let attempt = await this.send(key, body, signal);
     if (attempt.kind === "answered" && attempt.status >= 500) {
       log("WARNING", "model call retried", { model: request.model, status: attempt.status });
+      attempts = 2;
       attempt = await this.send(key, body, signal);
     }
-    return this.resultOf(request.model, attempt);
+    return this.resultOf(request.model, attempt, attempts);
   }
 
   private async send(key: string, body: string, signal: AbortSignal): Promise<Attempt> {
@@ -119,7 +121,7 @@ export class OpenRouterGateway implements ModelGateway {
     }
   }
 
-  private resultOf(model: string, attempt: Attempt): ModelResult {
+  private resultOf(model: string, attempt: Attempt, attempts: number): ModelResult {
     if (attempt.kind === "failed") {
       log("ERROR", "model call failed", { model, reason: attempt.reason });
       return { outcome: "error", status: null, reason: attempt.reason };
@@ -149,7 +151,7 @@ export class OpenRouterGateway implements ModelGateway {
     }
     const usage = usageOf(parsed.usage);
     log("INFO", "model call done", { model, status, ...(usage ?? { usage: null }) });
-    return { outcome: "ok", text, usage };
+    return { outcome: "ok", text, usage, attempts };
   }
 }
 

@@ -14,6 +14,7 @@ import {
   type RunService,
   type TicketService,
   type WorkReader,
+  type GlobalSpendCaps,
   type WhatsNewReader,
 } from "@andy/domain";
 import type { SpendSettingsService } from "../spend";
@@ -64,6 +65,8 @@ export interface ToolDeps {
   work?: WorkReader;
   /** Spend caps settings (AI-249); the app always passes it, unit tests may not. */
   spend?: SpendSettingsService;
+  /** The global spend caps (AI-276); the app always passes it, unit tests may not. */
+  globalSpendCaps?: GlobalSpendCaps;
   /** What's new (AI-159); absent or null: no `whats_new` tool. */
   whatsNew?: WhatsNewReader | null;
   /** The app's public URL for page links in tool text (the digest links What's new); null in dev. */

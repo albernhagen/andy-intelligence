@@ -16,4 +16,4 @@ Overview and reading map: [ARCHITECTURE.md](ARCHITECTURE.md). Sections match the
   - **Built (AI-131):** `apps/local-runner` runs refine, plan, build (ADR-0122) per worktree: profile via `--settings`, setting sources off, agent in Seatbelt (ADR-0098).
 - **OpenCode**: Actions workflow, per-project OpenRouter key, non-Claude models.
 - **Jules**: REST API; its PR is detected by the PR webhook (§7.1).
-- **Direct**: in-process OpenRouter calls for single-call steps (sizing, digests, scout analysis).
+- **Direct** (AI-258: built, nothing routed): in-process OpenRouter calls for single-call steps (sizing, digests, scout analysis), behind the spend gate.
