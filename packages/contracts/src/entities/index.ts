@@ -44,6 +44,7 @@ export * from "./dispatch-caps";
 export * from "./executor";
 export * from "./ideate";
 export * from "./in-flight";
+export * from "./membership";
 export * from "./model-scout";
 export * from "./night";
 export * from "./notify-email";
