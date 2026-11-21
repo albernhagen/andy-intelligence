@@ -8,9 +8,9 @@ From 2026-11-12 to 11-20 the coordinator ran about fifteen workers on one Mac an
 
 ## What changed
 
-- `scripts/coordinator/`: `survey`, `merge-queue`, `resync`, `host-check` (runbook `coordinating-sessions.md` §6). `merge-queue` and `resync` change remote state and are for a coordinator under ADR-0120 only.
+- `scripts/coordinator/`: `survey`, `merge-queue`, `resync`, `host-check` (runbook `coordinating-sessions.md` §7). `merge-queue` and `resync` change remote state and are for a coordinator under ADR-0120 only.
 - Pre-push runs typecheck and `vitest run --changed origin/main` (ADR-0113: proposed). CI still runs the full suite.
-- `scripts/cloud-setup.sh` and runbook §7: Running sessions in the cloud (untested until AI-151).
+- `scripts/cloud-setup.sh` and runbook §8: Running sessions in the cloud (untested until AI-151).
 
 ## Measured (14-core Mac, shared with other sessions)
 

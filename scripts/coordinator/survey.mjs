@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// PR survey for a coordinator (AI-149; runbook `coordinating-sessions.md` §6). Read-only.
+// PR survey for a coordinator (AI-149; runbook `coordinating-sessions.md` §7). Read-only.
 // For each PR: head, merge state, whether the head contains the base branch, checks, each review
 // agent's verdict and blocking findings on that head, labels, and which paths the diff touches
 // from ADR-0120's "Andy keeps" table (blocking) and ADR-0092's "look hardest" list (reported).

@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // Mechanical re-sync for a coordinator acting under ADR-0120 (AI-149; runbook
-// `coordinating-sessions.md` §6). CHANGES REMOTE STATE: pushes a merge commit to the PR's branch.
+// `coordinating-sessions.md` §7). CHANGES REMOTE STATE: pushes a merge commit to the PR's branch.
 // Not for build agents.
 //
 // Merges origin/main into the PR's branch in a scratch worktree (the worker's own worktree is

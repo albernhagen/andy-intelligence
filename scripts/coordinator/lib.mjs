@@ -1,4 +1,4 @@
-// Shared helpers for the coordinator tools (AI-149; runbook `coordinating-sessions.md` §6).
+// Shared helpers for the coordinator tools (AI-149; runbook `coordinating-sessions.md` §7).
 // Every command goes through an injectable `run(cmd, args, opts)` so tests can fake gh and git.
 import { spawnSync } from "node:child_process";
 import { readFileSync } from "node:fs";

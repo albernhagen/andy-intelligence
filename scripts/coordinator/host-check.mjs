@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// Host check for a coordinator (AI-149; runbook `coordinating-sessions.md` §6). Read-only.
+// Host check for a coordinator (AI-149; runbook `coordinating-sessions.md` §7). Read-only.
 // Run it first when sessions stall or tests time out: a closed lid or a sleeping Mac freezes every
 // session and looks like failing tests (2026-11-16 to 11-20: four days lost). Prints one verdict.
 //

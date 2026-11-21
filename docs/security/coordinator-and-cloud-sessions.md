@@ -1,6 +1,6 @@
 # Threat model: Coordinator tools and cloud sessions
 
-The coordinator's scripts (`scripts/coordinator/`, AI-149) and Claude Code cloud sessions (runbook `coordinating-sessions.md` §6 and §7). Risks: [R23](risks/R23.md), [R-AI-149](risks/R-AI-149.md) (`resync` runs branch code as Andy) and [R-AI-149-2](risks/R-AI-149-2.md) (a cloud worker acts as Andy). Cloud rows marked _(untested)_ come from Anthropic's docs on 2026-11-20; AI-151 replaces the marks with what a real session showed.
+The coordinator's scripts (`scripts/coordinator/`, AI-149) and Claude Code cloud sessions (runbook `coordinating-sessions.md` §7 and §8). Risks: [R23](risks/R23.md), [R-AI-149](risks/R-AI-149.md) (`resync` runs branch code as Andy) and [R-AI-149-2](risks/R-AI-149-2.md) (a cloud worker acts as Andy). Cloud rows marked _(untested)_ come from Anthropic's docs on 2026-11-20; AI-151 replaces the marks with what a real session showed.
 
 ## Trust boundaries and entry points
 

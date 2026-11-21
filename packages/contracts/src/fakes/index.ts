@@ -11,6 +11,7 @@ import {
   type Listing,
   type PullRequest,
   type PullRequestCommit,
+  type PullRequestDetails,
   type ProposedPullRequest,
   type RepoToken,
   type RequiredCheck,
@@ -665,6 +666,16 @@ export class InMemoryCodeHost implements CodeHost {
     this.workflowRuns.get(runId)!.run = { ...run, status: "completed", conclusion: "cancelled" };
   }
 
+  async getPullRequestDetails(
+    fullName: string,
+    number: number,
+  ): Promise<PullRequestDetails | null> {
+    if (!(await this.getRepo(fullName))) return null;
+    const pr = this.pullRequests.get(number);
+    if (!pr) return null;
+    return structuredClone(pr.details ?? { body: "", mergedBy: null, mergedAt: null });
+  }
+
   async getPullRequest(fullName: string, number: number): Promise<PullRequest | null> {
     if (!(await this.getRepo(fullName))) return null;
     const pr = this.pullRequests.get(number);
@@ -788,6 +799,8 @@ export interface FakePullRequest {
   files: Listing<ChangedFile>;
   checks: Listing<HeadCheck>;
   commits: Listing<PullRequestCommit>;
+  /** Description and merge (AI-159); an empty body and no merge when unset. */
+  details?: PullRequestDetails;
 }
 
 /** In-memory CodeHostConnectionStore. */

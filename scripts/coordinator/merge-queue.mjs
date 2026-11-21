@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // Serial merge queue for a coordinator acting under ADR-0120 (AI-149; runbook
-// `coordinating-sessions.md` §6). CHANGES REMOTE STATE: squash-merges PRs on GitHub and deletes
+// `coordinating-sessions.md` §7). CHANGES REMOTE STATE: squash-merges PRs on GitHub and deletes
 // their branches. Not for build agents.
 //
 // Takes an explicit list of PRs the coordinator has already judged its own to merge; it never
