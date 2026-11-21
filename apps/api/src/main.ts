@@ -8,6 +8,7 @@ import {
   FirestoreOAuthGrantStore,
   FirestoreQuotaStore,
   FirestoreDeploymentStore,
+  FirestoreRoutingConfigStore,
   FirestoreNightLaunchStore,
   FirestoreProjectVersions,
   FirestoreRunStore,
@@ -90,6 +91,7 @@ async function main() {
     nightLaunches: new FirestoreNightLaunchStore(db),
     projectVersions: new FirestoreProjectVersions(db),
     deployments: new FirestoreDeploymentStore(db),
+    routing: new FirestoreRoutingConfigStore(db),
     configChanges: new FirestoreConfigChangeStore(db),
     // Serve only the public URL's host; the run.app URLs answer /health alone (ADR-0044).
     publicHost: publicUrl ? new URL(publicUrl).host : undefined,
