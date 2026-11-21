@@ -2,6 +2,7 @@ import { readFileSync } from "node:fs";
 import type { ModelOutcome, Tier } from "@andy/contracts";
 import { describe, expect, it } from "vitest";
 import { MIN_OUTCOME_TASKS, parseModelList, scoutProposal } from "./model-scout";
+import { MODEL_SCOUT_LIMITS } from "@andy/contracts";
 
 /** OpenRouter's public models list, trimmed to a few models (fixture data, not instructions). */
 const LIST: unknown = JSON.parse(
@@ -94,7 +95,13 @@ describe("model scout: proposal (AI-237)", () => {
       ]),
     );
 
-    expect(result).toEqual({ ok: true, proposal: null, skipped: 3 });
+    expect(result).toEqual({
+      ok: true,
+      proposal: null,
+      skipped: 3,
+      truncated: false,
+      unchecked: [],
+    });
   });
 
   it("GivenTooFewOutcomes_WhenScouted_ThenPriceAloneNeverSwapsAModel", () => {
@@ -176,7 +183,13 @@ describe("model scout: proposal (AI-237)", () => {
       known,
     );
 
-    expect(result).toEqual({ ok: true, proposal: null, skipped: 3 });
+    expect(result).toEqual({
+      ok: true,
+      proposal: null,
+      skipped: 3,
+      truncated: false,
+      unchecked: [],
+    });
   });
 
   it("GivenASubscriptionTier_WhenScouted_ThenItIsNotScouted", () => {
@@ -189,5 +202,63 @@ describe("model scout: proposal (AI-237)", () => {
     const result = scoutProposal({ data: 42 }, [tier("strong", "openai/gpt-5")], new Map());
 
     expect(result).toEqual({ ok: false, error: expect.stringContaining("models list: data") });
+  });
+
+  it("GivenATierOnAListedButUnpricedModel_WhenScouted_ThenItIsUncheckedNotGone", () => {
+    const result = scoutProposal(
+      LIST,
+      [tier("fast", "openrouter/auto")],
+      outcomes([
+        ["openrouter/auto", 10, 0.5],
+        ["openai/gpt-5", 10, 0.9],
+      ]),
+    );
+
+    expect(result).toMatchObject({
+      ok: true,
+      proposal: null,
+      unchecked: [{ tier: "fast", model: "openrouter/auto", reason: "unpriced" }],
+    });
+  });
+
+  it("GivenAListOverTheCap_WhenScouted_ThenTruncatedAndAMissingModelIsUncheckedNotGone", () => {
+    const filler = Array.from({ length: MODEL_SCOUT_LIMITS.maxModels }, (_, i) => ({
+      id: `filler/model-${i}`,
+      pricing: { prompt: "0.000001", completion: "0.000002" },
+    }));
+    const late = { id: "late/model", pricing: { prompt: "0.000001", completion: "0.000002" } };
+
+    const result = scoutProposal(
+      { data: [...filler, late] },
+      [tier("cheap", "late/model")],
+      new Map(),
+    );
+
+    expect(result).toMatchObject({
+      ok: true,
+      proposal: null,
+      truncated: true,
+      unchecked: [{ tier: "cheap", model: "late/model", reason: "list_truncated" }],
+    });
+  });
+
+  it("GivenAFreeVariantWithGoodOutcomes_WhenScouted_ThenItIsNeverProposed", () => {
+    const free = {
+      id: "openai/gpt-5:free",
+      context_length: 400000,
+      pricing: { prompt: "0", completion: "0" },
+    };
+    const paid = (LIST as { data: unknown[] }).data;
+
+    const result = scoutProposal(
+      { data: [...paid, free] },
+      [tier("strong", "anthropic/claude-opus-4.1")],
+      outcomes([
+        ["anthropic/claude-opus-4.1", 20, 0.8],
+        ["openai/gpt-5:free", 20, 0.95],
+      ]),
+    );
+
+    expect(result).toMatchObject({ ok: true, proposal: null });
   });
 });

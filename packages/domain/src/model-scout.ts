@@ -28,7 +28,8 @@ import {
  *
  * A candidate qualifies when its outcomes have at least `MIN_OUTCOME_TASKS` tasks and a success
  * rate at least the current model's (which needs as many tasks too), and its context is not
- * smaller than the current model's. Without enough outcomes on both sides nothing is proposed:
+ * smaller than the current model's, and it isn't a free variant. A tier whose model is listed but
+ * skipped (unpriced), or missing from a list cut at the cap, comes back unchecked, never gone. Without enough outcomes on both sides nothing is proposed:
  * price alone never swaps a model.
  */
 
@@ -40,7 +41,14 @@ export const PRICE_CHANGE_SHARE = 0.1;
 const INPUT_WEIGHT = 0.75;
 
 export type ParsedModelList =
-  | { ok: true; models: ListedModel[]; skipped: number; truncated: boolean }
+  | {
+      ok: true;
+      models: ListedModel[];
+      skipped: number;
+      /** Ids of skipped items that had a string id (clipped): listed, but not usable. */
+      skippedIds: ReadonlySet<string>;
+      truncated: boolean;
+    }
   | { ok: false; error: string };
 
 /**
@@ -60,10 +68,13 @@ export function parseModelList(raw: unknown): ParsedModelList {
   const items = envelope.data.data.slice(0, MODEL_SCOUT_LIMITS.maxModels);
   const models: ListedModel[] = [];
   let skipped = 0;
+  const skippedIds = new Set<string>();
   for (const item of items) {
     const parsed = ModelListEntry.safeParse(item);
     if (!parsed.success) {
       skipped += 1;
+      const id = (item as { id?: unknown } | null)?.id;
+      if (typeof id === "string") skippedIds.add(id.slice(0, MODEL_SCOUT_LIMITS.id));
       continue;
     }
     const m = parsed.data;
@@ -79,6 +90,7 @@ export function parseModelList(raw: unknown): ParsedModelList {
     ok: true,
     models,
     skipped,
+    skippedIds,
     truncated: envelope.data.data.length > MODEL_SCOUT_LIMITS.maxModels,
   };
 }
@@ -87,9 +99,30 @@ const perMTok = (perToken: number) => Math.round(perToken * 1e6 * 1e4) / 1e4;
 const blended = (m: { priceInPerMTokUsd: number; priceOutPerMTokUsd: number }) =>
   INPUT_WEIGHT * m.priceInPerMTokUsd + (1 - INPUT_WEIGHT) * m.priceOutPerMTokUsd;
 const usd = (n: number) => `$${n.toFixed(2)}`;
+/**
+ * Free variants (`:free`, or both prices 0) are never candidates: they are rate-limited and can be
+ * withdrawn, so a tier can't depend on them.
+ */
+const isFree = (m: ListedModel) =>
+  m.id.endsWith(":free") || (m.priceInPerMTokUsd === 0 && m.priceOutPerMTokUsd === 0);
+
+/** A tier the scout couldn't judge: its model is listed but unusable, or the list was cut. */
+export interface UncheckedTier {
+  tier: Tier["key"];
+  model: string;
+  reason: "unpriced" | "list_truncated";
+}
 
 export type ScoutResult =
-  { ok: true; proposal: ScoutProposal | null; skipped: number } | { ok: false; error: string };
+  | {
+      ok: true;
+      proposal: ScoutProposal | null;
+      skipped: number;
+      /** The list had more than `MODEL_SCOUT_LIMITS.maxModels` items; the rest weren't read. */
+      truncated: boolean;
+      unchecked: UncheckedTier[];
+    }
+  | { ok: false; error: string };
 
 /**
  * The scout's proposal for `currentTiers`, or null when nothing would change. A list that fails
@@ -107,14 +140,21 @@ export function scoutProposal(
   const known = new Map(knownModels.map((m) => [m.id, m]));
 
   const changes: ScoutTierChange[] = [];
+  const unchecked: UncheckedTier[] = [];
   for (const tier of currentTiers) {
     const route = tier.routes[0];
     if (!route || route.provider !== "openrouter") continue;
+    // Not usable isn't gone: a skipped item is listed, and a cut list may hold the model further on.
+    if (!byId.has(route.model) && (list.skippedIds.has(route.model) || list.truncated)) {
+      const reason = list.skippedIds.has(route.model) ? "unpriced" : "list_truncated";
+      unchecked.push({ tier: tier.key, model: route.model, reason });
+      continue;
+    }
     const change = tierChange(tier, route, byId, list.models, outcomesByModel, known);
     if (change) changes.push(change);
   }
-  if (changes.length === 0) return { ok: true, proposal: null, skipped: list.skipped };
-  return { ok: true, proposal: toProposal(changes), skipped: list.skipped };
+  const base = { ok: true as const, skipped: list.skipped, truncated: list.truncated, unchecked };
+  return { ...base, proposal: changes.length === 0 ? null : toProposal(changes) };
 }
 
 function tierChange(
@@ -131,7 +171,7 @@ function tierChange(
     !!o && o.tasks >= MIN_OUTCOME_TASKS;
   const qualifies = (m: ListedModel) => {
     const o = outcomes.get(m.id);
-    if (m.id === route.model || !enough(o) || !enough(base)) return false;
+    if (m.id === route.model || isFree(m) || !enough(o) || !enough(base)) return false;
     if (o.successRate < base.successRate) return false;
     const minContext = current?.contextTokens ?? null;
     return minContext === null || (m.contextTokens ?? 0) >= minContext;
