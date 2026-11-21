@@ -307,3 +307,37 @@ describe("roadmap milestone cap (AI-305)", () => {
     expect(roadmap.truncated).toBe(false);
   });
 });
+
+describe("roadmap child epics and milestones (AI-305)", () => {
+  const m1: Milestone = {
+    id: "m1",
+    projectId: "ai",
+    name: "M1",
+    outcome: "M1 works",
+    order: 1,
+    status: "approved",
+    createdAt: "2026-11-21T00:00:00.000Z",
+    updatedAt: "2026-11-21T00:00:00.000Z",
+  };
+
+  it("GivenAChildEpicUnderAMilestonesEpic_WhenBuilt_ThenItsTicketsCountInTheMilestoneAndItIsNoRow", () => {
+    const tickets = [
+      epic(1, { milestoneId: "m1" }),
+      // A stale id on a child epic is ignored: only the top-level epic's counts (ADR-0131).
+      epic(2, { parentId: "ai-t1", stage: "ready", milestoneId: "other" }),
+      under(2, 20, { stage: "done" }),
+      under(2, 21, { stage: "in_progress" }),
+      under(1, 10, { stage: "ready" }),
+    ];
+
+    const roadmap = buildRoadmap(PROJECT, tickets, [m1]);
+
+    expect(roadmap.milestones[0]).toMatchObject({
+      epicKeys: ["AI-1"],
+      progress: { done: 1, total: 3 },
+      counts: { inProgress: 1, notStarted: 1 },
+    });
+    expect(roadmap.noMilestone).toEqual([]);
+    expect(roadmap.truncated).toBe(false);
+  });
+});
