@@ -134,6 +134,16 @@ export const PROVIDER_BILLING: Record<ProviderKey, BillingType> = {
   "claude-api": "pay_per_use",
 };
 
+/**
+ * The executor's helper calls per step on top of the agent (claude-executor.yml): build's
+ * sandbox check, and sync's sandbox check and checks run. Each runs under
+ * HELPER_CALL_BUDGET_MICRO_USD on the API key, so a pay_per_use run's agent gets its
+ * reservation less these, and its settled cost counts them in full (AI-260).
+ */
+export const HELPER_CALLS: Partial<Record<RunStep, number>> = { build: 1, sync: 2 };
+export const HELPER_CALL_BUDGET_MICRO_USD = 250_000;
+const helperAllowance = (step: RunStep) => (HELPER_CALLS[step] ?? 0) * HELPER_CALL_BUDGET_MICRO_USD;
+
 /** Caps per step (ADR-0028): agent turns, and the deadline the watchdog (M1.6b) checks. */
 export const STEP_LIMITS: Record<StartableStep, { maxTurns: number; timeoutMinutes: number }> = {
   // Above the workflow's own worst case: context 5 + agent 30 + report 5 minutes.
@@ -897,14 +907,22 @@ export class RunService {
     return run ? PROVIDER_BILLING[run.route.provider] : null;
   }
 
-  /** The run's reserved spend in USD; `spend_cap` when it has none (it must never start). */
+  /**
+   * The agent's budget in USD: the run's reservation less its helper calls' allowance, so the
+   * whole run stays within what was reserved. `spend_cap` when there is no reservation or it
+   * leaves the agent nothing (the run must never start).
+   */
   private async reservedBudgetUsd(run: Run): Promise<number> {
     const micro = this.spendGate ? await this.spendGate.reservedFor(run.id) : null;
-    if (micro === null || micro <= 0) {
-      log("ERROR", "paid run asked for its context without a reservation", { runId: run.id });
-      throw new DomainError("spend_cap", `run ${run.id} has no spend reservation`);
+    const agent = micro === null ? 0 : micro - helperAllowance(run.step);
+    if (agent <= 0) {
+      log("ERROR", "paid run asked for its context without a usable reservation", {
+        runId: run.id,
+        reservedMicroUsd: micro,
+      });
+      throw new DomainError("spend_cap", `run ${run.id} has no usable spend reservation`);
     }
-    return micro / MICRO_USD_PER_USD;
+    return agent / MICRO_USD_PER_USD;
   }
 
   /**
@@ -1969,7 +1987,9 @@ export class RunService {
       log("ERROR", "run unreadable while closing its spend", { runId, error: String(err) });
       return null;
     });
-    await this.spendGate.close(runId, fresh, usage);
+    // A report's usage covers the agent only: the helper calls count at their full allowance.
+    const helpers = usage ? helperAllowance(ended.step) : 0;
+    await this.spendGate.close(runId, fresh, usage, helpers);
   }
 
   /** Marks a queued run failed; logs (doesn't throw) if that write fails too. */

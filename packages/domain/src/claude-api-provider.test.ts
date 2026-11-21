@@ -8,10 +8,13 @@ import {
   RoutingConfig,
   type Route,
   type RoutingConfigInput,
+  type Runner,
 } from "@andy/contracts";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { effectiveRouting, resolveRoute } from "./route-resolver";
-import { PROVIDER_BILLING, RunService } from "./runs";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
+import { HELPER_CALL_BUDGET_MICRO_USD, HELPER_CALLS, PROVIDER_BILLING, RunService } from "./runs";
 import { SpendGate, type SpendPrices } from "./spend-gate";
 import { WorkflowExecutor } from "./test-executor";
 
@@ -153,6 +156,107 @@ describe("a claude-api agent task", () => {
     await ledger.release(run.id, NOW.toISOString());
     await expect(runs.context(run.id, run.executor!)).rejects.toMatchObject({ code: "spend_cap" });
     expect((await runStore.get(run.id))!.startedAt).toBeNull();
+  });
+
+  it("GivenAClaudeApiRoute_WhenTheLocalRunnerClaimsATask_ThenItIsRefusedAndNothingIsReserved", async () => {
+    await tracker.updateProject(projectId, { executor: "local" });
+    const runner = { id: "r1", name: "mac", projectIds: [projectId] } as Runner;
+    const runs = service(new SpendGate(ledger, PRICED, undefined, () => NOW));
+    const ticket = await tracker.createTicket(
+      projectId,
+      {
+        type: "feature",
+        title: "Board",
+        body: "Andy can't see his tickets.",
+        acceptanceCriteria: ["WHEN Andy opens the board THE SYSTEM SHALL list his tickets"],
+        size: "M",
+        sizeReason: "one screen",
+      },
+      "andy",
+    );
+    await tracker.updateTicket(
+      projectId,
+      ticket.id,
+      { stage: { to: "ready", forced: false, reason: null } },
+      "andy",
+    );
+    const reserve = vi.spyOn(ledger, "reserve");
+    await expect(
+      runs.start(projectId, ticket.id, "build", undefined, { runner }),
+    ).rejects.toMatchObject({
+      code: "spend_cap",
+      message: expect.stringContaining("local runner"),
+    });
+    expect(reserve).not.toHaveBeenCalled();
+  });
+
+  describe("the executor's helper calls", () => {
+    const startBuild = async (runs: RunService) => {
+      await tracker.updateProject(projectId, { planApproval: "none" });
+      const run = await startPlan(runs);
+      expect(run.step).toBe("build");
+      return run;
+    };
+
+    it("GivenAPaidBuild_WhenItReadsItsContext_ThenItsAgentBudgetLeavesRoomForTheSandboxCheck", async () => {
+      const runs = service(new SpendGate(ledger, PRICED, undefined, () => NOW));
+      const run = await startBuild(runs);
+      expect(HELPER_CALLS.build).toBe(1);
+      // $2 reserved, less one $0.25 helper call.
+      expect((await runs.context(run.id, run.executor!)).maxBudgetUsd).toBe(1.75);
+    });
+
+    it("GivenAPaidBuildsReport_WhenItSettles_ThenTheHelperCallCountsAtItsCap", async () => {
+      const runs = service(new SpendGate(ledger, PRICED, undefined, () => NOW));
+      const run = await startBuild(runs);
+      await runs.context(run.id, run.executor!);
+      await runs.report(run.id, run.executor!, {
+        status: "succeeded",
+        summary: null,
+        output: { nope: true },
+        tokensIn: null,
+        tokensOut: null,
+        costUsd: null,
+        // 10,000 × $5/M + 2,000 × $25/M = 50,000 + 50,000 micro-USD
+        usage: {
+          inputTokens: 10_000,
+          outputTokens: 2_000,
+          cacheReadTokens: 0,
+          cacheWriteTokens: 0,
+          turns: null,
+          wallMs: null,
+        },
+      });
+      expect(await ledger.get(run.id)).toMatchObject({
+        state: "settled",
+        settledMicroUsd: 100_000 + HELPER_CALL_BUDGET_MICRO_USD,
+      });
+    });
+
+    it("GivenAReservationTooSmallForTheHelperCalls_WhenTheBuildReadsItsContext_ThenItNeverStarts", async () => {
+      const caps = async () => ({
+        global: { dailyMicroUsd: 5_000_000, monthlyMicroUsd: 50_000_000, perTaskMicroUsd: 250_000 },
+        project: null,
+      });
+      const runs = service(new SpendGate(ledger, PRICED, caps, () => NOW));
+      const run = await startBuild(runs);
+      await expect(runs.context(run.id, run.executor!)).rejects.toMatchObject({
+        code: "spend_cap",
+      });
+      expect((await runStore.get(run.id))!.startedAt).toBeNull();
+    });
+
+    it("GivenTheWorkflow_WhenItsHelperBudgetsAreRead_ThenTheyMatchTheAllowanceReserved", () => {
+      const workflow = readFileSync(
+        join(__dirname, "../../../.github/workflows/claude-executor.yml"),
+        "utf8",
+      );
+      const usd = HELPER_CALL_BUDGET_MICRO_USD / 1_000_000;
+      const flags = workflow.match(/--max-budget-usd [0-9.]+'/g) ?? [];
+      // One per helper call step (sandbox check, sync checks); sync runs both.
+      expect(flags).toEqual([`--max-budget-usd ${usd}'`, `--max-budget-usd ${usd}'`]);
+      expect(HELPER_CALLS).toEqual({ build: 1, sync: 2 });
+    });
   });
 
   it("GivenNoPriceForClaudeApi_WhenATaskStarts_ThenItIsRefused", async () => {

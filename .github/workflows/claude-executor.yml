@@ -394,7 +394,8 @@ jobs:
       # index.lock), then the command writes facts (nonce, PID 1, env names) into the
       # checkout. The workflow judges: the verify step requires that exact command in the
       # execution log (one Bash call, no error, no other tool) and asserts the facts. Capped
-      # (ADR-0028): Haiku, 3 turns, 5 minutes, $0.25 on the API key (AI-260). Fixed prompt: no ticket text, no nonce.
+      # (ADR-0028): Haiku, 3 turns, 5 minutes, $0.25 on the API key (AI-260; the run's reservation holds it back from the agent:
+      # `HELPER_CALLS` in packages/domain/src/runs.ts). Fixed prompt: no ticket text, no nonce.
       - name: Check the sandbox (build)
         id: sandbox_check
         if: steps.mode.outputs.edits == 'true'
