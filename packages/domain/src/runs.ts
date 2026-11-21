@@ -14,6 +14,7 @@ import {
   SyncOutput,
   WorkTrackerError,
   notFound,
+  MICRO_USD_PER_USD,
   type BillingType,
   type CodeHost,
   type InFlightRun,
@@ -129,7 +130,19 @@ export const PROVIDER_BILLING: Record<ProviderKey, BillingType> = {
   "claude-sub": "subscription",
   "google-sub": "subscription",
   openrouter: "pay_per_use",
+  // AI-260: Claude Code on an API key, held by the spend gate's caps (M10.7).
+  "claude-api": "pay_per_use",
 };
+
+/**
+ * The executor's helper calls per step on top of the agent (claude-executor.yml): build's
+ * sandbox check, and sync's sandbox check and checks run. Each runs under
+ * HELPER_CALL_BUDGET_MICRO_USD on the API key, so a pay_per_use run's agent gets its
+ * reservation less these, and its settled cost counts them in full (AI-260).
+ */
+export const HELPER_CALLS: Partial<Record<RunStep, number>> = { build: 1, sync: 2 };
+export const HELPER_CALL_BUDGET_MICRO_USD = 250_000;
+const helperAllowance = (step: RunStep) => (HELPER_CALLS[step] ?? 0) * HELPER_CALL_BUDGET_MICRO_USD;
 
 /** Caps per step (ADR-0028): agent turns, and the deadline the watchdog (M1.6b) checks. */
 export const STEP_LIMITS: Record<StartableStep, { maxTurns: number; timeoutMinutes: number }> = {
@@ -859,6 +872,10 @@ export class RunService {
   /** The run's instructions. The first call marks it running. */
   async context(runId: string, caller: RunCaller): Promise<RunContext> {
     let run = await this.requireCaller(runId, caller);
+    // AI-260: a pay_per_use run gets its instructions only with its reserved budget, checked
+    // before it is marked running; no reservation, no agent.
+    const billingType = PROVIDER_BILLING[run.route.provider];
+    const maxBudgetUsd = billingType === "pay_per_use" ? await this.reservedBudgetUsd(run) : null;
     if (run.status === "queued") {
       run = await this.runs.update(
         run.id,
@@ -889,7 +906,33 @@ export class RunService {
           ? { pullRequest: run.syncRun.number, headSha: run.syncRun.headSha }
           : null,
       baseBranch: run.step === "build" ? run.baseBranch : null,
+      billingType,
+      maxBudgetUsd,
     };
+  }
+
+  /** How the run's route is billed; null for an unknown run. */
+  async billingOf(runId: string): Promise<BillingType | null> {
+    const run = await this.runs.get(runId);
+    return run ? PROVIDER_BILLING[run.route.provider] : null;
+  }
+
+  /**
+   * The agent's budget in USD: the run's reservation less its helper calls' allowance, so the
+   * whole run stays within what was reserved. `spend_cap` when there is no reservation or it
+   * leaves the agent nothing (the run must never start).
+   */
+  private async reservedBudgetUsd(run: Run): Promise<number> {
+    const micro = this.spendGate ? await this.spendGate.reservedFor(run.id) : null;
+    const agent = micro === null ? 0 : micro - helperAllowance(run.step);
+    if (agent <= 0) {
+      log("ERROR", "paid run asked for its context without a usable reservation", {
+        runId: run.id,
+        reservedMicroUsd: micro,
+      });
+      throw new DomainError("spend_cap", `run ${run.id} has no usable spend reservation`);
+    }
+    return agent / MICRO_USD_PER_USD;
   }
 
   /**
@@ -1954,7 +1997,9 @@ export class RunService {
       log("ERROR", "run unreadable while closing its spend", { runId, error: String(err) });
       return null;
     });
-    await this.spendGate.close(runId, fresh, usage);
+    // A report's usage covers the agent only: the helper calls count at their full allowance.
+    const helpers = usage ? helperAllowance(ended.step) : 0;
+    await this.spendGate.close(runId, fresh, usage, helpers);
   }
 
   /** Marks a queued run failed; logs (doesn't throw) if that write fails too. */

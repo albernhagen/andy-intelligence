@@ -42,7 +42,7 @@ export type Size = z.infer<typeof Size>;
 export const TierKey = z.enum(["frontier", "strong", "fast", "cheap"]);
 export type TierKey = z.infer<typeof TierKey>;
 
-export const ProviderKey = z.enum(["claude-sub", "google-sub", "openrouter"]);
+export const ProviderKey = z.enum(["claude-sub", "google-sub", "openrouter", "claude-api"]);
 export type ProviderKey = z.infer<typeof ProviderKey>;
 
 export const HarnessKey = z.enum(["claude-code", "jules", "opencode", "direct"]);
