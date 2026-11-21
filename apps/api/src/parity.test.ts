@@ -63,7 +63,7 @@ describe("Web UI and MCP parity registry (AI-300)", () => {
       expect(e.pending!.missing.trim()).not.toBe("");
     }
     // The gaps held open on purpose today; a ticket that closes one removes its mark here.
-    expect(gaps.map((e) => e.pending!.ticket).sort()).toEqual(["AI-294", "AI-296", "AI-299"]);
+    expect(gaps.map((e) => e.pending!.ticket).sort()).toEqual(["AI-294", "AI-299"]);
   });
 
   it("GivenTheActions_WhenListed_ThenEachIsNamedOnce", () => {
