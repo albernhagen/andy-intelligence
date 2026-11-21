@@ -41,6 +41,7 @@ const epicResult = {
   outcome: "epic" as const,
   epic: {
     title: "Andy sees his week",
+    outcome: "Andy sees a weekly summary of his runs.",
     body: "Runs pile up with no overview.",
     acceptanceCriteria: ["WHEN Andy opens the week THE SYSTEM SHALL show totals"],
     slices: [{ title: "Totals", summary: "Sum the week." }],
