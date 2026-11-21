@@ -1,6 +1,6 @@
 # Mobile: Web Push keys — runbook (Andy)
 
-Gives the control plane its Web Push key pair (AI-179: M7.10: VAPID key secret, ADR-0052, ADR-0115 Q2). Until every step is done the API sends no push: it logs `push not configured` once at start.
+Gives the control plane its Web Push key pair (AI-179: M7.10: VAPID key secret, ADR-0052, ADR-0115 Q2). Until every step is done the API sends no push. The sender that reads these keys is AI-178: M7.9: web-push sender (PR #245); once it is on `main`, the API logs `push not configured` once at start while the keys are missing.
 
 | Term                | Meaning                                                                                                                              |
 | ------------------- | ------------------------------------------------------------------------------------------------------------------------------------ |
@@ -50,7 +50,7 @@ terraform plan -out=push.tfplan   # expect 0 to add, 1 to change (google_cloud_r
 terraform apply push.tfplan
 ```
 
-The new revision reads the key at start. Check Cloud Logging, `jsonPayload.component="push-sender"`: no `push not configured` line after the revision starts. A test push comes with M7.11: Subscribe API and M7.12: Notification settings page.
+The new revision reads the key at start: if the secret has no version yet, the revision fails to deploy, so do step 2 first. Once AI-178 is on `main`, check Cloud Logging, `jsonPayload.component="push-sender"`: no `push not configured` line after the revision starts. Before that no code reads the keys, so there is no line either way. A test push comes with M7.11: Subscribe API and M7.12: Notification settings page.
 
 ## Turn it off or rotate
 
