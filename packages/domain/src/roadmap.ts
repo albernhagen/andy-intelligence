@@ -1,4 +1,5 @@
 import {
+  MILESTONES_PER_PROJECT_MAX,
   byMilestoneOrder,
   compareRanks,
   notFound,
@@ -96,10 +97,16 @@ export interface ProjectRoadmap {
   projectName: string;
   /** The project's milestones in roadmap order (`byMilestoneOrder`). */
   milestones: RoadmapMilestone[];
-  /** Keys of top-level epics with no milestone (or one not found), in rank order. */
+  /**
+   * Keys of top-level epics with no milestone, in rank order. An epic naming a milestone that
+   * isn't listed is here only when the list wasn't cut; past the cap it is left out (`truncated`).
+   */
   noMilestone: string[];
   epics: RoadmapEpic[];
-  /** Some top-level or child epics were left out (`MAX_ROADMAP_EPICS`, `MAX_ROADMAP_CHILD_EPICS`). */
+  /**
+   * Something was left out: top-level or child epics (`MAX_ROADMAP_EPICS`,
+   * `MAX_ROADMAP_CHILD_EPICS`), or milestones past `MILESTONES_PER_PROJECT_MAX`.
+   */
   truncated: boolean;
 }
 
@@ -244,6 +251,10 @@ export function buildRoadmap(
   const epics = top.slice(0, MAX_ROADMAP_EPICS).map((e) => entry(e, tickets, byId, cut));
   const ordered = [...milestones].sort(byMilestoneOrder);
   const known = new Set(ordered.map((m) => m.id));
+  // A list at the store's cap may have been cut: an epic naming an unlisted milestone may belong
+  // to one past it, so it isn't called "no milestone" and the roadmap says it is partial.
+  const listCut = milestones.length >= MILESTONES_PER_PROJECT_MAX;
+  const unlisted = (e: Ticket) => e.milestoneId !== null && !known.has(e.milestoneId);
   // Every top-level epic counts in its milestone, even one past the `epics` cap.
   const rolled = top.map((e) => ({ epic: e, fields: fields(e, tickets, byId) }));
   return {
@@ -257,10 +268,10 @@ export function buildRoadmap(
       ),
     ),
     noMilestone: top
-      .filter((e) => e.milestoneId === null || !known.has(e.milestoneId))
+      .filter((e) => e.milestoneId === null || (unlisted(e) && !listCut))
       .map((e) => e.key),
     epics,
-    truncated: cut.truncated,
+    truncated: cut.truncated || (listCut && top.some(unlisted)),
   };
 }
 

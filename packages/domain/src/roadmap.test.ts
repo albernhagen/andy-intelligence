@@ -1,5 +1,6 @@
 import {
   InMemoryMilestoneStore,
+  MILESTONES_PER_PROJECT_MAX,
   InMemoryWorkTracker,
   type BoardTicket,
   type Milestone,
@@ -274,5 +275,35 @@ describe("roadmap by milestone (AI-305)", () => {
 
     expect(roadmap.milestones.map((m) => m.epicKeys)).toEqual([["AI-1"]]);
     expect(lists).toBe(1);
+  });
+});
+
+describe("roadmap milestone cap (AI-305)", () => {
+  const ms = (i: number): Milestone => ({
+    id: `m${i}`,
+    projectId: "ai",
+    name: `M${i}`,
+    outcome: `M${i} works`,
+    order: i,
+    status: "approved",
+    createdAt: "2026-11-21T00:00:00.000Z",
+    updatedAt: "2026-11-21T00:00:00.000Z",
+  });
+
+  it("GivenAListAtTheCap_WhenAnEpicNamesAnUnlistedMilestone_ThenItIsLeftOutOfNoMilestoneAndTruncated", () => {
+    const listed = Array.from({ length: MILESTONES_PER_PROJECT_MAX }, (_, i) => ms(i));
+    const tickets = [epic(1, { milestoneId: "past-the-cap" }), epic(2)];
+
+    const roadmap = buildRoadmap(PROJECT, tickets, listed);
+
+    expect(roadmap.noMilestone).toEqual(["AI-2"]);
+    expect(roadmap.truncated).toBe(true);
+  });
+
+  it("GivenAListUnderTheCap_WhenAnEpicNamesAMissingMilestone_ThenItIsUnderNoMilestone", () => {
+    const roadmap = buildRoadmap(PROJECT, [epic(1, { milestoneId: "gone" })], [ms(1)]);
+
+    expect(roadmap.noMilestone).toEqual(["AI-1"]);
+    expect(roadmap.truncated).toBe(false);
   });
 });
