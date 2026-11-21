@@ -60,12 +60,14 @@ describe("workViews", () => {
     expect(views(ticket(1, { blockedBy: ["AI-2"] }), [blocker])).toContain("blocked");
   });
 
-  it("GivenOnlyDoneOrCancelledBlockers_WhenClassified_ThenItIsNotBlocked", () => {
+  it("GivenOnlyDoneBlockers_WhenClassified_ThenItIsNotBlocked", () => {
     const done = ticket(2, { stage: "done" });
+    expect(views(ticket(1, { blockedBy: ["AI-2"] }), [done])).not.toContain("blocked");
+  });
+
+  it("GivenACancelledBlocker_WhenClassified_ThenItIsStillBlocked", () => {
     const cancelled = ticket(3, { stage: "cancelled" });
-    expect(views(ticket(1, { blockedBy: ["AI-2", "t3"] }), [done, cancelled])).not.toContain(
-      "blocked",
-    );
+    expect(views(ticket(1, { blockedBy: ["t3"] }), [cancelled])).toContain("blocked");
   });
 
   it("GivenReadyForReview_WhenClassified_ThenItIsInReview", () => {

@@ -1,5 +1,4 @@
 import type { BoardTicket, Ticket } from "@andy/contracts";
-import { openBlockers } from "./status-line";
 
 /**
  * Fixed work views (ADR-0108 decision 5, AI-187): presets in code that narrow a board to the
@@ -29,7 +28,8 @@ export const isOpenTicket = (t: Ticket) =>
 
 /**
  * The views an open ticket is in (none for a closed one). `byId` holds the board's tickets, for
- * blockers: a blocker counts while it is not Done or Cancelled, as the card's "Blocked by" does.
+ * blockers: a blocker counts until it is Done (ADR-0108), so a Cancelled blocker keeps the ticket
+ * in Blocked until someone removes it; the card's "Blocked by" marker ignores it.
  * Needs me matches the Needs-you inbox (an open question or the API's flag, AI-40) plus a
  * ticket whose worker is still to be picked (ADR-0082). An epic never runs, so it is never
  * Mine or Agents.
@@ -43,9 +43,18 @@ export function workViews(ticket: BoardTicket, byId: ReadonlyMap<string, Ticket>
     views.push("needs-me");
   if (runs && worker === "me") views.push("mine");
   if (runs && worker === "agent") views.push("agents");
-  if (openBlockers(ticket, byId).length > 0) views.push("blocked");
+  if (hasBlockerNotDone(ticket, byId)) views.push("blocked");
   if (ticket.stage === "ready_for_review") views.push("in-review");
   return views;
+}
+
+/** Entries are keys, or ids written before AI-96; a blocker in another project isn't on the board. */
+function hasBlockerNotDone(ticket: Ticket, byId: ReadonlyMap<string, Ticket>): boolean {
+  const find = (ref: string) => byId.get(ref) ?? [...byId.values()].find((t) => t.key === ref);
+  return ticket.blockedBy.some((ref) => {
+    const blocker = find(ref);
+    return !!blocker && blocker.stage !== "done";
+  });
 }
 
 /** Open tickets per view, for the chips' counts. */
