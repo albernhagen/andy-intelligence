@@ -21,6 +21,7 @@ import { actorOf, signedIn, type AuthEnv } from "./auth";
 import { registerWorkerRoutes } from "./worker";
 import { registerExecutorRoutes } from "./executor";
 import { costOfTicket } from "./ticket-cost";
+import type { RouteModule } from "./services";
 
 /** Ticket core REST API (M1.2: Ticket core). Every caller here is Andy (allow-list), so actor = actorOf(c.get("identity")). */
 
@@ -438,3 +439,7 @@ export function registerTicketRoutes(
   registerWorkerRoutes(app, service);
   registerExecutorRoutes(app, service);
 }
+
+/** Listed in `api-routes.ts` (AI-145). */
+export const apiRoutes: RouteModule = (app, s) =>
+  registerTicketRoutes(app, s.tracker, s.service, s.projects, s.runs);

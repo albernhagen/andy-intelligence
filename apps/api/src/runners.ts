@@ -15,6 +15,7 @@ import { actorOf, type AuthEnv } from "./auth";
 import { KnownCredentials } from "./known-credentials";
 import { FixedWindowLimiter } from "./mcp/rate-limit";
 import { hashToken, newToken } from "./mcp/tokens";
+import type { RouteModule } from "./services";
 
 /**
  * Local runners (ADR-0089 slice 3). Andy mints, lists and revokes runners under /api (Firebase
@@ -172,3 +173,15 @@ export function registerRunnerClaim(app: Hono<AuthEnv>, deps: RunnerClaimDeps): 
     },
   );
 }
+
+/** Listed in `api-routes.ts` (AI-145); absent when runners are not configured. */
+export const apiRoutes: RouteModule = (app, s) => {
+  if (s.runners) registerRunnerRoutes(app, s.runners);
+};
+
+/** Listed in `public-routes.ts` (AI-145): the runner presents its runner secret (ADR-0089). */
+export const publicRoutes: RouteModule = (app, s) => {
+  const { runners, claims } = s;
+  if (!runners || !claims) return;
+  registerRunnerClaim(app, { runners, claim: (runner) => claims.claim(runner), now: s.now });
+};

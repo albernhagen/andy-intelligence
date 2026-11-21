@@ -16,6 +16,7 @@ import {
 } from "@andy/contracts";
 import { settleNight, type NightLaunches, type PlanState } from "@andy/domain";
 import { actorOf, type AuthEnv } from "./auth";
+import type { RouteModule } from "./services";
 
 /**
  * The night launch step (M4.17, ADR-0049 "Launch step"): an epic's launch checklist, start and
@@ -330,3 +331,8 @@ export function registerNightRoutes(app: OpenAPIHono<AuthEnv>, deps: NightDeps):
     return c.json(await stopNight(deps, epic, actorOf(c.get("identity"))), 200);
   });
 }
+
+/** Listed in `api-routes.ts` (AI-145); absent without a launch store. */
+export const apiRoutes: RouteModule = (app, s) => {
+  if (s.night) registerNightRoutes(app, s.night);
+};
