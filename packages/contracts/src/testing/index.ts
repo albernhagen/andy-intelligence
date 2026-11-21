@@ -1201,6 +1201,28 @@ export function runStoreContract(
       expect(capped.complete).toBe(false);
     });
 
+    it("GivenRunsOnTwoProviders_WhenCountingOneSinceATime_ThenOnlyItsNewerRunsAndCapped", async () => {
+      const store = await make();
+      const p = project();
+      const google = (): NewRun => ({
+        ...newRun(p),
+        route: { harness: "jules", provider: "google-sub", model: "jules" },
+      });
+      const before = await store.create(google());
+      await new Promise((r) => setTimeout(r, 5));
+      const since = new Date().toISOString();
+      await new Promise((r) => setTimeout(r, 5));
+      await store.create(google());
+      await store.create(google());
+      await store.create(newRun(p));
+      expect(before.createdAt! < since).toBe(true);
+      const all = await store.countCreatedSince("google-sub", since, 100);
+      expect(all).toEqual({ count: 2, complete: true });
+      const capped = await store.countCreatedSince("google-sub", since, 1);
+      expect(capped.count).toBeLessThanOrEqual(1);
+      expect(capped.complete).toBe(false);
+    });
+
     it("GivenAQueuedRun_WhenUpdatedFromQueued_ThenOnlyThePatchedFieldsChange", async () => {
       const store = await make();
       const run = await store.create(newRun(project()));

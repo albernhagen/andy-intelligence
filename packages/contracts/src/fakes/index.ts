@@ -407,6 +407,14 @@ export class InMemoryRunStore implements RunStore {
     };
   }
 
+  async countCreatedSince(provider: ProviderKey, since: string, limit: number) {
+    const found = [...this.runs.values()].filter(
+      (r) => r.route.provider === provider && !!r.createdAt && r.createdAt >= since,
+    );
+    // Reaching the cap counts as incomplete, as in Firestore: the caller fails closed.
+    return { count: Math.min(found.length, limit), complete: found.length < limit };
+  }
+
   async update(runId: string, patch: RunPatch, from: readonly RunStatus[]): Promise<Run> {
     const current = this.runs.get(runId);
     if (!current) throw notFound("run", runId);
