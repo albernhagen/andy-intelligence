@@ -14,6 +14,9 @@ import {
   Policy,
   Project,
   Provider,
+  PushSendState,
+  PushSettings,
+  PushSubscription,
   QuotaClear,
   QuotaReading,
   Question,
@@ -72,6 +75,10 @@ export const collections = {
   runTokens: { path: () => "runTokens" },
   /** Overnight launches (ADR-0049), server-only; validated by `FirestoreNightLaunchStore`. */
   nightLaunches: { path: () => "nightLaunches" },
+  /** Web Push (M7.7), server-only; subscriptions keyed by SHA-256 of the endpoint, the rest by uid. */
+  pushSubscriptions: { path: () => "pushSubscriptions", schema: PushSubscription },
+  pushSettings: { path: () => "pushSettings", schema: PushSettings },
+  pushSendStates: { path: () => "pushSendStates", schema: PushSendState },
   /** Singleton settings documents, e.g. `config/codeHost` (ADR-0043). */
   config: { path: () => "config" },
 } as const;
@@ -142,3 +149,8 @@ export {
   CONFIG_CHANGE_PENDING_READ_MAX,
   FirestoreConfigChangeStore,
 } from "./config-change-store";
+export {
+  FirestorePushSubscriptionStore,
+  PUSH_SUBSCRIPTION_READ_MAX,
+  pushSubscriptionDocId,
+} from "./push-subscription-store";
