@@ -2,6 +2,7 @@ import { createRoute, z, type OpenAPIHono } from "@hono/zod-openapi";
 import { QuotaClearResult, QuotaStatus, type QuotaStore } from "@andy/contracts";
 import { quotaStatus, type QuotaClearer } from "@andy/domain";
 import { signedIn, type AuthEnv } from "./auth";
+import type { RouteModule } from "./services";
 
 const ErrorBody = z.object({ error: z.string(), details: z.array(z.string()).optional() });
 
@@ -53,3 +54,7 @@ export function registerQuotaRoutes(
     c.json(await clearer.clearIdle(signedIn(c.get("identity"))), 200),
   );
 }
+
+/** Listed in `api-routes.ts` (AI-145). */
+export const apiRoutes: RouteModule = (app, s) =>
+  registerQuotaRoutes(app, s.deps.quota ?? null, s.quota, s.now);

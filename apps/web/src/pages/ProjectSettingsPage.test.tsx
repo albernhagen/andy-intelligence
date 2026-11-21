@@ -54,6 +54,7 @@ describe("project settings page", () => {
       paused: true,
       defaultWorker: "ask",
       executor: "local",
+      environments: "dev-and-prod",
       lastDispatch: { decision: "paused", at: "2026-11-09T12:00:00.000Z" },
     });
     await h.queryClient.invalidateQueries();
@@ -74,9 +75,10 @@ describe("project settings page", () => {
     expect(checkbox("Paused")).toBe(true);
     expect(value("Default worker")).toBe("ask");
     expect(value("Default executor")).toBe("local");
+    expect(value("Environments")).toBe("dev-and-prod");
     expect(within(list).getByText("Dispatch: paused by you")).toBeTruthy();
     // One row per setting group, each with its line on what it does.
-    expect(within(list).getAllByRole("listitem")).toHaveLength(10);
+    expect(within(list).getAllByRole("listitem")).toHaveLength(11);
     expect(within(list).getByText(/never over MCP/)).toBeTruthy();
   });
 
@@ -111,6 +113,11 @@ describe("project settings page", () => {
     await h.user.selectOptions(within(list).getByLabelText("Plan approval"), "all");
     await waitFor(async () => expect((await h.tracker.getProject("ai"))?.planApproval).toBe("all"));
 
+    await h.user.selectOptions(within(list).getByLabelText("Environments"), "dev-and-prod");
+    await waitFor(async () =>
+      expect((await h.tracker.getProject("ai"))?.environments).toBe("dev-and-prod"),
+    );
+
     await h.user.click(within(list).getByRole("checkbox", { name: "Paused" }));
     await waitFor(async () => expect((await h.tracker.getProject("ai"))?.paused).toBe(true));
 
@@ -127,6 +134,7 @@ describe("project settings page", () => {
       planApproval: "none",
       paused: false,
       runsAtOnce: 2,
+      environments: "prod-only",
     });
   });
 

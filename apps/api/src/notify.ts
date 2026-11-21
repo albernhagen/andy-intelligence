@@ -3,7 +3,8 @@ import { EMAIL_BATCH_WINDOW_MS, EMAIL_DAILY_CAP, type EmailNotifications } from 
 import type { Hono } from "hono";
 import type { AuthEnv } from "./auth";
 import { FixedWindowLimiter } from "./mcp/rate-limit";
-import type { InvokerTokenVerifier } from "./watchdog";
+import { invokerTokenVerifier, type InvokerTokenVerifier } from "./watchdog";
+import type { RouteModule } from "./services";
 
 /**
  * Email for the Needs-you inbox (AI-77): the settings page's status and test send, and the
@@ -122,3 +123,20 @@ export function registerNotifyFlush(
     return c.json({ outcome }, outcome === "early" ? 503 : 200);
   });
 }
+
+/** Listed in `api-routes.ts` (AI-145). */
+export const apiRoutes: RouteModule = (app, s) => registerNotifyRoutes(app, s.notifyEmail ?? null);
+
+/** Listed in `public-routes.ts` (AI-145); needs email and the watchdog queue's invoker. */
+export const publicRoutes: RouteModule = (app, s) => {
+  const { notifyEmail } = s;
+  const watchdog = s.deps.watchdog;
+  if (!notifyEmail || !watchdog) return;
+  registerNotifyFlush(app, {
+    email: notifyEmail,
+    verify:
+      watchdog.verifyInvokerToken ??
+      invokerTokenVerifier(watchdog.publicUrl, watchdog.invokerEmail),
+    now: s.now,
+  });
+};

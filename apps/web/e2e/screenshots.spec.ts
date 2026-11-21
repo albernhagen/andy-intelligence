@@ -1,7 +1,7 @@
 import { expect, test, type Page } from "@playwright/test";
 
 /**
- * AI-26: screenshot checks for the shell, board, story panel (AI-29), inbox (AI-30) and agent task page (AI-101). A diff fails CI; a deliberate
+ * AI-26: screenshot checks for the shell, board, story panel (AI-29), inbox (AI-30), agent task page (AI-101) and project settings (M4.12). A diff fails CI; a deliberate
  * change updates the stored images in the same PR (README: "Screenshot checks").
  */
 
@@ -44,6 +44,16 @@ test("board: Done expanded", async ({ page }) => {
   await page.getByRole("button", { name: /^Show Done/ }).click();
   await expect(page.getByText("Ticket core")).toBeVisible();
   await expect(page).toHaveScreenshot("board-expanded.png", { fullPage: true });
+});
+
+test("board: work view chips, Needs me picked", async ({ page }) => {
+  await page.clock.setFixedTime(SEED_NOW);
+  await open(page, "/p/ai?view=needs-me", "Sort by score");
+  await expect(page.getByRole("button", { name: /^Needs me/ })).toHaveAttribute(
+    "aria-pressed",
+    "true",
+  );
+  await expect(page).toHaveScreenshot("board-work-view.png", { fullPage: true });
 });
 
 test("board under All projects asks for a project", async ({ page }) => {
@@ -96,4 +106,12 @@ test("story panel for an epic", async ({ page }) => {
   await open(page, "/p/ops/t/OPS-5", "1 of 3 done");
   await page.getByRole("region", { name: "Stories" }).scrollIntoViewIfNeeded();
   await expect(page).toHaveScreenshot("story-panel-epic.png");
+});
+
+/** M4.12: AI's settings with the Changes list: a reverted flip and the revert, logged too. */
+test("project settings with changes", async ({ page }) => {
+  await page.clock.setFixedTime(SEED_NOW);
+  await open(page, "/p/ai/settings", "AI: Andy Intelligence settings");
+  await expect(page.getByText("Revert of change-flip", { exact: false })).toBeVisible();
+  await expect(page).toHaveScreenshot("project-settings-changes.png", { fullPage: true });
 });

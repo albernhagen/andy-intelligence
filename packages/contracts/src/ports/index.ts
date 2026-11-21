@@ -1,7 +1,9 @@
 import { z } from "zod";
 import {
   Assumption,
+  EpicOutcome,
   AutoMerge,
+  EnvironmentPolicy,
   BillingType,
   DorStatus,
   EventActor,
@@ -88,6 +90,7 @@ export const NewTicket = Ticket.pick({ title: true }).extend({
   assumptions: z.array(z.string()).default([]),
   size: Ticket.shape.size.default(null),
   sizeReason: Ticket.shape.sizeReason.default(null),
+  outcome: Ticket.shape.outcome,
   outOfScope: Ticket.shape.outOfScope,
   touches: Ticket.shape.touches,
   overrides: Ticket.shape.overrides.default({}),
@@ -123,6 +126,7 @@ export const TicketFields = Ticket.pick({
   riskReason: true,
   confidence: true,
   confidenceReason: true,
+  outcome: true,
 })
   .partial()
   // Zod 4 applies defaults inside `.partial()`, which would turn "not given" into "reset":
@@ -135,6 +139,7 @@ export const TicketFields = Ticket.pick({
     upNextAt: Timestamp.nullable().optional(),
     sentBackReason: z.string().max(300).nullable().optional(),
     refineAssumptions: z.array(Assumption).optional(),
+    outcome: EpicOutcome.nullable().optional(),
     ...TicketScoreFields,
   });
 export type TicketFields = z.infer<typeof TicketFields>;
@@ -214,6 +219,7 @@ export const ProjectPatch = z.strictObject({
   ...projectPlanPatch,
   defaultWorker: Worker.optional(),
   executor: ExecutorKind.optional(),
+  environments: EnvironmentPolicy.optional(),
 });
 export type ProjectPatch = z.infer<typeof ProjectPatch>;
 
@@ -230,6 +236,7 @@ export const ProjectSettings = ProjectPatch.pick({
   defaultWorker: true,
   executor: true,
   emailNotifications: true,
+  environments: true,
 });
 export type ProjectSettings = z.infer<typeof ProjectSettings>;
 
@@ -422,6 +429,7 @@ export const RunPatch = Run.pick({
   syncRun: true,
   prSync: true,
   localRun: true,
+  epicMerge: true,
 }).partial();
 export type RunPatch = z.input<typeof RunPatch>;
 
@@ -558,8 +566,8 @@ export interface OAuthGrantStore {
   /** The grant, or null when missing or expired. */
   get(key: string): Promise<OAuthGrant | null>;
   /**
-   * Removes and returns the grant atomically (null when missing or expired), so codes and
-   * refresh tokens are single-use even under concurrent requests.
+   * Removes and returns the grant atomically (null when missing or expired), so codes are
+   * single-use even under concurrent requests.
    */
   take(key: string): Promise<OAuthGrant | null>;
 }
@@ -609,9 +617,14 @@ export interface CodeHost {
   listFiles(fullName: string, dir: string, ref: string): Promise<string[] | null>;
   /**
    * Squash-merges with the App's identity, only if the head is still `expectedHeadSha`. Throws
-   * when the host refuses (conflict, branch rules, a moved head).
+   * when the host refuses (conflict, branch rules, a moved head). Resolves to the squash
+   * commit's sha, or null when the host didn't report one.
    */
-  mergePullRequest(fullName: string, number: number, expectedHeadSha: string): Promise<void>;
+  mergePullRequest(
+    fullName: string,
+    number: number,
+    expectedHeadSha: string,
+  ): Promise<string | null>;
   /**
    * Whether commit `head` already contains `base` (a branch or commit): true when `head` is
    * ahead of it or the same. Null when the repo or a ref isn't known.
@@ -623,6 +636,25 @@ export interface CodeHost {
    * Throws when the branch already exists or the host refuses.
    */
   proposeFile(fullName: string, proposal: FileProposal): Promise<ProposedPullRequest | null>;
+  /** The branch's tip commit; null when the branch, the repo or the App's install is missing. */
+  branchSha(fullName: string, branch: string): Promise<string | null>;
+  /**
+   * Creates an `epic/<KEY>` branch at `sha` with the App's identity (AI-122: a night launch's
+   * branch); "exists" when a branch of that name is already there. Throws for any other name or
+   * sha, or when the App isn't installed.
+   */
+  createBranch(fullName: string, branch: string, sha: string): Promise<"created" | "exists">;
+  /**
+   * Opens a PR from an `epic/<KEY>` branch into `base` with the App's identity (AI-124: a night
+   * launch's morning PR); "exists" when an open PR for that head and base is already there.
+   * Throws for any other head, or when the App isn't installed.
+   */
+  openEpicPullRequest(
+    fullName: string,
+    pr: { head: string; base: string; title: string; body: string },
+  ): Promise<{ number: number; url: string } | "exists">;
+  /** Deletes an `epic/<KEY>` branch (AI-124); a missing one is fine. Throws for any other name. */
+  deleteEpicBranch(fullName: string, branch: string): Promise<void>;
 }
 
 // ── CodeHostConnectionStore ──────────────────────────────────────────────────
@@ -735,9 +767,12 @@ export interface Telemetry {
   recordCost(event: CostEvent): void;
 }
 
-export * from "./digest";
-export * from "./notify-email";
-export * from "./runner";
-export * from "./night";
-export * from "./config-proposals";
 export * from "./config-changes";
+export * from "./config-proposals";
+export * from "./deployments";
+export * from "./digest";
+export * from "./night";
+export * from "./notify-email";
+export * from "./project-versions";
+export * from "./push";
+export * from "./runner";

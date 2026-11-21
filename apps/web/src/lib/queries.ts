@@ -2,6 +2,7 @@ import { useEffect, useRef } from "react";
 import { type QueryClient, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type {
   AutoMerge,
+  EnvironmentPolicy,
   ExecutorKind,
   PlanApproval,
   Run,
@@ -326,6 +327,7 @@ export function useUpdateProject(projectId: string) {
       defaultWorker?: Worker;
       executor?: ExecutorKind;
       emailNotifications?: boolean;
+      environments?: EnvironmentPolicy;
     }) =>
       unwrap(
         await api.PATCH("/api/projects/{projectId}", { params: { path: { projectId } }, body }),
@@ -360,7 +362,7 @@ export function useCreateTicket(projectId: string) {
 
 /** One in-place edit: only the changed fields, plus the `updatedAt` it was read at (409 if stale). */
 export type TicketPatch = Partial<
-  TicketInput & { parentId: string | null; blockedBy: string[] }
+  TicketInput & { parentId: string | null; blockedBy: string[]; outcome: string | null }
 > & {
   ifUpdatedAt: string;
 };
@@ -632,5 +634,32 @@ export function useDecideConfigChange() {
               params: { path: { changeId } },
             }),
       ),
+  );
+}
+
+/** A project's settings change log (M4.12), newest first. */
+export function useSettingsChanges(projectId: string) {
+  const api = useApi();
+  return useQuery({
+    ...useLivePoll("slow"),
+    queryKey: ["settings-changes", projectId],
+    queryFn: async () =>
+      unwrap(
+        await api.GET("/api/projects/{projectId}/config-changes", {
+          params: { path: { projectId } },
+        }),
+      ),
+  });
+}
+
+/** Andy's revert of one settings change: before values back, logged as a new change. */
+export function useRevertSettingsChange(projectId: string) {
+  const api = useApi();
+  return useWrite(async (changeId: string) =>
+    unwrap(
+      await api.POST("/api/projects/{projectId}/config-changes/{changeId}/revert", {
+        params: { path: { projectId, changeId } },
+      }),
+    ),
   );
 }
