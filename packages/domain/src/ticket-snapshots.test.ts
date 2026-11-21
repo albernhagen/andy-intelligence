@@ -1,9 +1,10 @@
 import { InMemoryWorkTracker, type Ticket } from "@andy/contracts";
 import { countReads } from "@andy/contracts/testing";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import {
   SNAPSHOT_FULL_READ_MS,
   SNAPSHOT_MAX_PROJECTS,
+  ProjectTickets,
   TicketSnapshots,
   matchesTicketFilter,
 } from "./ticket-snapshots";
@@ -130,5 +131,42 @@ describe("TicketSnapshots (AI-317)", () => {
         await s.raw.listTickets("ai", filter),
       );
     }
+  });
+});
+
+describe("ProjectTickets (AI-318)", () => {
+  it("GivenVersionsAndSnapshots_WhenListedTwiceAtOneVersion_ThenTheSecondListReadsOnlyTheVersion", async () => {
+    const s = await setup(20);
+    const versions = { get: vi.fn().mockResolvedValue(3) };
+    const tickets = new ProjectTickets(s.counted.store, versions, s.snapshots);
+    expect(await tickets.list("ai")).toEqual(await s.raw.listTickets("ai"));
+    s.counted.reset();
+
+    await tickets.list("ai");
+
+    expect(s.counted.reads()).toBe(0);
+    expect(versions.get).toHaveBeenCalledTimes(2);
+  });
+
+  it("GivenTheVersionReadFails_WhenListed_ThenEveryTicketIsReadAndTheFailureLogged", async () => {
+    const s = await setup(20);
+    const error = vi.spyOn(console, "error").mockImplementation(() => {});
+    const versions = { get: vi.fn().mockRejectedValue(new Error("unavailable")) };
+    const tickets = new ProjectTickets(s.counted.store, versions, s.snapshots);
+
+    expect(await tickets.list("ai")).toHaveLength(20);
+
+    expect(s.counted.reads()).toBe(20);
+    expect(error).toHaveBeenCalledWith(expect.stringContaining("project-tickets"));
+    error.mockRestore();
+  });
+
+  it("GivenNoSnapshots_WhenListed_ThenEveryTicketIsRead", async () => {
+    const s = await setup(20);
+    const tickets = new ProjectTickets(s.counted.store);
+
+    await tickets.list("ai");
+
+    expect(s.counted.reads()).toBe(20);
   });
 });
