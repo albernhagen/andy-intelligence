@@ -906,11 +906,13 @@ export class RunService {
   }
 
   /**
-   * The publish job's one repo token per build run (ADR-0063): the caller must be the build
-   * run's own executor run, still in flight, in a repo of the run's project (ADR-0096). Read-then-write, so two calls racing in the same
-   * instant could both pass; both come from the platform's own workflow run.
+   * The publish step's one repo token per build run (ADR-0063): the caller must be the build
+   * run's own executor run, in a repo of the run's project (ADR-0096), or the local runner that
+   * claimed it (ADR-0089; its token is for the project's repo, never one it names), still in
+   * flight. Read-then-write, so two calls racing in the same instant could both pass; both come
+   * from the run's own executor.
    */
-  async claimPushGrant(runId: string, caller: RunExecutor): Promise<Run> {
+  async claimPushGrant(runId: string, caller: RunCaller): Promise<Run> {
     const run = await this.requireCaller(runId, caller);
     if (run.step !== "build" && run.step !== "sync") {
       throw new DomainError(
@@ -927,8 +929,32 @@ export class RunService {
     const granted = await this.runs.update(run.id, { pushGrantedAt: this.now().toISOString() }, [
       "running",
     ]);
-    log("INFO", "push token granted", { runId, repo: caller.repo });
+    log("INFO", "push token granted", {
+      runId,
+      ...(isLocalCaller(caller) ? { runnerId: caller.runnerId } : { repo: caller.repo }),
+    });
     return granted;
+  }
+
+  /**
+   * A local runner's push grant (ADR-0089): `claimPushGrant`, then the repo the token is for,
+   * the run's project repo (the claim named it to the runner). Local runs are build runs only
+   * (sync stays on Actions, ADR-0094).
+   */
+  async claimLocalPushGrant(runId: string, caller: LocalCaller): Promise<{ repo: string }> {
+    const claimed = await this.requireCaller(runId, caller);
+    if (claimed.step !== "build") {
+      throw new DomainError(
+        "forbidden",
+        `run ${runId} is a ${claimed.step} run; local runs push only builds`,
+      );
+    }
+    // The repo first, so a project without one doesn't spend the run's one grant.
+    const project = await this.tracker.getProject(claimed.projectId);
+    const repo = project?.repos[0];
+    if (!repo) throw new DomainError("invalid_repo", `run ${runId}'s project has no repo`);
+    await this.claimPushGrant(runId, caller);
+    return { repo };
   }
 
   /**

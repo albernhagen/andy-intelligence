@@ -8,11 +8,11 @@ Overview and reading map: [ARCHITECTURE.md](ARCHITECTURE.md). Section numbers ma
 v1.x screens:
 - **Needs-you inbox** (questions, gate reviews, pending config changes, quota warnings) — home screen.
 - **Phone** (M7: Mobile, ADR-0052): the SPA installed from Safari, phone layout for the inbox, ticket detail, releases and quota banner; push deep-links to the item; answer, approve, promote, pause from the phone.
-- **Quota & spend** (per provider gauges with reset times; paid spend vs caps; banner on warn/pause/unknown; built: header gauge, banner).
+- **Quota & spend** (per provider gauges with reset times; paid spend vs caps; built: header gauge, banner on warn/pause/unknown).
 - **Project settings** (AI-46, built): `/p/:projectId/settings`, header link; switches explained, saved by PATCH; setup checklist first (AI-95). `/projects` opens the current project's; `/projects/new` adds one.
 - **Digest** (AI-70, ADR-0081): `/p/:projectId/digest`, header link in a project scope.
-- **Tickets** — M1: board, ticket detail with history and linked runs/PRs/cost. M3 (ADR-0059): status on cards, story panel, command palette. M5: filter and group by project. M4: overrides editing; roadmap, work views (ADR-0108).
-- **Run detail** — built (AI-101: M4.7: Run detail screen): `/p/:projectId/runs/:runId`, opened from Activity; another project's task: not found. Jules links M9.
+- **Tickets** — M1: board, ticket detail with history and linked runs/PRs/cost. M3 (ADR-0059): status on cards, story panel, command palette. M5: filter and group by project. M4: overrides editing; roadmap; work views (ADR-0108): board chips; Work (`/all/work`, `/p/:id/work`, MCP `list_work`, AI-198).
+- **Run detail** — built (AI-101): `/p/:projectId/runs/:runId`, opened from Activity; another project's task: not found. Jules links M9.
 - **Config** (providers, harnesses, models, tiers, policies; audit log with revert (M4.12); pending approvals).
 - **Releases** (dev status, promote to prod, rollback).
 - **Dashboards** — built (AI-117, ADR-0045), `/p/:id/dashboards`, `/all/dashboards`: delivery (tickets by stage over time, lead time, rework, CI green on first try, review blockers), cost, quota and tokens per week by step and size (ADR-0046); `chart.tsx` (AI-103). DORA metrics from M6.
@@ -41,7 +41,7 @@ v1.x screens:
 - Drag (mouse, touch, keyboard) within a lane sets `rank` (`rankBetween`); across lanes moves (forced if not allowed, not onto Cancelled), then ranks. Optimistic; a refusal rolls back with the reason. A drop never opens the ticket (AI-25).
 - Quick add atop Backlog. Up next above Ideas (ADR-0075). Done: a counted strip; Cancelled, archived behind a toggle.
 - Group by epic (AI-86, remembered): per lane, a header per epic (key, title, done of total), No epic last; rank stays per lane. Epic filter.
-- Work view chips (AI-187, ADR-0108, `workViews`): All plus five fixed views, counted; one at a time, `?view=`, with the epic filter.
+- Work view chips (AI-187): All plus five views, counted; one at a time, `?view=`, with the epic filter.
 
 **Built in AI-29: Story panel (M3, ADR-0059):**
 - The ticket route is the board's child (`<Outlet />`): a 640px panel, full page under 900px; Esc closes.

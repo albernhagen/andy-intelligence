@@ -38,14 +38,16 @@ Contracts are defined in `packages/contracts` (Zod schemas + TypeScript interfac
 | `RunStore` | Run (status changes conditional on the current one: a late callback can't undo an ended run) | **Firestore** (M1.6a) | Local store (ADR-0032) |
 | `ModelGateway` | Completion, Usage, Cost | OpenRouter (direct single-call steps) | LiteLLM, direct providers |
 | `QuotaSource` (`QuotaStore` adds `save`) | QuotaReading | Claude `rate_limit_event` capture from run reports (§10.5), Jules task counter | Official APIs when available |
-| `Notifier` | Notice, Urgency | UI (banner + Needs-you inbox); **Email** on Resend (AI-77: batched, 20 a day; `NotifyLedger`, `NotifyFlushQueue`) | Web Push + `PushSubscriptionStore` (M7: Mobile, ADR-0052), Slack |
+| `Notifier` | Notice, Urgency | UI (banner + Needs-you inbox); **Email** on Resend (AI-77: batched, 20 a day; `NotifyLedger`, `NotifyFlushQueue`) | Web Push (`PushSender`: AI-178), `PushSubscriptionStore` (ADR-0052), Slack |
 | `Deployer` | Release, Promotion, Rollback | Cloud Deploy | — |
 | `Evaluator` | Suite, Case, Score, per-case result | Agent evals (M1.17: Agent evals v1, ADR-0086); Ori Eval for scout smoke tests | Claude Code runner (`scripts/evals/evaluator.mjs`) |
 | `OAuthGrantStore` | OAuthGrant (code, access token, refresh token; keyed by token hash) | **Firestore** (ADR-0039) | Local store (ADR-0032) |
 | `RunnerStore` | Runner, per-run token (hashes only; ADR-0089) | **Firestore** | — |
 | `ConfigChangeStore`, `ReviewFindingSource` | ConfigChange, ReviewFinding (ADR-0097) | **Firestore** | — |
 | `NightLaunchStore` | NightLaunch; one active per project, checked atomically | **Firestore** | — |
+| `DeploymentStore` | Deployment (AI-161: M6.3): record, finish once, list one environment newest first (≤ 100), latest good | **Firestore** (`deployments`, server-only) | — |
 | `ProjectVersions` | A change counter per project, bumped by every tracker and run write; unchanged board and ticket-list polls are served from a per-instance cache (AI-222) | **Firestore** | — |
+| `RoutingConfigStore` | RoutingConfig: providers, tier routes, step tiers; one global, one per project; puts carry `ifUpdatedAt` (AI-230: M9.3) | **Firestore** | — |
 | `Telemetry` | Trace, Span, CostEvent | OTel → Cloud Trace / Cloud Logging | BigQuery sink |
 
 **Rule:** freeze the `Executor` contract only after **two real adapters** (Claude Code + Jules) work. Vendor terms map to domain terms (a Jules *session* is a `Run`; its *activities* are run events).
