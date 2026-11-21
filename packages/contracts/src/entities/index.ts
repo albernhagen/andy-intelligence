@@ -26,6 +26,7 @@ import { runSyncFields } from "./sync";
 import { runLocalFields } from "./runner";
 import { runBaseFields } from "./build";
 import { runIdeaFields } from "./ideate";
+import { runRouteFields } from "./routing";
 import { ProjectSpendCaps } from "./spend-caps";
 import { RefineScores, TicketScores } from "./scores";
 import {
@@ -649,6 +650,7 @@ export const Run = z.object({
   ...runLocalFields,
   ...runBaseFields,
   ...runIdeaFields,
+  ...runRouteFields,
 });
 export type Run = z.infer<typeof Run>;
 

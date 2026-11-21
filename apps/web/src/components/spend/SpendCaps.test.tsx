@@ -67,6 +67,23 @@ describe("Spend caps panel", () => {
     expect(await within(changes).findByText(/^spendCaps: /)).toBeTruthy();
   });
 
+  it("GivenASubCentProjectCap_WhenOnlyDailyIsEditedAndSaved_ThenTheOtherKeepsItsExactValue", async () => {
+    const { h, panel, field } = await settingsPage();
+    await h.tracker.updateProject("ai", { spendCaps: { perTaskMicroUsd: 1_234_567 } });
+    await h.queryClient.invalidateQueries();
+    await waitFor(() => expect((field("Per task") as HTMLInputElement).value).toBe("1.23"));
+
+    await h.user.type(field("Daily"), "1");
+    await h.user.click(within(panel).getByRole("button", { name: "Save caps" }));
+
+    await waitFor(async () =>
+      expect((await h.tracker.getProject("ai"))?.spendCaps).toEqual({
+        dailyMicroUsd: 1_000_000,
+        perTaskMicroUsd: 1_234_567,
+      }),
+    );
+  });
+
   it("GivenACapAboveGlobal_WhenAndySavesIt_ThenTheRefusalSaysWhyAndNothingIsStored", async () => {
     const { h, panel, field } = await settingsPage();
     await h.user.type(field("Per task"), "3");
