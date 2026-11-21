@@ -62,6 +62,7 @@ const ready = (gaps: RefineGap[]): RefineOutput => ({
   touches: [],
   body: null,
   acceptanceCriteria: [],
+  epicOutcome: null,
   outcome: "ready",
   reason: null,
   children: [],

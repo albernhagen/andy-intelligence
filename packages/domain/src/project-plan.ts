@@ -155,7 +155,19 @@ export class ProjectPlanService {
         (t) => t.title === title && t.body === body && !current.epicIds.includes(t.id),
       );
       const epic =
-        found ?? (await this.tickets.create(projectId, { type: "epic", title, body }, actor));
+        found ??
+        (await this.tickets.create(
+          projectId,
+          {
+            type: "epic",
+            title,
+            body,
+            // The roadmap's summary and the epic's "Done when" (ADR-0108); the body keeps both too.
+            outcome: oneLine(milestone.goal),
+            acceptanceCriteria: milestone.doneWhen.map(oneLine),
+          },
+          actor,
+        ));
       epics.push(epic);
       current = { ...current, epicIds: [...current.epicIds, epic.id] };
       await this.tracker.updateProject(projectId, { projectPlan: current });
@@ -189,6 +201,9 @@ export function epicBody(m: PlannedMilestone): string {
     `**Rough slices** (refinement cuts the real tickets)\n\n${list(m.slices)}`,
   ].join("\n\n");
 }
+
+/** Plain text on one line: an outcome or a criterion is not markdown. */
+const oneLine = (text: string) => text.replace(/\s+/g, " ").trim();
 
 function log(message: string, fields: Record<string, unknown>) {
   console.log(JSON.stringify({ severity: "INFO", message, component: "project-plan", ...fields }));

@@ -82,6 +82,12 @@
         "maxLength": 500
       }
     },
+    "epicOutcome": {
+      "type": ["string", "null"],
+      "minLength": 1,
+      "maxLength": 300,
+      "description": "Only when the ticket is (or you type it as) an epic: one sentence, in the words of whoever asked for it, saying what is true when it is done; no implementation detail. null otherwise. Stored only if the epic has no outcome yet."
+    },
     "outcome": {
       "type": "string",
       "enum": ["ready", "send_back", "split"],
@@ -245,6 +251,7 @@
     "touches",
     "body",
     "acceptanceCriteria",
+    "epicOutcome",
     "outcome",
     "reason",
     "children",

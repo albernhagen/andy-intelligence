@@ -12,6 +12,8 @@ export const IDEATE_LIMITS = {
   idea: 4000,
   summary: 4000,
   title: 100,
+  /** The epic's outcome; equals `EPIC_OUTCOME_MAX` (drift test). */
+  outcome: 300,
   body: 4000,
   criteria: 10,
   criterion: 500,
@@ -28,6 +30,8 @@ const text = (max: number) => z.string().trim().min(1).max(max);
 
 export const IdeateEpic = z.strictObject({
   title: text(IDEATE_LIMITS.title),
+  /** One sentence: what is true when the epic is done (ADR-0108). Stored on the epic. */
+  outcome: text(IDEATE_LIMITS.outcome),
   body: text(IDEATE_LIMITS.body),
   acceptanceCriteria: z.array(text(IDEATE_LIMITS.criterion)).min(1).max(IDEATE_LIMITS.criteria),
   slices: z

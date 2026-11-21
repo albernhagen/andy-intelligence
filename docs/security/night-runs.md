@@ -1,6 +1,6 @@
 # Threat model: Night runs
 
-Overnight launches (ADR-0049, AI-104, AI-123). Risk: [R-AI-123](risks/R-AI-123.md). Launches start and stop through the entry points below (AI-120).
+Overnight launches (ADR-0049, AI-104, AI-123, AI-124). Risks: [R-AI-123](risks/R-AI-123.md), [R-AI-124](risks/R-AI-124.md). Launches start and stop through the entry points below (AI-120).
 
 ## Entry points (AI-120)
 
@@ -20,13 +20,27 @@ Overnight launches (ADR-0049, AI-104, AI-123). Risk: [R-AI-123](risks/R-AI-123.m
 ## What it never may
 
 - Answer a question that was open before the launch: the launch refuses to start while any story has one, misses the Definition of Ready or waits for a plan approval (AI-104).
-- Merge outside the merge gate: the auto-merge policy, required checks, both review agents and the protected paths are unchanged. A veto stops the story.
+- Merge outside the merge gate: required checks, both review agents and the protected paths are unchanged. A veto stops the story. Only the `autoMerge` policy is skipped, and only for a merge into the epic branch (below).
+- Merge into `main`: the morning PR's head is `epic/<KEY>`, not an agent branch, so the gate never touches it. Andy merges it.
 - Start a story whose blocker failed, was rejected or was vetoed: it waits on `blockedBy`, the launch lists it as skipped and it is flagged for the morning. When only stopped or skipped stories are left, the launch ends instead of idling to its stop time (with the night budget, AI-121).
 - Keep going once the launch is `stopping` or ended: questions are asked again as usual.
 
+## Merging into the epic branch (AI-124, ADR-0107)
+
+A new App-token write: the control plane squash-merges a story PR into `epic/<KEY>`, then opens one PR `epic/<KEY>` → `main` when the launch ends, or deletes an epic branch nothing merged into.
+
+| Rule            | How                                                                                                                                                                                     |
+| --------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Same gate       | Merges only when `not_default_branch` is the gate's only reason. CODEOWNERS and required checks come from the default branch, never the epic branch (which has no rules) or the PR.     |
+| Which PRs       | From stored facts only: the active launch's recorded `epicBranch`, equal to the PR's base and the build run's `baseBranch`; a story of the launch, not Done. PR text is never an input. |
+| Branch writes   | The adapter opens PRs from, and deletes, `epic/<KEY>` refs only (pattern-checked before any call). A branch is deleted only when its tip is still the launch's starting commit.         |
+| Morning PR text | Description: keys, links and shas only. Title: the epic's title with `@` dropped, so it notifies no one.                                                                                |
+
+Residual: a story merged overnight is Done before Andy reviews it, and later stories build on it; a bad early story taints the rest (ADR-0049). Andy sees it all in the morning PR; nothing reaches `main` without him.
+
 ## Caps (ADR-0028)
 
-Per launch, set by Andy and checked at start: agent tasks ≤ 100, tokens ≤ 50 M, ≤ $500 at API prices, stop time ≤ 16 h away, ≤ 50 stories. The dispatch dial, the global cap, the cap on agent PRs waiting and the quota reserve still apply (ADR-0079).
+Per launch, set by Andy and checked at start: agent tasks ≤ 100, tokens ≤ 50 M, ≤ $500 at API prices, stop time ≤ 16 h away, ≤ 50 stories, so ≤ 50 merges into the epic branch (once per story, from the merge claims written before each merge call). The dispatch dial, the global cap, the cap on agent PRs waiting and the quota reserve still apply (ADR-0079).
 
 ## Threat and residual risk
 
