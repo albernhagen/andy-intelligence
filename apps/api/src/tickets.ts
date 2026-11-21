@@ -61,6 +61,8 @@ const CreateTicket = NewTicket.omit({ dorStatus: true, needsAttention: true }).e
 });
 const PatchTicket = TicketFields.omit({
   dorStatus: true,
+  // ADR-0131: a milestone is attached only through the milestone routes (owner, logged).
+  milestoneId: true,
   archived: true,
   upNextRank: true,
   upNextAt: true,

@@ -140,6 +140,56 @@ describe("milestone holds at dispatch (AI-306)", () => {
       expect(await builds(held.id)).toBe(0);
     });
 
+    // AI-306 follow-up: a child epic already in a lane isn't fetched, so its own parent (the
+    // top-level epic) must still be read, or every story under it reads as "can't be read". In
+    // Ready it was read by luck (a Ready ticket's parent); In progress and Ready for review weren't.
+    for (const lane of ["ready", "in_progress", "ready_for_review"] as const) {
+      it(`GivenAChildEpicIn_${lane}_WhenItsStoryIsNext_ThenTheTopLevelEpicIsReadAndItStarts`, async () => {
+        await milestone("5", "approved");
+        const top = await epicIn("5");
+        const child = await epicIn(null, top.id);
+        await tracker.updateTicket(
+          projectId,
+          child.id,
+          { stage: { to: lane, forced: true, reason: null } },
+          "andy",
+        );
+        const story = await inReady("Story", child.id);
+        expect((await builder().next(projectId))?.ticketId).toBe(story.id);
+      });
+    }
+
+    it("GivenNestedEpicsWithNoMilestoneAndTheChildEpicInProgress_WhenNext_ThenTheStoryStarts", async () => {
+      const top = await epicIn(null);
+      const child = await epicIn(null, top.id);
+      await tracker.updateTicket(
+        projectId,
+        child.id,
+        { stage: { to: "in_progress", forced: true, reason: null } },
+        "andy",
+      );
+      const story = await inReady("Story", child.id);
+      expect((await builder(null).next(projectId))?.ticketId).toBe(story.id);
+    });
+
+    it("GivenAChildEpicInProgressUnderAParkedMilestone_WhenNext_ThenItsStoryIsHeldAsParked", async () => {
+      await milestone("6", "parked");
+      const top = await epicIn("6");
+      const child = await epicIn(null, top.id);
+      await tracker.updateTicket(
+        projectId,
+        child.id,
+        { stage: { to: "in_progress", forced: true, reason: null } },
+        "andy",
+      );
+      const held = await inReady("Held", child.id);
+      const lines: string[] = [];
+      vi.mocked(console.log).mockImplementation((l: unknown) => void lines.push(String(l)));
+      expect(await builder().next(projectId)).toBeNull();
+      expect(await builds(held.id)).toBe(0);
+      expect(lines.some((l) => l.includes("Milestone M6: Things is parked"))).toBe(true);
+    });
+
     it("GivenTicketsWithNoMilestone_WhenNext_ThenTheyStartAsBefore", async () => {
       const underEpic = await inReady("Under", (await epicIn(null)).id);
       expect((await builder(null).next(projectId))?.ticketId).toBe(underEpic.id);
@@ -207,6 +257,19 @@ describe("milestone holds at dispatch (AI-306)", () => {
       // AI-315: reads grow with the epics, not the tickets; held tickets cost no question reads.
       expect(getTicket).toHaveBeenCalledTimes(2);
       expect(get).toHaveBeenCalledTimes(1);
+    });
+
+    it("GivenNestedEpicsWithNoMilestoneAndTheChildEpicInUpNext_WhenNext_ThenItsStoryIsRefined", async () => {
+      const top = await epicIn(null);
+      const child = await epicIn(null, top.id);
+      const story = await upNext(child.id);
+      await tracker.updateTicket(
+        projectId,
+        child.id,
+        { fields: { upNextRank: "b", upNextAt: new Date(ms).toISOString() } },
+        "andy",
+      );
+      expect((await refiner().next(projectId))?.ticketId).toBe(story.id);
     });
 
     it("GivenAnUpNextTicketWithNoMilestone_WhenNext_ThenRefineStartsAsBefore", async () => {

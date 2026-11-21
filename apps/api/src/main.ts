@@ -3,7 +3,6 @@ import { serveStatic } from "@hono/node-server/serve-static";
 import {
   FirestoreCodeEventLog,
   FirestoreConfigChangeStore,
-  FirestoreMilestoneStore,
   FirestoreReviewFindingLog,
   FirestoreReleaseNoteStore,
   GcpCodeHostConnectionStore,
@@ -11,6 +10,7 @@ import {
   FirestoreOAuthGrantStore,
   FirestoreQuotaStore,
   FirestoreDeploymentStore,
+  FirestoreMilestoneStore,
   FirestoreRoutingConfigStore,
   FirestoreSpendCapsStore,
   FirestoreNightLaunchStore,
@@ -99,6 +99,7 @@ async function main() {
     nightLaunches: new FirestoreNightLaunchStore(db),
     projectVersions: new FirestoreProjectVersions(db),
     deployments: new FirestoreDeploymentStore(db),
+    milestones: new FirestoreMilestoneStore(db),
     routing: new FirestoreRoutingConfigStore(db),
     spendCapsStore: new FirestoreSpendCapsStore(db),
     spendLedger: new FirestoreSpendLedger(db),
@@ -106,7 +107,6 @@ async function main() {
     configChanges: new FirestoreConfigChangeStore(db),
     reviewFindings: new FirestoreReviewFindingLog(db),
     releaseNotes: new FirestoreReleaseNoteStore(db),
-    milestones: new FirestoreMilestoneStore(db),
     // Serve only the public URL's host; the run.app URLs answer /health alone (ADR-0044).
     publicHost: publicUrl ? new URL(publicUrl).host : undefined,
     watchdog,

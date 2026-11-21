@@ -381,8 +381,13 @@ export class BuildDispatcher {
     );
     const lanes = [...ready!, ...review!, ...building!];
     const parents = await this.parentsOf(projectId, ready!, lanes);
-    // ADR-0131: epics nest one level, so a child epic's parent is the top-level epic.
-    const tops = await this.parentsOf(projectId, parents, [...lanes, ...parents]);
+    // ADR-0131: epics nest one level, so a child epic's parent is the top-level epic. A Ready
+    // ticket's epic may be in a lane already (a child epic in Ready), not only fetched.
+    const known = new Map([...lanes, ...parents].map((t) => [t.id, t]));
+    const epics = ready!.flatMap((t) =>
+      t.parentId && known.has(t.parentId) ? [known.get(t.parentId)!] : [],
+    );
+    const tops = await this.parentsOf(projectId, epics, [...known.values()]);
     return [...lanes, ...parents, ...tops];
   }
 
