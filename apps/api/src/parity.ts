@@ -285,8 +285,6 @@ export const PARITY: readonly ParityEntry[] = [
   {
     action: "The board, every stage",
     routes: [`GET ${P}/board`],
-    tools: [],
-    oneSide: "Web only until its MCP tool lands.",
-    pending: { ticket: "AI-296", missing: "a board tool (waits on PR #320)" },
+    tools: ["board"],
   },
 ];
