@@ -38,3 +38,33 @@ export async function mcpCaller(
     return { isError: result.isError === true, text, data };
   };
 }
+
+/** Test helper: the names of every MCP tool the app serves, in the order `tools/list` gives. */
+export async function mcpToolNames(
+  app: { fetch: (req: Request) => Response | Promise<Response> },
+  grants: InMemoryOAuthGrantStore,
+  url: string,
+): Promise<string[]> {
+  const token = newToken();
+  await grants.put(hashToken(token), {
+    kind: "access",
+    clientId: "https://claude.ai/oauth/mcp-client-metadata",
+    email: "andy@example.com",
+    uid: "andy",
+    resource: url,
+    scope: "",
+    redirectUri: null,
+    codeChallenge: null,
+    expiresAt: "2999-01-01T00:00:00.000Z",
+  });
+  const client = new Client({ name: "test", version: "1" });
+  await client.connect(
+    new StreamableHTTPClientTransport(new URL(url), {
+      requestInit: { headers: { authorization: `Bearer ${token}`, host: new URL(url).host } },
+      fetch: async (input, init) =>
+        app.fetch(input instanceof Request ? input : new Request(input, init)),
+    }),
+  );
+  const { tools } = await client.listTools();
+  return tools.map((t) => t.name);
+}
