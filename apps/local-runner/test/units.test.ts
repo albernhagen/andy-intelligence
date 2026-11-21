@@ -24,7 +24,16 @@ import { KEYCHAIN_SERVICE, controlPlaneOrigin, checkRepo } from "../src/config";
 import { login, logout, readSecret } from "../src/keychain";
 import { checkAgentSettings, loadPlatform } from "../src/platform";
 import { pruneWork } from "../src/runner";
-import { noConfinement, seatbelt, seatbeltProfile } from "../src/seatbelt";
+import {
+  CURL_COULDNT_CONNECT,
+  networkProblem,
+  networkVerdict,
+  noConfinement,
+  outcomeOf,
+  seatbelt,
+  seatbeltProfile,
+  type ProbeOutcome,
+} from "../src/seatbelt";
 import {
   acquireRunnerLock,
   cleanLeftoverAgents,
@@ -251,6 +260,91 @@ describe("local-runner check-settings", () => {
     });
     expect(problem).toBe("hooks from the project and local settings ran");
   });
+});
+
+describe("network live check (AI-278)", () => {
+  const exited = (code: number): ProbeOutcome => ({ kind: "exited", code });
+  const refused = exited(CURL_COULDNT_CONNECT);
+  const verdict = (o: Partial<Record<"outside" | "control" | "inside", ProbeOutcome>>) =>
+    networkVerdict({ outside: exited(0), control: exited(0), inside: refused, ...o });
+
+  it("GivenARefusedProbeAndAPassingControl_WhenJudged_ThenTheCheckPasses", () => {
+    expect(verdict({})).toBeNull();
+  });
+
+  it("GivenTheProbeConnects_WhenJudged_ThenTheCheckFails", () => {
+    expect(verdict({ inside: exited(0) })).toMatch(/non-HTTPS port was allowed/);
+  });
+
+  it("GivenTheProbeTimesOut_WhenJudged_ThenTheCheckFails", () => {
+    expect(verdict({ inside: { kind: "timed-out" } })).toMatch(/timed out/);
+    expect(verdict({ inside: exited(28) })).toMatch(/timed out/);
+  });
+
+  it("GivenTheProbeCouldNotRun_WhenJudged_ThenTheCheckFails", () => {
+    expect(verdict({ inside: { kind: "not-run", reason: "ENOENT" } })).toMatch(/couldn't run/);
+    // sandbox-exec's own failures: 65 (bad profile), 71 (exec refused or missing binary).
+    expect(verdict({ inside: exited(65) })).toMatch(/another reason.*exit 65/);
+    expect(verdict({ inside: exited(71) })).toMatch(/another reason.*exit 71/);
+  });
+
+  it("GivenTheControlFails_WhenJudged_ThenTheCheckFailsAndSaysTheProfileIsBroken", () => {
+    expect(verdict({ control: exited(71) })).toMatch(/profile is broken.*exit 71/);
+    expect(verdict({ control: { kind: "timed-out" } })).toMatch(/profile is broken/);
+  });
+
+  it("GivenTheServerIsUnreachableOutside_WhenJudged_ThenTheCheckFails", () => {
+    expect(verdict({ outside: exited(7) })).toMatch(/couldn't reach its own server/);
+  });
+
+  it("GivenExecFileErrors_WhenClassified_ThenExitTimeoutAndNotRunAreToldApart", () => {
+    expect(outcomeOf(null)).toEqual({ kind: "exited", code: 0 });
+    expect(outcomeOf({ code: 7 })).toEqual({ kind: "exited", code: 7 });
+    expect(outcomeOf({ killed: true, signal: "SIGTERM", code: null })).toEqual({
+      kind: "timed-out",
+    });
+    expect(outcomeOf({ code: "ENOENT" })).toEqual({ kind: "not-run", reason: "ENOENT" });
+    expect(outcomeOf({ signal: "SIGKILL" })).toEqual({ kind: "not-run", reason: "signal SIGKILL" });
+  });
+
+  it("GivenAProbeRunner_WhenChecked_ThenTheControlAndTheProbeRunUnderTheProfile", async () => {
+    const calls: string[][] = [];
+    const problem = await networkProblem("/p.sb", "/tmp", async (cmd, args) => {
+      calls.push([cmd, ...args]);
+      if (cmd === "/usr/bin/curl") return exited(0);
+      return args.includes("--version") ? exited(0) : refused;
+    });
+    expect(problem).toBeNull();
+    expect(calls.map((c) => c.slice(0, 4))).toEqual([
+      ["/usr/bin/curl", "-s", "-o", "/dev/null"],
+      ["/usr/bin/sandbox-exec", "-f", "/p.sb", "/usr/bin/curl"],
+      ["/usr/bin/sandbox-exec", "-f", "/p.sb", "/usr/bin/curl"],
+    ]);
+    expect(calls[1]).toContain("--version");
+  });
+
+  it.runIf(process.platform === "darwin")(
+    "GivenAProfileThatRefusesEveryExec_WhenCheckedLive_ThenItFailsAsBrokenNotAsRefused",
+    async () => {
+      const dir = mkdtempSync(join(tmpdir(), "lr-noexec-"));
+      const profilePath = join(dir, "noexec.sb");
+      writeFileSync(profilePath, "(version 1)\n(allow default)\n(deny process-exec)\n");
+      expect(await networkProblem(profilePath, "/tmp")).toMatch(/profile is broken/);
+    },
+  );
+
+  it.runIf(process.platform === "darwin")(
+    "GivenTheAgentsProfile_WhenCheckedLive_ThenTheCheckPasses",
+    async () => {
+      const dir = mkdtempSync(join(tmpdir(), "lr-netok-"));
+      const profilePath = join(dir, "agent.sb");
+      writeFileSync(
+        profilePath,
+        seatbeltProfile({ runnerHome: dir, read: [], claude: { command: "/bin/sh" } }),
+      );
+      expect(await networkProblem(profilePath, "/tmp")).toBeNull();
+    },
+  );
 });
 
 describe("seatbelt profile", () => {
