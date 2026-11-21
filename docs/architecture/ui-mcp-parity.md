@@ -25,6 +25,7 @@ Step 1 of AI-285: Web UI and MCP parity: every action in both, enforced by a tes
 | The board, every stage | `GET …/board` | `board` (AI-296) |
 | Roadmap of milestones; milestone map | `GET /roadmap`, `…/roadmap` (AI-202 screen) | `roadmap`; `milestone_map` (MCP only) |
 | Create a project | `POST /projects` | `create_project` (AI-297) |
+| Milestones: list, set status, attach an epic | `GET …/milestones`, `PATCH …/milestones/:id`, `PUT …/tickets/:id/milestone` (AI-311: epic panel, roadmap, board) | `list_milestones`, `set_milestone_status`, `set_epic_milestone` (AI-304) |
 | List local runners | `GET /runners` | `list_runners` (AI-294) |
 | Settings changes: list, revert                           | `GET …/config-changes`, `POST …/config-changes/:id/revert`                      | `list_settings_changes`, `revert_settings_change`                                                                          |
 | Config proposals: list, accept, reject, sweep            | `GET /config-changes`, `POST …/accept`, `…/reject`, `…/config-proposals/sweep`  | `list_config_changes`, `accept_config_change`, `reject_config_change`, `sweep_config_proposals`                            |
@@ -48,6 +49,7 @@ Step 1 of AI-285: Web UI and MCP parity: every action in both, enforced by a tes
 | AI-294: Parity: list and revoke runners over MCP | UI-only | S | List built (`list_runners`); revoke pending Andy's decision on ADR-0089 → `revoke_runner` |
 | AI-295: Parity: dashboards and DORA metrics over MCP                   | UI-only   | S    | Built: `dashboard` (now matched)                             |
 | AI-296: Parity: the board, every stage, over MCP | UI-only | S | Built: `board` (now matched) |
+| AI-321: Milestone create and edit over MCP | UI-only | S | `POST …/milestones`, `PATCH` name, outcome, order → `create_milestone`, `edit_milestone` (ADR-0136, proposed) |
 | AI-298: Parity: ranked Ready list in the web UI                        | MCP-only  | S    | Built: `GET …/ready` and the Ready view (now matched)        |
 | AI-299: Parity: ideate from the web UI                                 | MCP-only  | M    | `ideate` (route exists, web never calls it) → a form         |
 | AI-300: Parity: registry test that every action has a route and a tool | done | M | Built: `apps/api/src/parity.ts` and `parity.test.ts` |
@@ -58,7 +60,6 @@ Step 1 of AI-285: Web UI and MCP parity: every action in both, enforced by a tes
 | --------------------------- | -------------------------- | ------------------------------------------------------------------------------------------------- |
 | Merge a gated PR            | Neither (Andy uses GitHub) | AI-220: Merge modes: coordinator sessions merge through MCP merge_pr; the web links to GitHub     |
 | What's new (release notes)  | Neither                    | AI-159: What's new (page and `whats_new` tool; PR #234 open)                                      |
-| Approve or park a milestone | Neither                    | ADR-0131 (in design): no ticket here                                                              |
 
 ## Parked (no tickets)
 
@@ -68,7 +69,7 @@ M6, M7 and M8 add no gap today: their settings that exist (environments) are alr
 
 ## One side on purpose (the parity test records the reason)
 
-The registry `apps/api/src/parity.ts` (AI-300) holds every action with its routes and tools; `parity.test.ts` fails when a route or tool is in no action, names one that doesn't exist, or has one side without a reason. Open gaps carry their ticket: AI-294, AI-296, AI-299.
+The registry `apps/api/src/parity.ts` (AI-300) holds every action with its routes and tools; `parity.test.ts` fails when a route or tool is in no action, names one that doesn't exist, or has one side without a reason. Open gaps carry their ticket: AI-294, AI-299, AI-321.
 
 | Action                                                | Side     | Reason                                                                                                   |
 | ----------------------------------------------------- | -------- | -------------------------------------------------------------------------------------------------------- |

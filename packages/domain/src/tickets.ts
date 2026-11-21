@@ -56,7 +56,8 @@ function log(severity: "INFO" | "WARNING" | "ERROR", message: string, fields: ob
 export { DomainError } from "./errors";
 
 /** Fields callers may edit; `dorStatus` is always computed here. */
-export type EditableFields = Omit<TicketFields, "dorStatus">;
+/** ADR-0131: a milestone is attached only through `MilestoneService` (owner, logged). */
+export type EditableFields = Omit<TicketFields, "dorStatus" | "milestoneId">;
 
 /** One ticket at a glance: where it is, what blocks Ready, and what happened lately. */
 export interface TicketStatus {

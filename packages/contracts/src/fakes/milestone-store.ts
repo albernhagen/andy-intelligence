@@ -5,6 +5,7 @@ import {
   type MilestoneInput,
   byMilestoneOrder,
 } from "../entities/milestone";
+import { WorkTrackerError } from "../ports";
 import type { MilestoneStore } from "../ports/milestone-store";
 
 const key = (projectId: string, id: string) => `${projectId}\u0000${id}`;
@@ -35,10 +36,14 @@ export class InMemoryMilestoneStore implements MilestoneStore {
     return structuredClone(m);
   }
 
-  async replace(milestone: MilestoneInput): Promise<Milestone | null> {
+  async replace(milestone: MilestoneInput, ifUpdatedAt?: string): Promise<Milestone | null> {
     const m = Milestone.parse(milestone);
     const k = key(m.projectId, m.id);
-    if (!this.rows.has(k)) return null;
+    const stored = this.rows.get(k);
+    if (!stored) return null;
+    if (ifUpdatedAt !== undefined && stored.updatedAt !== ifUpdatedAt) {
+      throw new WorkTrackerError("conflict", `milestone ${m.id} changed since it was read`);
+    }
     this.rows.set(k, m);
     return structuredClone(m);
   }
