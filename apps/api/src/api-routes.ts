@@ -16,6 +16,7 @@ export { apiRoutes as ideate } from "./ideate";
 export { apiRoutes as inFlight } from "./in-flight";
 export { apiRoutes as mcp } from "./mcp";
 export { apiRoutes as milestoneMap } from "./milestone-map";
+export { apiRoutes as milestones } from "./milestones";
 export { apiRoutes as night } from "./night";
 export { apiRoutes as notify } from "./notify";
 export { apiRoutes as projectPlan } from "./project-plan";
