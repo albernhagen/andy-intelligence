@@ -106,7 +106,15 @@ export function projectOfPath(path: string): ProjectTarget | null {
  * Input fields (MCP tool input, API request body) that hold ticket keys, one or a list.
  * `registries.test.ts` fails when a tool takes a ticket key in any other field.
  */
-export const TICKET_KEY_FIELDS = ["ticket", "parent", "parentId", "blockedBy", "above", "below"];
+export const TICKET_KEY_FIELDS = [
+  "ticket",
+  "parent",
+  "parentId",
+  "blockedBy",
+  "above",
+  "below",
+  "epic",
+];
 
 /**
  * The projects an input (MCP tool input or API request body) names: its `project`, and the
