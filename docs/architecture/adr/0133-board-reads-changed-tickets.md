@@ -26,6 +26,7 @@ Option 1. The counter (ADR-0126) still decides _when_ to refresh; `updatedAt` on
 - **Port:** `WorkTracker.listTicketsChangedSince(projectId, since)`. On Firestore it's one range filter on `updatedAt`: a single-field index, no composite one.
 - **`TicketSnapshots`** (domain) keeps each project's tickets per instance. The first read reads all of them. Each new counter value reads the tickets changed since the newest `updatedAt` seen, less 60 s, and merges them in. Tickets are never deleted (archiving is a change), so the merged set stays whole.
   - **Why the overlap:** ADR-0126 rejected `updatedAt` as the marker because two instances' clocks can differ and a write can still be committing. The 60 s overlap covers both; it re-reads only the tickets changed in that minute.
+  - **Unbumped writes:** a snapshot also reads changes when it's 5 minutes old at the same counter value, so a write that didn't bump the counter shows within 5 minutes (ADR-0126).
   - **Caps (ADR-0028):** a full re-read every 60 minutes bounds any drift; at most 200 projects per instance.
 - **The board** reads the snapshot, open questions and active agent tasks. Each card In progress or Ready for review reads only its `pr_linked` events (new `WorkTracker.getLatestPullRequest`), not its whole history, still capped at 50 cards. A PR link doesn't change its ticket (the port says so), so links are read per card on each refresh, not merged.
 - **The ticket list** filters the same snapshot in memory, so the board and list share one refresh.

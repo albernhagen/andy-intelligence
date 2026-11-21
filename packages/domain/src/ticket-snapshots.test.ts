@@ -7,6 +7,7 @@ import {
   TicketSnapshots,
   matchesTicketFilter,
 } from "./ticket-snapshots";
+import { PROJECT_CACHE_MAX_AGE_MS } from "./project-versions";
 
 async function setup(tickets: number) {
   const raw = new InMemoryWorkTracker();
@@ -62,6 +63,21 @@ describe("TicketSnapshots (AI-317)", () => {
     }
     // The ten changed tickets, plus the newest one seen before (inside the overlap window).
     expect(reads).toEqual([11, 11]);
+  });
+
+  it("GivenAWriteThatDidNotBumpTheVersion_WhenReadPastTheCacheMaxAge_ThenTheChangeShows", async () => {
+    const s = await setup(5);
+    await s.snapshots.tickets("ai", 1);
+    const renamed = await s.raw.updateTicket(
+      "ai",
+      s.made[0]!.id,
+      { fields: { title: "Edited outside the app" } },
+      "andy",
+    );
+    s.tick(PROJECT_CACHE_MAX_AGE_MS - 1);
+    expect((await s.snapshots.tickets("ai", 1)).find((t) => t.id === renamed.id)?.title).toBe("T0");
+    s.tick(1);
+    expect((await s.snapshots.tickets("ai", 1)).find((t) => t.id === renamed.id)).toEqual(renamed);
   });
 
   it("GivenASnapshotPastItsFullReadAge_WhenRead_ThenEveryTicketIsReadAgain", async () => {

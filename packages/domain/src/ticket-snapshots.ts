@@ -1,4 +1,5 @@
 import { compareRanks, type Ticket, type TicketFilter, type WorkTracker } from "@andy/contracts";
+import { PROJECT_CACHE_MAX_AGE_MS } from "./project-versions";
 
 /**
  * Each project's tickets, kept per instance and refreshed by what changed (AI-317: board and
@@ -25,6 +26,8 @@ interface Snapshot {
   /** The project version this snapshot is current for. */
   version: number;
   loadedAt: number;
+  /** When it last read changes (or loaded): past the cache's max age it reads changes again. */
+  refreshedAt: number;
   sorted: Ticket[];
 }
 
@@ -42,12 +45,15 @@ export class TicketSnapshots {
     if (!snap || this.now() - snap.loadedAt >= SNAPSHOT_FULL_READ_MS) {
       return this.keep(projectId, await this.readAll(projectId, version)).sorted;
     }
-    if (snap.version !== version) {
+    // A new version, or a write that didn't bump it (outside the app): read what changed. The
+    // second shows within the cache's max age, as ADR-0126 promises.
+    if (snap.version !== version || this.now() - snap.refreshedAt >= PROJECT_CACHE_MAX_AGE_MS) {
       const since = new Date(Date.parse(snap.newest) - SNAPSHOT_OVERLAP_MS).toISOString();
       const changed = await this.tracker.listTicketsChangedSince(projectId, since);
       for (const t of changed) snap.byId.set(t.id, t);
       snap.newest = newestOf(changed, snap.newest);
       snap.version = version;
+      snap.refreshedAt = this.now();
       snap.sorted = sortByRank(snap.byId);
     }
     return this.keep(projectId, snap).sorted;
@@ -56,7 +62,8 @@ export class TicketSnapshots {
   private async readAll(projectId: string, version: number): Promise<Snapshot> {
     const all = await this.tracker.listTickets(projectId);
     const byId = new Map(all.map((t) => [t.id, t]));
-    return { byId, newest: newestOf(all, ""), version, loadedAt: this.now(), sorted: all };
+    const at = this.now();
+    return { byId, newest: newestOf(all, ""), version, loadedAt: at, refreshedAt: at, sorted: all };
   }
 
   private keep(projectId: string, snap: Snapshot): Snapshot {
