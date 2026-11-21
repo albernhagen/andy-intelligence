@@ -12,6 +12,7 @@ export * from "./dispatch-conflicts";
 export * from "./dispatch-order";
 export * from "./dor";
 export * from "./dora";
+export * from "./dora-report";
 export * from "./epic-rollup";
 export * from "./executor";
 export * from "./gate";

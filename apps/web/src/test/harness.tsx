@@ -7,6 +7,7 @@ import {
   InMemoryCodeHost,
   InMemoryCodeHostConnectionStore,
   InMemoryConfigChangeStore,
+  InMemoryDeploymentStore,
   InMemoryNightLaunchStore,
   InMemoryReleaseNoteStore,
   InMemoryReviewFindingSource,
@@ -49,6 +50,7 @@ export function renderApp(
   const runners = new InMemoryRunnerStore();
   const configChanges = new InMemoryConfigChangeStore();
   const nightLaunches = new InMemoryNightLaunchStore();
+  const deployments = new InMemoryDeploymentStore();
   const releaseNotes = new InMemoryReleaseNoteStore();
   const reviewFindings = new InMemoryReviewFindingSource();
   // GitHub fakes (ADR-0043): one installed repo; any manifest code "connects" this App.
@@ -77,6 +79,7 @@ export function renderApp(
     runners,
     configChanges,
     nightLaunches,
+    deployments,
     releaseNotes,
     reviewFindings,
     email: opts.email,
@@ -141,6 +144,7 @@ export function renderApp(
     codeHost,
     connections,
     nightLaunches,
+    deployments,
     service: new TicketService(tracker),
   };
 }
