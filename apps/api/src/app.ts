@@ -13,61 +13,17 @@ import {
   type QuotaStore,
   type NightLaunchStore,
 } from "@andy/contracts";
-import { ClaudeCodeActionsExecutor, exchangeManifestCode, type CreatedApp } from "@andy/github";
-import {
-  BuildDispatcher,
-  SyncRuns,
-  DomainError,
-  ProjectService,
-  RefineDispatcher,
-  RunService,
-  RunnerService,
-  LocalClaims,
-  BoardReader,
-  ConfigProposals,
-  DigestReader,
-  QuotaClearer,
-  BriefService,
-  IdeateService,
-  ProjectPlanService,
-  TicketService,
-  EmailNotifications,
-  wakeAfterRunEnd,
-  notifyOnNeedsYou,
-  type EmailNotificationsDeps,
-} from "@andy/domain";
+import type { CreatedApp } from "@andy/github";
+import { DomainError, type EmailNotificationsDeps } from "@andy/domain";
 import { bodyLimit } from "hono/body-limit";
+import * as apiRoutes from "./api-routes";
 import { requireAllowedUser, type AuthEnv, type TokenVerifier } from "./auth";
-import { registerMcp, type ClientMetadataResolver } from "./mcp";
-import { registerQuotaRoutes } from "./quota";
-import { registerRunCallbacks, registerRunRoutes } from "./runs";
-import { registerRunnerClaim, registerRunnerRoutes, runnerCredentials } from "./runners";
-import { registerTicketRoutes } from "./tickets";
-import { registerBoardRoutes } from "./board";
-import { registerEpicRoutes } from "./epics";
-import { registerInFlightRoutes } from "./in-flight";
-import { registerDigestRoutes } from "./digest";
-import { registerDashboardRoutes } from "./dashboard";
-import { registerSetupRoutes } from "./setup";
-import { noReviewFindings, registerConfigProposalRoutes } from "./config-proposals";
-import { registerNotifyFlush, registerNotifyRoutes } from "./notify";
-import { registerBriefRoutes } from "./brief";
-import { registerIdeateRoutes } from "./ideate";
-import { registerProjectPlanRoutes } from "./project-plan";
-import {
-  ConnectedCodeHost,
-  GitHubConnection,
-  gitHubCodeHost,
-  type CodeHostFactory,
-} from "./github/connection";
-import { registerGitHubSetup } from "./github/setup";
-import {
-  actionsTokenVerifier,
-  registerGitHubToken,
-  type ActionsTokenVerifier,
-} from "./github/token";
-import { RepoIndex, registerGitHubWebhook } from "./github/webhooks";
-import { invokerTokenVerifier, registerRunWatchdog, type InvokerTokenVerifier } from "./watchdog";
+import type { CodeHostFactory } from "./github/connection";
+import type { ActionsTokenVerifier } from "./github/token";
+import type { ClientMetadataResolver } from "./mcp";
+import * as publicRoutes from "./public-routes";
+import { createServices, type RouteModule } from "./services";
+import type { InvokerTokenVerifier } from "./watchdog";
 
 /** Request body cap for /api/* (ADR-0028: everything that can grow gets a cap). */
 export const MAX_BODY_BYTES = 256 * 1024;
@@ -198,16 +154,12 @@ const DOMAIN_STATUS = {
   brief_too_long: 422,
   code_host_unavailable: 503,
   rate_limited: 429,
+  not_revertible: 409,
 } as const;
 
 export function createApp(input: AppDeps) {
-  // AI-77: with email configured, every service below writes through the tracker's email hook.
-  const email = input.email
-    ? new EmailNotifications({ tracker: input.tracker, ...input.email })
-    : null;
-  const deps = email
-    ? { ...input, tracker: notifyOnNeedsYou(input.tracker, (t) => email.ticketNeedsYou(t)) }
-    : input;
+  const services = createServices(input);
+  const deps = services.deps;
   const app = new OpenAPIHono<AuthEnv>({
     // Validation failures: 400 with the field paths, not Zod's raw error object.
     defaultHook: (result, c) => {
@@ -256,150 +208,10 @@ export function createApp(input: AppDeps) {
 
   app.get("/config.json", (c) => c.json(deps.webConfig));
 
-  const github = deps.github;
-  const now = github?.now ?? (() => new Date());
-  const connection = github
-    ? new GitHubConnection(github.connections, github.codeHostFor ?? gitHubCodeHost, () =>
-        now().getTime(),
-      )
-    : null;
+  // Public, outside /api: each checks its own caller (AI-145: listed in public-routes.ts).
+  register(app, services, publicRoutes);
 
-  // Runs dispatch through the GitHub App; without it, starting a run is refused (503).
-  // The dispatchers start the next waiting run after each report or watchdog end, ticket
-  // create, last answer, move to Ready and switch turned on: a build first (ADR-0063, projects
-  // with autoBuild), else a refine (ADR-0054). Projects waiting on the global cap go first,
-  // then builds start up to the caps (ADR-0079). `next` and `wakeGlobalCapWaiters` never throw.
-  // When a run ends at the global cap, `wakeAfterRunEnd` offers the slot to other projects in
-  // `dispatchOrder` (AI-91), syncs and refines too, until it's taken; the freeing project goes last.
-  // Local runners (ADR-0089): claims start runs through the same dispatchers and RunService.
-  const runners = deps.runners
-    ? new RunnerService(deps.runners, deps.tracker, runnerCredentials, now)
-    : null;
-  const runnerPresence = runners ? (projectId: string) => runners.presentFor(projectId) : null;
-  const runs = new RunService(
-    deps.tracker,
-    deps.runs,
-    connection ? new ClaudeCodeActionsExecutor(new ConnectedCodeHost(connection)) : null,
-    now,
-    deps.watchdog?.queue ?? null,
-    async (projectId) => runEnded(projectId),
-    connection ? new ConnectedCodeHost(connection) : null,
-    runnerPresence,
-    deps.nightLaunches ?? null,
-  );
-  const refiner = new RefineDispatcher(deps.tracker, deps.runs, runs, now);
-  const builder = new BuildDispatcher(deps.tracker, deps.runs, runs, now, deps.quota ?? null);
-  // AI-72 (ADR-0083): queued sync runs go first, so open PRs catch up with main before new work.
-  const syncer = new SyncRuns(
-    deps.tracker,
-    deps.runs,
-    runs,
-    connection ? new ConnectedCodeHost(connection) : null,
-    now,
-    deps.quota ?? null,
-  );
-  const dispatchNext = async (projectId: string, wakeWaiters = true) => {
-    // AI-75 (ADR-0087): held gaps are asked first, as the question caps allow; no run needed.
-    await refiner.askHeld(projectId);
-    await syncer.next(projectId);
-    if (wakeWaiters) await builder.wakeGlobalCapWaiters(projectId);
-    return (await builder.next(projectId)) ?? (await refiner.next(projectId));
-  };
-  const runEnded = async (projectId: string) => {
-    await wakeAfterRunEnd({
-      freedBy: projectId,
-      listProjects: () => deps.tracker.listProjects(),
-      globalActive: async () => (await runs.activeCounts(projectId)).global,
-      // One project's failure must not keep the slot from the projects after it.
-      dispatch: (id, wakeWaiters) =>
-        dispatchNext(id, wakeWaiters).then(
-          () => undefined,
-          (err: unknown) =>
-            console.error(
-              JSON.stringify({
-                severity: "ERROR",
-                message: "dispatch after a run ended failed",
-                projectId: id,
-                error: String(err),
-              }),
-            ),
-        ),
-    });
-  };
-  // One TicketService for REST, MCP and webhooks: all get the same ticket rules (packages/domain).
-  const service = new TicketService(deps.tracker, runs, dispatchNext, now, runnerPresence);
-  const claims = runners
-    ? new LocalClaims(
-        deps.tracker,
-        deps.runs,
-        runs,
-        runners,
-        builder,
-        refiner,
-        deps.watchdog?.queue ?? null,
-        now,
-      )
-    : null;
-
-  // Public, outside /api: the watchdog queue presents a Google OIDC token for the invoker SA.
-  if (deps.watchdog) {
-    registerRunWatchdog(app, {
-      runs,
-      ...(runners ? { runnerAway: (id: string) => runners.checkAway(id, dispatchNext) } : {}),
-      verify:
-        deps.watchdog.verifyInvokerToken ??
-        invokerTokenVerifier(deps.watchdog.publicUrl, deps.watchdog.invokerEmail),
-      now,
-    });
-  }
-
-  // Public, outside /api: the local runner presents its runner secret (ADR-0089).
-  if (runners && claims) {
-    registerRunnerClaim(app, { runners, claim: (runner) => claims.claim(runner), now });
-  }
-
-  // Public, outside /api: the queue calls the email flush with the invoker's OIDC token (AI-77).
-  if (email && deps.watchdog) {
-    registerNotifyFlush(app, {
-      email,
-      verify:
-        deps.watchdog.verifyInvokerToken ??
-        invokerTokenVerifier(deps.watchdog.publicUrl, deps.watchdog.invokerEmail),
-      now,
-    });
-  }
-
-  // Public, outside /api: GitHub signs webhooks (HMAC); CI jobs present an Actions OIDC token.
-  if (github && connection) {
-    const verifyActionsToken = github.verifyActionsToken ?? actionsTokenVerifier(github.publicUrl);
-    registerGitHubWebhook(app, {
-      secret: async () => (await connection.get())?.webhookSecret ?? null,
-      events: github.events,
-      tracker: deps.tracker,
-      tickets: service,
-      codeHost: new ConnectedCodeHost(connection),
-      runs: deps.runs,
-      onDefaultBranchMoved: (projectId) => syncer.defaultBranchMoved(projectId),
-      nightLaunches: deps.nightLaunches,
-      now,
-    });
-    const repoIndex = new RepoIndex(deps.tracker, () => now().getTime());
-    registerGitHubToken(app, {
-      connection,
-      verify: verifyActionsToken,
-      claimRunGrant: (runId, caller) => runs.claimPushGrant(runId, caller),
-      registeredProject: (repo) => repoIndex.projectFor(repo),
-      now,
-    });
-    registerRunCallbacks(app, {
-      runs,
-      runners,
-      verify: verifyActionsToken,
-      now,
-      quota: deps.quota,
-    });
-  }
-
+  // Middleware runs in registration order: everything registered below is behind it on /api/*.
   app.use("/api/*", requireAllowedUser(deps.verifier, deps.allowedEmails));
   app.use(
     "/api/*",
@@ -414,88 +226,7 @@ export function createApp(input: AppDeps) {
     return c.json({ email, uid }, 200);
   });
 
-  const projects = new ProjectService(
-    deps.tracker,
-    connection ? new ConnectedCodeHost(connection) : null,
-    dispatchNext,
-    now,
-    deps.configChanges ?? null,
-  );
-  registerTicketRoutes(app, deps.tracker, service, projects, runs);
-  registerBoardRoutes(app, new BoardReader(deps.tracker, deps.runs));
-  registerEpicRoutes(app, deps.tracker, deps.runs);
-
-  registerRunRoutes(app, runs, deps.runs);
-  if (runners) registerRunnerRoutes(app, runners);
-  registerInFlightRoutes(app, runs);
-  // AI-74: a clear wakes every project, as a settings change wakes one.
-  const quotaClearer = new QuotaClearer(deps.quota ?? null, now, async () => {
-    for (const p of await deps.tracker.listProjects()) await dispatchNext(p.id);
-  });
-  registerQuotaRoutes(app, deps.quota ?? null, quotaClearer, now);
-  const digest = new DigestReader(deps.tracker, deps.runs, deps.quota ?? null, now);
-  registerDigestRoutes(app, digest, now);
-  registerDashboardRoutes(app, deps, now);
-  registerSetupRoutes(app, deps.tracker, connection ? new ConnectedCodeHost(connection) : null);
-  registerNotifyRoutes(app, email);
-  const brief = new BriefService(
-    deps.tracker,
-    connection ? new ConnectedCodeHost(connection) : null,
-    now,
-  );
-  registerBriefRoutes(app, brief);
-  const ideate = new IdeateService(
-    deps.tracker,
-    service,
-    connection ? new ConnectedCodeHost(connection) : null,
-    now,
-  );
-  registerIdeateRoutes(app, ideate);
-  const plans = new ProjectPlanService(
-    deps.tracker,
-    service,
-    now,
-    email ? (id, plan) => email.planNeedsYou(id, plan.proposal.milestones.length) : undefined,
-  );
-  registerProjectPlanRoutes(app, plans);
-  const configProposals = deps.configChanges
-    ? new ConfigProposals(
-        deps.tracker,
-        deps.reviewFindings ?? noReviewFindings,
-        deps.configChanges,
-        now,
-      )
-    : null;
-  if (configProposals) registerConfigProposalRoutes(app, configProposals);
-
-  if (github && connection) {
-    registerGitHubSetup(app, {
-      publicUrl: github.publicUrl,
-      connection,
-      exchangeCode: github.exchangeCode ?? ((code) => exchangeManifestCode(code)),
-      now,
-    });
-  }
-
-  // After the /api middleware, so /api/oauth/approve requires the allow-listed user.
-  if (deps.mcp) {
-    registerMcp(app, {
-      ...deps.mcp,
-      allowedEmails: deps.allowedEmails,
-      version: deps.version,
-      tracker: deps.tracker,
-      service,
-      runs,
-      projects,
-      digest,
-      notifyEmail: email,
-      quota: quotaClearer,
-      brief,
-      ideate,
-      plans,
-      configProposals,
-    });
-  }
+  register(app, services, apiRoutes);
 
   app.openAPIRegistry.registerComponent("securitySchemes", "bearer", {
     type: "http",
@@ -508,4 +239,13 @@ export function createApp(input: AppDeps) {
   });
 
   return app;
+}
+
+/** Registers each listed module's routes (a module namespace: its exports in name order). */
+function register(
+  app: OpenAPIHono<AuthEnv>,
+  services: ReturnType<typeof createServices>,
+  modules: Record<string, RouteModule>,
+): void {
+  for (const routes of Object.values(modules)) routes(app, services);
 }

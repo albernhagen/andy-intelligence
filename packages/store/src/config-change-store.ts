@@ -103,6 +103,27 @@ export class FirestoreConfigChangeStore implements ConfigChangeStore {
       .slice(0, Math.min(limit, CONFIG_CHANGE_LIST_MAX));
   }
 
+  /** M4.12: in a transaction, so two reverts can't both mark it. */
+  async markReverted(id: string, by: string, at: string): Promise<ConfigChange> {
+    const ref = this.changes().doc(id);
+    return this.db.runTransaction(async (tx) => {
+      const snap = await tx.get(ref);
+      const current = snap.exists ? snap.data() : undefined;
+      if (!current) throw new WorkTrackerError("not_found", `config change ${id} not found`);
+      if (current.status !== "applied") {
+        throw new WorkTrackerError("conflict", `config change ${id} is ${current.status}`);
+      }
+      const reverted = ConfigChange.parse({
+        ...current,
+        status: "reverted",
+        decidedBy: by,
+        decidedAt: at,
+      });
+      tx.set(ref, reverted);
+      return reverted;
+    });
+  }
+
   async get(id: string): Promise<ConfigChange | null> {
     const snap = await this.changes().doc(id).get();
     return snap.exists ? (snap.data() ?? null) : null;

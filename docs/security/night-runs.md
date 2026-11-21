@@ -1,6 +1,16 @@
 # Threat model: Night runs
 
-Overnight launches (ADR-0049, AI-104, AI-123, AI-124). Risk register: [threat-model.md](threat-model.md) (R-AI-123). Night launches aren't wired into the API yet (M4.18): until then nothing here runs.
+Overnight launches (ADR-0049, AI-104, AI-123, AI-124). Risk register: [threat-model.md](threat-model.md) (R-AI-123). Launches start and stop through the entry points below (AI-120).
+
+## Entry points (AI-120)
+
+| Entry point                                                   | Who can reach it                                                             | Authn/authz                                                                         | Notes                                                                                                                                                                                                                                                                                  |
+| ------------------------------------------------------------- | ---------------------------------------------------------------------------- | ----------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `GET /api/projects/:id/tickets/:id/night`, MCP `night_status` | Allow-listed users (Firebase ID token on `/api`, our access token on `/mcp`) | Read-only                                                                           | The epic's checklist, latest launch and progress; reads ≤ 50 stories. Question and reason text is untrusted, rendered as plain text                                                                                                                                                    |
+| `POST …/night`, MCP `launch_night`                            | Same                                                                         | Owner-only (`start_run`, `permissions.ts` unchanged); agents and the system get 403 | Refused, listing every problem, while a story has an open question, misses the Definition of Ready or waits for a plan, or the budget or stop time is missing or over the caps below; one active launch per project. With GitHub connected it opens `epic/<KEY>` with the App (AI-122) |
+| `POST …/night/stop`, MCP `stop_night`                         | Same                                                                         | Owner-only (`start_run`)                                                            | `stopping` while the stories have agent tasks in flight, then ended; `409` with no running launch                                                                                                                                                                                      |
+
+- **Low (security review, PR #187):** MCP `launch_night` has no extra human confirmation. A launch starts nothing itself: stories start under auto-build and the dial as before, and a launch only holds them back past its budget, stop time or a stop (AI-121). It does widen what the night decides alone (the section below), so an injected call could make a night of assumptions start; the caps and the merge gate still apply.
 
 ## What an unattended night may decide by itself
 

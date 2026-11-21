@@ -67,5 +67,32 @@ export function configChangeLogContract(name: string, make: () => Promise<Config
       expect((await store.listForProject("ai", 2)).map((c) => c.id)).toEqual([ids[2], ids[1]]);
       expect(CONFIG_CHANGE_LIST_MAX).toBeGreaterThan(2);
     });
+
+    it("GivenAnAppliedChange_WhenMarkedReverted_ThenRevertedWithWhoAndWhen", async () => {
+      const store = await make();
+      const c = await store.append(change());
+      const reverted = await store.markReverted(c.id, "andy", at(3));
+      expect(reverted).toEqual({
+        ...c,
+        status: "reverted",
+        decidedBy: "andy",
+        decidedAt: at(3),
+      });
+      expect(await store.get(c.id)).toEqual(reverted);
+    });
+
+    it("GivenARevertedOrUnknownChange_WhenMarkedReverted_ThenConflictOrNotFound", async () => {
+      const store = await make();
+      const c = await store.append(change());
+      await store.markReverted(c.id, "andy", at(3));
+      await expect(store.markReverted(c.id, "andy", at(4))).rejects.toMatchObject({
+        name: "WorkTrackerError",
+        code: "conflict",
+      });
+      await expect(store.markReverted("missing", "andy", at(4))).rejects.toMatchObject({
+        name: "WorkTrackerError",
+        code: "not_found",
+      });
+    });
   });
 }
