@@ -56,7 +56,14 @@ export function configChangeLogContract(name: string, make: () => Promise<Config
       await store.append(recent);
       await store.append(change({ entityId: "other", projectId: "other" }));
       await store.append(change({ entity: "tier", entityId: "ai" }));
-      expect((await store.listForProject("ai")).map((c) => c.id)).toEqual([recent.id, old.id]);
+      const routing = change({ entity: "routing", createdAt: at(9) });
+      await store.append(routing);
+      await store.append(change({ entity: "routing", entityId: "global", projectId: null }));
+      expect((await store.listForProject("ai")).map((c) => c.id)).toEqual([
+        routing.id,
+        recent.id,
+        old.id,
+      ]);
       expect(await store.listForProject("none")).toEqual([]);
     });
 

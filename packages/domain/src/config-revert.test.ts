@@ -184,6 +184,23 @@ describe("ConfigRevert (M4.12)", () => {
     await expect(revert.list("none")).rejects.toMatchObject({ code: "not_found" });
   });
 
+  it("GivenARoutingChangeInTheProjectsLog_WhenReverted_ThenNotRevertibleAndNothingWritten", async () => {
+    await changes.append(
+      applied({
+        id: "routing-1",
+        entity: "routing",
+        diff: { steps: { from: null, to: { refine: "fast" } } },
+      }),
+    );
+    const before = await tracker.getProject("ai");
+    await expect(revert.revert("ai", "routing-1", OWNER, "app")).rejects.toMatchObject({
+      code: "not_revertible",
+      message: expect.stringContaining("routing change"),
+    });
+    expect(await tracker.getProject("ai")).toEqual(before);
+    expect((await changes.get("routing-1"))?.status).toBe("applied");
+  });
+
   it("GivenMarkingFailedOnce_WhenRetried_ThenTheMarkCompletesWithoutWritingAgain", async () => {
     await projects.update("ai", { paused: true }, OWNER);
     vi.spyOn(changes, "markReverted").mockRejectedValueOnce(new Error("unavailable"));

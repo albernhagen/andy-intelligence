@@ -41,6 +41,7 @@ export * from "./ranks";
 export * from "./refine-dispatch";
 export * from "./refine-gate";
 export * from "./routing-rules";
+export * from "./routing-settings";
 export * from "./runners";
 export * from "./runs";
 export * from "./scores";
