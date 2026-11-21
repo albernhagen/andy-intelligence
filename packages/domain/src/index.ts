@@ -42,3 +42,4 @@ export * from "./config-proposals";
 export * from "./dispatch-order";
 export * from "./night-branch";
 export * from "./overrides";
+export * from "./config-revert";

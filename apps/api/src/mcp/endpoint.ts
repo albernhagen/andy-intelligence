@@ -8,6 +8,7 @@ import type {
   ProjectService,
   QuotaClearer,
   ConfigProposals,
+  ConfigRevert,
   RunService,
   TicketService,
 } from "@andy/domain";
@@ -43,6 +44,8 @@ export interface McpEndpointDeps {
   plans: ProjectPlanService;
   /** Config proposals (ADR-0097); null: the store isn't configured, so no tools. */
   configProposals: ConfigProposals | null;
+  /** The settings change log and revert (M4.12); null: the store isn't configured, so no tools. */
+  configRevert: ConfigRevert | null;
 }
 
 /**
@@ -103,6 +106,7 @@ export function registerMcpEndpoint(app: Hono<AuthEnv>, deps: McpEndpointDeps) {
       ideate: deps.ideate,
       plans: deps.plans,
       configProposals: deps.configProposals,
+      configRevert: deps.configRevert,
       email: identity.email,
       actor: actorOf(identity),
     });

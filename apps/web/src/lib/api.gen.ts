@@ -8407,6 +8407,278 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  "/api/projects/{projectId}/config-changes": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get: {
+      parameters: {
+        query?: {
+          limit?: number;
+        };
+        header?: never;
+        path: {
+          projectId: string;
+        };
+        cookie?: never;
+      };
+      requestBody?: never;
+      responses: {
+        /** @description The project's settings changes, newest first (capped) */
+        200: {
+          headers: {
+            [name: string]: unknown;
+          };
+          content: {
+            "application/json": {
+              id: string;
+              entity: string;
+              entityId: string;
+              diff: {
+                [key: string]: unknown;
+              };
+              /** @enum {string} */
+              actor: "andy" | "ui" | "agent" | "scout";
+              reason: string;
+              /** @enum {string} */
+              status: "pending" | "accepted" | "applied" | "reverted" | "rejected";
+              /** Format: date-time */
+              createdAt: string;
+              /** Format: date-time */
+              appliedAt: string | null;
+              /** @default null */
+              projectId: string | null;
+              /** @default null */
+              dedupeKey: string | null;
+              /** @default null */
+              decidedBy: string | null;
+              /**
+               * Format: date-time
+               * @default null
+               */
+              decidedAt: string | null;
+            }[];
+          };
+        };
+        /** @description Unknown project */
+        404: {
+          headers: {
+            [name: string]: unknown;
+          };
+          content: {
+            "application/json": {
+              error: string;
+              details?: string[];
+            };
+          };
+        };
+      };
+    };
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/projects/{projectId}/config-changes/{changeId}/revert": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    post: {
+      parameters: {
+        query?: never;
+        header?: never;
+        path: {
+          projectId: string;
+          changeId: string;
+        };
+        cookie?: never;
+      };
+      requestBody?: never;
+      responses: {
+        /** @description Before values written (logged as a new change); original reverted */
+        200: {
+          headers: {
+            [name: string]: unknown;
+          };
+          content: {
+            "application/json": {
+              project: {
+                id: string;
+                name: string;
+                repos: string[];
+                key: string;
+                gcpDevProjectId: string | null;
+                gcpProdProjectId: string | null;
+                /** @enum {string} */
+                autonomy: "autonomous" | "gated" | "manual";
+                monthlyBudgetUsd: number | null;
+                enabled: boolean;
+                /** @default true */
+                autoRefine: boolean;
+                /** @default false */
+                autoBuild: boolean;
+                /** @default false */
+                buildEnabled: boolean;
+                /** @default null */
+                buildEnabledBy: string | null;
+                /**
+                 * Format: date-time
+                 * @default null
+                 */
+                buildEnabledAt: string | null;
+                /**
+                 * @default none
+                 * @enum {string}
+                 */
+                planApproval: "none" | "m-and-l" | "all";
+                /** @default 5 */
+                dailyQuestionCap: number;
+                /**
+                 * @default none
+                 * @enum {string}
+                 */
+                autoMerge: "none" | "s" | "s-and-m" | "all";
+                /** @default 2 */
+                runsAtOnce: number;
+                /** @default false */
+                paused: boolean;
+                /** @default null */
+                lastDispatch: {
+                  /** @enum {string} */
+                  decision:
+                    | "paused"
+                    | "project_cap"
+                    | "global_cap"
+                    | "prs_waiting_cap"
+                    | "quota_reserve"
+                    | "quota_warn"
+                    | "started"
+                    | "nothing_ready"
+                    | "touches_overlap";
+                  /** Format: date-time */
+                  at: string;
+                } | null;
+                /** @default true */
+                emailNotifications: boolean;
+                /** @default null */
+                projectPlan: {
+                  /** @enum {string} */
+                  status: "proposed" | "approving" | "approved" | "rejected";
+                  proposal: {
+                    summary: string;
+                    milestones: {
+                      title: string;
+                      goal: string;
+                      doneWhen: string[];
+                      slices: string[];
+                    }[];
+                  };
+                  proposedBy: string;
+                  /** Format: date-time */
+                  proposedAt: string;
+                  decidedBy: string | null;
+                  /** Format: date-time */
+                  decidedAt: string | null;
+                  reason: string | null;
+                  epicIds: string[];
+                } | null;
+                /**
+                 * @default agent
+                 * @enum {string}
+                 */
+                defaultWorker: "agent" | "me" | "ask";
+                /**
+                 * @default actions
+                 * @enum {string}
+                 */
+                executor: "actions" | "local";
+              };
+              reverted: {
+                id: string;
+                entity: string;
+                entityId: string;
+                diff: {
+                  [key: string]: unknown;
+                };
+                /** @enum {string} */
+                actor: "andy" | "ui" | "agent" | "scout";
+                reason: string;
+                /** @enum {string} */
+                status: "pending" | "accepted" | "applied" | "reverted" | "rejected";
+                /** Format: date-time */
+                createdAt: string;
+                /** Format: date-time */
+                appliedAt: string | null;
+                /** @default null */
+                projectId: string | null;
+                /** @default null */
+                dedupeKey: string | null;
+                /** @default null */
+                decidedBy: string | null;
+                /**
+                 * Format: date-time
+                 * @default null
+                 */
+                decidedAt: string | null;
+              };
+            };
+          };
+        };
+        /** @description Only the owner changes project settings */
+        403: {
+          headers: {
+            [name: string]: unknown;
+          };
+          content: {
+            "application/json": {
+              error: string;
+              details?: string[];
+            };
+          };
+        };
+        /** @description Unknown project or change */
+        404: {
+          headers: {
+            [name: string]: unknown;
+          };
+          content: {
+            "application/json": {
+              error: string;
+              details?: string[];
+            };
+          };
+        };
+        /** @description Not revertible: not applied, or a field changed since */
+        409: {
+          headers: {
+            [name: string]: unknown;
+          };
+          content: {
+            "application/json": {
+              error: string;
+              details?: string[];
+            };
+          };
+        };
+      };
+    };
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   "/api/github": {
     parameters: {
       query?: never;

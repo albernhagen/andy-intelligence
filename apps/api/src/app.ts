@@ -19,6 +19,7 @@ import {
   SyncRuns,
   DomainError,
   ProjectService,
+  ConfigRevert,
   RefineDispatcher,
   RunService,
   RunnerService,
@@ -50,6 +51,7 @@ import { registerDigestRoutes } from "./digest";
 import { registerDashboardRoutes } from "./dashboard";
 import { registerSetupRoutes } from "./setup";
 import { noReviewFindings, registerConfigProposalRoutes } from "./config-proposals";
+import { registerConfigChangeRoutes } from "./config-changes";
 import { registerNotifyFlush, registerNotifyRoutes } from "./notify";
 import { registerBriefRoutes } from "./brief";
 import { registerIdeateRoutes } from "./ideate";
@@ -198,6 +200,7 @@ const DOMAIN_STATUS = {
   brief_too_long: 422,
   code_host_unavailable: 503,
   rate_limited: 429,
+  not_revertible: 409,
 } as const;
 
 export function createApp(input: AppDeps) {
@@ -466,6 +469,10 @@ export function createApp(input: AppDeps) {
       )
     : null;
   if (configProposals) registerConfigProposalRoutes(app, configProposals);
+  const configRevert = deps.configChanges
+    ? new ConfigRevert(deps.tracker, projects, deps.configChanges, now)
+    : null;
+  if (configRevert) registerConfigChangeRoutes(app, configRevert);
 
   if (github && connection) {
     registerGitHubSetup(app, {
@@ -493,6 +500,7 @@ export function createApp(input: AppDeps) {
       ideate,
       plans,
       configProposals,
+      configRevert,
     });
   }
 

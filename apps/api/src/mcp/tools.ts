@@ -23,6 +23,7 @@ import {
   type IdeateService,
   type ProjectPlanService,
   type ConfigProposals,
+  type ConfigRevert,
   type RunService,
   type TicketService,
 } from "@andy/domain";
@@ -44,6 +45,7 @@ import { registerIdeateTools } from "./tools-ideate";
 import { registerProjectPlanTools } from "./tools-project-plan";
 import { registerProjectTools } from "./tools-projects";
 import { registerConfigTools } from "./tools-config";
+import { registerConfigLogTools } from "./tools-config-log";
 
 /**
  * MCP core tools (M1.4: MCP core tools; `refine` from M1.7: Refinement; `build` and
@@ -72,6 +74,8 @@ export interface ToolDeps {
   plans?: ProjectPlanService;
   /** Config proposals from review findings (ADR-0097); absent or null: no config tools. */
   configProposals?: ConfigProposals | null;
+  /** The settings change log and revert (M4.12); absent or null: no change-log tools. */
+  configRevert?: ConfigRevert | null;
   /** Signed-in email, shown by `status` so it doubles as the connection check. */
   email: string;
   /** The signed-in user as an actor, `user:<uid>` (AI-19): every write is recorded as this. */
@@ -204,6 +208,7 @@ export function registerTools(server: McpServer, deps: ToolDeps): void {
   registerProjectPlanTools(server, deps, run);
   registerProjectTools(server, deps, run);
   registerConfigTools(server, deps, run);
+  registerConfigLogTools(server, deps, run);
 
   /** Decides the ticket's latest plan run as Andy (owner-only, ADR-0050). */
   const decide = async (key: string, decision: "approved" | "rejected", reason: string | null) => {
