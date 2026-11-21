@@ -26,6 +26,7 @@ Generated from tickets, never edited here (AI-148). Every ticket sits under a mi
 - AI-144: Threat model: one file per risk: cap each risk file at 300 words and `threat-model.md` at 1000 (was 3600)?
 - ADR-0111: Re-sync open PRs: its App token?
 - ADR-0133: Board and ticket list read changed tickets (AI-317): accept the 60 s overlap and the hourly full re-read?
+- ADR-0136: Milestone create and edit over MCP (AI-321, PR to come): extend ADR-0131 to five MCP milestone tools?
 
 ## Blocked on Andy
 

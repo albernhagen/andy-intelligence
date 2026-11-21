@@ -73,6 +73,60 @@ describe("milestones over REST and MCP (AI-304 parity)", () => {
     expect(viaRest.json.map((m: { name: string }) => m.name)).toEqual(["M4", "M5"]);
   });
 
+  it("GivenCreateOverEach_WhenListed_ThenBothAreThereNotReviewedAndLogged", async () => {
+    const { rest, mcp } = await setup();
+    const viaRest = await rest("POST", "/api/projects/ai/milestones", { name: "M4", outcome: "x" });
+    const viaMcp = await mcp("create_milestone", { project: "AI", name: "M5", outcome: "y" });
+    expect(viaMcp.isError).toBe(false);
+    expect(viaMcp.data).toMatchObject({ name: "M5", order: 1, status: "not_reviewed" });
+    expect(viaRest.json).toMatchObject({ name: "M4", order: 0, status: "not_reviewed" });
+    const list = (await rest("GET", "/api/projects/ai/milestones")).json;
+    expect(list.map((m: { name: string }) => m.name)).toEqual(["M4", "M5"]);
+    const created = (await rest("GET", "/api/projects/ai/config-changes")).json.filter(
+      (c: { entity: string; diff: object }) => c.entity === "milestone" && "created" in c.diff,
+    );
+    expect(created).toHaveLength(2);
+  });
+
+  it("GivenBadInput_WhenCreatedOverEach_ThenBothRefuse", async () => {
+    const { rest, mcp } = await setup();
+    const long = "x".repeat(301);
+    expect(
+      (await rest("POST", "/api/projects/ai/milestones", { name: "M4", outcome: long })).status,
+    ).toBe(400);
+    expect(
+      (await mcp("create_milestone", { project: "AI", name: "M4", outcome: long })).isError,
+    ).toBe(true);
+    expect((await rest("GET", "/api/projects/ai/milestones")).json).toEqual([]);
+  });
+
+  it("GivenAMilestone_WhenEditedOverEach_ThenTheSameFieldsChangeAndARevertUndoesIt", async () => {
+    const { rest, mcp } = await setup();
+    const m = (await rest("POST", "/api/projects/ai/milestones", { name: "M4", outcome: "x" }))
+      .json;
+    const viaRest = await rest("PATCH", `/api/projects/ai/milestones/${m.id}`, { name: "M4a" });
+    expect(viaRest.json.name).toBe("M4a");
+    const viaMcp = await mcp("edit_milestone", {
+      project: "AI",
+      milestone: m.id,
+      outcome: "Epics on a roadmap",
+      order: 3,
+    });
+    expect(viaMcp.data).toMatchObject({ name: "M4a", outcome: "Epics on a roadmap", order: 3 });
+    const change = (await rest("GET", "/api/projects/ai/config-changes")).json.find(
+      (c: { entity: string; diff: object }) => c.entity === "milestone" && "outcome" in c.diff,
+    );
+    expect((await mcp("revert_settings_change", { project: "AI", id: change.id })).isError).toBe(
+      false,
+    );
+    const after = (await rest("GET", "/api/projects/ai/milestones")).json[0];
+    expect(after).toMatchObject({ outcome: "x", order: 0 });
+    const unknown = await mcp("edit_milestone", { project: "AI", milestone: "nope", name: "Z" });
+    const unknownRest = await rest("PATCH", "/api/projects/ai/milestones/nope", { name: "Z" });
+    expect(unknownRest.status).toBe(404);
+    expect(unknown.text).toBe(unknownRest.json.error);
+  });
+
   it("GivenAMilestone_WhenItsStatusIsSetOverEach_ThenBothSaveAndTheChangeLogShowsThem", async () => {
     const { rest, mcp } = await setup();
     const m = (await rest("POST", "/api/projects/ai/milestones", { name: "M4", outcome: "x" }))
