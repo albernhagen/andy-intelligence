@@ -83,17 +83,12 @@ describe("code registries (AI-145)", () => {
     expect(missing).toEqual([]);
   });
 
-  it("GivenTheRegistryAndBarrelFiles_WhenRead_ThenEachListIsSortedByModulePath", () => {
+  // Package barrels are generated from their folders (ADR-0130): scripts/gen-exports.test.mjs.
+  it("GivenTheRegistryFiles_WhenRead_ThenEachListIsSortedByModulePath", () => {
     const files = [
       "apps/api/src/api-routes.ts",
       "apps/api/src/public-routes.ts",
       "apps/api/src/mcp/tool-groups.ts",
-      "packages/domain/src/index.ts",
-      "packages/store/src/index.ts",
-      "packages/contracts/src/entities/index.ts",
-      "packages/contracts/src/ports/index.ts",
-      "packages/contracts/src/fakes/index.ts",
-      "packages/contracts/src/testing/index.ts",
     ];
     for (const file of files) {
       const modules = exportedModules(join(REPO, file));

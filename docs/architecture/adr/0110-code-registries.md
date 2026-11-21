@@ -1,6 +1,6 @@
 ---
 title: Code registries: one sorted line per module, api.gen.ts not committed
-status: proposed (AI-145; Andy decides at review)
+status: proposed (AI-145; Andy decides at review); Barrels amended by 0130 (proposed)
 date: 2026-11-20
 ---
 
