@@ -34,10 +34,13 @@ test("phone inbox: answer a question with one tap and with typed text", async ({
   await yes.tap();
   await expect.poll(() => answers.length).toBe(1);
 
-  const field = question.getByRole("textbox", { name: "Your answer" });
+  // Another card: an answered question leaves the list until the refetch brings it back (the
+  // answer was intercepted), so typing into the same one would race that re-render.
+  const other = page.getByRole("listitem", { name: "Question: Keep backups for 7 or 30 days?" });
+  const field = other.getByRole("textbox", { name: "Your answer" });
   expect(await field.evaluate((el) => getComputedStyle(el).fontSize)).toBe("16px");
   await field.fill("Keep it until Friday");
-  await question.getByRole("button", { name: "Answer" }).tap();
+  await other.getByRole("button", { name: "Answer" }).tap();
   await expect.poll(() => answers.length).toBe(2);
   expect(answers).toEqual([{ answer: "Yes" }, { answer: "Keep it until Friday" }]);
 });
