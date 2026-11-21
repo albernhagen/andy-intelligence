@@ -173,6 +173,17 @@ describe("ReleaseNoteRecorder", () => {
     expect(await notes.get(project.id, "pr-70")).toMatchObject({ ticketKey: null, risk: null });
   });
 
+  it("GivenTheHostReadsFail_WhenRecorded_ThenListedByTitleAsNoNoteWithTheError", async () => {
+    vi.spyOn(host, "getPullRequestDetails").mockRejectedValue(new Error("502 Bad Gateway"));
+    expect(await recorder.record(merged(), project)).toEqual({
+      result: "recorded",
+      source: "no_note",
+      ticket: "AI-1",
+      readError: "502 Bad Gateway",
+    });
+    expect(await notes.get(project.id, "pr-70")).toMatchObject({ source: "no_note", links: [] });
+  });
+
   it("GivenThePrIsUnknownToTheHost_WhenRecorded_ThenListedByTitleAsNoNote", async () => {
     host.pullRequests.clear();
     expect(await recorder.record(merged(), project)).toMatchObject({ source: "no_note" });

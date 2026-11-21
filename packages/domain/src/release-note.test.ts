@@ -7,6 +7,7 @@ import {
   releaseNoteWords,
   firstSentence,
   parseReleaseNote,
+  stripComments,
 } from "./release-note";
 
 const words = (n: number) => Array.from({ length: n }, (_, i) => `w${i}`).join(" ");
@@ -105,6 +106,14 @@ describe("parseReleaseNote", () => {
   it("GivenAHeadingRightAfterAField_WhenParsed_ThenTheFieldStopsThere", () => {
     const body = "What changed: a\n## Summary\nmore\nHow it works: b";
     expect(parseReleaseNote(body).note?.whatChanged).toBe("a");
+  });
+});
+
+describe("stripComments", () => {
+  it("GivenClosedAndUnclosedComments_WhenStripped_ThenNoCommentTextSurvives", () => {
+    expect(stripComments("a<!-- x -->b<!-- y -->c")).toBe("abc");
+    expect(stripComments("keep <!-- never closed\nWhat changed: hidden")).toBe("keep ");
+    expect(stripComments("<!--".repeat(50_000))).toBe("");
   });
 });
 

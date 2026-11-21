@@ -49,6 +49,11 @@ describe("backfill", () => {
     expect(note).toMatchObject({ whatChanged: "AI-85: Epic panel", ticketKey: null });
   });
 
+  it("GivenMorePrsThanTheCap_WhenBackfilled_ThenItRefusesInsteadOfCutting", () => {
+    const prs = Array.from({ length: 301 }, (_, i) => pr({ number: i + 1 }));
+    expect(() => backfillNotes(prs, project, tickets, NOW)).toThrow(/more than 300/);
+  });
+
   it("GivenAStoredNote_WhenApplied_ThenItIsNotOverwritten", async () => {
     const store = new InMemoryReleaseNoteStore();
     const [note] = backfillNotes([pr({})], project, tickets, NOW);

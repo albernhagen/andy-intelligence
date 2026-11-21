@@ -38,8 +38,14 @@ export function backfillNotes(
   tickets: readonly Pick<Ticket, "key" | "title" | "risk">[],
   now: Date,
 ): ReleaseNote[] {
+  if (prs.length > BACKFILL_MAX_PRS) {
+    // Never a silent cut: older PRs would be missing with nothing saying so.
+    throw new Error(
+      `more than ${BACKFILL_MAX_PRS} merged PRs: re-run with a later --since, in windows`,
+    );
+  }
   const byKey = new Map(tickets.map((t) => [t.key, t]));
-  return prs.slice(0, BACKFILL_MAX_PRS).map((pr) => {
+  return prs.map((pr) => {
     const body = pr.body ?? "";
     const key = ticketKeyFor(project.key, {
       headRef: pr.headRefName,
@@ -104,7 +110,7 @@ async function main(args: string[]) {
       "--search",
       `merged:>=${since} base:main`,
       "--limit",
-      String(BACKFILL_MAX_PRS),
+      String(BACKFILL_MAX_PRS + 1),
       "--json",
       "number,title,body,url,mergedAt,mergedBy,headRefName,files",
     ],

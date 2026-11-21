@@ -52,6 +52,23 @@ export const releaseNoteWords = (text: string) => text.split(/\s+/).filter(Boole
 
 const clean = (text: string) => text.replace(/\s+/g, " ").trim();
 
+/**
+ * Drops HTML comments in one linear pass (no regex: no backtracking on many `<!--`). An unclosed
+ * comment runs to the end, as in HTML, so no `<!--` survives.
+ */
+export function stripComments(text: string): string {
+  let out = "";
+  let i = 0;
+  for (;;) {
+    const start = text.indexOf("<!--", i);
+    if (start < 0) return out + text.slice(i);
+    out += text.slice(i, start);
+    const end = text.indexOf("-->", start + 4);
+    if (end < 0) return out;
+    i = end + 3;
+  }
+}
+
 /** Finds each field's first occurrence outside code fences. */
 function extract(body: string): Partial<Record<Field, string>> {
   const found: Partial<Record<Field, string>> = {};
@@ -64,7 +81,7 @@ function extract(body: string): Partial<Record<Field, string>> {
     parts = [];
   };
   // Comments are the PR template's hints, never note text.
-  for (const line of body.replace(/<!--[\s\S]*?-->/g, "").split(/\r?\n/)) {
+  for (const line of stripComments(body).split(/\r?\n/)) {
     if (/^\s*(```|~~~)/.test(line)) {
       close();
       fenced = !fenced;

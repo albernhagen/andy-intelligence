@@ -135,8 +135,12 @@ export function registerGitHubWebhook(app: Hono<AuthEnv>, deps: WebhookDeps): vo
     const fields = { deliveryId: record.deliveryId, pr: record.pullRequest.number };
     try {
       const outcome = await notes.record(record, project);
-      if (outcome.result === "recorded")
-        log("INFO", "webhook release note", { ...fields, ...outcome });
+      if (outcome.result !== "recorded") return;
+      // A failed read still stored a "no note" row; the warning says why it has no text.
+      log(outcome.readError ? "WARNING" : "INFO", "webhook release note", {
+        ...fields,
+        ...outcome,
+      });
     } catch (err) {
       const error = err instanceof Error ? err : new Error(String(err));
       log("ERROR", "webhook release note failed", { ...fields, error: error.message });
