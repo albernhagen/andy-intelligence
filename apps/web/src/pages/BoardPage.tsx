@@ -13,6 +13,7 @@ import {
 } from "@dnd-kit/core";
 import { Stage, type BoardTicket } from "@andy/contracts";
 import {
+  boardStages,
   parseWorkView,
   sortByStartScore,
   workViewCounts,
@@ -48,7 +49,7 @@ import {
   saveGroupByEpic,
 } from "@/lib/board-groups";
 import { useBoard, useBoardMove, useQuickAdd, useRankTicket, useSetUpNext } from "@/lib/queries";
-import { STAGES, dropMove, groupByStage, visibleTickets } from "@/lib/tickets";
+import { dropMove, groupByStage, visibleTickets } from "@/lib/tickets";
 import { showsError } from "@/lib/live";
 
 /**
@@ -203,7 +204,7 @@ function Lanes({
   // Ungrouped is one group with no header.
   const groupCards = (cards: BoardTicket[]): EpicGroup<BoardTicket>[] =>
     grouped ? groupByEpic(cards, allById) : [{ epic: null, cards }];
-  const stages = STAGES.filter((s) => s !== "cancelled" || showCancelled);
+  const stages = boardStages(showCancelled);
 
   function laneOf(id: string | number | undefined): Stage | null {
     if (typeof id === "string" && isBacklogZone(id)) return "backlog";

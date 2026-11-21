@@ -463,6 +463,8 @@ export function createServices(raw: AppDeps): Services {
       globalSpendCaps,
     ),
     globalSpendCaps,
+    // AI-296: the board route and MCP `board` share one reader (cache and snapshots).
+    board,
     // AI-198, AI-193: each project's board through the same read cache as board polls.
     work: new WorkReader(deps.tracker, board),
     roadmap: new RoadmapReader(deps.tracker, board),

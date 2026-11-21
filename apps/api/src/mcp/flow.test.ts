@@ -172,6 +172,7 @@ describe("MCP OAuth flow (MCP SDK client)", () => {
       "approve_project_plan",
       "archive_ticket",
       "ask_question",
+      "board",
       "build",
       "cancel_ticket",
       "clear_quota_idle",

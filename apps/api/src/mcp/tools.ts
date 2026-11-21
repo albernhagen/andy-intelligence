@@ -15,6 +15,7 @@ import {
   type TicketService,
   type WorkReader,
   type RoadmapReader,
+  type BoardReader,
   type GlobalSpendCaps,
   type WhatsNewReader,
   type ProjectTickets,
@@ -70,6 +71,8 @@ export interface ToolDeps {
   work?: WorkReader;
   /** Roadmaps over epics (AI-193); the app always passes it, unit tests may not. */
   roadmap?: RoadmapReader;
+  /** The board's read (AI-296), shared with GET …/board; the app always passes it. */
+  board?: BoardReader;
   /** A project's setup checklist (AI-287); the app always passes it, unit tests may not. */
   setup?: SetupChecklistReader;
   /** Spend caps settings (AI-249); the app always passes it, unit tests may not. */
