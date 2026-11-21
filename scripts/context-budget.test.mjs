@@ -3,7 +3,15 @@ import { mkdtempSync, readFileSync, readdirSync, symlinkSync, writeFileSync } fr
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { DEFAULT_BUDGETS, check, globToRegExp, loadBudgets, measure } from "./context-budget.mjs";
+import {
+  DEFAULT_BUDGETS,
+  baseRefFrom,
+  check,
+  checkHeadroom,
+  globToRegExp,
+  loadBudgets,
+  measure,
+} from "./context-budget.mjs";
 import { cleanGitEnv } from "./git-env.mjs";
 
 describe("globToRegExp", () => {
@@ -105,6 +113,64 @@ describe("repo helper", () => {
   });
 });
 
+describe("checkHeadroom", () => {
+  const words = (n) => Array.from({ length: n }, (_, i) => `w${i}`).join(" ");
+  const result = (path, text, maxWords) =>
+    check([path], [{ pattern: path, maxWords }], () => text)[0];
+  const base = (texts) => (path) => texts[path] ?? null;
+
+  it.each([
+    ["grows by half the room", 1800, 1900, []],
+    ["shrinks while near budget", 1990, 1980, []],
+    ["is unchanged at budget", 2000, 2000, []],
+    [
+      "grows by more than half the room",
+      1800,
+      1901,
+      ["README.md: grew 101 words (1800 → 1901/2000)"],
+    ],
+    ["grows one word with one left", 1999, 2000, ["README.md: grew 1 words (1999 → 2000/2000)"]],
+  ])("GivenAFileThat%s_WhenChecked_ThenProblemsMatch", (_, was, now, expected) => {
+    const problems = checkHeadroom(
+      [result("README.md", words(now), 2000)],
+      base({ "README.md": words(was) }),
+    );
+    expect(problems.map((p) => p.split(";")[0])).toEqual(expected);
+  });
+
+  it("GivenANewFile_WhenChecked_ThenOnlyItsBudgetApplies", () => {
+    expect(checkHeadroom([result("docs/new.md", words(250), 250)], base({}))).toEqual([]);
+  });
+
+  // AI-143: two PRs from one base that each pass can't push main over together.
+  it.each([0, 1000, 1850, 1999, 2000])(
+    "GivenTwoPassingPrsFromBase%s_WhenBothMerge_ThenTheFileStaysInBudget",
+    (was) => {
+      const grow = Math.floor((2000 - was) / 2);
+      const pr = result("README.md", words(was + grow), 2000);
+      expect(checkHeadroom([pr], base({ "README.md": words(was) }))).toEqual([]);
+      expect(was + 2 * grow).toBeLessThanOrEqual(2000);
+    },
+  );
+});
+
+describe("baseRefFrom", () => {
+  it("GivenABaseFlag_WhenRead_ThenUsedWithoutFetching", () => {
+    expect(baseRefFrom(["--base", "origin/main"], {})).toEqual({
+      ref: "origin/main",
+      fetch: false,
+    });
+  });
+
+  it("GivenAPullRequestOnActions_WhenRead_ThenTheBaseBranchIsFetched", () => {
+    expect(baseRefFrom([], { GITHUB_BASE_REF: "main" })).toEqual({ ref: "main", fetch: true });
+  });
+
+  it("GivenNeither_WhenRead_ThenNull", () => {
+    expect(baseRefFrom(["."], {})).toBeNull();
+  });
+});
+
 describe("CLI", () => {
   const script = join(import.meta.dirname, "context-budget.mjs");
   // `git ls-files` in the CLI must read the temp repo, not a hook's GIT_DIR.
@@ -116,6 +182,23 @@ describe("CLI", () => {
     expect(result.status).toBe(0);
     expect(result.stdout).toContain("ok   AGENTS.md: 1/200 lines");
     expect(result.stdout).not.toContain("CLAUDE.md");
+  });
+
+  it("GivenAFileGrownByMoreThanHalfTheRoom_WhenRunWithBase_ThenExitsOne", () => {
+    const budget = '{"budgets":[{"pattern":"AGENTS.md","maxLines":20}]}';
+    const dir = repo({ "AGENTS.md": "a\n".repeat(18), "context-budget.json": budget });
+    const env = cleanGitEnv();
+    const git = (...args) => execFileSync("git", args, { cwd: dir, env });
+    git("-c", "user.name=t", "-c", "user.email=t@example.com", "commit", "-qm", "base");
+    writeFileSync(join(dir, "AGENTS.md"), "a\n".repeat(20));
+    git("add", "AGENTS.md");
+    const result = spawnSync(process.execPath, [script, dir, "--base", "HEAD"], {
+      encoding: "utf8",
+      env,
+    });
+    expect(result.status).toBe(1);
+    expect(result.stdout).toContain("ROOM AGENTS.md: grew 2 lines (18 → 20/20)");
+    expect(run(dir).status).toBe(0);
   });
 
   it("GivenOversizedFile_WhenRun_ThenExitsOne", () => {

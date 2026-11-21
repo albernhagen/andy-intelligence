@@ -15,7 +15,7 @@ Always loaded (`CLAUDE.md` is a symlink to this file). Full operating rules: [`d
 - ADRs: read `docs/architecture/adr/README.md` (one line each), then open only the ones you need.
 - Build-log history (`docs/build-log/`, one file per entry): only when you need why something happened.
 - Broad searches or reading many files: use a subagent and keep its summary, not the file dumps.
-- `pnpm context:check` enforces size budgets (`context-budget.json`); trim, don't raise a budget, unless Andy agrees.
+- `pnpm context:check` enforces size budgets (`context-budget.json`); a PR may use at most half the room left in a file it grows (AI-143). Trim, don't raise a budget, unless Andy agrees.
 
 ## Docs ship with the change (ADR-0022)
 
