@@ -1,6 +1,8 @@
+import { ProviderKey } from "../entities/common";
 import {
   SpendCapLimits,
   SpendEntry,
+  type ProviderSpendTotals,
   spendCapPassed,
   spendCounted,
   type SpendTotals,
@@ -61,6 +63,16 @@ export class InMemorySpendLedger implements SpendLedger {
     return { day: dayOf(at), dayMicroUsd, month: monthOf(at), monthMicroUsd };
   }
 
+  async totalsByProvider(
+    scope: { projectId?: string },
+    at: string,
+  ): Promise<ProviderSpendTotals[]> {
+    return ProviderKey.options.map((provider) => {
+      const { dayMicroUsd, monthMicroUsd } = this.sum(at, scope.projectId, provider);
+      return { provider, day: dayOf(at), dayMicroUsd, month: monthOf(at), monthMicroUsd };
+    });
+  }
+
   private close(id: string, at: string, change: (e: SpendEntry) => SpendEntry): SpendEntry | null {
     const e = this.entries.get(id);
     if (!e) return null;
@@ -70,11 +82,12 @@ export class InMemorySpendLedger implements SpendLedger {
     return structuredClone(next);
   }
 
-  private sum(at: string, projectId?: string) {
+  private sum(at: string, projectId?: string, provider?: ProviderKey) {
     let dayMicroUsd = 0;
     let monthMicroUsd = 0;
     for (const e of this.entries.values()) {
       if (projectId !== undefined && e.projectId !== projectId) continue;
+      if (provider !== undefined && e.provider !== provider) continue;
       if (monthOf(e.at) !== monthOf(at)) continue;
       monthMicroUsd += spendCounted(e);
       if (dayOf(e.at) === dayOf(at)) dayMicroUsd += spendCounted(e);

@@ -49,7 +49,7 @@ describe("settings Changes list", () => {
     expect((autoRefine() as HTMLInputElement).checked).toBe(true);
   });
 
-  it("GivenARoutingChange_WhenListed_ThenSummarisedWithoutRevert", async () => {
+  it("GivenARoutingChange_WhenListed_ThenSummarisedWithRevert", async () => {
     const { h, changes } = await settingsPage();
     const at = new Date().toISOString();
     await h.configChanges.append({
@@ -69,7 +69,7 @@ describe("settings Changes list", () => {
     });
     await h.queryClient.invalidateQueries();
     const row = (await within(changes()).findByText("Routing: tiers changed")).closest("li")!;
-    expect(within(row).getByText("Routing change")).toBeTruthy();
-    expect(within(row).queryByRole("button", { name: "Revert" })).toBeNull();
+    // AI-275: a routing change reverts from here too, through routing settings.
+    expect(within(row).getByRole("button", { name: "Revert" })).toBeTruthy();
   });
 });

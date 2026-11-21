@@ -10,7 +10,7 @@ All records carry `project_id` where applicable. Zod schemas in `packages/contra
 
 | Entity | Key fields |
 |---|---|
-| **Project** | name, repos, GCP dev/prod project IDs, policy overrides, budget allocation, autonomy level, enabled, `autoRefine` (default on), `autoBuild` (default off, ADR-0063), `planApproval` (default `none`, ADR-0050), `autoMerge` (`s-and-m` for new projects, ADR-0050), `executor` (`actions` or `local`, ADR-0089), `environments` (`prod-only` default, `dev-and-prod`; AI-160, ADR-0050) |
+| **Project** | name, repos, GCP dev/prod project IDs, policy overrides, budget allocation, autonomy level, enabled, `autoRefine` (default on), `autoBuild` (default off, ADR-0063), `planApproval` (default `none`, ADR-0050), `autoMerge` (`s-and-m` for new projects, ADR-0050), `executor` (`actions` or `local`, ADR-0089), `environments` (`prod-only` default, `dev-and-prod`; AI-160, ADR-0050), `spendCaps` (own caps, only below global; AI-249, ADR-0129) |
 | **Ticket** (system of record) | key (`AI-42`), title, body, acceptance criteria (the checklist; EARS for features), assumptions, type (epic/feature/chore/bug/spike, empty at capture; ADR-0058), parent, stage, size, size reason, overrides (assignee agent/me or a harness key, resolved against the project's `defaultWorker`, ADR-0082; executor, ADR-0089; tier, model pin, autonomy, target env), needs_attention (blocked on a human), DoR status, rank, blocked_by (keys, any project), archived, out_of_scope, touches (areas or path globs; ≤ 20 × 300 chars each), outcome (epics only, ≤ 300 chars: what is true when it is done; an epic's criteria are its "Done when"; ADR-0108). No stored tier: derived from size (ADR-0062) |
 | **TicketEvent** | ticket, kind (comment / stage_change / field_change / run_linked / pr_linked …), actor (`user:<uid>` for a signed-in user by auth uid, never an email (AI-19); legacy `andy`, read as the owner; agent:<run> / system; label derived on read), body/diff, timestamp; the ticket's full history |
 | **Question** | ticket, text (the question line), context, choices (label, consequence), recommendation (answer, reason), options, suggested_answer, assumptions, urgency, status, answer, answered_via, run (if an agent asked), timestamps; the format fields are null or empty on questions from before AI-73 |
@@ -36,7 +36,7 @@ Contracts are defined in `packages/contracts` (Zod schemas + TypeScript interfac
 | `CodeHostConnectionStore` | CodeHostConnection (our App: IDs + private key + webhook secret; one per control plane) | **Firestore + Secret Manager** (ADR-0043) | Local store (ADR-0032) |
 | `Executor` | RunRequest, RunStatus, RunResult, CompletionSignal, Artifact links | **Claude Code via Actions**, **Jules REST API**, **OpenCode via Actions** | Cloud Run Jobs, Agent SDK, Replicas |
 | `RunStore` | Run (status changes conditional on the current one: a late callback can't undo an ended run) | **Firestore** (M1.6a) | Local store (ADR-0032) |
-| `ModelGateway` | Completion, Usage, Cost | OpenRouter (direct single-call steps) | LiteLLM, direct providers |
+| `ModelGateway` | Completion, Usage, Cost | **OpenRouter** (AI-250: built, unwired; direct single-call steps) | LiteLLM, direct providers |
 | `QuotaSource` (`QuotaStore` adds `save`) | QuotaReading | Claude `rate_limit_event` capture from run reports (§10.5), Jules task counter | Official APIs when available |
 | `Notifier` | Notice, Urgency | UI (banner + Needs-you inbox); **Email** on Resend (AI-77: batched, 20 a day; `NotifyLedger`, `NotifyFlushQueue`) | Web Push (`PushSender`: AI-178), `PushSubscriptionStore` (ADR-0052), Slack |
 | `Deployer` | Release, Promotion, Rollback | Cloud Deploy | — |
@@ -48,7 +48,7 @@ Contracts are defined in `packages/contracts` (Zod schemas + TypeScript interfac
 | `DeploymentStore` | Deployment (AI-161: M6.3): record, finish once, list one environment newest first (≤ 100), latest good | **Firestore** (`deployments`, server-only) | — |
 | `ProjectVersions` | A change counter per project, bumped by every tracker and run write; unchanged board and ticket-list polls are served from a per-instance cache (AI-222) | **Firestore** | — |
 | `RoutingConfigStore` | RoutingConfig: providers, tier routes, step tiers; one global, one per project; puts carry `ifUpdatedAt` (AI-230: M9.3) | **Firestore** | — |
-| `SpendLedger` | SpendEntry: reserve, then settle or release, in integer micro-dollars; append-only; a reservation over a per-task, project or global UTC day or month cap is refused atomically (AI-234: M10.2) | **Firestore** (AI-247: M10.6); in-memory fake | — |
+| `SpendLedger` | SpendEntry: reserve, then settle or release, in integer micro-dollars; append-only; a reservation over a per-task, project or global UTC day or month cap is refused atomically (AI-234: M10.2); totals per project, global and per provider (AI-280) | **Firestore** (AI-247: M10.6); in-memory fake | — |
 | `Telemetry` | Trace, Span, CostEvent | OTel → Cloud Trace / Cloud Logging | BigQuery sink |
 
 **Rule:** freeze the `Executor` contract only after **two real adapters** (Claude Code + Jules) work. Vendor terms map to domain terms (a Jules *session* is a `Run`; its *activities* are run events).

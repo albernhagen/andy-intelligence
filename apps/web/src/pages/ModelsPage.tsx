@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { TierKey } from "@andy/contracts";
 import { effectiveRouting } from "@andy/domain";
+import { RoutingChanges } from "@/components/routing/RoutingChanges";
 import { RoutingEditor } from "@/components/routing/RoutingEditor";
 import { Loading, QueryError } from "@/components/Status";
 import { Select } from "@/components/ui/input";
@@ -17,6 +18,7 @@ export function ModelsPage() {
   const routing = useRouting();
   const projects = useProjects().data ?? [];
   const [scope, setScope] = useState<string | null>(null);
+  const [reverts, setReverts] = useState(0);
   const data = routing.data;
   const project = scope === null ? undefined : data?.projects.find((p) => p.projectId === scope);
   return (
@@ -46,13 +48,17 @@ export function ModelsPage() {
       {routing.isPending && <Loading />}
       {routing.isError && <QueryError error={routing.error} />}
       {data && scope === null && (
-        <RoutingEditor
-          key="global"
-          projectId={null}
-          start={data.global}
-          ifUpdatedAt={data.global.updatedAt}
-          global={data.global}
-        />
+        <>
+          <RoutingEditor
+            key={`global-${reverts}`}
+            projectId={null}
+            start={data.global}
+            ifUpdatedAt={data.global.updatedAt}
+            global={data.global}
+          />
+          {/* A revert Andy chose starts the editor again from the reverted routing. */}
+          <RoutingChanges onReverted={() => setReverts((n) => n + 1)} />
+        </>
       )}
       {data && project && (
         <>

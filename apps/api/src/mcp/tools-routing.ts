@@ -1,4 +1,5 @@
 import {
+  CONFIG_CHANGE_LIST_MAX,
   Project,
   ProviderKey,
   ProviderRouting,
@@ -36,7 +37,7 @@ const view = (c: RoutingConfig) => ({
  */
 export function registerRoutingTools(
   server: McpServer,
-  deps: Pick<ToolDeps, "routing" | "actor">,
+  deps: Pick<ToolDeps, "routing" | "actor" | "projectAccess">,
   run: <T extends object>(fn: () => Promise<T>) => Promise<CallToolResult>,
 ): void {
   const routing = deps.routing;
@@ -126,5 +127,37 @@ export function registerRoutingTools(
       run(async () =>
         view(await routing.setStepTier(scope(project), step, tier, deps.actor, reason)),
       ),
+  );
+
+  server.registerTool(
+    "list_routing_changes",
+    {
+      description: `Global routing's changes, newest first (at most ${CONFIG_CHANGE_LIST_MAX}): each with its id, the changed parts' before and after (diff), who (actor), when, reason and status (applied, or reverted). A project's routing changes are in its settings log (list_settings_changes).`,
+      inputSchema: { limit: z.number().int().min(1).max(CONFIG_CHANGE_LIST_MAX).optional() },
+      annotations: { readOnlyHint: true },
+    },
+    ({ limit }) => run(async () => ({ changes: await routing.globalChanges(deps.actor, limit) })),
+  );
+
+  server.registerTool(
+    "revert_routing_change",
+    {
+      description:
+        "Reverts one applied routing change, global or a project's, as Andy (owner only): the parts it changed go back to their before values through the normal save (validated, logged as a new change) and the original is marked reverted. Refused when a later change touched the same parts, and for a project's first save.",
+      inputSchema: {
+        id: z
+          .string()
+          .regex(/^[A-Za-z0-9-]{1,64}$/)
+          .describe("The change's id, from list_routing_changes or list_settings_changes."),
+      },
+      annotations: { destructiveHint: false, idempotentHint: false, openWorldHint: false },
+    },
+    ({ id }) =>
+      run(async () => {
+        // The change's project is checked here: the tool names none (AI-252).
+        const canRead = (projectId: string) => deps.projectAccess.canRead(deps.actor, projectId);
+        const { config, reverted } = await routing.revert(id, deps.actor, canRead);
+        return { config: view(config), reverted };
+      }),
   );
 }
