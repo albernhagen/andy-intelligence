@@ -4777,6 +4777,12 @@ export interface paths {
               } | null;
               /** @default null */
               baseBranch: string | null;
+              /** @default null */
+              epicMerge: {
+                /** Format: date-time */
+                at: string;
+                sha: string | null;
+              } | null;
             }[];
           };
         };
@@ -5027,6 +5033,12 @@ export interface paths {
               } | null;
               /** @default null */
               baseBranch: string | null;
+              /** @default null */
+              epicMerge: {
+                /** Format: date-time */
+                at: string;
+                sha: string | null;
+              } | null;
             };
           };
         };
@@ -5342,6 +5354,12 @@ export interface paths {
               } | null;
               /** @default null */
               baseBranch: string | null;
+              /** @default null */
+              epicMerge: {
+                /** Format: date-time */
+                at: string;
+                sha: string | null;
+              } | null;
             };
           };
         };
@@ -5611,6 +5629,12 @@ export interface paths {
                 } | null;
                 /** @default null */
                 baseBranch: string | null;
+                /** @default null */
+                epicMerge: {
+                  /** Format: date-time */
+                  at: string;
+                  sha: string | null;
+                } | null;
               };
               build: {
                 id: string;
@@ -5819,6 +5843,12 @@ export interface paths {
                 } | null;
                 /** @default null */
                 baseBranch: string | null;
+                /** @default null */
+                epicMerge: {
+                  /** Format: date-time */
+                  at: string;
+                  sha: string | null;
+                } | null;
               } | null;
               buildError: string | null;
             };

@@ -5,6 +5,7 @@ import {
   InMemoryWorkTracker,
   type AutoMerge,
   type HeadCheck,
+  type NightEndReason,
   type NightLaunch,
   type PullRequest,
   type Repo,
@@ -140,6 +141,7 @@ describe("night merges into the epic branch (AI-124)", () => {
       endedAt: null,
       endReason: null,
       epicBranch: { name: `epic/${epic.key}`, sha: START_SHA },
+      stoppedStories: [],
       ...over,
     });
   }
@@ -266,7 +268,7 @@ describe("night merges into the epic branch (AI-124)", () => {
       await gate().apply(opened(pr), await project());
 
       expect(required).toHaveBeenCalledWith(REPO.fullName, "main");
-      expect(read.mock.calls.every(([, , ref]) => ref === "main")).toBe(true);
+      expect(read.mock.calls.every((call) => (call as unknown[])[2] === "main")).toBe(true);
     });
 
     it("GivenTheDefaultBranchRequiresAMissingCheck_WhenAStoryPrIsAssessed_ThenItStaysOpen", async () => {
@@ -454,7 +456,7 @@ describe("night merges into the epic branch (AI-124)", () => {
 
   describe("MorningPullRequests", () => {
     const morning = () => new MorningPullRequests(tracker, runs, host, APP_URL);
-    const end = async (reason: NightLaunch["endReason"] = "done") =>
+    const end = async (reason: NightEndReason = "done") =>
       nights.transition("launch-1", ["running", "stopping"], {
         status: "ended",
         endedAt: now().toISOString(),
