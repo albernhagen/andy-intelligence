@@ -11,6 +11,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { PhonePauseButton } from "@/components/DispatchControls";
 import { LiveUpdatesBanner } from "@/components/LiveUpdatesBanner";
 import { QuotaBanner } from "@/components/QuotaBanner";
 import { QuotaGauge } from "@/components/QuotaGauge";
@@ -84,6 +85,7 @@ export function AppShell() {
         </nav>
         <div className="ml-auto flex items-center gap-2">
           <QuotaGauge />
+          <PhonePauseButton scope={scope} />
           <NeedsYouCount />
           {useContext(HeaderEndContext)}
         </div>
