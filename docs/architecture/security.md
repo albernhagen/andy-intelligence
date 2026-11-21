@@ -27,7 +27,7 @@ Applies to this repo now (M1.10: Security review automation) and to every manage
 |---|---|---|---|---|
 | Deterministic scans | Every PR | TruffleHog, CodeQL (TS + Actions), dependency review, Terraform misconfig scan, workflow linter | Check results | High/critical |
 | Security-review agent | Every PR push | Read-only agent reviews the diff against the threat model and ADRs: authn/authz, IAM, secrets, injection incl. prompt injection, workflow permissions, public-repo exposure, cost abuse | One PR comment, findings by severity | High/critical, unless Andy labels `security-accepted` with a reason |
-| System security review agent | End of each milestone; weekly if anything merged; on demand | Reads repo, threat model, ADRs, Terraform IAM, `terraform plan` drift; looks for risks no single PR shows | PR updating `docs/security/threat-model.md` | Milestone can't close with open high/critical risks unless Andy accepts them |
+| System security review agent | End of each milestone; weekly if anything merged; on demand | Reads repo, threat model, ADRs, Terraform IAM, `terraform plan` drift; looks for risks no single PR shows | PR updating `docs/security/threat-model.md` and risk files | Milestone can't close with open high/critical risks unless Andy accepts them |
 
 **Agent guardrails:** same-repo PRs only (never forks, never `pull_request_target`); token `contents: read` + `pull-requests: write`; no shell or network tools; PR content is untrusted data. If the agent can't run, its check is neutral and Andy decides. Reviewer is a separate session from the implementer; from M9 a different vendor.
 
@@ -38,7 +38,7 @@ Applies to this repo now (M1.10: Security review automation) and to every manage
 | CodeQL (TS + Actions), dependency review, Trivy Terraform scan | `.github/workflows/security-scans.yml` (TruffleHog: `secret-scan.yml`; actionlint: `ci.yml`) |
 | Security-review agent + gate | `.github/workflows/security-review.yml` → shared actions `platform/actions/agent-review-{prepare,finish}` → `scripts/review-gate.mjs` (ADR-0037, ADR-0038); rules `platform/procedures/security-review.md` (read from the base branch); Sonnet, max 25 turns; docs-only PRs skip the agent (`scripts/review-scope.mjs`); usage on each comment |
 | Adversarial-review agent | `.github/workflows/adversarial-review.yml`, same actions and gate; rules `platform/procedures/adversarial-review.md`; Sonnet, max 40 turns; later pushes review only new commits + open findings, with owner/collaborator replies as context; `review-accepted` override |
-| System security review | `.github/workflows/system-security-review.yml` (Mondays if anything merged; manual) → calls `terraform-plan.yml` for drift → PR editing `docs/security/threat-model.md`; rules `platform/procedures/threat-model.md` |
+| System security review | `.github/workflows/system-security-review.yml` (Mondays if anything merged; manual) → calls `terraform-plan.yml` for drift → PR editing `docs/security/threat-model.md` and `docs/security/risks/`; rules `platform/procedures/threat-model.md` |
 | Override | `security-accepted` label; removed on every push |
 | Action pins | Commit SHAs; Dependabot (npm, Actions, Terraform), 7-day cooldown (`.github/dependabot.yml`) |
 | Manual steps | `docs/runbooks/security-review.md` (token secret, label, required checks) |

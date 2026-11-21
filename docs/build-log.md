@@ -23,6 +23,7 @@ Generated from tickets, never edited here (AI-148). Every ticket sits under a mi
 - ADR-0096: Managed repos call one executor (AI-83): Claude token in an environment on `main`, executor at `@main`, one repo per project?
 - ADR-0099: Agent read access (AI-97): steps, tools, live or bundled?
 - ADR-0108: Roadmap view over epics, and fixed work views (M4.24 to M4.31): accept one new epic field (`outcome`), Done-when as the epic's acceptance criteria, and the five views?
+- AI-144: Threat model: one file per risk: cap each risk file at 300 words and `threat-model.md` at 1000 (was 3600)?
 
 ## Blocked on Andy
 

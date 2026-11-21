@@ -1,6 +1,6 @@
 # Threat model: Night runs
 
-Overnight launches (ADR-0049, AI-104, AI-123, AI-124). Risk register: [threat-model.md](threat-model.md) (R-AI-123). Launches start and stop through the entry points below (AI-120).
+Overnight launches (ADR-0049, AI-104, AI-123, AI-124). Risks: [R-AI-123](risks/R-AI-123.md), [R-AI-124](risks/R-AI-124.md). Launches start and stop through the entry points below (AI-120).
 
 ## Entry points (AI-120)
 
