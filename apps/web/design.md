@@ -1,6 +1,6 @@
 # Design source — control-plane UI
 
-Every UI change follows this file (ADR-0059: UX foundation; ADR-0045: UI design system). Shortcut's simplicity is the starting point, not the look (ADR-0070): a modern, minimalist design of our own, biased toward deciding (answer, approve, watch). Add missing rules here.
+Every UI change follows this file (ADR-0059: UX foundation; ADR-0045: UI design system). A minimalist design of our own, biased toward deciding: answer, approve, watch (ADR-0070).
 
 Stack: React, Tailwind v4, shadcn/ui components in `src/components/ui/`, icons from `lucide-react`. Tokens live in `src/index.css`; use them through Tailwind classes (`bg-muted`, `text-attention`), never raw colours.
 
@@ -9,14 +9,23 @@ Stack: React, Tailwind v4, shadcn/ui components in `src/components/ui/`, icons f
 - Simple before complete. One obvious way to do each thing.
 - Status visible without opening anything: a card says where it is and what it waits for.
 - Automatic by default, editable everywhere.
-- Fast: keyboard first, nothing animates for show.
+- Fast: keyboard first, nothing animates.
 
 ## Layout
 
-- One shell on every screen (`src/components/AppShell.tsx`): header with the project picker, navigation, and the "Needs you N" count. Pages render inside it and never draw their own header.
-- The picker is the global scope. Project screens live under `/p/<project>/…`, cross-project screens under `/all/…`. A new screen gets both forms, or says why it can't (the board needs one project).
+- One shell on every screen (`src/components/AppShell.tsx`): project picker, navigation, "Needs you N". Pages never draw their own header.
+- The picker is the global scope: project screens under `/p/<project>/…`, cross-project under `/all/…`. A new screen gets both, or says why not (the board needs one project).
 - Content is full width with `px-4 sm:px-6` and `py-4`. Forms and prose cap at `max-w-2xl`.
 - A ticket opens as a panel over the board, led by its status line; prose uses `Markdown`.
+
+## Phone
+
+Below `sm` (640px; `useIsPhone`):
+
+- Navigation is a bottom bar: Board, Inbox, Dashboards, More.
+- Touch targets at least 44px (`h-11`, desktop size back at `sm:`). Inputs `text-base` (a fifth size) so iOS doesn't zoom.
+- Edge-touching elements pad by `env(safe-area-inset-*)`.
+- No hover-only actions; panels open full-screen.
 
 ## Type
 
@@ -86,11 +95,10 @@ No spinners or pulsing in markers: static text keeps screenshots stable.
 | ------------------------------------------------------------ | --------------------------------------------------------- |
 | `<Badge variant="attention">Needs you</Badge>`               | `<span className="text-orange-600">!</span>`              |
 | `text-sm` table with `h-8` rows                              | `text-base` cards with `p-6` and a shadow on each         |
-| Put a new screen under `/p/$projectId/…` and `/all/…`        | Add a project dropdown inside one page                    |
 | "Waiting for you: 2 questions"                               | "ACTION REQUIRED!!"                                       |
 | Reuse `Button`, `Badge`, `DropdownMenu` from `components/ui` | Add a second component library or a one-off styled button |
 | Change a colour in `index.css`                               | Hard-code `oklch(...)` or `#hex` in a component           |
 
 ## Checks
 
-Playwright screenshots (`apps/web/e2e/`) cover the shell, board, story panel and inbox; CI fails on a diff. A deliberate change updates them in the same PR.
+Playwright screenshots (`apps/web/e2e/`, phone ones at 390×844) fail CI on a diff; a deliberate change updates them in the same PR.
