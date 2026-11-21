@@ -11,6 +11,7 @@ import {
   type WatchdogQueue,
   type WorkTracker,
   type QuotaStore,
+  type DeploymentStore,
   type NightLaunchStore,
   type ProjectVersions,
 } from "@andy/contracts";
@@ -60,6 +61,8 @@ export interface AppDeps {
   quota?: QuotaStore;
   /** Night launches (ADR-0049): a launched story's build gets its `epic/<KEY>` base (AI-122). */
   nightLaunches?: NightLaunchStore;
+  /** Deployment records (AI-161); without it the DORA panel reads empty (AI-200). */
+  deployments?: DeploymentStore;
   /**
    * Per-project change counters (AI-222): with them, every tracker and run write bumps its
    * project, and the board and ticket list serve unchanged polls from a cache. Without, no cache.
