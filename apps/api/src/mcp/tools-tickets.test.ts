@@ -140,6 +140,75 @@ describe("the inbox from any harness (real path)", () => {
   });
 });
 
+// AI-291: parity with PATCH /api/projects/{id}/tickets/{id} for the flag and the scores.
+describe("edit_ticket: needs-attention, risk and confidence", () => {
+  const scores = {
+    needsAttention: true,
+    risk: "high",
+    riskReason: "Touches the merge gate.",
+    confidence: "low",
+    confidenceReason: "No test covers the webhook path.",
+  };
+  const picked = (t: Record<string, unknown>) => ({
+    needsAttention: t.needsAttention,
+    risk: t.risk,
+    riskReason: t.riskReason,
+    confidence: t.confidence,
+    confidenceReason: t.confidenceReason,
+  });
+
+  it("GivenTwoTickets_WhenOneIsEditedOverMcpAndOneOverRest_ThenTheSameFlagAndScoresAreStored", async () => {
+    const ctx = await setup();
+    const a = await ctx.service.create("ai", story("A"), "andy");
+    const b = await ctx.service.create("ai", story("B"), "andy");
+
+    const tool = await ctx.call("edit_ticket", { ticket: a.key, ...scores });
+    const route = await ctx.rest(`/api/projects/ai/tickets/${b.id}`, {
+      method: "PATCH",
+      body: JSON.stringify(scores),
+    });
+
+    expect(tool.isError).toBe(false);
+    expect(route.status).toBe(200);
+    const storedA = (await ctx.tracker.getTicket("ai", a.id))!;
+    const storedB = (await ctx.tracker.getTicket("ai", b.id))!;
+    expect(picked(storedA)).toEqual(scores);
+    expect(picked(storedA)).toEqual(picked(storedB));
+  });
+
+  it("GivenScores_WhenOnlyTheTitleIsEdited_ThenTheScoresStay", async () => {
+    const ctx = await setup();
+    const a = await ctx.service.create("ai", story("A"), "andy");
+    await ctx.call("edit_ticket", { ticket: a.key, ...scores });
+    await ctx.call("edit_ticket", { ticket: a.key, title: "A, renamed" });
+    expect(picked((await ctx.tracker.getTicket("ai", a.id))!)).toEqual(scores);
+  });
+
+  it.each([
+    ["a risk that isn't a level", { risk: "extreme" }],
+    ["an empty reason", { riskReason: "   " }],
+    ["a reason over 300 characters", { confidenceReason: "x".repeat(301) }],
+  ])("GivenAValueThatIs%s_WhenEdited_ThenBothRefuseAndNothingChanges", async (_, bad) => {
+    const ctx = await setup();
+    const a = await ctx.service.create("ai", story("A"), "andy");
+    const tool = await ctx.call("edit_ticket", { ticket: a.key, ...bad });
+    const route = await ctx.rest(`/api/projects/ai/tickets/${a.id}`, {
+      method: "PATCH",
+      body: JSON.stringify(bad),
+    });
+    expect(tool.isError).toBe(true);
+    expect(route.status).toBe(400);
+    const field = Object.keys(bad)[0]!;
+    expect(tool.text).toContain(field);
+    expect(JSON.stringify(await route.json())).toContain(field);
+    expect(picked((await ctx.tracker.getTicket("ai", a.id))!)).toMatchObject({
+      risk: null,
+      riskReason: null,
+      confidenceReason: null,
+    });
+  });
+});
+
 describe("edit_ticket", () => {
   it("GivenFields_WhenEdited_ThenOnlyThoseChangeAndDorIsRechecked", async () => {
     const ctx = await setup();
@@ -210,6 +279,79 @@ describe("edit_ticket", () => {
     });
     expect(stale.isError).toBe(true);
     expect((await ctx.tracker.getTicket("ai", a.id))?.title).toBe("A");
+  });
+});
+
+// AI-290: parity with the ticket page's "Ask a question" (POST …/tickets/{id}/questions).
+describe("ask_question", () => {
+  it("GivenTwoTickets_WhenOneIsAskedOverMcpAndOneOverRest_ThenTheSameQuestionAndFlagAreRecorded", async () => {
+    const ctx = await setup();
+    const a = await ctx.service.create("ai", story("A"), "andy");
+    const b = await ctx.service.create("ai", story("B"), "andy");
+
+    const tool = await ctx.call("ask_question", {
+      ticket: a.key,
+      text: "Which board first?",
+      options: ["AI", "OPS"],
+      suggestedAnswer: "AI",
+    });
+    const route = await ctx.rest(`/api/projects/ai/tickets/${b.id}/questions`, {
+      method: "POST",
+      body: JSON.stringify({
+        text: "Which board first?",
+        options: ["AI", "OPS"],
+        suggestedAnswer: "AI",
+      }),
+    });
+
+    expect(tool.isError).toBe(false);
+    expect(route.status).toBe(201);
+    const fields = (q: Record<string, unknown>) => ({
+      text: q.text,
+      options: q.options,
+      suggestedAnswer: q.suggestedAnswer,
+      status: q.status,
+      urgency: q.urgency,
+      runId: q.runId,
+    });
+    expect(fields(tool.data.question)).toEqual(
+      fields((await route.json()) as Record<string, unknown>),
+    );
+    expect(tool.data.question).toMatchObject({ status: "open", runId: null });
+    for (const id of [a.id, b.id]) {
+      const asked = (await ctx.tracker.listEvents("ai", id)).find(
+        (e) => e.kind === "question_asked",
+      );
+      expect(asked?.actor).toBe("user:andy");
+      expect(await ctx.tracker.getTicket("ai", id)).toMatchObject({
+        needsAttention: true,
+        dorStatus: "not_met",
+      });
+    }
+  });
+
+  it("GivenACancelledTicket_WhenAsked_ThenTheToolRefusesWithTheRoutesReason", async () => {
+    const ctx = await setup();
+    const a = await ctx.service.create("ai", story("A"), "andy");
+    await ctx.service.cancel("ai", a.id, "user:andy");
+
+    const tool = await ctx.call("ask_question", { ticket: a.key, text: "Still needed?" });
+    const route = await ctx.rest(`/api/projects/ai/tickets/${a.id}/questions`, {
+      method: "POST",
+      body: JSON.stringify({ text: "Still needed?" }),
+    });
+
+    expect(tool.isError).toBe(true);
+    expect(route.status).toBe(422);
+    expect(tool.text).toContain(((await route.json()) as { error: string }).error);
+    expect(await ctx.tracker.listQuestions({ ticketId: a.id })).toEqual([]);
+  });
+
+  it("GivenAnUnknownTicket_WhenAsked_ThenNotFound", async () => {
+    const ctx = await setup();
+    const res = await ctx.call("ask_question", { ticket: "AI-99", text: "Which?" });
+    expect(res.isError).toBe(true);
+    expect(res.text).toMatch(/not found/i);
   });
 });
 

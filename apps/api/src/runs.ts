@@ -10,8 +10,6 @@ import {
   type QuotaReading,
   type QuotaStore,
   type RunExecutor,
-  type RunStore,
-  notFound,
 } from "@andy/contracts";
 import {
   STARTABLE_STEPS,
@@ -116,23 +114,16 @@ const routes = {
   }),
 };
 
-export function registerRunRoutes(
-  app: OpenAPIHono<AuthEnv>,
-  runs: RunService,
-  store: Pick<RunStore, "get">,
-): void {
+export function registerRunRoutes(app: OpenAPIHono<AuthEnv>, runs: RunService): void {
   app.openapi(routes.listRuns, async (c) => {
     const { projectId, ticketId } = c.req.valid("param");
     return c.json(await runs.list(projectId, ticketId), 200);
   });
 
-  // The run detail screen (AI-101). Another project's run answers exactly like an unknown id,
-  // so the URL's project can't be used to read across projects.
+  // The run detail screen (AI-101); the same read as MCP `get_run` (AI-293).
   app.openapi(routes.getRun, async (c) => {
     const { projectId, runId } = c.req.valid("param");
-    const run = await store.get(runId);
-    if (!run || run.projectId !== projectId) throw notFound("agent task", runId);
-    return c.json(run, 200);
+    return c.json(await runs.get(projectId, runId), 200);
   });
 
   app.openapi(routes.startRun, async (c) => {
@@ -365,7 +356,7 @@ export function registerRunCallbacks(app: OpenAPIHono<AuthEnv>, deps: RunCallbac
 }
 
 /** Listed in `api-routes.ts` (AI-145). */
-export const apiRoutes: RouteModule = (app, s) => registerRunRoutes(app, s.runs, s.deps.runs);
+export const apiRoutes: RouteModule = (app, s) => registerRunRoutes(app, s.runs);
 
 /** Listed in `public-routes.ts` (AI-145): CI jobs present an Actions OIDC token. Needs the GitHub App. */
 export const publicRoutes: RouteModule = (app, s) => {
