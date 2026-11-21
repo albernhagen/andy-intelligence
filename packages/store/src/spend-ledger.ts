@@ -43,25 +43,34 @@ const monthOf = (at: string) => new Date(at).toISOString().slice(0, 7);
 const scopeOf = (projectId?: string) =>
   projectId === undefined ? "global" : `project:${encodeURIComponent(projectId)}`;
 
-/** A provider's part of a total document id (AI-280). */
-const providerOf = (provider: string) => `provider:${encodeURIComponent(provider)}`;
+/**
+ * The one way a total document id is built (reads and writes both use it, so they can't drift):
+ * `{scope}|{window}` or, split by provider (AI-280), `{scope}|provider:<key>|{window}`.
+ */
+export function spendTotalDocId(
+  scope: { projectId?: string; provider?: string },
+  window: "day" | "month",
+  at: string,
+): string {
+  const w = window === "day" ? `day:${dayOf(at)}` : `month:${monthOf(at)}`;
+  const p = scope.provider === undefined ? "" : `provider:${encodeURIComponent(scope.provider)}|`;
+  return `${scopeOf(scope.projectId)}|${p}${w}`;
+}
 
 /**
  * The total document ids an entry reserved at `at` for `projectId` on `provider` counts in: the
  * project's and the global totals, and the same two split by provider (AI-280).
  */
 export function spendTotalDocIds(projectId: string, at: string, provider: string) {
-  const project = scopeOf(projectId);
-  const p = providerOf(provider);
   return {
-    projectDay: `${project}|day:${dayOf(at)}`,
-    projectMonth: `${project}|month:${monthOf(at)}`,
-    globalDay: `global|day:${dayOf(at)}`,
-    globalMonth: `global|month:${monthOf(at)}`,
-    projectProviderDay: `${project}|${p}|day:${dayOf(at)}`,
-    projectProviderMonth: `${project}|${p}|month:${monthOf(at)}`,
-    globalProviderDay: `global|${p}|day:${dayOf(at)}`,
-    globalProviderMonth: `global|${p}|month:${monthOf(at)}`,
+    projectDay: spendTotalDocId({ projectId }, "day", at),
+    projectMonth: spendTotalDocId({ projectId }, "month", at),
+    globalDay: spendTotalDocId({}, "day", at),
+    globalMonth: spendTotalDocId({}, "month", at),
+    projectProviderDay: spendTotalDocId({ projectId, provider }, "day", at),
+    projectProviderMonth: spendTotalDocId({ projectId, provider }, "month", at),
+    globalProviderDay: spendTotalDocId({ provider }, "day", at),
+    globalProviderMonth: spendTotalDocId({ provider }, "month", at),
   };
 }
 
@@ -150,10 +159,9 @@ export class FirestoreSpendLedger implements SpendLedger {
   }
 
   async totals(scope: { projectId?: string }, at: string): Promise<SpendTotals> {
-    const s = scopeOf(scope.projectId);
     const [day, month] = await this.db.getAll(
-      this.totalsCol().doc(`${s}|day:${dayOf(at)}`),
-      this.totalsCol().doc(`${s}|month:${monthOf(at)}`),
+      this.totalsCol().doc(spendTotalDocId(scope, "day", at)),
+      this.totalsCol().doc(spendTotalDocId(scope, "month", at)),
     );
     return {
       day: dayOf(at),
@@ -167,12 +175,13 @@ export class FirestoreSpendLedger implements SpendLedger {
     scope: { projectId?: string },
     at: string,
   ): Promise<ProviderSpendTotals[]> {
-    const s = scopeOf(scope.projectId);
     const providers = ProviderKey.options;
     const snaps = await this.db.getAll(
-      ...providers.flatMap((p) => [
-        this.totalsCol().doc(`${s}|${providerOf(p)}|day:${dayOf(at)}`),
-        this.totalsCol().doc(`${s}|${providerOf(p)}|month:${monthOf(at)}`),
+      ...providers.flatMap((provider) => [
+        this.totalsCol().doc(spendTotalDocId({ projectId: scope.projectId, provider }, "day", at)),
+        this.totalsCol().doc(
+          spendTotalDocId({ projectId: scope.projectId, provider }, "month", at),
+        ),
       ]),
     );
     return providers.map((provider, i) => ({
