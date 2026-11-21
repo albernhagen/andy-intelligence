@@ -74,6 +74,9 @@ describe("app shell", () => {
   it("GivenAllProjects_WhenTheBoardOpens_ThenItAsksForAProject", async () => {
     await twoProjects("/all/board");
     expect(await screen.findByText("A board shows one project. Pick one:")).toBeTruthy();
-    expect(screen.getByRole("link", { name: "OPS Ops" }).getAttribute("href")).toBe("/p/ops");
+    // The project links come from their own query, after the heading.
+    expect((await screen.findByRole("link", { name: "OPS Ops" })).getAttribute("href")).toBe(
+      "/p/ops",
+    );
   });
 });

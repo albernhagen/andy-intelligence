@@ -273,6 +273,22 @@ export function workTrackerContract(name: string, make: () => Promise<WorkTracke
       ).toEqual([ticket.id]);
     });
 
+    it("GivenUpNextAndIdeasTickets_WhenListedByUpNext_ThenOnlyBacklogTicketsWithAnUpNextRank", async () => {
+      const { tracker, project, ticket } = await setup();
+      const upNext = await tracker.createTicket(project.id, { title: "Up next" }, "andy");
+      await tracker.updateTicket(project.id, upNext.id, { fields: { upNextRank: "m" } }, "andy");
+      const moved = await tracker.createTicket(project.id, { title: "Moved on" }, "andy");
+      await tracker.updateTicket(
+        project.id,
+        moved.id,
+        { fields: { upNextRank: "n" }, stage: { to: "ready", reason: null } },
+        "andy",
+      );
+      const ids = (await tracker.listTickets(project.id, { upNext: true })).map((t) => t.id);
+      expect(ids).toEqual([upNext.id]);
+      expect(ids).not.toContain(ticket.id);
+    });
+
     it("GivenAnArchivedTicket_WhenListedByArchived_ThenOnlyMatchingTicketsAreReturned", async () => {
       const { tracker, project, ticket } = await setup();
       expect(ticket.archived).toBe(false);
@@ -396,6 +412,45 @@ export function workTrackerContract(name: string, make: () => Promise<WorkTracke
       expect((await tracker.listEvents(project.id, ticket.id)).at(-1)).toEqual(linked);
       expect(await tracker.getTicket(project.id, ticket.id)).toEqual(ticket);
       await rejectsWith(tracker.linkPullRequest(project.id, "nope", link, "system"), "not_found");
+    });
+
+    it("GivenTwoLinkedPullRequests_WhenTheLatestIsRead_ThenItIsTheNewestLink", async () => {
+      const { tracker, project, ticket } = await setup();
+      expect(await tracker.getLatestPullRequest(project.id, ticket.id)).toBeNull();
+      await tracker.addComment(project.id, ticket.id, "not a link", "andy");
+      const first = { number: 7, url: "https://example.com/pr/7", state: "closed" } as const;
+      const second = { number: 8, url: "https://example.com/pr/8", state: "open" } as const;
+      await tracker.linkPullRequest(project.id, ticket.id, first, "system");
+      await tracker.linkPullRequest(project.id, ticket.id, second, "system");
+      expect(await tracker.getLatestPullRequest(project.id, ticket.id)).toEqual(second);
+      expect(await tracker.getLatestPullRequest(project.id, "nope")).toBeNull();
+    });
+
+    it("GivenTicketsChangedBeforeAndAfterACutoff_WhenListedChangedSince_ThenOnlyTheLaterOnesComeBackByRank", async () => {
+      const { tracker, project, ticket } = await setup();
+      const old = await tracker.createTicket(project.id, { type: "chore", title: "Old" }, "andy");
+      await new Promise((r) => setTimeout(r, 5));
+      const since = new Date().toISOString();
+      await new Promise((r) => setTimeout(r, 5));
+      const made = await tracker.createTicket(project.id, { type: "chore", title: "New" }, "andy");
+      const moved = await tracker.updateTicket(
+        project.id,
+        ticket.id,
+        { fields: { title: "First, renamed" } },
+        "andy",
+      );
+      const archived = await tracker.updateTicket(
+        project.id,
+        made.id,
+        { fields: { archived: true } },
+        "andy",
+      );
+      const changed = await tracker.listTicketsChangedSince(project.id, since);
+      expect(changed).toEqual([moved, archived]);
+      expect(changed.map((t) => t.id)).not.toContain(old.id);
+      expect(await tracker.listTicketsChangedSince(project.id, "2999-01-01T00:00:00.000Z")).toEqual(
+        [],
+      );
     });
 
     it("GivenAQuestion_WhenAnswered_ThenStatusAndHistoryUpdateAndASecondAnswerConflicts", async () => {

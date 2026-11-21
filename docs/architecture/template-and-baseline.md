@@ -21,17 +21,19 @@ infra/                            # Terraform: dev/prod Cloud Run, Cloud Deploy 
 ```
 **Required CI checks** on `main`: tests, lint, typecheck, protected-path check, secret scan, security scans and security-review agent (§9.1), "PR references a ticket" (ticket key in branch name or PR body, verified against the control-plane API).
 
-Onboarding a project = UI/MCP "Add project" → onboarding interview → brief PR (ADR-0053) → bootstrap (applies the project baseline, §8.1; until then `platform/baseline/baseline.mjs onboard`, runbook `docs/runbooks/onboard-a-repo.md`: branch ruleset, repo settings, labels, template files, secrets refs, App install check, Terraform PR for GCP) → Andy approves Terraform PR.
+Onboarding a project = UI/MCP "Add project" → onboarding interview → brief PR (ADR-0053) → bootstrap (applies the project baseline, §8.1; until then `platform/baseline/baseline.mjs onboard`, runbook `docs/runbooks/onboard-a-repo.md`) → Andy approves Terraform PR.
 
 ### 8.1 Project baseline (ADR-0031)
 
-Every guardrail built here reaches each managed project the same way, this repo included. **Every slice that adds or changes a guardrail updates this table in the same PR.**
+Every guardrail built here reaches each managed project the same way, this repo included; a slice that adds or changes one updates this table.
 
 Carried by (ADR-0038): **A** = composite action in `platform/actions/`; managed repos get the caller workflow with the action pinned by SHA · **M** = managed file (kept identical; listed in `platform/baseline/manifest.json`) · **S** = seed file, copied once from `template/` · **G** = GitHub config in `platform/baseline/github/`, applied by `platform/baseline/baseline.mjs` · **TF** = Terraform module in `infra/modules/` · **RB** = runbook step (secrets).
 
 This repo's Dependabot bumps third-party pins in `platform/actions/`; managed repos get them through the baseline pin. Drift: `baseline.mjs check <repo>`; the weekly system review checks labels and ruleset.
 
 GitHub settings rows (ruleset, merge settings, `autoMerge`, `planApproval`, Dependabot auto-merge, CODEOWNERS, security and analysis, Actions, labels): [`baseline-github-settings.md`](baseline-github-settings.md).
+
+Build runs (plan approval, sandbox, publish limits) and read caps (AI-222): [`baseline-build-and-reads.md`](baseline-build-and-reads.md).
 
 | Guardrail | ADR | Source in this repo | Carried by | Status |
 |---|---|---|---|---|
@@ -45,8 +47,9 @@ GitHub settings rows (ruleset, merge settings, `autoMerge`, `planApproval`, Depe
 | Security-review agent + gate | 0025, 0030, 0037 | `security-review.yml`, `platform/actions/agent-review-*`, `scripts/review-*.mjs`, `platform/procedures/security-review.md` | A | carried (M1.16); procedure read from the pinned commit |
 | Adversarial PR review | 0026, 0037 | `adversarial-review.yml`, `platform/actions/agent-review-*`, `scripts/review-gate.mjs`, `platform/procedures/adversarial-review.md` | A | carried (M1.16); procedure read from the pinned commit |
 | System security review + drift | 0025, 0030 | `system-security-review.yml`, `platform/procedures/threat-model.md` | — | not yet carried (M6: Dev → prod releases; its drift plan is GCP-specific) |
-| Local hooks (lefthook) + Claude Code format hook + Prettier config | 0027 | `lefthook.yml`, `.claude/settings.json`, `scripts/format-edited-file.mjs`, `.prettierrc.json` | M | carried (M1.16) |
+| Lefthook (push: affected tests), format hook, Prettier | 0027, 0113 | `lefthook.yml`, `.claude/settings.json`, `scripts/format-edited-file.mjs`, `.prettierrc.json` | M | carried (M1.16) |
 | Dependabot (npm, Actions; cooldown) | 0025, 0030 | `template/.github/dependabot.yml` (this repo's adds Terraform) | M | carried (M1.16) |
+| PR release-note block | 0121 | `release-note.yml` → `platform/actions/release-note-check` | A | not yet carried |
 | PR template (docs + security checklist) | 0022, 0025 | `template/.github/pull_request_template.md` | M | carried (M1.16) |
 | Agent rules; docs ship with the change | 0022 | `template/AGENTS.md.template` | S | carried (M1.16) |
 | Threat model seed | 0025 | `template/docs/security/threat-model.md` | S | carried (M1.16) |
@@ -56,10 +59,9 @@ GitHub settings rows (ruleset, merge settings, `autoMerge`, `planApproval`, Depe
 | Public-repo hygiene (`.gitignore`: tfvars, state, `.env*`) | 0015 | `template/gitignore.lines` | M (lines) | carried (M1.16) |
 | Reviewer token secret | 0030 | `CLAUDE_CODE_OAUTH_TOKEN` | RB | carried (M1.16: `docs/runbooks/onboard-a-repo.md`) |
 | GCP budget + alerts | 0028, 0029 | `infra/billing` | TF | not yet carried (M6: Dev → prod releases) |
-| Cloud Run caps, log exclusions, usage alerts | 0028 | `infra/control-plane` | TF | not yet carried (M6: Dev → prod releases) |
+| Cloud Run caps, log exclusions, usage alerts, daily Firestore backup (7-day retention), Cloud Tasks queue caps (rate, concurrency, retries) | 0028 | `infra/control-plane` | TF | not yet carried (M6: Dev → prod releases) |
+| Alert: config change not in the change log (AI-136); test keeps filter and message in step | — | `infra/control-plane`, `config-changes.test.ts` | TF | not yet carried (M6: Dev → prod releases) |
 | Cost kill switch (opt-in) | 0028, 0036 | `infra/billing/kill-switch.tf` + workflow YAML | TF | not yet carried (M6: Dev → prod releases) |
-| Daily Firestore backup (7-day retention) | 0028 | `infra/control-plane` | TF | not yet carried (M6: Dev → prod releases) |
-| Cloud Tasks queue caps (rate, concurrency, retries) | 0028 | `infra/control-plane` | TF | not yet carried (M6: Dev → prod releases) |
 | Safe deploy: no-traffic revision, smoke test, then traffic | 0076 | `platform/actions/cloud-run-safe-deploy` | A | control plane only until M6: Dev → prod releases |
 | UI screenshot checks (Playwright): a diff fails, actual images uploaded; 10-minute cap | 0045, 0059 | `ui-screenshots.yml` → `platform/actions/ui-screenshots`; config and images in `apps/web/e2e/` | — | control plane only; a managed web UI can call the action (needs `playwright.config.ts`). Not required yet |
 | Refine caps (questions, children); email (20/day, 10-min batch) | 0028, 0075 | `packages/domain/src/{refine-gate,notify-email}.ts` | — | control plane |
@@ -67,12 +69,11 @@ GitHub settings rows (ruleset, merge settings, `autoMerge`, `planApproval`, Depe
 | Spend notices: 80% of a cap and a stop, once per cap and window, 10 a day, no agent text | 0028 | `packages/domain/src/spend-notices.ts` | — | control plane |
 | Membership caps: 20 members per project, 100 in all, checked inside `put`'s transaction; member reads capped to match | 0028, 0126 | `packages/store/src/membership-store.ts` | — | control plane |
 | API request body cap (256 KB); UI poll floor 5 s | 0028, 0091 | `apps/api/src/app.ts`, `apps/web/src/lib/live.ts` | — | control plane only |
-| Read caps (AI-222): `status` reads a ticket, its blockers and its lane, never the project; an unchanged board or ticket list is one counter read (cache 5 min, 200 views per instance); blocker and epic chains capped at 200 reads; the google-sub task count reads at most 500 runs and reads as 100% used past it (AI-232); tests count reads | 0028, 0126 | `packages/domain/src/{project-versions,ticket-reads,jules-quota}.ts`, `apps/api/src/reads.test.ts` | — | control plane only |
 | Context budget: agent-loaded docs within size budgets (`context-budget.json`; default `AGENTS.md`/`CLAUDE.md` ≤ 200 lines) | 0046 | `scripts/context-budget.mjs` in `platform/actions/ci-check` | A | carried (next baseline tag) |
 | Review agents: lockfiles out of the diff (code first, 120 KB cap with truncation note); lockfile sources must be the npm registry with integrity | 0046 | `platform/actions/agent-review-prepare`; `scripts/lockfile-sources.mjs` in `platform/actions/ci-check` | A | carried (next baseline tag) |
 | Agent evals (`agent-evals` check) | 0040, 0086 | `platform/actions/agent-evals` | A | control plane only, not required |
-| Executor permission profile (headless Claude Code) | 0040, 0051 | `platform/executor/profile.json` + `scripts/executor-profile.mjs`, installed by the reusable `claude-executor.yml` | — | built (M1.6a); managed repos call the reusable workflow from M5: Multi-project in parallel |
-| Build runs: `autoBuild` switch; `planApproval`: an approved read-only plan first, owner-only decision, ≤ 3 plan runs, stale after a ticket or policy change or 72 h; Bash only in the sandbox (registry-only network, credentials unset and scrubbed), live-checked by one sandboxed Bash call before the agent; `.git` paths that steer git checked and `.git` restored after it; sandbox placeholders dropped; publish job refuses protected paths, symlinks, > 200 files or > 5 MB; one App token per build run; ≤ 4 builds per ticket | 0028, 0063, 0071 | `packages/domain/src/build{s,-dispatch}.ts`, `profile.json` `steps.build`, `claude-executor.yml` (`publish`), `scripts/executor-{publish,sandbox}.mjs`, `apps/api/src/github/token.ts`, `packages/domain/src/plans.ts` | — | built (M1.8a); managed repos with the reusable workflow (M5) |
-| Webhook caps (1 MB body, 300 signed deliveries/minute per instance) + HMAC + 30-day TTL on records | 0028, 0041 | `apps/api/src/webhooks.ts`, `infra/control-plane` | — | control plane only (managed repos send webhooks; they don't receive them) |
-| Bot-opened PRs run their checks (repo token from the control plane via Actions OIDC; agent job holds no write credential) | 0041, 0043 | `system-security-review.yml` (`publish` job), `apps/api/src/github/token.ts` | — | not yet carried (the system review itself isn't carried until M6: Dev → prod releases) |
+| Executor permission profile (headless Claude Code) | 0040, 0051 | `platform/executor/profile.json` + `scripts/executor-profile.mjs`, installed by the reusable `claude-executor.yml` | M (`agent-run.yml` caller) | built (M1.6a); managed repos get the caller from the baseline; its token sits in a `main`-only `agent` environment (AI-106) |
+| Webhook caps (1 MB body, 300 signed deliveries/minute per instance) + HMAC + 30-day TTL on records | 0028, 0041 | `apps/api/src/webhooks.ts`, `infra/control-plane` | — | control plane only (managed repos only send webhooks) |
+| Bot-opened PRs run their checks (repo token from the control plane via Actions OIDC; agent job holds no write credential) | 0041, 0043 | `system-security-review.yml` (`publish` job), `apps/api/src/github/token.ts` | — | not yet carried (until M6: Dev → prod releases) |
+| Re-sync open PRs (clean merges only, capped; `no-auto-sync` label) | 0111 | `platform/actions/resync-prs` | A, G | label carried; caller needs per-project tokens |
 | Sandbox self-test on executor changes | 0071 | `platform/actions/sandbox-self-test` | A | platform only; a project hosting an executor pins the action |

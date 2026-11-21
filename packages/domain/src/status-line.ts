@@ -51,6 +51,8 @@ export interface StatusInput {
   held?: { count: number; cap: string } | null;
   /** Where its next run goes (ADR-0089); absent until it loads, read as `actions`. */
   executor?: ResolvedExecutor;
+  /** Why its milestone holds it in Backlog or Ready (AI-306); null or absent: it doesn't. */
+  milestoneHold?: string | null;
 }
 
 const QUESTION_LINE_MAX = 200;
@@ -100,6 +102,10 @@ function mainStatus(s: StatusInput, now: Date): { text: string; tone: StatusTone
   }
   if (s.worker === "ask" && (s.stage === "ready" || s.stage === "in_progress")) {
     return { text: "Needs a worker", tone: "attention" };
+  }
+
+  if (s.milestoneHold && (s.stage === "backlog" || s.stage === "ready")) {
+    return { text: `Waiting: ${s.milestoneHold}`, tone: "default" };
   }
 
   switch (s.stage) {
@@ -261,6 +267,8 @@ export interface TicketFacts {
   questionLine?: string | null;
   /** Where its next run goes (ADR-0089); undefined until it loads. */
   executor?: ResolvedExecutor;
+  /** Why its milestone holds it (`ticketMilestoneHold`, AI-306); only MCP `status` passes it. */
+  milestoneHold?: string | null;
 }
 
 const SYNC_STOP_FILES = 3;
@@ -314,6 +322,7 @@ export function ticketStatusLine(ticket: Ticket, facts: TicketFacts, now: Date) 
       questionLine: facts.questionLine ?? null,
       held: heldLine(ticket),
       executor: facts.executor,
+      milestoneHold: facts.milestoneHold ?? null,
     },
     now,
   );

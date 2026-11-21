@@ -8,9 +8,11 @@ import {
   InMemoryCodeHostConnectionStore,
   InMemoryConfigChangeStore,
   InMemoryDeploymentStore,
+  InMemoryMilestoneStore,
   InMemoryRoutingConfigStore,
   InMemorySpendCapsStore,
   InMemoryNightLaunchStore,
+  InMemoryReleaseNoteStore,
   InMemoryReviewFindingSource,
   InMemoryQuotaStore,
   InMemoryRunStore,
@@ -43,9 +45,12 @@ export function renderApp(
     beforeFetch?: (request: Request) => Promise<void>;
     /** Needs-you email (AI-77); absent: not configured. */
     email?: Parameters<typeof createApp>[0]["email"];
+    /** A tracker to use instead of a fresh one (e.g. one that reports epics' milestones). */
+    tracker?: InMemoryWorkTracker;
   } = {},
 ) {
-  const tracker = new InMemoryWorkTracker();
+  const tracker = opts.tracker ?? new InMemoryWorkTracker();
+  const milestones = new InMemoryMilestoneStore();
   const runs = new InMemoryRunStore();
   const quota = new InMemoryQuotaStore();
   const runners = new InMemoryRunnerStore();
@@ -54,6 +59,7 @@ export function renderApp(
   const deployments = new InMemoryDeploymentStore();
   const routing = new InMemoryRoutingConfigStore();
   const spendCapsStore = new InMemorySpendCapsStore();
+  const releaseNotes = new InMemoryReleaseNoteStore();
   const reviewFindings = new InMemoryReviewFindingSource();
   // GitHub fakes (ADR-0043): one installed repo; any manifest code "connects" this App.
   const connections = new InMemoryCodeHostConnectionStore();
@@ -83,6 +89,8 @@ export function renderApp(
     configChanges,
     nightLaunches,
     deployments,
+    milestones,
+    releaseNotes,
     reviewFindings,
     routing,
     spendCapsStore,
@@ -136,8 +144,10 @@ export function renderApp(
     </QueryClientProvider>,
   );
   return {
+    milestones,
     runners,
     spendCapsStore,
+    releaseNotes,
     reviewFindings,
     configChanges,
     user,

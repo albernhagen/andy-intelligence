@@ -226,6 +226,25 @@ describe("ConfigRevert (M4.12)", () => {
     expect(await revert.list("ai")).toHaveLength(2);
   });
 
+  it("GivenAMergeModeTighteningRevertedOverMcp_WhenTried_ThenRefusedAndNothingWritten", async () => {
+    await projects.update("ai", { mergeMode: "manual" }, OWNER);
+    await expect(revert.revert("ai", "change-1", OWNER, "mcp")).rejects.toMatchObject({
+      details: [expect.stringContaining("project settings page")],
+    });
+    expect((await tracker.getProject("ai"))?.mergeMode).toBe("manual");
+  });
+
+  it("GivenALooseningRevertWrittenInTheAppWhoseMarkFailed_WhenRetriedOverMcp_ThenTheMarkCompletes", async () => {
+    await projects.update("ai", { mergeMode: "manual" }, OWNER);
+    vi.spyOn(changes, "markReverted").mockRejectedValueOnce(new Error("unavailable"));
+    await expect(revert.revert("ai", "change-1", OWNER, "app")).rejects.toThrow("unavailable");
+
+    const retried = await revert.revert("ai", "change-1", OWNER, "mcp");
+
+    expect(retried.reverted.status).toBe("reverted");
+    expect(retried.project.mergeMode).toBe("low-risk");
+  });
+
   it("GivenAnAgentChangeWithTheRevertReason_WhenReverted_ThenItDoesNotCountAsTheRevert", async () => {
     await projects.update("ai", { paused: true }, OWNER);
     await changes.append(
