@@ -1,8 +1,8 @@
 import type { Milestone, MilestoneInput } from "../entities/milestone";
 
 // ── MilestoneStore ───────────────────────────────────────────────────────────
-// A project's milestones (ADR-0131, AI-302: M4.33). Storage only: nothing reads it yet
-// (AI-304: M4.34 adds the domain service, API and MCP). Reads are bounded by
+// A project's milestones (ADR-0131, AI-302: M4.33). Storage only; `MilestoneService` (AI-304:
+// M4.34) is its one caller. Reads are bounded by
 // MILESTONES_PER_PROJECT_MAX (ADR-0126).
 
 export interface MilestoneStore {
@@ -16,6 +16,10 @@ export interface MilestoneStore {
    * can't pass the cap.
    */
   create(milestone: MilestoneInput): Promise<Milestone>;
-  /** Replaces an existing milestone and returns it as stored; null when there is none. */
-  replace(milestone: MilestoneInput): Promise<Milestone | null>;
+  /**
+   * Replaces an existing milestone and returns it as stored; null when there is none. With
+   * `ifUpdatedAt` (optimistic concurrency, AI-304), a WorkTrackerError `conflict` when the stored
+   * milestone's `updatedAt` differs, and nothing is written. Atomic.
+   */
+  replace(milestone: MilestoneInput, ifUpdatedAt?: string): Promise<Milestone | null>;
 }

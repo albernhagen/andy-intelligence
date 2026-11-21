@@ -5,6 +5,7 @@ import {
   MilestoneCapError,
   byMilestoneOrder,
   type MilestoneInput,
+  WorkTrackerError,
   type MilestoneStore,
 } from "@andy/contracts";
 import { collections, typedCollection } from "./index";
@@ -45,11 +46,15 @@ export class FirestoreMilestoneStore implements MilestoneStore {
     return m;
   }
 
-  async replace(milestone: MilestoneInput): Promise<Milestone | null> {
+  async replace(milestone: MilestoneInput, ifUpdatedAt?: string): Promise<Milestone | null> {
     const m = Milestone.parse(milestone);
     const ref = this.coll(m.projectId).doc(m.id);
     return this.db.runTransaction(async (tx) => {
-      if (!(await tx.get(ref)).exists) return null;
+      const stored = (await tx.get(ref)).data();
+      if (!stored) return null;
+      if (ifUpdatedAt !== undefined && stored.updatedAt !== ifUpdatedAt) {
+        throw new WorkTrackerError("conflict", `milestone ${m.id} changed since it was read`);
+      }
       tx.set(ref, m);
       return m;
     });
