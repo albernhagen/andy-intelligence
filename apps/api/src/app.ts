@@ -26,6 +26,7 @@ import {
   BoardReader,
   ConfigProposals,
   DigestReader,
+  MilestoneMapReader,
   QuotaClearer,
   BriefService,
   IdeateService,
@@ -47,6 +48,7 @@ import { registerBoardRoutes } from "./board";
 import { registerEpicRoutes } from "./epics";
 import { registerInFlightRoutes } from "./in-flight";
 import { registerDigestRoutes } from "./digest";
+import { registerMilestoneMapRoutes } from "./milestone-map";
 import { registerDashboardRoutes } from "./dashboard";
 import { registerSetupRoutes } from "./setup";
 import { noReviewFindings, registerConfigProposalRoutes } from "./config-proposals";
@@ -434,6 +436,7 @@ export function createApp(input: AppDeps) {
   registerQuotaRoutes(app, deps.quota ?? null, quotaClearer, now);
   const digest = new DigestReader(deps.tracker, deps.runs, deps.quota ?? null, now);
   registerDigestRoutes(app, digest, now);
+  registerMilestoneMapRoutes(app, new MilestoneMapReader(deps.tracker));
   registerDashboardRoutes(app, deps, now);
   registerSetupRoutes(app, deps.tracker, connection ? new ConnectedCodeHost(connection) : null);
   registerNotifyRoutes(app, email);

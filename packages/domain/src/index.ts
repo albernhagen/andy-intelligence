@@ -37,6 +37,7 @@ export * from "./project-plan";
 export * from "./dashboard";
 export * from "./setup-checklist";
 export * from "./epic-rollup";
+export * from "./milestone-map";
 export * from "./night-launch";
 export * from "./config-proposals";
 export * from "./dispatch-order";

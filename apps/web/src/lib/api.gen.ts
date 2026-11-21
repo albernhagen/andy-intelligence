@@ -6451,6 +6451,82 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  "/api/projects/{projectId}/milestone-map": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get: {
+      parameters: {
+        query?: {
+          /** @description One epic's key, e.g. "AI-84", in any stage. Omit for every open epic. */
+          epic?: string;
+        };
+        header?: never;
+        path: {
+          projectId: string;
+        };
+        cookie?: never;
+      };
+      requestBody?: never;
+      responses: {
+        /** @description Each open epic's children: done, in review, in progress, blocked */
+        200: {
+          headers: {
+            [name: string]: unknown;
+          };
+          content: {
+            "application/json": components["schemas"]["MilestoneMap"];
+          };
+        };
+        /** @description Invalid request */
+        400: {
+          headers: {
+            [name: string]: unknown;
+          };
+          content: {
+            "application/json": {
+              error: string;
+              details?: string[];
+            };
+          };
+        };
+        /** @description Not found */
+        404: {
+          headers: {
+            [name: string]: unknown;
+          };
+          content: {
+            "application/json": {
+              error: string;
+              details?: string[];
+            };
+          };
+        };
+        /** @description The key names no epic of the project */
+        422: {
+          headers: {
+            [name: string]: unknown;
+          };
+          content: {
+            "application/json": {
+              error: string;
+              details?: string[];
+            };
+          };
+        };
+      };
+    };
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   "/api/projects/{projectId}/dashboard": {
     parameters: {
       query?: never;
@@ -8598,6 +8674,56 @@ export interface components {
       };
       costedChildren: number;
       partial: boolean;
+    };
+    MilestoneMap: {
+      projectKey: string;
+      epics: {
+        key: string;
+        title: string;
+        /** @enum {string} */
+        stage: "backlog" | "ready" | "in_progress" | "ready_for_review" | "done" | "cancelled";
+        progress: {
+          done: number;
+          total: number;
+        };
+        done: string[];
+        inReview: {
+          key: string;
+          title: string;
+          prNumber: number | null;
+          openBlockers: string[];
+          needsAttention: boolean;
+        }[];
+        inProgress: {
+          key: string;
+          title: string;
+          prNumber: number | null;
+          openBlockers: string[];
+          needsAttention: boolean;
+        }[];
+        blocked: {
+          key: string;
+          title: string;
+          prNumber: number | null;
+          openBlockers: string[];
+          needsAttention: boolean;
+        }[];
+        notStarted: {
+          key: string;
+          title: string;
+          prNumber: number | null;
+          openBlockers: string[];
+          needsAttention: boolean;
+        }[];
+        cancelled: number;
+      }[];
+      unassigned: string[];
+      truncated: {
+        epics: boolean;
+        prNumbers: boolean;
+        unassigned: boolean;
+      };
+      text: string;
     };
     SetupChecklist: {
       repo: string | null;

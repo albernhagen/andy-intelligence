@@ -38,6 +38,7 @@ import { registerScoreTools, withStartScore } from "./tools-scores";
 import { registerSettingsTools } from "./tools-settings";
 import { registerNotifyTools } from "./tools-notify";
 import { registerDigestTools } from "./tools-digest";
+import { registerMilestoneMapTools } from "./tools-milestone-map";
 import { registerQuotaTools } from "./tools-quota";
 import { registerBriefTools } from "./tools-brief";
 import { registerIdeateTools } from "./tools-ideate";
@@ -198,6 +199,7 @@ export function registerTools(server: McpServer, deps: ToolDeps): void {
   registerExecutorTools(server, deps, run);
   registerTicketTools(server, deps);
   registerDigestTools(server, deps, run);
+  registerMilestoneMapTools(server, deps, run);
   registerQuotaTools(server, deps, run);
   registerBriefTools(server, deps, run);
   registerIdeateTools(server, deps, run);
