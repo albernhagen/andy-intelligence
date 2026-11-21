@@ -1,4 +1,5 @@
 import {
+  DEFAULT_ROUTING,
   NewTicket,
   Stage,
   compareRanks,
@@ -12,10 +13,12 @@ import {
   type NewQuestion,
   type Project,
   type Question,
+  type RoutingConfigStore,
   type Run,
   type Ticket,
   type TicketEvent,
   type TicketFields,
+  type TicketRouting,
   type Worker,
   type WorkerChoice,
   type WorkerView,
@@ -40,6 +43,7 @@ import { rankBetween } from "./ranks";
 import { isDispatchable, resolveWorker, workerView } from "./worker";
 import { cascadesFrom, epicOf, withEpicOverrides } from "./overrides";
 import { executorView } from "./executor";
+import { routeLayers } from "./route-layers";
 import { canTransition, isForwardMove, pullRequestPath, type PullRequestTarget } from "./stages";
 
 function log(severity: "INFO" | "WARNING" | "ERROR", message: string, fields: object = {}) {
@@ -60,6 +64,11 @@ export interface TicketStatus {
   worker: Worker;
   /** Where its runs execute (ADR-0089), before runner presence is considered. */
   executor: ExecutorView;
+  /**
+   * Its build worker, tier and route, and the layer that set each (AI-282: M9). null when the
+   * routing configs can't be read: the rest of the status still answers, and the error is logged.
+   */
+  routing: TicketRouting | null;
 }
 
 /** Every project with its unarchived ticket count per stage, plus the size of the Needs-you inbox. */
@@ -111,6 +120,8 @@ export class TicketService {
     private readonly now: () => Date = () => new Date(),
     /** Whether a local runner serving the project is present (ADR-0089); null: none can be. */
     private readonly runnerPresence: ((projectId: string) => Promise<boolean>) | null = null,
+    /** The routing configs (AI-230: M9.3); null reads `DEFAULT_ROUTING`, as runs do. */
+    private readonly routingStore: RoutingConfigStore | null = null,
   ) {}
 
   private async runnerPresent(projectId: string): Promise<boolean> {
@@ -422,6 +433,24 @@ export class TicketService {
       this.requireProject(projectId),
     ]);
     return workerView(ticket, project, await this.epicFor(ticket));
+  }
+
+  /** Its build worker, tier and route, and which layer set each (AI-282: M9). Read-only. */
+  async routing(projectId: string, ticketId: string): Promise<TicketRouting> {
+    const [ticket, project] = await Promise.all([
+      this.require(projectId, ticketId),
+      this.requireProject(projectId),
+    ]);
+    return this.routingFor(ticket, project);
+  }
+
+  private async routingFor(ticket: Ticket, project: Project): Promise<TicketRouting> {
+    const [epic, global, projectConfig] = await Promise.all([
+      this.epicFor(ticket),
+      this.routingStore ? this.routingStore.getGlobal() : DEFAULT_ROUTING,
+      this.routingStore ? this.routingStore.getProject(project.id) : null,
+    ]);
+    return routeLayers({ ticket, epic, project, global, projectConfig });
   }
 
   /** The ticket's epic when its overrides cascade (AI-116); one read when it has a parent. */
@@ -942,6 +971,10 @@ export class TicketService {
       recentEvents: events.slice(-RECENT_EVENTS),
       worker: resolveWorker(ticket, project, await this.epicFor(ticket)),
       executor: executorView(ticket, project, await this.runnerPresent(project.id)),
+      routing: await this.routingFor(ticket, project).catch((err: unknown) => {
+        log("ERROR", "ticket routing unreadable", { ticket: ticket.key, error: String(err) });
+        return null;
+      }),
     };
   }
 

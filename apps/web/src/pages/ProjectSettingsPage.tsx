@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
 import { useParams } from "@tanstack/react-router";
+import { LayerOrderHint } from "@/components/RouteLayers";
 import { AutoMerge, EnvironmentPolicy, PlanApproval, type Project } from "@andy/contracts";
 import { ClearQuotaIdle } from "@/components/ClearQuotaIdle";
 import { ConfigHistory } from "@/components/ConfigHistory";
@@ -36,6 +37,7 @@ export function ProjectSettingsPage() {
       {project.repos.length > 0 && (
         <p className="text-sm text-muted-foreground">Repos: {project.repos.join(", ")}</p>
       )}
+      <LayerOrderHint />
       <ProjectPlanPanel projectId={project.id} />
       <SetupChecklist projectId={project.id} />
       <ul aria-label="Settings" className="divide-y divide-border rounded-md border border-border">
