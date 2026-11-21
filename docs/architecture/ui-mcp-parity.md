@@ -18,6 +18,7 @@ Step 1 of AI-285: Web UI and MCP parity: every action in both, enforced by a tes
 | Night launch, its status, stop; the morning report       | `GET`/`POST …/night`, `POST …/night/stop`; report arrives as an epic comment    | `night_status`, `launch_night`, `stop_night`; report in `status` and `list_needs_me`                                       |
 | In flight; work across projects; digest                  | `GET …/in-flight`, `GET /work`, `GET …/digest`                                  | `list_in_flight`, `list_work`, `digest`                                                                                    |
 | Project list; settings (except below)                    | `GET /projects`, `GET`/`PATCH /projects/:id`                                    | `list_projects`, `get_project_settings`, ten `set_*` tools, `set_spend_caps`                                               |
+| List local runners | `GET /runners` | `list_runners` (AI-294) |
 | Settings changes: list, revert                           | `GET …/config-changes`, `POST …/config-changes/:id/revert`                      | `list_settings_changes`, `revert_settings_change`                                                                          |
 | Config proposals: list, accept, reject, sweep            | `GET /config-changes`, `POST …/accept`, `…/reject`, `…/config-proposals/sweep`  | `list_config_changes`, `accept_config_change`, `reject_config_change`, `sweep_config_proposals`                            |
 | Pause, runs at once                                      | `PATCH /projects/:id`                                                           | `set_paused`, `set_runs_at_once`                                                                                           |
@@ -33,11 +34,11 @@ Step 1 of AI-285: Web UI and MCP parity: every action in both, enforced by a tes
 | AI-287: Parity: project setup checklist over MCP                       | UI-only   | S    | `GET …/setup` → `project_setup`                              |
 | AI-288: Parity: spend per provider in get_spend                        | UI-only   | S    | `GET …/spend/providers` → `get_spend`                        |
 | AI-289: Parity: send a test email over MCP                             | UI-only   | S    | `GET /notify/email`, `POST …/test` → `test_email`            |
+| AI-294 follow-up: revoke a runner over MCP (pending Andy's decision on ADR-0089) | UI-only | S | `POST /runners/:id/revoke` → `revoke_runner` |
 | AI-290: Parity: ask a question on a ticket over MCP                    | done      | S    | `POST …/tickets/:id/questions` → `ask_question`              |
 | AI-291: Parity: edit_ticket sets needs-attention, risk and confidence  | done      | S    | `PATCH` fields → `edit_ticket`                               |
 | AI-292: Parity: set the daily question cap over MCP                    | UI-only   | S    | `PATCH dailyQuestionCap` → `set_daily_question_cap`          |
 | AI-293: Parity: a ticket's full history and runs over MCP              | UI-only   | S    | `…/events`, `…/runs`, `…/runs/:runId` → three reads          |
-| AI-294: Parity: list and revoke runners over MCP                       | UI-only   | S    | `GET /runners`, revoke → two tools (register stays app-only) |
 | AI-295: Parity: dashboards and DORA metrics over MCP                   | UI-only   | S    | `GET /dashboard`, `…/dashboard`, `…/dora` → `dashboard`      |
 | AI-296: Parity: the board, every stage, over MCP                       | UI-only   | S    | `GET …/board` → `board`                                      |
 | AI-297: Parity: create a project over MCP                              | UI-only   | S    | `POST /projects` → `create_project`                          |
