@@ -199,15 +199,11 @@ export function morningPrTitle(epicKey: string, epicTitle: string): string {
   return `${epicKey}: ${title} (overnight)`;
 }
 
-/** The code host writes the morning step needs: the App token, `epic/<KEY>` branches only. */
-export interface MorningPrHost extends Pick<CodeHost, "getRepo"> {
-  branchSha(fullName: string, branch: string): Promise<string | null>;
-  openEpicPullRequest(
-    fullName: string,
-    pr: { head: string; base: string; title: string; body: string },
-  ): Promise<{ number: number; url: string } | "exists">;
-  deleteEpicBranch(fullName: string, branch: string): Promise<void>;
-}
+/** The code host calls the morning step needs: the App token, `epic/<KEY>` branches only. */
+export type MorningPrHost = Pick<
+  CodeHost,
+  "getRepo" | "branchSha" | "openEpicPullRequest" | "deleteEpicBranch"
+>;
 
 export type MorningResult =
   | { result: "opened"; number: number; url: string; stories: number }

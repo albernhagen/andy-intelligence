@@ -136,4 +136,19 @@ export class ConnectedCodeHost implements CodeHost {
     if (!host) throw new Error("GitHub is not connected");
     return host.createBranch(fullName, branch, sha);
   }
+
+  async openEpicPullRequest(
+    fullName: string,
+    pr: { head: string; base: string; title: string; body: string },
+  ) {
+    const host = await this.connection.codeHost();
+    if (!host) throw new Error("GitHub is not connected");
+    return host.openEpicPullRequest(fullName, pr);
+  }
+
+  async deleteEpicBranch(fullName: string, branch: string) {
+    const host = await this.connection.codeHost();
+    if (!host) throw new Error("GitHub is not connected");
+    await host.deleteEpicBranch(fullName, branch);
+  }
 }

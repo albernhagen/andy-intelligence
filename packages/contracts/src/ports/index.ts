@@ -637,6 +637,17 @@ export interface CodeHost {
    * sha, or when the App isn't installed.
    */
   createBranch(fullName: string, branch: string, sha: string): Promise<"created" | "exists">;
+  /**
+   * Opens a PR from an `epic/<KEY>` branch into `base` with the App's identity (AI-124: a night
+   * launch's morning PR); "exists" when an open PR for that head and base is already there.
+   * Throws for any other head, or when the App isn't installed.
+   */
+  openEpicPullRequest(
+    fullName: string,
+    pr: { head: string; base: string; title: string; body: string },
+  ): Promise<{ number: number; url: string } | "exists">;
+  /** Deletes an `epic/<KEY>` branch (AI-124); a missing one is fine. Throws for any other name. */
+  deleteEpicBranch(fullName: string, branch: string): Promise<void>;
 }
 
 // ── CodeHostConnectionStore ──────────────────────────────────────────────────
