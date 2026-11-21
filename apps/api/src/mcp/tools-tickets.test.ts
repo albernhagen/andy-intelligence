@@ -245,7 +245,9 @@ describe("ask_question", () => {
       urgency: q.urgency,
       runId: q.runId,
     });
-    expect(fields(tool.data.question)).toEqual(fields(await route.json()));
+    expect(fields(tool.data.question)).toEqual(
+      fields((await route.json()) as Record<string, unknown>),
+    );
     expect(tool.data.question).toMatchObject({ status: "open", runId: null });
     for (const id of [a.id, b.id]) {
       const asked = (await ctx.tracker.listEvents("ai", id)).find(
@@ -272,7 +274,7 @@ describe("ask_question", () => {
 
     expect(tool.isError).toBe(true);
     expect(route.status).toBe(422);
-    expect(tool.text).toContain((await route.json()).error);
+    expect(tool.text).toContain(((await route.json()) as { error: string }).error);
     expect(await ctx.tracker.listQuestions({ ticketId: a.id })).toEqual([]);
   });
 
