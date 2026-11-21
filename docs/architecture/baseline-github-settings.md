@@ -4,7 +4,7 @@ Rows moved unchanged from the §8.1 table in [template-and-baseline.md](template
 
 | Guardrail | ADR | Source in this repo | Carried by | Status |
 |---|---|---|---|---|
-| `main` ruleset: PR required (squash), no force push/deletion, required checks, code scanning (CodeQL, high or higher) | 0025 | `github/ruleset-main.json` | G | carried (M1.16), minus `github/source-only.json` (`firestore-suite`). No per-project extra checks yet (`apply` replaces the ruleset) |
+| `main` ruleset: PR required (squash), no force push/deletion, required checks on a head up to date with `main` (AI-284), code scanning (CodeQL, high or higher) | 0025 | `github/ruleset-main.json` | G | carried (M1.16), minus `github/source-only.json` (`firestore-suite`). No per-project extra checks yet (`apply` replaces the ruleset) |
 | Merge settings: squash only, delete branch on merge, auto-merge allowed (Dependabot; agent PRs through the review gate) | 0022, 0042, 0050 | `github/repo.json` | G | carried (M1.16; auto-merge from ADR-0042) |
 | Agent PR policy `autoMerge` (`none` / `s` / `s-and-m` / `all`; new projects `s-and-m`, project AI `none`): merges only when required and review checks pass and no veto applies | 0050 | built (M1.8b): product setting, nothing to copy. Protected paths (`packages/domain/src/gate.ts`) apply to every project, plus CODEOWNERS paths after `*` from the base branch |
 | `planApproval` (`none` / `m-and-l` / `all`): approved read-only plan before the build | 0050 | built (M1.8a): product setting, nothing to copy |
