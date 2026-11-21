@@ -43,6 +43,7 @@ export * from "./runners";
 export * from "./runs";
 export * from "./scores";
 export * from "./setup-checklist";
+export * from "./spend-estimate";
 export * from "./stages";
 export * from "./status-line";
 export * from "./sync-runs";
