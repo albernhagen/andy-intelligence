@@ -426,6 +426,7 @@ export const RunPatch = Run.pick({
   syncRun: true,
   prSync: true,
   localRun: true,
+  epicMerge: true,
 }).partial();
 export type RunPatch = z.input<typeof RunPatch>;
 
@@ -613,9 +614,14 @@ export interface CodeHost {
   listFiles(fullName: string, dir: string, ref: string): Promise<string[] | null>;
   /**
    * Squash-merges with the App's identity, only if the head is still `expectedHeadSha`. Throws
-   * when the host refuses (conflict, branch rules, a moved head).
+   * when the host refuses (conflict, branch rules, a moved head). Resolves to the squash
+   * commit's sha, or null when the host didn't report one.
    */
-  mergePullRequest(fullName: string, number: number, expectedHeadSha: string): Promise<void>;
+  mergePullRequest(
+    fullName: string,
+    number: number,
+    expectedHeadSha: string,
+  ): Promise<string | null>;
   /**
    * Whether commit `head` already contains `base` (a branch or commit): true when `head` is
    * ahead of it or the same. Null when the repo or a ref isn't known.
@@ -635,6 +641,17 @@ export interface CodeHost {
    * sha, or when the App isn't installed.
    */
   createBranch(fullName: string, branch: string, sha: string): Promise<"created" | "exists">;
+  /**
+   * Opens a PR from an `epic/<KEY>` branch into `base` with the App's identity (AI-124: a night
+   * launch's morning PR); "exists" when an open PR for that head and base is already there.
+   * Throws for any other head, or when the App isn't installed.
+   */
+  openEpicPullRequest(
+    fullName: string,
+    pr: { head: string; base: string; title: string; body: string },
+  ): Promise<{ number: number; url: string } | "exists">;
+  /** Deletes an `epic/<KEY>` branch (AI-124); a missing one is fine. Throws for any other name. */
+  deleteEpicBranch(fullName: string, branch: string): Promise<void>;
 }
 
 // ── CodeHostConnectionStore ──────────────────────────────────────────────────
@@ -753,5 +770,6 @@ export * from "./deployments";
 export * from "./digest";
 export * from "./night";
 export * from "./notify-email";
+export * from "./project-versions";
 export * from "./push";
 export * from "./runner";
