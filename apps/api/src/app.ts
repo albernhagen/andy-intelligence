@@ -154,6 +154,7 @@ const DOMAIN_STATUS = {
   brief_too_long: 422,
   code_host_unavailable: 503,
   rate_limited: 429,
+  not_revertible: 409,
 } as const;
 
 export function createApp(input: AppDeps) {
