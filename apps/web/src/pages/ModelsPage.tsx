@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { TierKey } from "@andy/contracts";
+import { LayerOrderHint } from "@/components/RouteLayers";
 import { effectiveRouting } from "@andy/domain";
 import { RoutingChanges } from "@/components/routing/RoutingChanges";
 import { RoutingEditor } from "@/components/routing/RoutingEditor";
@@ -30,6 +31,7 @@ export function ModelsPage() {
         Which providers are on, each tier&apos;s routes in order, and which tier each step uses.
         Global is the ceiling: a project can only narrow it. Every save is in the change log.
       </p>
+      <LayerOrderHint />
       <label className="flex items-center gap-2 text-sm">
         Routing for
         <Select
