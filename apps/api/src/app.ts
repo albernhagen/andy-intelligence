@@ -380,6 +380,7 @@ export function createApp(input: AppDeps) {
       codeHost: new ConnectedCodeHost(connection),
       runs: deps.runs,
       onDefaultBranchMoved: (projectId) => syncer.defaultBranchMoved(projectId),
+      nightLaunches: deps.nightLaunches,
       now,
     });
     const repoIndex = new RepoIndex(deps.tracker, () => now().getTime());

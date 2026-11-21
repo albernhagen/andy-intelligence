@@ -16,6 +16,7 @@ import { DomainError } from "./errors";
 import type { PlanState } from "./plans";
 import { requireCan } from "./permissions";
 import type { EpicBranchOpener } from "./night-branch";
+import type { MorningPrOpener } from "./night-merge";
 
 /**
  * Night launch (ADR-0049 "Launch step" and "Night budget", M4.16). Before Andy steps away he
@@ -176,6 +177,8 @@ export class NightLaunches {
     private readonly newId: () => string = () => crypto.randomUUID(),
     /** Creates the launch's `epic/<KEY>` branch (AI-122); null: none, stories build on main. */
     private readonly branches: EpicBranchOpener | null = null,
+    /** Opens the morning PR once a launch ends (AI-124); null: none opens. */
+    private readonly morning: MorningPrOpener | null = null,
   ) {}
 
   /** Everything that blocks launching the epic now; the UI shows it as the checklist. */
@@ -266,6 +269,7 @@ export class NightLaunches {
       endReason: reason,
     });
     log("INFO", "night launch ended", { launchId, reason });
+    await this.morning?.open(ended);
     return ended;
   }
 

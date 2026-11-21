@@ -36,6 +36,7 @@ import {
   type NightLimit,
   type NightUsage,
 } from "./night-budget";
+import type { MorningPrOpener } from "./night-merge";
 
 /** The project's active night launch as this dispatch call found it. */
 interface NightState {
@@ -83,6 +84,8 @@ export class BuildDispatcher {
     private readonly quota: QuotaStore | null = null,
     /** Null when night launches aren't kept: no ticket is then held back by a night budget. */
     private readonly nights: NightLaunchStore | null = null,
+    /** Opens the morning PR once a launch ends here (AI-124); null: none opens. */
+    private readonly morning: MorningPrOpener | null = null,
   ) {}
 
   /** Starts waiting builds in the project up to the caps; the first run, or null. Never throws. */
@@ -291,6 +294,8 @@ export class BuildDispatcher {
       });
       log("INFO", "night launch ended", { launchId: launch.id, reason });
       if (reason !== "done") await this.flagUnfinished(launch, stories, reason);
+      // Safe if a racing call opens it too: the code host refuses a second PR (AI-124).
+      if (launch.status === "ended") await this.morning?.open(launch);
     }
     if (reason === "done") return null;
     const hold = limit ?? (launch.status !== "running" ? "stopped" : null);

@@ -112,7 +112,7 @@ export class ConnectedCodeHost implements CodeHost {
   async mergePullRequest(fullName: string, number: number, expectedHeadSha: string) {
     const host = await this.connection.codeHost();
     if (!host) throw new Error("GitHub is not connected");
-    await host.mergePullRequest(fullName, number, expectedHeadSha);
+    return host.mergePullRequest(fullName, number, expectedHeadSha);
   }
 
   async headContains(fullName: string, head: string, base: string) {

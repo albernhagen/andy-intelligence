@@ -17,6 +17,7 @@ import { BuildDispatcher } from "./build-dispatch";
 import { MAX_BUILD_RUNS_PER_TICKET, branchFor } from "./builds";
 import { MAX_ACTIVE_RUNS_GLOBAL, MAX_PRS_WAITING_PER_PROJECT } from "./dispatch-caps";
 import { wakeAfterRunEnd } from "./dispatch-order";
+import type { MorningPrOpener } from "./night-merge";
 import { MAX_PLAN_RUNS_PER_TICKET } from "./plans";
 import { ProjectService } from "./projects";
 import { RunService, type RunResult } from "./runs";
@@ -57,6 +58,7 @@ describe("BuildDispatcher", () => {
     executor: Executor | null = new WorkflowExecutor(host),
     nights: NightLaunchStore | null = null,
     quota: QuotaStore | null = null,
+    morning: MorningPrOpener | null = null,
   ) {
     const runs: RunService = new RunService(
       tracker,
@@ -69,7 +71,7 @@ describe("BuildDispatcher", () => {
       },
       host,
     );
-    const dispatcher = new BuildDispatcher(tracker, runStore, runs, now, quota, nights);
+    const dispatcher = new BuildDispatcher(tracker, runStore, runs, now, quota, nights, morning);
     const next = (p: string) => dispatcher.next(p);
     return {
       runs,
@@ -1112,6 +1114,27 @@ describe("BuildDispatcher", () => {
       await dispatcher.next(projectId);
       expect(await nights.get("launch-1")).toMatchObject({ status: "ended", endReason: "done" });
       expect((await tracker.getTicket(projectId, a.id))!.needsAttention).toBe(false);
+    });
+
+    it("GivenAMorningOpener_WhenNextEndsTheLaunch_ThenItGetsTheEndedLaunchOnce", async () => {
+      const open = vi.fn<MorningPrOpener["open"]>().mockResolvedValue({ result: "deleted" });
+      const { dispatcher } = wire(undefined, nights, null, { open });
+      const a = await inReady("A");
+      await tracker.updateTicket(
+        projectId,
+        a.id,
+        { stage: { to: "done", forced: true, reason: null } },
+        "andy",
+      );
+      await launch([a]);
+
+      await dispatcher.next(projectId);
+      await dispatcher.next(projectId);
+
+      expect(open).toHaveBeenCalledTimes(1);
+      expect(open).toHaveBeenCalledWith(
+        expect.objectContaining({ id: "launch-1", status: "ended", endReason: "done" }),
+      );
     });
   });
 });

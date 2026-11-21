@@ -671,13 +671,19 @@ export class InMemoryCodeHost implements CodeHost {
     return this.files.get(path) ?? null;
   }
 
-  async mergePullRequest(fullName: string, number: number, expectedHeadSha: string): Promise<void> {
+  async mergePullRequest(
+    fullName: string,
+    number: number,
+    expectedHeadSha: string,
+  ): Promise<string | null> {
     if (this.failMerge) throw this.failMerge;
     const pr = this.pullRequests.get(number);
     if (!pr || pr.pullRequest.state !== "open") throw new Error("not mergeable");
     if (pr.pullRequest.headSha !== expectedHeadSha) throw new Error("head moved");
     pr.pullRequest.state = "merged";
     this.merges.push({ fullName, number, sha: expectedHeadSha });
+    // A stable stand-in for the squash commit: the PR number, padded to a sha.
+    return number.toString(16).padStart(40, "c");
   }
 
   async headContains(fullName: string, head: string): Promise<boolean | null> {

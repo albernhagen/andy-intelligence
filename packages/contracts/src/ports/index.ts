@@ -422,6 +422,7 @@ export const RunPatch = Run.pick({
   syncRun: true,
   prSync: true,
   localRun: true,
+  epicMerge: true,
 }).partial();
 export type RunPatch = z.input<typeof RunPatch>;
 
@@ -604,9 +605,14 @@ export interface CodeHost {
   readFile(fullName: string, path: string, ref: string): Promise<string | null>;
   /**
    * Squash-merges with the App's identity, only if the head is still `expectedHeadSha`. Throws
-   * when the host refuses (conflict, branch rules, a moved head).
+   * when the host refuses (conflict, branch rules, a moved head). Resolves to the squash
+   * commit's sha, or null when the host didn't report one.
    */
-  mergePullRequest(fullName: string, number: number, expectedHeadSha: string): Promise<void>;
+  mergePullRequest(
+    fullName: string,
+    number: number,
+    expectedHeadSha: string,
+  ): Promise<string | null>;
   /**
    * Whether commit `head` already contains `base` (a branch or commit): true when `head` is
    * ahead of it or the same. Null when the repo or a ref isn't known.

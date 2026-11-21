@@ -327,15 +327,19 @@ export class GitHubCodeHost implements CodeHost {
     return Buffer.from(res.data.content, "base64").toString("utf8");
   }
 
-  async mergePullRequest(fullName: string, number: number, expectedHeadSha: string): Promise<void> {
+  async mergePullRequest(
+    fullName: string,
+    number: number,
+    expectedHeadSha: string,
+  ): Promise<string | null> {
     const client = await this.repoClient(fullName);
     if (!client) throw new Error(`the App isn't installed on ${fullName}`);
-    await client.octokit.request("PUT /repos/{owner}/{repo}/pulls/{pull_number}/merge", {
-      ...client.repo,
-      pull_number: number,
-      sha: expectedHeadSha,
-      merge_method: "squash",
-    });
+    const res = await client.octokit.request(
+      "PUT /repos/{owner}/{repo}/pulls/{pull_number}/merge",
+      { ...client.repo, pull_number: number, sha: expectedHeadSha, merge_method: "squash" },
+    );
+    const sha = (res.data as { sha?: unknown }).sha;
+    return typeof sha === "string" && /^[0-9a-f]{40}$/.test(sha) ? sha : null;
   }
 
   async headContains(fullName: string, head: string, base: string): Promise<boolean | null> {
@@ -390,6 +394,49 @@ export class GitHubCodeHost implements CodeHost {
       if (status === 422 && /already exists/i.test(message ?? "")) return "exists";
       throw err;
     }
+  }
+
+  /**
+   * Opens the morning PR from an `epic/<KEY>` branch into the default branch (AI-124): the
+   * App's only PR it opens from a branch it didn't just create, and only for that pattern.
+   * "exists" when GitHub says an open PR for that head and base is already there.
+   */
+  async openEpicPullRequest(
+    fullName: string,
+    pr: { head: string; base: string; title: string; body: string },
+  ): Promise<{ number: number; url: string } | "exists"> {
+    if (!EPIC_BRANCH_PATTERN.test(pr.head)) throw new Error("only epic/<KEY> heads are opened");
+    if (!SAFE_BRANCH.test(pr.base)) throw new Error("unexpected branch name");
+    const client = await this.repoClient(fullName);
+    if (!client) throw new Error(`the App isn't installed on ${fullName}`);
+    try {
+      const { data } = await client.octokit.request("POST /repos/{owner}/{repo}/pulls", {
+        ...client.repo,
+        head: pr.head,
+        base: pr.base,
+        title: pr.title.slice(0, 256),
+        body: pr.body.slice(0, 60_000),
+      });
+      return { number: data.number, url: data.html_url };
+    } catch (err) {
+      // GitHub answers 422 "A pull request already exists for …" for a duplicate head and base.
+      const { status, message } = err as { status?: number; message?: string };
+      if (status === 422 && /already exists/i.test(message ?? "")) return "exists";
+      throw err;
+    }
+  }
+
+  /** Deletes an `epic/<KEY>` branch (AI-124); a branch that is already gone is fine. */
+  async deleteEpicBranch(fullName: string, branch: string): Promise<void> {
+    if (!EPIC_BRANCH_PATTERN.test(branch)) throw new Error("only epic/<KEY> branches are deleted");
+    const client = await this.repoClient(fullName);
+    if (!client) throw new Error(`the App isn't installed on ${fullName}`);
+    await this.notFoundAsNull(() =>
+      client.octokit.request("DELETE /repos/{owner}/{repo}/git/refs/heads/{branch}", {
+        ...client.repo,
+        branch,
+      }),
+    );
   }
 
   async proposeFile(fullName: string, proposal: FileProposal): Promise<ProposedPullRequest | null> {
