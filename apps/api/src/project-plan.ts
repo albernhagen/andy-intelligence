@@ -8,6 +8,7 @@ import {
 } from "@andy/contracts";
 import type { ProjectPlanService } from "@andy/domain";
 import { actorOf, type AuthEnv } from "./auth";
+import type { RouteModule } from "./services";
 
 /**
  * Project plans (AI-108, AI-65): the plan-project result goes in as a proposal; Andy approves
@@ -105,3 +106,6 @@ export function registerProjectPlanRoutes(
   );
   app.openapi(routes.waiting, async (c) => c.json(await plans.waiting(), 200));
 }
+
+/** Listed in `api-routes.ts` (AI-145). */
+export const apiRoutes: RouteModule = (app, s) => registerProjectPlanRoutes(app, s.plans);

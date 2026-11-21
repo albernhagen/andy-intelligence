@@ -4,7 +4,7 @@ Scope: [`milestones.md`](milestones.md) §M4. Sliced by AI-80: Slice M4: Epics +
 
 **Already built (not sliced):** `parentId` on tickets, MCP `set_ticket_parent`, the epic picker in the ticket rail, `blockedBy` respected by dispatch, refine `split` for non-epics, the `ConfigChange` schema and collection (nothing writes it yet).
 
-**Risk** is the merge class (ADR-0092: The high-risk list): high means Andy merges; the coordinator may merge low and medium (ADR-0088). High-risk parts are kept in their own small slices.
+**Risk** marks where reviewers look hardest (ADR-0092's list); who merges is ADR-0120: the coordinator merges clean PRs, Andy keeps four kinds. High-risk parts are kept in their own small slices.
 
 | Ticket: slice                                                                    | Scope                                                                                                         | Size | Depends on                                        | Risk                          | Done when (Andy, minutes)                                       |
 | -------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------- | ---- | ------------------------------------------------- | ----------------------------- | --------------------------------------------------------------- |
@@ -42,7 +42,7 @@ Scope: [`milestones.md`](milestones.md) §M4. Sliced by AI-80: Slice M4: Epics +
 
 ## Order and parallel work
 
-Slices in one batch own disjoint files (`touches`). Shared registries take one-line additions only (`apps/api/src/app.ts`, `apps/api/src/mcp/tools.ts`, the `packages/contracts` and `packages/store` index files, generated `apps/web/src/lib/api.gen.ts`): on a conflict keep both sides and regenerate.
+Slices in one batch own disjoint files (`touches`). Shared registries take one sorted line per module (`api-routes.ts`, `public-routes.ts`, `mcp/tool-groups.ts`, the package index files; AI-145): on a conflict keep both lines. `api.gen.ts` is generated, not committed.
 
 | Batch | Slices                                                     | Starts when                                  |
 | ----- | ---------------------------------------------------------- | -------------------------------------------- |

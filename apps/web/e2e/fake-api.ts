@@ -1,4 +1,10 @@
-import { InMemoryConfigChangeStore, InMemoryRunStore, InMemoryWorkTracker } from "@andy/contracts";
+import {
+  ConfigChange,
+  InMemoryConfigChangeStore,
+  InMemoryNightLaunchStore,
+  InMemoryRunStore,
+  InMemoryWorkTracker,
+} from "@andy/contracts";
 import type { NewTicket, Stage } from "@andy/contracts";
 import { TicketService, rankBetween } from "@andy/domain";
 import { createApp } from "@andy/api/app";
@@ -168,6 +174,8 @@ export async function createFakeApp() {
   await service.move("ops", logs.id, "done", "andy", { force: true });
   await service.ask("ops", logs.id, { text: "Delete the old bucket too?" }, "agent");
   await seedEpic(service);
+  const configChanges = new InMemoryConfigChangeStore();
+  await seedSettingsChanges(configChanges);
 
   return createApp({
     verifier: {
@@ -182,8 +190,34 @@ export async function createFakeApp() {
     tracker,
     runs,
     // ADR-0097: no findings, so a project inbox shows the empty "Config proposals" row.
-    configChanges: new InMemoryConfigChangeStore(),
+    configChanges,
+    nightLaunches: new InMemoryNightLaunchStore(),
   });
+}
+
+/**
+ * M4.12: AI's settings Changes list: a flip of auto-refine, reverted, and the revert itself.
+ * Values match the project's current settings, so the settings page reads consistently.
+ */
+async function seedSettingsChanges(store: InMemoryConfigChangeStore) {
+  const change = (id: string, minutes: number, from: boolean, reason: string) =>
+    store.append(
+      ConfigChange.parse({
+        id,
+        entity: "project",
+        entityId: "ai",
+        projectId: "ai",
+        diff: { autoRefine: { from, to: !from } },
+        actor: "andy",
+        reason,
+        status: "applied",
+        createdAt: minutesAgo(minutes),
+        appliedAt: minutesAgo(minutes),
+      }),
+    );
+  await change("change-flip", 30, true, "");
+  await store.markReverted("change-flip", "user:andy", minutesAgo(10));
+  await change("change-revert", 10, false, "Revert of change-flip");
 }
 
 const minutesAgo = (n: number) => new Date(NOW.getTime() - n * 60_000).toISOString();
