@@ -22,6 +22,8 @@ Step 1 of AI-285: Web UI and MCP parity: every action in both, enforced by a tes
 | Dashboards; DORA metrics                                 | `GET /dashboard`, `…/dashboard`, `…/dora`                                       | `dashboard` (AI-295)                                                                                                       |
 | Project list; settings (except below)                    | `GET /projects`, `GET`/`PATCH /projects/:id`                                    | `list_projects`, `get_project_settings`, the `set_*` tools, `set_spend_caps`                                               |
 | Project setup checklist | `GET …/setup` | `project_setup` (AI-287) |
+| The board, every stage | `GET …/board` | `board` (AI-296) |
+| Roadmap of milestones; milestone map | `GET /roadmap`, `…/roadmap` (AI-202 screen) | `roadmap`; `milestone_map` (MCP only) |
 | Create a project | `POST /projects` | `create_project` (AI-297) |
 | List local runners | `GET /runners` | `list_runners` (AI-294) |
 | Settings changes: list, revert                           | `GET …/config-changes`, `POST …/config-changes/:id/revert`                      | `list_settings_changes`, `revert_settings_change`                                                                          |
@@ -45,7 +47,7 @@ Step 1 of AI-285: Web UI and MCP parity: every action in both, enforced by a tes
 | AI-293: Parity: a ticket's full history and runs over MCP              | done      | S    | Built: `ticket_history`, `list_runs`, `get_run` (now matched) |
 | AI-294: Parity: list and revoke runners over MCP | UI-only | S | List built (`list_runners`); revoke pending Andy's decision on ADR-0089 → `revoke_runner` |
 | AI-295: Parity: dashboards and DORA metrics over MCP                   | UI-only   | S    | Built: `dashboard` (now matched)                             |
-| AI-296: Parity: the board, every stage, over MCP                       | UI-only   | S    | `GET …/board` → `board`                                      |
+| AI-296: Parity: the board, every stage, over MCP | UI-only | S | Built: `board` (now matched) |
 | AI-298: Parity: ranked Ready list in the web UI                        | MCP-only  | S    | Built: `GET …/ready` and the Ready view (now matched)        |
 | AI-299: Parity: ideate from the web UI                                 | MCP-only  | M    | `ideate` (route exists, web never calls it) → a form         |
 | AI-300: Parity: registry test that every action has a route and a tool | done | M | Built: `apps/api/src/parity.ts` and `parity.test.ts` |
@@ -56,7 +58,6 @@ Step 1 of AI-285: Web UI and MCP parity: every action in both, enforced by a tes
 | --------------------------- | -------------------------- | ------------------------------------------------------------------------------------------------- |
 | Merge a gated PR            | Neither (Andy uses GitHub) | AI-220: Merge modes: coordinator sessions merge through MCP merge_pr; the web links to GitHub     |
 | What's new (release notes)  | Neither                    | AI-159: What's new (page and `whats_new` tool; PR #234 open)                                      |
-| Roadmap; milestone map | API and MCP `roadmap` (AI-193); MCP `milestone_map` | The screen: AI-202: M4.26: Roadmap screen, after ADR-0131 (in design) |
 | Approve or park a milestone | Neither                    | ADR-0131 (in design): no ticket here                                                              |
 
 ## Parked (no tickets)

@@ -1,5 +1,6 @@
 import { WorkTrackerError, type EventActor, type Ticket, type WorkTracker } from "@andy/contracts";
 import {
+  type MilestoneReader,
   DomainError,
   type DigestReader,
   type EmailNotifications,
@@ -15,8 +16,10 @@ import {
   type TicketService,
   type WorkReader,
   type RoadmapReader,
+  type BoardReader,
   type GlobalSpendCaps,
   type WhatsNewReader,
+  type ProjectTickets,
   type DashboardReader,
   type DoraReader,
 } from "@andy/domain";
@@ -72,6 +75,8 @@ export interface ToolDeps {
   runners?: RunnerService | null;
   /** Roadmaps over epics (AI-193); the app always passes it, unit tests may not. */
   roadmap?: RoadmapReader;
+  /** The board's read (AI-296), shared with GET …/board; the app always passes it. */
+  board?: BoardReader;
   /** A project's setup checklist (AI-287); the app always passes it, unit tests may not. */
   setup?: SetupChecklistReader;
   /** Spend caps settings (AI-249); the app always passes it, unit tests may not. */
@@ -87,6 +92,10 @@ export interface ToolDeps {
   whatsNew?: WhatsNewReader | null;
   /** The app's public URL for page links in tool text (the digest links What's new); null in dev. */
   publicUrl?: string | null;
+  /** Milestones (ADR-0131): `status` shows a ticket's milestone hold (AI-306); null holds any. */
+  milestones?: MilestoneReader | null;
+  /** A project's tickets through the ticket snapshot (AI-318); absent: a full read each call. */
+  tickets?: ProjectTickets;
   /** Signed-in email, shown by `status` so it doubles as the connection check. */
   email: string;
   /** The signed-in user as an actor, `user:<uid>` (AI-19): every write is recorded as this. */

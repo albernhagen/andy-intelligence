@@ -29,6 +29,7 @@ import {
   MorningSteps,
   ProjectReadCache,
   TicketSnapshots,
+  ProjectTickets,
   RoutingSettings,
   GlobalSpendCaps,
   SpendAlerts,
@@ -117,6 +118,7 @@ export const METERED_READS = {
   ],
   reviewFindings: ["recent"],
   releaseNotes: ["get", "listForProject"],
+  milestones: ["list", "get"],
   quota: ["latest", "clearsSince"],
   nightLaunches: ["get", "listForProject", "findActive"],
   deployments: ["get", "list", "latestGood"],
@@ -154,6 +156,8 @@ export function createServices(raw: AppDeps): Services {
   const readCache = versions ? new ProjectReadCache(versions) : null;
   // AI-317: the board and ticket list refresh from changed tickets, not the whole project.
   const snapshots = readCache ? new TicketSnapshots(deps.tracker) : null;
+  // AI-318: the readers that need every ticket read them through the same snapshots.
+  const tickets = new ProjectTickets(deps.tracker, versions ?? null, snapshots);
   // Board reads served through the read cache: board polls, work lists and roadmaps (ADR-0126).
   const board = new BoardReader(deps.tracker, deps.runs, readCache, snapshots);
 
@@ -224,7 +228,7 @@ export function createServices(raw: AppDeps): Services {
         )
       : null,
   );
-  const refiner = new RefineDispatcher(deps.tracker, deps.runs, runs, now);
+  const refiner = new RefineDispatcher(deps.tracker, deps.runs, runs, now, deps.milestones ?? null);
   // AI-124/AI-125: when a launch ends, its morning PR opens (or an empty epic branch goes),
   // then the morning report goes on the epic, with or without GitHub. One instance for both
   // places a launch ends: `NightLaunches.end` (stop, stop time) and the build dispatcher (done,
@@ -263,6 +267,7 @@ export function createServices(raw: AppDeps): Services {
     deps.quota ?? null,
     deps.nightLaunches ?? null,
     morning,
+    deps.milestones ?? null,
   );
   // AI-72 (ADR-0083): queued sync runs go first, so open PRs catch up with main before new work.
   const syncer = new SyncRuns(
@@ -322,6 +327,7 @@ export function createServices(raw: AppDeps): Services {
     now,
     runnerPresence,
     deps.routing ?? null,
+    tickets,
   );
   const claims = runners
     ? new LocalClaims(
@@ -348,6 +354,7 @@ export function createServices(raw: AppDeps): Services {
           undefined,
           connection ? connectedEpicBranches(connection, deps.tracker, deps.nightLaunches) : null,
           morning,
+          deps.milestones ?? null,
         ),
         store: deps.nightLaunches,
         tracker: deps.tracker,
@@ -380,7 +387,7 @@ export function createServices(raw: AppDeps): Services {
       return lowestThresholds("claude-sub", routings, CLAUDE_SUB_THRESHOLDS);
     },
   );
-  const digest = new DigestReader(deps.tracker, deps.runs, deps.quota ?? null, now);
+  const digest = new DigestReader(deps.tracker, deps.runs, deps.quota ?? null, now, tickets);
   const brief = new BriefService(
     deps.tracker,
     connection ? new ConnectedCodeHost(connection) : null,
@@ -407,7 +414,9 @@ export function createServices(raw: AppDeps): Services {
       )
     : null;
   // AI-159: the What's new read; absent without a release-note store (route and tool both).
-  const whatsNew = deps.releaseNotes ? new WhatsNewReader(deps.tracker, deps.releaseNotes) : null;
+  const whatsNew = deps.releaseNotes
+    ? new WhatsNewReader(deps.tracker, deps.releaseNotes, tickets)
+    : null;
   // AI-239: routing settings; each save is logged when the change log is configured.
   const routing = deps.routing
     ? new RoutingSettings(deps.routing, deps.tracker, deps.configChanges ?? null, now)
@@ -445,6 +454,7 @@ export function createServices(raw: AppDeps): Services {
     night,
     readCache,
     snapshots,
+    tickets,
     setup: new SetupChecklistReader(
       deps.tracker,
       connection ? new ConnectedCodeHost(connection) : null,
@@ -457,12 +467,15 @@ export function createServices(raw: AppDeps): Services {
       globalSpendCaps,
     ),
     globalSpendCaps,
+    // AI-296: the board route and MCP `board` share one reader (cache and snapshots).
+    board,
     // AI-198, AI-193: each project's board through the same read cache as board polls.
     work: new WorkReader(deps.tracker, board),
-    roadmap: new RoadmapReader(deps.tracker, board),
+    roadmap: new RoadmapReader(deps.tracker, board, deps.milestones ?? null),
     whatsNew,
+    milestones: deps.milestones ?? null,
     // AI-295: one reader each for the Dashboards routes and MCP `dashboard`.
-    dashboard: new DashboardReader(deps.tracker, deps.runs),
+    dashboard: new DashboardReader(deps.tracker, deps.runs, tickets),
     dora: new DoraReader(deps.tracker, deps.deployments ?? null, now),
     publicUrl: deps.mcp?.publicUrl ?? null,
   };

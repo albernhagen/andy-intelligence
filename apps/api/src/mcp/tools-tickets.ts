@@ -13,6 +13,7 @@ import {
   inboxCards,
   readEpicRollup,
   statusLineTickets,
+  ticketMilestoneHold,
   ticketStatusLine,
   type InboxCard,
   type TicketStatus,
@@ -97,6 +98,11 @@ const ReorderInput = {
   below: TicketKey.optional().describe("Place directly below this ticket."),
 };
 
+/** Every ticket of the project: through the snapshot when the app passes it (AI-318). */
+function listProjectTickets(deps: ToolDeps, projectId: string) {
+  return deps.tickets ? deps.tickets.list(projectId) : deps.tracker.listTickets(projectId);
+}
+
 /**
  * `status` for a ticket with the status line the UI shows; an epic also gets its children and
  * roll-up (AI-85), the same the epic panel reads.
@@ -111,7 +117,7 @@ export async function statusLineOf<S extends TicketStatus>(
   // An epic's roll-up needs its project; any other ticket reads only what its line names (AI-222).
   const tickets =
     ticket.type === "epic"
-      ? await deps.tracker.listTickets(ticket.projectId)
+      ? await listProjectTickets(deps, ticket.projectId)
       : await statusLineTickets(deps.tracker, ticket);
   const open = questions.filter((q) => q.status === "open").length;
   const [line, epic] = await Promise.all([
@@ -121,7 +127,7 @@ export async function statusLineOf<S extends TicketStatus>(
           ticket,
           tickets,
           (p, t) => deps.runs.list(p, t),
-          (p) => deps.tracker.listTickets(p).catch(() => []),
+          (p) => listProjectTickets(deps, p).catch(() => []),
         )
       : Promise.resolve(undefined),
   ]);
@@ -137,12 +143,13 @@ async function lineFor(
   executor?: ResolvedExecutor,
   ticketRuns?: AgentTask[],
 ) {
-  const [runs, events, inFlight] = await Promise.all([
+  const [runs, events, inFlight, milestoneHold] = await Promise.all([
     ticketRuns ?? deps.runs.list(ticket.projectId, ticket.id),
     deps.tracker.listEvents(ticket.projectId, ticket.id),
     deps.runs.inFlight(ticket.projectId),
+    ticketMilestoneHold(deps.tracker, deps.milestones ?? null, ticket, tickets),
   ]);
-  const facts = { tickets, runs, events, openQuestions, worker, inFlight, executor };
+  const facts = { tickets, runs, events, openQuestions, worker, inFlight, executor, milestoneHold };
   return ticketStatusLine(ticket, facts, new Date());
 }
 

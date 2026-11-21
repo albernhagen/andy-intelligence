@@ -1,6 +1,7 @@
 // Every MCP tool module, one line each, sorted by file name (AI-145). A module exports a
 // `ToolGroup` (`registerXTools(server, deps, run)`) and gets one line here; `tools.test.ts` fails
 // when a `tools-*.ts` file is missing. Order is not significant: tool names are unique.
+export { registerBoardTools as board } from "./tools-board";
 export { registerBriefTools as brief } from "./tools-brief";
 export { registerConfigTools as config } from "./tools-config";
 export { registerConfigLogTools as configLog } from "./tools-config-log";
