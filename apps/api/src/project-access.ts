@@ -57,6 +57,11 @@ export const CROSS_PROJECT_ROUTES: Readonly<Record<string, string>> = {
   "POST /api/runners": "Local runners: owner only.",
   "POST /api/runners/:runnerId/revoke": "Local runners: owner only.",
   "PUT /api/routing": "Global model routing: owner only.",
+  "GET /api/spend-caps": "The global spend caps (AI-276): nothing per project to filter.",
+  "PUT /api/spend-caps": "Global spend caps: owner only (`change_spend_caps`, enforced).",
+  "GET /api/spend-caps/changes": "Global spend caps' change log: owner only (enforced).",
+  "POST /api/spend-caps/changes/:changeId/revert":
+    "Reverts a global spend caps change: owner only (enforced); global, no project.",
 };
 
 /**
@@ -77,6 +82,10 @@ export const CROSS_PROJECT_TOOLS: Readonly<Record<string, string>> = {
   reject_config_change: "Check the change's project.",
   revert_routing_change:
     "Reverts a global or project routing change (AI-275): the change's project is checked with canRead.",
+  set_global_spend_caps:
+    "The global spend caps (AI-276): owner only (`change_spend_caps`, enforced).",
+  list_spend_cap_changes: "Global spend caps' change log: owner only (enforced).",
+  revert_spend_cap_change: "Reverts a global spend caps change: owner only (enforced); no project.",
   set_provider_routing: "Without `project`, the global routing: owner only.",
   set_step_tier: "Without `project`, the global routing: owner only.",
   set_tier_routes: "Without `project`, the global routing: owner only.",
