@@ -6,6 +6,7 @@ import {
   PLAN_REASON_MAX,
   PlanOutput,
   PR_SYNC_EMPTY,
+  RUN_PROMPT_MAX,
   RUN_SUMMARY_MAX,
   SYNC_LIMITS,
   SYNC_STOP_OUTCOMES,
@@ -66,6 +67,8 @@ import {
   type PlanState,
 } from "./plans";
 import { checkDor } from "./dor";
+import { BRIEF_PATH } from "./brief";
+import { briefContext } from "./brief-context";
 import type { NightUnattended } from "./night-unattended";
 import { RefineGate } from "./refine-gate";
 import { DomainError } from "./errors";
@@ -211,8 +214,11 @@ export class RunService {
      * waiting ticket can start (the refine dispatcher, ADR-0054). Its errors are logged only.
      */
     private readonly onRunEnded: ((projectId: string) => Promise<void>) | null = null,
-    /** Lists the repo's ADR folder to reserve build runs' ADR numbers (ADR-0080); null: none. */
-    private readonly codeHost: Pick<CodeHost, "getRepo" | "listFiles"> | null = null,
+    /**
+     * Lists the repo's ADR folder to reserve build runs' ADR numbers (ADR-0080) and reads the
+     * project brief for the prompt (AI-112); null: neither.
+     */
+    private readonly codeHost: Pick<CodeHost, "getRepo" | "listFiles" | "readFile"> | null = null,
     /**
      * Whether a local runner that serves the project is present (ADR-0089); null: no runners,
      * so a `local` default runs on the cloud executor and a `local` override waits.
@@ -1100,12 +1106,53 @@ export class RunService {
     approved: Run | null,
     reservedAdr: number | null,
   ): Promise<string> {
+    const prompt = await this.basePrompt(step, ticket, repo, questions, approved, reservedAdr);
+    const brief = briefContext(await this.readBrief(ticket.projectId, repo), step);
+    if (brief.length === 0) return prompt;
+    const withBrief = [prompt, ...brief].join("\n");
+    if (withBrief.length <= RUN_PROMPT_MAX) return withBrief;
+    // The brief is optional context: it must never make a run's prompt too long to store.
+    log("WARNING", "project brief left out: the prompt would pass its cap", {
+      ticket: ticket.key,
+      promptChars: prompt.length,
+      max: RUN_PROMPT_MAX,
+    });
+    return prompt;
+  }
+
+  private async basePrompt(
+    step: StartableStep,
+    ticket: Ticket,
+    repo: string,
+    questions: Question[],
+    approved: Run | null,
+    reservedAdr: number | null,
+  ): Promise<string> {
     if (step === "build") {
       return buildPrompt(ticket, repo, questions, approved?.plan ?? null, reservedAdr);
     }
     if (step === "refine") return refinePrompt(ticket, repo, questions);
     const runs = await this.runs.listForTicket(ticket.projectId, ticket.id);
     return planPrompt(ticket, repo, questions, runs);
+  }
+
+  /**
+   * The project brief from the repo's default branch (AI-112, ADR-0053), read through the code
+   * host at dispatch, never by the agent. Missing, or unreadable: null, and the task starts.
+   */
+  private async readBrief(projectId: string, repo: string): Promise<string | null> {
+    if (!this.codeHost) return null;
+    try {
+      const info = await this.codeHost.getRepo(repo);
+      return info ? await this.codeHost.readFile(repo, BRIEF_PATH, info.defaultBranch) : null;
+    } catch (err) {
+      log("WARNING", "project brief not read; the agent task starts without it", {
+        projectId,
+        repo,
+        error: String(err),
+      });
+      return null;
+    }
   }
 
   /**
