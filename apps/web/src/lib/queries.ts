@@ -192,6 +192,19 @@ export function useWorker(path: TicketPath) {
   });
 }
 
+/** Its build worker, tier and route, and the layer that set each (AI-282: M9). */
+export function useTicketRouting(path: TicketPath) {
+  const api = useApi();
+  return useQuery({
+    ...useLivePoll("slow"),
+    queryKey: ["ticket-routing", path],
+    queryFn: async () =>
+      unwrap(
+        await api.GET("/api/projects/{projectId}/tickets/{ticketId}/routing", { params: { path } }),
+      ),
+  });
+}
+
 export function useSetWorker(path: TicketPath) {
   const api = useApi();
   return useWrite(async (body: { worker: WorkerChoice | null }) =>
