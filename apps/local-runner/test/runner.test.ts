@@ -390,6 +390,18 @@ describe("local-runner start", () => {
       expect(server.reports.map((r) => r.body.status)).toEqual(["cancelled"]);
     });
 
+    it("GivenABuildOnAnEpicBranch_WhenClaimed_ThenTheAgentDoesNotRunAndNothingIsPublished", async () => {
+      const t = task("build");
+      t.context.baseBranch = "epic/AI-9";
+      const { done } = loop({ tasks: [t], githubApi: server.origin });
+      expect(await done).toBe("idle");
+
+      expect(env.calls()).toEqual([]);
+      expect(server.pushTokens).toEqual([]);
+      expect(server.reports[0]!.body.status).toBe("failed");
+      expect(server.reports[0]!.body.summary).toContain("epic/AI-9");
+    });
+
     it("GivenABuildContextWithoutTheRunsBranch_WhenClaimed_ThenTheAgentDoesNotRun", async () => {
       const t = task("build");
       t.context.branch = "agent/AI-7/someone-else";

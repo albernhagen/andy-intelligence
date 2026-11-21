@@ -146,6 +146,9 @@ export function publishChange(input: PublishInput): Promise<PublishOutcome> {
       BRANCH: input.branch,
       REPO: input.repo,
       BASE: input.base,
+      // A local build always targets the default branch: the control plane refuses a local start
+      // of a story on a night launch's epic branch (AI-122), and the runner refuses one too.
+      DEFAULT_BRANCH: input.base,
       PROJECT_ID: input.projectId,
       TICKET_KEY: input.ticketKey,
       TICKET_TITLE: input.ticketTitle,

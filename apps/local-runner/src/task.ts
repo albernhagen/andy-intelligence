@@ -199,6 +199,11 @@ export async function runTask(
     if (build && (context.branch !== branch || context.ticket?.key !== claimed.ticketKey)) {
       throw new Error("the build's context doesn't name this run's branch and ticket");
     }
+    if (build && context.baseBranch) {
+      throw new Error(
+        `the local runner doesn't build on ${context.baseBranch} (a night launch's epic branch) yet`,
+      );
+    }
     checkpoint();
 
     const platformSha = await deps.repos.fetch(deps.platformRepo);
