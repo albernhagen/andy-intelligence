@@ -2,7 +2,6 @@ import { describe, expect, it } from "vitest";
 import { DEFAULT_ROUTING, ROUTING_LIMITS, type RoutingConfigInput } from "../entities/routing";
 import type { RoutingConfigStore } from "../ports/routing";
 
-/** `make` must return an empty store whose clock is `now`. */
 export interface RoutingConfigStoreContractOptions {
   /**
    * Timeout (ms) for the case that races two puts on one document (AI-283); see
@@ -11,6 +10,7 @@ export interface RoutingConfigStoreContractOptions {
   raceTimeoutMs?: number;
 }
 
+/** `make` must return an empty store whose clock is `now`. */
 export function routingConfigStoreContract(
   name: string,
   make: (now: () => Date) => Promise<RoutingConfigStore>,
