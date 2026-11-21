@@ -12,7 +12,7 @@ import type { RouteModule } from "./services";
 
 /**
  * The roadmap (AI-193: M4.25, ADR-0108): top-level epics with outcome, "Done when", state,
- * progress and open-story counts, for one project or every readable one. Read-only; computed
+ * progress and open-ticket counts, for one project or every readable one. Read-only; computed
  * from each project's board through the read cache (ADR-0126); first 50 projects by key.
  */
 

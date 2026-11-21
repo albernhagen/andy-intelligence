@@ -104,8 +104,8 @@ describe("roadmap (AI-193)", () => {
     ["done", ["backlog"], "done"],
   ] as const)(
     "GivenEpicStage%sAndStories%j_WhenStateRead_ThenItIs%s",
-    (stage, stories, expected) => {
-      expect(roadmapState({ stage }, stories)).toBe(expected);
+    (stage, tickets, expected) => {
+      expect(roadmapState({ stage }, tickets)).toBe(expected);
     },
   );
 

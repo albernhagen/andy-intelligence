@@ -15,23 +15,24 @@ import { workViews } from "./work-views";
 /**
  * The roadmap (AI-193: M4.25, ADR-0108 decisions 1 and 2): a project's top-level epics in rank
  * order, child epics nested one level, each with its outcome, "Done when" lines, a state, progress
- * and counts of open stories. Computed on read, never stored; stories are grouped as the
+ * and counts of open tickets. Computed on read, never stored; tickets are grouped as the
  * milestone map groups them (`childGroup`). Reads (ADR-0028): each project's board through the
  * board's read cache (ADR-0126), so an unchanged poll reads one version counter per project; no
- * per-story agent-task reads (cost stays on the epic panel).
+ * per-ticket agent-task reads (cost stays on the epic panel). The shape is per epic so a
+ * milestone level above epics (ADR-0131, proposed) can group these entries without changing it.
  */
 
 /** Projects one all-projects roadmap reads, first by key; past it the roadmap says `truncated`. */
 export const MAX_ROADMAP_PROJECTS = 50;
 /** Top-level epics one project's roadmap lists; past it the roadmap says `truncated`. */
 export const MAX_ROADMAP_EPICS = 50;
-/** Child epics listed under one epic; past it the roadmap says `truncated` (stories still count). */
+/** Child epics listed under one epic; past it the roadmap says `truncated` (tickets still count). */
 export const MAX_ROADMAP_CHILD_EPICS = 20;
 
 export type RoadmapState = "not_started" | "in_progress" | "done";
 
 export interface RoadmapCounts {
-  /** Open stories waiting on Andy: the board's Needs me rule (ADR-0108); overlaps the others. */
+  /** Open tickets waiting on Andy: the board's Needs me rule (ADR-0108); overlaps the others. */
   needsYou: number;
   inReview: number;
   inProgress: number;
@@ -50,7 +51,7 @@ interface RoadmapEpicFields {
   doneWhen: string[];
   stage: Stage;
   state: RoadmapState;
-  /** Done stories of all stories that aren't Cancelled, child epics' stories included. */
+  /** Done tickets of all tickets that aren't Cancelled, child epics' tickets included. */
   progress: { done: number; total: number };
   counts: RoadmapCounts;
 }
@@ -61,7 +62,7 @@ export interface RoadmapChildEpic extends RoadmapEpicFields {
 }
 
 export interface RoadmapEpic extends RoadmapEpicFields {
-  /** Child epics, not archived or Cancelled, in rank order; their stories count here too. */
+  /** Child epics, not archived or Cancelled, in rank order; their tickets count here too. */
   children: RoadmapChildEpic[];
 }
 
@@ -84,28 +85,27 @@ const byRank = (a: Ticket, b: Ticket) => compareRanks(a.rank, b.rank);
 const listed = (t: Ticket) => t.type === "epic" && !t.archived && t.stage !== "cancelled";
 
 /**
- * The stories under an epic: its non-epic children, then those of its child epics at any depth
+ * The tickets under an epic: its non-epic children, then those of its child epics at any depth
  * (not archived or Cancelled). A parent cycle is read once.
  */
-function storiesUnder(epic: Ticket, tickets: readonly Ticket[], seen = new Set<string>()) {
+function ticketsUnder(epic: Ticket, tickets: readonly Ticket[], seen = new Set<string>()) {
   seen.add(epic.id);
-  const children = epicChildren(epic, tickets);
-  const stories = children.filter((c) => c.type !== "epic");
+  const under = epicChildren(epic, tickets).filter((c) => c.type !== "epic");
   for (const sub of tickets) {
     if (sub.parentId === epic.id && listed(sub) && !seen.has(sub.id)) {
-      stories.push(...storiesUnder(sub, tickets, seen));
+      under.push(...ticketsUnder(sub, tickets, seen));
     }
   }
-  return stories;
+  return under;
 }
 
-/** Not started: no story past Backlog (none Done either); done: the epic is Done. */
+/** Not started: no ticket past Backlog (none Done either); done: the epic is Done. */
 export function roadmapState(
   epic: Pick<Ticket, "stage">,
-  storyStages: readonly Stage[],
+  ticketStages: readonly Stage[],
 ): RoadmapState {
   if (epic.stage === "done") return "done";
-  const started = storyStages.some((s) => s !== "backlog" && s !== "cancelled");
+  const started = ticketStages.some((s) => s !== "backlog" && s !== "cancelled");
   return started ? "in_progress" : "not_started";
 }
 
@@ -114,7 +114,7 @@ function fields(
   tickets: readonly BoardTicket[],
   byId: ReadonlyMap<string, BoardTicket>,
 ): RoadmapEpicFields {
-  const stories = storiesUnder(epic, tickets);
+  const under = ticketsUnder(epic, tickets);
   const counts: RoadmapCounts = {
     needsYou: 0,
     inReview: 0,
@@ -124,7 +124,7 @@ function fields(
   };
   let done = 0;
   let total = 0;
-  for (const s of stories) {
+  for (const s of under) {
     const group = childGroup(s);
     if (group === "cancelled") continue;
     total += 1;
@@ -144,7 +144,7 @@ function fields(
     stage: epic.stage,
     state: roadmapState(
       epic,
-      stories.map((s) => s.stage),
+      under.map((s) => s.stage),
     ),
     progress: { done, total },
     counts,

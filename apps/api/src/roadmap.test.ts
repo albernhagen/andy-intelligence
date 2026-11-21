@@ -83,7 +83,7 @@ describe("roadmap API and MCP (AI-193)", () => {
   const at = (projectId: string, id: string, to: Stage) =>
     tracker.updateTicket(projectId, id, { stage: { to, forced: true, reason: null } }, "andy");
 
-  /** M1 (Done) and M2 with an outcome, a child epic, and stories in several stages. */
+  /** M1 (Done) and M2 with an outcome, a child epic, and tickets in several stages. */
   async function seed() {
     const create = (input: Parameters<InMemoryWorkTracker["createTicket"]>[1]) =>
       tracker.createTicket("ai", input, "andy");
@@ -98,7 +98,7 @@ describe("roadmap API and MCP (AI-193)", () => {
     const doneOne = await create({ title: "Done", parentId: m2.id });
     const review = await create({ title: "Review", parentId: m2.id });
     await create({ title: "Blocked", parentId: m2.id, blockedBy: [review.key] });
-    const subStory = await create({ title: "Sub story", parentId: sub.id });
+    const subStory = await create({ title: "Sub ticket", parentId: sub.id });
     await at("ai", doneOne.id, "done");
     await at("ai", review.id, "ready_for_review");
     await at("ai", subStory.id, "in_progress");
