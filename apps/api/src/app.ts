@@ -15,6 +15,7 @@ import {
   type RoutingConfigStore,
   type NightLaunchStore,
   type ProjectVersions,
+  type SpendLedger,
 } from "@andy/contracts";
 import type { CreatedApp } from "@andy/github";
 import { DomainError, type EmailNotificationsDeps } from "@andy/domain";
@@ -24,6 +25,9 @@ import { requireAllowedUser, type AuthEnv, type TokenVerifier } from "./auth";
 import type { CodeHostFactory } from "./github/connection";
 import type { ActionsTokenVerifier } from "./github/token";
 import type { ClientMetadataResolver } from "./mcp";
+import { requireProjectAccess, type ProjectAccess } from "./project-access";
+// Callers outside the package (web tests, e2e, gen:api) pass today's rule explicitly.
+export { ownerOnlyAccess } from "./project-access";
 import * as publicRoutes from "./public-routes";
 import { createServices, type RouteModule } from "./services";
 import type { InvokerTokenVerifier } from "./watchdog";
@@ -66,11 +70,18 @@ export interface AppDeps {
   deployments?: DeploymentStore;
   /** Model routing (AI-230, AI-238); without it every run takes `DEFAULT_ROUTING`. */
   routing?: RoutingConfigStore;
+  /** Spend totals for the caps settings (AI-249); without it spend reads unknown, never zero. */
+  spendLedger?: SpendLedger;
   /**
    * Per-project change counters (AI-222): with them, every tracker and run write bumps its
    * project, and the board and ticket list serve unchanged polls from a cache. Without, no cache.
    */
   projectVersions?: ProjectVersions;
+  /**
+   * Who may read which project (AI-252: M8.3), for `/api` and MCP alike. Required, with no
+   * default, so a wiring omission can't turn the check off: `main.ts` passes `ownerOnlyAccess()`.
+   */
+  projectAccess: ProjectAccess;
   /**
    * The only host served (ADR-0044), e.g. `ai.andybernhagen.com`. Requests for any other host
    * (the default run.app URLs) get 404, except /health for monitoring. Unset: every host (local dev).
@@ -171,6 +182,8 @@ const DOMAIN_STATUS = {
 } as const;
 
 export function createApp(input: AppDeps) {
+  // The type requires it; this stops a caller that slips past the type (fail closed).
+  if (!input.projectAccess) throw new Error("createApp needs a projectAccess rule");
   const services = createServices(input);
   const deps = services.deps;
   const app = new OpenAPIHono<AuthEnv>({
@@ -233,6 +246,7 @@ export function createApp(input: AppDeps) {
       onError: (c) => c.json({ error: "request body too large" }, 413),
     }),
   );
+  app.use("/api/*", requireProjectAccess(deps.projectAccess));
 
   app.openapi(meRoute, (c) => {
     const { email, uid } = c.get("identity");

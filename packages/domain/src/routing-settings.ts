@@ -1,6 +1,9 @@
 import {
+  CONFIG_CHANGE_LIST_MAX,
   ConfigChange,
+  GLOBAL_ENTITY_ID,
   ProviderKey,
+  WorkTrackerError,
   RoutingConfigInput,
   notFound,
   type ConfigChangeLog,
@@ -14,7 +17,12 @@ import {
   type TierKey,
   type WorkTracker,
 } from "@andy/contracts";
-import { CONFIG_CHANGE_NOT_RECORDED, changeActor, type SettingsDiff } from "./config-changes";
+import {
+  CONFIG_CHANGE_NOT_RECORDED,
+  changeActor,
+  revertReason,
+  type SettingsDiff,
+} from "./config-changes";
 import { DomainError } from "./errors";
 import { requireCan } from "./permissions";
 import { routeProblem } from "./routing-rules";
@@ -42,6 +50,9 @@ export interface ProjectRouting {
 }
 
 const FIELDS = ["providers", "tiers", "steps"] as const;
+
+/** The ConfigChange entity of a routing save (AI-239). */
+export const ROUTING_ENTITY = "routing";
 
 /** Projects one routing overview reads (ADR-0028); past it the view says it was cut short. */
 export const ROUTING_VIEW_MAX_PROJECTS = 50;
@@ -246,8 +257,8 @@ export class RoutingSettings {
       await this.changes.append(
         ConfigChange.parse({
           id,
-          entity: "routing",
-          entityId: projectId ?? "global",
+          entity: ROUTING_ENTITY,
+          entityId: projectId ?? GLOBAL_ENTITY_ID,
           projectId,
           diff,
           actor: changeActor(actor),
@@ -272,6 +283,102 @@ export class RoutingSettings {
         error: String(err),
       });
     }
+  }
+
+  /**
+   * Global routing's changes, newest first, at most `limit` (capped, ADR-0028; AI-275). Global
+   * routing is the owner's (`change_routing`), so is its log.
+   */
+  async globalChanges(actor: EventActor, limit = CONFIG_CHANGE_LIST_MAX): Promise<ConfigChange[]> {
+    requireCan(actor, "change_routing", null);
+    return this.requireLog().listGlobal(ROUTING_ENTITY, limit);
+  }
+
+  /**
+   * Reverts one applied routing change, global or a project's (AI-275): each part it changed goes
+   * back to its before value through the normal save, so the result is validated
+   * (`routeProblem`, and for a project narrowing to global), stored against the current version
+   * and logged as a new change; then the original is marked `reverted`. Refused when a later
+   * change touched the same parts, when the stored config no longer holds the change's values,
+   * and for a project's first save (there is no config to go back to).
+   */
+  async revert(
+    changeId: string,
+    actor: EventActor,
+    /**
+     * The caller's project access (AI-252): a project's change the caller can't read is not found,
+     * as an unknown one. Callers that already checked the project (its settings log) may omit it.
+     */
+    canRead?: (projectId: string) => Promise<boolean>,
+  ): Promise<{ config: RoutingConfig; reverted: ConfigChange }> {
+    requireCan(actor, "change_routing", null);
+    const changes = this.requireLog();
+    const change = await changes.get(changeId);
+    if (!change || change.entity !== ROUTING_ENTITY) throw notFound("config change", changeId);
+    const projectId = change.entityId === GLOBAL_ENTITY_ID ? null : change.entityId;
+    if (projectId !== null && canRead && !(await canRead(projectId))) {
+      throw notFound("config change", changeId);
+    }
+    requireCan(actor, "change_routing", projectId);
+    if (change.status !== "applied") {
+      throw new DomainError("not_revertible", `config change ${change.id} is ${change.status}`, [
+        "only an applied change can be reverted",
+      ]);
+    }
+    if (projectId !== null) await this.requireProject(projectId);
+    const current =
+      projectId === null ? await this.store.getGlobal() : await this.store.getProject(projectId);
+    const logged =
+      projectId === null
+        ? await changes.listGlobal(ROUTING_ENTITY)
+        : (await changes.listForProject(projectId)).filter((c) => c.entity === ROUTING_ENTITY);
+    // A revert whose save was logged but whose mark failed: finish the mark, don't save again.
+    // Only a later owner change with exactly this revert's reason, while the config still holds
+    // the change's before values, counts.
+    if (current && revertedEarlier(change, current, logged)) {
+      const reverted = await this.markReverted(change, actor);
+      log("INFO", "routing change revert completed", { projectId, configChangeId: change.id });
+      return { config: current, reverted };
+    }
+    const refusal = routingRevertRefusal(change, current, logged);
+    if (refusal) throw refusal;
+
+    const restored = { ...pick(current!) };
+    for (const [field, value] of Object.entries(change.diff)) {
+      (restored as Record<string, unknown>)[field] = (value as { from: unknown }).from;
+    }
+    const reason = revertReason(change.id);
+    const config =
+      projectId === null
+        ? await this.putGlobal(restored, current!.updatedAt, actor, reason)
+        : await this.putProject(projectId, restored, current!.updatedAt, actor, reason);
+    const reverted = await this.markReverted(change, actor);
+    log("INFO", "routing change reverted", { projectId, configChangeId: change.id, by: actor });
+    return { config, reverted };
+  }
+
+  /** A `conflict` means another revert marked it first: a 409. Anything else logs and surfaces. */
+  private async markReverted(change: ConfigChange, actor: EventActor): Promise<ConfigChange> {
+    try {
+      return await this.requireLog().markReverted(change.id, actor, this.now().toISOString());
+    } catch (err) {
+      if (err instanceof WorkTrackerError && err.code === "conflict") {
+        throw new DomainError("not_revertible", `config change ${change.id} is already reverted`);
+      }
+      log("ERROR", "routing change not marked reverted", {
+        configChangeId: change.id,
+        by: actor,
+        error: String(err),
+      });
+      throw err;
+    }
+  }
+
+  private requireLog(): ConfigChangeLog {
+    if (!this.changes) {
+      throw new DomainError("not_revertible", "the config change log isn't configured");
+    }
+    return this.changes;
   }
 
   private async requireProject(projectId: string): Promise<void> {
@@ -332,4 +439,70 @@ export function widerThanGlobal(project: RoutingFields, global: RoutingFields): 
     });
   }
   return problems;
+}
+
+/**
+ * Why `change` can't be reverted against `current`, or null (AI-275): a later logged change
+ * touched one of its parts (named, newest first), a part
+ * no longer holds the change's `to` value (written outside the log), or its `from` is null (a
+ * project's first save: there was no config before). `logged` is the same config's log.
+ */
+export function routingRevertRefusal(
+  change: ConfigChange,
+  current: RoutingConfig | null,
+  logged: ConfigChange[],
+): DomainError | null {
+  const parts = Object.keys(change.diff);
+  const newer = logged
+    // Strictly later: two saves in one millisecond can't be ordered by time, and a later one that
+    // changed a part fails the `to` check below anyway.
+    .filter((c) => c.id !== change.id && c.createdAt > change.createdAt)
+    .filter((c) => Object.keys(c.diff).some((f) => parts.includes(f)))
+    .sort((a, b) => b.createdAt.localeCompare(a.createdAt))[0];
+  if (newer) {
+    const touched = Object.keys(newer.diff).filter((f) => parts.includes(f));
+    return new DomainError(
+      "not_revertible",
+      `${touched.join(", ")} changed since, by config change ${newer.id} at ${newer.createdAt}`,
+      ["revert the newer change first, or edit the routing directly"],
+    );
+  }
+  const diff = change.diff as Record<string, { from: unknown; to: unknown }>;
+  if (parts.some((f) => diff[f]?.from === null)) {
+    return new DomainError("not_revertible", `config change ${change.id} was the first save`, [
+      "there was no routing before it to go back to: edit the routing instead",
+    ]);
+  }
+  const moved = parts.filter(
+    (f) =>
+      !current || JSON.stringify(current[f as keyof RoutingFields]) !== JSON.stringify(diff[f]?.to),
+  );
+  if (moved.length > 0) {
+    return new DomainError(
+      "not_revertible",
+      `${moved.join(", ")} changed since config change ${change.id}, outside the change log`,
+      ["edit the routing directly"],
+    );
+  }
+  return null;
+}
+
+/** Whether `logged` holds this change's own revert and the config still shows its result. */
+function revertedEarlier(
+  change: ConfigChange,
+  current: RoutingConfig,
+  logged: ConfigChange[],
+): boolean {
+  const diff = change.diff as Record<string, { from: unknown; to: unknown }>;
+  const parts = Object.keys(diff);
+  const own = logged.some(
+    (c) =>
+      c.reason === revertReason(change.id) && c.actor === "andy" && c.createdAt >= change.createdAt,
+  );
+  return (
+    own &&
+    parts.every(
+      (f) => JSON.stringify(current[f as keyof RoutingFields]) === JSON.stringify(diff[f]?.from),
+    )
+  );
 }

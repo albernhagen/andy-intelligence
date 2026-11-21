@@ -1,7 +1,7 @@
 import { ConfigChange } from "../entities";
 import { ProposalLookupCursor, ReviewFinding } from "../entities/config-proposals";
 import { WorkTrackerError } from "../ports";
-import { CONFIG_CHANGE_LIST_MAX } from "../ports/config-changes";
+import { CONFIG_CHANGE_LIST_MAX, GLOBAL_ENTITY_ID } from "../ports/config-changes";
 import type {
   ConfigChangeDecision,
   ConfigChangeStore,
@@ -60,6 +60,14 @@ export class InMemoryConfigChangeStore implements ConfigChangeStore {
   async listForProject(projectId: string, limit = CONFIG_CHANGE_LIST_MAX): Promise<ConfigChange[]> {
     return [...this.changes.values()]
       .filter((c) => LOGGED_ENTITIES.includes(c.entity) && c.entityId === projectId)
+      .sort(newestFirst)
+      .slice(0, Math.min(limit, CONFIG_CHANGE_LIST_MAX))
+      .map((c) => structuredClone(c));
+  }
+
+  async listGlobal(entity: string, limit = CONFIG_CHANGE_LIST_MAX): Promise<ConfigChange[]> {
+    return [...this.changes.values()]
+      .filter((c) => c.entity === entity && c.entityId === GLOBAL_ENTITY_ID)
       .sort(newestFirst)
       .slice(0, Math.min(limit, CONFIG_CHANGE_LIST_MAX))
       .map((c) => structuredClone(c));

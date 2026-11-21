@@ -42,6 +42,7 @@ Trust boundaries, entry points and credentials, moved by area (ADR-0046). PRs th
 | Web Push                     | [`push.md`](push.md)                                                 |
 | Model gateway (OpenRouter)   | [`model-gateway.md`](model-gateway.md)                               |
 | Project settings             | [`project-settings.md`](project-settings.md)                         |
+| Project access               | [`project-access.md`](project-access.md)                             |
 
 ## Mitigations in place
 

@@ -81,10 +81,21 @@ export type ResolvedRoute =
 
 const label = (r: Route) => `${r.harness}/${r.provider}/${r.model}`;
 
+/**
+ * Why `route` would be skipped with these providers, or null: its provider is off, or it can't
+ * run (`routeProblem`). The settings page shows the same reason (AI-243: M9.8).
+ */
+export function routeSkipReason(
+  route: Route,
+  providers: Record<ProviderKey, ProviderRouting>,
+): string | null {
+  if (!providers[route.provider].enabled) return `provider ${route.provider} is off`;
+  return routeProblem(route);
+}
+
 /** Why `route` can't run under `routing`, or null. */
 function unusable(route: Route, routing: EffectiveRouting): string | null {
-  if (!routing.providers[route.provider].enabled) return `provider ${route.provider} is off`;
-  return routeProblem(route);
+  return routeSkipReason(route, routing.providers);
 }
 
 /** A pin must be one of the routes some tier allows: global is the ceiling for pins too. */

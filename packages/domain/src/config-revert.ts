@@ -12,6 +12,7 @@ import { revertPatch, revertReason, revertRefusal } from "./config-changes";
 import { DomainError } from "./errors";
 import { requireCan } from "./permissions";
 import type { ProjectService } from "./projects";
+import type { RoutingSettings } from "./routing-settings";
 
 function log(severity: "INFO" | "ERROR", message: string, fields: object = {}) {
   console.log(JSON.stringify({ severity, message, component: "config-revert", ...fields }));
@@ -40,6 +41,8 @@ export class ConfigRevert {
     private readonly projects: ProjectService,
     private readonly changes: ConfigChangeLog,
     private readonly now: () => Date = () => new Date(),
+    /** Routing changes in the project's log revert through routing settings (AI-275). */
+    private readonly routing: Pick<RoutingSettings, "revert"> | null = null,
   ) {}
 
   /** The project's changes, newest first, at most `limit` (capped, ADR-0028). */
@@ -58,12 +61,16 @@ export class ConfigRevert {
     const project = await this.tracker.getProject(projectId);
     if (!project) throw notFound("project", projectId);
     const change = await this.changes.get(changeId);
-    // A routing change (AI-239) shows in its project's log but isn't settings: refuse, don't
-    // replay its diff as settings. Reverting routing is AI-275.
+    // A routing change (AI-239) shows in its project's log but isn't settings: it reverts through
+    // routing settings (AI-275), never by replaying its diff as settings.
     if (change?.entity === "routing" && change.projectId === projectId) {
-      throw new DomainError("not_revertible", `config change ${change.id} is a routing change`, [
-        "routing changes can't be reverted yet; save the routing again instead",
-      ]);
+      if (!this.routing) {
+        throw new DomainError("not_revertible", `config change ${change.id} is a routing change`, [
+          "routing isn't configured here",
+        ]);
+      }
+      const { reverted } = await this.routing.revert(change.id, by.actor);
+      return { project, reverted };
     }
     if (!change || change.entity !== "project" || change.entityId !== projectId) {
       throw notFound("config change", changeId);

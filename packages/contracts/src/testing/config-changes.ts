@@ -1,6 +1,10 @@
 import { describe, expect, it } from "vitest";
 import { ConfigChange } from "../entities";
-import { CONFIG_CHANGE_LIST_MAX, type ConfigChangeLog } from "../ports/config-changes";
+import {
+  CONFIG_CHANGE_LIST_MAX,
+  GLOBAL_ENTITY_ID,
+  type ConfigChangeLog,
+} from "../ports/config-changes";
 
 /** The applied log (M4.11). `make` must return a store with nothing in it. */
 export function configChangeLogContract(name: string, make: () => Promise<ConfigChangeLog>) {
@@ -65,6 +69,29 @@ export function configChangeLogContract(name: string, make: () => Promise<Config
         old.id,
       ]);
       expect(await store.listForProject("none")).toEqual([]);
+    });
+
+    it("GivenGlobalAndProjectChanges_WhenListingGlobalForAnEntity_ThenOnlyItsGlobalOnesNewestFirst", async () => {
+      const store = await make();
+      const old = change({
+        entity: "routing",
+        entityId: GLOBAL_ENTITY_ID,
+        projectId: null,
+        createdAt: at(1),
+      });
+      const recent = change({
+        entity: "routing",
+        entityId: GLOBAL_ENTITY_ID,
+        projectId: null,
+        createdAt: at(4),
+      });
+      await store.append(old);
+      await store.append(recent);
+      await store.append(change({ entity: "routing" }));
+      await store.append(change({ entity: "caps", entityId: GLOBAL_ENTITY_ID, projectId: null }));
+      expect((await store.listGlobal("routing")).map((c) => c.id)).toEqual([recent.id, old.id]);
+      expect((await store.listGlobal("routing", 1)).map((c) => c.id)).toEqual([recent.id]);
+      expect(await store.listGlobal("none")).toEqual([]);
     });
 
     it("GivenMoreChangesThanTheLimit_WhenListed_ThenOnlyTheNewestAreReturned", async () => {
