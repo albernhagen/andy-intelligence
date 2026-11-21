@@ -20,7 +20,7 @@ import {
   type TicketEvent,
   type WorkTracker,
 } from "@andy/contracts";
-import { ProjectTickets } from "./ticket-snapshots";
+import { ProjectTickets, SNAPSHOT_FULL_READ_MS } from "./ticket-snapshots";
 
 /**
  * Dashboards data (AI-102, ADR-0045, ADR-0020): delivery and cost per week, computed on read
@@ -303,14 +303,20 @@ export class DashboardReader {
   /**
    * Each ticket's stage moves, kept for its `updatedAt` (AI-318): a stage move always changes the
    * ticket, so an unchanged ticket's moves are still current and its history isn't read again.
+   * Two writes in one millisecond share an `updatedAt`, so an entry is also read again once it is
+   * `SNAPSHOT_FULL_READ_MS` old, as the snapshot itself is.
    */
-  private readonly histories = new Map<string, { updatedAt: string; moves: TicketEvent[] }>();
+  private readonly histories = new Map<
+    string,
+    { updatedAt: string; at: number; moves: TicketEvent[] }
+  >();
 
   constructor(
     private readonly tracker: WorkTracker,
     private readonly runs: RunStore,
     /** AI-318: the project's tickets through the snapshot, so a call reads only what changed. */
     private readonly tickets: ProjectTickets = new ProjectTickets(tracker),
+    private readonly now: () => number = Date.now,
   ) {}
 
   async project(projectId: string, window: DashboardWindow): Promise<ProjectDashboard> {
@@ -381,13 +387,14 @@ export class DashboardReader {
   private async stageMoves(projectId: string, ticket: Ticket): Promise<TicketEvent[]> {
     const hit = this.histories.get(ticket.id);
     this.histories.delete(ticket.id);
-    const moves =
-      hit && hit.updatedAt === ticket.updatedAt
-        ? hit.moves
-        : (await this.tracker.listEvents(projectId, ticket.id)).filter(
-            (e) => e.kind === "stage_changed",
-          );
-    this.histories.set(ticket.id, { updatedAt: ticket.updatedAt, moves });
+    if (hit && hit.updatedAt === ticket.updatedAt && this.now() - hit.at < SNAPSHOT_FULL_READ_MS) {
+      this.histories.set(ticket.id, hit);
+      return hit.moves;
+    }
+    const moves = (await this.tracker.listEvents(projectId, ticket.id)).filter(
+      (e) => e.kind === "stage_changed",
+    );
+    this.histories.set(ticket.id, { updatedAt: ticket.updatedAt, at: this.now(), moves });
     if (this.histories.size > MAX_CACHED_HISTORIES) {
       this.histories.delete(this.histories.keys().next().value!);
     }

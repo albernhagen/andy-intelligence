@@ -4,7 +4,7 @@
 
 **Fix:** they read the project's tickets through the AI-317 snapshot (ADR-0133): one counter read, plus the tickets changed since the last call (`ProjectTickets`). Also:
 
-- The dashboard keeps each ticket's stage moves for its `updatedAt`, since a stage move always changes the ticket. It re-reads a history only for a changed ticket, and keeps at most 5,000 per instance.
+- The dashboard keeps each ticket's stage moves for its `updatedAt`, since a stage move always changes the ticket. It re-reads a history only for a changed ticket or an hour-old entry, and keeps at most 5,000 per instance.
 - The milestone map reads each in-review ticket's latest PR link (`pr_linked` events only), not its whole history.
 
 | Read (`project-reads.test.ts`, 40 / 300 tickets) | Unchanged | After one write | After ten writes |
