@@ -141,6 +141,19 @@ export class FirestoreWorkTracker implements WorkTracker {
 
   async listTickets(projectId: string, filter: TicketFilter = {}): Promise<Ticket[]> {
     let query: Query<Ticket> = this.tickets(projectId);
+    // AI-315: Up next is a single-field inequality on `upNextRank` (automatic index; a document
+    // without the field is in Ideas, so it is rightly left out). An equality on another field
+    // would need a composite index, so the stage and the other filters apply in memory then.
+    if (filter.upNext) {
+      const found = (await query.where("upNextRank", "!=", null).get()).docs.map((d) => d.data());
+      return found
+        .filter((t) => t.stage === "backlog" && t.upNextRank !== null)
+        .filter((t) => filter.archived === undefined || t.archived === filter.archived)
+        .filter(
+          (t) => filter.needsAttention === undefined || t.needsAttention === filter.needsAttention,
+        )
+        .sort((a, b) => compareRanks(a.rank, b.rank));
+    }
     // v2 documents may still store `monitoring` for Done until their next write (ticketV2toV3),
     // so a Done filter matches both stored values; the converter returns them as Done.
     if (filter.stage !== undefined) {
