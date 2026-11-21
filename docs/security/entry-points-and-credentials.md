@@ -1,6 +1,6 @@
 # Threat model: Entry points and credentials
 
-Detail on the control plane's public HTTP endpoints and the credentials behind them. Risk register (every `R<n>` id), assets and mitigations: [threat-model.md](threat-model.md). PRs that change this area update this file; the weekly system review edits only the main file.
+Detail on the control plane's public HTTP endpoints and the credentials behind them. Risks: [risks/](risks/), one file per id; assets and mitigations: [threat-model.md](threat-model.md). PRs that change this area update this file; the weekly system review edits only the main file.
 
 ## Trust boundaries and entry points
 

@@ -32,7 +32,7 @@ What is built on `main` now. Target design: [ARCHITECTURE.md](docs/architecture/
 | [`docs/product/brief.md`](docs/product/brief.md)                         | Project brief for project `AI`: idea, users, vision, goals, architectural expectations (ADR-0053)              |
 | [`docs/architecture/adr/README.md`](docs/architecture/adr/README.md)     | ADR index, one line each                                                                                       |
 | [`docs/features.md`](docs/features.md)                                   | Shipped features, one row each, and how to use them                                                            |
-| [`docs/security/threat-model.md`](docs/security/threat-model.md)         | Threat model and open security risks                                                                           |
+| [`docs/security/threat-model.md`](docs/security/threat-model.md)         | Threat model; risks: `docs/security/risks/`, `pnpm risks`                                                      |
 | [`docs/runbooks/`](docs/runbooks/)                                       | Manual steps (setup, secrets, apply)                                                                           |
 | [`AGENTS.md`](AGENTS.md)                                                 | Rules for agents working in this repo (`CLAUDE.md` symlink)                                                    |
 | [`docs/BUILD-PROMPT.md`](docs/BUILD-PROMPT.md)                           | Session prompt for the building agent                                                                          |
