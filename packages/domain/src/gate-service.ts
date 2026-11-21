@@ -20,6 +20,7 @@ import {
 } from "./gate";
 import { intoEpicBranch, passesIntoEpic, type EpicMerges } from "./night-merge";
 import { syncPendingFor } from "./sync-runs";
+import type { NightUnattended } from "./night-unattended";
 import type { TicketService } from "./tickets";
 
 /**
@@ -63,6 +64,8 @@ export class PullRequestGate {
     private readonly runs: RunStore,
     private readonly tickets: TicketService,
     private readonly now: () => Date = () => new Date(),
+    /** Night launches (AI-123): a vetoed PR stops its story for the night; null: none. */
+    private readonly night: NightUnattended | null = null,
     /** Night launches' epic branches (AI-124); null: PRs into them never merge. */
     private readonly epicMerges: EpicMerges | null = null,
   ) {}
@@ -107,7 +110,14 @@ export class PullRequestGate {
     );
     const base = { pr: number, runId: run.id };
     log("INFO", "gate assessed", { ...base, reasons: decision.reasons });
-    if (decision.flag) await this.flagOnce(run, agent.ticket, decision);
+    if (decision.flag) {
+      await this.flagOnce(run, agent.ticket, decision);
+      await this.night?.stopStory(
+        agent.ticket.projectId,
+        agent.ticket.id,
+        `the merge gate vetoed its PR #${pr.number}: ${decision.reasons.join(", ")}`,
+      );
+    }
     // `wouldAutoMerge` needs the default branch, so a PR into an epic branch never takes it.
     if (!decision.wouldAutoMerge) {
       const launch =

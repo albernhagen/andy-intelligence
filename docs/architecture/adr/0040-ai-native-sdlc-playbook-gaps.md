@@ -1,4 +1,5 @@
 ---
+title: Close gaps against the AI-native SDLC playbook
 status: accepted, amended by 0049, 0050
 date: 2026-11-03
 amends: 0021, 0026

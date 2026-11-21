@@ -104,6 +104,7 @@ export function registerGitHubWebhook(app: Hono<AuthEnv>, deps: WebhookDeps): vo
     deps.runs,
     deps.tickets,
     now,
+    null,
     epicMerges,
   );
 

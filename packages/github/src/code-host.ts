@@ -327,6 +327,24 @@ export class GitHubCodeHost implements CodeHost {
     return Buffer.from(res.data.content, "base64").toString("utf8");
   }
 
+  async listFiles(fullName: string, dir: string, ref: string): Promise<string[] | null> {
+    const client = await this.repoClient(fullName);
+    if (!client) return null;
+    // A folder listing returns at most 1,000 entries; ADR folders stay far below that.
+    const res = await this.notFoundAsNull(() =>
+      client.octokit.request("GET /repos/{owner}/{repo}/contents/{path}", {
+        ...client.repo,
+        path: dir,
+        ref,
+      }),
+    );
+    if (!res || !Array.isArray(res.data)) return null;
+    return res.data
+      .filter((entry) => entry.type === "file")
+      .map((entry) => entry.name)
+      .sort();
+  }
+
   async mergePullRequest(
     fullName: string,
     number: number,

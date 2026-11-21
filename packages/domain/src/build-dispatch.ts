@@ -282,7 +282,12 @@ export class BuildDispatcher {
       launch = await this.moveLaunch(launch, ["running"], { status: "stopping" });
       log("WARNING", "night launch stopping: limit reached", { launchId: launch.id, limit });
     }
-    const finished = stories.every((t) => t.stage === "done" || t.stage === "cancelled");
+    // A story stopped for the night, or skipped because it waits on one, can't finish tonight
+    // (AI-123): with the rest done, the launch ends instead of idling until its stop time.
+    const settled = new Set(launch.stoppedStories.flatMap((s) => [s.key, ...s.skipped]));
+    const finished = stories.every(
+      (t) => t.stage === "done" || t.stage === "cancelled" || settled.has(t.key),
+    );
     const reason = runs.some((r) => isInFlight(r, now))
       ? null
       : nightEndReason(launch, limit, finished);

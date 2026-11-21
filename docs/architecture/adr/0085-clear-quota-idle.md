@@ -1,4 +1,5 @@
 ---
+title: Andy can clear a quota idle
 status: accepted
 date: 2026-11-10
 amends: 0079 (quota reserve)

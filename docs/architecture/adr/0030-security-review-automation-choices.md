@@ -1,4 +1,5 @@
 ---
+title: "Security review automation: implementation choices"
 status: accepted
 date: 2026-10-28
 ---

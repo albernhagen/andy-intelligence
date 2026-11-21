@@ -114,6 +114,7 @@ describe("night merges into the epic branch (AI-124)", () => {
       runs,
       tickets,
       now,
+      null,
       withEpics ? new EpicMerges(nights, tracker) : null,
     );
 

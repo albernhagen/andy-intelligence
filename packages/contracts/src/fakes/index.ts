@@ -671,6 +671,15 @@ export class InMemoryCodeHost implements CodeHost {
     return this.files.get(path) ?? null;
   }
 
+  async listFiles(fullName: string, dir: string): Promise<string[] | null> {
+    if (!(await this.getRepo(fullName))) return null;
+    const prefix = `${dir}/`;
+    const names = [...this.files.keys()]
+      .filter((p) => p.startsWith(prefix) && !p.slice(prefix.length).includes("/"))
+      .map((p) => p.slice(prefix.length));
+    return names.length > 0 ? names.sort() : null;
+  }
+
   async mergePullRequest(
     fullName: string,
     number: number,

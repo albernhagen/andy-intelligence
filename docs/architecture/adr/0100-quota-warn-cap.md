@@ -1,4 +1,5 @@
 ---
+title: One agent task at quota warn
 status: proposed
 date: 2026-11-12
 amends: 0079 (dispatch caps), 0083 (sync runs)
