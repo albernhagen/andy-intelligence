@@ -13,7 +13,7 @@ v1.x screens:
 - **Digest** (AI-70, ADR-0081): `/p/:projectId/digest`, header link in a project scope.
 - **Tickets** — M1: board, ticket detail with history and linked runs/PRs/cost. M3 (ADR-0059): status on cards, story panel, command palette. M5: filter and group by project. M4: overrides editing; roadmap, work views (ADR-0108).
 - **Run detail** — built (AI-101: M4.7: Run detail screen): `/p/:projectId/runs/:runId`, opened from Activity; another project's task: not found. Jules links M9.
-- **Config** (providers, harnesses, models, tiers, policies; audit log with revert; pending approvals).
+- **Config** (providers, harnesses, models, tiers, policies; audit log with revert (M4.12); pending approvals).
 - **Releases** (dev status, promote to prod, rollback).
 - **Dashboards** — built (AI-117, ADR-0045), `/p/:id/dashboards`, `/all/dashboards`: delivery (tickets by stage over time, lead time, rework, CI green on first try, review blockers), cost, quota and tokens per week by step and size (ADR-0046); `chart.tsx` (AI-103). DORA metrics from M6.
 

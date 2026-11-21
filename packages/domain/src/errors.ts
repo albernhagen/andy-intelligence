@@ -24,7 +24,8 @@ export class DomainError extends Error {
       | "runs_elsewhere"
       | "brief_too_long"
       | "code_host_unavailable"
-      | "rate_limited",
+      | "rate_limited"
+      | "not_revertible",
     message: string,
     readonly details: string[] = [],
   ) {
