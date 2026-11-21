@@ -29,6 +29,7 @@ export const OWNER_ACTIONS = {
   submit_brief: "submit a project brief",
   register_project: "create a project",
   send_test_email: "send a test email",
+  change_milestones: "create, edit or order milestones, or attach an epic to one",
 } as const;
 
 export type OwnerAction = keyof typeof OWNER_ACTIONS;

@@ -241,7 +241,7 @@ export const PARITY: readonly ParityEntry[] = [
     action: "Roadmap; milestone map",
     routes: ["GET /api/roadmap", `GET ${P}/roadmap`, `GET ${P}/milestone-map`],
     tools: ["roadmap", "milestone_map"],
-    note: "Both return milestones in order with their epics, and No milestone (AI-305).",
+    note: "Both return milestones in order with their epics, and No milestone (AI-305); the web Roadmap screen (AI-202) shows it.",
   },
   {
     action: "What's new",
@@ -256,6 +256,12 @@ export const PARITY: readonly ParityEntry[] = [
       ticket: "AI-299",
       missing: "a web form: the route exists but the web never calls it (PR #240)",
     },
+  },
+  {
+    action: "Milestones: list, set status, attach or detach an epic",
+    routes: [`GET ${P}/milestones`, `PATCH ${P}/milestones/:milestoneId`, `PUT ${T}/milestone`],
+    tools: ["list_milestones", "set_milestone_status", "set_epic_milestone"],
+    note: "The web sets status and attaches from the epic panel and the roadmap (AI-311). PATCH also renames, rewords and reorders: no MCP tool until AI-321 (Create a milestone).",
   },
   // ── One side on purpose ─────────────────────────────────────────────────────
   {
@@ -283,6 +289,17 @@ export const PARITY: readonly ParityEntry[] = [
     tools: [],
     oneSide: "API only until its web control and MCP tool land (AI-134 built the routes).",
     pending: { ticket: "AI-320", missing: "a web control and an MCP tool to start them" },
+  },
+  {
+    action: "Create a milestone",
+    routes: [`POST ${P}/milestones`],
+    tools: [],
+    oneSide:
+      "ADR-0131 names three MCP milestone tools; create and edit wait on ADR-0136 (proposed).",
+    pending: {
+      ticket: "AI-321",
+      missing: "create_milestone and edit_milestone (name, outcome, order)",
+    },
   },
   {
     action: "List and revoke runners",
