@@ -52,6 +52,7 @@ function loop(
     now?: () => Date;
     signal?: AbortSignal;
     confinement?: Confinement;
+    mayClaim?: () => boolean;
     githubApi?: string;
     /** Remotes with other project files (e.g. a lockfile); default: the file's shared ones. */
     remotes?: Remotes;
@@ -84,6 +85,7 @@ function loop(
     signal: options.signal ?? new AbortController().signal,
     msPerSecond: MS_PER_SECOND,
     idleMs: options.idleMs ?? 400,
+    ...(options.mayClaim ? { mayClaim: options.mayClaim } : {}),
     ...(options.now ? { now: options.now } : {}),
   });
   return { done, log, awake };
@@ -487,6 +489,17 @@ describe("local-runner start", () => {
     expect(await done).toBe("stopped");
     expect(server.reports.map((r) => r.body.status)).toEqual(["failed"]);
     expect(server.reports[0]!.body.summary).toContain("stopped on its Mac");
+  });
+
+  it("GivenTheRunnerLockIsLost_WhenTheNextClaimIsDue_ThenItStopsWithoutClaiming", async () => {
+    let owns = true;
+    const { done } = loop({ mayClaim: () => owns, idleMs: 60_000 });
+    await expect.poll(() => server.claims.length, { timeout: 3000 }).toBeGreaterThanOrEqual(1);
+    owns = false;
+    expect(await done).toBe("lock_lost");
+    const claims = server.claims.length;
+    await new Promise((r) => setTimeout(r, 5 * MS_PER_SECOND));
+    expect(server.claims.length).toBe(claims);
   });
 
   it("GivenARevokedSecret_WhenClaiming_ThenTheRunnerExitsUnauthorizedWithoutLoggingTheSecret", async () => {
