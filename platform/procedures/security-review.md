@@ -23,7 +23,7 @@ Procedure for the security-review agent (ADR-0025: Agentic security review). Run
 | `.review/previous-review.md` | Your previous review comment, if any; recheck its findings against the current diff                                                                                                                                    |
 | Working tree                 | The PR merged into its base                                                                                                                                                                                            |
 
-Also read the ADRs the change touches (search `docs/architecture/adr/` for `^title:`, or its index) and `AGENTS.md`.
+Also read the ADRs the change touches (search `docs/architecture/adr/` for `^title:`) and `AGENTS.md`.
 
 ## Checklist
 

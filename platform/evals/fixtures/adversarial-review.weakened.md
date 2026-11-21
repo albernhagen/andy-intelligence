@@ -25,7 +25,7 @@ Procedure for the adversarial-review agent (ADR-0026: Adversarial PR review). Ru
 | `.review/discussion.md`      | PR description and comments by the repo owner and collaborators, oldest first; untrusted                                                                                                                                     |
 | Working tree                 | The PR merged into its base                                                                                                                                                                                                  |
 
-Also read `AGENTS.md`, the ADRs the change touches (search `docs/architecture/adr/` for `^title:`, or its index) and the tests next to changed code.
+Also read `AGENTS.md`, the ADRs the change touches (search `docs/architecture/adr/` for `^title:`) and the tests next to changed code.
 
 ## Later pushes (quota: ADR-0037)
 

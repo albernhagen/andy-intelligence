@@ -26,7 +26,7 @@ Option 3.
 - Each ADR's frontmatter has `title` (short, for the index) and `status`; `amends` and `supersedes` show in the index when present. `docs/architecture/adr/README.md` explains the format and lists nothing.
 - `pnpm adr` (`scripts/adr-index.mjs`) prints one line per ADR. `pnpm test` fails when an ADR lacks a title or status, or two ADRs share a number.
 - Build runs reserve the next number above the highest `NNNN-*.md` in the ADR folder on the default branch (new `CodeHost.listFiles`), not above index rows. A managed repo with ADR files but no index now gets numbers too.
-- Review procedures find ADRs by searching the folder for `^title:` (read-only agents can't run `pnpm`), or a managed repo's own index.
+- Review procedures find ADRs by searching the folder for `^title:` (read-only agents can't run `pnpm`).
 - Migration: titles copied from the index; seven frontmatter `status` lines took "amended by" facts only the index had (0032, 0047, 0054, 0058, 0075, 0079, 0083) and 0078's `amends` took 0058. ADR bodies unchanged.
 
 ### Consequences
