@@ -233,12 +233,13 @@ export function createServices(input: AppDeps): Services {
         now,
       )
     : null;
-  const configRevert = deps.configChanges
-    ? new ConfigRevert(deps.tracker, projects, deps.configChanges, now)
-    : null;
   // AI-239: routing settings; each save is logged when the change log is configured.
   const routing = deps.routing
     ? new RoutingSettings(deps.routing, deps.tracker, deps.configChanges ?? null, now)
+    : null;
+  // AI-275: a routing change in a project's log reverts through routing settings.
+  const configRevert = deps.configChanges
+    ? new ConfigRevert(deps.tracker, projects, deps.configChanges, now, routing)
     : null;
 
   return {

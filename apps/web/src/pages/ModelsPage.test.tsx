@@ -154,4 +154,24 @@ describe("Models settings page", () => {
       (within(form).getByRole("button", { name: "Save routing" }) as HTMLButtonElement).disabled,
     ).toBe(false);
   });
+
+  it("GivenAGlobalSave_WhenRevertedFromTheChangesList_ThenTheEditorShowsTheRevertedRouting", async () => {
+    const { h, form } = await modelsPage();
+    await h.user.selectOptions(
+      within(form).getByRole("combobox", { name: "review tier" }),
+      "cheap",
+    );
+    await h.user.click(within(form).getByRole("button", { name: "Save routing" }));
+    const changes = await screen.findByRole("region", { name: "Global changes" });
+    const row = await within(changes).findByText("Routing: steps changed");
+    await h.user.click(within(row.closest("li")!).getByRole("button", { name: "Revert" }));
+
+    await waitFor(async () => expect((await h.routing.getGlobal()).steps.review).toBe("fast"));
+    await waitFor(() =>
+      expect(
+        (screen.getByRole("combobox", { name: "review tier" }) as HTMLSelectElement).value,
+      ).toBe("fast"),
+    );
+    expect(await within(changes).findByText("Reverted")).toBeTruthy();
+  });
 });
