@@ -1,5 +1,6 @@
 import type { EventActor, Project, Question, Ticket, TicketEvent } from "../entities";
 import { QuestionId, RUNS_AT_ONCE_DEFAULT } from "../entities";
+import { milestoneTargetProblem } from "../entities/milestone";
 import {
   NewProject,
   NewQuestion,
@@ -174,6 +175,9 @@ export function applyTicketChange(
     );
     next.stage = to;
   }
+  // ADR-0131: only a top-level epic holds a milestone, on every write path.
+  const milestoneProblem = next.milestoneId ? milestoneTargetProblem(next) : null;
+  if (milestoneProblem) throw new WorkTrackerError("conflict", milestoneProblem);
   if (events.length > 0) next.updatedAt = at.toISOString();
   return { ticket: next, events };
 }

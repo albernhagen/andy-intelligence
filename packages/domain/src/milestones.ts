@@ -3,7 +3,8 @@ import type { Ticket } from "@andy/contracts";
 /**
  * Milestone rules (ADR-0131, AI-302: M4.33). A milestone holds top-level epics; a child epic and
  * every ticket take the milestone of their top-level epic. Nothing reads these yet: the API and
- * MCP (AI-304: M4.34) and the dispatch rule (AI-306: M4.36) will.
+ * MCP (AI-304: M4.34) and the dispatch rule (AI-306: M4.36) will. Which tickets may hold one:
+ * `milestoneTargetProblem` in `@andy/contracts`, checked on every ticket write.
  */
 
 type Chain = Pick<Ticket, "id" | "type" | "parentId" | "milestoneId">;
@@ -35,17 +36,4 @@ export function topLevelOf<T extends Chain>(ticket: T, tickets: readonly T[]): T
 export function milestoneOf<T extends Chain>(ticket: T, tickets: readonly T[]): string | null {
   const top = topLevelOf(ticket, tickets);
   return top.type === "epic" ? (top.milestoneId ?? null) : null;
-}
-
-/** Why `ticket` can't be given a milestone directly, or null when it can (a top-level epic). */
-export function milestoneTargetProblem(
-  ticket: Pick<Ticket, "key" | "type" | "parentId">,
-): string | null {
-  if (ticket.type !== "epic") {
-    return `only a top-level epic has a milestone; ${ticket.key} is ${ticket.type ? `a ${ticket.type}` : "untyped"} and takes its epic's`;
-  }
-  if (ticket.parentId) {
-    return `only a top-level epic has a milestone; ${ticket.key} is a child epic and takes its top-level epic's`;
-  }
-  return null;
 }

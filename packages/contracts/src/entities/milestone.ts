@@ -49,3 +49,22 @@ export class MilestoneCapError extends Error {
 /** The roadmap's order: by `order`, then name, then id (stable). */
 export const byMilestoneOrder = (a: Milestone, b: Milestone) =>
   a.order - b.order || a.name.localeCompare(b.name) || a.id.localeCompare(b.id);
+
+/**
+ * Why `ticket` can't hold a milestone, or null when it can: only a top-level epic does; a child
+ * epic and every ticket take their top-level epic's (`milestoneOf` in `@andy/domain`). Every
+ * ticket write checks it (`applyTicketChange`), so a type or parent change can't leave one behind.
+ */
+export function milestoneTargetProblem(ticket: {
+  key: string;
+  type: string | null;
+  parentId: string | null;
+}): string | null {
+  if (ticket.type !== "epic") {
+    return `only a top-level epic has a milestone; ${ticket.key} is ${ticket.type ? `a ${ticket.type}` : "untyped"} and takes its epic's`;
+  }
+  if (ticket.parentId) {
+    return `only a top-level epic has a milestone; ${ticket.key} is a child epic and takes its top-level epic's`;
+  }
+  return null;
+}

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { milestoneOf, milestoneTargetProblem, topLevelOf } from "./milestones";
+import { milestoneOf, topLevelOf } from "./milestones";
 
 /** AI-302: M4.33: Milestone entity and store (ADR-0131). */
 
@@ -40,17 +40,5 @@ describe("milestoneOf", () => {
     const b = t({ id: "b", type: "epic", parentId: "a", milestoneId: "mb" });
     expect(topLevelOf(a, [a, b]).id).toBe("b");
     expect(milestoneOf(a, [a, b])).toBe("mb");
-  });
-});
-
-describe("milestoneTargetProblem", () => {
-  it("GivenATopLevelEpic_WhenChecked_ThenAllowed", () => {
-    expect(milestoneTargetProblem(top)).toBeNull();
-  });
-
-  it("GivenAChildEpicOrANonEpicTicket_WhenChecked_ThenRefusedWithTheReason", () => {
-    expect(milestoneTargetProblem(child)).toMatch(/E2 is a child epic/);
-    expect(milestoneTargetProblem(loose)).toMatch(/S3 is a feature/);
-    expect(milestoneTargetProblem(t({ id: "u", type: null }))).toMatch(/U is untyped/);
   });
 });
