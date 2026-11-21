@@ -16,6 +16,8 @@ export const MCP_SCOPE = "mcp";
 export const CODE_TTL_S = 60;
 export const ACCESS_TTL_S = 60 * 60;
 export const REFRESH_TTL_S = 30 * 24 * 60 * 60;
+/** How long a used refresh token keeps working (ADR-0105: Refresh-token grace window). */
+export const REFRESH_GRACE_S = 60;
 const OAUTH_BODY_BYTES = 16 * 1024;
 
 export interface McpAuthDeps {
@@ -253,13 +255,27 @@ export function registerOAuthRoutes(app: Hono<AuthEnv>, deps: McpAuthDeps & Look
       } else if (grantType === "refresh_token") {
         const refresh = field("refresh_token");
         if (!refresh) throw new OAuthError("invalid_request", "refresh_token is required");
-        // Rotation: the old refresh token is consumed here; a new one comes back below.
-        grant = await deps.grants.take(lookupKey(refresh));
+        const key = lookupKey(refresh);
+        grant = await deps.grants.get(key);
         if (!grant || grant.kind !== "refresh" || grant.clientId !== clientId) {
           throw new OAuthError(
             "invalid_grant",
             "refresh token is invalid, expired or already used",
           );
+        }
+        // Rotation with a grace window (ADR-0105): a new pair comes back below, and the old
+        // refresh token expires in REFRESH_GRACE_S instead of at once. Sessions that share
+        // one stored token and refresh together, or a client whose response was lost, can
+        // then retry instead of forcing a new sign-in. A token already inside the window
+        // was used before; its expiry is left alone, so reuse can't extend it.
+        const graceEnd = expiresIn(REFRESH_GRACE_S);
+        if (Date.parse(grant.expiresAt) > Date.parse(graceEnd)) {
+          await deps.grants.put(key, { ...grant, expiresAt: graceEnd });
+        } else {
+          log("INFO", "oauth refresh: token reused inside the grace window", {
+            clientId,
+            uid: grant.uid,
+          });
         }
       } else {
         throw new OAuthError("unsupported_grant_type", "use authorization_code or refresh_token");
