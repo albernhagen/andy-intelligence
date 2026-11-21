@@ -114,3 +114,61 @@ describe("configFor", () => {
     expect(requiredChecks(base)).toContain("firestore-suite");
   });
 });
+
+/**
+ * AI-106: M5.3: the managed-repo caller (ADR-0096). The control plane accepts callbacks and the
+ * push grant only from `CLAUDE_EXECUTOR_REF`, so the caller must call exactly that executor.
+ */
+describe("managed-repo caller", () => {
+  const CALLER = "template/.github/workflows/agent-run.yml";
+  const executorTs = read("packages/github/src/executor.ts");
+  const platformRepo = /PLATFORM_REPO = "([^"]+)"/.exec(executorTs)?.[1];
+  const executorRef = `${platformRepo}/.github/workflows/claude-executor.yml@refs/heads/main`;
+  const uses = (text) => [...text.matchAll(/^\s+uses:\s+(\S+)/gm)].map((m) => m[1]);
+  const withoutComments = (text) =>
+    text
+      .split("\n")
+      .filter((l) => !l.trimStart().startsWith("#"))
+      .join("\n");
+
+  it("GivenTheManifest_WhenRead_ThenTheCallerIsAManagedFile", () => {
+    expect(manifest.managed).toContainEqual({
+      path: ".github/workflows/agent-run.yml",
+      from: CALLER,
+    });
+  });
+
+  it("GivenTheCaller_WhenRead_ThenItCallsTheExecutorTheControlPlaneAccepts", () => {
+    expect(executorTs).toContain(
+      "export const CLAUDE_EXECUTOR_REF = `${PLATFORM_REPO}/.github/workflows/claude-executor.yml@refs/heads/main`",
+    );
+    const [only, ...rest] = uses(read(CALLER));
+    expect(rest).toEqual([]);
+    expect(only.replace(/@main$/, "@refs/heads/main")).toBe(executorRef);
+  });
+
+  it("GivenTheCaller_WhenRead_ThenOnlyTheAdrsPermissionsAndInputs", () => {
+    const text = read(CALLER);
+    expect(text).toMatch(/^permissions: \{\}$/m);
+    const jobPermissions = /^ {4}permissions:\n((?: {6}.+\n)+)/m.exec(text)?.[1] ?? "";
+    expect(
+      jobPermissions
+        .split("\n")
+        .filter(Boolean)
+        .map((l) => l.trim().split(" #")[0]),
+    ).toEqual(["contents: read", "id-token: write"]);
+    const inputs = /^ {4}inputs:\n((?: {6}.+\n)+)/m.exec(text)?.[1] ?? "";
+    expect([...inputs.matchAll(/^ {6}([\w-]+):$/gm)].map((m) => m[1])).toEqual([
+      "run_id",
+      "credential",
+    ]);
+  });
+
+  it("GivenThisReposCaller_WhenComparedWithTheTemplate_ThenOnlyUsesDiffers", () => {
+    const local = withoutComments(read(".github/workflows/agent-run.yml"));
+    const template = withoutComments(read(CALLER));
+    expect(template.replace(uses(template)[0], "./.github/workflows/claude-executor.yml")).toBe(
+      local,
+    );
+  });
+});

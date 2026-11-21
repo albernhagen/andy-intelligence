@@ -28,6 +28,10 @@
       "from": ".github/workflows/dependabot-auto-merge.yml",
       "pin": true
     },
+    {
+      "path": ".github/workflows/agent-run.yml",
+      "from": "template/.github/workflows/agent-run.yml"
+    },
     { "path": ".github/dependabot.yml", "from": "template/.github/dependabot.yml" },
     {
       "path": ".github/pull_request_template.md",

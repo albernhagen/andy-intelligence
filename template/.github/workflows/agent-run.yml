@@ -1,0 +1,43 @@
+name: Agent run
+run-name: "Agent run ${{ inputs.run_id }}"
+
+# A managed repo's caller of the platform's Claude Code executor (ADR-0096: Managed repos call one
+# executor; carried by the project baseline, AI-106). The control plane dispatches this file by
+# name (agent-run.yml) on `main` with a run ID; everything else (prompt, step, model) comes from
+# the control plane over OIDC. It calls the platform's executor at `main`: the control plane
+# accepts callbacks and the push grant only from that exact workflow (`job_workflow_ref`), so
+# don't change the `uses:` line or pin it. The Claude token is this repo's own secret.
+
+on:
+  workflow_dispatch:
+    inputs:
+      run_id:
+        description: "Control-plane run ID"
+        type: string
+        required: true
+      credential:
+        description: "Model credential"
+        type: choice
+        options: [subscription, api_key]
+        default: subscription
+        required: true
+
+permissions: {}
+
+# One executor per run ID: a duplicate dispatch waits instead of running the agent twice at once.
+concurrency:
+  group: agent-run-${{ inputs.run_id }}
+  cancel-in-progress: false
+
+jobs:
+  agent-run:
+    permissions:
+      contents: read # project checkout
+      id-token: write # Actions OIDC token for the control-plane callbacks
+    uses: albernhagen/andy-intelligence/.github/workflows/claude-executor.yml@main
+    with:
+      run_id: ${{ inputs.run_id }}
+      credential: ${{ inputs.credential }}
+    secrets:
+      CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+      ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
