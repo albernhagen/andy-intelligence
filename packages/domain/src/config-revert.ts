@@ -82,11 +82,6 @@ export class ConfigRevert {
         "Builds is set only in the app: revert it on the settings page",
       ]);
     }
-    // ADR-0124: over MCP a merge mode may only tighten; a revert that loosens it is refused.
-    if (via === "mcp" && "mergeMode" in patch) {
-      const target = effectiveMergeMode({ ...project, mergeMode: patch.mergeMode ?? null });
-      requireTightening(target, project);
-    }
     const logged = await this.changes.listForProject(projectId, CONFIG_CHANGE_LIST_MAX);
     // A revert whose write was logged but whose mark failed: finish it, don't write again. Only a
     // later applied settings change by the owner with exactly the revert's reason counts.
@@ -102,6 +97,12 @@ export class ConfigRevert {
       const reverted = await this.mark(change, by.actor);
       log("INFO", "config change revert completed", { projectId, configChangeId: change.id });
       return { project, reverted };
+    }
+    // ADR-0124: over MCP a merge mode may only tighten; a revert that loosens it is refused. After
+    // the finish-a-written-revert path above, so a retry that only needs its mark isn't blocked.
+    if (via === "mcp" && "mergeMode" in patch) {
+      const target = effectiveMergeMode({ ...project, mergeMode: patch.mergeMode ?? null });
+      requireTightening(target, project);
     }
     const refusal = revertRefusal(change, project, logged);
     if (refusal) throw refusal;

@@ -5,6 +5,7 @@ import {
   MERGE_MODE_ORDER,
   MERGE_MODE_TEXT,
   effectiveMergeMode,
+  effectiveTicketMergeMode,
   isLooser,
   requireOverrideNotLooser,
   requireTightening,
@@ -41,6 +42,23 @@ describe("effectiveMergeMode", () => {
     expect(isLooser("all-clean", "low-risk")).toBe(true);
     expect(isLooser("epic", "low-risk")).toBe(false);
     expect(isLooser("manual", "manual")).toBe(false);
+  });
+});
+
+describe("effectiveTicketMergeMode", () => {
+  it("GivenAStricterOverride_WhenRead_ThenTheOverrideApplies", () => {
+    expect(effectiveTicketMergeMode(project({ mergeMode: "all-clean" }), "low-risk")).toBe(
+      "low-risk",
+    );
+  });
+
+  it("GivenAProjectTightenedAfterALooserOverride_WhenRead_ThenTheProjectWins", () => {
+    // Allowed when written (equal), then the project went to manual: the override no longer counts.
+    expect(effectiveTicketMergeMode(project({ mergeMode: "manual" }), "all-clean")).toBe("manual");
+  });
+
+  it("GivenNoOverride_WhenRead_ThenItIsTheProjectsMode", () => {
+    expect(effectiveTicketMergeMode(project({ mergeMode: "epic" }), undefined)).toBe("epic");
   });
 });
 

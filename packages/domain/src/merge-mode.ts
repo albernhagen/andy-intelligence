@@ -40,6 +40,19 @@ export function effectiveMergeMode(
   return FROM_AUTO_MERGE[project.autoMerge];
 }
 
+/**
+ * A ticket's mode: the stricter of its project's and its own override (an epic's override passes
+ * to its tickets the same way). Overrides are checked only when written, so a project tightened
+ * later must still win here: AI-215 reads the mode through this, never the override alone.
+ */
+export function effectiveTicketMergeMode(
+  project: Pick<Project, "id" | "mergeMode" | "autoMerge">,
+  override: MergeMode | undefined,
+): MergeMode {
+  const projectMode = effectiveMergeMode(project);
+  return override && !isLooser(override, projectMode) ? override : projectMode;
+}
+
 /** Whether `mode` lets more PRs merge without Andy than `than`. */
 export function isLooser(mode: MergeMode, than: MergeMode): boolean {
   return MERGE_MODE_ORDER.indexOf(mode) > MERGE_MODE_ORDER.indexOf(than);
