@@ -62,7 +62,7 @@ export function App() {
   }
 
   const signOut = (
-    <Button variant="ghost" size="sm" onClick={() => void signOutUser()}>
+    <Button variant="ghost" size="sm" className="h-11 sm:h-8" onClick={() => void signOutUser()}>
       Sign out
     </Button>
   );

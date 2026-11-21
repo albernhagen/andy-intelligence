@@ -1,6 +1,6 @@
 # Threat model: Project settings
 
-Per-project settings Andy changes after registration. Risk register: [threat-model.md](threat-model.md). This file starts with the environment policy (AI-160); the other settings' entry points are in [ui-and-mcp.md](ui-and-mcp.md).
+Per-project settings Andy changes after registration. No risk file: until an M6 slice reads the setting it changes nothing (see the end of this file). PRs that change this area update this file. This file starts with the environment policy (AI-160); the other settings' entry points are in [ui-and-mcp.md](ui-and-mcp.md).
 
 ## Entry points
 

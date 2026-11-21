@@ -28,12 +28,13 @@ import { inboxCards } from "./inbox-order";
 import {
   blockerKeys,
   blockerProblem,
+  outcomeProblem,
   parentProblem,
   projectOfKey,
   reorderRank,
-  ticketsByRef,
   type ReorderAnchor,
 } from "./ticket-edits";
+import { blockerChain, parentChain } from "./ticket-reads";
 import { MAX_OPEN_QUESTIONS_PER_TICKET, assumptionQuestion } from "./refine-gate";
 import { rankBetween } from "./ranks";
 import { isDispatchable, resolveWorker, workerView } from "./worker";
@@ -124,6 +125,8 @@ export class TicketService {
     { upNext = false }: { upNext?: boolean } = {},
   ): Promise<Ticket> {
     const parsed = NewTicket.parse(input);
+    const badOutcome = outcomeProblem(parsed);
+    if (badOutcome) throw new DomainError("invalid_field", badOutcome);
     const parentId = parsed.parentId && (await this.parentIdOf(projectId, parsed.parentId));
     const dorStatus = checkDor(parsed, 0).met ? "met" : "not_met";
     const ticket = await this.tracker.createTicket(
@@ -139,8 +142,9 @@ export class TicketService {
    * `reparentByKey` and `update` refuse. A new ticket has no children, so no cycle check.
    */
   private async parentIdOf(projectId: string, parent: string): Promise<string> {
-    const tickets = await this.tracker.listTickets(projectId);
-    const found = tickets.find((t) => t.id === parent || t.key === parent);
+    const found =
+      (projectOfKey(parent) === null ? await this.tracker.getTicket(projectId, parent) : null) ??
+      (await this.tracker.getTicketByKey(projectId, parent));
     if (!found) throw new DomainError("invalid_reference", `${parent} is not in this project`);
     if (found.type !== "epic") {
       throw new DomainError("invalid_reference", `${found.key} is not an epic`);
@@ -347,14 +351,16 @@ export class TicketService {
   ): Promise<Ticket> {
     const current = await this.require(projectId, ticketId);
     if (fields.parentId && fields.parentId !== current.parentId) {
-      const tickets = await this.tracker.listTickets(projectId);
-      const problem = parentProblem(current, fields.parentId, tickets);
+      const chain = await parentChain(this.tracker, projectId, fields.parentId);
+      const problem = parentProblem(current, fields.parentId, chain);
       if (problem) throw new DomainError("invalid_reference", problem);
     }
     if (fields.blockedBy) {
       fields = { ...fields, blockedBy: await this.checkedBlockers(current, fields.blockedBy) };
     }
     const merged = { ...current, ...stripUndefined(fields) };
+    const badOutcome = outcomeProblem(merged);
+    if (badOutcome) throw new DomainError("invalid_field", badOutcome);
     const dor = checkDor(merged, await this.openQuestionCount(ticketId));
     const updated = await this.tracker.updateTicket(
       projectId,
@@ -376,37 +382,13 @@ export class TicketService {
    */
   private async checkedBlockers(ticket: Ticket, blockedBy: readonly string[]): Promise<string[]> {
     const added = blockedBy.filter((ref) => !ticket.blockedBy.includes(ref));
-    const byRef = await this.blockerGraph(ticket, added);
+    // The existing entries are read too (not checked), so old id entries come back as keys.
+    const byRef = await blockerChain(this.tracker, ticket, blockedBy);
     const missing = added.find((ref) => !byRef.has(ref));
     if (missing) throw notFound("ticket", missing);
     const problem = blockerProblem(ticket, blockedBy, byRef);
     if (problem) throw new DomainError("invalid_reference", problem);
     return blockerKeys(blockedBy, byRef);
-  }
-
-  /**
-   * Every ticket of the ticket's project and of each project a blocker chain from `refs` reaches,
-   * by key and by id. Reads each project once; an unknown prefix reads as an empty project.
-   */
-  private async blockerGraph(
-    ticket: Ticket,
-    refs: readonly string[],
-  ): Promise<Map<string, Ticket>> {
-    const byRef = new Map<string, Ticket>();
-    const read = new Set<string>();
-    let pending = [ticket.projectId, ...refs.flatMap((r) => projectOfKey(r) ?? [])];
-    while (pending.length > 0) {
-      const next: string[] = [];
-      for (const projectId of new Set(pending)) {
-        if (read.has(projectId)) continue;
-        read.add(projectId);
-        const tickets = await this.tracker.listTickets(projectId);
-        for (const [ref, t] of ticketsByRef(tickets)) byRef.set(ref, t);
-        next.push(...tickets.flatMap((t) => t.blockedBy.flatMap((r) => projectOfKey(r) ?? [])));
-      }
-      pending = next.filter((p) => !read.has(p));
-    }
-    return byRef;
   }
 
   /**
@@ -560,8 +542,9 @@ export class TicketService {
   /** Places a ticket next to another in its lane; order is priority (ADR-0058). */
   async reorderByKey(key: string, anchor: ReorderAnchor, actor: EventActor): Promise<Ticket> {
     const ticket = await this.findByKey(key);
-    const tickets = await this.tracker.listTickets(ticket.projectId);
-    const placed = reorderRank(ticket, anchor, tickets);
+    // Only the ticket's own lane (AI-222); a lane never holds archived tickets outside Done.
+    const lane = await this.tracker.listTickets(ticket.projectId, { stage: ticket.stage });
+    const placed = reorderRank(ticket, anchor, lane);
     if (typeof placed === "string") throw new DomainError("invalid_reference", placed);
     return placed.lane === "up_next"
       ? this.setUpNext(ticket.projectId, ticket.id, { upNext: true, rank: placed.rank }, actor)

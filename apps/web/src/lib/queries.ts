@@ -362,7 +362,7 @@ export function useCreateTicket(projectId: string) {
 
 /** One in-place edit: only the changed fields, plus the `updatedAt` it was read at (409 if stale). */
 export type TicketPatch = Partial<
-  TicketInput & { parentId: string | null; blockedBy: string[] }
+  TicketInput & { parentId: string | null; blockedBy: string[]; outcome: string | null }
 > & {
   ifUpdatedAt: string;
 };
