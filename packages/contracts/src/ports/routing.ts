@@ -8,7 +8,7 @@ import type { RoutingConfig, RoutingConfigInput } from "../entities/routing";
 export interface RoutingConfigStore {
   /** The global config; `DEFAULT_ROUTING` (updatedAt null) while none is stored. */
   getGlobal(): Promise<RoutingConfig>;
-  /** The project's config, or null when it has none (it then follows global). */
+  /** The project's config, or null when it has none (it then follows global) or the id isn't a project key. */
   getProject(projectId: string): Promise<RoutingConfig | null>;
   /**
    * Stores the config for its scope and stamps `updatedAt` (always later than the one it

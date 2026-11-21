@@ -2,6 +2,7 @@ import {
   DEFAULT_ROUTING,
   RoutingConfig,
   RoutingConfigInput,
+  RoutingProjectId,
   nextRoutingStamp,
   routingKey,
 } from "../entities/routing";
@@ -22,6 +23,7 @@ export class InMemoryRoutingConfigStore implements RoutingConfigStore {
   }
 
   async getProject(projectId: string): Promise<RoutingConfig | null> {
+    if (!RoutingProjectId.safeParse(projectId).success) return null;
     const found = this.configs.get(routingKey(projectId));
     return found ? structuredClone(found) : null;
   }

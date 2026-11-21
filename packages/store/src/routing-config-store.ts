@@ -3,6 +3,7 @@ import {
   DEFAULT_ROUTING,
   RoutingConfig,
   RoutingConfigInput,
+  RoutingProjectId,
   WorkTrackerError,
   nextRoutingStamp,
   routingKey,
@@ -35,6 +36,8 @@ export class FirestoreRoutingConfigStore implements RoutingConfigStore {
   }
 
   async getProject(projectId: string): Promise<RoutingConfig | null> {
+    // Not a project key: no project has it, and a "/" would split the document path.
+    if (!RoutingProjectId.safeParse(projectId).success) return null;
     return (await this.doc(projectId).get()).data() ?? null;
   }
 

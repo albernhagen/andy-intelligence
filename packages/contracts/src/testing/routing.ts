@@ -90,6 +90,15 @@ export function routingConfigStoreContract(
       expect(await store.getGlobal()).toEqual(DEFAULT_ROUTING);
     });
 
+    it("GivenAProjectIdThatIsNotAProjectKey_WhenPutOrRead_ThenRefusedAndNothingWritten", async () => {
+      const store = await fresh();
+      for (const bad of ["a/b", "AI", "../global", ""]) {
+        await expect(store.put(project(bad), null)).rejects.toThrow();
+        expect(await store.getProject(bad)).toBeNull();
+      }
+      expect(await store.getGlobal()).toEqual(DEFAULT_ROUTING);
+    });
+
     it("GivenTwoEditorsWithTheSameStamp_WhenBothPut_ThenExactlyOneWins", async () => {
       const store = await fresh();
       const base = await store.put(global(), null);

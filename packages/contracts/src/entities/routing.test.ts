@@ -57,6 +57,7 @@ describe("routing config", () => {
     expect(edit((c) => Object.assign(c, { scope: "project", projectId: "ai" }))).toBe(true);
     expect(edit((c) => (c.scope = "project"))).toBe(false);
     expect(edit((c) => (c.projectId = "ai"))).toBe(false);
+    expect(edit((c) => Object.assign(c, { scope: "project", projectId: "a/b" }))).toBe(false);
   });
 
   it("GivenAMissingProviderTierOrStep_WhenParsed_ThenRefused", () => {

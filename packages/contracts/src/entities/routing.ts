@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { Id, ProviderKey, Route, RunStep, TierKey, Timestamp } from "./common";
+import { ProviderKey, Route, RunStep, TierKey, Timestamp } from "./common";
 
 /**
  * Model routing config (M9: Add Jules + model routing, AI-230: M9.3). One stored document for
@@ -9,7 +9,13 @@ import { Id, ProviderKey, Route, RunStep, TierKey, Timestamp } from "./common";
  */
 
 /** Caps (ADR-0028): a tier tries at most this many routes. */
-export const ROUTING_LIMITS = { routesPerTier: 5, dailyTaskLimit: 10_000, projectId: 100 } as const;
+export const ROUTING_LIMITS = { routesPerTier: 5, dailyTaskLimit: 10_000 } as const;
+
+/**
+ * A project id: the project key lowercased (`projectIdFor`), so never a `/` that would split a
+ * stored document's path.
+ */
+export const RoutingProjectId = z.string().regex(/^[a-z][a-z0-9]{0,9}$/);
 
 const Pct = z.number().min(0).max(100);
 
@@ -44,7 +50,7 @@ const routingFields = {
 const scopeFields = {
   scope: z.enum(["global", "project"]),
   /** The project's id for `project`, null for `global`. */
-  projectId: Id.max(ROUTING_LIMITS.projectId).nullable(),
+  projectId: RoutingProjectId.nullable(),
 };
 
 type Scoped = { scope: "global" | "project"; projectId: string | null };
