@@ -25,7 +25,7 @@ Step 1 of AI-285: Web UI and MCP parity: every action in both, enforced by a tes
 | The board, every stage | `GET …/board` | `board` (AI-296) |
 | Roadmap of milestones; milestone map | `GET /roadmap`, `…/roadmap` (AI-202 screen) | `roadmap`; `milestone_map` (MCP only) |
 | Create a project | `POST /projects` | `create_project` (AI-297) |
-| Milestones: list, set status, attach an epic | `GET …/milestones`, `PATCH …/milestones/:id`, `PUT …/tickets/:id/milestone` | `list_milestones`, `set_milestone_status`, `set_epic_milestone` (AI-304) |
+| Milestones: list, set status, attach an epic | `GET …/milestones`, `PATCH …/milestones/:id`, `PUT …/tickets/:id/milestone` (AI-311: epic panel, roadmap, board) | `list_milestones`, `set_milestone_status`, `set_epic_milestone` (AI-304) |
 | Settings changes: list, revert                           | `GET …/config-changes`, `POST …/config-changes/:id/revert`                      | `list_settings_changes`, `revert_settings_change`                                                                          |
 | Config proposals: list, accept, reject, sweep            | `GET /config-changes`, `POST …/accept`, `…/reject`, `…/config-proposals/sweep`  | `list_config_changes`, `accept_config_change`, `reject_config_change`, `sweep_config_proposals`                            |
 | Pause, runs at once                                      | `PATCH /projects/:id`                                                           | `set_paused`, `set_runs_at_once`                                                                                           |
@@ -59,7 +59,6 @@ Step 1 of AI-285: Web UI and MCP parity: every action in both, enforced by a tes
 | --------------------------- | -------------------------- | ------------------------------------------------------------------------------------------------- |
 | Merge a gated PR            | Neither (Andy uses GitHub) | AI-220: Merge modes: coordinator sessions merge through MCP merge_pr; the web links to GitHub     |
 | What's new (release notes)  | Neither                    | AI-159: What's new (page and `whats_new` tool; PR #234 open)                                      |
-| Approve or park a milestone | Neither                    | ADR-0131 (in design): no ticket here                                                              |
 
 ## Parked (no tickets)
 

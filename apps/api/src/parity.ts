@@ -261,7 +261,7 @@ export const PARITY: readonly ParityEntry[] = [
     action: "Milestones: list, set status, attach or detach an epic",
     routes: [`GET ${P}/milestones`, `PATCH ${P}/milestones/:milestoneId`, `PUT ${T}/milestone`],
     tools: ["list_milestones", "set_milestone_status", "set_epic_milestone"],
-    note: "PATCH also renames, rewords and reorders: no MCP tool until AI-321 (Create a milestone).",
+    note: "The web sets status and attaches from the epic panel and the roadmap (AI-311). PATCH also renames, rewords and reorders: no MCP tool until AI-321 (Create a milestone).",
   },
   // ── One side on purpose ─────────────────────────────────────────────────────
   {
