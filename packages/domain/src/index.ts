@@ -3,6 +3,7 @@ export * from "./brief";
 export * from "./build-dispatch";
 export * from "./builds";
 export * from "./config-proposals";
+export * from "./config-revert";
 export * from "./cost";
 export * from "./dashboard";
 export * from "./digest";
