@@ -698,17 +698,6 @@ export interface CodeEventLog {
 
 // ── Plain interfaces (no contract suite yet) ─────────────────────────────────
 
-export interface Completion {
-  text: string;
-  tokensIn: number;
-  tokensOut: number;
-  costUsd: number;
-}
-
-export interface ModelGateway {
-  complete(model: string, prompt: string, opts?: { maxTokens?: number }): Promise<Completion>;
-}
-
 export interface Notice {
   title: string;
   body: string;
