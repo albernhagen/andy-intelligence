@@ -1,5 +1,6 @@
 import { Link } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
+import { NightLaunch } from "@/components/NightLaunch";
 import { Loading, QueryError } from "@/components/Status";
 import { StageBadge, TypeMarker } from "@/components/TicketMarkers";
 import { Badge } from "@/components/ui/badge";
@@ -47,6 +48,17 @@ export function formatEpicRollup(r: Pick<EpicRollup, "progress" | "cost" | "part
 
 /** The epic's stories in dependency order, with progress and summed cost. */
 export function EpicChildren(path: TicketPath) {
+  const rollup = useEpicRollup(path);
+  const r = rollup.data;
+  return (
+    <>
+      <StoryList path={path} />
+      {r && r.children.length > 0 && <NightLaunch {...path} />}
+    </>
+  );
+}
+
+function StoryList({ path }: { path: TicketPath }) {
   const rollup = useEpicRollup(path);
   const r = rollup.data;
   return (
