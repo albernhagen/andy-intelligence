@@ -7,6 +7,7 @@ import {
 import { beforeEach, describe, expect, it } from "vitest";
 import { createApp } from "./app";
 import type { TokenVerifier } from "./auth";
+import { ownerOnlyAccess } from "./project-access";
 
 const verifier: TokenVerifier = {
   async verify(token) {
@@ -45,6 +46,7 @@ describe("dashboards API (AI-102)", () => {
     tracker = new InMemoryWorkTracker();
     runs = new InMemoryRunStore();
     app = createApp({
+      projectAccess: ownerOnlyAccess(),
       verifier,
       allowedEmails: new Set(["andy@example.com"]),
       version: "test",
