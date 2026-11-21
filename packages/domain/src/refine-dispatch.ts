@@ -8,6 +8,7 @@ import {
 } from "@andy/contracts";
 import { wasDispatched } from "./dispatch-caps";
 import { checkDor } from "./dor";
+import { epicChainOf, MilestoneHolds, type MilestoneReader } from "./milestone-holds";
 import { MAX_REFINE_RUNS_PER_TICKET, type RunService } from "./runs";
 import { DomainError } from "./tickets";
 import { ACTIONS_ROUTE, routeTakes, type DispatchRoute } from "./executor";
@@ -38,6 +39,8 @@ export class RefineDispatcher {
     private readonly runStore: RunStore,
     private readonly runs: RunService,
     private readonly now: () => Date = () => new Date(),
+    /** Milestones (ADR-0131); null: a ticket with a milestone is held, one without runs. */
+    private readonly milestones: MilestoneReader | null = null,
   ) {}
 
   /** Starts the next waiting refine in the project; null when nothing started. Never throws. */
@@ -70,12 +73,21 @@ export class RefineDispatcher {
     if (!project?.autoRefine || project.paused) return null;
     if (await this.busy(projectId)) return null;
     const runnerPresent = local || (await this.runs.runnerPresent(projectId));
+    // AI-306: a ticket whose milestone isn't approved stays in Up next. Epics read once each.
+    const holds = new MilestoneHolds(this.milestones, projectId);
+    const epics: Ticket[] = [];
 
     for (const ticket of await this.upNext(projectId)) {
       // Backlog only, so Done and cancelled tickets never qualify; nor do hidden ones. Epics do
       // (AI-115): their refine splits them into stories.
       if (ticket.archived || ticket.needsAttention) continue;
       if (!routeTakes(route, ticket, project, runnerPresent)) continue; // ADR-0089.
+      epics.push(...(await epicChainOf(this.tracker, ticket, epics)));
+      const hold = await holds.reasonFor(ticket, epics);
+      if (hold) {
+        log("INFO", "refine waits: milestone not approved", { ticket: ticket.key, reason: hold });
+        continue;
+      }
       if (!(await this.waiting(ticket))) continue;
       try {
         const run = await this.runs.start(
