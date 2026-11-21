@@ -19,6 +19,7 @@ import {
   type GateDecision,
 } from "./gate";
 import { syncPendingFor } from "./sync-runs";
+import type { NightUnattended } from "./night-unattended";
 import type { TicketService } from "./tickets";
 
 /**
@@ -59,6 +60,8 @@ export class PullRequestGate {
     private readonly runs: RunStore,
     private readonly tickets: TicketService,
     private readonly now: () => Date = () => new Date(),
+    /** Night launches (AI-123): a vetoed PR stops its story for the night; null: none. */
+    private readonly night: NightUnattended | null = null,
   ) {}
 
   /** One recorded delivery. Replays never get here; a second delivery of a close is a no-op. */
@@ -87,20 +90,28 @@ export class PullRequestGate {
     const agent = await this.agentPr(pr, project);
     if (!agent || agent.run.outcome) return { result: "ignored", pr: number };
 
-    const decision = await this.assess(repo, pr, agent.run);
+    const decision = await this.assess(repo, pr, agent.run, agent.ticket);
     const run = await this.runs.update(
       agent.run.id,
       {
         wouldAutoMerge: decision.wouldAutoMerge,
         gateReasons: decision.reasons,
         protectedFiles: decision.protectedFiles,
+        outsideDocs: decision.outsideDocs,
         metrics: progress(agent.run.metrics, decision, pr.headSha),
       },
       ["succeeded"],
     );
     const base = { pr: number, runId: run.id };
     log("INFO", "gate assessed", { ...base, reasons: decision.reasons });
-    if (decision.flag) await this.flagOnce(run, agent.ticket, decision);
+    if (decision.flag) {
+      await this.flagOnce(run, agent.ticket, decision);
+      await this.night?.stopStory(
+        agent.ticket.projectId,
+        agent.ticket.id,
+        `the merge gate vetoed its PR #${pr.number}: ${decision.reasons.join(", ")}`,
+      );
+    }
     if (!decision.wouldAutoMerge) return { result: "assessed", ...base };
 
     // The repo index caches projects for a minute: read the policy now.
@@ -162,7 +173,7 @@ export class PullRequestGate {
 
     let decision: GateDecision | null = null;
     try {
-      decision = await this.assess(repo, pr, run);
+      decision = await this.assess(repo, pr, run, ticket);
     } catch (err) {
       log("WARNING", "gate read failed at close", { runId: run.id, error: errorText(err) });
     }
@@ -179,6 +190,7 @@ export class PullRequestGate {
               wouldAutoMerge: decision.wouldAutoMerge,
               gateReasons: decision.reasons,
               protectedFiles: decision.protectedFiles,
+              outsideDocs: decision.outsideDocs,
             }
           : {}),
       },
@@ -254,7 +266,12 @@ export class PullRequestGate {
     }
   }
 
-  private async assess(repo: string, pr: PullRequest, run: Run): Promise<GateDecision> {
+  private async assess(
+    repo: string,
+    pr: PullRequest,
+    run: Run,
+    ticket: Ticket,
+  ): Promise<GateDecision> {
     const [files, codeowners, required, checks, active] = await Promise.all([
       this.host.listChangedFiles(repo, pr.number),
       // The base branch's file: a PR can't unprotect a path by editing CODEOWNERS.
@@ -273,6 +290,7 @@ export class PullRequestGate {
       checks,
       // AI-72 (ADR-0083): never merge a head a queued or running sync run is about to replace.
       syncPending: syncPendingFor(run, active, this.now()),
+      ticketType: ticket.type,
     });
   }
 
@@ -280,7 +298,10 @@ export class PullRequestGate {
     if (run.gateFlaggedAt) return;
     await this.runs.update(run.id, { gateFlaggedAt: this.now().toISOString() }, ["succeeded"]);
     await this.tickets.flag(ticket.projectId, ticket.id, "system");
-    const files = decision.protectedFiles.slice(0, MAX_LISTED_FILES).join(", ");
+    // A spike's protected path is also outside docs/: list it once.
+    const files = [...new Set([...decision.protectedFiles, ...decision.outsideDocs])]
+      .slice(0, MAX_LISTED_FILES)
+      .join(", ");
     await this.tracker.addComment(
       ticket.projectId,
       ticket.id,

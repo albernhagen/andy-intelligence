@@ -28,6 +28,7 @@ export const TYPE_LABELS: Record<TicketType, string> = {
   chore: "Chore",
   bug: "Bug",
   epic: "Epic",
+  spike: "Spike",
 };
 
 /** A ticket's type for display; empty until Andy or refine sets one. */

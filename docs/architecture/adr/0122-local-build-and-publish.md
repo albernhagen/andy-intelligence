@@ -1,4 +1,5 @@
 ---
+title: "Local build and publish"
 status: proposed (AI-133; Andy decides at review)
 date: 2026-11-12
 amends: 0089 (publish and the push token for a local build), 0098 (the pre-agent Bash check for builds)

@@ -1,4 +1,5 @@
 ---
+title: Decisions as MADR
 status: accepted
 date: 2026-10-21
 ---

@@ -922,6 +922,12 @@ export function codeHostContract(
       const { host, knownRepo } = await make();
       expect(await host.readFile(knownRepo, "no/such/file.txt", "main")).toBeNull();
     });
+
+    it("GivenAMissingFolder_WhenListed_ThenNull", async () => {
+      const { host, knownRepo, unknownRepo } = await make();
+      expect(await host.listFiles(knownRepo, "no/such/folder", "main")).toBeNull();
+      expect(await host.listFiles(unknownRepo, "docs", "main")).toBeNull();
+    });
   });
 }
 
@@ -1346,3 +1352,4 @@ export * from "./notify-email";
 export * from "./runner";
 export * from "./night";
 export * from "./config-proposals";
+export * from "./config-changes";

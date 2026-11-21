@@ -1,6 +1,14 @@
 import { Link } from "@tanstack/react-router";
 import { useSortable } from "@dnd-kit/sortable";
-import { Bug, CircleDashed, Lightbulb, Mountain, Wrench, type LucideIcon } from "lucide-react";
+import {
+  Bug,
+  CircleDashed,
+  FlaskConical,
+  Lightbulb,
+  Mountain,
+  Wrench,
+  type LucideIcon,
+} from "lucide-react";
 import type { BoardTicket, Stage, Ticket, TicketType, Worker } from "@andy/contracts";
 import { scoreMarkers, startScore } from "@andy/domain";
 import { Badge } from "@/components/ui/badge";
@@ -15,6 +23,7 @@ const TYPE_ICONS: Record<TicketType, LucideIcon> = {
   bug: Bug,
   chore: Wrench,
   epic: Mountain,
+  spike: FlaskConical,
 };
 
 export interface CardProps {

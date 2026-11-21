@@ -168,9 +168,9 @@ export function runTouches(
   return [...new Set([...ticketTouches, ...planFiles])].slice(0, RUN_TOUCHES_MAX);
 }
 
-/** The highest ADR number in an index (`docs/architecture/adr/README.md` rows: `| [0079](…`). */
-export function highestAdrInIndex(readme: string): number | null {
-  const numbers = [...readme.matchAll(/^\|\s*\[(\d{4})\]\(/gm)].map((m) => Number(m[1]));
+/** The highest ADR number among an ADR folder's file names (`0079-dispatch-caps.md`; AI-142). */
+export function highestAdrNumber(fileNames: readonly string[]): number | null {
+  const numbers = fileNames.flatMap((f) => f.match(/^(\d{4})-.+\.md$/)?.[1] ?? []).map(Number);
   return numbers.length ? Math.max(...numbers) : null;
 }
 
