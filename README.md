@@ -4,7 +4,7 @@ Personal control plane for agentic software development: ideas → refined ticke
 
 ## How it works today
 
-What is built on `main` now. Target design: [ARCHITECTURE.md](docs/architecture/ARCHITECTURE.md); progress: tickets in project `AI` (map, decisions, blockers: [`docs/build-log.md`](docs/build-log.md)). Update it in the same PR as the change.
+What is built on `main` now. Target design: [ARCHITECTURE.md](docs/architecture/ARCHITECTURE.md); progress: tickets in project `AI` (milestone map: MCP `milestone_map`; decisions, blockers: [`docs/build-log.md`](docs/build-log.md)). Update it in the same PR as the change.
 
 ```
  Browser UI ─┐                                   ┌─ Firestore (tickets, questions, history, runs, OAuth grants, webhook events)
