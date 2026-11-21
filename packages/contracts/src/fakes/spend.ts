@@ -5,7 +5,8 @@ import {
   spendCounted,
   type SpendTotals,
 } from "../entities/spend";
-import type { ReserveOutcome, SpendLedger } from "../ports/spend";
+import { WorkTrackerError } from "../ports";
+import { sameSpendReservation, type ReserveOutcome, type SpendLedger } from "../ports/spend";
 
 const dayOf = (at: string) => new Date(at).toISOString().slice(0, 10);
 const monthOf = (at: string) => new Date(at).toISOString().slice(0, 7);
@@ -21,7 +22,12 @@ export class InMemorySpendLedger implements SpendLedger {
       throw new Error("a new spend entry must be reserved, not settled");
     }
     const existing = this.entries.get(parsed.id);
-    if (existing) return { ok: true, entry: structuredClone(existing) };
+    if (existing) {
+      if (!sameSpendReservation(existing, parsed)) {
+        throw new WorkTrackerError("conflict", `spend entry ${parsed.id} exists with other terms`);
+      }
+      return { ok: true, entry: structuredClone(existing) };
+    }
     const passed = spendCapPassed(
       parsed.reservedMicroUsd,
       limits,

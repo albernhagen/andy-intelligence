@@ -1,6 +1,7 @@
 import type { SpendCapName, SpendCapLimits, SpendEntry, SpendTotals } from "../entities/spend";
 
 // ── SpendLedger ──────────────────────────────────────────────────────────────
+// Errors are WorkTrackerError (`conflict`), mapped the same way by the API.
 // Append-only record of paid spend (M10: Paid models + spend caps, AI-234: M10.2). Entries are
 // never deleted: a reservation only moves to `settled` or `released`. Totals are per scope and
 // UTC window, so a read never scans the whole ledger (ADR-0126; the Firestore adapter, M10.6,
@@ -16,7 +17,8 @@ export interface SpendLedger {
    * Records `entry` (state `reserved`) unless its `reservedMicroUsd`, added to its project's and
    * the global totals for its UTC day and month, would pass a cap; then records nothing and says
    * which. Atomic: concurrent reservations can't together pass a cap. An id already recorded
-   * returns that entry, counted once (a retried reserve).
+   * with the same terms (`sameSpendReservation`) returns that entry, counted once (a retried
+   * reserve); with other terms it is a `WorkTrackerError` `conflict` and nothing changes.
    */
   reserve(entry: SpendEntry, caps: SpendCapLimits): Promise<ReserveOutcome>;
   /**
@@ -32,4 +34,17 @@ export interface SpendLedger {
    * with no `projectId`. Entries count in the window they were reserved in.
    */
   totals(scope: { projectId?: string }, at: string): Promise<SpendTotals>;
+}
+
+/** A retried reserve matches the recorded one: same run, project, provider, model, amount and time. */
+export function sameSpendReservation(recorded: SpendEntry, retry: SpendEntry): boolean {
+  return (
+    recorded.id === retry.id &&
+    recorded.runId === retry.runId &&
+    recorded.projectId === retry.projectId &&
+    recorded.provider === retry.provider &&
+    recorded.model === retry.model &&
+    recorded.reservedMicroUsd === retry.reservedMicroUsd &&
+    Date.parse(recorded.at) === Date.parse(retry.at)
+  );
 }

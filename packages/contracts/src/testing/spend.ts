@@ -115,6 +115,24 @@ export function spendLedgerContract(
       expect((await ledger.totals({}, AT)).dayMicroUsd).toBe(1_000_000);
     });
 
+    it.each([
+      ["another amount", { reservedMicroUsd: 9_000_000 }],
+      ["another project", { projectId: "other" }],
+      ["another run", { runId: "run-x" }],
+      ["another model", { model: "example/model-2" }],
+    ] as const)(
+      "GivenARecordedIdRetriedWith %s_WhenReserved_ThenConflictAndNothingChanges",
+      async (_label, over) => {
+        const ledger = await make();
+        await ledger.reserve(spendEntry(1), NO_SPEND_CAP_LIMITS);
+        await expect(
+          ledger.reserve(spendEntry(1, over), NO_SPEND_CAP_LIMITS),
+        ).rejects.toMatchObject({ code: "conflict" });
+        expect(await ledger.get("spend-1")).toEqual(spendEntry(1));
+        expect((await ledger.totals({}, AT)).dayMicroUsd).toBe(1_000_000);
+      },
+    );
+
     it("GivenAnActualCost_WhenSettled_ThenItCountsInsteadOfTheReservation", async () => {
       const ledger = await make();
       await ledger.reserve(spendEntry(1), NO_SPEND_CAP_LIMITS);
