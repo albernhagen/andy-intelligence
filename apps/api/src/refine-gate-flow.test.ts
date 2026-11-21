@@ -219,6 +219,7 @@ describe("refine gate flow", () => {
       size: null,
       body: "",
       refineAssumptions: [],
+      outcome: null,
     });
     expect(await t.questions(created.id)).toEqual([]);
     expect((await t.comments(created.id)).join()).toContain("Back to Ideas: Which board?");
