@@ -92,6 +92,33 @@ describe("inbox v2", () => {
     expect(within(item).getByLabelText("Your answer")).toBeTruthy();
   });
 
+  it("GivenSeveralQuestions_WhenTheInboxOpens_ThenNoAnswerButtonIsAFilledPrimary", async () => {
+    await twoTickets();
+    await card("AI-1: Board");
+    const answers = screen.getAllByRole("button", { name: "Answer" });
+    expect(answers).toHaveLength(3);
+    for (const b of answers) expect(b.className).not.toContain("bg-primary");
+    const field = screen.getAllByLabelText("Your answer")[0]!;
+    expect(field.getAttribute("name")).toBe("answer");
+    expect(field.getAttribute("autocomplete")).toBe("off");
+  });
+
+  it("GivenAnUrgentQuestion_WhenTheInboxShowsIt_ThenTheUrgentMarkComesBeforeTheQuestion", async () => {
+    await twoTickets("/p/ai/inbox", async (h) => {
+      const ticket = await h.service.create("ai", { type: "chore", title: "Keys" }, "andy");
+      await askAsRun(h, ticket.id, "run3", [
+        { text: "Rotate now?", options: ["Yes", "No"], urgency: "high" },
+      ]);
+    });
+    const item = await waitFor(() => {
+      const q = question("Rotate now?");
+      if (!q) throw new Error("not shown yet");
+      return q;
+    });
+    const line = within(item).getByText("Rotate now?").parentElement!;
+    expect(line.textContent).toBe("UrgentRotate now?");
+  });
+
   it("GivenARunsQuestion_WhenAndyClicksAnOption_ThenItIsTheAnswerAndTheQuestionLeavesTheInbox", async () => {
     const h = await twoTickets();
     await card("AI-1: Board");
