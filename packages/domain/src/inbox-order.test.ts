@@ -53,6 +53,7 @@ const full = (id: string, fields: Partial<Ticket>) =>
     upNextAt: null,
     sentBackReason: null,
     refineAssumptions: [],
+    outcome: null,
     ...fields,
   }) as Ticket;
 const ask = (
