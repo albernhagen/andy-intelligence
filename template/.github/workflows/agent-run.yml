@@ -6,7 +6,10 @@ run-name: "Agent run ${{ inputs.run_id }}"
 # name (agent-run.yml) on `main` with a run ID; everything else (prompt, step, model) comes from
 # the control plane over OIDC. It calls the platform's executor at `main`: the control plane
 # accepts callbacks and the push grant only from that exact workflow (`job_workflow_ref`), so
-# don't change the `uses:` line or pin it. The Claude token is this repo's own secret.
+# don't change the `uses:` line or pin it. The Claude token lives in this repo's `agent`
+# environment, deployable from `main` only (AI-106; runbook agent-environment.md). The executor's
+# agent job names that environment; GitHub still needs the caller to pass the secret by name.
+# A private repo without GitHub Pro can't configure environments: keep it as a repo secret there.
 
 on:
   workflow_dispatch:

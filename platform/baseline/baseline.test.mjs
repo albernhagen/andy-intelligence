@@ -164,6 +164,14 @@ describe("managed-repo caller", () => {
     ]);
   });
 
+  it("GivenTheCaller_WhenRead_ThenItPassesBothCredentialsByNameForTheAgentEnvironment", () => {
+    // AI-106: GitHub resolves a passed secret from the executor job's environment (`agent`)
+    // first; the caller must still name it, or it reaches the executor empty.
+    const text = read(CALLER);
+    expect(text).toContain("CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}");
+    expect(text).toContain("ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}");
+  });
+
   it("GivenThisReposCaller_WhenComparedWithTheTemplate_ThenOnlyUsesDiffers", () => {
     const local = withoutComments(read(".github/workflows/agent-run.yml"));
     const template = withoutComments(read(CALLER));
