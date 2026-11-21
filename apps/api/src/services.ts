@@ -36,6 +36,9 @@ import {
   NO_PRICES,
   BoardReader,
   WorkReader,
+  DashboardReader,
+  DoraReader,
+  RoadmapReader,
   bumpOnWrite,
   type EpicBranchOpener,
 } from "@andy/domain";
@@ -54,6 +57,7 @@ import type { ToolServices } from "./mcp/tools";
 import type { NightDeps } from "./night";
 import { measureReads, meterReads } from "./read-meter";
 import { runnerCredentials } from "./runners";
+import { SetupChecklistReader } from "./setup";
 import { SpendSettingsService } from "./spend";
 
 /**
@@ -150,6 +154,8 @@ export function createServices(raw: AppDeps): Services {
   const readCache = versions ? new ProjectReadCache(versions) : null;
   // AI-317: the board and ticket list refresh from changed tickets, not the whole project.
   const snapshots = readCache ? new TicketSnapshots(deps.tracker) : null;
+  // Board reads served through the read cache: board polls, work lists and roadmaps (ADR-0126).
+  const board = new BoardReader(deps.tracker, deps.runs, readCache, snapshots);
 
   const github = deps.github;
   const now = github?.now ?? (() => new Date());
@@ -439,6 +445,10 @@ export function createServices(raw: AppDeps): Services {
     night,
     readCache,
     snapshots,
+    setup: new SetupChecklistReader(
+      deps.tracker,
+      connection ? new ConnectedCodeHost(connection) : null,
+    ),
     spend: new SpendSettingsService(
       projects,
       async (id) => (await deps.tracker.getProject(id))?.spendCaps ?? null,
@@ -447,12 +457,13 @@ export function createServices(raw: AppDeps): Services {
       globalSpendCaps,
     ),
     globalSpendCaps,
-    // AI-198: each project's board through the same read cache as board polls.
-    work: new WorkReader(
-      deps.tracker,
-      new BoardReader(deps.tracker, deps.runs, readCache, snapshots),
-    ),
+    // AI-198, AI-193: each project's board through the same read cache as board polls.
+    work: new WorkReader(deps.tracker, board),
+    roadmap: new RoadmapReader(deps.tracker, board),
     whatsNew,
+    // AI-295: one reader each for the Dashboards routes and MCP `dashboard`.
+    dashboard: new DashboardReader(deps.tracker, deps.runs),
+    dora: new DoraReader(deps.tracker, deps.deployments ?? null, now),
     publicUrl: deps.mcp?.publicUrl ?? null,
   };
 }
