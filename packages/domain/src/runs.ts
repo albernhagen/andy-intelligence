@@ -86,6 +86,7 @@ import {
 import { afterFailure, deadlineAction, MAX_RUN_ATTEMPTS } from "./watchdog";
 import { syncPrompt, type SyncTarget } from "./sync-runs";
 import { winsNightSlot, type NightSlot } from "./night-budget";
+import type { SpendGate } from "./spend-gate";
 
 /**
  * Agent runs (M1.6a: Claude Code executor, ARCHITECTURE §7.1–7.2, §9). Andy starts a run on a
@@ -243,6 +244,8 @@ export class RunService {
     private readonly night: NightUnattended | null = null,
     /** Model routing (AI-238: M9.6), read once per start; null: `DEFAULT_ROUTING`. */
     private readonly routing: Pick<RoutingConfigStore, "getGlobal" | "getProject"> | null = null,
+    /** AI-248: reserves pay_per_use tasks' spend; without it every pay_per_use start is refused. */
+    private readonly spendGate: SpendGate | null = null,
   ) {}
 
   /** The refine gate with this service's tracker, clock and night launches. */
@@ -488,9 +491,16 @@ export class RunService {
     const started = retryOf
       ? `Retrying the ${startable} task (attempt ${run.attempt} of ${MAX_RUN_ATTEMPTS})`
       : `Started a ${startable} task (${run.route.model})${skippedNote(resolved)}`;
-    const dispatched = opts.runner
-      ? await this.claimLocal(run, ticket, opts.runner, started)
-      : await this.dispatchRun(run, ticket, repo, started);
+    const budget = await this.reserveSpend(run);
+    let dispatched: Run;
+    try {
+      dispatched = opts.runner
+        ? await this.claimLocal(run, ticket, opts.runner, started)
+        : await this.dispatchRun(run, ticket, repo, started, budget);
+    } catch (err) {
+      await this.closeSpend(run);
+      throw err;
+    }
     if (startable === "build") await this.markInProgress(ticket);
     return dispatched;
   }
@@ -552,12 +562,19 @@ export class RunService {
       await this.fail(run.id, "another agent task started at the same time");
       throw new DomainError("run_limit", "the cap on agent tasks across all projects is reached");
     }
-    return this.dispatchRun(
-      run,
-      ticket,
-      repo,
-      `Started a sync task: merging main into PR #${target.number} (${run.route.model})${skippedNote(build)}`,
-    );
+    const budget = await this.reserveSpend(run);
+    try {
+      return await this.dispatchRun(
+        run,
+        ticket,
+        repo,
+        `Started a sync task: merging main into PR #${target.number} (${run.route.model})${skippedNote(build)}`,
+        budget,
+      );
+    } catch (err) {
+      await this.closeSpend(run);
+      throw err;
+    }
   }
 
   /** The project's routing (AI-238): global narrowed by the project's config. */
@@ -683,11 +700,18 @@ export class RunService {
   async abandonClaim(run: Run, reason: string): Promise<void> {
     log("ERROR", "claimed run abandoned", { runId: run.id, reason });
     await this.fail(run.id, `the local runner's claim failed: ${reason}`);
+    await this.closeSpend(run);
     await this.runEnded(run);
   }
 
   /** Hands a created run to the executor and records its handle and watchdog. */
-  private async dispatchRun(run: Run, ticket: Ticket, repo: string, started: string): Promise<Run> {
+  private async dispatchRun(
+    run: Run,
+    ticket: Ticket,
+    repo: string,
+    started: string,
+    budgetMicroUsd: number | null = null,
+  ): Promise<Run> {
     const executor = this.executor;
     if (!executor)
       throw new DomainError("executor_unavailable", "no executor: connect GitHub first");
@@ -700,6 +724,7 @@ export class RunService {
         step: run.step,
         route: run.route,
         billingType: PROVIDER_BILLING[run.route.provider],
+        budgetMicroUsd,
         instructions: run.prompt ?? "",
         callbackUrl: null,
       });
@@ -797,7 +822,11 @@ export class RunService {
     result: RunResult,
   ): Promise<"recorded" | "duplicate"> {
     const run = await this.requireCaller(runId, caller);
-    if (!ACTIVE_RUN_STATUSES.includes(run.status)) return "duplicate";
+    if (!ACTIVE_RUN_STATUSES.includes(run.status)) {
+      // A replay after a crash between ending the run and closing its spend closes it now.
+      await this.closeSpend(run, result.usage ?? null);
+      return "duplicate";
+    }
     if (result.status === "cancelled") return this.recordCancelled(run);
     const at = this.now().toISOString();
     let status: "succeeded" | "failed" = result.status;
@@ -893,6 +922,7 @@ export class RunService {
       tokensOut: result.tokensOut,
       costUsd: cost.costUsd,
     });
+    await this.closeSpend(run, usage);
     if (done.ticketId) {
       const asks = asked > 0 ? `\n\nAsked ${asked} question(s): answer them in Needs you.` : "";
       const pr = built?.pullRequest ? `\n\nPull request: ${built.pullRequest}` : "";
@@ -950,6 +980,7 @@ export class RunService {
       throw err;
     }
     log("WARNING", "run reported cancelled", { runId: run.id });
+    await this.closeSpend(run);
     await this.runEnded(run);
     return "recorded";
   }
@@ -1471,6 +1502,7 @@ export class RunService {
         if (!(err instanceof WorkTrackerError && err.code === "conflict")) throw err;
       }
       log("INFO", "run cancelled with its ticket", { runId: run.id, ticketId });
+      await this.closeSpend(run);
     }
     return cancelled;
   }
@@ -1540,6 +1572,7 @@ export class RunService {
       runnerId: run.localRun.runnerId,
       leaseExpiresAt: run.localRun.leaseExpiresAt,
     });
+    await this.closeSpend(run);
     await this.flagNeedsYou(
       ended,
       `Local agent task lost: the runner went away (lease_lost, the ${ended.step} task). It isn't retried. Start it again once the runner is back, set the ticket's executor to actions to run it on GitHub Actions, or take it over`,
@@ -1580,7 +1613,13 @@ export class RunService {
       log("WARNING", "watchdog check for an unknown run", { runId });
       return "unknown";
     }
-    if (!ACTIVE_RUN_STATUSES.includes(run.status)) return "settled";
+    if (!ACTIVE_RUN_STATUSES.includes(run.status)) {
+      // AI-248: every dispatched run gets this check, so a reservation left open by a crash
+      // between ending the run and closing its spend is closed here (kept in full, or released
+      // if the run never started). Closing is idempotent.
+      await this.closeSpend(run);
+      return "settled";
+    }
     if (run.deadline && Date.parse(run.deadline) > this.now().getTime()) {
       log("WARNING", "watchdog check before the deadline", { runId, deadline: run.deadline });
       return "early";
@@ -1620,6 +1659,7 @@ export class RunService {
       throw err;
     }
     log("WARNING", "watchdog ended a run", { runId, executorStatus: status, error });
+    await this.closeSpend(run);
     if (action.kind === "heal") {
       if (ended.ticketId) {
         await this.tracker.addComment(
@@ -1792,6 +1832,49 @@ export class RunService {
       .flat()
       .filter((r) => isInFlight(r, now))
       .sort(oldestFirst);
+  }
+
+  /**
+   * AI-248: a pay_per_use run reserves its worst case before it is handed to an executor; the
+   * per-task budget it returns goes into the run request. Subscription runs reserve nothing
+   * (null). Refused or unknown: the run is failed and `spend_cap` thrown, so dispatch idles.
+   */
+  private async reserveSpend(run: Run): Promise<number | null> {
+    if (PROVIDER_BILLING[run.route.provider] !== "pay_per_use") return null;
+    try {
+      if (!this.spendGate) {
+        throw new DomainError("spend_cap", "no paid agent task: no spend ledger is configured");
+      }
+      // The local runner has no harness that enforces a budget yet: no paid task runs there.
+      if (run.localRun) {
+        throw new DomainError(
+          "spend_cap",
+          "no paid agent task: the local runner can't enforce a budget",
+        );
+      }
+      return (await this.spendGate.reserve(run)).budgetMicroUsd;
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      await this.fail(run.id, message);
+      if (err instanceof DomainError && err.code === "spend_cap") throw err;
+      log("ERROR", "spend reserve failed", { runId: run.id, error: message });
+      throw new DomainError("spend_cap", `no paid agent task: ${message}`);
+    }
+  }
+
+  /**
+   * AI-248: closes an ended run's reservation, if it has one; never throws. `usage` is the
+   * report's (null when missing): settled at the actual cost or the full reservation. Without a
+   * report it is released only if the run never fetched its instructions, else kept in full.
+   */
+  private async closeSpend(ended: Run, usage?: RunUsage | null): Promise<void> {
+    if (!this.spendGate || PROVIDER_BILLING[ended.route.provider] !== "pay_per_use") return;
+    const runId = ended.id;
+    const fresh = await this.runs.get(runId).catch((err: unknown) => {
+      log("ERROR", "run unreadable while closing its spend", { runId, error: String(err) });
+      return null;
+    });
+    await this.spendGate.close(runId, fresh, usage);
   }
 
   /** Marks a queued run failed; logs (doesn't throw) if that write fails too. */

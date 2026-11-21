@@ -222,6 +222,9 @@ export class BuildDispatcher {
             `Build couldn't start: ${err.message}. Start it again from the ticket.`,
           );
         }
+        // AI-248: a paid task refused at its spend cap idles dispatch with that reason.
+        if (err.code === "spend_cap" && !local)
+          await this.record(project, "spend_cap", first !== null);
         return first;
       }
       verdict = await check();
