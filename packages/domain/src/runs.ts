@@ -14,6 +14,7 @@ import {
   SyncOutput,
   WorkTrackerError,
   notFound,
+  MICRO_USD_PER_USD,
   type BillingType,
   type CodeHost,
   type InFlightRun,
@@ -125,6 +126,8 @@ export const PROVIDER_BILLING: Record<ProviderKey, BillingType> = {
   "claude-sub": "subscription",
   "google-sub": "subscription",
   openrouter: "pay_per_use",
+  // AI-260: Claude Code on an API key, held by the spend gate's caps (M10.7).
+  "claude-api": "pay_per_use",
 };
 
 /** Caps per step (ADR-0028): agent turns, and the deadline the watchdog (M1.6b) checks. */
@@ -779,6 +782,10 @@ export class RunService {
   /** The run's instructions. The first call marks it running. */
   async context(runId: string, caller: RunCaller): Promise<RunContext> {
     let run = await this.requireCaller(runId, caller);
+    // AI-260: a pay_per_use run gets its instructions only with its reserved budget, checked
+    // before it is marked running; no reservation, no agent.
+    const billingType = PROVIDER_BILLING[run.route.provider];
+    const maxBudgetUsd = billingType === "pay_per_use" ? await this.reservedBudgetUsd(run) : null;
     if (run.status === "queued") {
       run = await this.runs.update(
         run.id,
@@ -809,7 +816,25 @@ export class RunService {
           ? { pullRequest: run.syncRun.number, headSha: run.syncRun.headSha }
           : null,
       baseBranch: run.step === "build" ? run.baseBranch : null,
+      billingType,
+      maxBudgetUsd,
     };
+  }
+
+  /** How the run's route is billed; null for an unknown run. */
+  async billingOf(runId: string): Promise<BillingType | null> {
+    const run = await this.runs.get(runId);
+    return run ? PROVIDER_BILLING[run.route.provider] : null;
+  }
+
+  /** The run's reserved spend in USD; `spend_cap` when it has none (it must never start). */
+  private async reservedBudgetUsd(run: Run): Promise<number> {
+    const micro = this.spendGate ? await this.spendGate.reservedFor(run.id) : null;
+    if (micro === null || micro <= 0) {
+      log("ERROR", "paid run asked for its context without a reservation", { runId: run.id });
+      throw new DomainError("spend_cap", `run ${run.id} has no spend reservation`);
+    }
+    return micro / MICRO_USD_PER_USD;
   }
 
   /**

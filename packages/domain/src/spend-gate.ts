@@ -171,6 +171,20 @@ export class SpendGate {
     );
   }
 
+  /**
+   * The run's open reservation in micro-USD: the budget its executor enforces (AI-260). Null
+   * when there is none, it is closed, or the ledger can't be read: then the run must not start.
+   */
+  async reservedFor(runId: string): Promise<number | null> {
+    try {
+      const entry = await this.ledger.get(runId);
+      return entry?.state === "reserved" ? entry.reservedMicroUsd : null;
+    } catch (err) {
+      log("ERROR", "spend entry unreadable", { runId, error: String(err) });
+      return null;
+    }
+  }
+
   /** Releases a reservation; logs (doesn't throw) on failure, so it stays reserved in full. */
   private async release(runId: string): Promise<void> {
     await this.ledger.release(runId, this.now().toISOString()).then(
