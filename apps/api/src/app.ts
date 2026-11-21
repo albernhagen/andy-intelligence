@@ -13,6 +13,7 @@ import {
   type QuotaStore,
   type DeploymentStore,
   type RoutingConfigStore,
+  type SpendLedger,
   type NightLaunchStore,
   type ProjectVersions,
 } from "@andy/contracts";
@@ -66,6 +67,8 @@ export interface AppDeps {
   deployments?: DeploymentStore;
   /** Model routing (AI-230, AI-238); without it every run takes `DEFAULT_ROUTING`. */
   routing?: RoutingConfigStore;
+  /** Paid spend (AI-248); without it every pay_per_use agent task is refused (`spend_cap`). */
+  spendLedger?: SpendLedger;
   /**
    * Per-project change counters (AI-222): with them, every tracker and run write bumps its
    * project, and the board and ticket list serve unchanged polls from a cache. Without, no cache.
@@ -152,6 +155,7 @@ const DOMAIN_STATUS = {
   not_refinable: 422,
   not_buildable: 422,
   run_limit: 409,
+  spend_cap: 409,
   run_finished: 409,
   executor_unavailable: 503,
   dispatch_failed: 502,

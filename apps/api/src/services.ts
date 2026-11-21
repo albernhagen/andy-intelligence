@@ -24,6 +24,7 @@ import {
   MorningPullRequests,
   ProjectReadCache,
   RoutingSettings,
+  SpendGate,
   BoardReader,
   WorkReader,
   bumpOnWrite,
@@ -111,6 +112,8 @@ export function createServices(input: AppDeps): Services {
     deps.nightLaunches ?? null,
     null,
     deps.routing ?? null,
+    // AI-248: no price source yet (M10.5), so the gate refuses every pay_per_use start.
+    deps.spendLedger ? new SpendGate(deps.spendLedger) : null,
   );
   const refiner = new RefineDispatcher(deps.tracker, deps.runs, runs, now);
   const builder = new BuildDispatcher(deps.tracker, deps.runs, runs, now, deps.quota ?? null);

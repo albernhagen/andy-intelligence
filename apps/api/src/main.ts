@@ -13,6 +13,7 @@ import {
   FirestoreProjectVersions,
   FirestoreRunStore,
   FirestoreRunnerStore,
+  FirestoreSpendLedger,
   FirestoreWorkTracker,
   CloudTasksWatchdogQueue,
   CloudTasksNotifyFlushQueue,
@@ -92,6 +93,7 @@ async function main() {
     projectVersions: new FirestoreProjectVersions(db),
     deployments: new FirestoreDeploymentStore(db),
     routing: new FirestoreRoutingConfigStore(db),
+    spendLedger: new FirestoreSpendLedger(db),
     configChanges: new FirestoreConfigChangeStore(db),
     // Serve only the public URL's host; the run.app URLs answer /health alone (ADR-0044).
     publicHost: publicUrl ? new URL(publicUrl).host : undefined,
