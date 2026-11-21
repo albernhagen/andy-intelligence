@@ -15,7 +15,7 @@ Procedure for a **coordinator**: one session that hands tickets to **worker** se
 ## 1. Pick a batch
 
 - **Only approved milestones.** Skip parked and unreviewed ones; the runbook lists them.
-- **Approved work ran out:** slice the next milestone, then ask the owner once (§8): approve or park, with the slice table and what it needs. Build nothing before a yes.
+- **Approved work done:** break the next milestone into tickets and ask the owner once (§8): approve or park, with its tickets and what it needs. Build nothing before a yes.
 - Only tickets whose dependencies have merged, in milestone order; a later one may join if it depends on nothing unfinished and touches other packages.
 - **Two workers never own the same file.** Name each worker's files in its brief. Where two must touch one, one owns it; the other gets one named line.
 - Shared documents (ADR index) belong to the coordinator or one worker.
