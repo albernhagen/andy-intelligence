@@ -31,6 +31,8 @@ export const DispatchDecision = z.enum([
   "nothing_ready",
   // Ready tickets wait only because their touches overlap a run in flight (ADR-0080).
   "touches_overlap",
+  // Ready tickets wait only because their milestone isn't approved (ADR-0131, AI-306).
+  "milestone_held",
 ]);
 export type DispatchDecision = z.infer<typeof DispatchDecision>;
 

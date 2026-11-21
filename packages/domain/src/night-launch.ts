@@ -17,6 +17,7 @@ import type { PlanState } from "./plans";
 import { requireCan } from "./permissions";
 import type { EpicBranchOpener } from "./night-branch";
 import type { MorningPrOpener } from "./night-merge";
+import { MilestoneHolds, type MilestoneReader } from "./milestone-holds";
 
 /**
  * Night launch (ADR-0049 "Launch step" and "Night budget", M4.16). Before Andy steps away he
@@ -40,6 +41,8 @@ export interface LaunchRequest {
   now: Date;
   /** The project's active launch (running or stopping), or null. */
   active: Pick<NightLaunch, "epicKey" | "status"> | null;
+  /** Why the epic's milestone holds it (`MilestoneHolds`); null or absent: it doesn't. */
+  milestoneHold?: string | null;
 }
 
 /** Children in these stages are finished: a launch doesn't cover them. */
@@ -109,6 +112,7 @@ export function launchProblems(
   }
   budgetProblems(request.budget, add);
   stopTimeProblems(request, add);
+  if (request.milestoneHold) add("milestone_not_approved", epic.key, request.milestoneHold);
   if (request.active) {
     const { epicKey, status } = request.active;
     add("launch_running", epicKey, `a launch for ${epicKey} is ${status} in this project`);
@@ -179,6 +183,8 @@ export class NightLaunches {
     private readonly branches: EpicBranchOpener | null = null,
     /** Opens the morning PR once a launch ends (AI-124); null: none opens. */
     private readonly morning: MorningPrOpener | null = null,
+    /** Milestones (ADR-0131); null: an epic with a milestone can't be launched. */
+    private readonly milestones: MilestoneReader | null = null,
   ) {}
 
   /** Everything that blocks launching the epic now; the UI shows it as the checklist. */
@@ -186,9 +192,8 @@ export class NightLaunches {
     const parsed = StartNightLaunch.parse(input);
     const epic = await this.tracker.getTicket(projectId, parsed.epicId);
     if (!epic) throw notFound("ticket", parsed.epicId);
-    const children = (await this.tracker.listTickets(projectId)).filter(
-      (t) => t.parentId === epic.id,
-    );
+    const all = await this.tracker.listTickets(projectId);
+    const children = all.filter((t) => t.parentId === epic.id);
     const covered = launchStories(children.map((ticket) => ({ ticket })));
     // Two reads per story: over the cap, read none (`launchProblems` then checks only the count).
     const stories: LaunchChild[] =
@@ -208,6 +213,8 @@ export class NightLaunches {
       stopAt: parsed.stopAt,
       now: this.now(),
       active: await this.store.findActive(projectId),
+      // AI-306: the project's tickets are read already, so the epic chain costs nothing more.
+      milestoneHold: await new MilestoneHolds(this.milestones, projectId).reasonFor(epic, all),
     });
     return { epic, storyKeys: stories.map((s) => s.ticket.key), problems };
   }

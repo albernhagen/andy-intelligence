@@ -3,6 +3,7 @@ import { serveStatic } from "@hono/node-server/serve-static";
 import {
   FirestoreCodeEventLog,
   FirestoreConfigChangeStore,
+  FirestoreMilestoneStore,
   FirestoreReleaseNoteStore,
   GcpCodeHostConnectionStore,
   SecretManagerVersions,
@@ -97,6 +98,7 @@ async function main() {
     nightLaunches: new FirestoreNightLaunchStore(db),
     projectVersions: new FirestoreProjectVersions(db),
     deployments: new FirestoreDeploymentStore(db),
+    milestones: new FirestoreMilestoneStore(db),
     routing: new FirestoreRoutingConfigStore(db),
     spendCapsStore: new FirestoreSpendCapsStore(db),
     spendLedger: new FirestoreSpendLedger(db),
