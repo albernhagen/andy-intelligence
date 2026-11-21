@@ -7,7 +7,7 @@ import {
   type Ticket,
   type TicketEvent,
 } from "@andy/contracts";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import {
   DashboardReader,
   MAX_DASHBOARD_PROJECTS,
@@ -16,6 +16,7 @@ import {
   dashboardWindow,
   type DashboardData,
 } from "./dashboard";
+import { SNAPSHOT_FULL_READ_MS } from "./ticket-snapshots";
 
 // A Thursday; with two weeks the window is Mon 2 Nov to now, split at Mon 9 Nov.
 const NOW = new Date("2026-11-12T12:00:00.000Z");
@@ -368,6 +369,9 @@ async function seed(tracker: InMemoryWorkTracker, runs: InMemoryRunStore, key: s
   return project;
 }
 
+/** Every project readable: today's one owner. */
+const readAll = () => Promise.resolve(true);
+
 describe("DashboardReader (AI-102)", () => {
   const window = () => dashboardWindow(new Date(Date.now() + 1000), 2);
 
@@ -382,6 +386,50 @@ describe("DashboardReader (AI-102)", () => {
     const now = dash.weeks.at(-1)!;
     expect(now.ticketsByStage.ready).toBe(1);
     expect(now.cost).toMatchObject({ runs: 1, estimatedCostUsd: 2 });
+  });
+
+  it("GivenAnUnchangedTicket_WhenTheDashboardIsReadAgain_ThenOnlyChangedTicketsHistoriesAreRead", async () => {
+    let at = Date.now() - 60_000;
+    const tracker = new InMemoryWorkTracker(() => new Date((at += 10)));
+    const runs = new InMemoryRunStore();
+    await seed(tracker, runs, "AI");
+    const [ticket] = await tracker.listTickets("ai");
+    const reader = new DashboardReader(tracker, runs);
+    await reader.project("ai", window());
+    const histories = vi.spyOn(tracker, "listEvents");
+
+    await reader.project("ai", window());
+    expect(histories).not.toHaveBeenCalled();
+
+    await tracker.updateTicket(
+      "ai",
+      ticket!.id,
+      { stage: { to: "done", forced: true, reason: null } },
+      "andy",
+    );
+    const w = window();
+    const dash = await reader.project("ai", w);
+    expect(histories).toHaveBeenCalledTimes(1);
+    expect(dash).toEqual(await new DashboardReader(tracker, runs).project("ai", w));
+  });
+
+  it("GivenACachedHistoryAnHourOld_WhenTheDashboardIsRead_ThenItIsReadAgainThoughTheTicketIsUnchanged", async () => {
+    const tracker = new InMemoryWorkTracker();
+    const runs = new InMemoryRunStore();
+    await seed(tracker, runs, "AI");
+    let now = 0;
+    const reader = new DashboardReader(tracker, runs, undefined, () => now);
+    const w = window();
+    await reader.project("ai", w);
+    const histories = vi.spyOn(tracker, "listEvents");
+
+    now = SNAPSHOT_FULL_READ_MS - 1;
+    await reader.project("ai", w);
+    expect(histories).not.toHaveBeenCalled();
+
+    now = SNAPSHOT_FULL_READ_MS;
+    await reader.project("ai", w);
+    expect(histories).toHaveBeenCalled();
   });
 
   it("GivenAnUnknownProject_WhenItsDashboardIsRead_ThenNotFound", async () => {
@@ -418,7 +466,7 @@ describe("DashboardReader (AI-102)", () => {
     await seed(tracker, runs, "BB");
     await seed(tracker, runs, "AI");
 
-    const dash = await new DashboardReader(tracker, runs).all(window());
+    const dash = await new DashboardReader(tracker, runs).all(window(), readAll);
 
     expect(dash.projects.map((p) => p.key)).toEqual(["AI", "BB"]);
     expect(dash.projects[0]!.weeks.at(-1)!.cost.estimatedCostUsd).toBe(2);
@@ -429,13 +477,27 @@ describe("DashboardReader (AI-102)", () => {
     expect(dash.partial).toEqual([]);
   });
 
+  it("GivenAProjectTheCallerMayNotRead_WhenAllIsRead_ThenItIsLeftOutOfTheListAndTheSums", async () => {
+    const tracker = new InMemoryWorkTracker();
+    const runs = new InMemoryRunStore();
+    await seed(tracker, runs, "BB");
+    await seed(tracker, runs, "AI");
+
+    const dash = await new DashboardReader(tracker, runs).all(window(), (id) =>
+      Promise.resolve(id !== "bb"),
+    );
+
+    expect(dash.projects.map((p) => p.key)).toEqual(["AI"]);
+    expect(dash.weeks.at(-1)!.cost).toMatchObject({ runs: 1, estimatedCostUsd: 2 });
+  });
+
   it("GivenMoreProjectsThanTheCap_WhenAllIsRead_ThenProjectsAreMarkedPartial", async () => {
     const tracker = new InMemoryWorkTracker();
     for (let i = 0; i <= MAX_DASHBOARD_PROJECTS; i++) {
       await tracker.createProject({ name: `P${i}`, key: `P${String(i).padStart(2, "0")}` });
     }
 
-    const dash = await new DashboardReader(tracker, new InMemoryRunStore()).all(window());
+    const dash = await new DashboardReader(tracker, new InMemoryRunStore()).all(window(), readAll);
 
     expect(dash.projects).toHaveLength(MAX_DASHBOARD_PROJECTS);
     expect(dash.partial).toEqual(["projects"]);
@@ -446,7 +508,7 @@ describe("DashboardReader (AI-102)", () => {
     const runs = new CappedRunStore();
     await seed(tracker, runs, "AI");
 
-    const dash = await new DashboardReader(tracker, runs).all(window());
+    const dash = await new DashboardReader(tracker, runs).all(window(), readAll);
 
     expect(dash.partial).toContain("cost");
     expect(dash.projects[0]!.partial).toContain("cost");

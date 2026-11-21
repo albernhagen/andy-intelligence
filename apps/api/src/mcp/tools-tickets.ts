@@ -1,4 +1,5 @@
 import {
+  NewQuestion,
   TicketFields,
   TicketKey,
   Timestamp,
@@ -12,6 +13,7 @@ import {
   inboxCards,
   readEpicRollup,
   statusLineTickets,
+  ticketMilestoneHold,
   ticketStatusLine,
   type InboxCard,
   type TicketStatus,
@@ -43,6 +45,12 @@ const EditInput = {
     outOfScope: true,
     touches: true,
     overrides: true,
+    // AI-291: the PATCH route's flag and scores, with the same schemas.
+    needsAttention: true,
+    risk: true,
+    riskReason: true,
+    confidence: true,
+    confidenceReason: true,
   }).shape,
   outcome: TicketFields.shape.outcome.describe(
     "Epics only: what is true when the epic is done, at most 300 characters; null clears it.",
@@ -57,6 +65,18 @@ const EditInput = {
 };
 
 const CommentInput = { ticket: Key, body: z.string().trim().min(1) };
+
+/** The route's question fields (`NewQuestion`), so the tool takes what the ticket page sends. */
+const AskInput = {
+  ticket: Key,
+  text: NewQuestion.shape.text.describe("The question, one plain sentence ending in `?`."),
+  options: NewQuestion.shape.options
+    .optional()
+    .describe("Answers Andy can pick with one click; empty or left out: free text only."),
+  suggestedAnswer: NewQuestion.shape.suggestedAnswer
+    .optional()
+    .describe("The answer you'd pick, shown first; null or left out: none."),
+};
 
 const ParentInput = {
   ticket: Key,
@@ -78,6 +98,11 @@ const ReorderInput = {
   below: TicketKey.optional().describe("Place directly below this ticket."),
 };
 
+/** Every ticket of the project: through the snapshot when the app passes it (AI-318). */
+function listProjectTickets(deps: ToolDeps, projectId: string) {
+  return deps.tickets ? deps.tickets.list(projectId) : deps.tracker.listTickets(projectId);
+}
+
 /**
  * `status` for a ticket with the status line the UI shows; an epic also gets its children and
  * roll-up (AI-85), the same the epic panel reads.
@@ -92,7 +117,7 @@ export async function statusLineOf<S extends TicketStatus>(
   // An epic's roll-up needs its project; any other ticket reads only what its line names (AI-222).
   const tickets =
     ticket.type === "epic"
-      ? await deps.tracker.listTickets(ticket.projectId)
+      ? await listProjectTickets(deps, ticket.projectId)
       : await statusLineTickets(deps.tracker, ticket);
   const open = questions.filter((q) => q.status === "open").length;
   const [line, epic] = await Promise.all([
@@ -102,7 +127,7 @@ export async function statusLineOf<S extends TicketStatus>(
           ticket,
           tickets,
           (p, t) => deps.runs.list(p, t),
-          (p) => deps.tracker.listTickets(p).catch(() => []),
+          (p) => listProjectTickets(deps, p).catch(() => []),
         )
       : Promise.resolve(undefined),
   ]);
@@ -118,12 +143,13 @@ async function lineFor(
   executor?: ResolvedExecutor,
   ticketRuns?: AgentTask[],
 ) {
-  const [runs, events, inFlight] = await Promise.all([
+  const [runs, events, inFlight, milestoneHold] = await Promise.all([
     ticketRuns ?? deps.runs.list(ticket.projectId, ticket.id),
     deps.tracker.listEvents(ticket.projectId, ticket.id),
     deps.runs.inFlight(ticket.projectId),
+    ticketMilestoneHold(deps.tracker, deps.milestones ?? null, ticket, tickets),
   ]);
-  const facts = { tickets, runs, events, openQuestions, worker, inFlight, executor };
+  const facts = { tickets, runs, events, openQuestions, worker, inFlight, executor, milestoneHold };
   return ticketStatusLine(ticket, facts, new Date());
 }
 
@@ -192,7 +218,7 @@ export function registerTicketTools(server: McpServer, deps: ToolDeps): void {
     "edit_ticket",
     {
       description:
-        "Edits a ticket's fields, as the ticket page does. Only the fields given change; lists replace the whole list. An epic's `acceptanceCriteria` are its Done-when list. Re-checks the Definition of Ready.",
+        "Edits a ticket's fields, as the ticket page does. Only the fields given change; lists replace the whole list. An epic's `acceptanceCriteria` are its Done-when list. Also sets Needs-you (`needsAttention`) and the risk and confidence scores with their reasons. Re-checks the Definition of Ready.",
       inputSchema: EditInput,
       annotations: { destructiveHint: false, idempotentHint: true },
     },
@@ -225,6 +251,32 @@ export function registerTicketTools(server: McpServer, deps: ToolDeps): void {
       run(async () => {
         const found = await service.findByKey(ticket);
         return { comment: await service.comment(found.projectId, found.id, body, deps.actor) };
+      }),
+  );
+
+  // AI-290: the ticket page's "Ask a question" (POST …/tickets/{id}/questions), same service call.
+  server.registerTool(
+    "ask_question",
+    {
+      description:
+        "Asks an open question on a ticket, as the signed-in user: the ticket is flagged Needs-you and can't move to Ready until it is answered, as on the ticket page. Refused for a cancelled ticket. Answer it with answer_question.",
+      inputSchema: AskInput,
+      annotations: { destructiveHint: false, idempotentHint: false },
+    },
+    ({ ticket, text, options, suggestedAnswer }) =>
+      run(async () => {
+        const found = await service.findByKey(ticket);
+        const question = await service.ask(
+          found.projectId,
+          found.id,
+          {
+            text,
+            ...(options === undefined ? {} : { options }),
+            ...(suggestedAnswer === undefined ? {} : { suggestedAnswer }),
+          },
+          deps.actor,
+        );
+        return { ticket: found.key, question };
       }),
   );
 

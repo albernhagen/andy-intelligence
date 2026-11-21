@@ -11,6 +11,7 @@ import { mcpCaller } from "./mcp/test-client";
 import { hashToken, newToken } from "./mcp/tokens";
 import { registerTools, run, withProjectAccess, type ToolDeps, type ToolGroup } from "./mcp/tools";
 import {
+  CROSS_PROJECT_ROUTES,
   ownerOnlyAccess,
   projectOfPath,
   projectsOfInput,
@@ -327,10 +328,23 @@ describe("API routes behind the project-access check (AI-252)", () => {
   it("GivenARefusingAccess_WhenEachCrossProjectRouteIsCalled_ThenTheCheckIsNotAsked", async () => {
     const { access, asked } = recordingAccess();
     const { app } = await seededApp({ projectAccess: access });
-    const cross = (await apiRoutes()).filter((r) => !projectOfPath(r.path));
+    // Routes that filter their projects with canRead themselves ask in their handler (below).
+    const filters = (route: string) => /canRead, enforced/.test(CROSS_PROJECT_ROUTES[route] ?? "");
+    const cross = (await apiRoutes()).filter((r) => !projectOfPath(r.path) && !filters(r.route));
     expect(cross.length).toBeGreaterThan(10);
     for (const { method, path } of cross) await call(app, method, path, "andy");
     expect(asked).toEqual([]);
+  });
+
+  it("GivenARefusingAccess_WhenAllRoadmapsAreRead_ThenEachProjectIsAskedOnceAndLeftOut", async () => {
+    const { access, asked } = recordingAccess();
+    const { app } = await seededApp({ projectAccess: access });
+
+    const res = await call(app, "GET", "/api/roadmap", "andy");
+
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ projects: [], truncated: false });
+    expect(asked.map(([, projectId]) => projectId)).toEqual(["ai"]);
   });
 
   it("GivenEveryApiRoute_WhenCalledSignedOutOrByANonOwner_ThenRefusedAsTodayBeforeTheCheck", async () => {

@@ -84,6 +84,7 @@ The marker set: [`design-status-markers.md`](design-status-markers.md).
 | `<Badge variant="attention">Needs you</Badge>`               | `<span className="text-orange-600">!</span>`              |
 | `text-sm` table with `h-8` rows                              | `text-base` cards with `p-6` and a shadow on each         |
 | "Waiting for you: 2 questions"                               | "ACTION REQUIRED!!"                                       |
+| A per-row submit ("Answer" on each question) is `outline`    | A filled `primary` button on every row                    |
 | Reuse `Button`, `Badge`, `DropdownMenu` from `components/ui` | Add a second component library or a one-off styled button |
 | Change a colour in `index.css`                               | Hard-code `oklch(...)` or `#hex` in a component           |
 | Put a new screen under `/p/$projectId/…` and `/all/…`        | Add a project dropdown inside one page                    |

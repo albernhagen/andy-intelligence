@@ -1,0 +1,5 @@
+# Roadmap data
+
+A project's milestones in order, each with its status (not reviewed, approved, parked), whether it is done (approved, with every epic Done), progress and counts of open tickets summed over its epics, and its epics' keys; epics with no milestone come under "No milestone" (AI-305, ADR-0131). Every top-level epic is listed too, in rank order (Done ones included), with its outcome, Done-when lines, state, progress and counts (needs you, in review, in progress, blocked, not started); child epics nest one level and count toward their parent (AI-193). Computed on read from each project's board through the read cache and one milestone list; never stored. The Roadmap screen shows it: one row per milestone, parked ones dimmed and done ones compact, each expanding to its epics, then No milestone (AI-202).
+
+**How to use:** header link Roadmap (`/p/<project>/roadmap`, `/all/roadmap`); MCP `roadmap`, optional `project`; `GET /api/projects/ai/roadmap`, or `GET /api/roadmap` for every project you can read (first 50 by key).
