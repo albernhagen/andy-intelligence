@@ -1,5 +1,5 @@
 ---
-title: "Local quality gates: lint and format before code leaves the machine"
+title: "Local quality gates: lint and format before code leaves"
 status: accepted
 date: 2026-10-27
 ---

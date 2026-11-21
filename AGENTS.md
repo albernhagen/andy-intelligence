@@ -12,7 +12,7 @@ Always loaded (`CLAUDE.md` is a symlink to this file). Full operating rules: [`d
 ## Context: load only what the task needs (ADR-0046)
 
 - ARCHITECTURE.md is a short overview with a reading map (ADR-0061); open only the topic files (`docs/architecture/*.md`) your ticket needs.
-- ADRs: `pnpm adr` prints one line each (from each ADR's frontmatter), then open only the ones you need.
+- ADRs: grep `^title:` and `^status:` in `docs/architecture/adr/*.md` (one line each; with a shell, `pnpm adr`), then open only the ones you need.
 - Build-log history (`docs/build-log/`, one file per entry): only when you need why something happened.
 - Broad searches or reading many files: use a subagent and keep its summary, not the file dumps.
 - `pnpm context:check` enforces size budgets (`context-budget.json`); trim, don't raise a budget, unless Andy agrees.

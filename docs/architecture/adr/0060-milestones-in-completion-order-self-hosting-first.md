@@ -1,5 +1,5 @@
 ---
-title: "Milestones in completion order; M2: Self-hosting; every ticket under a milestone"
+title: "Milestones in completion order; M2: Self-hosting; tickets under milestones"
 status: accepted
 date: 2026-11-04
 amends: 0021, 0035, 0047, 0050, 0052, 0059 (milestone numbers, order and what each milestone holds)

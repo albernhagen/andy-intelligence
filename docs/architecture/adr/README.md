@@ -1,9 +1,9 @@
 # Architecture decision records
 
-One file per ADR (MADR; bodies immutable, frontmatter may change). Open only what you need (ADR-0046).
+One file per ADR (MADR; bodies immutable, frontmatter may change). No index is kept here, so no PR edits a shared list (AI-142, ADR-0104). Open only what you need (ADR-0046).
 
-- **Index:** `pnpm adr` prints one line per ADR (number, title, status, what it amends or supersedes) from each file's frontmatter. Nothing to edit here (AI-142, ADR-0104).
-- **A new ADR:** `NNNN-<slug>.md` with the next free number (a build gets one reserved, ADR-0080) and this frontmatter; `pnpm test` checks every ADR has a title and status and no two share a number:
+- **List them:** grep `^title:` and `^status:` in `docs/architecture/adr/*.md` (one line each; works with Read, Glob and Grep only). With a shell, `pnpm adr` prints the same as one line per ADR, with what each amends or supersedes.
+- **A new ADR:** `NNNN-<slug>.md` with the next free number (a build gets one reserved, ADR-0080), a `# NNNN — <decision>` heading and this frontmatter. `pnpm test` checks every ADR has a title, a status and a heading matching its number, and that no two share a number.
 
 ```yaml
 ---

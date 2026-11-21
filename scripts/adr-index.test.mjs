@@ -12,10 +12,10 @@ import {
   renderIndex,
 } from "./adr-index.mjs";
 
-const adr = (fields) =>
+const adr = (fields, number = "0001") =>
   `---\n${Object.entries(fields)
     .map(([k, v]) => `${k}: ${v}`)
-    .join("\n")}\n---\n\n# body\n`;
+    .join("\n")}\n---\n\n# ${number} — body\n`;
 
 /** A temp repo whose ADR folder holds `files`. */
 const repo = (files) => {
@@ -41,7 +41,10 @@ describe("parseFrontmatter", () => {
 
 describe("parseAdr", () => {
   it("GivenTitleStatusAndAmends_WhenParsed_ThenReturnsThem", () => {
-    const text = adr({ title: "Caps", status: "accepted", date: "2026-11-09", amends: "0063" });
+    const text = adr(
+      { title: "Caps", status: "accepted", date: "2026-11-09", amends: "0063" },
+      "0079",
+    );
     expect(parseAdr("0079-dispatch-caps.md", text)).toEqual({
       number: "0079",
       file: "0079-dispatch-caps.md",
@@ -54,9 +57,15 @@ describe("parseAdr", () => {
 
   it.each([
     ["bad file name", "79-caps.md", adr({ title: "t", status: "s" }), "file name"],
-    ["no frontmatter", "0079-caps.md", "# body\n", "frontmatter"],
-    ["no title", "0079-caps.md", adr({ status: "s" }), '"title"'],
-    ["no status", "0079-caps.md", adr({ title: "t" }), '"status"'],
+    ["no frontmatter", "0079-caps.md", "# 0079 — body\n", "frontmatter"],
+    ["no title", "0079-caps.md", adr({ status: "s" }, "0079"), '"title"'],
+    ["no status", "0079-caps.md", adr({ title: "t" }, "0079"), '"status"'],
+    [
+      "a heading for another number",
+      "0079-caps.md",
+      adr({ title: "t", status: "s" }, "0078"),
+      "# 0079",
+    ],
   ])("GivenAdrWith%s_WhenParsed_ThenThrows", (_, file, text, message) => {
     expect(() => parseAdr(file, text)).toThrow(message);
   });
@@ -85,7 +94,7 @@ describe("renderIndex", () => {
 describe("loadAdrs", () => {
   it("GivenAdrsAndReadme_WhenLoaded_ThenSortedAndReadmeSkipped", () => {
     const dir = repo({
-      "0002-b.md": adr({ title: "B", status: "s" }),
+      "0002-b.md": adr({ title: "B", status: "s" }, "0002"),
       "0001-a.md": adr({ title: "A", status: "s" }),
       "README.md": "# index\n",
     });
@@ -97,8 +106,8 @@ describe("loadAdrs", () => {
   // Two PRs that both take the next number (as PRs #182 and #201 did with 0102) fail here.
   it("GivenTwoAdrsWithOneNumber_WhenLoaded_ThenErrorNamesBoth", () => {
     const dir = repo({
-      "0102-a.md": adr({ title: "A", status: "s" }),
-      "0102-b.md": adr({ title: "B", status: "s" }),
+      "0102-a.md": adr({ title: "A", status: "s" }, "0102"),
+      "0102-b.md": adr({ title: "B", status: "s" }, "0102"),
       "0103-c.md": "# no frontmatter\n",
     });
     expect(loadAdrs(dir).errors).toEqual([

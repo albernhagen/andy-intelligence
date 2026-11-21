@@ -1,5 +1,5 @@
 ---
-title: "Overnight runs: epic launched at night, one PR reviewed next morning"
+title: "Overnight runs: epic launched at night, PR reviewed next morning"
 status: accepted
 date: 2026-11-04
 amends: 0021, 0040

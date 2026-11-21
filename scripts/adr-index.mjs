@@ -5,8 +5,8 @@
 // Frontmatter (between `---` lines at the top; one `key: value` per line, a value may be
 // double-quoted): `title` and `status` required; `amends`, `supersedes` shown when present.
 //
-// Usage: node scripts/adr-index.mjs [repo-dir]. Prints the index; exit 1 when an ADR lacks
-// a title or status, or two ADRs share a number.
+// Usage: node scripts/adr-index.mjs [repo-dir]. Prints the index; exit 1 when an ADR lacks a
+// title, a status or a `# NNNN` heading matching its file name, or two ADRs share a number.
 import { readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -36,6 +36,8 @@ export function parseAdr(file, text) {
   if (!fields) throw new Error("needs frontmatter between --- lines");
   if (!fields.title) throw new Error('frontmatter needs "title"');
   if (!fields.status) throw new Error('frontmatter needs "status"');
+  const heading = text.match(/^# (\d{4})\b/m)?.[1];
+  if (heading !== number) throw new Error(`needs a "# ${number} — <decision>" heading`);
   const { title, status, amends, supersedes } = fields;
   return { number, file, title, status, amends, supersedes };
 }
