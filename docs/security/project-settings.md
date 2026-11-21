@@ -41,3 +41,5 @@ A project's own caps on paid-model spend (ADR-0129); they can only lower the glo
 | `PUT /api/projects/{id}/spend-caps`, `PATCH /api/projects/{id}` field `spendCaps`; MCP `set_spend_caps` | Signed-in, allow-listed users | Owner-only through `change_project_settings` (AI-19); agents and the system get 403 | Whole micro-dollars only (a fraction or negative is a 400); a cap above global is refused (422) on every path, in `ProjectService.update`; each change is logged and revertable |
 
 Nothing here spends money or reaches a provider: the caps are read by the spend gate (AI-248: M10.7) before a paid task starts.
+
+Residual: a set merges with the stored caps, read then write; two concurrent sets of different caps can each keep only their own (the later write wins). Accepted: only the owner writes, both changes are in the change log, and nothing spends yet.

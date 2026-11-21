@@ -103,7 +103,8 @@ export class SpendSettingsService {
     const current = await this.read(projectId);
     if (current === null) throw notFound("project", projectId);
     // A field left out stays as it is; null takes the global cap. So setting one cap never
-    // clears the others.
+    // clears the others. Read, then write: two concurrent sets can each keep only their own cap
+    // (the later write wins). Accepted: only the owner writes, and the change log shows both.
     const given = Object.fromEntries(
       Object.entries(input.caps).filter(([, v]) => v !== undefined),
     ) as ProjectSpendCaps;

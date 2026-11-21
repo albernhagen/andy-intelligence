@@ -69,7 +69,7 @@ export function registerSpendTools(server: McpServer, deps: ToolDeps, run: Run):
     "set_spend_caps",
     {
       description:
-        "Sets a project's own spend caps (daily, monthly, per-task) in micro-dollars; a cap left out stays as it is, null takes the global cap, and each must be at or below the global cap. Andy only. Refused, with the reason, if a cap is above the global one. Lowering is always allowed. Logged in the config change log and revertable there. Nothing spends money from this.",
+        "Sets a project's own spend caps (daily, monthly, per-task) in micro-dollars; a cap left out stays as it is, null takes the global cap, and each must be at or below the global cap. Andy only. Refused, with the reason, if a cap is above the global one. Lowering is always allowed. Logged in the config change log and revertable there. Two calls at the same moment can each keep only their own cap (the second write wins): set the caps in one call, or check with get_spend after. Nothing spends money from this.",
       inputSchema: SetSpendCapsInput,
       annotations: { destructiveHint: false, idempotentHint: true, openWorldHint: false },
     },
