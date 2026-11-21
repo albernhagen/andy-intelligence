@@ -137,6 +137,7 @@ export function renderApp(
   );
   return {
     runners,
+    spendCapsStore,
     reviewFindings,
     configChanges,
     user,

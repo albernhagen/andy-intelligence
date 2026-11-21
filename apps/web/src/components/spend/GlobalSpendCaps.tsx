@@ -115,7 +115,14 @@ export function GlobalSpendCaps() {
             onClick={() =>
               save.mutate(
                 {
-                  caps: parsed as Record<Cap, number>,
+                  // Only edited caps take the typed (whole-cent) value; the others keep their
+                  // exact stored micro-dollars, so a save never rounds a cap Andy didn't touch.
+                  caps: Object.fromEntries(
+                    CAPS.map(({ field }) => [
+                      field,
+                      field in draft ? (parsed[field] as number) : view.caps[field],
+                    ]),
+                  ) as Record<Cap, number>,
                   ifUpdatedAt: view.updatedAt,
                   ...(reason.trim() ? { reason: reason.trim() } : {}),
                 },

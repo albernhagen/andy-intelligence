@@ -44,6 +44,29 @@ describe("Global spend caps panel", () => {
     await waitFor(() => expect((field("daily") as HTMLInputElement).value).toBe("5.00"));
   });
 
+  // Review on PR #294: the panel shows whole cents; a cap Andy didn't edit keeps its exact value.
+  it("GivenASubCentCap_WhenOnlyDailyIsEditedAndSaved_ThenTheOtherCapsKeepTheirExactValues", async () => {
+    const { h, panel, field } = await modelsPage();
+    await h.spendCapsStore.putGlobal(
+      { dailyMicroUsd: 5_000_000, monthlyMicroUsd: 50_005_000, perTaskMicroUsd: 1_234_567 },
+      null,
+    );
+    await h.queryClient.invalidateQueries();
+    await waitFor(() => expect((field("per task") as HTMLInputElement).value).toBe("1.23"));
+
+    await h.user.clear(field("daily"));
+    await h.user.type(field("daily"), "3");
+    await h.user.click(within(panel).getByRole("button", { name: "Save global caps" }));
+
+    await waitFor(async () =>
+      expect(await h.spendCapsStore.getGlobal()).toMatchObject({
+        dailyMicroUsd: 3_000_000,
+        monthlyMicroUsd: 50_005_000,
+        perTaskMicroUsd: 1_234_567,
+      }),
+    );
+  });
+
   it("GivenAnEmptyCap_WhenTyped_ThenSaveIsDisabled", async () => {
     const { h, panel, field } = await modelsPage();
     await h.user.clear(field("monthly"));

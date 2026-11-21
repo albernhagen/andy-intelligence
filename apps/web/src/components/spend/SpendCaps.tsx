@@ -158,7 +158,14 @@ export function SpendCaps({ projectId }: { projectId: string }) {
             onClick={() =>
               save.mutate(
                 {
-                  caps: Object.fromEntries(CAPS.map(({ field }) => [field, parsed[field]])),
+                  // Only edited caps are sent (the API keeps the others as stored), so a save
+                  // never rounds a cap Andy didn't touch to whole cents.
+                  caps: Object.fromEntries(
+                    CAPS.filter(({ field }) => field in draft).map(({ field }) => [
+                      field,
+                      parsed[field],
+                    ]),
+                  ),
                   ...(reason.trim() ? { reason: reason.trim() } : {}),
                 },
                 {
