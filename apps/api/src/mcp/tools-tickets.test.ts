@@ -213,6 +213,79 @@ describe("edit_ticket", () => {
   });
 });
 
+// AI-290: parity with the ticket page's "Ask a question" (POST …/tickets/{id}/questions).
+describe("ask_question", () => {
+  it("GivenTwoTickets_WhenOneIsAskedOverMcpAndOneOverRest_ThenTheSameQuestionAndFlagAreRecorded", async () => {
+    const ctx = await setup();
+    const a = await ctx.service.create("ai", story("A"), "andy");
+    const b = await ctx.service.create("ai", story("B"), "andy");
+
+    const tool = await ctx.call("ask_question", {
+      ticket: a.key,
+      text: "Which board first?",
+      options: ["AI", "OPS"],
+      suggestedAnswer: "AI",
+    });
+    const route = await ctx.rest(`/api/projects/ai/tickets/${b.id}/questions`, {
+      method: "POST",
+      body: JSON.stringify({
+        text: "Which board first?",
+        options: ["AI", "OPS"],
+        suggestedAnswer: "AI",
+      }),
+    });
+
+    expect(tool.isError).toBe(false);
+    expect(route.status).toBe(201);
+    const fields = (q: Record<string, unknown>) => ({
+      text: q.text,
+      options: q.options,
+      suggestedAnswer: q.suggestedAnswer,
+      status: q.status,
+      urgency: q.urgency,
+      runId: q.runId,
+    });
+    expect(fields(tool.data.question)).toEqual(
+      fields((await route.json()) as Record<string, unknown>),
+    );
+    expect(tool.data.question).toMatchObject({ status: "open", runId: null });
+    for (const id of [a.id, b.id]) {
+      const asked = (await ctx.tracker.listEvents("ai", id)).find(
+        (e) => e.kind === "question_asked",
+      );
+      expect(asked?.actor).toBe("user:andy");
+      expect(await ctx.tracker.getTicket("ai", id)).toMatchObject({
+        needsAttention: true,
+        dorStatus: "not_met",
+      });
+    }
+  });
+
+  it("GivenACancelledTicket_WhenAsked_ThenTheToolRefusesWithTheRoutesReason", async () => {
+    const ctx = await setup();
+    const a = await ctx.service.create("ai", story("A"), "andy");
+    await ctx.service.cancel("ai", a.id, "user:andy");
+
+    const tool = await ctx.call("ask_question", { ticket: a.key, text: "Still needed?" });
+    const route = await ctx.rest(`/api/projects/ai/tickets/${a.id}/questions`, {
+      method: "POST",
+      body: JSON.stringify({ text: "Still needed?" }),
+    });
+
+    expect(tool.isError).toBe(true);
+    expect(route.status).toBe(422);
+    expect(tool.text).toContain(((await route.json()) as { error: string }).error);
+    expect(await ctx.tracker.listQuestions({ ticketId: a.id })).toEqual([]);
+  });
+
+  it("GivenAnUnknownTicket_WhenAsked_ThenNotFound", async () => {
+    const ctx = await setup();
+    const res = await ctx.call("ask_question", { ticket: "AI-99", text: "Which?" });
+    expect(res.isError).toBe(true);
+    expect(res.text).toMatch(/not found/i);
+  });
+});
+
 describe("comment_ticket", () => {
   it("GivenABody_WhenCommented_ThenItIsInHistoryAsTheSignedInUser", async () => {
     const ctx = await setup();
