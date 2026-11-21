@@ -17,3 +17,16 @@ Per-project settings Andy changes after registration. No risk file: until an M6 
 ## Threat and residual risk
 
 - Only the owner can change it. A wrong value has no effect until an M6 slice reads it, and the change log shows who set it and allows a revert.
+
+## Settings change log and revert (AI-119: M4.12)
+
+Every settings write (this file's and those in `ui-and-mcp.md`) is logged; the log can be read and a change reverted.
+
+| Entry point                                                                                                                                                       | Who can reach it              | Authn/authz                                                                                                                                           | Notes                                                                                                                                                                                                                                                                                                                                                                                                                                                                           |
+| ----------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `GET /api/projects/{id}/config-changes?limit=`, `POST /api/projects/{id}/config-changes/{changeId}/revert`; MCP `list_settings_changes`, `revert_settings_change` | Signed-in, allow-listed users | `/api/*` and `/mcp` sign-in plus the allow-list; revert is owner-only through the existing `change_project_settings` action (`permissions.ts`, AI-19) | The list is capped at 100. A revert replays the logged before-values through `ProjectService.update`, so it is logged as a new change (reason `Revert of <id>`), then the original is marked `reverted`. It is refused (`409 not_revertible`) for a change that isn't applied, when a newer logged change touched one of its fields, or when a field moved outside the log. A change that switches Builds can't be reverted over MCP (ADR-0063: Builds is set only in the app). |
+
+Residual risks:
+
+- **Two reverts at once** of the same change can both write the same before-values (both logged); `markReverted` is transactional, so only one marks it and the other gets `409`. Accepted: the values are identical.
+- **What a revert can change:** any project setting the change touched, including `autoBuild`, `autoMerge` and `executor`, as the owner could by hand. `buildEnabled` only from the app.
