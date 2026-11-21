@@ -413,7 +413,7 @@ export function registerCoreTools(server: McpServer, deps: ToolDeps, run: Run): 
     "status",
     {
       description:
-        "With a ticket key: its stage, Definition of Ready gaps, questions and recent history; an epic's key also returns `epic`: its stories in dependency order, progress (Done of non-cancelled) and summed cost, read from at most 50 stories' agent tasks (two reads each; `partial` past that) and one ticket list per other project a blocker names (at most 5). Without: every project's ticket counts by stage, its dispatch dial, pause switch and last dispatch decision (why nothing is running), and the Needs-you count (questions, tickets and new projects' plans waiting for Andy).",
+        "With a ticket key: its stage, Definition of Ready gaps, questions, recent history, and `routing`: its build worker, tier and route, each with the layer that set it (ticket override, epic override, project default, global) and why earlier routes were skipped; an epic's key also returns `epic`: its stories in dependency order, progress (Done of non-cancelled) and summed cost, read from at most 50 stories' agent tasks (two reads each; `partial` past that) and one ticket list per other project a blocker names (at most 5). Without: every project's ticket counts by stage, its dispatch dial, pause switch and last dispatch decision (why nothing is running), and the Needs-you count (questions, tickets and new projects' plans waiting for Andy).",
       inputSchema: StatusInput,
       annotations: { readOnlyHint: true },
     },

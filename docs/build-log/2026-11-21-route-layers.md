@@ -1,0 +1,8 @@
+# 2026-11-21 — AI-282: M9: Show which layer set a ticket's worker, tier and route
+
+- New pure `routeLayers` (`packages/domain/src/route-layers.ts`) and contract `TicketRouting` (`packages/contracts/src/entities/route-layers.ts`). For the build step, it returns the worker, tier and route, each with its layer (ticket override, epic override with the epic's key, project default, global) and a short note, plus the resolver's skipped routes and reasons.
+- Values come from `resolveWorker` and `buildRoute`, which dispatch uses too, so the view can't disagree with a start. Nothing about how routes resolve changed.
+- Layer rules: worker comes from the ticket, its epic, else the project. Tier comes from the ticket, its epic, else size, which counts as global; a fixed step tier is the routing config's layer. Route: a usable model pin is the ticket's or epic's layer; otherwise the routing config's layer (project when it has its own config, else global).
+- REST `GET /api/projects/<id>/tickets/<id>/routing`; MCP `status` gains `routing` (null, with an ERROR log, when the routing configs can't be read, so `status` still answers). The ticket rail gets a Routing section, and the Worker control names an epic instead of always saying "project default". Settings → Models and project settings show one line naming the four layers (`LAYER_ORDER_LINE`).
+- Quota and spend skips happen at dispatch and live on the run (`routeSkips`, AI-261: M10.14). They aren't in this view, which shows what a start would resolve now.
+- Terminology table: `docs/architecture/routing-and-policy.md` "Layers", same words as ADR-0128 (PR #268).
