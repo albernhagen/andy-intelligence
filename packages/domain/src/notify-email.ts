@@ -291,10 +291,10 @@ export class EmailNotifications {
   }
 
   /**
-   * A test email from the settings page. A slot of the daily cap is held while it sends and
-   * given back if the provider refuses (bad key, unverified domain), so only a sent test counts.
+   * A test email: the settings page's Send test and MCP `test_email` (AI-289). Owner only
+   * (`send_test_email`). A slot of the daily cap is held while it sends and given back if the
+   * provider refuses (bad key, unverified domain), so only a sent test counts.
    */
-  /** Owner only (`send_test_email`): the settings page's Send test and MCP `test_email` (AI-289). */
   async sendTest(
     by: EventActor,
   ): Promise<{ result: "sent" } | { result: "cap_reached" } | { result: "failed"; error: string }> {
