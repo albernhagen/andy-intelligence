@@ -92,6 +92,8 @@ describe("isClaudeModel", () => {
     ["opusplan", true],
     ["claude-haiku-5-5", true],
     ["sonnet-ish", false],
+    ["opus[1m]", true],
+    ["[".repeat(50_000) + "]", false],
     ["gpt-5", false],
   ])("GivenModel%s_WhenChecked_Then%s", (model, expected) => {
     expect(isClaudeModel(model)).toBe(expected);

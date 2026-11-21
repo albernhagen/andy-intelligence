@@ -22,7 +22,10 @@ const CLAUDE_ALIASES = new Set(["opus", "sonnet", "haiku", "fable", "opusplan"])
 /** A Claude model: a full id (`claude-…`) or one of Claude Code's aliases (`opus`, `sonnet`). */
 export function isClaudeModel(model: string): boolean {
   const id = model.trim().toLowerCase();
-  return id.startsWith("claude-") || CLAUDE_ALIASES.has(id.replace(/\[[^\]]*\]$/, ""));
+  if (id.startsWith("claude-")) return true;
+  // String ops, not a regex: the id is untrusted input (no backtracking on `[[[…`).
+  const open = id.endsWith("]") ? id.lastIndexOf("[") : -1;
+  return CLAUDE_ALIASES.has(open === -1 ? id : id.slice(0, open));
 }
 
 /** Why `route` can't run, or null when it can. The reason names what is wrong. */
