@@ -46,7 +46,10 @@ export interface DoraMetrics {
   /** Failed deployments over all deployments (0 to 1); null with no deployments. */
   changeFailureRate: number | null;
   failedDeployments: number;
-  /** Failed deployment to restore, in hours; `open`: failures not restored yet. */
+  /**
+   * Failed deployment to restore, in hours. `open`: failures not restored yet, or whose restore
+   * time is unusable (also counted in `ignored`); `open + count` is always `failedDeployments`.
+   */
   timeToRestoreHours: Distribution & { open: number };
   /**
    * Inputs left out: a deployment whose `deployedAt` doesn't parse, a change committed after the
@@ -121,8 +124,11 @@ export function doraMetrics(
       continue;
     }
     const restored = time(d.restoredAt);
-    if (restored === null || restored < d.at) ignored += 1;
-    else restores.push((restored - d.at) / HOUR);
+    if (restored === null || restored < d.at) {
+      // Not known to be restored: counted open (so open + count = failedDeployments) and ignored.
+      ignored += 1;
+      open += 1;
+    } else restores.push((restored - d.at) / HOUR);
   }
 
   const days = (to - from) / DAY;

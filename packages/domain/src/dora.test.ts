@@ -65,6 +65,7 @@ describe("doraMetrics (AI-170)", () => {
     expect(m.changeFailureRate).toBe(0.75);
     expect(m.failedDeployments).toBe(3);
     expect(m.timeToRestoreHours).toEqual({ median: 1, p90: 6, count: 2, open: 1 });
+    expect(m.timeToRestoreHours.open + m.timeToRestoreHours.count).toBe(m.failedDeployments);
   });
 
   it("GivenARestoreWithoutAFailure_WhenMeasured_ThenItIsNotTimed", () => {
@@ -81,14 +82,17 @@ describe("doraMetrics (AI-170)", () => {
         deploy({ deployedAt: at(2), changeCommittedAt: [at(3), "nope", at(1)] }),
         // A restore before its failure.
         deploy({ deployedAt: at(4), failed: true, restoredAt: at(3) }),
+        // A restore time that doesn't parse.
+        deploy({ deployedAt: at(5), failed: true, restoredAt: "garbage" }),
       ],
       WEEK,
     );
-    expect(m.ignored).toBe(4);
-    expect(m.deployments).toBe(2);
+    expect(m.ignored).toBe(5);
+    expect(m.deployments).toBe(3);
     expect(m.leadTimeHours).toEqual({ median: 24, p90: 24, count: 1 });
-    expect(m.timeToRestoreHours).toMatchObject({ count: 0, open: 0 });
-    expect(m.failedDeployments).toBe(1);
+    // The unusable restore counts as open, so open + timed is every failure.
+    expect(m.timeToRestoreHours).toMatchObject({ count: 0, open: 2 });
+    expect(m.failedDeployments).toBe(2);
   });
 
   it("GivenAWindowThatIsEmptyOrBackwards_WhenMeasured_ThenRangeError", () => {
