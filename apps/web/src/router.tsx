@@ -17,6 +17,8 @@ import { InboxPage } from "@/pages/InboxPage";
 import { NewProjectPage, ProjectsPage } from "@/pages/ProjectsPage";
 import { ModelsPage } from "@/pages/ModelsPage";
 import { ProjectSettingsPage } from "@/pages/ProjectSettingsPage";
+import { ReadyPage } from "@/pages/ReadyPage";
+import { readySearch } from "@/lib/ready";
 import { RunnersPage } from "@/pages/RunnersPage";
 import { RunPage } from "@/pages/RunPage";
 import { TicketPage } from "@/pages/TicketPage";
@@ -98,6 +100,13 @@ const routeTree = rootRoute.addChildren([
     path: "/p/$projectId/work",
     component: WorkPage,
     validateSearch: workSearch,
+  }),
+  // Ready, ranked (AI-298): project-scoped only, like MCP `list_ready` and the board's lane.
+  createRoute({
+    getParentRoute: () => rootRoute,
+    path: "/p/$projectId/ready",
+    component: ReadyPage,
+    validateSearch: readySearch,
   }),
   createRoute({
     getParentRoute: () => rootRoute,

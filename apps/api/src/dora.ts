@@ -1,5 +1,5 @@
 import { createRoute, z, type OpenAPIHono } from "@hono/zod-openapi";
-import { DoraReader, type DoraReport as DoraReportValue } from "@andy/domain";
+import type { DoraReader, DoraReport as DoraReportValue } from "@andy/domain";
 import type { AuthEnv } from "./auth";
 import type { RouteModule } from "./services";
 
@@ -65,5 +65,4 @@ export function registerDoraRoutes(app: OpenAPIHono<AuthEnv>, reader: DoraReader
 }
 
 /** Listed in `api-routes.ts` (AI-145). */
-export const apiRoutes: RouteModule = (app, s) =>
-  registerDoraRoutes(app, new DoraReader(s.tracker, s.deps.deployments ?? null, s.now));
+export const apiRoutes: RouteModule = (app, s) => registerDoraRoutes(app, s.dora);
