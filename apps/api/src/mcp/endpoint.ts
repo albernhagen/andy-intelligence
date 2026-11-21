@@ -5,6 +5,7 @@ import type { Hono, MiddlewareHandler } from "hono";
 import { bodyLimit } from "hono/body-limit";
 import { actorOf, type AuthEnv } from "../auth";
 import type { ProjectAccess } from "../project-access";
+import { noteTool } from "../read-meter";
 import { mcpUrls } from "./oauth";
 import type { FixedWindowLimiter } from "./rate-limit";
 import { hashToken, isTokenShaped } from "./tokens";
@@ -56,6 +57,20 @@ export function requireMcpToken(deps: McpEndpointDeps): MiddlewareHandler<AuthEn
 }
 
 /**
+ * Each tool, when it runs, names itself for the request's read log (AI-315). It runs after
+ * sign-in and the body cap, so the meter does no work on an unauthenticated request.
+ */
+function withToolNames(server: McpServer): McpServer {
+  const register = server.registerTool.bind(server);
+  server.registerTool = ((name: string, config: never, cb: (...args: unknown[]) => unknown) =>
+    register(name, config, ((...args: unknown[]) => {
+      noteTool(name);
+      return cb(...args);
+    }) as never)) as typeof server.registerTool;
+  return server;
+}
+
+/**
  * Remote MCP endpoint (Streamable HTTP, stateless: a new server per request, so any Cloud
  * Run instance can answer). Tools: tools.ts (M1.4: MCP core tools).
  */
@@ -70,7 +85,9 @@ export function registerMcpEndpoint(app: Hono<AuthEnv>, deps: McpEndpointDeps) {
   );
   app.all("/mcp", async (c) => {
     const identity = c.get("identity");
-    const server = new McpServer({ name: "andy-intelligence", version: deps.version });
+    const server = withToolNames(
+      new McpServer({ name: "andy-intelligence", version: deps.version }),
+    );
     registerTools(server, {
       ...deps.services,
       email: identity.email,

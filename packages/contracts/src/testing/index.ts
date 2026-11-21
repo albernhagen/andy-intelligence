@@ -273,6 +273,22 @@ export function workTrackerContract(name: string, make: () => Promise<WorkTracke
       ).toEqual([ticket.id]);
     });
 
+    it("GivenUpNextAndIdeasTickets_WhenListedByUpNext_ThenOnlyBacklogTicketsWithAnUpNextRank", async () => {
+      const { tracker, project, ticket } = await setup();
+      const upNext = await tracker.createTicket(project.id, { title: "Up next" }, "andy");
+      await tracker.updateTicket(project.id, upNext.id, { fields: { upNextRank: "m" } }, "andy");
+      const moved = await tracker.createTicket(project.id, { title: "Moved on" }, "andy");
+      await tracker.updateTicket(
+        project.id,
+        moved.id,
+        { fields: { upNextRank: "n" }, stage: { to: "ready", reason: null } },
+        "andy",
+      );
+      const ids = (await tracker.listTickets(project.id, { upNext: true })).map((t) => t.id);
+      expect(ids).toEqual([upNext.id]);
+      expect(ids).not.toContain(ticket.id);
+    });
+
     it("GivenAnArchivedTicket_WhenListedByArchived_ThenOnlyMatchingTicketsAreReturned", async () => {
       const { tracker, project, ticket } = await setup();
       expect(ticket.archived).toBe(false);
