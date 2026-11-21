@@ -101,29 +101,43 @@ export class BoardReader {
   }
 }
 
+/** What a lane needs of a ticket. */
+type LaneTicket = Pick<BoardTicket, "stage" | "rank" | "archived">;
+
 /** A board lane: one stage's tickets in rank order (AI-296). */
-export interface BoardLane<T extends BoardTicket = BoardTicket> {
+export interface BoardLane<T extends LaneTicket = BoardTicket> {
   stage: Stage;
   tickets: T[];
 }
 
 /**
- * The board's lanes, as the web board shows them (AI-296: Parity: the board, over MCP): every
- * stage in workflow order, each lane's tickets by rank. Archived tickets and the Cancelled lane
- * show only with `showArchived` (the board's "Show cancelled and archived"); `stage` keeps one lane.
+ * The board's lanes in workflow order: the Cancelled lane only with `showArchived` (the board's
+ * "Show cancelled and archived"). The web board and MCP `board` both use it (AI-296).
  */
-export function boardLanes<T extends BoardTicket>(
+export function boardStages(showArchived: boolean): Stage[] {
+  return StageSchema.options.filter((s) => s !== "cancelled" || showArchived);
+}
+
+/** Whether a ticket shows on the board: archived ones only with `showArchived` (AI-15). */
+export function onBoard(ticket: Pick<BoardTicket, "archived">, showArchived: boolean): boolean {
+  return showArchived || !ticket.archived;
+}
+
+/**
+ * The board's lanes, as the web board shows them (AI-296: Parity: the board, over MCP): each of
+ * `boardStages` (or only `stage`), with the tickets `onBoard` in rank order. The web board groups
+ * its cards with it too, so the two can't drift.
+ */
+export function boardLanes<T extends LaneTicket>(
   tickets: readonly T[],
   options: { stage?: Stage; showArchived?: boolean } = {},
 ): BoardLane<T>[] {
   const showArchived = options.showArchived ?? false;
-  const stages = StageSchema.options.filter((s) =>
-    options.stage ? s === options.stage : s !== "cancelled" || showArchived,
-  );
+  const stages = options.stage ? [options.stage] : boardStages(showArchived);
   return stages.map((stage) => ({
     stage,
     tickets: tickets
-      .filter((t) => t.stage === stage && (showArchived || !t.archived))
+      .filter((t) => t.stage === stage && onBoard(t, showArchived))
       .sort((a, b) => compareRanks(a.rank, b.rank)),
   }));
 }
