@@ -41,6 +41,7 @@ import {
   type Listing,
   type PullRequest,
   type PullRequestCommit,
+  type PullRequestDetails,
   type ProposedPullRequest,
   type Repo,
   type RepoToken,
@@ -619,6 +620,8 @@ export interface CodeHost {
   cancelWorkflowRun(fullName: string, runId: string): Promise<void>;
   /** Null when the pull request or the repo isn't known. */
   getPullRequest(fullName: string, number: number): Promise<PullRequest | null>;
+  /** The PR's description and who merged it when (AI-159); null when the PR or repo isn't known. */
+  getPullRequestDetails(fullName: string, number: number): Promise<PullRequestDetails | null>;
   /** Empty and complete when the repo isn't known. */
   listChangedFiles(fullName: string, number: number): Promise<Listing<ChangedFile>>;
   /** The latest result per check on a commit. */

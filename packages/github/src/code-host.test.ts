@@ -216,6 +216,22 @@ describe("GitHubCodeHost", () => {
       });
     });
 
+    it("GivenAMergedPr_WhenDetailsRead_ThenBodyMergerAndTimeAreMapped", async () => {
+      const fetch = fakeGitHub({
+        ...installed,
+        [`GET ${R}/pulls/6`]: () =>
+          json(200, {
+            body: `What changed: x\n${"y".repeat(30_000)}`,
+            merged_by: { login: "albernhagen" },
+            merged_at: "2026-11-20T10:00:00Z",
+          }),
+      });
+      const details = await host(fetch).getPullRequestDetails("albernhagen/andy-intelligence", 6);
+      expect(details).toMatchObject({ mergedBy: "albernhagen", mergedAt: "2026-11-20T10:00:00Z" });
+      expect(details?.body).toHaveLength(20_000);
+      expect(details?.body.startsWith("What changed: x")).toBe(true);
+    });
+
     it("GivenAThreePageFileList_WhenListed_ThenRenamesKeptAndMarkedIncomplete", async () => {
       const full = Array.from({ length: 100 }, (_, i) => ({
         filename: `f${i}`,

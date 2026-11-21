@@ -19,6 +19,7 @@ import {
   ProjectPlanService,
   ProjectTaskResults,
   TicketService,
+  WhatsNewReader,
   EmailNotifications,
   wakeAfterRunEnd,
   notifyOnNeedsYou,
@@ -38,7 +39,12 @@ import {
   bumpOnWrite,
   type EpicBranchOpener,
 } from "@andy/domain";
-import { type NightLaunchStore, type WorkTracker } from "@andy/contracts";
+import {
+  type EventActor,
+  type NightLaunchStore,
+  type Ticket,
+  type WorkTracker,
+} from "@andy/contracts";
 import type { AppDeps } from "./app";
 import type { AuthEnv } from "./auth";
 import { noReviewFindings } from "./config-proposals";
@@ -167,7 +173,45 @@ export function createServices(input: AppDeps): Services {
     projectTasks,
   );
   const refiner = new RefineDispatcher(deps.tracker, deps.runs, runs, now);
-  const builder = new BuildDispatcher(deps.tracker, deps.runs, runs, now, deps.quota ?? null);
+  // AI-124/AI-125: when a launch ends, its morning PR opens (or an empty epic branch goes),
+  // then the morning report goes on the epic, with or without GitHub. One instance for both
+  // places a launch ends: `NightLaunches.end` (stop, stop time) and the build dispatcher (done,
+  // a budget limit). `flag` is looked up when a launch ends: `service` is built further down.
+  const flagger: Pick<TicketService, "flag"> = {
+    flag: (projectId: string, ticketId: string, actor: EventActor): Promise<Ticket> =>
+      service.flag(projectId, ticketId, actor),
+  };
+  const morning = deps.nightLaunches
+    ? new MorningSteps(
+        connection && deps.github
+          ? new MorningPullRequests(
+              deps.tracker,
+              deps.runs,
+              new ConnectedCodeHost(connection),
+              deps.github.publicUrl,
+              flagger,
+            )
+          : null,
+        new MorningReports(
+          deps.tracker,
+          deps.runs,
+          flagger,
+          deps.github?.publicUrl ?? "",
+          deps.reviewFindings ?? null,
+        ),
+      )
+    : null;
+  // AI-279: with the launch store and the morning steps, dispatch holds a launch's stories at
+  // its budget or once stopped, and ends the launch when its stories finish or a limit is hit.
+  const builder = new BuildDispatcher(
+    deps.tracker,
+    deps.runs,
+    runs,
+    now,
+    deps.quota ?? null,
+    deps.nightLaunches ?? null,
+    morning,
+  );
   // AI-72 (ADR-0083): queued sync runs go first, so open PRs catch up with main before new work.
   const syncer = new SyncRuns(
     deps.tracker,
@@ -230,26 +274,7 @@ export function createServices(input: AppDeps): Services {
           now,
           undefined,
           connection ? connectedEpicBranches(connection, deps.tracker, deps.nightLaunches) : null,
-          // AI-124: when a launch ends, its morning PR opens (or an empty epic branch goes);
-          // AI-125: then the morning report goes on the epic, with or without GitHub.
-          new MorningSteps(
-            connection && deps.github
-              ? new MorningPullRequests(
-                  deps.tracker,
-                  deps.runs,
-                  new ConnectedCodeHost(connection),
-                  deps.github.publicUrl,
-                  service,
-                )
-              : null,
-            new MorningReports(
-              deps.tracker,
-              deps.runs,
-              service,
-              deps.github?.publicUrl ?? "",
-              deps.reviewFindings ?? null,
-            ),
-          ),
+          morning,
         ),
         store: deps.nightLaunches,
         tracker: deps.tracker,
@@ -308,6 +333,8 @@ export function createServices(input: AppDeps): Services {
         now,
       )
     : null;
+  // AI-159: the What's new read; absent without a release-note store (route and tool both).
+  const whatsNew = deps.releaseNotes ? new WhatsNewReader(deps.tracker, deps.releaseNotes) : null;
   // AI-239: routing settings; each save is logged when the change log is configured.
   const routing = deps.routing
     ? new RoutingSettings(deps.routing, deps.tracker, deps.configChanges ?? null, now)
@@ -354,6 +381,8 @@ export function createServices(input: AppDeps): Services {
     globalSpendCaps,
     // AI-198: each project's board through the same read cache as board polls.
     work: new WorkReader(deps.tracker, new BoardReader(deps.tracker, deps.runs, readCache)),
+    whatsNew,
+    publicUrl: deps.mcp?.publicUrl ?? null,
   };
 }
 
