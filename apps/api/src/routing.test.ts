@@ -11,6 +11,7 @@ import { createApp } from "./app";
 import { parseAllowList, type TokenVerifier } from "./auth";
 import { ClientMetadataResolver } from "./mcp/client-metadata";
 import { mcpCaller } from "./mcp/test-client";
+import { ownerOnlyAccess } from "./project-access";
 
 /** AI-239: M9.7: routing settings over REST and MCP, against the in-memory stores. */
 
@@ -37,6 +38,7 @@ async function setup() {
   const changes = new InMemoryConfigChangeStore();
   const grants = new InMemoryOAuthGrantStore();
   const app = createApp({
+    projectAccess: ownerOnlyAccess(),
     verifier,
     allowedEmails: parseAllowList("andy@example.com"),
     version: "test",
