@@ -23,7 +23,7 @@ M10 adds three ways to spend money per call: OpenCode and direct calls through O
 - **Scope:** only `pay_per_use` routes reserve. Subscription runs keep their API-equivalent estimates (`cost.ts`) and never count against caps.
 - **Caps live in a `SpendCaps` setting** owned by M10, not on `Provider`; each change is a ConfigChange.
 
-Default cap values are Andy's decision (question on AI-227); the code ships with whatever he picks, and with paid providers disabled.
+Default caps (Andy, 2026-11-21): $5 a day and $50 a month global, $2 per task; projects default to the global caps. The code ships with these, and with paid providers disabled.
 
 ### Consequences
 

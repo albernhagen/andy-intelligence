@@ -27,7 +27,7 @@ One `SpendEntry` per paid agent task or direct call:
 | Daily, monthly | Global           | The ceiling                                              |
 | Daily, monthly | Project          | Can only be lower than global; a higher value is ignored |
 
-Caps are a `SpendCaps` setting (global document plus project fields); every change is a ConfigChange. A cap of 0 means no paid spend. Default values: Andy's answer on AI-227.
+Caps are a `SpendCaps` setting (global document plus project fields); every change is a ConfigChange. A cap of 0 means no paid spend. Defaults (Andy, 2026-11-21): $5 a day, $50 a month global, $2 per task; projects default to the global caps.
 
 ## Fail closed
 
