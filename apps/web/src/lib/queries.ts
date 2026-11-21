@@ -3,6 +3,7 @@ import { type QueryClient, useMutation, useQuery, useQueryClient } from "@tansta
 import type {
   AutoMerge,
   MergeMode,
+  MilestoneStatus,
   EnvironmentPolicy,
   ExecutorKind,
   PlanApproval,
@@ -119,6 +120,47 @@ export function useTickets(projectId: string) {
 }
 
 type TicketPath = { projectId: string; ticketId: string };
+
+/** A project's milestones in roadmap order (ADR-0131, AI-304); slow, as they change by hand. */
+export function useMilestones(projectId: string, enabled = true) {
+  const api = useApi();
+  return useQuery({
+    ...useLivePoll("slow"),
+    enabled,
+    queryKey: ["milestones", projectId],
+    queryFn: async () =>
+      unwrap(
+        await api.GET("/api/projects/{projectId}/milestones", { params: { path: { projectId } } }),
+      ),
+  });
+}
+
+/** The owner's status change (not reviewed, approved, parked), logged as a config change. */
+export function useSetMilestoneStatus(projectId: string) {
+  const api = useApi();
+  return useWrite(
+    async ({ milestoneId, status }: { milestoneId: string; status: MilestoneStatus }) =>
+      unwrap(
+        await api.PATCH("/api/projects/{projectId}/milestones/{milestoneId}", {
+          params: { path: { projectId, milestoneId } },
+          body: { status },
+        }),
+      ),
+  );
+}
+
+/** Attaches a top-level epic to a milestone, or detaches it (null); logged as a config change. */
+export function useSetEpicMilestone(path: TicketPath) {
+  const api = useApi();
+  return useWrite(async (milestoneId: string | null) =>
+    unwrap(
+      await api.PUT("/api/projects/{projectId}/tickets/{ticketId}/milestone", {
+        params: { path },
+        body: { milestoneId },
+      }),
+    ),
+  );
+}
 
 export const ticketQueryKey = (projectId: string, ref: string) => ["ticket", projectId, ref];
 

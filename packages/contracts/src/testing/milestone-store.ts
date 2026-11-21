@@ -91,6 +91,23 @@ export function milestoneStoreContract(
       expect(await store.get("p1", "m1")).toEqual(replaced);
     });
 
+    it("GivenAStaleRead_WhenReplacedIfUnchanged_ThenConflictAndNothingStored", async () => {
+      const store = await make();
+      await store.create(milestone());
+      const read = (await store.get("p1", "m1"))!;
+      await store.replace(
+        milestone({ name: "First", updatedAt: "2026-11-22T12:00:00.000Z" }),
+        read.updatedAt,
+      );
+      await expect(
+        store.replace(
+          milestone({ status: "parked", updatedAt: "2026-11-22T12:00:00.001Z" }),
+          read.updatedAt,
+        ),
+      ).rejects.toMatchObject({ code: "conflict" });
+      expect(await store.get("p1", "m1")).toMatchObject({ name: "First", status: "not_reviewed" });
+    });
+
     it("GivenNoSuchMilestone_WhenReplaced_ThenNullAndNothingStored", async () => {
       const store = await make();
       expect(await store.replace(milestone({ status: "parked" }))).toBeNull();

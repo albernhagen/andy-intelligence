@@ -18,8 +18,15 @@ const newestFirst = (a: ConfigChange, b: ConfigChange) =>
  * In-memory ConfigChangeStore. Every method reads and writes without an await in between, so
  * concurrent calls are atomic in one process, like the real store's transactions.
  */
-/** What a project's change log lists: its settings and routing changes (AI-239). */
+/**
+ * What a project's change log lists: its settings and routing changes (AI-239), keyed by
+ * `entityId`, and its milestone changes (AI-304), keyed by `projectId` (their `entityId` is the
+ * milestone or the epic).
+ */
 const LOGGED_ENTITIES = ["project", "routing"];
+const inProjectLog = (c: ConfigChange, projectId: string) =>
+  (LOGGED_ENTITIES.includes(c.entity) && c.entityId === projectId) ||
+  (c.entity === "milestone" && c.projectId === projectId);
 
 export class InMemoryConfigChangeStore implements ConfigChangeStore {
   private readonly changes = new Map<string, ConfigChange>();
@@ -60,7 +67,7 @@ export class InMemoryConfigChangeStore implements ConfigChangeStore {
 
   async listForProject(projectId: string, limit = CONFIG_CHANGE_LIST_MAX): Promise<ConfigChange[]> {
     return [...this.changes.values()]
-      .filter((c) => LOGGED_ENTITIES.includes(c.entity) && c.entityId === projectId)
+      .filter((c) => inProjectLog(c, projectId))
       .sort(newestFirst)
       .slice(0, Math.min(limit, CONFIG_CHANGE_LIST_MAX))
       .map((c) => structuredClone(c));

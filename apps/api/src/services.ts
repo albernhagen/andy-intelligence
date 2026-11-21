@@ -1,6 +1,7 @@
 import type { OpenAPIHono } from "@hono/zod-openapi";
 import { ClaudeCodeActionsExecutor } from "@andy/github";
 import {
+  MilestoneService,
   BuildDispatcher,
   SyncRuns,
   ProjectService,
@@ -438,9 +439,14 @@ export function createServices(raw: AppDeps): Services {
   const routing = deps.routing
     ? new RoutingSettings(deps.routing, deps.tracker, deps.configChanges ?? null, now)
     : null;
-  // AI-275: a routing change in a project's log reverts through routing settings.
+  // AI-304: milestones (ADR-0131); each write is logged when the change log is configured.
+  const milestoneService = deps.milestones
+    ? new MilestoneService(deps.tracker, deps.milestones, deps.configChanges ?? null, now)
+    : null;
+  // AI-275: a routing change in a project's log reverts through routing settings; AI-304: a
+  // milestone change through the milestone service.
   const configRevert = deps.configChanges
-    ? new ConfigRevert(deps.tracker, projects, deps.configChanges, now, routing)
+    ? new ConfigRevert(deps.tracker, projects, deps.configChanges, now, routing, milestoneService)
     : null;
 
   return {
@@ -468,6 +474,7 @@ export function createServices(raw: AppDeps): Services {
     configProposals,
     configRevert,
     routing,
+    milestoneService,
     night,
     readCache,
     direct,

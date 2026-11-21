@@ -12,6 +12,7 @@ export type MilestoneReader = Pick<MilestoneStore, "get">;
 
 /** The epic levels above a ticket: its epic and, for a child epic, the top-level one (ADR-0131). */
 const CHAIN_DEPTH = 2;
+const EPIC_NOT_FOUND = "Milestone can't be read: its epic wasn't found";
 
 function log(message: string, fields: object) {
   console.log(
@@ -20,7 +21,10 @@ function log(message: string, fields: object) {
 }
 
 /** Why a ticket in milestone `id` waits, or null when the milestone is approved. */
-export function milestoneHoldReason(id: string, milestone: Milestone | null): string | null {
+export function milestoneHoldReason(
+  id: string,
+  milestone: Pick<Milestone, "name" | "status"> | null,
+): string | null {
   if (milestone === null) return `Milestone ${id} can't be read`;
   if (milestone.status === "approved") return null;
   return `Milestone ${milestone.name} is ${milestone.status === "parked" ? "parked" : "not reviewed"}`;
@@ -44,7 +48,7 @@ export class MilestoneHolds {
    */
   async reasonFor(ticket: Ticket, tickets: readonly Ticket[]): Promise<string | null> {
     const top = topLevelOf(ticket, tickets);
-    if (top.parentId) return "Milestone can't be read: its epic wasn't found";
+    if (top.parentId) return EPIC_NOT_FOUND;
     const id = milestoneOf(ticket, tickets);
     return id === null ? null : milestoneHoldReason(id, await this.milestone(id));
   }
@@ -90,6 +94,28 @@ export async function epicChainOf(
   return chain;
 }
 
+/** Whether dispatch takes `ticket` from where it is: Ready, or Up next (refine). */
+function dispatchesFrom(ticket: Pick<Ticket, "stage" | "upNextRank">): boolean {
+  // Ideas (Backlog, not in Up next) never dispatch, so their line stays "Backlog · …".
+  return ticket.stage === "ready" || (ticket.stage === "backlog" && ticket.upNextRank !== null);
+}
+
+/**
+ * `ticketMilestoneHold` from data already loaded (AI-311: the web's status line): the project's
+ * tickets and its milestone list. A milestone missing from the list holds the ticket, as a
+ * failed read does in dispatch.
+ */
+export function listedMilestoneHold(
+  ticket: Ticket,
+  tickets: readonly Ticket[],
+  milestones: readonly Pick<Milestone, "id" | "name" | "status">[],
+): string | null {
+  if (!dispatchesFrom(ticket)) return null;
+  if (topLevelOf(ticket, tickets).parentId) return EPIC_NOT_FOUND;
+  const id = milestoneOf(ticket, tickets);
+  return id === null ? null : milestoneHoldReason(id, milestones.find((m) => m.id === id) ?? null);
+}
+
 /**
  * Why `ticket` waits on its milestone, for its status line (AI-306): only in Ready and in Up
  * next (refine takes it), else null. Reads at most its two epics (none already in `known`) and
@@ -101,10 +127,7 @@ export async function ticketMilestoneHold(
   ticket: Ticket,
   known: readonly Ticket[] = [],
 ): Promise<string | null> {
-  // Ideas (Backlog, not in Up next) never dispatch, so their line stays "Backlog · …".
-  const dispatches =
-    ticket.stage === "ready" || (ticket.stage === "backlog" && ticket.upNextRank !== null);
-  if (!dispatches) return null;
+  if (!dispatchesFrom(ticket)) return null;
   const chain = [...known, ...(await epicChainOf(tracker, ticket, known))];
   return new MilestoneHolds(milestones, ticket.projectId).reasonFor(ticket, chain);
 }
