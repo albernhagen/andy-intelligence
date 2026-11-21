@@ -4,6 +4,7 @@ import { registerMcpEndpoint } from "./endpoint";
 import { registerOAuthRoutes, type McpAuthDeps } from "./oauth";
 import { FixedWindowLimiter } from "./rate-limit";
 import type { ToolServices } from "./tools";
+import type { ProjectAccess } from "../project-access";
 import type { RouteModule } from "../services";
 
 /** Grant-store lookups per minute per instance from callers without a valid session. */
@@ -15,7 +16,7 @@ export type { McpAuthDeps } from "./oauth";
 /** Registers the MCP OAuth server and the /mcp endpoint (ADR-0039: MCP OAuth facade). */
 export function registerMcp(
   app: Hono<AuthEnv>,
-  deps: McpAuthDeps & { version: string; services: ToolServices },
+  deps: McpAuthDeps & { version: string; services: ToolServices; projectAccess: ProjectAccess },
 ) {
   const lookups = new FixedWindowLimiter(LOOKUPS_PER_MINUTE, 60 * 1000);
   registerOAuthRoutes(app, { ...deps, lookups });
@@ -35,5 +36,6 @@ export const apiRoutes: RouteModule = (app, s) => {
     allowedEmails: s.deps.allowedEmails,
     version: s.deps.version,
     services: s,
+    projectAccess: s.deps.projectAccess,
   });
 };

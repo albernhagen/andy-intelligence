@@ -33,26 +33,7 @@ import {
   refineQuestionFields,
 } from "./question-format";
 
-export * from "./brief";
-export * from "./build";
-export * from "./common";
-export * from "./config-proposals";
-export * from "./cost";
-export * from "./dashboard";
-export * from "./deployment";
-export * from "./dispatch-caps";
-export * from "./executor";
-export * from "./ideate";
-export * from "./in-flight";
-export * from "./night";
-export * from "./notify-email";
-export * from "./project-plan";
-export * from "./push";
-export * from "./question-format";
-export * from "./runner";
-export * from "./scores";
-export * from "./sync";
-export * from "./worker";
+export * from "./exports.gen";
 
 /** ARCHITECTURE §5 — domain model. Vendor concepts must not appear here. */
 
