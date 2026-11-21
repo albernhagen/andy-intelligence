@@ -61,8 +61,6 @@ The coordinator merges a PR when **all** hold on its current head:
 
 How: `gh pr merge <n> --squash --delete-branch`, one PR at a time; then `gh run list --branch main`; then message every open worker to merge `main` and rerun. Keep a running table of every merge (PR, ticket, who merged, review verdicts) in the milestone digest (`docs/build-log/<date>-digest-<milestone>.md`), which opens with a plain summary of what was built or changed.
 
-How: `gh pr merge <n> --squash --delete-branch`, one PR at a time; then `gh run list --branch main`; then message every open worker to merge `main` and rerun. Keep a running table of every merge (PR, ticket, risk class, who merged, review verdicts) in the milestone digest (`docs/build-log/<date>-digest-<milestone>.md`), which opens with a plain summary of what was built or changed.
-
 ## 6. Coordinator tools (`scripts/coordinator/`)
 
 Plain Node, tested, run from the repo root. `--help` on each. Keep throwaway scripts out of temp folders (one was wiped after four days): improve these instead.
