@@ -8,6 +8,7 @@ import {
   InMemoryCodeHostConnectionStore,
   InMemoryConfigChangeStore,
   InMemoryDeploymentStore,
+  InMemoryMilestoneStore,
   InMemoryRoutingConfigStore,
   InMemorySpendCapsStore,
   InMemoryNightLaunchStore,
@@ -38,9 +39,12 @@ export function renderApp(
     beforeFetch?: (request: Request) => Promise<void>;
     /** Needs-you email (AI-77); absent: not configured. */
     email?: Parameters<typeof createApp>[0]["email"];
+    /** A tracker to use instead of a fresh one (e.g. one that reports epics' milestones). */
+    tracker?: InMemoryWorkTracker;
   } = {},
 ) {
-  const tracker = new InMemoryWorkTracker();
+  const tracker = opts.tracker ?? new InMemoryWorkTracker();
+  const milestones = new InMemoryMilestoneStore();
   const runs = new InMemoryRunStore();
   const quota = new InMemoryQuotaStore();
   const runners = new InMemoryRunnerStore();
@@ -79,6 +83,7 @@ export function renderApp(
     configChanges,
     nightLaunches,
     deployments,
+    milestones,
     releaseNotes,
     reviewFindings,
     routing,
@@ -133,6 +138,7 @@ export function renderApp(
     </QueryClientProvider>,
   );
   return {
+    milestones,
     runners,
     spendCapsStore,
     releaseNotes,
