@@ -1,4 +1,5 @@
 ---
+title: Firestore contract suites run in CI when the adapters change
 status: accepted
 date: 2026-11-04
 amends: 0034

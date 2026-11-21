@@ -1,4 +1,5 @@
 ---
+title: ARCHITECTURE split into an overview and per-topic files
 status: accepted
 date: 2026-11-04
 amends: 0022, 0046
