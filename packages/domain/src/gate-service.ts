@@ -175,8 +175,8 @@ export class PullRequestGate {
       return { result: "merge_failed", ...base };
     }
     if (epicKey) {
-      await this.mergedIntoEpic(run, ticket, pr, sha, epicKey);
-      log("INFO", "merged into the epic branch", { ...base, branch: pr.baseRef });
+      log("INFO", "merged into the epic branch", { ...base, branch: pr.baseRef, epicKey });
+      await this.recordEpicMerge(run, ticket, pr, sha);
       return { result: "merged", ...base };
     }
     log("INFO", "auto-merged", base);
@@ -184,25 +184,47 @@ export class PullRequestGate {
   }
 
   /**
-   * Records the merge on the run, for the morning PR, and moves the story to Done (ADR-0107), so
-   * its dependants build on the epic branch and the launch can finish.
+   * After a merge into the epic branch: records it on the run, for the morning PR, and moves the
+   * story to Done (ADR-0107), so its dependants build on the branch and the launch can finish.
+   * Both steps are idempotent; the PR's close webhook runs them again, so a failure here is
+   * flagged on the story and retried there instead of lost. Never throws.
    */
-  private async mergedIntoEpic(
+  private async recordEpicMerge(
     run: Run,
     ticket: Ticket,
     pr: PullRequest,
     sha: string | null,
-    epicKey: string,
-  ): Promise<void> {
-    await this.runs.update(run.id, { epicMerge: { at: this.now().toISOString(), sha } }, [
-      "succeeded",
-    ]);
-    await this.tickets.followPullRequest(
-      ticket.projectId,
-      ticket.id,
-      "done",
-      `PR #${pr.number} merged into ${pr.baseRef} (night launch of ${epicKey}): ${pr.url}`,
-    );
+  ): Promise<boolean> {
+    try {
+      const current = (await this.runs.get(run.id)) ?? run;
+      if (!current.epicMerge) {
+        await this.runs.update(run.id, { epicMerge: { at: this.now().toISOString(), sha } }, [
+          "succeeded",
+        ]);
+      }
+      await this.tickets.followPullRequest(
+        ticket.projectId,
+        ticket.id,
+        "done",
+        `PR #${pr.number} merged into ${pr.baseRef} (night launch): ${pr.url}`,
+      );
+      return true;
+    } catch (err) {
+      const error = errorText(err);
+      log("ERROR", "epic merge bookkeeping failed", { pr: pr.number, runId: run.id, error });
+      try {
+        await this.tickets.flag(ticket.projectId, ticket.id, "system");
+        await this.tracker.addComment(
+          ticket.projectId,
+          ticket.id,
+          `PR #${pr.number} merged into ${pr.baseRef}, but recording it failed (retried when its close arrives): ${error}`,
+          "system",
+        );
+      } catch (flagErr) {
+        log("ERROR", "flag after epic merge failed", { runId: run.id, error: errorText(flagErr) });
+      }
+      return false;
+    }
   }
 
   private async closed(repo: string, pr: PullRequest, project: Project): Promise<GateResult[]> {
@@ -214,6 +236,15 @@ export class PullRequestGate {
     const agent = await this.agentPr(pr, project);
     if (!agent || agent.run.outcome) return results;
     const { run, ticket } = agent;
+    // Recovers a night merge whose bookkeeping failed after the merge call (AI-124).
+    if (
+      pr.state === "merged" &&
+      this.epicMerges &&
+      intoEpicBranch(pr) &&
+      run.baseBranch === pr.baseRef
+    ) {
+      await this.recordEpicMerge(run, ticket, pr, null);
+    }
 
     let decision: GateDecision | null = null;
     try {

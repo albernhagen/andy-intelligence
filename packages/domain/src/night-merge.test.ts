@@ -17,7 +17,6 @@ import { PullRequestGate } from "./gate-service";
 import { NightLaunches } from "./night-launch";
 import {
   EpicMerges,
-  MAX_EPIC_MERGES_PER_LAUNCH,
   MorningPullRequests,
   mergedStories,
   morningPrBody,
@@ -117,7 +116,7 @@ describe("night merges into the epic branch (AI-124)", () => {
       tickets,
       now,
       null,
-      withEpics ? new EpicMerges(nights, tracker) : null,
+      withEpics ? new EpicMerges(nights, runs) : null,
     );
 
   async function setPolicy(autoMerge: AutoMerge) {
@@ -373,30 +372,69 @@ describe("night merges into the epic branch (AI-124)", () => {
       expect(host.merges).toEqual([]);
     });
 
-    it("GivenTheMergeCapReached_WhenAnotherStoryPrPasses_ThenItStaysOpen", async () => {
-      const keys: string[] = [];
-      for (let i = 0; i < MAX_EPIC_MERGES_PER_LAUNCH; i++) {
-        const t = await story(`Done ${i}`);
-        await tracker.updateTicket(
-          projectId,
-          t.id,
-          { stage: { to: "done", forced: true, reason: null } },
-          "andy",
-        );
-        keys.push(t.key);
-      }
-      const b = await story("B");
-      const stored = await launch([b.key]);
-      // A launch holds at most the cap of stories; this one is read past it to test the cap.
-      const merges = new EpicMerges(
-        { findActive: async () => ({ ...stored, storyKeys: [...keys, b.key] }) },
-        tracker,
+    it("GivenAStoryAlreadyMergedThisLaunch_WhenAnotherOfItsPrsPasses_ThenItStaysOpen", async () => {
+      const a = await story("A");
+      await launch([a.key]);
+      await gate().apply(opened((await agentPr(a)).pr), await project());
+      // As if its move to Done had failed: back in progress, a new PR from a new build.
+      await tracker.updateTicket(
+        projectId,
+        a.id,
+        { stage: { to: "in_progress", forced: true, reason: null } },
+        "andy",
       );
-      const pr = { number: 99, intoDefaultBranch: false, baseRef: "epic/AI-1" };
-      const run = { projectId, baseBranch: "epic/AI-1" as const };
+      const again = await agentPr((await tracker.getTicket(projectId, a.id))!);
 
-      expect(await merges.target(pr, run, b)).toBeNull();
-      expect(await new EpicMerges(nights, tracker).target(pr, run, b)).not.toBeNull();
+      const [result] = await gate().apply(opened(again.pr), await project());
+
+      expect(result).toMatchObject({ result: "assessed" });
+      expect(host.merges).toHaveLength(1);
+    });
+
+    it("GivenTheBookkeepingFailsAfterTheMerge_WhenThePrsCloseArrives_ThenItIsFlaggedThenRecoveredAndDone", async () => {
+      const a = await story("A");
+      await launch([a.key]);
+      const { run, pr } = await agentPr(a);
+      const update = runs.update.bind(runs);
+      const failing = vi
+        .spyOn(runs, "update")
+        .mockImplementation(async (id, patch, from) =>
+          patch.epicMerge ? Promise.reject(new Error("store down")) : update(id, patch, from),
+        );
+
+      const [result] = await gate().apply(opened(pr), await project());
+
+      expect(result).toMatchObject({ result: "merged" });
+      expect(host.merges).toHaveLength(1);
+      expect((await runs.get(run.id))!.epicMerge).toBeNull();
+      const flagged = (await tracker.getTicket(projectId, a.id))!;
+      expect(flagged).toMatchObject({ stage: "in_progress", needsAttention: true });
+      const events = await tracker.listEvents(projectId, a.id);
+      expect(JSON.stringify(events)).toContain("recording it failed");
+
+      failing.mockRestore();
+      const merged = { ...pr, state: "merged" as const };
+      host.pullRequests.get(pr.number)!.pullRequest = merged;
+      await gate().apply({ ...opened(merged), action: "closed" }, await project());
+
+      expect((await runs.get(run.id))!.epicMerge).toEqual({ at: now().toISOString(), sha: null });
+      expect(await stageOf(a)).toBe("done");
+    });
+
+    it("GivenAMergeRecordedAlready_WhenThePrsCloseArrives_ThenItsShaIsKept", async () => {
+      const a = await story("A");
+      await launch([a.key]);
+      const { run, pr } = await agentPr(a);
+      await gate().apply(opened(pr), await project());
+      const recorded = (await runs.get(run.id))!.epicMerge;
+
+      const merged = { ...pr, state: "merged" as const };
+      host.pullRequests.get(pr.number)!.pullRequest = merged;
+      ms += 60_000;
+      await gate().apply({ ...opened(merged), action: "closed" }, await project());
+
+      expect((await runs.get(run.id))!.epicMerge).toEqual(recorded);
+      expect(recorded!.sha).not.toBeNull();
     });
 
     it("GivenAMergeTheHostRefuses_WhenAStoryPrPasses_ThenItIsFlaggedAndNotDone", async () => {
@@ -455,7 +493,7 @@ describe("night merges into the epic branch (AI-124)", () => {
   });
 
   describe("MorningPullRequests", () => {
-    const morning = () => new MorningPullRequests(tracker, runs, host, APP_URL);
+    const morning = () => new MorningPullRequests(tracker, runs, host, APP_URL, tickets);
     const end = async (reason: NightEndReason = "done") =>
       nights.transition("launch-1", ["running", "stopping"], {
         status: "ended",
@@ -598,6 +636,10 @@ describe("night merges into the epic branch (AI-124)", () => {
       vi.spyOn(host, "openEpicPullRequest").mockRejectedValue(new Error("boom"));
 
       expect(await morning().open(await end())).toEqual({ result: "failed", error: "boom" });
+      // Nothing calls it again once the launch has ended, so the epic is flagged for Andy.
+      expect((await tracker.getTicket(projectId, epic.id))!.needsAttention).toBe(true);
+      const events = await tracker.listEvents(projectId, epic.id);
+      expect(JSON.stringify(events)).toContain("couldn't be opened: boom");
     });
 
     it("GivenNightLaunchesWithAMorningOpener_WhenALaunchEnds_ThenTheOpenerGetsTheEndedLaunch", async () => {

@@ -97,7 +97,7 @@ export function registerGitHubWebhook(app: Hono<AuthEnv>, deps: WebhookDeps): vo
   const limiter = new FixedWindowLimiter(WEBHOOK_RATE_LIMIT, 60_000, () => now().getTime());
   const repos = new RepoIndex(deps.tracker, () => now().getTime());
   const prTickets = new PullRequestTickets(deps.tickets, deps.tracker);
-  const epicMerges = deps.nightLaunches ? new EpicMerges(deps.nightLaunches, deps.tracker) : null;
+  const epicMerges = deps.nightLaunches ? new EpicMerges(deps.nightLaunches, deps.runs) : null;
   const gate = new PullRequestGate(
     deps.codeHost,
     deps.tracker,

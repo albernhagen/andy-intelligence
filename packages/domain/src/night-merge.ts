@@ -13,6 +13,7 @@ import {
 } from "@andy/contracts";
 import type { GateDecision } from "./gate";
 import { NIGHT_END_TEXT } from "./night-budget";
+import type { TicketService } from "./tickets";
 
 /**
  * Night merges and the morning PR (AI-124, ADR-0049 "Epic branch" and "Morning review",
@@ -23,7 +24,10 @@ import { NIGHT_END_TEXT } from "./night-budget";
  * branch, so the gate never touches it: it never auto-merges.
  */
 
-/** Story merges into one launch's epic branch (ADR-0028): one per story, at most this many. */
+/**
+ * The bound on merges into one launch's epic branch (ADR-0028): once per story, checked against
+ * the merges recorded on its runs, and a launch has at most `NIGHT_LIMITS.maxStories` stories.
+ */
 export const MAX_EPIC_MERGES_PER_LAUNCH = NIGHT_LIMITS.maxStories;
 
 function log(severity: "INFO" | "WARNING" | "ERROR", message: string, fields: object = {}) {
@@ -54,14 +58,14 @@ const MERGEABLE_STAGES: readonly Ticket["stage"][] = ["in_progress", "ready_for_
 export class EpicMerges {
   constructor(
     private readonly launches: Pick<NightLaunchStore, "findActive">,
-    private readonly tracker: Pick<WorkTracker, "listTickets">,
+    private readonly runs: Pick<RunStore, "listForTicket">,
   ) {}
 
   /** The active launch the PR may merge into, or null (the PR then stays open). */
   async target(
     pr: Pick<PullRequest, "number" | "intoDefaultBranch" | "baseRef">,
     run: Pick<Run, "projectId" | "baseBranch">,
-    ticket: Pick<Ticket, "key" | "stage">,
+    ticket: Pick<Ticket, "id" | "key" | "stage">,
   ): Promise<NightLaunch | null> {
     if (!intoEpicBranch(pr) || run.baseBranch !== pr.baseRef) return null;
     const launch = await this.launches.findActive(run.projectId);
@@ -74,13 +78,16 @@ export class EpicMerges {
     ) {
       return null;
     }
-    // A merged story moves to Done, so Done stories count the merges made (a cap, not a race
-    // guard: the per-head merge claim on the run is that).
-    const done = (await this.tracker.listTickets(run.projectId)).filter(
-      (t) => launch.storyKeys.includes(t.key) && t.stage === "done",
-    ).length;
-    if (done >= MAX_EPIC_MERGES_PER_LAUNCH) {
-      log("WARNING", "epic merge cap reached", { launchId: launch.id, pr: pr.number });
+    // Once per story, from the recorded merges, not the stage: a story whose move to Done failed
+    // after its merge never merges again. With at most `maxStories` stories, that bounds the launch.
+    const story = { id: ticket.id, key: ticket.key };
+    const runs = await this.runs.listForTicket(run.projectId, ticket.id);
+    if (mergedStories(launch, [story], runs).length > 0) {
+      log("WARNING", "story already merged into the epic branch", {
+        launchId: launch.id,
+        pr: pr.number,
+        ticket: ticket.key,
+      });
       return null;
     }
     return launch;
@@ -201,21 +208,49 @@ export interface MorningPrOpener {
  */
 export class MorningPullRequests implements MorningPrOpener {
   constructor(
-    private readonly tracker: Pick<WorkTracker, "getProject" | "getTicket" | "listTickets">,
+    private readonly tracker: Pick<
+      WorkTracker,
+      "getProject" | "getTicket" | "listTickets" | "addComment"
+    >,
     private readonly runs: Pick<RunStore, "listForTicket">,
     private readonly host: MorningPrHost,
     /** The web app's origin, for the epic's link. */
     private readonly appUrl: string,
+    /** Flags a ticket Needs-you (`TicketService.flag`). */
+    private readonly tickets: Pick<TicketService, "flag">,
   ) {}
 
-  /** Never throws: a failure is logged and returned; the branch and the stories stay as they are. */
+  /**
+   * Never throws. A failure is logged and flags the epic Needs-you with what to do, since nothing
+   * calls this again once the launch has ended; the branch and the stories stay as they are.
+   */
   async open(launch: NightLaunch): Promise<MorningResult> {
     try {
       return await this.settle(launch);
     } catch (err) {
       const error = (err instanceof Error ? err.message : String(err)).slice(0, 2000);
       log("ERROR", "morning PR failed", { launchId: launch.id, error });
+      await this.flagEpic(launch, error);
       return { result: "failed", error };
+    }
+  }
+
+  private async flagEpic(launch: NightLaunch, error: string): Promise<void> {
+    const branch = launch.epicBranch?.name ?? `epic/${launch.epicKey}`;
+    try {
+      await this.tickets.flag(launch.projectId, launch.epicId, "system");
+      await this.tracker.addComment(
+        launch.projectId,
+        launch.epicId,
+        `The night launch ended, but its morning PR from ${branch} couldn't be opened: ${error}. Open a PR from ${branch} into the default branch by hand.`,
+        "system",
+      );
+    } catch (err) {
+      const why = err instanceof Error ? err.message : String(err);
+      log("ERROR", "flagging the epic after a failed morning PR failed", {
+        launchId: launch.id,
+        error: why.slice(0, 2000),
+      });
     }
   }
 
