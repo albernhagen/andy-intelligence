@@ -94,13 +94,17 @@ export function QuestionCard({
           <div className="flex gap-2">
             <Input
               aria-label="Answer"
+              name="answer"
+              autoComplete="off"
               value={answer}
               onChange={(e) => setAnswer(e.target.value)}
               placeholder="Your answer"
               className="h-11 text-base sm:h-9 sm:text-sm"
             />
+            {/* A per-question submit is outline: primary is the screen's one main action (design.md). */}
             <Button
               type="submit"
+              variant="outline"
               className="h-11 sm:h-9"
               disabled={!answer.trim() || submit.isPending}
             >
