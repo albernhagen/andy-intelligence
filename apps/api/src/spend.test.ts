@@ -3,14 +3,15 @@ import {
   InMemoryConfigChangeStore,
   InMemoryOAuthGrantStore,
   InMemoryRunStore,
+  InMemorySpendLedger,
   InMemoryWorkTracker,
+  type SpendLedger,
 } from "@andy/contracts";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createApp } from "./app";
 import type { TokenVerifier } from "./auth";
 import { ClientMetadataResolver } from "./mcp/client-metadata";
 import { mcpCaller } from "./mcp/test-client";
-import type { SpendTotalsReader } from "./spend";
 
 /** AI-249: M10.8: spend caps settings over REST and MCP, with the change log behind them. */
 
@@ -24,15 +25,16 @@ const verifier: TokenVerifier = {
   },
 };
 
-/** Totals per scope: `project` for any project, `global` with no project id. */
-const ledger = (project: number, global: number): SpendTotalsReader => ({
-  async totals(scope) {
-    const day = scope.projectId ? project : global;
-    return { dayMicroUsd: day, monthMicroUsd: day * 10 };
-  },
-});
+/** The in-memory ledger with fixed totals: `project` for any project, `global` with none. */
+const ledger = (project: number, global: number): SpendLedger =>
+  Object.assign(new InMemorySpendLedger(), {
+    totals: async (scope: { projectId?: string }) => {
+      const day = scope.projectId ? project : global;
+      return { day: "2026-11-21", dayMicroUsd: day, month: "2026-11", monthMicroUsd: day * 10 };
+    },
+  });
 
-async function setup(spendLedger?: SpendTotalsReader) {
+async function setup(spendLedger?: SpendLedger) {
   const tracker = new InMemoryWorkTracker();
   await tracker.createProject({ name: "AI", key: "AI" });
   const grants = new InMemoryOAuthGrantStore();
@@ -78,6 +80,14 @@ describe("spend caps routes (AI-249)", () => {
     });
   });
 
+  it("GivenTheRealInMemoryLedgerEmpty_WhenSpendIsRead_ThenZeroSpentNotUnknown", async () => {
+    const { call } = await setup(new InMemorySpendLedger());
+    expect((await call("GET", "/api/projects/ai/spend")).json.spent).toEqual({
+      project: { dayMicroUsd: 0, monthMicroUsd: 0 },
+      global: { dayMicroUsd: 0, monthMicroUsd: 0 },
+    });
+  });
+
   it("GivenALedger_WhenSpendIsRead_ThenTodayAndThisMonthShowForTheProjectAndAll", async () => {
     const { call } = await setup(ledger(120_000, 450_000));
     const { spent } = (await call("GET", "/api/projects/ai/spend")).json;
@@ -91,9 +101,9 @@ describe("spend caps routes (AI-249)", () => {
     ["no ledger", undefined],
     [
       "a ledger that fails",
-      {
+      Object.assign(new InMemorySpendLedger(), {
         totals: () => Promise.reject(new Error("down")),
-      } satisfies SpendTotalsReader,
+      }),
     ],
   ])("GivenSpend%s_WhenRead_ThenSpentIsNullNotZero", async (_, reader) => {
     const { call } = await setup(reader);

@@ -12,8 +12,10 @@ import {
   type WorkTracker,
   type QuotaStore,
   type DeploymentStore,
+  type RoutingConfigStore,
   type NightLaunchStore,
   type ProjectVersions,
+  type SpendLedger,
 } from "@andy/contracts";
 import type { CreatedApp } from "@andy/github";
 import { DomainError, type EmailNotificationsDeps } from "@andy/domain";
@@ -25,7 +27,6 @@ import type { ActionsTokenVerifier } from "./github/token";
 import type { ClientMetadataResolver } from "./mcp";
 import * as publicRoutes from "./public-routes";
 import { createServices, type RouteModule } from "./services";
-import type { SpendTotalsReader } from "./spend";
 import type { InvokerTokenVerifier } from "./watchdog";
 
 /** Request body cap for /api/* (ADR-0028: everything that can grow gets a cap). */
@@ -64,8 +65,10 @@ export interface AppDeps {
   nightLaunches?: NightLaunchStore;
   /** Deployment records (AI-161); without it the DORA panel reads empty (AI-200). */
   deployments?: DeploymentStore;
+  /** Model routing (AI-230, AI-238); without it every run takes `DEFAULT_ROUTING`. */
+  routing?: RoutingConfigStore;
   /** Spend totals for the caps settings (AI-249); without it spend reads unknown, never zero. */
-  spendLedger?: SpendTotalsReader;
+  spendLedger?: SpendLedger;
   /**
    * Per-project change counters (AI-222): with them, every tracker and run write bumps its
    * project, and the board and ticket list serve unchanged polls from a cache. Without, no cache.

@@ -6,6 +6,7 @@ import {
   SpendSoFar,
   notFound,
   type EventActor,
+  type SpendLedger,
 } from "@andy/contracts";
 import { spendView, type ProjectService, type SpendView } from "@andy/domain";
 import { signedIn, type AuthEnv } from "./auth";
@@ -19,13 +20,8 @@ import type { RouteModule } from "./services";
  * change is a ConfigChange, revertable from the change log. Nothing here spends money.
  */
 
-/** What the settings read from the spend ledger (AI-234: M10.2's `SpendLedger` has it). */
-export interface SpendTotalsReader {
-  totals(
-    scope: { projectId?: string },
-    at: string,
-  ): Promise<{ dayMicroUsd: number; monthMicroUsd: number }>;
-}
+/** What the settings read from the spend ledger (AI-234: M10.2). */
+export type SpendTotalsReader = Pick<SpendLedger, "totals">;
 
 function log(severity: "WARNING", message: string, fields: object) {
   console.log(JSON.stringify({ severity, message, component: "spend", ...fields }));

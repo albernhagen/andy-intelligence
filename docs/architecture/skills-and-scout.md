@@ -17,6 +17,7 @@ Substance lives in shared procedure docs (`docs/agent/*.md`) so non-Claude harne
 **Deployment modes (ADR-0032):** `gcp` (this design) and, later, `local` (one process on the user's machine, their own subscription and GitHub). Rule from now on: GCP specifics (Firestore storage for runs/config/spend, Cloud Tasks, Firebase Auth + allow-list) go behind ports when first built or touched, so `local` only adds adapters.
 
 ### 7.4 Model scout (weekly)
+Built (AI-237): `domain/model-scout.ts` and `platform/procedures/model-scout.md`; nothing runs them until M10.17.
 1. Pull OpenRouter models API (pricing, context, availability).
 2. Research recent releases and coding leaderboards (web).
 3. Optionally run Ori Eval smoke tests on new candidates.
