@@ -850,3 +850,4 @@ export * from "./notify-email";
 export * from "./project-versions";
 export * from "./push";
 export * from "./runner";
+export * from "./spend";

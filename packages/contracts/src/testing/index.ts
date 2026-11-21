@@ -1384,3 +1384,4 @@ export * from "./project-versions";
 export * from "./push";
 export * from "./read-counter";
 export * from "./runner";
+export * from "./spend";
