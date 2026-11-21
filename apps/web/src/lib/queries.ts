@@ -322,6 +322,28 @@ export function useSaveRouting(projectId: string | null) {
   );
 }
 
+/** Global routing's changes, newest first (AI-275); a project's are in its settings log. */
+export function useRoutingChanges() {
+  const api = useApi();
+  return useQuery({
+    ...useLivePoll("slow"),
+    queryKey: ["routing-changes"],
+    queryFn: async () => unwrap(await api.GET("/api/routing/changes")),
+  });
+}
+
+/** Reverts a routing change, global or a project's; refusals carry the API's reason. */
+export function useRevertRoutingChange() {
+  const api = useApi();
+  return useWrite(async (changeId: string) =>
+    unwrap(
+      await api.POST("/api/routing/changes/{changeId}/revert", {
+        params: { path: { changeId } },
+      }),
+    ),
+  );
+}
+
 /** Local runners (ADR-0089): never their secrets. */
 export function useRunners() {
   const api = useApi();

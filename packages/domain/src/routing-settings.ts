@@ -423,7 +423,7 @@ export function widerThanGlobal(project: RoutingFields, global: RoutingFields): 
 
 /**
  * Why `change` can't be reverted against `current`, or null (AI-275): a later logged change
- * touched one of its parts (named, newest first; the same millisecond counts as later), a part
+ * touched one of its parts (named, newest first), a part
  * no longer holds the change's `to` value (written outside the log), or its `from` is null (a
  * project's first save: there was no config before). `logged` is the same config's log.
  */
@@ -434,7 +434,9 @@ export function routingRevertRefusal(
 ): DomainError | null {
   const parts = Object.keys(change.diff);
   const newer = logged
-    .filter((c) => c.id !== change.id && c.createdAt >= change.createdAt)
+    // Strictly later: two saves in one millisecond can't be ordered by time, and a later one that
+    // changed a part fails the `to` check below anyway.
+    .filter((c) => c.id !== change.id && c.createdAt > change.createdAt)
     .filter((c) => Object.keys(c.diff).some((f) => parts.includes(f)))
     .sort((a, b) => b.createdAt.localeCompare(a.createdAt))[0];
   if (newer) {

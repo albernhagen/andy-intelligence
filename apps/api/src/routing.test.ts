@@ -206,7 +206,10 @@ describe("routing settings (AI-239)", () => {
       "/api/projects/ai/routing",
       save({ steps: { ...DEFAULT_ROUTING.steps, refine: "strong" }, ifUpdatedAt: updatedAt }),
     );
-    const [latest] = await changes.listForProject("ai");
+    // By content, not position: two saves in one millisecond tie on time.
+    const latest = (await changes.listForProject("ai")).find(
+      (c) => (c.diff.steps as { to: { refine: string } }).to.refine === "strong",
+    );
     const res = await request("POST", `/api/projects/ai/config-changes/${latest!.id}/revert`);
     expect(res.status).toBe(200);
     const view = (await (await request("GET", "/api/routing?projectId=ai")).json()) as {

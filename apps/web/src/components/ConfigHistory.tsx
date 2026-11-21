@@ -67,12 +67,7 @@ function ChangeRow({
           {change.reason && ` · ${change.reason}`}
         </p>
       </div>
-      {routing ? (
-        // Reverting routing is AI-275: M9: Revert a routing change.
-        <span className="text-xs text-muted-foreground">
-          {change.status === "reverted" ? "Reverted" : "Routing change"}
-        </span>
-      ) : change.status === "applied" ? (
+      {change.status === "applied" ? (
         <button type="button" className={button} disabled={reverting} onClick={onRevert}>
           Revert
         </button>

@@ -26,7 +26,7 @@ export function registerConfigLogTools(
   server.registerTool(
     "list_settings_changes",
     {
-      description: `A project's settings changes, newest first (at most ${CONFIG_CHANGE_LIST_MAX}): each with its id, the changed fields' before and after (diff), who (actor), when (createdAt), reason, and status (applied, or reverted). The same list as the settings page; project routing saves are listed too (entity routing) but can't be reverted yet.`,
+      description: `A project's settings changes, newest first (at most ${CONFIG_CHANGE_LIST_MAX}): each with its id, the changed fields' before and after (diff), who (actor), when (createdAt), reason, and status (applied, or reverted). The same list as the settings page; project routing saves are listed too (entity routing) and revert with revert_settings_change or revert_routing_change.`,
       inputSchema: {
         project: ProjectKey,
         limit: z.number().int().min(1).max(CONFIG_CHANGE_LIST_MAX).optional(),
