@@ -7231,7 +7231,7 @@ export interface paths {
                     projectId: string;
                     key: string;
                     /** @enum {string|null} */
-                    type: "epic" | "feature" | "chore" | "bug" | null;
+                    type: "epic" | "feature" | "chore" | "bug" | "spike" | null;
                     parentId: string | null;
                     title: string;
                     body: string;
@@ -7366,7 +7366,7 @@ export interface paths {
                     projectId: string;
                     key: string;
                     /** @enum {string|null} */
-                    type: "epic" | "feature" | "chore" | "bug" | null;
+                    type: "epic" | "feature" | "chore" | "bug" | "spike" | null;
                     parentId: string | null;
                     title: string;
                     body: string;
