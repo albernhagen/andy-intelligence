@@ -1,4 +1,5 @@
 ---
+title: Review agents share composite actions; adversarial re-reviews are incremental
 status: accepted
 date: 2026-11-01
 ---

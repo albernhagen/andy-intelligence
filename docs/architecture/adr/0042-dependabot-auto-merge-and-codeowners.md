@@ -1,4 +1,5 @@
 ---
+title: Dependabot auto-merges npm patches, stable minors; CODEOWNERS asks Andy
 status: accepted
 date: 2026-11-03
 amends: 0031

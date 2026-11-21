@@ -1,4 +1,5 @@
 ---
+title: Repos on Andy's personal GitHub account (public)
 status: accepted
 date: 2026-10-21
 ---

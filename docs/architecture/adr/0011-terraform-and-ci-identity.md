@@ -1,4 +1,5 @@
 ---
+title: Terraform layout and CI identity
 status: accepted, amended by 0029
 date: 2026-10-21
 ---

@@ -1,4 +1,5 @@
 ---
+title: Contract suites needing an emulator run locally, not in CI
 status: accepted, amended by 0048
 date: 2026-11-01
 amends: 0023

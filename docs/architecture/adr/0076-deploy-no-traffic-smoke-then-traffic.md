@@ -1,4 +1,5 @@
 ---
+title: "Control-plane deploy: no-traffic revision, smoke test, then traffic"
 status: accepted
 date: 2026-11-08
 ---

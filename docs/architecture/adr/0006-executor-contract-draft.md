@@ -1,4 +1,5 @@
 ---
+title: Executor contract draft until two adapters pass
 status: accepted
 date: 2026-10-21
 ---

@@ -1,4 +1,5 @@
 ---
+title: Agent callbacks authenticated with GitHub Actions OIDC
 status: accepted
 date: 2026-10-22
 amends: 0016
