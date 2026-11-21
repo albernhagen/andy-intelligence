@@ -8,6 +8,7 @@ export { registerCoreTools as core } from "./tools-core";
 export { registerDigestTools as digest } from "./tools-digest";
 export { registerDispatchTools as dispatch } from "./tools-dispatch";
 export { registerExecutorTools as executor } from "./tools-executor";
+export { registerHistoryTools as history } from "./tools-history";
 export { registerIdeateTools as ideate } from "./tools-ideate";
 export { registerInFlightTools as inFlight } from "./tools-inflight";
 export { registerMilestoneMapTools as milestoneMap } from "./tools-milestone-map";
