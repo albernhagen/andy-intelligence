@@ -355,6 +355,27 @@ resource "google_cloud_run_v2_service" "control_plane" {
           }
         }
       }
+      # Web Push (AI-179, ADR-0115 Q2): set only once Andy turns push_enabled on, after adding the
+      # private key's version (runbook mobile.md). Until then the API logs "push not configured".
+      dynamic "env" {
+        for_each = var.push_enabled ? [var.vapid_public_key] : []
+        content {
+          name  = "VAPID_PUBLIC_KEY"
+          value = env.value
+        }
+      }
+      dynamic "env" {
+        for_each = var.push_enabled ? [google_secret_manager_secret.vapid_private_key.secret_id] : []
+        content {
+          name = "VAPID_PRIVATE_KEY"
+          value_source {
+            secret_key_ref {
+              secret  = env.value
+              version = "latest"
+            }
+          }
+        }
+      }
     }
   }
 
@@ -425,6 +446,27 @@ resource "google_secret_manager_secret" "resend_api_key" {
 # The runtime reads this secret only; nothing can add versions but Andy.
 resource "google_secret_manager_secret_iam_member" "runtime_reads_resend_api_key" {
   secret_id = google_secret_manager_secret.resend_api_key.id
+  role      = "roles/secretmanager.secretAccessor"
+  member    = "serviceAccount:${google_service_account.runtime.email}"
+}
+
+# ── Web Push (AI-179, ADR-0052, ADR-0115 Q2) ────────────────────────────────────
+# The VAPID private key's container only: Andy makes the key pair on his Mac and adds the version
+# by hand (runbook mobile.md), so the key never passes through Terraform, state or the repo.
+
+resource "google_secret_manager_secret" "vapid_private_key" {
+  secret_id = "vapid-private-key"
+
+  replication {
+    auto {}
+  }
+
+  depends_on = [google_project_service.apis]
+}
+
+# The runtime reads this secret only; nothing can add versions but Andy.
+resource "google_secret_manager_secret_iam_member" "runtime_reads_vapid_private_key" {
+  secret_id = google_secret_manager_secret.vapid_private_key.id
   role      = "roles/secretmanager.secretAccessor"
   member    = "serviceAccount:${google_service_account.runtime.email}"
 }
