@@ -70,6 +70,21 @@ export const DeploymentFinish = z.object({
 });
 export type DeploymentFinish = z.infer<typeof DeploymentFinish>;
 
+/**
+ * The deployment after `finish` (shared by every DeploymentStore, so they can't drift): status and
+ * time from the finish; the revision only when the finish names one, so a known revision is never
+ * wiped by an absent or undefined field.
+ */
+export function finishedDeployment(current: Deployment, finish: DeploymentFinish): Deployment {
+  const change = DeploymentFinish.parse(finish);
+  return Deployment.parse({
+    ...current,
+    status: change.status,
+    finishedAt: change.finishedAt,
+    revision: change.revision ?? current.revision,
+  });
+}
+
 /** A listing's page size, clamped to 1..`maxPage`; `defaultPage` when not given. */
 export function deploymentPageSize(limit?: number): number {
   if (limit === undefined || !Number.isFinite(limit)) return DEPLOYMENT_LIMITS.defaultPage;

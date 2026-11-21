@@ -61,6 +61,18 @@ export function deploymentStoreContract(
       expect(await store.get(recorded.id)).toEqual(done);
     });
 
+    test("GivenAKnownRevision_WhenFinishedWithoutOne_ThenTheRevisionIsKept", async () => {
+      const store = await make();
+      const recorded = await store.record(deployment({ revision: "control-plane-00042-abc" }));
+      const done = await store.finish(recorded.id, {
+        status: "succeeded",
+        finishedAt: at(2),
+        revision: undefined,
+      });
+      expect(done.revision).toBe("control-plane-00042-abc");
+      expect((await store.get(recorded.id))?.revision).toBe("control-plane-00042-abc");
+    });
+
     test("GivenAFinishedDeployment_WhenFinishedAgain_ThenConflictAndNothingChanges", async () => {
       const store = await make();
       const recorded = await store.record(deployment());

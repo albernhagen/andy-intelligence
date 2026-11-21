@@ -2,6 +2,7 @@ import {
   Deployment,
   DeploymentFinish,
   deploymentPageSize,
+  finishedDeployment,
   type DeploymentEnvironment,
   type NewDeployment,
 } from "../entities/deployment";
@@ -26,13 +27,13 @@ export class InMemoryDeploymentStore implements DeploymentStore {
   }
 
   async finish(deploymentId: string, finish: DeploymentFinish): Promise<Deployment> {
-    const change = DeploymentFinish.parse(finish);
+    DeploymentFinish.parse(finish);
     const current = this.deployments.get(deploymentId);
     if (!current) throw new WorkTrackerError("not_found", `deployment ${deploymentId} not found`);
     if (current.status !== "started") {
       throw new WorkTrackerError("conflict", `deployment ${deploymentId} is ${current.status}`);
     }
-    const next = Deployment.parse({ ...current, ...change });
+    const next = finishedDeployment(current, finish);
     this.deployments.set(deploymentId, next);
     return structuredClone(next);
   }

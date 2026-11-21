@@ -4,6 +4,7 @@ import {
   DeploymentFinish,
   WorkTrackerError,
   deploymentPageSize,
+  finishedDeployment,
   type DeploymentEnvironment,
   type DeploymentStore,
   type NewDeployment,
@@ -52,7 +53,7 @@ export class FirestoreDeploymentStore implements DeploymentStore {
   }
 
   async finish(deploymentId: string, finish: DeploymentFinish): Promise<Deployment> {
-    const change = DeploymentFinish.parse(finish);
+    DeploymentFinish.parse(finish);
     const ref = this.deployments().doc(deploymentId);
     return this.db.runTransaction(async (tx) => {
       const current = (await tx.get(ref)).data();
@@ -60,7 +61,7 @@ export class FirestoreDeploymentStore implements DeploymentStore {
       if (current.status !== "started") {
         throw new WorkTrackerError("conflict", `deployment ${deploymentId} is ${current.status}`);
       }
-      const next = Deployment.parse({ ...current, ...change });
+      const next = finishedDeployment(current, finish);
       tx.set(ref, next);
       return next;
     });
