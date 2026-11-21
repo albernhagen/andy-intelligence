@@ -1,0 +1,108 @@
+name: Baseline — report a deployment
+description: >-
+  Reports a deployment to the control plane (AI-180: M6.4, ADR-0114): `start` before the deploy
+  (image digest; the commit comes from the job's OIDC token), `finish` after it (status and the
+  serving revision). Authenticated with the job's GitHub Actions OIDC token (ADR-0019), so the
+  calling job needs `id-token: write`. Never fails the job: any error becomes a warning and a line
+  in the job summary saying the deployment was not recorded.
+
+inputs:
+  control-plane-url:
+    description: The control plane's origin, also the OIDC audience.
+    required: true
+  phase:
+    description: "`start` or `finish`."
+    required: true
+  image-digest:
+    description: "`start`: the deployed image's digest (`sha256:…`)."
+    required: false
+    default: ""
+  deployment-id:
+    description: "`finish`: the id the `start` report returned."
+    required: false
+    default: ""
+  status:
+    description: "`finish`: `succeeded` or `failed`."
+    required: false
+    default: ""
+  service:
+    description: "`finish`: the Cloud Run service, to read the serving revision (optional)."
+    required: false
+    default: ""
+  region:
+    description: "`finish`: the Cloud Run region (with `service`)."
+    required: false
+    default: ""
+
+outputs:
+  deployment-id:
+    description: The recorded deployment's id (`start`); empty when it was not recorded.
+    value: ${{ steps.report.outputs.deployment_id }}
+
+runs:
+  using: composite
+  steps:
+    - name: Report the deployment
+      id: report
+      shell: bash
+      env:
+        CONTROL_PLANE_URL: ${{ inputs.control-plane-url }}
+        PHASE: ${{ inputs.phase }}
+        IMAGE_DIGEST: ${{ inputs.image-digest }}
+        DEPLOYMENT_ID: ${{ inputs.deployment-id }}
+        STATUS: ${{ inputs.status }}
+        SERVICE: ${{ inputs.service }}
+        REGION: ${{ inputs.region }}
+      run: |
+        set -u
+        # Keep the token out of logs: no `set -x` in this step.
+        not_recorded() {
+          echo "::warning title=report-deployment::Deployment not recorded ($PHASE): $1"
+          echo "⚠️ Deployment not recorded in the control plane ($PHASE): $1. The deploy itself is unaffected." >> "$GITHUB_STEP_SUMMARY"
+          exit 0
+        }
+        [ -n "${ACTIONS_ID_TOKEN_REQUEST_URL:-}" ] || not_recorded "no OIDC token (the job needs id-token: write)"
+
+        case "$PHASE" in
+          start)
+            [[ "$IMAGE_DIGEST" =~ ^sha256:[0-9a-f]{64}$ ]] || not_recorded "no image digest"
+            body=$(jq -cn --arg d "$IMAGE_DIGEST" '{imageDigest: $d}')
+            path="/deployments"
+            ;;
+          finish)
+            [[ "$DEPLOYMENT_ID" =~ ^[A-Za-z0-9-]{1,80}$ ]] || not_recorded "the start report returned no deployment id"
+            [[ "$STATUS" =~ ^(succeeded|failed)$ ]] || not_recorded "status must be succeeded or failed"
+            revision=""
+            if [ -n "$SERVICE" ] && [ -n "$REGION" ]; then
+              revision=$(gcloud run services describe "$SERVICE" --region "$REGION" \
+                --format='value(status.latestReadyRevisionName)' 2>/dev/null) || revision=""
+            fi
+            body=$(jq -cn --arg s "$STATUS" --arg r "$revision" \
+              '{status: $s} + (if $r == "" then {} else {revision: $r} end)')
+            path="/deployments/$DEPLOYMENT_ID/finish"
+            ;;
+          *) not_recorded "phase must be start or finish" ;;
+        esac
+
+        token=$(curl -sS --fail --max-time 10 -H "Authorization: bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" \
+          "$ACTIONS_ID_TOKEN_REQUEST_URL&audience=$CONTROL_PLANE_URL" | jq -r .value) || token=""
+        [ -n "$token" ] && [ "$token" != null ] || not_recorded "could not get an OIDC token"
+        echo "::add-mask::$token"
+
+        response="$RUNNER_TEMP/deployment-report.json"
+        code=$(curl -sS --max-time 15 --retry 2 -o "$response" -w '%{http_code}' -X POST \
+          -H "Authorization: Bearer $token" -H "Content-Type: application/json" \
+          --data "$body" "$CONTROL_PLANE_URL$path") || code=000
+        case "$code" in
+          2??) ;;
+          *) not_recorded "the control plane answered HTTP $code" ;;
+        esac
+
+        if [ "$PHASE" = start ]; then
+          id=$(jq -r '.deploymentId // ""' "$response")
+          [[ "$id" =~ ^[A-Za-z0-9-]{1,80}$ ]] || not_recorded "no deployment id in the answer"
+          echo "deployment_id=$id" >> "$GITHUB_OUTPUT"
+          echo "Deployment $id recorded as started." >> "$GITHUB_STEP_SUMMARY"
+        else
+          echo "Deployment $DEPLOYMENT_ID recorded as $STATUS${revision:+ (revision $revision)}." >> "$GITHUB_STEP_SUMMARY"
+        fi

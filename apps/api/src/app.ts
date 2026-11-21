@@ -12,6 +12,7 @@ import {
   type WorkTracker,
   type QuotaStore,
   type NightLaunchStore,
+  type DeploymentStore,
 } from "@andy/contracts";
 import type { CreatedApp } from "@andy/github";
 import { DomainError, type EmailNotificationsDeps } from "@andy/domain";
@@ -59,6 +60,8 @@ export interface AppDeps {
   quota?: QuotaStore;
   /** Night launches (ADR-0049): a launched story's build gets its `epic/<KEY>` base (AI-122). */
   nightLaunches?: NightLaunchStore;
+  /** Deployments reported by deploy workflows (AI-180: M6.4); the report routes are absent when unset. */
+  deployments?: DeploymentStore;
   /**
    * The only host served (ADR-0044), e.g. `ai.andybernhagen.com`. Requests for any other host
    * (the default run.app URLs) get 404, except /health for monitoring. Unset: every host (local dev).
