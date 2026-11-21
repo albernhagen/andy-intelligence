@@ -1,11 +1,14 @@
 import {
   InMemoryCodeEventLog,
   InMemoryCodeHostConnectionStore,
+  InMemoryMilestoneStore,
   InMemoryOAuthGrantStore,
   InMemoryProjectVersions,
   InMemoryRunStore,
   InMemoryWorkTracker,
+  type MilestoneStatus,
   type Stage,
+  type Ticket,
 } from "@andy/contracts";
 import { countReads } from "@andy/contracts/testing";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -24,8 +27,11 @@ import { createServices } from "./services";
 
 const PUBLIC_URL = "https://control-plane.example.run.app";
 
-/** A project with fixed working lanes and `finished` Done tickets (half archived). */
-async function setup(finished: number) {
+/**
+ * A project with fixed working lanes and `finished` Done tickets (half archived). With
+ * `milestone`, the Ready tickets sit under one epic in a milestone of that status (AI-306).
+ */
+async function setup(finished: number, milestone?: MilestoneStatus) {
   const raw = new InMemoryWorkTracker();
   await raw.createProject({ name: "Andy Intelligence", key: "AI", repos: ["albernhagen/ai"] });
   await raw.updateProject("ai", { autoRefine: true, autoBuild: true, buildEnabled: true });
@@ -46,13 +52,28 @@ async function setup(finished: number) {
     if (i % 2 === 0) await raw.updateTicket("ai", t.id, { fields: { archived: true } }, "andy");
   }
   for (let i = 0; i < 20; i++) await at("backlog", `Idea ${i}`);
-  for (let i = 0; i < 3; i++) await at("ready", `Ready ${i}`);
+  const readyTickets: Ticket[] = [];
+  for (let i = 0; i < 3; i++) readyTickets.push(await at("ready", `Ready ${i}`));
+  const rawMilestones = new InMemoryMilestoneStore();
+  if (milestone) {
+    const at = "2026-11-21T12:00:00.000Z";
+    await rawMilestones.create({
+      ...{ id: "m6", projectId: "ai", name: "M6: Dev to prod", outcome: "Releases reach prod." },
+      ...{ order: 6, status: milestone, createdAt: at, updatedAt: at },
+    });
+    const epic = await raw.createTicket("ai", { title: "Epic", type: "epic", body: "x" }, "andy");
+    // Nothing writes a ticket's milestone until AI-304: M4.34; set it as that write will.
+    const stored = (raw as unknown as { tickets: Map<string, Ticket> }).tickets;
+    stored.get(epic.id)!.milestoneId = "m6";
+    for (const t of readyTickets) stored.get(t.id)!.parentId = epic.id;
+  }
   for (let i = 0; i < 2; i++) await at("in_progress", `Building ${i}`);
   for (let i = 0; i < 2; i++) await at("ready_for_review", `In review ${i}`);
   const touched = await at("backlog", "Touched");
 
   const tracker = countReads(raw);
   const runs = countReads(new InMemoryRunStore());
+  const milestones = countReads(rawMilestones);
   const deps: AppDeps = {
     projectAccess: ownerOnlyAccess(),
     verifier: { verify: () => Promise.reject(new Error("unused")) },
@@ -61,6 +82,7 @@ async function setup(finished: number) {
     webConfig: { firebaseApiKey: "k", firebaseAuthDomain: "d", projectId: "p" },
     tracker: tracker.store,
     runs: runs.store,
+    milestones: milestones.store,
     projectVersions: new InMemoryProjectVersions(),
     // With GitHub configured the build dispatcher runs, as in production.
     github: {
@@ -75,7 +97,7 @@ async function setup(finished: number) {
     },
   };
   const services = createServices(deps);
-  return { raw, tracker, runs, services, touched, deps };
+  return { raw, tracker, runs, milestones, services, touched, deps, readyTickets };
 }
 
 describe("dispatch reads (AI-315)", () => {
@@ -101,6 +123,29 @@ describe("dispatch reads (AI-315)", () => {
     expect(counts[1]).toBe(counts[0]);
     // The Ready, In progress and Ready for review lanes and their tasks: not the project.
     expect(counts[1]).toBeLessThan(60);
+  });
+
+  it("GivenReadyTicketsInAMilestone_WhenADispatchRuns_ThenItReadsTheirEpicAndMilestoneOnce", async () => {
+    vi.spyOn(console, "log").mockImplementation(() => {});
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    const reads = async (milestone?: MilestoneStatus) => {
+      const s = await setup(300, milestone);
+      s.tracker.reset();
+      s.runs.reset();
+      s.milestones.reset();
+      await s.services.dispatchNext("ai");
+      return { s, tracker: s.tracker.reads(), milestones: s.milestones.reads() };
+    };
+    const without = await reads();
+    const parked = await reads("parked");
+    // AI-306: one epic read (overrides already read it, AI-116) and one milestone read, no list.
+    expect(without.milestones).toBe(0);
+    expect(parked.milestones).toBe(1);
+    expect(parked.tracker).toBeLessThanOrEqual(without.tracker + 1);
+    // Held: none of the Ready tickets started; the decision says why.
+    const held = await parked.s.runs.store.listActive("ai");
+    expect(held.filter((r) => parked.s.readyTickets.some((t) => t.id === r.ticketId))).toEqual([]);
+    expect((await parked.s.raw.getProject("ai"))!.lastDispatch?.decision).toBe("milestone_held");
   });
 
   it("GivenADispatch_WhenItRuns_ThenItLogsTheDocumentsItRead", async () => {
