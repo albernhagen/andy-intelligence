@@ -1,4 +1,5 @@
 ---
+title: Custom domain `ai.andybernhagen.com` now, via a Cloud Run domain mapping
 status: accepted
 date: 2026-11-03
 amends: 0007

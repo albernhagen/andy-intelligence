@@ -5,7 +5,7 @@ import {
   blockingRun,
   editingRuns,
   globMatches,
-  highestAdrInIndex,
+  highestAdrNumber,
   overlappingKey,
   overlaps,
   runTouches,
@@ -158,17 +158,10 @@ describe("runTouches", () => {
 });
 
 describe("ADR numbers", () => {
-  const index = [
-    "| ADR | Decision | Status |",
-    "| --- | --- | --- |",
-    "| [0079](0079-dispatch-caps.md) | Dispatch caps | accepted |",
-    "| [0082](0082-worker-role.md) | Worker role | accepted |",
-    "See [0099](0099-x.md) in prose: not a row.",
-  ].join("\n");
-
-  it("GivenAnIndex_WhenRead_ThenTheHighestRowNumber", () => {
-    expect(highestAdrInIndex(index)).toBe(82);
-    expect(highestAdrInIndex("no rows")).toBeNull();
+  it("GivenAdrFileNames_WhenRead_ThenTheHighestNumber", () => {
+    const files = ["0079-dispatch-caps.md", "0082-worker-role.md", "README.md", "0099-notes.txt"];
+    expect(highestAdrNumber(files)).toBe(82);
+    expect(highestAdrNumber(["README.md"])).toBeNull();
   });
 
   it("GivenANumber_WhenLabelled_ThenFourDigits", () => {

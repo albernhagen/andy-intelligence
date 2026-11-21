@@ -1,4 +1,5 @@
 ---
+title: Build dependencies installed before the agent, outside the sandbox
 status: accepted
 date: 2026-11-07
 amends: 0063 (Tooling files, Bash containment)

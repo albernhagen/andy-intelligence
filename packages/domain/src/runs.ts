@@ -42,7 +42,7 @@ import {
 } from "@andy/contracts";
 import { buildBaseBranch } from "./night-branch";
 import { MAX_ACTIVE_RUNS_GLOBAL, isInFlight, wasDispatched } from "./dispatch-caps";
-import { blockingRun, editingRuns, highestAdrInIndex, runTouches } from "./dispatch-conflicts";
+import { blockingRun, editingRuns, highestAdrNumber, runTouches } from "./dispatch-conflicts";
 import { isDispatchable, resolveWorker } from "./worker";
 import { cascadesFrom, withEpicOverrides } from "./overrides";
 import { resolveExecutor, wantedExecutor } from "./executor";
@@ -100,8 +100,8 @@ function oldestFirst(a: Run, b: Run): number {
   return (a.createdAt ?? "").localeCompare(b.createdAt ?? "") || a.id.localeCompare(b.id);
 }
 
-/** Where a repo keeps its ADR index; build runs' ADR numbers are reserved above it (ADR-0080). */
-export const ADR_INDEX_PATH = "docs/architecture/adr/README.md";
+/** Where a repo keeps its ADRs (`NNNN-*.md`); build runs' numbers are reserved above them (ADR-0080, ADR-0104). */
+export const ADR_DIR = "docs/architecture/adr";
 
 /**
  * How each provider is billed (ARCHITECTURE §5 Provider). The executor takes the run's
@@ -210,8 +210,8 @@ export class RunService {
      * waiting ticket can start (the refine dispatcher, ADR-0054). Its errors are logged only.
      */
     private readonly onRunEnded: ((projectId: string) => Promise<void>) | null = null,
-    /** Reads the repo's ADR index to reserve build runs' ADR numbers (ADR-0080); null: none. */
-    private readonly codeHost: Pick<CodeHost, "getRepo" | "readFile"> | null = null,
+    /** Lists the repo's ADR folder to reserve build runs' ADR numbers (ADR-0080); null: none. */
+    private readonly codeHost: Pick<CodeHost, "getRepo" | "listFiles"> | null = null,
     /**
      * Whether a local runner that serves the project is present (ADR-0089); null: no runners,
      * so a `local` default runs on the cloud executor and a `local` override waits.
@@ -1567,17 +1567,15 @@ export class RunService {
 
   /**
    * The next ADR number for a build run (ADR-0080), reserved atomically on the project's counter:
-   * above the index on the default branch and every number reserved before. Null, never a
-   * guess, when the repo has no index or it can't be read.
+   * above the highest `NNNN-*.md` in the ADR folder on the default branch and every number
+   * reserved before. Null, never a guess, when the repo has no ADR files or they can't be listed.
    */
   private async reserveAdr(projectId: string, repo: string): Promise<number | null> {
     if (!this.codeHost) return null;
     try {
       const info = await this.codeHost.getRepo(repo);
-      const index = info
-        ? await this.codeHost.readFile(repo, ADR_INDEX_PATH, info.defaultBranch)
-        : null;
-      const highest = index === null ? null : highestAdrInIndex(index);
+      const files = info ? await this.codeHost.listFiles(repo, ADR_DIR, info.defaultBranch) : null;
+      const highest = files === null ? null : highestAdrNumber(files);
       if (highest === null) return null;
       if (highest >= ADR_NUMBER_MAX) return null;
       const next = await this.tracker.reserveAdrNumber(projectId, highest);

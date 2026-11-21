@@ -371,11 +371,9 @@ describe("BuildDispatcher", () => {
       expect(await builds(next.id)).toHaveLength(1);
     });
 
-    it("GivenAnAdrIndex_WhenTwoBuildsStart_ThenEachReservesTheNextNumberAndThePromptSaysSo", async () => {
-      host.files.set(
-        "docs/architecture/adr/README.md",
-        "| [0079](0079-x.md) | x | accepted |\n| [0082](0082-y.md) | y | accepted |",
-      );
+    it("GivenAdrFiles_WhenTwoBuildsStart_ThenEachReservesTheNextNumberAndThePromptSaysSo", async () => {
+      host.files.set("docs/architecture/adr/0079-x.md", "x");
+      host.files.set("docs/architecture/adr/0082-y.md", "y");
       const { dispatcher } = wire();
       const [a, b] = [await inReady("A"), await inReady("B")];
       await dispatcher.next(projectId);
@@ -385,7 +383,7 @@ describe("BuildDispatcher", () => {
       expect(runA.prompt).toContain(`risk IDs carry the ticket key: R-${a.key} `);
     });
 
-    it("GivenNoAdrIndex_WhenABuildStarts_ThenNoNumberIsReserved", async () => {
+    it("GivenNoAdrFiles_WhenABuildStarts_ThenNoNumberIsReserved", async () => {
       const { dispatcher } = wire();
       const a = await inReady("A");
       await dispatcher.next(projectId);
