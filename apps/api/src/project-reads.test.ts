@@ -17,9 +17,13 @@ import { ownerOnlyAccess } from "./project-access";
 
 /**
  * AI-318: Dashboard, digest, epic status, What's new and milestone map read the whole project per
- * call; AI-319: Needs-you reads every flagged ticket and open question across projects per call. Documents each reads, cold, unchanged, and after one and ten ticket writes, at two project
- * sizes: after the first read they must not grow with the number of tickets, and each returns
- * what a full read (no snapshot) returns.
+ * call.
+ *
+ * AI-319: Needs-you reads every flagged ticket and open question across projects per call.
+ *
+ * Documents each entry point reads, cold, unchanged, and after one and ten ticket writes, at two
+ * project sizes: after the first read they must not grow with the number of tickets, and each
+ * returns what a full read (no snapshot) returns.
  */
 
 const MINUTE = 60_000;
