@@ -42,7 +42,7 @@ Scope: [`milestones.md`](milestones.md) §M4. Sliced by AI-80: Slice M4: Epics +
 
 ## Order and parallel work
 
-Slices in one batch own disjoint files (`touches`). Shared registries take one-line additions only (`apps/api/src/app.ts`, `apps/api/src/mcp/tools.ts`, the `packages/contracts` and `packages/store` index files, generated `apps/web/src/lib/api.gen.ts`): on a conflict keep both sides and regenerate.
+Slices in one batch own disjoint files (`touches`). Shared registries take one sorted line per module (`api-routes.ts`, `public-routes.ts`, `mcp/tool-groups.ts`, the package index files; AI-145): on a conflict keep both lines. `api.gen.ts` is generated, not committed.
 
 | Batch | Slices                                                     | Starts when                                  |
 | ----- | ---------------------------------------------------------- | -------------------------------------------- |

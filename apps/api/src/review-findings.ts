@@ -10,6 +10,7 @@ import type { Hono } from "hono";
 import { bodyLimit } from "hono/body-limit";
 import type { AuthEnv } from "./auth";
 import type { ActionsTokenVerifier } from "./github/token";
+import type { RouteModule } from "./services";
 import { FixedWindowLimiter } from "./mcp/rate-limit";
 
 /**
@@ -53,6 +54,17 @@ export interface ReviewFindingsDeps {
 function log(severity: "INFO" | "WARNING", message: string, fields: Record<string, unknown> = {}) {
   console.log(JSON.stringify({ severity, message, component: "review-findings", ...fields }));
 }
+
+/** Registered with the GitHub App and a findings log; listed in `public-routes.ts` (AI-145). */
+export const publicRoutes: RouteModule = (app, s) => {
+  if (!s.verifyActionsToken || !s.deps.reviewFindings) return;
+  registerReviewFindings(app, {
+    log: s.deps.reviewFindings,
+    tracker: s.deps.tracker,
+    verify: s.verifyActionsToken,
+    now: s.now,
+  });
+};
 
 export function registerReviewFindings(app: Hono<AuthEnv>, deps: ReviewFindingsDeps): void {
   const now = deps.now ?? (() => new Date());

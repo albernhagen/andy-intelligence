@@ -62,6 +62,22 @@ export class InMemoryConfigChangeStore implements ConfigChangeStore {
       .map((c) => structuredClone(c));
   }
 
+  async markReverted(id: string, by: string, at: string): Promise<ConfigChange> {
+    const found = this.changes.get(id);
+    if (!found) throw new WorkTrackerError("not_found", `config change ${id} not found`);
+    if (found.status !== "applied") {
+      throw new WorkTrackerError("conflict", `config change ${id} is ${found.status}`);
+    }
+    const reverted = ConfigChange.parse({
+      ...found,
+      status: "reverted",
+      decidedBy: by,
+      decidedAt: at,
+    });
+    this.changes.set(id, reverted);
+    return structuredClone(reverted);
+  }
+
   async listPending(projectId?: string): Promise<ConfigChange[]> {
     return [...this.changes.values()]
       .filter((c) => c.status === "pending")
