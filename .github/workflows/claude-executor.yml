@@ -67,8 +67,6 @@ jobs:
         env:
           RUN_ID: ${{ inputs.run_id }}
           CREDENTIAL: ${{ inputs.credential }}
-          HAS_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN != '' }}
-          HAS_API_KEY: ${{ secrets.ANTHROPIC_API_KEY != '' }}
           MAX_TURNS_CAP: 200 # spend cap per run (ADR-0028), whatever the control plane asks
           MAX_BUDGET_USD_CAP: 50 # USD per pay_per_use run (AI-260), whatever the control plane asks
           MAX_PROMPT_CHARS: 200000
@@ -79,9 +77,9 @@ jobs:
             exit 1
           }
           [[ "$RUN_ID" =~ ^[A-Za-z0-9-]{1,64}$ ]] || fail "run_id must be 1-64 letters, digits or hyphens"
+          # The secret itself is checked in the agent job, the one job that can read it (AI-106).
           case "$CREDENTIAL" in
-            subscription) [ "$HAS_OAUTH_TOKEN" = true ] || fail "credential=subscription but secret CLAUDE_CODE_OAUTH_TOKEN is empty" ;;
-            api_key) [ "$HAS_API_KEY" = true ] || fail "credential=api_key but secret ANTHROPIC_API_KEY is empty" ;;
+            subscription | api_key) ;;
             *) fail "credential must be subscription or api_key" ;;
           esac
 
@@ -178,9 +176,16 @@ jobs:
     needs: context
     runs-on: ubuntu-latest
     timeout-minutes: ${{ needs.context.outputs.step == 'build' && 65 || (needs.context.outputs.step == 'sync' && 80) || 30 }}
+    # AI-106 (ADR-0096): the model credential lives in the calling repo's `agent` environment,
+    # deployable from `main` only, so a workflow on another branch can't read it. An environment
+    # secret wins over the repo secret of the same name the caller passes; with none set (an
+    # environment GitHub creates empty on first use, or a private repo without environments) the
+    # repo secret is used. Only this job names it: `context` and `report` never see the credential.
+    environment: agent
     permissions:
       contents: read
     outputs:
+      credential_error: ${{ steps.credential.outputs.error }}
       report: ${{ steps.settle.outputs.report || steps.report.outputs.report }}
       base_sha: ${{ steps.change.outputs.base_sha }}
       has_change: ${{ steps.change.outputs.has_change }}
@@ -189,6 +194,27 @@ jobs:
       merge_tree: ${{ steps.merge.outputs.merge_tree }}
       sync_publish: ${{ steps.settle.outputs.sync_publish }}
     steps:
+      # First, before any checkout: the credential the run asked for must be set, in the `agent`
+      # environment or as the repo secret (AI-106). Its value never leaves the env of the steps
+      # that use it.
+      - name: Check the model credential
+        id: credential
+        env:
+          CREDENTIAL: ${{ inputs.credential }}
+          HAS_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN != '' }}
+          HAS_API_KEY: ${{ secrets.ANTHROPIC_API_KEY != '' }}
+        run: |
+          fail() {
+            echo "error=$1" >> "$GITHUB_OUTPUT"
+            echo "::error title=claude-executor::$1"
+            exit 1
+          }
+          case "$CREDENTIAL" in
+            subscription) [ "$HAS_OAUTH_TOKEN" = true ] || fail "credential=subscription but CLAUDE_CODE_OAUTH_TOKEN is empty (neither the agent environment nor the repo secret holds it)" ;;
+            api_key) [ "$HAS_API_KEY" = true ] || fail "credential=api_key but ANTHROPIC_API_KEY is empty (neither the agent environment nor the repo secret holds it)" ;;
+            *) fail "credential must be subscription or api_key" ;;
+          esac
+
       # A sync run checks out the PR head it was started on, with history, to merge the default
       # branch into it; a night launch's story build checks out its epic branch (AI-122, checked in
       # the context job), with history, to compare it with the default branch; every other step
@@ -827,6 +853,7 @@ jobs:
           CONTEXT_RESULT: ${{ needs.context.result }}
           CONTEXT_ERROR: ${{ needs.context.outputs.error }}
           AGENT_RESULT: ${{ needs.agent.result }}
+          CREDENTIAL_ERROR: ${{ needs.agent.outputs.credential_error }}
           PUBLISH_RESULT: ${{ needs.publish.result }}
           CHANGE_ERROR: ${{ needs.agent.outputs.change_error }}
           BRANCH: ${{ needs.publish.outputs.branch }}
@@ -845,7 +872,7 @@ jobs:
             if [ "$CONTEXT_RESULT" != success ]; then
               reason="Executor could not start: ${CONTEXT_ERROR:-context job $CONTEXT_RESULT}"
             else
-              reason="Executor agent job $AGENT_RESULT before it built a report"
+              reason="Executor agent job $AGENT_RESULT before it built a report${CREDENTIAL_ERROR:+: $CREDENTIAL_ERROR}"
             fi
             jq -cn --arg s "$reason" '{status: "failed", summary: $s, tokensIn: null, tokensOut: null, costUsd: null}' > "$body"
           fi
