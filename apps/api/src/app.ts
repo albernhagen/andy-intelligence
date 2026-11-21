@@ -29,6 +29,7 @@ import type { CodeHostFactory } from "./github/connection";
 import type { ActionsTokenVerifier } from "./github/token";
 import type { ClientMetadataResolver } from "./mcp";
 import { requireProjectAccess, type ProjectAccess } from "./project-access";
+import { readMeterMiddleware } from "./read-meter";
 // Callers outside the package (web tests, e2e, gen:api) pass today's rule explicitly.
 export { ownerOnlyAccess } from "./project-access";
 import * as publicRoutes from "./public-routes";
@@ -237,6 +238,9 @@ export function createApp(input: AppDeps) {
     );
     return c.json({ error: "internal error" }, 500);
   });
+
+  // AI-315: one log line per request with the documents it read (`read-meter.ts`).
+  app.use("*", readMeterMiddleware());
 
   // No page of ours may be framed: the OAuth consent page must not be clickjacked.
   app.use("*", async (c, next) => {

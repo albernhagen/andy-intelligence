@@ -51,6 +51,7 @@ import { ConnectedCodeHost, GitHubConnection, gitHubCodeHost } from "./github/co
 import { actionsTokenVerifier, type ActionsTokenVerifier } from "./github/token";
 import type { ToolServices } from "./mcp/tools";
 import type { NightDeps } from "./night";
+import { measureReads, meterReads } from "./read-meter";
 import { runnerCredentials } from "./runners";
 import { SpendSettingsService } from "./spend";
 
@@ -79,7 +80,36 @@ export interface Services extends Required<ToolServices> {
 /** A module's routes: registered from its own file and listed once in `public-routes.ts` or `api-routes.ts`. */
 export type RouteModule = (app: OpenAPIHono<AuthEnv>, services: Services) => void;
 
-export function createServices(input: AppDeps): Services {
+/** The stores whose reads the read meter counts (AI-315). */
+const METERED = [
+  "tracker",
+  "runs",
+  "runners",
+  "configChanges",
+  "reviewFindings",
+  "releaseNotes",
+  "quota",
+  "nightLaunches",
+  "deployments",
+  "routing",
+  "spendLedger",
+  "spendCapsStore",
+  "spendNotices",
+  "projectVersions",
+] as const satisfies readonly (keyof AppDeps)[];
+
+/** `deps` with each store's reads counted per request and per dispatch (AI-315). */
+function metered(deps: AppDeps): AppDeps {
+  const out: Record<string, unknown> = { ...deps };
+  for (const key of METERED) {
+    const store = deps[key];
+    if (store) out[key] = meterReads(store);
+  }
+  return out as unknown as AppDeps;
+}
+
+export function createServices(raw: AppDeps): Services {
+  const input = metered(raw);
   // AI-77: with email configured, every service below writes through the tracker's email hook.
   const email = input.email
     ? new EmailNotifications({ tracker: input.tracker, ...input.email })
@@ -210,12 +240,26 @@ export function createServices(input: AppDeps): Services {
     now,
     deps.quota ?? null,
   );
-  const dispatchNext = async (projectId: string, wakeWaiters = true) => {
+  const dispatchOnce = async (projectId: string, wakeWaiters: boolean) => {
     // AI-75 (ADR-0087): held gaps are asked first, as the question caps allow; no run needed.
     await refiner.askHeld(projectId);
     await syncer.next(projectId);
     if (wakeWaiters) await builder.wakeGlobalCapWaiters(projectId);
     return (await builder.next(projectId)) ?? (await refiner.next(projectId));
+  };
+  // AI-315: one line per dispatch event with the documents it read (also counted in its request).
+  const dispatchNext = async (projectId: string, wakeWaiters = true) => {
+    const { value, reads } = await measureReads(() => dispatchOnce(projectId, wakeWaiters));
+    console.log(
+      JSON.stringify({
+        severity: "INFO",
+        message: "dispatch reads",
+        component: "read-meter",
+        projectId,
+        reads,
+      }),
+    );
+    return value;
   };
   const runEnded = async (projectId: string) => {
     await wakeAfterRunEnd({
