@@ -108,6 +108,8 @@ export function createServices(input: AppDeps): Services {
     connection ? new ConnectedCodeHost(connection) : null,
     runnerPresence,
     deps.nightLaunches ?? null,
+    null,
+    deps.routing ?? null,
   );
   const refiner = new RefineDispatcher(deps.tracker, deps.runs, runs, now);
   const builder = new BuildDispatcher(deps.tracker, deps.runs, runs, now, deps.quota ?? null);
