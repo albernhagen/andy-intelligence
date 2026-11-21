@@ -48,6 +48,7 @@ export * from "./runs";
 export * from "./scores";
 export * from "./setup-checklist";
 export * from "./spend-caps";
+export * from "./spend-estimate";
 export * from "./spend-settings";
 export * from "./stages";
 export * from "./status-line";
