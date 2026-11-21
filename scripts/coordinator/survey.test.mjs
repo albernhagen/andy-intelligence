@@ -119,6 +119,16 @@ describe("survey", () => {
     expect(format(report)).toContain("look hardest (ADR-0092): packages/contracts");
   });
 
+  it("GivenKeptFileRenamedAway_WhenSurveyed_ThenOldPathStillBlocks", () => {
+    const gh = fakeGh({
+      7: cleanPr(7, { files: [], renames: [["scripts/review-gate.mjs", "scripts/gate.mjs"]] }),
+    });
+    const report = surveyPr(7, { run: gh.run, patterns });
+    expect(gh.calls.some((c) => c.includes(".previous_filename"))).toBe(true);
+    expect(report.andyKeeps).toContain("scripts/review-*.mjs");
+    expect(report.blockers.join()).toMatch(/Andy keeps/);
+  });
+
   it("GivenTerraformChange_WhenSurveyed_ThenAndyKeepsIt", () => {
     expect(survey(cleanPr(7, { files: ["infra/control-plane/main.tf"] })).andyKeeps).toEqual([
       "infra/",

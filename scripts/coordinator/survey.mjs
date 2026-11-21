@@ -81,7 +81,8 @@ export function surveyPr(number, { run = sh, patterns }) {
       "--paginate",
       `repos/{owner}/{repo}/pulls/${number}/files`,
       "--jq",
-      ".[].filename",
+      // A rename counts at both paths: moving a kept file away must not hide it.
+      ".[] | .filename, (.previous_filename // empty)",
     ]),
   );
   const report = {
