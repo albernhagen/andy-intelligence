@@ -11,8 +11,8 @@ import {
   type WatchdogQueue,
   type WorkTracker,
   type QuotaStore,
-  type NightLaunchStore,
   type DeploymentStore,
+  type NightLaunchStore,
 } from "@andy/contracts";
 import type { CreatedApp } from "@andy/github";
 import { DomainError, type EmailNotificationsDeps } from "@andy/domain";
@@ -60,7 +60,10 @@ export interface AppDeps {
   quota?: QuotaStore;
   /** Night launches (ADR-0049): a launched story's build gets its `epic/<KEY>` base (AI-122). */
   nightLaunches?: NightLaunchStore;
-  /** Deployments reported by deploy workflows (AI-180: M6.4); the report routes are absent when unset. */
+  /**
+   * Deployment records (AI-161): written by deploy workflows' reports (AI-180, routes absent when
+   * unset) and read by the DORA panel (AI-200, empty when unset).
+   */
   deployments?: DeploymentStore;
   /**
    * The only host served (ADR-0044), e.g. `ai.andybernhagen.com`. Requests for any other host
