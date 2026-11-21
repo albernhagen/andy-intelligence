@@ -1,6 +1,7 @@
 import { WorkTrackerError, type EventActor, type Ticket, type WorkTracker } from "@andy/contracts";
 import {
   type MilestoneReader,
+  type MilestoneService,
   DomainError,
   type DigestReader,
   type EmailNotifications,
@@ -66,6 +67,8 @@ export interface ToolDeps {
   configRevert?: ConfigRevert | null;
   /** Model routing settings (AI-239); absent or null: no routing tools. */
   routing?: RoutingSettings | null;
+  /** Milestones (AI-304); absent or null: no milestone tools. Never in an agent's tool list. */
+  milestoneService?: MilestoneService | null;
   /** The night launch step (M4.17); absent or null: no night tools. */
   night?: NightDeps | null;
   /** Work across projects (AI-198); the app always passes it, unit tests may not. */
