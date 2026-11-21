@@ -209,6 +209,7 @@ function Story({ ticket: t }: { ticket: Ticket }) {
       />
       <div className="grid gap-6 sm:grid-cols-[minmax(0,1fr)_11rem]">
         <div className="min-w-0 space-y-6">
+          {t.type === "epic" && <Outcome ticket={t} />}
           <MarkdownField
             label="Description"
             value={t.body}
@@ -220,7 +221,8 @@ function Story({ ticket: t }: { ticket: Ticket }) {
           <ListField
             ticket={t}
             field="acceptanceCriteria"
-            label={t.type === "chore" ? "Done when" : "Acceptance criteria"}
+            // An epic's criteria are its "Done when" list (ADR-0108), as a chore's are.
+            label={t.type === "chore" || t.type === "epic" ? "Done when" : "Acceptance criteria"}
           />
           <ListField ticket={t} field="assumptions" label="Assumptions" />
           <ListField ticket={t} field="outOfScope" label="Out of scope" />
@@ -255,6 +257,25 @@ function ListField({
       pending={s.pending}
       error={s.error}
     />
+  );
+}
+
+/** An epic's outcome: one line saying what is true when it is done (ADR-0108). */
+function Outcome({ ticket: t }: { ticket: Ticket }) {
+  const outcome = useTicketSave(t);
+  return (
+    <section aria-label="Outcome" className="space-y-1">
+      <h3 className="text-sm font-medium">Outcome</h3>
+      <InlineText
+        label="Outcome"
+        placeholder="What is true when this epic is done?"
+        value={t.outcome ?? ""}
+        onSave={(v, done) => outcome.save({ outcome: v || null }, done)}
+        onEdit={outcome.begin}
+        pending={outcome.pending}
+        error={outcome.error}
+      />
+    </section>
   );
 }
 

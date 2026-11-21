@@ -1,6 +1,6 @@
 # Threat model: Project agent tasks
 
-`plan-project` and `ideate` as agent tasks (AI-134). Risk register: [threat-model.md](threat-model.md). A project agent task is a run with no ticket: it reads the project's repo and returns the procedure's result (`platform/procedures/plan-project.md`, `ideate.md`); the control plane stores it.
+`plan-project` and `ideate` as agent tasks (AI-134). Index: [threat-model.md](threat-model.md); risk: [R-AI-134](risks/R-AI-134.md). A project agent task is a run with no ticket: it reads the project's repo and returns the procedure's result (`platform/procedures/plan-project.md`, `ideate.md`); the control plane stores it.
 
 ## Entry points
 
