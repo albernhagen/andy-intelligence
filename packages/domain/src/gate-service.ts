@@ -9,13 +9,16 @@ import {
   type RunMetrics,
   type RunOutcome,
   type Listing,
+  type MergeMode,
   type ReviewFindingSource,
   type RunStore,
   type Ticket,
   type WorkTracker,
 } from "@andy/contracts";
 import { CODEOWNERS_PATHS, codeownersGlobs, decideGate, type GateDecision } from "./gate";
+import { effectiveTicketMergeMode } from "./merge-mode";
 import { mergeVerdict, openFindingsOn, type MergeVerdict } from "./merge-verdict";
+import { cascadesFrom } from "./overrides";
 import { intoEpicBranch, passesIntoEpic, type EpicMerges } from "./night-merge";
 import { syncPendingFor } from "./sync-runs";
 import type { NightUnattended } from "./night-unattended";
@@ -104,6 +107,12 @@ export class PullRequestGate {
     if (!agent || agent.run.outcome) return { result: "ignored", pr: number };
 
     const { decision, files } = await this.assess(repo, pr, agent.run, agent.ticket);
+    // Into the default branch: the merge verdict for this head (vetoed heads too, as
+    // gate_not_clean), recorded in the same write as the gate's facts so the Run never shows an
+    // older head's verdict.
+    const judged = pr.intoDefaultBranch
+      ? await this.verdictFor(repo, pr, agent.ticket, project, decision.wouldAutoMerge, files)
+      : null;
     const run = await this.runs.update(
       agent.run.id,
       {
@@ -112,11 +121,19 @@ export class PullRequestGate {
         protectedFiles: decision.protectedFiles,
         outsideDocs: decision.outsideDocs,
         metrics: progress(agent.run.metrics, decision, pr.headSha),
+        ...(judged
+          ? {
+              mergeMode: judged.mode,
+              mergeVerdict: judged.verdict.verdict,
+              verdictReasons: judged.verdict.reasons,
+            }
+          : {}),
       },
       ["succeeded"],
     );
     const base = { pr: number, runId: run.id };
     log("INFO", "gate assessed", { ...base, reasons: decision.reasons });
+    if (judged) log("INFO", "merge verdict", { ...base, mode: judged.mode, ...judged.verdict });
     if (decision.flag) {
       await this.flagOnce(run, agent.ticket, decision);
       await this.night?.stopStory(
@@ -132,39 +149,28 @@ export class PullRequestGate {
           ? await this.epicMerges.target(pr, run, agent.ticket)
           : null;
       if (launch) return this.merge(repo, pr, run, agent.ticket, launch.epicKey);
-      // Into the default branch: record the verdict for this head too, so it never shows an
-      // older head's. It waits (gate_not_clean) whatever the other facts say.
-      if (pr.intoDefaultBranch) {
-        await this.verdictFor(repo, pr, run, agent.ticket, project, false, files);
-      }
       return { result: "assessed", ...base };
     }
-
-    const { mode, verdict } = await this.verdictFor(
-      repo,
-      pr,
-      run,
-      agent.ticket,
-      project,
-      true,
-      files,
-    );
-    if (verdict.verdict !== "merge") return { result: "assessed", ...base };
-    return this.merge(repo, pr, run, agent.ticket, null, mode);
+    if (judged?.verdict.verdict !== "merge") return { result: "assessed", ...base };
+    return this.merge(repo, pr, run, agent.ticket, null, judged.mode);
   }
 
-  /** The merge verdict for the PR's head under the project's mode, recorded on the Run. */
+  /**
+   * The merge verdict for the PR's head. The mode is the ticket's: the stricter of the project's
+   * saved mode and any ticket or epic override (`effectiveTicketMergeMode`); a project with no
+   * saved mode stays unset, so nothing merges (ADR-0134).
+   */
   private async verdictFor(
     repo: string,
     pr: PullRequest,
-    run: Run,
     ticket: Ticket,
     project: Project,
     gateClean: boolean,
     files: Listing<ChangedFile>,
-  ): Promise<{ mode: Project["mergeMode"]; verdict: MergeVerdict }> {
-    // The repo index caches projects for a minute: read the mode now. Unset: nothing merges.
-    const mode = (await this.tracker.getProject(project.id))?.mergeMode ?? null;
+  ): Promise<{ mode: MergeMode | null; verdict: MergeVerdict }> {
+    // The repo index caches projects for a minute: read the mode now.
+    const fresh = (await this.tracker.getProject(project.id)) ?? project;
+    const mode = await this.ticketMode(fresh, ticket);
     const verdict = mergeVerdict(
       {
         gateClean,
@@ -176,18 +182,17 @@ export class PullRequestGate {
       },
       mode,
     );
-    await this.recordVerdict(run, mode, verdict);
-    log("INFO", "merge verdict", { pr: pr.number, runId: run.id, mode, ...verdict });
     return { mode, verdict };
   }
 
-  /** The mode and verdict on the PR record (the Run), shown with the PR (ADR-0124 "Record"). */
-  private async recordVerdict(run: Run, mode: Project["mergeMode"], verdict: MergeVerdict) {
-    await this.runs.update(
-      run.id,
-      { mergeMode: mode, mergeVerdict: verdict.verdict, verdictReasons: verdict.reasons },
-      ["succeeded"],
-    );
+  /** The ticket's mode: the stricter of the project's, its own override and its epic's. */
+  private async ticketMode(project: Project, ticket: Ticket): Promise<MergeMode | null> {
+    if (project.mergeMode === null) return null;
+    const epic = ticket.parentId
+      ? cascadesFrom(await this.tracker.getTicket(ticket.projectId, ticket.parentId))
+      : null;
+    const withEpic = effectiveTicketMergeMode(project, epic?.overrides.mergeMode);
+    return effectiveTicketMergeMode({ mergeMode: withEpic }, ticket.overrides.mergeMode);
   }
 
   /** Whether the head contains the default branch's tip; null (wait) when the host can't say. */
@@ -200,7 +205,11 @@ export class PullRequestGate {
     }
   }
 
-  /** Open findings recorded for this head; null (wait) without a source or when it fails. */
+  /**
+   * Open findings recorded for this head; null (wait) without a source, when the read fails, or
+   * when the read may have been cut short: `recent` returns the newest PRs' findings, so a PR
+   * missing from a full page (or a read at the findings cap) may have findings it didn't return.
+   */
   private async openFindings(
     projectId: string,
     repo: string,
@@ -212,6 +221,9 @@ export class PullRequestGate {
         maxPulls: FINDING_PULLS,
         maxFindings: FINDING_LIMIT,
       });
+      const pulls = new Set(recent.map((f) => `${f.repo}#${f.pullNumber}`));
+      const listed = pulls.has(`${repo}#${pr.number}`);
+      if (recent.length >= FINDING_LIMIT || (!listed && pulls.size >= FINDING_PULLS)) return null;
       return openFindingsOn(recent, { repo, number: pr.number, headSha: pr.headSha });
     } catch (err) {
       log("WARNING", "review findings read failed", { pr: pr.number, error: errorText(err) });

@@ -51,10 +51,11 @@ export function effectiveMergeMode(project: Pick<Project, "mergeMode">): MergeMo
 /**
  * A ticket's mode: the stricter of its project's and its own override (an epic's override passes
  * to its tickets the same way). Overrides are checked only when written, so a project tightened
- * later must still win here: AI-215 reads the mode through this, never the override alone.
+ * later must still win here: the gate (AI-215) reads a ticket's mode through this, never the
+ * override alone.
  */
 export function effectiveTicketMergeMode(
-  project: Pick<Project, "id" | "mergeMode" | "autoMerge">,
+  project: Pick<Project, "mergeMode">,
   override: MergeMode | undefined,
 ): MergeMode {
   const projectMode = effectiveMergeMode(project);

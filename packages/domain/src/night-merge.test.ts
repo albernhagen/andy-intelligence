@@ -105,11 +105,13 @@ describe("night merges into the epic branch (AI-124)", () => {
     host.requiredChecks = REQUIRED.map((name) => ({ name, sourceId: "15368" }));
     host.branches.set("epic/AI-1", START_SHA);
     nights = new InMemoryNightLaunchStore();
+    findings = new InMemoryReviewFindingSource();
     tickets = new TicketService(tracker, null, null, now);
     projectId = (await tracker.createProject({ name: "AI", key: "AI", repos: [REPO.fullName] })).id;
     epic = await tracker.createTicket(projectId, { type: "epic", title: "Night work" }, "andy");
   });
 
+  let findings: InMemoryReviewFindingSource;
   const gate = (withEpics = true) =>
     new PullRequestGate(
       host,
@@ -119,7 +121,7 @@ describe("night merges into the epic branch (AI-124)", () => {
       now,
       null,
       withEpics ? new EpicMerges(nights, runs) : null,
-      new InMemoryReviewFindingSource(),
+      findings,
     );
 
   /** The project's merge mode (AI-215); null: none saved, so nothing merges into main. */
@@ -502,6 +504,79 @@ describe("night merges into the epic branch (AI-124)", () => {
       expect(host.merges).toEqual([]);
       expect((await runs.get(run.id))!.wouldAutoMerge).toBe(true);
       expect(required).toHaveBeenCalledWith(REPO.fullName, "main");
+    });
+
+    /** A story in Ready for review with an open PR into main, under an all-clean project. */
+    async function cleanPrIntoMain() {
+      await setMode("all-clean");
+      const a = await story("A");
+      const review = await tracker.updateTicket(
+        projectId,
+        a.id,
+        { stage: { to: "ready_for_review", forced: true, reason: null } },
+        "andy",
+      );
+      return { a: review, ...(await agentPr(review, "main")) };
+    }
+
+    const finding = (pullNumber: number, headSha: string, severity: string) =>
+      ({
+        projectId,
+        repo: REPO.fullName,
+        pullNumber,
+        reviewer: "adversarial",
+        severity,
+        kind: "bug",
+        title: "t",
+        file: null,
+        headSha,
+        recordedAt: now().toISOString(),
+      }) as Parameters<InMemoryReviewFindingSource["add"]>[0];
+
+    it("GivenAStricterTicketOrEpicOverride_WhenTheProjectIsAllClean_ThenTheOverrideHoldsThePr", async () => {
+      const { a, run, pr } = await cleanPrIntoMain();
+      await tracker.updateTicket(
+        projectId,
+        a.id,
+        { fields: { overrides: { mergeMode: "manual" } } },
+        "andy",
+      );
+      expect((await gate().apply(opened(pr), await project()))[0]).toMatchObject({
+        result: "assessed",
+      });
+      expect(await runs.get(run.id)).toMatchObject({
+        mergeMode: "manual",
+        verdictReasons: ["mode_manual"],
+      });
+
+      await tracker.updateTicket(projectId, a.id, { fields: { overrides: {} } }, "andy");
+      await tracker.updateTicket(
+        projectId,
+        epic.id,
+        { fields: { overrides: { mergeMode: "low-risk" } } },
+        "andy",
+      );
+      await gate().apply(opened(pr), await project());
+      expect(await runs.get(run.id)).toMatchObject({ mergeMode: "low-risk" });
+    });
+
+    it("GivenAShouldFixOnTheHead_WhenTheModeAllows_ThenItWaits", async () => {
+      const { run, pr } = await cleanPrIntoMain();
+      // Findings record hex heads; the fake PR's head takes one.
+      host.pullRequests.get(pr.number)!.pullRequest.headSha = "abcdef1";
+      findings.add(finding(pr.number, "abcdef1", "should-fix"));
+      expect((await gate().apply(opened(pr), await project()))[0]).toMatchObject({
+        result: "assessed",
+      });
+      expect(await runs.get(run.id)).toMatchObject({ verdictReasons: ["open_review_findings"] });
+    });
+
+    it("GivenAFindingsReadThatMayBeCutShort_WhenThePrIsNotInIt_ThenTheFindingsAreUnknown", async () => {
+      const { run, pr } = await cleanPrIntoMain();
+      // A full page of newer PRs' findings: this PR's could be past the cut.
+      for (let n = 1000; n < 1030; n++) findings.add(finding(n, "abc1234", "question"));
+      await gate().apply(opened(pr), await project());
+      expect(await runs.get(run.id)).toMatchObject({ verdictReasons: ["review_findings_unknown"] });
     });
 
     it("GivenAPrIntoMain_WhenTheModeAllows_ThenItAutoMergesWithoutAnEpicMerge", async () => {
