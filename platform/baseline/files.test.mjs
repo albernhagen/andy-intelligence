@@ -6,6 +6,7 @@ import {
   normalizePins,
   pinActions,
   renderFiles,
+  seedsToWrite,
 } from "./files.mjs";
 
 const SOURCE = "albernhagen/andy-intelligence";
@@ -148,5 +149,21 @@ describe("fileDrift", () => {
     expect(fileDrift(rendered, reader(files), { source: SOURCE, version: SHA })).toEqual([
       { path: ".gitignore", issue: "missing lines: *.tfvars" },
     ]);
+  });
+});
+
+describe("seedsToWrite", () => {
+  const seed = [
+    { path: "AGENTS.md", content: "# rules\n" },
+    { path: "design.md", content: "# Design\n" },
+  ];
+
+  it("GivenARepoWithoutTheSeeds_WhenSeeded_ThenEveryOneIsWritten", () => {
+    expect(seedsToWrite(seed, () => false).map((f) => f.path)).toEqual(["AGENTS.md", "design.md"]);
+  });
+
+  it("GivenAnExistingDesignFile_WhenSeeded_ThenItIsNeverOverwritten", () => {
+    const out = seedsToWrite(seed, (p) => p === "design.md");
+    expect(out.map((f) => f.path)).toEqual(["AGENTS.md"]);
   });
 });

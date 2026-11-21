@@ -12,6 +12,7 @@ import {
   BRIEF_PRS_PER_HOUR,
   BriefService,
   countWords,
+  DESIGN_NOT_STATED,
   plainAnswer,
   renderBrief,
 } from "./brief";
@@ -31,6 +32,7 @@ const full: BriefAnswers = {
   environments: "Dev and prod.",
   constraints: "Public repo.",
   qualityBar: "Tests and CI green.",
+  design: "Calm and dense; the design file is `design.md`.",
   openQuestions: ["Which weather API?"],
 };
 
@@ -62,7 +64,13 @@ describe("renderBrief", () => {
     expect(md).toContain("1. Zero typing\n2. Weekly summary");
     expect(md).toContain("- Social features");
     expect(md).toContain("- **Quality bar:** Tests and CI green.");
+    expect(md).toContain("- **Design:** Calm and dense; the design file is `design.md`.");
     expect(md).toContain("- Which weather API?");
+  });
+
+  it("GivenAnswersWithoutADesign_WhenRendered_ThenTheBriefNamesTheDefaultDesignFile", () => {
+    const older: BriefAnswers = { ...full, design: undefined };
+    expect(rendered(older)).toContain(`- **Design:** ${DESIGN_NOT_STATED}`);
   });
 
   it("GivenNoNonGoalsOrOpenQuestions_WhenRendered_ThenTheSectionsSaySo", () => {
@@ -94,6 +102,19 @@ describe("renderBrief", () => {
       expect(sectionWords(answers as BriefAnswers, first)).toBe(maxWords);
     }
     expect(countWords(rendered(answers as BriefAnswers))).toBeLessThanOrEqual(BRIEF_MAX_WORDS);
+  });
+
+  it("GivenADesignAnswer_WhenTheArchitectureSectionIsFull_ThenTheDesignAnswerSharesTheCap", () => {
+    // Pad the design answer until the six answers fill exactly the section's 200 words.
+    const answers: BriefAnswers = { ...full, design: "x" };
+    answers.design = `x ${words(200 - sectionWords(answers, "design"))}`;
+    expect(sectionWords(answers, "design")).toBe(200);
+    expect(renderBrief({ ...answers, design: `${answers.design} more` })).toMatchObject({
+      ok: false,
+      section: "Architectural expectations",
+      words: 201,
+      maxWords: 200,
+    });
   });
 
   it("GivenAnAnswerWithNewlinesAndALeadingHash_WhenRendered_ThenItCannotAddAHeading", () => {

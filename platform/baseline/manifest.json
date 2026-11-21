@@ -42,7 +42,8 @@
   "seed": [
     { "path": "AGENTS.md", "from": "template/AGENTS.md.template" },
     { "path": ".github/CODEOWNERS", "from": "template/.github/CODEOWNERS" },
-    { "path": "docs/security/threat-model.md", "from": "template/docs/security/threat-model.md" }
+    { "path": "docs/security/threat-model.md", "from": "template/docs/security/threat-model.md" },
+    { "path": "design.md", "from": "template/design.md" }
   ],
   "starter": [
     { "path": "package.json", "from": "template/starter/package.json.template" },

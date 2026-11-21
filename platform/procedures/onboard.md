@@ -38,11 +38,12 @@ Every answer has an id: the field name in `BriefAnswers` (`packages/contracts/sr
 | Architectural expectations | `environments`  | Which environments, and how does code reach production?                     | Dev and prod; releases approved by Andy.                                                   |
 | Architectural expectations | `constraints`   | Any constraints: compliance, data residency, budget, integrations, devices? | Public repo hygiene; least privilege; no fixed budget yet.                                 |
 | Architectural expectations | `qualityBar`    | What does "shipped" mean here?                                              | Tests, CI green, security and adversarial review passed, docs current, prod monitoring.    |
+| Architectural expectations | `design`        | What design direction should the UI follow, and where is its design file?   | The baseline's `design.md` defaults; the design file is `design.md` at the repo root.      |
 | Open questions             | `openQuestions` | What is still undecided? (0 to 10)                                          | None.                                                                                      |
 
 ## Word caps
 
-The brief's whole budget is 800 words (`context-budget.json`). Per section: Idea 100, Users and business 100, Vision 80, Goals and non-goals 150, Architectural expectations 200, Open questions 80. Lists hold at most 10 items of 300 characters; other answers at most 2000 characters.
+The brief's whole budget is 800 words (`context-budget.json`). Per section: Idea 100, Users and business 100, Vision 80, Goals and non-goals 150, Architectural expectations 200 (its six answers share it, the design answer included: keep that one to a line), Open questions 80. Lists hold at most 10 items of 300 characters; other answers at most 2000 characters.
 
 ## Result
 
