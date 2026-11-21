@@ -149,7 +149,7 @@ const CASES: [string, string, (key: string) => unknown][] = [
   ],
   ["pull_request opened (moves its ticket)", "pull_request", (key) => pullRequest(key)],
   [
-    "pull_request merged (ticket to Done, dispatch)",
+    "pull_request merged from In progress (ticket to Done)",
     "pull_request",
     (key) => pullRequest(key, true),
   ],
