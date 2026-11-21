@@ -59,14 +59,14 @@ function repos() {
   const origin = join(root, "origin.git");
   const work = join(root, "work");
   git(root, "init", "--bare", "-b", "main", origin);
-  git(root, "clone", origin, work);
+  git(root, "clone", "-q", origin, work);
   git(work, "config", "user.name", "Test");
   git(work, "config", "user.email", "test@example.invalid");
   writeFileSync(join(work, "list.md"), "| a |\n| z |\n");
   writeFileSync(join(work, "code.txt"), "one\n");
   git(work, "add", ".");
   git(work, "commit", "-m", "base");
-  git(work, "push", "origin", "main");
+  git(work, "push", "-q", "origin", "main");
   return { git, origin, work };
 }
 
