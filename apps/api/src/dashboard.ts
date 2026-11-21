@@ -4,10 +4,8 @@ import {
   DASHBOARD_MAX_WEEKS,
   Dashboard,
   ProjectDashboard,
-  type RunStore,
-  type WorkTracker,
 } from "@andy/contracts";
-import { DashboardReader, dashboardWindow } from "@andy/domain";
+import { dashboardWindow, type DashboardReader } from "@andy/domain";
 import type { AuthEnv } from "./auth";
 import type { RouteModule } from "./services";
 
@@ -57,10 +55,9 @@ const allRoute = createRoute({
 
 export function registerDashboardRoutes(
   app: OpenAPIHono<AuthEnv>,
-  deps: { tracker: WorkTracker; runs: RunStore },
+  reader: DashboardReader,
   now: () => Date,
 ): void {
-  const reader = new DashboardReader(deps.tracker, deps.runs);
   app.openapi(projectRoute, async (c) => {
     const window = dashboardWindow(now(), c.req.valid("query").weeks);
     return c.json(await reader.project(c.req.valid("param").projectId, window), 200);
@@ -72,4 +69,4 @@ export function registerDashboardRoutes(
 }
 
 /** Listed in `api-routes.ts` (AI-145). */
-export const apiRoutes: RouteModule = (app, s) => registerDashboardRoutes(app, s.deps, s.now);
+export const apiRoutes: RouteModule = (app, s) => registerDashboardRoutes(app, s.dashboard, s.now);

@@ -35,6 +35,8 @@ import {
   NO_PRICES,
   BoardReader,
   WorkReader,
+  DashboardReader,
+  DoraReader,
   bumpOnWrite,
   type EpicBranchOpener,
 } from "@andy/domain";
@@ -443,6 +445,9 @@ export function createServices(raw: AppDeps): Services {
     // AI-198: each project's board through the same read cache as board polls.
     work: new WorkReader(deps.tracker, new BoardReader(deps.tracker, deps.runs, readCache)),
     whatsNew,
+    // AI-295: one reader each for the Dashboards routes and MCP `dashboard`.
+    dashboard: new DashboardReader(deps.tracker, deps.runs),
+    dora: new DoraReader(deps.tracker, deps.deployments ?? null, now),
     publicUrl: deps.mcp?.publicUrl ?? null,
   };
 }
