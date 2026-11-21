@@ -51,7 +51,7 @@ function RunDetail({ run }: { run: Run }) {
   const wall = wallMs(run);
   const quota = run.quotaDelta && formatQuotaDelta(run.quotaDelta);
   return (
-    <article className="max-w-2xl space-y-4" aria-label="Agent task">
+    <article className="max-w-2xl space-y-4 wrap-anywhere" aria-label="Agent task">
       <header className="flex flex-wrap items-center gap-2">
         <h2 className="text-lg font-medium">Agent task · {run.step}</h2>
         <Badge variant={STATUS_VARIANT[run.status]}>{run.status}</Badge>
@@ -191,7 +191,9 @@ function Section({ title, children }: { title: string; children: ReactNode }) {
 function Facts({ title, children }: { title: string; children: ReactNode }) {
   return (
     <Section title={title}>
-      <dl className="grid grid-cols-[8rem_1fr] gap-x-3 gap-y-1">{children}</dl>
+      <dl className="grid grid-cols-[7rem_minmax(0,1fr)] gap-x-3 gap-y-1 sm:grid-cols-[8rem_1fr]">
+        {children}
+      </dl>
     </Section>
   );
 }

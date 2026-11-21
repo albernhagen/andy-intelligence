@@ -7,6 +7,8 @@ import {
   InMemoryCodeHost,
   InMemoryCodeHostConnectionStore,
   InMemoryConfigChangeStore,
+  InMemoryDeploymentStore,
+  InMemoryNightLaunchStore,
   InMemoryReviewFindingSource,
   InMemoryQuotaStore,
   InMemoryRunStore,
@@ -17,6 +19,15 @@ import { TicketService } from "@andy/domain";
 import { createApp } from "@andy/api/app";
 import { ApiContext, createApi } from "@/lib/api";
 import { makeRouter } from "@/router";
+
+/**
+ * Options for the first `findBy*` after opening a page (AI-219). A page's first render in a test
+ * file runs its whole tree cold, through the in-process API: about 0.3 s alone, but past
+ * testing-library's 1 s default when several sessions run the suite at once (pre-push). Only that
+ * wait gets longer; it stays under the 5 s test timeout so a real failure still names the element.
+ * Later waits keep the 1 s default.
+ */
+export const PAGE_LOAD = { timeout: 4000 } as const;
 
 /**
  * Renders the UI against the real API running in-process (createApp + in-memory tracker), so
@@ -37,6 +48,8 @@ export function renderApp(
   const quota = new InMemoryQuotaStore();
   const runners = new InMemoryRunnerStore();
   const configChanges = new InMemoryConfigChangeStore();
+  const nightLaunches = new InMemoryNightLaunchStore();
+  const deployments = new InMemoryDeploymentStore();
   const reviewFindings = new InMemoryReviewFindingSource();
   // GitHub fakes (ADR-0043): one installed repo; any manifest code "connects" this App.
   const connections = new InMemoryCodeHostConnectionStore();
@@ -63,6 +76,8 @@ export function renderApp(
     quota,
     runners,
     configChanges,
+    nightLaunches,
+    deployments,
     reviewFindings,
     email: opts.email,
     github: {
@@ -102,7 +117,9 @@ export function renderApp(
   });
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   const router = makeRouter(createMemoryHistory({ initialEntries: [path] }));
-  const user = userEvent.setup();
+  // No timer tick between keystrokes and clicks: under load each tick waits behind every other
+  // test worker, and the UI under test doesn't depend on the gaps (AI-219).
+  const user = userEvent.setup({ delay: null });
 
   render(
     <QueryClientProvider client={queryClient}>
@@ -122,6 +139,8 @@ export function renderApp(
     quota,
     codeHost,
     connections,
+    nightLaunches,
+    deployments,
     service: new TicketService(tracker),
   };
 }

@@ -11,7 +11,9 @@
     "dev": "tsx watch src/main.ts",
     "build": "node build.mjs",
     "start": "node dist/main.js",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "snapshot": "tsx src/registry-snapshot.ts",
+    "reference": "tsx src/reference.ts"
   },
   "dependencies": {
     "@andy/contracts": "workspace:*",
