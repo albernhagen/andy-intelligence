@@ -21,14 +21,14 @@ export type WorkProject = {
   id: string;
   key: string;
   name: string;
-  /** Tickets in the view in this project, before the ticket cap. */
+  /** Tickets in the view in this project, before the ticket cap: past it, more than `tickets`. */
   count: number;
   tickets: WorkTicket[];
 };
 
 export type WorkList = {
   view: WorkView;
-  /** Open tickets per view across the projects read: the chips' counts. */
+  /** Open tickets per view across the projects read (the first 50 by key): the chips' counts. */
   counts: Record<WorkView, number>;
   projects: WorkProject[];
   truncated: boolean;

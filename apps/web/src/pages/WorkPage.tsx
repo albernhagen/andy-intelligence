@@ -76,17 +76,25 @@ export function WorkPage() {
                   {p.name} <span className="text-muted-foreground tabular-nums">{p.count}</span>
                 </h3>
               )}
-              <ul className="divide-y divide-border rounded-md border border-border">
-                {p.tickets.map((t) => (
-                  <Row key={t.id} ticket={t} projectId={p.id} />
-                ))}
-              </ul>
+              {p.tickets.length > 0 && (
+                <ul className="divide-y divide-border rounded-md border border-border">
+                  {p.tickets.map((t) => (
+                    <Row key={t.id} ticket={t} projectId={p.id} />
+                  ))}
+                </ul>
+              )}
+              {/* Past the 200-ticket cap a project keeps its count, with fewer rows or none. */}
+              {p.tickets.length < p.count && (
+                <p className="text-sm text-muted-foreground">
+                  {p.count - p.tickets.length} more not shown
+                </p>
+              )}
             </section>
           ))}
           {work.data.truncated && (
             <p className="text-sm text-muted-foreground">
-              Showing the first 200 tickets of the first 50 projects; narrow it to one project to
-              see more.
+              Showing the first 200 tickets of the first 50 projects by key; chip counts cover those
+              projects only. Open one project&apos;s Work to see more.
             </p>
           )}
         </>

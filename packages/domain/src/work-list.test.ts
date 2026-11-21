@@ -110,6 +110,20 @@ describe("WorkReader", () => {
     ]);
   });
 
+  it("GivenAProjectPastTheTicketCap_WhenListed_ThenItKeepsItsCountWithNoTickets", async () => {
+    const many = (projectId: string, n: number) =>
+      Array.from({ length: n }, (_, i) => card(projectId, i + 1));
+    const { work } = await reader({ AI: many("ai", MAX_WORK_TICKETS), OPS: many("ops", 5) });
+
+    const list = await work.list("agents");
+
+    expect(list.truncated).toBe(true);
+    expect(list.projects.map((p) => [p.key, p.count, p.tickets.length])).toEqual([
+      ["AI", MAX_WORK_TICKETS, MAX_WORK_TICKETS],
+      ["OPS", 5, 0],
+    ]);
+  });
+
   it("GivenMoreProjectsThanTheCap_WhenListed_ThenOnlyTheFirstByKeyAreReadAndItIsTruncated", async () => {
     const boards = Object.fromEntries(
       Array.from({ length: MAX_WORK_PROJECTS + 1 }, (_, i) => [
