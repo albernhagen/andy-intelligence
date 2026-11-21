@@ -21,6 +21,7 @@ import {
   type WorkTracker,
 } from "@andy/contracts";
 import { ticketCost } from "./cost";
+import { ProjectTickets } from "./ticket-snapshots";
 import {
   MAX_ACTIVE_RUNS_AT_WARN,
   MAX_ACTIVE_RUNS_GLOBAL,
@@ -530,6 +531,8 @@ export class DigestReader {
     private readonly runs: RunStore,
     private readonly quota: QuotaStore | null,
     private readonly now: () => Date = () => new Date(),
+    /** AI-318: the project's tickets through the snapshot, so a call reads only what changed. */
+    private readonly tickets: ProjectTickets = new ProjectTickets(tracker),
   ) {}
 
   async digest(projectId: string, window: DigestWindow): Promise<Digest> {
@@ -538,7 +541,7 @@ export class DigestReader {
     const from = window.from.toISOString();
     const to = window.to.toISOString();
     const [tickets, questions, activeRuns, ended, quota, quotaClears] = await Promise.all([
-      this.tracker.listTickets(projectId),
+      this.tickets.list(projectId),
       this.tracker.listQuestions({ projectId, status: "open" }),
       this.runs.listActive(projectId),
       this.runs.listEndedBetween(projectId, from, to, MAX_DIGEST_RUNS),
