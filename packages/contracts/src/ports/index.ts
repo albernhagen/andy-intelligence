@@ -737,6 +737,7 @@ export interface Telemetry {
 
 export * from "./digest";
 export * from "./notify-email";
+export * from "./push-sender";
 export * from "./runner";
 export * from "./night";
 export * from "./config-proposals";
