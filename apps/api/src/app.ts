@@ -25,6 +25,9 @@ import {
   LocalClaims,
   BoardReader,
   ConfigProposals,
+  NightLaunches,
+  EpicBranches,
+  type EpicBranchOpener,
   DigestReader,
   MilestoneMapReader,
   QuotaClearer,
@@ -46,6 +49,7 @@ import { registerRunnerClaim, registerRunnerRoutes, runnerCredentials } from "./
 import { registerTicketRoutes } from "./tickets";
 import { registerBoardRoutes } from "./board";
 import { registerEpicRoutes } from "./epics";
+import { registerNightRoutes, type NightDeps } from "./night";
 import { registerInFlightRoutes } from "./in-flight";
 import { registerDigestRoutes } from "./digest";
 import { registerMilestoneMapRoutes } from "./milestone-map";
@@ -425,6 +429,26 @@ export function createApp(input: AppDeps) {
   registerTicketRoutes(app, deps.tracker, service, projects, runs);
   registerBoardRoutes(app, new BoardReader(deps.tracker, deps.runs));
   registerEpicRoutes(app, deps.tracker, deps.runs);
+  // M4.17: the night launch step; absent without a launch store (routes and tools both).
+  const night: NightDeps | null = deps.nightLaunches
+    ? {
+        // AI-122: with GitHub connected, a launch opens its `epic/<KEY>` branch for the stories.
+        nights: new NightLaunches(
+          deps.nightLaunches,
+          deps.tracker,
+          runs,
+          now,
+          undefined,
+          connection ? connectedEpicBranches(connection, deps.tracker, deps.nightLaunches) : null,
+        ),
+        store: deps.nightLaunches,
+        tracker: deps.tracker,
+        runs: deps.runs,
+        plans: runs,
+        now,
+      }
+    : null;
+  if (night) registerNightRoutes(app, night);
 
   registerRunRoutes(app, runs, deps.runs);
   if (runners) registerRunnerRoutes(app, runners);
@@ -496,6 +520,7 @@ export function createApp(input: AppDeps) {
       ideate,
       plans,
       configProposals,
+      night,
     });
   }
 
@@ -510,4 +535,20 @@ export function createApp(input: AppDeps) {
   });
 
   return app;
+}
+
+/**
+ * AI-122 epic branches, once GitHub is connected: before setup (or in local dev) a launch opens
+ * none and its stories build on the default branch, as `NightLaunch.epicBranch` allows.
+ */
+function connectedEpicBranches(
+  connection: GitHubConnection,
+  tracker: WorkTracker,
+  launches: NightLaunchStore,
+): EpicBranchOpener {
+  const branches = new EpicBranches(tracker, new ConnectedCodeHost(connection), launches);
+  return {
+    open: async (projectId, epic) =>
+      (await connection.codeHost()) ? branches.open(projectId, epic) : null,
+  };
 }
