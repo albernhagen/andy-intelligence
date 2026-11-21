@@ -359,11 +359,13 @@ resource "google_cloud_run_v2_service" "control_plane" {
   }
 
   lifecycle {
-    # CI deploys own the image, the revision labels deploy-cloudrun adds (commit-sha, managed-by)
-    # and traffic (no-traffic revision, smoke test, then traffic: ADR-0076).
+    # CI deploys own the image, the revision labels deploy-cloudrun adds (commit-sha, managed-by),
+    # the revision name each deploy creates (e.g. control-plane-00312-zaq; AI-314) and traffic
+    # (no-traffic revision, smoke test, then traffic: ADR-0076).
     ignore_changes = [
       template[0].containers[0].image,
       template[0].labels,
+      template[0].revision,
       traffic,
       client,
       client_version,
