@@ -455,6 +455,17 @@ export interface RunStore {
     limit: number,
   ): Promise<{ runs: Run[]; complete: boolean }>;
   /**
+   * How many runs on `provider` were created at or after `since`, in any project (AI-232:
+   * google-sub quota by task counting). Reads at most `limit` runs created since `since`, of
+   * every provider (the provider filter comes after the cap). `complete` is false when `limit`
+   * runs were read, so the count may be low: callers must fail closed.
+   */
+  countCreatedSince(
+    provider: ProviderKey,
+    since: string,
+    limit: number,
+  ): Promise<{ count: number; complete: boolean }>;
+  /**
    * Applies the patch atomically, only if the run's status is one of `from` and, for a patch
    * that sets `planDecision`, the run has none yet, and for one that sets `mergeAttemptedSha`, it
    * isn't already that value; `conflict` otherwise, `not_found` when there
@@ -771,9 +782,11 @@ export * from "./config-changes";
 export * from "./config-proposals";
 export * from "./deployments";
 export * from "./digest";
+export * from "./membership";
 export * from "./night";
 export * from "./notify-email";
 export * from "./project-versions";
 export * from "./push";
+export * from "./push-sender";
 export * from "./routing";
 export * from "./runner";
