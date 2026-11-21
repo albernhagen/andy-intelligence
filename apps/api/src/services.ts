@@ -11,7 +11,9 @@ import {
   ConfigProposals,
   ConfigRevert,
   DigestReader,
+  CLAUDE_SUB_THRESHOLDS,
   QuotaClearer,
+  lowestThresholds,
   BriefService,
   IdeateService,
   ProjectPlanService,
@@ -226,10 +228,20 @@ export function createServices(input: AppDeps): Services {
     now,
     deps.configChanges ?? null,
   );
-  // AI-74: a clear wakes every project, as a settings change wakes one.
-  const quota = new QuotaClearer(deps.quota ?? null, now, async () => {
-    for (const p of await deps.tracker.listProjects()) await dispatchNext(p.id);
-  });
+  // AI-74: a clear wakes every project, as a settings change wakes one. AI-261: it clears at
+  // the lowest claude-sub pause level any project's routing dispatches under.
+  const quota = new QuotaClearer(
+    deps.quota ?? null,
+    now,
+    async () => {
+      for (const p of await deps.tracker.listProjects()) await dispatchNext(p.id);
+    },
+    async () => {
+      const projects = await deps.tracker.listProjects();
+      const routings = await Promise.all(projects.map((p) => runs.routingOf(p.id)));
+      return lowestThresholds("claude-sub", routings, CLAUDE_SUB_THRESHOLDS);
+    },
+  );
   const digest = new DigestReader(deps.tracker, deps.runs, deps.quota ?? null, now);
   const brief = new BriefService(
     deps.tracker,

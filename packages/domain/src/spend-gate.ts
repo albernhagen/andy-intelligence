@@ -62,26 +62,40 @@ export class SpendGate {
   ) {}
 
   /**
-   * Reserves the run's worst case: an agentic task's per-task cap (its turns and tokens aren't
-   * known up front). Throws `DomainError` `spend_cap` when anything is unknown or a cap would be
-   * passed; nothing is left reserved then.
+   * Whether a task on `route` in the project would be allowed now, without reserving: null, or
+   * why not. Route fallback (AI-261: M10.14) asks this to skip a paid route instead of starting
+   * it; `reserve` still decides, so a race between the two is refused there.
    */
-  async reserve(run: Pick<Run, "id" | "projectId" | "route">): Promise<SpendReservation> {
+  async refusal(projectId: string, route: Route): Promise<string | null> {
+    const checked = await this.check({ id: null, projectId, route });
+    return checked.ok ? null : `no paid agent task: ${checked.reason}`;
+  }
+
+  /** The caps and worst case for a task, or why it can't start. Reads; writes nothing. */
+  private async check(run: {
+    id: string | null;
+    projectId: string;
+    route: Route;
+  }): Promise<
+    | { ok: true; caps: ReturnType<typeof effectiveCaps>; estimate: number; at: string }
+    | { ok: false; reason: string; details?: string[] }
+  > {
     const model = await this.prices(run.route).catch((err: unknown) => {
       log("ERROR", "model prices unreadable", { runId: run.id, error: String(err) });
       return null;
     });
-    if (!model) throw refuse(run, `no price for ${run.route.provider}/${run.route.model}`);
+    if (!model)
+      return { ok: false, reason: `no price for ${run.route.provider}/${run.route.model}` };
     let caps;
     try {
       const source = await this.caps(run.projectId);
       caps = effectiveCaps(source.global, source.project);
     } catch (err) {
       log("ERROR", "spend caps unreadable", { runId: run.id, error: String(err) });
-      throw refuse(run, "the spend caps can't be read");
+      return { ok: false, reason: "the spend caps can't be read" };
     }
     const estimate = reserveFor(model, { kind: "task", taskCapMicroUsd: caps.per_task });
-    if (estimate === null) throw refuse(run, "no estimate for its model");
+    if (estimate === null) return { ok: false, reason: "no estimate for its model" };
     const at = this.now().toISOString();
     let totals;
     try {
@@ -92,16 +106,32 @@ export class SpendGate {
       totals = { project, global };
     } catch (err) {
       log("ERROR", "spend totals unreadable", { runId: run.id, error: String(err) });
-      throw refuse(run, "the spend ledger can't be read");
+      return { ok: false, reason: "the spend ledger can't be read" };
     }
     const decision = maySpend(caps, totals, estimate);
-    if (decision.kind === "unknown") throw refuse(run, `unknown ${decision.reason}`);
+    if (decision.kind === "unknown") return { ok: false, reason: `unknown ${decision.reason}` };
     if (decision.kind === "cap") {
-      throw refuse(run, `it would pass the ${decision.cap} cap`, [
-        `limit: ${decision.limitMicroUsd} micro-USD`,
-        `used: ${decision.usedMicroUsd} micro-USD`,
-      ]);
+      return {
+        ok: false,
+        reason: `it would pass the ${decision.cap} cap`,
+        details: [
+          `limit: ${decision.limitMicroUsd} micro-USD`,
+          `used: ${decision.usedMicroUsd} micro-USD`,
+        ],
+      };
     }
+    return { ok: true, caps, estimate, at };
+  }
+
+  /**
+   * Reserves the run's worst case: an agentic task's per-task cap (its turns and tokens aren't
+   * known up front). Throws `DomainError` `spend_cap` when anything is unknown or a cap would be
+   * passed; nothing is left reserved then.
+   */
+  async reserve(run: Pick<Run, "id" | "projectId" | "route">): Promise<SpendReservation> {
+    const checked = await this.check(run);
+    if (!checked.ok) throw refuse(run, checked.reason, checked.details);
+    const { caps, estimate, at } = checked;
     const entry: SpendEntry = {
       id: run.id,
       runId: run.id,

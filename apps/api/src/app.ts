@@ -176,6 +176,7 @@ const DOMAIN_STATUS = {
   not_buildable: 422,
   run_limit: 409,
   spend_cap: 409,
+  quota_reserve: 409,
   run_finished: 409,
   executor_unavailable: 503,
   dispatch_failed: 502,
