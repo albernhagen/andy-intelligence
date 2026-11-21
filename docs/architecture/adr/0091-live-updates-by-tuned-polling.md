@@ -1,4 +1,5 @@
 ---
+title: Live UI updates by tuned polling
 status: accepted
 date: 2026-11-11
 ---

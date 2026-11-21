@@ -1,4 +1,5 @@
 ---
+title: Coordinator's high-risk list, in full
 status: accepted
 date: 2026-11-11
 amends: 0088 (the high-risk list)
