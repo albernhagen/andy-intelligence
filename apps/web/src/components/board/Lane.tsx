@@ -2,7 +2,8 @@ import type { ReactNode } from "react";
 import { useDroppable } from "@dnd-kit/core";
 import { SortableContext, verticalListSortingStrategy } from "@dnd-kit/sortable";
 import { ChevronsLeftRight, ChevronsRightLeft } from "lucide-react";
-import type { Stage } from "@andy/contracts";
+import type { Milestone, Stage } from "@andy/contracts";
+import { MilestoneChip } from "@/components/MilestoneControls";
 import { STAGE_LABELS } from "@/lib/tickets";
 
 /** A labelled part of a lane (Backlog's Up next and Ideas); a drop on it lands in that part. */
@@ -23,19 +24,23 @@ export function LaneZone({ id, label, count }: { id: string; label: string; coun
 
 /**
  * A group header inside a lane when the board is grouped by epic (AI-86): the epic's key, title
- * and how many of its children are done, or "No epic". Not a drop target: rank stays per lane.
+ * and how many of its children are done, or "No epic"; its milestone and status when it has one
+ * (AI-311). Not a drop target: rank stays per lane.
  */
 export function EpicGroupHeader({
   epic,
   progress,
+  milestone = null,
 }: {
   epic: { key: string; title: string } | null;
   progress: { done: number; total: number } | null;
+  /** The epic's milestone (its top-level epic's, ADR-0131), shown with its status (AI-311). */
+  milestone?: Pick<Milestone, "name" | "status"> | null;
 }) {
   return (
     <li
       data-epic={epic?.key ?? "none"}
-      className="flex h-6 items-center gap-1 px-1 text-xs text-muted-foreground"
+      className="flex min-h-6 flex-wrap items-center gap-x-1 gap-y-0.5 px-1 py-0.5 text-xs text-muted-foreground"
     >
       {epic ? (
         <>
@@ -46,6 +51,12 @@ export function EpicGroupHeader({
           {progress && (
             <span className="shrink-0 tabular-nums">
               {progress.done} of {progress.total} done
+            </span>
+          )}
+          {/* Its own line, so the epic's title and the milestone's status both stay readable. */}
+          {milestone && (
+            <span className="flex basis-full">
+              <MilestoneChip milestone={milestone} className="max-w-full" />
             </span>
           )}
         </>

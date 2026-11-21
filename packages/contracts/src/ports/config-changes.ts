@@ -21,8 +21,9 @@ export interface ConfigChangeLog {
   append(change: ConfigChange): Promise<ConfigChange>;
   get(id: string): Promise<ConfigChange | null>;
   /**
-   * The project's settings and routing changes, newest first, at most `limit` (capped at
-   * CONFIG_CHANGE_LIST_MAX).
+   * The project's settings and routing changes (`entityId` is the project) and its milestone
+   * changes (entity `milestone`, `projectId` is the project, AI-304), newest first, at most
+   * `limit` (capped at CONFIG_CHANGE_LIST_MAX).
    */
   listForProject(projectId: string, limit?: number): Promise<ConfigChange[]>;
   /**
