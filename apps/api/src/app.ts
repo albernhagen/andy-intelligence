@@ -17,7 +17,6 @@ import {
   type NightLaunchStore,
   type ProjectVersions,
   type SpendLedger,
-  type MilestoneStore,
   type ReleaseNoteStore,
   type SpendCapsStore,
   type SpendNoticeLedger,
@@ -74,8 +73,9 @@ export interface AppDeps {
    */
   releaseNotes?: ReleaseNoteStore;
   /**
-   * Milestones (ADR-0131). Dispatch and night launches read them (AI-306); unset, a ticket with a
-   * milestone is held and one without runs as before.
+   * Milestones (ADR-0131). Dispatch, night launches (AI-306) and the roadmap (AI-305) read them;
+   * unset, a ticket with a milestone is held and one without runs as before, and the roadmap lists
+   * every epic under No milestone.
    */
   milestones?: MilestoneStore;
   /** Subscription quota readings (M1.9). Without it every window reads unknown. */
@@ -87,8 +87,6 @@ export interface AppDeps {
    * unset) and read by the DORA panel (AI-200, empty when unset).
    */
   deployments?: DeploymentStore;
-  /** Milestones (ADR-0131, AI-302): read by the roadmap (AI-305); without it, no milestones. */
-  milestones?: MilestoneStore;
   /** Model routing (AI-230, AI-238); without it every run takes `DEFAULT_ROUTING`. */
   routing?: RoutingConfigStore;
   /**
