@@ -19,7 +19,8 @@ import { workViews } from "./work-views";
  * milestone map groups them (`childGroup`). Reads (ADR-0028): each project's board through the
  * board's read cache (ADR-0126), so an unchanged poll reads one version counter per project; no
  * per-ticket agent-task reads (cost stays on the epic panel). The shape is per epic so a
- * milestone level above epics (ADR-0131, proposed) can group these entries without changing it.
+ * milestone level above epics (AI-301: M4.32: Milestones: design) can group these entries
+ * without changing it.
  */
 
 /** Projects one all-projects roadmap reads, first by key; past it the roadmap says `truncated`. */
