@@ -1,6 +1,22 @@
 import { adrLabel } from "./dispatch-conflicts";
-import type { BuildPlan, Question, Route, Stage, Ticket, TierKey } from "@andy/contracts";
-import { TIER_ROUTES, tierFor } from "./tiers";
+import {
+  DEFAULT_ROUTING,
+  type BuildPlan,
+  type Question,
+  type Route,
+  type RunStep,
+  type Stage,
+  type Ticket,
+} from "@andy/contracts";
+import {
+  effectiveRouting,
+  resolveRoute,
+  routeCandidates,
+  type EffectiveRouting,
+  type ResolvedRoute,
+  type RouteCandidate,
+} from "./route-resolver";
+import { tierFor } from "./tiers";
 
 /**
  * Build run rules (M1.8a: Build run, ADR-0063). Pure decisions; `RunService` and the
@@ -27,17 +43,36 @@ export function branchFor(ticketKey: string, runId: string): string {
 }
 
 /**
- * The build run's tier and model: `tierFor(ticket)` (`overrides.tier` wins, else from size).
- * `frontier` and `cheap` have no route of their own until M4 tier config, so they take the
- * nearest one in use (ADR-0050: Sonnet for S, Opus for M and L).
+ * A run's tier and route (AI-238: M9.6): the ticket's tier from `tierFor` (`overrides.tier`
+ * wins, else from size; fast without a size), then `resolveRoute` under the project's routing.
+ * Pass the ticket with its epic's overrides (`withEpicOverrides`), so an epic's pin and tier
+ * apply. With `DEFAULT_ROUTING`: Sonnet for fast and cheap, Opus for strong and frontier.
  */
-export function buildRoute(ticket: Pick<Ticket, "size" | "overrides">): {
-  tier: TierKey;
-  route: Route;
-} {
-  const tier = tierFor(ticket) ?? "fast";
-  const route = tier === "frontier" || tier === "strong" ? TIER_ROUTES.strong : TIER_ROUTES.fast;
-  return { tier, route };
+/** Under `DEFAULT_ROUTING`, which has a usable route for every tier. */
+export function buildRoute(
+  ticket: Pick<Ticket, "size" | "overrides">,
+): ResolvedRoute & { route: Route };
+export function buildRoute(
+  ticket: Pick<Ticket, "size" | "overrides">,
+  routing: EffectiveRouting,
+  step?: RunStep,
+): ResolvedRoute;
+export function buildRoute(
+  ticket: Pick<Ticket, "size" | "overrides">,
+  routing: EffectiveRouting = effectiveRouting(DEFAULT_ROUTING, null),
+  step: RunStep = "build",
+): ResolvedRoute {
+  return resolveRoute(step, tierFor(ticket) ?? "fast", routing, ticket.overrides.modelPin);
+}
+
+/** Every route `step` may try for the ticket, in order, as `buildRoute` would (AI-261: M10.14). */
+export function buildCandidates(
+  ticket: Pick<Ticket, "size" | "overrides">,
+  routing: EffectiveRouting,
+  step: RunStep,
+): RouteCandidate[] {
+  return routeCandidates(step, tierFor(ticket) ?? "fast", routing, ticket.overrides.modelPin)
+    .candidates;
 }
 
 /**

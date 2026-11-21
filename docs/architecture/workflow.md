@@ -30,7 +30,7 @@ As built (PR events, build dispatch, plan approval): [`history/workflow-as-built
 - Size S/M/L with one-line justification (`sizeReason`) (rubric in `docs/agent/size-rubric.md`).
 - Dependencies declared (ticket "blocked by" links).
 - **No open questions** and no held gaps (§4.3). Assumptions listed.
-- Tier is not a readiness item: `tierFor` derives it from size (S → `fast`, Sonnet; M and L → `strong`, Opus; ADR-0050); `overrides.tier` pins one (ADR-0062).
+- Tier is not a readiness item: `tierFor` derives it from size (S → `fast`, M and L → `strong`; ADR-0050); `overrides.tier` pins one (ADR-0062). The stored routing config picks each tier's route, Sonnet and Opus by default (`resolveRoute`, AI-238).
 - Per-project policy may allow "proceed on documented assumptions" for S tasks only; default is **require Andy's answers**. Overnight runs (ADR-0049) answer everything before launch; later gaps: night assumptions; failures stop dependants.
 - **Epics** need only a stated intent and no open questions (no criteria or size).
 - Checked in `packages/domain` (`checkDor`); `dorStatus` is computed on every change, never set by callers.
@@ -44,7 +44,7 @@ As built (PR events, build dispatch, plan approval): [`history/workflow-as-built
 
 ### 4.4 Epics
 - Ticket types (Epic / Feature / Chore / Bug, ADR-0058) + **child tickets** (`parent_id`).
-- Epic refinement (built) produces stories with `blockedBy`: vertical slices, independently mergeable behind flags; no long-lived branches. Exception: an **overnight run** (ADR-0049) merges stories into `epic/<key>`, one PR for Andy next morning; AI-122 builds on it, AI-124 merges there (ADR-0107).
+- Epic refinement (built) produces stories with `blockedBy`: vertical slices, independently mergeable behind flags; no long-lived branches. Exception: an **overnight run** (ADR-0049) merges stories into `epic/<key>`, one PR for Andy next morning; AI-122 builds on it, AI-124 merges there (ADR-0107), AI-125 posts the morning report on the epic.
 - **Just-in-time re-planning** (built, M4.6): dispatch re-runs plans older than a blocker's Done.
 - Epic status, cost and progress roll up; an epic's overrides cascade to its stories.
 

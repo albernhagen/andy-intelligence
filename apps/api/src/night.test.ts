@@ -13,6 +13,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { createApp } from "./app";
 import type { TokenVerifier } from "./auth";
 import { launchNight, progressOf, stopNight, type NightDeps, type NightStatus } from "./night";
+import { ownerOnlyAccess } from "./project-access";
 
 /** M4.17: Night launch step: the checklist, launch and stop over REST (ADR-0049). */
 
@@ -74,6 +75,7 @@ async function setup(opts: { github?: boolean; connected?: boolean } = {}) {
     );
   };
   const app = createApp({
+    projectAccess: ownerOnlyAccess(),
     verifier,
     allowedEmails: new Set(["andy@example.com"]),
     version: "test",
