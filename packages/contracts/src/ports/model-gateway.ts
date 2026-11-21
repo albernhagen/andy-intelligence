@@ -33,8 +33,9 @@ export interface ModelUsage {
  * - `ok`: the model answered; `usage` is null when the response carried none (the spend gate
  *   then settles the full reservation, ADR-0129).
  * - `off`: no key is configured; nothing was sent.
- * - `error`: refused before sending (bad request), or a provider status, timeout, network failure
- *   or unreadable response. Nothing usable came back.
+ * - `error`: refused before sending (bad request), or a provider status, timeout, network failure,
+ *   unreadable or empty response, or an error the provider reported. Nothing usable came back;
+ *   usage is unknown, so the spend gate settles the full reservation.
  */
 export type ModelResult =
   | { outcome: "ok"; text: string; usage: ModelUsage | null }
@@ -45,7 +46,13 @@ export interface ModelGateway {
   complete(request: ModelRequest): Promise<ModelResult>;
 }
 
-/** Longest any completion may run (ADR-0028). */
+/**
+ * Requests one completion may send: a 5xx is retried once. A provider may bill a request that
+ * failed after generating, so one call can be billed up to this many times; callers reserve
+ * spend for every attempt (ADR-0129, M10.11).
+ */
+export const MODEL_MAX_ATTEMPTS = 2;
+/** Longest any completion may run, retry included (ADR-0028). */
 export const MODEL_TIMEOUT_MS = 60_000;
 /** Largest output cap a request may set. */
 export const MODEL_MAX_OUTPUT_TOKENS = 32_000;

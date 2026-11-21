@@ -36,6 +36,8 @@ const log = (severity: "INFO" | "WARNING" | "ERROR", message: string, fields: ob
 
 /** The OpenAI-compatible response fields we read; everything else is ignored. */
 const Completion = z.object({
+  /** OpenRouter can report a failure inside an HTTP 200 body. */
+  error: z.unknown().optional(),
   choices: z.array(z.object({ message: z.object({ content: z.string().nullable() }) })).min(1),
   usage: z
     .object({
@@ -79,7 +81,7 @@ export class OpenRouterGateway implements ModelGateway {
       return { outcome: "off" };
     }
 
-    // One deadline for the whole call, retry included.
+    // One deadline for the whole call, retry included (at most MODEL_MAX_ATTEMPTS requests).
     const signal = AbortSignal.timeout(modelTimeoutMs(request));
     const body = JSON.stringify({
       model: request.model,
@@ -135,9 +137,19 @@ export class OpenRouterGateway implements ModelGateway {
       log("ERROR", "model call failed", { model, status, reason: "unreadable response" });
       return { outcome: "error", status, reason: "unreadable response" };
     }
+    if (parsed.error !== undefined && parsed.error !== null) {
+      log("ERROR", "model call failed", { model, status, reason: "provider error" });
+      return { outcome: "error", status, reason: "provider error" };
+    }
+    const text = parsed.choices[0]?.message.content;
+    if (!text) {
+      // Content-filtered or cut off before any text: not an answer, so settle as unknown.
+      log("ERROR", "model call failed", { model, status, reason: "empty response" });
+      return { outcome: "error", status, reason: "empty response" };
+    }
     const usage = usageOf(parsed.usage);
     log("INFO", "model call done", { model, status, ...(usage ?? { usage: null }) });
-    return { outcome: "ok", text: parsed.choices[0]?.message.content ?? "", usage };
+    return { outcome: "ok", text, usage };
   }
 }
 

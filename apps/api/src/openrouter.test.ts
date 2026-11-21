@@ -196,6 +196,19 @@ describe("OpenRouterGateway", () => {
     });
   });
 
+  it.each([
+    ["null content", '{"choices":[{"message":{"content":null}}]}', "empty response"],
+    ["empty content", '{"choices":[{"message":{"content":""}}]}', "empty response"],
+    [
+      "an error field",
+      '{"error":{"code":502,"message":"upstream"},"choices":[{"message":{"content":"partial"}}]}',
+      "provider error",
+    ],
+  ])("GivenA200With%s_WhenCompleted_ThenError", async (_, body, reason) => {
+    const f = mockFetch(json(200, body));
+    expect(await gateway(f).complete(request)).toEqual({ outcome: "error", status: 200, reason });
+  });
+
   it("GivenUsageWithoutCost_WhenCompleted_ThenCostIsNull", async () => {
     const f = mockFetch(
       json(200, bodyFor("ok", { inputTokens: 5, outputTokens: 1, cachedTokens: 0, costUsd: null })),
