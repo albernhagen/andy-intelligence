@@ -456,9 +456,9 @@ export interface RunStore {
   ): Promise<{ runs: Run[]; complete: boolean }>;
   /**
    * How many runs on `provider` were created at or after `since`, in any project (AI-232:
-   * google-sub quota by task counting). Reads at most `limit` runs; an adapter may count other
-   * providers' runs toward it. `complete` is false when the cap was reached, so the count may be
-   * low: callers must fail closed.
+   * google-sub quota by task counting). Reads at most `limit` runs created since `since`, of
+   * every provider (the provider filter comes after the cap). `complete` is false when `limit`
+   * runs were read, so the count may be low: callers must fail closed.
    */
   countCreatedSince(
     provider: ProviderKey,

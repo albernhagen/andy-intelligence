@@ -78,4 +78,13 @@ describe("counting google-sub tasks", () => {
     expect(started).toEqual({ count: 2, complete: true });
     expect(julesQuotaReading(started, 10, DAY, NOW)?.usedPct).toBe(20);
   });
+
+  it("GivenOtherProvidersFillTheReadCap_WhenCounted_ThenIncompleteAndReadAsFullyUsed", async () => {
+    const runs = new InMemoryRunStore(() => NOW);
+    await runs.create(run("google-sub"));
+    for (let i = 0; i < 3; i++) await runs.create(run("claude-sub"));
+    const started = await runs.countCreatedSince("google-sub", DAY.toISOString(), 3);
+    expect(started.complete).toBe(false);
+    expect(julesQuotaReading(started, 10, DAY, NOW)?.usedPct).toBe(100);
+  });
 });

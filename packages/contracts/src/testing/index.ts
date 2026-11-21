@@ -1221,6 +1221,8 @@ export function runStoreContract(
       const capped = await store.countCreatedSince("google-sub", since, 1);
       expect(capped.count).toBeLessThanOrEqual(1);
       expect(capped.complete).toBe(false);
+      // Other providers' runs fill the cap too: three runs since, a cap of three.
+      expect((await store.countCreatedSince("google-sub", since, 3)).complete).toBe(false);
     });
 
     it("GivenAQueuedRun_WhenUpdatedFromQueued_ThenOnlyThePatchedFieldsChange", async () => {
