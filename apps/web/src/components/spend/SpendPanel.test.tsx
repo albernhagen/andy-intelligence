@@ -79,4 +79,28 @@ describe("Paid spend panel", () => {
     const all = within(panel).getByRole("row", { name: /^All projects/ });
     expect(within(all).getAllByText("unknown")).toHaveLength(2);
   });
+
+  it("GivenNoProjects_WhenDashboardsOpen_ThenAnEmptyStateNotLoadingForever", async () => {
+    renderApp("/all/dashboards");
+    const panel = await screen.findByRole("region", { name: "Paid spend" }, PAGE_LOAD);
+    expect(await within(panel).findByText("No projects yet.", {}, PAGE_LOAD)).toBeTruthy();
+  });
+
+  it("GivenOneProjectsReadFails_WhenDashboardsOpen_ThenTheOtherStillShowsAndTheFailedOneIsUnknown", async () => {
+    const h = renderApp("/all/dashboards", {
+      beforeFetch: async (request) => {
+        if (new URL(request.url).pathname === "/api/projects/web/spend") {
+          throw new Error("spend read failed");
+        }
+      },
+    });
+    await h.tracker.createProject({ name: "Andy Intelligence", key: "AI" });
+    await h.tracker.createProject({ name: "Website", key: "WEB" });
+    await h.queryClient.invalidateQueries();
+    const panel = await screen.findByRole("region", { name: "Paid spend" }, PAGE_LOAD);
+    const web = await within(panel).findByRole("row", { name: /^WEB/ }, PAGE_LOAD);
+    expect(within(web).getAllByText("unknown")).toHaveLength(2);
+    expect(within(panel).getByRole("row", { name: /^AI/ })).toBeTruthy();
+    expect(within(panel).getByText(/Couldn't read spend for one project/)).toBeTruthy();
+  });
 });

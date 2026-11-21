@@ -20,30 +20,31 @@ const WARN_PCT = 80;
 export interface SpendRow {
   label: string;
   day: number | null;
-  dayCap: number;
+  /** Null when the caps couldn't be read either. */
+  dayCap: number | null;
   month: number | null;
-  monthCap: number;
+  monthCap: number | null;
 }
 
 export function spendRows(
-  views: { key: string; effective: EffectiveSpendCaps; spent: SpendSoFar | null }[],
+  views: { key: string; effective: EffectiveSpendCaps | null; spent: SpendSoFar | null }[],
 ): SpendRow[] {
   const rows: SpendRow[] = views.map((v) => ({
     label: v.key,
     day: v.spent?.project.dayMicroUsd ?? null,
-    dayCap: v.effective.project_daily,
+    dayCap: v.effective?.project_daily ?? null,
     month: v.spent?.project.monthMicroUsd ?? null,
-    monthCap: v.effective.project_monthly,
+    monthCap: v.effective?.project_monthly ?? null,
   }));
-  // Every project's view carries the same global totals; any known one will do.
-  const first = views.find((v) => v.spent) ?? views[0];
+  // Every project's view carries the same global totals; any read one will do.
+  const first = views.find((v) => v.spent) ?? views.find((v) => v.effective) ?? views[0];
   if (first) {
     rows.push({
       label: "All projects",
       day: first.spent?.global.dayMicroUsd ?? null,
-      dayCap: first.effective.global_daily,
+      dayCap: first.effective?.global_daily ?? null,
       month: first.spent?.global.monthMicroUsd ?? null,
-      monthCap: first.effective.global_monthly,
+      monthCap: first.effective?.global_monthly ?? null,
     });
   }
   return rows;
@@ -55,10 +56,11 @@ export function SpendUsed({
   label,
 }: {
   used: number | null;
-  cap: number;
+  /** Null when the caps couldn't be read. */
+  cap: number | null;
   label: string;
 }) {
-  if (used === null) return <span className="text-muted-foreground">unknown</span>;
+  if (used === null || cap === null) return <span className="text-muted-foreground">unknown</span>;
   const pct = cap === 0 ? (used > 0 ? 100 : 0) : Math.min(100, Math.floor((used * 100) / cap));
   const tone = pct >= 100 ? "text-destructive" : pct >= WARN_PCT ? "text-attention" : "";
   return (
@@ -72,7 +74,8 @@ export function SpendUsed({
 export function SpendPanel({ projectId }: { projectId?: string }) {
   const api = useApi();
   const poll = useLivePoll("slow");
-  const projects = useProjects().data ?? [];
+  const projectsQuery = useProjects();
+  const projects = projectsQuery.data ?? [];
   const shown = (projectId ? projects.filter((p) => p.id === projectId) : projects).slice(
     0,
     SPEND_PANEL_PROJECTS_MAX,
@@ -90,12 +93,15 @@ export function SpendPanel({ projectId }: { projectId?: string }) {
         ),
     })),
   });
-  const loaded = reads.every((r) => r.data !== undefined);
-  const failed = reads.some((r) => r.isError);
-  const views = shown.flatMap((p, i) => {
+  // A project whose read failed (or is still loading) shows as unknown; the rest still show.
+  const loading = projectsQuery.isPending || reads.some((r) => r.isPending);
+  const views = shown.map((p, i) => {
     const data = reads[i]?.data;
-    return data ? [{ key: p.key, effective: data.effective, spent: data.spent }] : [];
+    return data
+      ? { key: p.key, effective: data.effective, spent: data.spent }
+      : { key: p.key, effective: null, spent: null };
   });
+  const failed = reads.filter((r) => r.isError).length;
 
   return (
     <section aria-label="Paid spend" className="space-y-2 rounded-md border border-border p-3">
@@ -104,12 +110,10 @@ export function SpendPanel({ projectId }: { projectId?: string }) {
         Pay-per-use models only, in UTC days and months, against the caps in force. Subscription
         usage is in the quota banner.
       </p>
-      {shown.length === 0 || !loaded ? (
-        failed ? (
-          <p className="text-xs text-destructive">Couldn't read spend; treat it as unknown.</p>
-        ) : (
-          <p className="text-xs text-muted-foreground">Loading…</p>
-        )
+      {loading ? (
+        <p className="text-xs text-muted-foreground">Loading…</p>
+      ) : shown.length === 0 ? (
+        <p className="text-xs text-muted-foreground">No projects yet.</p>
       ) : (
         <table className="w-full text-sm">
           <thead className="text-xs text-muted-foreground">
@@ -135,6 +139,12 @@ export function SpendPanel({ projectId }: { projectId?: string }) {
             ))}
           </tbody>
         </table>
+      )}
+      {failed > 0 && (
+        <p className="text-xs text-destructive">
+          Couldn't read spend for {failed === 1 ? "one project" : `${failed} projects`}; treat it as
+          unknown.
+        </p>
       )}
       {projects.length > SPEND_PANEL_PROJECTS_MAX && !projectId && (
         <p className="text-xs text-muted-foreground">
