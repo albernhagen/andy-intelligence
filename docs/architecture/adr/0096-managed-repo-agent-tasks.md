@@ -1,4 +1,5 @@
 ---
+title: Managed repos call one executor
 status: proposed (design; built in AI-105, AI-106, AI-111; Andy decides at review)
 date: 2026-11-12
 amends: 0051 (agent tasks run in a registered project's repo, not only this one), 0063 (the push grant for a managed repo), 0038 (the executor is called at `main`, not a pinned SHA)

@@ -1,4 +1,5 @@
 ---
+title: Lockfile-only Dependabot fixes are low risk
 status: accepted
 date: 2026-11-10
 amends: 0078 (the low-risk class a coordinator session may merge)

@@ -1,4 +1,5 @@
 ---
+title: "Agentic security review: every PR, and the system over time"
 status: accepted
 date: 2026-10-23
 ---

@@ -1,4 +1,5 @@
 ---
+title: "Local runner: Seatbelt, platform from main"
 status: proposed (AI-131; Andy decides at review)
 date: 2026-11-12
 amends: 0089 (what the runner confines, and which platform commit it runs)

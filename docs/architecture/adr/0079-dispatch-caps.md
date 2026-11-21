@@ -1,5 +1,6 @@
 ---
-status: accepted
+title: Dispatch caps and pause
+status: accepted, amended by 0083, 0085, 0100
 date: 2026-11-09
 amends: 0063 (one run per project), 0028 (run caps)
 ---
