@@ -2,6 +2,7 @@ import { createRoute, z, type OpenAPIHono } from "@hono/zod-openapi";
 import { DIGEST_DEFAULT_HOURS, DIGEST_MAX_HOURS, Digest } from "@andy/contracts";
 import { digestWindow, type DigestReader } from "@andy/domain";
 import type { AuthEnv } from "./auth";
+import type { RouteModule } from "./services";
 
 /** The daily digest's one read (AI-70, ADR-0081): computed on request, never stored. */
 
@@ -52,3 +53,6 @@ export function registerDigestRoutes(
     return c.json(await digest.digest(c.req.valid("param").projectId, window), 200);
   });
 }
+
+/** Listed in `api-routes.ts` (AI-145). */
+export const apiRoutes: RouteModule = (app, s) => registerDigestRoutes(app, s.digest, s.now);

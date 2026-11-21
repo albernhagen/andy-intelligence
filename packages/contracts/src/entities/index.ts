@@ -20,9 +20,6 @@ import { projectDispatchFields } from "./dispatch-caps";
 import { projectNotifyFields } from "./notify-email";
 import { projectPlanFields } from "./project-plan";
 import { configChangeProposalFields } from "./config-proposals";
-
-export * from "./common";
-export * from "./dispatch-caps";
 import { RunCostFields } from "./cost";
 import { runInFlightFields } from "./in-flight";
 import { runSyncFields } from "./sync";
@@ -36,17 +33,24 @@ import {
   refineQuestionFields,
 } from "./question-format";
 
+export * from "./brief";
+export * from "./build";
 export * from "./common";
+export * from "./config-proposals";
 export * from "./cost";
 export * from "./dashboard";
-export * from "./in-flight";
-export * from "./sync";
-export * from "./scores";
-export * from "./notify-email";
-export * from "./question-format";
-export * from "./brief";
+export * from "./dispatch-caps";
+export * from "./executor";
 export * from "./ideate";
+export * from "./in-flight";
+export * from "./night";
+export * from "./notify-email";
 export * from "./project-plan";
+export * from "./question-format";
+export * from "./runner";
+export * from "./scores";
+export * from "./sync";
+export * from "./worker";
 
 /** ARCHITECTURE §5 — domain model. Vendor concepts must not appear here. */
 
@@ -1037,10 +1041,3 @@ export const CodeHostEvent = z.discriminatedUnion("kind", [
   CodeHostEventBase.extend({ kind: z.literal("push"), push: BranchPush }),
 ]);
 export type CodeHostEvent = z.infer<typeof CodeHostEvent>;
-
-export * from "./worker";
-export * from "./executor";
-export * from "./runner";
-export * from "./build";
-export * from "./night";
-export * from "./config-proposals";

@@ -1,4 +1,4 @@
-import { EnvironmentPolicy, Project, WorkTrackerError, type WorkTracker } from "@andy/contracts";
+import { EnvironmentPolicy, Project, WorkTrackerError } from "@andy/contracts";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import { z } from "zod";
@@ -40,7 +40,18 @@ export const settingsOf = (p: Project) => ({
   lastDispatch: p.lastDispatch,
 });
 
-export function registerSettingsTools(server: McpServer, tracker: WorkTracker, run: Run): void {
+const EnvironmentsInput = {
+  project: SettingsInput.project,
+  environments: EnvironmentPolicy.describe(
+    "prod-only (default): one prod environment plus PR previews. dev-and-prod: releases go to dev first, then are promoted to prod.",
+  ),
+};
+
+export function registerSettingsTools(
+  server: McpServer,
+  deps: Pick<ToolDeps, "tracker" | "projects" | "actor" | "email">,
+  run: Run,
+): void {
   server.registerTool(
     "get_project_settings",
     {
@@ -51,22 +62,13 @@ export function registerSettingsTools(server: McpServer, tracker: WorkTracker, r
     },
     ({ project }) =>
       run(async () => {
-        const found = await tracker.getProject(project.toLowerCase());
+        const found = await deps.tracker.getProject(project.toLowerCase());
         if (!found) throw new WorkTrackerError("not_found", `project ${project} not found`);
         return settingsOf(found);
       }),
   );
-}
 
-const EnvironmentsInput = {
-  project: SettingsInput.project,
-  environments: EnvironmentPolicy.describe(
-    "prod-only (default): one prod environment plus PR previews. dev-and-prod: releases go to dev first, then are promoted to prod.",
-  ),
-};
-
-/** AI-160: the release environment policy; same rule as PATCH /api/projects/{id} (AI-40 parity). */
-export function registerEnvironmentTools(server: McpServer, deps: ToolDeps, run: Run): void {
+  // AI-160: the release environment policy; same rule as PATCH /api/projects/{id} (AI-40 parity).
   server.registerTool(
     "set_environments",
     {
