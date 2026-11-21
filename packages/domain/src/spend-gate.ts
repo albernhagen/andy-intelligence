@@ -5,13 +5,16 @@ import {
   type Route,
   type Run,
   type RunUsage,
+  type SpendCapKey,
   type SpendCaps,
   type SpendEntry,
   type SpendLedger,
+  type SpendSoFar,
 } from "@andy/contracts";
 import { DomainError } from "./errors";
 import { effectiveCaps, maySpend } from "./spend-caps";
 import { reserveFor, settleFor, type PricedModel } from "./spend-estimate";
+import type { SpendEvent } from "./spend-notices";
 
 /**
  * Spend gate (AI-248: M10.7, m10-slices.md). Every agent task on a `pay_per_use` route reserves
@@ -38,6 +41,24 @@ export const DEFAULT_CAPS_SOURCE: SpendCapsSource = async () => ({
 /** No price source yet (M10.5 scouts prices): every paid start is refused. */
 export const NO_PRICES: SpendPrices = async () => null;
 
+/** Hears what the gate decided, for the spend notices (AI-257: M10.9); must not throw. */
+export type SpendAlertSink = (event: SpendEvent) => Promise<void>;
+
+/** The run fields `reserve` reads; `ticketId` names what waits in a stop notice. */
+type GateRun = Pick<Run, "id" | "projectId" | "route"> & Partial<Pick<Run, "ticketId">>;
+
+const stopOf = (stop: {
+  cap: SpendCapKey;
+  caps: ReturnType<typeof effectiveCaps>;
+  totals: SpendSoFar;
+}) => ({ cap: stop.cap, caps: stop.caps, spent: stop.totals });
+
+const alertRun = (run: GateRun) => ({
+  id: run.id,
+  projectId: run.projectId,
+  ticketId: run.ticketId ?? null,
+});
+
 /** What a reservation hands the executor: the per-task budget the harness enforces. */
 export interface SpendReservation {
   entry: SpendEntry;
@@ -59,6 +80,7 @@ export class SpendGate {
     private readonly prices: SpendPrices = NO_PRICES,
     private readonly caps: SpendCapsSource = DEFAULT_CAPS_SOURCE,
     private readonly now: () => Date = () => new Date(),
+    private readonly alerts: SpendAlertSink | null = null,
   ) {}
 
   /**
@@ -72,13 +94,21 @@ export class SpendGate {
   }
 
   /** The caps and worst case for a task, or why it can't start. Reads; writes nothing. */
-  private async check(run: {
-    id: string | null;
-    projectId: string;
-    route: Route;
-  }): Promise<
-    | { ok: true; caps: ReturnType<typeof effectiveCaps>; estimate: number; at: string }
-    | { ok: false; reason: string; details?: string[] }
+  private async check(run: { id: string | null; projectId: string; route: Route }): Promise<
+    | {
+        ok: true;
+        caps: ReturnType<typeof effectiveCaps>;
+        estimate: number;
+        at: string;
+        totals: SpendSoFar;
+      }
+    | {
+        ok: false;
+        reason: string;
+        details?: string[];
+        /** Set when a cap stops it: what a stop notice needs (AI-257). */
+        stop?: { cap: SpendCapKey; caps: ReturnType<typeof effectiveCaps>; totals: SpendSoFar };
+      }
   > {
     const model = await this.prices(run.route).catch((err: unknown) => {
       log("ERROR", "model prices unreadable", { runId: run.id, error: String(err) });
@@ -118,9 +148,10 @@ export class SpendGate {
           `limit: ${decision.limitMicroUsd} micro-USD`,
           `used: ${decision.usedMicroUsd} micro-USD`,
         ],
+        stop: { cap: decision.cap, caps, totals },
       };
     }
-    return { ok: true, caps, estimate, at };
+    return { ok: true, caps, estimate, at, totals };
   }
 
   /**
@@ -128,10 +159,14 @@ export class SpendGate {
    * known up front). Throws `DomainError` `spend_cap` when anything is unknown or a cap would be
    * passed; nothing is left reserved then.
    */
-  async reserve(run: Pick<Run, "id" | "projectId" | "route">): Promise<SpendReservation> {
+  async reserve(run: GateRun): Promise<SpendReservation> {
     const checked = await this.check(run);
-    if (!checked.ok) throw refuse(run, checked.reason, checked.details);
-    const { caps, estimate, at } = checked;
+    if (!checked.ok) {
+      if (checked.stop)
+        await this.alert({ kind: "stopped", run: alertRun(run), ...stopOf(checked.stop) });
+      throw refuse(run, checked.reason, checked.details);
+    }
+    const { caps, estimate, at, totals } = checked;
     const entry: SpendEntry = {
       id: run.id,
       runId: run.id,
@@ -154,12 +189,35 @@ export class SpendGate {
       throw refuse(run, "the spend ledger refused the reservation");
     }
     if (!outcome.ok) {
+      await this.alert({
+        kind: "stopped",
+        run: alertRun(run),
+        cap: outcome.cap,
+        caps,
+        spent: totals,
+      });
       throw refuse(run, `it would pass the ${outcome.cap} cap`, [
         `limit: ${outcome.limitMicroUsd} micro-USD`,
         `used: ${outcome.usedMicroUsd} micro-USD`,
       ]);
     }
     log("INFO", "spend reserved", { runId: run.id, microUsd: outcome.entry.reservedMicroUsd });
+    const added = outcome.entry.reservedMicroUsd;
+    await this.alert({
+      kind: "reserved",
+      run: alertRun(run),
+      caps,
+      spent: {
+        project: {
+          dayMicroUsd: totals.project.dayMicroUsd + added,
+          monthMicroUsd: totals.project.monthMicroUsd + added,
+        },
+        global: {
+          dayMicroUsd: totals.global.dayMicroUsd + added,
+          monthMicroUsd: totals.global.monthMicroUsd + added,
+        },
+      },
+    });
     return { entry: outcome.entry, budgetMicroUsd: caps.per_task };
   }
 
@@ -220,6 +278,38 @@ export class SpendGate {
       log("ERROR", "spend entry unreadable", { runId, error: String(err) });
       return null;
     }
+  }
+
+  /**
+   * Route fallback found no route because the gate refused them (AI-257, after AI-261): sends
+   * the stop notice for the first route refused at a cap, naming the ticket that waits. Re-reads
+   * like `refusal`; writes nothing but the notice, which the notice ledger dedupes per cap and
+   * window, so a dispatch that keeps idling doesn't repeat it. Never throws.
+   */
+  async alertStopped(projectId: string, ticketId: string, routes: readonly Route[]): Promise<void> {
+    if (!this.alerts) return;
+    try {
+      for (const route of routes) {
+        const checked = await this.check({ id: null, projectId, route });
+        if (checked.ok || !checked.stop) continue;
+        await this.alert({
+          kind: "stopped",
+          run: { id: `dispatch:${ticketId}`, projectId, ticketId },
+          ...stopOf(checked.stop),
+        });
+        return;
+      }
+    } catch (err) {
+      log("ERROR", "spend stop alert failed", { projectId, ticketId, error: String(err) });
+    }
+  }
+
+  /** Tells the spend notices; a failure there is logged and never blocks the gate. */
+  private async alert(event: SpendEvent): Promise<void> {
+    if (!this.alerts) return;
+    await this.alerts(event).catch((err: unknown) =>
+      log("ERROR", "spend alert failed", { runId: event.run.id, error: String(err) }),
+    );
   }
 
   /** Releases a reservation; logs (doesn't throw) on failure, so it stays reserved in full. */
