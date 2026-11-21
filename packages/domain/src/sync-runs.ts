@@ -11,6 +11,7 @@ import {
   type SyncWaitReason,
   type Ticket,
   type WorkTracker,
+  type Stage,
 } from "@andy/contracts";
 import { MAX_ACTIVE_RUNS_GLOBAL, atWarnCap, isInFlight, wasDispatched } from "./dispatch-caps";
 import { quotaStatus, readingsForDispatch } from "./quota";
@@ -133,7 +134,7 @@ function log(severity: "INFO" | "WARNING" | "ERROR", message: string, fields: ob
 }
 
 /** Stages with an open agent PR: in review, or back in progress for rework. */
-const PR_STAGES = new Set(["ready_for_review", "in_progress"]);
+const PR_STAGES = new Set<Stage>(["ready_for_review", "in_progress"]);
 
 export class SyncRuns {
   constructor(
@@ -319,9 +320,12 @@ export class SyncRuns {
 
   /** Per ticket with an open PR stage, its newest succeeded build run that opened a PR. */
   private async agentRuns(project: Project): Promise<{ run: Run; ticket: Ticket }[]> {
-    const tickets = (await this.tracker.listTickets(project.id, { archived: false })).filter((t) =>
-      PR_STAGES.has(t.stage),
-    );
+    // AI-315: only the PR stages, by stage, not the whole project.
+    const tickets = (
+      await Promise.all(
+        [...PR_STAGES].map((stage) => this.tracker.listTickets(project.id, { stage })),
+      )
+    ).flat();
     const out: { run: Run; ticket: Ticket }[] = [];
     for (const ticket of tickets) {
       // Newest first: the latest build run with a PR owns the ticket's current PR.

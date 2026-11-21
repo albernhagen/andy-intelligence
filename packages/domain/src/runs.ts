@@ -321,6 +321,16 @@ export class RunService {
   }
 
   /**
+   * One agent task (AI-101 run page, AI-293 MCP `get_run`). Another project's task answers
+   * exactly like an unknown id, so a project in the request can't read across projects.
+   */
+  async get(projectId: string, runId: string): Promise<Run> {
+    const run = await this.runs.get(runId);
+    if (!run || run.projectId !== projectId) throw notFound("agent task", runId);
+    return run;
+  }
+
+  /**
    * A run the owner asks for (UI, API, MCP): owner-only (`start_run`, AI-19), then `start`. The
    * dispatchers, the watchdog's retry and an approved plan call `start` directly: those are the
    * rules starting runs, not a request.

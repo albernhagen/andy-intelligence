@@ -368,6 +368,9 @@ async function seed(tracker: InMemoryWorkTracker, runs: InMemoryRunStore, key: s
   return project;
 }
 
+/** Every project readable: today's one owner. */
+const readAll = () => Promise.resolve(true);
+
 describe("DashboardReader (AI-102)", () => {
   const window = () => dashboardWindow(new Date(Date.now() + 1000), 2);
 
@@ -418,7 +421,7 @@ describe("DashboardReader (AI-102)", () => {
     await seed(tracker, runs, "BB");
     await seed(tracker, runs, "AI");
 
-    const dash = await new DashboardReader(tracker, runs).all(window());
+    const dash = await new DashboardReader(tracker, runs).all(window(), readAll);
 
     expect(dash.projects.map((p) => p.key)).toEqual(["AI", "BB"]);
     expect(dash.projects[0]!.weeks.at(-1)!.cost.estimatedCostUsd).toBe(2);
@@ -429,13 +432,27 @@ describe("DashboardReader (AI-102)", () => {
     expect(dash.partial).toEqual([]);
   });
 
+  it("GivenAProjectTheCallerMayNotRead_WhenAllIsRead_ThenItIsLeftOutOfTheListAndTheSums", async () => {
+    const tracker = new InMemoryWorkTracker();
+    const runs = new InMemoryRunStore();
+    await seed(tracker, runs, "BB");
+    await seed(tracker, runs, "AI");
+
+    const dash = await new DashboardReader(tracker, runs).all(window(), (id) =>
+      Promise.resolve(id !== "bb"),
+    );
+
+    expect(dash.projects.map((p) => p.key)).toEqual(["AI"]);
+    expect(dash.weeks.at(-1)!.cost).toMatchObject({ runs: 1, estimatedCostUsd: 2 });
+  });
+
   it("GivenMoreProjectsThanTheCap_WhenAllIsRead_ThenProjectsAreMarkedPartial", async () => {
     const tracker = new InMemoryWorkTracker();
     for (let i = 0; i <= MAX_DASHBOARD_PROJECTS; i++) {
       await tracker.createProject({ name: `P${i}`, key: `P${String(i).padStart(2, "0")}` });
     }
 
-    const dash = await new DashboardReader(tracker, new InMemoryRunStore()).all(window());
+    const dash = await new DashboardReader(tracker, new InMemoryRunStore()).all(window(), readAll);
 
     expect(dash.projects).toHaveLength(MAX_DASHBOARD_PROJECTS);
     expect(dash.partial).toEqual(["projects"]);
@@ -446,7 +463,7 @@ describe("DashboardReader (AI-102)", () => {
     const runs = new CappedRunStore();
     await seed(tracker, runs, "AI");
 
-    const dash = await new DashboardReader(tracker, runs).all(window());
+    const dash = await new DashboardReader(tracker, runs).all(window(), readAll);
 
     expect(dash.partial).toContain("cost");
     expect(dash.projects[0]!.partial).toContain("cost");
