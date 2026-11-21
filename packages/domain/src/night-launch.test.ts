@@ -1,4 +1,5 @@
 import {
+  InMemoryMilestoneStore,
   InMemoryNightLaunchStore,
   InMemoryWorkTracker,
   NIGHT_LIMITS,
@@ -150,6 +151,21 @@ describe("launchProblems", () => {
       },
     ]);
   });
+
+  it("GivenTheEpicsMilestoneHoldsIt_WhenChecked_ThenTheReasonIsAProblem", () => {
+    const problems = launchProblems(
+      EPIC,
+      [child("AI-85")],
+      request({ milestoneHold: "Milestone M6: Dev to prod is parked" }),
+    );
+    expect(problems).toEqual([
+      {
+        kind: "milestone_not_approved",
+        ticketKey: "AI-84",
+        message: "Milestone M6: Dev to prod is parked",
+      },
+    ]);
+  });
 });
 
 describe("NightLaunches", () => {
@@ -201,6 +217,61 @@ describe("NightLaunches", () => {
       () => `launch-${++n}`,
     );
     epic = await tracker.createTicket("ai", { type: "epic", title: "Overnight" }, "andy");
+  });
+
+  describe("milestones (AI-306)", () => {
+    const AT = NOW.toISOString();
+    const withMilestone = async (status: "approved" | "parked" | null) => {
+      const milestones = new InMemoryMilestoneStore();
+      if (status) {
+        await milestones.create({
+          id: "6",
+          projectId: "ai",
+          name: "M6: Dev to prod",
+          outcome: "Releases go to prod.",
+          order: 6,
+          status,
+          createdAt: AT,
+          updatedAt: AT,
+        });
+      }
+      // Nothing writes a ticket's milestone until AI-304: M4.34; set it as that write will.
+      const stored = (tracker as unknown as { tickets: Map<string, Ticket> }).tickets.get(epic.id)!;
+      stored.milestoneId = "6";
+      return new NightLaunches(
+        store,
+        tracker,
+        { planStateOf: async () => ({ kind: "approved" }) as PlanState },
+        () => now,
+        () => "launch-m",
+        null,
+        null,
+        milestones,
+      );
+    };
+
+    it("GivenAnEpicInAParkedMilestone_WhenStarted_ThenRefusedWithTheReasonAndNothingStored", async () => {
+      await story();
+      const refused = (await withMilestone("parked")).start("ai", input(), "andy");
+      await expect(refused).rejects.toMatchObject({
+        code: "not_buildable",
+        details: ["Milestone M6: Dev to prod is parked"],
+      });
+      expect(await store.listForProject("ai")).toEqual([]);
+    });
+
+    it("GivenAnEpicInAMilestoneThatCantBeRead_WhenStarted_ThenRefused", async () => {
+      await story();
+      await expect((await withMilestone(null)).start("ai", input(), "andy")).rejects.toMatchObject({
+        details: ["Milestone 6 can't be read"],
+      });
+    });
+
+    it("GivenAnEpicInAnApprovedMilestone_WhenStarted_ThenItLaunches", async () => {
+      await story();
+      const launch = await (await withMilestone("approved")).start("ai", input(), "andy");
+      expect(launch.status).toBe("running");
+    });
   });
 
   it("GivenAnEpicWhoseStoriesAreAllClear_WhenStarted_ThenARunningLaunchIsStored", async () => {
