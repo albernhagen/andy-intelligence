@@ -17,6 +17,24 @@ describe("routing config", () => {
     return RoutingConfigInput.safeParse(copy).success;
   };
 
+  it("GivenAConfigStoredBeforeTheProjectTaskSteps_WhenRead_ThenTheyReadAsStrong", () => {
+    const old = structuredClone(DEFAULT_ROUTING) as Record<string, unknown> & {
+      steps: Record<string, string>;
+    };
+    delete old.steps["plan-project"];
+    delete old.steps.ideate;
+    const read = RoutingConfig.parse(old);
+    expect(read.steps["plan-project"]).toBe("strong");
+    expect(read.steps.ideate).toBe("strong");
+    expect(read.steps.refine).toBe("fast");
+  });
+
+  it("GivenAStoredTierForAProjectTaskStep_WhenRead_ThenItIsKept", () => {
+    const stored = structuredClone(DEFAULT_ROUTING);
+    stored.steps.ideate = "fast";
+    expect(RoutingConfig.parse(stored).steps.ideate).toBe("fast");
+  });
+
   it("GivenTheDefault_WhenRead_ThenFastIsSonnetAndStrongIsOpusOnClaudeOnly", () => {
     const claude = { harness: "claude-code", provider: "claude-sub" };
     expect(DEFAULT_ROUTING.tiers.fast).toEqual([{ ...claude, model: "sonnet" }]);

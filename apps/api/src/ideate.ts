@@ -1,13 +1,21 @@
 import { createRoute, z, type OpenAPIHono } from "@hono/zod-openapi";
-import { IdeateSubmission, ProposedPullRequest, Question, Ticket } from "@andy/contracts";
-import type { IdeateService } from "@andy/domain";
+import {
+  IdeateSubmission,
+  IdeateTaskRequest,
+  ProposedPullRequest,
+  Question,
+  Run,
+  Ticket,
+} from "@andy/contracts";
+import type { IdeateService, RunService } from "@andy/domain";
 import { actorOf, type AuthEnv } from "./auth";
 import type { RouteModule } from "./services";
 
 /**
  * Ideation (AI-114, ADR-0050): an idea and the ideate procedure's result in; an epic in Ideas
- * with a spec PR, or an Ideas ticket with one question, out. Owner-only (`can`). Until AI-134
- * wires the ideate agent task, the result comes from Claude desktop (MCP `ideate`) or here.
+ * with a spec PR, or an Ideas ticket with one question, out. Owner-only (`can`). The result
+ * comes from an ideate agent task (AI-134, `POST .../ideate/agent-task` with the idea), from
+ * Claude desktop (MCP `ideate`), or here.
  */
 
 const ErrorBody = z.object({ error: z.string(), details: z.array(z.string()).optional() });
@@ -45,7 +53,42 @@ const ideateRoute = createRoute({
   },
 });
 
-export function registerIdeateRoutes(app: OpenAPIHono<AuthEnv>, ideate: IdeateService): void {
+const ideateTaskRoute = createRoute({
+  security: [{ bearer: [] }],
+  method: "post",
+  path: "/api/projects/{projectId}/ideate/agent-task",
+  request: {
+    params: ProjectParams,
+    body: { content: { "application/json": { schema: IdeateTaskRequest } }, required: true },
+  },
+  responses: {
+    201: json(Run, "An ideate agent task started on the idea"),
+    400: json(ErrorBody, "Invalid idea"),
+    403: json(ErrorBody, "Only the owner"),
+    404: json(ErrorBody, "No such project"),
+    409: json(ErrorBody, "An ideate task is in flight, or the agent-task caps are reached"),
+    422: json(ErrorBody, "No repo"),
+    502: json(ErrorBody, "The executor couldn't start it (GitHub not connected)"),
+    503: json(ErrorBody, "No executor"),
+  },
+});
+
+export function registerIdeateRoutes(
+  app: OpenAPIHono<AuthEnv>,
+  ideate: IdeateService,
+  runs: Pick<RunService, "requestProjectTask">,
+): void {
+  app.openapi(ideateTaskRoute, async (c) =>
+    c.json(
+      await runs.requestProjectTask(
+        c.req.valid("param").projectId,
+        "ideate",
+        c.req.valid("json"),
+        actorOf(c.get("identity")),
+      ),
+      201,
+    ),
+  );
   app.openapi(ideateRoute, async (c) =>
     c.json(
       await ideate.submit(
@@ -59,4 +102,4 @@ export function registerIdeateRoutes(app: OpenAPIHono<AuthEnv>, ideate: IdeateSe
 }
 
 /** Listed in `api-routes.ts` (AI-145). */
-export const apiRoutes: RouteModule = (app, s) => registerIdeateRoutes(app, s.ideate);
+export const apiRoutes: RouteModule = (app, s) => registerIdeateRoutes(app, s.ideate, s.runs);
