@@ -1,6 +1,6 @@
 # Architecture decision records — index
 
-One line per ADR (MADR, bodies immutable); open only what you need (ADR-0046). Each ADR's PR adds its line (tested). ADRs before 0060 use old milestone numbers; 0060 maps them.
+One line per ADR (bodies immutable); each ADR's PR adds its line (tested). Before 0060: old milestone numbers (mapped there).
 
 | ADR                                                               | Decision                                                                                            | Status                                                                      |
 | ----------------------------------------------------------------- | --------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------- |
@@ -48,7 +48,7 @@ One line per ADR (MADR, bodies immutable); open only what you need (ADR-0046). E
 | [0042](0042-dependabot-auto-merge-and-codeowners.md)              | Dependabot auto-merges npm patches, stable minors; CODEOWNERS asks Andy                             | accepted                                                                    |
 | [0043](0043-github-app-setup-from-the-ui.md)                      | GitHub App setup in UI; CI uses repo tokens, no review-bot App                                      | accepted                                                                    |
 | [0044](0044-custom-domain-before-m6.md)                           | Custom domain `ai.andybernhagen.com` now, via a Cloud Run domain mapping                            | accepted                                                                    |
-| [0045](0045-ui-design-system-and-dashboards.md)                   | UI design system, design skills (Hallmark first), dashboards in M5                                  | accepted, amended by 0059                                                   |
+| [0045](0045-ui-design-system-and-dashboards.md)                   | UI design system, design skills (Hallmark first), dashboards                                        | accepted, amended by 0059                                                   |
 | [0046](0046-context-budget.md)                                    | Context budget: small always-loaded docs, everything else on demand                                 | accepted, amended by 0061                                                   |
 | [0048](0048-firestore-suite-in-ci.md)                             | Firestore contract suites run in CI when the adapters change                                        | accepted                                                                    |
 | [0047](0047-coordinating-parallel-work.md)                        | Coordinating parallel work: deterministic supervisor, no LLM parent                                 | accepted, amended by 0060, 0080, 0083                                       |
@@ -62,7 +62,7 @@ One line per ADR (MADR, bodies immutable); open only what you need (ADR-0046). E
 | [0056](0056-pr-merge-completes-ticket.md)                         | A merged PR completes its ticket until M6: Dev → prod releases                                      | accepted, amended by 0067, 0069                                             |
 | [0057](0057-forced-moves-without-reason.md)                       | Forced stage moves no longer need a reason                                                          | accepted, amends ARCHITECTURE §4.1                                          |
 | [0058](0058-ticket-model-shortcut-style.md)                       | Ticket model: Shortcut-style stories; order is priority, size the estimate                          | accepted (direction), amended by 0080, 0102                                 |
-| [0059](0059-ux-foundation-shortcut-style.md)                      | UX foundation: workspace, status board, story panel                                                 | accepted (direction; M3), amended by 0070                                   |
+| [0059](0059-ux-foundation-shortcut-style.md)                      | UX foundation: workspace, status board, story panel                                                 | accepted (direction; M3), amended by 0070, 0108                             |
 | [0060](0060-milestones-in-completion-order-self-hosting-first.md) | Milestones in completion order; M2: Self-hosting; tickets under milestones                          | accepted                                                                    |
 | [0061](0061-architecture-split-into-overview-and-topic-files.md)  | ARCHITECTURE split into an overview and per-topic files                                             | accepted, amends 0022, 0046                                                 |
 | [0062](0062-stored-tier-dropped.md)                               | Tier is computed from size; `overrides.tier` pins one                                               | accepted, amends ARCHITECTURE §4.2, §5, §10.4                               |
@@ -96,3 +96,4 @@ One line per ADR (MADR, bodies immutable); open only what you need (ADR-0046). E
 | [0099](0099-agent-read-access.md)                                 | Agent read-only run token                                                                           | proposed, amends 0051, 0040, 0089                                           |
 | [0100](0100-quota-warn-cap.md)                                    | One agent task at quota warn                                                                        | proposed, amends 0079, 0083                                                 |
 | [0102](0102-spike-tickets.md)                                     | Spike tickets                                                                                       | proposed, amends 0058, 0050                                                 |
+| [0108](0108-roadmap-and-work-views.md)                            | Roadmap; work views                                                                                 | proposed, amends 0059                                                       |
