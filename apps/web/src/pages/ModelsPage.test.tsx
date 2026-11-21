@@ -135,4 +135,23 @@ describe("Models settings page", () => {
     await h.user.click(within(fast).getByRole("button", { name: "Remove fast route 2" }));
     expect(within(fast).queryByText("Refused")).toBeNull();
   });
+
+  it("GivenAnOutOfRangePercentage_WhenTyped_ThenSaveIsBlockedAndTheFieldIsNamed", async () => {
+    const { h, form } = await modelsPage();
+    const reserve = within(form).getByRole("spinbutton", { name: "claude-sub reserve" });
+    await h.user.clear(reserve);
+    await h.user.type(reserve, "150");
+    expect(
+      (within(form).getByRole("button", { name: "Save routing" }) as HTMLButtonElement).disabled,
+    ).toBe(true);
+    expect(
+      within(form).getByText(/claude-sub reserve must be a whole number from 0 to 100/),
+    ).toBeTruthy();
+    expect((reserve as HTMLInputElement).value).toBe("150");
+    await h.user.clear(reserve);
+    await h.user.type(reserve, "25");
+    expect(
+      (within(form).getByRole("button", { name: "Save routing" }) as HTMLButtonElement).disabled,
+    ).toBe(false);
+  });
 });

@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { TierKey, type Route, type RoutingConfig } from "@andy/contracts";
+import { ProviderKey, TierKey, type Route, type RoutingConfig } from "@andy/contracts";
 import { effectiveRouting, routeSkipReason } from "@andy/domain";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -58,6 +58,12 @@ export function RoutingEditor({
     setBase(ifUpdatedAt);
   };
   const changedElsewhere = ifUpdatedAt !== base;
+  // Percentages being typed that aren't whole numbers from 0 to 100: nothing is saved until fixed.
+  const invalid = ProviderKey.options.flatMap((key) =>
+    (["reservePct", "warnPct", "pausePct"] as const)
+      .filter((f) => !Number.isInteger(draft.providers[key][f]))
+      .map((f) => `${key} ${f.replace("Pct", "")}`),
+  );
   const errors = routingErrors(save.error);
 
   // The providers a route runs under: the draft's, narrowed to global for a project.
@@ -140,10 +146,19 @@ export function RoutingEditor({
           value={reason}
           onChange={(e) => setReason(e.target.value)}
         />
-        <Button type="submit" className="h-11 sm:h-9" disabled={save.isPending}>
+        <Button
+          type="submit"
+          className="h-11 sm:h-9"
+          disabled={save.isPending || invalid.length > 0}
+        >
           Save routing
         </Button>
         {save.isSuccess && <span className="text-xs text-muted-foreground">Saved.</span>}
+        {invalid.length > 0 && (
+          <span role="alert" className="text-xs text-destructive">
+            Not saved: {invalid.join(", ")} must be a whole number from 0 to 100.
+          </span>
+        )}
       </div>
     </form>
   );

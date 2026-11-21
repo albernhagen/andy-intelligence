@@ -81,8 +81,9 @@ export function ProviderSettings({
 }
 
 /**
- * A 0–100 field that keeps what is typed: a cleared or partial value stays on screen and is
- * passed on only once it is a whole number in range, so clearing a field never saves a 0.
+ * A 0–100 field that keeps what is typed. A whole number in range is passed on; anything else
+ * (cleared, out of range) is passed on as NaN, so the editor blocks the save and names the
+ * field instead of saving the old value or a 0.
  */
 function PercentInput({
   label,
@@ -93,7 +94,7 @@ function PercentInput({
   value: number;
   onChange: (value: number) => void;
 }) {
-  const [text, setText] = useState(String(value));
+  const [text, setText] = useState(Number.isNaN(value) ? "" : String(value));
   const parsed = Number(text);
   const valid = text.trim() !== "" && Number.isInteger(parsed) && parsed >= 0 && parsed <= 100;
   return (
@@ -108,11 +109,8 @@ function PercentInput({
       onChange={(e) => {
         setText(e.target.value);
         const n = Number(e.target.value);
-        if (e.target.value.trim() !== "" && Number.isInteger(n) && n >= 0 && n <= 100) onChange(n);
-      }}
-      // Leaving a field that isn't a valid number shows the value the draft still holds.
-      onBlur={() => {
-        if (!valid) setText(String(value));
+        const ok = e.target.value.trim() !== "" && Number.isInteger(n) && n >= 0 && n <= 100;
+        onChange(ok ? n : Number.NaN);
       }}
     />
   );
