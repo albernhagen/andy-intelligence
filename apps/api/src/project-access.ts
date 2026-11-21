@@ -36,6 +36,10 @@ export const CROSS_PROJECT_ROUTES: Readonly<Record<string, string>> = {
   "GET /api/notify/email": "Needs-you email setting: owner only.",
   "GET /api/project-plans/waiting": "Every project's waiting plan: keep readable projects.",
   "GET /api/projects": "Every project: keep readable projects.",
+  "GET /api/routing":
+    "Every project's routing (a `projectId` query is checked): keep readable projects.",
+  "GET /api/work":
+    "Every project's open tickets (a `project` query is checked): keep readable projects.",
   "GET /api/quota": "Subscription quota: owner only.",
   "GET /api/runners": "Local runners: owner only.",
   "POST /api/config-changes/:changeId/accept": "Check the change's project.",
@@ -48,6 +52,7 @@ export const CROSS_PROJECT_ROUTES: Readonly<Record<string, string>> = {
   "POST /api/quota/clear": "Subscription quota: owner only.",
   "POST /api/runners": "Local runners: owner only.",
   "POST /api/runners/:runnerId/revoke": "Local runners: owner only.",
+  "PUT /api/routing": "Global model routing: owner only.",
 };
 
 /**
@@ -58,10 +63,15 @@ export const CROSS_PROJECT_TOOLS: Readonly<Record<string, string>> = {
   accept_config_change: "Check the change's project.",
   answer_question: "Check the question's ticket's project.",
   clear_quota_idle: "Subscription quota: owner only.",
+  get_routing: "Without `project`, the global routing: nothing to filter.",
   list_config_changes: "Without `project`, every project's changes: keep readable projects.",
   list_needs_me: "Every project's inbox: keep readable projects.",
   list_projects: "Every project: keep readable projects.",
+  list_work: "Without `project`, every project's open tickets: keep readable projects.",
   reject_config_change: "Check the change's project.",
+  set_provider_routing: "Without `project`, the global routing: owner only.",
+  set_step_tier: "Without `project`, the global routing: owner only.",
+  set_tier_routes: "Without `project`, the global routing: owner only.",
   status: "Without `ticket`, every project's counts: keep readable projects.",
 };
 
@@ -113,9 +123,22 @@ export function projectsOfInput(input: unknown): ProjectTarget[] {
   return targets;
 }
 
+/** Query parameters that name a project (`/api/work?project=`, `/api/routing?projectId=`). */
+export const PROJECT_QUERY_PARAMS = ["project", "projectId"];
+
+/** The projects an `/api` query names: every value of a `PROJECT_QUERY_PARAMS` parameter. */
+export function projectsOfQuery(query: Record<string, string[]>): ProjectTarget[] {
+  return PROJECT_QUERY_PARAMS.flatMap((param) =>
+    (query[param] ?? []).map((value) => ({
+      projectId: projectIdFor(value),
+      error: "project not found",
+    })),
+  );
+}
+
 /**
- * The `/api` check, after sign-in and the body cap. A route whose path names a project checks it,
- * and every project its JSON body names; a refusal is that thing's unknown-one 404. A route with
+ * The `/api` check, after sign-in and the body cap. It checks the project a route's path names
+ * and every project its query or JSON body names; a refusal is that thing's unknown-one 404. A route with
  * no project in its path passes only when listed in `CROSS_PROJECT_ROUTES`; any other is refused
  * with 404 (fail closed). A path no route matches falls through to the router's 404.
  */
@@ -130,7 +153,11 @@ export function requireProjectAccess(access: ProjectAccess): MiddlewareHandler<A
       log("ERROR", "route has no project scope", { actor, route });
       return c.json({ error: "not found" }, 404);
     }
-    const targets = [...(pathTarget ? [pathTarget] : []), ...projectsOfInput(await jsonBody(c))];
+    const targets = [
+      ...(pathTarget ? [pathTarget] : []),
+      ...projectsOfQuery(c.req.queries()),
+      ...projectsOfInput(await jsonBody(c)),
+    ];
     const refused = await refusedTarget(access, actor, targets, "api");
     return refused ? c.json({ error: refused.error }, 404) : next();
   };

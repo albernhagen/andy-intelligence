@@ -14,6 +14,7 @@ import {
   ownerOnlyAccess,
   projectOfPath,
   projectsOfInput,
+  projectsOfQuery,
   requireProjectAccess,
   type ProjectAccess,
 } from "./project-access";
@@ -151,6 +152,19 @@ describe("projectsOfInput (AI-252)", () => {
   });
 });
 
+describe("projectsOfQuery (AI-252)", () => {
+  it("GivenProjectQueryParameters_WhenRead_ThenEachValueIsAProject", () => {
+    expect(projectsOfQuery({ project: ["ops"], projectId: ["AI", "web"], view: ["mine"] })).toEqual(
+      [
+        { projectId: "ops", error: "project not found" },
+        { projectId: "ai", error: "project not found" },
+        { projectId: "web", error: "project not found" },
+      ],
+    );
+    expect(projectsOfQuery({ view: ["mine"] })).toEqual([]);
+  });
+});
+
 describe("requireProjectAccess (AI-252)", () => {
   function miniApp(access: ProjectAccess) {
     const handler = vi.fn(() => new Response("handled", { status: 201 }));
@@ -284,6 +298,26 @@ describe("API routes behind the project-access check (AI-252)", () => {
     expect(mislabelled.status).toBe(404);
     expect(await tracker.listTickets("ai")).toHaveLength(1);
     expect((await tracker.getTicket("ai", ticket.id))?.updatedAt).toBe(ticket.updatedAt);
+  });
+
+  it("GivenAQueryNamingAnUnreadableProject_WhenACrossProjectRouteIsCalled_ThenTheUnknownProject404", async () => {
+    vi.spyOn(console, "log").mockImplementation(() => undefined);
+    const access: ProjectAccess = {
+      canRead: (_, projectId) => Promise.resolve(projectId !== "ops"),
+    };
+    const { app } = await seededApp({ projectAccess: access });
+    for (const path of ["/api/work?view=mine&project=ops", "/api/routing?projectId=ops"]) {
+      const refused = await call(app, "GET", path, "andy");
+      expect(refused.status, path).toBe(404);
+      expect(await refused.json()).toEqual({ error: "project not found" });
+    }
+    for (const path of [
+      "/api/work?view=mine&project=ai",
+      "/api/routing?projectId=ai",
+      "/api/work?view=mine",
+    ]) {
+      expect((await call(app, "GET", path, "andy")).status, path).toBe(200);
+    }
   });
 
   it("GivenARefusingAccess_WhenEachCrossProjectRouteIsCalled_ThenTheCheckIsNotAsked", async () => {
