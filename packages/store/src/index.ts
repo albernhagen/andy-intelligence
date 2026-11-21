@@ -155,6 +155,14 @@ export { FirestoreQuotaStore } from "./quota-store";
 export { FirestoreRoutingConfigStore, ROUTING_CONFIGS_COLLECTION } from "./routing-config-store";
 export { FirestoreRunStore } from "./run-store";
 export { FirestoreRunnerStore } from "./runner-store";
+export {
+  FirestoreSpendLedger,
+  SPEND_COLLECTION,
+  SPEND_TOTALS_COLLECTION,
+  SpendTotalDoc,
+  spendEntryDocId,
+  spendTotalDocIds,
+} from "./spend-ledger";
 export { ticketEventV2toV3, ticketV1toV2, ticketV2toV3, upgrade, type Upgrader } from "./upgrade";
 export {
   CloudTasksWatchdogQueue,
