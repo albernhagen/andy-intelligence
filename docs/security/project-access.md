@@ -4,12 +4,12 @@ One check decides whether a caller may read a project, for API routes and MCP to
 
 ## Where the check runs
 
-| Entry                                               | Project it reads             | Refusal                                                                  |
-| --------------------------------------------------- | ---------------------------- | ------------------------------------------------------------------------ |
-| `/api/projects/{projectId}[/…]` (every method)      | `projectId`                  | `404 {"error":"project not found"}`, the same body as an unknown project |
-| `/api/tickets/{KEY}`                                | The key's prefix, lowercased | `404 {"error":"ticket not found: KEY"}`, as an unknown ticket            |
-| MCP tool with a `project` input (required or given) | `project`, lowercased        | Tool error `project KEY not found`; the handler doesn't run              |
-| MCP tool with a `ticket` input (required or given)  | The key's prefix, lowercased | Tool error `ticket not found: KEY`; the handler doesn't run              |
+| Entry                                                                                         | Project it reads              | Refusal                                                                  |
+| --------------------------------------------------------------------------------------------- | ----------------------------- | ------------------------------------------------------------------------ |
+| `/api/projects/{projectId}[/…]` (every method)                                                | `projectId`                   | `404 {"error":"project not found"}`, the same body as an unknown project |
+| `/api/tickets/{KEY}`                                                                          | The key's prefix, lowercased  | `404 {"error":"ticket not found: KEY"}`, as an unknown ticket            |
+| MCP tool with a `project` input (required or given)                                           | `project`, lowercased         | Tool error `project KEY not found`; the handler doesn't run              |
+| MCP tool with a ticket key in `ticket`, `parent`, `parentId`, `blockedBy`, `above` or `below` | Each key's prefix, lowercased | Tool error `ticket not found: KEY`; the handler doesn't run              |
 
 - Order on `/api/*`: sign-in and allow-list (401, 403), body cap, then this check. Strangers never reach it, so a refusal can't tell them a project exists.
 - Each refusal logs a `WARNING` with the actor (`user:<uid>`) and project id; never the email (ADR-0015).
