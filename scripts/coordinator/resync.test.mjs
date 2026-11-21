@@ -154,6 +154,29 @@ describe("resyncBranch", { timeout: 30_000 }, () => {
     expect(ran[1]).toMatch(/resync-budget-.*context-budget\.mjs \.$/);
   });
 
+  it("GivenTokenInEnvironment_WhenResynced_ThenPushAndItsHookSeeNoToken", () => {
+    const r = repos();
+    r.git(r.work, "checkout", "-qb", "pr");
+    commit(r, "pr", "code.txt", "two\n");
+    commit(r, "main", "list.md", "| a |\n| main |\n| z |\n");
+    const pushEnvs = [];
+    const run = (cmd, args, opts) => {
+      if (cmd === "git" && args[0] === "push") pushEnvs.push(opts.env);
+      return sh(cmd, args, opts);
+    };
+    process.env.GH_TOKEN = "test-token";
+    try {
+      expect(resyncBranch({ repo: r.work, branch: "pr", run, checks: [] })).toMatchObject({
+        ok: true,
+      });
+    } finally {
+      delete process.env.GH_TOKEN;
+    }
+    expect(pushEnvs).toHaveLength(1);
+    expect(pushEnvs[0].GH_TOKEN).toBeUndefined();
+    expect(pushEnvs[0].PATH).toBeDefined();
+  });
+
   it("GivenRealConflict_WhenResynced_ThenAbortedNothingPushedFilesListed", () => {
     const r = repos();
     r.git(r.work, "checkout", "-qb", "pr");

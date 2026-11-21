@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// Mechanical re-sync for a coordinator acting under ADR-0088 (AI-149; runbook
+// Mechanical re-sync for a coordinator acting under ADR-0120 (AI-149; runbook
 // `coordinating-sessions.md` §6). CHANGES REMOTE STATE: pushes a merge commit to the PR's branch.
 // Not for build agents.
 //
@@ -8,9 +8,10 @@
 // lines at the same place (diff3 base empty): both additions are kept, the branch's first.
 // Anything else aborts and lists the files for the worker. Then it installs (no lifecycle
 // scripts) and runs main's copy of the context-budget check with no tokens in the environment,
-// and pushes without force through the pre-push hook. The hook runs the branch's typecheck and
-// tests on this machine, as the worker's own push does. If the worker pushed meanwhile, the push
-// is refused.
+// and pushes without force through the pre-push hook, also with no tokens in its environment.
+// The hook runs the branch's typecheck and tests as this user, as the worker's own push does:
+// that code can still reach the keychain's GitHub login (residual risk, docs/security). If the
+// worker pushed meanwhile, the push is refused.
 //
 // Usage: node scripts/coordinator/resync.mjs <PR> [--dry-run] [--keep]
 import { mkdtempSync, readFileSync, writeFileSync } from "node:fs";
@@ -173,7 +174,12 @@ export function resyncBranch({
       : "merged main cleanly";
     if (dryRun) return { ok: true, summary: `${what}; dry run, not pushed`, resolved };
     // No force: if the worker pushed since the fetch, this is refused and nothing is lost.
-    const pushed = git(dir, "push", "origin", `HEAD:refs/heads/${branch}`);
+    // The hook runs the branch's code: no tokens in its environment. git authenticates through
+    // its credential helper (keychain), which code running as this user can still reach.
+    const pushed = run("git", ["push", "origin", `HEAD:refs/heads/${branch}`], {
+      cwd: dir,
+      env: scrubbedEnv(env),
+    });
     if (pushed.status !== 0) {
       return {
         ok: false,
@@ -194,10 +200,11 @@ export function resyncBranch({
 const HELP = `Usage: resync.mjs <PR> [--dry-run] [--keep]
 
 CHANGES REMOTE STATE: pushes a merge of origin/main to the PR's branch (no force).
-For a coordinator acting under ADR-0088 only, never for build agents.
+For a coordinator acting under ADR-0120 only, never for build agents.
 Resolves a conflict only in Markdown files where both sides purely added lines; otherwise
 aborts and lists the files for the worker. Runs main's context-budget check and the pre-push
-hook (the branch's own typecheck and tests) before pushing.
+hook (the branch's own typecheck and tests) before pushing, all with no tokens in the
+environment. That code still runs as you: it can reach your keychain's GitHub login.
 --dry-run merges and checks without pushing; --keep leaves the scratch worktree.
 `;
 

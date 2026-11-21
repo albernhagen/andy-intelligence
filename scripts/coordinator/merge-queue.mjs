@@ -1,19 +1,19 @@
 #!/usr/bin/env node
-// Serial merge queue for a coordinator acting under ADR-0088 (AI-149; runbook
+// Serial merge queue for a coordinator acting under ADR-0120 (AI-149; runbook
 // `coordinating-sessions.md` §6). CHANGES REMOTE STATE: squash-merges PRs on GitHub and deletes
 // their branches. Not for build agents.
 //
-// Takes an explicit list of PRs the coordinator has already classed low or medium risk; it never
-// decides the class. Before each merge it re-surveys the PR and merges only when survey.mjs finds
-// no blocker (head contains main, every check passed, both verdicts on that head with zero
-// blocker, should-fix, high and critical, no labels). After each merge it waits for main's runs on
+// Takes an explicit list of PRs the coordinator has already judged its own to merge; it never
+// decides that. Before each merge it re-surveys the PR and merges only when survey.mjs finds no
+// blocker (head contains main, every check passed, both verdicts on that head with zero blocker,
+// should-fix, high and critical, no labels, no ADR-0120 "Andy keeps" path, file list read). After each merge it waits for main's runs on
 // the merge commit and stops on any failure or timeout. A PR that is not ready is skipped with
 // its reasons; after one merge the rest are usually behind main and need resync.mjs first.
 //
 // Usage: node scripts/coordinator/merge-queue.mjs <PR> [PR...] [--dry-run] [--timeout-min 45]
 import { parseArgs } from "node:util";
 import { fileURLToPath } from "node:url";
-import { ghJson, readHighRiskPatterns, sh, sleep as realSleep } from "./lib.mjs";
+import { ghJson, readPatterns, sh, sleep as realSleep } from "./lib.mjs";
 import { surveyPr } from "./survey.mjs";
 
 const OK_CONCLUSIONS = ["success", "skipped", "neutral"];
@@ -172,8 +172,9 @@ export async function runQueue(
 const HELP = `Usage: merge-queue.mjs <PR> [PR...] [--dry-run] [--timeout-min 45]
 
 CHANGES REMOTE STATE: squash-merges the listed PRs on GitHub, one at a time, and deletes
-their branches. For a coordinator acting under ADR-0088 only, never for build agents.
-List only PRs you have classed low or medium risk; this tool does not decide the class.
+their branches. For a coordinator acting under ADR-0120 only, never for build agents.
+List only PRs you have judged yours to merge; this tool does not decide that, but refuses
+any PR touching a path in ADR-0120's "Andy keeps" table, or whose files it can't read.
 Merges a PR only when survey.mjs finds no blocker on its head; waits for main's runs after
 each merge and stops on any failure. --dry-run reports what it would merge.
 `;
@@ -197,7 +198,7 @@ async function main() {
     return 2;
   }
   const result = await runQueue(numbers, {
-    patterns: readHighRiskPatterns(),
+    patterns: readPatterns(),
     dryRun: values["dry-run"],
     timeoutMs: Number(values["timeout-min"]) * 60_000,
     log: (line) => process.stdout.write(`${line}\n`),

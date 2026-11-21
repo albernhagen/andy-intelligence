@@ -1,16 +1,9 @@
-import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { HEAD, cleanPr, fakeGh, reviewBody } from "./fake-gh.mjs";
-import {
-  HIGH_RISK_ADR,
-  highRiskPatterns,
-  highRiskTouched,
-  latestReviews,
-  parseReview,
-} from "./lib.mjs";
+import { highRiskTouched, readPatterns, latestReviews, parseReview } from "./lib.mjs";
 import { format, surveyPr } from "./survey.mjs";
 
-const patterns = highRiskPatterns(readFileSync(HIGH_RISK_ADR, "utf8"));
+const patterns = readPatterns();
 const survey = (pr) =>
   surveyPr(pr.view.number, { run: fakeGh({ [pr.view.number]: pr }).run, patterns });
 const bot = (body, updated_at = "2026-11-20T02:00:00Z") => ({
@@ -108,12 +101,28 @@ describe("survey", () => {
     );
   });
 
-  it("GivenDiffTouchingProcedures_WhenSurveyed_ThenHighRiskPathListed", () => {
+  it("GivenDiffTouchingCoordinateProcedure_WhenSurveyed_ThenAndyKeepsItAndBlocked", () => {
     const report = survey(
       cleanPr(7, { files: ["platform/procedures/coordinate.md", "apps/web/x.ts"] }),
     );
-    expect(report.highRisk).toEqual(["platform/procedures/"]);
-    expect(report.blockers).toContain("touches high-risk paths: platform/procedures/");
+    expect(report.andyKeeps).toEqual(
+      expect.arrayContaining(["platform/procedures/coordinate.md", "platform/procedures/"]),
+    );
+    expect(report.blockers.join()).toMatch(/Andy keeps \(ADR-0120\): .*coordinate\.md/);
+  });
+
+  it("GivenDiffTouchingOnlyLookHardestPath_WhenSurveyed_ThenReportedButNotBlocked", () => {
+    const report = survey(cleanPr(7, { files: ["packages/contracts/src/a.ts"] }));
+    expect(report.lookHardest).toEqual(["packages/contracts"]);
+    expect(report.andyKeeps).toEqual([]);
+    expect(report.blockers).toEqual([]);
+    expect(format(report)).toContain("look hardest (ADR-0092): packages/contracts");
+  });
+
+  it("GivenTerraformChange_WhenSurveyed_ThenAndyKeepsIt", () => {
+    expect(survey(cleanPr(7, { files: ["infra/control-plane/main.tf"] })).andyKeeps).toEqual([
+      "infra/",
+    ]);
   });
 
   it("GivenFileListCallFails_WhenSurveyed_ThenBlockedNotTreatedAsLowRisk", () => {
@@ -122,37 +131,60 @@ describe("survey", () => {
   });
 });
 
-describe("high-risk patterns", () => {
-  it("GivenAdr0092_WhenParsed_ThenPathTokensOnly", () => {
-    expect(patterns).toEqual(
+describe("ADR path patterns", () => {
+  it("GivenAdr0120_WhenParsed_ThenAndyKeepsPathsPlusTerraform", () => {
+    expect(patterns.keeps).toEqual(
+      expect.arrayContaining([
+        "platform/procedures/coordinate.md",
+        "coordinating-sessions.md",
+        "AGENTS.md",
+        ".github/**",
+        "platform/actions/**",
+        "platform/baseline/**",
+        "CODEOWNERS",
+        "scripts/review-*.mjs",
+        "platform/evals/**",
+        "scripts/evals/**",
+        "infra/",
+      ]),
+    );
+    expect(patterns.keeps).not.toContain("terraform apply");
+  });
+
+  it("GivenAdr0092_WhenParsed_ThenLookHardestPathTokensOnly", () => {
+    expect(patterns.hardest).toEqual(
       expect.arrayContaining([
         ".github/",
         "infra/",
         "scripts/review-*.mjs",
-        "AGENTS.md",
         "docs/architecture/*.md",
       ]),
     );
-    expect(patterns).not.toContain("terraform apply");
   });
 
   it.each([
-    [".github/workflows/ci.yml", ".github/"],
+    [".github/workflows/ci.yml", ".github/**"],
     ["scripts/review-gate.mjs", "scripts/review-*.mjs"],
-    ["packages/contracts/src/a.ts", "packages/contracts"],
     ["apps/api/AGENTS.md", "AGENTS.md"],
+    [".github/CODEOWNERS", "CODEOWNERS"],
     ["platform/baseline/manifest.json", "platform/baseline/**"],
-  ])("GivenFile%s_WhenMatched_ThenPattern%s", (file, pattern) => {
-    expect(highRiskTouched([file], patterns)).toContain(pattern);
+    ["docs/runbooks/coordinating-sessions.md", "coordinating-sessions.md"],
+  ])("GivenFile%s_WhenMatched_ThenAndyKeepsPattern%s", (file, pattern) => {
+    expect(highRiskTouched([file], patterns.keeps)).toContain(pattern);
   });
 
   it.each([
     "scripts/reviewer.txt",
     "docs/architecture/adr/0001-x.md",
-    "packages/contracts-extra/a.ts",
+    "packages/contracts/src/a.ts",
     "apps/web/src/a.ts",
-  ])("GivenFile%s_WhenMatched_ThenNotHighRiskByPath", (file) => {
-    expect(highRiskTouched([file], patterns)).toEqual([]);
+    "lefthook.yml",
+  ])("GivenFile%s_WhenMatched_ThenNotAndyKeeps", (file) => {
+    expect(highRiskTouched([file], patterns.keeps)).toEqual([]);
+  });
+
+  it("GivenPackagesContracts_WhenMatched_ThenSiblingPackageNotMatched", () => {
+    expect(highRiskTouched(["packages/contracts-extra/a.ts"], patterns.hardest)).toEqual([]);
   });
 });
 

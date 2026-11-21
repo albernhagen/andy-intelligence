@@ -39,7 +39,7 @@ export const REVIEW_ROLES = {
   security: "<!-- security-review -->",
   adversarial: "<!-- adversarial-review -->",
 };
-/** Severities that keep a PR from merging under ADR-0088 (coordinate.md §7). */
+/** Severities that keep a PR from merging under ADR-0120 (coordinate.md §7). */
 export const BLOCKING = ["blocker", "should-fix", "high", "critical"];
 
 /**
@@ -74,16 +74,21 @@ export function latestReviews(comments) {
   return out;
 }
 
-export const HIGH_RISK_ADR = "docs/architecture/adr/0092-high-risk-list.md";
+/** ADR-0120: what Andy keeps, whatever the coordinator classed. These block a tool merge. */
+export const ANDY_KEEPS_ADR = "docs/architecture/adr/0120-coordinator-merges-clean-prs.md";
+/** ADR-0092: where reviewers and the coordinator look hardest (ADR-0120). Reported, not blocking. */
+export const LOOK_HARDEST_ADR = "docs/architecture/adr/0092-high-risk-list.md";
+/** ADR-0120's "Needs Andy's hands" names Terraform that needs `terraform apply`: no path given. */
+const ANDY_KEEPS_EXTRA = ["infra/"];
 
 /**
- * Path patterns from the high-risk table in ADR-0092, read from the ADR itself so the tools
- * cannot drift from it: every backticked token in a table row that looks like a path.
+ * Path patterns from an ADR's tables, read from the ADR itself so the tools cannot drift from it:
+ * every backticked token in a table row that looks like a path or an all-caps file name.
  */
 export function highRiskPatterns(adrText) {
   const rows = adrText.split("\n").filter((l) => l.startsWith("| ") && !/^\|[\s-|]+$/.test(l));
   const tokens = rows.flatMap((row) => [...row.matchAll(/`([^`\s]+)`/g)].map((m) => m[1]));
-  return [...new Set(tokens.filter((t) => /[/.]/.test(t)))];
+  return [...new Set(tokens.filter((t) => /[/.]/.test(t) || /^[A-Z]{4,}$/.test(t)))];
 }
 
 function patternRegex(pattern) {
@@ -99,13 +104,15 @@ function patternRegex(pattern) {
   return new RegExp(`^${escaped}$`);
 }
 
-/** Which ADR-0092 patterns the changed files touch (a hint for the coordinator, not a class). */
+/** Which of the given ADR patterns the changed files touch. */
 export function highRiskTouched(files, patterns) {
   return patterns.filter((p) => files.some((f) => patternRegex(p).test(f)));
 }
 
-export function readHighRiskPatterns(root = process.cwd()) {
-  return highRiskPatterns(readFileSync(`${root}/${HIGH_RISK_ADR}`, "utf8"));
+/** @returns {{ keeps: string[], hardest: string[] }} */
+export function readPatterns(root = process.cwd()) {
+  const read = (adr) => highRiskPatterns(readFileSync(`${root}/${adr}`, "utf8"));
+  return { keeps: [...read(ANDY_KEEPS_ADR), ...ANDY_KEEPS_EXTRA], hardest: read(LOOK_HARDEST_ADR) };
 }
 
 /** Waits `ms` milliseconds (injectable so tests don't wait). */

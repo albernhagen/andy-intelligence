@@ -1,9 +1,10 @@
 #!/usr/bin/env node
 // PR survey for a coordinator (AI-149; runbook `coordinating-sessions.md` §6). Read-only.
 // For each PR: head, merge state, whether the head contains the base branch, checks, each review
-// agent's verdict and blocking findings on that head, labels, and which ADR-0092 high-risk paths
-// the diff touches. Blockers are coordinate.md §7's mechanical conditions plus any ADR-0092 path;
-// a PR with none may still be high risk (size, an ADR about merging, doubt): the class stays the
+// agent's verdict and blocking findings on that head, labels, and which paths the diff touches
+// from ADR-0120's "Andy keeps" table (blocking) and ADR-0092's "look hardest" list (reported).
+// Blockers are ADR-0120's mechanical conditions plus any "Andy keeps" path. A PR with none may
+// still be Andy's (a new credential, an ADR about who merges, doubt): that stays the
 // coordinator's call.
 //
 // Usage: node scripts/coordinator/survey.mjs [PR...] [--json]   (no PR: every open PR)
@@ -16,7 +17,7 @@ import {
   highRiskTouched,
   latestReviews,
   parseReview,
-  readHighRiskPatterns,
+  readPatterns,
   sh,
 } from "./lib.mjs";
 
@@ -98,7 +99,8 @@ export function surveyPr(number, { run = sh, patterns }) {
     sync,
     checks,
     reviews,
-    highRisk: Array.isArray(files) ? highRiskTouched(files, patterns) : files,
+    andyKeeps: Array.isArray(files) ? highRiskTouched(files, patterns.keeps) : files,
+    lookHardest: Array.isArray(files) ? highRiskTouched(files, patterns.hardest) : files,
   };
   return { ...report, blockers: blockers(report) };
 }
@@ -115,9 +117,9 @@ export function blockers(r) {
   if (r.base !== "main") out.push(`base is ${r.base}, not main`);
   if (!["CLEAN", "HAS_HOOKS"].includes(r.mergeState)) out.push(`merge state ${r.mergeState}`);
   if (r.labels.length > 0) out.push(`labels: ${r.labels.join(", ")}`);
-  // ADR-0092's paths are Andy's whatever the coordinator classed (R23): never merged by a tool.
-  if (!Array.isArray(r.highRisk)) out.push(`changed files unknown (${r.highRisk.error})`);
-  else if (r.highRisk.length > 0) out.push(`touches high-risk paths: ${r.highRisk.join(", ")}`);
+  // ADR-0120's "Andy keeps" paths are his whatever the coordinator classed (R23): never a tool merge.
+  if (!Array.isArray(r.andyKeeps)) out.push(`changed files unknown (${r.andyKeeps.error})`);
+  else if (r.andyKeeps.length > 0) out.push(`Andy keeps (ADR-0120): ${r.andyKeeps.join(", ")}`);
   if (r.sync.error) out.push(`sync unknown (${r.sync.error})`);
   else if (!r.sync.containsBase) out.push(`head is ${r.sync.behindBy} commit(s) behind ${r.base}`);
   if (r.checks.error) out.push(`checks unknown (${r.checks.error})`);
@@ -173,9 +175,9 @@ export function format(r) {
     }
   }
   lines.push(
-    Array.isArray(r.highRisk)
-      ? `  high-risk paths (ADR-0092): ${r.highRisk.join(", ") || "none"}`
-      : `  high-risk paths: unknown: ${r.highRisk.error}`,
+    Array.isArray(r.lookHardest)
+      ? `  Andy keeps (ADR-0120): ${r.andyKeeps.join(", ") || "none"} · look hardest (ADR-0092): ${r.lookHardest.join(", ") || "none"}`
+      : `  changed files: unknown: ${r.lookHardest.error}`,
   );
   lines.push(
     r.blockers.length
@@ -202,7 +204,7 @@ function main() {
     );
     return 0;
   }
-  const patterns = readHighRiskPatterns();
+  const patterns = readPatterns();
   const numbers = positionals.length ? positionals.map(Number) : openPrNumbers();
   const reports = numbers.map((n) => attempt(() => surveyPr(n, { patterns })));
   if (values.json) process.stdout.write(`${JSON.stringify(reports, null, 2)}\n`);

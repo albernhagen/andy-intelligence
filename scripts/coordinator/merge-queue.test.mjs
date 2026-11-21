@@ -15,7 +15,7 @@ function queue(prs, numbers, opts = {}) {
   const lines = [];
   const promise = runQueue(numbers, {
     run: gh.run,
-    patterns: [],
+    patterns: { keeps: [], hardest: [] },
     log: (l) => lines.push(l),
     ...clock(),
     ...opts,
@@ -73,8 +73,12 @@ describe("merge queue", () => {
 
   it("GivenPrTouchingHighRiskPath_WhenQueued_ThenRefusedWhateverTheClass", async () => {
     const gh = fakeGh({ 7: cleanPr(7, { files: [".github/workflows/ci.yml"] }) });
-    const result = await runQueue([7], { run: gh.run, patterns: [".github/"], ...clock() });
-    expect(result.skipped[0].reasons).toContain("touches high-risk paths: .github/");
+    const result = await runQueue([7], {
+      run: gh.run,
+      patterns: { keeps: [".github/"], hardest: [] },
+      ...clock(),
+    });
+    expect(result.skipped[0].reasons).toContain("Andy keeps (ADR-0120): .github/");
     expect(merges(gh.calls)).toEqual([]);
   });
 
