@@ -32,7 +32,7 @@ export default defineConfig({
     colorScheme: "light",
   },
   webServer: {
-    command: `vite --config e2e/vite.config.ts --port ${PORT} --strictPort`,
+    command: `node ../../scripts/gen-exports.mjs && vite --config e2e/vite.config.ts --port ${PORT} --strictPort`,
     url: `http://127.0.0.1:${PORT}`,
     reuseExistingServer: !CI,
     timeout: 60_000,

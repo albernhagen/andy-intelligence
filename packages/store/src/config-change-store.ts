@@ -81,24 +81,30 @@ export class FirestoreConfigChangeStore implements ConfigChangeStore {
    * the read guard is far off; reaching it logs an error, as the newest may be missed.
    */
   async listForProject(projectId: string, limit = CONFIG_CHANGE_LIST_MAX): Promise<ConfigChange[]> {
-    const snap = await this.changes()
-      .where("entity", "==", "project")
-      .where("entityId", "==", projectId)
-      .limit(CONFIG_CHANGE_LOG_READ_MAX)
-      .get();
-    if (snap.size >= CONFIG_CHANGE_LOG_READ_MAX) {
+    // Settings and routing changes (AI-239): one equality query each, merged in memory.
+    const snaps = await Promise.all(
+      ["project", "routing"].map((entity) =>
+        this.changes()
+          .where("entity", "==", entity)
+          .where("entityId", "==", projectId)
+          .limit(CONFIG_CHANGE_LOG_READ_MAX)
+          .get(),
+      ),
+    );
+    const read = snaps.reduce((n, s) => n + s.size, 0);
+    if (snaps.some((s) => s.size >= CONFIG_CHANGE_LOG_READ_MAX)) {
       console.error(
         JSON.stringify({
           severity: "ERROR",
           message: "config changes reached the read guard; the newest may be missing",
           component: "config-change-store",
           projectId,
-          read: snap.size,
+          read,
         }),
       );
     }
-    return snap.docs
-      .map((d) => d.data())
+    return snaps
+      .flatMap((s) => s.docs.map((d) => d.data()))
       .sort(newestFirst)
       .slice(0, Math.min(limit, CONFIG_CHANGE_LIST_MAX));
   }

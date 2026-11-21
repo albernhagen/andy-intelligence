@@ -2,6 +2,8 @@ import { execFile } from "node:child_process";
 import { randomBytes } from "node:crypto";
 import { existsSync, realpathSync } from "node:fs";
 import { rm, writeFile } from "node:fs/promises";
+import { createServer } from "node:http";
+import type { AddressInfo } from "node:net";
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 import { promisify } from "node:util";
@@ -85,7 +87,7 @@ export function seatbeltProfile(input: ProfileInput): string {
   const lines = [
     "(version 1)",
     "(allow default)",
-    `(deny file-read-data file-write* (subpath "/Users") (subpath ${quoted(real(input.runnerHome))}) (subpath ${quoted(home)}))`,
+    `(deny file-read-data file-write* (subpath "/Users") (subpath "/Volumes") (subpath ${quoted(real(input.runnerHome))}) (subpath ${quoted(home)}))`,
   ];
   if (input.scratch) {
     lines.push(`(deny file-read-data file-write* (subpath ${quoted(real(input.scratch.root))}))`);
@@ -115,6 +117,12 @@ export function seatbeltProfile(input: ProfileInput): string {
       `(allow file-read-data file-write* (prefix ${quoted(real(dirname(p)) + "/" + p.split("/").at(-1))}))`,
     );
   }
+  if (input.claude) {
+    // Claude Code needs HTTPS (the API) and DNS (mDNSResponder's socket); nothing else.
+    lines.push("(deny network-outbound)");
+    lines.push('(allow network-outbound (remote tcp "*:443"))');
+    lines.push('(allow network-outbound (literal "/private/var/run/mDNSResponder"))');
+  }
   if (input.offline) lines.push("(deny network*)");
   if (input.offline || input.noKeychain) {
     lines.push(
@@ -131,7 +139,7 @@ export interface Confinement {
    * The live check before the agent (fail closed): under the profile, a file in the runner's
    * directory can't be read, the checkout can be listed and written only when `writable` (a
    * build), and (when the runner user's home is under /Users) the home's Keychain folder can't
-   * be listed. Null when it holds.
+   * be listed, and a non-HTTPS connection is refused. Null when it holds.
    */
   check(input: {
     profilePath: string;
@@ -175,13 +183,98 @@ export const seatbelt: Confinement = {
       const keychains = join(real(homedir()), "Library", "Keychains");
       if (real(homedir()).startsWith("/Users/") && (await confined("/bin/ls", [keychains])).ok)
         return "the home's Keychain folder was listable";
-      return null;
+      return await networkProblem(profilePath, checkout);
     } finally {
       await rm(canary, { force: true });
       await rm(probe, { force: true });
     }
   },
 };
+
+/** curl's exit code for "couldn't connect": what the sandbox's network deny produces. */
+export const CURL_COULDNT_CONNECT = 7;
+/** curl's exit code for its own `--max-time`. */
+const CURL_TIMED_OUT = 28;
+
+/** How a probe command ended: an exit code, killed by its timeout, or never started. */
+export type ProbeOutcome =
+  { kind: "exited"; code: number } | { kind: "timed-out" } | { kind: "not-run"; reason: string };
+
+/** Runs a probe command; never throws. */
+export type ProbeRunner = (cmd: string, args: string[], cwd: string) => Promise<ProbeOutcome>;
+
+/** The outcome of an `execFile` call from its error (null: it exited 0). */
+export function outcomeOf(err: unknown): ProbeOutcome {
+  if (err === null || err === undefined) return { kind: "exited", code: 0 };
+  const e = err as { code?: unknown; killed?: unknown; signal?: unknown };
+  if (e.killed === true) return { kind: "timed-out" };
+  if (typeof e.code === "number") return { kind: "exited", code: e.code };
+  if (typeof e.code === "string") return { kind: "not-run", reason: e.code };
+  return { kind: "not-run", reason: e.signal ? `signal ${String(e.signal)}` : "unknown error" };
+}
+
+const runProbe: ProbeRunner = (cmd, args, cwd) =>
+  run(cmd, args, { cwd, timeout: 10_000 }).then(
+    () => outcomeOf(null),
+    (err: unknown) => outcomeOf(err),
+  );
+
+function describeOutcome(o: ProbeOutcome): string {
+  if (o.kind === "exited") return `exit ${o.code}`;
+  if (o.kind === "timed-out") return "timed out";
+  return o.reason;
+}
+
+/**
+ * The network check's verdict (fail closed, AI-278). It passes only when the server answers
+ * outside the profile, an allowed command (the control) succeeds inside it, and the probe inside
+ * is refused cleanly (curl's "couldn't connect"). A probe that couldn't run, timed out or failed
+ * any other way fails the check: it proves nothing about the network.
+ */
+export function networkVerdict(r: {
+  outside: ProbeOutcome;
+  control: ProbeOutcome;
+  inside: ProbeOutcome;
+}): string | null {
+  const ok = (o: ProbeOutcome) => o.kind === "exited" && o.code === 0;
+  if (!ok(r.outside)) return "the network check couldn't reach its own server";
+  if (!ok(r.control))
+    return `the sandbox profile is broken: an allowed command failed under it (${describeOutcome(r.control)})`;
+  const inside = r.inside;
+  if (inside.kind === "exited" && inside.code === 0)
+    return "a connection to a non-HTTPS port was allowed";
+  if (inside.kind === "timed-out" || (inside.kind === "exited" && inside.code === CURL_TIMED_OUT))
+    return "the network probe timed out under the profile";
+  if (inside.kind === "not-run")
+    return `the network probe couldn't run under the profile (${inside.reason})`;
+  if (inside.code !== CURL_COULDNT_CONNECT)
+    return `the network probe failed for another reason under the profile (exit ${inside.code})`;
+  return null;
+}
+
+/**
+ * Outbound network other than HTTPS is refused: a local HTTP server on a random (non-443) port
+ * answers `curl` outside the profile, `curl --version` (the positive control) runs inside it, and
+ * the same request inside it is refused. Null when that holds.
+ */
+export async function networkProblem(
+  profilePath: string,
+  cwd: string,
+  probe: ProbeRunner = runProbe,
+): Promise<string | null> {
+  const server = createServer((_req, res) => res.end("ok"));
+  await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+  const url = `http://127.0.0.1:${(server.address() as AddressInfo).port}/`;
+  const curl = ["/usr/bin/curl", "-s", "-o", "/dev/null", "--max-time", "3", url];
+  try {
+    const outside = await probe(curl[0]!, curl.slice(1), cwd);
+    const control = await probe(SANDBOX_EXEC, ["-f", profilePath, curl[0]!, "--version"], cwd);
+    const inside = await probe(SANDBOX_EXEC, ["-f", profilePath, ...curl], cwd);
+    return networkVerdict({ outside, control, inside });
+  } finally {
+    server.close();
+  }
+}
 
 /** No sandbox: tests on Linux CI only (`sandbox-exec` is macOS-only). Never used by `main`. */
 export const noConfinement: Confinement = {
