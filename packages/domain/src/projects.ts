@@ -7,13 +7,16 @@ import {
   type ConfigChange,
   type ConfigChangeLog,
   type SpendCaps,
+  type AutoMerge,
   type EventActor,
+  type MergeMode,
   type Project,
   type WorkTracker,
 } from "@andy/contracts";
 import { notFound } from "@andy/contracts";
 import { CONFIG_CHANGE_NOT_RECORDED, projectSettingsChange } from "./config-changes";
 import { DomainError } from "./errors";
+import { requireAutoMergeNotLoosening, requireTightening } from "./merge-mode";
 import { requireCan } from "./permissions";
 import { projectCapsRefusal } from "./spend-settings";
 
@@ -43,6 +46,40 @@ export class ProjectService {
     /** The global spend caps a project's own may not pass (AI-249); defaults until AI-276. */
     private readonly globalSpendCaps: () => Promise<SpendCaps> = async () => DEFAULT_SPEND_CAPS,
   ) {}
+
+  /**
+   * MCP `set_merge_mode` (ADR-0124): owner-only like every setting, and it may only tighten the
+   * mode (or keep it); loosening is refused here and done on the settings page. Logged like any
+   * settings change.
+   */
+  async tightenMergeMode(
+    projectId: string,
+    mode: MergeMode,
+    by: { actor: EventActor; email: string },
+    reason?: string,
+  ): Promise<Project> {
+    requireCan(by.actor, "change_project_settings", projectId);
+    const current = await this.tracker.getProject(projectId);
+    if (!current) throw notFound("project", projectId);
+    requireTightening(mode, current);
+    return this.update(projectId, { mergeMode: mode }, by, reason);
+  }
+
+  /**
+   * MCP `set_auto_merge`: while `mergeMode` is unset the mode is read from `autoMerge`, so this
+   * may not loosen it over MCP (ADR-0124); otherwise the normal settings write.
+   */
+  async setAutoMergeOverMcp(
+    projectId: string,
+    autoMerge: AutoMerge,
+    by: { actor: EventActor; email: string },
+  ): Promise<Project> {
+    requireCan(by.actor, "change_project_settings", projectId);
+    const current = await this.tracker.getProject(projectId);
+    if (!current) throw notFound("project", projectId);
+    requireAutoMergeNotLoosening(autoMerge, current);
+    return this.update(projectId, { autoMerge }, by);
+  }
 
   /**
    * Changes a project's switches: owner-only (`change_project_settings`, AI-19). `buildEnabled`

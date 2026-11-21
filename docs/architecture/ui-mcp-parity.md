@@ -52,7 +52,7 @@ Step 1 of AI-285: Web UI and MCP parity: every action in both, enforced by a tes
 | --------------------------- | -------------------------- | ------------------------------------------------------------------------------------------------- |
 | Merge a gated PR            | Neither (Andy uses GitHub) | AI-220: Merge modes: coordinator sessions merge through MCP merge_pr; the web links to GitHub     |
 | What's new (release notes)  | Neither                    | AI-159: What's new (page and `whats_new` tool; PR #234 open)                                      |
-| Roadmap; milestone map      | MCP `milestone_map` only   | ADR-0131 (in design, with AI-148: Milestone map): no ticket here                                  |
+| Roadmap; milestone map | API and MCP `roadmap` (AI-193); MCP `milestone_map` | The screen: AI-202: M4.26: Roadmap screen, after ADR-0131 (in design) |
 | Approve or park a milestone | Neither                    | ADR-0131 (in design): no ticket here                                                              |
 
 ## Parked (no tickets)
