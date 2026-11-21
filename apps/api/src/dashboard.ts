@@ -6,7 +6,8 @@ import {
   ProjectDashboard,
 } from "@andy/contracts";
 import { dashboardWindow, type DashboardReader } from "@andy/domain";
-import type { AuthEnv } from "./auth";
+import { signedIn, type AuthEnv } from "./auth";
+import type { ProjectAccess } from "./project-access";
 import type { RouteModule } from "./services";
 
 /** The Dashboards data reads (AI-102, ADR-0045): computed on request, never stored. */
@@ -56,6 +57,7 @@ const allRoute = createRoute({
 export function registerDashboardRoutes(
   app: OpenAPIHono<AuthEnv>,
   reader: DashboardReader,
+  access: ProjectAccess,
   now: () => Date,
 ): void {
   app.openapi(projectRoute, async (c) => {
@@ -64,9 +66,11 @@ export function registerDashboardRoutes(
   });
   app.openapi(allRoute, async (c) => {
     const window = dashboardWindow(now(), c.req.valid("query").weeks);
-    return c.json(await reader.all(window), 200);
+    const { actor } = signedIn(c.get("identity"));
+    return c.json(await reader.all(window, (id) => access.canRead(actor, id)), 200);
   });
 }
 
 /** Listed in `api-routes.ts` (AI-145). */
-export const apiRoutes: RouteModule = (app, s) => registerDashboardRoutes(app, s.dashboard, s.now);
+export const apiRoutes: RouteModule = (app, s) =>
+  registerDashboardRoutes(app, s.dashboard, s.deps.projectAccess, s.now);

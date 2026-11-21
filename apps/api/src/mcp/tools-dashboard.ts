@@ -11,7 +11,7 @@ import type { Run, ToolDeps } from "./tools";
  */
 export function registerDashboardTools(
   server: McpServer,
-  deps: Pick<ToolDeps, "dashboard" | "dora" | "now">,
+  deps: Pick<ToolDeps, "dashboard" | "dora" | "now" | "projectAccess" | "actor">,
   run: Run,
 ): void {
   const { dashboard, dora } = deps;
@@ -44,7 +44,9 @@ export function registerDashboardTools(
     ({ project, weeks }) =>
       run(async () => {
         const window = dashboardWindow(now(), weeks);
-        if (!project) return dashboard.all(window);
+        if (!project) {
+          return dashboard.all(window, (id) => deps.projectAccess.canRead(deps.actor, id));
+        }
         const projectId = project.toLowerCase();
         const [delivery, metrics] = await Promise.all([
           dashboard.project(projectId, window),

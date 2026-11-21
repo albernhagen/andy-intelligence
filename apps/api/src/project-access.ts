@@ -28,7 +28,7 @@ export function ownerOnlyAccess(): ProjectAccess {
  */
 export const CROSS_PROJECT_ROUTES: Readonly<Record<string, string>> = {
   "GET /api/config-changes": "Pending changes of every project: keep readable projects.",
-  "GET /api/dashboard": "Every project's counts: keep readable projects.",
+  "GET /api/dashboard": "Every project's counts: readable projects only (canRead, enforced).",
   "GET /api/github": "GitHub App connection: owner only.",
   "GET /api/github/manifest": "GitHub App setup: owner only.",
   "GET /api/me": "The caller's own identity: nothing to filter.",
@@ -74,7 +74,8 @@ export const CROSS_PROJECT_TOOLS: Readonly<Record<string, string>> = {
   answer_question: "Check the question's ticket's project.",
   clear_quota_idle: "Subscription quota: owner only.",
   create_project: "Creates a project: owner only (`register_project`, enforced); no project yet.",
-  dashboard: "Without `project`, every project's figures: keep readable projects.",
+  dashboard:
+    "Without `project`, every project's figures: readable projects only (canRead, enforced).",
   get_quota: "Subscription quota: owner only.",
   get_routing: "Without `project`, the global routing: nothing to filter.",
   list_config_changes: "Without `project`, every project's changes: keep readable projects.",

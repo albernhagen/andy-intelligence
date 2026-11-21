@@ -9,7 +9,6 @@ import { createApp } from "./app";
 import { parseAllowList, type TokenVerifier } from "./auth";
 import { ClientMetadataResolver } from "./mcp/client-metadata";
 import { mcpCaller } from "./mcp/test-client";
-import { ownerOnlyAccess } from "./project-access";
 
 /** AI-295: Parity: dashboards and DORA metrics over MCP. `dashboard` returns what the routes do. */
 
@@ -23,7 +22,7 @@ const verifier: TokenVerifier = {
 };
 const daysAgo = (days: number) => new Date(NOW.getTime() - days * 86_400_000).toISOString();
 
-async function setup() {
+async function setup(canRead: (projectId: string) => boolean = () => true) {
   const tracker = new InMemoryWorkTracker();
   const deployments = new InMemoryDeploymentStore();
   await tracker.createProject({ name: "Andy Intelligence", key: "AI" });
@@ -47,7 +46,7 @@ async function setup() {
   }
   const grants = new InMemoryOAuthGrantStore();
   const app = createApp({
-    projectAccess: ownerOnlyAccess(),
+    projectAccess: { canRead: (_actor, id) => Promise.resolve(canRead(id)) },
     verifier,
     allowedEmails: parseAllowList("andy@example.com"),
     version: "test",
@@ -93,6 +92,13 @@ describe("dashboard parity (AI-295)", () => {
     expect(dora.status).toBe(200);
     const tool = await call("dashboard", { project: "ai" });
     expect(tool.data).toEqual({ dashboard: dashboard.body, dora: dora.body });
+  });
+
+  it("GivenAProjectTheCallerMayNotRead_WhenReadWithoutAProject_ThenBothSidesLeaveItOut", async () => {
+    const { get, call } = await setup((id) => id !== "ops");
+    const rest = (await get("/api/dashboard")).body as { projects: { key: string }[] };
+    expect(rest.projects.map((p) => p.key)).toEqual(["AI"]);
+    expect((await call("dashboard", {})).data).toEqual(rest);
   });
 
   it("GivenAnUnknownProjectOrTooManyWeeks_WhenRead_ThenBothSidesRefuse", async () => {
