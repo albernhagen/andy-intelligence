@@ -16,6 +16,8 @@ import {
   type WorkReader,
   type GlobalSpendCaps,
   type WhatsNewReader,
+  type DashboardReader,
+  type DoraReader,
 } from "@andy/domain";
 import type { SpendSettingsService } from "../spend";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
@@ -67,6 +69,11 @@ export interface ToolDeps {
   spend?: SpendSettingsService;
   /** The global spend caps (AI-276); the app always passes it, unit tests may not. */
   globalSpendCaps?: GlobalSpendCaps;
+  /** The Dashboards reads (AI-295); absent: no `dashboard` tool. */
+  dashboard?: DashboardReader;
+  dora?: DoraReader;
+  /** The app's clock (the routes' `now`); absent: the system clock. */
+  now?: () => Date;
   /** What's new (AI-159); absent or null: no `whats_new` tool. */
   whatsNew?: WhatsNewReader | null;
   /** The app's public URL for page links in tool text (the digest links What's new); null in dev. */
