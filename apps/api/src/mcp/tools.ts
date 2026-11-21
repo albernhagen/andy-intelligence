@@ -14,9 +14,13 @@ import {
   type RunService,
   type TicketService,
   type WorkReader,
+  type RoadmapReader,
   type GlobalSpendCaps,
   type WhatsNewReader,
+  type DashboardReader,
+  type DoraReader,
 } from "@andy/domain";
+import type { SetupChecklistReader } from "../setup";
 import type { SpendSettingsService } from "../spend";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
@@ -63,10 +67,19 @@ export interface ToolDeps {
   night?: NightDeps | null;
   /** Work across projects (AI-198); the app always passes it, unit tests may not. */
   work?: WorkReader;
+  /** Roadmaps over epics (AI-193); the app always passes it, unit tests may not. */
+  roadmap?: RoadmapReader;
+  /** A project's setup checklist (AI-287); the app always passes it, unit tests may not. */
+  setup?: SetupChecklistReader;
   /** Spend caps settings (AI-249); the app always passes it, unit tests may not. */
   spend?: SpendSettingsService;
   /** The global spend caps (AI-276); the app always passes it, unit tests may not. */
   globalSpendCaps?: GlobalSpendCaps;
+  /** The Dashboards reads (AI-295); absent: no `dashboard` tool. */
+  dashboard?: DashboardReader;
+  dora?: DoraReader;
+  /** The app's clock (the routes' `now`); absent: the system clock. */
+  now?: () => Date;
   /** What's new (AI-159); absent or null: no `whats_new` tool. */
   whatsNew?: WhatsNewReader | null;
   /** The app's public URL for page links in tool text (the digest links What's new); null in dev. */

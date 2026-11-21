@@ -39,6 +39,7 @@ export function buildProject(input: NewProject): Project {
     environments: "prod-only",
     spendCaps: {},
     autoMerge: "s-and-m",
+    mergeMode: "low-risk",
     runsAtOnce: RUNS_AT_ONCE_DEFAULT,
     paused: false,
     lastDispatch: null,
