@@ -3,6 +3,7 @@ import {
   Assumption,
   EpicOutcome,
   AutoMerge,
+  MergeMode,
   EnvironmentPolicy,
   ProjectSpendCaps,
   BillingType,
@@ -41,6 +42,7 @@ import {
   type Listing,
   type PullRequest,
   type PullRequestCommit,
+  type PullRequestDetails,
   type ProposedPullRequest,
   type Repo,
   type RepoToken,
@@ -215,6 +217,8 @@ export const ProjectPatch = z.strictObject({
   planApproval: PlanApproval.optional(),
   dailyQuestionCap: Project.shape.dailyQuestionCap.unwrap().optional(),
   autoMerge: AutoMerge.optional(),
+  /** Null clears it back to the `autoMerge` mapping (a revert of the first change). */
+  mergeMode: MergeMode.nullable().optional(),
   ...projectDispatchPatch,
   ...projectNotifyPatch,
   ...projectPlanPatch,
@@ -233,6 +237,7 @@ export const ProjectSettings = ProjectPatch.pick({
   planApproval: true,
   dailyQuestionCap: true,
   autoMerge: true,
+  mergeMode: true,
   runsAtOnce: true,
   paused: true,
   defaultWorker: true,
@@ -247,6 +252,11 @@ export const TicketFilter = z.object({
   stage: Stage.optional(),
   needsAttention: z.boolean().optional(),
   archived: z.boolean().optional(),
+  /**
+   * true: only Up next tickets (Backlog with an `upNextRank`, ADR-0075), read without the rest
+   * of the Backlog (AI-315: dispatch reads only what it uses).
+   */
+  upNext: z.literal(true).optional(),
 });
 export type TicketFilter = z.infer<typeof TicketFilter>;
 
@@ -268,6 +278,11 @@ export interface WorkTracker {
   getTicket(projectId: string, ticketId: string): Promise<Ticket | null>;
   /** Sorted by rank. */
   listTickets(projectId: string, filter?: TicketFilter): Promise<Ticket[]>;
+  /**
+   * Every ticket of the project (archived ones too) last changed at or after `since` (ISO time),
+   * sorted by rank. Reads only those tickets: the board and ticket list refresh with it (AI-317).
+   */
+  listTicketsChangedSince(projectId: string, since: string): Promise<Ticket[]>;
   /** The project's ticket with this key (e.g. "AI-7"), or null. Reads only that ticket. */
   getTicketByKey(projectId: string, key: string): Promise<Ticket | null>;
   /**
@@ -297,6 +312,11 @@ export interface WorkTracker {
   ): Promise<TicketEvent>;
   /** Oldest first. */
   listEvents(projectId: string, ticketId: string): Promise<TicketEvent[]>;
+  /**
+   * The newest `pr_linked` link of the ticket, or null (also for an unknown ticket). Reads only
+   * the ticket's `pr_linked` events, not its whole history (AI-317).
+   */
+  getLatestPullRequest(projectId: string, ticketId: string): Promise<PullRequestLink | null>;
 
   /** Appends `question_asked` to the ticket. */
   askQuestion(
@@ -618,6 +638,8 @@ export interface CodeHost {
   cancelWorkflowRun(fullName: string, runId: string): Promise<void>;
   /** Null when the pull request or the repo isn't known. */
   getPullRequest(fullName: string, number: number): Promise<PullRequest | null>;
+  /** The PR's description and who merged it when (AI-159); null when the PR or repo isn't known. */
+  getPullRequestDetails(fullName: string, number: number): Promise<PullRequestDetails | null>;
   /** Empty and complete when the repo isn't known. */
   listChangedFiles(fullName: string, number: number): Promise<Listing<ChangedFile>>;
   /** The latest result per check on a commit. */

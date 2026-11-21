@@ -11,6 +11,7 @@ import {
   type Listing,
   type PullRequest,
   type PullRequestCommit,
+  type PullRequestDetails,
   type ProposedPullRequest,
   type RepoToken,
   type RequiredCheck,
@@ -144,6 +145,14 @@ export class InMemoryWorkTracker implements WorkTracker {
         (t) => filter.needsAttention === undefined || t.needsAttention === filter.needsAttention,
       )
       .filter((t) => filter.archived === undefined || t.archived === filter.archived)
+      .filter((t) => !filter.upNext || (t.stage === "backlog" && t.upNextRank !== null))
+      .sort((a, b) => compareRanks(a.rank, b.rank))
+      .map((t) => structuredClone(t));
+  }
+
+  async listTicketsChangedSince(projectId: string, since: string): Promise<Ticket[]> {
+    return [...this.tickets.values()]
+      .filter((t) => t.projectId === projectId && t.updatedAt >= since)
       .sort((a, b) => compareRanks(a.rank, b.rank))
       .map((t) => structuredClone(t));
   }
@@ -203,6 +212,12 @@ export class InMemoryWorkTracker implements WorkTracker {
   async listEvents(projectId: string, ticketId: string): Promise<TicketEvent[]> {
     this.requireTicket(projectId, ticketId);
     return structuredClone(this.events.get(ticketId) ?? []);
+  }
+
+  async getLatestPullRequest(projectId: string, ticketId: string): Promise<PullRequestLink | null> {
+    if (this.tickets.get(ticketId)?.projectId !== projectId) return null;
+    const linked = (this.events.get(ticketId) ?? []).filter((e) => e.kind === "pr_linked").at(-1);
+    return linked ? PullRequestLink.parse(linked.data) : null;
   }
 
   async askQuestion(
@@ -665,6 +680,16 @@ export class InMemoryCodeHost implements CodeHost {
     this.workflowRuns.get(runId)!.run = { ...run, status: "completed", conclusion: "cancelled" };
   }
 
+  async getPullRequestDetails(
+    fullName: string,
+    number: number,
+  ): Promise<PullRequestDetails | null> {
+    if (!(await this.getRepo(fullName))) return null;
+    const pr = this.pullRequests.get(number);
+    if (!pr) return null;
+    return structuredClone(pr.details ?? { body: "", mergedBy: null, mergedAt: null });
+  }
+
   async getPullRequest(fullName: string, number: number): Promise<PullRequest | null> {
     if (!(await this.getRepo(fullName))) return null;
     const pr = this.pullRequests.get(number);
@@ -788,6 +813,8 @@ export interface FakePullRequest {
   files: Listing<ChangedFile>;
   checks: Listing<HeadCheck>;
   commits: Listing<PullRequestCommit>;
+  /** Description and merge (AI-159); an empty body and no merge when unset. */
+  details?: PullRequestDetails;
 }
 
 /** In-memory CodeHostConnectionStore. */

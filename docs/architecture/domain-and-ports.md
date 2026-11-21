@@ -4,13 +4,14 @@ Overview and reading map: [ARCHITECTURE.md](ARCHITECTURE.md). Section numbers ma
 
 ## 5. Domain model (Firestore documents)
 
-All records carry `project_id` where applicable. Zod schemas in `packages/contracts` validate every read and write; tickets and their events nest under their project (`projects/{p}/tickets/{t}/events/{e}`). Ticket numbers come from a per-project counter (`counters/tickets-{p}`), in the ticket's transaction. Queries use equality filters only (no composite indexes); results are sorted in memory.
+All records carry `project_id` where applicable. Zod schemas in `packages/contracts` validate every read and write; tickets and their events nest under their project (`projects/{p}/tickets/{t}/events/{e}`). Ticket numbers come from a per-project counter (`counters/tickets-{p}`), in the ticket's transaction. Queries need no composite index (ADR-0121); results are sorted in memory.
 
-**Rollups** (cost per ticket/epic/model/provider) are **computed on read with Firestore aggregation queries** in v1.x; no denormalized counters. Revisit if reads get slow.
+**Rollups** (cost per ticket/epic/model/provider) are **computed on read with Firestore aggregation queries** in v1.x; no denormalized counters.
 
 | Entity | Key fields |
 |---|---|
-| **Project** | name, repos, GCP dev/prod project IDs, policy overrides, budget allocation, autonomy level, enabled, `autoRefine` (default on), `autoBuild` (default off, ADR-0063), `planApproval` (default `none`, ADR-0050), `autoMerge` (`s-and-m` for new projects, ADR-0050), `executor` (`actions` or `local`, ADR-0089), `environments` (`prod-only` default, `dev-and-prod`; AI-160, ADR-0050), `spendCaps` (own caps, only below global; AI-249, ADR-0129) |
+| **Project** | name, repos, GCP dev/prod project IDs, policy overrides, budget allocation, autonomy level, enabled, `autoRefine` (default on), `autoBuild` (default off, ADR-0063), `planApproval` (default `none`, ADR-0050), `autoMerge` (`s-and-m` for new projects, ADR-0050), `mergeMode` (ADR-0124; stored only, unset reads from `autoMerge`), `executor` (`actions` or `local`, ADR-0089), `environments` (`prod-only` default, `dev-and-prod`; AI-160, ADR-0050), `spendCaps` (own caps, only below global; AI-249, ADR-0129) |
+| **Milestone** | ADR-0131; `MilestoneStore` |
 | **Ticket** (system of record) | key (`AI-42`), title, body, acceptance criteria (the checklist; EARS for features), assumptions, type (epic/feature/chore/bug/spike, empty at capture; ADR-0058), parent, stage, size, size reason, overrides (assignee agent/me or a harness key, resolved against the project's `defaultWorker`, ADR-0082; executor, ADR-0089; tier, model pin, autonomy, target env), needs_attention (blocked on a human), DoR status, rank, blocked_by (keys, any project), archived, out_of_scope, touches (areas or path globs; ≤ 20 × 300 chars each), outcome (epics only, ≤ 300 chars: what is true when it is done; an epic's criteria are its "Done when"; ADR-0108). No stored tier: derived from size (ADR-0062) |
 | **TicketEvent** | ticket, kind (comment / stage_change / field_change / run_linked / pr_linked …), actor (`user:<uid>` for a signed-in user by auth uid, never an email (AI-19); legacy `andy`, read as the owner; agent:<run> / system; label derived on read), body/diff, timestamp; the ticket's full history |
 | **Question** | ticket, text (the question line), context, choices (label, consequence), recommendation (answer, reason), options, suggested_answer, assumptions, urgency, status, answer, answered_via, run (if an agent asked), timestamps; the format fields are null or empty on questions from before AI-73 |
@@ -18,6 +19,7 @@ All records carry `project_id` where applicable. Zod schemas in `packages/contra
 | **QuotaReading** | provider, window (5h / weekly / daily-tasks), used_pct, resets_at, source, taken_at, confidence |
 | **ConfigChange** | entity, diff, actor (andy/ui/agent/scout), reason, status (pending/accepted/applied/reverted/rejected), project, dedupe key, decided by/at, timestamps; project-settings writes log, revert (built, M4.11-12) |
 | **Release** | project, image digest, tickets included, notes, status |
+| **ReleaseNote** | merged PR's untrusted note, ticket, doc links (ADR-0121) |
 | **CodeHostEvent** | delivery ID (document ID), project, repo, kind (pull_request / check_run / workflow_run), action, normalized PR / check / workflow fields, received_at; TTL 30 days (ADR-0041) |
 | **NightLaunch** | epic, project, budget (agent tasks, tokens, USD), stop time (≤ 16 h away), status (planned to ended), started/ended, end reason, story keys, epic branch, start sha (ADR-0049) |
 
@@ -26,7 +28,7 @@ Provider, Harness, Model, Tier, Policy; configuration rules; default quota polic
 
 ## 6. Ports (contracts) and adapters
 
-Contracts are defined in `packages/contracts` (Zod schemas + TypeScript interfaces; OpenAPI generated for the API). **Every port has an in-memory fake and a shared contract test suite that every adapter, including the fake, must pass** (ADR-0023). CI runs suites on the fakes, and the Firestore emulator suites when the adapters or suites change (`firestore-suite.yml`, ADR-0048; locally `pnpm test:firestore`). A port's fake and suite land before its first real adapter.
+Contracts live in `packages/contracts` (Zod schemas, TypeScript interfaces; OpenAPI generated). **Every port has an in-memory fake and a shared contract test suite that every adapter, including the fake, must pass** (ADR-0023). CI runs suites on the fakes, and on the emulator when adapters or suites change (`firestore-suite.yml`, ADR-0048; locally `pnpm test:firestore`). A port's fake and suite land before its first real adapter.
 
 | Port | Domain concepts | v1.x adapters | Later |
 |---|---|---|---|
@@ -41,15 +43,8 @@ Contracts are defined in `packages/contracts` (Zod schemas + TypeScript interfac
 | `Notifier` | Notice, Urgency | UI (banner + Needs-you inbox); **Email** on Resend (AI-77: batched, 20 a day; `NotifyLedger`, `NotifyFlushQueue`) | Web Push (`PushSender`: AI-178), `PushSubscriptionStore` (ADR-0052), Slack |
 | `Deployer` | Release, Promotion, Rollback | GitHub Actions | — |
 | `Evaluator` | Suite, Case, Score, per-case result | Agent evals (M1.17: Agent evals v1, ADR-0086); Ori Eval for scout smoke tests | Claude Code runner (`scripts/evals/evaluator.mjs`) |
-| `OAuthGrantStore` | OAuthGrant (code, access token, refresh token; keyed by token hash) | **Firestore** (ADR-0039) | Local store (ADR-0032) |
-| `RunnerStore` | Runner, per-run token (hashes only; ADR-0089) | **Firestore** | — |
-| `ConfigChangeStore`, `ReviewFindingSource` | ConfigChange, ReviewFinding (ADR-0097) | **Firestore** | — |
-| `NightLaunchStore` | NightLaunch; one active per project, checked atomically | **Firestore** | — |
-| `DeploymentStore` | Deployment (AI-161: M6.3): record, finish once, list one environment newest first (≤ 100), latest good | **Firestore** (`deployments`, server-only) | — |
-| `ProjectVersions` | A change counter per project, bumped by every tracker and run write; unchanged board and ticket-list polls are served from a per-instance cache (AI-222) | **Firestore** | — |
-| `RoutingConfigStore` | RoutingConfig: providers, tier routes, step tiers; one global, one per project; puts carry `ifUpdatedAt` (AI-230: M9.3) | **Firestore** | — |
-| `SpendLedger` | SpendEntry: reserve, then settle or release, in integer micro-dollars; append-only; a reservation over a per-task, project or global UTC day or month cap is refused atomically (AI-234: M10.2); totals per project, global and per provider (AI-280); `SpendNoticeLedger` dedupes cap notices (AI-257) | **Firestore** (AI-247: M10.6); in-memory fake | — |
-| `SpendCapsStore` | SpendCaps: the global caps, one document; nothing stored means the defaults; puts carry `ifUpdatedAt`; an unreadable store fails paid calls closed (AI-276) | **Firestore** | — |
 | `Telemetry` | Trace, Span, CostEvent | OTel → Cloud Trace / Cloud Logging | BigQuery sink |
+
+Store and ledger ports (`OAuthGrantStore`, `RunnerStore`, `ConfigChangeStore`, `NightLaunchStore`, `DeploymentStore`, `ProjectVersions`, `RoutingConfigStore`, `SpendLedger`, `SpendCapsStore`, with their related stores): [`ports-stores.md`](ports-stores.md).
 
 **Rule:** freeze the `Executor` contract only after **two real adapters** (Claude Code + Jules) work. Vendor terms map to domain terms (a Jules *session* is a `Run`; its *activities* are run events).

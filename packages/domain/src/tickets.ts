@@ -1,4 +1,5 @@
 import {
+  DEFAULT_ROUTING,
   NewTicket,
   Stage,
   compareRanks,
@@ -7,15 +8,18 @@ import {
   notFound,
   type AnsweredVia,
   type EventActor,
+  type MergeMode,
   type ExecutorKind,
   type ExecutorView,
   type NewQuestion,
   type Project,
   type Question,
+  type RoutingConfigStore,
   type Run,
   type Ticket,
   type TicketEvent,
   type TicketFields,
+  type TicketRouting,
   type Worker,
   type WorkerChoice,
   type WorkerView,
@@ -37,9 +41,12 @@ import {
 import { blockerChain, parentChain } from "./ticket-reads";
 import { MAX_OPEN_QUESTIONS_PER_TICKET, assumptionQuestion } from "./refine-gate";
 import { rankBetween } from "./ranks";
+import { ProjectTickets } from "./ticket-snapshots";
 import { isDispatchable, resolveWorker, workerView } from "./worker";
 import { cascadesFrom, epicOf, withEpicOverrides } from "./overrides";
+import { requireOverrideNotLooser } from "./merge-mode";
 import { executorView } from "./executor";
+import { routeLayers } from "./route-layers";
 import { canTransition, isForwardMove, pullRequestPath, type PullRequestTarget } from "./stages";
 
 function log(severity: "INFO" | "WARNING" | "ERROR", message: string, fields: object = {}) {
@@ -60,6 +67,11 @@ export interface TicketStatus {
   worker: Worker;
   /** Where its runs execute (ADR-0089), before runner presence is considered. */
   executor: ExecutorView;
+  /**
+   * Its build worker, tier and route, and the layer that set each (AI-282: M9). null when the
+   * routing configs can't be read: the rest of the status still answers, and the error is logged.
+   */
+  routing: TicketRouting | null;
 }
 
 /** Every project with its unarchived ticket count per stage, plus the size of the Needs-you inbox. */
@@ -111,6 +123,10 @@ export class TicketService {
     private readonly now: () => Date = () => new Date(),
     /** Whether a local runner serving the project is present (ADR-0089); null: none can be. */
     private readonly runnerPresence: ((projectId: string) => Promise<boolean>) | null = null,
+    /** The routing configs (AI-230: M9.3); null reads `DEFAULT_ROUTING`, as runs do. */
+    private readonly routingStore: RoutingConfigStore | null = null,
+    /** AI-319: each project's tickets through the snapshot, so Needs-you reads only what changed. */
+    private readonly projectTickets: ProjectTickets = new ProjectTickets(tracker),
   ) {}
 
   private async runnerPresent(projectId: string): Promise<boolean> {
@@ -127,6 +143,7 @@ export class TicketService {
     const parsed = NewTicket.parse(input);
     const badOutcome = outcomeProblem(parsed);
     if (badOutcome) throw new DomainError("invalid_field", badOutcome);
+    await this.checkMergeModeOverride(projectId, parsed.overrides?.mergeMode);
     const parentId = parsed.parentId && (await this.parentIdOf(projectId, parsed.parentId));
     const dorStatus = checkDor(parsed, 0).met ? "met" : "not_met";
     const ticket = await this.tracker.createTicket(
@@ -350,6 +367,7 @@ export class TicketService {
     ifUpdatedAt?: string,
   ): Promise<Ticket> {
     const current = await this.require(projectId, ticketId);
+    await this.checkMergeModeOverride(projectId, fields.overrides?.mergeMode);
     if (fields.parentId && fields.parentId !== current.parentId) {
       const chain = await parentChain(this.tracker, projectId, fields.parentId);
       const problem = parentProblem(current, fields.parentId, chain);
@@ -422,6 +440,29 @@ export class TicketService {
       this.requireProject(projectId),
     ]);
     return workerView(ticket, project, await this.epicFor(ticket));
+  }
+
+  /** ADR-0124: a ticket or epic may set a stricter merge mode than its project, never looser. */
+  private async checkMergeModeOverride(projectId: string, mode: MergeMode | undefined) {
+    if (mode) requireOverrideNotLooser(mode, await this.requireProject(projectId));
+  }
+
+  /** Its build worker, tier and route, and which layer set each (AI-282: M9). Read-only. */
+  async routing(projectId: string, ticketId: string): Promise<TicketRouting> {
+    const [ticket, project] = await Promise.all([
+      this.require(projectId, ticketId),
+      this.requireProject(projectId),
+    ]);
+    return this.routingFor(ticket, project);
+  }
+
+  private async routingFor(ticket: Ticket, project: Project): Promise<TicketRouting> {
+    const [epic, global, projectConfig] = await Promise.all([
+      this.epicFor(ticket),
+      this.routingStore ? this.routingStore.getGlobal() : DEFAULT_ROUTING,
+      this.routingStore ? this.routingStore.getProject(project.id) : null,
+    ]);
+    return routeLayers({ ticket, epic, project, global, projectConfig });
   }
 
   /** The ticket's epic when its overrides cascade (AI-116); one read when it has a parent. */
@@ -887,29 +928,28 @@ export class TicketService {
    */
   async needsYou(): Promise<{ questions: Question[]; tickets: Ticket[] }> {
     const projects = await this.tracker.listProjects();
-    const [questions, flagged, archived, cancelled] = await Promise.all([
+    // Each project's tickets come from its snapshot (AI-319): flags, archives and cancels are
+    // filtered in memory, so a call reads the changed tickets, not every archived one.
+    const [questions, all] = await Promise.all([
       this.tracker.listQuestions({ status: "open" }),
-      Promise.all(
-        projects.map((p) =>
-          this.tracker.listTickets(p.id, { needsAttention: true, archived: false }),
-        ),
-      ),
-      Promise.all(projects.map((p) => this.tracker.listTickets(p.id, { archived: true }))),
-      Promise.all(projects.map((p) => this.tracker.listTickets(p.id, { stage: "cancelled" }))),
+      Promise.all(projects.map((p) => this.projectTickets.list(p.id))),
     ]);
-    const hidden = new Set([...archived.flat(), ...cancelled.flat()].map((t) => t.id));
+    const tickets = all.flat();
+    const hidden = new Set(
+      tickets.filter((t) => t.archived || t.stage === "cancelled").map((t) => t.id),
+    );
     const visible = questions.filter((q) => !hidden.has(q.ticketId));
     // A flag left on a finished ticket (AI-2) isn't waiting on anyone, unless a question is open
     // (the inbox lists those under Stale).
-    const tickets = flagged
-      .flat()
+    const flagged = tickets
+      .filter((t) => t.needsAttention && !t.archived)
       .filter(
         (t) =>
           !hidden.has(t.id) && (t.stage !== "done" || questions.some((q) => q.ticketId === t.id)),
       );
     // Every reader gets the inbox's order (AI-40).
-    const { active, stale } = inboxCards({ questions: visible, tickets });
-    return { questions: [...active, ...stale].flatMap((c) => c.questions), tickets };
+    const { active, stale } = inboxCards({ questions: visible, tickets: flagged });
+    return { questions: [...active, ...stale].flatMap((c) => c.questions), tickets: flagged };
   }
 
   /** "AI-42" → the ticket. A project's id is its key lowercased (WorkTracker contract). */
@@ -942,6 +982,10 @@ export class TicketService {
       recentEvents: events.slice(-RECENT_EVENTS),
       worker: resolveWorker(ticket, project, await this.epicFor(ticket)),
       executor: executorView(ticket, project, await this.runnerPresent(project.id)),
+      routing: await this.routingFor(ticket, project).catch((err: unknown) => {
+        log("ERROR", "ticket routing unreadable", { ticket: ticket.key, error: String(err) });
+        return null;
+      }),
     };
   }
 

@@ -20,7 +20,9 @@ import {
   QuotaClear,
   QuotaReading,
   Question,
+  Milestone,
   Release,
+  ReleaseNote,
   Run,
   Ticket,
   TicketEvent,
@@ -68,6 +70,14 @@ export const collections = {
   configChanges: { path: () => "configChanges", schema: ConfigChange },
   proposalLookupCursors: { path: () => "proposalLookupCursors", schema: ProposalLookupCursor },
   releases: { path: () => "releases", schema: Release },
+  releaseNotes: {
+    path: (projectId: string) => `projects/${projectId}/releaseNotes`,
+    schema: ReleaseNote,
+  },
+  milestones: {
+    path: (projectId: string) => `projects/${projectId}/milestones`,
+    schema: Milestone,
+  },
   oauthGrants: { path: () => "oauthGrants", schema: OAuthGrant },
   codeHostEvents: { path: () => "codeHostEvents", schema: CodeHostEvent },
   /** Local runners and their per-run tokens (ADR-0089); validated by `FirestoreRunnerStore`. */

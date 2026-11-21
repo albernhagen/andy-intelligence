@@ -70,7 +70,7 @@ export function AppShell() {
       <header className="flex h-[calc(3rem+env(safe-area-inset-top))] items-center gap-2 border-b border-border px-4 pt-[env(safe-area-inset-top)] sm:gap-4 sm:px-6">
         <ProjectPicker scope={scope} section={section ?? "inbox"} />
         {!phone && (
-          <nav aria-label="Main" className="flex items-center gap-1">
+          <nav aria-label="Main" className="flex items-center gap-1 text-sm">
             {links.map((l) => (
               <NavLink key={l.label} to={l.to} current={l.current}>
                 {l.label}
@@ -78,7 +78,7 @@ export function AppShell() {
             ))}
           </nav>
         )}
-        <div className="ml-auto flex items-center gap-2">
+        <div className="ml-auto flex shrink-0 items-center gap-2">
           <QuotaGauge />
           <PhonePauseButton scope={scope} />
           <NeedsYouCount />
@@ -118,6 +118,8 @@ function navLinks(scope: Scope, pathname: string, section: Section | null): NavI
     { label: "Inbox", to: scopePath(scope, "inbox"), current: section === "inbox", icon: Inbox },
     // AI-198: under More on a phone (no icon), next to the inbox on desktop.
     { label: "Work", to: scopePath(scope, "work"), current: section === "work" },
+    // AI-202: milestones and their epics; under More on a phone.
+    { label: "Roadmap", to: scopePath(scope, "roadmap"), current: section === "roadmap" },
     {
       label: "Dashboards",
       to: scopePath(scope, "dashboards"),
@@ -133,6 +135,11 @@ function navLinks(scope: Scope, pathname: string, section: Section | null): NavI
         label: "Digest",
         to: `/p/${encodeURIComponent(scope.projectId)}/digest`,
         current: /\/digest\/?$/.test(pathname),
+      },
+      {
+        label: "What's new",
+        to: `/p/${encodeURIComponent(scope.projectId)}/whats-new`,
+        current: /\/whats-new\/?$/.test(pathname),
       },
     );
   }
@@ -212,7 +219,7 @@ function NavLink(props: { to: string; current: boolean; children: ReactNode }) {
       to={props.to}
       aria-current={props.current ? "page" : undefined}
       className={cn(
-        "rounded-md px-2 py-1 text-muted-foreground hover:bg-muted hover:text-foreground",
+        "whitespace-nowrap rounded-md px-2 py-1 text-muted-foreground hover:bg-muted hover:text-foreground",
         props.current && "bg-muted text-foreground",
       )}
     >

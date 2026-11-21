@@ -21,10 +21,10 @@ const MilestoneMapInput = {
  */
 export function registerMilestoneMapTools(
   server: McpServer,
-  deps: Pick<ToolDeps, "tracker">,
+  deps: Pick<ToolDeps, "tracker" | "tickets">,
   run: <T extends object>(fn: () => Promise<T>) => Promise<CallToolResult>,
 ): void {
-  const reader = new MilestoneMapReader(deps.tracker);
+  const reader = new MilestoneMapReader(deps.tracker, deps.tickets);
   server.registerTool(
     "milestone_map",
     {

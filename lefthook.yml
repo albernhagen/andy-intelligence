@@ -23,10 +23,19 @@ pre-commit:
           echo "actionlint not installed (brew install actionlint); skipped, CI still checks"
         fi
 
+# Pre-push runs only the tests the branch can affect, so parallel worktrees pushing at once don't
+# starve each other (ADR-0113). vitest --changed follows imports from every file that differs from
+# origin/main; a changed package.json or vitest config reruns everything. CI still runs the full
+# suite and gates every merge. Without an origin/main ref, the full suite runs here.
 pre-push:
   parallel: true
   commands:
     typecheck:
       run: pnpm typecheck
     test:
-      run: pnpm test
+      run: |
+        if git rev-parse --verify --quiet origin/main >/dev/null; then
+          pnpm exec vitest run --changed origin/main --passWithNoTests
+        else
+          pnpm test
+        fi

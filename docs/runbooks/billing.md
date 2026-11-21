@@ -1,6 +1,6 @@
 # Billing guardrails — runbook (Andy)
 
-GCP cost guardrails for the control plane (ADR-0028: GCP cost guardrails, ADR-0029: Billing root plans locally; kill switch split out). Budget and kill switch: Terraform root `infra/billing` (sections 1–4). Usage alerts and caps: `infra/control-plane` (sections 5–6).
+GCP cost guardrails for the control plane (ADR-0028: GCP cost guardrails, ADR-0029: Billing root plans locally; kill switch split out). Budget and kill switch: Terraform root `infra/billing` (sections 1–4). Usage alerts and caps: `infra/control-plane` (sections 5–6). The config-change alert shares the usage alerts' email (section 7).
 
 | Term               | Meaning                                                                                                    |
 | ------------------ | ---------------------------------------------------------------------------------------------------------- |
@@ -121,6 +121,8 @@ Windows are rolling; an alert auto-closes a day after usage drops. To tune, set 
 
 **When one fires:** find the cause in Cloud Run metrics, Firestore usage, or Logs Explorer. If it's abuse or a runaway loop, use the emergency stop in section 4.
 
+**Firestore reads (AI-315):** every request and every dispatch event logs the documents it read. In Logs Explorer, query `jsonPayload.component="read-meter"` over the alert's hour, then add up `jsonPayload.reads` by `jsonPayload.route` (and `jsonPayload.tool` for MCP calls on `/mcp`); `message="dispatch reads"` lines are dispatch events (their reads also count in the request that caused them). The biggest total is the cause.
+
 **Test (a few minutes):** `terraform apply -var 'usage_alert_thresholds={run_requests_per_5m=0}'`, open the app (any request), wait for the email, then `terraform apply` to restore.
 
 ## 6. Other caps (in `infra/control-plane`, CI-planned)
@@ -134,3 +136,13 @@ Windows are rolling; an alert auto-closes a day after usage drops. To tune, set 
 | Log exclusion                      | Successful request logs for `/assets/*` and `/health`                   |
 | Artifact Registry                  | Keep 10 most recent; delete images older than 30 days                   |
 | Cloud Tasks                        | Queue max rate/concurrency set when the queue lands (M1.2: Ticket core) |
+
+## 7. Config change not recorded (AI-136)
+
+A project-settings change succeeds even when its change-log entry fails to write; the API then logs the ERROR `config change not recorded` (`component: "projects"`). A log-based metric counts those lines and the alert **Config change not recorded in the change log** emails `alert_email` (section 5): one email per 5-minute window with failures; it closes once a window is quiet.
+
+**Apply (once):** in `infra/control-plane`, `terraform plan -out=cp.tfplan`. Expect **2 to add, 0 to change, 0 to destroy**: `google_logging_metric.config_change_not_recorded` and `google_monitoring_alert_policy.config_change_not_recorded`. Anything else in the plan is drift from another change: stop and check. Then `terraform apply cp.tfplan`. Cost: one more alert condition; the metric's volume is a few points a month.
+
+**When it fires:** Logs Explorer, query `jsonPayload.message="config change not recorded"`. Each entry has `projectId`, `diff` (before and after per field), `by` and `error`. The settings change itself went through; only its log entry is missing. Fix the cause (usually Firestore errors or quota), and note the change by hand if its audit trail matters.
+
+**Don't reword the message.** The metric's filter matches `CONFIG_CHANGE_NOT_RECORDED` in `packages/domain/src/config-changes.ts`; `config-changes.test.ts` fails if the two differ.
