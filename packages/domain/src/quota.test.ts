@@ -259,6 +259,23 @@ describe("clear quota idle (AI-74)", () => {
     );
   });
 
+  it("GivenAProjectPausingClaudeSubAt60_WhenA65ReadingIsCleared_ThenItIsDiscarded", async () => {
+    vi.spyOn(console, "log").mockImplementation(() => {});
+    const store = new InMemoryQuotaStore();
+    await store.save([reading({ usedPct: 65 })]);
+    const clearer = new QuotaClearer(
+      store,
+      () => now,
+      async () => {},
+      async () => ({
+        warnPct: 50,
+        pausePct: 60,
+      }),
+    );
+    const result = await clearer.clearIdle(OWNER);
+    expect(result.cleared).toEqual([expect.objectContaining({ window: "5h", usedPct: 65 })]);
+  });
+
   it("GivenNothingAtTheReserve_WhenCleared_ThenRefusedAndNothingIsWoken", async () => {
     const store = new InMemoryQuotaStore();
     await store.save([reading({ usedPct: 50 })]);
