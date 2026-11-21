@@ -9,6 +9,7 @@ import { AskQuestionForm } from "@/components/AskQuestionForm";
 import { CancelArchiveControls } from "@/components/CancelArchiveControls";
 import { EpicChildren } from "@/components/EpicChildren";
 import { OverridesEditor } from "@/components/OverridesEditor";
+import { PullRequestLink } from "@/components/PullRequestLink";
 import {
   EditableList,
   InlineText,
@@ -40,6 +41,7 @@ import {
   useWorker,
   useExecutor,
   useTickets,
+  useProjects,
 } from "@/lib/queries";
 import { STAGE_LABELS, TYPE_LABELS } from "@/lib/tickets";
 import { showsError } from "@/lib/live";
@@ -190,8 +192,11 @@ function StatusLine({ ticket }: { ticket: Ticket }) {
 function Story({ ticket: t }: { ticket: Ticket }) {
   const title = useTicketSave(t);
   const body = useTicketSave(t);
+  const events = useEvents(pathOf(t)).data ?? [];
+  const repos = useProjects().data?.find((p) => p.id === t.projectId)?.repos ?? [];
   return (
     <article className="space-y-6">
+      <PullRequestLink events={events} repos={repos} />
       <TicketCostLine {...pathOf(t)} />
       <InlineText
         label="Title"

@@ -407,6 +407,17 @@ export class InMemoryRunStore implements RunStore {
     };
   }
 
+  async countCreatedSince(provider: ProviderKey, since: string, limit: number) {
+    // As in Firestore: the cap applies to every provider's runs, oldest first, before the
+    // provider filter; reading `limit` runs counts as incomplete, so the caller fails closed.
+    const read = [...this.runs.values()]
+      .filter((r) => !!r.createdAt && r.createdAt >= since)
+      .sort((a, b) => a.createdAt!.localeCompare(b.createdAt!))
+      .slice(0, limit);
+    const count = read.filter((r) => r.route.provider === provider).length;
+    return { count, complete: read.length < limit };
+  }
+
   async update(runId: string, patch: RunPatch, from: readonly RunStatus[]): Promise<Run> {
     const current = this.runs.get(runId);
     if (!current) throw notFound("run", runId);
@@ -845,8 +856,10 @@ export class InMemoryEvaluator implements Evaluator {
 }
 export * from "./config-proposals";
 export * from "./deployments";
+export * from "./membership";
 export * from "./night";
 export * from "./notify-email";
 export * from "./project-versions";
 export * from "./push";
+export * from "./push-sender";
 export * from "./runner";
