@@ -10,9 +10,8 @@ import { routeProblem } from "./routing-rules";
 
 /**
  * Route resolution (AI-238: M9.6; routing-and-policy.md). Pure: the caller reads the global and
- * project configs from `RoutingConfigStore` (AI-230: M9.3) and passes them in. No quota-aware
- * fallback here: a route whose provider is at its pause level is still picked (M10: Paid models +
- * spend caps adds that).
+ * project configs from `RoutingConfigStore` (AI-230: M9.3) and passes them in. Quota and spend
+ * aren't checked here: `route-fallback.ts` (AI-261: M10.14) walks `routeCandidates` with them.
  */
 
 /** The routing a project runs under: its config only narrows global. */
@@ -104,12 +103,42 @@ function pinProblem(pin: Route, routing: EffectiveRouting): string | null {
   return allowed ? unusable(pin, routing) : "not a route in this project's routing";
 }
 
+/** A route a step may try, with why it can't run (null: it can) (AI-261: M10.14). */
+export interface RouteCandidate {
+  route: Route;
+  problem: string | null;
+}
+
 /**
- * The route a step runs on. Its tier is the step's (`steps[step]`), or the ticket's (`ticketTier`,
- * from size or pin) when the step is `by_size`. On a `by_size` step a ticket's `modelPin` comes
- * first when it is usable and is a route of some tier in `routing` (so a pin can't reach a model
- * the project's routing leaves out); then the tier's routes in order. Every route passed over is returned
- * with its reason. `route: null` when none is usable: the caller refuses to start.
+ * The routes a step tries, in order, each with its problem. Its tier is the step's
+ * (`steps[step]`), or the ticket's (`ticketTier`, from size or pin) when the step is `by_size`. On
+ * a `by_size` step a ticket's `modelPin` comes first; it can run only if it is usable and is a
+ * route of some tier in `routing` (so a pin can't reach a model the project's routing leaves
+ * out). Then the tier's routes in order.
+ */
+export function routeCandidates(
+  step: RunStep,
+  ticketTier: TierKey,
+  routing: EffectiveRouting,
+  pin?: Route,
+): { tier: TierKey; candidates: RouteCandidate[] } {
+  const stepTier = routing.steps[step];
+  const tier = stepTier === "by_size" ? ticketTier : stepTier;
+  const pinned: RouteCandidate[] = [];
+  if (pin && stepTier === "by_size") {
+    const problem = pinProblem(pin, routing);
+    pinned.push({ route: pin, problem: problem && `the ticket's model pin: ${problem}` });
+  }
+  const tierRoutes = routing.tiers[tier].map((route) => ({
+    route,
+    problem: unusable(route, routing),
+  }));
+  return { tier, candidates: [...pinned, ...tierRoutes] };
+}
+
+/**
+ * The route a step runs on: the first candidate that can run, with every route passed over
+ * before it and its reason. `route: null` when none can: the caller refuses to start.
  */
 export function resolveRoute(
   step: RunStep,
@@ -117,17 +146,11 @@ export function resolveRoute(
   routing: EffectiveRouting,
   pin?: Route,
 ): ResolvedRoute {
-  const stepTier = routing.steps[step];
-  const tier = stepTier === "by_size" ? ticketTier : stepTier;
-  const candidates = [
-    ...(pin && stepTier === "by_size" ? [{ route: pin, pinned: true }] : []),
-    ...routing.tiers[tier].map((route) => ({ route, pinned: false })),
-  ];
+  const { tier, candidates } = routeCandidates(step, ticketTier, routing, pin);
   const skipped: SkippedRoute[] = [];
-  for (const { route, pinned } of candidates) {
-    const problem = pinned ? pinProblem(route, routing) : unusable(route, routing);
+  for (const { route, problem } of candidates) {
     if (problem === null) return { route, tier, skipped };
-    skipped.push({ route, reason: pinned ? `the ticket's model pin: ${problem}` : problem });
+    skipped.push({ route, reason: problem });
   }
   return { route: null, tier, skipped };
 }
