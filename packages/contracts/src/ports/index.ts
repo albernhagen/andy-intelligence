@@ -559,8 +559,8 @@ export interface OAuthGrantStore {
   /** The grant, or null when missing or expired. */
   get(key: string): Promise<OAuthGrant | null>;
   /**
-   * Removes and returns the grant atomically (null when missing or expired), so codes and
-   * refresh tokens are single-use even under concurrent requests.
+   * Removes and returns the grant atomically (null when missing or expired), so codes are
+   * single-use even under concurrent requests.
    */
   take(key: string): Promise<OAuthGrant | null>;
 }
