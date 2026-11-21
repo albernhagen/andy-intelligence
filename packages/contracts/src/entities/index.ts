@@ -20,14 +20,12 @@ import { projectDispatchFields } from "./dispatch-caps";
 import { projectNotifyFields } from "./notify-email";
 import { projectPlanFields } from "./project-plan";
 import { configChangeProposalFields } from "./config-proposals";
-
-export * from "./common";
-export * from "./dispatch-caps";
 import { RunCostFields } from "./cost";
 import { runInFlightFields } from "./in-flight";
 import { runSyncFields } from "./sync";
 import { runLocalFields } from "./runner";
 import { runBaseFields } from "./build";
+import { ProjectSpendCaps } from "./spend-caps";
 import { RefineScores, TicketScores } from "./scores";
 import {
   questionFormatFields,
@@ -36,17 +34,7 @@ import {
   refineQuestionFields,
 } from "./question-format";
 
-export * from "./common";
-export * from "./cost";
-export * from "./dashboard";
-export * from "./in-flight";
-export * from "./sync";
-export * from "./scores";
-export * from "./notify-email";
-export * from "./question-format";
-export * from "./brief";
-export * from "./ideate";
-export * from "./project-plan";
+export * from "./exports.gen";
 
 /** ARCHITECTURE §5 — domain model. Vendor concepts must not appear here. */
 
@@ -66,6 +54,14 @@ export type PlanApproval = z.infer<typeof PlanApproval>;
  */
 export const AutoMerge = z.enum(["none", "s", "s-and-m", "all"]);
 export type AutoMerge = z.infer<typeof AutoMerge>;
+
+/**
+ * Where a project's releases go (ADR-0050, AI-160: M6.2): `prod-only` (one prod project plus PR
+ * previews; the default) or `dev-and-prod` (dev first, then a promote to prod). Nothing deploys
+ * from it yet; M6 slices read it.
+ */
+export const EnvironmentPolicy = z.enum(["prod-only", "dev-and-prod"]);
+export type EnvironmentPolicy = z.infer<typeof EnvironmentPolicy>;
 
 export const Project = z.object({
   id: Id,
@@ -108,6 +104,13 @@ export const Project = z.object({
   defaultWorker: Worker.default("agent"),
   /** Where a ticket's runs execute when it has no pick of its own (ADR-0089). */
   executor: ExecutorKind.default("actions"),
+  /** Release environments (AI-160); projects stored before it read as `prod-only`, unrewritten. */
+  environments: EnvironmentPolicy.default("prod-only"),
+  /**
+   * The project's own spend caps (AI-249: M10.8); each can only lower the global cap, and a
+   * missing field takes the global value. Projects stored before it read as `{}`, unrewritten.
+   */
+  spendCaps: ProjectSpendCaps.default({}),
 });
 export type Project = z.infer<typeof Project>;
 
@@ -136,6 +139,10 @@ export const ScopeList = z
   .max(SCOPE_LIMITS.maxItems);
 
 const REFINE_REASON_MAX = 300;
+/** Longest epic outcome: one line the roadmap shows (ADR-0108). */
+export const EPIC_OUTCOME_MAX = 300;
+/** An epic's outcome: what is true when it is done. Only epics have one (domain rule). */
+export const EpicOutcome = z.string().trim().min(1).max(EPIC_OUTCOME_MAX);
 
 /** What a wrong guess would cost (ADR-0075). Anything but `reversible` is worth asking Andy. */
 export const GapCost = z.enum(["reversible", "direction", "scope", "trust", "spend"]);
@@ -195,7 +202,10 @@ export const Ticket = z.object({
   parentId: Id.nullable(),
   title: z.string().min(1),
   body: z.string(),
-  /** The checklist. Features: each in EARS form ("… shall …"); chores: any wording. */
+  /**
+   * The checklist. Features: each in EARS form ("… shall …"); chores: any wording. On an epic
+   * it is the "Done when" list (ADR-0108).
+   */
   acceptanceCriteria: z.array(z.string()),
   assumptions: z.array(z.string()),
   stage: Stage,
@@ -229,6 +239,8 @@ export const Ticket = z.object({
   sentBackReason: z.string().max(REFINE_REASON_MAX).nullable().default(null),
   /** What refine assumed instead of asking (ADR-0075). */
   refineAssumptions: z.array(Assumption).default([]),
+  /** Epics only: what is true when it is done, one line (ADR-0108); null on older documents. */
+  outcome: EpicOutcome.nullable().default(null),
   ...TicketScores,
   createdAt: Timestamp,
   updatedAt: Timestamp,
@@ -407,6 +419,11 @@ export const RefineOutput = z
     /** Written only where the ticket has none, like the proposals above. */
     body: capped(REFINE_LIMITS.body).nullable(),
     acceptanceCriteria: z.array(capped(REFINE_LIMITS.criterion)).max(REFINE_LIMITS.maxCriteria),
+    /**
+     * For an epic: what is true when it is done, one sentence (ADR-0108). Stored only when the epic
+     * has none. Defaults to null so a result without it still parses.
+     */
+    epicOutcome: EpicOutcome.nullable().default(null),
     outcome: RefineOutcome,
     /** One line for Andy: why it went back, or why it was split. */
     reason: capped(REFINE_LIMITS.reason).nullable(),
@@ -1027,10 +1044,3 @@ export const CodeHostEvent = z.discriminatedUnion("kind", [
   CodeHostEventBase.extend({ kind: z.literal("push"), push: BranchPush }),
 ]);
 export type CodeHostEvent = z.infer<typeof CodeHostEvent>;
-
-export * from "./worker";
-export * from "./executor";
-export * from "./runner";
-export * from "./build";
-export * from "./night";
-export * from "./config-proposals";

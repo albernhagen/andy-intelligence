@@ -11,6 +11,7 @@ export class DomainError extends Error {
       | "not_refinable"
       | "not_buildable"
       | "run_limit"
+      | "spend_cap"
       | "run_finished"
       | "executor_unavailable"
       | "dispatch_failed"
@@ -24,7 +25,9 @@ export class DomainError extends Error {
       | "runs_elsewhere"
       | "brief_too_long"
       | "code_host_unavailable"
-      | "rate_limited",
+      | "rate_limited"
+      | "not_revertible"
+      | "invalid_field",
     message: string,
     readonly details: string[] = [],
   ) {

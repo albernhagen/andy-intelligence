@@ -19,6 +19,8 @@ export const DispatchIdleReason = z.enum([
   "quota_reserve",
   // Quota at warn: one agent task in flight across all projects (AI-92).
   "quota_warn",
+  // A pay_per_use agent task would pass a spend cap, or its cost is unknown (AI-248).
+  "spend_cap",
 ]);
 export type DispatchIdleReason = z.infer<typeof DispatchIdleReason>;
 

@@ -1,6 +1,10 @@
 import { describe, expect, it } from "vitest";
 import { ConfigChange } from "../entities";
-import { CONFIG_CHANGE_LIST_MAX, type ConfigChangeLog } from "../ports/config-changes";
+import {
+  CONFIG_CHANGE_LIST_MAX,
+  GLOBAL_ENTITY_ID,
+  type ConfigChangeLog,
+} from "../ports/config-changes";
 
 /** The applied log (M4.11). `make` must return a store with nothing in it. */
 export function configChangeLogContract(name: string, make: () => Promise<ConfigChangeLog>) {
@@ -56,8 +60,38 @@ export function configChangeLogContract(name: string, make: () => Promise<Config
       await store.append(recent);
       await store.append(change({ entityId: "other", projectId: "other" }));
       await store.append(change({ entity: "tier", entityId: "ai" }));
-      expect((await store.listForProject("ai")).map((c) => c.id)).toEqual([recent.id, old.id]);
+      const routing = change({ entity: "routing", createdAt: at(9) });
+      await store.append(routing);
+      await store.append(change({ entity: "routing", entityId: "global", projectId: null }));
+      expect((await store.listForProject("ai")).map((c) => c.id)).toEqual([
+        routing.id,
+        recent.id,
+        old.id,
+      ]);
       expect(await store.listForProject("none")).toEqual([]);
+    });
+
+    it("GivenGlobalAndProjectChanges_WhenListingGlobalForAnEntity_ThenOnlyItsGlobalOnesNewestFirst", async () => {
+      const store = await make();
+      const old = change({
+        entity: "routing",
+        entityId: GLOBAL_ENTITY_ID,
+        projectId: null,
+        createdAt: at(1),
+      });
+      const recent = change({
+        entity: "routing",
+        entityId: GLOBAL_ENTITY_ID,
+        projectId: null,
+        createdAt: at(4),
+      });
+      await store.append(old);
+      await store.append(recent);
+      await store.append(change({ entity: "routing" }));
+      await store.append(change({ entity: "caps", entityId: GLOBAL_ENTITY_ID, projectId: null }));
+      expect((await store.listGlobal("routing")).map((c) => c.id)).toEqual([recent.id, old.id]);
+      expect((await store.listGlobal("routing", 1)).map((c) => c.id)).toEqual([recent.id]);
+      expect(await store.listGlobal("none")).toEqual([]);
     });
 
     it("GivenMoreChangesThanTheLimit_WhenListed_ThenOnlyTheNewestAreReturned", async () => {
@@ -66,6 +100,33 @@ export function configChangeLogContract(name: string, make: () => Promise<Config
       for (let i = 0; i < 3; i++) ids.push((await store.append(change({ createdAt: at(i) }))).id);
       expect((await store.listForProject("ai", 2)).map((c) => c.id)).toEqual([ids[2], ids[1]]);
       expect(CONFIG_CHANGE_LIST_MAX).toBeGreaterThan(2);
+    });
+
+    it("GivenAnAppliedChange_WhenMarkedReverted_ThenRevertedWithWhoAndWhen", async () => {
+      const store = await make();
+      const c = await store.append(change());
+      const reverted = await store.markReverted(c.id, "andy", at(3));
+      expect(reverted).toEqual({
+        ...c,
+        status: "reverted",
+        decidedBy: "andy",
+        decidedAt: at(3),
+      });
+      expect(await store.get(c.id)).toEqual(reverted);
+    });
+
+    it("GivenARevertedOrUnknownChange_WhenMarkedReverted_ThenConflictOrNotFound", async () => {
+      const store = await make();
+      const c = await store.append(change());
+      await store.markReverted(c.id, "andy", at(3));
+      await expect(store.markReverted(c.id, "andy", at(4))).rejects.toMatchObject({
+        name: "WorkTrackerError",
+        code: "conflict",
+      });
+      await expect(store.markReverted("missing", "andy", at(4))).rejects.toMatchObject({
+        name: "WorkTrackerError",
+        code: "not_found",
+      });
     });
   });
 }

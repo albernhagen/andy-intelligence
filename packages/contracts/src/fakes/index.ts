@@ -1,6 +1,7 @@
 import {
   CodeHostConnection,
   CodeHostEvent,
+  EPIC_BRANCH_PATTERN,
   FileProposal,
   Repo,
   RepoName,
@@ -406,6 +407,17 @@ export class InMemoryRunStore implements RunStore {
     };
   }
 
+  async countCreatedSince(provider: ProviderKey, since: string, limit: number) {
+    // As in Firestore: the cap applies to every provider's runs, oldest first, before the
+    // provider filter; reading `limit` runs counts as incomplete, so the caller fails closed.
+    const read = [...this.runs.values()]
+      .filter((r) => !!r.createdAt && r.createdAt >= since)
+      .sort((a, b) => a.createdAt!.localeCompare(b.createdAt!))
+      .slice(0, limit);
+    const count = read.filter((r) => r.route.provider === provider).length;
+    return { count, complete: read.length < limit };
+  }
+
   async update(runId: string, patch: RunPatch, from: readonly RunStatus[]): Promise<Run> {
     const current = this.runs.get(runId);
     if (!current) throw notFound("run", runId);
@@ -562,6 +574,19 @@ export class InMemoryCodeHost implements CodeHost {
   }[] = [];
   /** Test seam: make `proposeFile` fail. */
   failPropose: Error | null = null;
+  /** Branch tips by `<repo, lower-cased>#<branch>`; a default branch not set here is at `DEFAULT_TIP`. */
+  readonly branches = new Map<string, string>();
+  /** PRs opened with `openEpicPullRequest`, in order (AI-124: morning PRs). */
+  readonly epicPullRequests: {
+    fullName: string;
+    head: string;
+    base: string;
+    title: string;
+    body: string;
+    number: number;
+    url: string;
+  }[] = [];
+  static readonly DEFAULT_TIP = "d".repeat(40);
 
   constructor(
     repos: Repo[] = [],
@@ -680,13 +705,19 @@ export class InMemoryCodeHost implements CodeHost {
     return names.length > 0 ? names.sort() : null;
   }
 
-  async mergePullRequest(fullName: string, number: number, expectedHeadSha: string): Promise<void> {
+  async mergePullRequest(
+    fullName: string,
+    number: number,
+    expectedHeadSha: string,
+  ): Promise<string | null> {
     if (this.failMerge) throw this.failMerge;
     const pr = this.pullRequests.get(number);
     if (!pr || pr.pullRequest.state !== "open") throw new Error("not mergeable");
     if (pr.pullRequest.headSha !== expectedHeadSha) throw new Error("head moved");
     pr.pullRequest.state = "merged";
     this.merges.push({ fullName, number, sha: expectedHeadSha });
+    // A stable stand-in for the squash commit: the PR number, padded to a sha.
+    return number.toString(16).padStart(40, "c");
   }
 
   async headContains(fullName: string, head: string): Promise<boolean | null> {
@@ -706,6 +737,49 @@ export class InMemoryCodeHost implements CodeHost {
     const opened = { number, url: `${repo.url}/pull/${number}`, branch: parsed.branch };
     this.proposals.push({ fullName: repo.fullName, proposal: parsed, opened });
     return structuredClone(opened);
+  }
+
+  async branchSha(fullName: string, branch: string): Promise<string | null> {
+    const repo = await this.getRepo(fullName);
+    if (!repo) return null;
+    const tip = this.branches.get(`${repo.fullName.toLowerCase()}#${branch}`);
+    if (tip) return tip;
+    return branch === repo.defaultBranch ? InMemoryCodeHost.DEFAULT_TIP : null;
+  }
+
+  async createBranch(fullName: string, branch: string, sha: string): Promise<"created" | "exists"> {
+    if (!EPIC_BRANCH_PATTERN.test(branch)) throw new Error("only epic/<KEY> branches are created");
+    if (!/^[0-9a-f]{40}$/.test(sha)) throw new Error("unexpected commit sha");
+    const repo = await this.getRepo(fullName);
+    if (!repo) throw new Error(`the App isn't installed on ${fullName}`);
+    const key = `${repo.fullName.toLowerCase()}#${branch}`;
+    if (this.branches.has(key)) return "exists";
+    this.branches.set(key, sha);
+    return "created";
+  }
+
+  async openEpicPullRequest(
+    fullName: string,
+    pr: { head: string; base: string; title: string; body: string },
+  ): Promise<{ number: number; url: string } | "exists"> {
+    if (!EPIC_BRANCH_PATTERN.test(pr.head)) throw new Error("only epic/<KEY> heads are opened");
+    const repo = await this.getRepo(fullName);
+    if (!repo) throw new Error(`the App isn't installed on ${fullName}`);
+    const open = this.epicPullRequests.some(
+      (p) => p.fullName === repo.fullName && p.head === pr.head && p.base === pr.base,
+    );
+    if (open) return "exists";
+    const number = 2000 + this.epicPullRequests.length;
+    const opened = { number, url: `${repo.url}/pull/${number}` };
+    this.epicPullRequests.push({ fullName: repo.fullName, ...pr, ...opened });
+    return opened;
+  }
+
+  async deleteEpicBranch(fullName: string, branch: string): Promise<void> {
+    if (!EPIC_BRANCH_PATTERN.test(branch)) throw new Error("only epic/<KEY> branches are deleted");
+    const repo = await this.getRepo(fullName);
+    if (!repo) throw new Error(`the App isn't installed on ${fullName}`);
+    this.branches.delete(`${repo.fullName.toLowerCase()}#${branch}`);
   }
 }
 
@@ -780,7 +854,4 @@ export class InMemoryEvaluator implements Evaluator {
     };
   }
 }
-export * from "./notify-email";
-export * from "./runner";
-export * from "./night";
-export * from "./config-proposals";
+export * from "./exports.gen";

@@ -20,7 +20,7 @@ inputs:
     description: JSON schema path in the baseline repo for the agent's output.
     required: true
   context-files:
-    description: Paths in the calling repo (one per line) copied from its base branch into .review/.
+    description: Paths in the calling repo (one per line) copied from its base branch into .review/. A path ending in "/" is a folder; its files go to .review/<folder name>/.
     default: ""
   incremental:
     description: '"true": on later pushes, also write .review/new-commits.diff since the last review.'
@@ -187,8 +187,25 @@ runs:
           cp "$BASELINE/$PROCEDURE" .review/procedure.md
           cp "$BASELINE/$SCHEMA" .review/schema.json
         fi
+        # A folder: every file in it on the base branch (the working tree's if the base has none).
+        base_copy_dir() {
+          local out
+          out=".review/$(basename "$1")"
+          mkdir -p "$out"
+          if git cat-file -e "origin/$BASE_REF:$1" 2>/dev/null; then
+            git ls-tree --format='%(objecttype) %(path)' "origin/$BASE_REF" "$1/" | while read -r type p; do
+              if [ "$type" = blob ]; then git show "origin/$BASE_REF:$p" > "$out/$(basename "$p")"; fi
+            done
+          elif [ -d "$1" ]; then
+            find "$1" -maxdepth 1 -type f -exec cp {} "$out/" \;
+          fi
+        }
         while IFS= read -r f; do
-          [ -n "$f" ] && base_copy "$f" ".review/$(basename "$f")"
+          case "$f" in
+            "") ;;
+            */) base_copy_dir "${f%/}" ;;
+            *) base_copy "$f" ".review/$(basename "$f")" ;;
+          esac
         done <<<"$CONTEXT_FILES"
 
         # Discussion: only the owner and collaborators (anyone can comment on a public repo).

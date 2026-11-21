@@ -872,6 +872,33 @@ export function codeHostContract(
       expect(await host.proposeFile(unknownRepo, proposal)).toBeNull();
     });
 
+    it("GivenAnInstalledRepo_WhenItsDefaultBranchIsRead_ThenItsTipShaComesBack", async () => {
+      const { host, knownRepo } = await make();
+      const repo = await host.getRepo(knownRepo);
+      expect(await host.branchSha(knownRepo, repo!.defaultBranch)).toMatch(/^[0-9a-f]{40}$/);
+    });
+
+    it("GivenAMissingBranchOrRepo_WhenItsTipIsRead_ThenNull", async () => {
+      const { host, knownRepo, unknownRepo } = await make();
+      expect(await host.branchSha(knownRepo, "epic/ZZ-999999999")).toBeNull();
+      expect(await host.branchSha(unknownRepo, "main")).toBeNull();
+    });
+
+    it("GivenABranchThatIsNotAnEpicBranch_WhenCreated_ThenItThrowsBeforeWriting", async () => {
+      const { host, knownRepo } = await make();
+      await expect(host.createBranch(knownRepo, "main", "a".repeat(40))).rejects.toThrow();
+      await expect(host.createBranch(knownRepo, "epic/AI-1", "not-a-sha")).rejects.toThrow();
+    });
+
+    itProposes("GivenAnEpicBranch_WhenCreatedTwice_ThenCreatedThenExists", async () => {
+      const { host, knownRepo } = await make();
+      const repo = await host.getRepo(knownRepo);
+      const tip = (await host.branchSha(knownRepo, repo!.defaultBranch))!;
+      expect(await host.createBranch(knownRepo, "epic/AI-1", tip)).toBe("created");
+      expect(await host.branchSha(knownRepo, "epic/AI-1")).toBe(tip);
+      expect(await host.createBranch(knownRepo, "epic/AI-1", tip)).toBe("exists");
+    });
+
     it("GivenAMalformedName_WhenRead_ThenNull", async () => {
       const { host } = await make();
       expect(await host.getRepo("../etc/passwd")).toBeNull();
@@ -1174,6 +1201,30 @@ export function runStoreContract(
       expect(capped.complete).toBe(false);
     });
 
+    it("GivenRunsOnTwoProviders_WhenCountingOneSinceATime_ThenOnlyItsNewerRunsAndCapped", async () => {
+      const store = await make();
+      const p = project();
+      const google = (): NewRun => ({
+        ...newRun(p),
+        route: { harness: "jules", provider: "google-sub", model: "jules" },
+      });
+      const before = await store.create(google());
+      await new Promise((r) => setTimeout(r, 5));
+      const since = new Date().toISOString();
+      await new Promise((r) => setTimeout(r, 5));
+      await store.create(google());
+      await store.create(google());
+      await store.create(newRun(p));
+      expect(before.createdAt! < since).toBe(true);
+      const all = await store.countCreatedSince("google-sub", since, 100);
+      expect(all).toEqual({ count: 2, complete: true });
+      const capped = await store.countCreatedSince("google-sub", since, 1);
+      expect(capped.count).toBeLessThanOrEqual(1);
+      expect(capped.complete).toBe(false);
+      // Other providers' runs fill the cap too: three runs since, a cap of three.
+      expect((await store.countCreatedSince("google-sub", since, 3)).complete).toBe(false);
+    });
+
     it("GivenAQueuedRun_WhenUpdatedFromQueued_ThenOnlyThePatchedFieldsChange", async () => {
       const store = await make();
       const run = await store.create(newRun(project()));
@@ -1348,8 +1399,4 @@ export function evaluatorContract(
     });
   });
 }
-export * from "./notify-email";
-export * from "./runner";
-export * from "./night";
-export * from "./config-proposals";
-export * from "./config-changes";
+export * from "./exports.gen";

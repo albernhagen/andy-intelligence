@@ -13,6 +13,7 @@ import { ClientMetadataResolver } from "./client-metadata";
 import { LOOKUPS_PER_MINUTE } from "./index";
 import { REFRESH_GRACE_S } from "./oauth";
 import { hashToken, newToken } from "./tokens";
+import { ownerOnlyAccess } from "../project-access";
 
 const PUBLIC_URL = "https://control-plane.example.run.app";
 const RESOURCE = `${PUBLIC_URL}/mcp`;
@@ -45,6 +46,7 @@ function setup(allowList = "andy@example.com") {
   };
   const allowedEmails = parseAllowList(allowList);
   const app = createApp({
+    projectAccess: ownerOnlyAccess(),
     verifier,
     allowedEmails,
     version: "test",
@@ -177,11 +179,13 @@ describe("MCP OAuth flow (MCP SDK client)", () => {
       "digest",
       "edit_ticket",
       "get_project_settings",
+      "get_spend",
       "ideate",
       "list_in_flight",
       "list_needs_me",
       "list_projects",
       "list_ready",
+      "list_work",
       "move_ticket",
       "promote_assumption",
       "refine",
@@ -194,10 +198,12 @@ describe("MCP OAuth flow (MCP SDK client)", () => {
       "set_default_executor",
       "set_default_worker",
       "set_email_notifications",
+      "set_environments",
       "set_executor",
       "set_paused",
       "set_plan_approval",
       "set_runs_at_once",
+      "set_spend_caps",
       "set_ticket_parent",
       "set_worker",
       "status",
@@ -538,6 +544,7 @@ describe("MCP OAuth endpoints", () => {
 describe("MCP off", () => {
   it("GivenNoPublicUrl_WhenCallingMcpRoutes_ThenTheyDoNotExist", async () => {
     const app = createApp({
+      projectAccess: ownerOnlyAccess(),
       verifier,
       allowedEmails: parseAllowList("andy@example.com"),
       version: "test",

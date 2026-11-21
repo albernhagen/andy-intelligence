@@ -2,6 +2,7 @@ import { useEffect, useRef } from "react";
 import { type QueryClient, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type {
   AutoMerge,
+  EnvironmentPolicy,
   ExecutorKind,
   PlanApproval,
   Run,
@@ -12,6 +13,7 @@ import type {
   Worker,
   WorkerChoice,
 } from "@andy/contracts";
+import { RoutingConfig } from "@andy/contracts";
 import { unwrap, useApi } from "./api";
 import { useLivePoll } from "./live";
 import { withoutQuestion, type NeedsYou } from "./needs-you";
@@ -278,6 +280,70 @@ export function useClearQuotaIdle() {
   return useWrite(async () => unwrap(await api.POST("/api/quota/clear")));
 }
 
+/** Model routing (AI-243: M9.8): global, and each project's own and effective routing. */
+export function useRouting() {
+  const api = useApi();
+  return useQuery({
+    ...useLivePoll("slow"),
+    queryKey: ["routing"],
+    // The generated types read enum-keyed records as partial; the contract's schema restores them.
+    queryFn: async () => {
+      const view = unwrap(await api.GET("/api/routing"));
+      return {
+        global: RoutingConfig.parse(view.global),
+        projects: view.projects.map((p) => ({
+          projectId: p.projectId,
+          config: p.config ? RoutingConfig.parse(p.config) : null,
+          effective: RoutingConfig.parse(p.effective),
+        })),
+        truncated: view.truncated,
+      };
+    },
+  });
+}
+
+type RoutingSaveBody = Pick<RoutingConfig, "providers" | "tiers" | "steps"> & {
+  ifUpdatedAt: string | null;
+  reason?: string;
+};
+
+/** Saves global (`projectId` null) or one project's routing; refusals carry the API's details. */
+export function useSaveRouting(projectId: string | null) {
+  const api = useApi();
+  return useWrite(async (body: RoutingSaveBody) =>
+    projectId === null
+      ? unwrap(await api.PUT("/api/routing", { body }))
+      : unwrap(
+          await api.PUT("/api/projects/{projectId}/routing", {
+            params: { path: { projectId } },
+            body,
+          }),
+        ),
+  );
+}
+
+/** Global routing's changes, newest first (AI-275); a project's are in its settings log. */
+export function useRoutingChanges() {
+  const api = useApi();
+  return useQuery({
+    ...useLivePoll("slow"),
+    queryKey: ["routing-changes"],
+    queryFn: async () => unwrap(await api.GET("/api/routing/changes")),
+  });
+}
+
+/** Reverts a routing change, global or a project's; refusals carry the API's reason. */
+export function useRevertRoutingChange() {
+  const api = useApi();
+  return useWrite(async (changeId: string) =>
+    unwrap(
+      await api.POST("/api/routing/changes/{changeId}/revert", {
+        params: { path: { changeId } },
+      }),
+    ),
+  );
+}
+
 /** Local runners (ADR-0089): never their secrets. */
 export function useRunners() {
   const api = useApi();
@@ -326,6 +392,7 @@ export function useUpdateProject(projectId: string) {
       defaultWorker?: Worker;
       executor?: ExecutorKind;
       emailNotifications?: boolean;
+      environments?: EnvironmentPolicy;
     }) =>
       unwrap(
         await api.PATCH("/api/projects/{projectId}", { params: { path: { projectId } }, body }),
@@ -360,7 +427,7 @@ export function useCreateTicket(projectId: string) {
 
 /** One in-place edit: only the changed fields, plus the `updatedAt` it was read at (409 if stale). */
 export type TicketPatch = Partial<
-  TicketInput & { parentId: string | null; blockedBy: string[] }
+  TicketInput & { parentId: string | null; blockedBy: string[]; outcome: string | null }
 > & {
   ifUpdatedAt: string;
 };
@@ -632,5 +699,32 @@ export function useDecideConfigChange() {
               params: { path: { changeId } },
             }),
       ),
+  );
+}
+
+/** A project's settings change log (M4.12), newest first. */
+export function useSettingsChanges(projectId: string) {
+  const api = useApi();
+  return useQuery({
+    ...useLivePoll("slow"),
+    queryKey: ["settings-changes", projectId],
+    queryFn: async () =>
+      unwrap(
+        await api.GET("/api/projects/{projectId}/config-changes", {
+          params: { path: { projectId } },
+        }),
+      ),
+  });
+}
+
+/** Andy's revert of one settings change: before values back, logged as a new change. */
+export function useRevertSettingsChange(projectId: string) {
+  const api = useApi();
+  return useWrite(async (changeId: string) =>
+    unwrap(
+      await api.POST("/api/projects/{projectId}/config-changes/{changeId}/revert", {
+        params: { path: { projectId, changeId } },
+      }),
+    ),
   );
 }
