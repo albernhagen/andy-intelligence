@@ -5,6 +5,8 @@ import {
   type Project,
 } from "@andy/contracts";
 import { configChangeLogContract } from "@andy/contracts/testing";
+import { readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
   CONFIG_CHANGE_NOT_RECORDED,
@@ -46,6 +48,22 @@ describe("CONFIG_CHANGE_NOT_RECORDED", () => {
   it("GivenTheAlertMatchesIt_WhenRead_ThenTheMessageIsUnchanged", () => {
     // AI-136's log-based alert matches this exact text.
     expect(CONFIG_CHANGE_NOT_RECORDED).toBe("config change not recorded");
+  });
+
+  it("GivenTheAlertMetricInTerraform_WhenItsFilterIsRead_ThenItMatchesTheLoggedLine", () => {
+    // The alert's log-based metric (infra/control-plane) must match what ProjectService logs.
+    const tf = readFileSync(
+      fileURLToPath(new URL("../../../infra/control-plane/main.tf", import.meta.url)),
+      "utf8",
+    );
+    const block =
+      /resource "google_logging_metric" "config_change_not_recorded" \{[\s\S]*?\n\}/.exec(tf)?.[0];
+    expect(block).toBeDefined();
+    const field = (name: string) =>
+      new RegExp(`${name.replace(".", "\\.")} = "([^"]*)"`).exec(block ?? "")?.[1];
+    expect(field("jsonPayload.message")).toBe(CONFIG_CHANGE_NOT_RECORDED);
+    expect(field("jsonPayload.component")).toBe("projects");
+    expect(field("severity")).toBe("ERROR");
   });
 });
 

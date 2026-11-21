@@ -44,6 +44,7 @@ Trust boundaries, entry points and credentials, moved by area (ADR-0046). PRs th
 | Model gateway (OpenRouter)   | [`model-gateway.md`](model-gateway.md)                               |
 | Project settings             | [`project-settings.md`](project-settings.md)                         |
 | Project access               | [`project-access.md`](project-access.md)                             |
+| Paid model spend             | [`spend.md`](spend.md)                                               |
 
 ## Mitigations in place
 

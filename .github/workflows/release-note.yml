@@ -1,0 +1,23 @@
+name: Release note
+
+# The release-note block in every PR description (AI-159, ADR-0121): the control plane stores it
+# on merge for the What's new page. `edited` re-runs the check when the description changes.
+# Project baseline caller (ADR-0038). Not a required check until Andy adds it to the ruleset.
+
+on:
+  pull_request:
+    types: [opened, edited, reopened, synchronize]
+
+permissions: {}
+
+jobs:
+  release-note:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: ./platform/actions/release-note-check

@@ -134,6 +134,11 @@ function navLinks(scope: Scope, pathname: string, section: Section | null): NavI
         to: `/p/${encodeURIComponent(scope.projectId)}/digest`,
         current: /\/digest\/?$/.test(pathname),
       },
+      {
+        label: "What's new",
+        to: `/p/${encodeURIComponent(scope.projectId)}/whats-new`,
+        current: /\/whats-new\/?$/.test(pathname),
+      },
     );
   }
   items.push({
