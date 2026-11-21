@@ -23,6 +23,7 @@ google-sub:  reserve 20% of daily Jules tasks     → warn at 70%, pause at 80%
 openrouter:  hard daily/monthly USD caps (also enforced on the OpenRouter key itself)
 ```
 Missing or stale quota reading ⇒ treat as **unknown**: warn in UI, prefer next route, never assume headroom.
+Dispatch walks a tier's routes in order (`chooseRoute`, AI-261: M10.14): it skips a subscription at its pause level and a paid route the spend gate would refuse, and keeps each skip and why on the run (`routeSkips`). An unknown reading runs only if no other route has room and no route before it hit its reserve. Nothing left: dispatch idles with `quota_reserve` or `spend_cap`. A start by hand takes the first usable route.
 
 ### How routes are stored and chosen (ADR-0128, proposed; M9: Add Jules + model routing)
 - **Stored:** one `RoutingConfig` (providers, tiers with up to 5 ordered routes, step → tier) behind `RoutingConfigStore`: one global document, at most one per project. `DEFAULT_ROUTING` equals today's two Claude routes (fast: Sonnet, strong: Opus); google-sub and openrouter start disabled.
