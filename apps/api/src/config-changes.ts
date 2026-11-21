@@ -2,6 +2,7 @@ import { createRoute, z, type OpenAPIHono } from "@hono/zod-openapi";
 import { CONFIG_CHANGE_LIST_MAX, ConfigChange, Project } from "@andy/contracts";
 import type { ConfigRevert } from "@andy/domain";
 import { signedIn, type AuthEnv } from "./auth";
+import type { RouteModule } from "./services";
 
 /**
  * A project's settings change log and its revert (M4.12), under /api (Firebase sign-in +
@@ -63,3 +64,8 @@ export function registerConfigChangeRoutes(app: OpenAPIHono<AuthEnv>, revert: Co
     );
   });
 }
+
+/** Listed in `api-routes.ts` (AI-145); absent when the config-change store is not configured. */
+export const apiRoutes: RouteModule = (app, s) => {
+  if (s.configRevert) registerConfigChangeRoutes(app, s.configRevert);
+};

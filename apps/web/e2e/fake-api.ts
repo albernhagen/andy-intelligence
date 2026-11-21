@@ -1,6 +1,7 @@
 import {
   ConfigChange,
   InMemoryConfigChangeStore,
+  InMemoryNightLaunchStore,
   InMemoryRunStore,
   InMemoryWorkTracker,
 } from "@andy/contracts";
@@ -190,6 +191,7 @@ export async function createFakeApp() {
     runs,
     // ADR-0097: no findings, so a project inbox shows the empty "Config proposals" row.
     configChanges,
+    nightLaunches: new InMemoryNightLaunchStore(),
   });
 }
 

@@ -5,10 +5,12 @@ import {
   DEFAULT_APP_NAME,
   ManifestCode,
   appManifest,
+  exchangeManifestCode,
   type CreatedApp,
 } from "@andy/github";
 import type { AuthEnv } from "../auth";
 import type { GitHubConnection } from "./connection";
+import type { RouteModule } from "../services";
 
 /**
  * GitHub App setup from the UI (ADR-0043), under /api (signed-in, allow-listed Andy only).
@@ -136,3 +138,16 @@ export function registerGitHubSetup(app: OpenAPIHono<AuthEnv>, deps: SetupDeps):
     return c.json(await status(), 201);
   });
 }
+
+/** Listed in `api-routes.ts` (AI-145); needs the GitHub App. */
+export const apiRoutes: RouteModule = (app, s) => {
+  const { connection } = s;
+  const github = s.deps.github;
+  if (!github || !connection) return;
+  registerGitHubSetup(app, {
+    publicUrl: github.publicUrl,
+    connection,
+    exchangeCode: github.exchangeCode ?? ((code) => exchangeManifestCode(code)),
+    now: s.now,
+  });
+};
