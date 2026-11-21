@@ -12,7 +12,7 @@ function atLevel(status: QuotaStatus): string {
 }
 
 /**
- * Persistent while the level holds; there is no dismiss control (§7). At the pause level dispatch
+ * Persistent while the level holds; there is no dismiss control (§7). Wraps at 390 px (AI-176). At the pause level dispatch
  * starts nothing new (ADR-0079), and Andy can clear a reading he doesn't believe (AI-74). A failed
  * fetch counts as unknown.
  */
@@ -27,7 +27,7 @@ export function QuotaBanner() {
     return (
       <p
         role="status"
-        className="border-b border-border px-4 py-1.5 text-xs text-muted-foreground sm:px-6"
+        className="border-b border-border px-4 py-1.5 text-xs break-words text-muted-foreground sm:px-6"
       >
         Claude quota unknown: no fresh reading. Don&apos;t assume there is headroom.
       </p>
@@ -38,7 +38,7 @@ export function QuotaBanner() {
     <p
       role="alert"
       className={cn(
-        "border-b border-border px-4 py-1.5 text-sm font-medium sm:px-6",
+        "border-b border-border px-4 py-1.5 text-sm font-medium break-words sm:px-6",
         pause ? "bg-destructive/15 text-destructive" : "bg-attention/15 text-attention",
       )}
     >

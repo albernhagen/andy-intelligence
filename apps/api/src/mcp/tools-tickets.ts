@@ -44,6 +44,9 @@ const EditInput = {
     touches: true,
     overrides: true,
   }).shape,
+  outcome: TicketFields.shape.outcome.describe(
+    "Epics only: what is true when the epic is done, at most 300 characters; null clears it.",
+  ),
   blockedBy: z
     .array(TicketKey)
     .optional()
@@ -189,7 +192,7 @@ export function registerTicketTools(server: McpServer, deps: ToolDeps): void {
     "edit_ticket",
     {
       description:
-        "Edits a ticket's fields, as the ticket page does. Only the fields given change; lists replace the whole list. Re-checks the Definition of Ready.",
+        "Edits a ticket's fields, as the ticket page does. Only the fields given change; lists replace the whole list. An epic's `acceptanceCriteria` are its Done-when list. Re-checks the Definition of Ready.",
       inputSchema: EditInput,
       annotations: { destructiveHint: false, idempotentHint: true },
     },

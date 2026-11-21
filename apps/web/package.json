@@ -6,8 +6,8 @@
   "scripts": {
     "dev": "vite",
     "build": "vite build",
-    "typecheck": "tsx scripts/gen-api.ts && tsc --noEmit",
-    "gen:api": "tsx scripts/gen-api.ts",
+    "typecheck": "node --import tsx scripts/gen-api.ts && tsc --noEmit",
+    "gen:api": "node --import tsx scripts/gen-api.ts",
     "screenshots": "playwright test",
     "screenshots:update": "sh e2e/update-in-docker.sh"
   },

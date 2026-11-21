@@ -4,6 +4,7 @@
 - Fix (AI-222: Firestore reads grow with project size; decision: ADR-0126: Per-project change counter and read cache):
   - `status` and the inbox read a ticket's blockers by key (and the Ready lane for a Ready ticket), not the project. Its agent tasks are read once, not twice.
   - The in-flight view reads only the tickets with an agent task in flight.
+  - The build dispatcher's blocker check reads each blocker, not every ticket of each blocker's project.
   - Ticket writes read the parent chain, the blocker chain or the ticket's lane, never the whole project. Lanes outside Done hold no archived tickets.
   - A `ProjectVersions` counter per project (`projectVersions/{projectId}`) is bumped by every tracker and run write. The board and ticket list cache their result per counter value, per instance, for at most 5 minutes. An unchanged poll is one counter read plus, for the list, the project read.
 - Measured in tests (`apps/api/src/reads.test.ts`): `status` for a story with one blocker reads 11 documents at 10 and at 200 tickets; an unchanged board poll reads 1.

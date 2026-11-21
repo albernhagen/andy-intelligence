@@ -69,6 +69,7 @@ import { checkDor } from "./dor";
 import type { NightUnattended } from "./night-unattended";
 import { RefineGate } from "./refine-gate";
 import { DomainError } from "./errors";
+import { ticketByRef } from "./ticket-reads";
 import { requireCan } from "./permissions";
 import { TIER_ROUTES } from "./tiers";
 import { afterFailure, deadlineAction, MAX_RUN_ATTEMPTS } from "./watchdog";
@@ -1132,19 +1133,16 @@ export class RunService {
   /** Stage of each ticket a `blockedBy` entry can name, by key and by id (see unfinishedBlockers). */
   async blockerStages(ticket: Ticket): Promise<Map<string, Stage>> {
     const stages = new Map<string, Stage>();
-    if (ticket.blockedBy.length === 0) return stages;
-    const projects = new Set([
-      ticket.projectId,
-      ...ticket.blockedBy
-        .filter((b) => b.includes("-"))
-        .map((b) => b.slice(0, b.lastIndexOf("-")).toLowerCase()),
-    ]);
-    for (const projectId of projects) {
-      for (const t of await this.tracker.listTickets(projectId).catch(() => [])) {
+    // One read per blocker, not one list per project (AI-222); a failed read leaves it unknown.
+    await Promise.all(
+      ticket.blockedBy.map(async (ref) => {
+        const t = await ticketByRef(this.tracker, ticket.projectId, ref).catch(() => null);
+        if (!t) return;
+        stages.set(ref, t.stage);
         stages.set(t.key, t.stage);
         stages.set(t.id, t.stage);
-      }
-    }
+      }),
+    );
     return stages;
   }
 
