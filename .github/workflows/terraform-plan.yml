@@ -46,6 +46,9 @@ jobs:
       TF_VAR_email_enabled: ${{ secrets.TF_VAR_EMAIL_ENABLED || 'false' }}
       TF_VAR_email_from: ${{ secrets.TF_VAR_EMAIL_FROM }}
       TF_VAR_email_to: ${{ secrets.TF_VAR_EMAIL_TO }}
+      # Web Push (AI-179): optional repository variables (public values, not secrets); unset means off.
+      TF_VAR_push_enabled: ${{ vars.TF_VAR_PUSH_ENABLED || 'false' }}
+      TF_VAR_vapid_public_key: ${{ vars.TF_VAR_VAPID_PUBLIC_KEY }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Check variable secrets

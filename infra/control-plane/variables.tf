@@ -83,3 +83,25 @@ variable "email_to" {
     error_message = "email_to must be empty or an email address."
   }
 }
+
+variable "push_enabled" {
+  type        = bool
+  description = "Web Push (AI-179): sets VAPID_PUBLIC_KEY and VAPID_PRIVATE_KEY on the service. Turn on only after the vapid-private-key secret has a version (runbook mobile.md)."
+  default     = false
+
+  validation {
+    condition     = !var.push_enabled || var.vapid_public_key != ""
+    error_message = "push_enabled needs vapid_public_key."
+  }
+}
+
+variable "vapid_public_key" {
+  type        = string
+  description = "VAPID public key (base64url, 65 bytes uncompressed P-256), as `npx web-push generate-vapid-keys` prints it. Public: browsers receive it. Used only with push_enabled."
+  default     = ""
+
+  validation {
+    condition     = var.vapid_public_key == "" || can(regex("^[A-Za-z0-9_-]{87}$", var.vapid_public_key))
+    error_message = "vapid_public_key must be empty or an 87-character base64url key."
+  }
+}
