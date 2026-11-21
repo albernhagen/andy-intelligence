@@ -2,11 +2,23 @@ import { describe, expect, it } from "vitest";
 import { DEFAULT_ROUTING, ROUTING_LIMITS, type RoutingConfigInput } from "../entities/routing";
 import type { RoutingConfigStore } from "../ports/routing";
 
+export interface RoutingConfigStoreContractOptions {
+  /**
+   * Timeout (ms) for the case that races two puts on one document (AI-283); see
+   * `NotifyLedgerContractOptions` (AI-138). Default: vitest's 5 s.
+   */
+  raceTimeoutMs?: number;
+}
+
 /** `make` must return an empty store whose clock is `now`. */
 export function routingConfigStoreContract(
   name: string,
   make: (now: () => Date) => Promise<RoutingConfigStore>,
+  options: RoutingConfigStoreContractOptions = {},
 ): void {
+  /** A case that races puts on one document: gets the adapter's race timeout (AI-283). */
+  const itRaces = (title: string, fn: () => Promise<void>) => it(title, fn, options.raceTimeoutMs);
+
   describe(`RoutingConfigStore contract: ${name}`, () => {
     let clock = new Date("2026-11-21T10:00:00.000Z");
     const fresh = () => {
@@ -99,7 +111,7 @@ export function routingConfigStoreContract(
       expect(await store.getGlobal()).toEqual(DEFAULT_ROUTING);
     });
 
-    it("GivenTwoEditorsWithTheSameStamp_WhenBothPut_ThenExactlyOneWins", async () => {
+    itRaces("GivenTwoEditorsWithTheSameStamp_WhenBothPut_ThenExactlyOneWins", async () => {
       const store = await fresh();
       const base = await store.put(global(), null);
       const results = await Promise.allSettled([
