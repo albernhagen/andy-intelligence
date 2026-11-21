@@ -1,6 +1,6 @@
 ---
 title: "Local quality gates: lint and format before code leaves"
-status: accepted
+status: accepted (push row amended by 0113)
 date: 2026-10-27
 ---
 
