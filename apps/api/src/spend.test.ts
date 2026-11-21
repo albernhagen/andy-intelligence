@@ -12,6 +12,7 @@ import { createApp } from "./app";
 import type { TokenVerifier } from "./auth";
 import { ClientMetadataResolver } from "./mcp/client-metadata";
 import { mcpCaller } from "./mcp/test-client";
+import { ownerOnlyAccess } from "./project-access";
 
 /** AI-249: M10.8: spend caps settings over REST and MCP, with the change log behind them. */
 
@@ -34,7 +35,7 @@ const ledger = (project: number, global: number): SpendLedger =>
     },
   });
 
-async function setup(spendLedger?: SpendLedger) {
+async function setup(spendLedger?: SpendLedger, projectAccess = ownerOnlyAccess()) {
   const tracker = new InMemoryWorkTracker();
   await tracker.createProject({ name: "AI", key: "AI" });
   const grants = new InMemoryOAuthGrantStore();
@@ -46,6 +47,7 @@ async function setup(spendLedger?: SpendLedger) {
     tracker,
     runs: new InMemoryRunStore(),
     configChanges: new InMemoryConfigChangeStore(),
+    projectAccess,
     mcp: { publicUrl: PUBLIC_URL, grants, clients: new ClientMetadataResolver() },
     ...(spendLedger ? { spendLedger } : {}),
   });
@@ -169,6 +171,21 @@ describe("spend caps routes (AI-249)", () => {
     const { call, tracker } = await setup();
     const res = await call("PUT", "/api/projects/ai/spend-caps", { caps: {} }, "eve");
     expect(res.status).toBe(403);
+    expect((await tracker.getProject("ai"))?.spendCaps).toEqual({});
+  });
+
+  // AI-252: the one project-access check covers these routes and tools (projectId in the path,
+  // `project` in the input): a project the caller can't read looks absent.
+  it("GivenAProjectTheCallerCantRead_WhenSpendIsReadOrSet_ThenNotFoundAndNothingStored", async () => {
+    const { call, mcp, tracker } = await setup(undefined, {
+      canRead: () => Promise.resolve(false),
+    });
+    expect((await call("GET", "/api/projects/ai/spend")).status).toBe(404);
+    expect(
+      (await call("PUT", "/api/projects/ai/spend-caps", { caps: { dailyMicroUsd: 0 } })).status,
+    ).toBe(404);
+    const tool = await (await mcp())("set_spend_caps", { project: "ai", dailyMicroUsd: 0 });
+    expect(tool.isError).toBe(true);
     expect((await tracker.getProject("ai"))?.spendCaps).toEqual({});
   });
 
