@@ -3,6 +3,8 @@ import {
   Assumption,
   EpicOutcome,
   AutoMerge,
+  EnvironmentPolicy,
+  ProjectSpendCaps,
   BillingType,
   DorStatus,
   EventActor,
@@ -39,6 +41,7 @@ import {
   type Listing,
   type PullRequest,
   type PullRequestCommit,
+  type PullRequestDetails,
   type ProposedPullRequest,
   type Repo,
   type RepoToken,
@@ -218,6 +221,8 @@ export const ProjectPatch = z.strictObject({
   ...projectPlanPatch,
   defaultWorker: Worker.optional(),
   executor: ExecutorKind.optional(),
+  environments: EnvironmentPolicy.optional(),
+  spendCaps: ProjectSpendCaps.optional(),
 });
 export type ProjectPatch = z.infer<typeof ProjectPatch>;
 
@@ -234,6 +239,8 @@ export const ProjectSettings = ProjectPatch.pick({
   defaultWorker: true,
   executor: true,
   emailNotifications: true,
+  environments: true,
+  spendCaps: true,
 });
 export type ProjectSettings = z.infer<typeof ProjectSettings>;
 
@@ -335,6 +342,8 @@ export const RunRequest = z.object({
   route: Route,
   /** From the route's Provider: which credential the run uses (ADR-0050). */
   billingType: BillingType.default("subscription"),
+  /** A pay_per_use task's budget in micro-USD, for the harness to enforce (AI-248); null otherwise. */
+  budgetMicroUsd: z.number().int().min(0).max(Number.MAX_SAFE_INTEGER).nullable().default(null),
   instructions: z.string().min(1),
   callbackUrl: z.url().nullable(),
 });
@@ -390,6 +399,7 @@ export const NewRun = Run.pick({
   syncRun: true,
   localRun: true,
   baseBranch: true,
+  routeSkips: true,
 });
 export type NewRun = z.input<typeof NewRun>;
 
@@ -451,6 +461,17 @@ export interface RunStore {
     to: string,
     limit: number,
   ): Promise<{ runs: Run[]; complete: boolean }>;
+  /**
+   * How many runs on `provider` were created at or after `since`, in any project (AI-232:
+   * google-sub quota by task counting). Reads at most `limit` runs created since `since`, of
+   * every provider (the provider filter comes after the cap). `complete` is false when `limit`
+   * runs were read, so the count may be low: callers must fail closed.
+   */
+  countCreatedSince(
+    provider: ProviderKey,
+    since: string,
+    limit: number,
+  ): Promise<{ count: number; complete: boolean }>;
   /**
    * Applies the patch atomically, only if the run's status is one of `from` and, for a patch
    * that sets `planDecision`, the run has none yet, and for one that sets `mergeAttemptedSha`, it
@@ -598,6 +619,8 @@ export interface CodeHost {
   cancelWorkflowRun(fullName: string, runId: string): Promise<void>;
   /** Null when the pull request or the repo isn't known. */
   getPullRequest(fullName: string, number: number): Promise<PullRequest | null>;
+  /** The PR's description and who merged it when (AI-159); null when the PR or repo isn't known. */
+  getPullRequestDetails(fullName: string, number: number): Promise<PullRequestDetails | null>;
   /** Empty and complete when the repo isn't known. */
   listChangedFiles(fullName: string, number: number): Promise<Listing<ChangedFile>>;
   /** The latest result per check on a commit. */
@@ -681,17 +704,6 @@ export interface CodeEventLog {
 
 // ── Plain interfaces (no contract suite yet) ─────────────────────────────────
 
-export interface Completion {
-  text: string;
-  tokensIn: number;
-  tokensOut: number;
-  costUsd: number;
-}
-
-export interface ModelGateway {
-  complete(model: string, prompt: string, opts?: { maxTokens?: number }): Promise<Completion>;
-}
-
 export interface Notice {
   title: string;
   body: string;
@@ -764,12 +776,4 @@ export interface Telemetry {
   recordCost(event: CostEvent): void;
 }
 
-export * from "./config-changes";
-export * from "./config-proposals";
-export * from "./deployments";
-export * from "./digest";
-export * from "./night";
-export * from "./notify-email";
-export * from "./project-versions";
-export * from "./push";
-export * from "./runner";
+export * from "./exports.gen";

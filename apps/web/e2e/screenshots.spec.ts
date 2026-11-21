@@ -46,6 +46,22 @@ test("board: Done expanded", async ({ page }) => {
   await expect(page).toHaveScreenshot("board-expanded.png", { fullPage: true });
 });
 
+test("board: work view chips, Needs me picked", async ({ page }) => {
+  await page.clock.setFixedTime(SEED_NOW);
+  await open(page, "/p/ai?view=needs-me", "Sort by score");
+  await expect(page.getByRole("button", { name: /^Needs me/ })).toHaveAttribute(
+    "aria-pressed",
+    "true",
+  );
+  await expect(page).toHaveScreenshot("board-work-view.png", { fullPage: true });
+});
+
+test("work under All projects, Needs me", async ({ page }) => {
+  await page.clock.setFixedTime(SEED_NOW);
+  await open(page, "/all/work", "Story side panel");
+  await expect(page).toHaveScreenshot("work-all-projects.png", { fullPage: true });
+});
+
 test("board under All projects asks for a project", async ({ page }) => {
   await open(page, "/all/board", "A board shows one project");
   await expect(page).toHaveScreenshot("board-pick-project.png");
@@ -91,6 +107,14 @@ test("agent task page from the story panel", async ({ page }) => {
 });
 
 /** AI-85: the epic's stories in the panel, on the OPS epic AI-86 seeds (OPS-5). */
+test("what's new: status, then changes by day, one opened", async ({ page }) => {
+  await page.clock.setFixedTime(SEED_NOW);
+  await open(page, "/p/ops/whats-new", "Backups now land in a second region");
+  await page.getByText("Backups now land in a second region").click();
+  await expect(page.getByText("A nightly job copies each snapshot")).toBeVisible();
+  await expect(page).toHaveScreenshot("whats-new.png", { fullPage: true });
+});
+
 test("story panel for an epic", async ({ page }) => {
   await page.clock.setFixedTime(SEED_NOW);
   await open(page, "/p/ops/t/OPS-5", "1 of 3 done");

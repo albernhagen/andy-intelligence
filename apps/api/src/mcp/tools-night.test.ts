@@ -9,6 +9,7 @@ import { createApp } from "../app";
 import { parseAllowList, type TokenVerifier } from "../auth";
 import { ClientMetadataResolver } from "./client-metadata";
 import { mcpCaller } from "./test-client";
+import { ownerOnlyAccess } from "../project-access";
 
 const PUBLIC_URL = "https://control-plane.example.run.app";
 
@@ -42,6 +43,7 @@ async function setup(options: { store?: boolean } = {}) {
     "andy",
   );
   const app = createApp({
+    projectAccess: ownerOnlyAccess(),
     verifier,
     allowedEmails: parseAllowList("andy@example.com"),
     version: "test",

@@ -68,6 +68,7 @@ function compliant() {
         data: { ...config.labels[0], color: "b60205" },
       },
       [`repos/${REPO}/labels/review-accepted`]: { status: 200, data: config.labels[1] },
+      [`repos/${REPO}/labels/no-auto-sync`]: { status: 200, data: config.labels[2] },
       [`repos/${REPO}/rulesets?includes_parents=false`]: {
         status: 200,
         data: [{ id: 7, name: "protect-main" }],

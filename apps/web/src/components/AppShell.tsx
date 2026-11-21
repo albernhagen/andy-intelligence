@@ -116,6 +116,8 @@ function navLinks(scope: Scope, pathname: string, section: Section | null): NavI
       icon: SquareKanban,
     },
     { label: "Inbox", to: scopePath(scope, "inbox"), current: section === "inbox", icon: Inbox },
+    // AI-198: under More on a phone (no icon), next to the inbox on desktop.
+    { label: "Work", to: scopePath(scope, "work"), current: section === "work" },
     {
       label: "Dashboards",
       to: scopePath(scope, "dashboards"),
@@ -131,6 +133,11 @@ function navLinks(scope: Scope, pathname: string, section: Section | null): NavI
         label: "Digest",
         to: `/p/${encodeURIComponent(scope.projectId)}/digest`,
         current: /\/digest\/?$/.test(pathname),
+      },
+      {
+        label: "What's new",
+        to: `/p/${encodeURIComponent(scope.projectId)}/whats-new`,
+        current: /\/whats-new\/?$/.test(pathname),
       },
     );
   }

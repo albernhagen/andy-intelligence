@@ -5,6 +5,7 @@ import {
   redirect,
   type RouterHistory,
 } from "@tanstack/react-router";
+import { parseWorkView, type WorkView } from "@andy/domain";
 import { AppShell } from "@/components/AppShell";
 import { loadScope, scopePath } from "@/lib/scope";
 import { BoardPage } from "@/pages/BoardPage";
@@ -14,10 +15,13 @@ import { PickProjectPage } from "@/pages/PickProjectPage";
 import { GitHubCallbackPage, GitHubPage } from "@/pages/GitHubPage";
 import { InboxPage } from "@/pages/InboxPage";
 import { NewProjectPage, ProjectsPage } from "@/pages/ProjectsPage";
+import { ModelsPage } from "@/pages/ModelsPage";
 import { ProjectSettingsPage } from "@/pages/ProjectSettingsPage";
 import { RunnersPage } from "@/pages/RunnersPage";
 import { RunPage } from "@/pages/RunPage";
 import { TicketPage } from "@/pages/TicketPage";
+import { WhatsNewPage } from "@/pages/WhatsNewPage";
+import { WorkPage } from "@/pages/WorkPage";
 
 const rootRoute = createRootRoute({
   component: AppShell,
@@ -28,10 +32,18 @@ const boardRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/p/$projectId",
   component: BoardPage,
-  // The Ready lane's view (AI-37); anything else in the URL reads as queue order.
-  validateSearch: (search: Record<string, unknown>): { sort?: "score" } =>
-    search.sort === "score" ? { sort: "score" } : {},
+  // The Ready lane's view (AI-37) and the work view chip (AI-187); unknown values read as unset.
+  validateSearch: (search: Record<string, unknown>): { sort?: "score"; view?: WorkView } => {
+    const view = parseWorkView(search.view);
+    return { ...(search.sort === "score" && { sort: "score" }), ...(view && { view }) };
+  },
 });
+
+/** The Work list's view; an unknown or missing one reads as unset (the page shows Needs me). */
+function workSearch(search: Record<string, unknown>): { view?: WorkView } {
+  const view = parseWorkView(search.view);
+  return view ? { view } : {};
+}
 
 /** URLs carry the picker's scope (lib/scope.ts): `/p/<project>/…` or `/all/…`. */
 const routeTree = rootRoute.addChildren([
@@ -52,6 +64,13 @@ const routeTree = rootRoute.addChildren([
   }),
   createRoute({ getParentRoute: () => rootRoute, path: "/all/inbox", component: InboxPage }),
   createRoute({ getParentRoute: () => rootRoute, path: "/all/board", component: PickProjectPage }),
+  // Work across projects (AI-198): both scopes; the view chip is in `?view=` (default Needs me).
+  createRoute({
+    getParentRoute: () => rootRoute,
+    path: "/all/work",
+    component: WorkPage,
+    validateSearch: workSearch,
+  }),
   // Dashboards (AI-117): both scopes.
   createRoute({
     getParentRoute: () => rootRoute,
@@ -76,6 +95,12 @@ const routeTree = rootRoute.addChildren([
   }),
   createRoute({
     getParentRoute: () => rootRoute,
+    path: "/p/$projectId/work",
+    component: WorkPage,
+    validateSearch: workSearch,
+  }),
+  createRoute({
+    getParentRoute: () => rootRoute,
     path: "/p/$projectId/settings",
     component: ProjectSettingsPage,
   }),
@@ -83,6 +108,12 @@ const routeTree = rootRoute.addChildren([
     getParentRoute: () => rootRoute,
     path: "/p/$projectId/digest",
     component: DigestPage,
+  }),
+  // What's new (AI-159): project-scoped only, as status is per milestone epic of one project.
+  createRoute({
+    getParentRoute: () => rootRoute,
+    path: "/p/$projectId/whats-new",
+    component: WhatsNewPage,
   }),
   createRoute({
     getParentRoute: () => rootRoute,
@@ -101,6 +132,7 @@ const routeTree = rootRoute.addChildren([
     path: "/settings/runners",
     component: RunnersPage,
   }),
+  createRoute({ getParentRoute: () => rootRoute, path: "/settings/models", component: ModelsPage }),
   createRoute({
     getParentRoute: () => rootRoute,
     path: "/settings/github/callback",
