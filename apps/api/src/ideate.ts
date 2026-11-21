@@ -9,6 +9,7 @@ import {
 } from "@andy/contracts";
 import type { IdeateService, RunService } from "@andy/domain";
 import { actorOf, type AuthEnv } from "./auth";
+import type { RouteModule } from "./services";
 
 /**
  * Ideation (AI-114, ADR-0050): an idea and the ideate procedure's result in; an epic in Ideas
@@ -99,3 +100,6 @@ export function registerIdeateRoutes(
     ),
   );
 }
+
+/** Listed in `api-routes.ts` (AI-145). */
+export const apiRoutes: RouteModule = (app, s) => registerIdeateRoutes(app, s.ideate, s.runs);

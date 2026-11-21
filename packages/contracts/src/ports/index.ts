@@ -624,6 +624,14 @@ export interface CodeHost {
    * Throws when the branch already exists or the host refuses.
    */
   proposeFile(fullName: string, proposal: FileProposal): Promise<ProposedPullRequest | null>;
+  /** The branch's tip commit; null when the branch, the repo or the App's install is missing. */
+  branchSha(fullName: string, branch: string): Promise<string | null>;
+  /**
+   * Creates an `epic/<KEY>` branch at `sha` with the App's identity (AI-122: a night launch's
+   * branch); "exists" when a branch of that name is already there. Throws for any other name or
+   * sha, or when the App isn't installed.
+   */
+  createBranch(fullName: string, branch: string, sha: string): Promise<"created" | "exists">;
 }
 
 // ── CodeHostConnectionStore ──────────────────────────────────────────────────
@@ -736,9 +744,9 @@ export interface Telemetry {
   recordCost(event: CostEvent): void;
 }
 
+export * from "./config-changes";
+export * from "./config-proposals";
 export * from "./digest";
+export * from "./night";
 export * from "./notify-email";
 export * from "./runner";
-export * from "./night";
-export * from "./config-proposals";
-export * from "./config-changes";

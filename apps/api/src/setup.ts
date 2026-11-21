@@ -8,6 +8,8 @@ import {
   type RepoFacts,
 } from "@andy/domain";
 import type { AuthEnv } from "./auth";
+import type { RouteModule } from "./services";
+import { ConnectedCodeHost } from "./github/connection";
 
 /**
  * A project's setup checklist (AI-95: M5.15): the five steps from AI-65, decided by the domain
@@ -106,3 +108,7 @@ export function registerSetupRoutes(
     return c.json(setupChecklist(project, facts), 200);
   });
 }
+
+/** Listed in `api-routes.ts` (AI-145). */
+export const apiRoutes: RouteModule = (app, s) =>
+  registerSetupRoutes(app, s.tracker, s.connection ? new ConnectedCodeHost(s.connection) : null);

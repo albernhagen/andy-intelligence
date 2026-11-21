@@ -38,7 +38,11 @@ export const settingsOf = (p: Project) => ({
   lastDispatch: p.lastDispatch,
 });
 
-export function registerSettingsTools(server: McpServer, tracker: WorkTracker, run: Run): void {
+export function registerSettingsTools(
+  server: McpServer,
+  { tracker }: { tracker: WorkTracker },
+  run: Run,
+): void {
   server.registerTool(
     "get_project_settings",
     {
