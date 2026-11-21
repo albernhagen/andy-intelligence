@@ -9,6 +9,7 @@ import {
   type WorkTracker,
 } from "@andy/contracts";
 
+import type { ProjectReadCache } from "./project-versions";
 import { resolveWorker } from "./worker";
 import { epicOf } from "./overrides";
 
@@ -25,15 +26,24 @@ export const MAX_PR_LOOKUPS = 50;
  * The board's tickets with what each card shows (AI-28: Board v2): open questions, the run in
  * flight, the latest pull request. A fixed number of reads per board (tickets, open questions,
  * active runs) plus one history read per card in `PR_STAGES`, so the UI makes one request, not
- * one per card.
+ * one per card. With the read cache, a poll while nothing changed reads only the project's
+ * version (AI-222).
  */
 export class BoardReader {
   constructor(
     private readonly tracker: WorkTracker,
     private readonly runs: RunStore,
+    /** AI-222: with it, an unchanged board (same project version) is one document read. */
+    private readonly cache: ProjectReadCache | null = null,
   ) {}
 
   async tickets(projectId: string): Promise<BoardTicket[]> {
+    return this.cache
+      ? this.cache.get(projectId, "board", () => this.read(projectId))
+      : this.read(projectId);
+  }
+
+  private async read(projectId: string): Promise<BoardTicket[]> {
     const project = await this.tracker.getProject(projectId);
     if (!project) throw notFound("project", projectId);
     const [tickets, questions, active] = await Promise.all([

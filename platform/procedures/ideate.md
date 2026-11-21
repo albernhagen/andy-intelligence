@@ -29,6 +29,7 @@ The question follows the house format (the same as `refine.md`), for Andy away f
 ## The epic
 
 - `title`: what someone can do when it ships, at most 100 characters.
+- `outcome`: one sentence, at most 300 characters, in Andy's words: what is true when the epic is done. No implementation detail. The roadmap shows it as the epic's summary (ADR-0108).
 - `body`: markdown: the problem and who has it, the proposal in a few sentences, which brief goal it serves, what is out of scope, and a link to the spec path.
 - `acceptanceCriteria`: testable, covering failure cases, in EARS form ("WHEN … the system shall …", "IF … THEN the system shall …").
 - `slices`: candidate tickets, each a title and one line, in build order; refinement cuts the real ones.

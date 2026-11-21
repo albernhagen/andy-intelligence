@@ -1,6 +1,6 @@
 # Threat model: Project context in prompts
 
-Detail on project context (the brief, ADR-0053) that the control plane puts into agent task prompts. Risk register (every `R<n>` id), assets and mitigations: [threat-model.md](threat-model.md). PRs that change this area update this file; the weekly system review edits only the main file.
+Detail on project context (the brief, ADR-0053) that the control plane puts into agent task prompts. Risks: [risks/](risks/), one per id; assets, mitigations: [threat-model.md](threat-model.md). PRs that change this area update this file; the weekly system review edits only the main file.
 
 ## Trust boundaries and entry points
 
