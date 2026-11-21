@@ -147,6 +147,7 @@ const DOMAIN_STATUS = {
   plan_not_decidable: 409,
   not_promotable: 409,
   invalid_reference: 422,
+  invalid_field: 422,
   not_clearable: 409,
   not_acceptable: 409,
   runner_limit: 409,
