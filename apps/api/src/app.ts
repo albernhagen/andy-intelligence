@@ -12,6 +12,7 @@ import {
   type WorkTracker,
   type QuotaStore,
   type DeploymentStore,
+  type MilestoneStore,
   type RoutingConfigStore,
   type NightLaunchStore,
   type ProjectVersions,
@@ -80,6 +81,8 @@ export interface AppDeps {
    * unset) and read by the DORA panel (AI-200, empty when unset).
    */
   deployments?: DeploymentStore;
+  /** Milestones (ADR-0131, AI-302): read by the roadmap (AI-305); without it, no milestones. */
+  milestones?: MilestoneStore;
   /** Model routing (AI-230, AI-238); without it every run takes `DEFAULT_ROUTING`. */
   routing?: RoutingConfigStore;
   /**

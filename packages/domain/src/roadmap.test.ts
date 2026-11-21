@@ -1,4 +1,9 @@
-import { InMemoryWorkTracker, type BoardTicket } from "@andy/contracts";
+import {
+  InMemoryMilestoneStore,
+  InMemoryWorkTracker,
+  type BoardTicket,
+  type Milestone,
+} from "@andy/contracts";
 import { describe, expect, it } from "vitest";
 import {
   MAX_ROADMAP_CHILD_EPICS,
@@ -27,6 +32,7 @@ const card = (n: number, { summary, ...over }: Over = {}, projectId = "ai"): Boa
     upNextRank: null,
     acceptanceCriteria: [],
     outcome: null,
+    milestoneId: null,
     ...over,
     summary: { openQuestions: 0, run: null, pullRequest: null, worker: "agent", ...summary },
   }) as BoardTicket;
@@ -185,5 +191,88 @@ describe("RoadmapReader (AI-193)", () => {
     expect(roadmap.projects[0]!.projectKey).toBe("P100");
     expect(read).toHaveLength(MAX_ROADMAP_PROJECTS);
     expect(roadmap.truncated).toBe(true);
+  });
+});
+
+describe("roadmap by milestone (AI-305)", () => {
+  const ms = (id: string, order: number, status: Milestone["status"] = "approved"): Milestone => ({
+    id,
+    projectId: "ai",
+    name: id.toUpperCase(),
+    outcome: `${id} works`,
+    order,
+    status,
+    createdAt: "2026-11-21T00:00:00.000Z",
+    updatedAt: "2026-11-21T00:00:00.000Z",
+  });
+
+  it("GivenMilestonesWithEpics_WhenBuilt_ThenMilestonesInOrderWithSummedProgressAndEpicKeys", () => {
+    const tickets = [
+      epic(1, { milestoneId: "m2" }),
+      epic(2, { milestoneId: "m1" }),
+      epic(3, { milestoneId: "m1" }),
+      epic(4),
+      under(2, 20, { stage: "done" }),
+      under(3, 30, { stage: "in_progress" }),
+      under(1, 10, { stage: "ready_for_review" }),
+    ];
+
+    const roadmap = buildRoadmap(PROJECT, tickets, [ms("m2", 2, "parked"), ms("m1", 1)]);
+
+    expect(roadmap.milestones.map((m) => [m.id, m.status, m.epicKeys])).toEqual([
+      ["m1", "approved", ["AI-2", "AI-3"]],
+      ["m2", "parked", ["AI-1"]],
+    ]);
+    expect(roadmap.milestones[0]).toMatchObject({
+      name: "M1",
+      outcome: "m1 works",
+      done: false,
+      progress: { done: 1, total: 2 },
+      counts: { inProgress: 1 },
+    });
+    expect(roadmap.noMilestone).toEqual(["AI-4"]);
+    expect(roadmap.epics.map((e) => e.key)).toEqual(["AI-1", "AI-2", "AI-3", "AI-4"]);
+  });
+
+  it.each([
+    ["approved", ["done", "done"], true],
+    ["approved", ["done", "in_progress"], false],
+    ["parked", ["done"], false],
+    ["not_reviewed", ["done"], false],
+  ] as const)("GivenA%sMilestoneWithEpics%j_WhenBuilt_ThenDoneIs%s", (status, stages, expected) => {
+    const tickets = stages.map((stage, i) => epic(i + 1, { stage, milestoneId: "m1" }));
+
+    expect(buildRoadmap(PROJECT, tickets, [ms("m1", 1, status)]).milestones[0]!.done).toBe(
+      expected,
+    );
+  });
+
+  it("GivenAnApprovedMilestoneWithNoEpic_WhenBuilt_ThenItIsNotDone", () => {
+    expect(buildRoadmap(PROJECT, [], [ms("m1", 1)]).milestones[0]!.done).toBe(false);
+  });
+
+  it("GivenAnEpicNamingAMissingMilestone_WhenBuilt_ThenItIsUnderNoMilestone", () => {
+    const roadmap = buildRoadmap(PROJECT, [epic(1, { milestoneId: "gone" })], [ms("m1", 1)]);
+
+    expect(roadmap.noMilestone).toEqual(["AI-1"]);
+    expect(roadmap.milestones[0]!.epicKeys).toEqual([]);
+  });
+
+  it("GivenAMilestoneStore_WhenAProjectIsRead_ThenItsMilestonesAreReadOnce", async () => {
+    const tracker = new InMemoryWorkTracker();
+    await tracker.createProject({ name: "AI", key: "AI" });
+    const store = new InMemoryMilestoneStore();
+    await store.create(ms("m1", 1));
+    let lists = 0;
+    const roadmaps = new RoadmapReader(
+      tracker,
+      { tickets: async () => [epic(1, { milestoneId: "m1" })] },
+      { list: async (id) => (lists++, store.list(id)) },
+    );
+
+    const roadmap = await roadmaps.project("ai");
+
+    expect(roadmap.milestones.map((m) => m.epicKeys)).toEqual([["AI-1"]]);
+    expect(lists).toBe(1);
   });
 });

@@ -461,7 +461,7 @@ export function createServices(raw: AppDeps): Services {
     board,
     // AI-198, AI-193: each project's board through the same read cache as board polls.
     work: new WorkReader(deps.tracker, board),
-    roadmap: new RoadmapReader(deps.tracker, board),
+    roadmap: new RoadmapReader(deps.tracker, board, deps.milestones ?? null),
     whatsNew,
     // AI-295: one reader each for the Dashboards routes and MCP `dashboard`.
     dashboard: new DashboardReader(deps.tracker, deps.runs),

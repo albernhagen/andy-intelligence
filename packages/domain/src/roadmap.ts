@@ -1,7 +1,11 @@
 import {
+  byMilestoneOrder,
   compareRanks,
   notFound,
   type BoardTicket,
+  type Milestone,
+  type MilestoneStatus,
+  type MilestoneStore,
   type Project,
   type Stage,
   type Ticket,
@@ -18,9 +22,12 @@ import { workViews } from "./work-views";
  * and counts of open tickets. Computed on read, never stored; tickets are grouped as the
  * milestone map groups them (`childGroup`). Reads (ADR-0028): each project's board through the
  * board's read cache (ADR-0126), so an unchanged poll reads one version counter per project; no
- * per-ticket agent-task reads (cost stays on the epic panel). The shape is per epic so a
- * milestone level above epics (AI-301: M4.32: Milestones: design) can group these entries
- * without changing it.
+ * per-ticket agent-task reads (cost stays on the epic panel).
+ *
+ * Milestones (AI-305: M4.35, ADR-0131): the project's milestones in order, each with its status,
+ * whether it is done (computed: approved, with every epic Done), progress and counts summed over
+ * its epics, and its epics' keys; epics with no milestone are listed under `noMilestone`. One
+ * milestone-list read per project, capped at 50 (ADR-0028). `epics` keeps its AI-193 shape.
  */
 
 /** Projects one all-projects roadmap reads, first by key; past it the roadmap says `truncated`. */
@@ -67,10 +74,30 @@ export interface RoadmapEpic extends RoadmapEpicFields {
   children: RoadmapChildEpic[];
 }
 
+export interface RoadmapMilestone {
+  id: string;
+  name: string;
+  outcome: string;
+  order: number;
+  /** As stored: `not_reviewed`, `approved` or `parked` (screens dim parked ones). */
+  status: MilestoneStatus;
+  /** Computed, never stored: approved, with at least one epic and every epic Done. */
+  done: boolean;
+  /** Summed over its epics (child epics' tickets included). */
+  progress: { done: number; total: number };
+  counts: RoadmapCounts;
+  /** Its top-level epics' keys in rank order; each is in `epics` unless that list was cut. */
+  epicKeys: string[];
+}
+
 export interface ProjectRoadmap {
   projectId: string;
   projectKey: string;
   projectName: string;
+  /** The project's milestones in roadmap order (`byMilestoneOrder`). */
+  milestones: RoadmapMilestone[];
+  /** Keys of top-level epics with no milestone (or one not found), in rank order. */
+  noMilestone: string[];
   epics: RoadmapEpic[];
   /** Some top-level or child epics were left out (`MAX_ROADMAP_EPICS`, `MAX_ROADMAP_CHILD_EPICS`). */
   truncated: boolean;
@@ -168,22 +195,70 @@ function entry(
   };
 }
 
+const sum = (a: RoadmapCounts, b: RoadmapCounts): RoadmapCounts => ({
+  needsYou: a.needsYou + b.needsYou,
+  inReview: a.inReview + b.inReview,
+  inProgress: a.inProgress + b.inProgress,
+  blocked: a.blocked + b.blocked,
+  notStarted: a.notStarted + b.notStarted,
+});
+const NO_COUNTS: RoadmapCounts = {
+  needsYou: 0,
+  inReview: 0,
+  inProgress: 0,
+  blocked: 0,
+  notStarted: 0,
+};
+
+/** A milestone's row: its epics' roll-ups summed, and done when approved with every epic Done. */
+function milestoneEntry(m: Milestone, epics: readonly RoadmapEpicFields[]): RoadmapMilestone {
+  return {
+    id: m.id,
+    name: m.name,
+    outcome: m.outcome,
+    order: m.order,
+    status: m.status,
+    done: m.status === "approved" && epics.length > 0 && epics.every((e) => e.stage === "done"),
+    progress: {
+      done: epics.reduce((n, e) => n + e.progress.done, 0),
+      total: epics.reduce((n, e) => n + e.progress.total, 0),
+    },
+    counts: epics.reduce((c, e) => sum(c, e.counts), NO_COUNTS),
+    epicKeys: epics.map((e) => e.key),
+  };
+}
+
 /**
- * One project's roadmap from its board tickets. Pure. Top-level epics have no parent, aren't
- * archived and aren't Cancelled; Done ones stay.
+ * One project's roadmap from its board tickets and milestones. Pure. Top-level epics have no
+ * parent, aren't archived and aren't Cancelled; Done ones stay. An epic belongs to the milestone
+ * its `milestoneId` names (only top-level epics hold one, ADR-0131).
  */
 export function buildRoadmap(
   project: Pick<Project, "id" | "key" | "name">,
   tickets: readonly BoardTicket[],
+  milestones: readonly Milestone[] = [],
 ): ProjectRoadmap {
   const byId = new Map(tickets.map((t) => [t.id, t]));
   const top = tickets.filter((t) => listed(t) && t.parentId === null).sort(byRank);
   const cut = { truncated: top.length > MAX_ROADMAP_EPICS };
   const epics = top.slice(0, MAX_ROADMAP_EPICS).map((e) => entry(e, tickets, byId, cut));
+  const ordered = [...milestones].sort(byMilestoneOrder);
+  const known = new Set(ordered.map((m) => m.id));
+  // Every top-level epic counts in its milestone, even one past the `epics` cap.
+  const rolled = top.map((e) => ({ epic: e, fields: fields(e, tickets, byId) }));
   return {
     projectId: project.id,
     projectKey: project.key,
     projectName: project.name,
+    milestones: ordered.map((m) =>
+      milestoneEntry(
+        m,
+        rolled.filter((r) => r.epic.milestoneId === m.id).map((r) => r.fields),
+      ),
+    ),
+    noMilestone: top
+      .filter((e) => e.milestoneId === null || !known.has(e.milestoneId))
+      .map((e) => e.key),
     epics,
     truncated: cut.truncated,
   };
@@ -194,12 +269,22 @@ export class RoadmapReader {
   constructor(
     private readonly tracker: Pick<WorkTracker, "getProject" | "listProjects">,
     private readonly board: BoardSource,
+    /** AI-305: one list read per project; without it every epic is under `noMilestone`. */
+    private readonly milestones: Pick<MilestoneStore, "list"> | null = null,
   ) {}
+
+  private async milestonesOf(projectId: string): Promise<Milestone[]> {
+    return this.milestones ? this.milestones.list(projectId) : [];
+  }
 
   async project(projectId: string): Promise<ProjectRoadmap> {
     const project = await this.tracker.getProject(projectId);
     if (!project) throw notFound("project", projectId);
-    return buildRoadmap(project, await this.board.tickets(projectId));
+    const [tickets, milestones] = await Promise.all([
+      this.board.tickets(projectId),
+      this.milestonesOf(projectId),
+    ]);
+    return buildRoadmap(project, tickets, milestones);
   }
 
   /** `canRead` leaves out projects the caller may not read, before the project cap. */
@@ -208,9 +293,12 @@ export class RoadmapReader {
     const allowed = await Promise.all(all.map((p) => canRead(p.id)));
     const readable = all.filter((_, i) => allowed[i]);
     const projects = readable.slice(0, MAX_ROADMAP_PROJECTS);
-    const boards = await Promise.all(projects.map((p) => this.board.tickets(p.id)));
+    const [boards, milestones] = await Promise.all([
+      Promise.all(projects.map((p) => this.board.tickets(p.id))),
+      Promise.all(projects.map((p) => this.milestonesOf(p.id))),
+    ]);
     return {
-      projects: projects.map((p, i) => buildRoadmap(p, boards[i]!)),
+      projects: projects.map((p, i) => buildRoadmap(p, boards[i]!, milestones[i]!)),
       truncated: readable.length > MAX_ROADMAP_PROJECTS,
     };
   }
