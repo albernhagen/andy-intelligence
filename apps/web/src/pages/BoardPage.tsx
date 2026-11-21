@@ -1,5 +1,5 @@
 import { Fragment, useEffect, useMemo, useRef, useState, type FormEvent } from "react";
-import { Outlet, useNavigate, useParams, useSearch } from "@tanstack/react-router";
+import { Link, Outlet, useNavigate, useParams, useSearch } from "@tanstack/react-router";
 import {
   DndContext,
   KeyboardSensor,
@@ -338,17 +338,27 @@ function Lanes({
                 stage === "backlog" ? (
                   <QuickAdd projectId={projectId} />
                 ) : stage === "ready" ? (
-                  <ReadySortToggle
-                    sorted={sortedByScore}
-                    onToggle={() =>
-                      void navigate({
-                        search: {
-                          sort: sortedByScore ? undefined : "score",
-                          view: view ?? undefined,
-                        },
-                      })
-                    }
-                  />
+                  <div className="flex flex-wrap items-center gap-2">
+                    <ReadySortToggle
+                      sorted={sortedByScore}
+                      onToggle={() =>
+                        void navigate({
+                          search: {
+                            sort: sortedByScore ? undefined : "score",
+                            view: view ?? undefined,
+                          },
+                        })
+                      }
+                    />
+                    {/* The same list as MCP list_ready, with scores, reasons and filters (AI-298). */}
+                    <Link
+                      to="/p/$projectId/ready"
+                      params={{ projectId }}
+                      className="rounded-md px-1 text-xs text-muted-foreground hover:bg-foreground/10"
+                    >
+                      Ranked list
+                    </Link>
+                  </div>
                 ) : undefined
               }
             >

@@ -12,7 +12,7 @@ import {
   type TicketChange,
   type WorkTracker,
 } from "@andy/contracts";
-import { isOwner } from "./permissions";
+import { isOwner, requireCan } from "./permissions";
 
 /**
  * Email for the Needs-you inbox (AI-77, ADR-0060). When a ticket starts to need Andy, it waits
@@ -291,12 +291,14 @@ export class EmailNotifications {
   }
 
   /**
-   * A test email from the settings page. A slot of the daily cap is held while it sends and
-   * given back if the provider refuses (bad key, unverified domain), so only a sent test counts.
+   * A test email: the settings page's Send test and MCP `test_email` (AI-289). Owner only
+   * (`send_test_email`). A slot of the daily cap is held while it sends and given back if the
+   * provider refuses (bad key, unverified domain), so only a sent test counts.
    */
-  async sendTest(): Promise<
-    { result: "sent" } | { result: "cap_reached" } | { result: "failed"; error: string }
-  > {
+  async sendTest(
+    by: EventActor,
+  ): Promise<{ result: "sent" } | { result: "cap_reached" } | { result: "failed"; error: string }> {
+    requireCan(by, "send_test_email", null);
     const now = this.now();
     const allowed = await this.deps.ledger.update((state) => {
       const s = rollDay(state, now);

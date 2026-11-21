@@ -33,4 +33,4 @@ Generated from tickets, never edited here (AI-148). Every ticket sits under a mi
 - M2: Self-hosting: the "Done when" trial (auto-build on), Andy's to start.
 - M3: New UI and MCP: local executor slice 7 (runbook, live proof) needs Andy's Mac (ADR-0089).
 - AI-111: M5.4 needs a second repo.
-- M4 questions, each in its ticket body: AI-126: M4.13: Hallmark trial (how to run it), AI-128: M4.15: Pluggable design skills (build now or move to Later), AI-129: M4.23: First overnight run trial (which epic and budget).
+- M4 questions, each in its ticket body: AI-128: M4.15: Pluggable design skills (build now or move to Later), AI-129: M4.23: First overnight run trial (which epic and budget).

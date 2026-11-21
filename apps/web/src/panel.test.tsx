@@ -185,7 +185,11 @@ describe("one document, edited in place", () => {
 
     await user.click(within(card).getByRole("button", { name: "Yes" }));
     expect(status().textContent).toBe("Waiting for you: 1 question");
-    await user.click(within(card).getByRole("button", { name: "Answer" }));
+    // A per-question submit is outline, not the screen's primary (design.md, AI-298).
+    const submit = within(card).getByRole("button", { name: "Answer" });
+    expect(submit.className).not.toContain("bg-primary");
+    expect(within(card).getByLabelText("Answer").getAttribute("name")).toBe("answer");
+    await user.click(submit);
 
     // Answered and ready, the ticket moves on to Ready (M1.7: Refinement).
     await waitFor(() => expect(status().textContent).toBe("Ready · next in the queue"));

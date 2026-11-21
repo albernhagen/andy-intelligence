@@ -3,6 +3,7 @@ import {
   Assumption,
   EpicOutcome,
   AutoMerge,
+  MergeMode,
   EnvironmentPolicy,
   ProjectSpendCaps,
   BillingType,
@@ -216,6 +217,8 @@ export const ProjectPatch = z.strictObject({
   planApproval: PlanApproval.optional(),
   dailyQuestionCap: Project.shape.dailyQuestionCap.unwrap().optional(),
   autoMerge: AutoMerge.optional(),
+  /** Null clears it back to the `autoMerge` mapping (a revert of the first change). */
+  mergeMode: MergeMode.nullable().optional(),
   ...projectDispatchPatch,
   ...projectNotifyPatch,
   ...projectPlanPatch,
@@ -234,6 +237,7 @@ export const ProjectSettings = ProjectPatch.pick({
   planApproval: true,
   dailyQuestionCap: true,
   autoMerge: true,
+  mergeMode: true,
   runsAtOnce: true,
   paused: true,
   defaultWorker: true,
@@ -248,6 +252,11 @@ export const TicketFilter = z.object({
   stage: Stage.optional(),
   needsAttention: z.boolean().optional(),
   archived: z.boolean().optional(),
+  /**
+   * true: only Up next tickets (Backlog with an `upNextRank`, ADR-0075), read without the rest
+   * of the Backlog (AI-315: dispatch reads only what it uses).
+   */
+  upNext: z.literal(true).optional(),
 });
 export type TicketFilter = z.infer<typeof TicketFilter>;
 

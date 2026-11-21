@@ -300,7 +300,7 @@ describe("EmailNotifications", () => {
       now: () => T0,
     });
     const spy = vi.spyOn(console, "log").mockImplementation(() => {});
-    expect(await n.sendTest()).toEqual({ result: "failed", error: "domain not verified" });
+    expect(await n.sendTest("andy")).toEqual({ result: "failed", error: "domain not verified" });
     expect(await n.sentToday()).toBe(0);
     spy.mockRestore();
   });
@@ -342,7 +342,24 @@ describe("EmailNotifications", () => {
       },
       result: null,
     }));
-    expect(await notifications.sendTest()).toEqual({ result: "cap_reached" });
+    expect(await notifications.sendTest("andy")).toEqual({ result: "cap_reached" });
     expect(sent).toHaveLength(0);
+  });
+
+  it("GivenANonOwner_WhenATestIsSent_ThenForbiddenNothingSentAndNoSlotUsed", async () => {
+    const { notifications, sent } = await setup();
+    await expect(notifications.sendTest("agent:run-1")).rejects.toMatchObject({
+      code: "forbidden",
+    });
+    await expect(notifications.sendTest("system")).rejects.toMatchObject({ code: "forbidden" });
+    expect(sent).toHaveLength(0);
+    expect(await notifications.sentToday()).toBe(0);
+  });
+
+  it("GivenTheOwner_WhenATestIsSent_ThenSentAndCounted", async () => {
+    const { notifications, sent } = await setup();
+    expect(await notifications.sendTest("user:uid-1")).toEqual({ result: "sent" });
+    expect(sent).toHaveLength(1);
+    expect(await notifications.sentToday()).toBe(1);
   });
 });
