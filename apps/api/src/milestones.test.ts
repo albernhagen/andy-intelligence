@@ -100,6 +100,22 @@ describe("milestones over REST and MCP (AI-304 parity)", () => {
     expect((await rest("GET", "/api/projects/ai/milestones")).json).toEqual([]);
   });
 
+  it("GivenAnEmptyEdit_WhenSentOverEach_ThenTheMilestoneIsUnchangedAndNothingIsLogged", async () => {
+    const { rest, mcp } = await setup();
+    const m = (await rest("POST", "/api/projects/ai/milestones", { name: "M4", outcome: "x" }))
+      .json;
+    const viaRest = await rest("PATCH", `/api/projects/ai/milestones/${m.id}`, {});
+    const viaMcp = await mcp("edit_milestone", { project: "AI", milestone: m.id });
+    expect(viaRest.status).toBe(200);
+    expect(viaMcp.isError).toBe(false);
+    expect(viaMcp.data).toEqual(viaRest.json);
+    expect(viaRest.json).toEqual(m);
+    const logged = (await rest("GET", "/api/projects/ai/config-changes")).json.filter(
+      (c: { entity: string }) => c.entity === "milestone",
+    );
+    expect(logged).toHaveLength(1);
+  });
+
   it("GivenAMilestone_WhenEditedOverEach_ThenTheSameFieldsChangeAndARevertUndoesIt", async () => {
     const { rest, mcp } = await setup();
     const m = (await rest("POST", "/api/projects/ai/milestones", { name: "M4", outcome: "x" }))

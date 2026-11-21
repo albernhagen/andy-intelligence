@@ -71,7 +71,7 @@ export function registerMilestoneTools(server: McpServer, deps: ToolDeps, run: R
     "edit_milestone",
     {
       description:
-        "Renames, rewords or reorders a milestone: any of name, outcome, order. Andy only. Logged in the project's change log; revert with revert_settings_change. Set its status with set_milestone_status.",
+        "Renames, rewords or reorders a milestone: any of name, outcome, order. Andy only. Logged in the project's change log; revert with revert_settings_change. Set its status with set_milestone_status. An edit that changes nothing saves and logs nothing.",
       inputSchema: {
         project: ProjectKey,
         milestone: MilestoneId.describe("Milestone id, from list_milestones."),
