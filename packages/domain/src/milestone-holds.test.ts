@@ -19,6 +19,7 @@ const t = (over: Partial<Ticket> & { id: string }): Ticket =>
     parentId: null,
     milestoneId: null,
     stage: "ready",
+    upNextRank: null,
     ...over,
   }) as Ticket;
 
@@ -134,8 +135,16 @@ describe("epic chain reads (AI-306)", () => {
     expect(await ticketMilestoneHold(tr, store, { ...child, stage: "done" })).toBeNull();
     expect(tr.getTicket).not.toHaveBeenCalled();
     expect(await ticketMilestoneHold(tr, store, child)).toBe("Milestone M5: Things is parked");
-    expect(await ticketMilestoneHold(tr, store, { ...child, stage: "backlog" })).toBe(
-      "Milestone M5: Things is parked",
-    );
+    expect(
+      await ticketMilestoneHold(tr, store, { ...child, stage: "backlog", upNextRank: "a" }),
+    ).toBe("Milestone M5: Things is parked");
+  });
+
+  it("GivenAnIdeaInAParkedMilestone_WhenItsStatusHoldIsAsked_ThenNoneIsShown", async () => {
+    const tr = tracker();
+    const store = storeOf(milestone("5", "parked"));
+    const idea = { ...child, stage: "backlog" as const, upNextRank: null };
+    expect(await ticketMilestoneHold(tr, store, idea)).toBeNull();
+    expect(tr.getTicket).not.toHaveBeenCalled();
   });
 });

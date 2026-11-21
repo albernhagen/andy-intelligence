@@ -7,5 +7,5 @@ ADR-0131: Milestones, rule row: refine, build and night launch start a ticket on
 - New dispatch decision `milestone_held`, used when held tickets are the only reason nothing started. The web label reads "Ready tickets wait: their milestone isn't approved".
 - Refine reads each Up next ticket's epics (at most two `getTicket` reads, shared across tickets) before its own checks, so a held ticket is never flagged by refine.
 - A night launch gets the problem `milestone_not_approved`, with the reason as its message. The launch already read the project's tickets, so this costs no extra ticket reads.
-- MCP `status` shows "Waiting: Milestone <name> is parked" (or "is not reviewed") for a held ticket in Backlog or Ready. Screens follow in AI-311: M4.38.
+- MCP `status` shows "Waiting: Milestone <name> is parked" (or "is not reviewed") for a held ticket in Up next or Ready (an Idea keeps its Backlog line). Screens follow in AI-311: M4.38.
 - Rollout: project AI has no milestones until AI-307: M4.37, so merging this changes nothing. Nothing writes `Ticket.milestoneId` until AI-304: M4.34, so the tests set it on the fake's stored ticket.

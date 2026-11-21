@@ -4,7 +4,7 @@ Refine, build and night-launch dispatch start a ticket only when its milestone i
 
 | Where                             | What it shows                                                                                                               |
 | --------------------------------- | --------------------------------------------------------------------------------------------------------------------------- |
-| Ticket status line (MCP `status`) | "Waiting: Milestone M6: Dev to prod is parked" (or "is not reviewed")                                                       |
+| Ticket status line (MCP `status`) | In Up next or Ready: "Waiting: Milestone M6: Dev to prod is parked" (or "is not reviewed")                                  |
 | Project dispatch decision         | `milestone_held` when that is the only reason no Ready ticket started: "Ready tickets wait: their milestone isn't approved" |
 | Night launch                      | refused, with the same reason in its list of problems                                                                       |
 

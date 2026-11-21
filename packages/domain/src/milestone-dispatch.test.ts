@@ -197,6 +197,18 @@ describe("milestone holds at dispatch (AI-306)", () => {
       expect((await refiner().next(projectId))?.ticketId).toBe(ticket.id);
     });
 
+    it("GivenManyUpNextTicketsUnderAFewEpics_WhenNext_ThenEachEpicAndMilestoneIsReadOnce", async () => {
+      await milestone("6", "parked");
+      const epics = [await epicIn("6"), await epicIn("6")];
+      for (let i = 0; i < 8; i++) await upNext(epics[i % 2]!.id);
+      const getTicket = vi.spyOn(tracker, "getTicket");
+      const get = vi.spyOn(milestones, "get");
+      expect(await refiner().next(projectId)).toBeNull();
+      // AI-315: reads grow with the epics, not the tickets; held tickets cost no question reads.
+      expect(getTicket).toHaveBeenCalledTimes(2);
+      expect(get).toHaveBeenCalledTimes(1);
+    });
+
     it("GivenAnUpNextTicketWithNoMilestone_WhenNext_ThenRefineStartsAsBefore", async () => {
       const ticket = await upNext(null);
       expect((await refiner().next(projectId))?.ticketId).toBe(ticket.id);

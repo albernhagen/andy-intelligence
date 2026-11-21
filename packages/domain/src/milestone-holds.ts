@@ -91,8 +91,8 @@ export async function epicChainOf(
 }
 
 /**
- * Why `ticket` waits on its milestone, for its status line (AI-306): only in Backlog (Up next
- * refines it) and Ready, else null. Reads at most its two epics (none already in `known`) and
+ * Why `ticket` waits on its milestone, for its status line (AI-306): only in Ready and in Up
+ * next (refine takes it), else null. Reads at most its two epics (none already in `known`) and
  * its milestone.
  */
 export async function ticketMilestoneHold(
@@ -101,7 +101,10 @@ export async function ticketMilestoneHold(
   ticket: Ticket,
   known: readonly Ticket[] = [],
 ): Promise<string | null> {
-  if (ticket.stage !== "backlog" && ticket.stage !== "ready") return null;
+  // Ideas (Backlog, not in Up next) never dispatch, so their line stays "Backlog · …".
+  const dispatches =
+    ticket.stage === "ready" || (ticket.stage === "backlog" && ticket.upNextRank !== null);
+  if (!dispatches) return null;
   const chain = [...known, ...(await epicChainOf(tracker, ticket, known))];
   return new MilestoneHolds(milestones, ticket.projectId).reasonFor(ticket, chain);
 }
