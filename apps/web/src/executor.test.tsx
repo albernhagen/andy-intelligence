@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { screen } from "@testing-library/react";
-import { readyStory, renderApp } from "@/test/harness";
+import { PAGE_LOAD, readyStory, renderApp } from "@/test/harness";
 
 /** AI-79 (ADR-0089 slice 2): where a ticket's runs execute, in the story panel and settings. */
 
@@ -20,7 +20,7 @@ describe("executor controls", () => {
       to: "/p/$projectId/t/$ticketRef",
       params: { projectId: "ai", ticketRef: ticket.key },
     });
-    expect(await screen.findByText("GitHub Actions")).toBeTruthy();
+    expect(await screen.findByText("GitHub Actions", {}, PAGE_LOAD)).toBeTruthy();
     await harness.user.click(await screen.findByRole("button", { name: "Run locally" }));
 
     await screen.findByRole("button", { name: "Run on Actions" });
@@ -36,7 +36,7 @@ describe("executor controls", () => {
 
     await harness.router.navigate({ to: "/p/$projectId/settings", params: { projectId: "ai" } });
     await harness.user.selectOptions(
-      await screen.findByRole("combobox", { name: "Default executor" }),
+      await screen.findByRole("combobox", { name: "Default executor" }, PAGE_LOAD),
       "local",
     );
 
