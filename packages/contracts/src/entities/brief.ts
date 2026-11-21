@@ -8,6 +8,11 @@ import { z } from "zod";
 
 /** The brief's word budget (`docs/product/brief.md` in `context-budget.json`). */
 export const BRIEF_MAX_WORDS = 800;
+/**
+ * Characters of brief text, as encoded, an agent task's prompt carries at most (AI-112): a
+ * rendered brief at its word budget fits with room to spare; a longer one is cut and marked.
+ */
+export const BRIEF_CONTEXT_MAX_CHARS = 12_000;
 
 const Answer = z.string().trim().min(1).max(2000);
 const ListItem = z.string().trim().min(1).max(300);
