@@ -19,6 +19,7 @@ Step 1 of AI-285: Web UI and MCP parity: every action in both, enforced by a tes
 | In flight; work across projects; digest                  | `GET …/in-flight`, `GET /work`, `GET …/digest`                                  | `list_in_flight`, `list_work`, `digest`                                                                                    |
 | Project list; settings (except below)                    | `GET /projects`, `GET`/`PATCH /projects/:id`                                    | `list_projects`, `get_project_settings`, ten `set_*` tools, `set_spend_caps`                                               |
 | Project setup checklist | `GET …/setup` | `project_setup` (AI-287) |
+| Create a project | `POST /projects` | `create_project` (AI-297) |
 | Settings changes: list, revert                           | `GET …/config-changes`, `POST …/config-changes/:id/revert`                      | `list_settings_changes`, `revert_settings_change`                                                                          |
 | Config proposals: list, accept, reject, sweep            | `GET /config-changes`, `POST …/accept`, `…/reject`, `…/config-proposals/sweep`  | `list_config_changes`, `accept_config_change`, `reject_config_change`, `sweep_config_proposals`                            |
 | Pause, runs at once                                      | `PATCH /projects/:id`                                                           | `set_paused`, `set_runs_at_once`                                                                                           |
@@ -41,7 +42,6 @@ Step 1 of AI-285: Web UI and MCP parity: every action in both, enforced by a tes
 | AI-294: Parity: list and revoke runners over MCP                       | UI-only   | S    | `GET /runners`, revoke → two tools (register stays app-only) |
 | AI-295: Parity: dashboards and DORA metrics over MCP                   | UI-only   | S    | `GET /dashboard`, `…/dashboard`, `…/dora` → `dashboard`      |
 | AI-296: Parity: the board, every stage, over MCP                       | UI-only   | S    | `GET …/board` → `board`                                      |
-| AI-297: Parity: create a project over MCP                              | UI-only   | S    | `POST /projects` → `create_project`                          |
 | AI-298: Parity: ranked Ready list in the web UI                        | MCP-only  | S    | Built: `GET …/ready` and the Ready view (now matched)        |
 | AI-299: Parity: ideate from the web UI                                 | MCP-only  | M    | `ideate` (route exists, web never calls it) → a form         |
 | AI-300: Parity: registry test that every action has a route and a tool | test      | M    | Step 2: fails when a new action ships in one side only       |

@@ -73,6 +73,7 @@ export const CROSS_PROJECT_TOOLS: Readonly<Record<string, string>> = {
   accept_config_change: "Check the change's project.",
   answer_question: "Check the question's ticket's project.",
   clear_quota_idle: "Subscription quota: owner only.",
+  create_project: "Creates a project: owner only (`register_project`, enforced); no project yet.",
   get_quota: "Subscription quota: owner only.",
   get_routing: "Without `project`, the global routing: nothing to filter.",
   list_config_changes: "Without `project`, every project's changes: keep readable projects.",

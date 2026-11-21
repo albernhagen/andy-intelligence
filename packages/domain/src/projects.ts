@@ -184,7 +184,13 @@ export class ProjectService {
     }
   }
 
-  async register(input: NewProject): Promise<Project> {
+  /**
+   * Creates a project: owner only (`register_project`), the same rule for `POST /api/projects`
+   * and MCP `create_project` (AI-297). It only validates repos and stores the project: no GitHub
+   * App flow, brief or agent task starts here.
+   */
+  async register(input: NewProject, by: EventActor): Promise<Project> {
+    requireCan(by, "register_project", null);
     const parsed = NewProject.parse(input);
     const owners = new Map<string, string>();
     for (const p of await this.tracker.listProjects()) {
