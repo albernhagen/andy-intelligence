@@ -2,6 +2,7 @@ import { createRoute, z, type OpenAPIHono } from "@hono/zod-openapi";
 import { IdeateSubmission, ProposedPullRequest, Question, Ticket } from "@andy/contracts";
 import type { IdeateService } from "@andy/domain";
 import { actorOf, type AuthEnv } from "./auth";
+import type { RouteModule } from "./services";
 
 /**
  * Ideation (AI-114, ADR-0050): an idea and the ideate procedure's result in; an epic in Ideas
@@ -56,3 +57,6 @@ export function registerIdeateRoutes(app: OpenAPIHono<AuthEnv>, ideate: IdeateSe
     ),
   );
 }
+
+/** Listed in `api-routes.ts` (AI-145). */
+export const apiRoutes: RouteModule = (app, s) => registerIdeateRoutes(app, s.ideate);

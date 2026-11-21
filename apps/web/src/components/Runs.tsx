@@ -73,7 +73,7 @@ export function RunItem({
   const log = httpsHref(run.links.executorRun);
   const pr = httpsHref(run.links.pullRequest);
   return (
-    <li className="space-y-1 rounded-md border border-border p-3 text-sm">
+    <li className="space-y-1 rounded-md border border-border p-3 text-sm wrap-anywhere">
       <p className="flex flex-wrap items-center gap-2">
         <Badge variant={STATUS_VARIANT[run.status]}>{run.status}</Badge>
         {/* Opens the agent task's own page (AI-101); styled as the label it replaced. */}

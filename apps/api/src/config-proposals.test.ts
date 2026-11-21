@@ -10,6 +10,7 @@ import {
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { createApp } from "./app";
 import type { TokenVerifier } from "./auth";
+import { ownerOnlyAccess } from "./project-access";
 
 /** ADR-0097 (AI-100): sweep → pending ConfigChange → list → Andy rejects; nothing applied. */
 
@@ -40,6 +41,7 @@ async function setup(options: { store?: boolean; findings?: boolean } = {}) {
   const changes = new InMemoryConfigChangeStore();
   const findings = new InMemoryReviewFindingSource();
   const app = createApp({
+    projectAccess: ownerOnlyAccess(),
     verifier,
     allowedEmails: new Set(["andy@example.com"]),
     version: "test",

@@ -1,25 +1,14 @@
-import type { OAuthGrantStore, WorkTracker } from "@andy/contracts";
-import type {
-  BriefService,
-  IdeateService,
-  ProjectPlanService,
-  DigestReader,
-  EmailNotifications,
-  ProjectService,
-  QuotaClearer,
-  ConfigProposals,
-  RunService,
-  TicketService,
-} from "@andy/domain";
+import type { OAuthGrantStore } from "@andy/contracts";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { WebStandardStreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js";
 import type { Hono, MiddlewareHandler } from "hono";
 import { bodyLimit } from "hono/body-limit";
 import { actorOf, type AuthEnv } from "../auth";
+import type { ProjectAccess } from "../project-access";
 import { mcpUrls } from "./oauth";
 import type { FixedWindowLimiter } from "./rate-limit";
 import { hashToken, isTokenShaped } from "./tokens";
-import { registerTools } from "./tools";
+import { registerTools, type ToolServices } from "./tools";
 
 const MCP_BODY_BYTES = 256 * 1024;
 
@@ -30,19 +19,10 @@ export interface McpEndpointDeps {
   version: string;
   /** Caps grant-store lookups callers can trigger without a valid token (ADR-0028). */
   lookups: FixedWindowLimiter;
-  tracker: WorkTracker;
-  service: TicketService;
-  runs: RunService;
-  projects: ProjectService;
-  digest: DigestReader;
-  /** Needs-you email (AI-77); null: not configured. */
-  notifyEmail: EmailNotifications | null;
-  quota: QuotaClearer;
-  brief: BriefService;
-  ideate: IdeateService;
-  plans: ProjectPlanService;
-  /** Config proposals (ADR-0097); null: the store isn't configured, so no tools. */
-  configProposals: ConfigProposals | null;
+  /** The app's shared services: every tool call uses these (AI-145). */
+  services: ToolServices;
+  /** The app's project-access check (AI-252: M8.3), the same one `/api` uses. */
+  projectAccess: ProjectAccess;
 }
 
 /**
@@ -92,19 +72,10 @@ export function registerMcpEndpoint(app: Hono<AuthEnv>, deps: McpEndpointDeps) {
     const identity = c.get("identity");
     const server = new McpServer({ name: "andy-intelligence", version: deps.version });
     registerTools(server, {
-      tracker: deps.tracker,
-      service: deps.service,
-      runs: deps.runs,
-      projects: deps.projects,
-      digest: deps.digest,
-      notifyEmail: deps.notifyEmail,
-      quota: deps.quota,
-      brief: deps.brief,
-      ideate: deps.ideate,
-      plans: deps.plans,
-      configProposals: deps.configProposals,
+      ...deps.services,
       email: identity.email,
       actor: actorOf(identity),
+      projectAccess: deps.projectAccess,
     });
     const transport = new WebStandardStreamableHTTPServerTransport({
       sessionIdGenerator: undefined,

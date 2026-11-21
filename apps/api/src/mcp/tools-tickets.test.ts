@@ -17,6 +17,7 @@ import { ClientMetadataResolver } from "./client-metadata";
 import type { ToolDeps } from "./tools";
 import { registerTicketTools } from "./tools-tickets";
 import { hashToken, newToken } from "./tokens";
+import { ownerOnlyAccess } from "../project-access";
 
 const PUBLIC_URL = "https://control-plane.example.run.app";
 const RESOURCE = `${PUBLIC_URL}/mcp`;
@@ -42,6 +43,7 @@ async function setup() {
   const runs = new InMemoryRunStore();
   const grants = new InMemoryOAuthGrantStore();
   const app = createApp({
+    projectAccess: ownerOnlyAccess(),
     verifier,
     allowedEmails: parseAllowList("andy@example.com"),
     version: "test",

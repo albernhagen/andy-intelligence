@@ -1,6 +1,7 @@
 import type { Firestore } from "@google-cloud/firestore";
 import {
   CONFIG_CHANGE_LIST_MAX,
+  GLOBAL_ENTITY_ID,
   ConfigChange,
   ProposalLookupCursor,
   WorkTrackerError,
@@ -81,9 +82,42 @@ export class FirestoreConfigChangeStore implements ConfigChangeStore {
    * the read guard is far off; reaching it logs an error, as the newest may be missed.
    */
   async listForProject(projectId: string, limit = CONFIG_CHANGE_LIST_MAX): Promise<ConfigChange[]> {
+    // Settings and routing changes (AI-239): one equality query each, merged in memory.
+    const snaps = await Promise.all(
+      ["project", "routing"].map((entity) =>
+        this.changes()
+          .where("entity", "==", entity)
+          .where("entityId", "==", projectId)
+          .limit(CONFIG_CHANGE_LOG_READ_MAX)
+          .get(),
+      ),
+    );
+    const read = snaps.reduce((n, s) => n + s.size, 0);
+    if (snaps.some((s) => s.size >= CONFIG_CHANGE_LOG_READ_MAX)) {
+      console.error(
+        JSON.stringify({
+          severity: "ERROR",
+          message: "config changes reached the read guard; the newest may be missing",
+          component: "config-change-store",
+          projectId,
+          read,
+        }),
+      );
+    }
+    return snaps
+      .flatMap((s) => s.docs.map((d) => d.data()))
+      .sort(newestFirst)
+      .slice(0, Math.min(limit, CONFIG_CHANGE_LIST_MAX));
+  }
+
+  /**
+   * AI-275: one entity's global changes. Equality filters only, sorted in memory (no composite
+   * index); the same read guard as `listForProject` (ADR-0126: bounded reads).
+   */
+  async listGlobal(entity: string, limit = CONFIG_CHANGE_LIST_MAX): Promise<ConfigChange[]> {
     const snap = await this.changes()
-      .where("entity", "==", "project")
-      .where("entityId", "==", projectId)
+      .where("entity", "==", entity)
+      .where("entityId", "==", GLOBAL_ENTITY_ID)
       .limit(CONFIG_CHANGE_LOG_READ_MAX)
       .get();
     if (snap.size >= CONFIG_CHANGE_LOG_READ_MAX) {
@@ -92,7 +126,7 @@ export class FirestoreConfigChangeStore implements ConfigChangeStore {
           severity: "ERROR",
           message: "config changes reached the read guard; the newest may be missing",
           component: "config-change-store",
-          projectId,
+          entity,
           read: snap.size,
         }),
       );
@@ -101,6 +135,27 @@ export class FirestoreConfigChangeStore implements ConfigChangeStore {
       .map((d) => d.data())
       .sort(newestFirst)
       .slice(0, Math.min(limit, CONFIG_CHANGE_LIST_MAX));
+  }
+
+  /** M4.12: in a transaction, so two reverts can't both mark it. */
+  async markReverted(id: string, by: string, at: string): Promise<ConfigChange> {
+    const ref = this.changes().doc(id);
+    return this.db.runTransaction(async (tx) => {
+      const snap = await tx.get(ref);
+      const current = snap.exists ? snap.data() : undefined;
+      if (!current) throw new WorkTrackerError("not_found", `config change ${id} not found`);
+      if (current.status !== "applied") {
+        throw new WorkTrackerError("conflict", `config change ${id} is ${current.status}`);
+      }
+      const reverted = ConfigChange.parse({
+        ...current,
+        status: "reverted",
+        decidedBy: by,
+        decidedAt: at,
+      });
+      tx.set(ref, reverted);
+      return reverted;
+    });
   }
 
   async get(id: string): Promise<ConfigChange | null> {
