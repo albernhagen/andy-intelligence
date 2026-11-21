@@ -780,7 +780,7 @@ export class InMemoryEvaluator implements Evaluator {
     };
   }
 }
+export * from "./config-proposals";
+export * from "./night";
 export * from "./notify-email";
 export * from "./runner";
-export * from "./night";
-export * from "./config-proposals";

@@ -110,7 +110,7 @@ Run watchdog (M1.6b: Claude Code executor: watchdog + retry): on when `PUBLIC_UR
 
 Needs-you email (AI-77): on when `RESEND_API_KEY`, `EMAIL_FROM` and `EMAIL_TO` are set (Terraform, with `email_enabled`); else off, logged once. Flushes ride the `run-watchdog` queue. Setup: [`docs/runbooks/email-notifications.md`](docs/runbooks/email-notifications.md).
 
-MCP tools live in `apps/api/src/mcp/tools.ts` and call the same `TicketService` as the REST API; `archive_ticket` hides Done or Cancelled tickets from board, inbox and counts.
+Each MCP tool module (`apps/api/src/mcp/tools-*.ts`) has one sorted line in `tool-groups.ts`; each route module exports `apiRoutes` or `publicRoutes`, one sorted line in `api-routes.ts` or `public-routes.ts` (AI-145). Tools call the same `TicketService` as the REST API.
 
 GitHub (ADR-0043: GitHub App setup from the UI) is on when `PUBLIC_URL` is set: connect it from `/settings/github`. The App's key and webhook secret live in Secret Manager (written by the API, read at runtime); CI jobs get repo tokens from `POST /github/token` with their Actions OIDC token. Locally without `PUBLIC_URL`, repos on projects are only format-checked. Setup: [`docs/runbooks/github-app.md`](docs/runbooks/github-app.md).
 
@@ -130,7 +130,7 @@ Design rules: [`apps/web/design.md`](apps/web/design.md). One header on every sc
 | `/p/:projectId`                               | Board: lanes with status on cards, quick add, drag to reorder or move                                                         |
 | `/p/:projectId/t/:ticketRef`                  | Ticket detail (ref = key, e.g. `AI-2`): edit, Definition of Ready, moves, agent tasks, questions, history                     |
 
-- API client: `openapi-fetch` typed by `apps/web/src/lib/api.gen.ts`, generated from the API's OpenAPI document. After changing an API route, run `pnpm --filter @andy/web gen:api` and commit the file; a test fails while it is stale.
+- API client: `openapi-fetch` typed by `apps/web/src/lib/api.gen.ts`, generated (not committed) by `pnpm typecheck` or `pnpm --filter @andy/web gen:api`.
 - Tests (`apps/web/src/**/*.test.tsx`, jsdom) render the UI against the real API in-process (`createApp` + fakes), so they also exercise auth and the ticket rules.
 - Screenshot checks (`apps/web/e2e/`, Playwright): shell, board, story panel and a busy inbox against the API over seeded fakes. CI job `ui-screenshots` fails on a diff and uploads the actual images. Stored images are Linux renders:
 
