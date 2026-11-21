@@ -23,6 +23,7 @@ Step 1 of AI-285: Web UI and MCP parity: every action in both, enforced by a tes
 | Project list; settings (except below)                    | `GET /projects`, `GET`/`PATCH /projects/:id`                                    | `list_projects`, `get_project_settings`, the `set_*` tools, `set_spend_caps`                                               |
 | Project setup checklist | `GET …/setup` | `project_setup` (AI-287) |
 | The board, every stage | `GET …/board` | `board` (AI-296) |
+| Roadmap of milestones; milestone map | `GET /roadmap`, `…/roadmap` (AI-202 screen) | `roadmap`; `milestone_map` (MCP only) |
 | Create a project | `POST /projects` | `create_project` (AI-297) |
 | Settings changes: list, revert                           | `GET …/config-changes`, `POST …/config-changes/:id/revert`                      | `list_settings_changes`, `revert_settings_change`                                                                          |
 | Config proposals: list, accept, reject, sweep            | `GET /config-changes`, `POST …/accept`, `…/reject`, `…/config-proposals/sweep`  | `list_config_changes`, `accept_config_change`, `reject_config_change`, `sweep_config_proposals`                            |
@@ -56,7 +57,6 @@ Step 1 of AI-285: Web UI and MCP parity: every action in both, enforced by a tes
 | --------------------------- | -------------------------- | ------------------------------------------------------------------------------------------------- |
 | Merge a gated PR            | Neither (Andy uses GitHub) | AI-220: Merge modes: coordinator sessions merge through MCP merge_pr; the web links to GitHub     |
 | What's new (release notes)  | Neither                    | AI-159: What's new (page and `whats_new` tool; PR #234 open)                                      |
-| Roadmap; milestone map | API and MCP `roadmap` by milestone (AI-193, AI-305); MCP `milestone_map` | The screen: AI-202: M4.26: Roadmap screen |
 | Approve or park a milestone | Neither                    | ADR-0131 (in design): no ticket here                                                              |
 
 ## Parked (no tickets)

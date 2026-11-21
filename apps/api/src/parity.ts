@@ -240,7 +240,7 @@ export const PARITY: readonly ParityEntry[] = [
     action: "Roadmap; milestone map",
     routes: ["GET /api/roadmap", `GET ${P}/roadmap`, `GET ${P}/milestone-map`],
     tools: ["roadmap", "milestone_map"],
-    note: "Both return milestones in order with their epics, and No milestone (AI-305).",
+    note: "Both return milestones in order with their epics, and No milestone (AI-305); the web Roadmap screen (AI-202) shows it.",
   },
   {
     action: "What's new",
