@@ -82,6 +82,7 @@ export function matchesTicketFilter(ticket: Ticket, filter: TicketFilter): boole
   return (
     (filter.stage === undefined || ticket.stage === filter.stage) &&
     (filter.needsAttention === undefined || ticket.needsAttention === filter.needsAttention) &&
-    (filter.archived === undefined || ticket.archived === filter.archived)
+    (filter.archived === undefined || ticket.archived === filter.archived) &&
+    (!filter.upNext || (ticket.stage === "backlog" && ticket.upNextRank != null))
   );
 }

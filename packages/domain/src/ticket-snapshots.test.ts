@@ -99,6 +99,7 @@ describe("TicketSnapshots (AI-317)", () => {
       { stage: { to: "done", forced: true, reason: null } },
       "andy",
     );
+    await s.raw.updateTicket("ai", s.made[3]!.id, { fields: { upNextRank: "0001" } }, "andy");
     const all = await s.raw.listTickets("ai");
     for (const filter of [
       {},
@@ -107,6 +108,7 @@ describe("TicketSnapshots (AI-317)", () => {
       { needsAttention: true },
       { stage: "done" as const },
       { stage: "backlog" as const, archived: false },
+      { upNext: true as const },
     ]) {
       expect(all.filter((t) => matchesTicketFilter(t, filter))).toEqual(
         await s.raw.listTickets("ai", filter),
