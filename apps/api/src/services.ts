@@ -29,6 +29,7 @@ import {
   MorningSteps,
   ProjectReadCache,
   TicketSnapshots,
+  ProjectTickets,
   RoutingSettings,
   GlobalSpendCaps,
   SpendAlerts,
@@ -154,6 +155,8 @@ export function createServices(raw: AppDeps): Services {
   const readCache = versions ? new ProjectReadCache(versions) : null;
   // AI-317: the board and ticket list refresh from changed tickets, not the whole project.
   const snapshots = readCache ? new TicketSnapshots(deps.tracker) : null;
+  // AI-318: the readers that need every ticket read them through the same snapshots.
+  const tickets = new ProjectTickets(deps.tracker, versions ?? null, snapshots);
   // Board reads served through the read cache: board polls, work lists and roadmaps (ADR-0126).
   const board = new BoardReader(deps.tracker, deps.runs, readCache, snapshots);
 
@@ -380,7 +383,7 @@ export function createServices(raw: AppDeps): Services {
       return lowestThresholds("claude-sub", routings, CLAUDE_SUB_THRESHOLDS);
     },
   );
-  const digest = new DigestReader(deps.tracker, deps.runs, deps.quota ?? null, now);
+  const digest = new DigestReader(deps.tracker, deps.runs, deps.quota ?? null, now, tickets);
   const brief = new BriefService(
     deps.tracker,
     connection ? new ConnectedCodeHost(connection) : null,
@@ -407,7 +410,9 @@ export function createServices(raw: AppDeps): Services {
       )
     : null;
   // AI-159: the What's new read; absent without a release-note store (route and tool both).
-  const whatsNew = deps.releaseNotes ? new WhatsNewReader(deps.tracker, deps.releaseNotes) : null;
+  const whatsNew = deps.releaseNotes
+    ? new WhatsNewReader(deps.tracker, deps.releaseNotes, tickets)
+    : null;
   // AI-239: routing settings; each save is logged when the change log is configured.
   const routing = deps.routing
     ? new RoutingSettings(deps.routing, deps.tracker, deps.configChanges ?? null, now)
@@ -445,6 +450,7 @@ export function createServices(raw: AppDeps): Services {
     night,
     readCache,
     snapshots,
+    tickets,
     setup: new SetupChecklistReader(
       deps.tracker,
       connection ? new ConnectedCodeHost(connection) : null,
@@ -464,7 +470,7 @@ export function createServices(raw: AppDeps): Services {
     roadmap: new RoadmapReader(deps.tracker, board),
     whatsNew,
     // AI-295: one reader each for the Dashboards routes and MCP `dashboard`.
-    dashboard: new DashboardReader(deps.tracker, deps.runs),
+    dashboard: new DashboardReader(deps.tracker, deps.runs, tickets),
     dora: new DoraReader(deps.tracker, deps.deployments ?? null, now),
     publicUrl: deps.mcp?.publicUrl ?? null,
   };
