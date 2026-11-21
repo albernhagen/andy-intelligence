@@ -7,9 +7,15 @@ import {
   SecretManagerVersions,
   FirestoreOAuthGrantStore,
   FirestoreQuotaStore,
+  FirestoreDeploymentStore,
+  FirestoreRoutingConfigStore,
+  FirestoreSpendCapsStore,
   FirestoreNightLaunchStore,
+  FirestoreProjectVersions,
   FirestoreRunStore,
   FirestoreRunnerStore,
+  FirestoreSpendLedger,
+  FirestoreSpendNoticeLedger,
   FirestoreWorkTracker,
   CloudTasksWatchdogQueue,
   CloudTasksNotifyFlushQueue,
@@ -21,6 +27,7 @@ import { parseAllowList } from "./auth";
 import { firebaseVerifier } from "./firebase";
 import { ClientMetadataResolver } from "./mcp";
 import { ResendNotifier, emailConfigFromEnv } from "./notifier-email";
+import { ownerOnlyAccess } from "./project-access";
 
 function requireEnv(name: string): string {
   const value = process.env[name];
@@ -72,6 +79,7 @@ async function main() {
       : undefined;
 
   const app = createApp({
+    projectAccess: ownerOnlyAccess(),
     email,
     verifier: firebaseVerifier(projectId),
     allowedEmails,
@@ -86,6 +94,12 @@ async function main() {
     runners: new FirestoreRunnerStore(db),
     quota: new FirestoreQuotaStore(db),
     nightLaunches: new FirestoreNightLaunchStore(db),
+    projectVersions: new FirestoreProjectVersions(db),
+    deployments: new FirestoreDeploymentStore(db),
+    routing: new FirestoreRoutingConfigStore(db),
+    spendCapsStore: new FirestoreSpendCapsStore(db),
+    spendLedger: new FirestoreSpendLedger(db),
+    spendNotices: new FirestoreSpendNoticeLedger(db),
     configChanges: new FirestoreConfigChangeStore(db),
     // Serve only the public URL's host; the run.app URLs answer /health alone (ADR-0044).
     publicHost: publicUrl ? new URL(publicUrl).host : undefined,

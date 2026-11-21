@@ -1,4 +1,5 @@
 import {
+  ProviderKey,
   WorkTrackerError,
   type DispatchDecision,
   type DispatchIdleReason,
@@ -21,9 +22,10 @@ import { isInFlight, mayDispatch, waitsForSlot, wasDispatched } from "./dispatch
 import { blockingRun, editingRuns } from "./dispatch-conflicts";
 import { checkDor } from "./dor";
 import { MAX_PLAN_RUNS_PER_TICKET, planRequired } from "./plans";
-import { quotaStatus, readingsForDispatch } from "./quota";
+import { dispatchQuotaLevel, subscriptionLevel } from "./route-fallback";
+import type { EffectiveRouting } from "./route-resolver";
 import { blockersDoneAt, replanNote, staleBlocker, writtenPlan } from "./replan";
-import type { RunService } from "./runs";
+import { PROVIDER_BILLING, type RouteFallback, type RunService } from "./runs";
 import { isDispatchable } from "./worker";
 import { epicOf, withEpicOverrides } from "./overrides";
 import { ACTIONS_ROUTE, routeTakes, type DispatchRoute } from "./executor";
@@ -36,6 +38,7 @@ import {
   type NightLimit,
   type NightUsage,
 } from "./night-budget";
+import type { MorningPrOpener } from "./night-merge";
 
 /** The project's active night launch as this dispatch call found it. */
 interface NightState {
@@ -83,6 +86,8 @@ export class BuildDispatcher {
     private readonly quota: QuotaStore | null = null,
     /** Null when night launches aren't kept: no ticket is then held back by a night budget. */
     private readonly nights: NightLaunchStore | null = null,
+    /** Opens the morning PR once a launch ends here (AI-124); null: none opens. */
+    private readonly morning: MorningPrOpener | null = null,
   ) {}
 
   /** Starts waiting builds in the project up to the caps; the first run, or null. Never throws. */
@@ -132,7 +137,11 @@ export class BuildDispatcher {
     const runnerPresent = local || (await this.runs.runnerPresent(projectId));
     const tickets = await this.tracker.listTickets(projectId, { archived: false });
     const prsWaiting = await this.prsWaiting(tickets);
-    const quotaLevel = await this.quotaLevel();
+    // AI-261: M10.14: each subscription's level under the project's routing. Dispatch idles at
+    // the reserve only when no provider on has room; each start then skips routes without it.
+    const routing = await this.runs.routingOf(projectId);
+    const fallback: RouteFallback = { levels: await this.quotaLevels(routing) };
+    const quotaLevel = dispatchQuotaLevel(fallback.levels, routing.providers);
     const check = async (): Promise<"start" | DispatchIdleReason> => {
       const active = await this.runs.activeCounts(projectId);
       return mayDispatch(project, {
@@ -192,6 +201,7 @@ export class BuildDispatcher {
       try {
         const run = await this.runs.start(projectId, ticket.id, start.step, undefined, {
           avoidOverlap: true,
+          fallback,
           ...(local ? { runner: route.runner } : {}),
           // Re-checked after the run exists, so concurrent calls can't overshoot (ADR-0079).
           ...(story ? { night: { launch: night.launch, ticketIds: night.storyIds } } : {}),
@@ -219,6 +229,10 @@ export class BuildDispatcher {
             `Build couldn't start: ${err.message}. Start it again from the ticket.`,
           );
         }
+        // AI-248, AI-261: a task with no route left (every one at its reserve or refused at a
+        // spend cap) idles dispatch with that reason.
+        if ((err.code === "spend_cap" || err.code === "quota_reserve") && !local)
+          await this.record(project, err.code, first !== null);
         return first;
       }
       verdict = await check();
@@ -296,6 +310,8 @@ export class BuildDispatcher {
       });
       log("INFO", "night launch ended", { launchId: launch.id, reason });
       if (reason !== "done") await this.flagUnfinished(launch, stories, reason);
+      // Safe if a racing call opens it too: the code host refuses a second PR (AI-124).
+      if (launch.status === "ended") await this.morning?.open(launch);
     }
     if (reason === "done") return null;
     const hold = limit ?? (launch.status !== "running" ? "stopped" : null);
@@ -345,11 +361,23 @@ export class BuildDispatcher {
     return waiting.filter(Boolean).length;
   }
 
-  private async quotaLevel(): Promise<QuotaLevel> {
-    if (!this.quota) return "unknown";
+  /** The level of each subscription on in `routing`; none without a quota store (unknown). */
+  private async quotaLevels(
+    routing: EffectiveRouting,
+  ): Promise<Partial<Record<ProviderKey, QuotaLevel>>> {
+    const store = this.quota;
+    if (!store) return {};
     const now = this.now();
-    const readings = readingsForDispatch(await this.quota.latest("claude-sub"), now);
-    return quotaStatus("claude-sub", readings, now).level;
+    const subscriptions = ProviderKey.options.filter(
+      (p) => routing.providers[p].enabled && PROVIDER_BILLING[p] === "subscription",
+    );
+    const levels = await Promise.all(
+      subscriptions.map(async (p) => {
+        const readings = await store.latest(p);
+        return [p, subscriptionLevel(p, readings, routing.providers[p], now)] as const;
+      }),
+    );
+    return Object.fromEntries(levels);
   }
 
   /** What to start for a waiting ticket, or null when it doesn't wait. */

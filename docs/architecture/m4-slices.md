@@ -1,10 +1,10 @@
 # M4: Epics + story board — slices
 
-Scope: [`milestones.md`](milestones.md) §M4. Sliced by AI-80: Slice M4: Epics + story board into tickets, 2026-11-11. Epic ticket: AI-84: M4: Epics + story board. Each ticket holds its acceptance criteria, `outOfScope` and `touches` (the files it owns); this table is the map.
+Scope: [`milestones.md`](milestones.md) §M4. Sliced by AI-80: Slice M4: Epics + story board into tickets, 2026-11-11. Epic ticket: AI-84: M4: Epics + story board. Each ticket holds its acceptance criteria, `outOfScope` and `touches` (the files it owns); this table is the map. M4.24 to M4.31 were added on 2026-11-20 (ADR-0108: Roadmap view over epics, and fixed work views).
 
 **Already built (not sliced):** `parentId` on tickets, MCP `set_ticket_parent`, the epic picker in the ticket rail, `blockedBy` respected by dispatch, refine `split` for non-epics, the `ConfigChange` schema and collection (nothing writes it yet).
 
-**Risk** is the merge class (ADR-0092: The high-risk list): high means Andy merges; the coordinator may merge low and medium (ADR-0088). High-risk parts are kept in their own small slices.
+**Risk** marks where reviewers look hardest (ADR-0092's list); who merges is ADR-0120: the coordinator merges clean PRs, Andy keeps four kinds. High-risk parts are kept in their own small slices.
 
 | Ticket: slice                                                                    | Scope                                                                                                         | Size | Depends on                                        | Risk                          | Done when (Andy, minutes)                                       |
 | -------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------- | ---- | ------------------------------------------------- | ----------------------------- | --------------------------------------------------------------- |
@@ -31,10 +31,18 @@ Scope: [`milestones.md`](milestones.md) §M4. Sliced by AI-80: Slice M4: Epics +
 | AI-124: M4.21: Night: merge stories into the epic branch and open the morning PR | Gate-passing story PRs merge into the branch; one PR to `main` at the end                                     | M    | AI-122                                            | high (gate and merge)         | Morning PR lists each story's commits; never auto-merges        |
 | AI-125: M4.22: Night: morning report in Needs-you                                | Report comment on the epic from stored facts; epic flagged                                                    | M    | AI-120, AI-123, AI-124                            | medium                        | Inbox shows the epic with the report                            |
 | AI-129: M4.23: First overnight run trial                                         | Andy launches a small epic; findings recorded                                                                 | S    | **Andy**, AI-120, AI-121, AI-124, AI-125          | low                           | Build-log entry links the morning PR and report                 |
+| AI-186: M4.24: Epic outcome field | Optional `outcome` on epics; Done-when is its criteria; plan approval fills both | S | — | high (contract schema) | Edit an epic's outcome; it stays after reload |
+| AI-193: M4.25: Roadmap data API and MCP tool | Top-level epics with state, progress and counts, per project and all; MCP `roadmap` | M | AI-148, AI-186 | medium | API test matches seeded tickets |
+| AI-202: M4.26: Roadmap screen | `/p/:id/roadmap`, `/all/roadmap`: a row per milestone, expanding to stories by state | M | AI-193 | medium | Open Roadmap: milestones with progress |
+| AI-205: M4.27: Retire the slice tables | An epic and outcome per milestone; slice tables deleted | S | AI-202, **Andy** | high (design docs) | Roadmap lists M1 to M10; no slice table left |
+| AI-187: M4.28: Board work filters | Chips: Needs me, Mine, Agents, Blocked, In review; kept in the URL | M | — | medium | Click Blocked: only blocked cards |
+| AI-198: M4.29: Work across projects | `/all/work` by the same views; MCP `list_work` | M | AI-187 | medium | Open Work: what needs you, by project |
+| AI-208: M4.30: Agent-written "what changed" paragraph per epic | Parked in Ideas until the roadmap is in use | — | AI-202, **Andy** | high if built | Refine questions answered |
+| AI-197: M4.31: Ideate and refine write an epic's outcome | Both procedures output `outcome` | S | AI-186 | high (procedures) | An ideated epic shows an outcome |
 
 ## Order and parallel work
 
-Slices in one batch own disjoint files (`touches`). Shared registries take one-line additions only (`apps/api/src/app.ts`, `apps/api/src/mcp/tools.ts`, the `packages/contracts` and `packages/store` index files, generated `apps/web/src/lib/api.gen.ts`): on a conflict keep both sides and regenerate.
+Slices in one batch own disjoint files (`touches`). Shared registries take one sorted line per module (`api-routes.ts`, `public-routes.ts`, `mcp/tool-groups.ts`, the package index files; AI-145): on a conflict keep both lines. `api.gen.ts` is generated, not committed.
 
 | Batch | Slices                                                     | Starts when                                  |
 | ----- | ---------------------------------------------------------- | -------------------------------------------- |

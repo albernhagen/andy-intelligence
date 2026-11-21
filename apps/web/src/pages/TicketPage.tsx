@@ -9,6 +9,7 @@ import { AskQuestionForm } from "@/components/AskQuestionForm";
 import { CancelArchiveControls } from "@/components/CancelArchiveControls";
 import { EpicChildren } from "@/components/EpicChildren";
 import { OverridesEditor } from "@/components/OverridesEditor";
+import { PullRequestLink } from "@/components/PullRequestLink";
 import {
   EditableList,
   InlineText,
@@ -40,6 +41,7 @@ import {
   useWorker,
   useExecutor,
   useTickets,
+  useProjects,
 } from "@/lib/queries";
 import { STAGE_LABELS, TYPE_LABELS } from "@/lib/tickets";
 import { showsError } from "@/lib/live";
@@ -49,6 +51,9 @@ import { showsError } from "@/lib/live";
  * rendered in the board route's `<Outlet />`. A status line, then one document (title,
  * description, checklist, scope) beside a rail of facts, then questions and one activity
  * timeline. Every field edits in place. Esc or Close goes back to the board.
+ *
+ * Below 900 px the panel fills the screen under the header (AI-175: M7.5: Phone ticket detail):
+ * on a phone the status line may wrap instead of truncating and Close is a 44 px target.
  *
  * The URL holds the ticket key (`/p/ai/t/AI-2`); an older id link loads the ticket and swaps
  * in the key URL.
@@ -92,12 +97,12 @@ export function TicketPage() {
       aria-label={loaded ? `${loaded.key}: ${loaded.title}` : ticketRef}
       className="fixed inset-x-0 top-12 bottom-0 z-30 overflow-y-auto bg-background shadow-lg outline-none min-[900px]:left-auto min-[900px]:w-[640px] min-[900px]:border-l min-[900px]:border-border"
     >
-      <div className="sticky top-0 z-10 flex h-10 items-center gap-2 border-b border-border bg-background px-4 sm:px-6">
+      <div className="sticky top-0 z-10 flex min-h-10 items-center gap-2 border-b border-border bg-background px-4 py-1 sm:h-10 sm:py-0 sm:px-6">
         {loaded && <StatusLine ticket={loaded} />}
         <Button
           size="sm"
           variant="ghost"
-          className="ml-auto px-1"
+          className="ml-auto size-11 shrink-0 px-1 sm:h-8 sm:w-auto"
           aria-label="Close"
           title="Close (Esc)"
           onClick={close}
@@ -176,8 +181,8 @@ function StatusLine({ ticket }: { ticket: Ticket }) {
     new Date(),
   );
   return (
-    <p role="status" aria-label="Status" className="min-w-0 truncate">
-      <Badge variant={tone} className="text-sm">
+    <p role="status" aria-label="Status" className="min-w-0 sm:truncate">
+      <Badge variant={tone} className="text-sm wrap-anywhere">
         {text}
       </Badge>
     </p>
@@ -187,8 +192,11 @@ function StatusLine({ ticket }: { ticket: Ticket }) {
 function Story({ ticket: t }: { ticket: Ticket }) {
   const title = useTicketSave(t);
   const body = useTicketSave(t);
+  const events = useEvents(pathOf(t)).data ?? [];
+  const repos = useProjects().data?.find((p) => p.id === t.projectId)?.repos ?? [];
   return (
     <article className="space-y-6">
+      <PullRequestLink events={events} repos={repos} />
       <TicketCostLine {...pathOf(t)} />
       <InlineText
         label="Title"
@@ -206,6 +214,7 @@ function Story({ ticket: t }: { ticket: Ticket }) {
       />
       <div className="grid gap-6 sm:grid-cols-[minmax(0,1fr)_11rem]">
         <div className="min-w-0 space-y-6">
+          {t.type === "epic" && <Outcome ticket={t} />}
           <MarkdownField
             label="Description"
             value={t.body}
@@ -217,7 +226,8 @@ function Story({ ticket: t }: { ticket: Ticket }) {
           <ListField
             ticket={t}
             field="acceptanceCriteria"
-            label={t.type === "chore" ? "Done when" : "Acceptance criteria"}
+            // An epic's criteria are its "Done when" list (ADR-0108), as a chore's are.
+            label={t.type === "chore" || t.type === "epic" ? "Done when" : "Acceptance criteria"}
           />
           <ListField ticket={t} field="assumptions" label="Assumptions" />
           <ListField ticket={t} field="outOfScope" label="Out of scope" />
@@ -252,6 +262,25 @@ function ListField({
       pending={s.pending}
       error={s.error}
     />
+  );
+}
+
+/** An epic's outcome: one line saying what is true when it is done (ADR-0108). */
+function Outcome({ ticket: t }: { ticket: Ticket }) {
+  const outcome = useTicketSave(t);
+  return (
+    <section aria-label="Outcome" className="space-y-1">
+      <h3 className="text-sm font-medium">Outcome</h3>
+      <InlineText
+        label="Outcome"
+        placeholder="What is true when this epic is done?"
+        value={t.outcome ?? ""}
+        onSave={(v, done) => outcome.save({ outcome: v || null }, done)}
+        onEdit={outcome.begin}
+        pending={outcome.pending}
+        error={outcome.error}
+      />
+    </section>
   );
 }
 

@@ -10,16 +10,7 @@ Slice status lives in **tickets in project `AI`** (ADR-0047 phase 1). This page 
 
 ## Milestone map (ADR-0060: Milestones in completion order)
 
-Every ticket sits under a milestone. Milestones are epic tickets in project `AI` (AI-21: M1, AI-22: M2, AI-23: M3); until tickets can be re-parented (M3: New UI and MCP), this table is the map. Done: AI-1 to AI-4, AI-14 to AI-17, AI-20, AI-24, AI-25, AI-27, AI-31, AI-33, AI-36 and the sandbox fixes AI-42, AI-47, AI-48, AI-50, AI-51, AI-54, AI-56, AI-58, AI-61 (M1); AI-26, AI-28, AI-29, AI-30 (M3). Cancelled: AI-8, AI-10, AI-12, AI-13, AI-38 and the sandbox proof tickets AI-45, AI-49, AI-52, AI-53, AI-55, AI-57, AI-59, AI-60. The sandbox proof passed on 2026-11-08 (`build-log/2026-11-08-sandbox-proof-passed.md`): Builds is on for project `AI`, auto-build off. Merged M1 slices: [`history/m1-merged-slices.md`](architecture/history/m1-merged-slices.md).
-
-| Milestone                                          | Open tickets, in order                                                                                                                                                                                                                                                                                                                   |
-| -------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| M1: First end-to-end flow: ticket → PR with Claude | Closed 2026-11-10: all tickets done, "Done when" checked (auto-merge never exercised on project `AI`: `autoMerge` off), §9.1 security review merged (PR #126: no high or critical risks; R25 and R26 low, open).                                                                                                                         |
-| M2: Self-hosting: andy-intelligence builds itself  | All tickets merged (digests `build-log/2026-11-09-digest-m2.md`, `build-log/2026-11-11-digest.md`): the last were AI-73, AI-74, AI-75, AI-76, AI-77: Email notifications (off until Andy adds the key), AI-6: M1.17: Agent evals v1, AI-78. Left: the `autoMerge` trial and the "Done when" trial, both Andy's to start (auto-build on). |
-| M3: New UI and MCP                                 | Done except the local executor's last slices (ADR-0089): slice 6, AI-133 (PR #182, Andy); the runner-lock follow-up (PR #178, Andy); slice 7 (runbook, live proof) needs Andy's Mac. Open PRs and what waits on them: `build-log/2026-11-12-digest.md`.                                                                                  |
-| M4: Epics + story board                            | Epic AI-84, map in `architecture/m4-slices.md`. Merged: AI-85 to AI-88, AI-101 to AI-104, AI-116. In PRs: AI-115, AI-117, AI-118, AI-120, AI-121, AI-122. Not started: AI-119, AI-123 to AI-125, AI-127. AI-126, AI-128, AI-129 wait on Andy.                                                                                            |
-| M5: Multi-project in parallel                      | Epic AI-82, table in `architecture/m5-slices.md`. Merged: AI-83, AI-89 to AI-91, AI-93 to AI-96, AI-98, AI-100 (part 1). In PRs: AI-92, AI-97, AI-99, AI-100 (part 2), AI-105, AI-107, AI-108, AI-114. Not started: AI-106, AI-109 to AI-113, AI-134. AI-111: M5.4 waits on Andy (second repo).                                          |
-| M8: Project members                                | AI-18: Project members (questions answered 2026-11-10).                                                                                                                                                                                                                                                                                  |
+Generated from tickets, never edited here (AI-148). Every ticket sits under a milestone epic in project `AI`. MCP `milestone_map` (`project: "AI"`, optional `epic` key) or `GET /api/projects/ai/milestone-map` lists each open epic's tickets: done, in review with the PR, in progress, blocked and on what, not started; "needs Andy" marks Needs-you. The board groups by epic; an epic's panel shows its stories. Merged M1 slices: [`history/m1-merged-slices.md`](architecture/history/m1-merged-slices.md).
 
 ## Pending decisions (Andy)
 
@@ -31,9 +22,14 @@ Every ticket sits under a milestone. Milestones are epic tickets in project `AI`
 - ADR-0097: Review findings → config proposals (AI-100): accept the two-PR plan, the 3-PR threshold and `AGENTS.md` as the only target?
 - ADR-0096: Managed repos call one executor (AI-83): Claude token in an environment on `main`, executor at `@main`, one repo per project?
 - ADR-0099: Agent read access (AI-97): steps, tools, live or bundled?
+- ADR-0108: Roadmap view over epics, and fixed work views (M4.24 to M4.31): accept one new epic field (`outcome`), Done-when as the epic's acceptance criteria, and the five views?
+- AI-144: Threat model: one file per risk: cap each risk file at 300 words and `threat-model.md` at 1000 (was 3600)?
 
 ## Blocked on Andy
 
 - Firestore export before the next schema-changing deploy (runbook `ticket-core.md`); the bucket exists.
 - For AI-77: Email notifications: a Resend account, a verified domain, one secret, then `terraform apply` (runbook `email-notifications.md`).
+- M2: Self-hosting: the "Done when" trial (auto-build on), Andy's to start.
+- M3: New UI and MCP: local executor slice 7 (runbook, live proof) needs Andy's Mac (ADR-0089).
+- AI-111: M5.4 needs a second repo.
 - M4 questions, each in its ticket body: AI-126: M4.13: Hallmark trial (how to run it), AI-128: M4.15: Pluggable design skills (build now or move to Later), AI-129: M4.23: First overnight run trial (which epic and budget).

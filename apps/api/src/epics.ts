@@ -2,6 +2,7 @@ import { createRoute, z, type OpenAPIHono } from "@hono/zod-openapi";
 import { Size, Stage, TicketType, type RunStore, type WorkTracker } from "@andy/contracts";
 import { readEpicRollup, type EpicRollup as EpicRollupValue } from "@andy/domain";
 import type { AuthEnv } from "./auth";
+import type { RouteModule } from "./services";
 
 /** An epic's children and roll-up (AI-85), computed on read. Read-only, signed-in. */
 
@@ -71,3 +72,6 @@ export function registerEpicRoutes(
     return c.json(rollup, 200);
   });
 }
+
+/** Listed in `api-routes.ts` (AI-145). */
+export const apiRoutes: RouteModule = (app, s) => registerEpicRoutes(app, s.tracker, s.deps.runs);

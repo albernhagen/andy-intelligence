@@ -12,6 +12,7 @@ import {
   runnerStoreContract,
   watchdogQueueContract,
   workTrackerContract,
+  projectVersionsContract,
 } from "../testing";
 import {
   InMemoryCodeEventLog,
@@ -27,9 +28,12 @@ import {
   InMemoryRunStore,
   InMemoryWatchdogQueue,
   InMemoryWorkTracker,
+  InMemoryProjectVersions,
 } from "./index";
 
 workTrackerContract("in-memory", async () => new InMemoryWorkTracker());
+
+projectVersionsContract("in-memory", async () => new InMemoryProjectVersions());
 
 executorContract("in-memory", async () => ({
   executor: new InMemoryExecutor(),

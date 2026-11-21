@@ -11,6 +11,7 @@ import { createApp } from "./app";
 import { parseAllowList, type TokenVerifier } from "./auth";
 import { ClientMetadataResolver } from "./mcp/client-metadata";
 import { hashToken, newToken } from "./mcp/tokens";
+import { ownerOnlyAccess } from "./project-access";
 
 /** AI-108: project plans over REST and MCP, in-process. A seeded proposal stands in for the agent. */
 
@@ -40,6 +41,7 @@ async function setup() {
   const tracker = new InMemoryWorkTracker();
   const grants = new InMemoryOAuthGrantStore();
   const app = createApp({
+    projectAccess: ownerOnlyAccess(),
     verifier,
     allowedEmails: parseAllowList("andy@example.com"),
     version: "test",

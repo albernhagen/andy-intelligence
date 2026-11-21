@@ -14,6 +14,9 @@ import {
   Policy,
   Project,
   Provider,
+  PushSendState,
+  PushSettings,
+  PushSubscription,
   QuotaClear,
   QuotaReading,
   Question,
@@ -72,6 +75,12 @@ export const collections = {
   runTokens: { path: () => "runTokens" },
   /** Overnight launches (ADR-0049), server-only; validated by `FirestoreNightLaunchStore`. */
   nightLaunches: { path: () => "nightLaunches" },
+  /** Per-project change counters (AI-222), server-only; read by `FirestoreProjectVersions`. */
+  projectVersions: { path: () => "projectVersions" },
+  /** Web Push (M7.7), server-only; subscriptions keyed by SHA-256 of the endpoint, the rest by uid. */
+  pushSubscriptions: { path: () => "pushSubscriptions", schema: PushSubscription },
+  pushSettings: { path: () => "pushSettings", schema: PushSettings },
+  pushSendStates: { path: () => "pushSendStates", schema: PushSendState },
   /** Singleton settings documents, e.g. `config/codeHost` (ADR-0043). */
   config: { path: () => "config" },
 } as const;
@@ -110,35 +119,4 @@ export function typedCollection<S extends z.ZodType<DocumentData>>(
   return db.collection(path).withConverter(zodConverter(schema, upgraders));
 }
 
-export { FirestoreQuotaStore } from "./quota-store";
-export {
-  CODE_HOST_SECRETS,
-  GcpCodeHostConnectionStore,
-  SecretManagerVersions,
-  type SecretVersions,
-} from "./code-host-connection-store";
-export {
-  CODE_HOST_EVENT_RETENTION_MS,
-  CODE_HOST_EVENT_TTL_FIELD,
-  FirestoreCodeEventLog,
-} from "./code-event-log";
-export { FirestoreOAuthGrantStore, OAUTH_GRANT_TTL_FIELD } from "./oauth-grant-store";
-export { FirestoreWorkTracker } from "./work-tracker";
-export { ticketEventV2toV3, ticketV1toV2, ticketV2toV3, upgrade, type Upgrader } from "./upgrade";
-export { FirestoreRunStore } from "./run-store";
-export { FirestoreRunnerStore } from "./runner-store";
-export { FirestoreNightLaunchStore } from "./night-launch-store";
-export {
-  CloudTasksWatchdogQueue,
-  leaseUrl,
-  runnerAwayUrl,
-  watchdogUrl,
-  type TaskCreator,
-} from "./watchdog-queue";
-export { FirestoreNotifyLedger } from "./notify-ledger";
-export { CloudTasksNotifyFlushQueue, notifyFlushUrl } from "./notify-flush-queue";
-export {
-  CONFIG_CHANGE_LOG_READ_MAX,
-  CONFIG_CHANGE_PENDING_READ_MAX,
-  FirestoreConfigChangeStore,
-} from "./config-change-store";
+export * from "./exports.gen";

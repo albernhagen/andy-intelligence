@@ -146,6 +146,24 @@ describe("ProjectService config change log (M4.11)", () => {
     expect(Object.keys(change!.diff)).toEqual(["runsAtOnce", "paused"]);
   });
 
+  it("GivenTheEnvironmentPolicy_WhenTheOwnerChangesIt_ThenItIsSavedAndLogged", async () => {
+    const updated = await service.update("ai", { environments: "dev-and-prod" }, OWNER);
+    const [change] = await changes.listForProject("ai");
+    expect(updated.environments).toBe("dev-and-prod");
+    expect(change?.diff).toEqual({ environments: { from: "prod-only", to: "dev-and-prod" } });
+  });
+
+  it.each(["agent:r1", "system"] as const)(
+    "GivenTheActor%s_WhenChangingTheEnvironmentPolicy_ThenForbiddenAndNothingLogged",
+    async (actor) => {
+      await expect(
+        service.update("ai", { environments: "dev-and-prod" }, { actor, email: "x@example.com" }),
+      ).rejects.toMatchObject({ code: "forbidden" });
+      expect((await tracker.getProject("ai"))?.environments).toBe("prod-only");
+      expect(await changes.listForProject("ai")).toEqual([]);
+    },
+  );
+
   it("GivenASettingsWrite_WhenNothingChanges_ThenNoChangeIsAppended", async () => {
     const project = (await tracker.getProject("ai"))!;
     await service.update("ai", { runsAtOnce: project.runsAtOnce }, OWNER);
