@@ -1,4 +1,6 @@
 import {
+  Stage as StageSchema,
+  compareRanks,
   notFound,
   type BoardTicket,
   type Run,
@@ -97,4 +99,31 @@ export class BoardReader {
       };
     });
   }
+}
+
+/** A board lane: one stage's tickets in rank order (AI-296). */
+export interface BoardLane<T extends BoardTicket = BoardTicket> {
+  stage: Stage;
+  tickets: T[];
+}
+
+/**
+ * The board's lanes, as the web board shows them (AI-296: Parity: the board, over MCP): every
+ * stage in workflow order, each lane's tickets by rank. Archived tickets and the Cancelled lane
+ * show only with `showArchived` (the board's "Show cancelled and archived"); `stage` keeps one lane.
+ */
+export function boardLanes<T extends BoardTicket>(
+  tickets: readonly T[],
+  options: { stage?: Stage; showArchived?: boolean } = {},
+): BoardLane<T>[] {
+  const showArchived = options.showArchived ?? false;
+  const stages = StageSchema.options.filter((s) =>
+    options.stage ? s === options.stage : s !== "cancelled" || showArchived,
+  );
+  return stages.map((stage) => ({
+    stage,
+    tickets: tickets
+      .filter((t) => t.stage === stage && (showArchived || !t.archived))
+      .sort((a, b) => compareRanks(a.rank, b.rank)),
+  }));
 }
