@@ -1,4 +1,5 @@
 ---
+title: GitHub App credentials and webhook intake
 status: accepted, amended by 0043
 date: 2026-11-02
 ---

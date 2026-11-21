@@ -1,5 +1,6 @@
 ---
-status: accepted
+title: "Refine runs: self-starting, output checked, questions once per run"
+status: accepted, amended by 0073, 0075
 date: 2026-11-04
 ---
 

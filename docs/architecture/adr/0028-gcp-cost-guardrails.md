@@ -1,4 +1,5 @@
 ---
+title: "GCP cost guardrails: budgets, alerts, caps on all that scales"
 status: accepted, amended by 0029 and 0036
 date: 2026-10-27
 ---

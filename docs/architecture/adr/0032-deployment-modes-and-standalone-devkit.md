@@ -1,5 +1,6 @@
 ---
-status: accepted (direction; detailed design after M1: First end-to-end flow)
+title: Deployment modes and a standalone devkit
+status: accepted (direction; detailed design after M1: First end-to-end flow); local executor by 0089
 date: 2026-11-01
 ---
 

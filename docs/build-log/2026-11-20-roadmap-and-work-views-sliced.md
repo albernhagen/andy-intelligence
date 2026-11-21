@@ -15,4 +15,4 @@
   - "Done when" is the epic's existing acceptance criteria under that label, not a second list: one new field (`outcome`) instead of two.
   - Agents filling the outcome is its own ticket (M4.31): it changes `platform/procedures/`, which is high risk, and M4.24 stays small.
   - M4.25 builds on AI-148: Milestone map generated from tickets, which another session is building; M4.27 no longer removes the build-log map (AI-148 does) and creates only the milestone epics still missing (M6 has AI-153: M6: Dev → prod releases).
-- Budgets: the ADR index and `ui.md` were at their caps, so this PR trims as many words as it adds in each (index header and one stale phrase; the run-detail note in `ui.md` merged into its screen line).
+- Budget: `ui.md` was at its cap (896 of 900 words), so this PR adds no words to it: the run-detail note is merged into its screen line.
