@@ -4,9 +4,9 @@ Overview and reading map: [ARCHITECTURE.md](ARCHITECTURE.md). Section numbers ma
 
 ## 5. Domain model (Firestore documents)
 
-All records carry `project_id` where applicable. Zod schemas in `packages/contracts` validate every read and write; tickets and their events nest under their project (`projects/{p}/tickets/{t}/events/{e}`). Ticket numbers come from a per-project counter (`counters/tickets-{p}`), in the ticket's transaction. Queries use equality filters only (no composite indexes); results are sorted in memory.
+All records carry `project_id` where applicable. Zod schemas in `packages/contracts` validate every read and write; tickets and their events nest under their project (`projects/{p}/tickets/{t}/events/{e}`). Ticket numbers come from a per-project counter (`counters/tickets-{p}`), in the ticket's transaction. Queries need no composite index (ADR-0121); results are sorted in memory.
 
-**Rollups** (cost per ticket/epic/model/provider) are **computed on read with Firestore aggregation queries** in v1.x; no denormalized counters. Revisit if reads get slow.
+**Rollups** (cost per ticket/epic/model/provider) are **computed on read with Firestore aggregation queries** in v1.x; no denormalized counters.
 
 | Entity | Key fields |
 |---|---|
@@ -23,6 +23,7 @@ All records carry `project_id` where applicable. Zod schemas in `packages/contra
 | **QuotaReading** | provider, window (5h / weekly / daily-tasks), used_pct, resets_at, source, taken_at, confidence |
 | **ConfigChange** | entity, diff, actor (andy/ui/agent/scout), reason, status (pending/accepted/applied/reverted/rejected), project, dedupe key, decided by/at, timestamps; project-settings writes log one (built, M4.11) |
 | **Release** | project, image digest, tickets included, notes, status |
+| **ReleaseNote** | merged PR's untrusted note, ticket, doc links (ADR-0121) |
 | **CodeHostEvent** | delivery ID (document ID), project, repo, kind (pull_request / check_run / workflow_run), action, normalized PR / check / workflow fields, received_at; TTL 30 days (ADR-0041) |
 | **NightLaunch** | epic, project, budget (agent tasks, tokens, USD), stop time (≤ 16 h away), status (planned to ended), started/ended, end reason, story keys, epic branch, start sha (ADR-0049) |
 
@@ -42,7 +43,7 @@ Missing or stale quota reading ⇒ treat as **unknown**: warn in UI, prefer next
 
 ## 6. Ports (contracts) and adapters
 
-Contracts are defined in `packages/contracts` (Zod schemas + TypeScript interfaces; OpenAPI generated for the API). **Every port has an in-memory fake and a shared contract test suite that every adapter, including the fake, must pass** (ADR-0023). CI runs suites on the fakes, and the Firestore emulator suites when the adapters or suites change (`firestore-suite.yml`, ADR-0048; locally `pnpm test:firestore`). A port's fake and suite land before its first real adapter.
+Contracts live in `packages/contracts` (Zod schemas, TypeScript interfaces; OpenAPI generated). **Every port has an in-memory fake and a shared contract test suite that every adapter, including the fake, must pass** (ADR-0023). CI runs suites on the fakes, and on the emulator when adapters or suites change (`firestore-suite.yml`, ADR-0048; locally `pnpm test:firestore`). A port's fake and suite land before its first real adapter.
 
 | Port | Domain concepts | v1.x adapters | Later |
 |---|---|---|---|
@@ -59,7 +60,7 @@ Contracts are defined in `packages/contracts` (Zod schemas + TypeScript interfac
 | `Evaluator` | Suite, Case, Score, per-case result | Agent evals (M1.17: Agent evals v1, ADR-0086); Ori Eval for scout smoke tests | Claude Code runner (`scripts/evals/evaluator.mjs`) |
 | `OAuthGrantStore` | OAuthGrant (code, access token, refresh token; keyed by token hash) | **Firestore** (ADR-0039) | Local store (ADR-0032) |
 | `RunnerStore` | Runner, per-run token (hashes only; ADR-0089) | **Firestore** | — |
-| `ConfigChangeStore`, `ReviewFindingSource` | ConfigChange, ReviewFinding (ADR-0097) | **Firestore** | — |
+| `ConfigChangeStore`, `ReviewFindingSource`, `ReleaseNoteStore` | ConfigChange, ReviewFinding (ADR-0097), ReleaseNote | **Firestore** | — |
 | `NightLaunchStore` | NightLaunch; one active per project, checked atomically | **Firestore** | — |
 | `Telemetry` | Trace, Span, CostEvent | OTel → Cloud Trace / Cloud Logging | BigQuery sink |
 

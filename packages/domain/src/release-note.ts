@@ -8,8 +8,8 @@
  *   Needs you: <optional, at most 25 words: a step only Andy can take>
  *
  * A field's text runs from its label to the next blank line, label or heading. Labels may be
- * bold (`**What changed:**`) or list items. Lines inside code fences are skipped, so examples in
- * a description never count. PR text is untrusted: this only extracts and measures it.
+ * bold (`**What changed:**`) or list items. HTML comments and lines inside code fences are
+ * skipped, so the template's hints and examples in a description never count. PR text is untrusted: this only extracts and measures it.
  */
 
 /** Word caps per field. */
@@ -63,7 +63,8 @@ function extract(body: string): Partial<Record<Field, string>> {
     current = null;
     parts = [];
   };
-  for (const line of body.split(/\r?\n/)) {
+  // Comments are the PR template's hints, never note text.
+  for (const line of body.replace(/<!--[\s\S]*?-->/g, "").split(/\r?\n/)) {
     if (/^\s*(```|~~~)/.test(line)) {
       close();
       fenced = !fenced;

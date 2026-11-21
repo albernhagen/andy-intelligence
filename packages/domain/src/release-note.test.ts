@@ -1,3 +1,6 @@
+import { readFileSync } from "node:fs";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import {
   RELEASE_NOTE_MAX_CHARS,
@@ -64,6 +67,21 @@ describe("parseReleaseNote", () => {
   it("GivenTheBlockOnlyInsideACodeFence_WhenParsed_ThenItDoesNotCount", () => {
     const body = "```\nWhat changed: x\nHow it works: y\n```";
     expect(parseReleaseNote(body).note).toBeNull();
+  });
+
+  it("GivenTheUnfilledPrTemplate_WhenParsed_ThenEveryFieldIsMissingOrEmpty", () => {
+    const template = readFileSync(
+      join(dirname(fileURLToPath(import.meta.url)), "../../../.github/pull_request_template.md"),
+      "utf8",
+    );
+    expect(parseReleaseNote(template)).toEqual({
+      note: null,
+      problems: [
+        '"What changed:" is missing or empty.',
+        '"How it works:" is missing or empty.',
+        '"Needs you:" is empty: remove it or fill it.',
+      ],
+    });
   });
 
   it("GivenTwoBlocks_WhenParsed_ThenTheFirstWins", () => {
