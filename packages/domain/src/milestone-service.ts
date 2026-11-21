@@ -109,17 +109,24 @@ export class MilestoneService {
     return created;
   }
 
-  /** Renames, rewords, reorders or sets the status of a milestone. Nothing changed: nothing logged. */
+  /**
+   * Renames, rewords, reorders or sets the status of a milestone. Nothing changed: nothing logged.
+   * `ifUpdatedAt`: the version the caller validated (a revert); a `conflict` if it moved since.
+   */
   async update(
     projectId: string,
     milestoneId: string,
     patch: MilestonePatch,
     actor: EventActor,
     reason?: string,
+    ifUpdatedAt?: string,
   ): Promise<Milestone> {
     requireCan(actor, "change_milestones", projectId);
     await this.requireProject(projectId);
     const current = await this.requireMilestone(projectId, milestoneId);
+    if (ifUpdatedAt !== undefined && current.updatedAt !== ifUpdatedAt) {
+      throw movedSince("milestone", milestoneId);
+    }
     const diff: Diff = {};
     for (const field of FIELDS) {
       const to = patch[field];
@@ -141,6 +148,7 @@ export class MilestoneService {
   /**
    * Attaches a top-level epic to a milestone of the same project, or detaches it (`null`). The
    * epic is named by key (`AI-84`) or id. Its child epics and tickets take its milestone.
+   * `ifUpdatedAt`: the epic version the caller validated (a revert); a `conflict` if it moved since.
    */
   async setEpicMilestone(
     projectId: string,
@@ -148,6 +156,7 @@ export class MilestoneService {
     milestoneId: string | null,
     actor: EventActor,
     reason?: string,
+    ifUpdatedAt?: string,
   ): Promise<Ticket> {
     requireCan(actor, "change_milestones", projectId);
     await this.requireProject(projectId);
@@ -155,6 +164,9 @@ export class MilestoneService {
       (await this.tracker.getTicketByKey(projectId, epicRef.toUpperCase())) ??
       (await this.tracker.getTicket(projectId, epicRef));
     if (!epic) throw notFound("ticket", epicRef);
+    if (ifUpdatedAt !== undefined && epic.updatedAt !== ifUpdatedAt) {
+      throw movedSince("ticket", epic.key);
+    }
     if (milestoneId !== null) {
       const problem = milestoneTargetProblem(epic);
       if (problem) throw new DomainError("invalid_field", problem);
@@ -184,8 +196,8 @@ export class MilestoneService {
    * normal write (validated, logged as a new change), then the original is marked reverted.
    * Refused when the milestone or epic no longer holds the change's values (a later change), for
    * a creation (milestones aren't deleted: park one instead), and for a diff it can't fully undo.
-   * Concurrent reverts of one change: each write is conditional on the version it read, so only
-   * the first applies; the other gets a conflict before writing anything.
+   * The write is conditional on the version this check read, so a concurrent edit or revert makes
+   * it a conflict before anything is written, never a silent undo.
    */
   async revert(
     change: ConfigChange,
@@ -220,6 +232,7 @@ export class MilestoneService {
         (diff.milestoneId!.from as string | null) ?? null,
         actor,
         reason,
+        epic.updatedAt,
       );
       return { reverted: await this.markReverted(change, actor), epic: restored };
     }
@@ -233,7 +246,15 @@ export class MilestoneService {
     }
     if (fields.some((f) => current[f] !== diff[f]!.to)) throw changedSince(change);
     const patch = Object.fromEntries(fields.map((f) => [f, diff[f]!.from])) as MilestonePatch;
-    const milestone = await this.update(projectId, current.id, patch, actor, reason);
+    // Written only against the version checked above: a change in between is a conflict.
+    const milestone = await this.update(
+      projectId,
+      current.id,
+      patch,
+      actor,
+      reason,
+      current.updatedAt,
+    );
     return { reverted: await this.markReverted(change, actor), milestone };
   }
 
@@ -315,6 +336,9 @@ function laterThan(previous: string, now: Date): string {
   const floor = Date.parse(previous) + 1;
   return new Date(Math.max(now.getTime(), floor)).toISOString();
 }
+
+const movedSince = (what: string, id: string) =>
+  new WorkTrackerError("conflict", `${what} ${id} changed since it was read`);
 
 const changedSince = (change: ConfigChange) =>
   new DomainError("not_revertible", `config change ${change.id} was changed since`, [

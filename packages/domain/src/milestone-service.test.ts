@@ -16,16 +16,20 @@ describe("MilestoneService", () => {
   let tracker: InMemoryWorkTracker;
   let changes: InMemoryConfigChangeStore;
   let service: MilestoneService;
+  let store: InMemoryMilestoneStore;
   let ids: number;
 
   beforeEach(async () => {
     vi.spyOn(console, "log").mockImplementation(() => {});
-    tracker = new InMemoryWorkTracker(() => NOW);
+    // A ticking clock: each ticket write gets its own updatedAt, so a stale version is visible.
+    let tick = 0;
+    tracker = new InMemoryWorkTracker(() => new Date(NOW.getTime() + 1000 * tick++));
     changes = new InMemoryConfigChangeStore();
     ids = 0;
+    store = new InMemoryMilestoneStore();
     service = new MilestoneService(
       tracker,
-      new InMemoryMilestoneStore(),
+      store,
       changes,
       () => NOW,
       () => `id${++ids}`,
@@ -203,6 +207,39 @@ describe("MilestoneService", () => {
       expect(results.filter((r) => r.status === "fulfilled")).toHaveLength(1);
       expect((await logged()).length).toBe(before + 1);
       expect((await service.list("ai"))[0]!.status).toBe("not_reviewed");
+    });
+
+    it("GivenAnEditBetweenTheRevertsCheckAndItsWrite_WhenReverted_ThenConflictAndTheEditStays", async () => {
+      const m = await service.create("ai", { name: "M4", outcome: "x" }, OWNER);
+      await service.update("ai", m.id, { status: "approved" }, OWNER);
+      const change = (await logged()).find((c) => "status" in c.diff)!;
+      // A second actor parks it right after the revert's check reads the milestone.
+      const read = store.get.bind(store);
+      vi.spyOn(store, "get").mockImplementationOnce(async (p, id) => {
+        const found = await read(p, id);
+        await service.update("ai", m.id, { status: "parked" }, OWNER);
+        return found;
+      });
+      await expect(service.revert(change, OWNER)).rejects.toMatchObject({ code: "conflict" });
+      expect((await service.list("ai"))[0]!.status).toBe("parked");
+      expect((await changes.get(change.id))?.status).toBe("applied");
+    });
+
+    it("GivenAnAttachBetweenTheRevertsCheckAndItsWrite_WhenReverted_ThenConflictAndTheAttachStays", async () => {
+      const m1 = await service.create("ai", { name: "M4", outcome: "x" }, OWNER);
+      const m2 = await service.create("ai", { name: "M5", outcome: "y" }, OWNER);
+      const e = await epic();
+      await service.setEpicMilestone("ai", e.key, m1.id, OWNER);
+      const change = (await logged()).find((c) => "milestoneId" in c.diff)!;
+      const read = tracker.getTicket.bind(tracker);
+      vi.spyOn(tracker, "getTicket").mockImplementationOnce(async (p, id) => {
+        const found = await read(p, id);
+        await service.setEpicMilestone("ai", e.key, m2.id, OWNER);
+        return found;
+      });
+      await expect(service.revert(change, OWNER)).rejects.toMatchObject({ code: "conflict" });
+      expect((await read("ai", e.id))?.milestoneId).toBe(m2.id);
+      expect((await changes.get(change.id))?.status).toBe("applied");
     });
 
     it("GivenADiffWithNoKnownField_WhenReverted_ThenRefusedAndNotMarked", async () => {
