@@ -30,7 +30,7 @@ export function WorkViewChips({
             type="button"
             aria-pressed={active}
             onClick={() => onChange(id)}
-            className={`flex items-center gap-1.5 rounded-full border px-3 py-1 text-sm focus-visible:outline-2 focus-visible:outline-ring ${
+            className={`flex items-center gap-1.5 h-11 rounded-full border px-3 text-sm sm:h-8 focus-visible:outline-2 focus-visible:outline-ring ${
               active
                 ? "border-primary bg-primary text-primary-foreground"
                 : "border-border bg-background hover:bg-foreground/10"
