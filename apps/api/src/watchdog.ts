@@ -4,6 +4,7 @@ import { createRemoteJWKSet, jwtVerify, type JWTVerifyGetKey } from "jose";
 import { z } from "@hono/zod-openapi";
 import type { AuthEnv } from "./auth";
 import { FixedWindowLimiter } from "./mcp/rate-limit";
+import type { RouteModule } from "./services";
 
 /**
  * Run watchdog endpoint (M1.6b, ARCHITECTURE §7.1, §9). The watchdog queue calls it once per
@@ -113,3 +114,21 @@ export function registerRunWatchdog(app: Hono<AuthEnv>, deps: RunWatchdogDeps): 
     });
   }
 }
+
+/**
+ * Listed in `public-routes.ts` (AI-145): the watchdog queue presents a Google OIDC token for the
+ * invoker service account. Absent when the watchdog is not configured.
+ */
+export const publicRoutes: RouteModule = (app, s) => {
+  const watchdog = s.deps.watchdog;
+  if (!watchdog) return;
+  const runners = s.runners;
+  registerRunWatchdog(app, {
+    runs: s.runs,
+    ...(runners ? { runnerAway: (id: string) => runners.checkAway(id, s.dispatchNext) } : {}),
+    verify:
+      watchdog.verifyInvokerToken ??
+      invokerTokenVerifier(watchdog.publicUrl, watchdog.invokerEmail),
+    now: s.now,
+  });
+};

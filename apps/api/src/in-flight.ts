@@ -2,6 +2,7 @@ import { createRoute, z, type OpenAPIHono } from "@hono/zod-openapi";
 import { InFlightRun } from "@andy/contracts";
 import type { RunService } from "@andy/domain";
 import type { AuthEnv } from "./auth";
+import type { RouteModule } from "./services";
 
 /** The in-flight view (ADR-0080): the project's runs in flight and what they touch. Read-only. */
 
@@ -29,3 +30,6 @@ export function registerInFlightRoutes(app: OpenAPIHono<AuthEnv>, runs: RunServi
     c.json(await runs.inFlight(c.req.valid("param").projectId), 200),
   );
 }
+
+/** Listed in `api-routes.ts` (AI-145). */
+export const apiRoutes: RouteModule = (app, s) => registerInFlightRoutes(app, s.runs);
