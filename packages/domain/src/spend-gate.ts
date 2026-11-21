@@ -12,6 +12,7 @@ import {
 import { DomainError } from "./errors";
 import { effectiveCaps, maySpend } from "./spend-caps";
 import { reserveFor, settleFor, type PricedModel } from "./spend-estimate";
+import type { SpendEvent } from "./spend-notices";
 
 /**
  * Spend gate (AI-248: M10.7, m10-slices.md). Every agent task on a `pay_per_use` route reserves
@@ -38,6 +39,12 @@ export const DEFAULT_CAPS_SOURCE: SpendCapsSource = async () => ({
 /** No price source yet (M10.5 scouts prices): every paid start is refused. */
 export const NO_PRICES: SpendPrices = async () => null;
 
+/** Hears what the gate decided, for the spend notices (AI-257: M10.9); must not throw. */
+export type SpendAlertSink = (event: SpendEvent) => Promise<void>;
+
+/** The run fields the gate reads; `ticketId` names what waits in a stop notice. */
+type GateRun = Pick<Run, "id" | "projectId" | "route"> & Partial<Pick<Run, "ticketId">>;
+
 /** What a reservation hands the executor: the per-task budget the harness enforces. */
 export interface SpendReservation {
   entry: SpendEntry;
@@ -53,12 +60,19 @@ const refuse = (run: Pick<Run, "id" | "projectId">, reason: string, details: str
   return new DomainError("spend_cap", `no paid agent task: ${reason}`, details);
 };
 
+const alertRun = (run: GateRun) => ({
+  id: run.id,
+  projectId: run.projectId,
+  ticketId: run.ticketId ?? null,
+});
+
 export class SpendGate {
   constructor(
     private readonly ledger: SpendLedger,
     private readonly prices: SpendPrices = NO_PRICES,
     private readonly caps: SpendCapsSource = DEFAULT_CAPS_SOURCE,
     private readonly now: () => Date = () => new Date(),
+    private readonly alerts: SpendAlertSink | null = null,
   ) {}
 
   /**
@@ -66,7 +80,7 @@ export class SpendGate {
    * known up front). Throws `DomainError` `spend_cap` when anything is unknown or a cap would be
    * passed; nothing is left reserved then.
    */
-  async reserve(run: Pick<Run, "id" | "projectId" | "route">): Promise<SpendReservation> {
+  async reserve(run: GateRun): Promise<SpendReservation> {
     const model = await this.prices(run.route).catch((err: unknown) => {
       log("ERROR", "model prices unreadable", { runId: run.id, error: String(err) });
       return null;
@@ -97,6 +111,13 @@ export class SpendGate {
     const decision = maySpend(caps, totals, estimate);
     if (decision.kind === "unknown") throw refuse(run, `unknown ${decision.reason}`);
     if (decision.kind === "cap") {
+      await this.alert({
+        kind: "stopped",
+        run: alertRun(run),
+        cap: decision.cap,
+        caps,
+        spent: totals,
+      });
       throw refuse(run, `it would pass the ${decision.cap} cap`, [
         `limit: ${decision.limitMicroUsd} micro-USD`,
         `used: ${decision.usedMicroUsd} micro-USD`,
@@ -124,12 +145,35 @@ export class SpendGate {
       throw refuse(run, "the spend ledger refused the reservation");
     }
     if (!outcome.ok) {
+      await this.alert({
+        kind: "stopped",
+        run: alertRun(run),
+        cap: outcome.cap,
+        caps,
+        spent: totals,
+      });
       throw refuse(run, `it would pass the ${outcome.cap} cap`, [
         `limit: ${outcome.limitMicroUsd} micro-USD`,
         `used: ${outcome.usedMicroUsd} micro-USD`,
       ]);
     }
     log("INFO", "spend reserved", { runId: run.id, microUsd: outcome.entry.reservedMicroUsd });
+    const added = outcome.entry.reservedMicroUsd;
+    await this.alert({
+      kind: "reserved",
+      run: alertRun(run),
+      caps,
+      spent: {
+        project: {
+          dayMicroUsd: totals.project.dayMicroUsd + added,
+          monthMicroUsd: totals.project.monthMicroUsd + added,
+        },
+        global: {
+          dayMicroUsd: totals.global.dayMicroUsd + added,
+          monthMicroUsd: totals.global.monthMicroUsd + added,
+        },
+      },
+    });
     return { entry: outcome.entry, budgetMicroUsd: caps.per_task };
   }
 
@@ -168,6 +212,14 @@ export class SpendGate {
       () => log("INFO", "spend settled", { runId, microUsd, keptInFull: microUsd === null }),
       (err: unknown) =>
         log("ERROR", "spend settle failed; it stays reserved", { runId, error: String(err) }),
+    );
+  }
+
+  /** Tells the spend notices; a failure there is logged and never blocks the gate. */
+  private async alert(event: SpendEvent): Promise<void> {
+    if (!this.alerts) return;
+    await this.alerts(event).catch((err: unknown) =>
+      log("ERROR", "spend alert failed", { runId: event.run.id, error: String(err) }),
     );
   }
 

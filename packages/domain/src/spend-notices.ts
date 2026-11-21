@@ -1,11 +1,22 @@
-import type { EffectiveSpendCaps, Notice, SpendCapKey, SpendSoFar } from "@andy/contracts";
+import {
+  SPEND_NOTICE_KEYS_MAX,
+  type EffectiveSpendCaps,
+  type Notice,
+  type Notifier,
+  type Run,
+  type SpendCapKey,
+  type SpendNoticeLedger,
+  type SpendNoticeState,
+  type SpendSoFar,
+  type WorkTracker,
+} from "@andy/contracts";
 import { formatMicroUsd } from "./spend-settings";
 
 /**
  * Spend notices for the Needs-you inbox (AI-257: M10.9, ADR-0129). Two kinds: a scope that has
  * used 80% of a daily or monthly cap, and a scope stopped at a cap with what is waiting. Each is
  * sent once per cap and window, and at most SPEND_NOTICES_PER_DAY a UTC day go out (ADR-0028).
- * Pure: the caller keeps `SpendNoticeState` and sends the returned notices. Only numbers, keys
+ * `spendNotices` is pure; `SpendAlerts` runs it inside the stored `SpendNoticeLedger` and sends. Only numbers, keys
  * and fixed phrases reach a notice: no agent-written text.
  */
 
@@ -15,21 +26,10 @@ export const SPEND_WARN_PCT = 80;
 export const SPEND_NOTICES_PER_DAY = 10;
 /** Waiting ticket keys a stop notice names; the rest are counted. */
 export const SPEND_STOP_KEYS_MAX = 5;
-/** Sent keys kept; old windows are pruned first, so this only bounds a pathological state. */
-const SENT_KEYS_MAX = 200;
 
 const PROJECT_KEY = /^[A-Z][A-Z0-9]{0,9}$/;
 const TICKET_KEY = /^[A-Z][A-Z0-9]{0,9}-\d{1,9}$/;
 const PROJECT_ID = /^[a-z][a-z0-9]{0,9}$/;
-
-/** What has gone out: dedupe keys for the current day and month, and today's count. */
-export interface SpendNoticeState {
-  /** UTC date the count belongs to. */
-  day: string;
-  sentToday: number;
-  /** `kind|cap|scope|window` keys already sent; windows other than today and this month are pruned. */
-  sent: string[];
-}
 
 /** A scope stopped at a cap (from the spend gate, M10.7), and the tickets it holds back. */
 export interface SpendStop {
@@ -87,7 +87,7 @@ function roll(state: SpendNoticeState | null, now: Date): SpendNoticeState {
     const window = key.slice(key.lastIndexOf("|") + 1);
     return window === day || window === month;
   };
-  const sent = (state?.sent ?? []).filter(live).slice(-SENT_KEYS_MAX);
+  const sent = (state?.sent ?? []).filter(live).slice(-SPEND_NOTICE_KEYS_MAX);
   return state?.day === day
     ? { day, sentToday: state.sentToday, sent }
     : { day, sentToday: 0, sent };
@@ -160,5 +160,87 @@ export function spendNotices(
     }
   }
 
-  return { state: { day, sentToday, sent: [...sent].slice(-SENT_KEYS_MAX) }, notices };
+  return { state: { day, sentToday, sent: [...sent].slice(-SPEND_NOTICE_KEYS_MAX) }, notices };
+}
+
+function log(severity: "INFO" | "WARNING" | "ERROR", message: string, fields: object = {}) {
+  console.log(JSON.stringify({ severity, message, component: "spend-notices", ...fields }));
+}
+
+/** What the spend gate (AI-248: M10.7) saw: a reservation that went through, or a refusal at a cap. */
+export type SpendEvent =
+  | {
+      kind: "reserved";
+      run: Pick<Run, "id" | "projectId" | "ticketId">;
+      caps: EffectiveSpendCaps;
+      /** The totals with this reservation counted. */
+      spent: SpendSoFar;
+    }
+  | {
+      kind: "stopped";
+      run: Pick<Run, "id" | "projectId" | "ticketId">;
+      cap: SpendCapKey;
+      caps: EffectiveSpendCaps;
+      spent: SpendSoFar | null;
+    };
+
+export interface SpendAlertsDeps {
+  tracker: Pick<WorkTracker, "getProject" | "getTicket">;
+  ledger: SpendNoticeLedger;
+  /** Where notices go (the Needs-you email); null: email is off, so they are logged instead. */
+  notifier: Notifier | null;
+  appUrl: string;
+  now?: () => Date;
+}
+
+/**
+ * Sends spend notices for the gate's events: the 80% warnings after a reservation, the stop
+ * notice on a refusal at a cap, naming the refused task's ticket. Dedupe and the daily cap are
+ * decided inside one `SpendNoticeLedger` update, so two instances can't both send the same
+ * notice. Never throws: a notice must not break the dispatch that raised it.
+ */
+export class SpendAlerts {
+  private readonly now: () => Date;
+
+  constructor(private readonly deps: SpendAlertsDeps) {
+    this.now = deps.now ?? (() => new Date());
+  }
+
+  async handle(event: SpendEvent): Promise<void> {
+    try {
+      const { projectId, ticketId } = event.run;
+      const project = await this.deps.tracker.getProject(projectId);
+      if (!project) return;
+      const ticket =
+        event.kind === "stopped" && ticketId
+          ? await this.deps.tracker.getTicket(projectId, ticketId)
+          : null;
+      const input: SpendNoticeInput = {
+        project: { id: project.id, key: project.key },
+        caps: event.caps,
+        spent: event.spent,
+        stop:
+          event.kind === "stopped" ? { cap: event.cap, waiting: ticket ? [ticket.key] : [] } : null,
+        appUrl: this.deps.appUrl,
+      };
+      const now = this.now();
+      const notices = await this.deps.ledger.update((state) => {
+        const out = spendNotices(input, state, now);
+        return { state: out.state, result: out.notices };
+      });
+      for (const notice of notices) await this.send(notice, event.run.id);
+    } catch (err) {
+      log("ERROR", "spend notice failed", { runId: event.run.id, error: String(err) });
+    }
+  }
+
+  private async send(notice: Notice, runId: string): Promise<void> {
+    if (!this.deps.notifier) {
+      // Email off: the notice still reaches the logs, where a log-based alert can find it.
+      log("WARNING", "spend notice (email off)", { runId, title: notice.title, body: notice.body });
+      return;
+    }
+    await this.deps.notifier.notify(notice);
+    log("INFO", "spend notice sent", { runId, title: notice.title });
+  }
 }

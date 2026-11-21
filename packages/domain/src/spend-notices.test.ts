@@ -1,10 +1,22 @@
-import type { EffectiveSpendCaps, SpendSoFar } from "@andy/contracts";
-import { describe, expect, it } from "vitest";
+import {
+  InMemorySpendLedger,
+  InMemorySpendNoticeLedger,
+  InMemoryWorkTracker,
+  type EffectiveSpendCaps,
+  type Notice,
+  type Notifier,
+  type SpendNoticeState,
+  type SpendSoFar,
+} from "@andy/contracts";
+import { describe, expect, it, vi } from "vitest";
+import { SpendGate } from "./spend-gate";
+import { TicketService } from "./tickets";
 import {
   SPEND_NOTICES_PER_DAY,
+  SpendAlerts,
   spendNotices,
+  type SpendEvent,
   type SpendNoticeInput,
-  type SpendNoticeState,
 } from "./spend-notices";
 
 /** AI-257: M10.9: spend notices. Amounts in micro-dollars (1 USD = 1,000,000). */
@@ -166,5 +178,106 @@ describe("spendNotices: daily cap and state", () => {
     expect(() =>
       spendNotices(input({ project: { id: "ai", key: "AI please" } }), null, NOW),
     ).toThrow();
+  });
+});
+
+describe("SpendGate → spend notices (AI-257 wiring)", () => {
+  const PAID = { harness: "opencode", provider: "openrouter", model: "vendor/model-x" } as const;
+  const PRICED = async () => ({ priceInPerMTokUsd: 1, priceOutPerMTokUsd: 2 });
+  const run = (n: number) => ({ id: `run-${n}`, projectId: "ai", ticketId: "t1", route: PAID });
+
+  async function setup(notifier: Notifier | null = null) {
+    const tracker = new InMemoryWorkTracker(() => NOW);
+    const project = await tracker.createProject({ name: "Andy Intelligence", key: "AI" });
+    const ticket = await new TicketService(tracker).create(
+      project.id,
+      { title: "Paid task" },
+      "user:u1",
+    );
+    const sent: Notice[] = [];
+    const alerts = new SpendAlerts({
+      tracker,
+      ledger: new InMemorySpendNoticeLedger(),
+      notifier: notifier ?? { notify: async (n) => void sent.push(n) },
+      appUrl: "https://ai.example.com",
+      now: () => NOW,
+    });
+    const events: SpendEvent[] = [];
+    const gate = new SpendGate(
+      new InMemorySpendLedger(),
+      PRICED,
+      undefined,
+      () => NOW,
+      async (e) => {
+        events.push(e);
+        await alerts.handle(e);
+      },
+    );
+    const r = (n: number) => ({ ...run(n), projectId: project.id, ticketId: ticket.id });
+    return { gate, events, sent, r, ticket };
+  }
+
+  it("GivenReservationsUpTo80PercentOfTheDailyCap_WhenTheGateReserves_ThenOneWarningPerCap", async () => {
+    const { gate, sent, r } = await setup();
+    await gate.reserve(r(1)); // $2 of $5: 40%
+    expect(sent).toEqual([]);
+    await gate.reserve(r(2)); // $4 of $5: 80%
+    expect(sent.map((n) => n.title)).toEqual([
+      "AI: 80% of the daily spend cap",
+      "All projects: 80% of the global daily spend cap",
+    ]);
+  });
+
+  it("GivenACapReached_WhenTheGateRefuses_ThenOneStopNoticeNamingTheWaitingTicketAndNoRepeat", async () => {
+    const { gate, sent, r, ticket } = await setup();
+    await gate.reserve(r(1));
+    await gate.reserve(r(2));
+    sent.length = 0;
+    await expect(gate.reserve(r(3))).rejects.toMatchObject({ code: "spend_cap" });
+    await expect(gate.reserve(r(4))).rejects.toMatchObject({ code: "spend_cap" });
+    expect(sent).toEqual([
+      {
+        title: "AI: paid tasks stopped at the daily spend cap",
+        body: `Waiting: ${ticket.key}. Raise the cap in project settings or wait for the next window.`,
+        urgency: "high",
+        link: expect.stringMatching(/^https:\/\/ai\.example\.com\/p\/[a-z0-9]+\/dashboards$/),
+      },
+    ]);
+  });
+
+  it("GivenTheNotifierFails_WhenTheGateReserves_ThenTheReservationStillGoesThrough", async () => {
+    const { gate, r } = await setup({
+      notify: async () => {
+        throw new Error("email down");
+      },
+    });
+    await gate.reserve(r(1));
+    await expect(gate.reserve(r(2))).resolves.toMatchObject({ budgetMicroUsd: 2 * USD });
+  });
+
+  it("GivenEmailOff_WhenANoticeIsDue_ThenItIsLoggedNotLost", async () => {
+    const tracker = new InMemoryWorkTracker(() => NOW);
+    const project = await tracker.createProject({ name: "Andy Intelligence", key: "AI" });
+    const logs = vi.spyOn(console, "log").mockImplementation(() => {});
+    const alerts = new SpendAlerts({
+      tracker,
+      ledger: new InMemorySpendNoticeLedger(),
+      notifier: null,
+      appUrl: "https://ai.example.com",
+      now: () => NOW,
+    });
+    await alerts.handle({
+      kind: "reserved",
+      run: { id: "run-1", projectId: project.id, ticketId: null },
+      caps: CAPS,
+      spent: spent(4 * USD),
+    });
+    const lines = logs.mock.calls.map(
+      ([l]) => JSON.parse(String(l)) as { message: string; severity: string },
+    );
+    expect(lines).toContainEqual(
+      expect.objectContaining({ severity: "WARNING", message: "spend notice (email off)" }),
+    );
+    logs.mockRestore();
   });
 });

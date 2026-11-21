@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import { render, screen, within } from "@testing-library/react";
 import type { EffectiveSpendCaps } from "@andy/contracts";
 import { PAGE_LOAD, renderApp } from "@/test/harness";
-import { SpendUsed, spendRows } from "./SpendPanel";
+import { SpendUsed, providerRows, spendRows } from "./SpendPanel";
 
 /** AI-257: M10.9: the Paid spend panel on Dashboards. */
 
@@ -49,6 +49,25 @@ describe("spendRows", () => {
   });
 });
 
+describe("providerRows", () => {
+  it("GivenProviderTotals_WhenRowsBuilt_ThenProvidersWithSpendFirstByMonthAndNoneLeftOut", () => {
+    expect(
+      providerRows([
+        { provider: "claude-sub", dayMicroUsd: 0, monthMicroUsd: 2 * USD },
+        { provider: "google-sub", dayMicroUsd: 0, monthMicroUsd: 0 },
+        { provider: "openrouter", dayMicroUsd: USD, monthMicroUsd: 3 * USD },
+      ]),
+    ).toEqual([
+      { provider: "openrouter", day: USD, month: 3 * USD },
+      { provider: "claude-sub", day: 0, month: 2 * USD },
+    ]);
+  });
+
+  it("GivenUnreadableTotals_WhenRowsBuilt_ThenUnknown", () => {
+    expect(providerRows(null)).toBeNull();
+  });
+});
+
 describe("SpendUsed", () => {
   it.each([
     [1 * USD, 5 * USD, "$1.00 of $5.00(20%)", ""],
@@ -78,6 +97,8 @@ describe("Paid spend panel", () => {
     expect(within(row).getAllByText("unknown")).toHaveLength(2);
     const all = within(panel).getByRole("row", { name: /^All projects/ });
     expect(within(all).getAllByText("unknown")).toHaveLength(2);
+    const byProvider = await within(panel).findByRole("group", { name: "By provider" }, PAGE_LOAD);
+    expect(within(byProvider).getByText("Spend by provider: unknown.")).toBeTruthy();
   });
 
   it("GivenNoProjects_WhenDashboardsOpen_ThenAnEmptyStateNotLoadingForever", async () => {

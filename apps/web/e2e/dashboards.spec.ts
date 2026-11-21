@@ -164,9 +164,9 @@ test("dashboards: a project's eight weeks", async ({ page }) => {
   await expect(page.getByRole("link", { name: "Needs you 6" })).toBeVisible();
   await expect(page.getByText("18 deployments")).toBeVisible();
   // AI-257: the Paid spend panel has loaded (the fake ledger is empty, so $0.00).
-  await expect(
-    page.getByRole("region", { name: "Paid spend" }).getByRole("row", { name: /^All projects/ }),
-  ).toBeVisible();
+  const spend = page.getByRole("region", { name: "Paid spend" });
+  await expect(spend.getByRole("row", { name: /^All projects/ })).toBeVisible();
+  await expect(spend.getByText("No paid spend this month.")).toBeVisible();
   await settleCharts(page);
   await expect(page).toHaveScreenshot("dashboards.png");
 });

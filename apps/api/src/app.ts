@@ -16,6 +16,7 @@ import {
   type NightLaunchStore,
   type ProjectVersions,
   type SpendLedger,
+  type SpendNoticeLedger,
 } from "@andy/contracts";
 import type { CreatedApp } from "@andy/github";
 import { DomainError, type EmailNotificationsDeps } from "@andy/domain";
@@ -75,6 +76,11 @@ export interface AppDeps {
    * totals (AI-249). Without it every pay_per_use task is refused and spend reads unknown.
    */
   spendLedger?: SpendLedger;
+  /**
+   * What the spend notices have sent (AI-257: M10.9): their dedupe and daily cap. Absent: the
+   * gate sends no spend notices.
+   */
+  spendNotices?: SpendNoticeLedger;
   /**
    * Per-project change counters (AI-222): with them, every tracker and run write bumps its
    * project, and the board and ticket list serve unchanged polls from a cache. Without, no cache.

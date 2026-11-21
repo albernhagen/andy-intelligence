@@ -1,4 +1,4 @@
-import { useQueries } from "@tanstack/react-query";
+import { useQueries, useQuery } from "@tanstack/react-query";
 import type { EffectiveSpendCaps, SpendSoFar } from "@andy/contracts";
 import { useProjects } from "@/lib/queries";
 import { unwrap, useApi } from "@/lib/api";
@@ -9,7 +9,7 @@ import { usd } from "./SpendCaps";
  * Paid spend on Dashboards (AI-257: M10.9): today and month to date for each project and for all
  * projects, against the caps in force (AI-249's read route over the spend ledger). Unknown spend
  * (ledger unreadable) shows as unknown, never as $0. Read-only: caps are set in project settings.
- * Spend by provider and settled vs reserved need ledger totals that don't exist yet.
+ * Below, the same spend by provider (AI-280's ledger totals): the project's, or all projects'.
  */
 
 /** Projects read on the all-projects view (ADR-0028): one spend read each. */
@@ -68,6 +68,73 @@ export function SpendUsed({
       {usd(used)} <span className="text-muted-foreground">of {usd(cap)}</span>
       {cap > 0 && <span className="ml-1 text-xs text-muted-foreground">({pct}%)</span>}
     </span>
+  );
+}
+
+/** One provider's spend in the shown scope; null amounts when the ledger can't be read. */
+export interface ProviderRow {
+  provider: string;
+  day: number | null;
+  month: number | null;
+}
+
+/** Providers with spend first (by month, then name); a provider with none is left out. */
+export function providerRows(
+  rows: { provider: string; dayMicroUsd: number; monthMicroUsd: number }[] | null,
+): ProviderRow[] | null {
+  if (rows === null) return null;
+  return rows
+    .filter((r) => r.dayMicroUsd > 0 || r.monthMicroUsd > 0)
+    .sort((a, b) => b.monthMicroUsd - a.monthMicroUsd || a.provider.localeCompare(b.provider))
+    .map((r) => ({ provider: r.provider, day: r.dayMicroUsd, month: r.monthMicroUsd }));
+}
+
+/** Spend by provider for one project, or for all projects (read through any project). */
+function ByProvider({ via, scope }: { via: string; scope: "project" | "global" }) {
+  const api = useApi();
+  const poll = useLivePoll("slow");
+  const read = useQuery({
+    ...poll,
+    queryKey: ["spend-providers", via],
+    queryFn: async () =>
+      unwrap(
+        await api.GET("/api/projects/{projectId}/spend/providers", {
+          params: { path: { projectId: via } },
+        }),
+      ),
+  });
+  if (read.isPending) return null;
+  const rows = read.isError ? null : providerRows(read.data[scope]);
+  return (
+    <div role="group" aria-label="By provider" className="space-y-1">
+      <h4 className="text-xs font-medium">By provider</h4>
+      {rows === null ? (
+        <p className="text-xs text-muted-foreground">Spend by provider: unknown.</p>
+      ) : rows.length === 0 ? (
+        <p className="text-xs text-muted-foreground">No paid spend this month.</p>
+      ) : (
+        <table className="w-full text-sm">
+          <thead className="text-xs text-muted-foreground">
+            <tr>
+              <th className="text-left font-normal">Provider</th>
+              <th className="text-left font-normal">Today</th>
+              <th className="text-left font-normal">This month</th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((r) => (
+              <tr key={r.provider} className="h-8">
+                <th scope="row" className="text-left font-normal">
+                  {r.provider}
+                </th>
+                <td className="tabular-nums">{r.day === null ? "unknown" : usd(r.day)}</td>
+                <td className="tabular-nums">{r.month === null ? "unknown" : usd(r.month)}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
+    </div>
   );
 }
 
@@ -139,6 +206,9 @@ export function SpendPanel({ projectId }: { projectId?: string }) {
             ))}
           </tbody>
         </table>
+      )}
+      {!loading && shown[0] && (
+        <ByProvider via={shown[0].id} scope={projectId ? "project" : "global"} />
       )}
       {failed > 0 && (
         <p className="text-xs text-destructive">
