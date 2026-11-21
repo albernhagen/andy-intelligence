@@ -9,7 +9,7 @@ import { FixedWindowLimiter } from "./mcp/rate-limit";
 import type { RouteModule } from "./services";
 
 /**
- * Deployment reports from deploy workflows (AI-180: M6.4, ADR-0114). The workflow proves who it
+ * Deployment reports from deploy workflows (AI-180: M6.4; ADR-0114, proposed in PR #227). The workflow proves who it
  * is with its GitHub Actions OIDC token, like the run callbacks (ADR-0019): only a registered,
  * enabled project's `deploy.yml` on `main` is accepted, and every other caller gets 403 with
  * nothing recorded. The token, not the body, says which repo and commit; the body adds only what
