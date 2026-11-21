@@ -9,6 +9,7 @@ import {
   type IdeateService,
   type ProjectPlanService,
   type ConfigProposals,
+  type ConfigRevert,
   type RunService,
   type TicketService,
 } from "@andy/domain";
@@ -43,6 +44,8 @@ export interface ToolDeps {
   plans?: ProjectPlanService;
   /** Config proposals from review findings (ADR-0097); absent or null: no config tools. */
   configProposals?: ConfigProposals | null;
+  /** The settings change log and revert (M4.12); absent or null: no change-log tools. */
+  configRevert?: ConfigRevert | null;
   /** The night launch step (M4.17); absent or null: no night tools. */
   night?: NightDeps | null;
   /** Signed-in email, shown by `status` so it doubles as the connection check. */
