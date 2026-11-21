@@ -39,6 +39,7 @@ export * from "./common";
 export * from "./config-proposals";
 export * from "./cost";
 export * from "./dashboard";
+export * from "./deployment";
 export * from "./dispatch-caps";
 export * from "./executor";
 export * from "./ideate";
