@@ -2,13 +2,14 @@ import {
   ConfigChange,
   InMemoryConfigChangeStore,
   InMemoryNightLaunchStore,
+  InMemoryReleaseNoteStore,
   InMemoryRoutingConfigStore,
   InMemorySpendLedger,
   InMemoryRunStore,
   InMemoryWorkTracker,
 } from "@andy/contracts";
 import type { NewTicket, Stage } from "@andy/contracts";
-import { TicketService, rankBetween } from "@andy/domain";
+import { TicketService, buildReleaseNote, rankBetween } from "@andy/domain";
 import { createApp, ownerOnlyAccess } from "@andy/api/app";
 import { E2E_TOKEN } from "./token";
 
@@ -199,6 +200,7 @@ export async function createFakeApp() {
     routing: new InMemoryRoutingConfigStore(),
     // AI-249: empty, so the settings page's Spend caps panel shows $0.00 spent.
     spendLedger: new InMemorySpendLedger(),
+    releaseNotes: await seedReleaseNotes(),
   });
 }
 
@@ -319,4 +321,56 @@ async function seedEpic(service: TicketService) {
   await child("ready", { type: "chore", title: "Monthly restore drill" });
   await child("in_progress", { type: "feature", title: "Alert when a backup fails" });
   await child("done", { type: "chore", title: "Backups to a second region" });
+}
+
+/**
+ * AI-159: What's new for OPS (its epic is seeded above): a note with every field, a backfilled
+ * one and one with no note, over two days. OPS only, so no AI screenshot changes.
+ */
+async function seedReleaseNotes() {
+  const notes = new InMemoryReleaseNoteStore();
+  const repo = "https://github.com/albernhagen/ops";
+  const note = (
+    number: number,
+    title: string,
+    body: string,
+    ticket: { key: string; title: string } | null,
+    minutes: number,
+    fallback?: string,
+  ) =>
+    notes.put(
+      buildReleaseNote({
+        projectId: "ops",
+        pr: { number, url: `${repo}/pull/${number}`, title },
+        details: { body, mergedBy: "albernhagen", mergedAt: minutesAgo(minutes) },
+        ticket: ticket ? { ...ticket, risk: "low" } : null,
+        files: [
+          { path: "docs/features/backup-alerts.md" },
+          { path: "docs/runbooks/restore-drill.md" },
+        ],
+        recordedAt: minutesAgo(minutes),
+        ...(fallback ? { fallback: { source: "backfill" as const, whatChanged: fallback } } : {}),
+      }),
+    );
+  await note(
+    12,
+    "OPS-8: Backups to a second region",
+    [
+      "What changed: Backups now land in a second region, so one outage can't lose them.",
+      "How it works: A nightly job copies each snapshot to the second bucket and checks its hash.",
+      "Needs you: Approve the bucket's cost in the project settings.",
+    ].join("\n"),
+    { key: "OPS-8", title: "Backups to a second region" },
+    30,
+  );
+  await note(11, "Chore(deps): Bump the test runner", "", null, 90);
+  await note(
+    9,
+    "OPS-7: Alert when a backup fails",
+    "Adds the alert.",
+    { key: "OPS-7", title: "Alert when a backup fails" },
+    60 * 26,
+    "A failed backup now pages the on-call channel.",
+  );
+  return notes;
 }

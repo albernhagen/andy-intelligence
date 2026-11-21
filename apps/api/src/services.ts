@@ -18,6 +18,7 @@ import {
   IdeateService,
   ProjectPlanService,
   TicketService,
+  WhatsNewReader,
   EmailNotifications,
   wakeAfterRunEnd,
   notifyOnNeedsYou,
@@ -304,6 +305,8 @@ export function createServices(input: AppDeps): Services {
         now,
       )
     : null;
+  // AI-159: the What's new read; absent without a release-note store (route and tool both).
+  const whatsNew = deps.releaseNotes ? new WhatsNewReader(deps.tracker, deps.releaseNotes) : null;
   // AI-239: routing settings; each save is logged when the change log is configured.
   const routing = deps.routing
     ? new RoutingSettings(deps.routing, deps.tracker, deps.configChanges ?? null, now)
@@ -350,6 +353,8 @@ export function createServices(input: AppDeps): Services {
     globalSpendCaps,
     // AI-198: each project's board through the same read cache as board polls.
     work: new WorkReader(deps.tracker, new BoardReader(deps.tracker, deps.runs, readCache)),
+    whatsNew,
+    publicUrl: deps.mcp?.publicUrl ?? null,
   };
 }
 
