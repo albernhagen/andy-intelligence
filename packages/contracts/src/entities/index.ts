@@ -515,6 +515,8 @@ export const GateReason = z.enum([
   "not_default_branch",
   // A sync run is queued or running for the PR (AI-72, ADR-0083).
   "sync_pending",
+  // A spike's PR changes files outside docs/ (AI-99): a deviation for Andy.
+  "spike_outside_docs",
 ]);
 export type GateReason = z.infer<typeof GateReason>;
 
@@ -614,6 +616,8 @@ export const Run = z.object({
   gateReasons: z.array(GateReason).max(GateReason.options.length).default([]),
   /** Changed paths the gate found protected, capped. */
   protectedFiles: z.array(z.string().max(300)).max(50).default([]),
+  /** A spike's changed paths outside `docs/` (AI-99), capped; empty for other types. */
+  outsideDocs: z.array(z.string().max(300)).max(50).default([]),
   /** When the gate flagged the ticket for a protected path or missing output; flags once. */
   gateFlaggedAt: Timestamp.nullable().default(null),
   /** The head commit of the last merge attempt, set before the call: one attempt per head. */
