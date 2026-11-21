@@ -414,6 +414,7 @@ export const RunPatch = Run.pick({
   verification: true,
   gateReasons: true,
   protectedFiles: true,
+  outsideDocs: true,
   gateFlaggedAt: true,
   mergeAttemptedSha: true,
   mergeError: true,
@@ -734,3 +735,4 @@ export * from "./notify-email";
 export * from "./runner";
 export * from "./night";
 export * from "./config-proposals";
+export * from "./config-changes";
