@@ -11,7 +11,7 @@ v1.x screens:
 - **Quota & spend** (per provider gauges with reset times; paid spend vs caps; built: header gauge, banner on warn/pause/unknown).
 - **Project settings** (AI-46, built): `/p/:projectId/settings`, header link; switches explained, saved by PATCH; setup checklist first (AI-95). `/projects` opens the current project's; `/projects/new` adds one.
 - **Digest**, **What's new** (ADR-0081, ADR-0121): `/p/:projectId/digest`, `…/whats-new`, header links.
-- **Tickets** — M1: board, ticket detail with history and linked runs/PRs/cost. M3 (ADR-0059): status on cards, story panel, command palette. M5: filter and group by project. M4: overrides editing; roadmap; work views (ADR-0108): board chips; Work (`/all/work`, `/p/:id/work`, MCP `list_work`, AI-198).
+- **Tickets** — M1: board, ticket detail with history and linked runs/PRs/cost. M3 (ADR-0059): status on cards, story panel, command palette. M5: filter and group by project. M4: overrides editing; Roadmap (AI-202); work views (ADR-0108): board chips; Work (`/all/work`, `/p/:id/work`, MCP `list_work`, AI-198).
 - **Run detail** — built (AI-101): `/p/:projectId/runs/:runId`, opened from Activity; another project's task: not found. Jules links M9.
 - **Config** (providers, harnesses, models, tiers, policies; audit log with revert (M4.12); pending approvals).
 - **Releases** (dev status, promote to prod, rollback).
