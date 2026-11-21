@@ -4,16 +4,27 @@ import * as contracts from "@andy/contracts";
 import * as contractsTesting from "@andy/contracts/testing";
 import * as domain from "@andy/domain";
 import * as store from "@andy/store";
-import { createApp } from "./app";
+import { createApp, type AppDeps } from "./app";
 import { ClientMetadataResolver } from "./mcp";
+import { ownerOnlyAccess } from "./project-access";
 import { mcpToolNames } from "./mcp/test-client";
 
 const PUBLIC_URL = "http://localhost";
 
 /** The app with every optional feature on, fakes only (no network, no credentials). */
-export function fullApp() {
+export function fullApp(overrides: Partial<AppDeps> = {}) {
   const grants = new contracts.InMemoryOAuthGrantStore();
-  const app = createApp({
+  const app = createApp(fullAppDeps(grants, overrides));
+  return { app, grants };
+}
+
+/** `fullApp`'s deps: every optional feature on, fakes only; `overrides` replace fields. */
+export function fullAppDeps(
+  grants = new contracts.InMemoryOAuthGrantStore(),
+  overrides: Partial<AppDeps> = {},
+): AppDeps {
+  return {
+    projectAccess: ownerOnlyAccess(),
     verifier: { verify: () => Promise.reject(new Error("unused")) },
     allowedEmails: new Set(["andy@example.com"]),
     version: "snapshot",
@@ -25,6 +36,7 @@ export function fullApp() {
     reviewFindings: new contracts.InMemoryReviewFindingSource(),
     quota: new contracts.InMemoryQuotaStore(),
     nightLaunches: new contracts.InMemoryNightLaunchStore(),
+    routing: new contracts.InMemoryRoutingConfigStore(),
     projectVersions: new contracts.InMemoryProjectVersions(),
     publicHost: "localhost",
     watchdog: {
@@ -49,8 +61,8 @@ export function fullApp() {
       connections: new contracts.InMemoryCodeHostConnectionStore(),
       events: new contracts.InMemoryCodeEventLog(),
     },
-  });
-  return { app, grants };
+    ...overrides,
+  };
 }
 
 /**

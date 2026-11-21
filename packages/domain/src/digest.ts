@@ -337,6 +337,7 @@ const IDLE_REASONS: Record<DispatchIdleReason, (p: DigestData["project"]) => str
   quota_reserve: () => "Dispatch is idle: quota is at the reserve",
   quota_warn: () =>
     `Dispatch is at the warn cap (${plural(MAX_ACTIVE_RUNS_AT_WARN, "agent task")} at once while quota is at warn)`,
+  spend_cap: () => "Dispatch is idle: a paid agent task would pass a spend cap",
 };
 
 function dispatchIdle({ project }: DigestData): DigestException[] {
@@ -410,11 +411,17 @@ function inFlightItem(r: Run, byId: Map<string, Ticket>, now: Date): DigestInFli
 function inReview(data: DigestData): DigestReview[] {
   return data.tickets
     .filter((t) => t.stage === "ready_for_review" && !t.archived)
-    .map((t) => {
-      const last = (data.ticketEvents.get(t.id) ?? []).findLast((e) => e.kind === "pr_linked");
-      const n = last?.data.number;
-      return { ticketKey: t.key, title: t.title, prNumber: typeof n === "number" ? n : null };
-    });
+    .map((t) => ({
+      ticketKey: t.key,
+      title: t.title,
+      prNumber: lastPrNumber(data.ticketEvents.get(t.id) ?? []),
+    }));
+}
+
+/** The number of the last PR linked in a ticket's history (oldest first); null when none. */
+export function lastPrNumber(events: readonly TicketEvent[]): number | null {
+  const n = events.findLast((e) => e.kind === "pr_linked")?.data.number;
+  return typeof n === "number" ? n : null;
 }
 
 function totalsOf(endedRuns: readonly Run[], merged: number): DigestTotals {

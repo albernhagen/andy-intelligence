@@ -1,12 +1,13 @@
 import { WorkTrackerError, type Project, type RunExecutor } from "@andy/contracts";
 import { AGENT_RUN_WORKFLOW, CLAUDE_EXECUTOR_REF } from "@andy/github";
 import { DomainError } from "@andy/domain";
-import type { Hono } from "hono";
+import type { Context, Hono } from "hono";
 import { bodyLimit } from "hono/body-limit";
 import { createRemoteJWKSet, jwtVerify, type JWTVerifyGetKey } from "jose";
 import type { AuthEnv } from "../auth";
 import { z } from "zod";
 import { FixedWindowLimiter } from "../mcp/rate-limit";
+import { RUN_TOKEN_SHAPE } from "../runners";
 import type { GitHubConnection } from "./connection";
 import type { RouteModule } from "../services";
 import { RepoIndex } from "./webhooks";
@@ -34,6 +35,8 @@ export interface ActionsClaims {
   job_workflow_ref?: string;
   /** The workflow run's ID (agent run callbacks). */
   run_id?: string;
+  /** The commit the workflow run is for (deployment callbacks, AI-180). */
+  sha?: string;
 }
 
 export type ActionsTokenVerifier = (jwt: string) => Promise<ActionsClaims>;
@@ -107,13 +110,28 @@ export function actionsTokenVerifier(
       workflow_ref: payload.workflow_ref,
       job_workflow_ref: optional(payload.job_workflow_ref),
       run_id: optional(payload.run_id),
+      sha: optional(payload.sha),
     };
   };
 }
 
+/**
+ * A local runner's push grant (ADR-0089): its per-run token checked for the run, then the run's
+ * one grant claimed; the token is for the run's project repo.
+ */
+export interface LocalRunGrant {
+  authenticate(token: string, runId: string): Promise<{ runnerId: string } | null>;
+  claim(runId: string, caller: { runnerId: string }): Promise<{ repo: string }>;
+}
+
+/** Per-run token lookups per instance per minute, before the store (as on run callbacks, ADR-0094). */
+export const LOCAL_TOKEN_LOOKUPS_PER_MINUTE = 60;
+
 export interface TokenDeps {
   connection: GitHubConnection;
   verify: ActionsTokenVerifier;
+  /** Local runners' push grants; absent: per-run tokens get 401. */
+  local?: LocalRunGrant;
   policy?: readonly TokenPolicyEntry[];
   /** For `runGrant` entries; without it they get no token. */
   claimRunGrant?: RunGrant;
@@ -130,12 +148,20 @@ export function registerGitHubToken(app: Hono<AuthEnv>, deps: TokenDeps): void {
   const policy = deps.policy ?? TOKEN_POLICY;
   const now = deps.now ?? (() => new Date());
   const limiter = new FixedWindowLimiter(TOKEN_RATE_LIMIT, 60_000, () => now().getTime());
+  const localLookups = new FixedWindowLimiter(LOCAL_TOKEN_LOOKUPS_PER_MINUTE, 60_000, () =>
+    now().getTime(),
+  );
+  // Local grants have their own bucket, so they can't starve Actions publishes (or the reverse).
+  const localIssues = new FixedWindowLimiter(TOKEN_RATE_LIMIT, 60_000, () => now().getTime());
 
   app.post(
     TOKEN_PATH,
     bodyLimit({ maxSize: 1024, onError: (c) => c.json({ error: "request body too large" }, 413) }),
     async (c) => {
       const match = /^Bearer\s+(\S+)$/i.exec(c.req.header("authorization") ?? "");
+      if (match?.[1] && RUN_TOKEN_SHAPE.test(match[1])) {
+        return localGrant(c, match[1]);
+      }
       let claims: ActionsClaims;
       try {
         if (!match?.[1]) throw new Error("no bearer token");
@@ -184,14 +210,47 @@ export function registerGitHubToken(app: Hono<AuthEnv>, deps: TokenDeps): void {
         }
       }
 
-      const host = await deps.connection.codeHost();
-      if (!host) return c.json({ error: "GitHub is not connected" }, 503);
-      const token = await host.issueRepoToken(claims.repository);
-      if (!token) return c.json({ error: "GitHub App is not installed on the repo" }, 403);
-      log("INFO", "repo token issued", { ...claims, expiresAt: token.expiresAt });
-      return c.json(token, 200);
+      return issue(c, claims.repository, { ...claims });
     },
   );
+
+  async function issue(c: Context, repository: string, fields: Record<string, unknown>) {
+    const host = await deps.connection.codeHost();
+    if (!host) return c.json({ error: "GitHub is not connected" }, 503);
+    const token = await host.issueRepoToken(repository);
+    if (!token) return c.json({ error: "GitHub App is not installed on the repo" }, 403);
+    log("INFO", "repo token issued", { ...fields, repository, expiresAt: token.expiresAt });
+    return c.json(token, 200);
+  }
+
+  /**
+   * A local build's push token (ADR-0089): the runner's per-run token for the named run, the
+   * run's one grant (refused a second time, or once the run ended), a token for its repo.
+   */
+  async function localGrant(c: Context, runToken: string) {
+    const body = RunGrantBody.safeParse(await c.req.json().catch(() => null));
+    if (!body.success || !deps.local) return c.json({ error: "unauthenticated" }, 401);
+    const runId = body.data.runId;
+    if (!localLookups.tryTake()) return c.json({ error: "rate limited" }, 429);
+    const caller = await deps.local.authenticate(runToken, runId);
+    if (!caller) {
+      log("WARNING", "per-run token rejected for a push token", { runId });
+      return c.json({ error: "unauthenticated" }, 401);
+    }
+    if (!localIssues.tryTake()) return c.json({ error: "rate limited" }, 429);
+    let repo: string;
+    try {
+      ({ repo } = await deps.local.claim(runId, caller));
+    } catch (err) {
+      if (!(err instanceof DomainError || err instanceof WorkTrackerError)) throw err;
+      log("WARNING", "local push token refused", { runId, ...caller, reason: err.message });
+      return c.json(
+        { error: err.message },
+        err instanceof DomainError ? 403 : err.code === "not_found" ? 404 : 409,
+      );
+    }
+    return issue(c, repo, { runId, ...caller });
+  }
 }
 
 /** Listed in `public-routes.ts` (AI-145): CI jobs present an Actions OIDC token. Needs the GitHub App. */
@@ -204,6 +263,16 @@ export const publicRoutes: RouteModule = (app, s) => {
     verify: verifyActionsToken,
     claimRunGrant: (runId, caller) => s.runs.claimPushGrant(runId, caller),
     registeredProject: (repo) => repoIndex.projectFor(repo),
+    ...(s.runners
+      ? {
+          local: {
+            authenticate: (token: string, runId: string) =>
+              s.runners!.authenticateRun(token, runId),
+            claim: (runId: string, caller: { runnerId: string }) =>
+              s.runs.claimLocalPushGrant(runId, caller),
+          },
+        }
+      : {}),
     now: s.now,
   });
 };

@@ -12,11 +12,18 @@ import {
   type DragStartEvent,
 } from "@dnd-kit/core";
 import { Stage, type BoardTicket } from "@andy/contracts";
-import { sortByStartScore } from "@andy/domain";
+import {
+  parseWorkView,
+  sortByStartScore,
+  workViewCounts,
+  workViews,
+  type WorkView,
+} from "@andy/domain";
 import { BoardCard } from "@/components/board/BoardCard";
 import { BoardDispatchStatus } from "@/components/DispatchControls";
 import { InFlightPanel } from "@/components/InFlightPanel";
 import { EpicControls } from "@/components/board/EpicControls";
+import { WorkViewChips } from "@/components/board/WorkViewChips";
 import { EpicGroupHeader, Lane, LaneZone, ReadySortToggle } from "@/components/board/Lane";
 import { Loading, QueryError } from "@/components/Status";
 import {
@@ -50,18 +57,31 @@ import { showsError } from "@/lib/live";
  * is the priority, ADR-0058), across lanes to move: an allowed transition is a normal move, any
  * other a forced one (ADR-0057). Backlog has two parts (ADR-0075): a drop into Up next starts refine, Ideas costs nothing. Moves and reorders show at once and roll back with the API's
  * message on the card. Group by epic (AI-86) puts a header per epic inside each lane; the epic
- * filter shows one epic's tickets. Child routes (the ticket panel) render in the Outlet.
+ * filter shows one epic's tickets. Work view chips (AI-187) narrow it to one fixed view, kept in
+ * the URL (`?view=`); both filters combine. Child routes (the ticket panel) render in the Outlet.
  */
 export function BoardPage() {
   const { projectId } = useParams({ from: "/p/$projectId" });
   const board = useBoard(projectId);
   const [showArchived, setShowArchived] = useState(false);
-  const { sort } = useSearch({ from: "/p/$projectId" });
+  const search = useSearch({ from: "/p/$projectId" });
+  const { sort } = search;
+  // Parsed again here: the router keeps unknown values in the URL, and they mean all tickets.
+  const view = parseWorkView(search.view);
+  const navigate = useNavigate({ from: "/p/$projectId" });
   const [grouped, setGrouped] = useState(loadGroupByEpic);
   const [chosenEpic, setChosenEpic] = useState<string | null>(null);
   const epics = useMemo(() => boardEpics(board.data ?? []), [board.data]);
   // An epic that left the board (another project's data, or deleted) stops filtering.
   const epicId = epics.some((e) => e.id === chosenEpic) ? chosenEpic : null;
+  const tickets = useMemo(
+    () => (board.data ? visibleTickets(board.data, showArchived) : []),
+    [board.data, showArchived],
+  );
+  const allById = useMemo(() => new Map((board.data ?? []).map((t) => [t.id, t])), [board.data]);
+  // Counts follow the epic filter, so a chip's number is what clicking it shows.
+  const inScope = useMemo(() => tickets.filter((t) => inEpic(t, epicId)), [tickets, epicId]);
+  const counts = useMemo(() => workViewCounts(inScope, allById), [inScope, allById]);
 
   return (
     <section className="space-y-4">
@@ -91,18 +111,27 @@ export function BoardPage() {
         </div>
       </div>
 
+      {board.data && (
+        <WorkViewChips
+          view={view}
+          counts={counts}
+          total={inScope.length}
+          onChange={(next) => void navigate({ search: { sort, view: next ?? undefined } })}
+        />
+      )}
       <InFlightPanel projectId={projectId} />
       {board.isPending && <Loading />}
       {showsError(board) && <QueryError error={board.error} />}
       {board.data && (
         <Lanes
-          tickets={visibleTickets(board.data, showArchived)}
+          tickets={tickets}
           showCancelled={showArchived}
           projectId={projectId}
           sortedByScore={sort === "score"}
           all={board.data}
           grouped={grouped}
           epicId={epicId}
+          view={view}
         />
       )}
       <Outlet />
@@ -121,6 +150,7 @@ function Lanes({
   all,
   grouped,
   epicId,
+  view,
 }: {
   tickets: BoardTicket[];
   showCancelled: boolean;
@@ -131,6 +161,8 @@ function Lanes({
   grouped: boolean;
   /** Show only this epic's children; null shows every ticket. */
   epicId: string | null;
+  /** Show only the tickets in this work view; null shows every ticket. */
+  view: WorkView | null;
 }) {
   const navigate = useNavigate({ from: "/p/$projectId" });
   const move = useBoardMove(projectId);
@@ -158,6 +190,8 @@ function Lanes({
   const lanes = groupByStage(shown);
   const byId = useMemo(() => new Map(shown.map((t) => [t.id, t])), [shown]);
   const allById = useMemo(() => new Map(all.map((t) => [t.id, t])), [all]);
+  // A filter hides cards only: drops still plan against whole lanes, as with the epic filter.
+  const inView = (t: BoardTicket) => !view || workViews(t, allById).includes(view);
   const next = nextUp(
     lanes.ready.filter((t) => t.summary.worker === "agent"),
     byId,
@@ -274,7 +308,7 @@ function Lanes({
           // Backlog shows two parts (Up next, then Ideas); each is grouped on its own.
           const split = stage === "backlog" ? splitBacklog(lanes.backlog) : null;
           const parts = (split ? [split.upNext, split.ideas] : [shownIn(stage)]).map((cards) =>
-            groupCards(cards.filter((t) => inEpic(t, epicId))),
+            groupCards(cards.filter((t) => inEpic(t, epicId) && inView(t))),
           );
           // `ids` follows the order shown, so dnd-kit sorts what you see.
           const ordered = parts.flat().flatMap((g) => g.cards);
@@ -307,7 +341,12 @@ function Lanes({
                   <ReadySortToggle
                     sorted={sortedByScore}
                     onToggle={() =>
-                      void navigate({ search: { sort: sortedByScore ? undefined : "score" } })
+                      void navigate({
+                        search: {
+                          sort: sortedByScore ? undefined : "score",
+                          view: view ?? undefined,
+                        },
+                      })
                     }
                   />
                 ) : undefined

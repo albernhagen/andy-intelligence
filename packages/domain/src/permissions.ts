@@ -23,6 +23,8 @@ export const OWNER_ACTIONS = {
   mint_runner: "register a local runner",
   revoke_runner: "revoke a local runner",
   change_project_settings: "change project settings",
+  change_routing: "change model routing",
+  change_spend_caps: "change the global spend caps",
   clear_quota_idle: "clear a quota idle",
   submit_brief: "submit a project brief",
 } as const;

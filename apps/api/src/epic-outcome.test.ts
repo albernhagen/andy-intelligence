@@ -8,6 +8,7 @@ import { createApp } from "./app";
 import type { TokenVerifier } from "./auth";
 import type { ToolDeps } from "./mcp/tools";
 import { registerTicketTools } from "./mcp/tools-tickets";
+import { ownerOnlyAccess } from "./project-access";
 
 /** AI-186: M4.24: Epic outcome field through the ticket PATCH route and MCP `edit_ticket`. */
 
@@ -25,6 +26,7 @@ describe("epic outcome API", () => {
   beforeEach(() => {
     tracker = new InMemoryWorkTracker();
     app = createApp({
+      projectAccess: ownerOnlyAccess(),
       verifier,
       allowedEmails: new Set(["andy@example.com"]),
       version: "test",

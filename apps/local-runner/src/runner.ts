@@ -43,9 +43,11 @@ export interface LoopOptions {
   /** Milliseconds per contract second; tests shrink it. */
   msPerSecond?: number;
   idleMs?: number;
+  /** Checked before every claim: false (e.g. the runner lock was lost) stops the loop at once. */
+  mayClaim?: () => boolean;
 }
 
-export type LoopEnd = "idle" | "stopped" | "unauthorized";
+export type LoopEnd = "idle" | "stopped" | "unauthorized" | "lock_lost";
 
 /**
  * Polls `POST /runner/claim` every `pollSeconds` while a slot is free (none while full), runs each
@@ -72,6 +74,10 @@ export async function runLoop(options: LoopOptions): Promise<LoopEnd> {
     }
     let waitSeconds = pollSeconds;
     if (active.size < options.runsAtOnce) {
+      if (options.mayClaim && !options.mayClaim()) {
+        end = "lock_lost";
+        break;
+      }
       const claim = await options.api.claim(options.secret);
       if (claim.kind === "ok") {
         pollSeconds = claim.response.pollSeconds;
