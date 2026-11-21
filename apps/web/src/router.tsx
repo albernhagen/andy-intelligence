@@ -19,6 +19,7 @@ import { ProjectSettingsPage } from "@/pages/ProjectSettingsPage";
 import { RunnersPage } from "@/pages/RunnersPage";
 import { RunPage } from "@/pages/RunPage";
 import { TicketPage } from "@/pages/TicketPage";
+import { WorkPage } from "@/pages/WorkPage";
 
 const rootRoute = createRootRoute({
   component: AppShell,
@@ -35,6 +36,12 @@ const boardRoute = createRoute({
     return { ...(search.sort === "score" && { sort: "score" }), ...(view && { view }) };
   },
 });
+
+/** The Work list's view; an unknown or missing one reads as unset (the page shows Needs me). */
+function workSearch(search: Record<string, unknown>): { view?: WorkView } {
+  const view = parseWorkView(search.view);
+  return view ? { view } : {};
+}
 
 /** URLs carry the picker's scope (lib/scope.ts): `/p/<project>/…` or `/all/…`. */
 const routeTree = rootRoute.addChildren([
@@ -55,6 +62,13 @@ const routeTree = rootRoute.addChildren([
   }),
   createRoute({ getParentRoute: () => rootRoute, path: "/all/inbox", component: InboxPage }),
   createRoute({ getParentRoute: () => rootRoute, path: "/all/board", component: PickProjectPage }),
+  // Work across projects (AI-198): both scopes; the view chip is in `?view=` (default Needs me).
+  createRoute({
+    getParentRoute: () => rootRoute,
+    path: "/all/work",
+    component: WorkPage,
+    validateSearch: workSearch,
+  }),
   // Dashboards (AI-117): both scopes.
   createRoute({
     getParentRoute: () => rootRoute,
@@ -76,6 +90,12 @@ const routeTree = rootRoute.addChildren([
     getParentRoute: () => rootRoute,
     path: "/p/$projectId/inbox",
     component: InboxPage,
+  }),
+  createRoute({
+    getParentRoute: () => rootRoute,
+    path: "/p/$projectId/work",
+    component: WorkPage,
+    validateSearch: workSearch,
   }),
   createRoute({
     getParentRoute: () => rootRoute,
