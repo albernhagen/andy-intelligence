@@ -52,6 +52,7 @@ export * from "./push";
 export * from "./question-format";
 export * from "./runner";
 export * from "./scores";
+export * from "./spend-caps";
 export * from "./sync";
 export * from "./worker";
 
