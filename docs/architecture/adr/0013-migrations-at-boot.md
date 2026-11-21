@@ -1,4 +1,5 @@
 ---
+title: Apply DB migrations at service boot
 status: superseded by 0017
 date: 2026-10-21
 ---

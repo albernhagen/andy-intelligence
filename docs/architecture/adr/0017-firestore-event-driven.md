@@ -1,4 +1,5 @@
 ---
+title: Firestore for the control-plane database; event-driven flow, no polling
 status: accepted, amended by 0020
 date: 2026-10-21
 supersedes: 0008, 0013

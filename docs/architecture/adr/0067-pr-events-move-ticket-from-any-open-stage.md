@@ -1,4 +1,5 @@
 ---
+title: PR events move a ticket from any open stage
 status: accepted, amended by 0069
 date: 2026-11-05
 amends: 0056, ARCHITECTURE §4.1

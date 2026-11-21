@@ -1,4 +1,5 @@
 ---
+title: Adversarial PR review
 status: accepted, amended by 0040
 date: 2026-10-27
 amends: 0025

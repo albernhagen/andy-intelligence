@@ -1,4 +1,5 @@
 ---
+title: "UX direction: Shortcut's simplicity, minimalist design"
 status: accepted
 date: 2026-11-06
 amends: 0059 (direction: Shortcut's simplicity as the starting point, not its look)

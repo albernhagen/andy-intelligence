@@ -30,7 +30,6 @@ What is built on `main` now. Target design: [ARCHITECTURE.md](docs/architecture/
 | [`docs/architecture/adr/`](docs/architecture/adr/)                       | Architecture decisions (MADR)                                                                                  |
 | [`docs/build-log.md`](docs/build-log.md)                                 | Slice → ticket map (status: tickets in project `AI`), pending decisions, blockers (history: `docs/build-log/`) |
 | [`docs/product/brief.md`](docs/product/brief.md)                         | Project brief for project `AI`: idea, users, vision, goals, architectural expectations (ADR-0053)              |
-| [`docs/architecture/adr/README.md`](docs/architecture/adr/README.md)     | ADR index, one line each                                                                                       |
 | [`docs/features.md`](docs/features.md)                                   | Shipped features, one row each, and how to use them                                                            |
 | [`docs/security/threat-model.md`](docs/security/threat-model.md)         | Threat model; risks: `docs/security/risks/`, `pnpm risks`                                                      |
 | [`docs/runbooks/`](docs/runbooks/)                                       | Manual steps (setup, secrets, apply)                                                                           |
@@ -51,6 +50,7 @@ pnpm lint
 pnpm build
 pnpm format      # prettier --write
 pnpm context:check   # agent-loaded docs within their size budgets (ADR-0046)
+pnpm adr             # ADR index, from each ADR's frontmatter
 pnpm test:firestore  # Firestore adapters on the emulator (Java 21+; CI runs them on adapter changes, ADR-0048)
 node apps/local-runner/dist/main.js login|start|check-settings  # local runner (macOS, after pnpm build)
 scripts/sandbox-lab/run.sh  # build sandbox in Docker; CI job sandbox-self-test runs it on executor changes (runbook agent-runs.md §9a)
