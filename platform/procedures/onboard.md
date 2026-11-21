@@ -38,6 +38,7 @@ Every answer has an id: the field name in `BriefAnswers` (`packages/contracts/sr
 | Architectural expectations | `environments`  | Which environments, and how does code reach production?                     | Dev and prod; releases approved by Andy.                                                   |
 | Architectural expectations | `constraints`   | Any constraints: compliance, data residency, budget, integrations, devices? | Public repo hygiene; least privilege; no fixed budget yet.                                 |
 | Architectural expectations | `qualityBar`    | What does "shipped" mean here?                                              | Tests, CI green, security and adversarial review passed, docs current, prod monitoring.    |
+| Architectural expectations | `design`        | What design direction should the UI follow, and where is its design file?   | The baseline's `design.md` defaults; the design file is `design.md` at the repo root.      |
 | Open questions             | `openQuestions` | What is still undecided? (0 to 10)                                          | None.                                                                                      |
 
 ## Word caps

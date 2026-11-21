@@ -31,6 +31,11 @@ export const BriefAnswers = z.object({
   environments: Answer,
   constraints: Answer,
   qualityBar: Answer,
+  /**
+   * The UI's design direction and where its design file lives (AI-128, ADR-0132). Optional so
+   * answer sets from before it still parse; the procedure always asks it.
+   */
+  design: Answer.optional(),
   openQuestions: z.array(ListItem).max(10),
 });
 export type BriefAnswers = z.infer<typeof BriefAnswers>;
@@ -48,7 +53,7 @@ export const BRIEF_SECTIONS = [
   {
     title: "Architectural expectations",
     maxWords: 200,
-    fields: ["stack", "cloud", "environments", "constraints", "qualityBar"],
+    fields: ["stack", "cloud", "environments", "constraints", "qualityBar", "design"],
   },
   { title: "Open questions", maxWords: 80, fields: ["openQuestions"] },
 ] as const satisfies readonly {

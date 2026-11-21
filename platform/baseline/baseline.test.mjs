@@ -54,6 +54,18 @@ describe("baseline consistency", () => {
     for (const e of entries) expect(existsSync(path.join(ROOT, e.from)), e.from).toBe(true);
   });
 
+  it("GivenTheManifest_WhenRead_ThenTheDesignFileIsACreateOnlySeed", () => {
+    expect(manifest.seed).toContainEqual({ path: "design.md", from: "template/design.md" });
+    expect(manifest.managed.map((m) => m.path)).not.toContain("design.md");
+    expect(read("template/design.md")).toMatch(/project owner edits this file/);
+  });
+
+  it("GivenTheAgentRulesTemplate_WhenRead_ThenUiTicketsFollowTheDesignFile", () => {
+    const rules = read("template/AGENTS.md.template");
+    expect(rules).toMatch(/changes a UI follows `design\.md`/);
+    expect(rules).toMatch(/contradicts it, ask a question/);
+  });
+
   it("GivenPinnedWorkflows_WhenRendered_ThenNoLocalActionsRemain", () => {
     for (const e of manifest.managed.filter((m) => m.pin)) {
       const out = pinActions(read(e.from), {

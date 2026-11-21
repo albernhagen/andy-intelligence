@@ -239,7 +239,7 @@ Each milestone must work **end to end** before the next starts (a ticket may sta
 | M1  | First end-to-end flow: ticket → PR with Claude | One project; ticket created from Claude desktop is refined, built by Claude Code, and merged                  |
 | M2  | Self-hosting: andy-intelligence builds itself  | Project `AI` builds and merges its own tickets, several at once, while Andy is away                           |
 | M3  | New UI and MCP                                 | Project picker, board that shows status, story panel, command palette; MCP tools to edit and organize tickets |
-| M4  | Epics + story board                            | Epics; epic grouping on the board; config editing; design skills and dashboards; roadmap and work views                               |
+| M4  | Epics + story board                            | Epics; epic grouping on the board; config editing; design file per project and dashboards; roadmap and work views                       |
 | M5  | Multi-project in parallel                      | Several repos onboarded; stories per project; runs across projects at once under caps and quota               |
 | M6  | Dev → prod releases                            | Per-project dev/prod deploys, verification, one-click promote, DORA metrics                                   |
 | M7  | Mobile                                         | The UI installed on Andy's phone with push notifications; answer, approve, promote and pause from anywhere    |

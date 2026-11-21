@@ -2,14 +2,14 @@
 
 The **project baseline** is the set of guardrails every repo Andy manages gets: CI and security checks, review agents, local hooks, repo files, and GitHub settings (ADR-0031: Project baseline, ADR-0038: Baseline carried by composite actions; inventory in ARCHITECTURE §8.1). One script applies and checks it: `platform/baseline/baseline.mjs`. Run it from a clone of andy-intelligence on your machine; it uses your `gh` login (admin on your repos). Never run it in CI.
 
-| Term                  | Meaning                                                                                                                    |
-| --------------------- | -------------------------------------------------------------------------------------------------------------------------- |
-| Ref                   | A tag (`v1.0.0`), branch (`origin/main`) or SHA of andy-intelligence. It must be pushed: managed repos pin its commit SHA. |
-| Managed file          | Kept identical to the baseline (workflows, hooks, Dependabot, PR template, Prettier config). Edits show up as drift.       |
-| Seed file             | Written once if missing (`AGENTS.md`, `.github/CODEOWNERS`, `docs/security/threat-model.md`); the repo owns it after that. |
-| Starter               | A minimal TypeScript project (`package.json`, `tsconfig.json`, `src/`), written only into a repo with no `package.json`.   |
-| `.andy/baseline.json` | Which andy-intelligence commit the repo's files came from.                                                                 |
-| Drift                 | A live setting or managed file that differs from the baseline.                                                             |
+| Term                  | Meaning                                                                                                                                 |
+| --------------------- | --------------------------------------------------------------------------------------------------------------------------------------- |
+| Ref                   | A tag (`v1.0.0`), branch (`origin/main`) or SHA of andy-intelligence. It must be pushed: managed repos pin its commit SHA.              |
+| Managed file          | Kept identical to the baseline (workflows, hooks, Dependabot, PR template, Prettier config). Edits show up as drift.                    |
+| Seed file             | Written once if missing (`AGENTS.md`, `.github/CODEOWNERS`, `docs/security/threat-model.md`, `design.md`); the repo owns it after that. |
+| Starter               | A minimal TypeScript project (`package.json`, `tsconfig.json`, `src/`), written only into a repo with no `package.json`.                |
+| `.andy/baseline.json` | Which andy-intelligence commit the repo's files came from.                                                                              |
+| Drift                 | A live setting or managed file that differs from the baseline.                                                                          |
 
 | Command                                                                    | Does                                                                                                                                                 |
 | -------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------- |
