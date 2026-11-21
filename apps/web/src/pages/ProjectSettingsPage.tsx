@@ -2,6 +2,7 @@ import type { ReactNode } from "react";
 import { useParams } from "@tanstack/react-router";
 import { AutoMerge, PlanApproval, type Project } from "@andy/contracts";
 import { ClearQuotaIdle } from "@/components/ClearQuotaIdle";
+import { ConfigHistory } from "@/components/ConfigHistory";
 import { DispatchControls } from "@/components/DispatchControls";
 import { ProjectPlanPanel } from "@/components/ProjectPlan";
 import { EmailNotificationsControl } from "@/components/EmailControls";
@@ -15,7 +16,7 @@ import { showsError } from "@/lib/live";
 /**
  * One project's settings (AI-46), linked from the workspace header. Every switch saves on change
  * through PATCH /api/projects/{id}, the same rules MCP's set_* tools use. Builds has no MCP setter
- * (ADR-0063); `get_project_settings` reads all of them.
+ * (ADR-0063); `get_project_settings` reads all of them. Below them, every change with Revert (M4.12).
  */
 export function ProjectSettingsPage() {
   const { projectId } = useParams({ strict: false });
@@ -69,6 +70,7 @@ export function ProjectSettingsPage() {
           <EmailNotificationsControl project={project} />
         </Setting>
       </ul>
+      <ConfigHistory projectId={project.id} />
     </section>
   );
 }

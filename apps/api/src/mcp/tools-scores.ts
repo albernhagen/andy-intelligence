@@ -57,7 +57,7 @@ export const withStartScore = <T extends { ticket: Ticket }>(status: T) => ({
 /** Read-only: the Ready queue with scores, so a harness can pick ("all S, low risk, confident"). */
 export function registerScoreTools(
   server: McpServer,
-  tracker: WorkTracker,
+  { tracker }: { tracker: WorkTracker },
   run: <T extends object>(fn: () => Promise<T>) => Promise<CallToolResult>,
 ): void {
   server.registerTool(

@@ -31,7 +31,7 @@ export function Activity(props: {
 
   return (
     <section aria-label="Activity" className="space-y-3">
-      <div className="flex items-center justify-between gap-2">
+      <div className="flex flex-wrap items-center justify-between gap-2">
         <h3 className="text-sm font-medium">Activity</h3>
         <StartRuns path={path} runs={props.runs} />
       </div>
@@ -73,7 +73,7 @@ export function Activity(props: {
 
 function EventItem({ event: e }: { event: TicketEvent }) {
   return (
-    <li className="space-y-1 border-l-2 border-border pl-3 text-sm">
+    <li className="space-y-1 border-l-2 border-border pl-3 text-sm wrap-anywhere">
       <p>
         <span className="font-medium">{actorLabel(e.actor)}</span> {describeEvent(e)}{" "}
         <time dateTime={e.createdAt} className="text-xs text-muted-foreground">
