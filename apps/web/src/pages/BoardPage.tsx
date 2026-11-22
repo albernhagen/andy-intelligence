@@ -24,7 +24,6 @@ import {
 } from "@andy/domain";
 import { BoardCard } from "@/components/board/BoardCard";
 import { BoardDispatchStatus } from "@/components/DispatchControls";
-import { InFlightPanel } from "@/components/InFlightPanel";
 import { EpicControls } from "@/components/board/EpicControls";
 import { WorkViewChips } from "@/components/board/WorkViewChips";
 import {
@@ -139,7 +138,6 @@ export function BoardPage() {
           }
         />
       )}
-      <InFlightPanel projectId={projectId} />
       {board.isPending && <Loading />}
       {showsError(board) && (
         <QueryError error={board.error} what="the board" onRetry={() => void board.refetch()} />
