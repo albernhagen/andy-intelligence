@@ -1,6 +1,7 @@
 import {
   InMemoryCodeHost,
   InMemoryReleaseNoteStore,
+  InMemoryRunStore,
   InMemoryWorkTracker,
   type CodeHostEvent,
   type Project,
@@ -12,6 +13,8 @@ import {
   ReleaseNoteRecorder,
   WhatsNewReader,
   buildReleaseNote,
+  gateMergeMode,
+  mergedByText,
   milestoneStatus,
   releaseNoteLinks,
   renderWhatsNewText,
@@ -184,6 +187,45 @@ describe("ReleaseNoteRecorder", () => {
     expect(await notes.get(project.id, "pr-70")).toMatchObject({ source: "no_note", links: [] });
   });
 
+  it("GivenTheGateMergedThePr_WhenRecorded_ThenTheNoteNamesTheMode", async () => {
+    const runs = new InMemoryRunStore(() => NOW);
+    const ticket = (await tracker.getTicketByKey(project.id, "AI-1"))!;
+    const run = await runs.create({
+      projectId: project.id,
+      ticketId: ticket.id,
+      step: "build",
+      route: { harness: "claude-code", provider: "claude-sub", model: "opus" },
+      tier: null,
+      deadline: null,
+      prompt: null,
+      maxTurns: null,
+    });
+    await runs.update(
+      run.id,
+      {
+        links: { pullRequest: `${REPO_URL}/pull/70` },
+        mergeMode: "all-clean",
+        mergeVerdict: "merge",
+        mergeAttemptedSha: "abc",
+      },
+      ["queued"],
+    );
+    recorder = new ReleaseNoteRecorder(host, tracker, notes, () => NOW, runs);
+
+    await recorder.record(merged(), project);
+
+    expect(await notes.get(project.id, "pr-70")).toMatchObject({ mergedByMode: "all-clean" });
+  });
+
+  it("GivenAPersonMergedThePr_WhenRecorded_ThenTheNoteHasNoMode", async () => {
+    recorder = new ReleaseNoteRecorder(host, tracker, notes, () => NOW, new InMemoryRunStore());
+    await recorder.record(merged(), project);
+    expect(await notes.get(project.id, "pr-70")).toMatchObject({
+      mergedBy: "albernhagen",
+      mergedByMode: null,
+    });
+  });
+
   it("GivenThePrIsUnknownToTheHost_WhenRecorded_ThenListedByTitleAsNoNote", async () => {
     host.pullRequests.clear();
     expect(await recorder.record(merged(), project)).toMatchObject({ source: "no_note" });
@@ -192,6 +234,40 @@ describe("ReleaseNoteRecorder", () => {
       mergedAt: NOW.toISOString(),
       whatChanged: null,
     });
+  });
+});
+
+describe("gateMergeMode", () => {
+  const pr70 = { url: `${REPO_URL}/pull/70`, headSha: "abc" };
+  const run = (over: object) =>
+    ({
+      links: { pullRequest: pr70.url },
+      mergeVerdict: "merge",
+      mergeAttemptedSha: "abc",
+      mergeError: null,
+      mergeMode: "low-risk",
+      ...over,
+    }) as never;
+
+  it("GivenTheGatesMergeOfTheMergedHead_WhenRead_ThenItsMode", () => {
+    expect(gateMergeMode([run({})], pr70)).toBe("low-risk");
+  });
+
+  it("GivenAnotherHeadAFailedCallOrAWait_WhenRead_ThenAPersonMergedIt", () => {
+    expect(gateMergeMode([run({ mergeAttemptedSha: "old" })], pr70)).toBeNull();
+    expect(gateMergeMode([run({ mergeError: "405" })], pr70)).toBeNull();
+    expect(gateMergeMode([run({ mergeVerdict: "wait" })], pr70)).toBeNull();
+    expect(gateMergeMode([run({ links: {} })], pr70)).toBeNull();
+  });
+
+  it("GivenANote_WhenTextIsMade_ThenItSaysTheModeOrThePerson", () => {
+    expect(mergedByText({ mergedBy: "bot", mergedByMode: "all-clean" })).toBe(
+      "merged by the mode (all-clean)",
+    );
+    expect(mergedByText({ mergedBy: "albernhagen", mergedByMode: null })).toBe(
+      "merged by albernhagen",
+    );
+    expect(mergedByText({ mergedBy: null, mergedByMode: null })).toBe("merged by unknown");
   });
 });
 
@@ -280,7 +356,15 @@ describe("milestoneStatus and WhatsNewReader", () => {
       "- AI-2: M2 · 0 done, 1 in review, 1 in progress, 2 not started · 1 need you",
     );
     expect(text).toContain("- Done: AI-1: M1");
-    expect(text).toContain("PR 2 (no note) · no ticket · PR #2");
+    expect(text).toContain("PR 2 (no note) · no ticket · PR #2 · merged by unknown");
+    // AI-218: the project's saved mode leads the read and the text.
+    await tracker.updateProject(project.id, { mergeMode: "low-risk" });
+    const withMode = await reader.read(project.id, whatsNewWindow(NOW));
+    expect(withMode.mergeMode).toBe("low-risk");
+    expect(renderWhatsNewText(withMode)).toContain("Merge mode: low-risk");
+    expect(renderWhatsNewText({ ...withMode, mergeMode: null })).toContain(
+      "Merge mode: not set (nothing merges on its own)",
+    );
   });
 
   it("GivenAnUnknownProject_WhenRead_ThenNotFound", async () => {

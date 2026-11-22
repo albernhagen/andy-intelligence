@@ -2,14 +2,14 @@
 
 The **project baseline** is the set of guardrails every repo Andy manages gets: CI and security checks, review agents, local hooks, repo files, and GitHub settings (ADR-0031: Project baseline, ADR-0038: Baseline carried by composite actions; inventory in ARCHITECTURE §8.1). One script applies and checks it: `platform/baseline/baseline.mjs`. Run it from a clone of andy-intelligence on your machine; it uses your `gh` login (admin on your repos). Never run it in CI.
 
-| Term                  | Meaning                                                                                                                    |
-| --------------------- | -------------------------------------------------------------------------------------------------------------------------- |
-| Ref                   | A tag (`v1.0.0`), branch (`origin/main`) or SHA of andy-intelligence. It must be pushed: managed repos pin its commit SHA. |
-| Managed file          | Kept identical to the baseline (workflows, hooks, Dependabot, PR template, Prettier config). Edits show up as drift.       |
-| Seed file             | Written once if missing (`AGENTS.md`, `.github/CODEOWNERS`, `docs/security/threat-model.md`); the repo owns it after that. |
-| Starter               | A minimal TypeScript project (`package.json`, `tsconfig.json`, `src/`), written only into a repo with no `package.json`.   |
-| `.andy/baseline.json` | Which andy-intelligence commit the repo's files came from.                                                                 |
-| Drift                 | A live setting or managed file that differs from the baseline.                                                             |
+| Term                  | Meaning                                                                                                                                 |
+| --------------------- | --------------------------------------------------------------------------------------------------------------------------------------- |
+| Ref                   | A tag (`v1.0.0`), branch (`origin/main`) or SHA of andy-intelligence. It must be pushed: managed repos pin its commit SHA.              |
+| Managed file          | Kept identical to the baseline (workflows, hooks, Dependabot, PR template, Prettier config). Edits show up as drift.                    |
+| Seed file             | Written once if missing (`AGENTS.md`, `.github/CODEOWNERS`, `docs/security/threat-model.md`, `design.md`); the repo owns it after that. |
+| Starter               | A minimal TypeScript project (`package.json`, `tsconfig.json`, `src/`), written only into a repo with no `package.json`.                |
+| `.andy/baseline.json` | Which andy-intelligence commit the repo's files came from.                                                                              |
+| Drift                 | A live setting or managed file that differs from the baseline.                                                                          |
 
 | Command                                                                    | Does                                                                                                                                                 |
 | -------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -56,7 +56,7 @@ node platform/baseline/baseline.mjs onboard albernhagen/<name> --ref v1.0.0
 
 Then:
 
-1. Reviewer token (the review agents report "not reviewed" until it is set; nothing else needs it). Never paste it into chat or a file:
+1. Reviewer token (until it is set, the review agents report "not reviewed" and their checks fail, ADR-0140; nothing else needs it). Never paste it into chat or a file:
    ```sh
    claude setup-token
    gh secret set CLAUDE_CODE_OAUTH_TOKEN --repo albernhagen/<name>
@@ -86,7 +86,7 @@ node platform/baseline/baseline.mjs files albernhagen/<name> --ref v1.1.0
 
 ## 5. M1.16: Project baseline v1 demo ("Done when")
 
-Run it before merging, from the PR branch. The scratch repo gets no Claude token, so both review agents report a neutral "not reviewed" under the same check names and use no quota.
+Run it before merging, from the PR branch. The scratch repo gets no Claude token, so both review agents report "not reviewed" under the same check names and use no quota. Since ADR-0140 those two checks fail; add `security-accepted` and `review-accepted` to the test PR.
 
 ```sh
 git fetch origin m1.16/project-baseline
@@ -103,7 +103,7 @@ git commit -am "test: demo change" && git push -u origin HEAD
 gh pr create --fill && gh pr checks --watch
 ```
 
-1. **Same checks as andy-intelligence:** `check`, `actionlint`, `terraform`, `trufflehog`, `codeql (javascript-typescript)`, `codeql (actions)`, `dependency-review`, `terraform-misconfig`, `security-review`, `adversarial-review` all pass (`terraform` ones with a "no infra/" notice; reviews "not reviewed").
+1. **Same checks as andy-intelligence:** `check`, `actionlint`, `terraform`, `trufflehog`, `codeql (javascript-typescript)`, `codeql (actions)`, `dependency-review`, `terraform-misconfig`, `security-review`, `adversarial-review` all pass (`terraform` ones with a "no infra/" notice; reviews "not reviewed", passing on the two labels).
 2. **No drift:** `node platform/baseline/baseline.mjs check albernhagen/baseline-scratch` → every line `ok`, exit 0.
 3. **Hand change shows as drift:** Settings → Actions → General → Workflow permissions → **Read and write** → Save. `check` again → `actions: drift`, `workflow.default_workflow_permissions: want "read", have "write"`, exit 1. `apply` puts it back.
 4. Clean up: `gh auth refresh -s delete_repo` (once), then `gh repo delete albernhagen/baseline-scratch --yes`.
@@ -139,3 +139,4 @@ Managed repos get both with the next baseline tag (§4: Update a repo to a newer
 | `apply` fails on `private-vulnerability-reporting` or `automated-security-fixes` | Run it again: GitHub enables these after vulnerability alerts, which `apply` turns on first.                                              |
 | A check never reports on the new repo's PR                                       | Its job name doesn't match the ruleset; `pnpm test` in andy-intelligence checks this, so the repo's caller file was edited (see `check`). |
 | Scratch PR `check` fails on `pnpm install --frozen-lockfile`                     | `pnpm-lock.yaml` wasn't committed: `files` runs `pnpm install` before committing; re-run it.                                              |
+| `check` fails: `context budget: can't read base`                                 | Private repo whose CI can't fetch its base branch: set `CONTEXT_BUDGET_BASE: none` in the `check` job's `env` (budgets only; AI-143).     |

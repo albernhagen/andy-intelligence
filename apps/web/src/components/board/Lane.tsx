@@ -1,8 +1,17 @@
-import type { ReactNode } from "react";
+import { useState, type ReactNode } from "react";
 import { useDroppable } from "@dnd-kit/core";
 import { SortableContext, verticalListSortingStrategy } from "@dnd-kit/sortable";
 import { ChevronsLeftRight, ChevronsRightLeft } from "lucide-react";
-import type { Stage } from "@andy/contracts";
+import {
+  Confidence,
+  Risk,
+  Size,
+  type Milestone,
+  type ReadyFilters,
+  type Stage,
+} from "@andy/contracts";
+import { Select } from "@/components/ui/input";
+import { MilestoneChip } from "@/components/MilestoneControls";
 import { STAGE_LABELS } from "@/lib/tickets";
 
 /** A labelled part of a lane (Backlog's Up next and Ideas); a drop on it lands in that part. */
@@ -23,19 +32,23 @@ export function LaneZone({ id, label, count }: { id: string; label: string; coun
 
 /**
  * A group header inside a lane when the board is grouped by epic (AI-86): the epic's key, title
- * and how many of its children are done, or "No epic". Not a drop target: rank stays per lane.
+ * and how many of its children are done, or "No epic"; its milestone and status when it has one
+ * (AI-311). Not a drop target: rank stays per lane.
  */
 export function EpicGroupHeader({
   epic,
   progress,
+  milestone = null,
 }: {
   epic: { key: string; title: string } | null;
   progress: { done: number; total: number } | null;
+  /** The epic's milestone (its top-level epic's, ADR-0131), shown with its status (AI-311). */
+  milestone?: Pick<Milestone, "name" | "status"> | null;
 }) {
   return (
     <li
       data-epic={epic?.key ?? "none"}
-      className="flex h-6 items-center gap-1 px-1 text-xs text-muted-foreground"
+      className="flex min-h-6 flex-wrap items-center gap-x-1 gap-y-0.5 px-1 py-0.5 text-xs text-muted-foreground"
     >
       {epic ? (
         <>
@@ -46,6 +59,12 @@ export function EpicGroupHeader({
           {progress && (
             <span className="shrink-0 tabular-nums">
               {progress.done} of {progress.total} done
+            </span>
+          )}
+          {/* Its own line, so the epic's title and the milestone's status both stay readable. */}
+          {milestone && (
+            <span className="flex basis-full">
+              <MilestoneChip milestone={milestone} className="max-w-full" />
             </span>
           )}
         </>
@@ -70,10 +89,81 @@ export function ReadySortToggle({ sorted, onToggle }: { sorted: boolean; onToggl
   );
 }
 
+const READY_FILTERS = [
+  { key: "size", label: "Size", options: Size.options },
+  { key: "risk", label: "Risk", options: Risk.options },
+  { key: "confidence", label: "Confidence", options: Confidence.options },
+] as const;
+
+/**
+ * The Ready lane's filters (AI-343, moved from the Ready page): size, risk and confidence, the
+ * same as MCP `list_ready`. They hide cards only; a ticket without the score a filter asks for
+ * is hidden. A small button opens them; it says how many are on.
+ */
+export function ReadyFilterMenu({
+  filters,
+  onChange,
+}: {
+  filters: ReadyFilters;
+  onChange: (next: ReadyFilters) => void;
+}) {
+  const on = READY_FILTERS.filter((f) => filters[f.key]).length;
+  const [open, setOpen] = useState(on > 0);
+  // A fragment: the button sits beside "Sort by score"; the open filters wrap onto their own line.
+  return (
+    <>
+      <button
+        type="button"
+        aria-expanded={open}
+        onClick={() => setOpen(!open)}
+        className="rounded-md px-1 text-left text-xs text-muted-foreground hover:bg-foreground/10"
+      >
+        {on ? `Filter · ${on}` : "Filter"}
+      </button>
+      {open && (
+        <div
+          role="group"
+          aria-label="Ready filters"
+          className="flex w-full flex-wrap items-center gap-2"
+        >
+          {READY_FILTERS.map((f) => (
+            <label key={f.key} className="flex items-center gap-1 text-xs text-muted-foreground">
+              {f.label}
+              <Select
+                aria-label={f.label}
+                className="h-11 w-auto px-1 text-base sm:h-7 sm:text-xs"
+                value={filters[f.key] ?? ""}
+                onChange={(e) => onChange({ ...filters, [f.key]: e.target.value || undefined })}
+              >
+                <option value="">Any</option>
+                {f.options.map((o) => (
+                  <option key={o} value={o}>
+                    {o}
+                  </option>
+                ))}
+              </Select>
+            </label>
+          ))}
+          {on > 0 && (
+            <button
+              type="button"
+              onClick={() => onChange({ size: undefined, risk: undefined, confidence: undefined })}
+              className="rounded-md px-1 text-xs text-muted-foreground hover:bg-foreground/10"
+            >
+              Clear
+            </button>
+          )}
+        </div>
+      )}
+    </>
+  );
+}
+
 /**
  * One swim lane per stage: a header with the count, then the cards in rank order (the order is
  * the priority, ADR-0058). A collapsed lane is a narrow strip with its count; it still takes
- * drops. `onToggle` makes the header (or the strip) expand or collapse it.
+ * drops. `onToggle` makes the header (or the strip) expand or collapse it. `fill` is the phone
+ * board's one lane (AI-337): full width, no header, since the stage tabs above name it.
  */
 export function Lane({
   stage,
@@ -82,6 +172,7 @@ export function Lane({
   onToggle,
   highlight,
   top,
+  fill = false,
   children,
 }: {
   stage: Stage;
@@ -91,6 +182,7 @@ export function Lane({
   highlight: boolean;
   /** Above the cards, e.g. Backlog's quick add. */
   top?: ReactNode;
+  fill?: boolean;
   children: ReactNode;
 }) {
   const { setNodeRef } = useDroppable({ id: stage });
@@ -125,9 +217,9 @@ export function Lane({
       ref={setNodeRef}
       aria-label={label}
       data-stage={stage}
-      className={`flex w-64 shrink-0 flex-col gap-2 rounded-md p-2 xl:w-auto xl:min-w-44 xl:flex-1 xl:shrink ${surface}`}
+      className={`flex shrink-0 flex-col gap-2 rounded-md p-2 ${fill ? "w-full" : "w-64 xl:w-auto xl:min-w-44 xl:flex-1 xl:shrink"} ${surface}`}
     >
-      <h3 className="flex h-6 items-center gap-1 text-sm font-medium">
+      <h3 className={`${fill ? "sr-only" : "flex"} h-6 items-center gap-1 text-sm font-medium`}>
         {label} <span className="text-xs text-muted-foreground tabular-nums">{ids.length}</span>
         {onToggle && (
           <button

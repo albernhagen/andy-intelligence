@@ -2,6 +2,7 @@ import type { ConfigChange } from "@andy/contracts";
 import { QueryError } from "@/components/Status";
 import { Button } from "@/components/ui/button";
 import { useRevertRoutingChange, useRoutingChanges } from "@/lib/queries";
+import { dateTime } from "@/lib/format";
 
 /**
  * Global routing's change log (AI-275): what each save changed, who, when and why, with Revert.
@@ -15,7 +16,13 @@ export function RoutingChanges({ onReverted }: { onReverted: () => void }) {
   return (
     <section aria-label="Global changes" className="space-y-2">
       <h3 className="text-sm font-medium">Changes</h3>
-      {changes.isError && <QueryError error={changes.error} />}
+      {changes.isError && (
+        <QueryError
+          error={changes.error}
+          what="the routing changes"
+          onRetry={() => void changes.refetch()}
+        />
+      )}
       {revert.error && <QueryError error={revert.error} />}
       {changes.data?.length === 0 && (
         <p className="text-sm text-muted-foreground">No global routing changes yet.</p>
@@ -50,8 +57,7 @@ function ChangeRow({
       <div className="min-w-0 flex-1 space-y-0.5">
         <p>Routing: {Object.keys(change.diff).join(", ")} changed</p>
         <p className="text-xs text-muted-foreground">
-          {change.actor === "andy" ? "Andy" : change.actor} ·{" "}
-          {new Date(change.createdAt).toLocaleString()}
+          {change.actor === "andy" ? "Andy" : change.actor} · {dateTime(change.createdAt)}
           {change.reason && ` · ${change.reason}`}
         </p>
       </div>

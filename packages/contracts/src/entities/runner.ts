@@ -182,6 +182,13 @@ export const RunContextResponse = z.object({
   sync: z.object({ pullRequest: z.number().int().positive(), headSha: z.string() }).nullable(),
   /** A build's base branch (`epic/<KEY>`, AI-122); null or absent: the default branch. */
   baseBranch: BaseBranch.nullable().optional(),
+  /**
+   * The route's billing (AI-260): the executor checks its credential matches (`pay_per_use`: the
+   * API key, never the subscription token). Same values as `BillingType`; absent: subscription.
+   */
+  billingType: z.enum(["subscription", "pay_per_use"]).optional(),
+  /** A pay_per_use task's budget in USD (its spend reservation); null or absent otherwise. */
+  maxBudgetUsd: z.number().positive().nullable().optional(),
 });
 export type RunContextResponse = z.infer<typeof RunContextResponse>;
 

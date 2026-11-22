@@ -42,13 +42,29 @@ export type Size = z.infer<typeof Size>;
 export const TierKey = z.enum(["frontier", "strong", "fast", "cheap"]);
 export type TierKey = z.infer<typeof TierKey>;
 
-export const ProviderKey = z.enum(["claude-sub", "google-sub", "openrouter"]);
+export const ProviderKey = z.enum(["claude-sub", "google-sub", "openrouter", "claude-api"]);
 export type ProviderKey = z.infer<typeof ProviderKey>;
 
 export const HarnessKey = z.enum(["claude-code", "jules", "opencode", "direct"]);
 export type HarnessKey = z.infer<typeof HarnessKey>;
 
-export const RunStep = z.enum(["refine", "plan", "build", "review", "verify", "scout", "sync"]);
+/**
+ * Agent-task steps. `plan-project` and `ideate` (AI-134) are project-level: their runs have no
+ * ticket. The executor runs only the read-only steps it lists, build and sync, and refuses others.
+ * `summarize` (AI-323, ADR-0137) writes the digest summary; its runs have no ticket either.
+ */
+export const RunStep = z.enum([
+  "refine",
+  "plan",
+  "build",
+  "review",
+  "verify",
+  "scout",
+  "sync",
+  "plan-project",
+  "ideate",
+  "summarize",
+]);
 export type RunStep = z.infer<typeof RunStep>;
 
 export const Urgency = z.enum(["low", "normal", "high"]);

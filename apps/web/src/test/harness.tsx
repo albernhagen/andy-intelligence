@@ -13,6 +13,7 @@ import {
   InMemorySpendCapsStore,
   InMemoryNightLaunchStore,
   InMemoryReleaseNoteStore,
+  InMemoryDigestSummaryStore,
   InMemoryReviewFindingSource,
   InMemoryQuotaStore,
   InMemoryRunStore,
@@ -24,14 +25,8 @@ import { createApp, ownerOnlyAccess } from "@andy/api/app";
 import { ApiContext, createApi } from "@/lib/api";
 import { makeRouter } from "@/router";
 
-/**
- * Options for the first `findBy*` after opening a page (AI-219). A page's first render in a test
- * file runs its whole tree cold, through the in-process API: about 0.3 s alone, but past
- * testing-library's 1 s default when several sessions run the suite at once (pre-push). Only that
- * wait gets longer; it stays under the 5 s test timeout so a real failure still names the element.
- * Later waits keep the 1 s default.
- */
-export const PAGE_LOAD = { timeout: 4000 } as const;
+/** Now the default wait for every `findBy*` (`setup.ts`); kept for tests that name it. */
+export { PAGE_LOAD } from "./timeouts";
 
 /**
  * Renders the UI against the real API running in-process (createApp + in-memory tracker), so
@@ -60,6 +55,7 @@ export function renderApp(
   const routing = new InMemoryRoutingConfigStore();
   const spendCapsStore = new InMemorySpendCapsStore();
   const releaseNotes = new InMemoryReleaseNoteStore();
+  const digestSummaries = new InMemoryDigestSummaryStore();
   const reviewFindings = new InMemoryReviewFindingSource();
   // GitHub fakes (ADR-0043): one installed repo; any manifest code "connects" this App.
   const connections = new InMemoryCodeHostConnectionStore();
@@ -91,6 +87,7 @@ export function renderApp(
     deployments,
     milestones,
     releaseNotes,
+    digestSummaries,
     reviewFindings,
     routing,
     spendCapsStore,
@@ -148,6 +145,7 @@ export function renderApp(
     runners,
     spendCapsStore,
     releaseNotes,
+    digestSummaries,
     reviewFindings,
     configChanges,
     user,

@@ -14,6 +14,7 @@ import {
   TicketKey,
   TicketFields,
   Timestamp,
+  WaitingMerges,
 } from "@andy/contracts";
 import {
   matchesTicketFilter,
@@ -22,6 +23,7 @@ import {
   type RunService,
   type TicketService,
   type TicketSnapshots,
+  type WaitingMergesReader,
 } from "@andy/domain";
 import type { WorkTracker } from "@andy/contracts";
 import { actorOf, signedIn, type AuthEnv } from "./auth";
@@ -92,7 +94,12 @@ const ArchiveTicket = z.object({ archived: z.boolean().default(true) });
 const Comment = z.object({ body: z.string().min(1) });
 const Answer = z.object({ answer: z.string().min(1) });
 const Readiness = z.object({ met: z.boolean(), missing: z.array(z.string()) });
-const NeedsYou = z.object({ questions: z.array(Question), tickets: z.array(Ticket) });
+const NeedsYou = z.object({
+  questions: z.array(Question),
+  tickets: z.array(Ticket),
+  /** AI-218: clean PRs the merge mode leaves for Andy, in the order they should merge. */
+  waitingMerges: WaitingMerges,
+});
 const BoolQuery = z
   .enum(["true", "false"])
   .transform((v) => v === "true")
@@ -275,6 +282,7 @@ export function registerTicketRoutes(
   runs: RunService,
   readCache: ProjectReadCache | null = null,
   snapshots: TicketSnapshots | null = null,
+  waiting: Pick<WaitingMergesReader, "read"> | null = null,
 ): void {
   const withCost = async (t: Ticket) => ({ ...t, cost: await costOfTicket(runs, t) });
 
@@ -456,11 +464,26 @@ export function registerTicketRoutes(
     );
   });
 
-  app.openapi(routes.needsYou, async (c) => c.json(await service.needsYou(), 200));
+  app.openapi(routes.needsYou, async (c) => {
+    const [inbox, waitingMerges] = await Promise.all([
+      service.needsYou(),
+      waiting ? waiting.read() : { merges: [], truncated: false },
+    ]);
+    return c.json({ ...inbox, waitingMerges }, 200);
+  });
   registerWorkerRoutes(app, service);
   registerExecutorRoutes(app, service);
 }
 
 /** Listed in `api-routes.ts` (AI-145). */
 export const apiRoutes: RouteModule = (app, s) =>
-  registerTicketRoutes(app, s.tracker, s.service, s.projects, s.runs, s.readCache, s.snapshots);
+  registerTicketRoutes(
+    app,
+    s.tracker,
+    s.service,
+    s.projects,
+    s.runs,
+    s.readCache,
+    s.snapshots,
+    s.waitingMerges,
+  );

@@ -16,6 +16,7 @@ import {
 import { overlappingKey } from "./dispatch-conflicts";
 import { heldGaps } from "./dor";
 import { CAP_WORDS } from "./refine-gate";
+import { durationText } from "./duration";
 
 /** The story panel's first line (ADR-0059): where the ticket is and what it waits for. */
 export type StatusTone = "default" | "attention" | "running" | "success" | "danger";
@@ -237,9 +238,12 @@ const RUN_VERBS: Record<RunStep, string> = {
   verify: "Verifying",
   scout: "Scouting",
   sync: "Syncing with main",
+  "plan-project": "Planning the project",
+  ideate: "Shaping an idea",
+  summarize: "Summarizing",
 };
 
-/** "Refining · 3 min" while running; "Refine queued · 1 min" before it starts. */
+/** "Refining · 3 min" while running; "Refine queued · 2 hours" before it starts (`durationText`). */
 export function runLabel(run: NonNullable<TicketSummary["run"]>, now: number): string {
   const since = run.startedAt ?? run.createdAt;
   const min = since ? Math.max(0, Math.floor((now - Date.parse(since)) / 60_000)) : null;
@@ -247,7 +251,7 @@ export function runLabel(run: NonNullable<TicketSummary["run"]>, now: number): s
     run.status === "queued"
       ? `${run.step[0]!.toUpperCase()}${run.step.slice(1)} queued`
       : RUN_VERBS[run.step];
-  return min === null ? what : `${what} · ${min} min`;
+  return min === null ? what : `${what} · ${durationText(min)}`;
 }
 
 /** What a ticket's status line is computed from; the UI and MCP read the same four things. */
