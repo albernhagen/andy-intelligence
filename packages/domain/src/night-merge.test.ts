@@ -571,6 +571,15 @@ describe("night merges into the epic branch (AI-124)", () => {
       expect(await runs.get(run.id)).toMatchObject({ verdictReasons: ["open_review_findings"] });
     });
 
+    it("GivenNoFindingsSource_WhenTheGateIsCleanAndTheModeAllows_ThenTheReviewChecksAreTheRecordAndItMerges", async () => {
+      const { run, pr } = await cleanPrIntoMain();
+      const noSource = new PullRequestGate(host, tracker, runs, tickets, now, null, null, null);
+      expect((await noSource.apply(opened(pr), await project()))[0]).toMatchObject({
+        result: "merged",
+      });
+      expect(await runs.get(run.id)).toMatchObject({ mergeVerdict: "merge", verdictReasons: [] });
+    });
+
     it("GivenAFindingsReadThatMayBeCutShort_WhenThePrIsNotInIt_ThenTheFindingsAreUnknown", async () => {
       const { run, pr } = await cleanPrIntoMain();
       // A full page of newer PRs' findings: this PR's could be past the cut.

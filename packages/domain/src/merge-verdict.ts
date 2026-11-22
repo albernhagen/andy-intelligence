@@ -36,7 +36,11 @@ export interface MergeFacts {
   labels: string[] | null;
   /** The head contains the default branch's latest commit; null when it couldn't be checked. */
   upToDate: boolean | null;
-  /** Open findings recorded for this head (see `openFindingsOn`); null when none can be read. */
+  /**
+   * Open findings on this head: from a findings source (`openFindingsOn`), else 0, since the
+   * review checks in `gateClean` fail on every open finding (ADR-0134). Null: a source's read
+   * failed.
+   */
   openFindings: number | null;
   /** The ticket is in Ready for review (the gate's existing rule). */
   readyForReview: boolean;

@@ -4,9 +4,9 @@ Manual steps for the per-PR adversarial-review agent (ADR-0026: Adversarial PR r
 
 | Term                     | Meaning                                                                                                                                                                                                             |
 | ------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `blocker`                | A finding with a failing scenario that should stop the merge. Fails the `adversarial-review` check.                                                                                                                 |
+| `blocker`                | A finding with a failing scenario that should stop the merge. Fails the `adversarial-review` check; so does an open `should-fix` (ADR-0134).                                                                        |
 | `should-fix`, `question` | Shown in the comment only; the check passes.                                                                                                                                                                        |
-| `review-accepted`        | PR label: Andy accepts the open blockers. Write why in the PR. Removed automatically on the next push.                                                                                                              |
+| `review-accepted`        | PR label: Andy accepts the open blockers and should-fix findings. Write why in the PR. Removed automatically on the next push.                                                                                      |
 | Re-review                | Each push reviews only the new commits plus the open findings, with replies from you and collaborators as context. Only a commit that fixes a blocker clears it; replies can settle questions and should-fix items. |
 
 ## 1. Label (once)

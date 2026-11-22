@@ -74,8 +74,8 @@ export class PullRequestGate {
     /** Night launches' epic branches (AI-124); null: PRs into them never merge. */
     private readonly epicMerges: EpicMerges | null = null,
     /**
-     * Review findings recorded per PR head (ADR-0097); null: unknown, so nothing merges into the
-     * default branch (the verdict fails closed on open should-fix findings it can't see).
+     * Review findings recorded per PR head (ADR-0097), optional. Null: the review checks are the
+     * record, since they fail on any open blocker, should-fix, high or critical finding (ADR-0134).
      */
     private readonly findings: ReviewFindingSource | null = null,
   ) {}
@@ -206,16 +206,18 @@ export class PullRequestGate {
   }
 
   /**
-   * Open findings recorded for this head; null (wait) without a source, when the read fails, or
-   * when the read may have been cut short: `recent` returns the newest PRs' findings, so a PR
-   * missing from a full page (or a read at the findings cap) may have findings it didn't return.
+   * Open findings recorded for this head. Without a source, 0: the review checks fail on every
+   * open finding (ADR-0134, Andy's answer (a)), so a clean gate already means none, and an
+   * override label makes the verdict wait. With one, null (wait) when the read fails or may
+   * have been cut short: `recent` returns the newest PRs' findings, so a PR missing from a full
+   * page (or a read at the findings cap) may have findings it didn't return.
    */
   private async openFindings(
     projectId: string,
     repo: string,
     pr: PullRequest,
   ): Promise<number | null> {
-    if (!this.findings) return null;
+    if (!this.findings) return 0;
     try {
       const recent = await this.findings.recent(projectId, {
         maxPulls: FINDING_PULLS,
