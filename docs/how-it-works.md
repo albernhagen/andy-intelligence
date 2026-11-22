@@ -36,4 +36,4 @@ What is built on `main` now, moved from `README.md` so its "How it works today" 
 **Project agent tasks (AI-134):**
 
 - Andy starts plan-project or ideate as a read-only agent task (`POST …/plan/agent-task`, `…/ideate/agent-task`); its result is stored as a submitted one, so a plan waits for approval and an idea becomes an epic with a spec PR or a question.
-- No MCP tool or button yet.
+- Board → **Ideate** starts ideate from the web (AI-299).

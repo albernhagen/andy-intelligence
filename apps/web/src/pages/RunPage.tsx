@@ -1,31 +1,13 @@
 import type { ReactNode } from "react";
 import { Link, useParams } from "@tanstack/react-router";
-import { useQuery } from "@tanstack/react-query";
 import type { BuildCheck, Run } from "@andy/contracts";
 import { Loading, QueryError } from "@/components/Status";
 import { Badge } from "@/components/ui/badge";
 import { STATUS_VARIANT, Summary, formatCost, httpsHref } from "@/components/Runs";
 import { formatQuotaDelta } from "@/components/TicketCostLine";
-import { ApiError, unwrap, useApi } from "@/lib/api";
-import { useLivePoll } from "@/lib/live";
-import { isActiveRun, useTicketByRef } from "@/lib/queries";
+import { ApiError } from "@/lib/api";
 import { count, dateTime, elapsed } from "@/lib/format";
-
-/** One agent task, polled while it is in flight. A 404 is final: no retries. */
-function useRun(projectId: string, runId: string) {
-  const api = useApi();
-  return useQuery({
-    ...useLivePoll("live", isActiveRun),
-    queryKey: ["run", projectId, runId],
-    queryFn: async () =>
-      unwrap(
-        await api.GET("/api/projects/{projectId}/runs/{runId}", {
-          params: { path: { projectId, runId } },
-        }),
-      ),
-    retry: (count, err) => !(err instanceof ApiError && err.status === 404) && count < 3,
-  });
-}
+import { useRun, useTicketByRef } from "@/lib/queries";
 
 /**
  * The agent task detail screen (AI-101) at `/p/<project>/runs/<runId>`: what ran, what it cost,

@@ -24,6 +24,7 @@ import {
 } from "@andy/domain";
 import { BoardCard } from "@/components/board/BoardCard";
 import { BoardDispatchStatus } from "@/components/DispatchControls";
+import { IdeateForm } from "@/components/IdeateForm";
 import { EpicControls } from "@/components/board/EpicControls";
 import { WorkViewChips } from "@/components/board/WorkViewChips";
 import {
@@ -35,6 +36,7 @@ import {
 } from "@/components/board/Lane";
 import { readySearch } from "@/lib/ready";
 import { Loading, QueryError } from "@/components/Status";
+import { Button } from "@/components/ui/button";
 import {
   COLLAPSED_STAGES,
   IDEAS_ZONE,
@@ -88,6 +90,7 @@ export function BoardPage() {
   const navigate = useNavigate({ from: "/p/$projectId" });
   const [grouped, setGrouped] = useState(loadGroupByEpic);
   const [chosenEpic, setChosenEpic] = useState<string | null>(null);
+  const [ideating, setIdeating] = useState(false);
   const epics = useMemo(() => boardEpics(board.data ?? []), [board.data]);
   // An epic that left the board (another project's data, or deleted) stops filtering.
   const epicId = epics.some((e) => e.id === chosenEpic) ? chosenEpic : null;
@@ -107,6 +110,17 @@ export function BoardPage() {
           Board <BoardDispatchStatus projectId={projectId} />
         </h2>
         <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+          {/* AI-299: an idea into an epic in Ideas, as MCP `ideate`; outline, not the primary. */}
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className="h-11 sm:h-8"
+            aria-expanded={ideating}
+            onClick={() => setIdeating((open) => !open)}
+          >
+            Ideate
+          </Button>
           <EpicControls
             epics={epics}
             grouped={grouped}
@@ -128,6 +142,7 @@ export function BoardPage() {
         </div>
       </div>
 
+      {ideating && <IdeateForm projectId={projectId} onClose={() => setIdeating(false)} />}
       {board.data && (
         <WorkViewChips
           view={view}
