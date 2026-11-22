@@ -14,7 +14,7 @@ Procedure for a **coordinator**: one session that hands tickets to **worker** se
 
 ## 1. Pick a batch
 
-- **Only approved milestones.** Skip parked and unreviewed ones; the runbook lists them.
+- **Only approved milestones.** Skip parked and unreviewed ones (see the runbook).
 - **Approved work done:** break the next milestone into tickets and ask the owner once (§8): approve or park, with its tickets and what it needs. Build nothing before a yes.
 - Only tickets whose dependencies have merged, in milestone order; a later one may join if it depends on nothing unfinished and touches other packages.
 - **Two workers never own the same file.** Name each worker's files in its brief. Where two must touch one, one owns it; the other gets one named line.
@@ -62,7 +62,7 @@ Hand over between batches, never during one. Write a log entry: what merged, wha
 
 ## 7. Merging PRs yourself
 
-Only where the owner decided it in a decision record (here ADR-0120, runbook `coordinating-sessions.md` §5). Always required: every check green on the head commit; both review agents posted a verdict on that head with no open blocker, should-fix, high or critical finding (a neutral check does not count: read a docs-only PR's whole diff yourself and record it; a fix clears a finding, a reply does not); no accepted-label override; the default branch merged in and rerun. The owner keeps what the record lists: what judges a PR (CI, reviews, baseline); a change to who merges or to your own rules; a PR that only takes effect when the owner acts (infrastructure to apply, a secret, an external account); and anything with a finding open or that you are unsure of. Call those ready only when synced, green and clean on both reviews. Never merge a change to your own authority. Squash, one at a time (§4); record each merge (PR, ticket, who, verdicts) in the digest.
+Only where the owner decided it in a decision record (here ADR-0120, runbook `coordinating-sessions.md` §5). Always required: every check green on the head commit; both review agents posted a verdict on that head with no open blocker, should-fix, high or critical finding (a neutral check does not count: read a docs-only PR's whole diff yourself and record it; a fix clears a finding, a reply does not); no accepted-label override; the default branch merged in and rerun. The owner keeps what the record lists: what judges a PR (CI, reviews, baseline); a change to who merges or to your own rules; a PR that only takes effect when the owner acts (infrastructure to apply, a secret, an external account); and anything with a finding open or that you are unsure of. Call those ready only when synced, green and review-clean. Never merge a change to your own authority. Squash, one at a time (§4); record each merge (PR, ticket, who, verdicts) in the digest.
 
 ## 8. Asking the owner
 
