@@ -15,7 +15,9 @@ import { eventId } from "./work-tracker-support";
  * A new change's id (AI-349): sorts in write order, like ticket event ids (zero-padded epoch ms,
  * a per-process sequence within one millisecond, a random suffix). Lists are newest first by
  * `createdAt`, then by id descending, so two changes saved in the same millisecond come back
- * newest first.
+ * newest first. Services call it with no argument (the wall clock), so ids follow call order in
+ * one process even when an injected clock repeats or goes backwards; `createdAt` still sorts
+ * first, the id only breaks ties. Across instances within one millisecond order is arbitrary.
  */
 export function configChangeId(at: Date = new Date()): string {
   return eventId(at);
