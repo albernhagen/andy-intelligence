@@ -4,16 +4,16 @@ M1.9: Quota capture. Design: ARCHITECTURE §5 and [observability-and-cost.md](..
 
 Claude subscription only, best-effort. A fresh reading at the pause level, taken in the last 6 hours, stops dispatch (ADR-0079); a fresh one at warn holds dispatch to one agent task in flight across all projects (idle reason `quota_warn`, AI-92). Stale, older or missing readings do neither. **Clear quota idle** acts on pause only.
 
-| Step      | What                                                                                                                                                                                                                  |
-| --------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Source    | Claude Code's `rate_limit_event` message, field `rate_limit_info`. `scripts/executor-report.mjs` forwards the last event's windows as `rateLimits` in the run report.                                                 |
-| Capture   | `POST /runs/{id}/report` (`apps/api/src/runs.ts`), the only place readings are written. A reading per window (5h, weekly), via `parseRateLimits` in `packages/domain/src/quota.ts`. A replayed report writes nothing. |
-| Malformed | Discarded with one `quota reading discarded` log line; the last reading stays and the run report still succeeds.                                                                                                      |
-| Storage   | Firestore `quotaReadings`, one document per provider and window (latest only); `quotaClears`, one per reading Andy cleared (AI-74), kept.                                                                             |
-| Read      | `GET /api/quota`: per window `freshness`, `level`, `usedPct`, plus the worst level. `usedPct` is null unless fresh.                                                                                                   |
-| Fresh     | Until the window's `resetsAt` passes; with no `resetsAt`, 6 hours after `takenAt`. Stale or missing shows as **unknown**.                                                                                             |
-| Levels    | From the §5 policy, 70% warn and 80% pause (`CLAUDE_SUB_THRESHOLDS`, constants until Provider documents exist). Worst first: pause, warn, unknown, ok.                                                                |
-| UI        | Header gauge; banner under the header at warn, pause and unknown (lower severity), no dismiss. Refetched on window focus, no polling, so an idle tab costs nothing.                                                   |
+| Step      | What                                                                                                                                                                                                                           |
+| --------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Source    | Claude Code's `rate_limit_event` message, field `rate_limit_info`. `scripts/executor-report.mjs` forwards the last event's windows as `rateLimits` in the run report.                                                          |
+| Capture   | `POST /runs/{id}/report` (`apps/api/src/runs.ts`), the only place readings are written. A reading per window (5h, weekly), via `parseRateLimits` in `packages/domain/src/quota.ts`. A replayed report writes nothing.          |
+| Malformed | Discarded with one `quota reading discarded` log line; the last reading stays and the run report still succeeds.                                                                                                               |
+| Storage   | Firestore `quotaReadings`, one document per provider and window (latest only); `quotaClears`, one per reading Andy cleared (AI-74), kept.                                                                                      |
+| Read      | `GET /api/quota`: per window `freshness`, `level`, `usedPct`, plus the worst level. `usedPct` is null unless fresh.                                                                                                            |
+| Fresh     | Until the window's `resetsAt` passes; with no `resetsAt`, 6 hours after `takenAt`. Stale or missing shows as **unknown**.                                                                                                      |
+| Levels    | From the §5 policy, 70% warn and 80% pause (`CLAUDE_SUB_THRESHOLDS`, constants until Provider documents exist). Worst first: pause, warn, unknown, ok.                                                                         |
+| UI        | Header gauge; banner under the header at warn and pause, no dismiss; unknown shows only in the gauge, whose tooltip says not to assume headroom (AI-328). Refetched on window focus, no polling, so an idle tab costs nothing. |
 
 ## Check it works
 

@@ -62,12 +62,12 @@ function StoryList({ path }: { path: TicketPath }) {
   const rollup = useEpicRollup(path);
   const r = rollup.data;
   return (
-    <section aria-label="Stories" className="space-y-2">
-      <h3 className="text-sm font-medium">Stories</h3>
+    <section aria-label="Tickets" className="space-y-2">
+      <h3 className="text-sm font-medium">Tickets</h3>
       {rollup.isPending && <Loading />}
       {showsError(rollup) && <QueryError error={rollup.error} />}
       {r && r.children.length === 0 && (
-        <p className="text-sm text-muted-foreground">No stories under this epic yet.</p>
+        <p className="text-sm text-muted-foreground">No tickets under this epic yet.</p>
       )}
       {r && r.children.length > 0 && (
         <>
