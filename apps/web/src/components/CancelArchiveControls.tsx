@@ -70,7 +70,7 @@ export function CancelArchiveControls({ ticket }: { ticket: Ticket }) {
             <Input value={reason} onChange={(e) => setReason(e.target.value)} />
           </Field>
           <div className="flex gap-2">
-            <Button type="submit" size="sm" disabled={pending}>
+            <Button type="submit" size="sm" variant="outline" disabled={pending}>
               Cancel ticket
             </Button>
             <Button type="button" size="sm" variant="outline" onClick={() => setCancelling(false)}>
