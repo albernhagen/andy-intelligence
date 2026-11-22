@@ -41,7 +41,7 @@ export function RunPage() {
     return run.error instanceof ApiError && run.error.status === 404 ? (
       <p className="text-muted-foreground">Agent task not found.</p>
     ) : (
-      <QueryError error={run.error} />
+      <QueryError error={run.error} what="the agent task" onRetry={() => void run.refetch()} />
     );
   }
   return <RunDetail run={run.data} />;

@@ -24,7 +24,14 @@ const MARKERS: Record<
 export function SetupChecklist({ projectId }: { projectId: string }) {
   const setup = useSetupChecklist(projectId);
   if (setup.isPending) return <Loading />;
-  if (setup.data === undefined || showsError(setup)) return <QueryError error={setup.error} />;
+  if (setup.data === undefined || showsError(setup))
+    return (
+      <QueryError
+        error={setup.error}
+        what="the setup checklist"
+        onRetry={() => void setup.refetch()}
+      />
+    );
   if (setup.data.complete) return null;
   const left = setup.data.items.filter((i) => i.status !== "done").length;
   const waiting = setup.data.items.filter((i) => i.status === "not_yet").map((i) => i.label);

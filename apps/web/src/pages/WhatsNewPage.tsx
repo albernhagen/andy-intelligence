@@ -67,7 +67,11 @@ export function WhatsNewPage() {
       {whatsNew.isPending ? (
         <Loading />
       ) : whatsNew.isError ? (
-        <QueryError error={whatsNew.error} />
+        <QueryError
+          error={whatsNew.error}
+          what="what's new"
+          onRetry={() => void whatsNew.refetch()}
+        />
       ) : (
         <>
           <Status whatsNew={whatsNew.data} projectId={projectId} />
