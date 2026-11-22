@@ -58,7 +58,7 @@ export function AskQuestionForm(props: { projectId: string; ticketId: string }) 
       </Field>
       {ask.error && <QueryError error={ask.error} />}
       <div className="flex gap-2">
-        <Button type="submit" size="sm" disabled={!text.trim() || ask.isPending}>
+        <Button type="submit" size="sm" variant="outline" disabled={!text.trim() || ask.isPending}>
           Ask
         </Button>
         <Button type="button" size="sm" variant="outline" onClick={() => setOpen(false)}>
