@@ -14,6 +14,7 @@ Generated from tickets, never edited here (AI-148). Every ticket sits under a mi
 
 ## Pending decisions (Andy)
 
+- AI-322 UX review: approve the ranked list in [`build-log/2026-11-21-ux-review.md`](build-log/2026-11-21-ux-review.md) (AI-325 to AI-343, all in Ideas) before any is built.
 - Contract suites for ports with one adapter (`OAuthGrantStore`, `CodeHostConnectionStore`): keep the fakes, drop the shared suite?
 - Production monitoring (alerts, error budget per project) as part of "shipped" (brief): add to M6: Dev → prod releases at slicing.
 - `autoMerge` on for project `AI`: after a trial of five tickets where the gate's `would_auto_merge` calls are compared with the coordinator's (Andy, 2026-11-10).
@@ -27,9 +28,11 @@ Generated from tickets, never edited here (AI-148). Every ticket sits under a mi
 - ADR-0111: Re-sync open PRs: its App token?
 - ADR-0133: Board and ticket list read changed tickets (AI-317): accept the 60 s overlap and the hourly full re-read?
 - Review handover with every open question and PR: [2026-11-21-handover-review.md](build-log/2026-11-21-handover-review.md).
-- ADR-0134 (PR #328, AI-215: Merge modes): fail the review check on should-fix findings?
 - AI-113: M5.14: baseline on a new repo: App opens the PR without workflows, Andy adds them?
 - Re-sync cap (`scripts/resync-prs.mjs`, 4 an hour): raise to 12 and skip counting skipped runs?
+- ADR-0136: Milestone create and edit over MCP (AI-321, PR #343): extend ADR-0131 to five MCP milestone tools?
+- ADR-0140: Review check fails when not reviewed (AI-346, PR #356): carry verdicts over re-sync merges, and fail repos with no token?
+- ADR-0141: Agent PRs get a real review (AI-348, PR #377): allow the App on `agent/*` branches only?
 
 ## Blocked on Andy
 

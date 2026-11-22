@@ -1,10 +1,11 @@
-import type {
+import {
   ProviderKey,
-  ProviderRouting,
-  QuotaLevel,
-  QuotaReading,
-  QuotaWindow,
-  Route,
+  type ProviderRouting,
+  type QuotaLevel,
+  type QuotaReading,
+  type QuotaStore,
+  type QuotaWindow,
+  type Route,
 } from "@andy/contracts";
 import { quotaStatus, readingsForDispatch, type QuotaThresholds } from "./quota";
 import type { EffectiveRouting, RouteCandidate, SkippedRoute } from "./route-resolver";
@@ -45,6 +46,8 @@ export const QUOTA_WINDOWS: Record<ProviderKey, QuotaWindow[]> = {
   "claude-sub": ["5h", "weekly"],
   "google-sub": ["daily_tasks"],
   openrouter: [],
+  // AI-260: pay-per-use on an API key: held by the spend caps, no subscription windows.
+  "claude-api": [],
 };
 
 /**
@@ -113,6 +116,29 @@ export function subscriptionLevel(
     thresholds,
     QUOTA_WINDOWS[provider],
   ).level;
+}
+
+/**
+ * Each enabled subscription's level under `routing` (`subscriptionLevel`), from the latest
+ * readings; empty without a quota store (every level unknown). Used by dispatch and by the
+ * digest summary's start (AI-323).
+ */
+export async function subscriptionQuotaLevels(
+  store: Pick<QuotaStore, "latest"> | null,
+  routing: EffectiveRouting,
+  now: Date,
+): Promise<Partial<Record<ProviderKey, QuotaLevel>>> {
+  if (!store) return {};
+  const subscriptions = ProviderKey.options.filter(
+    (p) => routing.providers[p].enabled && PROVIDER_BILLING[p] === "subscription",
+  );
+  const levels = await Promise.all(
+    subscriptions.map(async (p) => {
+      const readings = await store.latest(p);
+      return [p, subscriptionLevel(p, readings, routing.providers[p], now)] as const;
+    }),
+  );
+  return Object.fromEntries(levels);
 }
 
 /**

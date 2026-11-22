@@ -1,6 +1,6 @@
 ---
 title: "Context budgets: a PR uses at most half the room"
-status: proposed (AI-143; Andy decides at review)
+status: proposed (AI-143; Andy decides at review); amended by 0138 (a PR is judged on its own change)
 date: 2026-11-20
 amends: 0046 (what a PR may do to a budgeted doc)
 ---

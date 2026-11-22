@@ -1,5 +1,6 @@
 import { expect, test, type Page } from "@playwright/test";
 import type { ProjectRoadmap, RoadmapCounts, RoadmapEpic } from "@andy/domain";
+import { expectPageFits } from "./phone";
 
 /**
  * AI-202: M4.26: Roadmap screen. No write path sets an epic's milestone before AI-304, so the
@@ -106,9 +107,9 @@ const ROADMAP: ProjectRoadmap = {
 async function open(page: Page) {
   await page.route("**/api/projects/ai/roadmap", (route) => route.fulfill({ json: ROADMAP }));
   await page.goto("/p/ai/roadmap");
-  await expect(page.getByRole("button", { name: /M4: Epics \+ story board/ })).toBeVisible();
+  await expect(page.getByRole("button", { name: /^M4: Epics \+ story board/ })).toBeVisible();
   await expect(page.getByRole("link", { name: "Needs you 6" })).toBeVisible();
-  await page.getByRole("button", { name: /M4: Epics \+ story board/ }).click();
+  await page.getByRole("button", { name: /^M4: Epics \+ story board/ }).click();
   await expect(page.getByRole("link", { name: /AI-285/ })).toBeVisible();
 }
 
@@ -124,8 +125,7 @@ test.describe("phone", () => {
 
   test("phone roadmap: rows stack", async ({ page }) => {
     await open(page);
-    const width = await page.evaluate(() => document.documentElement.scrollWidth);
-    expect(width).toBeLessThanOrEqual(390);
+    await expectPageFits(page);
     await expect(page).toHaveScreenshot("phone-roadmap.png", { fullPage: true });
   });
 });

@@ -275,7 +275,11 @@ describe("ticket API", () => {
     expect((await call("POST", `/api/questions/${q.id}/answer`, { answer: "list" })).status).toBe(
       409,
     );
-    expect((await call("GET", "/api/needs-you")).json).toEqual({ questions: [], tickets: [] });
+    expect((await call("GET", "/api/needs-you")).json).toEqual({
+      questions: [],
+      tickets: [],
+      waitingMerges: { merges: [], truncated: false },
+    });
     expect((await call("GET", base)).json).toMatchObject({
       needsAttention: false,
       dorStatus: "met",

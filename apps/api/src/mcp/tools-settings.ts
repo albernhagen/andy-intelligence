@@ -1,5 +1,5 @@
 import { EnvironmentPolicy, MergeMode, Project, WorkTrackerError } from "@andy/contracts";
-import { MERGE_MODE_TEXT, effectiveMergeMode } from "@andy/domain";
+import { MERGE_MODE_TEXT, effectiveMergeMode, suggestedMergeMode } from "@andy/domain";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import { z } from "zod";
@@ -31,10 +31,10 @@ export const settingsOf = (p: Project) => ({
   planApproval: p.planApproval,
   autoRefine: p.autoRefine,
   dailyQuestionCap: p.dailyQuestionCap,
-  autoMerge: p.autoMerge,
-  // ADR-0124: the mode in force, and whether it is stored or read from `autoMerge`.
-  mergeMode: effectiveMergeMode(p),
-  mergeModeSet: p.mergeMode !== null,
+  // ADR-0124, ADR-0134: the saved mode (null: none, so the gate merges nothing) and the one
+  // ADR-0124's mapping suggests until one is saved.
+  mergeMode: p.mergeMode,
+  suggestedMergeMode: p.mergeMode === null ? suggestedMergeMode(p) : null,
   runsAtOnce: p.runsAtOnce,
   paused: p.paused,
   defaultWorker: p.defaultWorker,
@@ -77,7 +77,7 @@ export function registerSettingsTools(
     "get_project_settings",
     {
       description:
-        "Reads every setting of one project: Builds (buildEnabled, with who turned it on or off and when; set only in the app), auto-build, plan approval, auto-refine, questions per day, auto-merge, merge mode (mergeMode, and mergeModeSet: false when it is still read from auto-merge), agent tasks at once (runsAtOnce), paused, default worker, default executor (actions or local), email notifications (sent only once email is configured: set_email_notifications says), release environments (prod-only or dev-and-prod), and the dispatcher's last decision (lastDispatch: why it is idle, or what it did). Each setting has its own set_* tool except Builds.",
+        "Reads every setting of one project: Builds (buildEnabled, with who turned it on or off and when; set only in the app), auto-build, plan approval, auto-refine, questions per day, merge mode (mergeMode: who merges PRs; null until one is saved, and then nothing merges without Andy; suggestedMergeMode while unset), agent tasks at once (runsAtOnce), paused, default worker, default executor (actions or local), email notifications (sent only once email is configured: set_email_notifications says), release environments (prod-only or dev-and-prod), and the dispatcher's last decision (lastDispatch: why it is idle, or what it did). Each setting has its own set_* tool except Builds.",
       inputSchema: SettingsInput,
       annotations: { readOnlyHint: true },
     },
@@ -134,7 +134,7 @@ export function registerSettingsTools(
     "set_merge_mode",
     {
       description:
-        "Sets a project's merge mode (who merges its PRs, ADR-0124), strictest first: manual, epic, low-risk, all-clean. Only Andy, and over MCP only to the same or a stricter mode: loosening is refused, change it on the project settings page. Logged in the config change log. Nothing merges by it yet: the gate still follows auto-merge until AI-215.",
+        "Sets a project's merge mode (who merges its PRs, ADR-0124), strictest first: manual, epic, low-risk, all-clean. Only Andy, and over MCP only to the same or a stricter mode: loosening is refused, change it on the project settings page. With no mode saved the gate merges nothing, so over MCP only manual can be saved then (ADR-0134). Logged in the config change log.",
       inputSchema: MergeModeInput,
       annotations: { destructiveHint: false, idempotentHint: true, openWorldHint: false },
     },

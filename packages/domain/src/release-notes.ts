@@ -10,11 +10,14 @@ import {
   type ChangedFile,
   type CodeHost,
   type CodeHostEvent,
+  type MergeMode,
   type Project,
   type PullRequestDetails,
   type ReleaseNoteLink,
   type ReleaseNoteLinkKind,
   type ReleaseNoteStore,
+  type Run,
+  type RunStore,
   type Ticket,
   type WhatsNew,
   type WhatsNewMilestone,
@@ -68,6 +71,8 @@ export interface ReleaseNoteInput {
   ticket: Pick<Ticket, "key" | "title" | "risk"> | null;
   files: readonly Pick<ChangedFile, "path">[];
   recordedAt: string;
+  /** The mode the gate merged it under (AI-218); null or absent: a person merged it. */
+  mergedByMode?: MergeMode | null;
   /** `backfill` takes "What changed" from the summary's first sentence when there is no block. */
   fallback?: { source: "backfill"; whatChanged: string };
 }
@@ -99,6 +104,7 @@ export function buildReleaseNote(input: ReleaseNoteInput): ReleaseNote {
     risk: ticket?.risk ?? null,
     mergedAt: details.mergedAt ?? input.recordedAt,
     mergedBy: details.mergedBy,
+    mergedByMode: input.mergedByMode ?? null,
     source: text.source,
     whatChanged: cut(text.whatChanged),
     howItWorks: cut(text.howItWorks),
@@ -129,6 +135,8 @@ export class ReleaseNoteRecorder {
     private readonly tracker: WorkTracker,
     private readonly notes: ReleaseNoteStore,
     private readonly now: () => Date = () => new Date(),
+    /** Agent tasks, to tell a merge by the gate from one by a person (AI-218); null: unknown. */
+    private readonly runs: Pick<RunStore, "listForTicket"> | null = null,
   ) {}
 
   async record(event: CodeHostEvent, project: Project): Promise<ReleaseNoteOutcome> {
@@ -161,6 +169,7 @@ export class ReleaseNoteRecorder {
       ticket,
       files,
       recordedAt: this.now().toISOString(),
+      mergedByMode: ticket ? await this.gateMode(project.id, ticket.id, pr) : null,
     });
     await this.notes.put(note);
     return {
@@ -170,6 +179,46 @@ export class ReleaseNoteRecorder {
       ...(readError ? { readError } : {}),
     };
   }
+
+  private async gateMode(
+    projectId: string,
+    ticketId: string,
+    pr: { url: string; headSha: string },
+  ): Promise<MergeMode | null> {
+    if (!this.runs) return null;
+    try {
+      return gateMergeMode(await this.runs.listForTicket(projectId, ticketId), pr);
+    } catch (err) {
+      console.error(
+        JSON.stringify({
+          severity: "WARNING",
+          message: "release note: merge mode read failed",
+          pr: pr.url,
+          error: err instanceof Error ? err.message : String(err),
+        }),
+      );
+      return null;
+    }
+  }
+}
+
+/**
+ * The mode the gate merged this PR under: its build's agent task decided `merge` and attempted
+ * exactly the merged head without an error. Null otherwise (a person merged it), or when the read
+ * fails: the note still records.
+ */
+export function gateMergeMode(
+  runs: readonly Run[],
+  pr: { url: string; headSha: string },
+): MergeMode | null {
+  const run = runs.find(
+    (r) =>
+      r.links.pullRequest === pr.url &&
+      r.mergeVerdict === "merge" &&
+      r.mergeAttemptedSha === pr.headSha &&
+      r.mergeError === null,
+  );
+  return run?.mergeMode ?? null;
 }
 
 // ── What's new ───────────────────────────────────────────────────────────────
@@ -267,6 +316,7 @@ export class WhatsNewReader {
     });
     return {
       projectKey: project.key,
+      mergeMode: project.mergeMode ?? null,
       window: { from: window.from.toISOString(), to: window.to.toISOString() },
       milestones: milestoneStatus(tickets),
       needsYou: {
@@ -285,6 +335,7 @@ export class WhatsNewReader {
 export function renderWhatsNewText(w: WhatsNew): string {
   const lines = [
     `${w.projectKey} what's new · ${w.window.from.slice(0, 10)} to ${w.window.to.slice(0, 10)}`,
+    `Merge mode: ${w.mergeMode ?? "not set (nothing merges on its own)"}`,
   ];
   const open = w.milestones.filter((m) => m.notStarted + m.inProgress + m.inReview > 0);
   const finished = w.milestones.filter((m) => !open.includes(m));
@@ -307,10 +358,16 @@ export function renderWhatsNewText(w: WhatsNew): string {
   for (const n of w.notes) {
     const what = n.whatChanged ?? `${n.prTitle} (no note)`;
     lines.push(
-      `- ${n.mergedAt.slice(0, 10)} · ${what} · ${n.ticketKey ?? "no ticket"} · PR #${n.prNumber}`,
+      `- ${n.mergedAt.slice(0, 10)} · ${what} · ${n.ticketKey ?? "no ticket"} · PR #${n.prNumber} · ${mergedByText(n)}`,
     );
   }
   if (w.truncated)
     lines.push("", "The read cap was reached: older changes in the window are missing.");
   return lines.join("\n");
+}
+
+/** "merged by the mode (all-clean)", "merged by albernhagen", or "merged by unknown". */
+export function mergedByText(n: Pick<ReleaseNote, "mergedBy" | "mergedByMode">): string {
+  if (n.mergedByMode) return `merged by the mode (${n.mergedByMode})`;
+  return `merged by ${n.mergedBy ?? "unknown"}`;
 }

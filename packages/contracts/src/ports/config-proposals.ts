@@ -62,4 +62,18 @@ export interface ConfigChangeStore extends ConfigChangeLog {
    * `conflict` when the change isn't pending, `not_found` when unknown.
    */
   decide(id: string, decision: ConfigChangeDecision, by: string, at: string): Promise<ConfigChange>;
+  /**
+   * Appends `text` to a pending change's reason, after a blank line, keeping at most
+   * `CONFIG_CHANGE_REASON_APPEND_MAX` characters of reason; nothing else changes. Atomic.
+   * `conflict` when the change isn't pending (decided meanwhile), `not_found` when unknown.
+   */
+  appendReason(id: string, text: string): Promise<ConfigChange>;
+}
+
+/** Longest reason `appendReason` leaves on a change. */
+export const CONFIG_CHANGE_REASON_APPEND_MAX = 4000;
+
+/** The reason after appending `text` (shared by every adapter). */
+export function appendedReason(reason: string, text: string): string {
+  return `${reason}\n\n${text}`.slice(0, CONFIG_CHANGE_REASON_APPEND_MAX);
 }

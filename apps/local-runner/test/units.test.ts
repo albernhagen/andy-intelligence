@@ -194,6 +194,16 @@ describe("control plane answers", () => {
     sync: null,
   };
 
+  it("GivenAPayPerUseContext_WhenChecked_ThenTheLocalRunnerRefusesIt", () => {
+    expect(() =>
+      checkContext({ ...context, billingType: "pay_per_use", maxBudgetUsd: 2 }, "r1"),
+    ).toThrow(/pay-per-use/);
+    expect(() => checkContext({ ...context, maxBudgetUsd: 2 }, "r1")).toThrow(/pay-per-use/);
+    expect(
+      checkContext({ ...context, billingType: "subscription", maxBudgetUsd: null }, "r1"),
+    ).toBeTruthy();
+  });
+
   it("GivenAContextOutsideTheExecutorsBounds_WhenChecked_ThenItIsRefused", () => {
     expect(checkContext(context, "r1")).toEqual(context);
     expect(() => checkContext(context, "r2")).toThrow(/another/);
@@ -567,7 +577,7 @@ describe("platform settings", () => {
       confinement: noConfinement,
       profilePath: "/x",
     });
-    for (const step of ["refine", "plan", "build"]) {
+    for (const step of ["refine", "plan", "plan-project", "ideate", "build"]) {
       await expect(platform.settings(step, WORKSPACE)).resolves.toMatchObject({
         disableAllHooks: true,
       });

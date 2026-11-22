@@ -287,6 +287,20 @@ describe("ConfigProposals", () => {
     });
   }
 
+  it("GivenTwoProposalsInTheSameMillisecond_WhenListed_ThenNewestFirst", async () => {
+    const { tracker, findings, changes, projectId, repeated } = await setup();
+    // Default ids (configChangeId) on a fixed clock: both proposals share createdAt (AI-349).
+    const service = new ConfigProposals(tracker, findings, changes, () => NOW);
+    findings.add(...repeated("a-kind"), ...repeated("b-kind"));
+
+    const result = await service.sweep(projectId);
+
+    expect(result.created).toHaveLength(2);
+    const listed = await changes.listPending(projectId);
+    expect(listed.map((c) => c.createdAt)).toEqual([NOW.toISOString(), NOW.toISOString()]);
+    expect(listed.map((c) => c.id)).toEqual([...result.created].reverse());
+  });
+
   it("GivenThePendingCapIsReached_WhenSwept_ThenNothingMoreIsWrittenAndTheHeldCountIsReported", async () => {
     const { tracker, findings, changes, projectId, repeated } = await setup();
     let n = 0;

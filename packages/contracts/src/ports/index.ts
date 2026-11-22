@@ -424,6 +424,7 @@ export const NewRun = Run.pick({
   syncRun: true,
   localRun: true,
   baseBranch: true,
+  idea: true,
   routeSkips: true,
 });
 export type NewRun = z.input<typeof NewRun>;
@@ -457,6 +458,9 @@ export const RunPatch = Run.pick({
   gateFlaggedAt: true,
   mergeAttemptedSha: true,
   mergeError: true,
+  mergeMode: true,
+  mergeVerdict: true,
+  verdictReasons: true,
   metrics: true,
   syncRun: true,
   prSync: true,

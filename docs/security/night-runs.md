@@ -20,7 +20,7 @@ Overnight launches (ADR-0049, AI-104, AI-123, AI-124). Risks: [R-AI-123](risks/R
 ## What it never may
 
 - Answer a question that was open before the launch: the launch refuses to start while any story has one, misses the Definition of Ready or waits for a plan approval (AI-104).
-- Merge outside the merge gate: required checks, both review agents and the protected paths are unchanged. A veto stops the story. Only the `autoMerge` policy is skipped, and only for a merge into the epic branch (below).
+- Merge outside the merge gate: required checks, both review agents and the protected paths are unchanged. A veto stops the story. Only the merge mode is skipped, and only for a merge into the epic branch (below).
 - Merge into `main`: the morning PR's head is `epic/<KEY>`, not an agent branch, so the gate never touches it. Andy merges it.
 - Start a story whose blocker failed, was rejected or was vetoed: it waits on `blockedBy`, the launch lists it as skipped and it is flagged for the morning. When only stopped or skipped stories are left, the launch ends instead of idling to its stop time (with the night budget, AI-121).
 - Keep going once the launch is `stopping` or ended: questions are asked again as usual.

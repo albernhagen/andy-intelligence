@@ -13,6 +13,7 @@ import {
   type QuotaStore,
   type DeploymentStore,
   type MilestoneStore,
+  type DigestSummaryStore,
   type RoutingConfigStore,
   type NightLaunchStore,
   type ProjectVersions,
@@ -78,6 +79,11 @@ export interface AppDeps {
    * every epic under No milestone. Absent: no milestone routes or tools (AI-304).
    */
   milestones?: MilestoneStore;
+  /**
+   * Digest summaries (AI-323, ADR-0137): one per project per day. Needs `releaseNotes` too;
+   * absent, the digest has no summary and the retry route answers 503.
+   */
+  digestSummaries?: DigestSummaryStore;
   /** Subscription quota readings (M1.9). Without it every window reads unknown. */
   quota?: QuotaStore;
   /** Night launches (ADR-0049): a launched story's build gets its `epic/<KEY>` base (AI-122). */
@@ -126,6 +132,18 @@ export interface AppDeps {
     /** The OIDC audience: `PUBLIC_URL`. */
     publicUrl: string;
     /** The invoker service account the queue's tokens must be for. */
+    invokerEmail: string;
+    /** Test seam; defaults to Google's ID token verification. */
+    verifyInvokerToken?: InvokerTokenVerifier;
+  };
+  /**
+   * Weekly model scout (AI-268: M10.17): Cloud Scheduler calls `/jobs/model-scout` with its
+   * service account's OIDC token. Off (route absent) when not configured, e.g. local dev.
+   */
+  modelScout?: {
+    /** The OIDC audience: `PUBLIC_URL`. */
+    publicUrl: string;
+    /** The scheduler's service account the tokens must be for. */
     invokerEmail: string;
     /** Test seam; defaults to Google's ID token verification. */
     verifyInvokerToken?: InvokerTokenVerifier;
@@ -194,6 +212,8 @@ const DOMAIN_STATUS = {
   run_limit: 409,
   spend_cap: 409,
   quota_reserve: 409,
+  paused: 409,
+  no_route: 422,
   run_finished: 409,
   executor_unavailable: 503,
   dispatch_failed: 502,
