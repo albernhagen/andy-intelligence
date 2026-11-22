@@ -10,15 +10,14 @@ import { AppShell } from "@/components/AppShell";
 import { loadScope, scopePath } from "@/lib/scope";
 import { BoardPage } from "@/pages/BoardPage";
 import { DashboardsPage } from "@/pages/DashboardsPage";
-import { DigestPage } from "@/pages/DigestPage";
 import { PickProjectPage } from "@/pages/PickProjectPage";
 import { GitHubCallbackPage, GitHubPage } from "@/pages/GitHubPage";
 import { InboxPage } from "@/pages/InboxPage";
 import { NewProjectPage, ProjectsPage } from "@/pages/ProjectsPage";
 import { ModelsPage } from "@/pages/ModelsPage";
 import { ProjectSettingsPage } from "@/pages/ProjectSettingsPage";
-import { ReadyPage } from "@/pages/ReadyPage";
 import { readySearch } from "@/lib/ready";
+import type { ReadyFilters } from "@andy/contracts";
 import { RunnersPage } from "@/pages/RunnersPage";
 import { RunPage } from "@/pages/RunPage";
 import { TicketPage } from "@/pages/TicketPage";
@@ -35,14 +34,21 @@ const boardRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/p/$projectId",
   component: BoardPage,
-  // The Ready lane's view (AI-37) and the work view chip (AI-187); unknown values read as unset.
-  validateSearch: (search: Record<string, unknown>): { sort?: "score"; view?: WorkView } => {
+  // The Ready lane's sort (AI-37) and filters (AI-343), and the work view chip (AI-187); unknown
+  // values read as unset.
+  validateSearch: (
+    search: Record<string, unknown>,
+  ): { sort?: "score"; view?: WorkView } & ReadyFilters => {
     const view = parseWorkView(search.view);
-    return { ...(search.sort === "score" && { sort: "score" }), ...(view && { view }) };
+    return {
+      ...(search.sort === "score" && { sort: "score" }),
+      ...(view && { view }),
+      ...readySearch(search),
+    };
   },
 });
 
-/** The Work list's view; an unknown or missing one reads as unset (the page shows Needs me). */
+/** The Work list's view; an unknown or missing one reads as unset (the page shows Needs you). */
 function workSearch(search: Record<string, unknown>): { view?: WorkView } {
   const view = parseWorkView(search.view);
   return view ? { view } : {};
@@ -67,7 +73,7 @@ const routeTree = rootRoute.addChildren([
   }),
   createRoute({ getParentRoute: () => rootRoute, path: "/all/inbox", component: InboxPage }),
   createRoute({ getParentRoute: () => rootRoute, path: "/all/board", component: PickProjectPage }),
-  // Work across projects (AI-198): both scopes; the view chip is in `?view=` (default Needs me).
+  // Work across projects (AI-198): both scopes; the view chip is in `?view=` (default Needs you).
   createRoute({
     getParentRoute: () => rootRoute,
     path: "/all/work",
@@ -109,28 +115,39 @@ const routeTree = rootRoute.addChildren([
     path: "/p/$projectId/roadmap",
     component: RoadmapPage,
   }),
-  // Ready, ranked (AI-298): project-scoped only, like MCP `list_ready` and the board's lane.
+  // Old Ready page links (AI-298) open the board with the same filters (AI-343).
   createRoute({
     getParentRoute: () => rootRoute,
     path: "/p/$projectId/ready",
-    component: ReadyPage,
-    validateSearch: readySearch,
+    // AI-343: the Ready page is gone; its filters are on the board's Ready lane (MCP list_ready stays).
+    beforeLoad: ({ params, search }) => {
+      throw redirect({ to: "/p/$projectId", params, search: readySearch(search), replace: true });
+    },
   }),
   createRoute({
     getParentRoute: () => rootRoute,
     path: "/p/$projectId/settings",
     component: ProjectSettingsPage,
   }),
+  // AI-341: the Digest screen folded into What's new (24 hours, exceptions first); MCP digest stays.
   createRoute({
     getParentRoute: () => rootRoute,
     path: "/p/$projectId/digest",
-    component: DigestPage,
+    beforeLoad: ({ params }) => {
+      throw redirect({ to: "/p/$projectId/whats-new", params, search: { days: 1 }, replace: true });
+    },
   }),
   // What's new (AI-159): project-scoped only, as status is per milestone epic of one project.
   createRoute({
     getParentRoute: () => rootRoute,
     path: "/p/$projectId/whats-new",
     component: WhatsNewPage,
+    // The window lives in the URL (`?days=1` is the old digest URL's 24 hours, AI-341); 14 days,
+    // the default, and anything unknown read as unset.
+    validateSearch: (search: Record<string, unknown>): { days?: 1 | 30 | 90 } => {
+      const days = Number(search.days);
+      return days === 1 || days === 30 || days === 90 ? { days } : {};
+    },
   }),
   createRoute({
     getParentRoute: () => rootRoute,

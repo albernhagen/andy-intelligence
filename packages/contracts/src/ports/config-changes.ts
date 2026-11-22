@@ -1,4 +1,5 @@
 import type { ConfigChange } from "../entities";
+import { eventId } from "./work-tracker-support";
 
 // ── ConfigChangeLog ──────────────────────────────────────────────────────────
 // The applied side of ConfigChangeStore (`config-proposals.ts` holds the pending side, ADR-0097):
@@ -9,6 +10,18 @@ import type { ConfigChange } from "../entities";
 // change (no project: global routing, later global spend caps) has `entityId: GLOBAL_ENTITY_ID`
 // and `projectId: null`; `listGlobal` reads them by entity (AI-275).
 // Errors are WorkTrackerError (`conflict`), mapped the same way by the API.
+
+/**
+ * A new change's id (AI-349): sorts in write order, like ticket event ids (zero-padded epoch ms,
+ * a per-process sequence within one millisecond, a random suffix). Lists are newest first by
+ * `createdAt`, then by id descending, so two changes saved in the same millisecond come back
+ * newest first. Services call it with no argument (the wall clock), so ids follow call order in
+ * one process even when an injected clock repeats or goes backwards; `createdAt` still sorts
+ * first, the id only breaks ties. Across instances within one millisecond order is arbitrary.
+ */
+export function configChangeId(at: Date = new Date()): string {
+  return eventId(at);
+}
 
 /** At most this many changes per `listForProject` or `listGlobal` call (ADR-0028). */
 export const CONFIG_CHANGE_LIST_MAX = 100;
@@ -22,7 +35,8 @@ export interface ConfigChangeLog {
   get(id: string): Promise<ConfigChange | null>;
   /**
    * The project's settings and routing changes (`entityId` is the project) and its milestone
-   * changes (entity `milestone`, `projectId` is the project, AI-304), newest first, at most
+   * changes (entity `milestone`, `projectId` is the project, AI-304), newest first (ties: id
+   * descending, see configChangeId), at most
    * `limit` (capped at CONFIG_CHANGE_LIST_MAX).
    */
   listForProject(projectId: string, limit?: number): Promise<ConfigChange[]>;

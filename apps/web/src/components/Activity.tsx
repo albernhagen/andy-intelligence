@@ -1,5 +1,5 @@
 import { useState } from "react";
-import type { Run, TicketEvent } from "@andy/contracts";
+import type { Run, Ticket, TicketEvent } from "@andy/contracts";
 import { actorLabel } from "@andy/domain";
 import { Markdown } from "@/components/Markdown";
 import { RunItem, StartRuns, latestPlanId } from "@/components/Runs";
@@ -9,6 +9,7 @@ import { Textarea } from "@/components/ui/input";
 import { QueryError } from "@/components/Status";
 import { useAddComment } from "@/lib/queries";
 import { describeEvent, timeline } from "@/lib/tickets";
+import { dateTime } from "@/lib/format";
 
 /** Events whose body is untrusted prose (comments, question text): rendered as markdown. */
 const MARKDOWN_BODIES = new Set<TicketEvent["kind"]>(["comment", "question_asked"]);
@@ -20,6 +21,8 @@ const MARKDOWN_BODIES = new Set<TicketEvent["kind"]>(["comment", "question_asked
 export function Activity(props: {
   projectId: string;
   ticketId: string;
+  /** For a running build's branch and touches (AI-342); absent: they aren't shown. */
+  ticket?: Pick<Ticket, "key">;
   events: TicketEvent[];
   runs: Run[];
 }) {
@@ -43,6 +46,7 @@ export function Activity(props: {
               run={item.run}
               path={path}
               decidable={item.run.id === planId}
+              ticket={props.ticket}
             />
           ) : (
             <EventItem key={item.event.id} event={item.event} />
@@ -63,7 +67,12 @@ export function Activity(props: {
           onChange={(e) => setBody(e.target.value)}
         />
         {comment.error && <QueryError error={comment.error} />}
-        <Button type="submit" size="sm" disabled={!body.trim() || comment.isPending}>
+        <Button
+          type="submit"
+          size="sm"
+          variant="outline"
+          disabled={!body.trim() || comment.isPending}
+        >
           Comment
         </Button>
       </form>
@@ -77,7 +86,7 @@ function EventItem({ event: e }: { event: TicketEvent }) {
       <p>
         <span className="font-medium">{actorLabel(e.actor)}</span> {describeEvent(e)}{" "}
         <time dateTime={e.createdAt} className="text-xs text-muted-foreground">
-          {new Date(e.createdAt).toLocaleString()}
+          {dateTime(e.createdAt)}
         </time>
       </p>
       {e.body &&

@@ -8,7 +8,7 @@ async function settingsPage() {
   const h = renderApp("/p/ai/settings");
   await h.tracker.createProject({ name: "Andy Intelligence", key: "AI" });
   await h.queryClient.invalidateQueries();
-  const list = await screen.findByRole("list", { name: "Settings" });
+  const list = await screen.findByRole("region", { name: "Settings" });
   const autoRefine = () => within(list).getByRole("checkbox", { name: "Auto-refine" });
   return { h, autoRefine, changes: () => screen.getByRole("region", { name: "Changes" }) };
 }
@@ -24,13 +24,13 @@ describe("settings Changes list", () => {
   it("GivenAFlip_WhenAndyRevertsIt_ThenTheSettingIsBackAndTheRevertIsListedToo", async () => {
     const { h, autoRefine, changes } = await settingsPage();
     await h.user.click(autoRefine());
-    const row = await within(changes()).findByText("autoRefine: true → false");
+    const row = await within(changes()).findByText("Auto-refine: on → off");
     expect(within(changes()).getByText(/^Andy · /)).toBeTruthy();
 
     await h.user.click(within(row.closest("li")!).getByRole("button", { name: "Revert" }));
 
     await waitFor(() => expect((autoRefine() as HTMLInputElement).checked).toBe(true));
-    expect(await within(changes()).findByText("autoRefine: false → true")).toBeTruthy();
+    expect(await within(changes()).findByText("Auto-refine: off → on")).toBeTruthy();
     expect(within(changes()).getByText("Reverted")).toBeTruthy();
     expect(within(changes()).getByText(/· Revert of /)).toBeTruthy();
   });
@@ -38,10 +38,10 @@ describe("settings Changes list", () => {
   it("GivenTheSettingChangedAgain_WhenAndyRevertsTheOlderFlip_ThenItIsRefusedAndSaysWhy", async () => {
     const { h, autoRefine, changes } = await settingsPage();
     await h.user.click(autoRefine());
-    await within(changes()).findByText("autoRefine: true → false");
+    await within(changes()).findByText("Auto-refine: on → off");
     await h.user.click(autoRefine());
-    const older = (await within(changes()).findByText("autoRefine: true → false")).closest("li")!;
-    await within(changes()).findByText("autoRefine: false → true");
+    const older = (await within(changes()).findByText("Auto-refine: on → off")).closest("li")!;
+    await within(changes()).findByText("Auto-refine: off → on");
 
     await h.user.click(within(older).getByRole("button", { name: "Revert" }));
 

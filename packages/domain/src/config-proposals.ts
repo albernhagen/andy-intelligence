@@ -3,6 +3,7 @@ import {
   CONFIG_PROPOSAL_MAX_EXAMPLES,
   CONFIG_PROPOSAL_MAX_PRS,
   ConfigChange,
+  configChangeId,
   FindingProposalDiff,
   pullKey,
   type ConfigChangeDecision,
@@ -198,7 +199,7 @@ export class ConfigProposals {
     private readonly findings: ReviewFindingSource,
     private readonly changes: ConfigChangeStore,
     private readonly now: () => Date = () => new Date(),
-    private readonly newId: () => string = () => crypto.randomUUID(),
+    private readonly newId: () => string = () => configChangeId(),
     private readonly limits: ConfigProposalLimits = CONFIG_PROPOSAL_LIMITS,
   ) {}
 

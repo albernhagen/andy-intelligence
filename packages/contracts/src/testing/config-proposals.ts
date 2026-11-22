@@ -1,7 +1,11 @@
 import { describe, expect, it } from "vitest";
 import { ConfigChange } from "../entities";
 import { ReviewFinding } from "../entities/config-proposals";
-import type { ConfigChangeStore, ReviewFindingSource } from "../ports/config-proposals";
+import {
+  CONFIG_CHANGE_REASON_APPEND_MAX,
+  type ConfigChangeStore,
+  type ReviewFindingSource,
+} from "../ports/config-proposals";
 
 export interface ConfigChangeStoreContractOptions {
   /** Per-test timeout for the concurrent case: emulator transactions retry under contention. */
@@ -120,6 +124,37 @@ export function configChangeStoreContract(
 
       expect((await store.listPending("ai")).map((c) => c.id)).toEqual([newer.id, older.id]);
       expect(await store.listPending()).toHaveLength(3);
+    });
+
+    it("GivenAPendingChange_WhenAReasonIsAppended_ThenOnlyItsReasonGrows", async () => {
+      const store = await make();
+      const change = pendingConfigChange();
+      await store.createPending(change, 10);
+      const next = await store.appendReason(change.id, "More context.");
+      expect(next).toEqual({ ...change, reason: `${change.reason}\n\nMore context.` });
+      expect(await store.get(change.id)).toEqual(next);
+    });
+
+    it("GivenAHugeAppend_WhenAppended_ThenTheReasonIsCapped", async () => {
+      const store = await make();
+      const change = pendingConfigChange();
+      await store.createPending(change, 10);
+      const next = await store.appendReason(change.id, "x".repeat(10_000));
+      expect(next.reason).toHaveLength(CONFIG_CHANGE_REASON_APPEND_MAX);
+    });
+
+    it("GivenADecidedOrUnknownChange_WhenAReasonIsAppended_ThenConflictOrNotFound", async () => {
+      const store = await make();
+      const change = pendingConfigChange();
+      await store.createPending(change, 10);
+      await store.decide(change.id, "rejected", "andy", at);
+      await expect(store.appendReason(change.id, "late")).rejects.toMatchObject({
+        code: "conflict",
+      });
+      await expect(store.appendReason(crypto.randomUUID(), "x")).rejects.toMatchObject({
+        code: "not_found",
+      });
+      expect((await store.get(change.id))?.reason).toBe(change.reason);
     });
 
     for (const decision of ["accepted", "rejected"] as const) {

@@ -2,6 +2,7 @@ import { ConfigChange } from "../entities";
 import { ProposalLookupCursor, ReviewFinding } from "../entities/config-proposals";
 import { WorkTrackerError } from "../ports";
 import { CONFIG_CHANGE_LIST_MAX, GLOBAL_ENTITY_ID } from "../ports/config-changes";
+import { appendedReason } from "../ports/config-proposals";
 import type {
   ConfigChangeDecision,
   ConfigChangeStore,
@@ -11,7 +12,7 @@ import type {
 } from "../ports/config-proposals";
 
 const newestFirst = (a: ConfigChange, b: ConfigChange) =>
-  b.createdAt.localeCompare(a.createdAt) || a.id.localeCompare(b.id);
+  b.createdAt.localeCompare(a.createdAt) || b.id.localeCompare(a.id);
 
 /**
  * In-memory ConfigChangeStore. Every method reads and writes without an await in between, so
@@ -141,6 +142,17 @@ export class InMemoryConfigChangeStore implements ConfigChangeStore {
     });
     this.changes.set(id, decided);
     return structuredClone(decided);
+  }
+
+  async appendReason(id: string, text: string): Promise<ConfigChange> {
+    const found = this.changes.get(id);
+    if (!found) throw new WorkTrackerError("not_found", `config change ${id} not found`);
+    if (found.status !== "pending") {
+      throw new WorkTrackerError("conflict", `config change ${id} is ${found.status}`);
+    }
+    const next = ConfigChange.parse({ ...found, reason: appendedReason(found.reason, text) });
+    this.changes.set(id, next);
+    return structuredClone(next);
   }
 }
 

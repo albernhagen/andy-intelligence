@@ -28,17 +28,27 @@ inputs:
   has-token:
     description: '"true" when the Claude token secret is set.'
     required: true
+  resync-bot:
+    description: >-
+      Login of the re-sync bot (ADR-0111), e.g. my-app[bot]. A push it makes can carry the
+      previous verdict forward when the PR's own diff is unchanged (ADR-0140); "" turns that off.
+    default: ""
   github-token:
     description: Token for reading comments and removing the label.
     required: true
 
 outputs:
   mode:
-    description: review | unavailable | fork | skip
-    value: ${{ steps.scope.outputs.mode || steps.ctx.outputs.mode }}
+    description: >-
+      review | carried (re-sync merge, verdict carried forward) | skipped (by design; passes) |
+      unavailable (should have run; fails) | fork | skip (override label added)
+    value: ${{ steps.carry.outputs.mode || steps.scope.outputs.mode || steps.ctx.outputs.mode }}
   reason:
-    description: Why the agent won't run (unavailable mode).
-    value: ${{ steps.scope.outputs.reason || steps.ctx.outputs.reason }}
+    description: Why the agent won't run (skipped and unavailable modes).
+    value: ${{ steps.carry.outputs.reason || steps.scope.outputs.reason || steps.ctx.outputs.reason }}
+  carried-from:
+    description: The reviewed commit whose verdict carries forward (carried mode).
+    value: ${{ steps.carry.outputs.carried-from }}
   accepted:
     description: '"true" when the override label applies to this run.'
     value: ${{ steps.ctx.outputs.accepted }}
@@ -77,8 +87,8 @@ runs:
         reason=""
         if [ "$HEAD_REPO" != "$GITHUB_REPOSITORY" ]; then mode=fork
         elif [ "$ACTION" = labeled ]; then mode=skip
-        elif [ "$DRAFT" = true ]; then mode=unavailable; reason="draft PR; the review runs when it is marked ready"
-        elif [ "$ACTOR" = "dependabot[bot]" ]; then mode=unavailable; reason="Dependabot PR (no secrets); dependency review and CodeQL still run"
+        elif [ "$DRAFT" = true ]; then mode=skipped; reason="draft PR; the review runs when it is marked ready"
+        elif [ "$ACTOR" = "dependabot[bot]" ]; then mode=skipped; reason="Dependabot PR (no secrets); dependency review and CodeQL still run"
         elif [ "$HAS_TOKEN" != true ]; then mode=unavailable; reason="repository secret CLAUDE_CODE_OAUTH_TOKEN is not set (docs/runbooks/security-review.md)"
         else mode=review
         fi
@@ -116,15 +126,43 @@ runs:
         BASELINE: ${{ steps.root.outputs.dir }}
       run: |
         if [ "$MODE" = review ] && [ "$(git diff --name-only HEAD^1 HEAD | node "$BASELINE/scripts/review-scope.mjs")" = true ]; then
-          MODE=unavailable
+          MODE=skipped
           REASON="docs-only change; the agent is skipped to save quota (rule files such as AGENTS.md are still reviewed)"
         fi
         { echo "mode=$MODE"; echo "reason=$REASON"; } >> "$GITHUB_OUTPUT"
         echo "mode=$MODE"
 
+    # The review agent refuses a run a bot starts. When the re-sync bot merged the base branch
+    # into the PR, carry the previous verdict forward if it still covers the head (ADR-0140);
+    # otherwise the mode is unavailable and the check fails until a person pushes.
+    - name: Carry the verdict over a re-sync merge
+      id: carry
+      if: >-
+        steps.scope.outputs.mode == 'review' && github.event.action == 'synchronize' &&
+        inputs.resync-bot != '' && github.actor == inputs.resync-bot
+      shell: bash
+      env:
+        GH_TOKEN: ${{ inputs.github-token }}
+        PR: ${{ github.event.pull_request.number }}
+        MARKER: ${{ inputs.marker }}
+        HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        BASE_REF: ${{ github.event.pull_request.base.ref }}
+        BASELINE: ${{ steps.root.outputs.dir }}
+      run: |
+        # The same comment agent-review-finish reads and updates: the first with this marker.
+        PREVIOUS_FILE="$RUNNER_TEMP/previous-review.md"
+        : > "$PREVIOUS_FILE"
+        id=$(gh api "repos/$GITHUB_REPOSITORY/issues/$PR/comments" --paginate \
+          --jq ".[] | select(.user.login == \"github-actions[bot]\" and (.body | startswith(\"$MARKER\"))) | .id" | head -1)
+        if [ -n "$id" ]; then
+          gh api "repos/$GITHUB_REPOSITORY/issues/comments/$id" --jq .body > "$PREVIOUS_FILE"
+        fi
+        export PREVIOUS_FILE
+        node "$BASELINE/scripts/review-carry.mjs" | tee -a "$GITHUB_OUTPUT"
+
     - name: Prepare review inputs
       id: prep
-      if: steps.scope.outputs.mode == 'review'
+      if: (steps.carry.outputs.mode || steps.scope.outputs.mode) == 'review'
       shell: bash
       env:
         GH_TOKEN: ${{ inputs.github-token }}
