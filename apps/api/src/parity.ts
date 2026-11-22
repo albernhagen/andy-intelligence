@@ -122,6 +122,7 @@ export const PARITY: readonly ParityEntry[] = [
     action: "In flight; work across projects; digest",
     routes: [`GET ${P}/in-flight`, "GET /api/work", `GET ${P}/digest`],
     tools: ["list_in_flight", "list_work", "digest"],
+    note: "AI-342 removed the board's In flight box (the cards and the Agents chip carry it); the web reads in-flight for the ticket status line, and a build's panel shows its branch and touches.",
   },
   {
     action: "Dashboards; DORA metrics",
