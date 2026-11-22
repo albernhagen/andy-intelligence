@@ -17,7 +17,7 @@ v1.x screens:
 - **Releases** (dev status, promote to prod, rollback).
 - **Dashboards** — built (AI-117, ADR-0045), `/p/:id/dashboards`, `/all/dashboards`: delivery (tickets by stage over time, lead time, rework, CI green on first try, review blockers), cost, quota and tokens per week by step and size (ADR-0046); `chart.tsx` (AI-103). DORA metrics from M6.
 
-**Design (ADR-0045; M3, ADR-0059):** `apps/web/design.md` + shadcn theme tokens are the design source of truth agents and design skills read. M4: design skills, pluggable per project (custom-skill context source, §7.6); Hallmark trial first; `sloplint --render` (non-blocking).
+**Design (ADR-0045; M3, ADR-0059):** `apps/web/design.md` + shadcn theme tokens are the design source of truth agents and design skills read. Managed projects get a starter `design.md` (ADR-0132); design skills Later; Hallmark trial; `sloplint --render` (non-blocking).
 
 **Built in M1.3: UI: tickets + inbox:**
 - Routes: `/p/:projectId` board; `/p/:projectId/t/:ticketRef` ticket panel (ref = key, e.g. `AI-2`; an id or wrong project redirects).
