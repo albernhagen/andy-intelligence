@@ -147,6 +147,7 @@ function MilestoneList({
     const ids = shown.map((m) => m.id).filter((x) => x !== id);
     ids.splice(to, 0, id);
     setPending(ids);
+    // The hook refetches before the mutation settles, so the rows never flash the old order.
     reorder.mutate(writes, { onSettled: () => setPending(null) });
   }
 

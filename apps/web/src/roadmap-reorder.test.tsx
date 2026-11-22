@@ -3,13 +3,16 @@ import { screen, waitFor } from "@testing-library/react";
 import { PAGE_LOAD, renderApp } from "@/test/harness";
 
 /** Roadmap reorder (AI-324): the owner moves milestones; each move saves and is logged. */
-async function seeded() {
-  const harness = renderApp("/");
+async function seeded(
+  orders: [number, number, number] = [0, 10, 20],
+  beforeFetch?: (request: Request) => Promise<void>,
+) {
+  const harness = renderApp("/", { beforeFetch });
   await harness.tracker.createProject({ name: "Andy Intelligence", key: "AI" });
   for (const [id, order, name] of [
-    ["m1", 0, "M1: First flow"],
-    ["m2", 10, "M2: Self-hosting"],
-    ["m3", 20, "M3: Mobile"],
+    ["m1", orders[0], "M1: First flow"],
+    ["m2", orders[1], "M2: Self-hosting"],
+    ["m3", orders[2], "M3: Mobile"],
   ] as const) {
     await harness.milestones.create({
       id,
@@ -77,5 +80,34 @@ describe("roadmap reorder", () => {
     await waitFor(async () =>
       expect((await harness.milestones.list("ai")).map((m) => m.id)).toEqual(["m2", "m3", "m1"]),
     );
+  });
+
+  it("GivenTheSaveFails_WhenAMilestoneIsMoved_ThenTheRowsGoBackAndTheErrorShows", async () => {
+    let refuse = false;
+    const harness = await seeded([0, 10, 20], async (request) => {
+      if (refuse && request.method === "PATCH") throw new Error("Only the owner writes milestones");
+    });
+    refuse = true;
+
+    await harness.user.click(screen.getByRole("button", { name: "Move M3: Mobile up" }));
+
+    expect(await screen.findByText(/Only the owner writes milestones/)).toBeTruthy();
+    await waitFor(() => expect(rows()).toEqual(["m1", "m2", "m3"]));
+    expect((await harness.milestones.list("ai")).map((m) => m.id)).toEqual(["m1", "m2", "m3"]);
+  });
+
+  it("GivenNoRoomBetweenOrders_WhenMoved_ThenTheMilestonesAreRenumberedAndShowInTheNewOrder", async () => {
+    const harness = await seeded([0, 1, 1]);
+
+    await harness.user.click(screen.getByRole("button", { name: "Move M3: Mobile up" }));
+
+    await waitFor(async () =>
+      expect((await harness.milestones.list("ai")).map((m) => [m.id, m.order])).toEqual([
+        ["m1", 0],
+        ["m3", 10],
+        ["m2", 20],
+      ]),
+    );
+    await waitFor(() => expect(rows()).toEqual(["m1", "m3", "m2"]));
   });
 });
