@@ -10,9 +10,12 @@ const TIME = { hour: "numeric", minute: "2-digit" } as const;
 /** "2:48 PM". */
 export const timeOfDay = (iso: string) => new Date(iso).toLocaleTimeString("en-US", TIME);
 
-/** "Nov 4, 2:50 PM". */
-export const dateTime = (iso: string) =>
-  new Date(iso).toLocaleString("en-US", { month: "short", day: "numeric", ...TIME });
+/** "Nov 4, 2:50 PM" this year; "Nov 4, 2025, 2:50 PM" for any other year. */
+export function dateTime(iso: string, now: Date = new Date()): string {
+  const d = new Date(iso);
+  const year = d.getFullYear() === now.getFullYear() ? {} : { year: "numeric" as const };
+  return d.toLocaleString("en-US", { month: "short", day: "numeric", ...year, ...TIME });
+}
 
 /** "Nov 4, 2026". */
 export const dateOnly = (iso: string) =>
