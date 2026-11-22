@@ -205,6 +205,12 @@ export function checkContext(context: RunContextResponse, runId: string): RunCon
     );
   if (context.prompt.length > LOCAL_LIMITS.maxPromptChars)
     throw new Error("context prompt is over the size cap");
+  // AI-260: this runner can't enforce a spend budget, so it never runs a pay-per-use task (the
+  // control plane refuses to start one here too).
+  if ((context.billingType ?? "subscription") !== "subscription" || context.maxBudgetUsd != null)
+    throw new Error(
+      "context is for a pay-per-use task; the local runner runs subscription tasks only",
+    );
   return context;
 }
 
