@@ -109,3 +109,13 @@ export const IdeateSubmission = z.strictObject({
   result: IdeateOutput,
 });
 export type IdeateSubmission = z.infer<typeof IdeateSubmission>;
+
+/** Starts an ideate agent task (AI-134): the idea in the owner's words. */
+export const IdeateTaskRequest = z.strictObject({ idea: text(IDEATE_LIMITS.idea) });
+export type IdeateTaskRequest = z.infer<typeof IdeateTaskRequest>;
+
+/** Spread into `Run`. The default keeps older documents readable (no schema version bump). */
+export const runIdeaFields = {
+  /** An ideate agent task's idea (AI-134), kept for its report; null for other steps. */
+  idea: z.string().max(IDEATE_LIMITS.idea).nullable().default(null),
+};
