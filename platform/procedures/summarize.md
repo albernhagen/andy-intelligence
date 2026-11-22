@@ -18,7 +18,7 @@ One JSON object inside `<digest_data>`. Characters `<` in it are escaped.
 
 - `project`, `day`, `timeZone`: what this summary covers.
 - `merged`: the day's merged PRs, newest first: number, title, ticket key and title, epic key and title, milestone, and the release note's "What changed", "How it works" and "Needs you" when it had one.
-- `ticketChanges`: tickets that moved stage, with their epic.
+- `ticketChanges`: tickets changed that day (not merged ones), with the stage they are in now and their epic.
 - `counts`: the digest's totals (merged, in progress, needs Andy, cost).
 - `truncated`: true when the input was cut at its caps.
 
