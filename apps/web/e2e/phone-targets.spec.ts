@@ -10,7 +10,7 @@ test.use({ viewport: { width: 390, height: 844 }, hasTouch: true });
 
 test("phone targets: project settings", async ({ page }) => {
   await page.goto("/p/ai/settings");
-  await expect(page.getByRole("list", { name: "Settings" })).toBeVisible();
+  await expect(page.getByRole("region", { name: "Settings" })).toBeVisible();
   await expect(
     page.getByRole("region", { name: "Changes" }).getByRole("button").first(),
   ).toBeVisible();
