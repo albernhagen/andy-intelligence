@@ -1,4 +1,5 @@
 import { expect, test } from "@playwright/test";
+import { expectPageFits } from "./phone";
 
 /**
  * AI-173: M7.3: Phone shell — the shell at iPhone width (390×844): picker and "Needs you" in the
@@ -13,6 +14,7 @@ test("phone shell: inbox", async ({ page }) => {
   await expect(page.getByRole("navigation", { name: "Main" })).toBeVisible();
   const width = await page.evaluate(() => document.querySelector("header")!.scrollWidth);
   expect(width).toBeLessThanOrEqual(390);
+  await expectPageFits(page);
   await expect(page).toHaveScreenshot("phone-shell-inbox.png");
 });
 
@@ -24,5 +26,6 @@ test("phone shell: More menu open on the board", async ({ page }) => {
   await page.getByRole("button", { name: "More" }).click();
   await expect(page.getByRole("menuitem", { name: "Project settings" })).toBeVisible();
   await expect(page.getByRole("menuitem", { name: "Sign out" })).toBeVisible();
+  await expectPageFits(page);
   await expect(page).toHaveScreenshot("phone-shell-board-more.png");
 });

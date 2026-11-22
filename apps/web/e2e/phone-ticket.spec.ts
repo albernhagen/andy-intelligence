@@ -1,5 +1,6 @@
 import { expect, test, type Page, type Route } from "@playwright/test";
 import type { Run } from "@andy/contracts";
+import { expectPageFits } from "./phone";
 
 /**
  * AI-175: M7.5: Phone ticket detail. A ticket and its agent task page at 390 px. The seed's only
@@ -75,6 +76,7 @@ test("phone: a ticket with a finished agent task", async ({ page }) => {
   await expect(panel.getByRole("status", { name: "Status" })).toBeInViewport();
   await panel.getByRole("region", { name: "Activity" }).scrollIntoViewIfNeeded();
   await expectNoSidewaysScroll(page, "[role=dialog]");
+  await expectPageFits(page);
   await expect(panel).toHaveScreenshot("phone-ticket.png");
 });
 
@@ -86,6 +88,7 @@ test("phone: the finished agent task's page", async ({ page }) => {
   await expect(page.getByRole("heading", { name: "Agent task · build" })).toBeVisible();
   await expect(page.getByRole("link", { name: /^AI-7: / })).toBeVisible();
   await expectNoSidewaysScroll(page, "main");
+  await expectPageFits(page);
   await expect(page.getByRole("article", { name: "Agent task" })).toHaveScreenshot(
     "phone-agent-task.png",
   );
