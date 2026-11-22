@@ -127,6 +127,16 @@ describe("configFor", () => {
     );
     expect(requiredChecks(base)).toContain("firestore-suite");
   });
+
+  it("GivenAManagedRepoWithoutTheJobs_WhenConfigured_ThenReleaseNoteAndUiScreenshotsAreNotRequired", () => {
+    const base = loadConfig();
+    const config = configFor(base, "albernhagen/managed", manifest.source);
+    expect(requiredChecks(base)).toEqual(
+      expect.arrayContaining(["release-note", "ui-screenshots"]),
+    );
+    expect(requiredChecks(config)).not.toContain("release-note");
+    expect(requiredChecks(config)).not.toContain("ui-screenshots");
+  });
 });
 
 /**
