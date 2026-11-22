@@ -94,11 +94,11 @@ export function BoardPage() {
 
   return (
     <section className="space-y-4">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-wrap items-center justify-between gap-2">
         <h2 className="text-lg font-medium">
           Board <BoardDispatchStatus projectId={projectId} />
         </h2>
-        <div className="flex items-center gap-4">
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
           <EpicControls
             epics={epics}
             grouped={grouped}
@@ -300,7 +300,8 @@ function Lanes({
       onDragCancel={() => setOverLane(null)}
       onDragEnd={(e) => void onDragEnd(e)}
     >
-      <div className="flex items-stretch gap-3 overflow-x-auto pb-2">
+      {/* relative: keeps the lanes' sr-only text inside this scroller (AI-325) */}
+      <div className="relative flex items-stretch gap-3 overflow-x-auto pb-2">
         {stages.map((stage) => {
           const collapsible = COLLAPSED_STAGES.includes(stage);
           const collapsed = collapsible && !expanded.includes(stage);

@@ -1,11 +1,28 @@
 import { useState } from "react";
 import { Link, useParams } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
-import { ChevronDown, ChevronRight } from "lucide-react";
+import {
+  DndContext,
+  KeyboardSensor,
+  PointerSensor,
+  closestCenter,
+  useSensor,
+  useSensors,
+  type DragEndEvent,
+} from "@dnd-kit/core";
+import {
+  SortableContext,
+  sortableKeyboardCoordinates,
+  useSortable,
+  verticalListSortingStrategy,
+} from "@dnd-kit/sortable";
+import { ArrowDown, ArrowUp, ChevronDown, ChevronRight, GripVertical } from "lucide-react";
+import { milestoneReorder } from "@andy/domain";
 import { MILESTONE_STATUS, MilestoneStatusSelect } from "@/components/MilestoneControls";
 import { Loading, QueryError } from "@/components/Status";
 import { Badge } from "@/components/ui/badge";
 import { unwrap, useApi } from "@/lib/api";
+import { useReorderMilestones } from "@/lib/queries";
 import type { components } from "@/lib/api.gen";
 import { showsError, useLivePoll } from "@/lib/live";
 
@@ -45,7 +62,9 @@ function useRoadmap(projectId: string | undefined) {
  * Roadmap (AI-202: M4.26, ADR-0131): a project's milestones in order, each with its status and
  * progress, expanding in place to its epics; parked ones dimmed, done ones compact, epics with
  * no milestone last. Under All projects, one section per project. An open row sets the
- * milestone's status (AI-311), through the milestone route, so only the owner can and it's logged.
+ * milestone's status (AI-311), and milestones reorder by dragging their handle or with Move up
+ * and Move down (AI-324); both go through the milestone route, so only the owner can and it's
+ * logged.
  */
 export function RoadmapPage() {
   const { projectId } = useParams({ strict: false });
@@ -84,19 +103,13 @@ function ProjectSection({ roadmap: r, heading }: { roadmap: ProjectRoadmap; head
     <section aria-label={r.projectName} className="space-y-2">
       {heading && <h3 className="text-sm font-medium">{r.projectName}</h3>}
       {r.milestones.length === 0 && loose.length === 0 && (
-        <p className="text-sm text-muted-foreground">No milestones or epics yet.</p>
+        <p className="text-sm text-muted-foreground">
+          No milestones or epics yet. To start, ask a Claude session to plan this project or to
+          ideate an epic.
+        </p>
       )}
       {r.milestones.length > 0 && (
-        <ul className="divide-y divide-border rounded-md border border-border">
-          {r.milestones.map((m) => (
-            <MilestoneRow
-              key={m.id}
-              milestone={m}
-              epics={m.epicKeys.flatMap((k) => byKey.get(k) ?? [])}
-              projectId={r.projectId}
-            />
-          ))}
-        </ul>
+        <MilestoneList milestones={r.milestones} byKey={byKey} projectId={r.projectId} />
       )}
       {loose.length > 0 && (
         <section aria-label="No milestone" className="space-y-2">
@@ -113,41 +126,166 @@ function ProjectSection({ roadmap: r, heading }: { roadmap: ProjectRoadmap; head
   );
 }
 
+/**
+ * The milestone rows, reorderable (AI-324): drag a row's handle (pointer, or Space and the arrow
+ * keys), or use Move up and Move down. The new order shows at once and saves through the
+ * milestone route; on a refusal the rows go back and the API's message shows.
+ */
+function MilestoneList({
+  milestones,
+  byKey,
+  projectId,
+}: {
+  milestones: Milestone[];
+  byKey: ReadonlyMap<string, Epic>;
+  projectId: string;
+}) {
+  const reorder = useReorderMilestones(projectId);
+  const [pending, setPending] = useState<string[] | null>(null);
+  const byId = new Map(milestones.map((m) => [m.id, m]));
+  const shown = pending ? pending.flatMap((id) => byId.get(id) ?? []) : milestones;
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 8 } }),
+    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
+  );
+  const canMove = milestones.length > 1;
+
+  function move(id: string, to: number) {
+    const writes = milestoneReorder(shown, id, to);
+    if (writes.length === 0) return;
+    const ids = shown.map((m) => m.id).filter((x) => x !== id);
+    ids.splice(to, 0, id);
+    setPending(ids);
+    // The hook refetches before the mutation settles, so the rows never flash the old order.
+    reorder.mutate(writes, { onSettled: () => setPending(null) });
+  }
+
+  function onDragEnd({ active, over }: DragEndEvent) {
+    if (!over || active.id === over.id) return;
+    move(
+      String(active.id),
+      shown.findIndex((m) => m.id === over.id),
+    );
+  }
+
+  return (
+    <div className="space-y-2">
+      <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={onDragEnd}>
+        <SortableContext items={shown.map((m) => m.id)} strategy={verticalListSortingStrategy}>
+          <ul className="divide-y divide-border rounded-md border border-border">
+            {shown.map((m, i) => (
+              <MilestoneRow
+                key={m.id}
+                milestone={m}
+                epics={m.epicKeys.flatMap((k) => byKey.get(k) ?? [])}
+                projectId={projectId}
+                reorder={
+                  canMove
+                    ? {
+                        up: i > 0 ? () => move(m.id, i - 1) : null,
+                        down: i < shown.length - 1 ? () => move(m.id, i + 1) : null,
+                        busy: reorder.isPending,
+                      }
+                    : null
+                }
+              />
+            ))}
+          </ul>
+        </SortableContext>
+      </DndContext>
+      {reorder.error && <QueryError error={reorder.error} />}
+    </div>
+  );
+}
+
+const MOVE_BUTTON =
+  "inline-flex size-11 items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground focus-visible:outline-2 focus-visible:outline-ring disabled:opacity-40 sm:size-7";
+
 function MilestoneRow({
   milestone: m,
   epics,
   projectId,
+  reorder,
 }: {
   milestone: Milestone;
   epics: Epic[];
   projectId: string;
+  /** Null when there is only one milestone, so nothing to reorder. */
+  reorder: { up: (() => void) | null; down: (() => void) | null; busy: boolean } | null;
 }) {
   const [open, setOpen] = useState(false);
   const status = MILESTONE_STATUS[m.done ? "done" : m.status];
   const Chevron = open ? ChevronDown : ChevronRight;
+  const { setNodeRef, setActivatorNodeRef, attributes, listeners, transform, transition } =
+    useSortable({ id: m.id, disabled: !reorder || reorder.busy });
+  const style = {
+    transform: transform ? `translate3d(0, ${transform.y}px, 0)` : undefined,
+    transition,
+  };
   return (
     <li
+      ref={setNodeRef}
+      style={style}
       data-milestone={m.id}
       data-status={m.done ? "done" : m.status}
       className={m.status === "parked" ? "opacity-60" : undefined}
     >
-      <button
-        type="button"
-        aria-expanded={open}
-        onClick={() => setOpen(!open)}
-        className="flex w-full flex-wrap items-center gap-x-3 gap-y-1 p-2 text-left text-sm hover:bg-muted focus-visible:outline-2 focus-visible:outline-ring"
-      >
-        <Chevron className="size-4 shrink-0 text-muted-foreground" aria-hidden />
-        <span className="font-medium">{m.name}</span>
-        <Badge variant={status.variant}>{status.label}</Badge>
-        {!m.done && (
-          <span className="min-w-0 flex-1 text-muted-foreground max-sm:basis-full">
-            {m.outcome}
-          </span>
+      <div className="flex items-start">
+        {reorder && (
+          <div
+            role="group"
+            aria-label={`Order of ${m.name}`}
+            className="flex items-center pl-1 pt-0.5"
+          >
+            <button
+              type="button"
+              ref={setActivatorNodeRef}
+              {...attributes}
+              {...listeners}
+              aria-label={`Drag ${m.name} to reorder`}
+              // On a phone the move buttons reorder; the handle would crowd the row.
+              className={`${MOVE_BUTTON} cursor-grab max-sm:hidden`}
+            >
+              <GripVertical className="size-4" aria-hidden />
+            </button>
+            <button
+              type="button"
+              aria-label={`Move ${m.name} up`}
+              disabled={!reorder.up || reorder.busy}
+              onClick={() => reorder.up?.()}
+              className={MOVE_BUTTON}
+            >
+              <ArrowUp className="size-4" aria-hidden />
+            </button>
+            <button
+              type="button"
+              aria-label={`Move ${m.name} down`}
+              disabled={!reorder.down || reorder.busy}
+              onClick={() => reorder.down?.()}
+              className={MOVE_BUTTON}
+            >
+              <ArrowDown className="size-4" aria-hidden />
+            </button>
+          </div>
         )}
-        <Progress done={m.progress.done} total={m.progress.total} />
-        {!m.done && <CountChips counts={m.counts} />}
-      </button>
+        <button
+          type="button"
+          aria-expanded={open}
+          onClick={() => setOpen(!open)}
+          className="flex min-w-0 flex-1 flex-wrap items-center gap-x-3 gap-y-1 p-2 text-left text-sm hover:bg-muted focus-visible:outline-2 focus-visible:outline-ring"
+        >
+          <Chevron className="size-4 shrink-0 text-muted-foreground" aria-hidden />
+          <span className="font-medium">{m.name}</span>
+          <Badge variant={status.variant}>{status.label}</Badge>
+          {!m.done && (
+            <span className="min-w-0 flex-1 text-muted-foreground max-sm:basis-full">
+              {m.outcome}
+            </span>
+          )}
+          <Progress done={m.progress.done} total={m.progress.total} />
+          {!m.done && <CountChips counts={m.counts} />}
+        </button>
+      </div>
       {open && (
         <div className="space-y-2 px-2 pb-2 pl-8">
           {m.done && <p className="text-sm text-muted-foreground">{m.outcome}</p>}

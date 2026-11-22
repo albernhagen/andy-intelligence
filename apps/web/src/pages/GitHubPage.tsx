@@ -6,7 +6,7 @@ import { Loading, QueryError } from "@/components/Status";
 import { unwrap, useApi } from "@/lib/api";
 import { newState, postManifest, takeState } from "@/lib/github-setup";
 import { useConnectGitHub, useGitHub } from "@/lib/queries";
-import { SettingsNav } from "@/pages/RunnersPage";
+import { SettingsTabs } from "@/components/SettingsTabs";
 
 /** Settings → GitHub (ADR-0043): connect the App once, then install it on repos. */
 export function GitHubPage() {
@@ -29,7 +29,7 @@ export function GitHubPage() {
 
   return (
     <section className="max-w-xl space-y-4">
-      <SettingsNav current="github" />
+      <SettingsTabs />
       <h2 className="text-lg font-medium">GitHub</h2>
       {github.isPending && <Loading />}
       {github.isError && (

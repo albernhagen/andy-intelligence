@@ -30,8 +30,8 @@ export function ProjectPlanPanel({ projectId }: { projectId: string }) {
       <h3 className="text-sm font-medium">Project plan</h3>
       {current === null || current === undefined ? (
         <p className="text-sm text-muted-foreground">
-          Plan needed: no milestones yet. Run platform/procedures/plan-project.md and submit the
-          result with MCP submit_project_plan.
+          No plan yet: ask a Claude session to plan this project. Its proposed milestones show here
+          for you to approve.
         </p>
       ) : current.status === "proposed" || current.status === "approving" ? (
         <WaitingPlan projectId={projectId} plan={current} />
@@ -39,8 +39,8 @@ export function ProjectPlanPanel({ projectId }: { projectId: string }) {
         <p className="text-sm">Approved: {current.epicIds.length} epics created.</p>
       ) : (
         <p className="text-sm">
-          Rejected: <span className="whitespace-pre-wrap">{current.reason}</span>. Submit a new plan
-          with MCP submit_project_plan.
+          Rejected: <span className="whitespace-pre-wrap">{current.reason}</span>. Ask a Claude
+          session for a new plan.
         </p>
       )}
     </section>
