@@ -80,7 +80,7 @@ describe("board work views", () => {
     await seeded();
 
     expect(chip(/^All 7$/).getAttribute("aria-pressed")).toBe("true");
-    expect(chip(/^Needs me 1$/)).toBeTruthy();
+    expect(chip(/^Needs you · 1 ticket$/)).toBeTruthy();
     expect(chip(/^Mine 2$/)).toBeTruthy();
     expect(chip(/^Agents 4$/)).toBeTruthy();
     expect(chip(/^Blocked 1$/)).toBeTruthy();
@@ -104,7 +104,7 @@ describe("board work views", () => {
   it("GivenATicketWithAQuestion_WhenNeedsMeIsPicked_ThenItIsShown", async () => {
     const harness = await seeded();
 
-    await harness.user.click(chip(/^Needs me/));
+    await harness.user.click(chip(/^Needs you/));
 
     await waitFor(() => expect(shownCards()).toEqual(["AI-4"]));
   });
