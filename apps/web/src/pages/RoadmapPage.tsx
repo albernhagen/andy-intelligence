@@ -55,7 +55,13 @@ export function RoadmapPage() {
     <section className="space-y-4">
       <h2 className="text-lg font-medium">Roadmap</h2>
       {roadmap.isPending && <Loading />}
-      {showsError(roadmap) && <QueryError error={roadmap.error} />}
+      {showsError(roadmap) && (
+        <QueryError
+          error={roadmap.error}
+          what="the roadmap"
+          onRetry={() => void roadmap.refetch()}
+        />
+      )}
       {roadmap.data?.projects.map((p) => (
         <ProjectSection key={p.projectId} roadmap={p} heading={!projectId} />
       ))}

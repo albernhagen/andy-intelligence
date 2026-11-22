@@ -19,7 +19,10 @@ export function ProjectPlanPanel({ projectId }: { projectId: string }) {
     queryFn: async () =>
       unwrap(await api.GET("/api/projects/{projectId}/plan", { params: { path: { projectId } } })),
   });
-  if (plan.error) return <QueryError error={plan.error} />;
+  if (plan.error)
+    return (
+      <QueryError error={plan.error} what="the project plan" onRetry={() => void plan.refetch()} />
+    );
   const current = plan.data?.plan;
   if (plan.data === undefined) return null;
   return (

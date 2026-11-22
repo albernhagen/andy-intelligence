@@ -35,7 +35,14 @@ function Row(props: {
 
 export function RouteLayers({ ticket }: { ticket: Ticket }) {
   const query = useTicketRouting({ projectId: ticket.projectId, ticketId: ticket.id });
-  if (query.error) return <QueryError error={query.error} />;
+  if (query.error)
+    return (
+      <QueryError
+        error={query.error}
+        what="the routing layers"
+        onRetry={() => void query.refetch()}
+      />
+    );
   const r = query.data;
   if (!r) return null;
   return (

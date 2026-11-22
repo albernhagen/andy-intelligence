@@ -55,7 +55,9 @@ export function WorkPage() {
     <section className="space-y-4">
       <h2 className="text-lg font-medium">Work</h2>
       {work.isPending && <Loading />}
-      {showsError(work) && <QueryError error={work.error} />}
+      {showsError(work) && (
+        <QueryError error={work.error} what="the Work list" onRetry={() => void work.refetch()} />
+      )}
       {work.data && (
         <>
           <WorkViewChips

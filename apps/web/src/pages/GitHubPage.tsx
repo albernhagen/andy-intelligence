@@ -32,7 +32,13 @@ export function GitHubPage() {
       <SettingsNav current="github" />
       <h2 className="text-lg font-medium">GitHub</h2>
       {github.isPending && <Loading />}
-      {github.isError && <QueryError error={github.error} />}
+      {github.isError && (
+        <QueryError
+          error={github.error}
+          what="the GitHub connection"
+          onRetry={() => void github.refetch()}
+        />
+      )}
       {github.data && !github.data.connected && (
         <div className="space-y-3 rounded-md border border-border p-3">
           <p>

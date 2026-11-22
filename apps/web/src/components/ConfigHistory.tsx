@@ -20,7 +20,13 @@ export function ConfigHistory({ projectId }: { projectId: string }) {
   return (
     <section aria-label="Changes" className="space-y-2">
       <h3 className="text-sm font-medium">Changes</h3>
-      {changes.error && <QueryError error={changes.error} />}
+      {changes.error && (
+        <QueryError
+          error={changes.error}
+          what="the settings changes"
+          onRetry={() => void changes.refetch()}
+        />
+      )}
       {revert.error && <p className="text-xs text-destructive">{errorText(revert.error)}</p>}
       {changes.isSuccess && list.length === 0 && (
         <p className="text-xs text-muted-foreground">No settings changes yet.</p>

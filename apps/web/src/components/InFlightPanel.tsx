@@ -27,7 +27,14 @@ const safeUrl = (url: string | null) => (url?.startsWith("https://") ? url : nul
 
 export function InFlightPanel({ projectId }: { projectId: string }) {
   const inFlight = useInFlight(projectId);
-  if (showsError(inFlight)) return <QueryError error={inFlight.error} />;
+  if (showsError(inFlight))
+    return (
+      <QueryError
+        error={inFlight.error}
+        what="the agent tasks in flight"
+        onRetry={() => void inFlight.refetch()}
+      />
+    );
   const runs = inFlight.data ?? [];
   if (runs.length === 0) return null;
   return (

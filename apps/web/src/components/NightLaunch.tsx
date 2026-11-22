@@ -69,7 +69,13 @@ export function NightLaunch(path: TicketPath) {
     <section aria-label="Plan the night" className="space-y-2">
       <h3 className="text-sm font-medium">Plan the night</h3>
       {night.isPending && <Loading />}
-      {showsError(night) && <QueryError error={night.error} />}
+      {showsError(night) && (
+        <QueryError
+          error={night.error}
+          what="the night status"
+          onRetry={() => void night.refetch()}
+        />
+      )}
       {n && (
         <>
           <Checklist projectId={path.projectId} night={n} />

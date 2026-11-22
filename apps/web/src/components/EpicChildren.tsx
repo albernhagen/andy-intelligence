@@ -65,7 +65,13 @@ function StoryList({ path }: { path: TicketPath }) {
     <section aria-label="Stories" className="space-y-2">
       <h3 className="text-sm font-medium">Stories</h3>
       {rollup.isPending && <Loading />}
-      {showsError(rollup) && <QueryError error={rollup.error} />}
+      {showsError(rollup) && (
+        <QueryError
+          error={rollup.error}
+          what="the epic's stories"
+          onRetry={() => void rollup.refetch()}
+        />
+      )}
       {r && r.children.length === 0 && (
         <p className="text-sm text-muted-foreground">No stories under this epic yet.</p>
       )}

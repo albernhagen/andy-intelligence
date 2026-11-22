@@ -51,7 +51,7 @@ export function DigestPage() {
       {digest.isPending ? (
         <Loading />
       ) : digest.isError ? (
-        <QueryError error={digest.error} />
+        <QueryError error={digest.error} what="the digest" onRetry={() => void digest.refetch()} />
       ) : (
         <DigestBody digest={digest.data} projectId={projectId} />
       )}

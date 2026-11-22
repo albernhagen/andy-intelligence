@@ -15,7 +15,13 @@ export function RoutingChanges({ onReverted }: { onReverted: () => void }) {
   return (
     <section aria-label="Global changes" className="space-y-2">
       <h3 className="text-sm font-medium">Changes</h3>
-      {changes.isError && <QueryError error={changes.error} />}
+      {changes.isError && (
+        <QueryError
+          error={changes.error}
+          what="the routing changes"
+          onRetry={() => void changes.refetch()}
+        />
+      )}
       {revert.error && <QueryError error={revert.error} />}
       {changes.data?.length === 0 && (
         <p className="text-sm text-muted-foreground">No global routing changes yet.</p>

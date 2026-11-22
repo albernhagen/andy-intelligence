@@ -75,7 +75,7 @@ The marker set: [`design-status-markers.md`](design-status-markers.md).
 - Never a bare ID in prose or links: "AI-26: Design source and app shell".
 - Say "agent task", never "run".
 - Buttons are verbs. Empty states say what's missing: "Nothing needs you."
-- Errors show the API's message (`QueryError`); never swallow one.
+- Errors show the API's message (`QueryError`); never swallow one. A read passes `what` and `onRetry`, so a failure with no message reads "Couldn't read the GitHub connection (404)." with Retry.
 
 ## Do and don't
 

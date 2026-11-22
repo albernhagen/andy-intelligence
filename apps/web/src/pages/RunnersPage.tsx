@@ -29,7 +29,13 @@ export function RunnersPage() {
         <MintForm onMinted={setMinted} />
       )}
       {runners.isPending && <Loading />}
-      {runners.isError && <QueryError error={runners.error} />}
+      {runners.isError && (
+        <QueryError
+          error={runners.error}
+          what="the local runners"
+          onRetry={() => void runners.refetch()}
+        />
+      )}
       {runners.data && runners.data.length === 0 && (
         <p className="text-sm text-muted-foreground">No runners yet.</p>
       )}

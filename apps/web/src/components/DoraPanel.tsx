@@ -55,7 +55,11 @@ export function DoraPanel({ projectId }: { projectId: string }) {
       {dora.isPending ? (
         <Loading />
       ) : dora.isError ? (
-        <QueryError error={dora.error} />
+        <QueryError
+          error={dora.error}
+          what="the DORA metrics"
+          onRetry={() => void dora.refetch()}
+        />
       ) : (
         <DoraBody report={dora.data} days={days} />
       )}
