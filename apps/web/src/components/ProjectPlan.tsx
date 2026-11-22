@@ -55,13 +55,16 @@ export function useWaitingPlans(projectId?: string) {
     queryFn: async () => unwrap(await api.GET("/api/project-plans/waiting")),
   });
   const shown = (waiting.data ?? []).filter((w) => !projectId || w.projectId === projectId);
-  return { shown, error: waiting.error };
+  return { shown, error: waiting.error, refetch: waiting.refetch };
 }
 
 /** Every project's waiting plan, for the inbox; with `projectId`, only that project's. */
 export function ProjectPlansWaiting({ projectId }: { projectId?: string }) {
-  const { shown, error } = useWaitingPlans(projectId);
-  if (error) return <QueryError error={error} />;
+  const { shown, error, refetch } = useWaitingPlans(projectId);
+  if (error)
+    return (
+      <QueryError error={error} what="the waiting project plans" onRetry={() => void refetch()} />
+    );
   if (shown.length === 0) return null;
   return (
     <section aria-label="Project plans" className="space-y-2">
