@@ -133,7 +133,7 @@ function onEscape(cancel: () => void) {
 function SaveCancel({ pending, onCancel }: { pending: boolean; onCancel: () => void }) {
   return (
     <div className="flex gap-2">
-      <Button type="submit" size="sm" disabled={pending}>
+      <Button type="submit" size="sm" variant="outline" disabled={pending}>
         Save
       </Button>
       <Button type="button" size="sm" variant="outline" onClick={onCancel}>

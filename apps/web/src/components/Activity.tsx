@@ -63,7 +63,12 @@ export function Activity(props: {
           onChange={(e) => setBody(e.target.value)}
         />
         {comment.error && <QueryError error={comment.error} />}
-        <Button type="submit" size="sm" disabled={!body.trim() || comment.isPending}>
+        <Button
+          type="submit"
+          size="sm"
+          variant="outline"
+          disabled={!body.trim() || comment.isPending}
+        >
           Comment
         </Button>
       </form>
