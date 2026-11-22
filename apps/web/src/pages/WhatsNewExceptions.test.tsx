@@ -58,4 +58,39 @@ describe("What's new: the digest's exceptions and 24-hour window", () => {
     expect(screen.queryByRole("link", { name: "Digest" })).toBeNull();
     expect(screen.queryByRole("menuitem", { name: "Digest" })).toBeNull();
   });
+
+  it("GivenWhatsNewOpenOn14Days_WhenTheOldDigestUrlIsFollowed_ThenTheWindowSwitchesTo24Hours", async () => {
+    const harness = await seeded("/p/ai/whats-new");
+    const window = await screen.findByRole("group", { name: "Window" }, PAGE_LOAD);
+    expect(
+      within(window).getByRole("button", { name: "14 days" }).getAttribute("aria-pressed"),
+    ).toBe("true");
+
+    await harness.router.navigate({ href: "/p/ai/digest" });
+
+    await waitFor(() =>
+      expect(
+        within(screen.getByRole("group", { name: "Window" }))
+          .getByRole("button", { name: "24 hours" })
+          .getAttribute("aria-pressed"),
+      ).toBe("true"),
+    );
+  });
+
+  it("GivenTheDigestReadFails_WhenWhatsNewOpens_ThenExceptionsSaysWhatFailedWithARetry", async () => {
+    const harness = renderApp("/p/ai/whats-new", {
+      beforeFetch: async (request) => {
+        if (new URL(request.url).pathname.endsWith("/digest"))
+          throw new TypeError("Failed to fetch");
+      },
+    });
+    await harness.tracker.createProject({ name: "Andy Intelligence", key: "AI" });
+    await harness.router.invalidate();
+
+    // A network error shows its own message; the block offers a retry and the page still loads.
+    expect(await screen.findByText(/Failed to fetch/, {}, PAGE_LOAD)).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Retry" })).toBeTruthy();
+    expect(screen.queryByRole("region", { name: "Exceptions" })).toBeNull();
+    expect(screen.getByRole("group", { name: "Window" })).toBeTruthy();
+  });
 });

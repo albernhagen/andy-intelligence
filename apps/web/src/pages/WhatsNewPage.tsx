@@ -1,5 +1,5 @@
 import { useState, type ReactNode } from "react";
-import { Link, useParams, useSearch } from "@tanstack/react-router";
+import { Link, useNavigate, useParams, useSearch } from "@tanstack/react-router";
 import type { WhatsNew, WhatsNewMilestone, WhatsNewNote } from "@andy/contracts";
 import { DailySummary } from "@/components/DailySummary";
 import { Loading, QueryError } from "@/components/Status";
@@ -30,8 +30,12 @@ export const dayOf = (iso: string) =>
  */
 export function WhatsNewPage() {
   const { projectId = "" } = useParams({ strict: false });
+  // From the URL, so a link or redirect to `?days=1` changes the window even while the page is open.
   const search = useSearch({ strict: false });
-  const [days, setDays] = useState(() => ("days" in search && search.days === 1 ? 1 : 14));
+  const days = "days" in search && typeof search.days === "number" ? search.days : 14;
+  const navigate = useNavigate();
+  const setDays = (next: number) =>
+    void navigate({ to: ".", search: next === 14 ? {} : { days: next }, replace: true });
   const [epic, setEpic] = useState<string | null>(null);
   const whatsNew = useWhatsNew(projectId, days, epic);
 
@@ -156,7 +160,7 @@ function Changes(props: { whatsNew: WhatsNew; projectId: string; days: number })
     <section aria-label="Changes" className="space-y-4">
       {notes.length === 0 && (
         <p className="text-sm text-muted-foreground">
-          Nothing merged in the last {props.days} days.
+          Nothing merged in the last {props.days === 1 ? "24 hours" : `${props.days} days`}.
         </p>
       )}
       {[...days].map(([day, list]) => (

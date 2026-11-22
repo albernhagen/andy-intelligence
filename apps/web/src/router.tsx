@@ -142,9 +142,12 @@ const routeTree = rootRoute.addChildren([
     getParentRoute: () => rootRoute,
     path: "/p/$projectId/whats-new",
     component: WhatsNewPage,
-    // `?days=1` opens the 24-hour window (the old digest URL, AI-341); anything else reads as unset.
-    validateSearch: (search: Record<string, unknown>): { days?: 1 } =>
-      Number(search.days) === 1 ? { days: 1 } : {},
+    // The window lives in the URL (`?days=1` is the old digest URL's 24 hours, AI-341); 14 days,
+    // the default, and anything unknown read as unset.
+    validateSearch: (search: Record<string, unknown>): { days?: 1 | 30 | 90 } => {
+      const days = Number(search.days);
+      return days === 1 || days === 30 || days === 90 ? { days } : {};
+    },
   }),
   createRoute({
     getParentRoute: () => rootRoute,
