@@ -48,7 +48,11 @@ export type ProviderKey = z.infer<typeof ProviderKey>;
 export const HarnessKey = z.enum(["claude-code", "jules", "opencode", "direct"]);
 export type HarnessKey = z.infer<typeof HarnessKey>;
 
-/** `summarize`: the digest summary (AI-323, ADR-0137); a single-call task with no ticket. */
+/**
+ * Agent-task steps. `plan-project` and `ideate` (AI-134) are project-level: their runs have no
+ * ticket. The executor runs only the read-only steps it lists, build and sync, and refuses others.
+ * `summarize` (AI-323, ADR-0137) writes the digest summary; its runs have no ticket either.
+ */
 export const RunStep = z.enum([
   "refine",
   "plan",
@@ -57,6 +61,8 @@ export const RunStep = z.enum([
   "verify",
   "scout",
   "sync",
+  "plan-project",
+  "ideate",
   "summarize",
 ]);
 export type RunStep = z.infer<typeof RunStep>;

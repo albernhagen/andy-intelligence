@@ -237,6 +237,8 @@ const RUN_VERBS: Record<RunStep, string> = {
   verify: "Verifying",
   scout: "Scouting",
   sync: "Syncing with main",
+  "plan-project": "Planning the project",
+  ideate: "Shaping an idea",
   summarize: "Summarizing",
 };
 
