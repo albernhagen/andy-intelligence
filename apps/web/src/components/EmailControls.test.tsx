@@ -9,7 +9,7 @@ async function open(email?: NonNullable<Parameters<typeof renderApp>[1]>["email"
   const h = renderApp("/p/ai/settings", { email });
   await h.tracker.createProject({ name: "Andy Intelligence", key: "AI" });
   await h.queryClient.invalidateQueries();
-  const list = await screen.findByRole("list", { name: "Settings" });
+  const list = await screen.findByRole("region", { name: "Settings" });
   return { h, list };
 }
 

@@ -84,6 +84,15 @@ describe("routing config", () => {
     expect(edit((c) => delete (c.steps as Partial<typeof c.steps>).scout)).toBe(false);
   });
 
+  it("GivenAConfigStoredBeforeTheSummarizeStep_WhenRead_ThenItReadsAsFast", () => {
+    const stored = structuredClone(DEFAULT_ROUTING);
+    delete (stored.steps as Partial<typeof stored.steps>).summarize;
+    stored.steps.refine = "strong";
+    const read = RoutingConfig.parse(stored);
+    expect(read.steps.summarize).toBe("fast");
+    expect(read.steps.refine).toBe("strong");
+  });
+
   it("GivenAStoredConfigWithoutAStamp_WhenParsed_ThenRefused", () => {
     expect(RoutingConfig.safeParse(input).success).toBe(false);
   });
