@@ -254,10 +254,7 @@ export const PARITY: readonly ParityEntry[] = [
     action: "Ideate",
     routes: [`POST ${P}/ideate`],
     tools: ["ideate"],
-    pending: {
-      ticket: "AI-299",
-      missing: "a web form: the route exists but the web never calls it (PR #240)",
-    },
+    note: "The web's Ideate form on the board (AI-299) starts an ideate agent task (`POST …/ideate/agent-task`), which records its result through the same service and caps as this route and the tool.",
   },
   {
     action: "Milestones: list, create, edit, set status, attach or detach an epic",
@@ -300,8 +297,12 @@ export const PARITY: readonly ParityEntry[] = [
     action: "Start a project agent task (plan-project, ideate)",
     routes: [`POST ${P}/plan/agent-task`, `POST ${P}/ideate/agent-task`],
     tools: [],
-    oneSide: "API only until its web control and MCP tool land (AI-134 built the routes).",
-    pending: { ticket: "AI-320", missing: "a web control and an MCP tool to start them" },
+    oneSide:
+      "The web starts ideate from the board (AI-299); plan-project has no web control yet, and neither has an MCP tool.",
+    pending: {
+      ticket: "AI-320",
+      missing: "MCP tools to start both, and the plan-project web control",
+    },
   },
   {
     action: "List and revoke runners",
