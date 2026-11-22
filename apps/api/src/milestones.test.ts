@@ -143,6 +143,46 @@ describe("milestones over REST and MCP (AI-304 parity)", () => {
     expect(unknown.text).toBe(unknownRest.json.error);
   });
 
+  it("GivenThreeMilestones_WhenTheLastIsMovedUpOverEach_ThenBothListTheSameOrder", async () => {
+    // AI-324: the roadmap's reorder is a PATCH of `order`; MCP does the same with edit_milestone.
+    const names = async (s: Awaited<ReturnType<typeof setup>>) =>
+      (await s.rest("GET", "/api/projects/ai/milestones")).json.map(
+        (m: { name: string }) => m.name,
+      );
+    const viaRest = await setup();
+    const viaMcp = await setup();
+    for (const s of [viaRest, viaMcp]) {
+      for (const [name, order] of [
+        ["M1", 0],
+        ["M2", 10],
+        ["M3", 20],
+      ] as const) {
+        await s.rest("POST", "/api/projects/ai/milestones", { name, outcome: "x", order });
+      }
+    }
+    const last = async (s: typeof viaRest) =>
+      (await s.rest("GET", "/api/projects/ai/milestones")).json[2].id as string;
+
+    const saved = await viaRest.rest(
+      "PATCH",
+      `/api/projects/ai/milestones/${await last(viaRest)}`,
+      {
+        order: 5,
+        reason: "Reordered on the roadmap",
+      },
+    );
+    const moved = await viaMcp.mcp("edit_milestone", {
+      project: "AI",
+      milestone: await last(viaMcp),
+      order: 5,
+    });
+
+    expect(saved.status).toBe(200);
+    expect(moved.isError).toBe(false);
+    expect(await names(viaRest)).toEqual(["M1", "M3", "M2"]);
+    expect(await names(viaMcp)).toEqual(["M1", "M3", "M2"]);
+  });
+
   it("GivenAMilestone_WhenItsStatusIsSetOverEach_ThenBothSaveAndTheChangeLogShowsThem", async () => {
     const { rest, mcp } = await setup();
     const m = (await rest("POST", "/api/projects/ai/milestones", { name: "M4", outcome: "x" }))
