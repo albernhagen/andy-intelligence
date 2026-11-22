@@ -5,7 +5,7 @@ date: 2026-11-21
 amends: 0111 (the hourly cap)
 ---
 
-# 0137 — Re-sync's hourly cap: 12 runs that re-synced, counted from the branches
+# 0139 — Re-sync's hourly cap: 12 runs that re-synced, counted from the branches
 
 AI-345: Re-sync open PRs: raise the hourly cap to 12 and do not count skipped runs.
 

@@ -4,7 +4,7 @@ description: >-
   GitHub's update-branch API (merge commit; never rebase or force). Clean merges only; a conflict
   gets one comment naming the files. Skips forks, drafts, the `no-auto-sync` label, agent PRs and
   Dependabot. Capped: 12 runs that re-synced an hour, 20 PRs a run, 3 updates per PR a day
-  (scripts/resync-prs.mjs, ADR-0111, ADR-0137). Needs a checkout of the default branch with full
+  (scripts/resync-prs.mjs, ADR-0111, ADR-0139). Needs a checkout of the default branch with full
   history, a job token with `contents: read` and `pull-requests: read`, and `id-token: write` for
   the control plane's write token (POST /github/token, ADR-0043).
 

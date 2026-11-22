@@ -21,7 +21,7 @@ import { fileURLToPath } from "node:url";
 import { cleanGitEnv } from "./git-env.mjs";
 
 /**
- * Runs that re-synced a PR in the last hour (AI-345, ADR-0137). Counted from the branches, not the
+ * Runs that re-synced a PR in the last hour (AI-345, ADR-0139). Counted from the branches, not the
  * Actions API: skipped, capped and no-op runs merge nothing, so they don't count.
  */
 export const MAX_RUNS_PER_HOUR = 12;
