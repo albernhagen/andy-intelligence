@@ -236,6 +236,7 @@ export const PARITY: readonly ParityEntry[] = [
     action: "Ranked Ready list",
     routes: [`GET ${P}/ready`],
     tools: ["list_ready"],
+    note: "AI-343 removed the web Ready page: the board's Ready lane filters by size, risk and confidence with the same rule (matchesReadyFilters), and /ready opens the board. The route and list_ready stay.",
   },
   {
     action: "Roadmap; milestone map",
