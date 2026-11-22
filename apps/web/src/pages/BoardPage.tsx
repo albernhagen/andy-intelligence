@@ -128,7 +128,9 @@ export function BoardPage() {
         />
       )}
       {board.isPending && <Loading />}
-      {showsError(board) && <QueryError error={board.error} />}
+      {showsError(board) && (
+        <QueryError error={board.error} what="the board" onRetry={() => void board.refetch()} />
+      )}
       {board.data && (
         <Lanes
           tickets={tickets}

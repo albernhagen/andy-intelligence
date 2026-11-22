@@ -81,7 +81,13 @@ export function ReadyPage() {
         ))}
       </div>
       {ready.isPending && <Loading />}
-      {showsError(ready) && <QueryError error={ready.error} />}
+      {showsError(ready) && (
+        <QueryError
+          error={ready.error}
+          what="the Ready list"
+          onRetry={() => void ready.refetch()}
+        />
+      )}
       {ready.data && ready.data.tickets.length === 0 && (
         <p className="text-muted-foreground">No Ready ticket matches.</p>
       )}

@@ -81,7 +81,10 @@ export function SpendCaps({ projectId }: { projectId: string }) {
   const [draft, setDraft] = useState<Partial<Record<Cap, string>>>({});
   const [reason, setReason] = useState("");
 
-  if (spend.error) return <QueryError error={spend.error} />;
+  if (spend.error)
+    return (
+      <QueryError error={spend.error} what="the spend caps" onRetry={() => void spend.refetch()} />
+    );
   if (!spend.data) return null;
   const view = spend.data;
   const text = (field: Cap) => draft[field] ?? toText(view.project[field]);

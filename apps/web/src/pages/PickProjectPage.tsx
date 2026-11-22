@@ -11,7 +11,13 @@ export function PickProjectPage() {
       <h2 className="text-lg font-medium">Board</h2>
       <p className="text-muted-foreground">A board shows one project. Pick one:</p>
       {projects.isPending && <Loading />}
-      {showsError(projects) && <QueryError error={projects.error} />}
+      {showsError(projects) && (
+        <QueryError
+          error={projects.error}
+          what="the projects"
+          onRetry={() => void projects.refetch()}
+        />
+      )}
       {projects.data?.length === 0 && (
         <p className="text-muted-foreground">
           No projects yet.{" "}
