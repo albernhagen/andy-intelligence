@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button";
 import { QueryError } from "@/components/Status";
 import { unwrap, useApi } from "@/lib/api";
 import { useUpdateProject } from "@/lib/queries";
+import { SETTING_LABELS } from "@/lib/settings-labels";
 
 /**
  * Needs-you email for one project (AI-77). Off, whatever the switch says, until email is
@@ -25,14 +26,14 @@ export function EmailNotificationsControl({ project }: { project: Project }) {
 
   return (
     <>
-      <label className="ml-3 inline-flex items-center gap-1 text-sm">
+      <label className="ml-3 inline-flex items-center gap-1 text-sm max-sm:min-h-11">
         <input
           type="checkbox"
           checked={configured && project.emailNotifications}
           disabled={!configured || update.isPending}
           onChange={(e) => update.mutate({ emailNotifications: e.target.checked })}
         />
-        Email notifications
+        {SETTING_LABELS.emailNotifications}
         {status.data && !configured && (
           <span className="text-muted-foreground">(off: email is not configured)</span>
         )}
@@ -53,7 +54,13 @@ export function EmailNotificationsControl({ project }: { project: Project }) {
           {test.isSuccess ? "Test sent" : "Send test email"}
         </Button>
       )}
-      {status.error && <QueryError error={status.error} />}
+      {status.error && (
+        <QueryError
+          error={status.error}
+          what="the email status"
+          onRetry={() => void status.refetch()}
+        />
+      )}
       {update.error && <QueryError error={update.error} />}
       {test.error && <QueryError error={test.error} />}
     </>

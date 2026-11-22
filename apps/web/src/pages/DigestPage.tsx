@@ -3,7 +3,7 @@ import { Link, useParams } from "@tanstack/react-router";
 import type { Digest } from "@andy/contracts";
 import { MERGED_BY, gateText } from "@andy/domain";
 import { Loading, QueryError } from "@/components/Status";
-import { Button } from "@/components/ui/button";
+import { Segmented } from "@/components/ui/segmented";
 import { useDigest } from "@/lib/queries";
 
 const WINDOWS = [
@@ -27,19 +27,12 @@ export function DigestPage() {
     <section className="space-y-4">
       <header className="flex flex-wrap items-center gap-2">
         <h2 className="text-lg font-medium">Digest</h2>
-        <div role="group" aria-label="Window" className="flex gap-1">
-          {WINDOWS.map((w) => (
-            <Button
-              key={w.hours}
-              size="sm"
-              variant={w.hours === hours ? "default" : "ghost"}
-              aria-pressed={w.hours === hours}
-              onClick={() => setHours(w.hours)}
-            >
-              {w.label}
-            </Button>
-          ))}
-        </div>
+        <Segmented
+          label="Window"
+          value={hours}
+          options={WINDOWS.map((w) => ({ value: w.hours, label: w.label }))}
+          onChange={setHours}
+        />
         <Link
           to="/p/$projectId/whats-new"
           params={{ projectId }}
@@ -51,7 +44,7 @@ export function DigestPage() {
       {digest.isPending ? (
         <Loading />
       ) : digest.isError ? (
-        <QueryError error={digest.error} />
+        <QueryError error={digest.error} what="the digest" onRetry={() => void digest.refetch()} />
       ) : (
         <DigestBody digest={digest.data} projectId={projectId} />
       )}

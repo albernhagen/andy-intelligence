@@ -3,8 +3,9 @@ import { Link, useParams } from "@tanstack/react-router";
 import type { WhatsNew, WhatsNewMilestone, WhatsNewNote } from "@andy/contracts";
 import { Loading, QueryError } from "@/components/Status";
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
+import { Segmented } from "@/components/ui/segmented";
 import { useWhatsNew } from "@/lib/queries";
+import { dateTime } from "@/lib/format";
 
 const WINDOWS = [
   { days: 14, label: "14 days" },
@@ -33,19 +34,12 @@ export function WhatsNewPage() {
     <section className="space-y-4">
       <header className="flex flex-wrap items-center gap-2">
         <h2 className="text-lg font-medium">What's new</h2>
-        <div role="group" aria-label="Window" className="flex gap-1">
-          {WINDOWS.map((w) => (
-            <Button
-              key={w.days}
-              size="sm"
-              variant={w.days === days ? "default" : "ghost"}
-              aria-pressed={w.days === days}
-              onClick={() => setDays(w.days)}
-            >
-              {w.label}
-            </Button>
-          ))}
-        </div>
+        <Segmented
+          label="Window"
+          value={days}
+          options={WINDOWS.map((w) => ({ value: w.days, label: w.label }))}
+          onChange={setDays}
+        />
         {whatsNew.data && whatsNew.data.milestones.length > 0 && (
           <select
             aria-label="Epic"
@@ -73,7 +67,11 @@ export function WhatsNewPage() {
       {whatsNew.isPending ? (
         <Loading />
       ) : whatsNew.isError ? (
-        <QueryError error={whatsNew.error} />
+        <QueryError
+          error={whatsNew.error}
+          what="what's new"
+          onRetry={() => void whatsNew.refetch()}
+        />
       ) : (
         <>
           <Status whatsNew={whatsNew.data} projectId={projectId} />
@@ -219,10 +217,7 @@ function ChangeLine({ note: n, projectId }: { note: WhatsNewNote; projectId: str
             </Field>
           )}
           <Field label="Merged">
-            {new Date(n.mergedAt).toLocaleString("en-US", {
-              dateStyle: "medium",
-              timeStyle: "short",
-            })}
+            {dateTime(n.mergedAt)}
             {n.mergedBy ? ` by ${n.mergedBy}` : ""}
             {n.epicKey ? ` · ${n.epicKey}: ${n.epicTitle}` : ""}
           </Field>

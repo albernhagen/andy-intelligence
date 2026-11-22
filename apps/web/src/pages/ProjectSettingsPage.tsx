@@ -22,6 +22,8 @@ import { DefaultWorkerSelect } from "@/components/WorkerControls";
 import { DefaultExecutorSelect } from "@/components/ExecutorControls";
 import { useProjects, useUpdateProject } from "@/lib/queries";
 import { showsError } from "@/lib/live";
+import { dateOnly } from "@/lib/format";
+import { SETTING_LABELS } from "@/lib/settings-labels";
 
 /**
  * One project's settings (AI-46), linked from the workspace header. Every switch saves on change
@@ -33,7 +35,13 @@ export function ProjectSettingsPage() {
   const projects = useProjects();
   if (projects.isPending) return <Loading />;
   if (projects.data === undefined || showsError(projects))
-    return <QueryError error={projects.error} />;
+    return (
+      <QueryError
+        error={projects.error}
+        what="the projects"
+        onRetry={() => void projects.refetch()}
+      />
+    );
   const project = projects.data.find((p) => p.id === projectId);
   if (!project) return <p className="text-muted-foreground">Project not found.</p>;
 
@@ -108,14 +116,14 @@ function Setting({ what, children }: { what: string; children: ReactNode }) {
 function DailyQuestionCap({ project }: { project: Project }) {
   const update = useUpdateProject(project.id);
   return (
-    <label className="ml-3 inline-flex items-center gap-1 text-sm">
-      Questions per day
+    <label className="ml-3 inline-flex items-center gap-1 text-sm max-sm:min-h-11">
+      {SETTING_LABELS.dailyQuestionCap}
       <input
         type="number"
         min={0}
         max={50}
         aria-label="Questions per day"
-        className="w-14 rounded-md border border-border bg-background px-1"
+        className="w-14 rounded-md border border-border bg-background px-1 max-sm:h-11 max-sm:text-base"
         defaultValue={project.dailyQuestionCap}
         disabled={update.isPending}
         onBlur={(e) => {
@@ -134,14 +142,14 @@ function DailyQuestionCap({ project }: { project: Project }) {
 function AutoRefineToggle({ project }: { project: Project }) {
   const update = useUpdateProject(project.id);
   return (
-    <label className="ml-3 inline-flex items-center gap-1 text-sm">
+    <label className="ml-3 inline-flex items-center gap-1 text-sm max-sm:min-h-11">
       <input
         type="checkbox"
         checked={project.autoRefine}
         disabled={update.isPending}
         onChange={(e) => update.mutate({ autoRefine: e.target.checked })}
       />
-      Auto-refine
+      {SETTING_LABELS.autoRefine}
       {update.error && <QueryError error={update.error} />}
     </label>
   );
@@ -153,18 +161,16 @@ function AutoRefineToggle({ project }: { project: Project }) {
  */
 function BuildsEnabledToggle({ project }: { project: Project }) {
   const update = useUpdateProject(project.id);
-  const when = project.buildEnabledAt
-    ? new Date(project.buildEnabledAt).toLocaleDateString()
-    : null;
+  const when = project.buildEnabledAt ? dateOnly(project.buildEnabledAt) : null;
   return (
-    <label className="ml-3 inline-flex items-center gap-1 text-sm">
+    <label className="ml-3 inline-flex items-center gap-1 text-sm max-sm:min-h-11">
       <input
         type="checkbox"
         checked={project.buildEnabled}
         disabled={update.isPending}
         onChange={(e) => update.mutate({ buildEnabled: e.target.checked })}
       />
-      Builds
+      {SETTING_LABELS.buildEnabled}
       {project.buildEnabledBy && when && (
         <span className="text-muted-foreground" title={`by ${project.buildEnabledBy}`}>
           ({project.buildEnabled ? "on" : "off"} since {when})
@@ -179,14 +185,14 @@ function BuildsEnabledToggle({ project }: { project: Project }) {
 function AutoBuildToggle({ project }: { project: Project }) {
   const update = useUpdateProject(project.id);
   return (
-    <label className="ml-3 inline-flex items-center gap-1 text-sm">
+    <label className="ml-3 inline-flex items-center gap-1 text-sm max-sm:min-h-11">
       <input
         type="checkbox"
         checked={project.autoBuild}
         disabled={update.isPending || !project.buildEnabled}
         onChange={(e) => update.mutate({ autoBuild: e.target.checked })}
       />
-      Auto-build
+      {SETTING_LABELS.autoBuild}
       {update.error && <QueryError error={update.error} />}
     </label>
   );
@@ -202,10 +208,10 @@ const PLAN_APPROVAL_LABELS: Record<PlanApproval, string> = {
 function PlanApprovalSelect({ project }: { project: Project }) {
   const update = useUpdateProject(project.id);
   return (
-    <label className="ml-3 inline-flex items-center gap-1 text-sm">
-      Plan approval
+    <label className="ml-3 inline-flex items-center gap-1 text-sm max-sm:min-h-11">
+      {SETTING_LABELS.planApproval}
       <select
-        className="rounded border border-border bg-background px-1"
+        className="rounded border border-border bg-background px-1 max-sm:h-11 max-sm:text-base"
         value={project.planApproval}
         disabled={update.isPending}
         onChange={(e) => update.mutate({ planApproval: e.target.value as PlanApproval })}
@@ -230,10 +236,10 @@ const ENVIRONMENT_LABELS: Record<EnvironmentPolicy, string> = {
 function EnvironmentsSelect({ project }: { project: Project }) {
   const update = useUpdateProject(project.id);
   return (
-    <label className="ml-3 inline-flex items-center gap-1 text-sm">
-      Environments
+    <label className="ml-3 inline-flex items-center gap-1 text-sm max-sm:min-h-11">
+      {SETTING_LABELS.environments}
       <select
-        className="rounded border border-border bg-background px-1"
+        className="rounded border border-border bg-background px-1 max-sm:h-11 max-sm:text-base"
         value={project.environments}
         disabled={update.isPending}
         onChange={(e) => update.mutate({ environments: EnvironmentPolicy.parse(e.target.value) })}
@@ -265,10 +271,10 @@ function MergeModeSelect({ project }: { project: Project }) {
   const mode = effectiveMergeMode(project);
   return (
     <div className="ml-3 space-y-1 text-sm">
-      <label className="inline-flex items-center gap-1">
-        Merge mode
+      <label className="inline-flex items-center gap-1 max-sm:min-h-11">
+        {SETTING_LABELS.mergeMode}
         <select
-          className="rounded border border-border bg-background px-1"
+          className="rounded border border-border bg-background px-1 max-sm:h-11 max-sm:text-base"
           value={mode}
           disabled={update.isPending}
           onChange={(e) => update.mutate({ mergeMode: MergeMode.parse(e.target.value) })}
@@ -293,10 +299,10 @@ function MergeModeSelect({ project }: { project: Project }) {
 function AutoMergeSelect({ project }: { project: Project }) {
   const update = useUpdateProject(project.id);
   return (
-    <label className="ml-3 inline-flex items-center gap-1 text-sm">
-      Auto-merge
+    <label className="ml-3 inline-flex items-center gap-1 text-sm max-sm:min-h-11">
+      {SETTING_LABELS.autoMerge}
       <select
-        className="rounded border border-border bg-background px-1"
+        className="rounded border border-border bg-background px-1 max-sm:h-11 max-sm:text-base"
         value={project.autoMerge}
         disabled={update.isPending}
         onChange={(e) => update.mutate({ autoMerge: e.target.value as AutoMerge })}

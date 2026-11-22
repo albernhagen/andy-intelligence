@@ -1,9 +1,12 @@
 import { describe, expect, it } from "vitest";
 import { screen, waitFor, within } from "@testing-library/react";
-import { renderApp } from "@/test/harness";
+import { PAGE_LOAD, renderApp } from "@/test/harness";
 
-/** AI-298: Parity: ranked Ready list in the web UI, the same list as MCP `list_ready`. */
-describe("ranked Ready list", () => {
+/**
+ * The board's Ready lane filters (AI-343): size, risk and confidence, the same as MCP
+ * `list_ready` (AI-298). The Ready page is gone; its URL opens the board with its filters.
+ */
+describe("Ready lane filters", () => {
   async function seeded(path: string) {
     const h = renderApp("/all/board");
     await h.tracker.createProject({ name: "Andy Intelligence", key: "AI" });
@@ -16,58 +19,56 @@ describe("ranked Ready list", () => {
         "system",
       );
     };
-    await ready("Small and safe", {
-      size: "S",
-      risk: "low",
-      riskReason: "one file",
-      confidence: "high",
-    });
+    await ready("Small and safe", { size: "S", risk: "low", confidence: "high" });
     await ready("Big", { size: "L", risk: "high", confidence: "low" });
     await ready("Unscored", {});
-    await h.tracker.createTicket("ai", { type: "chore", title: "Not ready" }, "andy");
     await h.queryClient.invalidateQueries();
     await h.router.navigate({ href: path });
     return h;
   }
 
-  const titles = (list: HTMLElement) =>
-    within(list)
-      .getAllByRole("link")
-      .map((a) => a.textContent);
+  const readyTitles = async () => {
+    const lane = await screen.findByRole("region", { name: "Ready" }, PAGE_LOAD);
+    return within(lane)
+      .queryAllByRole("link")
+      .map((a) => a.textContent ?? "")
+      .filter((t) => ["Small and safe", "Big", "Unscored"].some((x) => t.includes(x)));
+  };
 
-  it("GivenReadyTickets_WhenTheReadyViewOpens_ThenTheyAreInRankOrderWithScoresAndReasons", async () => {
-    await seeded("/p/ai/ready");
-    const list = await screen.findByRole("list", { name: "Ready tickets" });
-    expect(titles(list)).toEqual(["Small and safe", "Big", "Unscored"]);
-    const first = list.querySelector('[data-ticket="AI-1"]') as HTMLElement;
-    expect(within(first).getByText("S · low risk · confident")).toBeTruthy();
-    expect(within(first).getByText("Risk: one file")).toBeTruthy();
-    expect(within(list).getByText("No scores")).toBeTruthy();
-    expect(screen.getByRole("heading", { name: "Ready 3" })).toBeTruthy();
-  });
+  it("GivenTheReadyLane_WhenAndyFiltersBySize_ThenOnlyMatchingCardsShowAndTheUrlFollows", async () => {
+    const h = await seeded("/p/ai");
+    await waitFor(async () => expect(await readyTitles()).toHaveLength(3));
 
-  it("GivenAFilter_WhenAndyPicksIt_ThenTheListAndTheUrlFollow", async () => {
-    const h = await seeded("/p/ai/ready");
-    await screen.findByRole("list", { name: "Ready tickets" });
+    await h.user.click(screen.getByRole("button", { name: "Filter" }));
     await h.user.selectOptions(screen.getByLabelText("Size"), "S");
 
     await waitFor(() => expect(h.router.state.location.search).toEqual({ size: "S" }));
-    await waitFor(() =>
-      expect(titles(screen.getByRole("list", { name: "Ready tickets" }))).toEqual([
-        "Small and safe",
-      ]),
-    );
+    await waitFor(async () => {
+      const titles = await readyTitles();
+      expect(titles).toHaveLength(1);
+      expect(titles[0]).toContain("Small and safe");
+    });
+    expect(screen.getByRole("button", { name: "Filter · 1" })).toBeTruthy();
   });
 
-  it("GivenAFilterInTheUrlThatMatchesNothing_WhenOpened_ThenItSaysSo", async () => {
-    await seeded("/p/ai/ready?risk=medium");
-    expect(await screen.findByText("No Ready ticket matches.")).toBeTruthy();
+  it("GivenFilters_WhenCleared_ThenEveryReadyCardShowsAgain", async () => {
+    const h = await seeded("/p/ai?risk=high");
+    await waitFor(async () => expect(await readyTitles()).toHaveLength(1));
+
+    await h.user.click(screen.getByRole("button", { name: "Clear" }));
+
+    await waitFor(async () => expect(await readyTitles()).toHaveLength(3));
   });
 
-  it("GivenTheBoard_WhenAndyFollowsRankedList_ThenTheReadyViewOpens", async () => {
-    const h = await seeded("/p/ai");
-    const lane = await screen.findByRole("region", { name: "Ready" });
-    await h.user.click(within(lane).getByRole("link", { name: "Ranked list" }));
-    expect(await screen.findByRole("list", { name: "Ready tickets" })).toBeTruthy();
+  it("GivenTheOldReadyPageUrl_WhenOpened_ThenTheBoardOpensWithItsFilters", async () => {
+    const h = await seeded("/p/ai/ready?confidence=low");
+
+    await waitFor(() => expect(h.router.state.location.pathname).toBe("/p/ai"));
+    expect(h.router.state.location.search).toEqual({ confidence: "low" });
+    await waitFor(async () => {
+      const titles = await readyTitles();
+      expect(titles).toHaveLength(1);
+      expect(titles[0]).toContain("Big");
+    });
   });
 });

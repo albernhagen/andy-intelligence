@@ -37,8 +37,11 @@ describe("tickets UI", () => {
     const tier = screen.getByLabelText("Tier") as HTMLSelectElement;
     expect(await within(tier).findByRole("option", { name: "strong (from size)" })).toBeTruthy();
     await user.selectOptions(tier, "frontier");
+    // Empty lists fold into the Add row (AI-330): pick one, type, Enter.
+    await user.selectOptions(screen.getByLabelText("Add a list"), "Out of scope");
     await user.type(screen.getByLabelText("Add to out of scope"), "billing{Enter}");
     await screen.findByRole("button", { name: "Remove: billing" });
+    await user.selectOptions(screen.getByLabelText("Add a list"), "Touches");
     await user.type(screen.getByLabelText("Add to touches"), "apps/web/**{Enter}");
 
     await waitFor(async () =>
