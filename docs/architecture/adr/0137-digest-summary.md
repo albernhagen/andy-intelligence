@@ -23,7 +23,7 @@ ADR-0081 computes the digest on every read; nothing is stored. A model call per 
 
 Andy chose 1(c) with (a) built now, 2 "share the engine", 3 "daily on first read".
 
-- **Step:** new run step `summarize`, tier `fast`. It runs wherever routing sends it: today an agent task on the subscription; the direct executor once Andy turns on a paid route. No paid call otherwise. A config stored before the step existed gets the default tier on read (`DEFAULT_STEP_TIERS`).
+- **Step:** new run step `summarize`, tier `fast`. It runs wherever routing sends it: today an agent task on the subscription; the direct executor once Andy turns on a paid route. No paid call otherwise. A config stored before the step existed reads it as `fast` (`LATER_STEP_TIERS`).
 - **Day:** ends at midnight in `America/Denver` (`DIGEST_SUMMARY_TIME_ZONE`), a named zone, so daylight saving is right. The digest shows the latest finished day's summary, with its date.
 - **Store:** `DigestSummaryStore`, one document per project per day (id `YYYY-MM-DD`): status `writing`, `ready` or `failed` (with the reason), output, task id, route, input hash. A digest read adds one point read.
 - **Claim:** the first digest read after the day ends claims it atomically, then starts the task. A second reader sees `writing`.
