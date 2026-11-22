@@ -235,7 +235,14 @@ function Story({ ticket: t }: { ticket: Ticket }) {
       {isEpic && (
         <>
           <Outcome ticket={t} />
-          <EpicChildren {...pathOf(t)} milestone={<TicketMilestone ticket={t} />} />
+          <EpicChildren
+            {...pathOf(t)}
+            milestone={
+              <div className="max-w-sm">
+                <TicketMilestone ticket={t} />
+              </div>
+            }
+          />
         </>
       )}
       <div className="grid gap-6 sm:grid-cols-[minmax(0,1fr)_11rem]">
