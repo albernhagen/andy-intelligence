@@ -18,6 +18,7 @@ export { registerMilestoneTools as milestones } from "./tools-milestones";
 export { registerNightTools as night } from "./tools-night";
 export { registerNotifyTools as notify } from "./tools-notify";
 export { registerProjectPlanTools as projectPlan } from "./tools-project-plan";
+export { registerProjectTaskTools as projectTasks } from "./tools-project-tasks";
 export { registerProjectTools as projects } from "./tools-projects";
 export { registerQuotaTools as quota } from "./tools-quota";
 export { registerRoadmapTools as roadmap } from "./tools-roadmap";

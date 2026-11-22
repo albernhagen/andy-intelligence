@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it } from "vitest";
 import { screen, waitFor, within } from "@testing-library/react";
+import { DEFAULT_ROUTE } from "@andy/domain";
 import { renderApp } from "@/test/harness";
 
 /** AI-46: one project's settings at /p/<project>/settings, against the in-process API. */
@@ -302,11 +303,61 @@ describe("/projects", () => {
     await waitFor(() => expect(within(list).queryByText("(read from auto-merge)")).toBeNull());
   });
 
-  it("GivenNoProjectPlan_WhenSettingsOpen_ThenThePlanCardSaysToAskASession", async () => {
+  it("GivenNoProjectPlan_WhenSettingsOpen_ThenThePlanCardOffersATaskOrASession", async () => {
     await withProjects("/p/ai/settings");
 
     const plan = await screen.findByRole("region", { name: "Project plan" });
-    expect(plan.textContent).toContain("No plan yet: ask a Claude session to plan this project.");
+    expect(plan.textContent).toContain(
+      "No plan yet: start a plan-project agent task, or ask a Claude session to plan this project.",
+    );
+    expect(within(plan).getByRole("button", { name: "Start plan-project task" })).toBeTruthy();
     expect(plan.textContent).not.toContain("submit_project_plan");
+  });
+
+  // AI-320: the same start as MCP start_plan_project and POST …/plan/agent-task.
+  it("GivenAConnectedProject_WhenAndyStartsAPlanProjectTask_ThenItStartsAndLinksToTheTask", async () => {
+    const h = renderApp("/p/ai/settings", { githubConnected: true });
+    await h.tracker.createProject({
+      name: "Andy Intelligence",
+      key: "AI",
+      repos: ["albernhagen/andy-intelligence"],
+    });
+    await h.queryClient.invalidateQueries();
+    const plan = await screen.findByRole("region", { name: "Project plan" });
+    await h.user.click(
+      await within(plan).findByRole("button", { name: "Start plan-project task" }),
+    );
+
+    const link = await within(plan).findByRole("link", { name: "Agent task · plan-project" });
+    const [run] = await h.runs.listActive("ai");
+    expect(run).toMatchObject({ step: "plan-project", ticketId: null });
+    expect(link.getAttribute("href")).toBe(`/p/ai/runs/${run!.id}`);
+  });
+
+  it("GivenAPlanProjectTaskInFlight_WhenAndyStartsAnother_ThenTheApisReasonShows", async () => {
+    const h = renderApp("/p/ai/settings", { githubConnected: true });
+    await h.tracker.createProject({
+      name: "Andy Intelligence",
+      key: "AI",
+      repos: ["albernhagen/andy-intelligence"],
+    });
+    await h.runs.create({
+      projectId: "ai",
+      ticketId: null,
+      step: "plan-project",
+      route: DEFAULT_ROUTE,
+      tier: "strong",
+      deadline: null,
+      prompt: "plan",
+      maxTurns: 50,
+    });
+    await h.queryClient.invalidateQueries();
+    const plan = await screen.findByRole("region", { name: "Project plan" });
+    await h.user.click(
+      await within(plan).findByRole("button", { name: "Start plan-project task" }),
+    );
+
+    expect(await within(plan).findByText(/already has a plan-project task in flight/)).toBeTruthy();
+    expect(await h.runs.listActive("ai")).toHaveLength(1);
   });
 });

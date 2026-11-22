@@ -1,9 +1,11 @@
 import { useState } from "react";
+import { Link } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { ProjectPlan as Plan } from "@andy/contracts";
 import { Button } from "@/components/ui/button";
 import { QueryError } from "@/components/Status";
 import { unwrap, useApi } from "@/lib/api";
+import { useLivePoll } from "@/lib/live";
 
 /**
  * Project plans (AI-108, AI-65): a new project's milestones, proposed from the plan-project
@@ -15,6 +17,8 @@ import { unwrap, useApi } from "@/lib/api";
 export function ProjectPlanPanel({ projectId }: { projectId: string }) {
   const api = useApi();
   const plan = useQuery({
+    // Polled, so a plan a plan-project task proposes shows without a reload (AI-320).
+    ...useLivePoll("slow"),
     queryKey: ["project-plan", projectId],
     queryFn: async () =>
       unwrap(await api.GET("/api/projects/{projectId}/plan", { params: { path: { projectId } } })),
@@ -29,21 +33,75 @@ export function ProjectPlanPanel({ projectId }: { projectId: string }) {
     <section aria-label="Project plan" className="space-y-2 rounded-md border border-border p-3">
       <h3 className="text-sm font-medium">Project plan</h3>
       {current === null || current === undefined ? (
-        <p className="text-sm text-muted-foreground">
-          No plan yet: ask a Claude session to plan this project. Its proposed milestones show here
-          for you to approve.
-        </p>
+        <>
+          <p className="text-sm text-muted-foreground">
+            No plan yet: start a plan-project agent task, or ask a Claude session to plan this
+            project. Its proposed milestones show here for you to approve.
+          </p>
+          <StartPlanTask projectId={projectId} />
+        </>
       ) : current.status === "proposed" || current.status === "approving" ? (
         <WaitingPlan projectId={projectId} plan={current} />
       ) : current.status === "approved" ? (
         <p className="text-sm">Approved: {current.epicIds.length} epics created.</p>
       ) : (
-        <p className="text-sm">
-          Rejected: <span className="whitespace-pre-wrap">{current.reason}</span>. Ask a Claude
-          session for a new plan.
-        </p>
+        <>
+          <p className="text-sm">
+            Rejected: <span className="whitespace-pre-wrap">{current.reason}</span>. Start a new
+            plan-project agent task, or ask a Claude session for a new plan.
+          </p>
+          <StartPlanTask projectId={projectId} />
+        </>
       )}
     </section>
+  );
+}
+
+/**
+ * Starts a plan-project agent task (AI-320; the route AI-134 added, as MCP `start_plan_project`):
+ * owner only, refused while one is in flight or at the agent-task caps. The task reads the brief
+ * and proposes the plan, which then shows in this panel.
+ */
+function StartPlanTask({ projectId }: { projectId: string }) {
+  const api = useApi();
+  const queryClient = useQueryClient();
+  const start = useMutation({
+    mutationFn: async () =>
+      unwrap(
+        await api.POST("/api/projects/{projectId}/plan/agent-task", {
+          params: { path: { projectId } },
+        }),
+      ),
+    onSuccess: () => queryClient.invalidateQueries(),
+  });
+  if (start.data)
+    return (
+      <p className="text-sm">
+        <Link
+          to="/p/$projectId/runs/$runId"
+          params={{ projectId, runId: start.data.id }}
+          className="underline underline-offset-2"
+        >
+          Agent task · plan-project
+        </Link>{" "}
+        started. Its plan shows here when it finishes.
+      </p>
+    );
+  return (
+    <div className="space-y-1">
+      <Button
+        type="button"
+        variant="outline"
+        size="sm"
+        className="h-11 sm:h-8"
+        disabled={start.isPending}
+        onClick={() => start.mutate()}
+      >
+        Start plan-project task
+      </Button>
+      <p className="text-xs text-muted-foreground">Reads the brief; uses Claude quota.</p>
+      {start.error && <QueryError error={start.error} />}
+    </div>
   );
 }
 
