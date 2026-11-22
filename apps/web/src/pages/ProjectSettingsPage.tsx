@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 import { useParams } from "@tanstack/react-router";
 import { LayerOrderHint } from "@/components/RouteLayers";
+import { SettingsTabs } from "@/components/SettingsTabs";
 import {
   AutoMerge,
   EnvironmentPolicy,
@@ -40,6 +41,7 @@ export function ProjectSettingsPage() {
 
   return (
     <section className="max-w-2xl space-y-4">
+      <SettingsTabs />
       <h2 className="text-lg font-medium">
         {project.key}: {project.name} settings
       </h2>

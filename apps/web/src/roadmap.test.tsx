@@ -94,11 +94,11 @@ describe("roadmap", () => {
         ["m3", "parked"],
       ]),
     );
-    const hosting = row(/M2: Self-hosting/);
+    const hosting = row(/^M2: Self-hosting/);
     expect(within(hosting).getByText("Not reviewed")).toBeTruthy();
     expect(within(hosting).getByText("0 of 2 done")).toBeTruthy();
     expect(within(hosting).getByText("1 in review")).toBeTruthy();
-    expect(within(row(/M1: First flow/)).getByText("Done")).toBeTruthy();
+    expect(within(row(/^M1: First flow/)).getByText("Done")).toBeTruthy();
   });
 
   it("GivenAParkedMilestone_WhenShown_ThenItsRowIsDimmed", async () => {
@@ -112,7 +112,7 @@ describe("roadmap", () => {
   it("GivenAMilestone_WhenExpanded_ThenItsEpicsShowWithProgressAndOpenTheEpic", async () => {
     const { harness, hosting } = await seeded("/p/ai/roadmap");
 
-    await harness.user.click(await screen.findByRole("button", { name: /M2: Self-hosting/ }));
+    await harness.user.click(await screen.findByRole("button", { name: /^M2: Self-hosting/ }));
 
     const epic = await screen.findByRole("link", { name: new RegExp(hosting.key) });
     const item = epic.closest("li")!;
@@ -136,7 +136,9 @@ describe("roadmap", () => {
 
     expect(await screen.findByRole("region", { name: "Andy Intelligence" })).toBeTruthy();
     const ops = screen.getByRole("region", { name: "Ops" });
-    expect(within(ops).getByText("No milestones or epics yet.")).toBeTruthy();
+    expect(
+      within(ops).getByText(/No milestones or epics yet. To start, ask a Claude session/),
+    ).toBeTruthy();
   });
 
   it("GivenTheShell_WhenAProjectIsOpen_ThenRoadmapIsLinked", async () => {
