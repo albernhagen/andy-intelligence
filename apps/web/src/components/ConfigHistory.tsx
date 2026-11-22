@@ -4,7 +4,7 @@ import { errorText } from "@/lib/api";
 import { useRevertSettingsChange, useSettingsChanges } from "@/lib/queries";
 
 const button =
-  "rounded-md border border-border bg-background px-2 py-0.5 text-xs font-medium text-foreground hover:bg-muted disabled:opacity-50";
+  "rounded-md border border-border bg-background px-2 py-0.5 text-xs font-medium text-foreground hover:bg-muted disabled:opacity-50 max-sm:min-h-11 max-sm:px-3";
 
 /**
  * The project's settings changes (M4.12), newest first, on the settings page: who, when, what

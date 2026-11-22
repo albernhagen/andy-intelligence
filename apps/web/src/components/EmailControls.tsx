@@ -25,7 +25,7 @@ export function EmailNotificationsControl({ project }: { project: Project }) {
 
   return (
     <>
-      <label className="ml-3 inline-flex items-center gap-1 text-sm">
+      <label className="ml-3 inline-flex items-center gap-1 text-sm max-sm:min-h-11">
         <input
           type="checkbox"
           checked={configured && project.emailNotifications}

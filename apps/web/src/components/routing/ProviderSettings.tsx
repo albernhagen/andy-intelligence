@@ -38,7 +38,7 @@ export function ProviderSettings({
           const p = providers[key];
           return (
             <li key={key} className="flex flex-wrap items-center gap-x-4 gap-y-2 px-3 py-2 text-sm">
-              <label className="flex min-w-36 items-center gap-2 font-medium">
+              <label className="flex min-w-36 items-center gap-2 font-medium max-sm:min-h-11">
                 <input
                   type="checkbox"
                   className="size-5 sm:size-4"
