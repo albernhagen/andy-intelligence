@@ -4,16 +4,18 @@ import {
   ProjectPlan,
   ProjectPlanDecision,
   ProjectPlanProposal,
+  Run,
   Ticket,
 } from "@andy/contracts";
-import type { ProjectPlanService } from "@andy/domain";
+import type { ProjectPlanService, RunService } from "@andy/domain";
 import { actorOf, type AuthEnv } from "./auth";
 import type { RouteModule } from "./services";
 
 /**
  * Project plans (AI-108, AI-65): the plan-project result goes in as a proposal; Andy approves
- * (one epic per milestone) or rejects with a reason. Owner-only (`can`). Until AI-134 wires the
- * plan-project agent task, the result is submitted here or with MCP `submit_project_plan`.
+ * (one epic per milestone) or rejects with a reason. Owner-only (`can`). The result comes from
+ * a plan-project agent task (AI-134, `POST .../plan/agent-task`), or is submitted here or with
+ * MCP `submit_project_plan`.
  */
 
 const ErrorBody = z.object({ error: z.string(), details: z.array(z.string()).optional() });
@@ -69,6 +71,23 @@ const routes = {
     },
     responses: { 200: json(PlanDecisionResult, "Decided; epics created on approval"), ...errors },
   }),
+  startTask: createRoute({
+    ...secured,
+    method: "post",
+    path: "/api/projects/{projectId}/plan/agent-task",
+    request: { params: ProjectParams },
+    responses: {
+      201: json(Run, "A plan-project agent task started; its result waits for Andy"),
+      ...errors,
+      409: json(
+        ErrorBody,
+        "A plan waits or is approved, a task is in flight, or the caps are reached",
+      ),
+      422: json(ErrorBody, "No repo"),
+      502: json(ErrorBody, "The executor couldn't start it (GitHub not connected)"),
+      503: json(ErrorBody, "No executor"),
+    },
+  }),
   waiting: createRoute({
     ...secured,
     method: "get",
@@ -80,7 +99,19 @@ const routes = {
 export function registerProjectPlanRoutes(
   app: OpenAPIHono<AuthEnv>,
   plans: ProjectPlanService,
+  runs: Pick<RunService, "requestProjectTask">,
 ): void {
+  app.openapi(routes.startTask, async (c) =>
+    c.json(
+      await runs.requestProjectTask(
+        c.req.valid("param").projectId,
+        "plan-project",
+        {},
+        actorOf(c.get("identity")),
+      ),
+      201,
+    ),
+  );
   app.openapi(routes.get, async (c) =>
     c.json({ plan: await plans.get(c.req.valid("param").projectId) }, 200),
   );
@@ -108,4 +139,4 @@ export function registerProjectPlanRoutes(
 }
 
 /** Listed in `api-routes.ts` (AI-145). */
-export const apiRoutes: RouteModule = (app, s) => registerProjectPlanRoutes(app, s.plans);
+export const apiRoutes: RouteModule = (app, s) => registerProjectPlanRoutes(app, s.plans, s.runs);
