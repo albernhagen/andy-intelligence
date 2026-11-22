@@ -3,6 +3,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { QueryError } from "@/components/Status";
 import { useExecutor, useSetExecutor, useUpdateProject } from "@/lib/queries";
+import { SETTING_LABELS } from "@/lib/settings-labels";
 
 /** Where a ticket's runs execute (ADR-0089): the ticket's switch and the project default. */
 
@@ -57,7 +58,7 @@ export function DefaultExecutorSelect({ project }: { project: Project }) {
   const update = useUpdateProject(project.id);
   return (
     <label className="ml-3 inline-flex items-center gap-1 text-sm text-muted-foreground">
-      Default executor
+      {SETTING_LABELS.executor}
       <select
         className="rounded border border-border bg-background px-1"
         value={project.executor}
