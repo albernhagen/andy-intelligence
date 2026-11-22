@@ -3,6 +3,9 @@ import {
   CodeHostEvent,
   EPIC_BRANCH_PATTERN,
   FileProposal,
+  BaselineProposal,
+  assertSettingSubpath,
+  type RepoSettingRead,
   Repo,
   RepoName,
   Stage,
@@ -575,6 +578,23 @@ export class InMemoryCodeHost implements CodeHost {
   requiredChecks: RequiredCheck[] = [];
   /** Test seam: file text by path (any ref). */
   readonly files = new Map<string, string>();
+  /**
+   * Test seam: one repo's own files, by `<repo, lower-cased>` then path; a repo listed here reads
+   * only these (AI-113: the baseline source and the target differ). Others read `files`.
+   */
+  readonly repoFiles = new Map<string, Map<string, string>>();
+  /** Test seam: repos with no commits yet (AI-113). */
+  readonly emptyRepos = new Set<string>();
+  /** Baselines proposed with `proposeFiles`, in order. */
+  readonly baselineProposals: {
+    fullName: string;
+    proposal: BaselineProposal;
+    opened: ProposedPullRequest;
+  }[] = [];
+  /** Test seam: answers to `readRepoSetting` by `<repo, lower-cased>#<subpath>`; others are 404. */
+  readonly settings = new Map<string, RepoSettingRead>();
+  /** Settings reads, in order (`<repo>#<subpath>`). */
+  readonly settingReads: string[] = [];
   /** Merge calls that went through, in order. */
   readonly merges: { fullName: string; number: number; sha: string }[] = [];
   /** Test seam: make merge calls fail. */
@@ -717,8 +737,10 @@ export class InMemoryCodeHost implements CodeHost {
   }
 
   async readFile(fullName: string, path: string): Promise<string | null> {
-    if (!(await this.getRepo(fullName))) return null;
-    return this.files.get(path) ?? null;
+    const repo = await this.getRepo(fullName);
+    if (!repo) return null;
+    const own = this.repoFiles.get(repo.fullName.toLowerCase());
+    return (own ?? this.files).get(path) ?? null;
   }
 
   async listFiles(fullName: string, dir: string): Promise<string[] | null> {
@@ -764,9 +786,38 @@ export class InMemoryCodeHost implements CodeHost {
     return structuredClone(opened);
   }
 
+  async proposeFiles(
+    fullName: string,
+    proposal: BaselineProposal,
+  ): Promise<ProposedPullRequest | null> {
+    const repo = await this.getRepo(fullName);
+    if (!repo) return null;
+    if (this.failPropose) throw this.failPropose;
+    const parsed = BaselineProposal.parse(proposal);
+    if (this.emptyRepos.has(repo.fullName.toLowerCase())) throw new Error("the repo is empty");
+    const taken = this.baselineProposals.some(
+      (p) => p.fullName === repo.fullName && p.proposal.branch === parsed.branch,
+    );
+    if (taken) throw new Error(`branch ${parsed.branch} already exists`);
+    const number = 3000 + this.baselineProposals.length;
+    const opened = { number, url: `${repo.url}/pull/${number}`, branch: parsed.branch };
+    this.baselineProposals.push({ fullName: repo.fullName, proposal: parsed, opened });
+    return structuredClone(opened);
+  }
+
+  async readRepoSetting(fullName: string, subpath: string): Promise<RepoSettingRead | null> {
+    assertSettingSubpath(subpath);
+    const repo = await this.getRepo(fullName);
+    if (!repo) return null;
+    const key = `${repo.fullName.toLowerCase()}#${subpath}`;
+    this.settingReads.push(key);
+    return structuredClone(this.settings.get(key) ?? { status: 404, data: null });
+  }
+
   async branchSha(fullName: string, branch: string): Promise<string | null> {
     const repo = await this.getRepo(fullName);
     if (!repo) return null;
+    if (this.emptyRepos.has(repo.fullName.toLowerCase())) return null;
     const tip = this.branches.get(`${repo.fullName.toLowerCase()}#${branch}`);
     if (tip) return tip;
     return branch === repo.defaultBranch ? InMemoryCodeHost.DEFAULT_TIP : null;

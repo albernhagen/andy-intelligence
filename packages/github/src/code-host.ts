@@ -1,4 +1,6 @@
 import {
+  assertSettingSubpath,
+  BaselineProposal,
   ChangedFile,
   FileProposal,
   HeadCheck,
@@ -13,6 +15,7 @@ import {
   RequiredCheck,
   WorkflowRun,
   type CheckConclusion,
+  type RepoSettingRead,
   type CodeHost,
   type Listing,
   EPIC_BRANCH_PATTERN,
@@ -536,6 +539,91 @@ export class GitHubCodeHost implements CodeHost {
         })
         .catch(() => undefined);
       throw err;
+    }
+  }
+
+  async proposeFiles(
+    fullName: string,
+    proposal: BaselineProposal,
+  ): Promise<ProposedPullRequest | null> {
+    const client = await this.repoClient(fullName);
+    if (!client) return null;
+    const p = BaselineProposal.parse(proposal);
+    const { data: repo } = await client.octokit.request("GET /repos/{owner}/{repo}", client.repo);
+    const base = repo.default_branch;
+    // An empty repo has no default branch to cut from (404, or 409 "Git Repository is empty").
+    let baseSha: string;
+    try {
+      const { data: ref } = await client.octokit.request(
+        "GET /repos/{owner}/{repo}/git/ref/heads/{branch}",
+        { ...client.repo, branch: base },
+      );
+      baseSha = ref.object.sha;
+    } catch (err) {
+      const status = (err as { status?: number }).status;
+      if (status === 404 || status === 409)
+        throw new Error(`${fullName} is empty: no ${base} yet`, { cause: err });
+      throw err;
+    }
+    const { data: baseCommit } = await client.octokit.request(
+      "GET /repos/{owner}/{repo}/git/commits/{commit_sha}",
+      { ...client.repo, commit_sha: baseSha },
+    );
+    // One tree on top of the base (inline contents become blobs), one commit, then the branch at
+    // it: nothing is referenced until the branch exists, so a failure before that leaves no trace.
+    const { data: tree } = await client.octokit.request("POST /repos/{owner}/{repo}/git/trees", {
+      ...client.repo,
+      base_tree: baseCommit.tree.sha,
+      tree: p.files.map((f) => ({
+        path: f.path,
+        mode: "100644" as const,
+        type: "blob" as const,
+        content: f.content,
+      })),
+    });
+    const { data: commit } = await client.octokit.request(
+      "POST /repos/{owner}/{repo}/git/commits",
+      { ...client.repo, message: p.message, tree: tree.sha, parents: [baseSha] },
+    );
+    // Fails (422) when the branch exists: a proposal never writes onto someone else's branch.
+    await client.octokit.request("POST /repos/{owner}/{repo}/git/refs", {
+      ...client.repo,
+      ref: `refs/heads/${p.branch}`,
+      sha: commit.sha,
+    });
+    try {
+      const { data: pr } = await client.octokit.request("POST /repos/{owner}/{repo}/pulls", {
+        ...client.repo,
+        title: p.title,
+        body: p.body,
+        head: p.branch,
+        base,
+      });
+      return ProposedPullRequest.parse({ number: pr.number, url: pr.html_url, branch: p.branch });
+    } catch (err) {
+      // No orphan branch: the one this call created goes again (best effort), then it fails.
+      await client.octokit
+        .request("DELETE /repos/{owner}/{repo}/git/refs/heads/{branch}", {
+          ...client.repo,
+          branch: p.branch,
+        })
+        .catch(() => undefined);
+      throw err;
+    }
+  }
+
+  async readRepoSetting(fullName: string, subpath: string): Promise<RepoSettingRead | null> {
+    assertSettingSubpath(subpath);
+    const client = await this.repoClient(fullName);
+    if (!client) return null;
+    const route = `GET /repos/{owner}/{repo}${subpath === "" ? "" : `/${subpath}`}`;
+    try {
+      const res = await client.octokit.request(route, client.repo);
+      return { status: res.status, data: res.data ?? null };
+    } catch (err) {
+      const e = err as { status?: number; response?: { data?: unknown } };
+      if (typeof e.status !== "number" || e.status < 400) throw err;
+      return { status: e.status, data: e.response?.data ?? null };
     }
   }
 
