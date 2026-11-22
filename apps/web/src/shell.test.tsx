@@ -66,9 +66,54 @@ describe("app shell", () => {
 
   it("GivenAProjectScreen_WhenAndyOpensSettings_ThenThePickerStillShowsThatProject", async () => {
     const harness = await twoProjects("/p/ai");
-    await harness.user.click(await screen.findByRole("link", { name: "Settings" }));
+    await harness.user.click(await screen.findByRole("button", { name: "Settings" }));
+    await harness.user.click(await screen.findByRole("menuitem", { name: "GitHub" }));
     await waitFor(() => expect(pathname(harness)).toBe("/settings/github"));
     expect(await screen.findByRole("button", { name: /AI Andy Intelligence/ })).toBeTruthy();
+  });
+
+  it("GivenAProject_WhenTheHeaderRenders_ThenItShowsSixDestinationsInboxFirst", async () => {
+    await twoProjects("/p/ai/inbox");
+    const nav = await screen.findByRole("navigation", { name: "Main" });
+    const labels = within(nav)
+      .getAllByRole("link")
+      .map((l) => l.textContent);
+    expect(labels).toEqual(["Inbox", "Board", "Roadmap", "Work", "Dashboards", "What's new"]);
+    expect(within(nav).getByRole("link", { name: "What's new" }).getAttribute("href")).toBe(
+      "/p/ai/whats-new",
+    );
+  });
+
+  it("GivenAllProjects_WhenTheHeaderRenders_ThenWhatsNewIsLeftOut", async () => {
+    await twoProjects("/all/inbox");
+    const nav = await screen.findByRole("navigation", { name: "Main" });
+    const labels = within(nav)
+      .getAllByRole("link")
+      .map((l) => l.textContent);
+    expect(labels).toEqual(["Inbox", "Board", "Roadmap", "Work", "Dashboards"]);
+  });
+
+  it("GivenAProject_WhenAndyOpensTheSettingsMenu_ThenItListsEverySettingsPage", async () => {
+    const harness = await twoProjects("/p/ops");
+    await harness.user.click(await screen.findByRole("button", { name: "Settings" }));
+    const items = within(await screen.findByRole("menu"))
+      .getAllByRole("menuitem")
+      .map((i) => i.textContent);
+    expect(items).toEqual(["Project settings", "GitHub", "Local runners", "Models"]);
+    await harness.user.click(screen.getByRole("menuitem", { name: "Project settings" }));
+    await waitFor(() => expect(pathname(harness)).toBe("/p/ops/settings"));
+  });
+
+  it("GivenASettingsPage_WhenItOpens_ThenTabsLeadToTheOtherSettingsPages", async () => {
+    window.localStorage.setItem("andy.scope", "p:ops");
+    const harness = await twoProjects("/settings/models");
+    const tabs = await screen.findByRole("navigation", { name: "Settings pages" });
+    expect(within(tabs).getByRole("link", { name: "Models" }).getAttribute("aria-current")).toBe(
+      "page",
+    );
+    await harness.user.click(within(tabs).getByRole("link", { name: "Project settings" }));
+    await waitFor(() => expect(pathname(harness)).toBe("/p/ops/settings"));
+    expect(await screen.findByText("OPS: Ops settings")).toBeTruthy();
   });
 
   it("GivenAllProjects_WhenTheBoardOpens_ThenItAsksForAProject", async () => {

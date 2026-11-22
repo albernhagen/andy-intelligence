@@ -1,9 +1,9 @@
 import { useState } from "react";
-import { Link } from "@tanstack/react-router";
 import type { MintedRunner, RunnerView } from "@andy/contracts";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Field, Input } from "@/components/ui/input";
+import { SettingsTabs } from "@/components/SettingsTabs";
 import { Loading, QueryError } from "@/components/Status";
 import { useMintRunner, useProjects, useRevokeRunner, useRunners } from "@/lib/queries";
 
@@ -16,7 +16,7 @@ export function RunnersPage() {
   const [minted, setMinted] = useState<MintedRunner | null>(null);
   return (
     <section className="max-w-2xl space-y-4">
-      <SettingsNav current="runners" />
+      <SettingsTabs />
       <h2 className="text-lg font-medium">Local runners</h2>
       <p className="text-sm text-muted-foreground">
         A runner on your Mac polls this control plane for tickets set to run locally; nothing
@@ -41,27 +41,6 @@ export function RunnersPage() {
         </ul>
       )}
     </section>
-  );
-}
-
-/** Links between the settings pages. */
-export function SettingsNav({ current }: { current: "github" | "runners" | "models" }) {
-  const link = (to: string, label: string, here: boolean) =>
-    here ? (
-      <span aria-current="page" className="font-medium">
-        {label}
-      </span>
-    ) : (
-      <Link to={to} className="underline">
-        {label}
-      </Link>
-    );
-  return (
-    <nav aria-label="Settings pages" className="flex gap-3 text-sm">
-      {link("/settings/github", "GitHub", current === "github")}
-      {link("/settings/runners", "Local runners", current === "runners")}
-      {link("/settings/models", "Models", current === "models")}
-    </nav>
   );
 }
 
