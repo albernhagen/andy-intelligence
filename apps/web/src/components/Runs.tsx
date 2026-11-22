@@ -70,8 +70,8 @@ export function RunItem({
   run: Run;
   path?: TicketPath;
   decidable?: boolean;
-  /** The run's ticket: a running build shows its branch and what it may touch (AI-342). */
-  ticket?: Pick<Ticket, "key" | "touches">;
+  /** The run's ticket: a running build's branch falls back to its name (AI-342). */
+  ticket?: Pick<Ticket, "key">;
 }) {
   const created = run.createdAt ?? run.startedAt;
   const log = httpsHref(run.links.executorRun);
@@ -126,7 +126,8 @@ export function RunItem({
         // Only builds edit files, so only they hold back overlapping tickets (ADR-0080).
         <p className="text-muted-foreground">
           Touches:{" "}
-          {ticket.touches.length ? ticket.touches.join(", ") : "unknown (holds back every ticket)"}
+          {/* The run's own list (ticket touches plus an approved plan's files), as dispatch uses. */}
+          {run.touches.length ? run.touches.join(", ") : "unknown (holds back every ticket)"}
           {run.reservedAdr !== null && ` · ${adrLabel(run.reservedAdr)} reserved`}
         </p>
       )}

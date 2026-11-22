@@ -24,7 +24,8 @@ describe("in-flight view", () => {
       deadline: null,
       prompt: "x",
       maxTurns: 1,
-      touches: ["packages/domain/**"],
+      // The run holds the ticket's touches plus its approved plan's files (`runTouches`).
+      touches: ["packages/domain/**", "apps/web/src/plan-file.ts"],
       reservedAdr: 83,
     });
     return { harness, building, run };
@@ -39,7 +40,9 @@ describe("in-flight view", () => {
       await within(activity).findByText(`branch agent/${building.key}/${run.id}`),
     ).toBeTruthy();
     expect(
-      within(activity).getByText(/Touches: packages\/domain\/\*\* · ADR-0083 reserved/),
+      within(activity).getByText(
+        "Touches: packages/domain/**, apps/web/src/plan-file.ts · ADR-0083 reserved",
+      ),
     ).toBeTruthy();
   });
 

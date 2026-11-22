@@ -21,7 +21,7 @@ export function Activity(props: {
   projectId: string;
   ticketId: string;
   /** For a running build's branch and touches (AI-342); absent: they aren't shown. */
-  ticket?: Pick<Ticket, "key" | "touches">;
+  ticket?: Pick<Ticket, "key">;
   events: TicketEvent[];
   runs: Run[];
 }) {
