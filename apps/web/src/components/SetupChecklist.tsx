@@ -1,3 +1,4 @@
+import { useEffect, useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Loading, QueryError } from "@/components/Status";
 import { useSetupChecklist } from "@/lib/queries";
@@ -19,10 +20,22 @@ const MARKERS: Record<
 /**
  * The project's setup checklist (AI-95: M5.15, from AI-65): repo connected, baseline merged,
  * deploy proven, threat model started, budget caps set. Shown until every step is done, then
- * hidden. Read-only: it never does a step.
+ * hidden. Read-only: it never does a step. Open the first time it's seen in this browser, then
+ * folded to its one-line summary (AI-339); a click opens it again.
  */
 export function SetupChecklist({ projectId }: { projectId: string }) {
+  // Keyed by project, so switching projects starts from that project's seen state.
+  return <Checklist key={projectId} projectId={projectId} />;
+}
+
+function Checklist({ projectId }: { projectId: string }) {
   const setup = useSetupChecklist(projectId);
+  const [open, setOpen] = useState(() => !seen(projectId));
+  // Seen only once the list has actually shown: not while loading, on an error, or when done.
+  const shown = setup.data !== undefined && !showsError(setup) && !setup.data.complete;
+  useEffect(() => {
+    if (shown) markSeen(projectId);
+  }, [shown, projectId]);
   if (setup.isPending) return <Loading />;
   if (setup.data === undefined || showsError(setup))
     return (
@@ -37,13 +50,18 @@ export function SetupChecklist({ projectId }: { projectId: string }) {
   const waiting = setup.data.items.filter((i) => i.status === "not_yet").map((i) => i.label);
 
   return (
-    <section aria-labelledby="setup-heading" className="space-y-1">
-      <h3 id="setup-heading" className="text-sm font-medium">
+    <details
+      aria-labelledby="setup-heading"
+      className="space-y-1"
+      open={open}
+      onToggle={(e) => setOpen(e.currentTarget.open)}
+    >
+      <summary id="setup-heading" className="cursor-pointer text-sm font-medium">
         Setup: {left} of {setup.data.items.length} left
         {setup.data.repo && (
           <span className="font-normal text-muted-foreground"> · checked {setup.data.repo}</span>
         )}
-      </h3>
+      </summary>
       <ul
         aria-label="Setup checklist"
         className="divide-y divide-border rounded-md border border-border"
@@ -65,6 +83,23 @@ export function SetupChecklist({ projectId }: { projectId: string }) {
           this checklist stays visible until then.
         </p>
       )}
-    </section>
+    </details>
   );
+}
+
+// Storage can be blocked (private mode, policy): then the checklist simply opens each time.
+const seenKey = (projectId: string) => `setup-seen:${projectId}`;
+function seen(projectId: string): boolean {
+  try {
+    return window.localStorage.getItem(seenKey(projectId)) === "1";
+  } catch {
+    return false;
+  }
+}
+function markSeen(projectId: string) {
+  try {
+    window.localStorage.setItem(seenKey(projectId), "1");
+  } catch {
+    // Not remembering is fine.
+  }
 }
