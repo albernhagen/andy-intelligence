@@ -116,6 +116,29 @@ export const DigestSummaryFailure = z.object({
 });
 export type DigestSummaryFailure = z.infer<typeof DigestSummaryFailure>;
 
+const HOUR_MS = 3_600_000;
+const DAY_MESSAGE = "from and to must bound the day `id` in `timeZone` (23 to 25 hours)";
+
+/**
+ * Whether `from`..`to` is the local day `id` in `timeZone`: `from` falls on `id` there, and the
+ * span is 23 to 25 hours (a day with a clock change). An unknown time zone is refused.
+ */
+function isLocalDay(p: { id: string; timeZone: string; from: string; to: string }): boolean {
+  const span = Date.parse(p.to) - Date.parse(p.from);
+  if (!(span >= 23 * HOUR_MS && span <= 25 * HOUR_MS)) return false;
+  try {
+    const date = new Intl.DateTimeFormat("en-CA", {
+      timeZone: p.timeZone,
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+    }).format(new Date(p.from));
+    return date === p.id;
+  } catch {
+    return false;
+  }
+}
+
 export const DigestSummary = z
   .object({
     /** The day, `YYYY-MM-DD`: one summary per project per day. */
@@ -148,16 +171,19 @@ export const DigestSummary = z
   })
   .refine((s) => (s.status === "failed") === (s.failure !== null), {
     message: "failure is set exactly when failed",
-  });
+  })
+  .refine(isLocalDay, { message: DAY_MESSAGE });
 export type DigestSummary = z.infer<typeof DigestSummary>;
 
-/** A day to claim: its id and bounds. */
-export const DigestSummaryPeriod = z.object({
-  id: DigestSummaryDate,
-  timeZone: z.string().min(1).max(64),
-  from: Timestamp,
-  to: Timestamp,
-});
+/** A day to claim: its id and bounds, checked to be that one day in its time zone. */
+export const DigestSummaryPeriod = z
+  .object({
+    id: DigestSummaryDate,
+    timeZone: z.string().min(1).max(64),
+    from: Timestamp,
+    to: Timestamp,
+  })
+  .refine(isLocalDay, { message: DAY_MESSAGE });
 export type DigestSummaryPeriod = z.infer<typeof DigestSummaryPeriod>;
 
 /** What the task's dispatch records on a summary still `writing`. */

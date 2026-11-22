@@ -1,5 +1,6 @@
 import type { Firestore, Transaction } from "@google-cloud/firestore";
 import {
+  DIGEST_SUMMARY_LIMITS,
   DigestSummary,
   type DigestSummaryClaim,
   type DigestSummaryDispatch,
@@ -108,7 +109,8 @@ export class FirestoreDigestSummaryStore implements DigestSummaryStore {
   private async takeStart(tx: Transaction, now: string, perDay: number): Promise<boolean> {
     const ref = this.day(now);
     const count = Number((await tx.get(ref)).get("count") ?? 0);
-    if (count >= perDay) return false;
+    // A caller can lower the cap, never raise it (ADR-0028).
+    if (count >= Math.min(perDay, DIGEST_SUMMARY_LIMITS.perDay)) return false;
     tx.set(ref, { count: count + 1 });
     return true;
   }

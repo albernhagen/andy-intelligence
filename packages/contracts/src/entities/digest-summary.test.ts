@@ -3,6 +3,7 @@ import {
   DIGEST_SUMMARY_LIMITS,
   DigestSummary,
   DigestSummaryOutput,
+  DigestSummaryPeriod,
   claimedDigestSummary,
 } from "./digest-summary";
 
@@ -53,6 +54,29 @@ describe("DigestSummary", () => {
     to: "2026-11-22T07:00:00.000Z",
   };
   const now = "2026-11-22T15:00:00.000Z";
+
+  it("GivenBoundsThatAreNotTheDayInItsZone_WhenParsed_ThenRefused", () => {
+    expect(DigestSummaryPeriod.safeParse(period).success).toBe(true);
+    const bad = [
+      { ...period, from: period.to, to: period.from },
+      { ...period, id: "2026-11-22" },
+      { ...period, to: "2026-11-23T07:00:00.000Z" },
+      { ...period, timeZone: "Mars/Olympus" },
+    ];
+    for (const p of bad)
+      expect(DigestSummaryPeriod.safeParse(p).success, JSON.stringify(p)).toBe(false);
+    expect(() => claimedDigestSummary("ai", bad[0]!, now)).toThrow();
+  });
+
+  it("GivenTheDayClocksSpringForward_WhenParsed_ThenItsTwentyThreeHoursAreAccepted", () => {
+    const short = {
+      id: "2026-03-08",
+      timeZone: "America/Denver",
+      from: "2026-03-08T07:00:00.000Z",
+      to: "2026-03-09T06:00:00.000Z",
+    };
+    expect(DigestSummaryPeriod.safeParse(short).success).toBe(true);
+  });
 
   it("GivenAReadyStatusWithoutOutput_WhenParsed_ThenRefused", () => {
     const writing = claimedDigestSummary("ai", period, now);

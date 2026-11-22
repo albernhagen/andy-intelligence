@@ -76,6 +76,14 @@ export function digestSummaryStoreContract(name: string, make: () => Promise<Dig
       expect((await store.claim("other", period(), 1, nextDay)).outcome).toBe("claimed");
     });
 
+    it("GivenACallerAskingForAHigherCap_WhenClaiming_ThenTheLimitStillHolds", async () => {
+      const store = await make();
+      for (let i = 0; i < 10; i++) {
+        expect((await store.claim(`p${i}`, period(), 1000, now)).outcome).toBe("claimed");
+      }
+      expect((await store.claim("p10", period(), 1000, now)).outcome).toBe("capped");
+    });
+
     it("GivenAClaimedSummary_WhenDispatchedThenCompletedByItsTask_ThenReady", async () => {
       const store = await make();
       await store.claim("ai", period(), 10, now);

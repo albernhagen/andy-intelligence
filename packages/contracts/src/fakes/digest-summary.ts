@@ -1,4 +1,5 @@
 import {
+  DIGEST_SUMMARY_LIMITS,
   type DigestSummary,
   type DigestSummaryDispatch,
   type DigestSummaryFailure,
@@ -93,7 +94,7 @@ export class InMemoryDigestSummaryStore implements DigestSummaryStore {
   private takeStart(now: string, perDay: number): boolean {
     const day = utcDay(now);
     const count = this.started.get(day) ?? 0;
-    if (count >= perDay) return false;
+    if (count >= Math.min(perDay, DIGEST_SUMMARY_LIMITS.perDay)) return false;
     this.started.set(day, count + 1);
     return true;
   }
