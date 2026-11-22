@@ -158,3 +158,76 @@ describe("ticket panel layout", () => {
     expect(within(rail).queryByRole("region", { name: "Milestone" })).toBeNull();
   });
 });
+
+/** AI-330: empty list fields fold into one Add row; a field with items shows as before. */
+describe("list fields", () => {
+  const LISTS = ["Acceptance criteria", "Assumptions", "Out of scope", "Touches"];
+
+  it("GivenATicketWithNoListItems_WhenThePanelOpens_ThenNoListHeadingsShowAndOneAddRowOffersEach", async () => {
+    const { open } = await seeded({ type: "feature", title: "Bare" });
+    const panel = await open();
+
+    const add = await within(panel).findByLabelText("Add a list");
+    for (const name of LISTS) {
+      expect(within(panel).queryByRole("heading", { name })).toBeNull();
+      expect(within(add).getByRole("option", { name })).toBeTruthy();
+    }
+  });
+
+  it("GivenOneListHasItems_WhenThePanelOpens_ThenItShowsAsTodayAndOnlyTheOthersFold", async () => {
+    const { open } = await seeded({ type: "feature", title: "Some", touches: ["apps/web/**"] });
+    const panel = await open();
+
+    const touches = await within(panel).findByRole("region", { name: "Touches" });
+    expect(within(touches).getByText("apps/web/**")).toBeTruthy();
+    const add = within(panel).getByLabelText("Add a list");
+    expect(within(add).queryByRole("option", { name: "Touches" })).toBeNull();
+    expect(within(add).getByRole("option", { name: "Out of scope" })).toBeTruthy();
+  });
+
+  it("GivenTheAddRow_WhenAndyPicksAListByKeyboardAndAddsAnItem_ThenTheFieldShowsFocusedAndSaves", async () => {
+    const { open, tracker, ticket, user } = await seeded({ type: "feature", title: "Bare" });
+    const panel = await open();
+
+    const add = await within(panel).findByLabelText("Add a list");
+    add.focus();
+    await user.selectOptions(add, "Out of scope");
+    const input = within(panel).getByLabelText("Add to out of scope");
+    expect(document.activeElement).toBe(input);
+    await user.type(input, "billing{Enter}");
+
+    const field = within(panel).getByRole("region", { name: "Out of scope" });
+    expect(await within(field).findByText("billing")).toBeTruthy();
+    expect(
+      within(within(panel).getByLabelText("Add a list")).queryByRole("option", {
+        name: "Out of scope",
+      }),
+    ).toBeNull();
+    expect((await tracker.getTicket("ai", ticket.id))?.outOfScope).toEqual(["billing"]);
+  });
+
+  it("GivenAllListsHaveItems_WhenThePanelOpens_ThenThereIsNoAddRow", async () => {
+    const { open } = await seeded({
+      type: "feature",
+      title: "Full",
+      acceptanceCriteria: ["a"],
+      assumptions: ["b"],
+      outOfScope: ["c"],
+      touches: ["d"],
+    });
+    const panel = await open();
+
+    await within(panel).findByRole("region", { name: "Touches" });
+    expect(within(panel).queryByLabelText("Add a list")).toBeNull();
+  });
+
+  it("GivenAShownList_WhenItsLastItemIsRemoved_ThenTheFieldStaysUntilTheTicketCloses", async () => {
+    const { open, user } = await seeded({ type: "feature", title: "One", touches: ["x"] });
+    const panel = await open();
+
+    await user.click(await within(panel).findByRole("button", { name: "Remove: x" }));
+
+    await within(panel).findByLabelText("Add to touches");
+    expect(within(panel).getByRole("region", { name: "Touches" })).toBeTruthy();
+  });
+});
