@@ -149,6 +149,25 @@ export function useSetMilestoneStatus(projectId: string) {
   );
 }
 
+/**
+ * Saves a milestone reorder (AI-324): the `order` writes `milestoneReorder` planned, one PATCH
+ * each in turn, so each is a logged, revertable config change the API refuses for anyone but the
+ * owner.
+ */
+export function useReorderMilestones(projectId: string) {
+  const api = useApi();
+  return useWrite(async (writes: { id: string; order: number }[]) => {
+    for (const w of writes) {
+      unwrap(
+        await api.PATCH("/api/projects/{projectId}/milestones/{milestoneId}", {
+          params: { path: { projectId, milestoneId: w.id } },
+          body: { order: w.order, reason: "Reordered on the roadmap" },
+        }),
+      );
+    }
+  });
+}
+
 /** Attaches a top-level epic to a milestone, or detaches it (null); logged as a config change. */
 export function useSetEpicMilestone(path: TicketPath) {
   const api = useApi();
