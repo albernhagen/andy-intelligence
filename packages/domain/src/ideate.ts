@@ -9,20 +9,21 @@ import {
   type ProposedPullRequest,
   type Question,
   type Repo,
+  type Run,
   type Ticket,
   type WorkTracker,
 } from "@andy/contracts";
 import { plainAnswer } from "./brief";
 import { DomainError } from "./errors";
-import { requireCan } from "./permissions";
+import { requireCan, requireOwnAgentTask } from "./permissions";
 import type { TicketService } from "./tickets";
 
 /**
  * Ideation (AI-114, ADR-0050): an idea plus the ideate procedure's result
  * (`platform/procedures/ideate.md`) become an epic in Ideas and a PR with the `specs/<slug>.md`
  * draft, or, when the idea contradicts the brief, an Ideas ticket holding one question for
- * Andy and no epic. Until AI-134 wires the ideate agent task, the owner submits the result
- * (Claude desktop follows the procedure itself and calls MCP `ideate`).
+ * Andy and no epic. The result comes from an ideate agent task (AI-134, `submitFromRun`), or the
+ * owner submits it (Claude desktop follows the procedure itself and calls MCP `ideate`).
  */
 
 /** Ideas submitted per instance per rolling hour, either outcome (ADR-0028). */
@@ -51,8 +52,44 @@ export class IdeateService {
   ) {}
 
   async submit(projectId: string, input: unknown, actor: EventActor): Promise<IdeateResult> {
-    // The submission stands in for the ideate agent task's result (AI-134).
     requireCan(actor, "start_run", projectId);
+    return this.apply(projectId, input, actor);
+  }
+
+  /**
+   * An ideate agent task's result (AI-134) with the idea its run kept: the same check and
+   * effects as `submit`, under the agent path's own rule. A replayed report finds the ticket the
+   * first one created (its `created` event is by this run) and returns it; nothing is created.
+   */
+  async submitFromRun(
+    run: Run,
+    output: unknown,
+  ): Promise<IdeateResult | { outcome: "recorded"; ticket: Ticket }> {
+    const actor = requireOwnAgentTask(run, "ideate");
+    const earlier = await this.createdBy(run.projectId, actor, run.startedAt);
+    if (earlier) return { outcome: "recorded", ticket: earlier };
+    return this.apply(run.projectId, { idea: run.idea, result: output }, actor);
+  }
+
+  /**
+   * The ticket `actor` created since its run started: few tickets, so one event read each. A run
+   * that never started (no context read) created nothing.
+   */
+  private async createdBy(
+    projectId: string,
+    actor: EventActor,
+    since: string | null,
+  ): Promise<Ticket | null> {
+    if (since === null) return null;
+    const recent = (await this.tracker.listTickets(projectId)).filter((t) => t.createdAt >= since);
+    for (const ticket of recent) {
+      const events = await this.tracker.listEvents(projectId, ticket.id);
+      if (events.some((e) => e.kind === "created" && e.actor === actor)) return ticket;
+    }
+    return null;
+  }
+
+  private async apply(projectId: string, input: unknown, actor: EventActor): Promise<IdeateResult> {
     const { idea, result } = IdeateSubmission.parse(input);
     const project = await this.tracker.getProject(projectId);
     if (!project) throw new WorkTrackerError("not_found", `project ${projectId} not found`);
