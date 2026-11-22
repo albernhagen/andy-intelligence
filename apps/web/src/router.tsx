@@ -42,7 +42,7 @@ const boardRoute = createRoute({
   },
 });
 
-/** The Work list's view; an unknown or missing one reads as unset (the page shows Needs me). */
+/** The Work list's view; an unknown or missing one reads as unset (the page shows Needs you). */
 function workSearch(search: Record<string, unknown>): { view?: WorkView } {
   const view = parseWorkView(search.view);
   return view ? { view } : {};
@@ -67,7 +67,7 @@ const routeTree = rootRoute.addChildren([
   }),
   createRoute({ getParentRoute: () => rootRoute, path: "/all/inbox", component: InboxPage }),
   createRoute({ getParentRoute: () => rootRoute, path: "/all/board", component: PickProjectPage }),
-  // Work across projects (AI-198): both scopes; the view chip is in `?view=` (default Needs me).
+  // Work across projects (AI-198): both scopes; the view chip is in `?view=` (default Needs you).
   createRoute({
     getParentRoute: () => rootRoute,
     path: "/all/work",

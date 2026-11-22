@@ -33,7 +33,7 @@ describe("work across projects", () => {
   it("GivenTwoProjects_WhenWorkOpensUnderAllProjects_ThenNeedsMeIsListedByProject", async () => {
     await seeded("/all/work");
 
-    expect(chip(/^Needs me 2$/).getAttribute("aria-pressed")).toBe("true");
+    expect(chip(/^Needs you · 2 tickets$/).getAttribute("aria-pressed")).toBe("true");
     expect(
       within(screen.getByRole("group", { name: "Work view" })).queryByRole("button", {
         name: /^All/,
