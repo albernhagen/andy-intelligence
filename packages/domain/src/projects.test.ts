@@ -92,9 +92,9 @@ describe("ProjectService", () => {
     expect(project.repos).toEqual(["me/anything"]);
   });
 
-  it("GivenARegisteredRepo_WhenTheProjectIsStored_ThenTheRepoHookRunsOncePerRepo", async () => {
+  it("GivenRegisteredRepos_WhenTheProjectIsStored_ThenTheReposHookRunsOnceWithTheStoredProject", async () => {
     host.install(repo("albernhagen/web"));
-    const calls: string[] = [];
+    const calls: string[][] = [];
     const hooked = new ProjectService(
       tracker,
       host,
@@ -103,16 +103,17 @@ describe("ProjectService", () => {
       null,
       undefined,
       undefined,
-      async (project, r) => {
+      async (project) => {
         expect(await tracker.getProject(project.id)).not.toBeNull();
-        calls.push(r);
+        calls.push(project.repos);
       },
     );
     await hooked.register(
       { name: "a", key: "A", repos: ["albernhagen/andy-intelligence", "albernhagen/web"] },
       "andy",
     );
-    expect(calls).toEqual(["albernhagen/andy-intelligence", "albernhagen/web"]);
+    await hooked.register({ name: "b", key: "B" }, "andy");
+    expect(calls).toEqual([["albernhagen/andy-intelligence", "albernhagen/web"]]);
   });
 
   it("GivenARepoHookThatThrows_WhenRegistered_ThenTheProjectIsStillCreated", async () => {

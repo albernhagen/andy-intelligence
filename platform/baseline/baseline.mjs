@@ -17,7 +17,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { applySections, checkSections, configFor, parseConfig, SECTIONS } from "./github.mjs";
 import { baselineRecord, fileDrift, mergeLines, renderFiles, seedsToWrite } from "./files.mjs";
-import { HELD_BY_APP } from "./plan.mjs";
+import { heldToAdd } from "./plan.mjs";
 import { cleanGitEnv } from "../../scripts/git-env.mjs";
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
@@ -178,7 +178,7 @@ function filesCommand(repo, ref) {
 }
 
 /**
- * Adds the files the App can't write (workflows, agent settings; `HELD_BY_APP`) to the App's
+ * Adds the files the App can't write (workflows, agent settings; `heldToAdd`) to the App's
  * baseline PR branch, with Andy's `gh` login: only the missing ones, so a differing file stays
  * for review (AI-113).
  */
@@ -194,8 +194,7 @@ function finishCommand(repo, ref, branch) {
     if (value) run("git", ["-C", dir, "config", key, value], { env });
   }
   const added = [];
-  for (const f of rendered.managed) {
-    if (!HELD_BY_APP.test(f.path) || existsSync(path.join(dir, f.path))) continue;
+  for (const f of heldToAdd(rendered, (p) => existsSync(path.join(dir, p)))) {
     writeFile(dir, f.path, f.content);
     added.push(f.path);
   }

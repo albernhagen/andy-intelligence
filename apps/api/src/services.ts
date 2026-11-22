@@ -415,7 +415,7 @@ export function createServices(raw: AppDeps): Services {
     deps.configChanges ?? null,
     undefined,
     () => globalSpendCaps.caps(),
-    baseline ? (project, repo) => baseline.onRepoRegistered(project, repo) : null,
+    baseline ? (project) => baseline.onProjectRegistered(project) : null,
   );
   // AI-74: a clear wakes every project, as a settings change wakes one. AI-261: it clears at
   // the lowest claude-sub pause level any project's routing dispatches under.

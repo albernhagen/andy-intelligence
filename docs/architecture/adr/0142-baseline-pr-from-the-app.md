@@ -31,4 +31,4 @@ Option 1 (Andy, 2026-11-22).
 ### Consequences
 
 - A registered repo gets its baseline PR without Andy at a terminal; workflows and settings still need one command each.
-- Reads are capped (60 source files, 40 repo files, one PR per registration); see R-AI-113.
+- Bounded inside the registration request (Cloud Run throttles CPU after a response, so the work can't move after it): at most 3 repos per registration, side by side, each within 40 s; 60 source and 40 repo reads per repo. The rest, or a repo past the deadline, go to Needs-you with `onboard`. See R-AI-113.

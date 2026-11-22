@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 import { InMemoryCodeHost, InMemoryWorkTracker, type Project } from "@andy/contracts";
 import { beforeEach, describe, expect, it } from "vitest";
-import { BASELINE_SOURCE, BaselineProposer } from "./registration";
+import { BASELINE_SOURCE, BaselineProposer, DATA_NOTE, MAX_BASELINE_REPOS } from "./registration";
 
 const ROOT = new URL("../../../../", import.meta.url);
 const SOURCE_TIP = "e".repeat(40);
@@ -98,9 +98,9 @@ describe("BaselineProposer", () => {
     await proposer.onRepoRegistered(project, TARGET);
     const body = host.baselineProposals[0]!.proposal.body;
     expect(body).toContain("- ruleset: differs; left unchanged");
-    expect(body).toContain('`enforcement`: want "active", have "disabled"');
+    expect(body).toContain('`enforcement`: want `"active"`, have `"disabled"`');
     expect(body).toContain("- actions: couldn't read (the App has no administration permission)");
-    expect(body).toContain('- repo: couldn\'t read: "repo: HTTP 500 {\\"message\\":\\"boom\\"}"');
+    expect(body).toContain('- repo: couldn\'t read: `"repo: HTTP 500 {\\"message\\":\\"boom\\"}"`');
     expect(body).toContain(`node platform/baseline/baseline.mjs apply ${TARGET} --dry-run`);
     expect(host.settingReads.every((r) => r.startsWith(`${TARGET}#`))).toBe(true);
   });
@@ -148,5 +148,44 @@ describe("BaselineProposer", () => {
     expect(outcome.kind).toBe("nothing_to_write");
     expect(host.baselineProposals).toEqual([]);
     expect((await needsYou())[0]?.title).toBe(`Baseline for ${TARGET}: nothing for the App to add`);
+  });
+
+  it("GivenMoreReposThanTheCap_WhenTheProjectIsRegistered_ThenTheFirstGetPrsSideBySideAndTheRestOneNeedsYouTicket", async () => {
+    const names = [
+      "albernhagen/r1",
+      "albernhagen/r2",
+      "albernhagen/r3",
+      "albernhagen/r4",
+      "albernhagen/r5",
+    ];
+    for (const n of names) {
+      host.install(repo(n));
+      host.repoFiles.set(n, new Map([["package.json", "{}\n"]]));
+    }
+    const many = await tracker.createProject({
+      name: "Many",
+      key: "MANY",
+      repos: [BASELINE_SOURCE, ...names],
+    });
+    const outcomes = await proposer.onProjectRegistered(many);
+    expect(host.baselineProposals.map((p) => p.fullName)).toEqual(
+      names.slice(0, MAX_BASELINE_REPOS),
+    );
+    expect(outcomes.has(BASELINE_SOURCE)).toBe(false);
+    expect(outcomes.get("albernhagen/r5")?.kind).toBe("over_cap");
+    const tickets = (await tracker.listTickets(many.id)).filter((t) => t.needsAttention);
+    expect(tickets).toHaveLength(1);
+    expect(tickets[0]?.body).toContain("baseline.mjs onboard albernhagen/r4");
+    expect(tickets[0]?.body).toContain("baseline.mjs onboard albernhagen/r5");
+  });
+
+  it("GivenAProposalPastTheDeadline_WhenTheProjectIsRegistered_ThenItStopsWaitingAndNeedsYouSaysSo", async () => {
+    const slow = new BaselineProposer(host, tracker, () => new Date(), 5);
+    host.readFile = () => new Promise(() => {});
+    const outcomes = await slow.onProjectRegistered(project);
+    expect(outcomes.get(TARGET)?.kind).toBe("timed_out");
+    const [ticket] = await needsYou();
+    expect(ticket?.title).toBe(`Baseline PR for ${TARGET} didn't finish`);
+    expect(ticket?.body).toContain(DATA_NOTE);
   });
 });

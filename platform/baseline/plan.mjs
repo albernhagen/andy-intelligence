@@ -94,6 +94,15 @@ export function planBaselinePr(rendered, target, { source, sha, ref, date }) {
   return { files, applied, differs, skipped, held };
 }
 
+/**
+ * The files `finish` adds to the App's PR branch: held ones (`HELD_BY_APP`) the branch doesn't
+ * have. `exists(path)` says whether the branch has it; an existing one, even if it differs, is
+ * never overwritten.
+ */
+export function heldToAdd(rendered, exists) {
+  return rendered.managed.filter((f) => HELD_BY_APP.test(f.path) && !exists(f.path));
+}
+
 /** Every path `planBaselinePr` reads from the target repo. */
 export function pathsToRead(rendered) {
   return [
@@ -105,10 +114,15 @@ export function pathsToRead(rendered) {
   ];
 }
 
-/** A value for one report line: JSON, backticks removed, at most 120 characters. */
+/**
+ * A value for one report line, as an inline code span: JSON, backticks and newlines removed, at
+ * most 120 characters. Values come from the target repo, so markdown, links and @mentions in
+ * them must not render (they are data, never instructions).
+ */
 function show(value) {
-  const text = (JSON.stringify(value) ?? String(value)).replace(/`/g, "'");
-  return text.length > 120 ? `${text.slice(0, 117)}...` : text;
+  const raw = (JSON.stringify(value) ?? String(value)).replace(/[`\r\n]/g, "'");
+  const text = raw.length > 120 ? `${raw.slice(0, 117)}...` : raw;
+  return `\`${text}\``;
 }
 
 const list = (entries) => entries.map((e) => `- \`${e.path}\`: ${e.note}`).join("\n");

@@ -21,6 +21,7 @@ export function planBaselinePr(
   target: Map<string, string | null>,
   opts: { source: string; sha: string; ref: string; date: string },
 ): BaselinePlan;
+export function heldToAdd(rendered: Rendered, exists: (path: string) => boolean): RenderedFile[];
 export function pathsToRead(rendered: Rendered): string[];
 export function renderReport(r: {
   repo: string;

@@ -1,5 +1,13 @@
 import { describe, expect, it } from "vitest";
-import { HELD_BY_APP, pathsToRead, planBaselinePr, RECORD_PATH, renderReport } from "./plan.mjs";
+import { fileDrift } from "./files.mjs";
+import {
+  heldToAdd,
+  HELD_BY_APP,
+  pathsToRead,
+  planBaselinePr,
+  RECORD_PATH,
+  renderReport,
+} from "./plan.mjs";
 
 const SOURCE = "albernhagen/andy-intelligence";
 const SHA = "a".repeat(40);
@@ -144,7 +152,7 @@ describe("renderReport", () => {
     });
     expect(md).toContain("- labels: matches");
     expect(md).toContain("- ruleset: differs; left unchanged");
-    expect(md).toContain(`  - \`(whole)\`: want "present", have "'missing'"`);
+    expect(md).toContain(`  - \`(whole)\`: want \`"present"\`, have \`"'missing'"\``);
     expect(md).toContain("- actions: couldn't read (the App has no administration permission)");
     expect(md).toContain("node platform/baseline/baseline.mjs apply albernhagen/web --dry-run");
   });
@@ -160,6 +168,74 @@ describe("renderReport", () => {
 
   it("GivenASettingsReadError_WhenRendered_ThenTheErrorAndApplyCommandAreShown", () => {
     const md = renderReport({ ...base, settings: { error: "HTTP 500" } });
-    expect(md).toContain(`Couldn't read them: "HTTP 500".`);
+    expect(md).toContain(`Couldn't read them: \`"HTTP 500"\`.`);
+  });
+});
+
+describe("heldToAdd", () => {
+  it("GivenABranchWithADifferingWorkflow_WhenChosen_ThenOnlyMissingHeldFilesAreAddedAndNothingIsOverwritten", () => {
+    const has = new Set([".github/workflows/ci.yml", "lefthook.yml"]);
+    expect(heldToAdd(rendered, (p) => has.has(p)).map((f) => f.path)).toEqual([
+      ".claude/settings.json",
+    ]);
+  });
+
+  it("GivenABranchWithNothing_WhenChosen_ThenNoNonHeldFileIsAdded", () => {
+    expect(heldToAdd(rendered, () => false).map((f) => f.path)).toEqual([
+      ".github/workflows/ci.yml",
+      ".claude/settings.json",
+    ]);
+  });
+});
+
+describe("record written before workflows", () => {
+  it("GivenTheMergedPrWithItsRecordButNoWorkflows_WhenDriftIsChecked_ThenMissingAndDifferingFilesStillShow", () => {
+    const p = plan({ "package.json": "{}", "lefthook.yml": "mine\n" });
+    const repo = new Map([...p.files.map((f) => [f.path, f.content]), ["lefthook.yml", "mine\n"]]);
+    const drift = fileDrift(rendered, (path) => repo.get(path) ?? null, {
+      source: SOURCE,
+      version: SHA,
+    });
+    expect(drift).toContainEqual({ path: ".github/workflows/ci.yml", issue: "missing" });
+    expect(drift).toContainEqual({ path: "lefthook.yml", issue: "differs from the baseline" });
+  });
+
+  it("GivenARepoWithTheRecordAtThisSha_WhenPlannedAgain_ThenMissingWorkflowsAreStillHeld", () => {
+    const first = plan({ "package.json": "{}" });
+    const again = plan(
+      Object.fromEntries([["package.json", "{}"], ...first.files.map((f) => [f.path, f.content])]),
+    );
+    expect(again.files).toEqual([]);
+    expect(again.held.map((h) => h.path)).toContain(".github/workflows/ci.yml");
+  });
+});
+
+describe("report escaping", () => {
+  it("GivenRepoControlledMarkdownInASetting_WhenRendered_ThenItIsInsideACodeSpan", () => {
+    const p = plan({ "package.json": "{}" });
+    const md = renderReport({
+      repo: "albernhagen/web",
+      source: SOURCE,
+      sha: SHA,
+      ref: "main",
+      branch: "baseline/aaaaaaa",
+      plan: p,
+      settings: {
+        results: [
+          {
+            section: "labels",
+            status: "drift",
+            diffs: [
+              {
+                setting: "[0].description",
+                want: "x",
+                have: "[click](https://evil) @someone\n# h",
+              },
+            ],
+          },
+        ],
+      },
+    });
+    expect(md).toContain('have `"[click](https://evil) @someone\\n# h"`');
   });
 });
