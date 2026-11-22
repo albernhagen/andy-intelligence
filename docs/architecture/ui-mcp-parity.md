@@ -35,7 +35,7 @@ Step 1 of AI-285: Web UI and MCP parity: every action in both, enforced by a tes
 | Spend per provider | `GET …/spend/providers` | `get_spend` (`byProvider`, AI-288) |
 | Routing: read, edit (global, project), history, revert   | `GET`/`PUT /routing`, `PUT …/routing`, `GET /routing/changes`, revert           | `get_routing`, `set_tier_routes`, `set_provider_routing`, `set_step_tier`, `list_routing_changes`, `revert_routing_change` |
 | Who am I                                                 | `GET /me`                                                                       | `status` (`signedInAs`)                                                                                                    |
-| Ranked Ready list with scores and filters                | `GET …/ready` (the Ready view, AI-298)                                           | `list_ready`                                                                                                               |
+| Ranked Ready list with scores and filters | The board's Ready lane filters (AI-343); `GET …/ready` | `list_ready` |
 
 ## Gaps and their tickets (smallest first)
 

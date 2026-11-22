@@ -15,7 +15,13 @@ export function ProjectsPage() {
   const projects = useProjects();
   if (projects.isPending) return <Loading />;
   if (projects.data === undefined || showsError(projects))
-    return <QueryError error={projects.error} />;
+    return (
+      <QueryError
+        error={projects.error}
+        what="the projects"
+        onRetry={() => void projects.refetch()}
+      />
+    );
   const remembered = loadScope();
   const current =
     projects.data.find((p) => remembered.kind === "project" && p.id === remembered.projectId) ??

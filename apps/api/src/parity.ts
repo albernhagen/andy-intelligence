@@ -122,6 +122,7 @@ export const PARITY: readonly ParityEntry[] = [
     action: "In flight; work across projects; digest",
     routes: [`GET ${P}/in-flight`, "GET /api/work", `GET ${P}/digest`],
     tools: ["list_in_flight", "list_work", "digest"],
+    note: "AI-342 removed the board's In flight box (the cards and the Agents chip carry it); the web reads in-flight for the ticket status line, and a build's panel shows its branch and touches.",
   },
   {
     action: "Dashboards; DORA metrics",
@@ -236,6 +237,7 @@ export const PARITY: readonly ParityEntry[] = [
     action: "Ranked Ready list",
     routes: [`GET ${P}/ready`],
     tools: ["list_ready"],
+    note: "AI-343 removed the web Ready page: the board's Ready lane filters by size, risk and confidence with the same rule (matchesReadyFilters), and /ready opens the board. Cards show the scores and the ticket panel the reasons, so no web list repeats them. The route and list_ready stay.",
   },
   {
     action: "Roadmap; milestone map",

@@ -1,4 +1,4 @@
-import { expect, type Page } from "@playwright/test";
+import { expect, type Locator, type Page } from "@playwright/test";
 
 /**
  * AI-325: Phone: no screen scrolls sideways. The page is never wider than the viewport; a strip
@@ -17,4 +17,22 @@ export async function expectPageFits(page: Page) {
   });
   const message = `page is ${scrollWidth} px wide at ${width}; widest: ${wide.join("; ")}`;
   expect(scrollWidth, message).toBeLessThanOrEqual(width);
+}
+
+/**
+ * AI-334: every control in `scope` is a 44 px tall target on a phone (design.md). A checkbox's
+ * target is its label. On a failure the message lists each small control and its height.
+ */
+export async function expectTouchTargets(scope: Locator) {
+  const small = await scope.evaluate((root) =>
+    [...root.querySelectorAll("input, select, button, textarea")]
+      .filter((el) => el.getClientRects().length > 0)
+      .map((el) => {
+        const target = el.closest("label") ?? el;
+        const name = el.getAttribute("aria-label") ?? target.textContent?.trim().slice(0, 30);
+        return { name, height: Math.round(target.getBoundingClientRect().height) };
+      })
+      .filter((c) => c.height < 44),
+  );
+  expect(small, "controls under 44 px").toEqual([]);
 }
