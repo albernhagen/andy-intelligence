@@ -1,8 +1,11 @@
 import { describe, expect, it } from "vitest";
 import { screen, within } from "@testing-library/react";
-import { readyStory, renderApp } from "@/test/harness";
+import { PAGE_LOAD, readyStory, renderApp } from "@/test/harness";
 
-/** The in-flight panel on the board (ADR-0080) and the overlap reason on a ticket's status line. */
+/**
+ * The in-flight view (ADR-0080): a running build's branch and touches on its ticket's agent task
+ * row (the board's box was removed, AI-342), and the overlap reason on a ticket's status line.
+ */
 describe("in-flight view", () => {
   async function withBuildInFlight() {
     const harness = renderApp();
@@ -12,7 +15,7 @@ describe("in-flight view", () => {
       { ...readyStory, touches: ["packages/domain/**"] },
       "andy",
     );
-    await harness.runs.create({
+    const run = await harness.runs.create({
       projectId: "ai",
       ticketId: building.id,
       step: "build",
@@ -24,23 +27,27 @@ describe("in-flight view", () => {
       touches: ["packages/domain/**"],
       reservedAdr: 83,
     });
-    return { harness, building };
+    return { harness, building, run };
   }
 
-  it("GivenABuildInFlight_WhenTheBoardOpens_ThenThePanelShowsItsTicketTouchesAndAdrNumber", async () => {
-    const { harness, building } = await withBuildInFlight();
-    await harness.router.navigate({ to: "/p/ai" });
-    const panel = await screen.findByRole("region", { name: "In flight" });
-    expect(within(panel).getByText(building.key)).toBeTruthy();
-    expect(within(panel).getByText(/Touches: packages\/domain\/\*\*/)).toBeTruthy();
-    expect(within(panel).getByText(/ADR-0083/)).toBeTruthy();
+  it("GivenABuildInFlight_WhenItsTicketPanelOpens_ThenItsAgentTaskShowsBranchTouchesAndAdr", async () => {
+    const { harness, building, run } = await withBuildInFlight();
+    await harness.router.navigate({ to: `/p/ai/t/${building.key}` });
+
+    const activity = await screen.findByRole("region", { name: "Activity" }, PAGE_LOAD);
+    expect(
+      await within(activity).findByText(`branch agent/${building.key}/${run.id}`),
+    ).toBeTruthy();
+    expect(
+      within(activity).getByText(/Touches: packages\/domain\/\*\* · ADR-0083 reserved/),
+    ).toBeTruthy();
   });
 
-  it("GivenNothingInFlight_WhenTheBoardOpens_ThenNoPanel", async () => {
-    const harness = renderApp();
-    await harness.tracker.createProject({ name: "AI", key: "AI" });
+  it("GivenABuildInFlight_WhenTheBoardOpens_ThenThereIsNoInFlightBox", async () => {
+    const { harness, building } = await withBuildInFlight();
     await harness.router.navigate({ to: "/p/ai" });
-    await screen.findByRole("region", { name: "Backlog" });
+
+    await screen.findByRole("link", { name: new RegExp(building.key) }, PAGE_LOAD);
     expect(screen.queryByRole("region", { name: "In flight" })).toBeNull();
   });
 

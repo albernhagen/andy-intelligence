@@ -253,7 +253,7 @@ function Story({ ticket: t }: { ticket: Ticket }) {
       <ScoreReasons ticket={t} />
       <Questions {...pathOf(t)} />
       <Assumptions ticket={t} />
-      <Timeline {...pathOf(t)} />
+      <Timeline path={pathOf(t)} ticket={t} />
     </article>
   );
 }
@@ -582,11 +582,11 @@ function Assumptions({ ticket }: { ticket: Ticket }) {
   );
 }
 
-function Timeline(path: TicketPath) {
+function Timeline({ path, ticket }: { path: TicketPath; ticket: Ticket }) {
   const events = useEvents(path);
   const runs = useRuns(path);
   if (events.isPending || runs.isPending) return <Loading />;
   if (events.data === undefined || showsError(events)) return <QueryError error={events.error} />;
   if (runs.data === undefined || showsError(runs)) return <QueryError error={runs.error} />;
-  return <Activity {...path} events={events.data} runs={runs.data} />;
+  return <Activity {...path} ticket={ticket} events={events.data} runs={runs.data} />;
 }

@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { Link } from "@tanstack/react-router";
-import type { Run, RunStatus } from "@andy/contracts";
+import type { Run, RunStatus, Ticket } from "@andy/contracts";
+import { adrLabel, branchFor } from "@andy/domain";
 import { QueryError } from "@/components/Status";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -64,14 +65,20 @@ export function RunItem({
   run,
   path,
   decidable = false,
+  ticket,
 }: {
   run: Run;
   path?: TicketPath;
   decidable?: boolean;
+  /** The run's ticket: a running build shows its branch and what it may touch (AI-342). */
+  ticket?: Pick<Ticket, "key" | "touches">;
 }) {
   const created = run.createdAt ?? run.startedAt;
   const log = httpsHref(run.links.executorRun);
   const pr = httpsHref(run.links.pullRequest);
+  const building = run.step === "build" && isActiveRun(run) && ticket;
+  // A build in flight works on its branch before it reports one (the in-flight view's rule).
+  const branch = run.branch ?? (building ? branchFor(ticket.key, run.id) : null);
   return (
     <li className="space-y-1 rounded-md border border-border p-3 text-sm wrap-anywhere">
       <p className="flex flex-wrap items-center gap-2">
@@ -104,15 +111,23 @@ export function RunItem({
       {!isActiveRun(run) && run.costUsd === null && (
         <p className="text-muted-foreground">Cost unknown</p>
       )}
-      {(pr || run.branch) && (
+      {(pr || branch) && (
         <p className="text-muted-foreground">
           {pr && (
             <a href={pr} target="_blank" rel="noopener noreferrer" className="underline">
               Pull request
             </a>
           )}
-          {pr && run.branch && " · "}
-          {run.branch && <span>branch {run.branch}</span>}
+          {pr && branch && " · "}
+          {branch && <span>branch {branch}</span>}
+        </p>
+      )}
+      {building && (
+        // Only builds edit files, so only they hold back overlapping tickets (ADR-0080).
+        <p className="text-muted-foreground">
+          Touches:{" "}
+          {ticket.touches.length ? ticket.touches.join(", ") : "unknown (holds back every ticket)"}
+          {run.reservedAdr !== null && ` · ${adrLabel(run.reservedAdr)} reserved`}
         </p>
       )}
       {run.error && <p className="whitespace-pre-wrap text-destructive">{run.error}</p>}
