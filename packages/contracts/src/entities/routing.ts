@@ -54,10 +54,15 @@ const Providers = z.preprocess(
 );
 
 /**
- * Steps added after routing configs were first stored (AI-134: project agent tasks). A stored
- * config without them reads with these tiers, so older documents still parse (additive change).
+ * Steps added after routing configs were first stored (AI-134: project agent tasks; AI-323: the
+ * digest summary). A stored config without them reads with these tiers, so older documents still
+ * parse (additive change).
  */
-export const LATER_STEP_TIERS = { "plan-project": "strong", ideate: "strong" } as const;
+export const LATER_STEP_TIERS = {
+  "plan-project": "strong",
+  ideate: "strong",
+  summarize: "fast",
+} as const;
 
 const StepTiers = z.preprocess(
   (v) => (v && typeof v === "object" && !Array.isArray(v) ? { ...LATER_STEP_TIERS, ...v } : v),
@@ -142,7 +147,8 @@ export const DEFAULT_ROUTING: RoutingConfig = RoutingConfig.parse({
     verify: "fast",
     scout: "fast",
     sync: "by_size",
-    // plan-project and ideate: LATER_STEP_TIERS (strong, as they ran before routing).
+    // plan-project, ideate (strong, as they ran before routing) and summarize (fast):
+    // LATER_STEP_TIERS.
   },
   updatedAt: null,
 });

@@ -15,7 +15,7 @@ import { DoraPanel } from "@/components/DoraPanel";
 import { SpendPanel } from "@/components/spend/SpendPanel";
 import { Loading, QueryError } from "@/components/Status";
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
+import { Segmented } from "@/components/ui/segmented";
 import {
   chartColor,
   ChartContainer,
@@ -90,24 +90,21 @@ export function DashboardsPage() {
     <section className="space-y-4">
       <header className="flex flex-wrap items-center gap-2">
         <h2 className="text-lg font-medium">Dashboards</h2>
-        <div role="group" aria-label="Weeks" className="flex gap-1">
-          {WINDOWS.map((w) => (
-            <Button
-              key={w}
-              size="sm"
-              variant={w === weeks ? "default" : "ghost"}
-              aria-pressed={w === weeks}
-              onClick={() => setWeeks(w)}
-            >
-              {w} weeks
-            </Button>
-          ))}
-        </div>
+        <Segmented
+          label="Weeks"
+          value={weeks}
+          options={WINDOWS.map((w) => ({ value: w, label: `${w} weeks` }))}
+          onChange={setWeeks}
+        />
       </header>
       {dashboard.isPending ? (
         <Loading />
       ) : dashboard.isError ? (
-        <QueryError error={dashboard.error} />
+        <QueryError
+          error={dashboard.error}
+          what="the dashboards"
+          onRetry={() => void dashboard.refetch()}
+        />
       ) : (
         <DashboardBody data={dashboard.data} />
       )}
@@ -352,53 +349,53 @@ function CostCharts({ weeks, partial }: { weeks: DashboardWeek[]; partial: Set<D
     <section aria-label="Cost" className="space-y-2">
       <header className="flex flex-wrap items-center gap-2">
         <h3 className="text-sm font-medium">Cost, tokens and quota</h3>
-        <div role="group" aria-label="Split by" className="flex gap-1">
-          {(["step", "size"] as const).map((b) => (
-            <Button
-              key={b}
-              size="sm"
-              variant={b === by ? "default" : "ghost"}
-              aria-pressed={b === by}
-              onClick={() => setBy(b)}
-            >
-              By {b}
-            </Button>
-          ))}
-        </div>
+        <Segmented
+          label="Split by"
+          value={by}
+          options={(["step", "size"] as const).map((b) => ({ value: b, label: `By ${b}` }))}
+          onChange={setBy}
+        />
         <span className="text-xs text-muted-foreground tabular-nums">
           {runs} agent tasks · {usd(total)} estimated
           {unknown ? ` · ${unknown} with unknown cost` : ""}
         </span>
       </header>
-      <div className="grid gap-4 lg:grid-cols-3">
-        {METRICS.map((m) => {
-          const rows = weeks.map((w) => ({
-            week: weekLabel(w.start),
-            ...Object.fromEntries(groups(w).map((g) => [g.name, m.value(g.cost)])),
-          }));
-          return (
-            <ChartCard
-              key={m.key}
-              title={m.title}
-              figures={["cost"]}
-              partial={partial}
-              empty={names.length ? null : "No agent tasks finished in these weeks."}
-            >
-              <WeekChart config={config} rows={rows}>
-                {names.map((n) => (
-                  <Bar
-                    key={n}
-                    dataKey={n}
-                    stackId={m.key}
-                    fill={chartColor(n)}
-                    isAnimationActive={false}
-                  />
-                ))}
-              </WeekChart>
-            </ChartCard>
-          );
-        })}
-      </div>
+      {names.length === 0 ? (
+        // AI-331: one line, not a card per metric with nothing in it.
+        <p className="text-sm text-muted-foreground">
+          No agent tasks finished in these weeks, so no cost, tokens or quota to chart.
+        </p>
+      ) : (
+        <div className="grid gap-4 lg:grid-cols-3">
+          {METRICS.map((m) => {
+            const rows = weeks.map((w) => ({
+              week: weekLabel(w.start),
+              ...Object.fromEntries(groups(w).map((g) => [g.name, m.value(g.cost)])),
+            }));
+            return (
+              <ChartCard
+                key={m.key}
+                title={m.title}
+                figures={["cost"]}
+                partial={partial}
+                empty={null}
+              >
+                <WeekChart config={config} rows={rows}>
+                  {names.map((n) => (
+                    <Bar
+                      key={n}
+                      dataKey={n}
+                      stackId={m.key}
+                      fill={chartColor(n)}
+                      isAnimationActive={false}
+                    />
+                  ))}
+                </WeekChart>
+              </ChartCard>
+            );
+          })}
+        </div>
+      )}
     </section>
   );
 }
@@ -424,7 +421,10 @@ function WeekChart(props: {
         />
         <ChartTooltip content={<ChartTooltipContent />} />
         {/* Series order, not alphabetical: stages read Backlog → Done. */}
-        <ChartLegend content={<ChartLegendContent />} itemSorter={null} />
+        <ChartLegend
+          content={<ChartLegendContent className="flex-wrap gap-y-1" />}
+          itemSorter={null}
+        />
         {props.children}
       </Chart>
     </ChartContainer>

@@ -5,6 +5,8 @@ import { QueryError } from "@/components/Status";
 import { workerStatus } from "@/lib/needs-you";
 import { useSetWorker, useTicketRouting, useUpdateProject, useWorker } from "@/lib/queries";
 import { layerText } from "@/lib/route-layers";
+import { SavedCue } from "@/components/SavedCue";
+import { SETTING_LABELS } from "@/lib/settings-labels";
 
 /** Who does the work (ADR-0082): markers, the ticket's one-click switch, the project default. */
 
@@ -87,21 +89,24 @@ const DEFAULT_WORKER_LABELS: Record<Worker, string> = {
 export function DefaultWorkerSelect({ project }: { project: Project }) {
   const update = useUpdateProject(project.id);
   return (
-    <label className="ml-3 inline-flex items-center gap-1 text-sm text-muted-foreground">
-      Default worker
-      <select
-        className="rounded border border-border bg-background px-1"
-        value={project.defaultWorker}
-        disabled={update.isPending}
-        onChange={(e) => update.mutate({ defaultWorker: Worker.parse(e.target.value) })}
-      >
-        {Worker.options.map((o) => (
-          <option key={o} value={o}>
-            {DEFAULT_WORKER_LABELS[o]}
-          </option>
-        ))}
-      </select>
-      {update.error && <QueryError error={update.error} />}
-    </label>
+    <>
+      <label className="ml-3 inline-flex items-center gap-1 text-sm text-muted-foreground max-sm:min-h-11">
+        {SETTING_LABELS.defaultWorker}
+        <select
+          className="rounded border border-border bg-background px-1 max-sm:h-11 max-sm:text-base"
+          value={project.defaultWorker}
+          disabled={update.isPending}
+          onChange={(e) => update.mutate({ defaultWorker: Worker.parse(e.target.value) })}
+        >
+          {Worker.options.map((o) => (
+            <option key={o} value={o}>
+              {DEFAULT_WORKER_LABELS[o]}
+            </option>
+          ))}
+        </select>
+        {update.error && <QueryError error={update.error} />}
+      </label>
+      <SavedCue pending={update.isPending} saved={update.isSuccess} />
+    </>
   );
 }

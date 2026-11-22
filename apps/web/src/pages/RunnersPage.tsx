@@ -6,6 +6,7 @@ import { Field, Input } from "@/components/ui/input";
 import { SettingsTabs } from "@/components/SettingsTabs";
 import { Loading, QueryError } from "@/components/Status";
 import { useMintRunner, useProjects, useRevokeRunner, useRunners } from "@/lib/queries";
+import { dateOnly, dateTime } from "@/lib/format";
 
 /**
  * Settings → Local runners (ADR-0089 slice 3): mint a runner secret (shown once), see which
@@ -29,7 +30,13 @@ export function RunnersPage() {
         <MintForm onMinted={setMinted} />
       )}
       {runners.isPending && <Loading />}
-      {runners.isError && <QueryError error={runners.error} />}
+      {runners.isError && (
+        <QueryError
+          error={runners.error}
+          what="the local runners"
+          onRetry={() => void runners.refetch()}
+        />
+      )}
       {runners.data && runners.data.length === 0 && (
         <p className="text-sm text-muted-foreground">No runners yet.</p>
       )}
@@ -117,8 +124,8 @@ function RunnerRow({ runner }: { runner: RunnerView }) {
       )}
       <span className="text-xs text-muted-foreground">
         {runner.projectIds.join(", ")} · last seen{" "}
-        {runner.lastSeenAt ? new Date(runner.lastSeenAt).toLocaleString() : "never"} · expires{" "}
-        {new Date(runner.expiresAt).toLocaleDateString()}
+        {runner.lastSeenAt ? dateTime(runner.lastSeenAt) : "never"} · expires{" "}
+        {dateOnly(runner.expiresAt)}
       </span>
       {runner.state === "active" && (
         <Button

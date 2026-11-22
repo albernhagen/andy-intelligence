@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { render, screen, waitFor, within } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BASELINE_FILES, setupChecklist } from "@andy/domain";
@@ -78,5 +78,47 @@ describe("setup checklist", () => {
     await waitFor(() => expect(served).toBe(true));
     await waitFor(() => expect(screen.queryByText("Loading…")).toBeNull());
     expect(container.innerHTML).toBe("");
+  });
+
+  describe("folding (AI-339)", () => {
+    const details = () => screen.getByText(/Setup: \d of 5 left/).closest("details")!;
+
+    it("GivenAFirstVisit_WhenTheChecklistShows_ThenItIsOpenAndRememberedAsSeen", async () => {
+      await open();
+
+      expect(details().open).toBe(true);
+      expect(window.localStorage.getItem("setup-seen:ai")).toBe("1");
+    });
+
+    it("GivenItWasSeenBefore_WhenThePageOpensAgain_ThenItIsFoldedToOneLine", async () => {
+      window.localStorage.setItem("setup-seen:ai", "1");
+      await open();
+
+      expect(details().open).toBe(false);
+    });
+
+    it("GivenItIsFolded_WhenTheSummaryIsClicked_ThenItOpens", async () => {
+      window.localStorage.setItem("setup-seen:ai", "1");
+      await open();
+
+      details().querySelector("summary")!.click();
+
+      await waitFor(() => expect(details().open).toBe(true));
+    });
+
+    it("GivenStorageIsBlocked_WhenThePageOpens_ThenTheChecklistStillShowsOpen", async () => {
+      const blocked = () => {
+        throw new Error("storage blocked");
+      };
+      const get = vi.spyOn(Storage.prototype, "getItem").mockImplementation(blocked);
+      const set = vi.spyOn(Storage.prototype, "setItem").mockImplementation(blocked);
+      try {
+        await open();
+        expect(details().open).toBe(true);
+      } finally {
+        get.mockRestore();
+        set.mockRestore();
+      }
+    });
   });
 });

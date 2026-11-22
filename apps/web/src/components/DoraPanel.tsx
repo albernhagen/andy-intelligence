@@ -2,7 +2,7 @@ import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Loading, QueryError } from "@/components/Status";
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
+import { Segmented } from "@/components/ui/segmented";
 import { unwrap, useApi } from "@/lib/api";
 
 /**
@@ -37,25 +37,22 @@ export function DoraPanel({ projectId }: { projectId: string }) {
     <section aria-label="DORA metrics" className="space-y-3 rounded-md border border-border p-3">
       <header className="flex flex-wrap items-center gap-2">
         <h3 className="text-sm font-medium">DORA metrics (production)</h3>
-        <div role="group" aria-label="DORA window" className="flex gap-1">
-          {WINDOWS.map((d) => (
-            <Button
-              key={d}
-              size="sm"
-              variant={d === days ? "default" : "ghost"}
-              aria-pressed={d === days}
-              onClick={() => setDays(d)}
-            >
-              {d} days
-            </Button>
-          ))}
-        </div>
+        <Segmented
+          label="DORA window"
+          value={days}
+          options={WINDOWS.map((d) => ({ value: d, label: `${d} days` }))}
+          onChange={setDays}
+        />
         {dora.data?.partial && <Badge variant="attention">Partial: a read cap was reached</Badge>}
       </header>
       {dora.isPending ? (
         <Loading />
       ) : dora.isError ? (
-        <QueryError error={dora.error} />
+        <QueryError
+          error={dora.error}
+          what="the DORA metrics"
+          onRetry={() => void dora.refetch()}
+        />
       ) : (
         <DoraBody report={dora.data} days={days} />
       )}

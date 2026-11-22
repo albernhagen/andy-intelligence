@@ -21,12 +21,17 @@ export function InboxTicketCard({ card }: { card: InboxCard }) {
   const locked = answering || acceptingAll;
   const label = ticket ? `${ticket.key}: ${ticket.title}` : "Ticket";
   return (
-    <article aria-label={label} className="space-y-1 rounded-md border border-border p-2">
+    <article
+      aria-label={label}
+      data-nav-group
+      className="space-y-1 rounded-md border border-border p-2"
+    >
       <header className="flex flex-wrap items-center gap-2">
         {ticket && <TypeMarker type={ticket.type} />}
         <Link
           to="/p/$projectId/t/$ticketRef"
           params={{ projectId: card.projectId, ticketRef: ticket?.key ?? card.ticketId }}
+          data-nav-open
           className="font-medium underline-offset-2 hover:underline"
         >
           {ticket ? (
@@ -48,7 +53,11 @@ export function InboxTicketCard({ card }: { card: InboxCard }) {
           ))}
         </ul>
       ) : (
-        <p className="flex items-center gap-2 py-1 text-muted-foreground">
+        <p
+          data-nav-item
+          tabIndex={-1}
+          className="flex items-center gap-2 rounded-md py-1 text-muted-foreground outline-offset-2 focus-visible:outline-2 focus-visible:outline-ring"
+        >
           <Badge variant="attention">Needs you</Badge>
           Flagged for you; open the ticket to see what it waits for.
         </p>

@@ -10,14 +10,14 @@ v1.x screens:
 - **Phone** (M7: Mobile, ADR-0052): the SPA installed from Safari, phone layout for the inbox, ticket detail, releases and quota banner; push deep-links to the item; answer, approve, promote, pause from the phone.
 - **Quota & spend** (per provider gauges with reset times; paid spend vs caps; built: header gauge, banner on warn/pause/unknown).
 - **Project settings** (AI-46, built): `/p/:projectId/settings`, header link; switches explained, saved by PATCH; setup checklist first (AI-95). `/projects` opens the current project's; `/projects/new` adds one.
-- **Digest**, **What's new** (ADR-0081, ADR-0121): `/p/:projectId/digest`, `…/whats-new`, header links.
+- **What's new** (ADR-0121, AI-341): `…/whats-new`, digest exceptions first.
 - **Tickets** — M1: board, ticket detail with history and linked runs/PRs/cost. M3 (ADR-0059): status on cards, story panel, command palette. M5: filter and group by project. M4: overrides editing; Roadmap (AI-202); work views (ADR-0108): board chips; Work (`/all/work`, `/p/:id/work`, MCP `list_work`, AI-198).
 - **Run detail** — built (AI-101): `/p/:projectId/runs/:runId`, opened from Activity; another project's task: not found. Jules links M9.
 - **Config** (providers, harnesses, models, tiers, policies; audit log with revert (M4.12); pending approvals).
 - **Releases** (dev status, promote to prod, rollback).
 - **Dashboards** — built (AI-117, ADR-0045), `/p/:id/dashboards`, `/all/dashboards`: delivery (tickets by stage over time, lead time, rework, CI green on first try, review blockers), cost, quota and tokens per week by step and size (ADR-0046); `chart.tsx` (AI-103). DORA metrics from M6.
 
-**Design (ADR-0045; M3, ADR-0059):** `apps/web/design.md` + shadcn theme tokens are the design source of truth agents and design skills read. M4: design skills, pluggable per project (custom-skill context source, §7.6); Hallmark trial first; `sloplint --render` (non-blocking).
+**Design (ADR-0045; M3, ADR-0059):** `apps/web/design.md` + shadcn theme tokens are the design source of truth agents and design skills read. Managed projects get a starter `design.md` (ADR-0132); design skills Later; Hallmark trial; `sloplint --render` (non-blocking).
 
 **Built in M1.3: UI: tickets + inbox:**
 - Routes: `/p/:projectId` board; `/p/:projectId/t/:ticketRef` ticket panel (ref = key, e.g. `AI-2`; an id or wrong project redirects).
