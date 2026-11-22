@@ -83,7 +83,7 @@ describe("epic panel", () => {
     expect(progress.textContent).toBe("1 of 2 done · Cost ~$2.50 (estimate)");
   });
 
-  it("GivenAFeature_WhenItsPanelOpens_ThenNoStoriesSection", async () => {
+  it("GivenAFeature_WhenItsPanelOpens_ThenNoTicketsSection", async () => {
     const harness = renderApp();
     await harness.tracker.createProject({ name: "AI", key: "AI" });
     const t = await harness.tracker.createTicket("ai", { title: "Plain", type: "feature" }, "andy");
