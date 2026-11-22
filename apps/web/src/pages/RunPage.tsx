@@ -304,6 +304,7 @@ const STEP_VERBS: Record<RunStep, [going: string, done: string]> = {
   sync: ["Syncing", "Synced"],
   "plan-project": ["Planning the project", "Planned the project"],
   ideate: ["Ideating", "Ideated"],
+  summarize: ["Summarizing", "Summarized"],
 };
 
 /** "PR #72", or "Pull request" for a URL without a number. */
