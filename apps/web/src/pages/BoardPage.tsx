@@ -1,5 +1,5 @@
 import { Fragment, useEffect, useMemo, useRef, useState, type FormEvent } from "react";
-import { Link, Outlet, useNavigate, useParams, useSearch } from "@tanstack/react-router";
+import { Outlet, useNavigate, useParams, useSearch } from "@tanstack/react-router";
 import {
   DndContext,
   KeyboardSensor,
@@ -11,9 +11,10 @@ import {
   type DragOverEvent,
   type DragStartEvent,
 } from "@dnd-kit/core";
-import { Stage, type BoardTicket } from "@andy/contracts";
+import { Stage, type BoardTicket, type ReadyFilters } from "@andy/contracts";
 import {
   boardStages,
+  matchesReadyFilters,
   milestoneOf,
   parseWorkView,
   sortByStartScore,
@@ -23,10 +24,16 @@ import {
 } from "@andy/domain";
 import { BoardCard } from "@/components/board/BoardCard";
 import { BoardDispatchStatus } from "@/components/DispatchControls";
-import { InFlightPanel } from "@/components/InFlightPanel";
 import { EpicControls } from "@/components/board/EpicControls";
 import { WorkViewChips } from "@/components/board/WorkViewChips";
-import { EpicGroupHeader, Lane, LaneZone, ReadySortToggle } from "@/components/board/Lane";
+import {
+  EpicGroupHeader,
+  Lane,
+  LaneZone,
+  ReadyFilterMenu,
+  ReadySortToggle,
+} from "@/components/board/Lane";
+import { readySearch } from "@/lib/ready";
 import { Loading, QueryError } from "@/components/Status";
 import {
   COLLAPSED_STAGES,
@@ -75,6 +82,7 @@ export function BoardPage() {
   const [showArchived, setShowArchived] = useState(false);
   const search = useSearch({ from: "/p/$projectId" });
   const { sort } = search;
+  const filters = readySearch(search);
   // Parsed again here: the router keeps unknown values in the URL, and they mean all tickets.
   const view = parseWorkView(search.view);
   const navigate = useNavigate({ from: "/p/$projectId" });
@@ -94,11 +102,11 @@ export function BoardPage() {
 
   return (
     <section className="space-y-4">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-wrap items-center justify-between gap-2 max-sm:flex-col max-sm:items-start">
         <h2 className="text-lg font-medium">
           Board <BoardDispatchStatus projectId={projectId} />
         </h2>
-        <div className="flex items-center gap-4">
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
           <EpicControls
             epics={epics}
             grouped={grouped}
@@ -109,7 +117,7 @@ export function BoardPage() {
             epicId={epicId}
             onEpicChange={setChosenEpic}
           />
-          <label className="flex items-center gap-1 text-sm">
+          <label className="flex items-center gap-1 text-sm max-sm:min-h-11">
             <input
               type="checkbox"
               checked={showArchived}
@@ -125,18 +133,22 @@ export function BoardPage() {
           view={view}
           counts={counts}
           total={inScope.length}
-          onChange={(next) => void navigate({ search: { sort, view: next ?? undefined } })}
+          onChange={(next) =>
+            void navigate({ search: { sort, ...filters, view: next ?? undefined } })
+          }
         />
       )}
-      <InFlightPanel projectId={projectId} />
       {board.isPending && <Loading />}
-      {showsError(board) && <QueryError error={board.error} />}
+      {showsError(board) && (
+        <QueryError error={board.error} what="the board" onRetry={() => void board.refetch()} />
+      )}
       {board.data && (
         <Lanes
           tickets={tickets}
           showCancelled={showArchived}
           projectId={projectId}
           sortedByScore={sort === "score"}
+          filters={filters}
           all={board.data}
           grouped={grouped}
           epicId={epicId}
@@ -156,6 +168,7 @@ function Lanes({
   showCancelled,
   projectId,
   sortedByScore,
+  filters,
   all,
   grouped,
   epicId,
@@ -165,6 +178,8 @@ function Lanes({
   showCancelled: boolean;
   projectId: string;
   sortedByScore: boolean;
+  /** The Ready lane's size, risk and confidence filters (AI-343); they hide cards only. */
+  filters: ReadyFilters;
   /** Every ticket the board read returned, archived ones too: epics and their progress. */
   all: readonly BoardTicket[];
   grouped: boolean;
@@ -298,7 +313,8 @@ function Lanes({
       onDragCancel={() => setOverLane(null)}
       onDragEnd={(e) => void onDragEnd(e)}
     >
-      <div className="flex items-stretch gap-3 overflow-x-auto pb-2">
+      {/* relative: keeps the lanes' sr-only text inside this scroller (AI-325) */}
+      <div className="relative flex items-stretch gap-3 overflow-x-auto pb-2">
         {stages.map((stage) => {
           const collapsible = COLLAPSED_STAGES.includes(stage);
           const collapsed = collapsible && !expanded.includes(stage);
@@ -319,7 +335,14 @@ function Lanes({
           // Backlog shows two parts (Up next, then Ideas); each is grouped on its own.
           const split = stage === "backlog" ? splitBacklog(lanes.backlog) : null;
           const parts = (split ? [split.upNext, split.ideas] : [shownIn(stage)]).map((cards) =>
-            groupCards(cards.filter((t) => inEpic(t, epicId) && inView(t))),
+            groupCards(
+              cards.filter(
+                (t) =>
+                  inEpic(t, epicId) &&
+                  inView(t) &&
+                  (stage !== "ready" || matchesReadyFilters(t, filters)),
+              ),
+            ),
           );
           // `ids` follows the order shown, so dnd-kit sorts what you see.
           const ordered = parts.flat().flatMap((g) => g.cards);
@@ -358,20 +381,26 @@ function Lanes({
                       onToggle={() =>
                         void navigate({
                           search: {
-                            sort: sortedByScore ? undefined : "score",
+                            ...filters,
                             view: view ?? undefined,
+                            sort: sortedByScore ? undefined : "score",
                           },
                         })
                       }
                     />
-                    {/* The same list as MCP list_ready, with scores, reasons and filters (AI-298). */}
-                    <Link
-                      to="/p/$projectId/ready"
-                      params={{ projectId }}
-                      className="rounded-md px-1 text-xs text-muted-foreground hover:bg-foreground/10"
-                    >
-                      Ranked list
-                    </Link>
+                    {/* The same filters as MCP list_ready (AI-343: the Ready page's, moved here). */}
+                    <ReadyFilterMenu
+                      filters={filters}
+                      onChange={(next) =>
+                        void navigate({
+                          search: {
+                            sort: sortedByScore ? "score" : undefined,
+                            view: view ?? undefined,
+                            ...next,
+                          },
+                        })
+                      }
+                    />
                   </div>
                 ) : undefined
               }

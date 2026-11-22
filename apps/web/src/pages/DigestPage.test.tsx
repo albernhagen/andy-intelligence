@@ -1,6 +1,5 @@
 import { describe, expect, it } from "vitest";
 import { screen, waitFor, within } from "@testing-library/react";
-import { latestFinishedDay } from "@andy/domain";
 import { renderApp } from "@/test/harness";
 
 /** AI-70: the digest page over the real API in-process, and its header link. */
@@ -34,11 +33,11 @@ async function seeded(path: string) {
 }
 
 describe("digest page", () => {
-  it("GivenAProjectScreen_WhenAndyClicksDigest_ThenTheDigestPageOpens", async () => {
-    const harness = await seeded("/p/ai");
+  it("GivenWhatsNew_WhenAndyClicksDigest_ThenTheDigestPageOpens", async () => {
+    const harness = await seeded("/p/ai/whats-new");
     await harness.user.click(await screen.findByRole("link", { name: "Digest" }));
     await waitFor(() => expect(harness.router.state.location.pathname).toBe("/p/ai/digest"));
-    expect(screen.getByRole("link", { name: "Digest" }).getAttribute("aria-current")).toBe("page");
+    expect(await screen.findByRole("heading", { name: "Digest" })).toBeTruthy();
   });
 
   it("GivenActivity_WhenTheDigestOpens_ThenSectionsInOrderWithReasonsAndCost", async () => {
@@ -49,8 +48,11 @@ describe("digest page", () => {
     expect(within(merged).getByRole("link", { name: "PR #3" })).toBeTruthy();
     expect(within(merged).getByText("$1.50")).toBeTruthy();
     const order = screen.getAllByRole("region").map((r) => r.getAttribute("aria-label"));
-    expect(order).toEqual(["Summary", "Exceptions", "Merged", "Totals"]);
+    expect(order).toEqual(["Exceptions", "Merged", "Totals"]);
     expect(screen.getByRole("region", { name: "Totals" }).textContent).toContain("1 merged");
+    // AI-327: the UI says "agent task", never "run".
+    expect(screen.getByRole("region", { name: "Totals" }).textContent).toMatch(/\d+ agent tasks? /);
+    expect(screen.getByRole("region", { name: "Totals" }).textContent).not.toMatch(/\bruns?\b/);
   });
 
   it("GivenAQuietProject_WhenTheDigestOpens_ThenOneLine", async () => {
@@ -60,76 +62,9 @@ describe("digest page", () => {
     expect(await screen.findByText("AI digest · last 24 hours: nothing happened.")).toBeTruthy();
   });
 
-  it("GivenAStoredSummary_WhenTheDigestOpens_ThenItLeadsLabelledWithItsLinks", async () => {
-    const harness = renderApp("/p/ai/digest");
-    await harness.tracker.createProject({ name: "Andy Intelligence", key: "AI" });
-    const day = latestFinishedDay(new Date());
-    const at = new Date().toISOString();
-    await harness.digestSummaries.claim("ai", day, 10, at);
-    await harness.digestSummaries.dispatched(
-      "ai",
-      day.id,
-      { runId: "run-1", route: ROUTE, inputHash: "a".repeat(64), truncated: false },
-      at,
-    );
-    await harness.digestSummaries.complete(
-      "ai",
-      day.id,
-      "run-1",
-      {
-        summary: "Andy can read a summary of the day.",
-        summaryRefs: { tickets: ["AI-323"], prs: [] },
-        lines: [
-          {
-            heading: "M4: Roadmap",
-            epicKey: null,
-            text: "The digest leads with it.",
-            refs: { tickets: ["AI-323"], prs: [349] },
-          },
-        ],
-      },
-      at,
-    );
-    await harness.router.invalidate();
-
-    const card = await screen.findByRole("region", { name: "Summary" });
-    expect(within(card).getByText(`Model-written summary of ${day.id} (sonnet)`)).toBeTruthy();
-    expect(
-      within(card).getByText("Andy can read a summary of the day.", { exact: false }),
-    ).toBeTruthy();
-    expect(within(card).getAllByRole("link", { name: "AI-323" })).toHaveLength(2);
-    expect(within(card).getByText("#349")).toBeTruthy();
-    expect(within(card).queryByRole("button", { name: "Retry once" })).toBeNull();
-  });
-
-  it("GivenAFailedSummary_WhenAndyRetries_ThenItRunsAgainAndSaysWhy", async () => {
-    const harness = renderApp("/p/ai/digest");
-    await harness.tracker.createProject({ name: "Andy Intelligence", key: "AI" });
-    const day = latestFinishedDay(new Date());
-    const at = new Date().toISOString();
-    await harness.digestSummaries.claim("ai", day, 10, at);
-    await harness.digestSummaries.fail(
-      "ai",
-      day.id,
-      null,
-      { reason: "run_failed", detail: "timed out" },
-      at,
-    );
-    await harness.router.invalidate();
-
-    const card = await screen.findByRole("region", { name: "Summary" });
-    expect(within(card).getByText("No summary: its agent task failed: timed out.")).toBeTruthy();
-    await harness.user.click(within(card).getByRole("button", { name: "Retry once" }));
-    // Nothing merged or changed yesterday, so the retry stores that instead of starting a task.
-    expect(
-      await within(card).findByText("No summary: nothing was merged or changed that day."),
-    ).toBeTruthy();
-    expect(within(card).queryByRole("button", { name: "Retry once" })).toBeNull();
-  });
-
-  it("GivenAllProjects_WhenTheHeaderShows_ThenNoDigestLink", async () => {
-    renderApp("/all/inbox");
-    await screen.findByRole("link", { name: "Inbox" });
-    expect(screen.queryByRole("link", { name: "Digest" })).toBeNull();
+  it("GivenAProject_WhenTheHeaderShows_ThenNoDigestLink", async () => {
+    await seeded("/p/ai/inbox");
+    const nav = await screen.findByRole("navigation", { name: "Main" });
+    expect(within(nav).queryByRole("link", { name: "Digest" })).toBeNull();
   });
 });

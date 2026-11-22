@@ -46,6 +46,8 @@ export const QUOTA_WINDOWS: Record<ProviderKey, QuotaWindow[]> = {
   "claude-sub": ["5h", "weekly"],
   "google-sub": ["daily_tasks"],
   openrouter: [],
+  // AI-260: pay-per-use on an API key: held by the spend caps, no subscription windows.
+  "claude-api": [],
 };
 
 /**

@@ -1,8 +1,16 @@
-import type { ReactNode } from "react";
+import { useState, type ReactNode } from "react";
 import { useDroppable } from "@dnd-kit/core";
 import { SortableContext, verticalListSortingStrategy } from "@dnd-kit/sortable";
 import { ChevronsLeftRight, ChevronsRightLeft } from "lucide-react";
-import type { Milestone, Stage } from "@andy/contracts";
+import {
+  Confidence,
+  Risk,
+  Size,
+  type Milestone,
+  type ReadyFilters,
+  type Stage,
+} from "@andy/contracts";
+import { Select } from "@/components/ui/input";
 import { MilestoneChip } from "@/components/MilestoneControls";
 import { STAGE_LABELS } from "@/lib/tickets";
 
@@ -78,6 +86,76 @@ export function ReadySortToggle({ sorted, onToggle }: { sorted: boolean; onToggl
     >
       {sorted ? "Sorted by score · show queue order" : "Sort by score"}
     </button>
+  );
+}
+
+const READY_FILTERS = [
+  { key: "size", label: "Size", options: Size.options },
+  { key: "risk", label: "Risk", options: Risk.options },
+  { key: "confidence", label: "Confidence", options: Confidence.options },
+] as const;
+
+/**
+ * The Ready lane's filters (AI-343, moved from the Ready page): size, risk and confidence, the
+ * same as MCP `list_ready`. They hide cards only; a ticket without the score a filter asks for
+ * is hidden. A small button opens them; it says how many are on.
+ */
+export function ReadyFilterMenu({
+  filters,
+  onChange,
+}: {
+  filters: ReadyFilters;
+  onChange: (next: ReadyFilters) => void;
+}) {
+  const on = READY_FILTERS.filter((f) => filters[f.key]).length;
+  const [open, setOpen] = useState(on > 0);
+  // A fragment: the button sits beside "Sort by score"; the open filters wrap onto their own line.
+  return (
+    <>
+      <button
+        type="button"
+        aria-expanded={open}
+        onClick={() => setOpen(!open)}
+        className="rounded-md px-1 text-left text-xs text-muted-foreground hover:bg-foreground/10"
+      >
+        {on ? `Filter · ${on}` : "Filter"}
+      </button>
+      {open && (
+        <div
+          role="group"
+          aria-label="Ready filters"
+          className="flex w-full flex-wrap items-center gap-2"
+        >
+          {READY_FILTERS.map((f) => (
+            <label key={f.key} className="flex items-center gap-1 text-xs text-muted-foreground">
+              {f.label}
+              <Select
+                aria-label={f.label}
+                className="h-11 w-auto px-1 text-base sm:h-7 sm:text-xs"
+                value={filters[f.key] ?? ""}
+                onChange={(e) => onChange({ ...filters, [f.key]: e.target.value || undefined })}
+              >
+                <option value="">Any</option>
+                {f.options.map((o) => (
+                  <option key={o} value={o}>
+                    {o}
+                  </option>
+                ))}
+              </Select>
+            </label>
+          ))}
+          {on > 0 && (
+            <button
+              type="button"
+              onClick={() => onChange({ size: undefined, risk: undefined, confidence: undefined })}
+              className="rounded-md px-1 text-xs text-muted-foreground hover:bg-foreground/10"
+            >
+              Clear
+            </button>
+          )}
+        </div>
+      )}
+    </>
   );
 }
 

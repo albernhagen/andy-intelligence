@@ -1,9 +1,11 @@
 import { WORK_VIEWS, WORK_VIEW_LABELS, type WorkView } from "@andy/domain";
+import { Segmented } from "@/components/ui/segmented";
 
 /**
  * Work view chips (AI-187, ADR-0108): All plus five fixed views, each with its count of open
  * tickets. One is active at a time; the page keeps the choice in the URL. The Work list (AI-198)
- * always shows one view, so it leaves All out (`total` null).
+ * always shows one view, so it leaves All out (`total` null). Needs you names its unit, "· 4 tickets",
+ * because the header's "Needs you N" counts things to answer, not tickets (AI-326, design.md).
  */
 export function WorkViewChips({
   view,
@@ -22,26 +24,21 @@ export function WorkViewChips({
     ...WORK_VIEWS.map((id) => ({ id, label: WORK_VIEW_LABELS[id], count: counts[id] })),
   ];
   return (
-    <div role="group" aria-label="Work view" className="flex flex-wrap gap-2">
-      {chips.map(({ id, label, count }) => {
-        const active = id === view;
-        return (
-          <button
-            key={id ?? "all"}
-            type="button"
-            aria-pressed={active}
-            onClick={() => onChange(id)}
-            className={`flex items-center gap-1.5 h-11 rounded-full border px-3 text-sm sm:h-8 focus-visible:outline-2 focus-visible:outline-ring ${
-              active
-                ? "border-primary bg-primary text-primary-foreground"
-                : "border-border bg-background hover:bg-foreground/10"
-            }`}
-          >
+    <Segmented
+      label="Work view"
+      value={view}
+      options={chips.map(({ id, label, count }) => ({
+        value: id,
+        label: (
+          <>
             {label}{" "}
-            <span className={`tabular-nums ${active ? "" : "text-muted-foreground"}`}>{count}</span>
-          </button>
-        );
-      })}
-    </div>
+            <span className="tabular-nums">
+              {id === "needs-me" ? `· ${count} ticket${count === 1 ? "" : "s"}` : count}
+            </span>
+          </>
+        ),
+      }))}
+      onChange={onChange}
+    />
   );
 }

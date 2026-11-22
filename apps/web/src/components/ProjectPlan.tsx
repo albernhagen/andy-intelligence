@@ -19,7 +19,10 @@ export function ProjectPlanPanel({ projectId }: { projectId: string }) {
     queryFn: async () =>
       unwrap(await api.GET("/api/projects/{projectId}/plan", { params: { path: { projectId } } })),
   });
-  if (plan.error) return <QueryError error={plan.error} />;
+  if (plan.error)
+    return (
+      <QueryError error={plan.error} what="the project plan" onRetry={() => void plan.refetch()} />
+    );
   const current = plan.data?.plan;
   if (plan.data === undefined) return null;
   return (
@@ -27,8 +30,8 @@ export function ProjectPlanPanel({ projectId }: { projectId: string }) {
       <h3 className="text-sm font-medium">Project plan</h3>
       {current === null || current === undefined ? (
         <p className="text-sm text-muted-foreground">
-          Plan needed: no milestones yet. Run platform/procedures/plan-project.md and submit the
-          result with MCP submit_project_plan.
+          No plan yet: ask a Claude session to plan this project. Its proposed milestones show here
+          for you to approve.
         </p>
       ) : current.status === "proposed" || current.status === "approving" ? (
         <WaitingPlan projectId={projectId} plan={current} />
@@ -36,8 +39,8 @@ export function ProjectPlanPanel({ projectId }: { projectId: string }) {
         <p className="text-sm">Approved: {current.epicIds.length} epics created.</p>
       ) : (
         <p className="text-sm">
-          Rejected: <span className="whitespace-pre-wrap">{current.reason}</span>. Submit a new plan
-          with MCP submit_project_plan.
+          Rejected: <span className="whitespace-pre-wrap">{current.reason}</span>. Ask a Claude
+          session for a new plan.
         </p>
       )}
     </section>
@@ -52,13 +55,16 @@ export function useWaitingPlans(projectId?: string) {
     queryFn: async () => unwrap(await api.GET("/api/project-plans/waiting")),
   });
   const shown = (waiting.data ?? []).filter((w) => !projectId || w.projectId === projectId);
-  return { shown, error: waiting.error };
+  return { shown, error: waiting.error, refetch: waiting.refetch };
 }
 
 /** Every project's waiting plan, for the inbox; with `projectId`, only that project's. */
 export function ProjectPlansWaiting({ projectId }: { projectId?: string }) {
-  const { shown, error } = useWaitingPlans(projectId);
-  if (error) return <QueryError error={error} />;
+  const { shown, error, refetch } = useWaitingPlans(projectId);
+  if (error)
+    return (
+      <QueryError error={error} what="the waiting project plans" onRetry={() => void refetch()} />
+    );
   if (shown.length === 0) return null;
   return (
     <section aria-label="Project plans" className="space-y-2">

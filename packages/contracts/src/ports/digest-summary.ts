@@ -34,7 +34,8 @@ export interface DigestSummaryStore {
   get(projectId: string, id: string): Promise<DigestSummary | null>;
   /**
    * Creates the day's summary as `writing` unless one exists. Counts against `perDay` writes
-   * started on `now`'s UTC day across all projects; refused as `capped` past it.
+   * started on `now`'s UTC day across all projects (never more than DIGEST_SUMMARY_LIMITS.perDay);
+   * refused as `capped` past it.
    */
   claim(
     projectId: string,

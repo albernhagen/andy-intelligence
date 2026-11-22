@@ -1,11 +1,13 @@
 import { useState } from "react";
 import { Link } from "@tanstack/react-router";
-import type { Run, RunStatus } from "@andy/contracts";
+import type { Run, RunStatus, Ticket } from "@andy/contracts";
+import { adrLabel, branchFor } from "@andy/domain";
 import { QueryError } from "@/components/Status";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { formatQuotaDelta } from "@/components/TicketCostLine";
 import { isActiveRun, useDecidePlan, useStartRun } from "@/lib/queries";
+import { count, dateTime, elapsed } from "@/lib/format";
 
 type TicketPath = { projectId: string; ticketId: string };
 
@@ -64,14 +66,20 @@ export function RunItem({
   run,
   path,
   decidable = false,
+  ticket,
 }: {
   run: Run;
   path?: TicketPath;
   decidable?: boolean;
+  /** The run's ticket: a running build's branch falls back to its name (AI-342). */
+  ticket?: Pick<Ticket, "key">;
 }) {
   const created = run.createdAt ?? run.startedAt;
   const log = httpsHref(run.links.executorRun);
   const pr = httpsHref(run.links.pullRequest);
+  const building = run.step === "build" && isActiveRun(run) && ticket;
+  // A build in flight works on its branch before it reports one (the in-flight view's rule).
+  const branch = run.branch ?? (building ? branchFor(ticket.key, run.id) : null);
   return (
     <li className="space-y-1 rounded-md border border-border p-3 text-sm wrap-anywhere">
       <p className="flex flex-wrap items-center gap-2">
@@ -104,15 +112,24 @@ export function RunItem({
       {!isActiveRun(run) && run.costUsd === null && (
         <p className="text-muted-foreground">Cost unknown</p>
       )}
-      {(pr || run.branch) && (
+      {(pr || branch) && (
         <p className="text-muted-foreground">
           {pr && (
             <a href={pr} target="_blank" rel="noopener noreferrer" className="underline">
               Pull request
             </a>
           )}
-          {pr && run.branch && " · "}
-          {run.branch && <span>branch {run.branch}</span>}
+          {pr && branch && " · "}
+          {branch && <span>branch {branch}</span>}
+        </p>
+      )}
+      {building && (
+        // Only builds edit files, so only they hold back overlapping tickets (ADR-0080).
+        <p className="text-muted-foreground">
+          Touches:{" "}
+          {/* The run's own list (ticket touches plus an approved plan's files), as dispatch uses. */}
+          {run.touches.length ? run.touches.join(", ") : "unknown (holds back every ticket)"}
+          {run.reservedAdr !== null && ` · ${adrLabel(run.reservedAdr)} reserved`}
         </p>
       )}
       {run.error && <p className="whitespace-pre-wrap text-destructive">{run.error}</p>}
@@ -167,7 +184,7 @@ function PlanDecision({ runId, path }: { runId: string; path: TicketPath }) {
 function Time({ label, iso }: { label: string; iso: string }) {
   return (
     <span className="text-muted-foreground">
-      {label} <time dateTime={iso}>{new Date(iso).toLocaleString()}</time>
+      {label} <time dateTime={iso}>{dateTime(iso)}</time>
     </span>
   );
 }
@@ -200,7 +217,7 @@ export function httpsHref(url: string | undefined): string | undefined {
 }
 
 export function formatTokens(run: Pick<Run, "tokensIn" | "tokensOut">): string {
-  const n = (v: number | null) => (v === null ? "—" : v.toLocaleString());
+  const n = (v: number | null) => (v === null ? "—" : count(v));
   return `${n(run.tokensIn)} in / ${n(run.tokensOut)} out tokens`;
 }
 
@@ -209,10 +226,10 @@ export function formatUsage(run: Pick<Run, "usage" | "quotaDelta">): string {
   const u = run.usage;
   const quota = run.quotaDelta && formatQuotaDelta(run.quotaDelta);
   return [
-    u && `${u.cacheReadTokens.toLocaleString()} cache read`,
-    u && `${u.cacheWriteTokens.toLocaleString()} cache write`,
+    u && `${count(u.cacheReadTokens)} cache read`,
+    u && `${count(u.cacheWriteTokens)} cache write`,
     u && u.turns !== null && `${u.turns} turns`,
-    u && u.wallMs !== null && `${Math.round(u.wallMs / 1000)}s`,
+    u && u.wallMs !== null && elapsed(u.wallMs),
     quota && `quota ${quota}`,
   ]
     .filter(Boolean)

@@ -45,9 +45,11 @@ Andy chose 1(c) with (a) built now, 2 "share the engine", 3 "daily on first read
 - **Waits, no model call:** pause, the quota reserve or the run caps leave the claimed day `writing` with no task. Andy's next digest read tries the start again.
 - **Fails:** no route, a dispatch error, a failed or timed-out task, bad output, or an unknown citation store `failed` with the reason.
 - Either way the digest shows its plain list and says why. Nothing retries a failure on its own, and nothing falls back to a paid route.
+- **No day stays `writing`:** with no task, Andy's next read starts it; with a task, the run's watchdog deadline (25 minutes) ends it, and every run end fails a summary its run didn't store.
 
 ### Consequences
 
 - The digest stops being purely computed: one stored document per project per day, a cross-project daily counter, and a new step through the executor.
 - A first read after midnight shows "writing" for the task's few minutes.
+- The cross-project daily counter keeps one small document per UTC day, about 365 a year, never deleted: accepted rather than a TTL.
 - `claude-executor.yml` and the procedure change in their own PR, Andy's to merge (ADR-0120).

@@ -14,7 +14,7 @@ One `SpendEntry` per paid agent task or direct call:
 | `settled`  | Its report arrives                          | The actual cost      |
 | `released` | It never started (refused, cancelled first) | Nothing              |
 
-- **Reserve amount:** a single call: input tokens × input price + max output tokens × output price. An agentic task: the per-task cap, which the harness enforces as its budget.
+- **Reserve amount:** a single call: input tokens × input price + max output tokens × output price. An agentic task: the per-task cap, which the harness enforces as its budget. Claude Code checks `--max-budget-usd` between turns, so it is a soft cap: one long turn can overshoot, and the provider limit is the hard stop (AI-260).
 - **Settle amount:** the provider's reported cost when the report carries it, else usage × the model's prices. No usage: the full reservation. A cost over the reservation is recorded as reported and logged as a warning.
 - **Open too long:** a reservation still open after its task's deadline settles at its full amount.
 - **Atomic:** `reserve` checks totals plus the new amount against every cap and writes in one transaction, so concurrent starts can't overshoot (Firestore: one total document per scope and window).

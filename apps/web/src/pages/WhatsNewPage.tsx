@@ -3,8 +3,9 @@ import { Link, useParams } from "@tanstack/react-router";
 import type { WhatsNew, WhatsNewMilestone, WhatsNewNote } from "@andy/contracts";
 import { Loading, QueryError } from "@/components/Status";
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
+import { Segmented } from "@/components/ui/segmented";
 import { useWhatsNew } from "@/lib/queries";
+import { dateTime } from "@/lib/format";
 
 const WINDOWS = [
   { days: 14, label: "14 days" },
@@ -19,7 +20,7 @@ export const dayOf = (iso: string) =>
   new Date(iso).toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" });
 
 /**
- * What's new (AI-159, ADR-0121) under `/p/<project>/whats-new`: status per milestone epic and
+ * What's new (AI-159, ADR-0121) under `/p/<project>/whats-new`: status per top-level epic and
  * what needs Andy, then merged changes newest first, grouped by day, one line each. A line opens
  * to "How it works", "Needs you" and doc links. Note text is the PR author's, shown as plain text.
  */
@@ -33,27 +34,20 @@ export function WhatsNewPage() {
     <section className="space-y-4">
       <header className="flex flex-wrap items-center gap-2">
         <h2 className="text-lg font-medium">What's new</h2>
-        <div role="group" aria-label="Window" className="flex gap-1">
-          {WINDOWS.map((w) => (
-            <Button
-              key={w.days}
-              size="sm"
-              variant={w.days === days ? "default" : "ghost"}
-              aria-pressed={w.days === days}
-              onClick={() => setDays(w.days)}
-            >
-              {w.label}
-            </Button>
-          ))}
-        </div>
+        <Segmented
+          label="Window"
+          value={days}
+          options={WINDOWS.map((w) => ({ value: w.days, label: w.label }))}
+          onChange={setDays}
+        />
         {whatsNew.data && whatsNew.data.milestones.length > 0 && (
           <select
-            aria-label="Milestone"
+            aria-label="Epic"
             className="h-8 rounded-md border border-border bg-background px-2 text-sm"
             value={epic ?? ""}
             onChange={(e) => setEpic(e.target.value || null)}
           >
-            <option value="">All milestones</option>
+            <option value="">All epics</option>
             {whatsNew.data.milestones.map((m) => (
               <option key={m.key} value={m.key}>
                 {m.key}: {m.title}
@@ -61,11 +55,23 @@ export function WhatsNewPage() {
             ))}
           </select>
         )}
+        {/* AI-335: the digest left the header; AI-341 folds it into this page. */}
+        <Link
+          to="/p/$projectId/digest"
+          params={{ projectId }}
+          className="ml-auto text-sm text-muted-foreground underline-offset-2 hover:underline"
+        >
+          Digest
+        </Link>
       </header>
       {whatsNew.isPending ? (
         <Loading />
       ) : whatsNew.isError ? (
-        <QueryError error={whatsNew.error} />
+        <QueryError
+          error={whatsNew.error}
+          what="what's new"
+          onRetry={() => void whatsNew.refetch()}
+        />
       ) : (
         <>
           <Status whatsNew={whatsNew.data} projectId={projectId} />
@@ -84,13 +90,13 @@ function Status({ whatsNew, projectId }: { whatsNew: WhatsNew; projectId: string
     <section aria-label="Status" className="space-y-1">
       <h3 className="text-sm font-medium">Status</h3>
       {open.length === 0 && finished.length === 0 && (
-        <p className="text-sm text-muted-foreground">No milestone epics yet.</p>
+        <p className="text-sm text-muted-foreground">No epics yet.</p>
       )}
       {open.length > 0 && (
         <table className="text-sm">
           <thead className="text-xs text-muted-foreground">
             <tr className="text-left">
-              <th className="pr-4 font-normal">Milestone</th>
+              <th className="pr-4 font-normal">Epic</th>
               <th className="pr-3 text-right font-normal">Done</th>
               <th className="pr-3 text-right font-normal">In review</th>
               <th className="pr-3 text-right font-normal">In progress</th>
@@ -211,10 +217,7 @@ function ChangeLine({ note: n, projectId }: { note: WhatsNewNote; projectId: str
             </Field>
           )}
           <Field label="Merged">
-            {new Date(n.mergedAt).toLocaleString("en-US", {
-              dateStyle: "medium",
-              timeStyle: "short",
-            })}
+            {dateTime(n.mergedAt)}
             {n.mergedBy ? ` by ${n.mergedBy}` : ""}
             {n.epicKey ? ` · ${n.epicKey}: ${n.epicTitle}` : ""}
           </Field>

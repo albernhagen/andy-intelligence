@@ -59,6 +59,7 @@ jobs:
       head_sha: ${{ steps.context.outputs.head_sha }}
       base_branch: ${{ steps.context.outputs.base_branch }}
       platform_sha: ${{ steps.context.outputs.platform_sha }}
+      max_budget_usd: ${{ steps.context.outputs.max_budget_usd }}
       error: ${{ steps.context.outputs.error }}
     steps:
       - name: Validate inputs and fetch the run context
@@ -67,6 +68,7 @@ jobs:
           RUN_ID: ${{ inputs.run_id }}
           CREDENTIAL: ${{ inputs.credential }}
           MAX_TURNS_CAP: 200 # spend cap per run (ADR-0028), whatever the control plane asks
+          MAX_BUDGET_USD_CAP: 50 # USD per pay_per_use run (AI-260), whatever the control plane asks
           MAX_PROMPT_CHARS: 200000
         run: |
           fail() {
@@ -97,8 +99,13 @@ jobs:
           if [ "$code" != 200 ]; then
             fail "GET /runs/$RUN_ID/context returned HTTP $code: $(head -c 300 "$body" 2>/dev/null | tr -d '\r\n')"
           fi
-          jq -e --arg id "$RUN_ID" --argjson cap "$MAX_TURNS_CAP" --argjson max "$MAX_PROMPT_CHARS" '
+          jq -e --arg id "$RUN_ID" --argjson cap "$MAX_TURNS_CAP" --argjson max "$MAX_PROMPT_CHARS" \
+            --argjson budgetcap "$MAX_BUDGET_USD_CAP" '
             (.runId == $id)
+            and ((.billingType // "subscription") as $b | ($b == "subscription" or $b == "pay_per_use"))
+            and (if (.billingType // "subscription") == "pay_per_use"
+              then (.maxBudgetUsd | type == "number" and . > 0 and . <= $budgetcap)
+              else ((.maxBudgetUsd // null) == null) end)
             and (.step | type == "string" and test("^[a-z][a-z-]{0,31}$"))
             and (.model | type == "string" and test("^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$"))
             and (.maxTurns | type == "number" and . == floor and . >= 1 and . <= $cap)
@@ -127,6 +134,14 @@ jobs:
           base_branch=$(jq -r '.baseBranch // ""' "$body")
           [[ -z "$base_branch" || "$base_branch" =~ ^epic/[A-Z][A-Z0-9]{0,9}-[0-9]{1,9}$ ]] || fail "unexpected base branch"
 
+          # AI-260: the credential must match the run's billing: a pay_per_use run uses the API
+          # key, never the subscription token, and runs under its reserved budget.
+          billing=$(jq -r '.billingType // "subscription"' "$body")
+          case "$billing" in subscription) want=subscription ;; *) want=api_key ;; esac
+          [ "$CREDENTIAL" = "$want" ] || fail "credential=$CREDENTIAL but the run bills $billing (needs $want)"
+          max_budget_usd=$(jq -r 'if .maxBudgetUsd == null then "" else (.maxBudgetUsd | tostring) end' "$body")
+          [[ -z "$max_budget_usd" || "$max_budget_usd" =~ ^[0-9]{1,2}(\.[0-9]{1,6})?$ ]] || fail "unexpected budget"
+
           step=$(jq -r .step "$body")
           # The only steps this executor runs (AI-134): the read-only ones get read-only tools;
           # build and sync are the editing ones. Any other step is refused before the agent job.
@@ -139,6 +154,7 @@ jobs:
             echo "step=$step"
             echo "model=$(jq -r .model "$body")"
             echo "max_turns=$(jq -r .maxTurns "$body")"
+            echo "max_budget_usd=$max_budget_usd"
             echo "read_only=$read_only"
             echo "platform_sha=$platform_sha"
             echo "ticket_key=$(jq -r '.ticket.key // ""' "$body")"
@@ -410,7 +426,8 @@ jobs:
       # index.lock), then the command writes facts (nonce, PID 1, env names) into the
       # checkout. The workflow judges: the verify step requires that exact command in the
       # execution log (one Bash call, no error, no other tool) and asserts the facts. Capped
-      # (ADR-0028): Haiku, 3 turns, 5 minutes. Fixed prompt: no ticket text, no nonce.
+      # (ADR-0028): Haiku, 3 turns, 5 minutes, $0.25 on the API key (AI-260; the run's reservation holds it back from the agent:
+      # `HELPER_CALLS` in packages/domain/src/runs.ts). Fixed prompt: no ticket text, no nonce.
       - name: Check the sandbox (build)
         id: sandbox_check
         if: steps.mode.outputs.edits == 'true'
@@ -434,6 +451,7 @@ jobs:
           claude_args: |
             --model haiku
             --max-turns 3
+            ${{ inputs.credential == 'api_key' && '--max-budget-usd 0.25' || '' }}
 
       - name: Verify the sandbox check (build)
         id: sandbox_verify
@@ -535,13 +553,14 @@ jobs:
           allowed_bots: andy-intelligence-control
           settings: '{"disableAllHooks": true}'
           prompt: ${{ steps.procedure.outputs.prompt }}
-          # model and max_turns were validated in `context`. The managed profile already holds
+          # model, max_turns and max_budget_usd (pay_per_use only, AI-260) were validated in `context`. The managed profile already holds
           # the step's allow/deny rules (allowManagedPermissionRulesOnly ignores --allowedTools);
           # the flags repeat them for read-only steps as a second layer. With a schema, the run
           # must end in structured output matching it (the report sends it as `output`).
           claude_args: |
             --model ${{ needs.context.outputs.model }}
             --max-turns ${{ needs.context.outputs.max_turns }}
+            ${{ needs.context.outputs.max_budget_usd != '' && format('--max-budget-usd {0}', needs.context.outputs.max_budget_usd) || '' }}
             ${{ steps.procedure.outputs.schema_args }}
             ${{ needs.context.outputs.read_only == 'true' && '--allowedTools "Read,Glob,Grep" --disallowedTools "Bash,Edit,Write,MultiEdit,NotebookEdit,WebFetch,WebSearch"' || '' }}
 
@@ -672,6 +691,7 @@ jobs:
           claude_args: |
             --model haiku
             --max-turns 3
+            ${{ inputs.credential == 'api_key' && '--max-budget-usd 0.25' || '' }}
 
       - name: Verify the checks (sync)
         id: checks_verify

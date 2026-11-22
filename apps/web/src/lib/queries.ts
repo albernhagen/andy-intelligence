@@ -166,6 +166,31 @@ export function useSetMilestoneStatus(projectId: string) {
   );
 }
 
+/**
+ * Saves a milestone reorder (AI-324): the `order` writes `milestoneReorder` planned, one PATCH
+ * each in turn, so each is a logged, revertable config change the API refuses for anyone but the
+ * owner. A renumber is several writes: if one fails, the earlier ones stay (ties sort by name).
+ * So whether it succeeds or fails, every query refetches before the mutation settles, and the
+ * screen then shows what the server holds.
+ */
+export function useReorderMilestones(projectId: string) {
+  const api = useApi();
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (writes: { id: string; order: number }[]) => {
+      for (const w of writes) {
+        unwrap(
+          await api.PATCH("/api/projects/{projectId}/milestones/{milestoneId}", {
+            params: { path: { projectId, milestoneId: w.id } },
+            body: { order: w.order, reason: "Reordered on the roadmap" },
+          }),
+        );
+      }
+    },
+    onSettled: () => queryClient.invalidateQueries(),
+  });
+}
+
 /** Attaches a top-level epic to a milestone, or detaches it (null); logged as a config change. */
 export function useSetEpicMilestone(path: TicketPath) {
   const api = useApi();
