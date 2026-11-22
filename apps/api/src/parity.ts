@@ -258,11 +258,21 @@ export const PARITY: readonly ParityEntry[] = [
     },
   },
   {
-    action: "Milestones: list, set status, attach or detach an epic",
-    routes: [`GET ${P}/milestones`, `PATCH ${P}/milestones/:milestoneId`, `PUT ${T}/milestone`],
-    tools: ["list_milestones", "set_milestone_status", "set_epic_milestone"],
-    note: "The web sets status and attaches from the epic panel and the roadmap (AI-311), and reorders on the roadmap (AI-324). PATCH also renames, rewords and reorders: no MCP tool until AI-321 (Create a milestone).",
-    pending: { ticket: "AI-321", missing: "reorder over MCP: edit_milestone with order (AI-324)" },
+    action: "Milestones: list, create, edit, set status, attach or detach an epic",
+    routes: [
+      `GET ${P}/milestones`,
+      `POST ${P}/milestones`,
+      `PATCH ${P}/milestones/:milestoneId`,
+      `PUT ${T}/milestone`,
+    ],
+    tools: [
+      "list_milestones",
+      "create_milestone",
+      "edit_milestone",
+      "set_milestone_status",
+      "set_epic_milestone",
+    ],
+    note: "The web sets status and attaches from the epic panel and the roadmap (AI-311), and reorders on the roadmap (AI-324). PATCH covers edit_milestone (order included) and set_milestone_status (ADR-0136).",
   },
   // ── One side on purpose ─────────────────────────────────────────────────────
   {
@@ -290,17 +300,6 @@ export const PARITY: readonly ParityEntry[] = [
     tools: [],
     oneSide: "API only until its web control and MCP tool land (AI-134 built the routes).",
     pending: { ticket: "AI-320", missing: "a web control and an MCP tool to start them" },
-  },
-  {
-    action: "Create a milestone",
-    routes: [`POST ${P}/milestones`],
-    tools: [],
-    oneSide:
-      "ADR-0131 names three MCP milestone tools; create and edit wait on ADR-0136 (proposed).",
-    pending: {
-      ticket: "AI-321",
-      missing: "create_milestone and edit_milestone (name, outcome, order)",
-    },
   },
   {
     action: "List and revoke runners",
