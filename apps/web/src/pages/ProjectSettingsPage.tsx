@@ -35,7 +35,13 @@ export function ProjectSettingsPage() {
   const projects = useProjects();
   if (projects.isPending) return <Loading />;
   if (projects.data === undefined || showsError(projects))
-    return <QueryError error={projects.error} />;
+    return (
+      <QueryError
+        error={projects.error}
+        what="the projects"
+        onRetry={() => void projects.refetch()}
+      />
+    );
   const project = projects.data.find((p) => p.id === projectId);
   if (!project) return <p className="text-muted-foreground">Project not found.</p>;
 

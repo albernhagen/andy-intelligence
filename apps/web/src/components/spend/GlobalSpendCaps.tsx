@@ -59,7 +59,14 @@ export function GlobalSpendCaps() {
     onSuccess: () => queryClient.invalidateQueries(),
   });
 
-  if (global.error) return <QueryError error={global.error} />;
+  if (global.error)
+    return (
+      <QueryError
+        error={global.error}
+        what="the global spend caps"
+        onRetry={() => void global.refetch()}
+      />
+    );
   if (!global.data) return null;
   const view = global.data;
   const text = (field: Cap) => draft[field] ?? usd(view.caps[field]).slice(1);
@@ -172,7 +179,13 @@ function SpendCapChanges({ onReverted }: { onReverted: () => void }) {
   });
   return (
     <div aria-label="Spend caps changes" role="region" className="space-y-1">
-      {changes.error && <QueryError error={changes.error} />}
+      {changes.error && (
+        <QueryError
+          error={changes.error}
+          what="the spend cap changes"
+          onRetry={() => void changes.refetch()}
+        />
+      )}
       {revert.error && <p className="text-xs text-destructive">{errorText(revert.error)}</p>}
       {changes.data?.length === 0 && (
         <p className="text-xs text-muted-foreground">No global spend caps changes yet.</p>
