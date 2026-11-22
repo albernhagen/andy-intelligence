@@ -33,6 +33,7 @@ Generated from tickets, never edited here (AI-148). Every ticket sits under a mi
 - Re-sync cap (`scripts/resync-prs.mjs`, 4 an hour): raise to 12 and skip counting skipped runs?
 - ADR-0136: Milestone create and edit over MCP (AI-321, PR #343): extend ADR-0131 to five MCP milestone tools?
 - ADR-0140: Review check fails when not reviewed (AI-346, PR #356): carry verdicts over re-sync merges, and fail repos with no token?
+- ADR-0141: Agent PRs get a real review (AI-348, PR #377): allow the App on `agent/*` branches only?
 
 ## Blocked on Andy
 
