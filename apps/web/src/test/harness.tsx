@@ -13,6 +13,7 @@ import {
   InMemorySpendCapsStore,
   InMemoryNightLaunchStore,
   InMemoryReleaseNoteStore,
+  InMemoryDigestSummaryStore,
   InMemoryReviewFindingSource,
   InMemoryQuotaStore,
   InMemoryRunStore,
@@ -60,6 +61,7 @@ export function renderApp(
   const routing = new InMemoryRoutingConfigStore();
   const spendCapsStore = new InMemorySpendCapsStore();
   const releaseNotes = new InMemoryReleaseNoteStore();
+  const digestSummaries = new InMemoryDigestSummaryStore();
   const reviewFindings = new InMemoryReviewFindingSource();
   // GitHub fakes (ADR-0043): one installed repo; any manifest code "connects" this App.
   const connections = new InMemoryCodeHostConnectionStore();
@@ -91,6 +93,7 @@ export function renderApp(
     deployments,
     milestones,
     releaseNotes,
+    digestSummaries,
     reviewFindings,
     routing,
     spendCapsStore,
@@ -148,6 +151,7 @@ export function renderApp(
     runners,
     spendCapsStore,
     releaseNotes,
+    digestSummaries,
     reviewFindings,
     configChanges,
     user,

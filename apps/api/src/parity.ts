@@ -124,6 +124,11 @@ export const PARITY: readonly ParityEntry[] = [
     tools: ["list_in_flight", "list_work", "digest"],
   },
   {
+    action: "Retry the digest summary after it failed (AI-323)",
+    routes: [`POST ${P}/digest/summary/retry`],
+    tools: ["retry_digest_summary"],
+  },
+  {
     action: "Dashboards; DORA metrics",
     routes: ["GET /api/dashboard", `GET ${P}/dashboard`, `GET ${P}/dora`],
     tools: ["dashboard"],

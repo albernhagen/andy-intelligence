@@ -254,3 +254,49 @@ export function failedDigestSummary(
     updatedAt: now,
   });
 }
+
+// ── Task input ───────────────────────────────────────────────────────────────
+
+/**
+ * What the `summarize` task reads (AI-323): built from stored facts by the domain, embedded in
+ * the run's prompt as untrusted JSON, and parsed back at report to check its citations.
+ */
+const InputKey = z.string().regex(/^[A-Z][A-Z0-9]{0,9}-\d+$/);
+
+/** What the task reads: built from stored facts, embedded in its prompt, parsed back at report. */
+export const DigestSummaryInput = z.object({
+  project: z.string(),
+  day: z.string(),
+  timeZone: z.string(),
+  merged: z.array(
+    z.object({
+      pr: z.number().int().positive(),
+      title: z.string(),
+      ticketKey: InputKey.nullable(),
+      ticketTitle: z.string().nullable(),
+      epicKey: InputKey.nullable(),
+      epicTitle: z.string().nullable(),
+      milestone: z.string().nullable(),
+      whatChanged: z.string().nullable(),
+      howItWorks: z.string().nullable(),
+      needsYou: z.string().nullable(),
+    }),
+  ),
+  ticketChanges: z.array(
+    z.object({
+      key: InputKey,
+      title: z.string(),
+      stage: z.string(),
+      epicKey: InputKey.nullable(),
+      epicTitle: z.string().nullable(),
+    }),
+  ),
+  counts: z.object({
+    merged: z.number().int(),
+    inProgress: z.number().int(),
+    needsAndy: z.number().int(),
+    costUsd: z.number(),
+  }),
+  truncated: z.boolean(),
+});
+export type DigestSummaryInput = z.infer<typeof DigestSummaryInput>;
