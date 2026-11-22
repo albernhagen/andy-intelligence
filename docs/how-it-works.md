@@ -21,6 +21,7 @@ What is built on `main` now, moved from `README.md` so its "How it works today" 
 - Dashboards chart delivery and cost per week (AI-117), and a project's DORA metrics over 30 or 90 days from its production deployment records (AI-200; lead time not measured until commit times are recorded).
 - Needs-you email (AI-77): each ticket that needs Andy, batched per 10 minutes, 20 a day; off until configured (runbook `email-notifications.md`).
 - Config proposals (inbox, MCP): a finding kind on 3+ PRs becomes a pending `AGENTS.md` change, never applied; idle until findings are stored (ADR-0097).
+- A weekly model scout (AI-268) proposes a tier change from OpenRouter's public models list, at most one a week, never applied; off until its Terraform is applied.
 
 **Dispatch:**
 
