@@ -8,7 +8,7 @@ export const WORK_VIEWS = ["needs-me", "mine", "agents", "blocked", "in-review"]
 export type WorkView = (typeof WORK_VIEWS)[number];
 
 export const WORK_VIEW_LABELS: Record<WorkView, string> = {
-  "needs-me": "Needs me",
+  "needs-me": "Needs you",
   mine: "Mine",
   agents: "Agents",
   blocked: "Blocked",
@@ -30,7 +30,7 @@ export const isOpenTicket = (t: Ticket) =>
  * The views an open ticket is in (none for a closed one). `byId` holds the board's tickets, for
  * blockers: a blocker counts until it is Done (ADR-0108), so a Cancelled blocker keeps the ticket
  * in Blocked until someone removes it; the card's "Blocked by" marker ignores it.
- * Needs me matches the Needs-you inbox (an open question or the API's flag, AI-40) plus a
+ * Needs you matches the Needs-you inbox (an open question or the API's flag, AI-40) plus a
  * ticket whose worker is still to be picked (ADR-0082). An epic never runs, so it is never
  * Mine or Agents.
  */

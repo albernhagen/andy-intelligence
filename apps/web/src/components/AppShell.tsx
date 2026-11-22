@@ -363,13 +363,18 @@ function KeyBadge({ children }: { children: ReactNode }) {
   );
 }
 
-/** Items waiting on the viewer across every project; opens that inbox. */
+/** Things to answer (questions and flagged tickets) across every project; opens that inbox. */
 function NeedsYouCount() {
   const needsYou = useNeedsYou();
   const total = needsYou.data ? waitingCounts(needsYou.data).total : null;
   return (
     <Link
       to={scopePath(ALL, "inbox")}
+      title={
+        total === null
+          ? undefined
+          : `${total} question${total === 1 ? "" : "s"} or flagged ticket${total === 1 ? "" : "s"} to answer`
+      }
       className={cn(
         "inline-flex h-11 items-center gap-1.5 whitespace-nowrap sm:h-7 rounded-md px-2 text-xs font-medium tabular-nums",
         total ? "bg-attention/15 text-attention" : "text-muted-foreground hover:bg-muted",
