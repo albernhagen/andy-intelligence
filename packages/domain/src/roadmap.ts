@@ -41,7 +41,7 @@ export const MAX_ROADMAP_CHILD_EPICS = 20;
 export type RoadmapState = "not_started" | "in_progress" | "done";
 
 export interface RoadmapCounts {
-  /** Open tickets waiting on Andy: the board's Needs me rule (ADR-0108); overlaps the others. */
+  /** Open tickets waiting on Andy: the board's Needs you rule (ADR-0108); overlaps the others. */
   needsYou: number;
   inReview: number;
   inProgress: number;
