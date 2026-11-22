@@ -285,7 +285,7 @@ function Running({ path, night }: { path: TicketPath; night: NightStatus }) {
       {p && (
         <>
           <p aria-label="Night progress" className="tabular-nums">
-            {p.stories.done} of {p.stories.total} stories done · {p.stories.running} running ·{" "}
+            {p.stories.done} of {p.stories.total} tickets done · {p.stories.running} running ·{" "}
             {p.stories.stopped} stopped · {p.stories.skipped} skipped · {p.stories.waiting} waiting
           </p>
           <p aria-label="Night spend" className="text-muted-foreground tabular-nums">
@@ -314,7 +314,7 @@ function Running({ path, night }: { path: TicketPath; night: NightStatus }) {
 }
 
 /**
- * What the night decided alone (AI-123), for the morning: stories it stopped, with why and the
+ * What the night decided alone (AI-123), for the morning: tickets it stopped, with why and the
  * dependants it skipped, and how many assumptions it made instead of asking.
  */
 function NightReport({ night }: { night: NightStatus }) {
@@ -325,7 +325,7 @@ function NightReport({ night }: { night: NightStatus }) {
     <div className="space-y-1 text-sm">
       {assumptions > 0 && (
         <p aria-label="Night assumptions">
-          {assumptions} night assumption{assumptions === 1 ? "" : "s"} to review on the stories.
+          {assumptions} night assumption{assumptions === 1 ? "" : "s"} to review on the tickets.
         </p>
       )}
       {stopped.length > 0 && (
