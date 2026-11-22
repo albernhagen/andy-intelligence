@@ -95,8 +95,8 @@ function RunDetail({ run }: { run: Run }) {
       </Facts>
 
       {/* The summary already says the first line; the full error shows only when it says more. */}
-      {run.error && run.error.trim().includes("\n") && (
-        <p className="whitespace-pre-wrap text-sm text-destructive">{run.error}</p>
+      {errorReason(run.error)?.more && (
+        <p className="whitespace-pre-wrap text-sm text-destructive">{run.error?.trim()}</p>
       )}
       {run.summary && (
         <Section title="Report">
@@ -341,11 +341,30 @@ export function runSummary(
     }
     case "failed": {
       const after = wall === null ? "" : ` after ${about(wall)}`;
-      const reason = run.error?.split("\n")[0]?.trim();
-      if (!reason) return `Failed${after}: ${going.toLowerCase()}${what}.`;
-      return `Failed${after}: ${reason}${reason.endsWith(".") ? "" : "."}`;
+      return `Failed${after}: ${reasonOr(run.error, `${going.toLowerCase()}${what}`)}`;
     }
     case "cancelled":
-      return `Cancelled: ${going.toLowerCase()}${what}.`;
+      return `Cancelled: ${reasonOr(run.error, `${going.toLowerCase()}${what}`)}`;
   }
+}
+
+/** The error's first non-blank line as a sentence, else `fallback`: "Checks failed." */
+function reasonOr(error: string | null | undefined, fallback: string): string {
+  const reason = errorReason(error)?.first ?? fallback;
+  return `${reason}${reason.endsWith(".") ? "" : "."}`;
+}
+
+/**
+ * An error split once for the summary line and the page: its first non-blank line, and whether
+ * more lines follow (then the page shows it in full). Null when it says nothing.
+ */
+export function errorReason(
+  error: string | null | undefined,
+): { first: string; more: boolean } | null {
+  const lines = (error ?? "")
+    .split("\n")
+    .map((l) => l.trim())
+    .filter(Boolean);
+  if (lines.length === 0) return null;
+  return { first: lines[0]!, more: lines.length > 1 };
 }

@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { screen, waitFor, within } from "@testing-library/react";
 import { DEFAULT_ROUTE } from "@andy/domain";
 import { renderApp } from "@/test/harness";
-import { gateText, prLabel, runSummary, wallMs } from "@/pages/RunPage";
+import { errorReason, gateText, prLabel, runSummary, wallMs } from "@/pages/RunPage";
 import { elapsed } from "@/lib/format";
 import { httpsHref } from "@/components/Runs";
 
@@ -287,6 +287,13 @@ describe("agent task page helpers", () => {
     expect(runSummary({ ...base, status: "cancelled", step: "sync" }, "AI-7", now)).toBe(
       "Cancelled: syncing AI-7.",
     );
+    // A cancelled task says why when it can; a blank first line never hides the reason.
+    expect(
+      runSummary({ ...ended, status: "cancelled", error: "Cancelled by Andy" }, "AI-7", now),
+    ).toBe("Cancelled: Cancelled by Andy.");
+    expect(runSummary({ ...ended, status: "failed", error: "\nChecks failed" }, "AI-7", now)).toBe(
+      "Failed after 10 min: Checks failed.",
+    );
   });
 
   it("GivenAFailedTask_WhenItsPageOpens_ThenAOneLineErrorShowsOnceAndALongerOneInFull", async () => {
@@ -306,6 +313,39 @@ describe("agent task page helpers", () => {
     await open(h, `/p/ai/runs/${long.id}`);
     page = await screen.findByRole("article", { name: "Agent task" });
     expect(await within(page).findByText(/pnpm test: 2 failing/)).toBeTruthy();
+  });
+
+  it("GivenErrorsWithBlankLines_WhenSplit_ThenTheFirstNonBlankLineLeadsAndMoreIsCounted", () => {
+    expect(errorReason(null)).toBeNull();
+    expect(errorReason(" \n ")).toBeNull();
+    expect(errorReason("Checks failed")).toEqual({ first: "Checks failed", more: false });
+    expect(errorReason("\n  Checks failed  \n")).toEqual({ first: "Checks failed", more: false });
+    expect(errorReason("\nChecks failed\n\npnpm test")).toEqual({
+      first: "Checks failed",
+      more: true,
+    });
+  });
+
+  it("GivenACancelledTaskWithAReason_WhenItsPageOpens_ThenTheReasonShowsOnce", async () => {
+    const h = await setup();
+    const run = await h.newRun();
+    await h.runs.update(run.id, { status: "cancelled", error: "Superseded by a newer build" }, [
+      "queued",
+    ]);
+    await open(h, `/p/ai/runs/${run.id}`);
+    const page = await screen.findByRole("article", { name: "Agent task" });
+    await waitFor(() =>
+      expect(within(page).getAllByText(/Superseded by a newer build/)).toHaveLength(1),
+    );
+  });
+
+  it("GivenAnErrorLedByABlankLine_WhenItsPageOpens_ThenTheReasonShowsOnce", async () => {
+    const h = await setup();
+    const run = await h.newRun();
+    await h.runs.update(run.id, { status: "failed", error: "\nChecks failed" }, ["queued"]);
+    await open(h, `/p/ai/runs/${run.id}`);
+    const page = await screen.findByRole("article", { name: "Agent task" });
+    await waitFor(() => expect(within(page).getAllByText(/Checks failed/)).toHaveLength(1));
   });
 
   it("GivenPrUrls_WhenLabelled_ThenTheNumberShows", () => {
