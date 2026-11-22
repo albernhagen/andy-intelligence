@@ -1,6 +1,7 @@
 import { useState, type ReactNode } from "react";
 import { Link, useParams, useSearch } from "@tanstack/react-router";
 import type { WhatsNew, WhatsNewMilestone, WhatsNewNote } from "@andy/contracts";
+import { DailySummary } from "@/components/DailySummary";
 import { Loading, QueryError } from "@/components/Status";
 import { Badge } from "@/components/ui/badge";
 import { Segmented } from "@/components/ui/segmented";
@@ -60,7 +61,7 @@ export function WhatsNewPage() {
           </select>
         )}
       </header>
-      {/* AI-323: the model-written daily summary goes here, above Exceptions. */}
+      <DailySummary projectId={projectId} />
       <Exceptions projectId={projectId} />
       {whatsNew.isPending ? (
         <Loading />
