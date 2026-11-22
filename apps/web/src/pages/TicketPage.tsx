@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { Link, useBlocker, useNavigate, useParams } from "@tanstack/react-router";
 import { useQueryClient } from "@tanstack/react-query";
 import { X } from "lucide-react";
-import { Size, TicketType, type Ticket } from "@andy/contracts";
+import { Size, TicketType, type Ticket, type Worker } from "@andy/contracts";
 import {
   isHeld,
   listedMilestoneHold,
@@ -25,7 +25,7 @@ import {
   useTicketSave,
 } from "@/components/InlineEdit";
 import { WorkerControl } from "@/components/WorkerControls";
-import { ExecutorControl } from "@/components/ExecutorControls";
+import { EXECUTOR_LABELS, ExecutorControl } from "@/components/ExecutorControls";
 import { useInFlight } from "@/components/InFlightPanel";
 import { TicketMilestone } from "@/components/MilestoneControls";
 import { MoveControls } from "@/components/MoveControls";
@@ -51,12 +51,13 @@ import {
   useTickets,
   useProjects,
   useMilestones,
+  useTicketRouting,
 } from "@/lib/queries";
-import { STAGE_LABELS, TYPE_LABELS } from "@/lib/tickets";
+import { TYPE_LABELS } from "@/lib/tickets";
 import { showsError } from "@/lib/live";
 
 /**
- * The story panel (ADR-0059: UX foundation, row "Story panel"): the ticket over the board,
+ * The ticket panel (ADR-0059: UX foundation, row "Story panel"): the ticket over the board,
  * rendered in the board route's `<Outlet />`. A status line, then one document (title,
  * description, checklist, scope) beside a rail of facts, then questions and one activity
  * timeline. Every field edits in place. Esc or Close goes back to the board.
@@ -121,7 +122,13 @@ export function TicketPage() {
       </div>
       <div className="px-4 py-4 sm:px-6">
         {ticket.isPending && <Loading />}
-        {showsError(ticket) && <QueryError error={ticket.error} />}
+        {showsError(ticket) && (
+          <QueryError
+            error={ticket.error}
+            what="the ticket"
+            onRetry={() => void ticket.refetch()}
+          />
+        )}
         {loaded && (
           // Keyed by ticket: another ticket starts with fresh editors, never this one's drafts.
           <UnsavedDrafts.Provider value={drafts}>
@@ -203,32 +210,49 @@ function StatusLine({ ticket }: { ticket: Ticket }) {
   );
 }
 
+/**
+ * Led by the decision (AI-336): the next move, open questions and the PR first; then the title.
+ * An epic then shows its outcome, tickets, milestone and night plan before its fields.
+ */
 function Story({ ticket: t }: { ticket: Ticket }) {
   const title = useTicketSave(t);
   const body = useTicketSave(t);
-  const events = useEvents(pathOf(t)).data ?? [];
-  const repos = useProjects().data?.find((p) => p.id === t.projectId)?.repos ?? [];
+  const isEpic = t.type === "epic";
   return (
     <article className="space-y-6">
-      <PullRequestLink events={events} repos={repos} />
-      <TicketCostLine {...pathOf(t)} />
-      <InlineText
-        label="Title"
-        required
-        value={t.title}
-        onSave={(v, done) => title.save({ title: v }, done)}
-        onEdit={title.begin}
-        pending={title.pending}
-        error={title.error}
-        wrap={(button) => (
-          <h2 className="text-lg font-medium">
-            <span className="text-muted-foreground tabular-nums">{t.key}:</span> {button}
-          </h2>
-        )}
-      />
+      <Next ticket={t} />
+      <div className="space-y-1">
+        <InlineText
+          label="Title"
+          required
+          value={t.title}
+          onSave={(v, done) => title.save({ title: v }, done)}
+          onEdit={title.begin}
+          pending={title.pending}
+          error={title.error}
+          wrap={(button) => (
+            <h2 className="text-lg font-medium">
+              <span className="text-muted-foreground tabular-nums">{t.key}:</span> {button}
+            </h2>
+          )}
+        />
+        <TicketCostLine {...pathOf(t)} />
+      </div>
+      {isEpic && (
+        <>
+          <Outcome ticket={t} />
+          <EpicChildren
+            {...pathOf(t)}
+            milestone={
+              <div className="max-w-sm">
+                <TicketMilestone ticket={t} />
+              </div>
+            }
+          />
+        </>
+      )}
       <div className="grid gap-6 sm:grid-cols-[minmax(0,1fr)_11rem]">
         <div className="min-w-0 space-y-6">
-          {t.type === "epic" && <Outcome ticket={t} />}
           <MarkdownField
             label="Description"
             value={t.body}
@@ -237,19 +261,10 @@ function Story({ ticket: t }: { ticket: Ticket }) {
             pending={body.pending}
             error={body.error}
           />
-          <ListField
-            ticket={t}
-            field="acceptanceCriteria"
-            // An epic's criteria are its "Done when" list (ADR-0108), as a chore's are.
-            label={t.type === "chore" || t.type === "epic" ? "Done when" : "Acceptance criteria"}
-          />
-          <ListField ticket={t} field="assumptions" label="Assumptions" />
-          <ListField ticket={t} field="outOfScope" label="Out of scope" />
-          <ListField ticket={t} field="touches" label="Touches" />
+          <ListFields ticket={t} />
         </div>
         <Rail ticket={t} />
       </div>
-      {t.type === "epic" && <EpicChildren {...pathOf(t)} />}
       <ScoreReasons ticket={t} />
       <Questions {...pathOf(t)} />
       <Assumptions ticket={t} />
@@ -258,14 +273,97 @@ function Story({ ticket: t }: { ticket: Ticket }) {
   );
 }
 
+/** The decision: the next move (the panel's one primary button), the PR, open questions. */
+function Next({ ticket: t }: { ticket: Ticket }) {
+  const events = useEvents(pathOf(t)).data ?? [];
+  const repos = useProjects().data?.find((p) => p.id === t.projectId)?.repos ?? [];
+  return (
+    <section aria-label="Next" className="space-y-2">
+      <MoveControls ticket={t} />
+      <Readiness {...pathOf(t)} />
+      <PullRequestLink events={events} repos={repos} />
+      <OpenQuestions {...pathOf(t)} />
+    </section>
+  );
+}
+
+type ListKey = "acceptanceCriteria" | "assumptions" | "outOfScope" | "touches";
+const LIST_KEYS: readonly ListKey[] = [
+  "acceptanceCriteria",
+  "assumptions",
+  "outOfScope",
+  "touches",
+];
+
+function listLabel(t: Ticket, field: ListKey): string {
+  switch (field) {
+    case "acceptanceCriteria":
+      // An epic's criteria are its "Done when" list (ADR-0108), as a chore's are.
+      return t.type === "chore" || t.type === "epic" ? "Done when" : "Acceptance criteria";
+    case "assumptions":
+      return "Assumptions";
+    case "outOfScope":
+      return "Out of scope";
+    case "touches":
+      return "Touches";
+  }
+}
+
+/**
+ * The list fields (AI-330): one with items shows as always; empty ones fold into one "Add…"
+ * row, so a bare ticket doesn't show four headings of nothing. Picking one opens it, focused;
+ * a field shown once stays for this ticket, even if its last item is removed.
+ */
+function ListFields({ ticket: t }: { ticket: Ticket }) {
+  const [opened, setOpened] = useState<{ keys: ListKey[]; focus: ListKey | null }>(() => ({
+    keys: LIST_KEYS.filter((f) => t[f].length > 0),
+    focus: null,
+  }));
+  const shown = LIST_KEYS.filter((f) => t[f].length > 0 || opened.keys.includes(f));
+  const folded = LIST_KEYS.filter((f) => !shown.includes(f));
+  return (
+    <>
+      {shown.map((f) => (
+        <ListField
+          key={f}
+          ticket={t}
+          field={f}
+          label={listLabel(t, f)}
+          autoFocus={opened.focus === f}
+        />
+      ))}
+      {folded.length > 0 && (
+        <Select
+          aria-label="Add a list"
+          className="h-8 w-auto text-muted-foreground"
+          value=""
+          onChange={(e) => {
+            const f = e.target.value as ListKey;
+            if (f) setOpened(({ keys }) => ({ keys: [...keys, f], focus: f }));
+          }}
+        >
+          <option value="">Add…</option>
+          {folded.map((f) => (
+            <option key={f} value={f}>
+              {listLabel(t, f)}
+            </option>
+          ))}
+        </Select>
+      )}
+    </>
+  );
+}
+
 function ListField({
   ticket,
   field,
   label,
+  autoFocus,
 }: {
   ticket: Ticket;
-  field: "acceptanceCriteria" | "assumptions" | "outOfScope" | "touches";
+  field: ListKey;
   label: string;
+  autoFocus: boolean;
 }) {
   const s = useTicketSave(ticket);
   return (
@@ -275,6 +373,7 @@ function ListField({
       onSave={(v, done) => s.save({ [field]: v }, done)}
       pending={s.pending}
       error={s.error}
+      autoFocus={autoFocus}
     />
   );
 }
@@ -299,8 +398,8 @@ function Outcome({ ticket: t }: { ticket: Ticket }) {
 }
 
 /**
- * Stage and moves, then the facts: type, size, tier, epic, milestone, blocked by; cancel and
- * archive.
+ * The rail (AI-336): Details (type, size, epic, milestone, blocked by), then How it runs,
+ * collapsed, then cancel and archive. An epic's milestone leads the panel instead.
  */
 function Rail({ ticket: t }: { ticket: Ticket }) {
   const tickets = useTickets(t.projectId).data ?? [];
@@ -309,16 +408,7 @@ function Rail({ ticket: t }: { ticket: Ticket }) {
 
   return (
     <aside aria-label="Details" className="min-w-0 space-y-4">
-      <div className="space-y-2">
-        <p className="flex items-center gap-2">
-          <span className="text-xs text-muted-foreground">Stage</span>
-          <Badge>{STAGE_LABELS[t.stage]}</Badge>
-        </p>
-        <Readiness {...pathOf(t)} />
-        <MoveControls ticket={t} />
-      </div>
-      <WorkerControl ticket={t} />
-      <ExecutorControl ticket={t} />
+      <h3 className="text-sm font-medium">Details</h3>
       <SelectField
         ticket={t}
         label="Type"
@@ -345,9 +435,6 @@ function Rail({ ticket: t }: { ticket: Ticket }) {
           className="text-xs"
         />
       </div>
-      {/* Tier comes from size; an override pins it, on the ticket or its epic (AI-116). */}
-      <OverridesEditor ticket={t} tickets={tickets} />
-      <RouteLayers ticket={t} />
       <SelectField
         ticket={t}
         label="Epic"
@@ -355,10 +442,53 @@ function Rail({ ticket: t }: { ticket: Ticket }) {
         options={[["", "None"], ...epics.map((e) => [e.id, `${e.key}: ${e.title}`] as const)]}
         patch={(v) => ({ parentId: v === "" ? null : v })}
       />
-      <TicketMilestone ticket={t} />
+      {t.type !== "epic" && <TicketMilestone ticket={t} />}
       <BlockedBy ticket={t} tickets={tickets} />
+      <HowItRuns ticket={t} tickets={tickets} />
       <CancelArchiveControls ticket={t} />
     </aside>
+  );
+}
+
+const WORKER_LABELS: Record<Worker, string> = { agent: "Agent", me: "Mine", ask: "No worker" };
+
+/**
+ * Operating detail, collapsed (AI-336): worker, runs on, overrides and routing. The summary
+ * names the current values, so it rarely needs opening.
+ */
+function HowItRuns({ ticket: t, tickets }: { ticket: Ticket; tickets: Ticket[] }) {
+  const path = pathOf(t);
+  const worker = useWorker(path).data?.worker;
+  const executor = useExecutor(path).data?.executor;
+  const routing = useTicketRouting(path).data;
+  const overrides = Object.values(t.overrides).filter((v) => v !== undefined).length;
+  const values = [
+    worker && WORKER_LABELS[worker],
+    executor && EXECUTOR_LABELS[executor],
+    routing && `${routing.tier.value} tier`,
+    routing && (routing.route.value?.model ?? "no route"),
+    overrides > 0 && `${overrides} ${overrides === 1 ? "override" : "overrides"}`,
+  ].filter(Boolean);
+  return (
+    <details aria-label="How it runs" className="group space-y-4">
+      <summary className="cursor-pointer list-none space-y-0.5">
+        <span className="block text-sm font-medium">
+          How it runs{" "}
+          <span aria-hidden className="text-muted-foreground group-open:hidden">
+            ▸
+          </span>
+          <span aria-hidden className="hidden text-muted-foreground group-open:inline">
+            ▾
+          </span>
+        </span>
+        <span className="block text-xs text-muted-foreground">{values.join(" · ")}</span>
+      </summary>
+      <WorkerControl ticket={t} />
+      <ExecutorControl ticket={t} />
+      {/* Tier comes from size; an override pins it, on the ticket or its epic (AI-116). */}
+      <OverridesEditor ticket={t} tickets={tickets} />
+      <RouteLayers ticket={t} />
+    </details>
   );
 }
 
@@ -496,7 +626,13 @@ function Readiness(path: TicketPath) {
   const dor = useReadiness(path);
   return (
     <section aria-label="Definition of Ready" className="space-y-1 text-xs">
-      {showsError(dor) && <QueryError error={dor.error} />}
+      {showsError(dor) && (
+        <QueryError
+          error={dor.error}
+          what="the Definition of Ready"
+          onRetry={() => void dor.refetch()}
+        />
+      )}
       {dor.data?.met && <p className="text-muted-foreground">Definition of Ready: met.</p>}
       {dor.data && !dor.data.met && (
         <>
@@ -512,18 +648,37 @@ function Readiness(path: TicketPath) {
   );
 }
 
+/** Open questions lead the panel: they are what the ticket waits for. */
+function OpenQuestions(path: TicketPath) {
+  const questions = useTicketQuestions(path);
+  const open = (questions.data ?? []).filter((q) => q.status === "open");
+  if (showsError(questions))
+    return (
+      <QueryError
+        error={questions.error}
+        what="the questions"
+        onRetry={() => void questions.refetch()}
+      />
+    );
+  if (open.length === 0) return null;
+  return (
+    <section aria-label="Open questions" className="space-y-2">
+      {open.map((q) => (
+        <QuestionCard key={q.id} question={q} />
+      ))}
+    </section>
+  );
+}
+
+/** Answered and dropped questions, and asking a new one; open ones lead the panel. */
 function Questions(path: TicketPath) {
   const questions = useTicketQuestions(path);
-  // Open questions first: they are what the ticket waits for.
-  const sorted = [...(questions.data ?? [])].sort(
-    (a, b) => Number(b.status === "open") - Number(a.status === "open"),
-  );
+  const closed = (questions.data ?? []).filter((q) => q.status !== "open");
   return (
     <section aria-label="Questions" className="space-y-2">
       <h3 className="text-sm font-medium">Questions</h3>
       {questions.isPending && <Loading />}
-      {showsError(questions) && <QueryError error={questions.error} />}
-      {sorted.map((q) => (
+      {closed.map((q) => (
         <QuestionCard key={q.id} question={q} />
       ))}
       <AskQuestionForm {...path} />
@@ -586,7 +741,21 @@ function Timeline(path: TicketPath) {
   const events = useEvents(path);
   const runs = useRuns(path);
   if (events.isPending || runs.isPending) return <Loading />;
-  if (events.data === undefined || showsError(events)) return <QueryError error={events.error} />;
-  if (runs.data === undefined || showsError(runs)) return <QueryError error={runs.error} />;
+  if (events.data === undefined || showsError(events))
+    return (
+      <QueryError
+        error={events.error}
+        what="the ticket's history"
+        onRetry={() => void events.refetch()}
+      />
+    );
+  if (runs.data === undefined || showsError(runs))
+    return (
+      <QueryError
+        error={runs.error}
+        what="the ticket's agent tasks"
+        onRetry={() => void runs.refetch()}
+      />
+    );
   return <Activity {...path} events={events.data} runs={runs.data} />;
 }

@@ -5,6 +5,7 @@ import type { Ticket } from "@andy/contracts";
 import { Markdown } from "@/components/Markdown";
 import { QueryError } from "@/components/Status";
 import { Button } from "@/components/ui/button";
+import { Segmented } from "@/components/ui/segmented";
 import { Input, Textarea } from "@/components/ui/input";
 import { ApiError } from "@/lib/api";
 import { type TicketPatch, ticketQueryKey, useUpdateTicket } from "@/lib/queries";
@@ -132,7 +133,7 @@ function onEscape(cancel: () => void) {
 function SaveCancel({ pending, onCancel }: { pending: boolean; onCancel: () => void }) {
   return (
     <div className="flex gap-2">
-      <Button type="submit" size="sm" disabled={pending}>
+      <Button type="submit" size="sm" variant="outline" disabled={pending}>
         Save
       </Button>
       <Button type="button" size="sm" variant="outline" onClick={onCancel}>
@@ -264,20 +265,15 @@ export function MarkdownField({
     >
       <div className="flex items-center justify-between">
         <h3 className="text-sm font-medium">{label}</h3>
-        <div className="flex gap-1" role="group" aria-label="Editor mode">
-          {(["Write", "Preview"] as const).map((mode) => (
-            <Button
-              key={mode}
-              type="button"
-              size="sm"
-              variant={(mode === "Preview") === preview ? "default" : "ghost"}
-              aria-pressed={(mode === "Preview") === preview}
-              onClick={() => setPreview(mode === "Preview")}
-            >
-              {mode}
-            </Button>
-          ))}
-        </div>
+        <Segmented
+          label="Editor mode"
+          value={preview ? "Preview" : "Write"}
+          options={[
+            { value: "Write", label: "Write" },
+            { value: "Preview", label: "Preview" },
+          ]}
+          onChange={(mode) => setPreview(mode === "Preview")}
+        />
       </div>
       {preview ? (
         <div className="min-h-20 rounded-md border border-border p-3" aria-label="Preview">
@@ -313,7 +309,8 @@ export function EditableList({
   pending,
   error,
   ordered = false,
-}: EditorProps<string[]> & { ordered?: boolean }) {
+  autoFocus = false,
+}: EditorProps<string[]> & { ordered?: boolean; autoFocus?: boolean }) {
   const [draft, setDraft] = useState("");
   useUnsavedDraft(draft.trim() !== "");
   const List = ordered ? "ol" : "ul";
@@ -356,6 +353,7 @@ export function EditableList({
         <Input
           aria-label={`Add to ${label.toLowerCase()}`}
           placeholder="Add an item, press Enter"
+          autoFocus={autoFocus}
           // Quiet until used: a box per list would outweigh the items.
           className="h-7 border-transparent bg-transparent px-1 text-xs hover:border-border focus-visible:border-border"
           value={draft}

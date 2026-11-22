@@ -37,8 +37,11 @@ describe("tickets UI", () => {
     const tier = screen.getByLabelText("Tier") as HTMLSelectElement;
     expect(await within(tier).findByRole("option", { name: "strong (from size)" })).toBeTruthy();
     await user.selectOptions(tier, "frontier");
+    // Empty lists fold into the Add row (AI-330): pick one, type, Enter.
+    await user.selectOptions(screen.getByLabelText("Add a list"), "Out of scope");
     await user.type(screen.getByLabelText("Add to out of scope"), "billing{Enter}");
     await screen.findByRole("button", { name: "Remove: billing" });
+    await user.selectOptions(screen.getByLabelText("Add a list"), "Touches");
     await user.type(screen.getByLabelText("Add to touches"), "apps/web/**{Enter}");
 
     await waitFor(async () =>
@@ -135,8 +138,9 @@ describe("tickets UI", () => {
     expect(await within(dor).findByText("Definition of Ready: met.")).toBeTruthy();
     await harness.user.click(screen.getByRole("button", { name: "Move to Ready" }));
 
-    // From Ready the domain allows In progress and back to Backlog.
+    // From Ready the next move is In progress; back to Backlog is under "Move…".
     expect(await screen.findByRole("button", { name: "Move to In progress" })).toBeTruthy();
+    await harness.user.click(screen.getByRole("button", { name: "Move…" }));
     expect(screen.getByRole("button", { name: "Move to Backlog" })).toBeTruthy();
     const history = screen.getByRole("region", { name: "Activity" });
     expect(await within(history).findByText(/moved Backlog → Ready/)).toBeTruthy();
@@ -149,7 +153,8 @@ describe("tickets UI", () => {
     await harness.router.navigate({ to: `/p/ai/t/${ticket.id}` });
     const { user } = harness;
 
-    await user.click(await screen.findByRole("button", { name: "Force move…" }));
+    await user.click(await screen.findByRole("button", { name: "Move…" }));
+    await user.click(screen.getByRole("button", { name: "Force move…" }));
     const submit = screen.getByRole("button", { name: "Force move" });
     expect((submit as HTMLButtonElement).disabled).toBe(true);
 
@@ -170,7 +175,8 @@ describe("tickets UI", () => {
     await harness.router.navigate({ to: `/p/ai/t/${ticket.id}` });
     const { user } = harness;
 
-    await user.click(await screen.findByRole("button", { name: "Force move…" }));
+    await user.click(await screen.findByRole("button", { name: "Move…" }));
+    await user.click(screen.getByRole("button", { name: "Force move…" }));
     await user.selectOptions(screen.getByLabelText("Force to"), "Ready");
     await user.click(screen.getByRole("button", { name: "Force move" }));
 

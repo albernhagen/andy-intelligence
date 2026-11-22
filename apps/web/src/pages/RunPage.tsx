@@ -9,6 +9,7 @@ import { formatQuotaDelta } from "@/components/TicketCostLine";
 import { ApiError, unwrap, useApi } from "@/lib/api";
 import { useLivePoll } from "@/lib/live";
 import { isActiveRun, useTicketByRef } from "@/lib/queries";
+import { count, dateTime, elapsed } from "@/lib/format";
 
 /** One agent task, polled while it is in flight. A 404 is final: no retries. */
 function useRun(projectId: string, runId: string) {
@@ -40,7 +41,7 @@ export function RunPage() {
     return run.error instanceof ApiError && run.error.status === 404 ? (
       <p className="text-muted-foreground">Agent task not found.</p>
     ) : (
-      <QueryError error={run.error} />
+      <QueryError error={run.error} what="the agent task" onRetry={() => void run.refetch()} />
     );
   }
   return <RunDetail run={run.data} />;
@@ -81,15 +82,15 @@ function RunDetail({ run }: { run: Run }) {
         </Fact>
         <Fact label="Started">{started ? <Time iso={started} /> : "—"}</Fact>
         <Fact label="Ended">{run.endedAt ? <Time iso={run.endedAt} /> : "—"}</Fact>
-        <Fact label="Wall time">{wall === null ? "—" : formatDuration(wall)}</Fact>
+        <Fact label="Wall time">{wall === null ? "—" : elapsed(wall)}</Fact>
       </Facts>
 
       <Facts title="Usage and cost">
-        <Fact label="Tokens in">{count(run.tokensIn ?? run.usage?.inputTokens ?? null)}</Fact>
-        <Fact label="Tokens out">{count(run.tokensOut ?? run.usage?.outputTokens ?? null)}</Fact>
-        <Fact label="Cache read">{count(run.usage?.cacheReadTokens ?? null)}</Fact>
-        <Fact label="Cache write">{count(run.usage?.cacheWriteTokens ?? null)}</Fact>
-        <Fact label="Turns">{count(run.usage?.turns ?? null)}</Fact>
+        <Fact label="Tokens in">{orDash(run.tokensIn ?? run.usage?.inputTokens ?? null)}</Fact>
+        <Fact label="Tokens out">{orDash(run.tokensOut ?? run.usage?.outputTokens ?? null)}</Fact>
+        <Fact label="Cache read">{orDash(run.usage?.cacheReadTokens ?? null)}</Fact>
+        <Fact label="Cache write">{orDash(run.usage?.cacheWriteTokens ?? null)}</Fact>
+        <Fact label="Turns">{orDash(run.usage?.turns ?? null)}</Fact>
         {/* No usage reported means unknown, never $0 (ADR-0046). */}
         <Fact label="Cost">{run.costUsd === null ? "unknown" : formatCost(run)}</Fact>
         <Fact label="Quota used">{quota ?? "unknown"}</Fact>
@@ -219,23 +220,16 @@ function External({ href, children }: { href: string | undefined; children: Reac
 }
 
 function Time({ iso }: { iso: string }) {
-  return <time dateTime={iso}>{new Date(iso).toLocaleString()}</time>;
+  return <time dateTime={iso}>{dateTime(iso)}</time>;
 }
 
-const count = (n: number | null) => (n === null ? "—" : n.toLocaleString());
+const orDash = (n: number | null) => (n === null ? "—" : count(n));
 
 /** The harness's own wall time, else ended minus started; null while either is missing. */
 export function wallMs(run: Pick<Run, "usage" | "startedAt" | "endedAt">): number | null {
   if (run.usage?.wallMs != null) return run.usage.wallMs;
   if (!run.startedAt || !run.endedAt) return null;
   return Math.max(0, Date.parse(run.endedAt) - Date.parse(run.startedAt));
-}
-
-export function formatDuration(ms: number): string {
-  const s = Math.round(ms / 1000);
-  if (s < 60) return `${s} s`;
-  const m = Math.floor(s / 60);
-  return s % 60 === 0 ? `${m} min` : `${m} min ${s % 60} s`;
 }
 
 /** The gate's verdict on a build's PR: passed, held with its reasons, or not run. */

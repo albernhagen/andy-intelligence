@@ -4,6 +4,7 @@ import { useProjects, useUpdateProject } from "@/lib/queries";
 import type { Scope } from "@/lib/scope";
 import { cn } from "@/lib/utils";
 import { SavedCue } from "@/components/SavedCue";
+import { dateTime } from "@/lib/format";
 
 const DECISION_TEXT: Record<DispatchDecision, string> = {
   paused: "paused by you",
@@ -24,7 +25,7 @@ export function DispatchStatus({ project }: { project: Project }) {
   if (!project.autoBuild || !project.lastDispatch) return null;
   const { decision, at } = project.lastDispatch;
   return (
-    <span className="ml-3 text-sm text-muted-foreground" title={new Date(at).toLocaleString()}>
+    <span className="ml-3 text-sm text-muted-foreground" title={dateTime(at)}>
       Dispatch: {DECISION_TEXT[decision]}
     </span>
   );

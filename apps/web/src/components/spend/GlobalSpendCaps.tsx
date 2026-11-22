@@ -5,6 +5,7 @@ import { QueryError } from "@/components/Status";
 import { errorText, unwrap, useApi } from "@/lib/api";
 import { useLivePoll } from "@/lib/live";
 import { parseUsd, usd } from "./SpendCaps";
+import { dateTime } from "@/lib/format";
 
 /**
  * The global spend caps (AI-276) on Settings → Models: the ceiling every project's own caps can
@@ -58,7 +59,14 @@ export function GlobalSpendCaps() {
     onSuccess: () => queryClient.invalidateQueries(),
   });
 
-  if (global.error) return <QueryError error={global.error} />;
+  if (global.error)
+    return (
+      <QueryError
+        error={global.error}
+        what="the global spend caps"
+        onRetry={() => void global.refetch()}
+      />
+    );
   if (!global.data) return null;
   const view = global.data;
   const text = (field: Cap) => draft[field] ?? usd(view.caps[field]).slice(1);
@@ -171,7 +179,13 @@ function SpendCapChanges({ onReverted }: { onReverted: () => void }) {
   });
   return (
     <div aria-label="Spend caps changes" role="region" className="space-y-1">
-      {changes.error && <QueryError error={changes.error} />}
+      {changes.error && (
+        <QueryError
+          error={changes.error}
+          what="the spend cap changes"
+          onRetry={() => void changes.refetch()}
+        />
+      )}
       {revert.error && <p className="text-xs text-destructive">{errorText(revert.error)}</p>}
       {changes.data?.length === 0 && (
         <p className="text-xs text-muted-foreground">No global spend caps changes yet.</p>
@@ -216,8 +230,7 @@ function ChangeRow({
       <div className="min-w-0 flex-1 space-y-0.5">
         <p className="tabular-nums">{what.join("; ")}</p>
         <p className="text-xs text-muted-foreground">
-          {change.actor === "andy" ? "Andy" : change.actor} ·{" "}
-          {new Date(change.createdAt).toLocaleString()}
+          {change.actor === "andy" ? "Andy" : change.actor} · {dateTime(change.createdAt)}
           {change.reason && ` · ${change.reason}`}
         </p>
       </div>

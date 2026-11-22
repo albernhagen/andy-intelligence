@@ -3,7 +3,7 @@ import { Link, useParams } from "@tanstack/react-router";
 import type { Digest } from "@andy/contracts";
 import { MERGED_BY, gateText } from "@andy/domain";
 import { Loading, QueryError } from "@/components/Status";
-import { Button } from "@/components/ui/button";
+import { Segmented } from "@/components/ui/segmented";
 import { useDigest } from "@/lib/queries";
 
 const WINDOWS = [
@@ -27,19 +27,12 @@ export function DigestPage() {
     <section className="space-y-4">
       <header className="flex flex-wrap items-center gap-2">
         <h2 className="text-lg font-medium">Digest</h2>
-        <div role="group" aria-label="Window" className="flex gap-1">
-          {WINDOWS.map((w) => (
-            <Button
-              key={w.hours}
-              size="sm"
-              variant={w.hours === hours ? "default" : "ghost"}
-              aria-pressed={w.hours === hours}
-              onClick={() => setHours(w.hours)}
-            >
-              {w.label}
-            </Button>
-          ))}
-        </div>
+        <Segmented
+          label="Window"
+          value={hours}
+          options={WINDOWS.map((w) => ({ value: w.hours, label: w.label }))}
+          onChange={setHours}
+        />
         <Link
           to="/p/$projectId/whats-new"
           params={{ projectId }}
@@ -51,7 +44,7 @@ export function DigestPage() {
       {digest.isPending ? (
         <Loading />
       ) : digest.isError ? (
-        <QueryError error={digest.error} />
+        <QueryError error={digest.error} what="the digest" onRetry={() => void digest.refetch()} />
       ) : (
         <DigestBody digest={digest.data} projectId={projectId} />
       )}
@@ -103,13 +96,14 @@ function DigestBody({ digest, projectId }: { digest: Digest; projectId: string }
       <section aria-label="Totals" className="space-y-1">
         <h3 className="text-sm font-medium">Totals</h3>
         <p className="text-sm tabular-nums">
-          {t.runs} runs{t.failedRuns ? ` (${t.failedRuns} failed)` : ""} · {usd(t.costUsd)}{" "}
-          estimated{t.unknownCostRuns ? ` (${t.unknownCostRuns} unknown)` : ""} · {t.merged} merged
+          {t.runs} agent task{t.runs === 1 ? "" : "s"}
+          {t.failedRuns ? ` (${t.failedRuns} failed)` : ""} · {usd(t.costUsd)} estimated
+          {t.unknownCostRuns ? ` (${t.unknownCostRuns} unknown)` : ""} · {t.merged} merged
         </p>
       </section>
       {digest.truncated && (
         <p className="text-sm text-muted-foreground">
-          A read cap was reached: some tickets or runs may be missing.
+          A read cap was reached: some tickets or agent tasks may be missing.
         </p>
       )}
     </>

@@ -39,6 +39,8 @@ export class ApiError extends Error {
     readonly status: number,
     message: string,
     readonly details: string[] = [],
+    /** False when the response carried no message of its own (AI-332); `QueryError` then names what failed. */
+    readonly fromApi = true,
   ) {
     super(message);
     this.name = "ApiError";
@@ -51,14 +53,22 @@ interface FetchResult<T> {
   response: Response;
 }
 
-/** Returns `data` on success; otherwise throws an ApiError built from the `{ error, details }` body. */
+/**
+ * Returns `data` on success; otherwise throws an ApiError built from the `{ error, details }`
+ * body (or `{ message }`). A body with neither (a bare 404, a proxy's page) is marked
+ * `fromApi: false`.
+ */
 export function unwrap<T>({ data, error, response }: FetchResult<T>): T {
   if (data !== undefined && response.ok) return data;
-  const body = (error ?? {}) as { error?: unknown; details?: unknown };
-  const message =
-    typeof body.error === "string" ? body.error : `request failed (${response.status})`;
+  const body = (error !== null && typeof error === "object" ? error : {}) as {
+    error?: unknown;
+    message?: unknown;
+    details?: unknown;
+  };
+  const own = [body.error, body.message].find((m) => typeof m === "string" && m.trim() !== "");
   const details = Array.isArray(body.details) ? body.details.map(String) : [];
-  throw new ApiError(response.status, message, details);
+  if (typeof own === "string") throw new ApiError(response.status, own, details);
+  throw new ApiError(response.status, `request failed (${response.status})`, details, false);
 }
 
 /** One line for an error banner: "message: detail; detail". */

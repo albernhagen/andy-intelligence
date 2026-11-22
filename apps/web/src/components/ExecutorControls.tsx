@@ -4,10 +4,11 @@ import { Button } from "@/components/ui/button";
 import { QueryError } from "@/components/Status";
 import { useExecutor, useSetExecutor, useUpdateProject } from "@/lib/queries";
 import { SavedCue } from "@/components/SavedCue";
+import { SETTING_LABELS } from "@/lib/settings-labels";
 
 /** Where a ticket's runs execute (ADR-0089): the ticket's switch and the project default. */
 
-const EXECUTOR_LABELS: Record<ExecutorKind, string> = {
+export const EXECUTOR_LABELS: Record<ExecutorKind, string> = {
   actions: "GitHub Actions",
   local: "Local runner",
 };
@@ -59,7 +60,7 @@ export function DefaultExecutorSelect({ project }: { project: Project }) {
   return (
     <>
       <label className="ml-3 inline-flex items-center gap-1 text-sm text-muted-foreground">
-        Default executor
+        {SETTING_LABELS.executor}
         <select
           className="rounded border border-border bg-background px-1"
           value={project.executor}
