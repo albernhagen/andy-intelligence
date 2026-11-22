@@ -567,7 +567,7 @@ describe("platform settings", () => {
       confinement: noConfinement,
       profilePath: "/x",
     });
-    for (const step of ["refine", "plan", "build"]) {
+    for (const step of ["refine", "plan", "plan-project", "ideate", "build"]) {
       await expect(platform.settings(step, WORKSPACE)).resolves.toMatchObject({
         disableAllHooks: true,
       });
