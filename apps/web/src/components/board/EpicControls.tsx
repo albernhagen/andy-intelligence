@@ -19,7 +19,7 @@ export function EpicControls({
 }) {
   return (
     <>
-      <label className="flex items-center gap-1 text-sm">
+      <label className="flex items-center gap-1 text-sm max-sm:min-h-11">
         <input
           type="checkbox"
           checked={grouped}
@@ -28,10 +28,10 @@ export function EpicControls({
         Group by epic
       </label>
       {epics.length > 0 && (
-        <label className="flex items-center gap-1 text-sm">
+        <label className="flex items-center gap-1 text-sm max-sm:min-h-11">
           Epic
           <select
-            className="max-w-48 rounded border border-border bg-background px-1"
+            className="max-w-48 rounded border border-border bg-background px-1 max-sm:h-11 max-sm:text-base"
             value={epicId ?? ""}
             onChange={(e) => onEpicChange(e.target.value || null)}
           >

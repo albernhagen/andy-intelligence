@@ -240,6 +240,7 @@ const RUN_VERBS: Record<RunStep, string> = {
   sync: "Syncing with main",
   "plan-project": "Planning the project",
   ideate: "Shaping an idea",
+  summarize: "Summarizing",
 };
 
 /** "Refining · 3 min" while running; "Refine queued · 2 hours" before it starts (`durationText`). */

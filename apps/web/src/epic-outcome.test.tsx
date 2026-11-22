@@ -31,8 +31,10 @@ describe("epic outcome", () => {
     const epic = await harness.service.create("ai", { type: "epic", title: "Roadmap" }, "andy");
     await harness.router.navigate({ to: `/p/ai/t/${epic.key}` });
 
-    expect(await screen.findByRole("heading", { name: "Done when" })).toBeTruthy();
-    expect(screen.queryByRole("heading", { name: "Acceptance criteria" })).toBeNull();
+    // Empty, so it's offered in the Add row (AI-330) under its epic name.
+    const add = await screen.findByLabelText("Add a list");
+    expect(within(add).getByRole("option", { name: "Done when" })).toBeTruthy();
+    expect(within(add).queryByRole("option", { name: "Acceptance criteria" })).toBeNull();
   });
 
   it("GivenAFeature_WhenItsPanelOpens_ThenThereIsNoOutcome", async () => {
@@ -41,7 +43,8 @@ describe("epic outcome", () => {
     const t = await harness.service.create("ai", { type: "feature", title: "Chips" }, "andy");
     await harness.router.navigate({ to: `/p/ai/t/${t.key}` });
 
-    expect(await screen.findByRole("heading", { name: "Acceptance criteria" })).toBeTruthy();
+    const add = await screen.findByLabelText("Add a list");
+    expect(within(add).getByRole("option", { name: "Acceptance criteria" })).toBeTruthy();
     expect(screen.queryByRole("region", { name: "Outcome" })).toBeNull();
   });
 });
