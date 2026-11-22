@@ -50,6 +50,9 @@ describe("digest page", () => {
     const order = screen.getAllByRole("region").map((r) => r.getAttribute("aria-label"));
     expect(order).toEqual(["Exceptions", "Merged", "Totals"]);
     expect(screen.getByRole("region", { name: "Totals" }).textContent).toContain("1 merged");
+    // AI-327: the UI says "agent task", never "run".
+    expect(screen.getByRole("region", { name: "Totals" }).textContent).toMatch(/\d+ agent tasks? /);
+    expect(screen.getByRole("region", { name: "Totals" }).textContent).not.toMatch(/\bruns?\b/);
   });
 
   it("GivenAQuietProject_WhenTheDigestOpens_ThenOneLine", async () => {
