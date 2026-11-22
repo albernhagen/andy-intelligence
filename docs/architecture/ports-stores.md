@@ -6,7 +6,7 @@ Moved unchanged from [domain-and-ports.md](domain-and-ports.md) §6 (main went o
 |---|---|---|---|
 | `OAuthGrantStore` | OAuthGrant (code, access token, refresh token; keyed by token hash) | **Firestore** (ADR-0039) | Local store (ADR-0032) |
 | `RunnerStore` | Runner, per-run token (hashes only; ADR-0089) | **Firestore** | — |
-| `ConfigChangeStore`, `ReviewFindingSource`, `ReleaseNoteStore` | ConfigChange, ReviewFinding (ADR-0097), ReleaseNote | **Firestore** | — |
+| `ConfigChangeStore`, `ReviewFindingLog`, `ReleaseNoteStore` | ConfigChange, ReviewVerdict (ADR-0097), ReleaseNote | **Firestore** | — |
 | `DigestSummaryStore` | DigestSummary (AI-323, ADR-0137): one per project per day; claim, retry and each status change are atomic; writes started are capped per UTC day across projects | **Firestore** (server-only) | — |
 | `NightLaunchStore` | NightLaunch; one active per project, checked atomically | **Firestore** | — |
 | `DeploymentStore` | Deployment (AI-161: M6.3): record, finish once, list one environment newest first (≤ 100), latest good | **Firestore** (`deployments`, server-only) | — |
