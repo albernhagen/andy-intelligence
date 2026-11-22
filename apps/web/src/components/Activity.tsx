@@ -1,5 +1,5 @@
 import { useState } from "react";
-import type { Run, TicketEvent } from "@andy/contracts";
+import type { Run, Ticket, TicketEvent } from "@andy/contracts";
 import { actorLabel } from "@andy/domain";
 import { Markdown } from "@/components/Markdown";
 import { RunItem, StartRuns, latestPlanId } from "@/components/Runs";
@@ -21,6 +21,8 @@ const MARKDOWN_BODIES = new Set<TicketEvent["kind"]>(["comment", "question_asked
 export function Activity(props: {
   projectId: string;
   ticketId: string;
+  /** For a running build's branch and touches (AI-342); absent: they aren't shown. */
+  ticket?: Pick<Ticket, "key">;
   events: TicketEvent[];
   runs: Run[];
 }) {
@@ -44,6 +46,7 @@ export function Activity(props: {
               run={item.run}
               path={path}
               decidable={item.run.id === planId}
+              ticket={props.ticket}
             />
           ) : (
             <EventItem key={item.event.id} event={item.event} />

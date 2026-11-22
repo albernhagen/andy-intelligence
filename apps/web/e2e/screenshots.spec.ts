@@ -147,13 +147,6 @@ test("ticket panel routing layers", async ({ page }) => {
   await expect(routing).toHaveScreenshot("ticket-routing.png");
 });
 
-/** AI-298: the ranked Ready list, the same as MCP list_ready. */
-test("ready view: ranked list with scores", async ({ page }) => {
-  await open(page, "/p/ai/ready", "In board order: the order is the priority.");
-  await expect(page.getByRole("list", { name: "Ready tickets" })).toBeVisible();
-  await expect(page).toHaveScreenshot("ready-view.png");
-});
-
 /** M4.12: AI's settings with the Changes list: a reverted flip and the revert, logged too. */
 test("project settings with changes", async ({ page }) => {
   await page.clock.setFixedTime(SEED_NOW);

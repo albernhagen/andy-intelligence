@@ -55,7 +55,13 @@ export function ConfigChanges({ projectId }: { projectId?: string }) {
       )}
       {sweep.data && <p className="text-xs text-muted-foreground">{sweepText(sweep.data)}</p>}
       {sweep.error && <QueryError error={sweep.error} />}
-      {changes.error && <QueryError error={changes.error} />}
+      {changes.error && (
+        <QueryError
+          error={changes.error}
+          what="the config proposals"
+          onRetry={() => void changes.refetch()}
+        />
+      )}
       {pending.map((c) => (
         <ConfigChangeCard key={c.id} change={c} />
       ))}

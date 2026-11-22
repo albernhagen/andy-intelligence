@@ -6,7 +6,7 @@ import { settingLabel, settingValue } from "@/lib/settings-labels";
 import { dateTime } from "@/lib/format";
 
 const button =
-  "rounded-md border border-border bg-background px-2 py-0.5 text-xs font-medium text-foreground hover:bg-muted disabled:opacity-50";
+  "rounded-md border border-border bg-background px-2 py-0.5 text-xs font-medium text-foreground hover:bg-muted disabled:opacity-50 max-sm:min-h-11 max-sm:px-3";
 
 /**
  * The project's settings changes (M4.12), newest first, on the settings page: who, when, what
@@ -22,7 +22,13 @@ export function ConfigHistory({ projectId }: { projectId: string }) {
   return (
     <section aria-label="Changes" className="space-y-2">
       <h3 className="text-sm font-medium">Changes</h3>
-      {changes.error && <QueryError error={changes.error} />}
+      {changes.error && (
+        <QueryError
+          error={changes.error}
+          what="the settings changes"
+          onRetry={() => void changes.refetch()}
+        />
+      )}
       {revert.error && <p className="text-xs text-destructive">{errorText(revert.error)}</p>}
       {changes.isSuccess && list.length === 0 && (
         <p className="text-xs text-muted-foreground">No settings changes yet.</p>

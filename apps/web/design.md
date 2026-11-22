@@ -26,7 +26,7 @@ Stack: React, Tailwind v4, shadcn/ui components in `src/components/ui/`, icons f
 Below `sm` (640px; `useIsPhone`); screens adopt these in their own M7: Mobile slices:
 
 - Navigation is a bottom bar: Board, Inbox, Dashboards, More.
-- Touch targets at least 44px (`h-11 sm:h-8`). Inputs `text-base` so iOS doesn't zoom.
+- Touch targets at least 44px (`h-11 sm:h-8`); a checkbox's label is its target (`max-sm:min-h-11`). Inputs `text-base` so iOS doesn't zoom. Phone specs check it with `expectTouchTargets` (AI-334).
 - Edge-touching elements pad by `env(safe-area-inset-*)`.
 - No hover-only actions; panels open full-screen.
 - Nothing scrolls sideways at 390px: a strip that scrolls (the board's lanes) does so in its own `relative overflow-x-auto` box. Phone specs check it with `expectPageFits` (`e2e/phone.ts`, AI-325).
@@ -67,7 +67,7 @@ The marker set: [`design-status-markers.md`](design-status-markers.md).
 - Never a bare ID in prose or links: "AI-26: Design source and app shell".
 - Say "agent task", never "run".
 - Buttons are verbs. Empty states say what's missing: "Nothing needs you."
-- Errors show the API's message (`QueryError`); never swallow one.
+- Errors show the API's message (`QueryError`); never swallow one. A read passes `what` and `onRetry`, so a failure with no message reads "Couldn't read the GitHub connection (404)." with Retry.
 - Times, durations and counts as words (`lib/format.ts`): "2:48 PM", "Nov 4, 2:50 PM", never seconds; past 90 minutes, hours or days ("17 days"); "5,000,000". Settings use their page labels and on/off (`lib/settings-labels.ts`).
 
 ## Checks

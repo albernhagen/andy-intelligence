@@ -49,7 +49,13 @@ export function ModelsPage() {
         </Select>
       </label>
       {routing.isPending && <Loading />}
-      {routing.isError && <QueryError error={routing.error} />}
+      {routing.isError && (
+        <QueryError
+          error={routing.error}
+          what="the routing settings"
+          onRetry={() => void routing.refetch()}
+        />
+      )}
       {data && scope === null && (
         <>
           <RoutingEditor
