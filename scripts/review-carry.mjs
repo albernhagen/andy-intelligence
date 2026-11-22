@@ -16,6 +16,7 @@
 import { execFileSync } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
+import { cleanGitEnv } from "./git-env.mjs";
 
 /** The SHA a sticky review comment's hidden marker names, or null. */
 export function reviewedSha(body) {
@@ -32,12 +33,16 @@ export function passingVerdict(body, fromSha) {
   return /^### ✅ /m.test(body);
 }
 
-/** Runs git in `cwd`; `git(args, input?)` returns stdout without its trailing newline. */
+/**
+ * Runs git in `cwd`; `git(args, input?)` returns stdout without its trailing newline. `GIT_*`
+ * variables are dropped, so under a git hook it can't write to the hook's repository (AI-20).
+ */
 export function gitRunner(cwd) {
   return (args, input) =>
     execFileSync("git", args, {
       cwd,
       input,
+      env: cleanGitEnv(),
       encoding: "utf8",
       maxBuffer: 256 * 1024 * 1024,
     }).replace(/\n$/, "");
