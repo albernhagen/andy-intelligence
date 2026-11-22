@@ -3,10 +3,10 @@ description: >-
   When the default branch moves, merges it into each open same-repo PR that lacks it, through
   GitHub's update-branch API (merge commit; never rebase or force). Clean merges only; a conflict
   gets one comment naming the files. Skips forks, drafts, the `no-auto-sync` label, agent PRs and
-  Dependabot. Capped: 4 runs an hour, 20 PRs a run, 3 updates per PR a day
-  (scripts/resync-prs.mjs, ADR-0111). Needs a checkout of the default branch with full history,
-  a job token with `contents: read`, `pull-requests: read`, `actions: read`, and `id-token: write`
-  for the control plane's write token (POST /github/token, ADR-0043).
+  Dependabot. Capped: 12 runs that re-synced an hour, 20 PRs a run, 3 updates per PR a day
+  (scripts/resync-prs.mjs, ADR-0111, ADR-0137). Needs a checkout of the default branch with full
+  history, a job token with `contents: read` and `pull-requests: read`, and `id-token: write` for
+  the control plane's write token (POST /github/token, ADR-0043).
 
 inputs:
   github-token:
@@ -25,7 +25,6 @@ runs:
         REPO: ${{ github.repository }}
         DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
         READ_TOKEN: ${{ inputs.github-token }}
-        WORKFLOW_REF: ${{ github.workflow_ref }}
         CONTROL_PLANE_URL: ${{ inputs.control-plane-url }}
       run: |
         BASELINE=$(cd "$GITHUB_ACTION_PATH/../../.." && pwd)

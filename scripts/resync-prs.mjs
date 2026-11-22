@@ -6,12 +6,12 @@
 // leaves one comment on the PR naming the files instead.
 //
 // Skipped: forks, drafts, the opt-out label, agent PRs (sync tasks own them, ADR-0083), Dependabot
-// (it rebases its own). Caps (ADR-0028): runs per hour, PRs per run, updates per PR per day.
-// Fails closed: a shared failure (token, main fetch, run count) stops the run; one PR's failure
+// (it rebases its own). Caps (ADR-0028): re-syncs per hour, PRs per run, updates per PR per day.
+// Fails closed: a shared failure (token, a fetch, the hourly count) stops the run; one PR's failure
 // writes nothing more for that PR, the rest go on, and the run exits non-zero.
 //
-// Env: REPO (owner/name), DEFAULT_BRANCH, READ_TOKEN (the job's GITHUB_TOKEN: list, fetch, count
-// runs), WORKFLOW_REF (github.workflow_ref), CONTROL_PLANE_URL, ACTIONS_ID_TOKEN_REQUEST_URL,
+// Env: REPO (owner/name), DEFAULT_BRANCH, READ_TOKEN (the job's GITHUB_TOKEN: fetch, list
+// PRs and comments), CONTROL_PLANE_URL, ACTIONS_ID_TOKEN_REQUEST_URL,
 // ACTIONS_ID_TOKEN_REQUEST_TOKEN, GITHUB_STEP_SUMMARY (optional). The write token comes from the
 // control plane (POST /github/token, ADR-0043) and only updates branches and writes the comment.
 import { Buffer } from "node:buffer";
@@ -20,7 +20,11 @@ import { appendFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { cleanGitEnv } from "./git-env.mjs";
 
-export const MAX_RUNS_PER_HOUR = 4;
+/**
+ * Runs that re-synced a PR in the last hour (AI-345, ADR-0137). Counted from the branches, not the
+ * Actions API: skipped, capped and no-op runs merge nothing, so they don't count.
+ */
+export const MAX_RUNS_PER_HOUR = 12;
 export const MAX_PRS_PER_RUN = 20;
 export const MAX_UPDATES_PER_PR_PER_DAY = 3;
 /** Open PRs listed at most (100 per page). */
@@ -61,12 +65,17 @@ export function pickPrs(prs, ctx) {
     else eligible.push(pr);
   }
   eligible.sort((a, b) => String(a.updated_at).localeCompare(String(b.updated_at)));
+  // A PR re-synced this hour moves to the back, so the hourly count reads every eligible PR.
   const overCap = eligible.slice(MAX_PRS_PER_RUN).map((pr) => ({
     number: pr.number,
     outcome: "skipped",
     detail: `over the cap of ${MAX_PRS_PER_RUN} PRs per run: next run`,
   }));
-  return { candidates: eligible.slice(0, MAX_PRS_PER_RUN), skipped: [...skipped, ...overCap] };
+  return {
+    eligible,
+    candidates: eligible.slice(0, MAX_PRS_PER_RUN),
+    skipped: [...skipped, ...overCap],
+  };
 }
 
 /**
@@ -78,13 +87,15 @@ export function mergeMessage(defaultBranch) {
   return `Merge branch '${defaultBranch}' into `;
 }
 
-/** "owner/repo/.github/workflows/x.yml@refs/heads/main" → "x.yml". */
-export function workflowFile(workflowRef) {
-  const match = /^[^/]+\/[^/]+\/\.github\/workflows\/([A-Za-z0-9._-]+\.ya?ml)@/.exec(
-    workflowRef ?? "",
-  );
-  if (!match) throw new Error("WORKFLOW_REF is not a workflow ref");
-  return match[1];
+/**
+ * The default-branch commits merged in, from `git log --merges --format=%P` (one line per merge:
+ * the branch's parent, then the merged commit). Each re-syncing run merges one `main` commit.
+ */
+export function mergedCommits(stdout) {
+  return stdout
+    .split("\n")
+    .map((line) => line.trim().split(" ")[1])
+    .filter((sha) => SHA.test(sha ?? ""));
 }
 
 /** Conflicted paths from `git merge-tree --write-tree --name-only --no-messages` (first line: tree). */
@@ -205,7 +216,6 @@ function requireEnv(env) {
     "REPO",
     "DEFAULT_BRANCH",
     "READ_TOKEN",
-    "WORKFLOW_REF",
     "CONTROL_PLANE_URL",
     "ACTIONS_ID_TOKEN_REQUEST_URL",
     "ACTIONS_ID_TOKEN_REQUEST_TOKEN",
@@ -242,6 +252,34 @@ async function upsertComment({ github, env, number, body, write }) {
     ok: [201],
   });
   return "posted";
+}
+
+/**
+ * Runs that re-synced a PR since `since`: the distinct `main` commits merged into the eligible PRs'
+ * heads by a merge of the default branch made since then. Throws if a fetch or count fails.
+ */
+function recentResyncs({ prs, env, git, auth, mainSha, since }) {
+  const refspecs = prs.map((pr) => `+refs/pull/${pr.number}/head:refs/resync/${pr.number}`);
+  const fetched = git(
+    ["fetch", "--quiet", "--no-tags", `https://github.com/${env.REPO}.git`, ...refspecs],
+    auth,
+  );
+  if (fetched.status !== 0) throw new Error("git fetch of the open PRs' heads failed");
+  const merged = new Set();
+  for (const pr of prs) {
+    const log = git([
+      "log",
+      "--merges",
+      `--since=${since}`,
+      "--fixed-strings",
+      `--grep=${mergeMessage(env.DEFAULT_BRANCH)}`,
+      "--format=%P",
+      `${mainSha}..refs/resync/${pr.number}`,
+    ]);
+    if (log.status !== 0) throw new Error(`git log failed for PR #${pr.number}`);
+    for (const sha of mergedCommits(log.stdout)) merged.add(sha);
+  }
+  return merged.size;
 }
 
 /** One PR: already current, capped, conflicted, refused or updated. */
@@ -340,20 +378,6 @@ export async function resync({ env, git, github, fetchImpl = globalThis.fetch, e
     emit(`#${r.number}: ${r.outcome}: ${r.detail}`);
   };
 
-  const since = new Date(now().getTime() - 3_600_000).toISOString().replace(/\.\d{3}Z$/, "Z");
-  const file = workflowFile(env.WORKFLOW_REF);
-  const runs = await github(
-    "GET",
-    `/repos/${env.REPO}/actions/workflows/${file}/runs?created=${encodeURIComponent(`>=${since}`)}&per_page=1`,
-    { token: env.READ_TOKEN },
-  );
-  const count = Number(runs.data?.total_count);
-  if (!Number.isInteger(count)) throw new Error("could not count this workflow's runs");
-  if (count > MAX_RUNS_PER_HOUR) {
-    emit(`::warning::${count} runs in the last hour (cap ${MAX_RUNS_PER_HOUR}): no re-sync`);
-    return { capped: true, results };
-  }
-
   const basic = Buffer.from(`x-access-token:${env.READ_TOKEN}`).toString("base64");
   emit(`::add-mask::${basic}`);
   const auth = {
@@ -380,14 +404,24 @@ export async function resync({ env, git, github, fetchImpl = globalThis.fetch, e
     prs.push(...(data ?? []));
     if ((data ?? []).length < 100) break;
   }
-  const { candidates, skipped } = pickPrs(prs, { repo: env.REPO, defaultBranch: branch });
+  const { eligible, candidates, skipped } = pickPrs(prs, {
+    repo: env.REPO,
+    defaultBranch: branch,
+  });
   skipped.forEach(record);
   if (candidates.length === 0) return { capped: false, results };
+
+  const since = new Date(now().getTime() - 3_600_000).toISOString().replace(/\.\d{3}Z$/, "Z");
+  const recent = recentResyncs({ prs: eligible, env, git, auth, mainSha, since });
+  if (recent >= MAX_RUNS_PER_HOUR) {
+    emit(`::warning::${recent} re-syncs in the last hour (cap ${MAX_RUNS_PER_HOUR}): no re-sync`);
+    return { capped: true, results };
+  }
 
   const write = await writeToken({ env, fetchImpl, emit });
   // A failure on one PR (locked conversation, a 403, a failed fetch) writes nothing more for it
   // and doesn't hold back the PRs after it; the run still ends red. Shared failures above (token,
-  // main fetch, run count) stop the whole run.
+  // a fetch, the hourly count) stop the whole run.
   for (const pr of candidates) {
     try {
       record({
