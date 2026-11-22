@@ -29,7 +29,8 @@ Below `sm` (640px; `useIsPhone`); screens adopt these in their own M7: Mobile sl
 - Touch targets at least 44px (`h-11 sm:h-8`); a checkbox's label is its target (`max-sm:min-h-11`). Inputs `text-base` so iOS doesn't zoom. Phone specs check it with `expectTouchTargets` (AI-334).
 - Edge-touching elements pad by `env(safe-area-inset-*)`.
 - No hover-only actions; panels open full-screen.
-- Nothing scrolls sideways at 390px: a strip that scrolls (the board's lanes) does so in its own `relative overflow-x-auto` box. Phone specs check it with `expectPageFits` (`e2e/phone.ts`, AI-325).
+- Columns side by side become one at a time under `Segmented` tabs (the board's stages, AI-337).
+- Nothing scrolls sideways at 390px: a strip that scrolls (the board's stage tabs) does so in its own `relative overflow-x-auto` box. Phone specs check it with `expectPageFits` (`e2e/phone.ts`, AI-325).
 
 ## Keyboard
 
