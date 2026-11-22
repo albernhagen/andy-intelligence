@@ -84,10 +84,12 @@ import { requireCan } from "./permissions";
 import { TIER_ROUTES } from "./tiers";
 import {
   effectiveRouting,
+  resolveRoute,
   skippedText,
   type EffectiveRouting,
   type ResolvedRoute,
 } from "./route-resolver";
+import { DIGEST_SUMMARY_RUN, type DigestSummaryResults } from "./digest-summary";
 import { afterFailure, deadlineAction, MAX_RUN_ATTEMPTS } from "./watchdog";
 import { syncPrompt, type SyncTarget } from "./sync-runs";
 import { winsNightSlot, type NightSlot } from "./night-budget";
@@ -286,6 +288,8 @@ export class RunService {
     private readonly spendGate: SpendGate | null = null,
     /** Stores plan-project and ideate results (AI-134); null: those tasks can't start. */
     private readonly projectTasks: ProjectTaskResults | null = null,
+    /** Stores and fails digest summaries (AI-323); null: summarize tasks can't start. */
+    private readonly digestSummaries: DigestSummaryResults | null = null,
   ) {}
 
   /** The refine gate with this service's tracker, clock and night launches. */
@@ -447,6 +451,98 @@ export class RunService {
         null,
         repo,
         `Started a ${step} task (${run.route.model})`,
+        budget,
+      );
+    } catch (err) {
+      await this.closeSpend(run);
+      throw err;
+    }
+  }
+
+  /**
+   * The digest summary's agent task (AI-323, ADR-0137), started by `DigestSummaryService`: no
+   * ticket, no tools, the `summarize` step's route. Refused while paused, at the quota reserve
+   * (`quota`: the subscriptions' levels), at a run cap or with a summarize task in flight; the
+   * service leaves the day waiting on those. One per project in flight; the oldest wins a race.
+   */
+  async requestDigestSummary(
+    projectId: string,
+    prompt: string,
+    quota: Partial<Record<string, QuotaLevel>>,
+  ): Promise<Run> {
+    if (!this.executor || !this.digestSummaries) {
+      throw new DomainError("executor_unavailable", "no executor: connect GitHub first");
+    }
+    const project = await this.tracker.getProject(projectId);
+    if (!project) throw notFound("project", projectId);
+    const repo = project.repos[0];
+    if (!repo) throw new DomainError("invalid_repo", `project ${project.key} has no repo`);
+    if (project.paused) throw new DomainError("paused", `dispatch is paused for ${project.key}`);
+    const resolved = resolveRoute("summarize", "fast", await this.routingOf(projectId));
+    if (!resolved.route || resolved.route.harness === "direct") {
+      const why = resolved.route
+        ? "its route is direct, which isn't wired here"
+        : skippedText(resolved.skipped);
+      throw new DomainError(
+        "no_route",
+        `no usable summarize route in the ${resolved.tier} tier: ${why}`,
+      );
+    }
+    const route = resolved.route;
+    if (PROVIDER_BILLING[route.provider] === "subscription" && quota[route.provider] === "pause") {
+      throw new DomainError("quota_reserve", `${route.provider} is at its quota reserve`);
+    }
+    const sameStep = (r: Run) => r.ticketId === null && r.step === "summarize";
+    const everywhere = await this.inFlightEverywhere();
+    const active = everywhere.filter((r) => r.projectId === projectId);
+    if (active.some(sameStep)) {
+      throw new DomainError(
+        "run_limit",
+        `project ${project.key} already has a summarize task in flight`,
+      );
+    }
+    if (active.filter(countsForDial).length >= project.runsAtOnce) {
+      throw new DomainError(
+        "run_limit",
+        `project ${project.key} is at its agent-tasks-at-once dial`,
+      );
+    }
+    if (everywhere.length >= MAX_ACTIVE_RUNS_GLOBAL) {
+      throw new DomainError("run_limit", "the cap on agent tasks across all projects is reached");
+    }
+    const run = await this.runs.create({
+      projectId,
+      ticketId: null,
+      step: "summarize",
+      route,
+      routeSkips: routeSkips(resolved),
+      tier: resolved.tier,
+      deadline: new Date(
+        this.now().getTime() + DIGEST_SUMMARY_RUN.timeoutMinutes * 60_000,
+      ).toISOString(),
+      prompt,
+      maxTurns: DIGEST_SUMMARY_RUN.maxTurns,
+    });
+    const after = await this.inFlightEverywhere();
+    const inProject = after.filter((r) => r.projectId === projectId);
+    const won =
+      after.slice(0, MAX_ACTIVE_RUNS_GLOBAL).some((r) => r.id === run.id) &&
+      inProject
+        .filter(countsForDial)
+        .slice(0, project.runsAtOnce)
+        .some((r) => r.id === run.id) &&
+      inProject.find(sameStep)?.id === run.id;
+    if (!won) {
+      await this.fail(run.id, "another agent task started at the same time");
+      throw new DomainError("run_limit", `project ${project.key} has no free agent task slot`);
+    }
+    const budget = await this.reserveSpend(run);
+    try {
+      return await this.dispatchRun(
+        run,
+        null,
+        repo,
+        `Started a summarize task (${route.model})`,
         budget,
       );
     } catch (err) {
@@ -1106,6 +1202,18 @@ export class RunService {
         summary = applied.summary.slice(0, RUN_SUMMARY_MAX);
       }
     }
+    // AI-323: the day's summary is stored, or the rejected answer fails the run and the summary.
+    if (run.step === "summarize" && status === "succeeded") {
+      const applied = this.digestSummaries
+        ? await this.digestSummaries.apply(run, result.output)
+        : { error: "digest summaries aren't wired on this instance" };
+      if ("error" in applied) {
+        status = "failed";
+        error = applied.error;
+      } else {
+        summary = applied.summary;
+      }
+    }
     if (run.step === "build") {
       built = await this.checkBuild(run, result);
       if (status === "succeeded" && built.error) {
@@ -1232,6 +1340,8 @@ export class RunService {
 
   /** Lets the next waiting ticket start (the refine dispatcher); logs, never throws. */
   private async runEnded(run: Run): Promise<void> {
+    // AI-323: a summarize run that ended without storing its summary fails it (no-op otherwise).
+    if (run.step === "summarize" && this.digestSummaries) await this.digestSummaries.ended(run);
     if (!this.onRunEnded) return;
     await this.onRunEnded(run.projectId).catch((err: unknown) =>
       log("ERROR", "next run after a run ended failed", { runId: run.id, error: String(err) }),

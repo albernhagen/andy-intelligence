@@ -4,10 +4,11 @@ The `summarize` agent task (AI-323: Digest: an AI-written summary of what was do
 
 ## Entry points
 
-| Entry point                                    | Who                                      | What it does                                                              |
-| ---------------------------------------------- | ---------------------------------------- | ------------------------------------------------------------------------- |
-| First digest read after the day ends (PR 3)    | Anyone who can read the project's digest | Claims the day and starts the task, under the caps below                  |
-| `/runs/:id/report` of a `summarize` run (PR 3) | Its own executor run only                | Stores the summary on the day's document, only for the run recorded on it |
+| Entry point                                    | Who                                              | What it does                                                                                           |
+| ---------------------------------------------- | ------------------------------------------------ | ------------------------------------------------------------------------------------------------------ |
+| First digest read after the day ends (PR 3)    | Andy only (`start_run`); others see stored state | `GET …/digest` and MCP `digest` (not read-only) claim the day and start the task, under the caps below |
+| Retry (PR 3)                                   | Andy only                                        | `POST …/digest/summary/retry`, MCP `retry_digest_summary`: one retry of a failed day                   |
+| `/runs/:id/report` of a `summarize` run (PR 3) | Its own executor run only                        | Stores the summary on the day's document, only for the run recorded on it                              |
 
 ## Trust boundaries
 

@@ -13,6 +13,8 @@ export class DomainError extends Error {
       | "run_limit"
       | "spend_cap"
       | "quota_reserve"
+      | "paused"
+      | "no_route"
       | "run_finished"
       | "executor_unavailable"
       | "dispatch_failed"

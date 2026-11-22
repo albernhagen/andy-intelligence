@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import {
   DIGEST_SUMMARY_LIMITS,
@@ -86,5 +87,37 @@ describe("DigestSummary", () => {
     const writing = claimedDigestSummary("ai", period, now);
     expect(DigestSummary.safeParse({ ...writing, status: "ready" }).success).toBe(false);
     expect(DigestSummary.safeParse({ ...writing, status: "failed" }).success).toBe(false);
+  });
+});
+
+// The schema the executor hands the summarize agent (`--json-schema`, AI-323 PR 2) must hold
+// the same shape and caps as DigestSummaryOutput, the domain's check.
+describe("summarize.schema.json", () => {
+  const schema = JSON.parse(
+    readFileSync(
+      new URL("../../../../platform/procedures/summarize.schema.json", import.meta.url),
+      "utf8",
+    ),
+  );
+  const L = DIGEST_SUMMARY_LIMITS;
+
+  it("GivenTheAgentSchemaFile_WhenComparedWithTheLimits_ThenTheyMatch", () => {
+    const line = schema.properties.lines.items;
+    expect(schema.required).toEqual(["summary", "summaryRefs", "lines"]);
+    expect(schema.properties.summary.maxLength).toBe(L.summaryChars);
+    expect(schema.properties.lines.maxItems).toBe(L.lines);
+    expect(line.properties.text.maxLength).toBe(L.lineChars);
+    expect(line.properties.heading.maxLength).toBe(L.headingChars);
+    expect(schema.properties.summaryRefs.properties.tickets.maxItems).toBe(L.refs);
+    expect(line.properties.refs.properties.prs.maxItems).toBe(L.refs);
+  });
+
+  it("GivenAnAnswerTheAgentSchemaAllows_WhenParsedHere_ThenItIsAccepted", () => {
+    const answer = {
+      summary: "Andy can read it.",
+      summaryRefs: { tickets: ["AI-323"], prs: [] },
+      lines: [{ heading: "M4", epicKey: null, text: "Done.", refs: { tickets: [], prs: [349] } }],
+    };
+    expect(DigestSummaryOutput.parse(answer)).toEqual(answer);
   });
 });

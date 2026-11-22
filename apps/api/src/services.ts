@@ -12,6 +12,9 @@ import {
   ConfigProposals,
   ConfigRevert,
   DigestReader,
+  DigestSummaryResults,
+  DigestSummaryService,
+  subscriptionQuotaLevels,
   CLAUDE_SUB_THRESHOLDS,
   QuotaClearer,
   lowestThresholds,
@@ -202,6 +205,11 @@ export function createServices(raw: AppDeps): Services {
     submitFromRun: (run, output) => ideate.submitFromRun(run, output),
   };
   const projectTasks: ProjectTaskResults = new ProjectTaskResults(plansLater, ideasLater);
+  // AI-323: stores and fails digest summaries from summarize runs' reports and ends.
+  const summaryResults =
+    deps.digestSummaries && deps.releaseNotes
+      ? new DigestSummaryResults(deps.digestSummaries, now)
+      : null;
   // AI-257: spend notices (80% of a cap, a stop) go to the Needs-you email when it is on, else
   // to the logs; their dedupe and daily cap live in the stored notice ledger.
   const spendAlerts = deps.spendNotices
@@ -256,6 +264,7 @@ export function createServices(raw: AppDeps): Services {
     deps.routing ?? null,
     spendGate,
     projectTasks,
+    summaryResults,
   );
   const refiner = new RefineDispatcher(deps.tracker, deps.runs, runs, now, deps.milestones ?? null);
   // AI-124/AI-125: when a launch ends, its morning PR opens (or an empty epic branch goes),
@@ -417,6 +426,22 @@ export function createServices(raw: AppDeps): Services {
     },
   );
   const digest = new DigestReader(deps.tracker, deps.runs, deps.quota ?? null, now, tickets);
+  // AI-323 (ADR-0137): Andy's first digest read after a day ends starts its summary task.
+  const digestSummaries =
+    deps.digestSummaries && deps.releaseNotes
+      ? new DigestSummaryService({
+          store: deps.digestSummaries,
+          tracker: deps.tracker,
+          releaseNotes: deps.releaseNotes,
+          tickets,
+          milestones: deps.milestones ?? null,
+          digest,
+          starter: runs,
+          quotaLevels: async (projectId) =>
+            subscriptionQuotaLevels(deps.quota ?? null, await runs.routingOf(projectId), now()),
+          now,
+        })
+      : null;
   const brief = new BriefService(
     deps.tracker,
     connection ? new ConnectedCodeHost(connection) : null,
@@ -509,6 +534,7 @@ export function createServices(raw: AppDeps): Services {
     work: new WorkReader(deps.tracker, board),
     roadmap: new RoadmapReader(deps.tracker, board, deps.milestones ?? null),
     whatsNew,
+    digestSummaries,
     milestones: deps.milestones ?? null,
     // AI-295: one reader each for the Dashboards routes and MCP `dashboard`.
     dashboard: new DashboardReader(deps.tracker, deps.runs, tickets),
