@@ -252,10 +252,7 @@ export const PARITY: readonly ParityEntry[] = [
     action: "Ideate",
     routes: [`POST ${P}/ideate`],
     tools: ["ideate"],
-    pending: {
-      ticket: "AI-299",
-      missing: "a web form: the route exists but the web never calls it (PR #240)",
-    },
+    note: "The web's Ideate form on the board (AI-299) starts an ideate agent task (`POST …/ideate/agent-task`), which records its result through the same service and caps as this route and the tool.",
   },
   {
     action: "Milestones: list, create, edit, set status, attach or detach an epic",
