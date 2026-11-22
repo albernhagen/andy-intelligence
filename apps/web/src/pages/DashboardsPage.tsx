@@ -431,7 +431,10 @@ function WeekChart(props: {
         />
         <ChartTooltip content={<ChartTooltipContent />} />
         {/* Series order, not alphabetical: stages read Backlog → Done. */}
-        <ChartLegend content={<ChartLegendContent />} itemSorter={null} />
+        <ChartLegend
+          content={<ChartLegendContent className="flex-wrap gap-y-1" />}
+          itemSorter={null}
+        />
         {props.children}
       </Chart>
     </ChartContainer>
