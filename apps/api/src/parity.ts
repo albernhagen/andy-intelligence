@@ -273,6 +273,12 @@ export const PARITY: readonly ParityEntry[] = [
     ],
     note: "The web sets status and attaches from the epic panel and the roadmap (AI-311), and reorders on the roadmap (AI-324). PATCH covers edit_milestone (order included) and set_milestone_status (ADR-0136).",
   },
+  {
+    action: "Start a project agent task (plan-project, ideate)",
+    routes: [`POST ${P}/plan/agent-task`, `POST ${P}/ideate/agent-task`],
+    tools: ["start_plan_project", "start_ideate"],
+    note: "One service (`RunService.requestProjectTask`, AI-134), same caps and refusals (AI-320). The web starts plan-project from the project settings' Project plan card and ideate from the board (AI-299).",
+  },
   // ── One side on purpose ─────────────────────────────────────────────────────
   {
     action: "Register a runner",
@@ -293,17 +299,6 @@ export const PARITY: readonly ParityEntry[] = [
     oneSide: "GitHub's manifest flow needs a browser.",
   },
   // ── Open gaps, each with its ticket ─────────────────────────────────────────
-  {
-    action: "Start a project agent task (plan-project, ideate)",
-    routes: [`POST ${P}/plan/agent-task`, `POST ${P}/ideate/agent-task`],
-    tools: [],
-    oneSide:
-      "The web starts ideate from the board (AI-299); plan-project has no web control yet, and neither has an MCP tool.",
-    pending: {
-      ticket: "AI-320",
-      missing: "MCP tools to start both, and the plan-project web control",
-    },
-  },
   {
     action: "List and revoke runners",
     routes: ["GET /api/runners", "POST /api/runners/:runnerId/revoke"],
