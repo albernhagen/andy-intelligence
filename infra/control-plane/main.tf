@@ -595,16 +595,16 @@ resource "google_monitoring_alert_policy" "config_change_not_recorded" {
   severity              = "ERROR"
   notification_channels = [google_monitoring_notification_channel.alert_email.id]
 
-  # Any failure in a 5-minute window opens one incident; quiet windows count as "not firing",
-  # so it closes on its own and a burst of failures sends one email, not one per failure.
+  # Any failure in a 5-minute window opens one incident; a threshold condition with no data
+  # stays inactive, so it closes on its own and a burst of failures sends one email, not one
+  # per failure. No evaluation_missing_data: the API refuses it with duration = "0s".
   conditions {
     display_name = "At least one unrecorded config change in 5 minutes"
     condition_threshold {
-      filter                  = "resource.type = \"cloud_run_revision\" AND metric.type = \"logging.googleapis.com/user/${google_logging_metric.config_change_not_recorded.name}\""
-      comparison              = "COMPARISON_GT"
-      threshold_value         = 0
-      duration                = "0s"
-      evaluation_missing_data = "EVALUATION_MISSING_DATA_INACTIVE"
+      filter          = "resource.type = \"cloud_run_revision\" AND metric.type = \"logging.googleapis.com/user/${google_logging_metric.config_change_not_recorded.name}\""
+      comparison      = "COMPARISON_GT"
+      threshold_value = 0
+      duration        = "0s"
       aggregations {
         alignment_period     = "300s"
         per_series_aligner   = "ALIGN_SUM"
