@@ -309,7 +309,8 @@ export function EditableList({
   pending,
   error,
   ordered = false,
-}: EditorProps<string[]> & { ordered?: boolean }) {
+  autoFocus = false,
+}: EditorProps<string[]> & { ordered?: boolean; autoFocus?: boolean }) {
   const [draft, setDraft] = useState("");
   useUnsavedDraft(draft.trim() !== "");
   const List = ordered ? "ol" : "ul";
@@ -352,6 +353,7 @@ export function EditableList({
         <Input
           aria-label={`Add to ${label.toLowerCase()}`}
           placeholder="Add an item, press Enter"
+          autoFocus={autoFocus}
           // Quiet until used: a box per list would outweigh the items.
           className="h-7 border-transparent bg-transparent px-1 text-xs hover:border-border focus-visible:border-border"
           value={draft}
