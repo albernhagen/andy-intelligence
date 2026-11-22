@@ -128,7 +128,13 @@ jobs:
           [[ -z "$base_branch" || "$base_branch" =~ ^epic/[A-Z][A-Z0-9]{0,9}-[0-9]{1,9}$ ]] || fail "unexpected base branch"
 
           step=$(jq -r .step "$body")
-          case "$step" in refine | plan | review) read_only=true ;; *) read_only=false ;; esac
+          # The only steps this executor runs (AI-134): the read-only ones get read-only tools;
+          # build and sync are the editing ones. Any other step is refused before the agent job.
+          case "$step" in
+            refine | plan | review | plan-project | ideate) read_only=true ;;
+            build | sync) read_only=false ;;
+            *) fail "step $step is not one this executor runs: refusing it" ;;
+          esac
           {
             echo "step=$step"
             echo "model=$(jq -r .model "$body")"
