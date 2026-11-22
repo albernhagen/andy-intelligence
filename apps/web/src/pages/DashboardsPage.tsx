@@ -370,35 +370,42 @@ function CostCharts({ weeks, partial }: { weeks: DashboardWeek[]; partial: Set<D
           {unknown ? ` · ${unknown} with unknown cost` : ""}
         </span>
       </header>
-      <div className="grid gap-4 lg:grid-cols-3">
-        {METRICS.map((m) => {
-          const rows = weeks.map((w) => ({
-            week: weekLabel(w.start),
-            ...Object.fromEntries(groups(w).map((g) => [g.name, m.value(g.cost)])),
-          }));
-          return (
-            <ChartCard
-              key={m.key}
-              title={m.title}
-              figures={["cost"]}
-              partial={partial}
-              empty={names.length ? null : "No agent tasks finished in these weeks."}
-            >
-              <WeekChart config={config} rows={rows}>
-                {names.map((n) => (
-                  <Bar
-                    key={n}
-                    dataKey={n}
-                    stackId={m.key}
-                    fill={chartColor(n)}
-                    isAnimationActive={false}
-                  />
-                ))}
-              </WeekChart>
-            </ChartCard>
-          );
-        })}
-      </div>
+      {names.length === 0 ? (
+        // AI-331: one line, not a card per metric with nothing in it.
+        <p className="text-sm text-muted-foreground">
+          No agent tasks finished in these weeks, so no cost, tokens or quota to chart.
+        </p>
+      ) : (
+        <div className="grid gap-4 lg:grid-cols-3">
+          {METRICS.map((m) => {
+            const rows = weeks.map((w) => ({
+              week: weekLabel(w.start),
+              ...Object.fromEntries(groups(w).map((g) => [g.name, m.value(g.cost)])),
+            }));
+            return (
+              <ChartCard
+                key={m.key}
+                title={m.title}
+                figures={["cost"]}
+                partial={partial}
+                empty={null}
+              >
+                <WeekChart config={config} rows={rows}>
+                  {names.map((n) => (
+                    <Bar
+                      key={n}
+                      dataKey={n}
+                      stackId={m.key}
+                      fill={chartColor(n)}
+                      isAnimationActive={false}
+                    />
+                  ))}
+                </WeekChart>
+              </ChartCard>
+            );
+          })}
+        </div>
+      )}
     </section>
   );
 }
@@ -424,7 +431,10 @@ function WeekChart(props: {
         />
         <ChartTooltip content={<ChartTooltipContent />} />
         {/* Series order, not alphabetical: stages read Backlog → Done. */}
-        <ChartLegend content={<ChartLegendContent />} itemSorter={null} />
+        <ChartLegend
+          content={<ChartLegendContent className="flex-wrap gap-y-1" />}
+          itemSorter={null}
+        />
         {props.children}
       </Chart>
     </ChartContainer>

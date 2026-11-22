@@ -1,4 +1,5 @@
 import { expect, test } from "@playwright/test";
+import { expectPageFits } from "./phone";
 
 /**
  * AI-174: M7.4: Phone inbox — the Needs-you inbox at iPhone width (390×844). Answers are
@@ -18,6 +19,7 @@ test("phone inbox: busy project", async ({ page }) => {
   // The page content only: the shell has its own phone screenshots (AI-173: M7.3: Phone shell).
   // A capture taller than the screen is stitched, and the fixed bottom bar would land mid-page.
   await page.addStyleTag({ content: "nav[aria-label=Main] { display: none !important; }" });
+  await expectPageFits(page);
   await expect(page.locator("main section").first()).toHaveScreenshot("phone-inbox-busy.png");
 });
 
