@@ -73,3 +73,46 @@ describe("executor context step: step list (AI-134)", () => {
     expect(listed).toEqual(expect.arrayContaining(["plan-project", "ideate"]));
   });
 });
+
+describe("executor context step: summarize (AI-323, ADR-0137)", () => {
+  it("GivenASummarizeRun_WhenTheContextIsRead_ThenItRunsWithNoTools", () => {
+    const r = runContext(context("summarize", { model: "sonnet", maxTurns: 3 }));
+
+    expect(r.status, r.log).toBe(0);
+    expect(r.value("read_only")).toBe("true");
+    expect(r.value("no_tools")).toBe("true");
+  });
+
+  it("GivenAnyOtherStep_WhenTheContextIsRead_ThenItKeepsItsTools", () => {
+    const r = runContext(context("refine"));
+
+    expect(r.status, r.log).toBe(0);
+    expect(r.value("no_tools")).toBe("false");
+  });
+
+  it("GivenASummarizeRunWithATicketBranchOrTooManyTurns_WhenTheContextIsRead_ThenRefused", () => {
+    const ticket = { projectId: "ai", key: "AI-3", title: "A story" };
+    for (const over of [{ ticket }, { branch: "agent/AI-3/run1" }, { maxTurns: 4 }]) {
+      const r = runContext(context("summarize", { maxTurns: 3, ...over }));
+
+      expect(r.status, JSON.stringify(over)).not.toBe(0);
+      expect(r.value("error")).toBe("GET /runs/run1/context: unexpected response shape");
+    }
+  });
+
+  it("GivenTheProfile_WhenRead_ThenSummarizeIsAllowedNoTool", () => {
+    const profile = JSON.parse(readFileSync(join(ROOT, "platform/executor/profile.json"), "utf8"));
+    expect(profile.steps.summarize.allow).toEqual([]);
+    expect(profile.steps.summarize.deny).toEqual(
+      expect.arrayContaining(["Read", "Glob", "Grep", "Bash", "Edit", "Write", "WebFetch", "Task"]),
+    );
+  });
+
+  it("GivenTheProcedure_WhenLoaded_ThenItHasASchemaWithNoSingleQuote", () => {
+    const dir = join(ROOT, "platform/procedures");
+    const schema = readFileSync(join(dir, "summarize.schema.json"), "utf8");
+    expect(schema).not.toContain("'");
+    expect(JSON.parse(schema).required).toEqual(["summary", "summaryRefs", "lines"]);
+    expect(readFileSync(join(dir, "summarize.md"), "utf8")).toContain("untrusted data");
+  });
+});

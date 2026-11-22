@@ -8,7 +8,7 @@ import { GlobalSpendCaps } from "@/components/spend/GlobalSpendCaps";
 import { Loading, QueryError } from "@/components/Status";
 import { Select } from "@/components/ui/input";
 import { useProjects, useRouting } from "@/lib/queries";
-import { SettingsNav } from "@/pages/RunnersPage";
+import { SettingsTabs } from "@/components/SettingsTabs";
 
 /**
  * Settings → Models (AI-243: M9.8): model routing, global or one project's. Providers with their
@@ -25,7 +25,7 @@ export function ModelsPage() {
   const project = scope === null ? undefined : data?.projects.find((p) => p.projectId === scope);
   return (
     <section className="max-w-4xl space-y-4">
-      <SettingsNav current="models" />
+      <SettingsTabs />
       <h2 className="text-lg font-medium">Models</h2>
       <p className="text-sm text-muted-foreground">
         Which providers are on, each tier&apos;s routes in order, and which tier each step uses.
@@ -49,7 +49,13 @@ export function ModelsPage() {
         </Select>
       </label>
       {routing.isPending && <Loading />}
-      {routing.isError && <QueryError error={routing.error} />}
+      {routing.isError && (
+        <QueryError
+          error={routing.error}
+          what="the routing settings"
+          onRetry={() => void routing.refetch()}
+        />
+      )}
       {data && scope === null && (
         <>
           <RoutingEditor

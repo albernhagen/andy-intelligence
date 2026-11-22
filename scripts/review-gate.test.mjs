@@ -87,16 +87,31 @@ describe("evaluate", () => {
     expect(body.indexOf("critical issue")).toBeLessThan(body.indexOf("low issue"));
   });
 
-  it("GivenAgentOutputMissing_WhenReviewMode_ThenNeutralPass", () => {
+  it("GivenAgentOutputMissing_WhenReviewMode_ThenFails", () => {
     const result = evaluate({ ...base, findings: "" });
-    expect(result.pass).toBe(true);
+    expect(result.pass).toBe(false);
+    expect(result.body).toContain("not reviewed");
     expect(result.body).toContain("no valid findings");
   });
 
-  it("GivenUnavailable_WhenEvaluated_ThenNeutralPassWithReason", () => {
+  it("GivenUnavailable_WhenNotAccepted_ThenFailsWithReason", () => {
     const result = evaluate({ mode: "unavailable", accepted: false, reason: "no token", sha: "x" });
-    expect(result.pass).toBe(true);
+    expect(result.pass).toBe(false);
+    expect(result.body).toContain("❌ Security review: not reviewed");
     expect(result.body).toContain("no token");
+  });
+
+  it("GivenUnavailable_WhenAccepted_ThenPasses", () => {
+    const result = evaluate({ mode: "unavailable", accepted: true, reason: "outage", sha: "x" });
+    expect(result.pass).toBe(true);
+    expect(result.body).toContain("Andy added `security-accepted`");
+  });
+
+  it("GivenASkipByDesign_WhenEvaluated_ThenPassesAsSkipped", () => {
+    const result = evaluate({ mode: "skipped", accepted: false, reason: "docs-only", sha: "x" });
+    expect(result.pass).toBe(true);
+    expect(result.body).toContain("⏭️ Security review: skipped");
+    expect(result.body).not.toContain("not reviewed");
   });
 
   it("GivenForkPr_WhenNotAccepted_ThenFails", () => {
@@ -199,6 +214,44 @@ describe("evaluate (adversarial)", () => {
       "reviewed-sha",
     );
     expect(evaluate({ ...base, mode: "fork" }).body).not.toContain("reviewed-sha");
+  });
+
+  it("GivenACarriedPassingVerdict_WhenEvaluated_ThenPassesAndRecordsTheNewHead", () => {
+    const from = "a".repeat(40);
+    const head = "b".repeat(40);
+    const previous = evaluate({ ...base, sha: from, findings: out([]) }).body;
+    const result = evaluate({ ...base, mode: "carried", sha: head, previous, carriedFrom: from });
+    expect(result.pass).toBe(true);
+    expect(result.body).toContain(reviewedShaMarker(head));
+    expect(result.body).not.toContain(reviewedShaMarker(from));
+    expect(result.body).toContain(`Carried forward from ${from} to ${head}`);
+  });
+
+  it("GivenACarriedVerdictThatDidNotPass_WhenEvaluated_ThenFailsAsNotReviewed", () => {
+    const from = "a".repeat(40);
+    const blocked = evaluate({ ...base, sha: from, findings: out([adv("blocker")]) }).body;
+    const result = evaluate({
+      ...base,
+      mode: "carried",
+      sha: "b".repeat(40),
+      previous: blocked,
+      carriedFrom: from,
+    });
+    expect(result.pass).toBe(false);
+    expect(result.body).toContain("not reviewed");
+    expect(result.body).not.toContain("reviewed-sha");
+  });
+
+  it("GivenACarriedVerdictOnAnotherSha_WhenEvaluated_ThenFails", () => {
+    const previous = evaluate({ ...base, sha: "c".repeat(40), findings: out([]) }).body;
+    const result = evaluate({
+      ...base,
+      mode: "carried",
+      sha: "b".repeat(40),
+      previous,
+      carriedFrom: "a".repeat(40),
+    });
+    expect(result.pass).toBe(false);
   });
 
   it("GivenAnUnknownRole_WhenEvaluated_ThenThrows", () => {

@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it } from "vitest";
 import { screen, waitFor, within } from "@testing-library/react";
+import { DEFAULT_ROUTE } from "@andy/domain";
 import { renderApp } from "@/test/harness";
 
 /** AI-46: one project's settings at /p/<project>/settings, against the in-process API. */
@@ -15,27 +16,29 @@ async function withProjects(path: string) {
 const pathname = (h: { router: { state: { location: { pathname: string } } } }) =>
   h.router.state.location.pathname;
 
-const settings = () => screen.findByRole("list", { name: "Settings" });
+const settings = () => screen.findByRole("region", { name: "Settings" });
 
 afterEach(() => window.localStorage.clear());
 
 describe("project settings page", () => {
-  it("GivenAProjectBoard_WhenAndyClicksProjectSettingsInTheHeader_ThenThatProjectsSettingsOpen", async () => {
+  it("GivenAProjectBoard_WhenAndyPicksProjectSettingsInTheSettingsMenu_ThenThatProjectsSettingsOpen", async () => {
     const h = await withProjects("/p/ops");
-    const nav = await screen.findByRole("navigation", { name: "Main" });
-
-    await h.user.click(within(nav).getByRole("link", { name: "Project settings" }));
+    await h.user.click(await screen.findByRole("button", { name: "Settings" }));
+    await h.user.click(await screen.findByRole("menuitem", { name: "Project settings" }));
 
     await waitFor(() => expect(pathname(h)).toBe("/p/ops/settings"));
     expect(await screen.findByText("OPS: Ops settings")).toBeTruthy();
-    const link = within(nav).getByRole("link", { name: "Project settings" });
-    expect(link.getAttribute("aria-current")).toBe("page");
+    const tabs = screen.getByRole("navigation", { name: "Settings pages" });
+    const tab = within(tabs).getByRole("link", { name: "Project settings" });
+    expect(tab.getAttribute("aria-current")).toBe("page");
   });
 
-  it("GivenAllProjects_WhenTheHeaderRenders_ThenThereIsNoProjectSettingsLink", async () => {
-    await withProjects("/all/inbox");
-    const nav = await screen.findByRole("navigation", { name: "Main" });
-    expect(within(nav).queryByRole("link", { name: "Project settings" })).toBeNull();
+  it("GivenAllProjects_WhenTheSettingsMenuOpens_ThenThereIsNoProjectSettingsItem", async () => {
+    const h = await withProjects("/all/inbox");
+    await h.user.click(await screen.findByRole("button", { name: "Settings" }));
+    const menu = await screen.findByRole("menu");
+    expect(within(menu).queryByRole("menuitem", { name: "Project settings" })).toBeNull();
+    expect(within(menu).getByRole("menuitem", { name: "Models" })).toBeTruthy();
   });
 
   it("GivenStoredSettings_WhenThePageOpens_ThenEverySettingShowsItsValueAndWhatItDoes", async () => {
@@ -80,9 +83,51 @@ describe("project settings page", () => {
     expect(value("Default executor")).toBe("local");
     expect(value("Environments")).toBe("dev-and-prod");
     expect(within(list).getByText("Dispatch: paused by you")).toBeTruthy();
-    // One row per setting group, each with its line on what it does.
-    expect(within(list).getAllByRole("listitem")).toHaveLength(12);
+    // One row per setting group, each with its line on what it does, plus spend caps (Limits).
+    expect(within(list).getAllByRole("listitem")).toHaveLength(13);
     expect(within(list).getByText(/never over MCP/)).toBeTruthy();
+  });
+
+  it("GivenAProject_WhenItsSettingsOpen_ThenFourSectionsInOrderEachWithItsSettings", async () => {
+    await withProjects("/p/ai/settings");
+    const list = await settings();
+
+    const SECTIONS = ["Automation", "Limits", "Defaults", "Notifications"];
+    const names = within(list)
+      .getAllByRole("region")
+      .map((r) => r.getAttribute("aria-label"));
+    expect(names.filter((n) => SECTIONS.includes(n ?? ""))).toEqual(SECTIONS);
+    const has = (section: string, name: string | RegExp) =>
+      within(within(list).getByRole("region", { name: section })).getByLabelText(name);
+    for (const name of [
+      /^Builds/,
+      "Auto-build",
+      "Plan approval",
+      "Auto-refine",
+      "Auto-merge",
+      "Merge mode",
+    ])
+      expect(has("Automation", name)).toBeTruthy();
+    for (const name of ["Agent tasks at once", "Questions per day"])
+      expect(has("Limits", name)).toBeTruthy();
+    expect(
+      await within(within(list).getByRole("region", { name: "Limits" })).findByRole("region", {
+        name: "Spend caps",
+      }),
+    ).toBeTruthy();
+    for (const name of ["Default worker", "Default executor", "Environments"])
+      expect(has("Defaults", name)).toBeTruthy();
+    expect(has("Notifications", /^Email notifications/)).toBeTruthy();
+  });
+
+  it("GivenASetting_WhenChanged_ThenItSavesAtOnceAndSaysSaved", async () => {
+    const h = await withProjects("/p/ai/settings");
+    const automation = within(await settings()).getByRole("region", { name: "Automation" });
+
+    await h.user.click(within(automation).getByRole("checkbox", { name: "Auto-refine" }));
+
+    expect(await within(automation).findByText("Saved")).toBeTruthy();
+    expect((await h.tracker.getProject("ai"))?.autoRefine).toBe(false);
   });
 
   it("GivenBuildsOff_WhenThePageOpens_ThenAutoBuildIsDisabledAndTurningBuildsOnSavesWhoAndWhen", async () => {
@@ -256,5 +301,63 @@ describe("/projects", () => {
       expect((await h.tracker.getProject("ops"))?.mergeMode).toBe("low-risk"),
     );
     await waitFor(() => expect(within(list).queryByText("(read from auto-merge)")).toBeNull());
+  });
+
+  it("GivenNoProjectPlan_WhenSettingsOpen_ThenThePlanCardOffersATaskOrASession", async () => {
+    await withProjects("/p/ai/settings");
+
+    const plan = await screen.findByRole("region", { name: "Project plan" });
+    expect(plan.textContent).toContain(
+      "No plan yet: start a plan-project agent task, or ask a Claude session to plan this project.",
+    );
+    expect(within(plan).getByRole("button", { name: "Start plan-project task" })).toBeTruthy();
+    expect(plan.textContent).not.toContain("submit_project_plan");
+  });
+
+  // AI-320: the same start as MCP start_plan_project and POST …/plan/agent-task.
+  it("GivenAConnectedProject_WhenAndyStartsAPlanProjectTask_ThenItStartsAndLinksToTheTask", async () => {
+    const h = renderApp("/p/ai/settings", { githubConnected: true });
+    await h.tracker.createProject({
+      name: "Andy Intelligence",
+      key: "AI",
+      repos: ["albernhagen/andy-intelligence"],
+    });
+    await h.queryClient.invalidateQueries();
+    const plan = await screen.findByRole("region", { name: "Project plan" });
+    await h.user.click(
+      await within(plan).findByRole("button", { name: "Start plan-project task" }),
+    );
+
+    const link = await within(plan).findByRole("link", { name: "Agent task · plan-project" });
+    const [run] = await h.runs.listActive("ai");
+    expect(run).toMatchObject({ step: "plan-project", ticketId: null });
+    expect(link.getAttribute("href")).toBe(`/p/ai/runs/${run!.id}`);
+  });
+
+  it("GivenAPlanProjectTaskInFlight_WhenAndyStartsAnother_ThenTheApisReasonShows", async () => {
+    const h = renderApp("/p/ai/settings", { githubConnected: true });
+    await h.tracker.createProject({
+      name: "Andy Intelligence",
+      key: "AI",
+      repos: ["albernhagen/andy-intelligence"],
+    });
+    await h.runs.create({
+      projectId: "ai",
+      ticketId: null,
+      step: "plan-project",
+      route: DEFAULT_ROUTE,
+      tier: "strong",
+      deadline: null,
+      prompt: "plan",
+      maxTurns: 50,
+    });
+    await h.queryClient.invalidateQueries();
+    const plan = await screen.findByRole("region", { name: "Project plan" });
+    await h.user.click(
+      await within(plan).findByRole("button", { name: "Start plan-project task" }),
+    );
+
+    expect(await within(plan).findByText(/already has a plan-project task in flight/)).toBeTruthy();
+    expect(await h.runs.listActive("ai")).toHaveLength(1);
   });
 });

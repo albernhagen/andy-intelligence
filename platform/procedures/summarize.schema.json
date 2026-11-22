@@ -1,0 +1,101 @@
+{
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "summary": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 900,
+      "description": "What Andy can now do that he could not before, plain language, at most 120 words."
+    },
+    "summaryRefs": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "tickets": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "pattern": "^[A-Z][A-Z0-9]{0,9}-[0-9]{1,9}$"
+          },
+          "maxItems": 10,
+          "description": "Ticket keys from the input this rests on."
+        },
+        "prs": {
+          "type": "array",
+          "items": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "maxItems": 10,
+          "description": "PR numbers from the input this rests on."
+        }
+      },
+      "required": ["tickets", "prs"],
+      "description": "At least one ticket or PR, at most 10 in all, every one from the input."
+    },
+    "lines": {
+      "type": "array",
+      "maxItems": 12,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "heading": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 120,
+            "description": "The milestone or epic, titled as in the input."
+          },
+          "epicKey": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^[A-Z][A-Z0-9]{0,9}-[0-9]{1,9}$"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The key of the epic when the line is about one, else null."
+          },
+          "text": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 300,
+            "description": "One or two sentences on what was done there."
+          },
+          "refs": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "tickets": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "pattern": "^[A-Z][A-Z0-9]{0,9}-[0-9]{1,9}$"
+                },
+                "maxItems": 10,
+                "description": "Ticket keys from the input this rests on."
+              },
+              "prs": {
+                "type": "array",
+                "items": {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                "maxItems": 10,
+                "description": "PR numbers from the input this rests on."
+              }
+            },
+            "required": ["tickets", "prs"],
+            "description": "At least one ticket or PR, at most 10 in all, every one from the input."
+          }
+        },
+        "required": ["heading", "epicKey", "text", "refs"]
+      },
+      "description": "One line per milestone or epic with work done, busiest first."
+    }
+  },
+  "required": ["summary", "summaryRefs", "lines"]
+}

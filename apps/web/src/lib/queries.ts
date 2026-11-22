@@ -16,7 +16,7 @@ import type {
   WorkerChoice,
 } from "@andy/contracts";
 import { RoutingConfig } from "@andy/contracts";
-import { unwrap, useApi } from "./api";
+import { ApiError, unwrap, useApi } from "./api";
 import { useLivePoll } from "./live";
 import { withoutQuestion, type NeedsYou } from "./needs-you";
 
@@ -147,6 +147,31 @@ export function useSetMilestoneStatus(projectId: string) {
         }),
       ),
   );
+}
+
+/**
+ * Saves a milestone reorder (AI-324): the `order` writes `milestoneReorder` planned, one PATCH
+ * each in turn, so each is a logged, revertable config change the API refuses for anyone but the
+ * owner. A renumber is several writes: if one fails, the earlier ones stay (ties sort by name).
+ * So whether it succeeds or fails, every query refetches before the mutation settles, and the
+ * screen then shows what the server holds.
+ */
+export function useReorderMilestones(projectId: string) {
+  const api = useApi();
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (writes: { id: string; order: number }[]) => {
+      for (const w of writes) {
+        unwrap(
+          await api.PATCH("/api/projects/{projectId}/milestones/{milestoneId}", {
+            params: { path: { projectId, milestoneId: w.id } },
+            body: { order: w.order, reason: "Reordered on the roadmap" },
+          }),
+        );
+      }
+    },
+    onSettled: () => queryClient.invalidateQueries(),
+  });
 }
 
 /** Attaches a top-level epic to a milestone, or detaches it (null); logged as a config change. */
@@ -684,6 +709,38 @@ export function useAnswerQuestion(ticketId?: string) {
         (data) => data && withoutQuestion(data, questionId),
       ),
     ticketId ? answerKey(ticketId) : undefined,
+  );
+}
+
+/** One agent task, polled while it is in flight. A 404 is final: no retries. */
+export function useRun(projectId: string, runId: string) {
+  const api = useApi();
+  return useQuery({
+    ...useLivePoll("live", isActiveRun),
+    queryKey: ["run", projectId, runId],
+    queryFn: async () =>
+      unwrap(
+        await api.GET("/api/projects/{projectId}/runs/{runId}", {
+          params: { path: { projectId, runId } },
+        }),
+      ),
+    retry: (count, err) => !(err instanceof ApiError && err.status === 404) && count < 3,
+  });
+}
+
+/**
+ * Starts an ideate agent task on an idea (AI-299, the route AI-134 added): owner-only, refused
+ * at the agent-task caps or while one is in flight, as MCP is. The result lands in Ideas.
+ */
+export function useStartIdeate(projectId: string) {
+  const api = useApi();
+  return useWrite(async (idea: string) =>
+    unwrap(
+      await api.POST("/api/projects/{projectId}/ideate/agent-task", {
+        params: { path: { projectId } },
+        body: { idea },
+      }),
+    ),
   );
 }
 

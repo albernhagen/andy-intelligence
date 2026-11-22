@@ -1,6 +1,6 @@
 import type { Ticket } from "@andy/contracts";
 import { describe, expect, it } from "vitest";
-import { IDEAS_ZONE, UP_NEXT_ZONE, planUpNextDrop, splitBacklog } from "./board";
+import { IDEAS_ZONE, UP_NEXT_ZONE, openingStage, planUpNextDrop, splitBacklog } from "./board";
 
 const ticket = (id: string, upNextRank: string | null, stage: Ticket["stage"] = "backlog") =>
   ({ id, stage, rank: "0000000001", upNextRank }) as Ticket;
@@ -40,5 +40,23 @@ describe("Backlog parts", () => {
 
   it("GivenACardOnItself_WhenDropped_ThenNothing", () => {
     expect(planUpNextDrop(backlog, a, "a")).toBeNull();
+  });
+});
+
+describe("Phone board's opening stage", () => {
+  const stages = ["backlog", "ready", "in_progress", "ready_for_review", "done"] as const;
+  const t = (stage: Ticket["stage"], needs: boolean) => ({ stage, needs });
+
+  it("GivenTicketsThatNeedYouInTwoStages_WhenOpened_ThenTheFirstStageInBoardOrderShows", () => {
+    const tickets = [t("ready_for_review", true), t("ready", true), t("backlog", false)];
+    expect(openingStage(stages, tickets, (x) => x.needs)).toBe("ready");
+  });
+
+  it("GivenNothingNeedsYou_WhenOpened_ThenInProgressShows", () => {
+    expect(openingStage(stages, [t("backlog", false)], (x) => x.needs)).toBe("in_progress");
+  });
+
+  it("GivenANeedsYouTicketInAHiddenStage_WhenOpened_ThenItIsSkipped", () => {
+    expect(openingStage(stages, [t("cancelled", true)], (x) => x.needs)).toBe("in_progress");
   });
 });

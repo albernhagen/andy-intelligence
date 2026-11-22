@@ -24,7 +24,6 @@ describe("scope", () => {
     ["/all/inbox", "inbox"],
     ["/p/ai/dashboards", "dashboards"],
     ["/all/dashboards", "dashboards"],
-    ["/p/ai/digest", null],
     ["/settings/github", null],
   ])("GivenPath%s_WhenParsed_ThenSectionIs%s", (path, section) => {
     expect(sectionFromPath(path)).toBe(section);

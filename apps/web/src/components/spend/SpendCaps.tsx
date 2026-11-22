@@ -71,9 +71,9 @@ function useSetSpendCaps(projectId: string) {
 }
 
 const input =
-  "h-7 w-24 rounded-md border border-border bg-background px-2 text-sm tabular-nums disabled:opacity-50";
+  "h-7 w-24 rounded-md border border-border bg-background px-2 text-sm tabular-nums disabled:opacity-50 max-sm:h-11 max-sm:text-base";
 const button =
-  "rounded-md border border-border bg-background px-2 py-0.5 text-xs font-medium text-foreground hover:bg-muted disabled:opacity-50";
+  "rounded-md border border-border bg-background px-2 py-0.5 text-xs font-medium text-foreground hover:bg-muted disabled:opacity-50 max-sm:min-h-11 max-sm:px-3";
 
 export function SpendCaps({ projectId }: { projectId: string }) {
   const spend = useSpend(projectId);
@@ -81,7 +81,10 @@ export function SpendCaps({ projectId }: { projectId: string }) {
   const [draft, setDraft] = useState<Partial<Record<Cap, string>>>({});
   const [reason, setReason] = useState("");
 
-  if (spend.error) return <QueryError error={spend.error} />;
+  if (spend.error)
+    return (
+      <QueryError error={spend.error} what="the spend caps" onRetry={() => void spend.refetch()} />
+    );
   if (!spend.data) return null;
   const view = spend.data;
   const text = (field: Cap) => draft[field] ?? toText(view.project[field]);
