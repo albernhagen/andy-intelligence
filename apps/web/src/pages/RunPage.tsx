@@ -112,7 +112,10 @@ function RunDetail({ run }: { run: Run }) {
         <Fact label="Quota used">{quota}</Fact>
       </Facts>
 
-      {run.error && <p className="whitespace-pre-wrap text-sm text-destructive">{run.error}</p>}
+      {/* The summary already says the first line; the full error shows only when it says more. */}
+      {run.error && run.error.trim().includes("\n") && (
+        <p className="whitespace-pre-wrap text-sm text-destructive">{run.error}</p>
+      )}
       {run.summary && (
         <Section title="Report">
           <Summary text={run.summary} />

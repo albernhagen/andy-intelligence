@@ -289,6 +289,25 @@ describe("agent task page helpers", () => {
     );
   });
 
+  it("GivenAFailedTask_WhenItsPageOpens_ThenAOneLineErrorShowsOnceAndALongerOneInFull", async () => {
+    const h = await setup();
+    const short = await h.newRun();
+    await h.runs.update(short.id, { status: "failed", error: "Checks failed" }, ["queued"]);
+    await open(h, `/p/ai/runs/${short.id}`);
+    let page = await screen.findByRole("article", { name: "Agent task" });
+    await waitFor(() => expect(within(page).getAllByText(/Checks failed/)).toHaveLength(1));
+
+    const long = await h.newRun();
+    await h.runs.update(
+      long.id,
+      { status: "failed", error: "Checks failed\npnpm test: 2 failing" },
+      ["queued"],
+    );
+    await open(h, `/p/ai/runs/${long.id}`);
+    page = await screen.findByRole("article", { name: "Agent task" });
+    expect(await within(page).findByText(/pnpm test: 2 failing/)).toBeTruthy();
+  });
+
   it("GivenPrUrls_WhenLabelled_ThenTheNumberShows", () => {
     expect(prLabel(PR)).toBe("PR #7");
     expect(prLabel("https://example.com/x")).toBe("Pull request");
