@@ -3,7 +3,7 @@ import { DomainError } from "./errors";
 
 /**
  * Merge modes (ADR-0124): one project setting decides who merges. This module holds the rules
- * on the setting itself; nothing reads the mode to merge yet (AI-215: the verdict and the gate).
+ * on the setting itself; `merge-verdict.ts` applies it to a PR (AI-215).
  */
 
 /** Strictest first: an earlier mode lets fewer PRs merge without Andy. */
@@ -28,25 +28,34 @@ const FROM_AUTO_MERGE: Record<AutoMerge, MergeMode> = {
 };
 
 /**
- * The project's mode: its stored `mergeMode`, else the mapping from `autoMerge`. Project AI is
- * the ADR's one exception: unset, it reads `all-clean`, the rule its coordinator applies today
- * (ADR-0120), not `manual`.
+ * ADR-0124's mapping from the old size policy (project AI: `all-clean`, its coordinator's rule
+ * today, ADR-0120). Since ADR-0134 it is only a suggestion shown while no mode is set: an unset
+ * mode merges nothing, so turning merging on is always Andy saving a mode.
  */
-export function effectiveMergeMode(
+export function suggestedMergeMode(
   project: Pick<Project, "id" | "mergeMode" | "autoMerge">,
 ): MergeMode {
-  if (project.mergeMode) return project.mergeMode;
   if (project.id === "ai") return "all-clean";
   return FROM_AUTO_MERGE[project.autoMerge];
 }
 
 /**
+ * The mode in force (ADR-0134): the stored `mergeMode`, else `manual`. The gate merges by it,
+ * overrides are compared with it, and MCP may only tighten it, so while no mode is set nothing
+ * merges without Andy and only the settings page can pick a looser one.
+ */
+export function effectiveMergeMode(project: Pick<Project, "mergeMode">): MergeMode {
+  return project.mergeMode ?? "manual";
+}
+
+/**
  * A ticket's mode: the stricter of its project's and its own override (an epic's override passes
  * to its tickets the same way). Overrides are checked only when written, so a project tightened
- * later must still win here: AI-215 reads the mode through this, never the override alone.
+ * later must still win here: the gate (AI-215) reads a ticket's mode through this, never the
+ * override alone.
  */
 export function effectiveTicketMergeMode(
-  project: Pick<Project, "id" | "mergeMode" | "autoMerge">,
+  project: Pick<Project, "mergeMode">,
   override: MergeMode | undefined,
 ): MergeMode {
   const projectMode = effectiveMergeMode(project);
@@ -92,16 +101,4 @@ export function requireTightening(
       ["over MCP a merge mode may only be tightened; loosen it on the project settings page"],
     );
   }
-}
-
-/**
- * While a project's `mergeMode` is unset its mode is read from `autoMerge`, so an `autoMerge`
- * change over MCP (`set_auto_merge`, a settings revert) must not loosen it either.
- */
-export function requireAutoMergeNotLoosening(
-  next: AutoMerge,
-  project: Pick<Project, "id" | "key" | "mergeMode" | "autoMerge">,
-): void {
-  if (project.mergeMode !== null) return;
-  requireTightening(effectiveMergeMode({ ...project, autoMerge: next }), project);
 }

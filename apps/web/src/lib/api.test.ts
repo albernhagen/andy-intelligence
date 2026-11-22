@@ -51,6 +51,31 @@ describe("unwrap", () => {
     expect(() => unwrap({ error: "Bad gateway", response })).toThrow("request failed (502)");
   });
 
+  it("GivenABodyWithAMessageField_WhenUnwrapped_ThenItIsTheApisMessage", () => {
+    const response = new Response(null, { status: 404 });
+    try {
+      unwrap({ error: { message: "GitHub is not connected" }, response });
+    } catch (e) {
+      expect(e).toBeInstanceOf(ApiError);
+      expect((e as ApiError).message).toBe("GitHub is not connected");
+      expect((e as ApiError).fromApi).toBe(true);
+    }
+    expect.assertions(3);
+  });
+
+  it("GivenNoMessageInTheBody_WhenUnwrapped_ThenTheErrorIsMarkedNotFromTheApi", () => {
+    const response = new Response(null, { status: 404 });
+    for (const error of ["404 Not Found", {}, { error: "" }, undefined]) {
+      try {
+        unwrap({ error, response });
+      } catch (e) {
+        expect((e as ApiError).fromApi).toBe(false);
+        expect((e as ApiError).status).toBe(404);
+      }
+    }
+    expect.assertions(8);
+  });
+
   it("GivenData_WhenUnwrapped_ThenItIsReturned", () => {
     expect(unwrap({ data: [1], response: new Response(null, { status: 200 }) })).toEqual([1]);
   });

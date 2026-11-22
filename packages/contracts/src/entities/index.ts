@@ -25,9 +25,11 @@ import { runInFlightFields } from "./in-flight";
 import { runSyncFields } from "./sync";
 import { runLocalFields } from "./runner";
 import { runBaseFields } from "./build";
+import { runIdeaFields } from "./ideate";
 import { runRouteFields } from "./routing";
 import { ProjectSpendCaps } from "./spend-caps";
 import { MilestoneId } from "./milestone";
+import { MergeMode } from "./merge-mode";
 import { RefineScores, TicketScores } from "./scores";
 import {
   questionFormatFields,
@@ -56,15 +58,6 @@ export type PlanApproval = z.infer<typeof PlanApproval>;
  */
 export const AutoMerge = z.enum(["none", "s", "s-and-m", "all"]);
 export type AutoMerge = z.infer<typeof AutoMerge>;
-
-/**
- * Who merges a project's PRs (ADR-0124), strictest first: `manual` (Andy merges everything),
- * `epic` (an epic's tickets merge into `epic/<KEY>`, Andy merges one PR per epic), `low-risk` (a clean PR
- * merges unless its diff touches the high-risk list), `all-clean` (a clean PR merges unless it
- * is a kept kind). Stored only until AI-215 makes the gate read it.
- */
-export const MergeMode = z.enum(["manual", "epic", "low-risk", "all-clean"]);
-export type MergeMode = z.infer<typeof MergeMode>;
 
 /**
  * Where a project's releases go (ADR-0050, AI-160: M6.2): `prod-only` (one prod project plus PR
@@ -558,6 +551,31 @@ export const GateReason = z.enum([
   // A spike's PR changes files outside docs/ (AI-99): a deviation for Andy.
   "spike_outside_docs",
 ]);
+
+/**
+ * Why the merge verdict (ADR-0124, AI-215) holds a PR for Andy, beyond the gate's own reasons.
+ * Every unknown fact is its own reason: missing information never counts as clean.
+ */
+export const MergeWaitReason = z.enum([
+  // The project's mode: not set (nothing merges until Andy picks one), manual, or epic (AI-216).
+  "mode_not_set",
+  "mode_manual",
+  "mode_epic",
+  // The gate's reasons (checks, vetoes, draft, branch) aren't all clear.
+  "gate_not_clean",
+  // A kept-kind path (every mode) or, in low-risk, a high-risk path.
+  "kept_path",
+  "high_risk_path",
+  "files_incomplete",
+  "labels_unknown",
+  "accepted_label",
+  "behind_default_branch",
+  "up_to_date_unknown",
+  "review_findings_unknown",
+  "open_review_findings",
+  "not_ready_for_review",
+]);
+export type MergeWaitReason = z.infer<typeof MergeWaitReason>;
 export type GateReason = z.infer<typeof GateReason>;
 
 /** ADR-0040's run metrics; kept current by the gate and completed when the PR closes. */
@@ -664,12 +682,17 @@ export const Run = z.object({
   mergeAttemptedSha: z.string().max(64).nullable().default(null),
   /** Why the merge call failed. */
   mergeError: z.string().max(2000).nullable().default(null),
+  // Added in AI-215: Merge modes (ADR-0124): the mode the gate applied and its verdict.
+  mergeMode: MergeMode.nullable().default(null),
+  mergeVerdict: z.enum(["merge", "wait"]).nullable().default(null),
+  verdictReasons: z.array(MergeWaitReason).max(MergeWaitReason.options.length).default([]),
   metrics: RunMetrics.nullable().default(null),
   ...RunCostFields,
   ...runInFlightFields,
   ...runSyncFields,
   ...runLocalFields,
   ...runBaseFields,
+  ...runIdeaFields,
   ...runRouteFields,
 });
 export type Run = z.infer<typeof Run>;
@@ -892,6 +915,8 @@ export const PullRequest = z.object({
   headSha: z.string().min(1),
   baseRef: z.string().min(1),
   url: z.url(),
+  /** Label names (AI-215, capped); absent when not read, which the merge verdict treats as unknown. */
+  labels: z.array(z.string().max(100)).max(100).nullable().optional(),
 });
 export type PullRequest = z.infer<typeof PullRequest>;
 

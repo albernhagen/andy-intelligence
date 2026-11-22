@@ -46,20 +46,30 @@ test("board: Done expanded", async ({ page }) => {
   await expect(page).toHaveScreenshot("board-expanded.png", { fullPage: true });
 });
 
-test("board: work view chips, Needs me picked", async ({ page }) => {
+test("board: work view chips, Needs you picked", async ({ page }) => {
   await page.clock.setFixedTime(SEED_NOW);
   await open(page, "/p/ai?view=needs-me", "Sort by score");
-  await expect(page.getByRole("button", { name: /^Needs me/ })).toHaveAttribute(
+  await expect(page.getByRole("button", { name: /^Needs you ·/ })).toHaveAttribute(
     "aria-pressed",
     "true",
   );
   await expect(page).toHaveScreenshot("board-work-view.png", { fullPage: true });
 });
 
-test("work under All projects, Needs me", async ({ page }) => {
+test("work under All projects, Needs you", async ({ page }) => {
   await page.clock.setFixedTime(SEED_NOW);
   await open(page, "/all/work", "Story side panel");
   await expect(page).toHaveScreenshot("work-all-projects.png", { fullPage: true });
+});
+
+/** AI-299: the board's Ideate form, open with an idea typed. */
+test("board: Ideate form open", async ({ page }) => {
+  await page.clock.setFixedTime(SEED_NOW);
+  await open(page, "/p/ai", "Building · 12 min");
+  await page.getByRole("button", { name: "Ideate" }).click();
+  await page.getByRole("textbox", { name: "Idea" }).fill("A weekly summary email of what shipped");
+  await expect(page.getByRole("button", { name: "Start ideate" })).toBeEnabled();
+  await expect(page).toHaveScreenshot("board-ideate.png");
 });
 
 test("board under All projects asks for a project", async ({ page }) => {
@@ -86,7 +96,8 @@ test("story panel with a question", async ({ page }) => {
   await page.clock.setFixedTime(SEED_NOW);
   await open(page, "/p/ai/t/AI-3", "Waiting for you: 1 question");
   await expect(page.getByRole("region", { name: "Activity" })).toBeVisible();
-  await page.getByRole("region", { name: "Questions" }).scrollIntoViewIfNeeded();
+  // AI-336: the open question leads the panel, in Next, above the title.
+  await expect(page.getByRole("region", { name: "Open questions" })).toBeInViewport();
   await expect(page).toHaveScreenshot("story-panel-question.png");
 });
 
@@ -94,6 +105,7 @@ test("board grouped by epic", async ({ page }) => {
   await open(page, "/p/ops", "Monthly restore drill");
   await page.getByRole("checkbox", { name: "Group by epic" }).check();
   await expect(page.getByText("1 of 3 done").first()).toBeVisible();
+  await expect(page.getByText("M2: Backups · Parked").first()).toBeVisible();
   await expect(page).toHaveScreenshot("board-grouped.png", { fullPage: true });
 });
 
@@ -115,10 +127,21 @@ test("what's new: status, then changes by day, one opened", async ({ page }) => 
   await expect(page).toHaveScreenshot("whats-new.png", { fullPage: true });
 });
 
+test("epic panel: its milestone and status (AI-311)", async ({ page }) => {
+  await page.clock.setFixedTime(SEED_NOW);
+  await open(page, "/p/ops/t/OPS-5", "M2: Backups · Parked");
+  await page.getByRole("region", { name: "Milestone" }).scrollIntoViewIfNeeded();
+  await expect(page).toHaveScreenshot("epic-milestone.png");
+});
+
 test("story panel for an epic", async ({ page }) => {
   await page.clock.setFixedTime(SEED_NOW);
   await open(page, "/p/ops/t/OPS-5", "1 of 3 done");
-  await page.getByRole("region", { name: "Stories" }).scrollIntoViewIfNeeded();
+  // AI-336: on a 1280×800 screen the epic's tickets, progress and milestone show unscrolled.
+  const panel = page.getByRole("dialog", { name: /^OPS-5: / });
+  await expect(panel.getByRole("region", { name: "Tickets" })).toBeInViewport();
+  await expect(panel.getByLabel("Epic progress")).toBeInViewport();
+  await expect(panel.getByRole("region", { name: "Milestone" })).toBeInViewport();
   await expect(page).toHaveScreenshot("story-panel-epic.png");
 });
 
@@ -126,17 +149,12 @@ test("story panel for an epic", async ({ page }) => {
 test("ticket panel routing layers", async ({ page }) => {
   await page.clock.setFixedTime(SEED_NOW);
   await open(page, "/p/ai/t/AI-1", "Picking a project should feel like picking a tenant.");
+  // AI-336: routing sits in the collapsed How it runs group.
+  await page.getByText("How it runs").click();
   const routing = page.getByRole("region", { name: "Routing" });
   await expect(routing.getByText("Route", { exact: true })).toBeVisible();
   await routing.scrollIntoViewIfNeeded();
   await expect(routing).toHaveScreenshot("ticket-routing.png");
-});
-
-/** AI-298: the ranked Ready list, the same as MCP list_ready. */
-test("ready view: ranked list with scores", async ({ page }) => {
-  await open(page, "/p/ai/ready", "In board order: the order is the priority.");
-  await expect(page.getByRole("list", { name: "Ready tickets" })).toBeVisible();
-  await expect(page).toHaveScreenshot("ready-view.png");
 });
 
 /** M4.12: AI's settings with the Changes list: a reverted flip and the revert, logged too. */

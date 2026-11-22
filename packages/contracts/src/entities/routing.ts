@@ -40,11 +40,40 @@ export type TierRoutes = z.infer<typeof TierRoutes>;
 export const StepTier = z.union([TierKey, z.literal("by_size")]);
 export type StepTier = z.infer<typeof StepTier>;
 
+/**
+ * Providers added after routing configs were first stored (AI-260: the API-key Claude provider,
+ * pay-per-use, held by spend caps). A stored config without one reads it as this entry: off.
+ */
+export const LATER_PROVIDERS = {
+  "claude-api": { enabled: false, reservePct: 0, warnPct: 70, pausePct: 80, dailyTaskLimit: null },
+} as const;
+
+const Providers = z.preprocess(
+  (v) => (v && typeof v === "object" && !Array.isArray(v) ? { ...LATER_PROVIDERS, ...v } : v),
+  z.record(ProviderKey, ProviderRouting),
+);
+
+/**
+ * Steps added after routing configs were first stored (AI-134: project agent tasks; AI-323: the
+ * digest summary). A stored config without them reads with these tiers, so older documents still
+ * parse (additive change).
+ */
+export const LATER_STEP_TIERS = {
+  "plan-project": "strong",
+  ideate: "strong",
+  summarize: "fast",
+} as const;
+
+const StepTiers = z.preprocess(
+  (v) => (v && typeof v === "object" && !Array.isArray(v) ? { ...LATER_STEP_TIERS, ...v } : v),
+  z.record(RunStep, StepTier),
+);
+
 /** Every field but the scope and the store's stamp: what `put` takes. */
 const routingFields = {
-  providers: z.record(ProviderKey, ProviderRouting),
+  providers: Providers,
   tiers: z.record(TierKey, TierRoutes),
-  steps: z.record(RunStep, StepTier),
+  steps: StepTiers,
 };
 
 const scopeFields = {
@@ -102,6 +131,7 @@ export const DEFAULT_ROUTING: RoutingConfig = RoutingConfig.parse({
     },
     // Pay-per-use: held by USD caps from M10: Paid models + spend caps, not a reserve.
     openrouter: { enabled: false, reservePct: 0, warnPct: 70, pausePct: 80, dailyTaskLimit: null },
+    // claude-api (AI-260): LATER_PROVIDERS, off until Andy enables it.
   },
   tiers: {
     frontier: claude("opus"),
@@ -117,6 +147,8 @@ export const DEFAULT_ROUTING: RoutingConfig = RoutingConfig.parse({
     verify: "fast",
     scout: "fast",
     sync: "by_size",
+    // plan-project, ideate (strong, as they ran before routing) and summarize (fast):
+    // LATER_STEP_TIERS.
   },
   updatedAt: null,
 });

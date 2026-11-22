@@ -158,6 +158,60 @@ describe("create_ticket", () => {
 });
 
 describe("list_needs_me", () => {
+  it("GivenACleanPrLeftForAndyByTheMode_WhenListed_ThenMcpAndTheInboxRouteListTheSameMerge", async () => {
+    const ctx = await withProject();
+    const ticket = await ctx.service.create("ai", { title: "Lanes", type: "chore" }, "andy");
+    await ctx.tracker.updateTicket(
+      "ai",
+      ticket.id,
+      { stage: { to: "ready_for_review", forced: true, reason: null } },
+      "andy",
+    );
+    const run = await ctx.runs.create({
+      projectId: "ai",
+      ticketId: ticket.id,
+      step: "build",
+      route: { harness: "claude-code", provider: "claude-sub", model: "opus" },
+      tier: null,
+      deadline: null,
+      prompt: null,
+      maxTurns: null,
+    });
+    await ctx.runs.update(
+      run.id,
+      {
+        links: { pullRequest: "https://github.com/albernhagen/andy-intelligence/pull/9" },
+        mergeMode: "all-clean",
+        mergeVerdict: "wait",
+        verdictReasons: ["kept_path"],
+      },
+      ["queued"],
+    );
+
+    const viaMcp = (await ctx.call("list_needs_me")).data.waitingMerges;
+    const viaRest = (await (await ctx.rest("/api/needs-you")).json()) as {
+      waitingMerges: unknown;
+    };
+
+    expect(viaMcp).toEqual({
+      merges: [
+        {
+          projectId: "ai",
+          ticketKey: "AI-1",
+          ticketTitle: "Lanes",
+          prNumber: 9,
+          prUrl: "https://github.com/albernhagen/andy-intelligence/pull/9",
+          mergeMode: "all-clean",
+          reasons: ["kept_path"],
+          // No code host connected here: listed without its release note.
+          note: null,
+        },
+      ],
+      truncated: false,
+    });
+    expect(viaRest.waitingMerges).toEqual(viaMcp);
+  });
+
   it("GivenNothingOpen_WhenListed_ThenTheInboxIsEmpty", async () => {
     const ctx = await withProject();
     expect((await ctx.call("list_needs_me")).data).toEqual({
@@ -165,6 +219,7 @@ describe("list_needs_me", () => {
       questions: [],
       tickets: [],
       projectPlans: [],
+      waitingMerges: { merges: [], truncated: false },
     });
   });
 
@@ -213,6 +268,7 @@ describe("answer_question", () => {
       questions: [],
       tickets: [],
       projectPlans: [],
+      waitingMerges: { merges: [], truncated: false },
     });
   });
 
@@ -443,17 +499,10 @@ describe("plan approval tools", () => {
     });
   });
 
-  it("GivenAProject_WhenSetAutoMergeIsCalled_ThenThePolicyIsSavedAndBadValuesRefused", async () => {
+  it("GivenTheMergeModes_WhenToolsAreListed_ThenSetAutoMergeIsGone", async () => {
+    // AI-215: the merge mode replaced the size policy; only the stored value stays (ADR-0124).
     const ctx = await withProject();
-    expect((await ctx.call("set_auto_merge", { project: "ai", policy: "none" })).data).toEqual({
-      project: "AI",
-      autoMerge: "none",
-    });
-    const projects = (await (await ctx.rest("/api/projects")).json()) as { autoMerge: string }[];
-    expect(projects[0]!.autoMerge).toBe("none");
-    expect(await ctx.call("set_auto_merge", { project: "AI", policy: "some" })).toMatchObject({
-      isError: true,
-    });
+    expect((await ctx.call("set_auto_merge", { project: "AI", policy: "all" })).isError).toBe(true);
   });
 
   it("GivenAStoredDispatchDecision_WhenStatusOverview_ThenItShowsTheReason", async () => {

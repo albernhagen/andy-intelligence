@@ -66,6 +66,31 @@
       "allow": ["Read", "Glob", "Grep"],
       "deny": ["Bash", "Edit", "Write", "MultiEdit", "NotebookEdit", "WebFetch", "WebSearch"]
     },
+    "plan-project": {
+      "allow": ["Read", "Glob", "Grep"],
+      "deny": ["Bash", "Edit", "Write", "MultiEdit", "NotebookEdit", "WebFetch", "WebSearch"]
+    },
+    "ideate": {
+      "allow": ["Read", "Glob", "Grep"],
+      "deny": ["Bash", "Edit", "Write", "MultiEdit", "NotebookEdit", "WebFetch", "WebSearch"]
+    },
+    "summarize": {
+      "$comment": "AI-323, ADR-0137: the digest summary. Its whole input is in the prompt, so no tool at all, not even Read.",
+      "allow": [],
+      "deny": [
+        "Read",
+        "Glob",
+        "Grep",
+        "Bash",
+        "Edit",
+        "Write",
+        "MultiEdit",
+        "NotebookEdit",
+        "WebFetch",
+        "WebSearch",
+        "Task"
+      ]
+    },
     "build": {
       "$comment": "ADR-0063, ADR-0071: Bash runs only inside the sandbox (no unsandboxed retry), with the model and GitHub credentials unset, writes limited to the checkout (its .git too: git needs the index and lock files; the sandbox itself keeps .git/config, .git/hooks and its other protected paths read-only) and /tmp/agent, and network to the package registry only. No denyWrite on .git itself: it made every Bash call fail (AI-42). denyWrite holds the paths that steer git (switch its config, refs or object store); the workflow creates each before the agent so the sandbox binds a real file or directory, never an empty placeholder (git dies on an empty commondir). The index, lock files, loose objects and logs stay writable. Read denies also become sandbox denyReads, so allowRead re-opens the CA certificates, OpenSSL's config (not /etc/ssl/private) and /etc/alternatives (symlinks such as /usr/bin/awk resolve through it; AI-58) under the Read(//etc/**) deny for sandboxed commands only (the narrower path wins; AI-51). The workflow also sets CLAUDE_CODE_SUBPROCESS_ENV_SCRUB=1 (credential scrub + PID namespace) and checks this sandbox with one Bash call before the agent.",
       "allow": ["Read", "Glob", "Grep", "Edit", "Write", "MultiEdit", "Bash"],

@@ -3,6 +3,7 @@ import { type QueryClient, useMutation, useQuery, useQueryClient } from "@tansta
 import type {
   AutoMerge,
   MergeMode,
+  MilestoneStatus,
   EnvironmentPolicy,
   ExecutorKind,
   PlanApproval,
@@ -15,7 +16,7 @@ import type {
   WorkerChoice,
 } from "@andy/contracts";
 import { RoutingConfig } from "@andy/contracts";
-import { unwrap, useApi } from "./api";
+import { ApiError, unwrap, useApi } from "./api";
 import { useLivePoll } from "./live";
 import { withoutQuestion, type NeedsYou } from "./needs-you";
 
@@ -63,7 +64,24 @@ export function useDigest(projectId: string, hours: number) {
           params: { path: { projectId }, query: { hours } },
         }),
       ),
+    // AI-323: while the day's summary is being written, look again every 30 s.
+    refetchInterval: (query) =>
+      query.state.data?.summary?.state === "writing" ? DIGEST_SUMMARY_POLL_MS : false,
   });
+}
+
+export const DIGEST_SUMMARY_POLL_MS = 30_000;
+
+/** Andy's one retry of a failed digest summary (AI-323). */
+export function useRetryDigestSummary(projectId: string) {
+  const api = useApi();
+  return useWrite(async () =>
+    unwrap(
+      await api.POST("/api/projects/{projectId}/digest/summary/retry", {
+        params: { path: { projectId } },
+      }),
+    ),
+  );
 }
 
 /**
@@ -119,6 +137,72 @@ export function useTickets(projectId: string) {
 }
 
 type TicketPath = { projectId: string; ticketId: string };
+
+/** A project's milestones in roadmap order (ADR-0131, AI-304); slow, as they change by hand. */
+export function useMilestones(projectId: string, enabled = true) {
+  const api = useApi();
+  return useQuery({
+    ...useLivePoll("slow"),
+    enabled,
+    queryKey: ["milestones", projectId],
+    queryFn: async () =>
+      unwrap(
+        await api.GET("/api/projects/{projectId}/milestones", { params: { path: { projectId } } }),
+      ),
+  });
+}
+
+/** The owner's status change (not reviewed, approved, parked), logged as a config change. */
+export function useSetMilestoneStatus(projectId: string) {
+  const api = useApi();
+  return useWrite(
+    async ({ milestoneId, status }: { milestoneId: string; status: MilestoneStatus }) =>
+      unwrap(
+        await api.PATCH("/api/projects/{projectId}/milestones/{milestoneId}", {
+          params: { path: { projectId, milestoneId } },
+          body: { status },
+        }),
+      ),
+  );
+}
+
+/**
+ * Saves a milestone reorder (AI-324): the `order` writes `milestoneReorder` planned, one PATCH
+ * each in turn, so each is a logged, revertable config change the API refuses for anyone but the
+ * owner. A renumber is several writes: if one fails, the earlier ones stay (ties sort by name).
+ * So whether it succeeds or fails, every query refetches before the mutation settles, and the
+ * screen then shows what the server holds.
+ */
+export function useReorderMilestones(projectId: string) {
+  const api = useApi();
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (writes: { id: string; order: number }[]) => {
+      for (const w of writes) {
+        unwrap(
+          await api.PATCH("/api/projects/{projectId}/milestones/{milestoneId}", {
+            params: { path: { projectId, milestoneId: w.id } },
+            body: { order: w.order, reason: "Reordered on the roadmap" },
+          }),
+        );
+      }
+    },
+    onSettled: () => queryClient.invalidateQueries(),
+  });
+}
+
+/** Attaches a top-level epic to a milestone, or detaches it (null); logged as a config change. */
+export function useSetEpicMilestone(path: TicketPath) {
+  const api = useApi();
+  return useWrite(async (milestoneId: string | null) =>
+    unwrap(
+      await api.PUT("/api/projects/{projectId}/tickets/{ticketId}/milestone", {
+        params: { path },
+        body: { milestoneId },
+      }),
+    ),
+  );
+}
 
 export const ticketQueryKey = (projectId: string, ref: string) => ["ticket", projectId, ref];
 
@@ -642,6 +726,38 @@ export function useAnswerQuestion(ticketId?: string) {
         (data) => data && withoutQuestion(data, questionId),
       ),
     ticketId ? answerKey(ticketId) : undefined,
+  );
+}
+
+/** One agent task, polled while it is in flight. A 404 is final: no retries. */
+export function useRun(projectId: string, runId: string) {
+  const api = useApi();
+  return useQuery({
+    ...useLivePoll("live", isActiveRun),
+    queryKey: ["run", projectId, runId],
+    queryFn: async () =>
+      unwrap(
+        await api.GET("/api/projects/{projectId}/runs/{runId}", {
+          params: { path: { projectId, runId } },
+        }),
+      ),
+    retry: (count, err) => !(err instanceof ApiError && err.status === 404) && count < 3,
+  });
+}
+
+/**
+ * Starts an ideate agent task on an idea (AI-299, the route AI-134 added): owner-only, refused
+ * at the agent-task caps or while one is in flight, as MCP is. The result lands in Ideas.
+ */
+export function useStartIdeate(projectId: string) {
+  const api = useApi();
+  return useWrite(async (idea: string) =>
+    unwrap(
+      await api.POST("/api/projects/{projectId}/ideate/agent-task", {
+        params: { path: { projectId } },
+        body: { idea },
+      }),
+    ),
   );
 }
 
