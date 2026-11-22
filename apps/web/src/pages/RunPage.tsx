@@ -100,11 +100,11 @@ function RunDetail({ run }: { run: Run }) {
       </Facts>
 
       <Facts title="Usage and cost">
-        <Fact label="Tokens in">{tokensIn !== null && count(tokensIn)}</Fact>
-        <Fact label="Tokens out">{tokensOut !== null && count(tokensOut)}</Fact>
-        <Fact label="Cache read">{run.usage && count(run.usage.cacheReadTokens)}</Fact>
-        <Fact label="Cache write">{run.usage && count(run.usage.cacheWriteTokens)}</Fact>
-        <Fact label="Turns">{run.usage && count(run.usage.turns)}</Fact>
+        <Fact label="Tokens in">{countOf(tokensIn)}</Fact>
+        <Fact label="Tokens out">{countOf(tokensOut)}</Fact>
+        <Fact label="Cache read">{countOf(run.usage?.cacheReadTokens)}</Fact>
+        <Fact label="Cache write">{countOf(run.usage?.cacheWriteTokens)}</Fact>
+        <Fact label="Turns">{countOf(run.usage?.turns)}</Fact>
         {/* No usage reported means unknown, never $0 (ADR-0046); said once the task ends. */}
         <Fact label="Cost">
           {run.costUsd !== null ? formatCost(run) : !isActiveRun(run) && "unknown"}
@@ -257,6 +257,8 @@ function Fact({ label, children }: { label: string; children: ReactNode }) {
   );
 }
 
+const countOf = (n: number | null | undefined) => (n == null ? null : count(n));
+
 const hasValue = (v: ReactNode) => v !== null && v !== undefined && v !== false && v !== "";
 
 function Time({ iso }: { iso: string }) {
@@ -340,8 +342,9 @@ export function runSummary(
     case "queued":
       return `Waiting to start: ${going.toLowerCase()}${what}${on}.`;
     case "running": {
-      const since = Date.parse(run.startedAt ?? run.createdAt);
-      return `${going}${what} for ${about(now.getTime() - since)}${on}.`;
+      const since = run.startedAt ?? run.createdAt;
+      if (!since) return `${going}${what}${on}.`;
+      return `${going}${what} for ${about(now.getTime() - Date.parse(since))}${on}.`;
     }
     case "succeeded": {
       const took = wall === null ? "" : ` in ${about(wall)}`;
