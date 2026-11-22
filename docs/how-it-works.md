@@ -26,7 +26,7 @@ What is built on `main` now, moved from `README.md` so its "How it works today" 
 
 - with auto-build on, Ready tickets start from the top, up to the project's "Agent tasks at once" dial (default 2, max 4), 4 across projects (1 at quota warn) and 5 agent PRs waiting for Andy; "Paused" stops new starts, and so does the quota reserve.
 - Project settings, the board and MCP `status` show why dispatch is idle (ADR-0079).
-- A ticket whose `touches` overlap a build in flight waits ("Waiting: overlaps AI-12 in flight") while the next starts; the board's In flight panel and MCP `list_in_flight` show each task's ticket, branch, PR and files, and each build gets its own ADR number (ADR-0080).
+- A ticket whose `touches` overlap a build in flight waits ("Waiting: overlaps AI-12 in flight") while the next starts; MCP `list_in_flight` shows each task's ticket, branch, PR and files (a build's ticket panel shows its branch and files), and each build gets its own ADR number (ADR-0080).
 - Blockers can be in any project (AI-96).
 - **Clear quota idle** (banner, Project settings, MCP `clear_quota_idle`) discards a quota reading you don't believe, logged with who and when; the digest lists it (AI-74).
 - When `main` moves, each open agent PR lacking it gets a sync task: merge `main`, resolve conflicts, rerun checks, push; an unsettled conflict goes to Needs you; no auto-merge while a sync is pending (ADR-0083).
@@ -36,4 +36,5 @@ What is built on `main` now, moved from `README.md` so its "How it works today" 
 **Project agent tasks (AI-134):**
 
 - Andy starts plan-project or ideate as a read-only agent task (`POST …/plan/agent-task`, `…/ideate/agent-task`); its result is stored as a submitted one, so a plan waits for approval and an idea becomes an epic with a spec PR or a question.
+- Board → **Ideate** starts ideate from the web (AI-299).
 - MCP `start_plan_project` and `start_ideate` start them, as the routes do; the Project plan card has a **Start plan-project task** button (AI-320).

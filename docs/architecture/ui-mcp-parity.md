@@ -35,7 +35,7 @@ Step 1 of AI-285: Web UI and MCP parity: every action in both, enforced by a tes
 | Spend per provider | `GET …/spend/providers` | `get_spend` (`byProvider`, AI-288) |
 | Routing: read, edit (global, project), history, revert   | `GET`/`PUT /routing`, `PUT …/routing`, `GET /routing/changes`, revert           | `get_routing`, `set_tier_routes`, `set_provider_routing`, `set_step_tier`, `list_routing_changes`, `revert_routing_change` |
 | Who am I                                                 | `GET /me`                                                                       | `status` (`signedInAs`)                                                                                                    |
-| Ranked Ready list with scores and filters                | `GET …/ready` (the Ready view, AI-298)                                           | `list_ready`                                                                                                               |
+| Ranked Ready list with scores and filters | The board's Ready lane filters (AI-343); `GET …/ready` | `list_ready` |
 
 ## Gaps and their tickets (smallest first)
 
@@ -50,7 +50,7 @@ Step 1 of AI-285: Web UI and MCP parity: every action in both, enforced by a tes
 | AI-296: Parity: the board, every stage, over MCP | UI-only | S | Built: `board` (now matched) |
 | AI-321: Milestone create and edit over MCP | done | S | Built: `create_milestone`, `edit_milestone` (ADR-0136, proposed; now matched) |
 | AI-298: Parity: ranked Ready list in the web UI                        | MCP-only  | S    | Built: `GET …/ready` and the Ready view (now matched)        |
-| AI-299: Parity: ideate from the web UI                                 | MCP-only  | M    | `ideate` (route exists, web never calls it) → a form         |
+| AI-299: Parity: ideate from the web UI                                 | MCP-only  | M    | Built: the board's Ideate form starts an ideate agent task (now matched) |
 | AI-300: Parity: registry test that every action has a route and a tool | done | M | Built: `apps/api/src/parity.ts` and `parity.test.ts` |
 
 ## Gaps owned elsewhere
@@ -68,7 +68,7 @@ M6, M7 and M8 add no gap today: their settings that exist (environments) are alr
 
 ## One side on purpose (the parity test records the reason)
 
-The registry `apps/api/src/parity.ts` (AI-300) holds every action with its routes and tools; `parity.test.ts` fails when a route or tool is in no action, names one that doesn't exist, or has one side without a reason. Open gaps carry their ticket: AI-294, AI-299. AI-320 added `start_plan_project` and `start_ideate` over MCP and the Project plan card's button in the web; the web's ideate form is AI-299.
+The registry `apps/api/src/parity.ts` (AI-300) holds every action with its routes and tools; `parity.test.ts` fails when a route or tool is in no action, names one that doesn't exist, or has one side without a reason. Open gaps carry their ticket: AI-294. AI-320 matched starting the plan-project and ideate agent tasks: `start_plan_project` and `start_ideate` over MCP; in the web, the Project plan card's button and the board's Ideate form (AI-299).
 
 | Action                                                | Side     | Reason                                                                                                   |
 | ----------------------------------------------------- | -------- | -------------------------------------------------------------------------------------------------------- |

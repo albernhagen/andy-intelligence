@@ -62,6 +62,16 @@ test("work under All projects, Needs you", async ({ page }) => {
   await expect(page).toHaveScreenshot("work-all-projects.png", { fullPage: true });
 });
 
+/** AI-299: the board's Ideate form, open with an idea typed. */
+test("board: Ideate form open", async ({ page }) => {
+  await page.clock.setFixedTime(SEED_NOW);
+  await open(page, "/p/ai", "Building · 12 min");
+  await page.getByRole("button", { name: "Ideate" }).click();
+  await page.getByRole("textbox", { name: "Idea" }).fill("A weekly summary email of what shipped");
+  await expect(page.getByRole("button", { name: "Start ideate" })).toBeEnabled();
+  await expect(page).toHaveScreenshot("board-ideate.png");
+});
+
 test("board under All projects asks for a project", async ({ page }) => {
   await open(page, "/all/board", "A board shows one project");
   await expect(page).toHaveScreenshot("board-pick-project.png");
@@ -145,13 +155,6 @@ test("ticket panel routing layers", async ({ page }) => {
   await expect(routing.getByText("Route", { exact: true })).toBeVisible();
   await routing.scrollIntoViewIfNeeded();
   await expect(routing).toHaveScreenshot("ticket-routing.png");
-});
-
-/** AI-298: the ranked Ready list, the same as MCP list_ready. */
-test("ready view: ranked list with scores", async ({ page }) => {
-  await open(page, "/p/ai/ready", "In board order: the order is the priority.");
-  await expect(page.getByRole("list", { name: "Ready tickets" })).toBeVisible();
-  await expect(page).toHaveScreenshot("ready-view.png");
 });
 
 /** M4.12: AI's settings with the Changes list: a reverted flip and the revert, logged too. */

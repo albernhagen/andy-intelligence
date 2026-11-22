@@ -237,7 +237,7 @@ describe("ticket cost line", () => {
       "Cost ~$1.25 (estimate) · quota 5h +3.5%, weekly +0.5% · 1 agent task unknown",
     );
     await within(section).findByText(
-      "900 cache read · 100 cache write · 4 turns · 62s · quota 5h +3.5%, weekly +0.5%",
+      "900 cache read · 100 cache write · 4 turns · 1 min 2 s · quota 5h +3.5%, weekly +0.5%",
     );
     within(section).getByText("Cost unknown");
   });
