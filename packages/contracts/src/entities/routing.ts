@@ -53,11 +53,22 @@ const Providers = z.preprocess(
   z.record(ProviderKey, ProviderRouting),
 );
 
+/**
+ * Steps added after routing configs were first stored (AI-134: project agent tasks). A stored
+ * config without them reads with these tiers, so older documents still parse (additive change).
+ */
+export const LATER_STEP_TIERS = { "plan-project": "strong", ideate: "strong" } as const;
+
+const StepTiers = z.preprocess(
+  (v) => (v && typeof v === "object" && !Array.isArray(v) ? { ...LATER_STEP_TIERS, ...v } : v),
+  z.record(RunStep, StepTier),
+);
+
 /** Every field but the scope and the store's stamp: what `put` takes. */
 const routingFields = {
   providers: Providers,
   tiers: z.record(TierKey, TierRoutes),
-  steps: z.record(RunStep, StepTier),
+  steps: StepTiers,
 };
 
 const scopeFields = {
@@ -131,6 +142,7 @@ export const DEFAULT_ROUTING: RoutingConfig = RoutingConfig.parse({
     verify: "fast",
     scout: "fast",
     sync: "by_size",
+    // plan-project and ideate: LATER_STEP_TIERS (strong, as they ran before routing).
   },
   updatedAt: null,
 });

@@ -143,7 +143,13 @@ jobs:
           [[ -z "$max_budget_usd" || "$max_budget_usd" =~ ^[0-9]{1,2}(\.[0-9]{1,6})?$ ]] || fail "unexpected budget"
 
           step=$(jq -r .step "$body")
-          case "$step" in refine | plan | review) read_only=true ;; *) read_only=false ;; esac
+          # The only steps this executor runs (AI-134): the read-only ones get read-only tools;
+          # build and sync are the editing ones. Any other step is refused before the agent job.
+          case "$step" in
+            refine | plan | review | plan-project | ideate) read_only=true ;;
+            build | sync) read_only=false ;;
+            *) fail "step $step is not one this executor runs: refusing it" ;;
+          esac
           {
             echo "step=$step"
             echo "model=$(jq -r .model "$body")"

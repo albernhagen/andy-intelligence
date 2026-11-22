@@ -43,8 +43,11 @@ export const LOCAL_LIMITS = {
   reportAttempts: 3,
 } as const;
 
-/** The steps this runner runs: read-only ones (slice 5) and build (slice 6). Sync stays on Actions. */
-export const LOCAL_STEPS = ["refine", "plan", "build"] as const;
+/**
+ * The steps this runner runs: the read-only ones (slice 5; plan-project and ideate, AI-134) and
+ * build (slice 6). Sync stays on Actions. Any other step is refused before anything runs.
+ */
+export const LOCAL_STEPS = ["refine", "plan", "plan-project", "ideate", "build"] as const;
 
 export function defaultHome(): string {
   return process.env.LOCAL_RUNNER_HOME ?? join(homedir(), ".local-runner");
