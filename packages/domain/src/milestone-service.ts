@@ -1,4 +1,5 @@
 import {
+  configChangeId,
   ConfigChange,
   Milestone,
   MilestoneCapError,
@@ -58,6 +59,7 @@ export class MilestoneService {
     private readonly changes: ConfigChangeLog | null,
     private readonly now: () => Date = () => new Date(),
     private readonly newId: () => string = () => crypto.randomUUID(),
+    private readonly newChangeId: () => string = () => configChangeId(),
   ) {}
 
   /** The project's milestones in roadmap order. Bounded by MILESTONES_PER_PROJECT_MAX. */
@@ -271,7 +273,7 @@ export class MilestoneService {
   ): Promise<void> {
     if (!this.changes) return;
     const at = this.now().toISOString();
-    const id = this.newId();
+    const id = this.newChangeId();
     try {
       await this.changes.append(
         ConfigChange.parse({
