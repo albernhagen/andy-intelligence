@@ -1,6 +1,6 @@
 ---
 title: Daily digest, computed on read
-status: accepted
+status: accepted; amended by 0137 (stored digest summary)
 date: 2026-11-09
 ---
 

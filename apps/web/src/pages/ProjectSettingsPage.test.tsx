@@ -15,7 +15,7 @@ async function withProjects(path: string) {
 const pathname = (h: { router: { state: { location: { pathname: string } } } }) =>
   h.router.state.location.pathname;
 
-const settings = () => screen.findByRole("list", { name: "Settings" });
+const settings = () => screen.findByRole("region", { name: "Settings" });
 
 afterEach(() => window.localStorage.clear());
 
@@ -81,10 +81,45 @@ describe("project settings page", () => {
     expect(value("Default executor")).toBe("local");
     expect(value("Environments")).toBe("dev-and-prod");
     expect(within(list).getByText("Dispatch: paused by you")).toBeTruthy();
-    // One row per setting group, each with its line on what it does.
-    expect(within(list).getAllByRole("listitem")).toHaveLength(11);
+    // One row per setting group, each with its line on what it does, plus spend caps (Limits).
+    expect(within(list).getAllByRole("listitem")).toHaveLength(12);
     expect(within(list).queryByLabelText("Auto-merge")).toBeNull();
     expect(within(list).getByText(/never over MCP/)).toBeTruthy();
+  });
+
+  it("GivenAProject_WhenItsSettingsOpen_ThenFourSectionsInOrderEachWithItsSettings", async () => {
+    await withProjects("/p/ai/settings");
+    const list = await settings();
+
+    const SECTIONS = ["Automation", "Limits", "Defaults", "Notifications"];
+    const names = within(list)
+      .getAllByRole("region")
+      .map((r) => r.getAttribute("aria-label"));
+    expect(names.filter((n) => SECTIONS.includes(n ?? ""))).toEqual(SECTIONS);
+    const has = (section: string, name: string | RegExp) =>
+      within(within(list).getByRole("region", { name: section })).getByLabelText(name);
+    for (const name of [/^Builds/, "Auto-build", "Plan approval", "Auto-refine", "Merge mode"])
+      expect(has("Automation", name)).toBeTruthy();
+    for (const name of ["Agent tasks at once", "Questions per day"])
+      expect(has("Limits", name)).toBeTruthy();
+    expect(
+      await within(within(list).getByRole("region", { name: "Limits" })).findByRole("region", {
+        name: "Spend caps",
+      }),
+    ).toBeTruthy();
+    for (const name of ["Default worker", "Default executor", "Environments"])
+      expect(has("Defaults", name)).toBeTruthy();
+    expect(has("Notifications", /^Email notifications/)).toBeTruthy();
+  });
+
+  it("GivenASetting_WhenChanged_ThenItSavesAtOnceAndSaysSaved", async () => {
+    const h = await withProjects("/p/ai/settings");
+    const automation = within(await settings()).getByRole("region", { name: "Automation" });
+
+    await h.user.click(within(automation).getByRole("checkbox", { name: "Auto-refine" }));
+
+    expect(await within(automation).findByText("Saved")).toBeTruthy();
+    expect((await h.tracker.getProject("ai"))?.autoRefine).toBe(false);
   });
 
   it("GivenBuildsOff_WhenThePageOpens_ThenAutoBuildIsDisabledAndTurningBuildsOnSavesWhoAndWhen", async () => {

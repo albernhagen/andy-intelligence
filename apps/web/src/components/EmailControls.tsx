@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button";
 import { QueryError } from "@/components/Status";
 import { unwrap, useApi } from "@/lib/api";
 import { useUpdateProject } from "@/lib/queries";
+import { SavedCue } from "@/components/SavedCue";
 import { SETTING_LABELS } from "@/lib/settings-labels";
 
 /**
@@ -62,6 +63,7 @@ export function EmailNotificationsControl({ project }: { project: Project }) {
         />
       )}
       {update.error && <QueryError error={update.error} />}
+      <SavedCue pending={update.isPending} saved={update.isSuccess} />
       {test.error && <QueryError error={test.error} />}
     </>
   );
