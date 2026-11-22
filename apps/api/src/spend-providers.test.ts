@@ -90,11 +90,13 @@ describe("GET /api/projects/{projectId}/spend/providers", () => {
       "claude-sub": 2_000_000,
       "google-sub": 0,
       openrouter: 1_000_000,
+      "claude-api": 0,
     });
     expect(day(body.global)).toEqual({
       "claude-sub": 2_000_000,
       "google-sub": 0,
       openrouter: 4_000_000,
+      "claude-api": 0,
     });
   });
 

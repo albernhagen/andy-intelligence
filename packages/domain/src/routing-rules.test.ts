@@ -1,6 +1,6 @@
 import { HarnessKey, ProviderKey, type Route } from "@andy/contracts";
 import { describe, expect, it } from "vitest";
-import { HARNESS_PROVIDER, ROUTE_MODEL_MAX, isClaudeModel, routeProblem } from "./routing-rules";
+import { HARNESS_PROVIDERS, ROUTE_MODEL_MAX, isClaudeModel, routeProblem } from "./routing-rules";
 import { TIER_ROUTES } from "./tiers";
 
 /** A model each harness accepts, so a pair test checks only harness ↔ provider. */
@@ -16,16 +16,22 @@ const pairs = HarnessKey.options.flatMap((harness) =>
 );
 
 describe("routeProblem: harness and provider", () => {
-  // 4 harnesses × 3 providers. A new harness or provider fails here: give it a rule and a model.
-  it("GivenEveryHarnessAndProvider_WhenListed_ThenTheTableCoversAllTwelvePairs", () => {
-    expect(pairs).toHaveLength(12);
+  // 4 harnesses × 4 providers. A new harness or provider fails here: give it a rule and a model.
+  it("GivenEveryHarnessAndProvider_WhenListed_ThenTheTableCoversAllSixteenPairs", () => {
+    expect(pairs).toHaveLength(16);
+  });
+
+  it("GivenClaudeCode_WhenCheckedOnTheApiKeyProvider_ThenItPasses", () => {
+    expect(
+      routeProblem({ harness: "claude-code", provider: "claude-api", model: "opus" }),
+    ).toBeNull();
   });
 
   it.each(pairs)(
-    "GivenHarness$harnessOnProvider$provider_WhenChecked_ThenOnlyItsOwnProviderPasses",
+    "GivenHarness$harnessOnProvider$provider_WhenChecked_ThenOnlyItsOwnProvidersPass",
     ({ harness, provider }) => {
       const problem = routeProblem({ harness, provider, model: MODEL_FOR[harness] });
-      if (provider === HARNESS_PROVIDER[harness]) {
+      if (HARNESS_PROVIDERS[harness].includes(provider)) {
         expect(problem).toBeNull();
       } else {
         expect(problem).toContain(harness);
