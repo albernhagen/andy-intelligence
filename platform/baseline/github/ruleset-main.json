@@ -34,7 +34,9 @@
           { "context": "dependency-review", "integration_id": 15368 },
           { "context": "terraform-misconfig", "integration_id": 15368 },
           { "context": "codeql (javascript-typescript)", "integration_id": 15368 },
-          { "context": "codeql (actions)", "integration_id": 15368 }
+          { "context": "codeql (actions)", "integration_id": 15368 },
+          { "context": "release-note", "integration_id": 15368 },
+          { "context": "ui-screenshots", "integration_id": 15368 }
         ]
       }
     },
