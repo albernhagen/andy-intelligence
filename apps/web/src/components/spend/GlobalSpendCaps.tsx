@@ -5,6 +5,7 @@ import { QueryError } from "@/components/Status";
 import { errorText, unwrap, useApi } from "@/lib/api";
 import { useLivePoll } from "@/lib/live";
 import { parseUsd, usd } from "./SpendCaps";
+import { dateTime } from "@/lib/format";
 
 /**
  * The global spend caps (AI-276) on Settings → Models: the ceiling every project's own caps can
@@ -229,8 +230,7 @@ function ChangeRow({
       <div className="min-w-0 flex-1 space-y-0.5">
         <p className="tabular-nums">{what.join("; ")}</p>
         <p className="text-xs text-muted-foreground">
-          {change.actor === "andy" ? "Andy" : change.actor} ·{" "}
-          {new Date(change.createdAt).toLocaleString()}
+          {change.actor === "andy" ? "Andy" : change.actor} · {dateTime(change.createdAt)}
           {change.reason && ` · ${change.reason}`}
         </p>
       </div>

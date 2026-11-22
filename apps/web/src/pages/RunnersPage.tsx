@@ -6,6 +6,7 @@ import { Field, Input } from "@/components/ui/input";
 import { SettingsTabs } from "@/components/SettingsTabs";
 import { Loading, QueryError } from "@/components/Status";
 import { useMintRunner, useProjects, useRevokeRunner, useRunners } from "@/lib/queries";
+import { dateOnly, dateTime } from "@/lib/format";
 
 /**
  * Settings → Local runners (ADR-0089 slice 3): mint a runner secret (shown once), see which
@@ -123,8 +124,8 @@ function RunnerRow({ runner }: { runner: RunnerView }) {
       )}
       <span className="text-xs text-muted-foreground">
         {runner.projectIds.join(", ")} · last seen{" "}
-        {runner.lastSeenAt ? new Date(runner.lastSeenAt).toLocaleString() : "never"} · expires{" "}
-        {new Date(runner.expiresAt).toLocaleDateString()}
+        {runner.lastSeenAt ? dateTime(runner.lastSeenAt) : "never"} · expires{" "}
+        {dateOnly(runner.expiresAt)}
       </span>
       {runner.state === "active" && (
         <Button

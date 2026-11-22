@@ -5,6 +5,7 @@ import { unwrap, useApi } from "@/lib/api";
 import { useLivePoll } from "@/lib/live";
 import { hasActiveRun } from "@/lib/queries";
 import { showsError } from "@/lib/live";
+import { timeOfDay } from "@/lib/format";
 
 /**
  * The in-flight view (ADR-0080): the project's runs in flight, oldest first, with what each may
@@ -51,7 +52,7 @@ export function InFlightPanel({ projectId }: { projectId: string }) {
                 <span className="text-muted-foreground">
                   {" "}
                   · {r.step} {r.status}
-                  {r.startedAt && ` since ${new Date(r.startedAt).toLocaleTimeString()}`}
+                  {r.startedAt && ` since ${timeOfDay(r.startedAt)}`}
                   {r.reservedAdr !== null && ` · ${adrLabel(r.reservedAdr)}`}
                 </span>
               </p>
