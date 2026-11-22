@@ -58,11 +58,11 @@ describe("epic panel", () => {
     return { harness, epic, outside };
   }
 
-  it("GivenAnEpic_WhenItsPanelOpens_ThenStoriesAreInDependencyOrderWithStageSizeAndOpenBlockers", async () => {
+  it("GivenAnEpic_WhenItsPanelOpens_ThenItsTicketsAreInDependencyOrderWithStageSizeAndOpenBlockers", async () => {
     const { harness, epic, outside } = await withEpic();
     await harness.router.navigate({ to: `/p/ai/t/${epic.key}` });
 
-    const stories = await screen.findByRole("region", { name: "Stories" });
+    const stories = await screen.findByRole("region", { name: "Tickets" });
     const items = await within(stories).findAllByRole("listitem");
     expect(items.map((li) => within(li).getByRole("link").textContent)).toEqual([
       "AI-2: Epic panel",
@@ -90,7 +90,7 @@ describe("epic panel", () => {
     await harness.router.navigate({ to: `/p/ai/t/${t.key}` });
 
     await screen.findByRole("region", { name: "Questions" });
-    expect(screen.queryByRole("region", { name: "Stories" })).toBeNull();
+    expect(screen.queryByRole("region", { name: "Tickets" })).toBeNull();
   });
 
   it("GivenAPartialRollUp_WhenFormatted_ThenTheCostSaysPartial", () => {

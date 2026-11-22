@@ -103,13 +103,14 @@ function DigestBody({ digest, projectId }: { digest: Digest; projectId: string }
       <section aria-label="Totals" className="space-y-1">
         <h3 className="text-sm font-medium">Totals</h3>
         <p className="text-sm tabular-nums">
-          {t.runs} runs{t.failedRuns ? ` (${t.failedRuns} failed)` : ""} · {usd(t.costUsd)}{" "}
-          estimated{t.unknownCostRuns ? ` (${t.unknownCostRuns} unknown)` : ""} · {t.merged} merged
+          {t.runs} agent task{t.runs === 1 ? "" : "s"}
+          {t.failedRuns ? ` (${t.failedRuns} failed)` : ""} · {usd(t.costUsd)} estimated
+          {t.unknownCostRuns ? ` (${t.unknownCostRuns} unknown)` : ""} · {t.merged} merged
         </p>
       </section>
       {digest.truncated && (
         <p className="text-sm text-muted-foreground">
-          A read cap was reached: some tickets or runs may be missing.
+          A read cap was reached: some tickets or agent tasks may be missing.
         </p>
       )}
     </>
