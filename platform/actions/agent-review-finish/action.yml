@@ -3,7 +3,7 @@ description: >-
   Shared second half of a PR review agent (ADR-0025, ADR-0026, ADR-0037): gate the agent's
   findings (scripts/review-gate.mjs), update the role's sticky PR comment, and fail the job on
   unaccepted blocking findings. A review that should have run and didn't fails the check
-  (ADR-0139); a skip by design (docs-only, draft, Dependabot) passes.
+  (ADR-0140); a skip by design (docs-only, draft, Dependabot) passes.
 
 inputs:
   role:

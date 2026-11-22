@@ -8,7 +8,7 @@ import { cleanGitEnv } from "./git-env.mjs";
 import { evaluate } from "./review-gate.mjs";
 
 // Runs the "Gate and comment" step of platform/actions/agent-review-finish as written, under the
-// runner's `bash -eo pipefail`, with a fake `gh` serving this role's sticky comment (ADR-0139).
+// runner's `bash -eo pipefail`, with a fake `gh` serving this role's sticky comment (ADR-0140).
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
 const ACTION_DIR = join(ROOT, "platform/actions/agent-review-finish");
 const ACTION = readFileSync(join(ACTION_DIR, "action.yml"), "utf8");

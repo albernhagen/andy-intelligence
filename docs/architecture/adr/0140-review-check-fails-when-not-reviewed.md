@@ -5,7 +5,7 @@ date: 2026-11-21
 amends: 0026 (an agent that could not run gave a neutral pass)
 ---
 
-# 0139 — "Not reviewed" fails the review check; a re-sync merge carries the verdict forward
+# 0140 — "Not reviewed" fails the review check; a re-sync merge carries the verdict forward
 
 AI-346: Review agents skip PRs the re-sync bot updated, and the review checks still pass. Found on PR #343: after Re-sync open PRs (ADR-0111) merged `main` into the PR, both review agents refused to run, because claude-code-action rejects a run a bot starts. Both posted "not reviewed", and both checks were green.
 

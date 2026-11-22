@@ -32,7 +32,7 @@ Generated from tickets, never edited here (AI-148). Every ticket sits under a mi
 - AI-113: M5.14: baseline on a new repo: App opens the PR without workflows, Andy adds them?
 - Re-sync cap (`scripts/resync-prs.mjs`, 4 an hour): raise to 12 and skip counting skipped runs?
 - ADR-0136: Milestone create and edit over MCP (AI-321, PR #343): extend ADR-0131 to five MCP milestone tools?
-- ADR-0139: Review check fails when not reviewed (AI-346, PR #356): carry verdicts over re-sync merges, and fail repos with no token?
+- ADR-0140: Review check fails when not reviewed (AI-346, PR #356): carry verdicts over re-sync merges, and fail repos with no token?
 
 ## Blocked on Andy
 

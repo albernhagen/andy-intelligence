@@ -8,10 +8,10 @@
 // ACCEPTED ("true" when the role's override label is on the PR), FINDINGS (the agent's JSON),
 // REASON (why the agent didn't run), SHA, EXECUTION_FILE (the action's message log; its result
 // message gives usage), PREVIOUS_FILE and CARRIED_FROM (carried mode: the previous comment and
-// the SHA it reviewed, ADR-0139). Writes the comment body to the path in argv[2]; exit code 1
+// the SHA it reviewed, ADR-0140). Writes the comment body to the path in argv[2]; exit code 1
 // means the check fails.
 //
-// Modes (ADR-0139): `skipped` is a skip by design (docs-only, draft, Dependabot) and passes;
+// Modes (ADR-0140): `skipped` is a skip by design (docs-only, draft, Dependabot) and passes;
 // `unavailable` means the review should have run and didn't (no token, agent failure, a re-sync
 // commit that changed the PR), and fails unless Andy adds the override label.
 import { readFileSync, writeFileSync } from "node:fs";
@@ -156,7 +156,7 @@ export function evaluate({
 
   if (mode === "carried") {
     if (passingVerdict(previous, carriedFrom)) {
-      const note = `\n\n<sub>Carried forward from ${sanitize(carriedFrom)} to ${safeSha}: the re-sync bot merged the base branch and the PR's own diff is unchanged (ADR-0139).</sub>`;
+      const note = `\n\n<sub>Carried forward from ${sanitize(carriedFrom)} to ${safeSha}: the re-sync bot merged the base branch and the PR's own diff is unchanged (ADR-0140).</sub>`;
       return {
         pass: true,
         body: `${previous.replace(reviewedShaMarker(carriedFrom), reviewedShaMarker(safeSha)).trimEnd()}${note}`,

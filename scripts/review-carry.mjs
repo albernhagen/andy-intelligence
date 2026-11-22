@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// Review carry-forward (ADR-0139): the review agents refuse a run a bot starts, so when the
+// Review carry-forward (ADR-0140): the review agents refuse a run a bot starts, so when the
 // re-sync bot (ADR-0111) merges the base branch into a PR, its new head would get no verdict.
 // This decides whether the previous verdict still covers the new head. It does only when all hold:
 //   1. the new head is a merge whose first parent is the commit the previous verdict reviewed;

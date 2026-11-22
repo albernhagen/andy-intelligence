@@ -56,7 +56,7 @@ node platform/baseline/baseline.mjs onboard albernhagen/<name> --ref v1.0.0
 
 Then:
 
-1. Reviewer token (until it is set, the review agents report "not reviewed" and their checks fail, ADR-0139; nothing else needs it). Never paste it into chat or a file:
+1. Reviewer token (until it is set, the review agents report "not reviewed" and their checks fail, ADR-0140; nothing else needs it). Never paste it into chat or a file:
    ```sh
    claude setup-token
    gh secret set CLAUDE_CODE_OAUTH_TOKEN --repo albernhagen/<name>
@@ -86,7 +86,7 @@ node platform/baseline/baseline.mjs files albernhagen/<name> --ref v1.1.0
 
 ## 5. M1.16: Project baseline v1 demo ("Done when")
 
-Run it before merging, from the PR branch. The scratch repo gets no Claude token, so both review agents report "not reviewed" under the same check names and use no quota. Since ADR-0139 those two checks fail; add `security-accepted` and `review-accepted` to the test PR.
+Run it before merging, from the PR branch. The scratch repo gets no Claude token, so both review agents report "not reviewed" under the same check names and use no quota. Since ADR-0140 those two checks fail; add `security-accepted` and `review-accepted` to the test PR.
 
 ```sh
 git fetch origin m1.16/project-baseline

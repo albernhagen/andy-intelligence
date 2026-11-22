@@ -31,7 +31,7 @@ inputs:
   resync-bot:
     description: >-
       Login of the re-sync bot (ADR-0111), e.g. my-app[bot]. A push it makes can carry the
-      previous verdict forward when the PR's own diff is unchanged (ADR-0139); "" turns that off.
+      previous verdict forward when the PR's own diff is unchanged (ADR-0140); "" turns that off.
     default: ""
   github-token:
     description: Token for reading comments and removing the label.
@@ -133,7 +133,7 @@ runs:
         echo "mode=$MODE"
 
     # The review agent refuses a run a bot starts. When the re-sync bot merged the base branch
-    # into the PR, carry the previous verdict forward if it still covers the head (ADR-0139);
+    # into the PR, carry the previous verdict forward if it still covers the head (ADR-0140);
     # otherwise the mode is unavailable and the check fails until a person pushes.
     - name: Carry the verdict over a re-sync merge
       id: carry
