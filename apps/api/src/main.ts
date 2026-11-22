@@ -5,6 +5,7 @@ import {
   FirestoreConfigChangeStore,
   FirestoreReviewFindingLog,
   FirestoreReleaseNoteStore,
+  FirestoreDigestSummaryStore,
   GcpCodeHostConnectionStore,
   SecretManagerVersions,
   FirestoreOAuthGrantStore,
@@ -107,9 +108,15 @@ async function main() {
     configChanges: new FirestoreConfigChangeStore(db),
     reviewFindings: new FirestoreReviewFindingLog(db),
     releaseNotes: new FirestoreReleaseNoteStore(db),
+    digestSummaries: new FirestoreDigestSummaryStore(db),
     // Serve only the public URL's host; the run.app URLs answer /health alone (ADR-0044).
     publicHost: publicUrl ? new URL(publicUrl).host : undefined,
     watchdog,
+    // Weekly model scout (AI-268: M10.17): on when the scheduler's service account is set.
+    modelScout:
+      publicUrl && process.env.MODEL_SCOUT_INVOKER_EMAIL
+        ? { publicUrl, invokerEmail: process.env.MODEL_SCOUT_INVOKER_EMAIL }
+        : undefined,
     mcp: publicUrl
       ? {
           publicUrl,

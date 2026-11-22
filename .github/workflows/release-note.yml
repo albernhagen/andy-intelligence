@@ -2,7 +2,7 @@ name: Release note
 
 # The release-note block in every PR description (AI-159, ADR-0121): the control plane stores it
 # on merge for the What's new page. `edited` re-runs the check when the description changes.
-# Project baseline caller (ADR-0038). Not a required check until Andy adds it to the ruleset.
+# Project baseline caller (ADR-0038). A required check on this repo only (github/source-only.json, AI-350).
 
 on:
   pull_request:

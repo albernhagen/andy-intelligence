@@ -1,7 +1,7 @@
 import { describe, expect, it, vi, beforeEach } from "vitest";
-import { screen, within } from "@testing-library/react";
+import { screen, waitFor, within } from "@testing-library/react";
 import { ReviewFinding } from "@andy/contracts";
-import { renderApp } from "@/test/harness";
+import { PAGE_LOAD, renderApp } from "@/test/harness";
 
 /** ADR-0097 (AI-100): pending config changes in the inbox, against the in-process API. */
 
@@ -51,9 +51,12 @@ describe("config proposals in the inbox", () => {
     expect(card.textContent).not.toContain("evil.example");
 
     await h.user.click(within(card).getByRole("button", { name: "Accept" }));
-    expect(
-      await within(section).findByText("0", { selector: "span" }, { timeout: 2000 }),
-    ).toBeTruthy();
+    // AI-331: with nothing pending there is no "Config proposals 0" row, only the check link.
+    await waitFor(() => expect(within(section).queryByRole("article")).toBeNull(), {
+      timeout: 2000,
+    });
+    expect(within(section).queryByRole("heading")).toBeNull();
+    expect(within(section).getByRole("button", { name: "Check review findings" })).toBeTruthy();
   });
 
   it("GivenAPendingProposal_WhenAndyRejectsIt_ThenItLeavesTheInbox", async () => {
@@ -65,7 +68,18 @@ describe("config proposals in the inbox", () => {
 
     await h.user.click(within(card).getByRole("button", { name: "Reject" }));
 
-    expect(await within(section).findByText("0", { selector: "span" })).toBeTruthy();
-    expect(within(section).queryByRole("article")).toBeNull();
+    await waitFor(() => expect(within(section).queryByRole("article")).toBeNull());
+    expect(within(section).queryByRole("heading")).toBeNull();
+  });
+
+  it("GivenNoProposals_WhenAProjectInboxOpens_ThenThereIsNoZeroRowOnlyTheCheckLink", async () => {
+    const h = renderApp("/");
+    await h.tracker.createProject({ name: "Andy Intelligence", key: "AI" });
+    await h.router.navigate({ href: "/p/ai/inbox" });
+
+    const section = await screen.findByRole("region", { name: "Config proposals" }, PAGE_LOAD);
+    expect(within(section).queryByRole("heading")).toBeNull();
+    expect(within(section).queryByText(/Config proposals/)).toBeNull();
+    expect(within(section).getByRole("button", { name: "Check review findings" })).toBeTruthy();
   });
 });

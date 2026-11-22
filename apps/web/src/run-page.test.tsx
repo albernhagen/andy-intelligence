@@ -2,7 +2,8 @@ import { describe, expect, it } from "vitest";
 import { screen, waitFor, within } from "@testing-library/react";
 import { DEFAULT_ROUTE } from "@andy/domain";
 import { renderApp } from "@/test/harness";
-import { formatDuration, gateText, wallMs } from "@/pages/RunPage";
+import { errorReason, gateText, prLabel, runSummary, wallMs } from "@/pages/RunPage";
+import { elapsed } from "@/lib/format";
 import { httpsHref } from "@/components/Runs";
 
 /** AI-101: the agent task detail screen, over the real API in-process. */
@@ -78,14 +79,17 @@ describe("agent task page", () => {
     expect(usage.textContent).toContain((50000).toLocaleString());
     expect(usage.textContent).toContain("~$1.25 (estimate)");
     expect(usage.textContent).toContain("5h +4%, weekly +1%");
-    const outcome = within(page).getByRole("region", { name: "Outcome" });
-    expect(outcome.textContent).toContain("merged_clean");
-    expect(outcome.textContent).toContain("held: protected_path");
+    expect(details.textContent).toContain("merged with no rework");
+    expect(details.textContent).toContain("waits for you: protected path");
+    // AI-340: one sentence first, naming the ticket, the time, the PR and the gate.
+    expect(
+      (await within(page).findByLabelText("What happened", { selector: "p" })).textContent,
+    ).toBe("Built AI-1 in 12 min: PR #7, waits for you: protected path.");
     expect(within(page).getByRole("region", { name: "Verification" }).textContent).toContain(
       "pnpm test",
     );
     expect(within(page).getByRole("link", { name: "Task log" }).getAttribute("href")).toBe(LOG);
-    expect(within(page).getByRole("link", { name: "Pull request" }).getAttribute("href")).toBe(PR);
+    expect(within(page).getByRole("link", { name: "PR #7" }).getAttribute("href")).toBe(PR);
     const ticket = await within(page).findByRole("link", { name: "AI-1: Board" });
     expect(ticket.getAttribute("href")).toBe("/p/ai/t/AI-1");
   });
@@ -196,18 +200,157 @@ describe("agent task page helpers", () => {
     expect(wallMs({ usage: null, startedAt: "2026-11-04T14:00:00Z", endedAt: null })).toBeNull();
   });
 
-  it("GivenDurations_WhenFormatted_ThenSecondsOrMinutes", () => {
-    expect(formatDuration(42_000)).toBe("42 s");
-    expect(formatDuration(720_000)).toBe("12 min");
-    expect(formatDuration(725_000)).toBe("12 min 5 s");
+  it("GivenDurations_WhenFormatted_ThenSecondsMinutesOrWords", () => {
+    expect(elapsed(42_000)).toBe("42 s");
+    expect(elapsed(720_000)).toBe("12 min");
+    expect(elapsed(725_000)).toBe("12 min 5 s");
+    expect(elapsed(3 * 60 * 60_000 + 5_000)).toBe("3 hours");
   });
 
-  it("GivenGateStates_WhenDescribed_ThenNotRunPassedOrHeldWithReasons", () => {
-    expect(gateText({ wouldAutoMerge: null, gateReasons: [] })).toBe("not run");
-    expect(gateText({ wouldAutoMerge: true, gateReasons: [] })).toBe("would auto-merge");
+  it("GivenGateStates_WhenDescribed_ThenNothingWouldMergeOrWaitsWithReasonsInWords", () => {
+    expect(gateText({ wouldAutoMerge: null, gateReasons: [] })).toBeNull();
+    expect(gateText({ wouldAutoMerge: true, gateReasons: [] })).toBe("would merge on its own");
     expect(gateText({ wouldAutoMerge: false, gateReasons: ["draft", "checks_failed"] })).toBe(
-      "held: draft, checks_failed",
+      "waits for you: draft, checks failed",
     );
+  });
+
+  it("GivenARunningRefine_WhenItsPageOpens_ThenItSaysWhatItIsDoingAndHidesEmptyRows", async () => {
+    const h = await setup();
+    const run = await h.runs.create({
+      projectId: "ai",
+      ticketId: h.ticket.id,
+      step: "refine",
+      route: DEFAULT_ROUTE,
+      tier: null,
+    });
+    await h.runs.update(run.id, { status: "running", startedAt: new Date().toISOString() }, [
+      "queued",
+    ]);
+    await open(h, `/p/ai/runs/${run.id}`);
+
+    const page = await screen.findByRole("article", { name: "Agent task" });
+    await waitFor(() =>
+      expect(within(page).getByLabelText("What happened", { selector: "p" }).textContent).toMatch(
+        new RegExp(`^Refining AI-1 for \\d+ s on ${DEFAULT_ROUTE.model}\\.$`),
+      ),
+    );
+    const text = page.textContent ?? "";
+    expect(text).not.toContain("—");
+    expect(text).not.toContain("unknown");
+    expect(text).not.toContain("Gate");
+    for (const label of ["Ended", "Wall time", "Tokens in", "Cost", "Quota used", "Tier"])
+      expect(within(page).queryByText(label, { selector: "dt" })).toBeNull();
+    expect(within(page).getByText("Started", { selector: "dt" })).toBeTruthy();
+    // Nothing reported yet: no Usage and cost heading over an empty list.
+    expect(within(page).queryByRole("region", { name: "Usage and cost" })).toBeNull();
+  });
+
+  it("GivenEachStatus_WhenSummarised_ThenOneSentenceSaysWhatHappened", () => {
+    const base = {
+      step: "build" as const,
+      route: DEFAULT_ROUTE,
+      createdAt: "2026-11-04T14:00:00.000Z",
+      startedAt: "2026-11-04T14:00:00.000Z",
+      endedAt: null,
+      usage: null,
+      links: {},
+      error: null,
+      wouldAutoMerge: null,
+      gateReasons: [],
+    };
+    const now = new Date("2026-11-04T14:12:00.000Z");
+    const m = DEFAULT_ROUTE.model;
+    expect(runSummary({ ...base, status: "queued" }, "AI-7", now)).toBe(
+      `Waiting to start: building AI-7 on ${m}.`,
+    );
+    expect(runSummary({ ...base, status: "running" }, "AI-7", now)).toBe(
+      `Building AI-7 for 12 min on ${m}.`,
+    );
+    const ended = { ...base, endedAt: "2026-11-04T14:10:00.000Z" };
+    expect(
+      runSummary(
+        { ...ended, status: "succeeded", links: { pullRequest: PR }, wouldAutoMerge: true },
+        "AI-7",
+        now,
+      ),
+    ).toBe("Built AI-7 in 10 min: PR #7, would merge on its own.");
+    expect(runSummary({ ...ended, status: "succeeded", step: "refine" }, "AI-3", now)).toBe(
+      "Refined AI-3 in 10 min.",
+    );
+    const odd = { ...base, endedAt: "2026-11-04T14:10:10.000Z", status: "succeeded" as const };
+    expect(runSummary(odd, "AI-7", now)).toBe("Built AI-7 in 10 min.");
+    expect(
+      runSummary({ ...ended, status: "failed", error: "Checks failed\nstack…" }, "AI-7", now),
+    ).toBe("Failed after 10 min: Checks failed.");
+    expect(runSummary({ ...base, status: "failed" }, null, now)).toBe("Failed: building.");
+    expect(runSummary({ ...base, status: "cancelled", step: "sync" }, "AI-7", now)).toBe(
+      "Cancelled: syncing AI-7.",
+    );
+    // A cancelled task says why when it can; a blank first line never hides the reason.
+    expect(
+      runSummary({ ...ended, status: "cancelled", error: "Cancelled by Andy" }, "AI-7", now),
+    ).toBe("Cancelled: Cancelled by Andy.");
+    expect(runSummary({ ...ended, status: "failed", error: "\nChecks failed" }, "AI-7", now)).toBe(
+      "Failed after 10 min: Checks failed.",
+    );
+  });
+
+  it("GivenAFailedTask_WhenItsPageOpens_ThenAOneLineErrorShowsOnceAndALongerOneInFull", async () => {
+    const h = await setup();
+    const short = await h.newRun();
+    await h.runs.update(short.id, { status: "failed", error: "Checks failed" }, ["queued"]);
+    await open(h, `/p/ai/runs/${short.id}`);
+    let page = await screen.findByRole("article", { name: "Agent task" });
+    await waitFor(() => expect(within(page).getAllByText(/Checks failed/)).toHaveLength(1));
+
+    const long = await h.newRun();
+    await h.runs.update(
+      long.id,
+      { status: "failed", error: "Checks failed\npnpm test: 2 failing" },
+      ["queued"],
+    );
+    await open(h, `/p/ai/runs/${long.id}`);
+    page = await screen.findByRole("article", { name: "Agent task" });
+    expect(await within(page).findByText(/pnpm test: 2 failing/)).toBeTruthy();
+  });
+
+  it("GivenErrorsWithBlankLines_WhenSplit_ThenTheFirstNonBlankLineLeadsAndMoreIsCounted", () => {
+    expect(errorReason(null)).toBeNull();
+    expect(errorReason(" \n ")).toBeNull();
+    expect(errorReason("Checks failed")).toEqual({ first: "Checks failed", more: false });
+    expect(errorReason("\n  Checks failed  \n")).toEqual({ first: "Checks failed", more: false });
+    expect(errorReason("\nChecks failed\n\npnpm test")).toEqual({
+      first: "Checks failed",
+      more: true,
+    });
+  });
+
+  it("GivenACancelledTaskWithAReason_WhenItsPageOpens_ThenTheReasonShowsOnce", async () => {
+    const h = await setup();
+    const run = await h.newRun();
+    await h.runs.update(run.id, { status: "cancelled", error: "Superseded by a newer build" }, [
+      "queued",
+    ]);
+    await open(h, `/p/ai/runs/${run.id}`);
+    const page = await screen.findByRole("article", { name: "Agent task" });
+    await waitFor(() =>
+      expect(within(page).getAllByText(/Superseded by a newer build/)).toHaveLength(1),
+    );
+  });
+
+  it("GivenAnErrorLedByABlankLine_WhenItsPageOpens_ThenTheReasonShowsOnce", async () => {
+    const h = await setup();
+    const run = await h.newRun();
+    await h.runs.update(run.id, { status: "failed", error: "\nChecks failed" }, ["queued"]);
+    await open(h, `/p/ai/runs/${run.id}`);
+    const page = await screen.findByRole("article", { name: "Agent task" });
+    await waitFor(() => expect(within(page).getAllByText(/Checks failed/)).toHaveLength(1));
+  });
+
+  it("GivenPrUrls_WhenLabelled_ThenTheNumberShows", () => {
+    expect(prLabel(PR)).toBe("PR #7");
+    expect(prLabel("https://example.com/x")).toBe("Pull request");
   });
 
   it("GivenNonHttpsUrls_WhenCheckedForLinks_ThenOnlyHttpsRenders", () => {

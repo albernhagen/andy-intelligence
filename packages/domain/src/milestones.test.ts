@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { milestoneOf, topLevelOf } from "./milestones";
+import { milestoneOf, milestoneReorder, topLevelOf } from "./milestones";
 
 /** AI-302: M4.33: Milestone entity and store (ADR-0131). */
 
@@ -40,5 +40,51 @@ describe("milestoneOf", () => {
     const b = t({ id: "b", type: "epic", parentId: "a", milestoneId: "mb" });
     expect(topLevelOf(a, [a, b]).id).toBe("b");
     expect(milestoneOf(a, [a, b])).toBe("mb");
+  });
+});
+
+describe("milestoneReorder (AI-324)", () => {
+  const list = (...orders: number[]) => orders.map((order, i) => ({ id: `m${i}`, order }));
+  /** The ids in the order the writes leave them. */
+  const after = (ms: { id: string; order: number }[], writes: { id: string; order: number }[]) => {
+    const orders = new Map(ms.map((m) => [m.id, m.order]));
+    for (const w of writes) orders.set(w.id, w.order);
+    return [...orders].sort((a, b) => a[1] - b[1]).map(([id]) => id);
+  };
+
+  it("GivenRoomBetweenNeighbours_WhenMovedUp_ThenOneWriteBetweenThem", () => {
+    const ms = list(0, 10, 20);
+
+    const writes = milestoneReorder(ms, "m2", 1);
+
+    expect(writes).toEqual([{ id: "m2", order: 5 }]);
+    expect(after(ms, writes)).toEqual(["m0", "m2", "m1"]);
+  });
+
+  it("GivenAMoveToTheTopOrBottom_WhenReordered_ThenOneWritePastTheEnd", () => {
+    const ms = list(10, 20, 30);
+
+    expect(milestoneReorder(ms, "m2", 0)).toEqual([{ id: "m2", order: 0 }]);
+    expect(milestoneReorder(ms, "m0", 2)).toEqual([{ id: "m0", order: 40 }]);
+  });
+
+  it("GivenNoRoom_WhenMoved_ThenOnlyChangedMilestonesAreRenumbered", () => {
+    const ms = list(0, 1, 1);
+
+    const writes = milestoneReorder(ms, "m2", 0);
+
+    expect(after(ms, writes)).toEqual(["m2", "m0", "m1"]);
+    expect(writes).toEqual([
+      { id: "m2", order: 0 },
+      { id: "m0", order: 10 },
+      { id: "m1", order: 20 },
+    ]);
+  });
+
+  it("GivenItsOwnPositionOrAnUnknownId_WhenMoved_ThenNothingIsWritten", () => {
+    const ms = list(0, 10);
+
+    expect(milestoneReorder(ms, "m1", 1)).toEqual([]);
+    expect(milestoneReorder(ms, "nope", 0)).toEqual([]);
   });
 });

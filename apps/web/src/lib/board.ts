@@ -114,3 +114,15 @@ export function nextUp(ready: readonly Ticket[], byId: ReadonlyMap<string, Ticke
 }
 
 export const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? "" : "s"}`;
+
+/**
+ * The stage a phone board opens on (AI-337): the first, in board order, holding a ticket that
+ * needs you; else In progress.
+ */
+export function openingStage<T extends Pick<Ticket, "stage">>(
+  stages: readonly Stage[],
+  tickets: readonly T[],
+  needsYou: (ticket: T) => boolean,
+): Stage {
+  return stages.find((s) => tickets.some((t) => t.stage === s && needsYou(t))) ?? "in_progress";
+}

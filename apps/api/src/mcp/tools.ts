@@ -20,6 +20,7 @@ import {
   type BoardReader,
   type GlobalSpendCaps,
   type WhatsNewReader,
+  type DigestSummaryService,
   type ProjectTickets,
   type DashboardReader,
   type DoraReader,
@@ -90,6 +91,8 @@ export interface ToolDeps {
   now?: () => Date;
   /** What's new (AI-159); absent or null: no `whats_new` tool. */
   whatsNew?: WhatsNewReader | null;
+  /** AI-323: the digest's model-written summary; null where it isn't wired. */
+  digestSummaries?: DigestSummaryService | null;
   /** The app's public URL for page links in tool text (the digest links What's new); null in dev. */
   publicUrl?: string | null;
   /** Milestones (ADR-0131): `status` shows a ticket's milestone hold (AI-306); null holds any. */

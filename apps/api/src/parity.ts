@@ -122,6 +122,12 @@ export const PARITY: readonly ParityEntry[] = [
     action: "In flight; work across projects; digest",
     routes: [`GET ${P}/in-flight`, "GET /api/work", `GET ${P}/digest`],
     tools: ["list_in_flight", "list_work", "digest"],
+    note: "AI-342 removed the board's In flight box (the cards and the Agents chip carry it); the web reads in-flight for the ticket status line, and a build's panel shows its branch and touches. AI-341 folded the Digest screen into What's new: it reads the digest for its Summary and Exceptions blocks (24 hours); MCP digest is unchanged.",
+  },
+  {
+    action: "Retry the digest summary after it failed (AI-323)",
+    routes: [`POST ${P}/digest/summary/retry`],
+    tools: ["retry_digest_summary"],
   },
   {
     action: "Dashboards; DORA metrics",
@@ -236,6 +242,7 @@ export const PARITY: readonly ParityEntry[] = [
     action: "Ranked Ready list",
     routes: [`GET ${P}/ready`],
     tools: ["list_ready"],
+    note: "AI-343 removed the web Ready page: the board's Ready lane filters by size, risk and confidence with the same rule (matchesReadyFilters), and /ready opens the board. Cards show the scores and the ticket panel the reasons, so no web list repeats them. The route and list_ready stay.",
   },
   {
     action: "Roadmap; milestone map",
@@ -252,10 +259,7 @@ export const PARITY: readonly ParityEntry[] = [
     action: "Ideate",
     routes: [`POST ${P}/ideate`],
     tools: ["ideate"],
-    pending: {
-      ticket: "AI-299",
-      missing: "a web form: the route exists but the web never calls it (PR #240)",
-    },
+    note: "The web's Ideate form on the board (AI-299) starts an ideate agent task (`POST …/ideate/agent-task`), which records its result through the same service and caps as this route and the tool.",
   },
   {
     action: "Milestones: list, create, edit, set status, attach or detach an epic",
@@ -272,7 +276,13 @@ export const PARITY: readonly ParityEntry[] = [
       "set_milestone_status",
       "set_epic_milestone",
     ],
-    note: "The web sets status and attaches from the epic panel and the roadmap (AI-311). PATCH covers edit_milestone and set_milestone_status (ADR-0136).",
+    note: "The web sets status and attaches from the epic panel and the roadmap (AI-311), and reorders on the roadmap (AI-324). PATCH covers edit_milestone (order included) and set_milestone_status (ADR-0136).",
+  },
+  {
+    action: "Start a project agent task (plan-project, ideate)",
+    routes: [`POST ${P}/plan/agent-task`, `POST ${P}/ideate/agent-task`],
+    tools: ["start_plan_project", "start_ideate"],
+    note: "One service (`RunService.requestProjectTask`, AI-134), same caps and refusals (AI-320). The web starts plan-project from the project settings' Project plan card and ideate from the board (AI-299).",
   },
   // ── One side on purpose ─────────────────────────────────────────────────────
   {
@@ -294,13 +304,6 @@ export const PARITY: readonly ParityEntry[] = [
     oneSide: "GitHub's manifest flow needs a browser.",
   },
   // ── Open gaps, each with its ticket ─────────────────────────────────────────
-  {
-    action: "Start a project agent task (plan-project, ideate)",
-    routes: [`POST ${P}/plan/agent-task`, `POST ${P}/ideate/agent-task`],
-    tools: [],
-    oneSide: "API only until its web control and MCP tool land (AI-134 built the routes).",
-    pending: { ticket: "AI-320", missing: "a web control and an MCP tool to start them" },
-  },
   {
     action: "List and revoke runners",
     routes: ["GET /api/runners", "POST /api/runners/:runnerId/revoke"],

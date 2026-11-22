@@ -8,6 +8,7 @@
 | --------------------------------------------------- | ------------------------- | --------------------------------------------------------------------------------------------- |
 | `POST /api/projects/:id/plan/agent-task`            | Owner (`start_run`)       | Starts a plan-project task on the project's first repo                                        |
 | `POST /api/projects/:id/ideate/agent-task` `{idea}` | Owner (`start_run`)       | Starts an ideate task; the idea (≤ 4,000 characters) is kept on the run for its report        |
+| MCP `start_plan_project`, `start_ideate` (AI-320)   | Owner (`start_run`)       | The same service as the two routes, same checks and refusals                                  |
 | `/runs/:id/report` of such a task                   | Its own executor run only | Stores the result as `…/plan` or `…/ideate` would, as `agent:<runId>` (`requireOwnAgentTask`) |
 
 ## Trust boundaries

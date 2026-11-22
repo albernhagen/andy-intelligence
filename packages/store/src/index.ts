@@ -21,6 +21,7 @@ import {
   QuotaClear,
   QuotaReading,
   Question,
+  DigestSummary,
   Milestone,
   Release,
   ReleaseNote,
@@ -80,6 +81,13 @@ export const collections = {
     path: (projectId: string) => `projects/${projectId}/milestones`,
     schema: Milestone,
   },
+  /** AI-323: one model-written summary per project per day (ADR-0137). */
+  digestSummaries: {
+    path: (projectId: string) => `projects/${projectId}/digestSummaries`,
+    schema: DigestSummary,
+  },
+  /** Summary writes started per UTC day across projects (ADR-0137), server-only: `{ count }`. */
+  digestSummaryDays: { path: () => "digestSummaryDays" },
   oauthGrants: { path: () => "oauthGrants", schema: OAuthGrant },
   codeHostEvents: { path: () => "codeHostEvents", schema: CodeHostEvent },
   /** Local runners and their per-run tokens (ADR-0089); validated by `FirestoreRunnerStore`. */

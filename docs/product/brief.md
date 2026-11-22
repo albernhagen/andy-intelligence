@@ -36,6 +36,7 @@ Non-goals are ARCHITECTURE §1, plus: multi-tenant SaaS; hand review of agent co
 - Contract-first; GCP specifics behind ports so a local mode only adds adapters (ADR-0032).
 - Security: agents read-only, writes as PRs, public-repo hygiene, continuous review (ARCHITECTURE §9).
 - Ticketing and UI: Shortcut's simplicity as the starting point (ADR-0058, ADR-0059, ADR-0070), not a clone: a modern, minimalist design of its own, biased toward Andy's real use (deciding, not operating). Feature, chore and bug; order on the board is the priority; stories in markdown; simple lanes. Automatic by default, editable everywhere, never complicated or over-engineered.
+- **Design:** the design file is `apps/web/design.md` (ADR-0059); every ticket that changes the UI follows it.
 - **Quality bar for anything called shipped**, here and in managed projects: tests, CI green, security and adversarial review passed, docs current, **and production monitoring** (alerts and an error budget per project).
 - Spend: no fixed ceiling yet; minimize. Today: the Claude subscription (Ultra, may be cut) plus a $25/month GCP budget. Revisit once runs record their cost (M1.8: Build + gate).
 

@@ -43,6 +43,7 @@ Trust boundaries, entry points and credentials, moved by area (ADR-0046). PRs th
 | Review pipeline                | [`review-pipeline.md`](review-pipeline.md)                               |
 | Web Push                       | [`push.md`](push.md)                                                     |
 | Project agent tasks            | [`project-tasks.md`](project-tasks.md)                                   |
+| Digest summary                 | [`digest-summary.md`](digest-summary.md)                                 |
 | Model gateway (OpenRouter)     | [`model-gateway.md`](model-gateway.md)                                   |
 | Project settings               | [`project-settings.md`](project-settings.md)                             |
 | Project access                 | [`project-access.md`](project-access.md)                                 |
@@ -52,7 +53,7 @@ Trust boundaries, entry points and credentials, moved by area (ADR-0046). PRs th
 ## Mitigations in place
 
 - Public-repo secret hygiene: TruffleHog on every PR and push, GitHub push protection, gitignored tfvars/state (ADR-0015).
-- Per-PR scans (CodeQL, dependency review, Trivy, actionlint; ADR-0030) and security-review agent.
+- Per-PR scans (CodeQL, dependency review, Trivy, actionlint; ADR-0030) and security-review agent. A review that should run and doesn't fails its check; a re-sync merge keeps a verdict only when the PR's diff is unchanged (ADR-0140, R-AI-346).
 - All actions pinned to commit SHAs; Dependabot (npm, Actions, Terraform) with a 7-day cooldown; npm patches and stable minors auto-merge after all required checks, never deploying on their own (ADR-0042); CODEOWNERS requests Andy's review on every PR he didn't author; a coordinator merges clean PRs; Andy merges what judges a PR and three more kinds (ADR-0120, R23).
 - Project baseline (ADR-0031, ADR-0038): declared in `platform/baseline/github/`; `check` shows drift.
 - Cloud Run caps, $25/month budget, usage alerts (ADR-0028, ADR-0029).

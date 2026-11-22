@@ -8,6 +8,7 @@ import {
   Inbox,
   Layers,
   Plus,
+  Settings,
   SquareKanban,
   type LucideIcon,
 } from "lucide-react";
@@ -30,8 +31,8 @@ import { useNeedsYou, useProjects } from "@/lib/queries";
 import {
   ALL,
   loadScope,
-  projectSettingsPath,
   saveScope,
+  settingsTabs,
   scopeFromPath,
   scopeKey,
   scopePath,
@@ -40,6 +41,7 @@ import {
   type Section,
 } from "@/lib/scope";
 import { useIsPhone } from "@/lib/use-phone";
+import { KeyboardShortcuts } from "@/components/KeyboardShortcuts";
 import { cn } from "@/lib/utils";
 
 /** Extra header controls from outside the router (the signed-in App adds Sign out). */
@@ -62,7 +64,8 @@ export function AppShell() {
 
   const phone = useIsPhone();
   const headerEnd = useContext(HeaderEndContext);
-  const links = navLinks(scope, pathname, section);
+  const links = destinations(scope, pathname, section);
+  const settings = settingsLinks(scope, pathname);
 
   return (
     <div className="min-h-screen">
@@ -82,8 +85,8 @@ export function AppShell() {
           <QuotaGauge />
           <PhonePauseButton scope={scope} />
           <NeedsYouCount />
-          {/* On a phone it moves under More, so the header fits 390px. */}
-          {!phone && headerEnd}
+          {/* On a phone settings and Sign out move under More, so the header fits 390px. */}
+          {!phone && <SettingsMenu links={settings} headerEnd={headerEnd} />}
         </div>
       </header>
       <LiveUpdatesBanner />
@@ -93,7 +96,8 @@ export function AppShell() {
       >
         <Outlet />
       </main>
-      {phone && <PhoneNav links={links} headerEnd={headerEnd} />}
+      {phone && <PhoneNav links={links} settings={settings} headerEnd={headerEnd} />}
+      <KeyboardShortcuts scope={scope} />
     </div>
   );
 }
@@ -106,20 +110,22 @@ interface NavItem {
   icon?: LucideIcon;
 }
 
-/** One list for both layouts, so desktop and phone never offer different screens. */
-function navLinks(scope: Scope, pathname: string, section: Section | null): NavItem[] {
+/**
+ * The header's destinations (AI-335), one list for both layouts so desktop and phone never offer
+ * different screens. Inbox leads: it is where Andy decides. What's new is per project.
+ */
+function destinations(scope: Scope, pathname: string, section: Section | null): NavItem[] {
   const items: NavItem[] = [
+    { label: "Inbox", to: scopePath(scope, "inbox"), current: section === "inbox", icon: Inbox },
     {
       label: "Board",
       to: scopePath(scope, "board"),
       current: section === "board",
       icon: SquareKanban,
     },
-    { label: "Inbox", to: scopePath(scope, "inbox"), current: section === "inbox", icon: Inbox },
-    // AI-198: under More on a phone (no icon), next to the inbox on desktop.
-    { label: "Work", to: scopePath(scope, "work"), current: section === "work" },
-    // AI-202: milestones and their epics; under More on a phone.
+    // AI-202 and AI-198: under More on a phone (no icon).
     { label: "Roadmap", to: scopePath(scope, "roadmap"), current: section === "roadmap" },
+    { label: "Work", to: scopePath(scope, "work"), current: section === "work" },
     {
       label: "Dashboards",
       to: scopePath(scope, "dashboards"),
@@ -127,37 +133,38 @@ function navLinks(scope: Scope, pathname: string, section: Section | null): NavI
       icon: ChartColumn,
     },
   ];
-  if (scope.kind === "project") {
-    const settings = projectSettingsPath(scope.projectId);
-    items.push(
-      { label: "Project settings", to: settings, current: pathname === settings },
-      {
-        label: "Digest",
-        to: `/p/${encodeURIComponent(scope.projectId)}/digest`,
-        current: /\/digest\/?$/.test(pathname),
-      },
-      {
-        label: "What's new",
-        to: `/p/${encodeURIComponent(scope.projectId)}/whats-new`,
-        current: /\/whats-new\/?$/.test(pathname),
-      },
-    );
-  }
-  items.push({
-    label: "Settings",
-    to: "/settings/github",
-    current: pathname.startsWith("/settings"),
-  });
+  if (scope.kind === "project")
+    items.push({
+      label: "What's new",
+      to: `/p/${encodeURIComponent(scope.projectId)}/whats-new`,
+      current: /\/whats-new\/?$/.test(pathname),
+    });
   return items;
+}
+
+/** The Settings menu's pages: this project's settings while one is in scope, then global ones. */
+function settingsLinks(scope: Scope, pathname: string): NavItem[] {
+  return settingsTabs(scope).map((t) => ({ ...t, current: pathname === t.to }));
 }
 
 /**
  * Phone navigation: a bottom bar in thumb reach, 44px targets, the rest under More. Below the
  * ticket panel (z-30), so a panel opened full-screen covers it until closed.
  */
-function PhoneNav({ links, headerEnd }: { links: NavItem[]; headerEnd: ReactNode }) {
+function PhoneNav(props: { links: NavItem[]; settings: NavItem[]; headerEnd: ReactNode }) {
+  const { links, settings, headerEnd } = props;
   const navigate = useNavigate();
   const more = links.filter((l) => !l.icon);
+  const item = (l: NavItem) => (
+    <DropdownMenuItem
+      key={l.label}
+      className="min-h-11"
+      aria-current={l.current ? "page" : undefined}
+      onSelect={() => void navigate({ to: l.to })}
+    >
+      {l.label}
+    </DropdownMenuItem>
+  );
   const target = "flex min-h-11 flex-1 flex-col items-center justify-center gap-0.5 text-xs";
   return (
     <nav
@@ -181,35 +188,67 @@ function PhoneNav({ links, headerEnd }: { links: NavItem[]; headerEnd: ReactNode
         <DropdownMenuTrigger
           className={cn(
             target,
-            more.some((l) => l.current) ? "text-foreground" : "text-muted-foreground",
+            [...more, ...settings].some((l) => l.current)
+              ? "text-foreground"
+              : "text-muted-foreground",
           )}
         >
           <Ellipsis aria-hidden className="size-5" />
           More
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end" side="top">
-          {more.map((l) => (
-            <DropdownMenuItem
-              key={l.label}
-              className="min-h-11"
-              aria-current={l.current ? "page" : undefined}
-              onSelect={() => void navigate({ to: l.to })}
-            >
-              {l.label}
-            </DropdownMenuItem>
-          ))}
-          {isValidElement(headerEnd) && (
-            <>
-              <DropdownMenuSeparator />
-              {/* The signed-in app's Sign out, as a menu item. */}
-              <DropdownMenuItem asChild className="min-h-11 w-full justify-start">
-                {headerEnd}
-              </DropdownMenuItem>
-            </>
-          )}
+          {more.map(item)}
+          <DropdownMenuSeparator />
+          {settings.map(item)}
+          <SignOutItem headerEnd={headerEnd} className="min-h-11" />
         </DropdownMenuContent>
       </DropdownMenu>
     </nav>
+  );
+}
+
+/** Desktop: one menu for every settings page and Sign out, so the header stays short (AI-335). */
+function SettingsMenu({ links, headerEnd }: { links: NavItem[]; headerEnd: ReactNode }) {
+  const navigate = useNavigate();
+  const current = links.some((l) => l.current);
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <Button
+          variant="ghost"
+          size="sm"
+          aria-label="Settings"
+          className={cn("text-muted-foreground", current && "bg-muted text-foreground")}
+        >
+          <Settings aria-hidden className="size-4" />
+        </Button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="end">
+        {links.map((l) => (
+          <DropdownMenuItem
+            key={l.label}
+            aria-current={l.current ? "page" : undefined}
+            onSelect={() => void navigate({ to: l.to })}
+          >
+            {l.label}
+          </DropdownMenuItem>
+        ))}
+        <SignOutItem headerEnd={headerEnd} />
+      </DropdownMenuContent>
+    </DropdownMenu>
+  );
+}
+
+/** The signed-in app's Sign out (HeaderEndContext), as the last menu item. */
+function SignOutItem({ headerEnd, className }: { headerEnd: ReactNode; className?: string }) {
+  if (!isValidElement(headerEnd)) return null;
+  return (
+    <>
+      <DropdownMenuSeparator />
+      <DropdownMenuItem asChild className={cn("w-full justify-start", className)}>
+        {headerEnd}
+      </DropdownMenuItem>
+    </>
   );
 }
 
@@ -324,13 +363,18 @@ function KeyBadge({ children }: { children: ReactNode }) {
   );
 }
 
-/** Items waiting on the viewer across every project; opens that inbox. */
+/** Things to answer (questions and flagged tickets) across every project; opens that inbox. */
 function NeedsYouCount() {
   const needsYou = useNeedsYou();
   const total = needsYou.data ? waitingCounts(needsYou.data).total : null;
   return (
     <Link
       to={scopePath(ALL, "inbox")}
+      title={
+        total === null
+          ? undefined
+          : `${total} question${total === 1 ? "" : "s"} or flagged ticket${total === 1 ? "" : "s"} to answer`
+      }
       className={cn(
         "inline-flex h-11 items-center gap-1.5 whitespace-nowrap sm:h-7 rounded-md px-2 text-xs font-medium tabular-nums",
         total ? "bg-attention/15 text-attention" : "text-muted-foreground hover:bg-muted",

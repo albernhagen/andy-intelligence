@@ -122,7 +122,7 @@ describe("MilestoneService", () => {
       const updated = await service.setEpicMilestone("ai", e.key, m.id, OWNER);
       expect(updated.milestoneId).toBe(m.id);
       expect((await tracker.getTicket("ai", e.id))?.milestoneId).toBe(m.id);
-      expect((await logged()).at(-1)).toMatchObject({
+      expect((await logged())[0]).toMatchObject({
         entityId: e.id,
         diff: { milestoneId: { from: null, to: m.id } },
       });
