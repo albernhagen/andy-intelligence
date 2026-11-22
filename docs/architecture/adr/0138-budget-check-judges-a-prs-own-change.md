@@ -30,5 +30,6 @@ Option 1. Budgets are never raised by it.
 | Locally (`pnpm context:check`, no base) | Any file is over                                                                                                                                  | Unchanged: every file over is listed                                                                                                                                                      |
 
 - **Issue, not a ticket:** a GitHub issue needs only the job's `GITHUB_TOKEN` with `issues: write`. A ticket would need a new control-plane endpoint and an OIDC token flow.
-- **Trust:** the issue job runs only on pushes to `main`, on `main`'s code, never on a PR. Caps: one issue; at most 3 pages of open issues read.
+- **Trust:** the issue job runs only on pushes to `main`, on `main`'s code, never on a PR. Caps: one issue (the job runs one at a time, a `concurrency` group); at most 3 pages of open issues read.
+- **Renames:** a moved file is judged against its old path (`git diff -M`), so moving an over-budget file doesn't fail as a new one.
 - **Managed projects** get both through the baseline's `ci.yml` and `platform/actions/ci-check` and `context-budget-trim` (ADR-0038).

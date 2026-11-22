@@ -183,6 +183,19 @@ export function baseRefFrom(args, env) {
   return null;
 }
 
+/**
+ * Renamed paths from `git diff --name-status -M --diff-filter=R` ("R095\told\tnew"): new → old.
+ * A moved file is judged against its old content, not as a new file (AI-344).
+ */
+export function renamesFrom(stdout) {
+  const map = new Map();
+  for (const line of stdout.split("\n")) {
+    const [status, from, to] = line.split("\t");
+    if (status?.startsWith("R") && from && to) map.set(to, from);
+  }
+  return map;
+}
+
 /** A reader of files at the base. Throws when the base can't be read (a fetch is tried twice). */
 function baseReader(dir, base) {
   const git = (args) =>
@@ -205,9 +218,11 @@ function baseReader(dir, base) {
     ref = "FETCH_HEAD";
   }
   ref = git(["rev-parse", "--verify", `${ref}^{commit}`]).trim();
+  // The working tree against the base: a CI merge commit's checkout, or a local branch.
+  const renames = renamesFrom(git(["diff", "--name-status", "-M", "--diff-filter=R", ref]));
   return (path) => {
     try {
-      return git(["show", `${ref}:${path}`]);
+      return git(["show", `${ref}:${renames.get(path) ?? path}`]);
     } catch {
       return null;
     }

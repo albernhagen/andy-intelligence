@@ -28,6 +28,10 @@ jobs:
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     timeout-minutes: 5
+    # One at a time, so two quick merges can't both find no issue and open two.
+    concurrency:
+      group: context-budget-trim
+      cancel-in-progress: false
     permissions:
       contents: read
       issues: write

@@ -70,7 +70,8 @@ export async function findIssue(github, repo) {
     const issues =
       (await github(
         "GET",
-        `/repos/${repo}/issues?state=open&creator=${encodeURIComponent(BOT)}&per_page=100&page=${page}`,
+        // No `creator` filter: matching the bot's login is checked below on each issue instead.
+        `/repos/${repo}/issues?state=open&per_page=100&page=${page}`,
       )) ?? [];
     const mine = issues.find(
       (i) => !i.pull_request && String(i.body ?? "").startsWith(MARKER) && i.user?.login === BOT,

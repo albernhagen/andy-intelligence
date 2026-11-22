@@ -12,6 +12,7 @@ import {
   loadBudgets,
   measure,
   prFailures,
+  renamesFrom,
   reportSummary,
 } from "./context-budget.mjs";
 import { cleanGitEnv } from "./git-env.mjs";
@@ -194,6 +195,13 @@ describe("prFailures", () => {
   });
 });
 
+describe("renamesFrom", () => {
+  it("GivenDiffNameStatus_WhenParsed_ThenNewPathsMapToOldOnes", () => {
+    const out = "R095\tdocs/a.md\tdocs/b.md\nM\tREADME.md\n";
+    expect([...renamesFrom(out)]).toEqual([["docs/b.md", "docs/a.md"]]);
+  });
+});
+
 describe("reportSummary", () => {
   it("GivenFilesOverBudget_WhenSummarised_ThenATableOfOnlyThoseFiles", () => {
     const results = [
@@ -346,6 +354,21 @@ describe("CLI", () => {
     expect(pr.status).toBe(0);
     expect(pr.stdout).toContain("NOTE AGENTS.md: over budget on the base and not grown here");
     expect(run(dir).status).toBe(1);
+  });
+
+  it("GivenAnOverBudgetFileMovedUnchanged_WhenAPrIsChecked_ThenItIsNotANewFile", () => {
+    const budget = '{"budgets":[{"pattern":"*.md","maxLines":2}]}';
+    const dir = repo({ "a.md": "a\nb\nc\n", "context-budget.json": budget });
+    const env = cleanGitEnv();
+    const git = (...args) => execFileSync("git", args, { cwd: dir, env });
+    git("-c", "user.name=t", "-c", "user.email=t@example.com", "commit", "-qm", "base");
+    git("mv", "a.md", "b.md");
+    const pr = spawnSync(process.execPath, [script, dir, "--base", "HEAD"], {
+      encoding: "utf8",
+      env,
+    });
+    expect(pr.stdout).not.toContain("a new file over budget");
+    expect(pr.status).toBe(0);
   });
 
   it("GivenOversizedFile_WhenRun_ThenExitsOne", () => {

@@ -59,6 +59,13 @@ describe("sync", () => {
     expect(calls.filter((c) => c.method === "PATCH")).toEqual([]);
   });
 
+  // The REST `creator` filter may not match a `[bot]` login; ours is matched on each issue instead.
+  it("GivenAnyOpenIssues_WhenSearched_ThenTheListIsNotFilteredByCreator", async () => {
+    const { github, calls } = fakeGithub([]);
+    await sync({ github, repo: "o/r", over });
+    expect(calls[0].path).toBe("/repos/o/r/issues?state=open&per_page=100&page=1");
+  });
+
   it("GivenOurIssueIsOpen_WhenNothingIsOver_ThenItIsClosed", async () => {
     const { github, calls } = fakeGithub([
       { number: 7, body: `${MARKER}\nold`, user: { login: BOT } },
