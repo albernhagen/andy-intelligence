@@ -66,6 +66,7 @@ describe("Web UI and MCP parity registry (AI-300)", () => {
     expect(gaps.map((e) => e.pending!.ticket).sort()).toEqual([
       "AI-294",
       "AI-299",
+      "AI-320",
       "AI-321",
       "AI-321",
     ]);
