@@ -48,7 +48,17 @@ export type ProviderKey = z.infer<typeof ProviderKey>;
 export const HarnessKey = z.enum(["claude-code", "jules", "opencode", "direct"]);
 export type HarnessKey = z.infer<typeof HarnessKey>;
 
-export const RunStep = z.enum(["refine", "plan", "build", "review", "verify", "scout", "sync"]);
+/** `summarize`: the digest summary (AI-323, ADR-0137); a single-call task with no ticket. */
+export const RunStep = z.enum([
+  "refine",
+  "plan",
+  "build",
+  "review",
+  "verify",
+  "scout",
+  "sync",
+  "summarize",
+]);
 export type RunStep = z.infer<typeof RunStep>;
 
 export const Urgency = z.enum(["low", "normal", "high"]);

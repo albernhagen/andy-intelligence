@@ -60,10 +60,22 @@ describe("routing config", () => {
     expect(edit((c) => Object.assign(c, { scope: "project", projectId: "a/b" }))).toBe(false);
   });
 
-  it("GivenAMissingProviderTierOrStep_WhenParsed_ThenRefused", () => {
+  it("GivenAMissingProviderOrTier_WhenParsed_ThenRefused", () => {
     expect(edit((c) => delete (c.providers as Partial<typeof c.providers>).openrouter)).toBe(false);
     expect(edit((c) => delete (c.tiers as Partial<typeof c.tiers>).cheap)).toBe(false);
-    expect(edit((c) => delete (c.steps as Partial<typeof c.steps>).scout)).toBe(false);
+  });
+
+  it("GivenAConfigStoredBeforeAStepExisted_WhenParsed_ThenThatStepGetsItsDefaultTier", () => {
+    const stored = { ...structuredClone(input), updatedAt: "2026-11-01T00:00:00.000Z" };
+    delete (stored.steps as Partial<typeof stored.steps>).summarize;
+    stored.steps.refine = "strong";
+    const parsed = RoutingConfig.parse(stored);
+    expect(parsed.steps.summarize).toBe("fast");
+    expect(parsed.steps.refine).toBe("strong");
+  });
+
+  it("GivenAStepWithAnUnknownTier_WhenParsed_ThenRefused", () => {
+    expect(edit((c) => Object.assign(c.steps, { scout: "huge" }))).toBe(false);
   });
 
   it("GivenAStoredConfigWithoutAStamp_WhenParsed_ThenRefused", () => {

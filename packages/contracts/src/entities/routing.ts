@@ -40,11 +40,32 @@ export type TierRoutes = z.infer<typeof TierRoutes>;
 export const StepTier = z.union([TierKey, z.literal("by_size")]);
 export type StepTier = z.infer<typeof StepTier>;
 
+/**
+ * Each step's tier until a config sets one. A config stored before a step existed has no entry
+ * for it (`summarize`, AI-323), so reads and puts fill missing steps from here: an additive
+ * change, no upgrader (ARCHITECTURE §10.4).
+ */
+export const DEFAULT_STEP_TIERS: Record<RunStep, StepTier> = {
+  refine: "fast",
+  plan: "by_size",
+  build: "by_size",
+  review: "fast",
+  verify: "fast",
+  scout: "fast",
+  sync: "by_size",
+  summarize: "fast",
+};
+
+function withDefaultStepTiers(steps: unknown): unknown {
+  if (typeof steps !== "object" || steps === null || Array.isArray(steps)) return steps;
+  return { ...DEFAULT_STEP_TIERS, ...steps };
+}
+
 /** Every field but the scope and the store's stamp: what `put` takes. */
 const routingFields = {
   providers: z.record(ProviderKey, ProviderRouting),
   tiers: z.record(TierKey, TierRoutes),
-  steps: z.record(RunStep, StepTier),
+  steps: z.preprocess(withDefaultStepTiers, z.record(RunStep, StepTier)),
 };
 
 const scopeFields = {
@@ -109,15 +130,7 @@ export const DEFAULT_ROUTING: RoutingConfig = RoutingConfig.parse({
     fast: claude("sonnet"),
     cheap: claude("sonnet"),
   },
-  steps: {
-    refine: "fast",
-    plan: "by_size",
-    build: "by_size",
-    review: "fast",
-    verify: "fast",
-    scout: "fast",
-    sync: "by_size",
-  },
+  steps: DEFAULT_STEP_TIERS,
   updatedAt: null,
 });
 

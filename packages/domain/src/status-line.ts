@@ -237,6 +237,7 @@ const RUN_VERBS: Record<RunStep, string> = {
   verify: "Verifying",
   scout: "Scouting",
   sync: "Syncing with main",
+  summarize: "Summarizing",
 };
 
 /** "Refining · 3 min" while running; "Refine queued · 1 min" before it starts. */
