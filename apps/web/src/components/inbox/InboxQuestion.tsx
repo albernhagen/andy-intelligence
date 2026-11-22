@@ -43,6 +43,7 @@ export function InboxQuestion({ question, locked }: { question: Question; locked
       variant="outline"
       className="h-11 sm:h-8"
       disabled={locked}
+      data-nav-choice
       onClick={() => answer(choice)}
     >
       {choice}
@@ -51,7 +52,13 @@ export function InboxQuestion({ question, locked }: { question: Question; locked
   );
 
   return (
-    <li aria-label={`Question: ${question.text}`} className="space-y-2 py-2">
+    // A stop for j / k (AI-338): focusable by the keyboard layer, not a Tab stop.
+    <li
+      aria-label={`Question: ${question.text}`}
+      data-nav-item
+      tabIndex={-1}
+      className="space-y-2 rounded-md py-2 outline-offset-2 focus-visible:outline-2 focus-visible:outline-ring"
+    >
       {/* The mark sits beside what it marks (AI-316). */}
       <div className="flex flex-wrap items-start gap-2">
         {question.urgency === "high" && <Badge variant="attention">Urgent</Badge>}
@@ -88,6 +95,7 @@ export function InboxQuestion({ question, locked }: { question: Question; locked
       >
         <Input
           aria-label="Your answer"
+          data-nav-answer
           name="answer"
           autoComplete="off"
           value={text}
