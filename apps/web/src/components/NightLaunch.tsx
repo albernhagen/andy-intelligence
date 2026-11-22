@@ -244,7 +244,7 @@ function LaunchForm({ path, night }: { path: TicketPath; night: NightStatus }) {
         </p>
       )}
       {launch.error && <QueryError error={launch.error} />}
-      <Button type="submit" size="sm" disabled={blocked || launch.isPending}>
+      <Button type="submit" size="sm" variant="outline" disabled={blocked || launch.isPending}>
         Launch
       </Button>
     </form>

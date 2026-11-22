@@ -86,7 +86,8 @@ test("story panel with a question", async ({ page }) => {
   await page.clock.setFixedTime(SEED_NOW);
   await open(page, "/p/ai/t/AI-3", "Waiting for you: 1 question");
   await expect(page.getByRole("region", { name: "Activity" })).toBeVisible();
-  await page.getByRole("region", { name: "Questions" }).scrollIntoViewIfNeeded();
+  // AI-336: the open question leads the panel, in Next, above the title.
+  await expect(page.getByRole("region", { name: "Open questions" })).toBeInViewport();
   await expect(page).toHaveScreenshot("story-panel-question.png");
 });
 
@@ -126,7 +127,11 @@ test("epic panel: its milestone and status (AI-311)", async ({ page }) => {
 test("story panel for an epic", async ({ page }) => {
   await page.clock.setFixedTime(SEED_NOW);
   await open(page, "/p/ops/t/OPS-5", "1 of 3 done");
-  await page.getByRole("region", { name: "Stories" }).scrollIntoViewIfNeeded();
+  // AI-336: on a 1280×800 screen the epic's tickets, progress and milestone show unscrolled.
+  const panel = page.getByRole("dialog", { name: /^OPS-5: / });
+  await expect(panel.getByRole("region", { name: "Tickets" })).toBeInViewport();
+  await expect(panel.getByLabel("Epic progress")).toBeInViewport();
+  await expect(panel.getByRole("region", { name: "Milestone" })).toBeInViewport();
   await expect(page).toHaveScreenshot("story-panel-epic.png");
 });
 
@@ -134,6 +139,8 @@ test("story panel for an epic", async ({ page }) => {
 test("ticket panel routing layers", async ({ page }) => {
   await page.clock.setFixedTime(SEED_NOW);
   await open(page, "/p/ai/t/AI-1", "Picking a project should feel like picking a tenant.");
+  // AI-336: routing sits in the collapsed How it runs group.
+  await page.getByText("How it runs").click();
   const routing = page.getByRole("region", { name: "Routing" });
   await expect(routing.getByText("Route", { exact: true })).toBeVisible();
   await routing.scrollIntoViewIfNeeded();
