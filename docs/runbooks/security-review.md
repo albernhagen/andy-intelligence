@@ -2,11 +2,11 @@
 
 Manual steps for per-PR scans, the security-review agent and the system security review (ADR-0025: Agentic security review, ADR-0030: Security review automation choices). Do step 3 **before** merging PR "M1.10: Security review automation" (`dependency-review` fails until the dependency graph is on); steps 1, 2, 4–6 after it merges.
 
-| Term                      | Meaning                                                                                                                             |
-| ------------------------- | ----------------------------------------------------------------------------------------------------------------------------------- |
-| `CLAUDE_CODE_OAUTH_TOKEN` | Repository Actions secret: a one-year Claude subscription token from `claude setup-token`. It can only make model requests.         |
-| `security-accepted`       | PR label: Andy accepts the high/critical findings. Write why in the PR. Removed automatically on the next push.                     |
-| Neutral                   | The agent couldn't run (no token, draft, Dependabot, quota, outage): the check passes with a "not reviewed" comment and you decide. |
+| Term                      | Meaning                                                                                                                                                                                                            |
+| ------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `CLAUDE_CODE_OAUTH_TOKEN` | Repository Actions secret: a one-year Claude subscription token from `claude setup-token`. It can only make model requests.                                                                                        |
+| `security-accepted`       | PR label: Andy accepts the high/critical findings. Write why in the PR. Removed automatically on the next push.                                                                                                    |
+| Skipped / not reviewed    | Skipped by design (draft, Dependabot, docs-only): the check passes. Should have run and didn't (no token, quota, outage): "not reviewed", the check fails until a push re-runs it or you add the label (ADR-0140). |
 
 ## 1. Reviewer token secret
 
@@ -84,10 +84,11 @@ The run also calls `terraform-plan.yml` for a drift summary (addresses only, no 
 | Symptom                                                               | Fix                                                                                                                                                                       |
 | --------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Comment says "not reviewed: … CLAUDE_CODE_OAUTH_TOKEN is not set"     | Step 1                                                                                                                                                                    |
-| "the agent run failed"                                                | Open the run log: quota exhausted or token expired → wait or redo step 1. The check is neutral meanwhile.                                                                 |
-| Docs-only PR: "not reviewed"                                          | Expected: the agent is skipped to save quota (ADR-0030). Agent rule files (`AGENTS.md`, `CLAUDE.md`, `docs/BUILD-PROMPT.md`, `platform/procedures/`) are always reviewed. |
+| "the agent run failed"                                                | Open the run log: quota exhausted or token expired → wait or redo step 1, then push to re-run. The check fails meanwhile (ADR-0140).                                      |
+| Docs-only PR: "skipped"                                               | Expected: the agent is skipped to save quota (ADR-0030). Agent rule files (`AGENTS.md`, `CLAUDE.md`, `docs/BUILD-PROMPT.md`, `platform/procedures/`) are always reviewed. |
 | Reviewer uses too much quota                                          | Each comment shows turns, tokens and an API-equivalent estimate. Lower `--max-turns` in `security-review.yml`, or move the reviewer to an API key with a spend cap.       |
-| Dependabot PR: "not reviewed"                                         | Expected: Dependabot runs get no repo secrets. Dependency review and CodeQL still gate it.                                                                                |
+| Dependabot PR: "skipped"                                              | Expected: Dependabot runs get no repo secrets. Dependency review and CodeQL still gate it.                                                                                |
+| "re-sync bot updated this PR and …"                                   | The re-sync merge changed the PR's diff or the earlier verdict didn't pass, so nothing carried forward (ADR-0140). Push a commit to re-run.                               |
 | Dependabot Terraform PR: `Terraform plan` fails on missing `TF_VAR_*` | Expected (no Dependabot secrets). Plan locally before merging.                                                                                                            |
 | System review fails "changed files other than the threat model"       | The agent overstepped; nothing was pushed. Re-run; if it repeats, tighten `platform/procedures/threat-model.md`.                                                          |
 | System review can't open the PR                                       | Step 3, Actions setting                                                                                                                                                   |

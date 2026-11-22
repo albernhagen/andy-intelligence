@@ -3,6 +3,7 @@ import { QueryError } from "@/components/Status";
 import { useProjects, useUpdateProject } from "@/lib/queries";
 import type { Scope } from "@/lib/scope";
 import { cn } from "@/lib/utils";
+import { SavedCue } from "@/components/SavedCue";
 import { dateTime } from "@/lib/format";
 
 const DECISION_TEXT: Record<DispatchDecision, string> = {
@@ -72,6 +73,7 @@ export function DispatchControls({ project }: { project: Project }) {
         Paused
       </label>
       {update.error && <QueryError error={update.error} />}
+      <SavedCue pending={update.isPending} saved={update.isSuccess} />
       <DispatchStatus project={project} />
     </>
   );

@@ -13,7 +13,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { applySections, checkSections, SECTIONS } from "./github.mjs";
-import { baselineRecord, fileDrift, mergeLines, renderFiles } from "./files.mjs";
+import { baselineRecord, fileDrift, mergeLines, renderFiles, seedsToWrite } from "./files.mjs";
 import { cleanGitEnv } from "../../scripts/git-env.mjs";
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
@@ -163,8 +163,8 @@ function filesCommand(repo, ref) {
     const existing = existsSync(target) ? readFileSync(target, "utf8") : "";
     writeFile(dir, f.path, mergeLines(existing, f.lines));
   }
-  for (const f of rendered.seed)
-    if (!existsSync(path.join(dir, f.path))) writeFile(dir, f.path, f.content);
+  for (const f of seedsToWrite(rendered.seed, (p) => existsSync(path.join(dir, p))))
+    writeFile(dir, f.path, f.content);
   if (starter) for (const f of rendered.starter) writeFile(dir, f.path, f.content);
   const date = new Date().toISOString().slice(0, 10);
   writeFile(dir, ".andy/baseline.json", baselineRecord({ source: m.source, sha, ref, date }));

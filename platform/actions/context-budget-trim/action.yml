@@ -1,0 +1,24 @@
+name: Baseline — context budget trim issue
+description: >-
+  On the default branch only: keeps one issue listing files over their context budget, edited as
+  the list changes and closed when nothing is over (AI-344, ADR-0138, ADR-0046). CI itself stays
+  green on the default branch. Needs a checkout of the default branch and a job token with
+  `contents: read` and `issues: write`. Run after actions/checkout.
+
+inputs:
+  github-token:
+    description: The job's GITHUB_TOKEN (issues write).
+    required: true
+
+runs:
+  using: composite
+  steps:
+    - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+      with:
+        node-version-file: .nvmrc
+    - name: Trim issue (AI-344)
+      shell: bash
+      env:
+        REPO: ${{ github.repository }}
+        GITHUB_TOKEN: ${{ inputs.github-token }}
+      run: node "$GITHUB_ACTION_PATH/../../../scripts/context-budget-issue.mjs"

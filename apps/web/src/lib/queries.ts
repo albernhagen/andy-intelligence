@@ -16,7 +16,7 @@ import type {
   WorkerChoice,
 } from "@andy/contracts";
 import { RoutingConfig } from "@andy/contracts";
-import { unwrap, useApi } from "./api";
+import { ApiError, unwrap, useApi } from "./api";
 import { useLivePoll } from "./live";
 import { withoutQuestion, type NeedsYou } from "./needs-you";
 
@@ -726,6 +726,38 @@ export function useAnswerQuestion(ticketId?: string) {
         (data) => data && withoutQuestion(data, questionId),
       ),
     ticketId ? answerKey(ticketId) : undefined,
+  );
+}
+
+/** One agent task, polled while it is in flight. A 404 is final: no retries. */
+export function useRun(projectId: string, runId: string) {
+  const api = useApi();
+  return useQuery({
+    ...useLivePoll("live", isActiveRun),
+    queryKey: ["run", projectId, runId],
+    queryFn: async () =>
+      unwrap(
+        await api.GET("/api/projects/{projectId}/runs/{runId}", {
+          params: { path: { projectId, runId } },
+        }),
+      ),
+    retry: (count, err) => !(err instanceof ApiError && err.status === 404) && count < 3,
+  });
+}
+
+/**
+ * Starts an ideate agent task on an idea (AI-299, the route AI-134 added): owner-only, refused
+ * at the agent-task caps or while one is in flight, as MCP is. The result lands in Ideas.
+ */
+export function useStartIdeate(projectId: string) {
+  const api = useApi();
+  return useWrite(async (idea: string) =>
+    unwrap(
+      await api.POST("/api/projects/{projectId}/ideate/agent-task", {
+        params: { path: { projectId } },
+        body: { idea },
+      }),
+    ),
   );
 }
 

@@ -16,7 +16,7 @@ What is built on `main` now, moved from `README.md` so its "How it works today" 
 - Agent task cost: ticket panel, Activity (links each task's page), MCP `status`.
 - Epics: stories, cost; map: MCP `milestone_map`; Roadmap (header, MCP `roadmap`): milestones and their epics; epics and the board's epic groups show their milestone's status, which Andy sets there or on the roadmap (AI-311).
 - Dispatch starts a ticket only when its milestone is approved or it has none (AI-306).
-- A daily digest (What's new → Digest, MCP `digest`) lists the last 24 hours: exceptions, merges and cost, work in progress, totals.
+- A daily digest (MCP `digest`) lists the last 24 hours: exceptions, merges and cost, work in progress, totals. What's new shows its exceptions first, with a 24 hours window (AI-341).
 - What's new (header, MCP `whats_new`): milestones, merged PRs' release notes.
 - Dashboards chart delivery and cost per week (AI-117), and a project's DORA metrics over 30 or 90 days from its production deployment records (AI-200; lead time not measured until commit times are recorded).
 - Needs-you email (AI-77): each ticket that needs Andy, batched per 10 minutes, 20 a day; off until configured (runbook `email-notifications.md`).
@@ -36,4 +36,5 @@ What is built on `main` now, moved from `README.md` so its "How it works today" 
 **Project agent tasks (AI-134):**
 
 - Andy starts plan-project or ideate as a read-only agent task (`POST …/plan/agent-task`, `…/ideate/agent-task`); its result is stored as a submitted one, so a plan waits for approval and an idea becomes an epic with a spec PR or a question.
-- No MCP tool or button yet.
+- Board → **Ideate** starts ideate from the web (AI-299).
+- MCP `start_plan_project` and `start_ideate` start them, as the routes do; the Project plan card has a **Start plan-project task** button (AI-320).

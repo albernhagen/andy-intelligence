@@ -10,7 +10,6 @@ import { AppShell } from "@/components/AppShell";
 import { loadScope, scopePath } from "@/lib/scope";
 import { BoardPage } from "@/pages/BoardPage";
 import { DashboardsPage } from "@/pages/DashboardsPage";
-import { DigestPage } from "@/pages/DigestPage";
 import { PickProjectPage } from "@/pages/PickProjectPage";
 import { GitHubCallbackPage, GitHubPage } from "@/pages/GitHubPage";
 import { InboxPage } from "@/pages/InboxPage";
@@ -130,16 +129,25 @@ const routeTree = rootRoute.addChildren([
     path: "/p/$projectId/settings",
     component: ProjectSettingsPage,
   }),
+  // AI-341: the Digest screen folded into What's new (24 hours, exceptions first); MCP digest stays.
   createRoute({
     getParentRoute: () => rootRoute,
     path: "/p/$projectId/digest",
-    component: DigestPage,
+    beforeLoad: ({ params }) => {
+      throw redirect({ to: "/p/$projectId/whats-new", params, search: { days: 1 }, replace: true });
+    },
   }),
   // What's new (AI-159): project-scoped only, as status is per milestone epic of one project.
   createRoute({
     getParentRoute: () => rootRoute,
     path: "/p/$projectId/whats-new",
     component: WhatsNewPage,
+    // The window lives in the URL (`?days=1` is the old digest URL's 24 hours, AI-341); 14 days,
+    // the default, and anything unknown read as unset.
+    validateSearch: (search: Record<string, unknown>): { days?: 1 | 30 | 90 } => {
+      const days = Number(search.days);
+      return days === 1 || days === 30 || days === 90 ? { days } : {};
+    },
   }),
   createRoute({
     getParentRoute: () => rootRoute,

@@ -58,6 +58,14 @@ export function renderFiles(manifest, read, { sha, ref }) {
   };
 }
 
+/**
+ * The seed files to write: those the repo doesn't have yet. Seeds (agent rules, threat model,
+ * design file) are the project's own once written, so an existing one is never overwritten.
+ */
+export function seedsToWrite(seed, exists) {
+  return seed.filter((f) => !exists(f.path));
+}
+
 /** The `.andy/baseline.json` record written into a managed repo. */
 export function baselineRecord({ source, sha, ref, date }) {
   return `${JSON.stringify({ source, version: sha, ref, updated: date }, null, 2)}\n`;
