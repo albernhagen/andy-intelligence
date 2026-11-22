@@ -3,7 +3,8 @@ import { WORK_VIEWS, WORK_VIEW_LABELS, type WorkView } from "@andy/domain";
 /**
  * Work view chips (AI-187, ADR-0108): All plus five fixed views, each with its count of open
  * tickets. One is active at a time; the page keeps the choice in the URL. The Work list (AI-198)
- * always shows one view, so it leaves All out (`total` null).
+ * always shows one view, so it leaves All out (`total` null). Needs you names its unit, "· 4 tickets",
+ * because the header's "Needs you N" counts things to answer, not tickets (AI-326, design.md).
  */
 export function WorkViewChips({
   view,
@@ -38,7 +39,9 @@ export function WorkViewChips({
             }`}
           >
             {label}{" "}
-            <span className={`tabular-nums ${active ? "" : "text-muted-foreground"}`}>{count}</span>
+            <span className={`tabular-nums ${active ? "" : "text-muted-foreground"}`}>
+              {id === "needs-me" ? `· ${count} ticket${count === 1 ? "" : "s"}` : count}
+            </span>
           </button>
         );
       })}
