@@ -220,6 +220,8 @@ describe("MCP OAuth flow (MCP SDK client)", () => {
       "set_spend_caps",
       "set_ticket_parent",
       "set_worker",
+      "start_ideate",
+      "start_plan_project",
       "status",
       "submit_brief",
       "submit_project_plan",
