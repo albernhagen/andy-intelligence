@@ -25,7 +25,7 @@ Option 1 (Andy, 2026-11-22).
 - The PR holds only files the repo is missing: managed files, seed files, missing `.gitignore` lines and `.andy/baseline.json`, from `andy-intelligence` at `main`'s tip. A file that differs is listed, never written.
 - Never in it: `.github/workflows/**` and `.claude/**` (agent settings, the same rule as single-file proposals). The report lists the missing ones and gives `baseline.mjs finish <repo> --ref <sha> --branch <branch>`, which adds them to the PR's branch with Andy's `gh` login (missing ones only).
 - GitHub settings are read with the App's identity and reported (matches, differs, couldn't read). The App never writes them; the report gives `baseline.mjs apply`.
-- An empty repo has nothing to open a PR against, and its starter needs `pnpm install` for a lockfile: it goes to Needs-you with `baseline.mjs onboard`, which applies the settings too. This is the ticket's "new and empty" case.
+- An empty repo gets **no PR**, which differs from AI-113's first acceptance criterion ("open a PR with the baseline files"): it has no branch to open one against, and its starter needs `pnpm install` for a lockfile. It goes to Needs-you with `baseline.mjs onboard`, which pushes the files and applies the settings too (the ticket's "new and empty" case).
 - Any failure becomes a Needs-you ticket in the project with the error and the CLI command. The baseline source repo itself is skipped.
 
 ### Consequences
