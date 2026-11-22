@@ -278,6 +278,10 @@ resource "google_cloud_run_v2_service" "control_plane" {
   invoker_iam_disabled = true
 
   template {
+    # Always unset, never ignored (AI-314): CI deploys name each revision, and Cloud Run refuses
+    # to reuse a name for a different template (409). Unset, it generates a new name, so after a
+    # deploy every plan shows `revision = "<last deploy's name>" -> null`. That line is expected.
+    revision        = null
     service_account = google_service_account.runtime.email
 
     # Cost caps (ADR-0028): bound billed time per request and requests per instance.
@@ -365,13 +369,12 @@ resource "google_cloud_run_v2_service" "control_plane" {
   }
 
   lifecycle {
-    # CI deploys own the image, the revision labels deploy-cloudrun adds (commit-sha, managed-by),
-    # the revision name each deploy creates (e.g. control-plane-00312-zaq; AI-314) and traffic
-    # (no-traffic revision, smoke test, then traffic: ADR-0076).
+    # CI deploys own the image, the revision labels deploy-cloudrun adds (commit-sha, managed-by)
+    # and traffic (no-traffic revision, smoke test, then traffic: ADR-0076). Not the revision
+    # name: ignoring it makes every template change fail with a 409 (AI-314; see `revision`).
     ignore_changes = [
       template[0].containers[0].image,
       template[0].labels,
-      template[0].revision,
       traffic,
       client,
       client_version,
