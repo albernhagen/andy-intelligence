@@ -39,7 +39,8 @@ export function Segmented<T extends string | number | null>({
               "focus-visible:outline-2 focus-visible:outline-ring",
               picked
                 ? "bg-muted font-medium text-foreground"
-                : "text-muted-foreground hover:bg-muted hover:text-foreground",
+                : // Hover is a lighter tint than the picked option's, so the two never look alike.
+                  "text-muted-foreground hover:bg-foreground/5 hover:text-foreground",
             )}
           >
             {o.label}

@@ -21,6 +21,10 @@ describe("Segmented", () => {
       "false",
     );
     expect(group.innerHTML).not.toContain("bg-primary");
+    // An unpicked option's hover is lighter than the picked option's bg-muted.
+    const other = screen.getByRole("button", { name: "7 days" });
+    expect(other.className).not.toMatch(/(^|\s)(hover:)?bg-muted(\s|$)/);
+    expect(other.className).toContain("hover:bg-foreground/5");
   });
 
   it("GivenAnOption_WhenClicked_ThenItsValueIsPassedOn", () => {
