@@ -58,7 +58,7 @@ describe("epic panel", () => {
     return { harness, epic, outside };
   }
 
-  it("GivenAnEpic_WhenItsPanelOpens_ThenTicketsAreInDependencyOrderWithStageSizeAndOpenBlockers", async () => {
+  it("GivenAnEpic_WhenItsPanelOpens_ThenItsTicketsAreInDependencyOrderWithStageSizeAndOpenBlockers", async () => {
     const { harness, epic, outside } = await withEpic();
     await harness.router.navigate({ to: `/p/ai/t/${epic.key}` });
 

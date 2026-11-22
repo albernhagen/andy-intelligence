@@ -57,7 +57,7 @@ import { TYPE_LABELS } from "@/lib/tickets";
 import { showsError } from "@/lib/live";
 
 /**
- * The story panel (ADR-0059: UX foundation, row "Story panel"): the ticket over the board,
+ * The ticket panel (ADR-0059: UX foundation, row "Story panel"): the ticket over the board,
  * rendered in the board route's `<Outlet />`. A status line, then one document (title,
  * description, checklist, scope) beside a rail of facts, then questions and one activity
  * timeline. Every field edits in place. Esc or Close goes back to the board.
