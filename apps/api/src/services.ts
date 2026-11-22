@@ -18,6 +18,7 @@ import {
   BriefService,
   IdeateService,
   ProjectPlanService,
+  ProjectTaskResults,
   TicketService,
   WhatsNewReader,
   EmailNotifications,
@@ -192,6 +193,15 @@ export function createServices(raw: AppDeps): Services {
     ? new RunnerService(deps.runners, deps.tracker, runnerCredentials, now)
     : null;
   const runnerPresence = runners ? (projectId: string) => runners.presentFor(projectId) : null;
+  // AI-134: plan-project and ideate results are stored by the plan and ideate services, built
+  // below (they need the ticket service, which needs `runs`); a report only calls these later.
+  const plansLater: Pick<ProjectPlanService, "proposeFromRun"> = {
+    proposeFromRun: (run, output) => plans.proposeFromRun(run, output),
+  };
+  const ideasLater: Pick<IdeateService, "submitFromRun"> = {
+    submitFromRun: (run, output) => ideate.submitFromRun(run, output),
+  };
+  const projectTasks: ProjectTaskResults = new ProjectTaskResults(plansLater, ideasLater);
   // AI-257: spend notices (80% of a cap, a stop) go to the Needs-you email when it is on, else
   // to the logs; their dedupe and daily cap live in the stored notice ledger.
   const spendAlerts = deps.spendNotices
@@ -245,6 +255,7 @@ export function createServices(raw: AppDeps): Services {
     null,
     deps.routing ?? null,
     spendGate,
+    projectTasks,
   );
   const refiner = new RefineDispatcher(deps.tracker, deps.runs, runs, now, deps.milestones ?? null);
   // AI-124/AI-125: when a launch ends, its morning PR opens (or an empty epic branch goes),
