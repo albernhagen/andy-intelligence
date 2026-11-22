@@ -31,7 +31,7 @@ Below `sm` (640px; `useIsPhone`); screens adopt these in their own M7: Mobile sl
 
 ## Keyboard
 
-Shortcuts (`j`/`k`, `Enter`, `a`, `1`–`9`, `g i`/`g b`/`g r`, `?`) live in `SHORTCUTS` (`src/lib/shortcuts.ts`, AI-338); `?` lists them. Never while typing in a field; no single key writes. Screens opt in with `data-nav-*` attributes and a visible focus outline.
+`SHORTCUTS` in `src/lib/shortcuts.ts` (AI-338); `?` lists them. Never while typing; no single key writes. Screens opt in with `data-nav-*` and a visible focus outline.
 
 ## Type
 
