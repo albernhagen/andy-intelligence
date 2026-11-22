@@ -162,7 +162,8 @@ export function ReadyFilterMenu({
 /**
  * One swim lane per stage: a header with the count, then the cards in rank order (the order is
  * the priority, ADR-0058). A collapsed lane is a narrow strip with its count; it still takes
- * drops. `onToggle` makes the header (or the strip) expand or collapse it.
+ * drops. `onToggle` makes the header (or the strip) expand or collapse it. `fill` is the phone
+ * board's one lane (AI-337): full width, no header, since the stage tabs above name it.
  */
 export function Lane({
   stage,
@@ -171,6 +172,7 @@ export function Lane({
   onToggle,
   highlight,
   top,
+  fill = false,
   children,
 }: {
   stage: Stage;
@@ -180,6 +182,7 @@ export function Lane({
   highlight: boolean;
   /** Above the cards, e.g. Backlog's quick add. */
   top?: ReactNode;
+  fill?: boolean;
   children: ReactNode;
 }) {
   const { setNodeRef } = useDroppable({ id: stage });
@@ -214,9 +217,9 @@ export function Lane({
       ref={setNodeRef}
       aria-label={label}
       data-stage={stage}
-      className={`flex w-64 shrink-0 flex-col gap-2 rounded-md p-2 xl:w-auto xl:min-w-44 xl:flex-1 xl:shrink ${surface}`}
+      className={`flex shrink-0 flex-col gap-2 rounded-md p-2 ${fill ? "w-full" : "w-64 xl:w-auto xl:min-w-44 xl:flex-1 xl:shrink"} ${surface}`}
     >
-      <h3 className="flex h-6 items-center gap-1 text-sm font-medium">
+      <h3 className={`${fill ? "sr-only" : "flex"} h-6 items-center gap-1 text-sm font-medium`}>
         {label} <span className="text-xs text-muted-foreground tabular-nums">{ids.length}</span>
         {onToggle && (
           <button

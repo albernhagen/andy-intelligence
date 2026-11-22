@@ -11,6 +11,7 @@ import {
   type DragOverEvent,
   type DragStartEvent,
 } from "@dnd-kit/core";
+import { SlidersHorizontal } from "lucide-react";
 import { Stage, type BoardTicket, type ReadyFilters } from "@andy/contracts";
 import {
   boardStages,
@@ -26,7 +27,7 @@ import { BoardCard } from "@/components/board/BoardCard";
 import { BoardDispatchStatus } from "@/components/DispatchControls";
 import { IdeateForm } from "@/components/IdeateForm";
 import { EpicControls } from "@/components/board/EpicControls";
-import { WorkViewChips } from "@/components/board/WorkViewChips";
+import { WorkViewChips, WorkViewMenu } from "@/components/board/WorkViewChips";
 import {
   EpicGroupHeader,
   Lane,
@@ -44,6 +45,7 @@ import {
   isBacklogZone,
   nextUp,
   openBlockers,
+  openingStage,
   planDrop,
   planUpNextDrop,
   splitBacklog,
@@ -66,8 +68,10 @@ import {
   useRankTicket,
   useSetUpNext,
 } from "@/lib/queries";
-import { dropMove, groupByStage, visibleTickets } from "@/lib/tickets";
+import { STAGE_LABELS, dropMove, groupByStage, visibleTickets } from "@/lib/tickets";
 import { showsError } from "@/lib/live";
+import { useIsPhone } from "@/lib/use-phone";
+import { Segmented } from "@/components/ui/segmented";
 
 /**
  * Board v2 (AI-28; ADR-0059 row "Board"): one swim lane per stage, cards with status markers,
@@ -77,6 +81,8 @@ import { showsError } from "@/lib/live";
  * message on the card. Group by epic (AI-86) puts a header per epic inside each lane; the epic
  * filter shows one epic's tickets. Work view chips (AI-187) narrow it to one fixed view, kept in
  * the URL (`?view=`); both filters combine. Child routes (the ticket panel) render in the Outlet.
+ * On a phone (AI-337) the board shows one stage at a time under stage tabs, the chips become one
+ * View menu and the other controls fold under Options; moving between stages is the panel's Move.
  */
 export function BoardPage() {
   const { projectId } = useParams({ from: "/p/$projectId" });
@@ -91,6 +97,8 @@ export function BoardPage() {
   const [grouped, setGrouped] = useState(loadGroupByEpic);
   const [chosenEpic, setChosenEpic] = useState<string | null>(null);
   const [ideating, setIdeating] = useState(false);
+  const isPhone = useIsPhone();
+  const [optionsOpen, setOptionsOpen] = useState(false);
   const epics = useMemo(() => boardEpics(board.data ?? []), [board.data]);
   // An epic that left the board (another project's data, or deleted) stops filtering.
   const epicId = epics.some((e) => e.id === chosenEpic) ? chosenEpic : null;
@@ -102,14 +110,41 @@ export function BoardPage() {
   // Counts follow the epic filter, so a chip's number is what clicking it shows.
   const inScope = useMemo(() => tickets.filter((t) => inEpic(t, epicId)), [tickets, epicId]);
   const counts = useMemo(() => workViewCounts(inScope, allById), [inScope, allById]);
+  const pickView = (next: WorkView | null) =>
+    void navigate({ search: { sort, ...filters, view: next ?? undefined } });
 
   return (
-    <section className="space-y-4">
-      <div className="flex flex-wrap items-center justify-between gap-2 max-sm:flex-col max-sm:items-start">
+    <section className="space-y-4 max-sm:space-y-2">
+      <div className="flex flex-wrap items-center justify-between gap-2">
         <h2 className="text-lg font-medium">
           Board <BoardDispatchStatus projectId={projectId} />
         </h2>
-        <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+        {isPhone && (
+          <div className="flex items-center gap-2">
+            {board.data && (
+              <WorkViewMenu
+                view={view}
+                counts={counts}
+                total={inScope.length}
+                onChange={pickView}
+              />
+            )}
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="size-11 px-0"
+              aria-label="Options"
+              aria-expanded={optionsOpen}
+              onClick={() => setOptionsOpen((open) => !open)}
+            >
+              <SlidersHorizontal className="size-4" aria-hidden />
+            </Button>
+          </div>
+        )}
+        <div
+          className={`flex flex-wrap items-center gap-x-4 gap-y-2 ${isPhone ? (optionsOpen ? "w-full" : "hidden") : ""}`}
+        >
           {/* AI-299: an idea into an epic in Ideas, as MCP `ideate`; outline, not the primary. */}
           <Button
             type="button"
@@ -143,15 +178,8 @@ export function BoardPage() {
       </div>
 
       {ideating && <IdeateForm projectId={projectId} onClose={() => setIdeating(false)} />}
-      {board.data && (
-        <WorkViewChips
-          view={view}
-          counts={counts}
-          total={inScope.length}
-          onChange={(next) =>
-            void navigate({ search: { sort, ...filters, view: next ?? undefined } })
-          }
-        />
+      {board.data && !isPhone && (
+        <WorkViewChips view={view} counts={counts} total={inScope.length} onChange={pickView} />
       )}
       {board.isPending && <Loading />}
       {showsError(board) && (
@@ -168,6 +196,7 @@ export function BoardPage() {
           grouped={grouped}
           epicId={epicId}
           view={view}
+          phone={isPhone}
         />
       )}
       <Outlet />
@@ -188,6 +217,7 @@ function Lanes({
   grouped,
   epicId,
   view,
+  phone,
 }: {
   tickets: BoardTicket[];
   showCancelled: boolean;
@@ -202,6 +232,8 @@ function Lanes({
   epicId: string | null;
   /** Show only the tickets in this work view; null shows every ticket. */
   view: WorkView | null;
+  /** One stage at a time, picked by tabs (AI-337). */
+  phone: boolean;
 }) {
   const navigate = useNavigate({ from: "/p/$projectId" });
   const move = useBoardMove(projectId);
@@ -217,6 +249,15 @@ function Lanes({
   const [errors, setErrors] = useState<Record<string, Error>>({});
   const [expanded, setExpanded] = useState<Stage[]>([]);
   const [overLane, setOverLane] = useState<Stage | null>(null);
+  const stages = boardStages(showCancelled);
+  // Picked once, when the board first loads; a tab click changes it after that.
+  const [phoneStage, setPhoneStage] = useState<Stage>(() =>
+    openingStage(stages, tickets, (t) =>
+      workViews(t, new Map(all.map((a) => [a.id, a]))).includes("needs-me"),
+    ),
+  );
+  // Cancelled can be hidden again while picked.
+  const shownStage = stages.includes(phoneStage) ? phoneStage : "in_progress";
   const suppressDropClick = useDropClickSuppression();
   const sensors = useSensors(
     useSensor(MouseSensor, { activationConstraint: { distance: 8 } }),
@@ -244,7 +285,6 @@ function Lanes({
   // Ungrouped is one group with no header.
   const groupCards = (cards: BoardTicket[]): EpicGroup<BoardTicket>[] =>
     grouped ? groupByEpic(cards, allById) : [{ epic: null, cards }];
-  const stages = boardStages(showCancelled);
 
   function laneOf(id: string | number | undefined): Stage | null {
     if (typeof id === "string" && isBacklogZone(id)) return "backlog";
@@ -317,6 +357,109 @@ function Lanes({
     }
   }
 
+  const lanesByStage = stages.map((stage) => {
+    const collapsible = !phone && COLLAPSED_STAGES.includes(stage);
+    const collapsed = collapsible && !expanded.includes(stage);
+    const toggle = () =>
+      setExpanded((e) => (e.includes(stage) ? e.filter((s) => s !== stage) : [...e, stage]));
+    const card = (t: BoardTicket) => (
+      <BoardCard
+        key={t.id}
+        ticket={t}
+        projectId={projectId}
+        blockers={openBlockers(t, byId)}
+        position={stage === "ready" ? lanes.ready.indexOf(t) + 1 : null}
+        next={t.id === next?.id}
+        now={now}
+        error={errors[t.id] ?? null}
+      />
+    );
+    // Backlog shows two parts (Up next, then Ideas); each is grouped on its own.
+    const split = stage === "backlog" ? splitBacklog(lanes.backlog) : null;
+    const parts = (split ? [split.upNext, split.ideas] : [shownIn(stage)]).map((cards) =>
+      groupCards(
+        cards.filter(
+          (t) =>
+            inEpic(t, epicId) &&
+            inView(t) &&
+            (stage !== "ready" || matchesReadyFilters(t, filters)),
+        ),
+      ),
+    );
+    // `ids` follows the order shown, so dnd-kit sorts what you see.
+    const ordered = parts.flat().flatMap((g) => g.cards);
+    const list = (groups: EpicGroup<BoardTicket>[]) =>
+      groups.map(({ epic, cards }) => (
+        <Fragment key={epic?.id ?? "none"}>
+          {grouped && (
+            <EpicGroupHeader
+              epic={epic}
+              progress={epic ? epicProgress(epic.id, all) : null}
+              milestone={epic ? milestones?.find((m) => m.id === milestoneOf(epic, all)) : null}
+            />
+          )}
+          {cards.map(card)}
+        </Fragment>
+      ));
+    const count = (groups: EpicGroup<BoardTicket>[]) =>
+      groups.reduce((n, g) => n + g.cards.length, 0);
+    const lane = (
+      <Lane
+        key={stage}
+        stage={stage}
+        ids={ordered.map((t) => t.id)}
+        collapsed={collapsed}
+        onToggle={collapsible ? toggle : undefined}
+        highlight={overLane === stage}
+        fill={phone}
+        top={
+          stage === "backlog" ? (
+            <QuickAdd projectId={projectId} />
+          ) : stage === "ready" ? (
+            <div className="flex flex-wrap items-center gap-2">
+              <ReadySortToggle
+                sorted={sortedByScore}
+                onToggle={() =>
+                  void navigate({
+                    search: {
+                      ...filters,
+                      view: view ?? undefined,
+                      sort: sortedByScore ? undefined : "score",
+                    },
+                  })
+                }
+              />
+              {/* The same filters as MCP list_ready (AI-343: the Ready page's, moved here). */}
+              <ReadyFilterMenu
+                filters={filters}
+                onChange={(next) =>
+                  void navigate({
+                    search: {
+                      sort: sortedByScore ? "score" : undefined,
+                      view: view ?? undefined,
+                      ...next,
+                    },
+                  })
+                }
+              />
+            </div>
+          ) : undefined
+        }
+      >
+        {!collapsed && split && (
+          <>
+            <LaneZone id={UP_NEXT_ZONE} label="Up next" count={count(parts[0]!)} />
+            {list(parts[0]!)}
+            <LaneZone id={IDEAS_ZONE} label="Ideas" count={count(parts[1]!)} />
+            {list(parts[1]!)}
+          </>
+        )}
+        {!collapsed && !split && list(parts[0]!)}
+      </Lane>
+    );
+    return { stage, count: ordered.length, lane };
+  });
+
   return (
     <DndContext
       sensors={sensors}
@@ -328,110 +471,25 @@ function Lanes({
       onDragCancel={() => setOverLane(null)}
       onDragEnd={(e) => void onDragEnd(e)}
     >
+      {phone && (
+        <Segmented
+          label="Stages"
+          value={shownStage}
+          className="relative flex-nowrap overflow-x-auto [scrollbar-width:none]"
+          options={lanesByStage.map(({ stage, count }) => ({
+            value: stage,
+            label: (
+              <>
+                {STAGE_LABELS[stage]} <span className="tabular-nums">{count}</span>
+              </>
+            ),
+          }))}
+          onChange={setPhoneStage}
+        />
+      )}
       {/* relative: keeps the lanes' sr-only text inside this scroller (AI-325) */}
       <div className="relative flex items-stretch gap-3 overflow-x-auto pb-2">
-        {stages.map((stage) => {
-          const collapsible = COLLAPSED_STAGES.includes(stage);
-          const collapsed = collapsible && !expanded.includes(stage);
-          const toggle = () =>
-            setExpanded((e) => (e.includes(stage) ? e.filter((s) => s !== stage) : [...e, stage]));
-          const card = (t: BoardTicket) => (
-            <BoardCard
-              key={t.id}
-              ticket={t}
-              projectId={projectId}
-              blockers={openBlockers(t, byId)}
-              position={stage === "ready" ? lanes.ready.indexOf(t) + 1 : null}
-              next={t.id === next?.id}
-              now={now}
-              error={errors[t.id] ?? null}
-            />
-          );
-          // Backlog shows two parts (Up next, then Ideas); each is grouped on its own.
-          const split = stage === "backlog" ? splitBacklog(lanes.backlog) : null;
-          const parts = (split ? [split.upNext, split.ideas] : [shownIn(stage)]).map((cards) =>
-            groupCards(
-              cards.filter(
-                (t) =>
-                  inEpic(t, epicId) &&
-                  inView(t) &&
-                  (stage !== "ready" || matchesReadyFilters(t, filters)),
-              ),
-            ),
-          );
-          // `ids` follows the order shown, so dnd-kit sorts what you see.
-          const ordered = parts.flat().flatMap((g) => g.cards);
-          const list = (groups: EpicGroup<BoardTicket>[]) =>
-            groups.map(({ epic, cards }) => (
-              <Fragment key={epic?.id ?? "none"}>
-                {grouped && (
-                  <EpicGroupHeader
-                    epic={epic}
-                    progress={epic ? epicProgress(epic.id, all) : null}
-                    milestone={
-                      epic ? milestones?.find((m) => m.id === milestoneOf(epic, all)) : null
-                    }
-                  />
-                )}
-                {cards.map(card)}
-              </Fragment>
-            ));
-          const count = (groups: EpicGroup<BoardTicket>[]) =>
-            groups.reduce((n, g) => n + g.cards.length, 0);
-          return (
-            <Lane
-              key={stage}
-              stage={stage}
-              ids={ordered.map((t) => t.id)}
-              collapsed={collapsed}
-              onToggle={collapsible ? toggle : undefined}
-              highlight={overLane === stage}
-              top={
-                stage === "backlog" ? (
-                  <QuickAdd projectId={projectId} />
-                ) : stage === "ready" ? (
-                  <div className="flex flex-wrap items-center gap-2">
-                    <ReadySortToggle
-                      sorted={sortedByScore}
-                      onToggle={() =>
-                        void navigate({
-                          search: {
-                            ...filters,
-                            view: view ?? undefined,
-                            sort: sortedByScore ? undefined : "score",
-                          },
-                        })
-                      }
-                    />
-                    {/* The same filters as MCP list_ready (AI-343: the Ready page's, moved here). */}
-                    <ReadyFilterMenu
-                      filters={filters}
-                      onChange={(next) =>
-                        void navigate({
-                          search: {
-                            sort: sortedByScore ? "score" : undefined,
-                            view: view ?? undefined,
-                            ...next,
-                          },
-                        })
-                      }
-                    />
-                  </div>
-                ) : undefined
-              }
-            >
-              {!collapsed && split && (
-                <>
-                  <LaneZone id={UP_NEXT_ZONE} label="Up next" count={count(parts[0]!)} />
-                  {list(parts[0]!)}
-                  <LaneZone id={IDEAS_ZONE} label="Ideas" count={count(parts[1]!)} />
-                  {list(parts[1]!)}
-                </>
-              )}
-              {!collapsed && !split && list(parts[0]!)}
-            </Lane>
-          );
-        })}
+        {lanesByStage.filter(({ stage }) => !phone || stage === shownStage).map((l) => l.lane)}
       </div>
     </DndContext>
   );
