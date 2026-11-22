@@ -141,7 +141,6 @@ export const PARITY: readonly ParityEntry[] = [
       "list_projects",
       "get_project_settings",
       "set_auto_build",
-      "set_auto_merge",
       "set_auto_refine",
       "set_daily_question_cap",
       "set_default_executor",

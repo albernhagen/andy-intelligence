@@ -2,7 +2,6 @@ import {
   NewTicket,
   PLAN_REASON_MAX,
   PlanApproval,
-  AutoMerge,
   Project,
   QuestionId,
   Stage,
@@ -89,13 +88,6 @@ const PlanApprovalInput = {
   project: ProjectKey,
   policy: PlanApproval.describe(
     "none: builds start without a plan. m-and-l: M and L tickets need an approved plan first. all: every ticket does.",
-  ),
-};
-
-const AutoMergeInput = {
-  project: ProjectKey,
-  policy: AutoMerge.describe(
-    "Which ticket sizes' agent PRs merge on their own once the gate passes: none, s, s-and-m or all. Vetoed PRs always wait for Andy.",
   ),
 };
 
@@ -318,25 +310,6 @@ export function registerCoreTools(server: McpServer, deps: ToolDeps, run: Run): 
           { actor: deps.actor, email: deps.email },
         );
         return { project: updated.key, planApproval: updated.planApproval };
-      }),
-  );
-
-  server.registerTool(
-    "set_auto_merge",
-    {
-      description:
-        "Sets which ticket sizes' agent PRs the control plane merges on its own once the gate passes: none, s, s-and-m (default for new projects) or all. Andy only. While a project's merge mode is unset it is read from this, so over MCP this may not loosen that mode (ADR-0124): change it on the project settings page.",
-      inputSchema: AutoMergeInput,
-      annotations: { destructiveHint: false, idempotentHint: true },
-    },
-    ({ project, policy }) =>
-      run(async () => {
-        // ADR-0124: while the merge mode is read from auto-merge, MCP may not loosen it.
-        const updated = await deps.projects.setAutoMergeOverMcp(project.toLowerCase(), policy, {
-          actor: deps.actor,
-          email: deps.email,
-        });
-        return { project: updated.key, autoMerge: updated.autoMerge };
       }),
   );
 

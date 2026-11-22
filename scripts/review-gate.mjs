@@ -34,8 +34,9 @@ export const ROLES = {
     title: "Adversarial review",
     label: "review-accepted",
     severities: ["blocker", "should-fix", "question"],
-    blocking: ["blocker"],
-    blockingName: "blocker",
+    // Should-fix fails too, so a passing check means a clean PR for the merge verdict (ADR-0134).
+    blocking: ["blocker", "should-fix"],
+    blockingName: "blocker or should-fix",
     detail: { field: "scenario", heading: "Failing scenario" },
     procedure: "platform/procedures/adversarial-review.md",
   },

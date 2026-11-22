@@ -226,6 +226,8 @@ export class GitHubCodeHost implements CodeHost {
       headSha: pr.head.sha,
       baseRef: pr.base.ref,
       url: pr.html_url,
+      // AI-215: the merge verdict waits on `review-accepted` / `security-accepted`.
+      labels: (pr.labels ?? []).slice(0, 100).map((l) => (l.name ?? "").slice(0, 100)),
     });
   }
 

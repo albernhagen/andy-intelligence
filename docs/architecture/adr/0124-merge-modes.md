@@ -1,6 +1,6 @@
 ---
 title: Merge modes: one project setting decides who merges
-status: proposed (AI-213; Andy decides at review)
+status: proposed (AI-213; Andy decides at review); amended by 0134
 date: 2026-11-20
 amends: 0050 (`autoMerge`), 0078, 0088, 0092, 0120 (who merges), 0107 (night runs)
 ---
