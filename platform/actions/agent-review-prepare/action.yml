@@ -149,10 +149,14 @@ runs:
         BASE_REF: ${{ github.event.pull_request.base.ref }}
         BASELINE: ${{ steps.root.outputs.dir }}
       run: |
+        # The same comment agent-review-finish reads and updates: the first with this marker.
         PREVIOUS_FILE="$RUNNER_TEMP/previous-review.md"
-        gh api "repos/$GITHUB_REPOSITORY/issues/$PR/comments" --paginate \
-          --jq ".[] | select(.user.login == \"github-actions[bot]\" and (.body | startswith(\"$MARKER\"))) | .body" \
-          > "$PREVIOUS_FILE"
+        : > "$PREVIOUS_FILE"
+        id=$(gh api "repos/$GITHUB_REPOSITORY/issues/$PR/comments" --paginate \
+          --jq ".[] | select(.user.login == \"github-actions[bot]\" and (.body | startswith(\"$MARKER\"))) | .id" | head -1)
+        if [ -n "$id" ]; then
+          gh api "repos/$GITHUB_REPOSITORY/issues/comments/$id" --jq .body > "$PREVIOUS_FILE"
+        fi
         export PREVIOUS_FILE
         node "$BASELINE/scripts/review-carry.mjs" | tee -a "$GITHUB_OUTPUT"
 

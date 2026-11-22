@@ -29,7 +29,7 @@ Applies to this repo now (M1.10: Security review automation) and to every manage
 | Security-review agent | Every PR push | Read-only agent reviews the diff against the threat model and ADRs: authn/authz, IAM, secrets, injection incl. prompt injection, workflow permissions, public-repo exposure, cost abuse | One PR comment, findings by severity | High/critical, unless Andy labels `security-accepted` with a reason |
 | System security review agent | End of each milestone; weekly if anything merged; on demand | Reads repo, threat model, ADRs, Terraform IAM, `terraform plan` drift; looks for risks no single PR shows | PR updating `docs/security/threat-model.md` and risk files | Milestone can't close with open high/critical risks unless Andy accepts them |
 
-**Agent guardrails:** same-repo PRs only (never forks, never `pull_request_target`); token `contents: read` + `pull-requests: write`; no shell or network tools; PR content is untrusted data. If the agent can't run, its check is neutral and Andy decides. Reviewer is a separate session from the implementer; from M9 a different vendor.
+**Agent guardrails:** same-repo PRs only (never forks, never `pull_request_target`); token `contents: read` + `pull-requests: write`; no shell or network tools; PR content is untrusted data. A skip by design (docs-only, draft, Dependabot) passes; a review that should run and doesn't fails its check unless Andy adds the override label, and a re-sync merge carries the verdict only when the PR's diff is unchanged (ADR-0139). Reviewer is a separate session from the implementer; from M9 a different vendor.
 
 **Implementation (ADR-0030: Security review automation choices):**
 

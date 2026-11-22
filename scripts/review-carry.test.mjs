@@ -1,4 +1,5 @@
-import { mkdtempSync, writeFileSync } from "node:fs";
+import { chmodSync, mkdtempSync, writeFileSync } from "node:fs";
+import { Buffer } from "node:buffer";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
@@ -24,25 +25,29 @@ function repo() {
   dev(["init", "-q", "-b", "main"]);
   write("app.js", "one\ntwo\nthree\nfour\nfive\nsix\nseven\neight\n");
   write("other.js", "a\n");
+  write("logo.bin", Buffer.from([0, 1, 2]));
   commit(dev, "base");
   dev(["checkout", "-q", "-b", "pr"]);
   write("app.js", "one\ntwo\nthree\nfour\nfive\nsix\nseven\neight changed by the PR\n");
+  write("logo.bin", Buffer.from([0, 1, 3]));
   const reviewed = commit(dev, "pr change");
   dev(["checkout", "-q", "main"]);
   write("other.js", "a\nb from main\n");
   const mainTip = commit(dev, "main moves on");
   dev(["update-ref", "refs/remotes/origin/main", mainTip]);
   dev(["checkout", "-q", "pr"]);
-  return { dir, raw, dev, bot, write, commit, reviewed, mainTip };
+  const chmod = (file, mode) => chmodSync(join(dir, file), mode);
+  return { dir, raw, dev, bot, write, chmod, commit, reviewed, mainTip };
 }
 
 const verdict = (sha, heading = "✅ Adversarial review: no blocker findings") =>
   `<!-- adversarial-review -->\n<!-- reviewed-sha: ${sha} -->\n### ${heading}\n\nblocker 0`;
 
 /** The re-sync bot merges main into the PR, as GitHub's update-branch does. */
-function botMerge(r, { extraEdit } = {}) {
+function botMerge(r, { extraEdit, also } = {}) {
   r.bot(["merge", "-q", "--no-ff", "--no-commit", "main"]);
   if (extraEdit) r.write("app.js", extraEdit);
+  if (also) also(r);
   return r.commit(r.bot, "Merge branch 'main' into pr");
 }
 
@@ -103,6 +108,24 @@ describe("decide", () => {
     expect(decide({ git: r.raw, previous: verdict(r.reviewed), head, baseRef: "main" }).carry).toBe(
       false,
     );
+  });
+
+  it("GivenAModeOnlyChangeInTheMerge_WhenDecided_ThenNothingCarries", () => {
+    const r = repo();
+    const head = botMerge(r, { also: (x) => x.chmod("app.js", 0o755) });
+    expect(decide({ git: r.raw, previous: verdict(r.reviewed), head, baseRef: "main" })).toEqual({
+      carry: false,
+      reason: "its merge changed the PR's own diff",
+    });
+  });
+
+  it("GivenABinaryChangeInTheMerge_WhenDecided_ThenNothingCarries", () => {
+    const r = repo();
+    const head = botMerge(r, { also: (x) => x.write("logo.bin", Buffer.from([0, 1, 4])) });
+    expect(decide({ git: r.raw, previous: verdict(r.reviewed), head, baseRef: "main" })).toEqual({
+      carry: false,
+      reason: "its merge changed the PR's own diff",
+    });
   });
 
   it("GivenABotCommitThatIsNotAMerge_WhenDecided_ThenNothingCarries", () => {

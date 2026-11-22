@@ -49,5 +49,6 @@ Why option 1 can't slip unreviewed changes in: the carried verdict covers exactl
 
 - PRs updated by the re-sync bot keep their verdicts, at no quota cost. A re-sync whose merge changed the PR's diff fails the check until a person pushes.
 - Repos without the Claude token, including the onboarding scratch repo, now fail both review checks until the token is set, or until Andy adds the label.
+- Agent PRs (`agent/*`, opened and pushed by the control-plane App) never got a real review: the action refuses the App, and the check passed as neutral (e.g. PR #101). Now both checks fail on them, so they need a person's push or Andy's labels until the review action allows the App on agent PRs. That is a separate decision (follow-up). Project AI's `autoMerge` is `none`, so nothing merges on its own meanwhile.
 - A quota outage now blocks merges instead of passing them. Andy's override label is the escape.
 - CI still runs on the merged head, so a semantic clash between `main` and the PR is CI's to catch, as before.
