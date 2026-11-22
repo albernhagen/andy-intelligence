@@ -54,7 +54,13 @@ export function EmailNotificationsControl({ project }: { project: Project }) {
           {test.isSuccess ? "Test sent" : "Send test email"}
         </Button>
       )}
-      {status.error && <QueryError error={status.error} />}
+      {status.error && (
+        <QueryError
+          error={status.error}
+          what="the email status"
+          onRetry={() => void status.refetch()}
+        />
+      )}
       {update.error && <QueryError error={update.error} />}
       {test.error && <QueryError error={test.error} />}
     </>
