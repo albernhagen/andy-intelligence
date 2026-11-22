@@ -6,12 +6,15 @@ import type { HarnessKey, ProviderKey, Route } from "@andy/contracts";
  * M9.7 (settings API and MCP) call `routeProblem` at resolve time and on save.
  */
 
-/** The one provider each harness may run on. */
-export const HARNESS_PROVIDER: Readonly<Record<HarnessKey, ProviderKey>> = {
-  "claude-code": "claude-sub",
-  jules: "google-sub",
-  opencode: "openrouter",
-  direct: "openrouter",
+/**
+ * The providers each harness may run on: Claude Code on the subscription or, pay-per-use, an API
+ * key (`claude-api`, AI-260).
+ */
+export const HARNESS_PROVIDERS: Readonly<Record<HarnessKey, readonly ProviderKey[]>> = {
+  "claude-code": ["claude-sub", "claude-api"],
+  jules: ["google-sub"],
+  opencode: ["openrouter"],
+  direct: ["openrouter"],
 };
 
 export const ROUTE_MODEL_MAX = 100;
@@ -31,9 +34,9 @@ export function isClaudeModel(model: string): boolean {
 /** Why `route` can't run, or null when it can. The reason names what is wrong. */
 export function routeProblem(route: Route): string | null {
   const { harness, provider, model } = route;
-  const expected = HARNESS_PROVIDER[harness];
-  if (provider !== expected) {
-    return `harness ${harness} doesn't run on provider ${provider} (it needs ${expected})`;
+  const expected = HARNESS_PROVIDERS[harness];
+  if (!expected.includes(provider)) {
+    return `harness ${harness} doesn't run on provider ${provider} (it needs ${expected.join(" or ")})`;
   }
   const id = model.trim();
   if (id === "") return "the model id is empty";

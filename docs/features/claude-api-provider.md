@@ -1,0 +1,5 @@
+# API-key Claude provider
+
+`claude-api` runs Claude Code on an Anthropic API key instead of the subscription, billed pay-per-use. It is off until Andy enables it in routing. Each task reserves its per-task cap in the spend ledger first. The executor checks that the credential matches the run's billing: a pay-per-use run gets the API key, never the subscription token. Claude Code then runs under `--max-budget-usd`: the reservation less $0.25 for each of the executor's short check calls, which run under that cap and count in full when the task settles. The local runner never runs it. A missing key, a mismatched credential or a missing reservation stops the task before the agent starts. An API-key run's rate limits never count as subscription quota. No model has a price yet, so it can't start a task until prices exist.
+
+**How to use:** nothing yet. Andy adds the key and the Console workspace limit (M10.16: Claude API key and workspace spend limit), then turns `claude-api` on in routing settings.
