@@ -2,6 +2,7 @@ import { useParams } from "@tanstack/react-router";
 import type { Project } from "@andy/contracts";
 import { ConfigChanges } from "@/components/ConfigChanges";
 import { InboxTicketCard } from "@/components/inbox/InboxTicketCard";
+import { MergesWaiting } from "@/components/inbox/MergesWaiting";
 import { ProjectPlansWaiting, useWaitingPlans } from "@/components/ProjectPlan";
 import { Loading, QueryError } from "@/components/Status";
 import { cardCount, inboxCards, type InboxCard } from "@/lib/needs-you";
@@ -29,7 +30,9 @@ export function InboxPage() {
     );
 
   const { active, stale } = inboxCards(needsYou.data, projectId);
-  const total = sum([...active, ...stale]) + plans.shown.length;
+  const { waitingMerges } = needsYou.data;
+  const merges = waitingMerges.merges.filter((m) => !projectId || m.projectId === projectId);
+  const total = sum([...active, ...stale]) + plans.shown.length + merges.length;
 
   return (
     <section className="space-y-4">
@@ -37,6 +40,7 @@ export function InboxPage() {
         Needs you <span className="text-muted-foreground tabular-nums">{total}</span>
       </h2>
       <ProjectPlansWaiting projectId={projectId} />
+      <MergesWaiting merges={merges} truncated={waitingMerges.truncated} />
       {total === 0 && <p className="text-muted-foreground">Nothing needs you.</p>}
       {projectId ? (
         <Cards cards={active} />
