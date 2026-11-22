@@ -73,9 +73,9 @@ describe("What's new page", () => {
     expect(regions.indexOf("Status")).toBeLessThan(regions.indexOf("Changes"));
   });
 
-  it("GivenAMilestoneFilter_WhenPicked_ThenOnlyItsChanges", async () => {
+  it("GivenAnEpicFilter_WhenPicked_ThenOnlyItsChanges", async () => {
     const harness = await seeded("/p/ai/whats-new");
-    await harness.user.selectOptions(await screen.findByLabelText("Milestone"), "AI-1");
+    await harness.user.selectOptions(await screen.findByLabelText("Epic"), "AI-1");
     await waitFor(() => expect(screen.queryByText("PR title 8")).toBeNull());
     expect(screen.getByText("Andy sees the board by epic.")).toBeTruthy();
   });
