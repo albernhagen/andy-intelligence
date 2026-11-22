@@ -7,6 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { formatQuotaDelta } from "@/components/TicketCostLine";
 import { isActiveRun, useDecidePlan, useStartRun } from "@/lib/queries";
+import { count, dateTime, elapsed } from "@/lib/format";
 
 type TicketPath = { projectId: string; ticketId: string };
 
@@ -183,7 +184,7 @@ function PlanDecision({ runId, path }: { runId: string; path: TicketPath }) {
 function Time({ label, iso }: { label: string; iso: string }) {
   return (
     <span className="text-muted-foreground">
-      {label} <time dateTime={iso}>{new Date(iso).toLocaleString()}</time>
+      {label} <time dateTime={iso}>{dateTime(iso)}</time>
     </span>
   );
 }
@@ -216,7 +217,7 @@ export function httpsHref(url: string | undefined): string | undefined {
 }
 
 export function formatTokens(run: Pick<Run, "tokensIn" | "tokensOut">): string {
-  const n = (v: number | null) => (v === null ? "—" : v.toLocaleString());
+  const n = (v: number | null) => (v === null ? "—" : count(v));
   return `${n(run.tokensIn)} in / ${n(run.tokensOut)} out tokens`;
 }
 
@@ -225,10 +226,10 @@ export function formatUsage(run: Pick<Run, "usage" | "quotaDelta">): string {
   const u = run.usage;
   const quota = run.quotaDelta && formatQuotaDelta(run.quotaDelta);
   return [
-    u && `${u.cacheReadTokens.toLocaleString()} cache read`,
-    u && `${u.cacheWriteTokens.toLocaleString()} cache write`,
+    u && `${count(u.cacheReadTokens)} cache read`,
+    u && `${count(u.cacheWriteTokens)} cache write`,
     u && u.turns !== null && `${u.turns} turns`,
-    u && u.wallMs !== null && `${Math.round(u.wallMs / 1000)}s`,
+    u && u.wallMs !== null && elapsed(u.wallMs),
     quota && `quota ${quota}`,
   ]
     .filter(Boolean)
