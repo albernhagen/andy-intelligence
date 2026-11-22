@@ -12,27 +12,17 @@ function atLevel(status: QuotaStatus): string {
 }
 
 /**
- * Persistent while the level holds; there is no dismiss control (§7). Wraps at 390 px (AI-176). At the pause level dispatch
+ * Shown only at warn or pause, when there is something to know or do (AI-335 review, AI-328): an
+ * unknown reading is said once, by the header gauge. Persistent while the level holds; there is no dismiss control (§7). Wraps at 390 px (AI-176). At the pause level dispatch
  * starts nothing new (ADR-0079), and Andy can clear a reading he doesn't believe (AI-74). A failed
- * fetch counts as unknown.
+ * fetch counts as unknown, so it shows no banner either.
  */
 export function QuotaBanner() {
   const quota = useQuota();
   if (quota.isPending) return null;
   const status = quota.data;
-  const level = status?.level ?? "unknown";
-  if (level === "ok") return null;
-
-  if (level === "unknown" || !status) {
-    return (
-      <p
-        role="status"
-        className="border-b border-border px-4 py-1.5 text-xs break-words text-muted-foreground sm:px-6"
-      >
-        Claude quota unknown: no fresh reading. Don&apos;t assume there is headroom.
-      </p>
-    );
-  }
+  if (!status || status.level === "ok" || status.level === "unknown") return null;
+  const level = status.level;
   const pause = level === "pause";
   return (
     <p
