@@ -46,12 +46,13 @@ jobs:
             docs/security/
             docs/security/risks/
           has-token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN != '' }}
+          resync-bot: andy-intelligence-control[bot] # ADR-0111 re-sync App; ADR-0139
           github-token: ${{ github.token }}
 
       - name: Security-review agent
         id: review
         if: steps.prep.outputs.mode == 'review'
-        continue-on-error: true # agent failure → neutral check, Andy decides (ADR-0025)
+        continue-on-error: true # agent failure → Finish posts "not reviewed" and fails the check (ADR-0139)
         timeout-minutes: 15
         uses: anthropics/claude-code-action@4fa93a88de49bbef68b10eb15aabedf28ca0e1ed # v1.0.271
         with:
@@ -79,6 +80,7 @@ jobs:
           mode: ${{ steps.prep.outputs.mode }}
           reason: ${{ steps.prep.outputs.reason }}
           accepted: ${{ steps.prep.outputs.accepted }}
+          carried-from: ${{ steps.prep.outputs.carried-from }}
           agent-outcome: ${{ steps.review.outcome }}
           findings: ${{ steps.review.outputs.structured_output }}
           execution-file: ${{ steps.review.outputs.execution_file }}

@@ -1,6 +1,6 @@
 ---
 title: Adversarial PR review
-status: accepted, amended by 0040
+status: accepted, amended by 0040, 0139 (not reviewed fails the check)
 date: 2026-10-27
 amends: 0025
 ---

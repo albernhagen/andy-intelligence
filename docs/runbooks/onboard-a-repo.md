@@ -56,7 +56,7 @@ node platform/baseline/baseline.mjs onboard albernhagen/<name> --ref v1.0.0
 
 Then:
 
-1. Reviewer token (the review agents report "not reviewed" until it is set; nothing else needs it). Never paste it into chat or a file:
+1. Reviewer token (until it is set, the review agents report "not reviewed" and their checks fail, ADR-0139; nothing else needs it). Never paste it into chat or a file:
    ```sh
    claude setup-token
    gh secret set CLAUDE_CODE_OAUTH_TOKEN --repo albernhagen/<name>
@@ -86,7 +86,7 @@ node platform/baseline/baseline.mjs files albernhagen/<name> --ref v1.1.0
 
 ## 5. M1.16: Project baseline v1 demo ("Done when")
 
-Run it before merging, from the PR branch. The scratch repo gets no Claude token, so both review agents report a neutral "not reviewed" under the same check names and use no quota.
+Run it before merging, from the PR branch. The scratch repo gets no Claude token, so both review agents report "not reviewed" under the same check names and use no quota. Since ADR-0139 those two checks fail; add `security-accepted` and `review-accepted` to the test PR.
 
 ```sh
 git fetch origin m1.16/project-baseline
@@ -103,7 +103,7 @@ git commit -am "test: demo change" && git push -u origin HEAD
 gh pr create --fill && gh pr checks --watch
 ```
 
-1. **Same checks as andy-intelligence:** `check`, `actionlint`, `terraform`, `trufflehog`, `codeql (javascript-typescript)`, `codeql (actions)`, `dependency-review`, `terraform-misconfig`, `security-review`, `adversarial-review` all pass (`terraform` ones with a "no infra/" notice; reviews "not reviewed").
+1. **Same checks as andy-intelligence:** `check`, `actionlint`, `terraform`, `trufflehog`, `codeql (javascript-typescript)`, `codeql (actions)`, `dependency-review`, `terraform-misconfig`, `security-review`, `adversarial-review` all pass (`terraform` ones with a "no infra/" notice; reviews "not reviewed", passing on the two labels).
 2. **No drift:** `node platform/baseline/baseline.mjs check albernhagen/baseline-scratch` → every line `ok`, exit 0.
 3. **Hand change shows as drift:** Settings → Actions → General → Workflow permissions → **Read and write** → Save. `check` again → `actions: drift`, `workflow.default_workflow_permissions: want "read", have "write"`, exit 1. `apply` puts it back.
 4. Clean up: `gh auth refresh -s delete_repo` (once), then `gh repo delete albernhagen/baseline-scratch --yes`.

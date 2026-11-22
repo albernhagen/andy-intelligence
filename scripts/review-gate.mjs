@@ -4,12 +4,19 @@
 // come from an agent that read untrusted PR content, so every field is sanitized before it
 // reaches the comment. One config per role; the plumbing is shared.
 //
-// Env: ROLE (security | adversarial), MODE (review | unavailable | fork), ACCEPTED ("true" when
-// the role's override label is on the PR), FINDINGS (the agent's JSON), REASON (why the agent
-// didn't run), SHA, EXECUTION_FILE (the action's message log; its result message gives usage).
-// Writes the comment body to the path in argv[2]; exit code 1 means the check fails.
+// Env: ROLE (security | adversarial), MODE (review | carried | skipped | unavailable | fork),
+// ACCEPTED ("true" when the role's override label is on the PR), FINDINGS (the agent's JSON),
+// REASON (why the agent didn't run), SHA, EXECUTION_FILE (the action's message log; its result
+// message gives usage), PREVIOUS_FILE and CARRIED_FROM (carried mode: the previous comment and
+// the SHA it reviewed, ADR-0139). Writes the comment body to the path in argv[2]; exit code 1
+// means the check fails.
+//
+// Modes (ADR-0139): `skipped` is a skip by design (docs-only, draft, Dependabot) and passes;
+// `unavailable` means the review should have run and didn't (no token, agent failure, a re-sync
+// commit that changed the PR), and fails unless Andy adds the override label.
 import { readFileSync, writeFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
+import { passingVerdict } from "./review-carry.mjs";
 
 export const ROLES = {
   security: {
@@ -122,6 +129,8 @@ export function evaluate({
   reason,
   sha,
   usage = "",
+  previous = "",
+  carriedFrom = "",
 }) {
   const role = ROLES[roleKey];
   if (!role) throw new Error(`unknown review role: ${roleKey}`);
@@ -138,12 +147,34 @@ export function evaluate({
     };
   }
 
+  if (mode === "skipped") {
+    return {
+      pass: true,
+      body: `${head}### ⏭️ ${role.title}: skipped\n\nNot run by design: ${sanitize(reason) || "unknown reason"}. The check passes; read the diff yourself.${footer}`,
+    };
+  }
+
+  if (mode === "carried") {
+    if (passingVerdict(previous, carriedFrom)) {
+      const note = `\n\n<sub>Carried forward from ${sanitize(carriedFrom)} to ${safeSha}: the re-sync bot merged the base branch and the PR's own diff is unchanged (ADR-0139).</sub>`;
+      return {
+        pass: true,
+        body: `${previous.replace(reviewedShaMarker(carriedFrom), reviewedShaMarker(safeSha)).trimEnd()}${note}`,
+      };
+    }
+    mode = "unavailable";
+    reason = "the earlier verdict to carry forward is missing or did not pass";
+  }
+
   const parsed = mode === "review" ? parseFindings(raw, role) : null;
   if (parsed === null) {
     const why = mode === "review" ? "the agent returned no valid findings" : sanitize(reason);
+    const outcome = accepted
+      ? `The check passes: Andy added \`${role.label}\`.`
+      : `The check fails until a review runs on this head, or Andy adds \`${role.label}\`.`;
     return {
-      pass: true,
-      body: `${head}### ⚠️ ${role.title}: not reviewed\n\nThe agent didn't run: ${why || "unknown reason"}. The check is neutral (passes); Andy decides.${footer}`,
+      pass: accepted,
+      body: `${head}### ❌ ${role.title}: not reviewed\n\nThe agent didn't run: ${why || "unknown reason"}. ${outcome}${footer}`,
     };
   }
 
@@ -179,6 +210,15 @@ function readExecutionFile(path) {
   }
 }
 
+function readText(path) {
+  if (!path) return "";
+  try {
+    return readFileSync(path, "utf8");
+  } catch {
+    return "";
+  }
+}
+
 function main() {
   const result = evaluate({
     role: process.env.ROLE,
@@ -188,6 +228,8 @@ function main() {
     reason: process.env.REASON,
     sha: process.env.SHA,
     usage: usageLine(readExecutionFile(process.env.EXECUTION_FILE)),
+    previous: readText(process.env.PREVIOUS_FILE),
+    carriedFrom: process.env.CARRIED_FROM ?? "",
   });
   writeFileSync(process.argv[2], result.body);
   process.stdout.write(`${result.body}\n`);

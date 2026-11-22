@@ -2,7 +2,8 @@ name: Agent review — finish
 description: >-
   Shared second half of a PR review agent (ADR-0025, ADR-0026, ADR-0037): gate the agent's
   findings (scripts/review-gate.mjs), update the role's sticky PR comment, and fail the job on
-  unaccepted blocking findings. An agent that didn't run or failed gives a neutral pass.
+  unaccepted blocking findings. A review that should have run and didn't fails the check
+  (ADR-0139); a skip by design (docs-only, draft, Dependabot) passes.
 
 inputs:
   role:
@@ -20,6 +21,9 @@ inputs:
   accepted:
     description: Output of agent-review-prepare.
     required: true
+  carried-from:
+    description: Output of agent-review-prepare (carried mode).
+    default: ""
   agent-outcome:
     description: Outcome of the agent step (success | failure | cancelled | skipped).
     default: skipped
@@ -51,6 +55,7 @@ runs:
         FINDINGS: ${{ inputs.findings }}
         EXECUTION_FILE: ${{ inputs.execution-file }}
         SHA: ${{ github.event.pull_request.head.sha }}
+        CARRIED_FROM: ${{ inputs.carried-from }}
       run: |
         # Gate script from the same commit as this action (pinned baseline, or this workspace).
         BASELINE=$(cd "$GITHUB_ACTION_PATH/../../.." && pwd)
@@ -60,15 +65,24 @@ runs:
           MODE=unavailable
           REASON="the agent run failed (quota, outage or error); see the run log"
         fi
-        export MODE REASON
+        # Fork PRs get a read-only token, so they get no comment.
+        id=""
+        if [ "$MODE" != fork ]; then
+          id=$(gh api "repos/$GITHUB_REPOSITORY/issues/$PR/comments" --paginate \
+            --jq ".[] | select(.user.login == \"github-actions[bot]\" and (.body | startswith(\"$MARKER\"))) | .id" | head -1)
+        fi
+        # Carried mode: the gate re-checks that the previous comment passed on CARRIED_FROM.
+        PREVIOUS_FILE="$RUNNER_TEMP/$ROLE-previous.md"
+        : > "$PREVIOUS_FILE"
+        if [ "$MODE" = carried ] && [ -n "$id" ]; then
+          gh api "repos/$GITHUB_REPOSITORY/issues/comments/$id" --jq .body > "$PREVIOUS_FILE"
+        fi
+        export MODE REASON PREVIOUS_FILE
         body="$RUNNER_TEMP/$ROLE-review.md"
         status=0
         node "$BASELINE/scripts/review-gate.mjs" "$body" || status=$?
 
-        # Fork PRs get a read-only token, so they get no comment.
         if [ "$MODE" != fork ]; then
-          id=$(gh api "repos/$GITHUB_REPOSITORY/issues/$PR/comments" --paginate \
-            --jq ".[] | select(.user.login == \"github-actions[bot]\" and (.body | startswith(\"$MARKER\"))) | .id" | head -1)
           if [ -n "$id" ]; then
             gh api -X PATCH "repos/$GITHUB_REPOSITORY/issues/comments/$id" -F "body=@$body" > /dev/null
           else
@@ -77,6 +91,6 @@ runs:
         fi
 
         if [ "$status" -ne 0 ]; then
-          echo "::error title=$ROLE-review::Blocking findings. Fix them or reply with evidence, or Andy adds the override label with a reason in the PR."
+          echo "::error title=$ROLE-review::Blocking findings, or no review of this head (see the PR comment). Fix them, or push so the review runs, or Andy adds the override label with a reason in the PR."
           exit 1
         fi

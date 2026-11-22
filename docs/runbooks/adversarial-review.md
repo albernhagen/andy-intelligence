@@ -55,8 +55,10 @@ gh pr create --title "test: adversarial review demo (do not merge)" --body "Plan
 
 ## Troubleshooting
 
-| Symptom                                     | Cause / fix                                                                                   |
-| ------------------------------------------- | --------------------------------------------------------------------------------------------- |
-| "not reviewed" comment, check passes        | Agent couldn't run (draft, Dependabot, docs-only, no token, quota). Expected; review by hand. |
-| Blocker you disagree with keeps coming back | By design: only a fix clears it. Add `review-accepted` and write the reason in the PR.        |
-| Review missed changes after a force-push    | A force-push drops the previous review commit, so the next run reviews the whole PR again.    |
+| Symptom                                     | Cause / fix                                                                                                                                                                           |
+| ------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| "skipped" comment, check passes             | Skip by design (draft, Dependabot, docs-only). Review the diff by hand.                                                                                                               |
+| "not reviewed" comment, check fails         | Should have run and didn't (no token, quota, agent error, or a re-sync merge that changed the PR's diff): push a commit to re-run, or add `review-accepted` with a reason (ADR-0139). |
+| "Carried forward from …" note               | The re-sync bot merged `main` and the PR's own diff was unchanged, so the earlier verdict covers the new head (ADR-0139).                                                             |
+| Blocker you disagree with keeps coming back | By design: only a fix clears it. Add `review-accepted` and write the reason in the PR.                                                                                                |
+| Review missed changes after a force-push    | A force-push drops the previous review commit, so the next run reviews the whole PR again.                                                                                            |
