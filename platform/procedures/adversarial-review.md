@@ -57,7 +57,7 @@ When `.review/new-commits.diff` exists:
 | Severity   | Meaning                                                                                                      | Check                                                                                    |
 | ---------- | ------------------------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------- |
 | blocker    | Merging causes wrong behavior, data loss, a broken build or deploy, or breaks a rule in `AGENTS.md` / an ADR | Fails `adversarial-review` unless Andy adds `review-accepted` (removed on the next push) |
-| should-fix | Real problem with a scenario, but not worth blocking (e.g. a missing edge-case test)                         | Comment only                                                                             |
+| should-fix | Real problem with a scenario, less severe (e.g. a missing edge-case test)                                    | Fails it too (ADR-0134)                                                                  |
 | question   | You can't tell from the code whether it's right; say what would settle it                                    | Comment only                                                                             |
 
 ## Output

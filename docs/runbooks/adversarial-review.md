@@ -4,9 +4,9 @@ Manual steps for the per-PR adversarial-review agent (ADR-0026: Adversarial PR r
 
 | Term                     | Meaning                                                                                                                                                                                                             |
 | ------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `blocker`                | A finding with a failing scenario that should stop the merge. Fails the `adversarial-review` check.                                                                                                                 |
+| `blocker`                | A finding with a failing scenario that should stop the merge. Fails the `adversarial-review` check; so does an open `should-fix` (ADR-0134).                                                                        |
 | `should-fix`, `question` | Shown in the comment only; the check passes.                                                                                                                                                                        |
-| `review-accepted`        | PR label: Andy accepts the open blockers. Write why in the PR. Removed automatically on the next push.                                                                                                              |
+| `review-accepted`        | PR label: Andy accepts the open blockers and should-fix findings. Write why in the PR. Removed automatically on the next push.                                                                                      |
 | Re-review                | Each push reviews only the new commits plus the open findings, with replies from you and collaborators as context. Only a commit that fixes a blocker clears it; replies can settle questions and should-fix items. |
 
 ## 1. Label (once)
@@ -59,6 +59,7 @@ gh pr create --title "test: adversarial review demo (do not merge)" --body "Plan
 | ------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | "skipped" comment, check passes             | Skip by design (draft, Dependabot, docs-only). Review the diff by hand.                                                                                                               |
 | "not reviewed" comment, check fails         | Should have run and didn't (no token, quota, agent error, or a re-sync merge that changed the PR's diff): push a commit to re-run, or add `review-accepted` with a reason (ADR-0140). |
+| Agent PR (`agent/*`) reviewed               | The App may start the reviews on its own agent branches only (ADR-0141); any other bot's run fails "not reviewed".                                                                    |
 | "Carried forward from …" note               | The re-sync bot merged `main` and the PR's own diff was unchanged, so the earlier verdict covers the new head (ADR-0140).                                                             |
 | Blocker you disagree with keeps coming back | By design: only a fix clears it. Add `review-accepted` and write the reason in the PR.                                                                                                |
 | Review missed changes after a force-push    | A force-push drops the previous review commit, so the next run reviews the whole PR again.                                                                                            |

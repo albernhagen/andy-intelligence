@@ -5,7 +5,6 @@ import {
   codeownersGlobs,
   decideGate,
   outsideDocs,
-  policyAllows,
   protectedFiles,
   type GateFacts,
 } from "./gate";
@@ -123,20 +122,6 @@ describe("codeownersGlobs", () => {
     expect(hit("db/schema.sql")).toBe(true);
     expect(hit("apps/secrets/key.ts")).toBe(true);
     expect(hit("apps/web/billing.ts")).toBe(false);
-  });
-});
-
-describe("policyAllows", () => {
-  it.each([
-    ["none", "S", false],
-    ["s", "S", true],
-    ["s", "M", false],
-    ["s-and-m", "M", true],
-    ["s-and-m", "L", false],
-    ["all", "L", true],
-    ["all", null, false],
-  ] as const)("GivenPolicy_%s_AndSize_%s_WhenChecked_Then_%s", (policy, size, allowed) => {
-    expect(policyAllows(policy, size)).toBe(allowed);
   });
 });
 

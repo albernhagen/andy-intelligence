@@ -109,9 +109,8 @@ describe("get_project_settings", () => {
       planApproval: "m-and-l",
       autoRefine: false,
       dailyQuestionCap: 7,
-      autoMerge: "s",
       mergeMode: "epic",
-      mergeModeSet: true,
+      suggestedMergeMode: null,
       runsAtOnce: 3,
       paused: true,
       defaultWorker: "ask",
@@ -221,20 +220,35 @@ describe("set_environments (AI-160)", () => {
 
 /** ADR-0124: merge modes, stored only (AI-214). The page's PATCH and MCP share one rule (AI-40). */
 describe("set_merge_mode and the settings route", () => {
-  const log = async (ctx: Awaited<ReturnType<typeof setup>>) =>
-    (await ctx.call("list_settings_changes", { project: "AI" })).data;
+  const log = async (ctx: Awaited<ReturnType<typeof setup>>, project = "AI") =>
+    (await ctx.call("list_settings_changes", { project })).data;
 
-  it("GivenAProjectStoredBeforeTheSetting_WhenRead_ThenItsModeComesFromAutoMerge", async () => {
+  it("GivenAProjectStoredBeforeTheSetting_WhenRead_ThenNoModeIsInForceAndOneIsSuggested", async () => {
     const ctx = await setup();
-    await ctx.tracker.updateProject("ops", { mergeMode: null, autoMerge: "none" });
+    await ctx.tracker.updateProject("ops", { mergeMode: null, autoMerge: "all" });
     await ctx.tracker.updateProject("ai", { mergeMode: null, autoMerge: "none" });
 
     const ops = (await ctx.call("get_project_settings", { project: "OPS" })).data;
     const ai = (await ctx.call("get_project_settings", { project: "AI" })).data;
 
-    expect(ops).toMatchObject({ mergeMode: "manual", mergeModeSet: false });
-    // ADR-0124's one exception: project AI reads all-clean, not manual.
-    expect(ai).toMatchObject({ mergeMode: "all-clean", mergeModeSet: false });
+    // ADR-0134: nothing merges until a mode is saved; ADR-0124's mapping is only suggested.
+    expect(ops).toMatchObject({ mergeMode: null, suggestedMergeMode: "all-clean" });
+    expect(ai).toMatchObject({ mergeMode: null, suggestedMergeMode: "all-clean" });
+    expect(ops).not.toHaveProperty("autoMerge");
+  });
+
+  it("GivenNoModeSaved_WhenOnlyManualCanBeSavedOverMcp_ThenAnythingLooserIsRefused", async () => {
+    const ctx = await setup();
+    await ctx.tracker.updateProject("ops", { mergeMode: null, autoMerge: "all" });
+
+    const loose = await ctx.call("set_merge_mode", { project: "OPS", mode: "all-clean" });
+    expect(loose.isError).toBe(true);
+    expect(loose.text).toContain("project settings page");
+    expect((await ctx.tracker.getProject("ops"))?.mergeMode).toBeNull();
+
+    expect((await ctx.call("set_merge_mode", { project: "OPS", mode: "manual" })).isError).toBe(
+      false,
+    );
   });
 
   it("GivenLowRisk_WhenTightenedToManualOverMcp_ThenSavedAndLogged", async () => {
@@ -278,37 +292,5 @@ describe("set_merge_mode and the settings route", () => {
 
     expect(res.isError).toBe(true);
     expect((await ctx.tracker.getProject("ai"))?.mergeMode).toBe("manual");
-  });
-
-  it("GivenAModeStillReadFromAutoMerge_WhenAutoMergeIsLoosenedOverMcp_ThenRefusedAndTighteningWorks", async () => {
-    const ctx = await setup();
-    await ctx.tracker.updateProject("ops", { mergeMode: null, autoMerge: "s" });
-
-    const loosen = await ctx.call("set_auto_merge", { project: "OPS", policy: "all" });
-    expect(loosen.isError).toBe(true);
-    expect(loosen.text).toContain("project settings page");
-    expect((await ctx.tracker.getProject("ops"))?.autoMerge).toBe("s");
-
-    // Same mode (s-and-m also reads low-risk) and tighter both go through.
-    expect((await ctx.call("set_auto_merge", { project: "OPS", policy: "s-and-m" })).isError).toBe(
-      false,
-    );
-    expect((await ctx.call("set_auto_merge", { project: "OPS", policy: "none" })).isError).toBe(
-      false,
-    );
-  });
-
-  it("GivenAModeStillReadFromAutoMerge_WhenAnAutoMergeTighteningIsRevertedOverMcp_ThenRefused", async () => {
-    const ctx = await setup();
-    await ctx.tracker.updateProject("ops", { mergeMode: null, autoMerge: "all" });
-    expect((await ctx.call("set_auto_merge", { project: "OPS", policy: "none" })).isError).toBe(
-      false,
-    );
-    const [change] = (await ctx.call("list_settings_changes", { project: "OPS" })).data.changes;
-
-    const res = await ctx.call("revert_settings_change", { project: "OPS", id: change.id });
-
-    expect(res.isError).toBe(true);
-    expect((await ctx.tracker.getProject("ops"))?.autoMerge).toBe("none");
   });
 });

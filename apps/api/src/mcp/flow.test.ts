@@ -205,7 +205,6 @@ describe("MCP OAuth flow (MCP SDK client)", () => {
       "revert_spend_cap_change",
       "roadmap",
       "set_auto_build",
-      "set_auto_merge",
       "set_auto_refine",
       "set_daily_question_cap",
       "set_default_executor",

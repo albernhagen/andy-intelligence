@@ -188,10 +188,22 @@ describe("evaluate (adversarial)", () => {
     expect(result.body).toContain("accepted by `review-accepted`");
   });
 
-  it("GivenOnlyShouldFixAndQuestions_WhenEvaluated_ThenPasses", () => {
+  it("GivenAShouldFix_WhenNotAccepted_ThenFails", () => {
     const result = evaluate({ ...base, findings: out([adv("should-fix"), adv("question")]) });
+    expect(result.pass).toBe(false);
+    expect(result.body).toContain("1 blocker or should-fix");
+  });
+
+  it("GivenAShouldFix_WhenReviewAccepted_ThenPassesWithWarning", () => {
+    const result = evaluate({ ...base, accepted: true, findings: out([adv("should-fix")]) });
     expect(result.pass).toBe(true);
-    expect(result.body).toContain("no blocker findings");
+    expect(result.body).toContain("accepted by `review-accepted`");
+  });
+
+  it("GivenOnlyQuestions_WhenEvaluated_ThenPasses", () => {
+    const result = evaluate({ ...base, findings: out([adv("question")]) });
+    expect(result.pass).toBe(true);
+    expect(result.body).toContain("no blocker or should-fix findings");
   });
 
   it("GivenSecuritySeverities_WhenParsedAsAdversarial_ThenNull", () => {
