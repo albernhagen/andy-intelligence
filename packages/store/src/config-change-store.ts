@@ -21,7 +21,7 @@ export const CONFIG_CHANGE_PENDING_READ_MAX = 1_000;
 export const CONFIG_CHANGE_LOG_READ_MAX = 1_000;
 
 const newestFirst = (a: ConfigChange, b: ConfigChange) =>
-  b.createdAt.localeCompare(a.createdAt) || a.id.localeCompare(b.id);
+  b.createdAt.localeCompare(a.createdAt) || b.id.localeCompare(a.id);
 
 /**
  * ConfigChangeStore on Firestore (ADR-0097): `configChanges/{id}`. The duplicate check, the

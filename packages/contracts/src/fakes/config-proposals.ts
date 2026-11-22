@@ -11,7 +11,7 @@ import type {
 } from "../ports/config-proposals";
 
 const newestFirst = (a: ConfigChange, b: ConfigChange) =>
-  b.createdAt.localeCompare(a.createdAt) || a.id.localeCompare(b.id);
+  b.createdAt.localeCompare(a.createdAt) || b.id.localeCompare(a.id);
 
 /**
  * In-memory ConfigChangeStore. Every method reads and writes without an await in between, so

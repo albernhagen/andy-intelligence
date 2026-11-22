@@ -3,6 +3,7 @@ import { ConfigChange } from "../entities";
 import {
   CONFIG_CHANGE_LIST_MAX,
   GLOBAL_ENTITY_ID,
+  configChangeId,
   type ConfigChangeLog,
 } from "../ports/config-changes";
 
@@ -108,6 +109,14 @@ export function configChangeLogContract(name: string, make: () => Promise<Config
       expect((await store.listGlobal("routing")).map((c) => c.id)).toEqual([recent.id, old.id]);
       expect((await store.listGlobal("routing", 1)).map((c) => c.id)).toEqual([recent.id]);
       expect(await store.listGlobal("none")).toEqual([]);
+    });
+
+    it("GivenChangesSavedInTheSameMillisecond_WhenListed_ThenNewestFirstByTheirIds", async () => {
+      const store = await make();
+      const same = new Date(start);
+      const ids = [configChangeId(same), configChangeId(same), configChangeId(same)];
+      for (const id of [ids[1], ids[2], ids[0]]) await store.append(change({ id }));
+      expect((await store.listForProject("ai")).map((c) => c.id)).toEqual([ids[2], ids[1], ids[0]]);
     });
 
     it("GivenMoreChangesThanTheLimit_WhenListed_ThenOnlyTheNewestAreReturned", async () => {
