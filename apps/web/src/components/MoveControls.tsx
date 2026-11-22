@@ -56,7 +56,11 @@ export function MoveControls({ ticket }: { ticket: Ticket }) {
           variant="ghost"
           aria-expanded={more}
           aria-controls={`more-moves-${ticket.id}`}
-          onClick={() => setMore(!more)}
+          onClick={() => {
+            // Collapsing Move… closes the force form with it, so the two never disagree.
+            if (more) setForcing(false);
+            setMore(!more);
+          }}
         >
           Move…
         </Button>
@@ -94,7 +98,7 @@ export function MoveControls({ ticket }: { ticket: Ticket }) {
       )}
 
       {upNext.error && <QueryError error={upNext.error} />}
-      {forcing && (
+      {more && forcing && (
         <form
           className="space-y-2 rounded-md border border-border p-3"
           onSubmit={(e) => {

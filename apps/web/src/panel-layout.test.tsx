@@ -61,6 +61,29 @@ describe("ticket panel layout", () => {
     expect(within(panel).getByRole("button", { name: "Move to Backlog" })).toBeTruthy();
     await user.click(within(panel).getByRole("button", { name: "Force move…" }));
     expect(primaries(panel)).toHaveLength(1);
+
+    // Collapsing Move… closes the force form too; reopening starts without it.
+    await user.click(within(panel).getByRole("button", { name: "Move…" }));
+    expect(within(panel).queryByLabelText("Force to")).toBeNull();
+    await user.click(within(panel).getByRole("button", { name: "Move…" }));
+    expect(within(panel).queryByLabelText("Force to")).toBeNull();
+    expect(within(panel).getByRole("button", { name: "Force move…" })).toBeTruthy();
+  });
+
+  it("GivenAForceFormOpen_WhenAndySwitchesTicket_ThenTheNextTicketStartsWithMoveCollapsed", async () => {
+    const { open, service, user } = await seeded();
+    await service.create("ai", { title: "Other" }, "andy");
+    let panel = await open();
+    await user.click(within(panel).getByRole("button", { name: "Move…" }));
+    await user.click(within(panel).getByRole("button", { name: "Force move…" }));
+    await user.selectOptions(within(panel).getByLabelText("Force to"), "Done");
+
+    panel = await open("AI-2");
+
+    expect(within(panel).getByRole("button", { name: "Move…" }).getAttribute("aria-expanded")).toBe(
+      "false",
+    );
+    expect(within(panel).queryByLabelText("Force to")).toBeNull();
   });
 
   it("GivenAnOpenQuestion_WhenThePanelOpens_ThenItShowsInNextAboveTheTitle", async () => {
