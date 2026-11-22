@@ -26,7 +26,7 @@ const T = `${P}/tickets/:ticketId`;
 
 export const PARITY: readonly ParityEntry[] = [
   {
-    action: "Needs-you inbox; answer a question",
+    action: "Needs-you inbox, with Waiting for your merge (AI-218); answer a question",
     routes: ["GET /api/needs-you", "POST /api/questions/:questionId/answer"],
     tools: ["list_needs_me", "answer_question"],
   },

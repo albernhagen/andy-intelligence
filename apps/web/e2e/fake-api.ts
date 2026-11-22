@@ -83,6 +83,27 @@ export async function createFakeApp() {
   await service.move("ai", drop.id, "ready", "andy");
   await service.move("ai", drop.id, "in_progress", "andy");
   await service.move("ai", drop.id, "ready_for_review", "andy");
+  // AI-218: its PR is clean but touches a kept path, so it waits for Andy's merge in Needs-you.
+  const dropBuild = await runs.create({
+    projectId: "ai",
+    ticketId: drop.id,
+    step: "build",
+    route,
+    tier: null,
+  });
+  await runs.update(
+    dropBuild.id,
+    {
+      status: "succeeded",
+      startedAt: NOW.toISOString(),
+      endedAt: NOW.toISOString(),
+      links: { pullRequest: "https://github.com/albernhagen/andy-intelligence/pull/74" },
+      mergeMode: "all-clean",
+      mergeVerdict: "wait",
+      verdictReasons: ["kept_path"],
+    },
+    ["queued"],
+  );
 
   const panel = await service.create("ai", feature("Story side panel"), "andy");
   await service.ask("ai", panel.id, { text: "Should Esc close the panel?" }, "agent");

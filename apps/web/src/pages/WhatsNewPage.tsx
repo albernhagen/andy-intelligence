@@ -1,6 +1,7 @@
 import { useState, type ReactNode } from "react";
 import { Link, useNavigate, useParams, useSearch } from "@tanstack/react-router";
 import type { WhatsNew, WhatsNewMilestone, WhatsNewNote } from "@andy/contracts";
+import { mergedByText } from "@andy/domain";
 import { DailySummary } from "@/components/DailySummary";
 import { Loading, QueryError } from "@/components/Status";
 import { Badge } from "@/components/ui/badge";
@@ -92,6 +93,11 @@ function Status({ whatsNew, projectId }: { whatsNew: WhatsNew; projectId: string
   return (
     <section aria-label="Status" className="space-y-1">
       <h3 className="text-sm font-medium">Status</h3>
+      {/* AI-218: who merges this project's PRs now (ADR-0124). */}
+      <p className="text-sm" aria-label="Merge mode">
+        <span className="text-xs text-muted-foreground">Merge mode</span>{" "}
+        {whatsNew.mergeMode ?? "not set: nothing merges on its own"}
+      </p>
       {open.length === 0 && finished.length === 0 && (
         <p className="text-sm text-muted-foreground">No epics yet.</p>
       )}
@@ -198,7 +204,8 @@ function ChangeLine({ note: n, projectId }: { note: WhatsNewNote; projectId: str
             )}
             <a href={n.prUrl} rel="noreferrer" className="underline-offset-2 hover:underline">
               PR #{n.prNumber}
-            </a>
+            </a>{" "}
+            · {mergedByText(n)}
           </span>{" "}
           {n.source === "no_note" && <Badge>No note</Badge>}
           {n.source === "backfill" && <Badge>Backfilled</Badge>}
@@ -221,7 +228,6 @@ function ChangeLine({ note: n, projectId }: { note: WhatsNewNote; projectId: str
           )}
           <Field label="Merged">
             {dateTime(n.mergedAt)}
-            {n.mergedBy ? ` by ${n.mergedBy}` : ""}
             {n.epicKey ? ` · ${n.epicKey}: ${n.epicTitle}` : ""}
           </Field>
         </dl>

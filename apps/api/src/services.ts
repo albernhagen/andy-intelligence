@@ -23,6 +23,7 @@ import {
   ProjectPlanService,
   ProjectTaskResults,
   TicketService,
+  WaitingMergesReader,
   WhatsNewReader,
   EmailNotifications,
   wakeAfterRunEnd,
@@ -534,6 +535,14 @@ export function createServices(raw: AppDeps): Services {
     work: new WorkReader(deps.tracker, board),
     roadmap: new RoadmapReader(deps.tracker, board, deps.milestones ?? null),
     whatsNew,
+    // AI-218: PRs the merge mode leaves for Andy; release notes read from the connected host.
+    waitingMerges: new WaitingMergesReader(
+      deps.tracker,
+      deps.runs,
+      connection ? new ConnectedCodeHost(connection) : null,
+      tickets,
+      now,
+    ),
     digestSummaries,
     milestones: deps.milestones ?? null,
     // AI-295: one reader each for the Dashboards routes and MCP `dashboard`.

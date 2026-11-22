@@ -121,7 +121,7 @@ export function registerGitHubWebhook(app: Hono<AuthEnv>, deps: WebhookDeps): vo
     deps.reviewFindings ?? null,
   );
   const notes = deps.releaseNotes
-    ? new ReleaseNoteRecorder(deps.codeHost, deps.tracker, deps.releaseNotes, now)
+    ? new ReleaseNoteRecorder(deps.codeHost, deps.tracker, deps.releaseNotes, now, deps.runs)
     : null;
 
   /**
