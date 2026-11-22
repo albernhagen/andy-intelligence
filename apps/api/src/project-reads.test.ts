@@ -20,6 +20,7 @@ import { ownerOnlyAccess } from "./project-access";
  * call.
  *
  * AI-319: Needs-you reads every flagged ticket and open question across projects per call.
+ * AI-218: it also reads the agent tasks of tickets in review, for "Waiting for your merge".
  *
  * Documents each entry point reads, cold, unchanged, and after one and ten ticket writes, at two
  * project sizes: after the first read they must not grow with the number of tickets, and each
@@ -36,6 +37,7 @@ async function setup(size: number) {
   const raw = new InMemoryWorkTracker(now);
   await raw.createProject({ name: "Andy Intelligence", key: "AI", repos: [] });
   const step = () => (clock.at += 2 * MINUTE);
+  const rawRuns = new InMemoryRunStore(now);
   const epic = await raw.createTicket("ai", { title: "Epic", type: "epic" }, "andy");
   for (let i = 0; i < 10; i++) {
     step();
@@ -59,6 +61,27 @@ async function setup(size: number) {
       t.id,
       { number: 10 + i, url: `https://example.com/pr/${10 + i}`, state: "open" },
       "system",
+    );
+    // AI-218: the first one's PR waits for Andy's merge, so Needs-you lists it.
+    if (i > 0) continue;
+    const build = await rawRuns.create({
+      projectId: "ai",
+      ticketId: t.id,
+      step: "build",
+      route: { harness: "claude-code", provider: "claude-sub", model: "opus" },
+      tier: null,
+      deadline: null,
+      prompt: null,
+      maxTurns: null,
+    });
+    await rawRuns.update(
+      build.id,
+      {
+        links: { pullRequest: "https://github.com/albernhagen/andy-intelligence/pull/10" },
+        mergeVerdict: "wait",
+        verdictReasons: ["kept_path"],
+      },
+      ["queued"],
     );
   }
   // Waiting on Andy (AI-319): a flagged ticket with a question, and one asked on a ticket since
@@ -87,7 +110,7 @@ async function setup(size: number) {
   const versions = new InMemoryProjectVersions();
   const stores = {
     tracker: countReads(raw),
-    runs: countReads(new InMemoryRunStore()),
+    runs: countReads(rawRuns),
     versions: countReads(versions),
     notes: countReads(new InMemoryReleaseNoteStore()),
   };

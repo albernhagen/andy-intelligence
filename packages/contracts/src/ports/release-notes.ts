@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { Timestamp } from "../entities/common";
+import { MergeMode } from "../entities/merge-mode";
 import { ReleaseNote } from "../entities/release-notes";
 
 // ── ReleaseNoteStore ─────────────────────────────────────────────────────────
@@ -58,6 +59,8 @@ export type WhatsNewNote = z.infer<typeof WhatsNewNote>;
 
 export const WhatsNew = z.object({
   projectKey: z.string(),
+  /** The project's saved merge mode now (AI-218); null: none saved, so nothing merges. */
+  mergeMode: MergeMode.nullable(),
   window: z.object({ from: Timestamp, to: Timestamp }),
   /** Every top-level epic with tickets under it, in board order. */
   milestones: z.array(WhatsNewMilestone),

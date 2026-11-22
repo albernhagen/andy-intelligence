@@ -183,7 +183,11 @@ describe("refine gate flow", () => {
       "Assume A?",
       "Assume B?",
     ]);
-    expect(await t.inbox()).toEqual({ questions: [], tickets: [] });
+    expect(await t.inbox()).toEqual({
+      questions: [],
+      tickets: [],
+      waitingMerges: { merges: [], truncated: false },
+    });
   });
 
   it("GivenARefineWithTwoQuestions_WhenReported_ThenWaitsInUpNextAndTheLastAnswerMovesItToReady", async () => {

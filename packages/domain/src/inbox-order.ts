@@ -115,12 +115,14 @@ export function inboxCards(data: NeedsYou, projectId?: string) {
  * The inbox right after a question is answered, before the refetch lands: the question leaves,
  * and its ticket too once nothing on it is open (the API clears the flag the same way).
  */
-export function withoutQuestion(data: NeedsYou, questionId: string): NeedsYou {
+export function withoutQuestion<T extends NeedsYou>(data: T, questionId: string): T {
   const answered = data.questions.find((q) => q.id === questionId);
   if (!answered) return data;
   const questions = data.questions.filter((q) => q.id !== questionId);
   const stillOpen = questions.some((q) => q.ticketId === answered.ticketId);
+  // The rest of the read (AI-218's waiting merges) stays as it was.
   return {
+    ...data,
     questions,
     tickets: stillOpen ? data.tickets : data.tickets.filter((t) => t.id !== answered.ticketId),
   };

@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { Id, Timestamp } from "./common";
+import { MergeMode } from "./merge-mode";
 import { Risk } from "./scores";
 
 /**
@@ -50,6 +51,11 @@ export const ReleaseNote = z.object({
   mergedAt: Timestamp,
   /** The code host login that merged it, e.g. a person or "andy-intelligence[bot]" (the gate). */
   mergedBy: z.string().max(100).nullable(),
+  /**
+   * The merge mode the gate merged it under (AI-218, ADR-0124 "Record"); null when a person
+   * merged it, or for notes recorded before AI-218.
+   */
+  mergedByMode: MergeMode.nullable().default(null),
   source: ReleaseNoteSource,
   /** Null only for `no_note`. */
   whatChanged: text.nullable(),

@@ -1,6 +1,6 @@
-import { render, screen } from "@testing-library/react";
+import { render, screen, within } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
-import type { Question, Ticket } from "@andy/contracts";
+import type { Question, Ticket, WaitingMerge } from "@andy/contracts";
 import { inboxCards } from "@andy/domain";
 import { InboxPage } from "./InboxPage";
 
@@ -37,9 +37,26 @@ const questions = tickets.map(
       createdAt: "x",
     }) as Question,
 );
-const data = { questions, tickets };
+const merge = (projectId: string, ticketKey: string): WaitingMerge => ({
+  projectId,
+  ticketKey,
+  ticketTitle: `${ticketKey} title`,
+  prNumber: 9,
+  prUrl: "https://github.com/albernhagen/andy-intelligence/pull/9",
+  mergeMode: "all-clean",
+  reasons: ["kept_path", "mode_manual"],
+  note: { whatChanged: "Lanes show.", howItWorks: "One read.", needsYou: null },
+});
+const data = {
+  questions,
+  tickets,
+  waitingMerges: { merges: [merge("ai", "AI-9"), merge("ops", "OPS-1")], truncated: false },
+};
 
-vi.mock("@tanstack/react-router", () => ({ useParams: () => ({ projectId: "ai" }) }));
+vi.mock("@tanstack/react-router", () => ({
+  useParams: () => ({ projectId: "ai" }),
+  Link: ({ children }: { children: unknown }) => <a>{children as string}</a>,
+}));
 vi.mock("@/lib/queries", () => ({
   useNeedsYou: () => ({ isPending: false, isError: false, data }),
   useProjects: () => ({ data: [] }),
@@ -64,5 +81,20 @@ describe("InboxPage", () => {
     expect(screen.getAllByRole("article").map((a) => a.getAttribute("aria-label"))).toEqual(
       expected,
     );
+  });
+
+  it("GivenAPrWaitingForAndysMerge_WhenRendered_ThenThisProjectsIsListedWithWhyAndItsNote", () => {
+    render(<InboxPage />);
+    const list = screen.getByRole("region", { name: "Waiting for your merge" });
+
+    const items = within(list).getAllByRole("listitem");
+    expect(items.map((i) => i.getAttribute("aria-label"))).toEqual(["AI-9: AI-9 title"]);
+    expect(within(list).getByText("Yours: touches a kept path, manual mode")).toBeTruthy();
+    expect(within(list).getByText("Lanes show.")).toBeTruthy();
+    expect(within(list).getByRole("link", { name: "PR #9" }).getAttribute("href")).toBe(
+      "https://github.com/albernhagen/andy-intelligence/pull/9",
+    );
+    // Three ticket questions plus the one merge.
+    expect(screen.getByRole("heading", { name: /Needs you/ }).textContent).toBe("Needs you 4");
   });
 });

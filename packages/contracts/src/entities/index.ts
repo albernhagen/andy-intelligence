@@ -29,6 +29,7 @@ import { runIdeaFields } from "./ideate";
 import { runRouteFields } from "./routing";
 import { ProjectSpendCaps } from "./spend-caps";
 import { MilestoneId } from "./milestone";
+import { MergeMode } from "./merge-mode";
 import { RefineScores, TicketScores } from "./scores";
 import {
   questionFormatFields,
@@ -57,15 +58,6 @@ export type PlanApproval = z.infer<typeof PlanApproval>;
  */
 export const AutoMerge = z.enum(["none", "s", "s-and-m", "all"]);
 export type AutoMerge = z.infer<typeof AutoMerge>;
-
-/**
- * Who merges a project's PRs (ADR-0124), strictest first: `manual` (Andy merges everything),
- * `epic` (an epic's tickets merge into `epic/<KEY>`, Andy merges one PR per epic), `low-risk` (a clean PR
- * merges unless its diff touches the high-risk list), `all-clean` (a clean PR merges unless it
- * is a kept kind). Stored only until AI-215 makes the gate read it.
- */
-export const MergeMode = z.enum(["manual", "epic", "low-risk", "all-clean"]);
-export type MergeMode = z.infer<typeof MergeMode>;
 
 /**
  * Where a project's releases go (ADR-0050, AI-160: M6.2): `prod-only` (one prod project plus PR
