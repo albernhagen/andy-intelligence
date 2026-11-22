@@ -126,7 +126,7 @@ test("epic panel: its milestone and status (AI-311)", async ({ page }) => {
 test("story panel for an epic", async ({ page }) => {
   await page.clock.setFixedTime(SEED_NOW);
   await open(page, "/p/ops/t/OPS-5", "1 of 3 done");
-  await page.getByRole("region", { name: "Stories" }).scrollIntoViewIfNeeded();
+  await page.getByRole("region", { name: "Tickets" }).scrollIntoViewIfNeeded();
   await expect(page).toHaveScreenshot("story-panel-epic.png");
 });
 
