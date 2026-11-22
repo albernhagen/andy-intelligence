@@ -318,7 +318,8 @@ describe("board v2", () => {
     expect(screen.getByText("Ideas")).toBeTruthy();
 
     await harness.router.navigate({ to: "/p/ai/t/AI-1" });
-    await harness.user.click(await screen.findByRole("button", { name: "Move to Up next" }));
+    await harness.user.click(await screen.findByRole("button", { name: "Move…" }));
+    await harness.user.click(screen.getByRole("button", { name: "Move to Up next" }));
 
     await waitFor(async () =>
       expect((await harness.tracker.listTickets("ai"))[0]?.upNextRank).not.toBeNull(),
