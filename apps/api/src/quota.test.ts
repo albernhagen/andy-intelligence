@@ -37,7 +37,10 @@ async function setup() {
   const project = await t.tracker.createProject({ name: "AI", key: "AI", repos: [REPO] });
 
   /** Starts a run and reports it; returns the report response. */
-  const runAndReport = async (rateLimits?: unknown) => {
+  const runAndReport = async (
+    rateLimits?: unknown,
+    beforeReport?: (runId: string) => Promise<void>,
+  ) => {
     const ticket = await t.tracker.createTicket(
       project.id,
       { type: "feature", title: "B" },
@@ -71,6 +74,7 @@ async function setup() {
         },
         JSON.stringify(claims),
       );
+    if (beforeReport) await beforeReport(run.id);
     const res = await send();
     return { res, send };
   };
@@ -99,6 +103,18 @@ describe("quota capture", () => {
       { window: "5h", freshness: "fresh", level: "warn", usedPct: 75 },
       { window: "weekly", freshness: "fresh", level: "ok", usedPct: 10 },
     ]);
+  });
+
+  it("GivenAnApiKeyRunsReportWithRateLimits_WhenQuotaIsRead_ThenTheSubscriptionQuotaIsUntouched", async () => {
+    const { runAndReport, read, runs } = await setup();
+    // AI-260: an API-key run. The app can't start one yet (no model prices), so the stored run
+    // is moved to the claude-api route before it reports; a route isn't a patchable field.
+    const { res } = await runAndReport(event(0.95, 0.9), async (id) => {
+      const route = { harness: "claude-code", provider: "claude-api", model: "sonnet" } as const;
+      await runs.update(id, { route } as never, ["queued", "running"]);
+    });
+    expect(res.status).toBe(200);
+    expect((await read()).level).toBe("unknown");
   });
 
   it("GivenAReportWithoutTheField_WhenQuotaIsRead_ThenUnknown", async () => {
