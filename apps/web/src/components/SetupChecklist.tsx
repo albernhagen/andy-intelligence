@@ -24,9 +24,18 @@ const MARKERS: Record<
  * folded to its one-line summary (AI-339); a click opens it again.
  */
 export function SetupChecklist({ projectId }: { projectId: string }) {
+  // Keyed by project, so switching projects starts from that project's seen state.
+  return <Checklist key={projectId} projectId={projectId} />;
+}
+
+function Checklist({ projectId }: { projectId: string }) {
   const setup = useSetupChecklist(projectId);
   const [open, setOpen] = useState(() => !seen(projectId));
-  useEffect(() => markSeen(projectId), [projectId]);
+  // Seen only once the list has actually shown: not while loading, on an error, or when done.
+  const shown = setup.data !== undefined && !showsError(setup) && !setup.data.complete;
+  useEffect(() => {
+    if (shown) markSeen(projectId);
+  }, [shown, projectId]);
   if (setup.isPending) return <Loading />;
   if (setup.data === undefined || showsError(setup))
     return (

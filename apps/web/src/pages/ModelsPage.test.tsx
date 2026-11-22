@@ -175,6 +175,25 @@ describe("Models settings page", () => {
     ).toBe("");
   });
 
+  it("GivenATierSave_WhenAProviderIsFlippedRightAfter_ThenBothSaveInTurnWithoutARefusal", async () => {
+    const { h, form } = await modelsPage();
+    const cheap = within(form).getByRole("region", { name: "Tier cheap" });
+    await h.user.click(within(cheap).getByRole("button", { name: "Add route" }));
+
+    // No wait between them: the second save must go out against the first one's new version.
+    await h.user.click(within(form).getByRole("button", { name: "Save cheap" }));
+    await h.user.click(within(form).getByRole("checkbox", { name: "openrouter on" }));
+
+    await waitFor(async () => {
+      const saved = await h.routing.getGlobal();
+      expect(saved.tiers.cheap).toHaveLength(2);
+      expect(saved.providers.openrouter.enabled).toBe(true);
+    });
+    expect(await within(form).findByText("Saved")).toBeTruthy();
+    expect(within(form).queryByRole("alert")).toBeNull();
+    expect(within(form).queryByText(/Routing changed since/)).toBeNull();
+  });
+
   it("GivenATierEdit_WhenAnotherPartSaves_ThenTheTierDraftStaysUnsaved", async () => {
     const { h, form } = await modelsPage();
     const cheap = within(form).getByRole("region", { name: "Tier cheap" });

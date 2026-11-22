@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { ProviderKey, TierKey, type Route, type RoutingConfig } from "@andy/contracts";
 import { effectiveRouting, routeSkipReason } from "@andy/domain";
 import { Button } from "@/components/ui/button";
@@ -58,13 +58,21 @@ export function RoutingEditor({
   const [reason, setReason] = useState("");
   const [part, setPart] = useState<Part | null>(null);
   const save = useSaveRouting(projectId);
+  // Saves run one after another (AI-339): each builds on the routing and version the one before
+  // it returned, so a quick second save never goes out against a stale version, and every save's
+  // own success handling runs. The refs hold the latest values for the queued saves.
+  const queue = useRef<Promise<void>>(Promise.resolve());
+  const savedRef = useRef(saved);
+  const baseRef = useRef(base);
   // Bumped by Reload, so the fields that hold typed text start again from the new values.
   const [loads, setLoads] = useState(0);
   const reload = () => {
     setLoads((n) => n + 1);
     save.reset();
     setPart(null);
-    setSaved(fieldsOf(start));
+    savedRef.current = fieldsOf(start);
+    baseRef.current = ifUpdatedAt;
+    setSaved(savedRef.current);
     setDraft(fieldsOf(start));
     setBase(ifUpdatedAt);
   };
@@ -81,18 +89,27 @@ export function RoutingEditor({
   const generalError =
     part === "providers" || part === "steps" ? routingErrors(save.error).general : errors.general;
 
-  const write = (which: Part, next: Fields) => {
-    setPart(which);
-    save.mutate(
-      { ...next, ifUpdatedAt: base, reason: reason.trim() || undefined },
-      {
-        onSuccess: (config) => {
-          setBase(config.updatedAt);
-          setSaved(structuredClone(next));
-          setReason("");
-        },
-      },
-    );
+  /** Queues a save of the last saved routing with `change` applied, with the reason typed now. */
+  const write = (which: Part, change: (last: Fields) => Fields) => {
+    const why = reason.trim() || undefined;
+    queue.current = queue.current.then(async () => {
+      const next = structuredClone(change(savedRef.current));
+      setPart(which);
+      try {
+        const config = await save.mutateAsync({
+          ...next,
+          ifUpdatedAt: baseRef.current,
+          reason: why,
+        });
+        savedRef.current = next;
+        baseRef.current = config.updatedAt;
+        setSaved(next);
+        setBase(config.updatedAt);
+        setReason((r) => (r.trim() === (why ?? "") ? "" : r));
+      } catch {
+        // The refusal shows from `save.error` beside the part it was for; later saves still run.
+      }
+    });
   };
   // Any edit clears an old refusal: its route numbers may no longer match the draft.
   const editDraft = (next: Fields) => {
@@ -105,8 +122,8 @@ export function RoutingEditor({
         (f) => !Number.isInteger(providers[key][f]),
       ),
     );
-    if (bad || sameJson(providers, saved.providers)) return;
-    write("providers", { ...saved, providers });
+    if (bad || sameJson(providers, savedRef.current.providers)) return;
+    write("providers", (last) => ({ ...last, providers }));
   };
 
   // The providers a route runs under: the draft's, narrowed to global for a project.
@@ -207,12 +224,13 @@ export function RoutingEditor({
                     variant="outline"
                     className="h-11 sm:h-8"
                     disabled={!changed || save.isPending}
-                    onClick={() =>
-                      write(tier, {
-                        ...saved,
-                        tiers: { ...saved.tiers, [tier]: draft.tiers[tier] },
-                      })
-                    }
+                    onClick={() => {
+                      const routes = draft.tiers[tier];
+                      write(tier, (last) => ({
+                        ...last,
+                        tiers: { ...last.tiers, [tier]: routes },
+                      }));
+                    }}
                   >
                     Save {tier}
                   </Button>
@@ -228,7 +246,7 @@ export function RoutingEditor({
           steps={draft.steps}
           onChange={(steps) => {
             setDraft({ ...draft, steps });
-            write("steps", { ...saved, steps });
+            write("steps", (last) => ({ ...last, steps: { ...last.steps, ...steps } }));
           }}
         />
         {cue("steps")}
