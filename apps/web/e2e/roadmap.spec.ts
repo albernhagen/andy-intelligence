@@ -107,9 +107,9 @@ const ROADMAP: ProjectRoadmap = {
 async function open(page: Page) {
   await page.route("**/api/projects/ai/roadmap", (route) => route.fulfill({ json: ROADMAP }));
   await page.goto("/p/ai/roadmap");
-  await expect(page.getByRole("button", { name: /M4: Epics \+ story board/ })).toBeVisible();
+  await expect(page.getByRole("button", { name: /^M4: Epics \+ story board/ })).toBeVisible();
   await expect(page.getByRole("link", { name: "Needs you 6" })).toBeVisible();
-  await page.getByRole("button", { name: /M4: Epics \+ story board/ }).click();
+  await page.getByRole("button", { name: /^M4: Epics \+ story board/ }).click();
   await expect(page.getByRole("link", { name: /AI-285/ })).toBeVisible();
 }
 
