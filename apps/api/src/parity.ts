@@ -278,7 +278,7 @@ export const PARITY: readonly ParityEntry[] = [
     action: "Start a project agent task (plan-project, ideate)",
     routes: [`POST ${P}/plan/agent-task`, `POST ${P}/ideate/agent-task`],
     tools: ["start_plan_project", "start_ideate"],
-    note: "One service (`RunService.requestProjectTask`, AI-134), same caps and refusals (AI-320). The web starts plan-project from the project settings' Project plan card, and ideate from the board (AI-299).",
+    note: "One service (`RunService.requestProjectTask`, AI-134), same caps and refusals (AI-320). The web starts plan-project from the project settings' Project plan card; its ideate form is AI-299 (PR #366).",
   },
   // ── One side on purpose ─────────────────────────────────────────────────────
   {
