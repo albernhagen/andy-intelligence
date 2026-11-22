@@ -27,6 +27,7 @@ Below `sm` (640px; `useIsPhone`); screens adopt these in their own M7: Mobile sl
 - Touch targets at least 44px (`h-11 sm:h-8`). Inputs `text-base` so iOS doesn't zoom.
 - Edge-touching elements pad by `env(safe-area-inset-*)`.
 - No hover-only actions; panels open full-screen.
+- Nothing scrolls sideways at 390px: a strip that scrolls (the board's lanes) does so in its own `relative overflow-x-auto` box. Phone specs check it with `expectPageFits` (`e2e/phone.ts`, AI-325).
 
 ## Keyboard
 

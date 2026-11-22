@@ -272,7 +272,7 @@ export const PARITY: readonly ParityEntry[] = [
       "set_milestone_status",
       "set_epic_milestone",
     ],
-    note: "The web sets status and attaches from the epic panel and the roadmap (AI-311). PATCH covers edit_milestone and set_milestone_status (ADR-0136).",
+    note: "The web sets status and attaches from the epic panel and the roadmap (AI-311), and reorders on the roadmap (AI-324). PATCH covers edit_milestone (order included) and set_milestone_status (ADR-0136).",
   },
   // ── One side on purpose ─────────────────────────────────────────────────────
   {
