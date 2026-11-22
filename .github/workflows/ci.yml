@@ -21,6 +21,24 @@ jobs:
           persist-credentials: false
       - uses: ./platform/actions/ci-check
 
+  # On main only: files over their context budget get one trim issue instead of a red check
+  # (AI-344, ADR-0138). It holds an issues-write token, so it runs only on pushes to main, whose
+  # checkout is main's own code: nothing from a PR runs here.
+  context-budget-trim:
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      issues: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: ./platform/actions/context-budget-trim
+        with:
+          github-token: ${{ github.token }}
+
   actionlint:
     runs-on: ubuntu-latest
     timeout-minutes: 10
