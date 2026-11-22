@@ -20,7 +20,13 @@ export function InboxPage() {
   const plans = useWaitingPlans(projectId);
   if (needsYou.isPending) return <Loading />;
   if (needsYou.data === undefined || showsError(needsYou))
-    return <QueryError error={needsYou.error} />;
+    return (
+      <QueryError
+        error={needsYou.error}
+        what="the Needs-you inbox"
+        onRetry={() => void needsYou.refetch()}
+      />
+    );
 
   const { active, stale } = inboxCards(needsYou.data, projectId);
   const total = sum([...active, ...stale]) + plans.shown.length;

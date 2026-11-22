@@ -122,7 +122,13 @@ export function TicketPage() {
       </div>
       <div className="px-4 py-4 sm:px-6">
         {ticket.isPending && <Loading />}
-        {showsError(ticket) && <QueryError error={ticket.error} />}
+        {showsError(ticket) && (
+          <QueryError
+            error={ticket.error}
+            what="the ticket"
+            onRetry={() => void ticket.refetch()}
+          />
+        )}
         {loaded && (
           // Keyed by ticket: another ticket starts with fresh editors, never this one's drafts.
           <UnsavedDrafts.Provider value={drafts}>
@@ -620,7 +626,13 @@ function Readiness(path: TicketPath) {
   const dor = useReadiness(path);
   return (
     <section aria-label="Definition of Ready" className="space-y-1 text-xs">
-      {showsError(dor) && <QueryError error={dor.error} />}
+      {showsError(dor) && (
+        <QueryError
+          error={dor.error}
+          what="the Definition of Ready"
+          onRetry={() => void dor.refetch()}
+        />
+      )}
       {dor.data?.met && <p className="text-muted-foreground">Definition of Ready: met.</p>}
       {dor.data && !dor.data.met && (
         <>
@@ -640,7 +652,14 @@ function Readiness(path: TicketPath) {
 function OpenQuestions(path: TicketPath) {
   const questions = useTicketQuestions(path);
   const open = (questions.data ?? []).filter((q) => q.status === "open");
-  if (showsError(questions)) return <QueryError error={questions.error} />;
+  if (showsError(questions))
+    return (
+      <QueryError
+        error={questions.error}
+        what="the questions"
+        onRetry={() => void questions.refetch()}
+      />
+    );
   if (open.length === 0) return null;
   return (
     <section aria-label="Open questions" className="space-y-2">
@@ -722,7 +741,21 @@ function Timeline(path: TicketPath) {
   const events = useEvents(path);
   const runs = useRuns(path);
   if (events.isPending || runs.isPending) return <Loading />;
-  if (events.data === undefined || showsError(events)) return <QueryError error={events.error} />;
-  if (runs.data === undefined || showsError(runs)) return <QueryError error={runs.error} />;
+  if (events.data === undefined || showsError(events))
+    return (
+      <QueryError
+        error={events.error}
+        what="the ticket's history"
+        onRetry={() => void events.refetch()}
+      />
+    );
+  if (runs.data === undefined || showsError(runs))
+    return (
+      <QueryError
+        error={runs.error}
+        what="the ticket's agent tasks"
+        onRetry={() => void runs.refetch()}
+      />
+    );
   return <Activity {...path} events={events.data} runs={runs.data} />;
 }

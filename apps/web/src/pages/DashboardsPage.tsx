@@ -100,7 +100,11 @@ export function DashboardsPage() {
       {dashboard.isPending ? (
         <Loading />
       ) : dashboard.isError ? (
-        <QueryError error={dashboard.error} />
+        <QueryError
+          error={dashboard.error}
+          what="the dashboards"
+          onRetry={() => void dashboard.refetch()}
+        />
       ) : (
         <DashboardBody data={dashboard.data} />
       )}
