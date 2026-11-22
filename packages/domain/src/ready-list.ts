@@ -14,7 +14,11 @@ import { startScore } from "./scores";
  * `GET /api/projects/:id/ready`, so both return the same tickets in the same order.
  */
 
-const matches = (t: Ticket, f: ReadyFilters) =>
+/** Whether a ticket has the scores the filters ask for (AI-298); the board's Ready lane uses it too (AI-343). */
+export const matchesReadyFilters = (
+  t: Pick<Ticket, "size" | "risk" | "confidence">,
+  f: ReadyFilters,
+) =>
   (!f.size || t.size === f.size) &&
   (!f.risk || t.risk === f.risk) &&
   (!f.confidence || t.confidence === f.confidence);
@@ -22,7 +26,7 @@ const matches = (t: Ticket, f: ReadyFilters) =>
 /** Ready, unarchived tickets matching `filters`, in rank order, at most `READY_LIST_MAX`. */
 export function rankReady(tickets: readonly Ticket[], filters: ReadyFilters): ReadyList {
   const found = tickets
-    .filter((t) => t.stage === "ready" && !t.archived && matches(t, filters))
+    .filter((t) => t.stage === "ready" && !t.archived && matchesReadyFilters(t, filters))
     .sort((a, b) => compareRanks(a.rank, b.rank));
   return {
     total: found.length,
