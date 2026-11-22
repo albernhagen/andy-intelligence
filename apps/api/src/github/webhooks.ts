@@ -10,6 +10,7 @@ import {
   type ReleaseNoteStore,
   type RunStore,
   type WorkTracker,
+  type ReviewFindingSource,
 } from "@andy/contracts";
 import {
   EpicMerges,
@@ -68,6 +69,11 @@ export interface WebhookDeps {
   nightLaunches?: NightLaunchStore;
   /** Release notes (AI-159): a PR merged into the default branch stores one. Off when unset. */
   releaseNotes?: ReleaseNoteStore;
+  /**
+   * Review findings per PR head (ADR-0097), for the merge verdict (AI-215). Unset: the verdict
+   * can't see open should-fix findings, so nothing merges into the default branch.
+   */
+  reviewFindings?: ReviewFindingSource;
   now?: () => Date;
 }
 
@@ -112,9 +118,10 @@ export function registerGitHubWebhook(app: Hono<AuthEnv>, deps: WebhookDeps): vo
     now,
     null,
     epicMerges,
+    deps.reviewFindings ?? null,
   );
   const notes = deps.releaseNotes
-    ? new ReleaseNoteRecorder(deps.codeHost, deps.tracker, deps.releaseNotes, now)
+    ? new ReleaseNoteRecorder(deps.codeHost, deps.tracker, deps.releaseNotes, now, deps.runs)
     : null;
 
   /**
@@ -284,6 +291,7 @@ export const publicRoutes: RouteModule = (app, s) => {
     onDefaultBranchMoved: (projectId) => s.syncer.defaultBranchMoved(projectId),
     nightLaunches: s.deps.nightLaunches,
     releaseNotes: s.deps.releaseNotes,
+    reviewFindings: s.deps.reviewFindings,
     now: s.now,
   });
 };

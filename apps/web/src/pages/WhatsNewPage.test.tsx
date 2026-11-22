@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { screen, waitFor, within } from "@testing-library/react";
+import type { MergeMode } from "@andy/contracts";
 import { buildReleaseNote } from "@andy/domain";
 import { renderApp } from "@/test/harness";
 import { dayOf } from "./WhatsNewPage";
@@ -20,8 +21,15 @@ async function seeded(path: string) {
     "andy",
   );
   await tracker.updateTicket("ai", story.id, { fields: { needsAttention: true } }, "andy");
-  const note = (number: number, body: string, mergedAt: string, ticketKey: string | null) =>
+  const note = (
+    number: number,
+    body: string,
+    mergedAt: string,
+    ticketKey: string | null,
+    mergedByMode: MergeMode | null = null,
+  ) =>
     buildReleaseNote({
+      mergedByMode,
       projectId: "ai",
       pr: { number, url: `${PR}/${number}`, title: `PR title ${number}` },
       details: { body, mergedBy: "albernhagen", mergedAt },
@@ -37,7 +45,7 @@ async function seeded(path: string) {
       story.key,
     ),
   );
-  await releaseNotes.put(note(8, "No block here.", hoursAgo(50), null));
+  await releaseNotes.put(note(8, "No block here.", hoursAgo(50), null, "all-clean"));
   await harness.router.invalidate();
   return { ...harness, epic, story };
 }
@@ -73,9 +81,24 @@ describe("What's new page", () => {
     expect(regions.indexOf("Status")).toBeLessThan(regions.indexOf("Changes"));
   });
 
-  it("GivenAMilestoneFilter_WhenPicked_ThenOnlyItsChanges", async () => {
+  it("GivenAMergeModeAndMerges_WhenThePageOpens_ThenTheModeAndWhoMergedEachShow", async () => {
     const harness = await seeded("/p/ai/whats-new");
-    await harness.user.selectOptions(await screen.findByLabelText("Milestone"), "AI-1");
+    await harness.tracker.updateProject("ai", { mergeMode: "manual" });
+    await harness.router.invalidate();
+    const status = await screen.findByRole("region", { name: "Status" });
+    await waitFor(() =>
+      expect(within(status).getByLabelText("Merge mode").textContent).toBe("Merge mode manual"),
+    );
+
+    const today = screen.getByRole("region", { name: dayOf(hoursAgo(1)) });
+    expect(within(today).getByText(/merged by albernhagen/)).toBeTruthy();
+    const older = screen.getByRole("region", { name: dayOf(hoursAgo(50)) });
+    expect(within(older).getByText(/merged by the mode \(all-clean\)/)).toBeTruthy();
+  });
+
+  it("GivenAnEpicFilter_WhenPicked_ThenOnlyItsChanges", async () => {
+    const harness = await seeded("/p/ai/whats-new");
+    await harness.user.selectOptions(await screen.findByLabelText("Epic"), "AI-1");
     await waitFor(() => expect(screen.queryByText("PR title 8")).toBeNull());
     expect(screen.getByText("Andy sees the board by epic.")).toBeTruthy();
   });

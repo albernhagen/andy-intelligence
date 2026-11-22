@@ -19,7 +19,9 @@ import {
   type RoadmapReader,
   type BoardReader,
   type GlobalSpendCaps,
+  type WaitingMergesReader,
   type WhatsNewReader,
+  type DigestSummaryService,
   type ProjectTickets,
   type DashboardReader,
   type DoraReader,
@@ -93,6 +95,10 @@ export interface ToolDeps {
   now?: () => Date;
   /** What's new (AI-159); absent or null: no `whats_new` tool. */
   whatsNew?: WhatsNewReader | null;
+  /** PRs waiting for Andy's merge (AI-218), in `list_needs_me`; absent or null: none listed. */
+  waitingMerges?: WaitingMergesReader | null;
+  /** AI-323: the digest's model-written summary; null where it isn't wired. */
+  digestSummaries?: DigestSummaryService | null;
   /** The app's public URL for page links in tool text (the digest links What's new); null in dev. */
   publicUrl?: string | null;
   /** Milestones (ADR-0131): `status` shows a ticket's milestone hold (AI-306); null holds any. */

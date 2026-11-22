@@ -4,6 +4,7 @@
 export { publicRoutes as deployments } from "./deployments";
 export { publicRoutes as githubToken } from "./github/token";
 export { publicRoutes as githubWebhooks } from "./github/webhooks";
+export { publicRoutes as modelScout } from "./model-scout";
 export { publicRoutes as notify } from "./notify";
 export { publicRoutes as runners } from "./runners";
 export { publicRoutes as runs } from "./runs";

@@ -7,7 +7,7 @@ import {
   effectiveMergeMode,
   effectiveTicketMergeMode,
   isLooser,
-  requireAutoMergeNotLoosening,
+  suggestedMergeMode,
   requireOverrideNotLooser,
   requireTightening,
 } from "./merge-mode";
@@ -17,23 +17,28 @@ import { TicketService } from "./tickets";
 const project = (over: Partial<Project> = {}) =>
   ({ id: "ops", key: "OPS", mergeMode: null, autoMerge: "none", ...over }) as Project;
 
-describe("effectiveMergeMode", () => {
+describe("suggestedMergeMode and effectiveMergeMode", () => {
   it.each<[AutoMerge, MergeMode]>([
     ["none", "manual"],
     ["s", "low-risk"],
     ["s-and-m", "low-risk"],
     ["all", "all-clean"],
-  ])("GivenNoModeAndAutoMerge %s_WhenRead_ThenItIs %s", (autoMerge, mode) => {
-    expect(effectiveMergeMode(project({ autoMerge }))).toBe(mode);
+  ])("GivenNoModeAndAutoMerge %s_WhenSuggested_ThenItIs %s", (autoMerge, mode) => {
+    expect(suggestedMergeMode(project({ autoMerge }))).toBe(mode);
   });
 
-  it("GivenProjectAiWithNoMode_WhenRead_ThenItIsAllClean", () => {
-    expect(effectiveMergeMode(project({ id: "ai", key: "AI", autoMerge: "none" }))).toBe(
+  it("GivenProjectAiWithNoMode_WhenSuggested_ThenItIsAllClean", () => {
+    expect(suggestedMergeMode(project({ id: "ai", key: "AI", autoMerge: "none" }))).toBe(
       "all-clean",
     );
   });
 
-  it("GivenAStoredMode_WhenRead_ThenItWinsOverAutoMerge", () => {
+  it("GivenNoModeSaved_WhenInForce_ThenItIsManualWhateverTheSuggestion", () => {
+    // ADR-0134: turning merging on is Andy saving a mode, never the mapping.
+    expect(effectiveMergeMode(project({ id: "ai", key: "AI", autoMerge: "all" }))).toBe("manual");
+  });
+
+  it("GivenAStoredMode_WhenInForce_ThenItIsThatMode", () => {
     expect(effectiveMergeMode(project({ mergeMode: "epic", autoMerge: "all" }))).toBe("epic");
   });
 
@@ -78,21 +83,6 @@ describe("requireOverrideNotLooser and requireTightening", () => {
   it("GivenManual_WhenLoosening_ThenRefusedAndTighteningAllowed", () => {
     expect(() => requireTightening("low-risk", project({ mergeMode: "manual" }))).toThrow(/looser/);
     expect(() => requireTightening("manual", project({ mergeMode: "all-clean" }))).not.toThrow();
-  });
-});
-
-describe("requireAutoMergeNotLoosening", () => {
-  it("GivenAnUnsetMode_WhenAutoMergeWouldLoosenIt_ThenRefused", () => {
-    expect(() => requireAutoMergeNotLoosening("all", project({ autoMerge: "none" }))).toThrow(
-      /looser/,
-    );
-    expect(() => requireAutoMergeNotLoosening("none", project({ autoMerge: "all" }))).not.toThrow();
-  });
-
-  it("GivenAStoredMode_WhenAutoMergeChanges_ThenItIsNotTheModeAndAllowed", () => {
-    expect(() =>
-      requireAutoMergeNotLoosening("all", project({ mergeMode: "manual", autoMerge: "none" })),
-    ).not.toThrow();
   });
 });
 

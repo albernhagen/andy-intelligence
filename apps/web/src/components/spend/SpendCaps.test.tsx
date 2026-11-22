@@ -64,7 +64,7 @@ describe("Spend caps panel", () => {
     const daily = within(panel).getByRole("row", { name: /^Daily/ });
     expect(await within(daily).findByText("$1.50")).toBeTruthy();
     const changes = screen.getByRole("region", { name: "Changes" });
-    expect(await within(changes).findByText(/^spendCaps: /)).toBeTruthy();
+    expect(await within(changes).findByText(/^Spend caps: /)).toBeTruthy();
   });
 
   it("GivenASubCentProjectCap_WhenOnlyDailyIsEditedAndSaved_ThenTheOtherKeepsItsExactValue", async () => {

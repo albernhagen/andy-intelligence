@@ -8,7 +8,7 @@ import { ROUTE_LAYER_NAMES, RouteLayer } from "@andy/contracts";
 /** The four layers in order: one line for Settings → Models and project settings. */
 export const LAYER_ORDER_LINE = `Who sets a ticket's worker, tier and route, first match wins: ${RouteLayer.options
   .map((l) => ROUTE_LAYER_NAMES[l])
-  .join(", then ")}. A milestone is an epic titled "M<N>: …".`;
+  .join(", then ")}.`;
 
 /** "project default", or "epic override AI-225" naming the epic. */
 export function layerText(src: { layer: RouteLayer; epicKey: string | null }): string {

@@ -2,6 +2,7 @@ import type { Firestore } from "@google-cloud/firestore";
 import {
   CONFIG_CHANGE_LIST_MAX,
   GLOBAL_ENTITY_ID,
+  appendedReason,
   ConfigChange,
   ProposalLookupCursor,
   WorkTrackerError,
@@ -21,7 +22,7 @@ export const CONFIG_CHANGE_PENDING_READ_MAX = 1_000;
 export const CONFIG_CHANGE_LOG_READ_MAX = 1_000;
 
 const newestFirst = (a: ConfigChange, b: ConfigChange) =>
-  b.createdAt.localeCompare(a.createdAt) || a.id.localeCompare(b.id);
+  b.createdAt.localeCompare(a.createdAt) || b.id.localeCompare(a.id);
 
 /**
  * ConfigChangeStore on Firestore (ADR-0097): `configChanges/{id}`. The duplicate check, the
@@ -232,6 +233,21 @@ export class FirestoreConfigChangeStore implements ConfigChangeStore {
       });
       tx.set(ref, decided);
       return decided;
+    });
+  }
+
+  async appendReason(id: string, text: string): Promise<ConfigChange> {
+    const ref = this.changes().doc(id);
+    return this.db.runTransaction(async (tx) => {
+      const snap = await tx.get(ref);
+      const current = snap.exists ? snap.data() : undefined;
+      if (!current) throw new WorkTrackerError("not_found", `config change ${id} not found`);
+      if (current.status !== "pending") {
+        throw new WorkTrackerError("conflict", `config change ${id} is ${current.status}`);
+      }
+      const next = ConfigChange.parse({ ...current, reason: appendedReason(current.reason, text) });
+      tx.set(ref, next);
+      return next;
     });
   }
 }

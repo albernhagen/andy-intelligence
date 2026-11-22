@@ -5,7 +5,7 @@ import type { Run, ToolDeps } from "./tools";
  * Local runners over MCP (AI-294): `list_runners` reads what GET /api/runners returns, from the
  * same `RunnerService.list`. Read-only on purpose: registering stays in the app (its secret is
  * shown once and must not land in a chat transcript); revoking stays in the app until Andy decides
- * on amending ADR-0089 (a tracked gap in the parity inventory).
+ * on it (a tracked gap in the parity inventory). Listing over MCP: ADR-0135, amending ADR-0089.
  */
 export function registerRunnerTools(server: McpServer, deps: ToolDeps, run: Run): void {
   const runners = deps.runners;
