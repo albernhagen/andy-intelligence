@@ -1,4 +1,5 @@
 import {
+  configChangeId,
   DEFAULT_SPEND_CAPS,
   NewProject,
   ProjectSettings,
@@ -42,7 +43,7 @@ export class ProjectService {
     private readonly now: () => Date = () => new Date(),
     /** The config change log (M4.11); null where none is kept (tests, local dev without one). */
     private readonly configChanges: ConfigChangeLog | null = null,
-    private readonly newId: () => string = () => crypto.randomUUID(),
+    private readonly newId: () => string = () => configChangeId(),
     /** The global spend caps a project's own may not pass (AI-249); defaults until AI-276. */
     private readonly globalSpendCaps: () => Promise<SpendCaps> = async () => DEFAULT_SPEND_CAPS,
   ) {}

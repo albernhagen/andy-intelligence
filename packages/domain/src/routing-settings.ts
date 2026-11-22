@@ -1,4 +1,5 @@
 import {
+  configChangeId,
   CONFIG_CHANGE_LIST_MAX,
   ConfigChange,
   GLOBAL_ENTITY_ID,
@@ -63,7 +64,7 @@ export class RoutingSettings {
     private readonly tracker: Pick<WorkTracker, "getProject">,
     private readonly changes: ConfigChangeLog | null,
     private readonly now: () => Date = () => new Date(),
-    private readonly newId: () => string = () => crypto.randomUUID(),
+    private readonly newId: () => string = () => configChangeId(),
   ) {}
 
   async global(): Promise<RoutingConfig> {
