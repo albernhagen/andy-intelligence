@@ -8,11 +8,12 @@ export function StepTiers({ steps, onChange }: { steps: Steps; onChange: (steps:
   return (
     <section aria-label="Steps" className="space-y-2">
       <h3 className="text-sm font-medium">Steps</h3>
-      <ul className="grid gap-2 sm:grid-cols-2">
+      <ul className="grid gap-x-6 gap-y-2 sm:grid-cols-2">
         {RunStep.options.map((step) => (
           <li key={step}>
-            <label className="flex items-center justify-between gap-2 text-sm">
-              {step}
+            {/* The label sits beside its select (AI-339), in a column wide enough for the longest step. */}
+            <label className="flex items-center gap-2 text-sm">
+              <span className="w-32 shrink-0">{step}</span>
               <Select
                 aria-label={`${step} tier`}
                 className="h-11 w-32 text-base sm:h-8 sm:text-sm"

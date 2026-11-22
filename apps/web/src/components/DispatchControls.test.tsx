@@ -14,7 +14,7 @@ describe("dispatch status at the warn cap", () => {
       lastDispatch: { decision: "quota_warn", at: "2026-11-12T08:00:00.000Z" },
     });
     await h.queryClient.invalidateQueries();
-    const list = await screen.findByRole("list", { name: "Settings" });
+    const list = await screen.findByRole("region", { name: "Settings" });
 
     expect(
       await within(list).findByText(
