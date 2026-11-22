@@ -297,7 +297,7 @@ export function checkDigestSummaryOutput(
 /** Applies a `summarize` run's result and end to its day's summary (used by `RunService`). */
 export class DigestSummaryResults {
   constructor(
-    private readonly store: Pick<DigestSummaryStore, "complete" | "fail">,
+    private readonly store: Pick<DigestSummaryStore, "dispatched" | "complete" | "fail">,
     private readonly now: () => Date = () => new Date(),
   ) {}
 
@@ -314,7 +314,9 @@ export class DigestSummaryResults {
         error: `Its summary was rejected (${checked.failure.detail ?? checked.failure.reason}).`,
       };
     }
-    const stored = await this.store.complete(run.projectId, input.day, run.id, checked.output, at);
+    const complete = () =>
+      this.store.complete(run.projectId, input.day, run.id, checked.output, at);
+    const stored = (await complete()) ?? ((await this.adopt(run, input)) && (await complete()));
     if (!stored) return { error: `The ${input.day} summary isn't this run's to store.` };
     return { summary: `Wrote the ${input.day} digest summary.` };
   }
@@ -330,11 +332,35 @@ export class DigestSummaryResults {
         L.failureDetailChars,
       ),
     };
-    await this.store
-      .fail(run.projectId, input.day, run.id, failure, this.now().toISOString())
-      .catch((err: unknown) =>
+    const fail = () =>
+      this.store.fail(run.projectId, input.day, run.id, failure, this.now().toISOString());
+    await (async () =>
+      (await fail()) ?? ((await this.adopt(run, input)) && (await fail())))().catch(
+      (err: unknown) =>
         log("ERROR", "digest summary not marked failed", { runId: run.id, error: String(err) }),
-      );
+    );
+  }
+
+  /**
+   * Records `run` on a day still `writing` with no task: its start ran but the `dispatched` write
+   * failed. Returns whether it is now this run's day.
+   */
+  private async adopt(run: Run, input: DigestSummaryInput): Promise<boolean> {
+    const dispatch = {
+      runId: run.id,
+      route: run.route,
+      inputHash: await sha256(JSON.stringify(input)),
+      truncated: input.truncated,
+    };
+    const adopted = await this.store.dispatched(
+      run.projectId,
+      input.day,
+      dispatch,
+      this.now().toISOString(),
+    );
+    if (adopted)
+      log("WARNING", "digest summary adopted its run", { runId: run.id, day: input.day });
+    return adopted !== null;
   }
 }
 
@@ -360,7 +386,15 @@ export type DirectSummary = (
 >;
 
 /** Refusals that leave the claimed day waiting: nothing ran, Andy's next read tries again. */
-const WAITS = new Set(["paused", "run_limit", "quota_reserve", "spend_cap"]);
+const WAITS = new Set([
+  "paused",
+  "run_limit",
+  "quota_reserve",
+  "spend_cap",
+  // Setup not finished (no executor or repo): fixing it shouldn't cost the day's one retry.
+  "executor_unavailable",
+  "invalid_repo",
+]);
 
 const FAILURE_WORDS: Record<DigestSummaryFailureReason, string> = {
   paused: "dispatch is paused",
@@ -486,9 +520,24 @@ export class DigestSummaryService {
       const quota = await this.deps.quotaLevels(projectId);
       const run = await this.deps.starter.requestDigestSummary(projectId, prompt, quota);
       const dispatch = { runId: run.id, route: run.route, inputHash, truncated: input.truncated };
-      const recorded = await this.deps.store.dispatched(projectId, period.id, dispatch, at());
       log("INFO", "digest summary started", { projectId, day: period.id, runId: run.id });
-      return this.view(period, recorded ?? (await this.deps.store.get(projectId, period.id)), null);
+      try {
+        const recorded = await this.deps.store.dispatched(projectId, period.id, dispatch, at());
+        return this.view(
+          period,
+          recorded ?? (await this.deps.store.get(projectId, period.id)),
+          null,
+        );
+      } catch (err) {
+        // The task runs anyway: the day stays writing, later reads wait on it (one summarize task
+        // per project), and its report or end adopts the day (`DigestSummaryResults`).
+        log("ERROR", "digest summary start not recorded", {
+          projectId,
+          runId: run.id,
+          error: String(err),
+        });
+        return this.view(period, claimed, null);
+      }
     } catch (err) {
       if (err instanceof DomainError && WAITS.has(err.code)) {
         log("INFO", "digest summary waits", { projectId, day: period.id, reason: err.code });

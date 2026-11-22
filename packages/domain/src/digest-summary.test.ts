@@ -25,8 +25,10 @@ import {
   digestSummaryPrompt,
   digestSummaryText,
   latestFinishedDay,
+  type DigestSummaryStarter,
   type DirectSummary,
 } from "./digest-summary";
+import { DomainError } from "./errors";
 import { RunService } from "./runs";
 import { WorkflowExecutor } from "./test-executor";
 import { ProjectTickets } from "./ticket-snapshots";
@@ -257,7 +259,7 @@ describe("DigestSummaryService (AI-323)", () => {
   let quota: Partial<Record<string, QuotaLevel>>;
   let direct: DirectSummary | null;
   let project: Project;
-  const service = () =>
+  const service = (starter: DigestSummaryStarter = runService) =>
     new DigestSummaryService({
       store,
       tracker,
@@ -265,7 +267,7 @@ describe("DigestSummaryService (AI-323)", () => {
       tickets: new ProjectTickets(tracker),
       milestones: new InMemoryMilestoneStore(),
       digest: new DigestReader(tracker, runs, null, () => clock),
-      starter: runService,
+      starter,
       quotaLevels: async () => quota,
       direct,
       now: () => clock,
@@ -463,6 +465,46 @@ describe("DigestSummaryService (AI-323)", () => {
 
     await tracker.updateProject(project.id, { paused: false });
     expect((await service().forDigest(project.id, OWNER)).state).toBe("writing");
+  });
+
+  it("GivenNoExecutorYet_WhenRead_ThenTheDayWaitsAndKeepsItsRetry", async () => {
+    await seedYesterday();
+    const unset = service({
+      requestDigestSummary: () =>
+        Promise.reject(
+          new DomainError("executor_unavailable", "no executor: connect GitHub first"),
+        ),
+    });
+
+    const waiting = await unset.forDigest(project.id, OWNER);
+    expect(waiting).toMatchObject({ state: "waiting", canRetry: false });
+    expect((await store.get(project.id, waiting.day))?.status).toBe("writing");
+
+    expect((await service().forDigest(project.id, OWNER)).state).toBe("writing");
+  });
+
+  it("GivenTheStartWriteFails_WhenTheTaskReports_ThenItAdoptsTheDayAndNoSecondTaskStarts", async () => {
+    const { epic, story } = await seedYesterday();
+    vi.spyOn(store, "dispatched").mockRejectedValueOnce(new Error("store unavailable"));
+
+    expect((await service().forDigest(project.id, OWNER)).state).toBe("waiting");
+    expect((await service().forDigest(project.id, OWNER)).state).toBe("waiting");
+    const active = await runs.listActive(project.id);
+    expect(active).toHaveLength(1);
+    const answer = output({
+      summaryRefs: { tickets: [story.key], prs: [349] },
+      lines: [
+        {
+          heading: "M4: Roadmap",
+          epicKey: epic.key,
+          text: "The digest leads with a summary.",
+          refs: { tickets: [story.key], prs: [349] },
+        },
+      ],
+    });
+
+    expect(await report(active[0]!.id, answer)).toBe("recorded");
+    expect(await service().forDigest(project.id, OWNER)).toMatchObject({ state: "ready" });
   });
 
   it("GivenTheQuotaReserve_WhenRead_ThenTheDayWaitsWithNoTask", async () => {
