@@ -2,6 +2,9 @@ import type { QuotaLevel, QuotaStatus, QuotaWindow } from "@andy/contracts";
 import { useQuota } from "@/lib/queries";
 import { cn } from "@/lib/utils";
 
+/** The gauge is the only place an unknown reading shows (AI-328), so it says what that means. */
+const UNKNOWN_HINT = "No fresh reading: don't assume there is headroom.";
+
 export const WINDOW_LABEL: Record<QuotaWindow, string> = {
   "5h": "5-hour",
   weekly: "Weekly",
@@ -41,7 +44,7 @@ export function QuotaGauge() {
           "whitespace-nowrap text-xs tabular-nums md:hidden",
           TEXT[fullest?.level ?? "unknown"],
         )}
-        title={fullest ? `${WINDOW_LABEL[fullest.window]} window` : undefined}
+        title={fullest ? `${WINDOW_LABEL[fullest.window]} window` : UNKNOWN_HINT}
       >
         {fullest ? `Quota ${Math.round(fullest.usedPct ?? 0)}%` : "Quota unknown"}
       </span>
@@ -59,7 +62,7 @@ function QuotaWindows({ windows }: { windows: QuotaStatus["windows"] }) {
           <li key={w.window} className="flex items-center gap-1.5 text-muted-foreground">
             {label}
             {w.usedPct === null ? (
-              <span>unknown</span>
+              <span title={UNKNOWN_HINT}>unknown</span>
             ) : (
               <>
                 <span

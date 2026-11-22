@@ -57,7 +57,7 @@ describe("quota gauge and banner", () => {
     const harness = await open([reading("5h", 92), reading("weekly", 10)]);
     const banner = await screen.findByRole("alert");
     fireEvent.click(within(banner).getByRole("button", { name: "Clear quota idle" }));
-    await screen.findByText(/Claude quota unknown/);
+    await waitFor(() => expect(screen.queryByRole("alert")).toBeNull());
     expect(screen.queryByRole("button", { name: "Clear quota idle" })).toBeNull();
     const [cleared] = (await harness.quota.latest("claude-sub")).filter((r) => r.window === "5h");
     expect(cleared?.discarded?.by).toBe("andy@example.com");
@@ -69,12 +69,14 @@ describe("quota gauge and banner", () => {
     expect(screen.queryByRole("button", { name: "Clear quota idle" })).toBeNull();
   });
 
-  it("GivenNoReadings_WhenTheShellOpens_ThenTheGaugeAndALowerSeverityBannerShowUnknown", async () => {
+  it("GivenNoReadings_WhenTheShellOpens_ThenOnlyTheGaugeSaysUnknown", async () => {
     await open([]);
-    await screen.findByText(/Claude quota unknown/);
-    const gauge = screen.getByRole("list", { name: "Claude quota" });
-    expect(within(gauge).getAllByText("unknown")).toHaveLength(2);
-    await waitFor(() => expect(screen.queryByRole("alert")).toBeNull());
+    const gauge = await screen.findByRole("list", { name: "Claude quota" });
+    const unknown = await within(gauge).findAllByText("unknown");
+    expect(unknown).toHaveLength(2);
+    expect(unknown[0]?.getAttribute("title")).toMatch(/don't assume there is headroom/);
+    expect(screen.queryByText(/Claude quota unknown/)).toBeNull();
+    expect(screen.queryByRole("alert")).toBeNull();
   });
 });
 
