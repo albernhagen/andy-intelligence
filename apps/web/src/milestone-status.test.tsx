@@ -133,7 +133,7 @@ describe("milestone status on the roadmap (AI-311)", () => {
     const { harness } = await seeded();
     await harness.router.navigate({ to: "/p/ai/roadmap" });
 
-    await harness.user.click(await screen.findByRole("button", { name: /M4: Epics/ }, PAGE_LOAD));
+    await harness.user.click(await screen.findByRole("button", { name: /^M4: Epics/ }, PAGE_LOAD));
     await harness.user.selectOptions(
       screen.getByRole("combobox", { name: "Status of M4: Epics" }),
       "Parked",
