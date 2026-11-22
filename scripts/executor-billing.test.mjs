@@ -74,6 +74,7 @@ function runContext(context, { credential }) {
       CREDENTIAL: credential,
       MAX_TURNS_CAP: "200",
       MAX_BUDGET_USD_CAP: "50",
+      SUMMARIZE_MAX_TURNS: "3",
       MAX_PROMPT_CHARS: "200000",
       ACTIONS_ID_TOKEN_REQUEST_TOKEN: "req",
       ACTIONS_ID_TOKEN_REQUEST_URL: "https://actions.example/token?x=1",
