@@ -62,6 +62,10 @@ describe("DigestSummary", () => {
       { ...period, id: "2026-11-22" },
       { ...period, to: "2026-11-23T07:00:00.000Z" },
       { ...period, timeZone: "Mars/Olympus" },
+      // 24 hours, but 13:00 to 13:00 Denver: half of two days.
+      { ...period, from: "2026-11-21T20:00:00.000Z", to: "2026-11-22T20:00:00.000Z" },
+      // Starts at midnight but ends an hour into the next day.
+      { ...period, to: "2026-11-22T08:00:00.000Z" },
     ];
     for (const p of bad)
       expect(DigestSummaryPeriod.safeParse(p).success, JSON.stringify(p)).toBe(false);

@@ -117,23 +117,27 @@ export const DigestSummaryFailure = z.object({
 export type DigestSummaryFailure = z.infer<typeof DigestSummaryFailure>;
 
 const HOUR_MS = 3_600_000;
-const DAY_MESSAGE = "from and to must bound the day `id` in `timeZone` (23 to 25 hours)";
+const DAY_MESSAGE = "from and to must be the local midnights that bound the day `id` in `timeZone`";
 
 /**
- * Whether `from`..`to` is the local day `id` in `timeZone`: `from` falls on `id` there, and the
- * span is 23 to 25 hours (a day with a clock change). An unknown time zone is refused.
+ * Whether `from`..`to` is exactly the local day `id` in `timeZone`: `from` is its first instant
+ * (1 ms earlier is another date), `to` is the next day's first instant, and the span is 23 to 25
+ * hours (a day with a clock change). An unknown time zone is refused.
  */
 function isLocalDay(p: { id: string; timeZone: string; from: string; to: string }): boolean {
-  const span = Date.parse(p.to) - Date.parse(p.from);
+  const from = Date.parse(p.from);
+  const to = Date.parse(p.to);
+  const span = to - from;
   if (!(span >= 23 * HOUR_MS && span <= 25 * HOUR_MS)) return false;
   try {
-    const date = new Intl.DateTimeFormat("en-CA", {
+    const format = new Intl.DateTimeFormat("en-CA", {
       timeZone: p.timeZone,
       year: "numeric",
       month: "2-digit",
       day: "2-digit",
-    }).format(new Date(p.from));
-    return date === p.id;
+    });
+    const day = (ms: number) => format.format(new Date(ms));
+    return day(from) === p.id && day(from - 1) !== p.id && day(to - 1) === p.id && day(to) !== p.id;
   } catch {
     return false;
   }
