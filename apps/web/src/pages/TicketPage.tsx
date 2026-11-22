@@ -261,15 +261,7 @@ function Story({ ticket: t }: { ticket: Ticket }) {
             pending={body.pending}
             error={body.error}
           />
-          <ListField
-            ticket={t}
-            field="acceptanceCriteria"
-            // An epic's criteria are its "Done when" list (ADR-0108), as a chore's are.
-            label={t.type === "chore" || isEpic ? "Done when" : "Acceptance criteria"}
-          />
-          <ListField ticket={t} field="assumptions" label="Assumptions" />
-          <ListField ticket={t} field="outOfScope" label="Out of scope" />
-          <ListField ticket={t} field="touches" label="Touches" />
+          <ListFields ticket={t} />
         </div>
         <Rail ticket={t} />
       </div>
@@ -295,14 +287,83 @@ function Next({ ticket: t }: { ticket: Ticket }) {
   );
 }
 
+type ListKey = "acceptanceCriteria" | "assumptions" | "outOfScope" | "touches";
+const LIST_KEYS: readonly ListKey[] = [
+  "acceptanceCriteria",
+  "assumptions",
+  "outOfScope",
+  "touches",
+];
+
+function listLabel(t: Ticket, field: ListKey): string {
+  switch (field) {
+    case "acceptanceCriteria":
+      // An epic's criteria are its "Done when" list (ADR-0108), as a chore's are.
+      return t.type === "chore" || t.type === "epic" ? "Done when" : "Acceptance criteria";
+    case "assumptions":
+      return "Assumptions";
+    case "outOfScope":
+      return "Out of scope";
+    case "touches":
+      return "Touches";
+  }
+}
+
+/**
+ * The list fields (AI-330): one with items shows as always; empty ones fold into one "Add…"
+ * row, so a bare ticket doesn't show four headings of nothing. Picking one opens it, focused;
+ * a field shown once stays for this ticket, even if its last item is removed.
+ */
+function ListFields({ ticket: t }: { ticket: Ticket }) {
+  const [opened, setOpened] = useState<{ keys: ListKey[]; focus: ListKey | null }>(() => ({
+    keys: LIST_KEYS.filter((f) => t[f].length > 0),
+    focus: null,
+  }));
+  const shown = LIST_KEYS.filter((f) => t[f].length > 0 || opened.keys.includes(f));
+  const folded = LIST_KEYS.filter((f) => !shown.includes(f));
+  return (
+    <>
+      {shown.map((f) => (
+        <ListField
+          key={f}
+          ticket={t}
+          field={f}
+          label={listLabel(t, f)}
+          autoFocus={opened.focus === f}
+        />
+      ))}
+      {folded.length > 0 && (
+        <Select
+          aria-label="Add a list"
+          className="h-8 w-auto text-muted-foreground"
+          value=""
+          onChange={(e) => {
+            const f = e.target.value as ListKey;
+            if (f) setOpened(({ keys }) => ({ keys: [...keys, f], focus: f }));
+          }}
+        >
+          <option value="">Add…</option>
+          {folded.map((f) => (
+            <option key={f} value={f}>
+              {listLabel(t, f)}
+            </option>
+          ))}
+        </Select>
+      )}
+    </>
+  );
+}
+
 function ListField({
   ticket,
   field,
   label,
+  autoFocus,
 }: {
   ticket: Ticket;
-  field: "acceptanceCriteria" | "assumptions" | "outOfScope" | "touches";
+  field: ListKey;
   label: string;
+  autoFocus: boolean;
 }) {
   const s = useTicketSave(ticket);
   return (
@@ -312,6 +373,7 @@ function ListField({
       onSave={(v, done) => s.save({ [field]: v }, done)}
       pending={s.pending}
       error={s.error}
+      autoFocus={autoFocus}
     />
   );
 }

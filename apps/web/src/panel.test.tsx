@@ -122,7 +122,7 @@ describe("status line", () => {
 
 describe("one document, edited in place", () => {
   it("GivenAChore_WhenThePanelOpens_ThenTheChecklistIsDoneWhen", async () => {
-    const { open } = await seeded({ type: "chore" });
+    const { open } = await seeded({ type: "chore", acceptanceCriteria: ["Runs nightly"] });
     const panel = await open();
     expect(within(panel).getByRole("region", { name: "Done when" })).toBeTruthy();
     expect(within(panel).queryByRole("region", { name: "Acceptance criteria" })).toBeNull();
