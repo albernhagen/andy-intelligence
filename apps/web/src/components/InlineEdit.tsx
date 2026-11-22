@@ -5,6 +5,7 @@ import type { Ticket } from "@andy/contracts";
 import { Markdown } from "@/components/Markdown";
 import { QueryError } from "@/components/Status";
 import { Button } from "@/components/ui/button";
+import { Segmented } from "@/components/ui/segmented";
 import { Input, Textarea } from "@/components/ui/input";
 import { ApiError } from "@/lib/api";
 import { type TicketPatch, ticketQueryKey, useUpdateTicket } from "@/lib/queries";
@@ -264,20 +265,15 @@ export function MarkdownField({
     >
       <div className="flex items-center justify-between">
         <h3 className="text-sm font-medium">{label}</h3>
-        <div className="flex gap-1" role="group" aria-label="Editor mode">
-          {(["Write", "Preview"] as const).map((mode) => (
-            <Button
-              key={mode}
-              type="button"
-              size="sm"
-              variant={(mode === "Preview") === preview ? "default" : "ghost"}
-              aria-pressed={(mode === "Preview") === preview}
-              onClick={() => setPreview(mode === "Preview")}
-            >
-              {mode}
-            </Button>
-          ))}
-        </div>
+        <Segmented
+          label="Editor mode"
+          value={preview ? "Preview" : "Write"}
+          options={[
+            { value: "Write", label: "Write" },
+            { value: "Preview", label: "Preview" },
+          ]}
+          onChange={(mode) => setPreview(mode === "Preview")}
+        />
       </div>
       {preview ? (
         <div className="min-h-20 rounded-md border border-border p-3" aria-label="Preview">
