@@ -74,6 +74,7 @@ export function runContext(context) {
       HAS_OAUTH_TOKEN: "true",
       HAS_API_KEY: "false",
       MAX_TURNS_CAP: "200",
+      SUMMARIZE_MAX_TURNS: "3",
       MAX_PROMPT_CHARS: "200000",
       ACTIONS_ID_TOKEN_REQUEST_TOKEN: "req",
       ACTIONS_ID_TOKEN_REQUEST_URL: "https://actions.example/token?x=1",
