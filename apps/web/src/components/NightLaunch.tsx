@@ -8,6 +8,7 @@ import { Field, Input } from "@/components/ui/input";
 import { unwrap, useApi } from "@/lib/api";
 import type { components } from "@/lib/api.gen";
 import { showsError, useLivePoll } from "@/lib/live";
+import { count, dateTime } from "@/lib/format";
 
 type NightStatus = components["schemas"]["NightStatus"];
 type Story = NightStatus["stories"][number];
@@ -45,10 +46,9 @@ export function formatSpend(
   spend: NonNullable<NightStatus["progress"]>["spend"],
   budget: NonNullable<NightStatus["launch"]>["budget"],
 ): string {
-  const n = (v: number) => v.toLocaleString("en-US");
   return [
     `${spend.runs} of ${budget.maxRuns} agent tasks`,
-    `${n(spend.tokens)} of ${n(budget.maxTokens)} tokens`,
+    `${count(spend.tokens)} of ${count(budget.maxTokens)} tokens`,
     `~$${spend.estimatedUsd.toFixed(2)} of $${budget.maxUsd} (estimate)`,
     spend.unknownRuns > 0 &&
       `${spend.unknownRuns} ${spend.unknownRuns === 1 ? "agent task" : "agent tasks"} unknown`,
@@ -185,12 +185,12 @@ function isoOf(local: string): string | null {
   return local && Number.isFinite(t) ? new Date(t).toISOString() : null;
 }
 
-const numberOrNull = (v: string) => (v.trim() === "" ? null : Number(v));
+const numberOrNull = (v: string) => (v.trim() === "" ? null : Number(v.replace(/,/g, "")));
 
 function LaunchForm({ path, night }: { path: TicketPath; night: NightStatus }) {
   const api = useApi();
   const [maxRuns, setMaxRuns] = useState("20");
-  const [maxTokens, setMaxTokens] = useState("5000000");
+  const [maxTokens, setMaxTokens] = useState("5,000,000");
   const [maxUsd, setMaxUsd] = useState("50");
   const [stopAt, setStopAt] = useState("");
   const launch = useNightWrite(async () =>
@@ -223,7 +223,7 @@ function LaunchForm({ path, night }: { path: TicketPath; night: NightStatus }) {
         <Field label={`Max agent tasks (≤ ${limits.maxRuns})`}>
           <Input inputMode="numeric" value={maxRuns} onChange={(e) => setMaxRuns(e.target.value)} />
         </Field>
-        <Field label={`Max tokens (≤ ${limits.maxTokens.toLocaleString("en-US")})`}>
+        <Field label={`Max tokens (≤ ${count(limits.maxTokens)})`}>
           <Input
             inputMode="numeric"
             value={maxTokens}
@@ -272,9 +272,7 @@ function Running({ path, night }: { path: TicketPath; night: NightStatus }) {
         <Badge variant={stopping ? "attention" : "running"}>
           {stopping ? "Stopping" : "Running"}
         </Badge>
-        <span className="text-muted-foreground">
-          until {new Date(launch.stopAt).toLocaleString()}
-        </span>
+        <span className="text-muted-foreground">until {dateTime(launch.stopAt)}</span>
       </div>
       {p && (
         <>

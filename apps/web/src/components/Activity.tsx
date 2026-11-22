@@ -9,6 +9,7 @@ import { Textarea } from "@/components/ui/input";
 import { QueryError } from "@/components/Status";
 import { useAddComment } from "@/lib/queries";
 import { describeEvent, timeline } from "@/lib/tickets";
+import { dateTime } from "@/lib/format";
 
 /** Events whose body is untrusted prose (comments, question text): rendered as markdown. */
 const MARKDOWN_BODIES = new Set<TicketEvent["kind"]>(["comment", "question_asked"]);
@@ -77,7 +78,7 @@ function EventItem({ event: e }: { event: TicketEvent }) {
       <p>
         <span className="font-medium">{actorLabel(e.actor)}</span> {describeEvent(e)}{" "}
         <time dateTime={e.createdAt} className="text-xs text-muted-foreground">
-          {new Date(e.createdAt).toLocaleString()}
+          {dateTime(e.createdAt)}
         </time>
       </p>
       {e.body &&

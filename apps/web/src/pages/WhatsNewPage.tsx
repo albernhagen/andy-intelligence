@@ -5,6 +5,7 @@ import { Loading, QueryError } from "@/components/Status";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { useWhatsNew } from "@/lib/queries";
+import { dateTime } from "@/lib/format";
 
 const WINDOWS = [
   { days: 14, label: "14 days" },
@@ -211,10 +212,7 @@ function ChangeLine({ note: n, projectId }: { note: WhatsNewNote; projectId: str
             </Field>
           )}
           <Field label="Merged">
-            {new Date(n.mergedAt).toLocaleString("en-US", {
-              dateStyle: "medium",
-              timeStyle: "short",
-            })}
+            {dateTime(n.mergedAt)}
             {n.mergedBy ? ` by ${n.mergedBy}` : ""}
             {n.epicKey ? ` · ${n.epicKey}: ${n.epicTitle}` : ""}
           </Field>
