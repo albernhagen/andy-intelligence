@@ -1,5 +1,6 @@
 import { expect, test, type Page } from "@playwright/test";
 import type { ProjectRoadmap, RoadmapCounts, RoadmapEpic } from "@andy/domain";
+import { expectPageFits } from "./phone";
 
 /**
  * AI-202: M4.26: Roadmap screen. No write path sets an epic's milestone before AI-304, so the
@@ -124,8 +125,7 @@ test.describe("phone", () => {
 
   test("phone roadmap: rows stack", async ({ page }) => {
     await open(page);
-    const width = await page.evaluate(() => document.documentElement.scrollWidth);
-    expect(width).toBeLessThanOrEqual(390);
+    await expectPageFits(page);
     await expect(page).toHaveScreenshot("phone-roadmap.png", { fullPage: true });
   });
 });
