@@ -14,6 +14,7 @@ Stack: React, Tailwind v4, shadcn/ui components in `src/components/ui/`, icons f
 ## Layout
 
 - One shell on every screen (`src/components/AppShell.tsx`): project picker, navigation, "Needs you N". Pages never draw their own header.
+- The header holds at most six destinations (Inbox, Board, Roadmap, Work, Dashboards, What's new); every settings page and Sign out sit in one Settings menu, and settings pages share `SettingsTabs`. A new screen goes under an existing destination or replaces one (AI-335).
 - The picker is the global scope: project screens under `/p/<project>/…`, cross-project under `/all/…`. A new screen gets both, or says why not (the board needs one project).
 - Content is full width with `px-4 sm:px-6` and `py-4`. Forms and prose cap at `max-w-2xl`.
 - A ticket opens as a panel over the board, led by its status line; prose uses `Markdown`.
@@ -26,6 +27,7 @@ Below `sm` (640px; `useIsPhone`); screens adopt these in their own M7: Mobile sl
 - Touch targets at least 44px (`h-11 sm:h-8`). Inputs `text-base` so iOS doesn't zoom.
 - Edge-touching elements pad by `env(safe-area-inset-*)`.
 - No hover-only actions; panels open full-screen.
+- Nothing scrolls sideways at 390px: a strip that scrolls (the board's lanes) does so in its own `relative overflow-x-auto` box. Phone specs check it with `expectPageFits` (`e2e/phone.ts`, AI-325).
 
 ## Type
 
