@@ -41,6 +41,7 @@ import {
   type Section,
 } from "@/lib/scope";
 import { useIsPhone } from "@/lib/use-phone";
+import { KeyboardShortcuts } from "@/components/KeyboardShortcuts";
 import { cn } from "@/lib/utils";
 
 /** Extra header controls from outside the router (the signed-in App adds Sign out). */
@@ -96,6 +97,7 @@ export function AppShell() {
         <Outlet />
       </main>
       {phone && <PhoneNav links={links} settings={settings} headerEnd={headerEnd} />}
+      <KeyboardShortcuts scope={scope} />
     </div>
   );
 }
