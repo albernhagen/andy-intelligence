@@ -53,6 +53,23 @@ export function scopePath(scope: Scope, section: Section): string {
 export const projectSettingsPath = (projectId: string) =>
   `/p/${encodeURIComponent(projectId)}/settings`;
 
+/**
+ * The settings pages in order (AI-335): this project's while one is in scope, then the global
+ * ones. The header's Settings menu, the phone's More and the tabs on each settings page share it.
+ */
+export function settingsTabs(scope: Scope): { label: string; to: string }[] {
+  const project =
+    scope.kind === "project"
+      ? [{ label: "Project settings", to: projectSettingsPath(scope.projectId) }]
+      : [];
+  return [
+    ...project,
+    { label: "GitHub", to: "/settings/github" },
+    { label: "Local runners", to: "/settings/runners" },
+    { label: "Models", to: "/settings/models" },
+  ];
+}
+
 /** "all" or "p:<project>": the stored form, also handy as a React key. */
 export const scopeKey = (scope: Scope) => (scope.kind === "all" ? "all" : `p:${scope.projectId}`);
 
