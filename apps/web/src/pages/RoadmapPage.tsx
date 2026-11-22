@@ -78,7 +78,10 @@ function ProjectSection({ roadmap: r, heading }: { roadmap: ProjectRoadmap; head
     <section aria-label={r.projectName} className="space-y-2">
       {heading && <h3 className="text-sm font-medium">{r.projectName}</h3>}
       {r.milestones.length === 0 && loose.length === 0 && (
-        <p className="text-sm text-muted-foreground">No milestones or epics yet.</p>
+        <p className="text-sm text-muted-foreground">
+          No milestones or epics yet. To start, ask a Claude session to plan this project or to
+          ideate an epic.
+        </p>
       )}
       {r.milestones.length > 0 && (
         <ul className="divide-y divide-border rounded-md border border-border">
