@@ -19,7 +19,7 @@ export const dayOf = (iso: string) =>
   new Date(iso).toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" });
 
 /**
- * What's new (AI-159, ADR-0121) under `/p/<project>/whats-new`: status per milestone epic and
+ * What's new (AI-159, ADR-0121) under `/p/<project>/whats-new`: status per top-level epic and
  * what needs Andy, then merged changes newest first, grouped by day, one line each. A line opens
  * to "How it works", "Needs you" and doc links. Note text is the PR author's, shown as plain text.
  */
@@ -48,12 +48,12 @@ export function WhatsNewPage() {
         </div>
         {whatsNew.data && whatsNew.data.milestones.length > 0 && (
           <select
-            aria-label="Milestone"
+            aria-label="Epic"
             className="h-8 rounded-md border border-border bg-background px-2 text-sm"
             value={epic ?? ""}
             onChange={(e) => setEpic(e.target.value || null)}
           >
-            <option value="">All milestones</option>
+            <option value="">All epics</option>
             {whatsNew.data.milestones.map((m) => (
               <option key={m.key} value={m.key}>
                 {m.key}: {m.title}
@@ -92,13 +92,13 @@ function Status({ whatsNew, projectId }: { whatsNew: WhatsNew; projectId: string
     <section aria-label="Status" className="space-y-1">
       <h3 className="text-sm font-medium">Status</h3>
       {open.length === 0 && finished.length === 0 && (
-        <p className="text-sm text-muted-foreground">No milestone epics yet.</p>
+        <p className="text-sm text-muted-foreground">No epics yet.</p>
       )}
       {open.length > 0 && (
         <table className="text-sm">
           <thead className="text-xs text-muted-foreground">
             <tr className="text-left">
-              <th className="pr-4 font-normal">Milestone</th>
+              <th className="pr-4 font-normal">Epic</th>
               <th className="pr-3 text-right font-normal">Done</th>
               <th className="pr-3 text-right font-normal">In review</th>
               <th className="pr-3 text-right font-normal">In progress</th>
