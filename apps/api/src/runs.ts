@@ -184,6 +184,8 @@ export interface RunCallbackDeps {
   quota?: QuotaStore;
 }
 
+const NO_READINGS: ParsedRateLimits = { ok: true, readings: [] };
+
 export function registerRunCallbacks(app: OpenAPIHono<AuthEnv>, deps: RunCallbackDeps): void {
   const now = deps.now ?? (() => new Date());
   const limiter = new FixedWindowLimiter(RUN_CALLBACK_RATE_LIMIT, 60_000, () => now().getTime());
@@ -337,7 +339,10 @@ export function registerRunCallbacks(app: OpenAPIHono<AuthEnv>, deps: RunCallbac
         return c.json({ error: "invalid request", details }, 400);
       }
       const { rateLimits, usage, ...report } = body.data;
-      const limits = parseRateLimits(rateLimits, now());
+      // Subscription quota readings come only from subscription runs (AI-260): an API-key run's
+      // limits say nothing about the plan's windows.
+      const subscription = (await deps.runs.billingOf(runId.data)) === "subscription";
+      const limits = subscription ? parseRateLimits(rateLimits, now()) : NO_READINGS;
       const result = await deps.runs.report(runId.data, caller, {
         ...report,
         usage: parseUsage(runId.data, usage),

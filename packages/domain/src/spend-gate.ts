@@ -228,7 +228,12 @@ export class SpendGate {
    * fetched (it can't have called a model), else kept in full. `run` is the run as stored after
    * it ended; null when it couldn't be read (then kept in full).
    */
-  async close(runId: string, run: Run | null, usage?: RunUsage | null): Promise<void> {
+  async close(
+    runId: string,
+    run: Run | null,
+    usage?: RunUsage | null,
+    extraMicroUsd = 0,
+  ): Promise<void> {
     let entry;
     try {
       entry = await this.ledger.get(runId);
@@ -249,7 +254,9 @@ export class SpendGate {
     let microUsd: number | null = null;
     if (usage !== undefined && run !== null) {
       const model = await this.prices(run.route).catch(() => null);
-      microUsd = model ? settleFor(model, usage) : null;
+      const agent = model ? settleFor(model, usage) : null;
+      // Spend the report doesn't carry (the executor's helper calls, AI-260), at its cap.
+      microUsd = agent === null ? null : agent + extraMicroUsd;
     }
     const at = this.now().toISOString();
     await this.ledger.settle(runId, microUsd, at).then(
@@ -257,6 +264,20 @@ export class SpendGate {
       (err: unknown) =>
         log("ERROR", "spend settle failed; it stays reserved", { runId, error: String(err) }),
     );
+  }
+
+  /**
+   * The run's open reservation in micro-USD: the budget its executor enforces (AI-260). Null
+   * when there is none, it is closed, or the ledger can't be read: then the run must not start.
+   */
+  async reservedFor(runId: string): Promise<number | null> {
+    try {
+      const entry = await this.ledger.get(runId);
+      return entry?.state === "reserved" ? entry.reservedMicroUsd : null;
+    } catch (err) {
+      log("ERROR", "spend entry unreadable", { runId, error: String(err) });
+      return null;
+    }
   }
 
   /**
