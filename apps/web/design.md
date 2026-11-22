@@ -68,6 +68,7 @@ The marker set: [`design-status-markers.md`](design-status-markers.md).
 - Say "agent task", never "run".
 - Buttons are verbs. Empty states say what's missing: "Nothing needs you."
 - Errors show the API's message (`QueryError`); never swallow one.
+- Times, durations and counts as words (`lib/format.ts`): "2:48 PM", "Nov 4, 2:50 PM", never seconds; past 90 minutes, hours or days ("17 days"); "5,000,000". Settings use their page labels and on/off (`lib/settings-labels.ts`).
 
 ## Checks
 
