@@ -38,7 +38,7 @@ A new session gets the MCP connector's current tools. A long-lived one keeps the
 - **Infra:** a PR that needs `terraform apply` or a deploy sequence says so in its description; Andy applies locally, per root, with the expected counts (`infra/AGENTS.md`).
 - **Sessions start only on Andy's turns.** The app refuses a session start on a turn a worker's note began; there the coordinator can only propose. Start the next batch while Andy is in the conversation.
 - **Give the next ticket before merging.** A worker is archived the moment its PR merges (auto-archive). Anything more for that worker (a follow-up, a fix) goes to it before the merge; after it, a new worker.
-- **Pushes:** the pre-push hook runs typecheck and only the tests the push affects (ADR-0113); CI runs the full suite. Still release workers' pushes a few at a time, and run `host-check` when pushes slow down.
+- **Pushes:** the pre-push hook runs typecheck and only the tests the push affects (ADR-0113), on at most a quarter of the cores (AI-219); CI runs the full suite. Still release workers' pushes a few at a time, and run `host-check` when pushes slow down.
 
 ## 4. Hand over
 
