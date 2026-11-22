@@ -12,12 +12,12 @@ import {
   conflictFiles,
   gitRunner,
   mergeMessage,
+  mergedCommits,
   pickPrs,
   resync,
   skipReason,
   stopComment,
   summaryTable,
-  workflowFile,
 } from "./resync-prs.mjs";
 
 const REPO = "o/r";
@@ -41,7 +41,6 @@ const env = {
   REPO,
   DEFAULT_BRANCH: "main",
   READ_TOKEN: "read-token",
-  WORKFLOW_REF: `${REPO}/.github/workflows/resync-prs.yml@refs/heads/main`,
   CONTROL_PLANE_URL: "https://cp.example",
   ACTIONS_ID_TOKEN_REQUEST_URL: "https://oidc.example/?x=1",
   ACTIONS_ID_TOKEN_REQUEST_TOKEN: "oidc-request",
@@ -53,7 +52,8 @@ const env = {
  */
 function world({
   prs = [pr()],
-  runsLastHour = 1,
+  // Per PR number: `git log --format=%P` lines of default-branch merges in the last hour.
+  mergesLastHour = {},
   ancestor = 1,
   recentMerges = 0,
   mergeTree = { status: 0, stdout: "tree\n" },
@@ -83,14 +83,16 @@ function world({
         return { status: 0, stdout: `${recentMerges}\n` };
       case "merge-tree":
         return mergeTree;
+      case "log": {
+        const number = /refs\/resync\/(\d+)$/.exec(args.at(-1))[1];
+        return { status: 0, stdout: mergesLastHour[number] ?? "" };
+      }
       default:
         throw new Error(`unexpected git ${args[0]}`);
     }
   };
   const github = async (method, path, opts = {}) => {
     calls.push({ method, path, token: opts.token, body: opts.body });
-    if (path.includes("/actions/workflows/"))
-      return { status: 200, data: { total_count: runsLastHour } };
     if (method === "GET" && path.includes("/pulls?")) return { status: 200, data: prs };
     if (method === "GET" && path.includes("/comments")) return { status: 200, data: comments };
     if (path.endsWith("/update-branch")) return update;
@@ -154,13 +156,10 @@ describe("pickPrs", () => {
   });
 });
 
-describe("workflowFile", () => {
-  it("GivenAWorkflowRef_WhenParsed_ThenTheFileName", () => {
-    expect(workflowFile(env.WORKFLOW_REF)).toBe("resync-prs.yml");
-  });
-
-  it("GivenGarbage_WhenParsed_ThenThrows", () => {
-    expect(() => workflowFile("o/r/../x.yml@main")).toThrow();
+describe("mergedCommits", () => {
+  it("GivenGitLogParents_WhenParsed_ThenTheMergedCommitOfEachMerge", () => {
+    const out = `${HEAD} ${MAIN}\n${"c".repeat(40)} ${"d".repeat(40)}\n\n`;
+    expect(mergedCommits(out)).toEqual([MAIN, "d".repeat(40)]);
   });
 });
 
@@ -223,11 +222,70 @@ describe("resync", () => {
     expect(writes(w.calls)).toEqual([]);
   });
 
-  it("GivenTooManyRunsThisHour_WhenRun_ThenNoPrIsListedAndNoTokenRequested", async () => {
-    const w = world({ runsLastHour: MAX_RUNS_PER_HOUR + 1 });
+  /** `git log --format=%P` lines for `n` re-syncs, each merging a different main commit. */
+  const resyncs = (n, from = 0) =>
+    Array.from(
+      { length: n },
+      (_, i) => `${HEAD} ${(from + i).toString(16).padStart(40, "0")}`,
+    ).join("\n");
+
+  it("GivenTwelveReSyncsThisHour_WhenRun_ThenRefusedWithAWarningAndNoTokenRequested", async () => {
+    const w = world({ mergesLastHour: { 7: resyncs(MAX_RUNS_PER_HOUR) } });
     const out = await w.run();
     expect(out.capped).toBe(true);
-    expect(w.calls.map((c) => c.method)).toEqual(["GET"]);
+    expect(w.lines).toContain(
+      `::warning::${MAX_RUNS_PER_HOUR} re-syncs in the last hour (cap ${MAX_RUNS_PER_HOUR}): no re-sync`,
+    );
+    expect(w.calls.filter((c) => c.method === "FETCH")).toEqual([]);
+    expect(writes(w.calls)).toEqual([]);
+  });
+
+  it("GivenElevenReSyncsThisHour_WhenRun_ThenTheTwelfthReSyncs", async () => {
+    const w = world({ mergesLastHour: { 7: resyncs(MAX_RUNS_PER_HOUR - 1) } });
+    const { capped, results } = await w.run();
+    expect(capped).toBe(false);
+    expect(results[0].outcome).toBe("updated");
+  });
+
+  it("GivenOneRunReSyncedSeveralPrs_WhenCounted_ThenItCountsOnce", async () => {
+    const other = pr({ number: 8, updated_at: "2026-11-20T11:00:00Z" });
+    const w = world({
+      prs: [pr(), other],
+      // The same 11 main commits merged into both PRs: 11 runs, not 22.
+      mergesLastHour: { 7: resyncs(11), 8: resyncs(11) },
+    });
+    const { capped } = await w.run();
+    expect(capped).toBe(false);
+  });
+
+  it("GivenSkippedAndCappedRunsThisHour_WhenRun_ThenOnlyMergesAreCountedAndTheActionsApiIsNotRead", async () => {
+    // Runs that re-synced nothing leave no merge on any branch: an hour of them counts as zero.
+    const w = world();
+    const { capped, results } = await w.run();
+    expect(capped).toBe(false);
+    expect(results[0].outcome).toBe("updated");
+    expect(w.calls.some((c) => c.path.includes("/actions/"))).toBe(false);
+    const log = w.gitCalls.find((a) => a[0] === "log");
+    expect(log).toEqual([
+      "log",
+      "--merges",
+      "--since=2026-11-20T11:00:00Z",
+      "--fixed-strings",
+      "--grep=Merge branch 'main' into ",
+      "--format=%P",
+      `${MAIN}..refs/resync/7`,
+    ]);
+  });
+
+  it("GivenAnOverCapPr_WhenCounted_ThenItsReSyncsStillCount", async () => {
+    // A PR re-synced this hour moves to the back of the queue, past the per-run cap.
+    const prs = Array.from({ length: MAX_PRS_PER_RUN + 1 }, (_, i) =>
+      pr({ number: 100 + i, updated_at: `2026-11-20T10:${String(i).padStart(2, "0")}:00Z` }),
+    );
+    const last = 100 + MAX_PRS_PER_RUN;
+    const w = world({ prs, mergesLastHour: { [last]: resyncs(MAX_RUNS_PER_HOUR) } });
+    const out = await w.run();
+    expect(out.capped).toBe(true);
   });
 
   it("GivenThreeReSyncsToday_WhenRun_ThenSkippedAtTheDailyCap", async () => {
@@ -423,6 +481,16 @@ describe("gitRunner against a real repository", () => {
     expect(r.status).toBe(1);
     expect(conflictFiles(r.stdout)).toEqual(["a.txt"]);
     expect(git(["merge-base", "--is-ancestor", main, side]).status).toBe(1);
+  });
+
+  it("GivenOneMergeOfMainThisHour_WhenLogged_ThenTheMergedMainCommitIsRead", () => {
+    const { git, main, side } = repoWithConflict();
+    const merged = git(["rev-parse", "main~1"]).stdout.trim();
+    const since = new Date(Date.now() - 3_600_000).toISOString();
+    const args = ["log", "--merges", `--since=${since}`, "--fixed-strings", "--format=%P"];
+    const log = git([...args, `--grep=${mergeMessage("main")}`, `${main}..${side}`]);
+    expect(log.status).toBe(0);
+    expect(mergedCommits(log.stdout)).toEqual([merged]);
   });
 
   it("GivenOneMergeOfMainOnTheBranch_WhenCountedByMessage_ThenOne", () => {

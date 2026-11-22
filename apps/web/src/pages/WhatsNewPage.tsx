@@ -1,13 +1,15 @@
 import { useState, type ReactNode } from "react";
-import { Link, useParams } from "@tanstack/react-router";
+import { Link, useNavigate, useParams, useSearch } from "@tanstack/react-router";
 import type { WhatsNew, WhatsNewMilestone, WhatsNewNote } from "@andy/contracts";
+import { DailySummary } from "@/components/DailySummary";
 import { Loading, QueryError } from "@/components/Status";
 import { Badge } from "@/components/ui/badge";
 import { Segmented } from "@/components/ui/segmented";
-import { useWhatsNew } from "@/lib/queries";
+import { useDigest, useWhatsNew } from "@/lib/queries";
 import { dateTime } from "@/lib/format";
 
 const WINDOWS = [
+  { days: 1, label: "24 hours" },
   { days: 14, label: "14 days" },
   { days: 30, label: "30 days" },
   { days: 90, label: "90 days" },
@@ -23,10 +25,17 @@ export const dayOf = (iso: string) =>
  * What's new (AI-159, ADR-0121) under `/p/<project>/whats-new`: status per top-level epic and
  * what needs Andy, then merged changes newest first, grouped by day, one line each. A line opens
  * to "How it works", "Needs you" and doc links. Note text is the PR author's, shown as plain text.
+ * Exceptions (waiting for you, blocked) come first, from the digest read MCP `digest` uses: the
+ * Digest screen folded in here (AI-341), with a "24 hours" window; `/digest` opens it.
  */
 export function WhatsNewPage() {
   const { projectId = "" } = useParams({ strict: false });
-  const [days, setDays] = useState(14);
+  // From the URL, so a link or redirect to `?days=1` changes the window even while the page is open.
+  const search = useSearch({ strict: false });
+  const days = "days" in search && typeof search.days === "number" ? search.days : 14;
+  const navigate = useNavigate();
+  const setDays = (next: number) =>
+    void navigate({ to: ".", search: next === 14 ? {} : { days: next }, replace: true });
   const [epic, setEpic] = useState<string | null>(null);
   const whatsNew = useWhatsNew(projectId, days, epic);
 
@@ -55,15 +64,9 @@ export function WhatsNewPage() {
             ))}
           </select>
         )}
-        {/* AI-335: the digest left the header; AI-341 folds it into this page. */}
-        <Link
-          to="/p/$projectId/digest"
-          params={{ projectId }}
-          className="ml-auto text-sm text-muted-foreground underline-offset-2 hover:underline"
-        >
-          Digest
-        </Link>
       </header>
+      <DailySummary projectId={projectId} />
+      <Exceptions projectId={projectId} />
       {whatsNew.isPending ? (
         <Loading />
       ) : whatsNew.isError ? (
@@ -157,7 +160,7 @@ function Changes(props: { whatsNew: WhatsNew; projectId: string; days: number })
     <section aria-label="Changes" className="space-y-4">
       {notes.length === 0 && (
         <p className="text-sm text-muted-foreground">
-          Nothing merged in the last {props.days} days.
+          Nothing merged in the last {props.days === 1 ? "24 hours" : `${props.days} days`}.
         </p>
       )}
       {[...days].map(([day, list]) => (
@@ -258,5 +261,46 @@ function TicketLink(props: { projectId: string; ticketKey: string; title: string
       <span className="text-xs text-muted-foreground tabular-nums">{props.ticketKey}:</span>{" "}
       {props.title}
     </Link>
+  );
+}
+
+/**
+ * What is waiting right now (AI-341, from the digest, ADR-0081): tickets waiting for Andy or
+ * blocked, failed agent tasks and the like, each with its reason. Always the last 24 hours,
+ * whatever window the changes show; nothing waiting shows nothing.
+ */
+function Exceptions({ projectId }: { projectId: string }) {
+  const digest = useDigest(projectId, 24);
+  if (digest.isError)
+    return (
+      <QueryError
+        error={digest.error}
+        what="what's waiting"
+        onRetry={() => void digest.refetch()}
+      />
+    );
+  const exceptions = digest.data?.exceptions ?? [];
+  if (exceptions.length === 0) return null;
+  return (
+    <section aria-label="Exceptions" className="space-y-1">
+      <h3 className="text-sm font-medium">
+        Exceptions <span className="text-muted-foreground tabular-nums">{exceptions.length}</span>
+      </h3>
+      <ul className="space-y-1 text-sm">
+        {exceptions.map((e, i) => (
+          <li key={i}>
+            {e.ticketKey ? (
+              <TicketLink projectId={projectId} ticketKey={e.ticketKey} title={e.title ?? ""} />
+            ) : (
+              "Project"
+            )}{" "}
+            · {/* Waiting on Andy is attention, not an error (design.md colour roles). */}
+            <span className={e.kind === "waiting_on_andy" ? "text-attention" : "text-destructive"}>
+              {e.reason}
+            </span>
+          </li>
+        ))}
+      </ul>
+    </section>
   );
 }
