@@ -49,7 +49,7 @@ describe("Models settings page", () => {
     // Shown before saving: why the resolver would skip it.
     expect(within(row).getByText(/harness jules doesn't run on provider claude-sub/)).toBeTruthy();
 
-    await h.user.click(within(form).getByRole("button", { name: "Save routing" }));
+    await h.user.click(within(form).getByRole("button", { name: "Save fast" }));
 
     const refused = await within(row).findByRole("alert");
     expect(refused.textContent).toContain("Refused");
@@ -67,7 +67,8 @@ describe("Models settings page", () => {
     await h.user.click(within(cheap).getByRole("button", { name: "Move cheap route 2 up" }));
     expect(routeModels("cheap")).toEqual(["haiku", "sonnet"]);
 
-    await h.user.click(within(form).getByRole("button", { name: "Save routing" }));
+    await h.user.click(within(form).getByRole("button", { name: "Save cheap" }));
+    expect(await within(form).findByText("Saved")).toBeTruthy();
 
     await waitFor(async () =>
       expect((await h.routing.getGlobal()).tiers.cheap.map((r) => r.model)).toEqual([
@@ -106,7 +107,7 @@ describe("Models settings page", () => {
     );
     await h.queryClient.invalidateQueries();
 
-    expect(await within(form).findByText(/Routing changed since you started editing/)).toBeTruthy();
+    expect(await within(form).findByText(/Routing changed since you opened it/)).toBeTruthy();
     expect(routeModels("cheap")).toEqual(["sonnet", "sonnet"]);
     await h.user.click(within(form).getByRole("button", { name: "Reload" }));
     expect(routeModels("cheap")).toEqual(["sonnet"]);
@@ -130,28 +131,64 @@ describe("Models settings page", () => {
       within(fast).getByRole("combobox", { name: "fast route 2 harness" }),
       "jules",
     );
-    await h.user.click(within(form).getByRole("button", { name: "Save routing" }));
+    await h.user.click(within(form).getByRole("button", { name: "Save fast" }));
     await within(fast).findByText("Refused");
     await h.user.click(within(fast).getByRole("button", { name: "Remove fast route 2" }));
     expect(within(fast).queryByText("Refused")).toBeNull();
   });
 
-  it("GivenAnOutOfRangePercentage_WhenTyped_ThenSaveIsBlockedAndTheFieldIsNamed", async () => {
+  it("GivenAnOutOfRangePercentage_WhenTheFieldIsLeft_ThenNothingSavesAndTheFieldIsNamed", async () => {
     const { h, form } = await modelsPage();
     const reserve = within(form).getByRole("spinbutton", { name: "claude-sub reserve" });
     await h.user.clear(reserve);
     await h.user.type(reserve, "150");
-    expect(
-      (within(form).getByRole("button", { name: "Save routing" }) as HTMLButtonElement).disabled,
-    ).toBe(true);
+    await h.user.tab();
     expect(
       within(form).getByText(/claude-sub reserve must be a whole number from 0 to 100/),
     ).toBeTruthy();
     expect((reserve as HTMLInputElement).value).toBe("150");
+    expect((await h.routing.getGlobal()).updatedAt).toBeNull();
+
     await h.user.clear(reserve);
     await h.user.type(reserve, "25");
+    await h.user.tab();
+    await waitFor(async () =>
+      expect((await h.routing.getGlobal()).providers["claude-sub"].reservePct).toBe(25),
+    );
+  });
+
+  it("GivenAProviderSwitch_WhenFlipped_ThenItSavesAtOnceWithTheReasonAndSaysSaved", async () => {
+    const { h, form } = await modelsPage();
+    await h.user.type(
+      within(form).getByRole("textbox", { name: "Reason for the change" }),
+      "try it",
+    );
+    await h.user.click(within(form).getByRole("checkbox", { name: "openrouter on" }));
+
+    expect(await within(form).findByText("Saved")).toBeTruthy();
+    expect((await h.routing.getGlobal()).providers.openrouter.enabled).toBe(true);
+    const changes = await screen.findByRole("region", { name: "Global changes" });
+    expect(await within(changes).findByText(/try it/)).toBeTruthy();
     expect(
-      (within(form).getByRole("button", { name: "Save routing" }) as HTMLButtonElement).disabled,
+      (within(form).getByRole("textbox", { name: "Reason for the change" }) as HTMLInputElement)
+        .value,
+    ).toBe("");
+  });
+
+  it("GivenATierEdit_WhenAnotherPartSaves_ThenTheTierDraftStaysUnsaved", async () => {
+    const { h, form } = await modelsPage();
+    const cheap = within(form).getByRole("region", { name: "Tier cheap" });
+    await h.user.click(within(cheap).getByRole("button", { name: "Add route" }));
+    await h.user.selectOptions(
+      within(form).getByRole("combobox", { name: "review tier" }),
+      "cheap",
+    );
+
+    await waitFor(async () => expect((await h.routing.getGlobal()).steps.review).toBe("cheap"));
+    expect((await h.routing.getGlobal()).tiers.cheap).toHaveLength(1);
+    expect(routeModels("cheap")).toEqual(["sonnet", "sonnet"]);
+    expect(
+      (within(form).getByRole("button", { name: "Save cheap" }) as HTMLButtonElement).disabled,
     ).toBe(false);
   });
 
@@ -161,7 +198,6 @@ describe("Models settings page", () => {
       within(form).getByRole("combobox", { name: "review tier" }),
       "cheap",
     );
-    await h.user.click(within(form).getByRole("button", { name: "Save routing" }));
     const changes = await screen.findByRole("region", { name: "Global changes" });
     const row = await within(changes).findByText("Routing: steps changed");
     await h.user.click(within(row.closest("li")!).getByRole("button", { name: "Revert" }));

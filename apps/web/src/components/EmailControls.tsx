@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button";
 import { QueryError } from "@/components/Status";
 import { unwrap, useApi } from "@/lib/api";
 import { useUpdateProject } from "@/lib/queries";
+import { SavedCue } from "@/components/SavedCue";
 
 /**
  * Needs-you email for one project (AI-77). Off, whatever the switch says, until email is
@@ -55,6 +56,7 @@ export function EmailNotificationsControl({ project }: { project: Project }) {
       )}
       {status.error && <QueryError error={status.error} />}
       {update.error && <QueryError error={update.error} />}
+      <SavedCue pending={update.isPending} saved={update.isSuccess} />
       {test.error && <QueryError error={test.error} />}
     </>
   );

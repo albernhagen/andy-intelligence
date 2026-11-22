@@ -21,6 +21,7 @@ import { DefaultWorkerSelect } from "@/components/WorkerControls";
 import { DefaultExecutorSelect } from "@/components/ExecutorControls";
 import { useProjects, useUpdateProject } from "@/lib/queries";
 import { showsError } from "@/lib/live";
+import { SavedCue } from "@/components/SavedCue";
 
 /**
  * One project's settings (AI-46), linked from the workspace header. Every switch saves on change
@@ -143,25 +144,28 @@ function Setting({ what, children }: { what: string; children: ReactNode }) {
 function DailyQuestionCap({ project }: { project: Project }) {
   const update = useUpdateProject(project.id);
   return (
-    <label className="ml-3 inline-flex items-center gap-1 text-sm">
-      Questions per day
-      <input
-        type="number"
-        min={0}
-        max={50}
-        aria-label="Questions per day"
-        className="w-14 rounded-md border border-border bg-background px-1"
-        defaultValue={project.dailyQuestionCap}
-        disabled={update.isPending}
-        onBlur={(e) => {
-          const value = Number(e.target.value);
-          if (Number.isInteger(value) && value !== project.dailyQuestionCap) {
-            update.mutate({ dailyQuestionCap: value });
-          }
-        }}
-      />
-      {update.error && <QueryError error={update.error} />}
-    </label>
+    <>
+      <label className="ml-3 inline-flex items-center gap-1 text-sm">
+        Questions per day
+        <input
+          type="number"
+          min={0}
+          max={50}
+          aria-label="Questions per day"
+          className="w-14 rounded-md border border-border bg-background px-1"
+          defaultValue={project.dailyQuestionCap}
+          disabled={update.isPending}
+          onBlur={(e) => {
+            const value = Number(e.target.value);
+            if (Number.isInteger(value) && value !== project.dailyQuestionCap) {
+              update.mutate({ dailyQuestionCap: value });
+            }
+          }}
+        />
+        {update.error && <QueryError error={update.error} />}
+      </label>
+      <SavedCue pending={update.isPending} saved={update.isSuccess} />
+    </>
   );
 }
 
@@ -169,16 +173,19 @@ function DailyQuestionCap({ project }: { project: Project }) {
 function AutoRefineToggle({ project }: { project: Project }) {
   const update = useUpdateProject(project.id);
   return (
-    <label className="ml-3 inline-flex items-center gap-1 text-sm">
-      <input
-        type="checkbox"
-        checked={project.autoRefine}
-        disabled={update.isPending}
-        onChange={(e) => update.mutate({ autoRefine: e.target.checked })}
-      />
-      Auto-refine
-      {update.error && <QueryError error={update.error} />}
-    </label>
+    <>
+      <label className="ml-3 inline-flex items-center gap-1 text-sm">
+        <input
+          type="checkbox"
+          checked={project.autoRefine}
+          disabled={update.isPending}
+          onChange={(e) => update.mutate({ autoRefine: e.target.checked })}
+        />
+        Auto-refine
+        {update.error && <QueryError error={update.error} />}
+      </label>
+      <SavedCue pending={update.isPending} saved={update.isSuccess} />
+    </>
   );
 }
 
@@ -192,21 +199,24 @@ function BuildsEnabledToggle({ project }: { project: Project }) {
     ? new Date(project.buildEnabledAt).toLocaleDateString()
     : null;
   return (
-    <label className="ml-3 inline-flex items-center gap-1 text-sm">
-      <input
-        type="checkbox"
-        checked={project.buildEnabled}
-        disabled={update.isPending}
-        onChange={(e) => update.mutate({ buildEnabled: e.target.checked })}
-      />
-      Builds
-      {project.buildEnabledBy && when && (
-        <span className="text-muted-foreground" title={`by ${project.buildEnabledBy}`}>
-          ({project.buildEnabled ? "on" : "off"} since {when})
-        </span>
-      )}
-      {update.error && <QueryError error={update.error} />}
-    </label>
+    <>
+      <label className="ml-3 inline-flex items-center gap-1 text-sm">
+        <input
+          type="checkbox"
+          checked={project.buildEnabled}
+          disabled={update.isPending}
+          onChange={(e) => update.mutate({ buildEnabled: e.target.checked })}
+        />
+        Builds
+        {project.buildEnabledBy && when && (
+          <span className="text-muted-foreground" title={`by ${project.buildEnabledBy}`}>
+            ({project.buildEnabled ? "on" : "off"} since {when})
+          </span>
+        )}
+        {update.error && <QueryError error={update.error} />}
+      </label>
+      <SavedCue pending={update.isPending} saved={update.isSuccess} />
+    </>
   );
 }
 
@@ -214,16 +224,19 @@ function BuildsEnabledToggle({ project }: { project: Project }) {
 function AutoBuildToggle({ project }: { project: Project }) {
   const update = useUpdateProject(project.id);
   return (
-    <label className="ml-3 inline-flex items-center gap-1 text-sm">
-      <input
-        type="checkbox"
-        checked={project.autoBuild}
-        disabled={update.isPending || !project.buildEnabled}
-        onChange={(e) => update.mutate({ autoBuild: e.target.checked })}
-      />
-      Auto-build
-      {update.error && <QueryError error={update.error} />}
-    </label>
+    <>
+      <label className="ml-3 inline-flex items-center gap-1 text-sm">
+        <input
+          type="checkbox"
+          checked={project.autoBuild}
+          disabled={update.isPending || !project.buildEnabled}
+          onChange={(e) => update.mutate({ autoBuild: e.target.checked })}
+        />
+        Auto-build
+        {update.error && <QueryError error={update.error} />}
+      </label>
+      <SavedCue pending={update.isPending} saved={update.isSuccess} />
+    </>
   );
 }
 
@@ -237,22 +250,25 @@ const PLAN_APPROVAL_LABELS: Record<PlanApproval, string> = {
 function PlanApprovalSelect({ project }: { project: Project }) {
   const update = useUpdateProject(project.id);
   return (
-    <label className="ml-3 inline-flex items-center gap-1 text-sm">
-      Plan approval
-      <select
-        className="rounded border border-border bg-background px-1"
-        value={project.planApproval}
-        disabled={update.isPending}
-        onChange={(e) => update.mutate({ planApproval: e.target.value as PlanApproval })}
-      >
-        {PlanApproval.options.map((o) => (
-          <option key={o} value={o}>
-            {PLAN_APPROVAL_LABELS[o]}
-          </option>
-        ))}
-      </select>
-      {update.error && <QueryError error={update.error} />}
-    </label>
+    <>
+      <label className="ml-3 inline-flex items-center gap-1 text-sm">
+        Plan approval
+        <select
+          className="rounded border border-border bg-background px-1"
+          value={project.planApproval}
+          disabled={update.isPending}
+          onChange={(e) => update.mutate({ planApproval: e.target.value as PlanApproval })}
+        >
+          {PlanApproval.options.map((o) => (
+            <option key={o} value={o}>
+              {PLAN_APPROVAL_LABELS[o]}
+            </option>
+          ))}
+        </select>
+        {update.error && <QueryError error={update.error} />}
+      </label>
+      <SavedCue pending={update.isPending} saved={update.isSuccess} />
+    </>
   );
 }
 
@@ -265,22 +281,25 @@ const ENVIRONMENT_LABELS: Record<EnvironmentPolicy, string> = {
 function EnvironmentsSelect({ project }: { project: Project }) {
   const update = useUpdateProject(project.id);
   return (
-    <label className="ml-3 inline-flex items-center gap-1 text-sm">
-      Environments
-      <select
-        className="rounded border border-border bg-background px-1"
-        value={project.environments}
-        disabled={update.isPending}
-        onChange={(e) => update.mutate({ environments: EnvironmentPolicy.parse(e.target.value) })}
-      >
-        {EnvironmentPolicy.options.map((o) => (
-          <option key={o} value={o}>
-            {ENVIRONMENT_LABELS[o]}
-          </option>
-        ))}
-      </select>
-      {update.error && <QueryError error={update.error} />}
-    </label>
+    <>
+      <label className="ml-3 inline-flex items-center gap-1 text-sm">
+        Environments
+        <select
+          className="rounded border border-border bg-background px-1"
+          value={project.environments}
+          disabled={update.isPending}
+          onChange={(e) => update.mutate({ environments: EnvironmentPolicy.parse(e.target.value) })}
+        >
+          {EnvironmentPolicy.options.map((o) => (
+            <option key={o} value={o}>
+              {ENVIRONMENT_LABELS[o]}
+            </option>
+          ))}
+        </select>
+        {update.error && <QueryError error={update.error} />}
+      </label>
+      <SavedCue pending={update.isPending} saved={update.isSuccess} />
+    </>
   );
 }
 
@@ -320,6 +339,7 @@ function MergeModeSelect({ project }: { project: Project }) {
       )}
       <p className="text-xs">{MERGE_MODE_TEXT[mode]}</p>
       {update.error && <QueryError error={update.error} />}
+      <SavedCue pending={update.isPending} saved={update.isSuccess} />
     </div>
   );
 }
@@ -328,21 +348,24 @@ function MergeModeSelect({ project }: { project: Project }) {
 function AutoMergeSelect({ project }: { project: Project }) {
   const update = useUpdateProject(project.id);
   return (
-    <label className="ml-3 inline-flex items-center gap-1 text-sm">
-      Auto-merge
-      <select
-        className="rounded border border-border bg-background px-1"
-        value={project.autoMerge}
-        disabled={update.isPending}
-        onChange={(e) => update.mutate({ autoMerge: e.target.value as AutoMerge })}
-      >
-        {AutoMerge.options.map((o) => (
-          <option key={o} value={o}>
-            {AUTO_MERGE_LABELS[o]}
-          </option>
-        ))}
-      </select>
-      {update.error && <QueryError error={update.error} />}
-    </label>
+    <>
+      <label className="ml-3 inline-flex items-center gap-1 text-sm">
+        Auto-merge
+        <select
+          className="rounded border border-border bg-background px-1"
+          value={project.autoMerge}
+          disabled={update.isPending}
+          onChange={(e) => update.mutate({ autoMerge: e.target.value as AutoMerge })}
+        >
+          {AutoMerge.options.map((o) => (
+            <option key={o} value={o}>
+              {AUTO_MERGE_LABELS[o]}
+            </option>
+          ))}
+        </select>
+        {update.error && <QueryError error={update.error} />}
+      </label>
+      <SavedCue pending={update.isPending} saved={update.isSuccess} />
+    </>
   );
 }

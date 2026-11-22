@@ -117,6 +117,16 @@ describe("project settings page", () => {
     expect(has("Notifications", /^Email notifications/)).toBeTruthy();
   });
 
+  it("GivenASetting_WhenChanged_ThenItSavesAtOnceAndSaysSaved", async () => {
+    const h = await withProjects("/p/ai/settings");
+    const automation = within(await settings()).getByRole("region", { name: "Automation" });
+
+    await h.user.click(within(automation).getByRole("checkbox", { name: "Auto-refine" }));
+
+    expect(await within(automation).findByText("Saved")).toBeTruthy();
+    expect((await h.tracker.getProject("ai"))?.autoRefine).toBe(false);
+  });
+
   it("GivenBuildsOff_WhenThePageOpens_ThenAutoBuildIsDisabledAndTurningBuildsOnSavesWhoAndWhen", async () => {
     const h = await withProjects("/p/ai/settings");
     const list = await settings();
