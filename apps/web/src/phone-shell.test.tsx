@@ -45,9 +45,19 @@ describe("phone shell", () => {
     const harness = await project("/p/ai/inbox");
     await harness.user.click(await screen.findByRole("button", { name: "More" }));
     const menu = await screen.findByRole("menu");
-    expect(within(menu).getByRole("menuitem", { name: "Project settings" })).toBeTruthy();
-    expect(within(menu).getByRole("menuitem", { name: "Digest" })).toBeTruthy();
-    await harness.user.click(within(menu).getByRole("menuitem", { name: "Settings" }));
+    const items = within(menu)
+      .getAllByRole("menuitem")
+      .map((i) => i.textContent);
+    expect(items).toEqual([
+      "Roadmap",
+      "Work",
+      "What's new",
+      "Project settings",
+      "GitHub",
+      "Local runners",
+      "Models",
+    ]);
+    await harness.user.click(within(menu).getByRole("menuitem", { name: "GitHub" }));
     await waitFor(() => expect(harness.router.state.location.pathname).toBe("/settings/github"));
   });
 
@@ -55,7 +65,8 @@ describe("phone shell", () => {
     emulateWidth(false);
     await project("/p/ai/inbox");
     const nav = await screen.findByRole("navigation", { name: "Main" });
-    expect(within(nav).getByRole("link", { name: "Settings" })).toBeTruthy();
+    expect(within(nav).getByRole("link", { name: "Roadmap" })).toBeTruthy();
     expect(within(nav).queryByRole("button", { name: "More" })).toBeNull();
+    expect(screen.getByRole("button", { name: "Settings" })).toBeTruthy();
   });
 });
