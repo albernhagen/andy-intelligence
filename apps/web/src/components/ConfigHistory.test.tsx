@@ -8,7 +8,7 @@ async function settingsPage() {
   const h = renderApp("/p/ai/settings");
   await h.tracker.createProject({ name: "Andy Intelligence", key: "AI" });
   await h.queryClient.invalidateQueries();
-  const list = await screen.findByRole("list", { name: "Settings" });
+  const list = await screen.findByRole("region", { name: "Settings" });
   const autoRefine = () => within(list).getByRole("checkbox", { name: "Auto-refine" });
   return { h, autoRefine, changes: () => screen.getByRole("region", { name: "Changes" }) };
 }

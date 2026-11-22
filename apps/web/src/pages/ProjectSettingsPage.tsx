@@ -47,47 +47,84 @@ export function ProjectSettingsPage() {
       <LayerOrderHint />
       <ProjectPlanPanel projectId={project.id} />
       <SetupChecklist projectId={project.id} />
-      <ul aria-label="Settings" className="divide-y divide-border rounded-md border border-border">
-        <Setting what="Build tasks may start at all, by hand or on their own. Owner only: set here in the app, never over MCP. Turn on after the live sandbox proof.">
-          <BuildsEnabledToggle project={project} />
-        </Setting>
-        <Setting what="Ready tickets are built on their own, top of the order first. Needs Builds on.">
-          <AutoBuildToggle project={project} />
-        </Setting>
-        <Setting what="Which tickets wait for you to approve a read-only plan before their build.">
-          <PlanApprovalSelect project={project} />
-        </Setting>
-        <Setting what="Refine starts on its own for tickets entering Up next and answered ones.">
-          <AutoRefineToggle project={project} />
-        </Setting>
-        <Setting what="Refine questions this project asks per rolling 24 hours; extras become assumptions.">
-          <DailyQuestionCap project={project} />
-        </Setting>
-        <Setting what="Which tickets' agent PRs merge on their own once every check and both reviews pass.">
-          <AutoMergeSelect project={project} />
-        </Setting>
-        <Setting what="Who merges this project's PRs (ADR-0124), strictest first. Nothing merges by it yet: auto-merge above decides until the gate switches over. Loosen it only here; over MCP it can only be tightened.">
-          <MergeModeSelect project={project} />
-        </Setting>
-        <Setting what="Agent tasks at once: agent tasks this project may have in flight (1 to 4). Paused: dispatch starts nothing here; agent tasks in flight finish.">
-          <DispatchControls project={project} />
-          <ClearQuotaIdle />
-        </Setting>
-        <Setting what="Who works a ticket that has no pick of its own; applies to existing tickets too.">
-          <DefaultWorkerSelect project={project} />
-        </Setting>
-        <Setting what="Where tickets without their own pick run: GitHub Actions, or your local runner while it is present (else Actions).">
-          <DefaultExecutorSelect project={project} />
-        </Setting>
-        <Setting what="Email you when a ticket here starts to need you: items within 10 minutes share one email, at most 20 a day.">
-          <EmailNotificationsControl project={project} />
-        </Setting>
-        <Setting what="Where releases go: prod only (with PR previews), or dev first and then a promote to prod. Nothing deploys from it yet.">
-          <EnvironmentsSelect project={project} />
-        </Setting>
-      </ul>
-      <SpendCaps projectId={project.id} />
+      <div role="region" aria-label="Settings" className="space-y-4">
+        <SettingsSection title="Automation" what="What runs on its own, and what waits for you.">
+          <Setting what="Build tasks may start at all, by hand or on their own. Owner only: set here in the app, never over MCP. Turn on after the live sandbox proof.">
+            <BuildsEnabledToggle project={project} />
+          </Setting>
+          <Setting what="Ready tickets are built on their own, top of the order first. Needs Builds on.">
+            <AutoBuildToggle project={project} />
+          </Setting>
+          <Setting what="Which tickets wait for you to approve a read-only plan before their build.">
+            <PlanApprovalSelect project={project} />
+          </Setting>
+          <Setting what="Refine starts on its own for tickets entering Up next and answered ones.">
+            <AutoRefineToggle project={project} />
+          </Setting>
+          <Setting what="Which tickets' agent PRs merge on their own once every check and both reviews pass.">
+            <AutoMergeSelect project={project} />
+          </Setting>
+          <Setting what="Who merges this project's PRs (ADR-0124), strictest first. Nothing merges by it yet: auto-merge above decides until the gate switches over. Loosen it only here; over MCP it can only be tightened.">
+            <MergeModeSelect project={project} />
+          </Setting>
+        </SettingsSection>
+        <SettingsSection title="Limits" what="How much this project may do at once, ask and spend.">
+          <Setting what="Agent tasks at once: agent tasks this project may have in flight (1 to 4). Paused: dispatch starts nothing here; agent tasks in flight finish.">
+            <DispatchControls project={project} />
+            <ClearQuotaIdle />
+          </Setting>
+          <Setting what="Refine questions this project asks per rolling 24 hours; extras become assumptions.">
+            <DailyQuestionCap project={project} />
+          </Setting>
+          <li className="px-3 py-2">
+            <SpendCaps projectId={project.id} />
+          </li>
+        </SettingsSection>
+        <SettingsSection title="Defaults" what="What a ticket gets when it has no pick of its own.">
+          <Setting what="Who works a ticket that has no pick of its own; applies to existing tickets too.">
+            <DefaultWorkerSelect project={project} />
+          </Setting>
+          <Setting what="Where tickets without their own pick run: GitHub Actions, or your local runner while it is present (else Actions).">
+            <DefaultExecutorSelect project={project} />
+          </Setting>
+          <Setting what="Where releases go: prod only (with PR previews), or dev first and then a promote to prod. Nothing deploys from it yet.">
+            <EnvironmentsSelect project={project} />
+          </Setting>
+        </SettingsSection>
+        <SettingsSection title="Notifications">
+          <Setting what="Email you when a ticket here starts to need you: items within 10 minutes share one email, at most 20 a day.">
+            <EmailNotificationsControl project={project} />
+          </Setting>
+        </SettingsSection>
+      </div>
       <ConfigHistory projectId={project.id} />
+    </section>
+  );
+}
+
+/**
+ * A headed group of settings (AI-339): Automation, Limits, Defaults, Notifications, in that
+ * order. Each setting still saves the moment it changes.
+ */
+function SettingsSection({
+  title,
+  what,
+  children,
+}: {
+  title: string;
+  what?: string;
+  children: ReactNode;
+}) {
+  return (
+    <section aria-label={title} className="space-y-1">
+      <h3 className="text-sm font-medium">{title}</h3>
+      {what && <p className="text-xs text-muted-foreground">{what}</p>}
+      <ul
+        aria-label={`${title} settings`}
+        className="divide-y divide-border rounded-md border border-border"
+      >
+        {children}
+      </ul>
     </section>
   );
 }
