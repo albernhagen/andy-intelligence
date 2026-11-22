@@ -4,7 +4,8 @@ import { Segmented } from "@/components/ui/segmented";
 /**
  * Work view chips (AI-187, ADR-0108): All plus five fixed views, each with its count of open
  * tickets. One is active at a time; the page keeps the choice in the URL. The Work list (AI-198)
- * always shows one view, so it leaves All out (`total` null).
+ * always shows one view, so it leaves All out (`total` null). Needs you names its unit, "· 4 tickets",
+ * because the header's "Needs you N" counts things to answer, not tickets (AI-326, design.md).
  */
 export function WorkViewChips({
   view,
@@ -30,7 +31,10 @@ export function WorkViewChips({
         value: id,
         label: (
           <>
-            {label} <span className="tabular-nums">{count}</span>
+            {label}{" "}
+            <span className="tabular-nums">
+              {id === "needs-me" ? `· ${count} ticket${count === 1 ? "" : "s"}` : count}
+            </span>
           </>
         ),
       }))}
