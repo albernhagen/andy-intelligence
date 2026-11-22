@@ -20,22 +20,24 @@ const settings = () => screen.findByRole("list", { name: "Settings" });
 afterEach(() => window.localStorage.clear());
 
 describe("project settings page", () => {
-  it("GivenAProjectBoard_WhenAndyClicksProjectSettingsInTheHeader_ThenThatProjectsSettingsOpen", async () => {
+  it("GivenAProjectBoard_WhenAndyPicksProjectSettingsInTheSettingsMenu_ThenThatProjectsSettingsOpen", async () => {
     const h = await withProjects("/p/ops");
-    const nav = await screen.findByRole("navigation", { name: "Main" });
-
-    await h.user.click(within(nav).getByRole("link", { name: "Project settings" }));
+    await h.user.click(await screen.findByRole("button", { name: "Settings" }));
+    await h.user.click(await screen.findByRole("menuitem", { name: "Project settings" }));
 
     await waitFor(() => expect(pathname(h)).toBe("/p/ops/settings"));
     expect(await screen.findByText("OPS: Ops settings")).toBeTruthy();
-    const link = within(nav).getByRole("link", { name: "Project settings" });
-    expect(link.getAttribute("aria-current")).toBe("page");
+    const tabs = screen.getByRole("navigation", { name: "Settings pages" });
+    const tab = within(tabs).getByRole("link", { name: "Project settings" });
+    expect(tab.getAttribute("aria-current")).toBe("page");
   });
 
-  it("GivenAllProjects_WhenTheHeaderRenders_ThenThereIsNoProjectSettingsLink", async () => {
-    await withProjects("/all/inbox");
-    const nav = await screen.findByRole("navigation", { name: "Main" });
-    expect(within(nav).queryByRole("link", { name: "Project settings" })).toBeNull();
+  it("GivenAllProjects_WhenTheSettingsMenuOpens_ThenThereIsNoProjectSettingsItem", async () => {
+    const h = await withProjects("/all/inbox");
+    await h.user.click(await screen.findByRole("button", { name: "Settings" }));
+    const menu = await screen.findByRole("menu");
+    expect(within(menu).queryByRole("menuitem", { name: "Project settings" })).toBeNull();
+    expect(within(menu).getByRole("menuitem", { name: "Models" })).toBeTruthy();
   });
 
   it("GivenStoredSettings_WhenThePageOpens_ThenEverySettingShowsItsValueAndWhatItDoes", async () => {
