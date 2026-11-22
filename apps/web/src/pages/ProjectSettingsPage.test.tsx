@@ -262,4 +262,12 @@ describe("/projects", () => {
     );
     await waitFor(() => expect(within(list).queryByText(/Not set/)).toBeNull());
   });
+
+  it("GivenNoProjectPlan_WhenSettingsOpen_ThenThePlanCardSaysToAskASession", async () => {
+    await withProjects("/p/ai/settings");
+
+    const plan = await screen.findByRole("region", { name: "Project plan" });
+    expect(plan.textContent).toContain("No plan yet: ask a Claude session to plan this project.");
+    expect(plan.textContent).not.toContain("submit_project_plan");
+  });
 });
