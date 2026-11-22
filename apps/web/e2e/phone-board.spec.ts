@@ -49,7 +49,7 @@ test("GivenThePhoneBoard_WhenAStageTabIsTapped_ThenThatStageShows", async ({ pag
   await expect(page).toHaveScreenshot("phone-board-in-progress.png");
 });
 
-test("GivenThePhoneBoard_WhenAViewIsPicked_ThenTheUrlKeepsItAndOptionsHoldTheRest", async ({
+test("GivenThePhoneBoard_WhenAViewIsPicked_ThenTheUrlKeepsItAndOptionsHoldTheRestWithACount", async ({
   page,
 }) => {
   await openBoard(page);
@@ -60,4 +60,9 @@ test("GivenThePhoneBoard_WhenAViewIsPicked_ThenTheUrlKeepsItAndOptionsHoldTheRes
   await page.getByRole("button", { name: "Options" }).click();
   await expect(page.getByRole("checkbox", { name: "Group by epic" })).toBeVisible();
   await expect(page.getByRole("button", { name: "Ideate" })).toBeVisible();
+  // A filter on still shows once Options closes: its count on the button.
+  await page.getByRole("checkbox", { name: "Group by epic" }).check();
+  await page.getByRole("button", { name: "Options" }).click();
+  await expect(page.getByRole("checkbox", { name: "Group by epic" })).toBeHidden();
+  await expect(page.getByRole("button", { name: "Options, 1 on" })).toBeVisible();
 });

@@ -110,6 +110,8 @@ export function BoardPage() {
   // Counts follow the epic filter, so a chip's number is what clicking it shows.
   const inScope = useMemo(() => tickets.filter((t) => inEpic(t, epicId)), [tickets, epicId]);
   const counts = useMemo(() => workViewCounts(inScope, allById), [inScope, allById]);
+  // Folded under Options on a phone, a filter on still shows: its count on the button.
+  const optionsOn = [epicId !== null, grouped, showArchived].filter(Boolean).length;
   const pickView = (next: WorkView | null) =>
     void navigate({ search: { sort, ...filters, view: next ?? undefined } });
 
@@ -133,12 +135,13 @@ export function BoardPage() {
               type="button"
               variant="outline"
               size="sm"
-              className="size-11 px-0"
-              aria-label="Options"
+              className="h-11 min-w-11 gap-1 px-2"
+              aria-label={optionsOn ? `Options, ${optionsOn} on` : "Options"}
               aria-expanded={optionsOpen}
               onClick={() => setOptionsOpen((open) => !open)}
             >
               <SlidersHorizontal className="size-4" aria-hidden />
+              {optionsOn > 0 && <span className="tabular-nums">{optionsOn}</span>}
             </Button>
           </div>
         )}
@@ -250,12 +253,15 @@ function Lanes({
   const [expanded, setExpanded] = useState<Stage[]>([]);
   const [overLane, setOverLane] = useState<Stage | null>(null);
   const stages = boardStages(showCancelled);
-  // Picked once, when the board first loads; a tab click changes it after that.
-  const [phoneStage, setPhoneStage] = useState<Stage>(() =>
-    openingStage(stages, tickets, (t) =>
-      workViews(t, new Map(all.map((a) => [a.id, a]))).includes("needs-me"),
-    ),
-  );
+  // Picked once, when the board first loads, from the tickets the filters show; a tab click
+  // changes it after that.
+  const [phoneStage, setPhoneStage] = useState<Stage>(() => {
+    const byId = new Map(all.map((a) => [a.id, a]));
+    return openingStage(stages, tickets, (t) => {
+      const views = workViews(t, byId);
+      return views.includes("needs-me") && inEpic(t, epicId) && (!view || views.includes(view));
+    });
+  });
   // Cancelled can be hidden again while picked.
   const shownStage = stages.includes(phoneStage) ? phoneStage : "in_progress";
   const suppressDropClick = useDropClickSuppression();
