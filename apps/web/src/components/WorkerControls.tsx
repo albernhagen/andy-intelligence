@@ -5,6 +5,7 @@ import { QueryError } from "@/components/Status";
 import { workerStatus } from "@/lib/needs-you";
 import { useSetWorker, useTicketRouting, useUpdateProject, useWorker } from "@/lib/queries";
 import { layerText } from "@/lib/route-layers";
+import { SETTING_LABELS } from "@/lib/settings-labels";
 
 /** Who does the work (ADR-0082): markers, the ticket's one-click switch, the project default. */
 
@@ -88,7 +89,7 @@ export function DefaultWorkerSelect({ project }: { project: Project }) {
   const update = useUpdateProject(project.id);
   return (
     <label className="ml-3 inline-flex items-center gap-1 text-sm text-muted-foreground max-sm:min-h-11">
-      Default worker
+      {SETTING_LABELS.defaultWorker}
       <select
         className="rounded border border-border bg-background px-1 max-sm:h-11 max-sm:text-base"
         value={project.defaultWorker}
