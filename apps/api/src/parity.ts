@@ -122,7 +122,7 @@ export const PARITY: readonly ParityEntry[] = [
     action: "In flight; work across projects; digest",
     routes: [`GET ${P}/in-flight`, "GET /api/work", `GET ${P}/digest`],
     tools: ["list_in_flight", "list_work", "digest"],
-    note: "AI-342 removed the board's In flight box (the cards and the Agents chip carry it); the web reads in-flight for the ticket status line, and a build's panel shows its branch and touches. AI-341 folded the Digest screen into What's new: it reads the digest for its Exceptions block (24 hours); MCP digest is unchanged.",
+    note: "AI-342 removed the board's In flight box (the cards and the Agents chip carry it); the web reads in-flight for the ticket status line, and a build's panel shows its branch and touches. AI-341 folded the Digest screen into What's new: it reads the digest for its Summary and Exceptions blocks (24 hours); MCP digest is unchanged.",
   },
   {
     action: "Retry the digest summary after it failed (AI-323)",

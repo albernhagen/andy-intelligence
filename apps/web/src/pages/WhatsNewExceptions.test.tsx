@@ -21,14 +21,15 @@ async function seeded(path: string) {
 }
 
 describe("What's new: the digest's exceptions and 24-hour window", () => {
-  it("GivenATicketWaitingForAndy_WhenWhatsNewOpens_ThenExceptionsComeFirst", async () => {
+  it("GivenATicketWaitingForAndy_WhenWhatsNewOpens_ThenExceptionsFollowTheSummary", async () => {
     await seeded("/p/ai/whats-new");
 
     const exceptions = await screen.findByRole("region", { name: "Exceptions" }, PAGE_LOAD);
     expect(within(exceptions).getByText("Waiting for you: Which?")).toBeTruthy();
     expect(within(exceptions).getByRole("link", { name: /Asks/ })).toBeTruthy();
     const regions = screen.getAllByRole("region").map((r) => r.getAttribute("aria-label"));
-    expect(regions[0]).toBe("Exceptions");
+    // The day's model-written summary leads (AI-323); exceptions come next.
+    expect(regions.slice(0, 2)).toEqual(["Summary", "Exceptions"]);
   });
 
   it("GivenTheOldDigestUrl_WhenOpened_ThenWhatsNewOpensOnTheLast24Hours", async () => {
