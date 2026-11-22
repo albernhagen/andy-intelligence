@@ -14,6 +14,7 @@ export { registerHistoryTools as history } from "./tools-history";
 export { registerIdeateTools as ideate } from "./tools-ideate";
 export { registerInFlightTools as inFlight } from "./tools-inflight";
 export { registerMilestoneMapTools as milestoneMap } from "./tools-milestone-map";
+export { registerMilestoneTools as milestones } from "./tools-milestones";
 export { registerNightTools as night } from "./tools-night";
 export { registerNotifyTools as notify } from "./tools-notify";
 export { registerProjectPlanTools as projectPlan } from "./tools-project-plan";

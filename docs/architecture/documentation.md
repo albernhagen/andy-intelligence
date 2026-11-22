@@ -10,7 +10,7 @@ Docs are part of the change, not a follow-up. Every slice PR updates the docs it
 
 | Doc | Owns | Update when |
 |---|---|---|
-| `context-budget.json` | Size budgets for agent-loaded docs, checked in CI (ADR-0046) | A budgeted doc is added; never raise a number without Andy |
+| `context-budget.json` | Agent-doc budgets; a PR uses ≤ half the room (ADR-0046) | A budgeted doc is added; never raise a number without Andy |
 | `docs/features/` | Catalog of shipped features, one file each, and how to use them (`pnpm features` prints the table; AI-141) | A feature is added or changed |
 | `README.md` | What the repo is; **How it works today** (a summary linking to `docs/features/`; one screen, ADR-0040); how to develop/run/test, layout table, links to the docs below | Commands, env vars, packages/apps, or layout change; a feature, component or way of using the system is added or changed |
 | `docs/architecture/ARCHITECTURE.md` | Overview of the target design: goals, principles, system diagram, one summary per numbered section, technology, milestone table, open questions, reading map (ADR-0061) | Design intent, a component list or the milestone table changes. No revision counter: `git log` is its history (ADR-0046). |

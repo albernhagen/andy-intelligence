@@ -94,6 +94,7 @@ test("board grouped by epic", async ({ page }) => {
   await open(page, "/p/ops", "Monthly restore drill");
   await page.getByRole("checkbox", { name: "Group by epic" }).check();
   await expect(page.getByText("1 of 3 done").first()).toBeVisible();
+  await expect(page.getByText("M2: Backups · Parked").first()).toBeVisible();
   await expect(page).toHaveScreenshot("board-grouped.png", { fullPage: true });
 });
 
@@ -113,6 +114,13 @@ test("what's new: status, then changes by day, one opened", async ({ page }) => 
   await page.getByText("Backups now land in a second region").click();
   await expect(page.getByText("A nightly job copies each snapshot")).toBeVisible();
   await expect(page).toHaveScreenshot("whats-new.png", { fullPage: true });
+});
+
+test("epic panel: its milestone and status (AI-311)", async ({ page }) => {
+  await page.clock.setFixedTime(SEED_NOW);
+  await open(page, "/p/ops/t/OPS-5", "M2: Backups · Parked");
+  await page.getByRole("region", { name: "Milestone" }).scrollIntoViewIfNeeded();
+  await expect(page).toHaveScreenshot("epic-milestone.png");
 });
 
 test("story panel for an epic", async ({ page }) => {
