@@ -1,6 +1,7 @@
 import {
   ConfigChange,
   InMemoryConfigChangeStore,
+  InMemoryMilestoneStore,
   InMemoryNightLaunchStore,
   InMemoryReleaseNoteStore,
   InMemoryRoutingConfigStore,
@@ -82,6 +83,27 @@ export async function createFakeApp() {
   await service.move("ai", drop.id, "ready", "andy");
   await service.move("ai", drop.id, "in_progress", "andy");
   await service.move("ai", drop.id, "ready_for_review", "andy");
+  // AI-218: its PR is clean but touches a kept path, so it waits for Andy's merge in Needs-you.
+  const dropBuild = await runs.create({
+    projectId: "ai",
+    ticketId: drop.id,
+    step: "build",
+    route,
+    tier: null,
+  });
+  await runs.update(
+    dropBuild.id,
+    {
+      status: "succeeded",
+      startedAt: NOW.toISOString(),
+      endedAt: NOW.toISOString(),
+      links: { pullRequest: "https://github.com/albernhagen/andy-intelligence/pull/74" },
+      mergeMode: "all-clean",
+      mergeVerdict: "wait",
+      verdictReasons: ["kept_path"],
+    },
+    ["queued"],
+  );
 
   const panel = await service.create("ai", feature("Story side panel"), "andy");
   await service.ask("ai", panel.id, { text: "Should Esc close the panel?" }, "agent");
@@ -176,7 +198,7 @@ export async function createFakeApp() {
   );
   await service.move("ops", logs.id, "done", "andy", { force: true });
   await service.ask("ops", logs.id, { text: "Delete the old bucket too?" }, "agent");
-  await seedEpic(service);
+  const milestones = await seedEpic(service, tracker);
   const configChanges = new InMemoryConfigChangeStore();
   await seedSettingsChanges(configChanges);
 
@@ -201,6 +223,8 @@ export async function createFakeApp() {
     // AI-249: empty, so the settings page's Spend caps panel shows $0.00 spent.
     spendLedger: new InMemorySpendLedger(),
     releaseNotes: await seedReleaseNotes(),
+    // AI-311: OPS's epic is in a parked milestone, so its board group and panel say so.
+    milestones,
   });
 }
 
@@ -306,14 +330,27 @@ async function seedBoardMarkers(
 /**
  * AI-86: Board: group by epic: an OPS epic with children in three lanes, one Done, for the
  * grouped-board screenshot. OPS, not AI, so the AI board and story panel screenshots don't
- * change; nothing here asks a question, so the inbox doesn't either.
+ * change; nothing here asks a question, so the inbox doesn't either. AI-311: the epic is in a
+ * parked milestone, so the grouped board and the epic panel show "M2: Backups · Parked".
  */
-async function seedEpic(service: TicketService) {
+async function seedEpic(service: TicketService, tracker: InMemoryWorkTracker) {
+  const milestones = new InMemoryMilestoneStore();
+  await milestones.create({
+    id: "m2",
+    projectId: "ops",
+    name: "M2: Backups",
+    outcome: "Every backup restores, and a failed one alerts",
+    order: 2,
+    status: "parked",
+    createdAt: NOW.toISOString(),
+    updatedAt: NOW.toISOString(),
+  });
   const epic = await service.create(
     "ops",
     { type: "epic", title: "Backups you can trust", body: "" },
     "andy",
   );
+  await tracker.updateTicket("ops", epic.id, { fields: { milestoneId: "m2" } }, "andy");
   const child = async (stage: Stage, fields: NewTicket) => {
     const t = await service.create("ops", { ...ready, ...fields, parentId: epic.id }, "andy");
     await service.move("ops", t.id, stage, "andy", { force: true });
@@ -321,6 +358,7 @@ async function seedEpic(service: TicketService) {
   await child("ready", { type: "chore", title: "Monthly restore drill" });
   await child("in_progress", { type: "feature", title: "Alert when a backup fails" });
   await child("done", { type: "chore", title: "Backups to a second region" });
+  return milestones;
 }
 
 /**

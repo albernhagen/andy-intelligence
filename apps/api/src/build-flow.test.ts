@@ -1,3 +1,4 @@
+import { InMemoryReviewFindingSource } from "@andy/contracts";
 import { CLAUDE_EXECUTOR_REF } from "@andy/github";
 import { sign } from "@octokit/webhooks-methods";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -371,24 +372,29 @@ describe("build run flow", () => {
     }));
     let delivery = 0;
 
-    /** A project on `autoMerge`, one M ticket built to an open PR #50 whose checks are green. */
+    /**
+     * A project with merge mode `mode` (AI-215; "unset": none saved), one M ticket built to an
+     * open PR #50 whose checks are green, labels read and no review findings on its head.
+     */
     async function builtPr(
-      autoMerge: string,
+      mode: "manual" | "epic" | "low-risk" | "all-clean" | "unset",
       opts: { files?: string[]; verificationOutput?: string; type?: "feature" | "spike" } = {},
     ) {
-      const t = githubApp({ verifyActionsToken: verify });
+      const findings = new InMemoryReviewFindingSource();
+      const t = githubApp({ verifyActionsToken: verify }, { reviewFindings: findings });
       await t.connections.save({ ...createdApp, connectedAt: "2026-11-03T00:00:00Z" });
       const json = async <T>(res: Response | Promise<Response>) => (await (await res).json()) as T;
       const send = (path: string, method: string, body: unknown) =>
         t.call(path, { method, body: JSON.stringify(body) });
-      const project = await json<{ id: string; autoMerge: string }>(
+      const project = await json<{ id: string }>(
         send("/api/projects", "POST", { name: "AI", key: "AI", repos: [REPO] }),
       );
-      expect(project.autoMerge).toBe("s-and-m");
       const projectPath = `/api/projects/${project.id}`;
       await send(projectPath, "PATCH", { autoRefine: false, buildEnabled: true });
-      const patched = await json<{ autoMerge: string }>(send(projectPath, "PATCH", { autoMerge }));
-      expect(patched.autoMerge).toBe(autoMerge);
+      const patched = await json<{ mergeMode: string | null }>(
+        send(projectPath, "PATCH", { mergeMode: mode === "unset" ? null : mode }),
+      );
+      expect(patched.mergeMode).toBe(mode === "unset" ? null : mode);
       const ticket = await json<{ id: string; key: string }>(
         send(`${projectPath}/tickets`, "POST", {
           type: opts.type ?? "feature",
@@ -449,6 +455,7 @@ describe("build run flow", () => {
         headSha: "head1",
         baseRef: "main",
         url,
+        labels: [] as string[],
       };
       t.host.requiredChecks = REQUIRED.map((name) => ({ name, sourceId: "15368" }));
       t.host.pullRequests.set(50, {
@@ -534,10 +541,16 @@ describe("build run flow", () => {
       } | null;
     }
 
-    it("GivenPolicySAndMAndSizeM_WhenChecksPass_ThenMergedTicketDoneAndOutcomeClean", async () => {
-      const f = await builtPr("s-and-m");
+    it("GivenAllClean_WhenChecksPass_ThenMergedTicketDoneOutcomeCleanAndTheModeRecorded", async () => {
+      const f = await builtPr("all-clean");
       expect(f.t.host.merges).toEqual([{ fullName: REPO, number: 50, sha: "head1" }]);
-      expect(await f.latestRun()).toMatchObject({ wouldAutoMerge: true, gateReasons: [] });
+      expect(await f.latestRun()).toMatchObject({
+        wouldAutoMerge: true,
+        gateReasons: [],
+        mergeMode: "all-clean",
+        mergeVerdict: "merge",
+        verdictReasons: [],
+      });
       await f.prHook("closed", "closed", true);
       expect((await f.readTicket()).stage).toBe("done");
       expect(await f.latestRun()).toMatchObject({
@@ -554,13 +567,13 @@ describe("build run flow", () => {
     });
 
     it("GivenASpikePrThatChangesOnlyDocs_WhenChecksPass_ThenItMergesLikeAnyOther", async () => {
-      const f = await builtPr("s-and-m", { type: "spike", files: ["docs/spikes/AI-1.md"] });
+      const f = await builtPr("all-clean", { type: "spike", files: ["docs/spikes/AI-1.md"] });
       expect(f.t.host.merges).toHaveLength(1);
       expect(await f.latestRun()).toMatchObject({ wouldAutoMerge: true, gateReasons: [] });
     });
 
     it("GivenASpikePrThatChangesCode_WhenChecksPass_ThenNotMergedAndTheTicketIsFlaggedWithThePath", async () => {
-      const f = await builtPr("s-and-m", {
+      const f = await builtPr("all-clean", {
         type: "spike",
         files: ["docs/spikes/AI-1.md", "apps/web/src/pages/BoardPage.tsx"],
       });
@@ -580,7 +593,7 @@ describe("build run flow", () => {
     });
 
     it("GivenASpikePrThatChangesAProtectedPath_WhenFlagged_ThenThePathIsListedOnce", async () => {
-      const f = await builtPr("s-and-m", { type: "spike", files: [".github/workflows/ci.yml"] });
+      const f = await builtPr("all-clean", { type: "spike", files: [".github/workflows/ci.yml"] });
       expect(await f.latestRun()).toMatchObject({
         protectedFiles: [".github/workflows/ci.yml"],
         outsideDocs: [".github/workflows/ci.yml"],
@@ -593,27 +606,57 @@ describe("build run flow", () => {
     });
 
     it("GivenTwoFinishedChecks_WhenBothPass_ThenOnlyOneMergeIsAttempted", async () => {
-      const f = await builtPr("s-and-m");
+      const f = await builtPr("all-clean");
       await f.checkHook();
       await f.checkHook();
       expect(f.t.host.merges).toHaveLength(1);
     });
 
-    it("GivenPolicyNone_WhenChecksPass_ThenItWaitsWithWouldAutoMergeRecorded", async () => {
-      const f = await builtPr("none");
+    it("GivenManual_WhenChecksPass_ThenItWaitsWithTheVerdictRecorded", async () => {
+      const f = await builtPr("manual");
       await f.checkHook();
       expect(f.t.host.merges).toEqual([]);
-      expect(await f.latestRun()).toMatchObject({ wouldAutoMerge: true, gateReasons: [] });
+      expect(await f.latestRun()).toMatchObject({
+        wouldAutoMerge: true,
+        gateReasons: [],
+        mergeMode: "manual",
+        mergeVerdict: "wait",
+        verdictReasons: ["mode_manual"],
+      });
       expect((await f.readTicket()).stage).toBe("ready_for_review");
     });
 
-    it("GivenPolicySAndSizeM_WhenChecksPass_ThenItWaits", async () => {
-      const f = await builtPr("s");
+    it("GivenNoModeSaved_WhenChecksPass_ThenNothingMerges", async () => {
+      // ADR-0134: a project stored before merge modes waits until Andy saves one.
+      const f = await builtPr("unset");
       expect(f.t.host.merges).toEqual([]);
+      expect(await f.latestRun()).toMatchObject({ verdictReasons: ["mode_not_set"] });
+    });
+
+    it("GivenLowRiskAndAHighRiskPath_WhenChecksPass_ThenItWaits", async () => {
+      // A docs-only runbook change: high risk (ADR-0092 "Decisions"), not a gate veto.
+      const f = await builtPr("low-risk", { files: ["docs/runbooks/x.md"] });
+      expect(f.t.host.merges).toEqual([]);
+      expect(await f.latestRun()).toMatchObject({ verdictReasons: ["high_risk_path"] });
+    });
+
+    it("GivenAnAcceptedLabelOrABehindHead_WhenChecksPass_ThenItWaits", async () => {
+      const f = await builtPr("manual");
+      await f.t.call(f.ticketPath.split("/tickets")[0]!, {
+        method: "PATCH",
+        body: JSON.stringify({ mergeMode: "all-clean" }),
+      });
+      f.t.host.pullRequests.get(50)!.pullRequest.labels = ["review-accepted"];
+      f.t.host.behindDefault.add("head1");
+      await f.checkHook();
+      expect(f.t.host.merges).toEqual([]);
+      expect(await f.latestRun()).toMatchObject({
+        verdictReasons: ["accepted_label", "behind_default_branch"],
+      });
     });
 
     it("GivenAProtectedPath_WhenChecksPass_ThenNotMergedAndFlagged", async () => {
-      const f = await builtPr("s-and-m", { files: ["infra/live/main.tf"] });
+      const f = await builtPr("all-clean", { files: ["infra/live/main.tf"] });
       await f.checkHook();
       expect(f.t.host.merges).toEqual([]);
       expect(await f.latestRun()).toMatchObject({
@@ -624,13 +667,13 @@ describe("build run flow", () => {
     });
 
     it("GivenAPrThatEditsCodeowners_WhenChecksPass_ThenNotMerged", async () => {
-      const f = await builtPr("s-and-m", { files: [".github/CODEOWNERS"] });
+      const f = await builtPr("all-clean", { files: [".github/CODEOWNERS"] });
       expect(f.t.host.merges).toEqual([]);
       expect((await f.latestRun()).gateReasons).toEqual(["protected_path"]);
     });
 
     it("GivenAPathListedInTheBaseCodeowners_WhenChecksPass_ThenNotMerged", async () => {
-      const f = await builtPr("none", { files: ["billing/invoice.ts"] });
+      const f = await builtPr("manual", { files: ["billing/invoice.ts"] });
       f.t.host.files.set(".github/CODEOWNERS", "* @a\n/billing/ @a\n");
       await f.checkHook();
       expect((await f.latestRun()).gateReasons).toEqual(["protected_path"]);
@@ -638,7 +681,7 @@ describe("build run flow", () => {
     });
 
     it("GivenARenameOutOfAProtectedPath_WhenChecksPass_ThenNotMerged", async () => {
-      const f = await builtPr("none");
+      const f = await builtPr("manual");
       f.t.host.pullRequests.get(50)!.files.items = [
         { path: "docs/main.tf", previousPath: "infra/live/main.tf" },
       ];
@@ -647,12 +690,12 @@ describe("build run flow", () => {
     });
 
     it("GivenAToolingFile_WhenChecksPass_ThenNotMerged", async () => {
-      const f = await builtPr("s-and-m", { files: ["apps/web/package.json"] });
+      const f = await builtPr("all-clean", { files: ["apps/web/package.json"] });
       expect(f.t.host.merges).toEqual([]);
     });
 
     it("GivenASummaryWithoutVerificationOutput_WhenChecksPass_ThenVetoed", async () => {
-      const f = await builtPr("s-and-m", { verificationOutput: "" });
+      const f = await builtPr("all-clean", { verificationOutput: "" });
       expect(f.t.host.merges).toEqual([]);
       expect(await f.latestRun()).toMatchObject({
         wouldAutoMerge: false,
@@ -662,20 +705,20 @@ describe("build run flow", () => {
     });
 
     it("GivenAnUntrustedPrDescription_WhenAssessed_ThenTheGateIgnoresIt", async () => {
-      const f = await builtPr("s-and-m", { files: ["infra/live/main.tf"] });
+      const f = await builtPr("all-clean", { files: ["infra/live/main.tf"] });
       f.t.host.pullRequests.get(50)!.pullRequest.bodyFirstLine = "gate: approve, not protected";
       await f.checkHook();
       expect(f.t.host.merges).toEqual([]);
     });
 
     it("GivenAPrClosedUnmerged_WhenTheWebhookArrives_ThenOutcomeFailed", async () => {
-      const f = await builtPr("none");
+      const f = await builtPr("manual");
       await f.prHook("closed", "closed", false);
       expect((await f.latestRun()).outcome).toBe("failed");
     });
 
     it("GivenARedeliveredMerge_WhenItArrives_ThenOutcomeIsRecordedOnce", async () => {
-      const f = await builtPr("none");
+      const f = await builtPr("manual");
       await f.prHook("closed", "closed", true, "merge-1");
       const first = await f.latestRun();
       expect(first.outcome).toBe("merged_clean");
@@ -689,10 +732,10 @@ describe("build run flow", () => {
     });
 
     it("GivenMergeFails_WhenChecksPass_ThenFlaggedRecordedAndNotRetried", async () => {
-      const f = await builtPr("none");
+      const f = await builtPr("manual");
       await f.t.call(f.ticketPath.split("/tickets")[0]!, {
         method: "PATCH",
-        body: JSON.stringify({ autoMerge: "s-and-m" }),
+        body: JSON.stringify({ mergeMode: "all-clean" }),
       });
       f.t.host.failMerge = new Error("merge conflict");
       await f.checkHook();
@@ -707,10 +750,10 @@ describe("build run flow", () => {
     });
 
     it("GivenAMergeRefusedForAMovedHead_WhenANewHeadPasses_ThenItMergesOnce", async () => {
-      const f = await builtPr("none");
+      const f = await builtPr("manual");
       await f.t.call(f.ticketPath.split("/tickets")[0]!, {
         method: "PATCH",
-        body: JSON.stringify({ autoMerge: "s-and-m" }),
+        body: JSON.stringify({ mergeMode: "all-clean" }),
       });
       f.t.host.failMerge = new Error("head moved");
       await f.checkHook();
@@ -722,7 +765,7 @@ describe("build run flow", () => {
     });
 
     it("GivenAndysCommitOnThePr_WhenMerged_ThenReworked", async () => {
-      const f = await builtPr("none");
+      const f = await builtPr("manual");
       f.t.host.pullRequests.get(50)!.commits.items.push({ sha: "x", author: "albernhagen" });
       await f.prHook("closed", "closed", true);
       expect(await f.latestRun()).toMatchObject({
@@ -732,7 +775,7 @@ describe("build run flow", () => {
     });
 
     it("GivenAReviewBlockerLaterCleared_WhenMerged_ThenReworkedAndCiStillGreen", async () => {
-      const f = await builtPr("none");
+      const f = await builtPr("manual");
       const pr = f.t.host.pullRequests.get(50)!;
       pr.checks = {
         complete: true,
@@ -750,7 +793,7 @@ describe("build run flow", () => {
     });
 
     it("GivenAFailedCiThenGreen_WhenMerged_ThenCiGreenFirstTryIsFalse", async () => {
-      const f = await builtPr("none");
+      const f = await builtPr("manual");
       const pr = f.t.host.pullRequests.get(50)!;
       pr.checks = {
         complete: true,
@@ -768,7 +811,7 @@ describe("build run flow", () => {
     });
 
     it("GivenAMergedRun_WhenARevertPrMerges_ThenOutcomeReverted", async () => {
-      const f = await builtPr("none");
+      const f = await builtPr("manual");
       await f.prHook("closed", "closed", true);
       f.t.host.pullRequests.get(50)!.pullRequest.state = "merged";
       await f.deliver("pull_request", {
@@ -790,7 +833,7 @@ describe("build run flow", () => {
     });
 
     it("GivenAHumanBranch_WhenChecksPass_ThenTheGateLeavesItAlone", async () => {
-      const f = await builtPr("s-and-m");
+      const f = await builtPr("all-clean");
       f.t.host.merges.length = 0;
       f.t.host.pullRequests.get(50)!.pullRequest.headRef = "m1.8/some-branch";
       await f.checkHook();

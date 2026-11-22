@@ -14,6 +14,7 @@ Generated from tickets, never edited here (AI-148). Every ticket sits under a mi
 
 ## Pending decisions (Andy)
 
+- AI-322 UX review: approve the ranked list in [`build-log/2026-11-21-ux-review.md`](build-log/2026-11-21-ux-review.md) (AI-325 to AI-343, all in Ideas) before any is built.
 - Contract suites for ports with one adapter (`OAuthGrantStore`, `CodeHostConnectionStore`): keep the fakes, drop the shared suite?
 - Production monitoring (alerts, error budget per project) as part of "shipped" (brief): add to M6: Dev → prod releases at slicing.
 - `autoMerge` on for project `AI`: after a trial of five tickets where the gate's `would_auto_merge` calls are compared with the coordinator's (Andy, 2026-11-10).
@@ -26,6 +27,12 @@ Generated from tickets, never edited here (AI-148). Every ticket sits under a mi
 - AI-144: Threat model: one file per risk: cap each risk file at 300 words and `threat-model.md` at 1000 (was 3600)?
 - ADR-0111: Re-sync open PRs: its App token?
 - ADR-0133: Board and ticket list read changed tickets (AI-317): accept the 60 s overlap and the hourly full re-read?
+- Review handover with every open question and PR: [2026-11-21-handover-review.md](build-log/2026-11-21-handover-review.md).
+- AI-113: M5.14: baseline on a new repo: App opens the PR without workflows, Andy adds them?
+- Re-sync cap (`scripts/resync-prs.mjs`, 4 an hour): raise to 12 and skip counting skipped runs?
+- ADR-0136: Milestone create and edit over MCP (AI-321, PR #343): extend ADR-0131 to five MCP milestone tools?
+- ADR-0140: Review check fails when not reviewed (AI-346, PR #356): carry verdicts over re-sync merges, and fail repos with no token?
+- ADR-0141: Agent PRs get a real review (AI-348, PR #377): allow the App on `agent/*` branches only?
 
 ## Blocked on Andy
 
@@ -34,4 +41,6 @@ Generated from tickets, never edited here (AI-148). Every ticket sits under a mi
 - M2: Self-hosting: the "Done when" trial (auto-build on), Andy's to start.
 - M3: New UI and MCP: local executor slice 7 (runbook, live proof) needs Andy's Mac (ADR-0089).
 - AI-111: M5.4 needs a second repo.
+- AI-307: M4.37: Create project AI's milestones; the OpenRouter and Claude API keys (AI-266, AI-267, AI-269).
+- What's new: the backfill (runbook `whats-new-backfill.md`) and `release-note` as a required check; `terraform apply` of `infra/control-plane` for PR #217.
 - M4 questions, each in its ticket body: AI-128: M4.15: Pluggable design skills (build now or move to Later), AI-129: M4.23: First overnight run trial (which epic and budget).

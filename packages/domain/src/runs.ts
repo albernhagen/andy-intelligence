@@ -3,6 +3,7 @@ import {
   ADR_NUMBER_MAX,
   DEFAULT_ROUTING,
   BuildOutput,
+  IdeateTaskRequest,
   RUNNER_LIMITS,
   PLAN_REASON_MAX,
   PlanOutput,
@@ -14,6 +15,7 @@ import {
   SyncOutput,
   WorkTrackerError,
   notFound,
+  MICRO_USD_PER_USD,
   type BillingType,
   type CodeHost,
   type InFlightRun,
@@ -82,13 +84,22 @@ import { requireCan } from "./permissions";
 import { TIER_ROUTES } from "./tiers";
 import {
   effectiveRouting,
+  resolveRoute,
   skippedText,
   type EffectiveRouting,
   type ResolvedRoute,
 } from "./route-resolver";
+import { DIGEST_SUMMARY_RUN, type DigestSummaryResults } from "./digest-summary";
 import { afterFailure, deadlineAction, MAX_RUN_ATTEMPTS } from "./watchdog";
 import { syncPrompt, type SyncTarget } from "./sync-runs";
 import { winsNightSlot, type NightSlot } from "./night-budget";
+import {
+  PROJECT_TASK_LIMITS,
+  checkProjectTaskStartable,
+  isProjectTaskStep,
+  projectTaskPrompt,
+  type ProjectTaskResults,
+} from "./project-tasks";
 import type { SpendGate } from "./spend-gate";
 import { chooseRoute, routeAvailability } from "./route-fallback";
 
@@ -129,7 +140,19 @@ export const PROVIDER_BILLING: Record<ProviderKey, BillingType> = {
   "claude-sub": "subscription",
   "google-sub": "subscription",
   openrouter: "pay_per_use",
+  // AI-260: Claude Code on an API key, held by the spend gate's caps (M10.7).
+  "claude-api": "pay_per_use",
 };
+
+/**
+ * The executor's helper calls per step on top of the agent (claude-executor.yml): build's
+ * sandbox check, and sync's sandbox check and checks run. Each runs under
+ * HELPER_CALL_BUDGET_MICRO_USD on the API key, so a pay_per_use run's agent gets its
+ * reservation less these, and its settled cost counts them in full (AI-260).
+ */
+export const HELPER_CALLS: Partial<Record<RunStep, number>> = { build: 1, sync: 2 };
+export const HELPER_CALL_BUDGET_MICRO_USD = 250_000;
+const helperAllowance = (step: RunStep) => (HELPER_CALLS[step] ?? 0) * HELPER_CALL_BUDGET_MICRO_USD;
 
 /** Caps per step (ADR-0028): agent turns, and the deadline the watchdog (M1.6b) checks. */
 export const STEP_LIMITS: Record<StartableStep, { maxTurns: number; timeoutMinutes: number }> = {
@@ -263,6 +286,10 @@ export class RunService {
     private readonly routing: Pick<RoutingConfigStore, "getGlobal" | "getProject"> | null = null,
     /** AI-248: reserves pay_per_use tasks' spend; without it every pay_per_use start is refused. */
     private readonly spendGate: SpendGate | null = null,
+    /** Stores plan-project and ideate results (AI-134); null: those tasks can't start. */
+    private readonly projectTasks: ProjectTaskResults | null = null,
+    /** Stores and fails digest summaries (AI-323); null: summarize tasks can't start. */
+    private readonly digestSummaries: DigestSummaryResults | null = null,
   ) {}
 
   /** The refine gate with this service's tracker, clock and night launches. */
@@ -343,6 +370,185 @@ export class RunService {
   ): Promise<Run> {
     requireCan(actor, "start_run", projectId);
     return this.start(projectId, ticketId, step);
+  }
+
+  /**
+   * A project-level agent task the owner asks for (AI-134): `plan-project`, or `ideate` with the
+   * idea. No ticket; the cloud executor runs it read-only on the project's repo. One of each
+   * step per project in flight; it counts against the project's dial and the global cap, and the
+   * oldest wins a race, as for `start`. Never retried: a failure ends it (see the run's error).
+   */
+  async requestProjectTask(
+    projectId: string,
+    step: string,
+    input: { idea?: string | null },
+    actor: EventActor,
+  ): Promise<Run> {
+    requireCan(actor, "start_run", projectId);
+    if (!isProjectTaskStep(step)) {
+      throw new DomainError("invalid_step", `${step} is not a project-level agent task`);
+    }
+    if (!this.executor || !this.projectTasks) {
+      throw new DomainError("executor_unavailable", "no executor: connect GitHub first");
+    }
+    const project = await this.tracker.getProject(projectId);
+    if (!project) throw notFound("project", projectId);
+    const repo = project.repos[0];
+    if (!repo) throw new DomainError("invalid_repo", `project ${project.key} has no repo`);
+    checkProjectTaskStartable(project, step);
+    const idea = step === "ideate" ? IdeateTaskRequest.parse({ idea: input.idea }).idea : null;
+    const sameStep = (r: Run) => r.ticketId === null && r.step === step;
+    const everywhere = await this.inFlightEverywhere();
+    const active = everywhere.filter((r) => r.projectId === projectId);
+    if (active.some(sameStep)) {
+      throw new DomainError(
+        "run_limit",
+        `project ${project.key} already has a ${step} task in flight`,
+      );
+    }
+    if (active.filter(countsForDial).length >= project.runsAtOnce) {
+      throw new DomainError(
+        "run_limit",
+        `project ${project.key} is at its agent-tasks-at-once dial`,
+        [`limit: ${project.runsAtOnce}`],
+      );
+    }
+    if (everywhere.length >= MAX_ACTIVE_RUNS_GLOBAL) {
+      throw new DomainError("run_limit", "the cap on agent tasks across all projects is reached", [
+        `limit: ${MAX_ACTIVE_RUNS_GLOBAL}`,
+      ]);
+    }
+    const limits = PROJECT_TASK_LIMITS[step];
+    // Shaping a project or an idea reads the whole brief and weighs it: the strong tier.
+    const run = await this.runs.create({
+      projectId,
+      ticketId: null,
+      step,
+      route: TIER_ROUTES.strong,
+      tier: "strong",
+      deadline: new Date(this.now().getTime() + limits.timeoutMinutes * 60_000).toISOString(),
+      prompt: projectTaskPrompt(step, project, repo, idea),
+      maxTurns: limits.maxTurns,
+      idea,
+    });
+    const after = await this.inFlightEverywhere();
+    const inProject = after.filter((r) => r.projectId === projectId);
+    const won =
+      after.slice(0, MAX_ACTIVE_RUNS_GLOBAL).some((r) => r.id === run.id) &&
+      inProject
+        .filter(countsForDial)
+        .slice(0, project.runsAtOnce)
+        .some((r) => r.id === run.id) &&
+      inProject.find(sameStep)?.id === run.id;
+    if (!won) {
+      await this.fail(run.id, "another agent task started at the same time");
+      throw new DomainError("run_limit", `project ${project.key} has no free agent task slot`);
+    }
+    const budget = await this.reserveSpend(run);
+    try {
+      return await this.dispatchRun(
+        run,
+        null,
+        repo,
+        `Started a ${step} task (${run.route.model})`,
+        budget,
+      );
+    } catch (err) {
+      await this.closeSpend(run);
+      throw err;
+    }
+  }
+
+  /**
+   * The digest summary's agent task (AI-323, ADR-0137), started by `DigestSummaryService`: no
+   * ticket, no tools, the `summarize` step's route. Refused while paused, at the quota reserve
+   * (`quota`: the subscriptions' levels), at a run cap or with a summarize task in flight; the
+   * service leaves the day waiting on those. One per project in flight; the oldest wins a race.
+   */
+  async requestDigestSummary(
+    projectId: string,
+    prompt: string,
+    quota: Partial<Record<string, QuotaLevel>>,
+  ): Promise<Run> {
+    if (!this.executor || !this.digestSummaries) {
+      throw new DomainError("executor_unavailable", "no executor: connect GitHub first");
+    }
+    const project = await this.tracker.getProject(projectId);
+    if (!project) throw notFound("project", projectId);
+    const repo = project.repos[0];
+    if (!repo) throw new DomainError("invalid_repo", `project ${project.key} has no repo`);
+    if (project.paused) throw new DomainError("paused", `dispatch is paused for ${project.key}`);
+    const resolved = resolveRoute("summarize", "fast", await this.routingOf(projectId));
+    if (!resolved.route || resolved.route.harness === "direct") {
+      const why = resolved.route
+        ? "its route is direct, which isn't wired here"
+        : skippedText(resolved.skipped);
+      throw new DomainError(
+        "no_route",
+        `no usable summarize route in the ${resolved.tier} tier: ${why}`,
+      );
+    }
+    const route = resolved.route;
+    if (PROVIDER_BILLING[route.provider] === "subscription" && quota[route.provider] === "pause") {
+      throw new DomainError("quota_reserve", `${route.provider} is at its quota reserve`);
+    }
+    const sameStep = (r: Run) => r.ticketId === null && r.step === "summarize";
+    const everywhere = await this.inFlightEverywhere();
+    const active = everywhere.filter((r) => r.projectId === projectId);
+    if (active.some(sameStep)) {
+      throw new DomainError(
+        "run_limit",
+        `project ${project.key} already has a summarize task in flight`,
+      );
+    }
+    if (active.filter(countsForDial).length >= project.runsAtOnce) {
+      throw new DomainError(
+        "run_limit",
+        `project ${project.key} is at its agent-tasks-at-once dial`,
+      );
+    }
+    if (everywhere.length >= MAX_ACTIVE_RUNS_GLOBAL) {
+      throw new DomainError("run_limit", "the cap on agent tasks across all projects is reached");
+    }
+    const run = await this.runs.create({
+      projectId,
+      ticketId: null,
+      step: "summarize",
+      route,
+      routeSkips: routeSkips(resolved),
+      tier: resolved.tier,
+      deadline: new Date(
+        this.now().getTime() + DIGEST_SUMMARY_RUN.timeoutMinutes * 60_000,
+      ).toISOString(),
+      prompt,
+      maxTurns: DIGEST_SUMMARY_RUN.maxTurns,
+    });
+    const after = await this.inFlightEverywhere();
+    const inProject = after.filter((r) => r.projectId === projectId);
+    const won =
+      after.slice(0, MAX_ACTIVE_RUNS_GLOBAL).some((r) => r.id === run.id) &&
+      inProject
+        .filter(countsForDial)
+        .slice(0, project.runsAtOnce)
+        .some((r) => r.id === run.id) &&
+      inProject.find(sameStep)?.id === run.id;
+    if (!won) {
+      await this.fail(run.id, "another agent task started at the same time");
+      throw new DomainError("run_limit", `project ${project.key} has no free agent task slot`);
+    }
+    const budget = await this.reserveSpend(run);
+    try {
+      return await this.dispatchRun(
+        run,
+        null,
+        repo,
+        `Started a summarize task (${route.model})`,
+        budget,
+      );
+    } catch (err) {
+      await this.closeSpend(run);
+      throw err;
+    }
   }
 
   /**
@@ -797,7 +1003,7 @@ export class RunService {
   /** Hands a created run to the executor and records its handle and watchdog. */
   private async dispatchRun(
     run: Run,
-    ticket: Ticket,
+    ticket: Ticket | null,
     repo: string,
     started: string,
     budgetMicroUsd: number | null = null,
@@ -810,7 +1016,7 @@ export class RunService {
       handle = await executor.start({
         runId: run.id,
         projectRef: repo,
-        ticketRef: ticket.key,
+        ticketRef: ticket?.key ?? null,
         step: run.step,
         route: run.route,
         billingType: PROVIDER_BILLING[run.route.provider],
@@ -820,7 +1026,7 @@ export class RunService {
       });
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
-      log("ERROR", "run dispatch failed", { runId: run.id, ticket: ticket.key, error: message });
+      log("ERROR", "run dispatch failed", { runId: run.id, ticket: ticket?.key, error: message });
       await this.fail(run.id, `dispatch failed: ${message}`);
       throw new DomainError("dispatch_failed", `couldn't start the agent task: ${message}`);
     }
@@ -851,11 +1057,13 @@ export class RunService {
     }
     log("INFO", "run dispatched", {
       runId: run.id,
-      ticket: ticket.key,
+      ticket: ticket?.key ?? null,
+      step: run.step,
       externalId: handle.externalId,
       attempt: run.attempt,
     });
     await this.scheduleWatchdog(dispatched);
+    if (!ticket) return dispatched;
     // Best effort: the run is dispatched and recorded, so a failed comment mustn't read as a
     // failed start (a retry would then be flagged Needs-you while it runs).
     await this.tracker
@@ -869,6 +1077,10 @@ export class RunService {
   /** The run's instructions. The first call marks it running. */
   async context(runId: string, caller: RunCaller): Promise<RunContext> {
     let run = await this.requireCaller(runId, caller);
+    // AI-260: a pay_per_use run gets its instructions only with its reserved budget, checked
+    // before it is marked running; no reservation, no agent.
+    const billingType = PROVIDER_BILLING[run.route.provider];
+    const maxBudgetUsd = billingType === "pay_per_use" ? await this.reservedBudgetUsd(run) : null;
     if (run.status === "queued") {
       run = await this.runs.update(
         run.id,
@@ -899,7 +1111,33 @@ export class RunService {
           ? { pullRequest: run.syncRun.number, headSha: run.syncRun.headSha }
           : null,
       baseBranch: run.step === "build" ? run.baseBranch : null,
+      billingType,
+      maxBudgetUsd,
     };
+  }
+
+  /** How the run's route is billed; null for an unknown run. */
+  async billingOf(runId: string): Promise<BillingType | null> {
+    const run = await this.runs.get(runId);
+    return run ? PROVIDER_BILLING[run.route.provider] : null;
+  }
+
+  /**
+   * The agent's budget in USD: the run's reservation less its helper calls' allowance, so the
+   * whole run stays within what was reserved. `spend_cap` when there is no reservation or it
+   * leaves the agent nothing (the run must never start).
+   */
+  private async reservedBudgetUsd(run: Run): Promise<number> {
+    const micro = this.spendGate ? await this.spendGate.reservedFor(run.id) : null;
+    const agent = micro === null ? 0 : micro - helperAllowance(run.step);
+    if (agent <= 0) {
+      log("ERROR", "paid run asked for its context without a usable reservation", {
+        runId: run.id,
+        reservedMicroUsd: micro,
+      });
+      throw new DomainError("spend_cap", `run ${run.id} has no usable spend reservation`);
+    }
+    return agent / MICRO_USD_PER_USD;
   }
 
   /**
@@ -949,6 +1187,31 @@ export class RunService {
         status = "failed";
         error = `Its result was rejected (${issuesOf(parsed.error)}); no plan was recorded.`;
         log("WARNING", "plan result rejected", { runId: run.id, error });
+      }
+    }
+    // AI-134: stored as the owner-only routes store a submitted result; a rejected one fails.
+    if (isProjectTaskStep(run.step) && status === "succeeded") {
+      const applied = this.projectTasks
+        ? await this.projectTasks.apply(run, result.output)
+        : { error: "project-level agent tasks aren't wired on this instance" };
+      if ("error" in applied) {
+        status = "failed";
+        error = applied.error;
+        log("WARNING", "project task result rejected", { runId: run.id, step: run.step, error });
+      } else {
+        summary = applied.summary.slice(0, RUN_SUMMARY_MAX);
+      }
+    }
+    // AI-323: the day's summary is stored, or the rejected answer fails the run and the summary.
+    if (run.step === "summarize" && status === "succeeded") {
+      const applied = this.digestSummaries
+        ? await this.digestSummaries.apply(run, result.output)
+        : { error: "digest summaries aren't wired on this instance" };
+      if ("error" in applied) {
+        status = "failed";
+        error = applied.error;
+      } else {
+        summary = applied.summary;
       }
     }
     if (run.step === "build") {
@@ -1077,6 +1340,8 @@ export class RunService {
 
   /** Lets the next waiting ticket start (the refine dispatcher); logs, never throws. */
   private async runEnded(run: Run): Promise<void> {
+    // AI-323: a summarize run that ended without storing its summary fails it (no-op otherwise).
+    if (run.step === "summarize" && this.digestSummaries) await this.digestSummaries.ended(run);
     if (!this.onRunEnded) return;
     await this.onRunEnded(run.projectId).catch((err: unknown) =>
       log("ERROR", "next run after a run ended failed", { runId: run.id, error: String(err) }),
@@ -1964,7 +2229,9 @@ export class RunService {
       log("ERROR", "run unreadable while closing its spend", { runId, error: String(err) });
       return null;
     });
-    await this.spendGate.close(runId, fresh, usage);
+    // A report's usage covers the agent only: the helper calls count at their full allowance.
+    const helpers = usage ? helperAllowance(ended.step) : 0;
+    await this.spendGate.close(runId, fresh, usage, helpers);
   }
 
   /** Marks a queued run failed; logs (doesn't throw) if that write fails too. */

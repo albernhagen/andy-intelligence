@@ -106,4 +106,10 @@ describe("inbox cards", () => {
     expect(after.questions.map((q) => q.id)).toEqual(["q2", "q3"]);
     expect(after.tickets).toHaveLength(3);
   });
+
+  it("GivenTheReadCarriesWaitingMerges_WhenAQuestionIsAnswered_ThenTheyStay", () => {
+    const merges = { merges: [], truncated: false };
+    const after = withoutQuestion({ ...data, waitingMerges: merges }, "q3");
+    expect(after.waitingMerges).toBe(merges);
+  });
 });

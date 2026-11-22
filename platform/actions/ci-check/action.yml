@@ -21,7 +21,11 @@ runs:
       run: pnpm lint
     - name: Context budget (ADR-0046)
       shell: bash
-      run: node "$GITHUB_ACTION_PATH/../../../scripts/context-budget.mjs"
+      # On a PR: only the PR's own change fails it. On a push to the default branch: warns, never
+      # fails; the context-budget-trim job records the trim (AI-344, ADR-0138).
+      env:
+        REPORT: ${{ github.event_name == 'push' && github.ref_name == github.event.repository.default_branch && '--report' || '' }}
+      run: node "$GITHUB_ACTION_PATH/../../../scripts/context-budget.mjs" $REPORT
     - shell: bash
       run: pnpm typecheck
     - shell: bash

@@ -35,6 +35,9 @@ export function plainAnswer(text: string): string {
   return line.startsWith("#") ? `\\${line}` : line;
 }
 
+/** The Design line when the answers have none: the baseline's design file is the default. */
+export const DESIGN_NOT_STATED = "not stated yet; the design file is `design.md` at the repo root.";
+
 const bullets = (items: string[]) => items.map((i) => `- ${plainAnswer(i)}`).join("\n");
 
 const SECTION_BODIES: Record<BriefSectionTitle, (a: BriefAnswers) => string> = {
@@ -55,6 +58,7 @@ const SECTION_BODIES: Record<BriefSectionTitle, (a: BriefAnswers) => string> = {
       `- **Environments:** ${plainAnswer(a.environments)}`,
       `- **Constraints:** ${plainAnswer(a.constraints)}`,
       `- **Quality bar:** ${plainAnswer(a.qualityBar)}`,
+      `- **Design:** ${a.design ? plainAnswer(a.design) : DESIGN_NOT_STATED}`,
     ].join("\n"),
   "Open questions": (a) => (a.openQuestions.length === 0 ? "None yet." : bullets(a.openQuestions)),
 };

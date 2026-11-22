@@ -32,7 +32,6 @@ function decode(segment: string): string {
 /** The section a path shows: the ticket page belongs to the board, everything else unscoped. */
 export function sectionFromPath(pathname: string): Section | null {
   if (/^\/p\/[^/]+\/settings\/?$/.test(pathname)) return null;
-  if (/^\/p\/[^/]+\/digest\/?$/.test(pathname)) return null; // The digest (AI-70) is its own page.
   if (/^\/p\/[^/]+\/whats-new\/?$/.test(pathname)) return null; // So is What's new (AI-159).
   if (/^\/(all|p\/[^/]+)\/inbox\/?$/.test(pathname)) return "inbox";
   if (/^\/(all|p\/[^/]+)\/dashboards\/?$/.test(pathname)) return "dashboards";
@@ -52,6 +51,23 @@ export function scopePath(scope: Scope, section: Section): string {
 /** A project's settings page (AI-46), linked from the header while a project is in scope. */
 export const projectSettingsPath = (projectId: string) =>
   `/p/${encodeURIComponent(projectId)}/settings`;
+
+/**
+ * The settings pages in order (AI-335): this project's while one is in scope, then the global
+ * ones. The header's Settings menu, the phone's More and the tabs on each settings page share it.
+ */
+export function settingsTabs(scope: Scope): { label: string; to: string }[] {
+  const project =
+    scope.kind === "project"
+      ? [{ label: "Project settings", to: projectSettingsPath(scope.projectId) }]
+      : [];
+  return [
+    ...project,
+    { label: "GitHub", to: "/settings/github" },
+    { label: "Local runners", to: "/settings/runners" },
+    { label: "Models", to: "/settings/models" },
+  ];
+}
 
 /** "all" or "p:<project>": the stored form, also handy as a React key. */
 export const scopeKey = (scope: Scope) => (scope.kind === "all" ? "all" : `p:${scope.projectId}`);

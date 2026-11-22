@@ -1,4 +1,5 @@
 import {
+  configChangeId,
   DEFAULT_SPEND_CAPS,
   NewProject,
   ProjectSettings,
@@ -7,7 +8,6 @@ import {
   type ConfigChange,
   type ConfigChangeLog,
   type SpendCaps,
-  type AutoMerge,
   type EventActor,
   type MergeMode,
   type Project,
@@ -16,7 +16,7 @@ import {
 import { notFound } from "@andy/contracts";
 import { CONFIG_CHANGE_NOT_RECORDED, projectSettingsChange } from "./config-changes";
 import { DomainError } from "./errors";
-import { requireAutoMergeNotLoosening, requireTightening } from "./merge-mode";
+import { requireTightening } from "./merge-mode";
 import { requireCan } from "./permissions";
 import { projectCapsRefusal } from "./spend-settings";
 
@@ -42,7 +42,7 @@ export class ProjectService {
     private readonly now: () => Date = () => new Date(),
     /** The config change log (M4.11); null where none is kept (tests, local dev without one). */
     private readonly configChanges: ConfigChangeLog | null = null,
-    private readonly newId: () => string = () => crypto.randomUUID(),
+    private readonly newId: () => string = () => configChangeId(),
     /** The global spend caps a project's own may not pass (AI-249); defaults until AI-276. */
     private readonly globalSpendCaps: () => Promise<SpendCaps> = async () => DEFAULT_SPEND_CAPS,
   ) {}
@@ -63,22 +63,6 @@ export class ProjectService {
     if (!current) throw notFound("project", projectId);
     requireTightening(mode, current);
     return this.update(projectId, { mergeMode: mode }, by, reason);
-  }
-
-  /**
-   * MCP `set_auto_merge`: while `mergeMode` is unset the mode is read from `autoMerge`, so this
-   * may not loosen it over MCP (ADR-0124); otherwise the normal settings write.
-   */
-  async setAutoMergeOverMcp(
-    projectId: string,
-    autoMerge: AutoMerge,
-    by: { actor: EventActor; email: string },
-  ): Promise<Project> {
-    requireCan(by.actor, "change_project_settings", projectId);
-    const current = await this.tracker.getProject(projectId);
-    if (!current) throw notFound("project", projectId);
-    requireAutoMergeNotLoosening(autoMerge, current);
-    return this.update(projectId, { autoMerge }, by);
   }
 
   /**

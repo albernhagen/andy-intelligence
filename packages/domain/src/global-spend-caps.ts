@@ -1,4 +1,5 @@
 import {
+  configChangeId,
   CONFIG_CHANGE_LIST_MAX,
   ConfigChange,
   DEFAULT_SPEND_CAPS,
@@ -45,7 +46,7 @@ export class GlobalSpendCaps {
     private readonly store: SpendCapsStore | null,
     private readonly changes: ConfigChangeLog | null,
     private readonly now: () => Date = () => new Date(),
-    private readonly newId: () => string = () => crypto.randomUUID(),
+    private readonly newId: () => string = () => configChangeId(),
   ) {}
 
   /** Throws when the store can't be read: callers must not treat that as the defaults. */

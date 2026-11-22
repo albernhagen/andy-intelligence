@@ -138,6 +138,7 @@ export function buildDigest(window: DigestWindow, data: DigestData): Digest {
     inProgress: { inFlight, readyForReview },
     totals,
     truncated: data.truncated,
+    summary: null,
   };
   return { ...digest, text: renderDigestText(digest, live) };
 }

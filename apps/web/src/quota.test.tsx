@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { fireEvent, screen, waitFor, within } from "@testing-library/react";
 import type { QuotaReading } from "@andy/contracts";
 import { renderApp } from "@/test/harness";
@@ -57,7 +57,7 @@ describe("quota gauge and banner", () => {
     const harness = await open([reading("5h", 92), reading("weekly", 10)]);
     const banner = await screen.findByRole("alert");
     fireEvent.click(within(banner).getByRole("button", { name: "Clear quota idle" }));
-    await screen.findByText(/Claude quota unknown/);
+    await waitFor(() => expect(screen.queryByRole("alert")).toBeNull());
     expect(screen.queryByRole("button", { name: "Clear quota idle" })).toBeNull();
     const [cleared] = (await harness.quota.latest("claude-sub")).filter((r) => r.window === "5h");
     expect(cleared?.discarded?.by).toBe("andy@example.com");
@@ -69,12 +69,37 @@ describe("quota gauge and banner", () => {
     expect(screen.queryByRole("button", { name: "Clear quota idle" })).toBeNull();
   });
 
-  it("GivenNoReadings_WhenTheShellOpens_ThenTheGaugeAndALowerSeverityBannerShowUnknown", async () => {
+  it("GivenNoReadings_WhenTheShellOpens_ThenOnlyTheGaugeSaysUnknown", async () => {
     await open([]);
-    await screen.findByText(/Claude quota unknown/);
-    const gauge = screen.getByRole("list", { name: "Claude quota" });
-    expect(within(gauge).getAllByText("unknown")).toHaveLength(2);
-    await waitFor(() => expect(screen.queryByRole("alert")).toBeNull());
+    const gauge = await screen.findByRole("list", { name: "Claude quota" });
+    const unknown = await within(gauge).findAllByText("unknown");
+    expect(unknown).toHaveLength(2);
+    expect(unknown[0]?.getAttribute("title")).toMatch(/don't assume there is headroom/);
+    expect(screen.queryByText(/Claude quota unknown/)).toBeNull();
+    expect(screen.queryByRole("alert")).toBeNull();
+  });
+});
+
+describe("quota gauge when a reading is missing or the read fails (AI-328)", () => {
+  it("GivenTheQuotaReadFails_WhenTheShellOpens_ThenTheGaugeStillSaysUnknownWithItsHint", async () => {
+    const harness = renderApp("/all/inbox");
+    vi.spyOn(harness.quota, "latest").mockRejectedValue(new Error("store down"));
+    await harness.router.invalidate();
+    const gauge = await screen.findByText("Quota unknown");
+    // The failed-read gauge shows at every width, not only on a phone.
+    expect(gauge.className).not.toContain("md:hidden");
+    expect(screen.queryByRole("list", { name: "Claude quota" })).toBeNull();
+    expect(gauge.getAttribute("title")).toMatch(/don't assume there is headroom/);
+    expect(within(gauge).getByText(/don't assume there is headroom/).className).toContain(
+      "sr-only",
+    );
+    expect(screen.queryByRole("alert")).toBeNull();
+  });
+
+  it("GivenNoReadings_WhenTheShellOpens_ThenScreenReadersHearTheHint", async () => {
+    await open([]);
+    const gauge = await screen.findByRole("list", { name: "Claude quota" });
+    expect(await within(gauge).findAllByText(/don't assume there is headroom/)).toHaveLength(2);
   });
 });
 
