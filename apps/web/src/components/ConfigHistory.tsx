@@ -2,6 +2,8 @@ import type { ConfigChange } from "@andy/contracts";
 import { QueryError } from "@/components/Status";
 import { errorText } from "@/lib/api";
 import { useRevertSettingsChange, useSettingsChanges } from "@/lib/queries";
+import { settingLabel, settingValue } from "@/lib/settings-labels";
+import { dateTime } from "@/lib/format";
 
 const button =
   "rounded-md border border-border bg-background px-2 py-0.5 text-xs font-medium text-foreground hover:bg-muted disabled:opacity-50";
@@ -55,15 +57,14 @@ function ChangeRow({
   const fields = routing
     ? [`Routing: ${Object.keys(change.diff).join(", ")} changed`]
     : Object.entries(change.diff).map(
-        ([field, value]) => `${field}: ${show(value, "from")} → ${show(value, "to")}`,
+        ([field, value]) => `${settingLabel(field)}: ${show(value, "from")} → ${show(value, "to")}`,
       );
   return (
     <li aria-label={`Change ${change.id}`} className="flex items-start gap-2 px-3 py-2">
       <div className="min-w-0 flex-1 space-y-0.5">
         <p>{fields.join("; ")}</p>
         <p className="text-xs text-muted-foreground">
-          {change.actor === "andy" ? "Andy" : change.actor} ·{" "}
-          {new Date(change.createdAt).toLocaleString()}
+          {change.actor === "andy" ? "Andy" : change.actor} · {dateTime(change.createdAt)}
           {change.reason && ` · ${change.reason}`}
         </p>
       </div>
@@ -80,8 +81,7 @@ function ChangeRow({
   );
 }
 
-/** One side of a field's before and after, as plain text. */
+/** One side of a field's before and after, in words (`settingValue`). */
 function show(value: unknown, side: "from" | "to"): string {
-  const v = (value as Record<string, unknown> | null)?.[side];
-  return typeof v === "string" ? v : JSON.stringify(v ?? null);
+  return settingValue((value as Record<string, unknown> | null)?.[side]);
 }

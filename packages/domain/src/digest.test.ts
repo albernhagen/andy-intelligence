@@ -495,7 +495,7 @@ describe("buildDigest", () => {
     expect(at("In progress")).toBeLessThan(at("Totals"));
     expect(d.inProgress.inFlight[0]).toMatchObject({
       ticketKey: "AI-2",
-      label: "Building · 600 min",
+      label: "Building · 10 hours",
     });
   });
 

@@ -2,7 +2,8 @@ import { describe, expect, it } from "vitest";
 import { screen, waitFor, within } from "@testing-library/react";
 import { DEFAULT_ROUTE } from "@andy/domain";
 import { renderApp } from "@/test/harness";
-import { formatDuration, gateText, wallMs } from "@/pages/RunPage";
+import { gateText, wallMs } from "@/pages/RunPage";
+import { elapsed } from "@/lib/format";
 import { httpsHref } from "@/components/Runs";
 
 /** AI-101: the agent task detail screen, over the real API in-process. */
@@ -196,10 +197,11 @@ describe("agent task page helpers", () => {
     expect(wallMs({ usage: null, startedAt: "2026-11-04T14:00:00Z", endedAt: null })).toBeNull();
   });
 
-  it("GivenDurations_WhenFormatted_ThenSecondsOrMinutes", () => {
-    expect(formatDuration(42_000)).toBe("42 s");
-    expect(formatDuration(720_000)).toBe("12 min");
-    expect(formatDuration(725_000)).toBe("12 min 5 s");
+  it("GivenDurations_WhenFormatted_ThenSecondsMinutesOrWords", () => {
+    expect(elapsed(42_000)).toBe("42 s");
+    expect(elapsed(720_000)).toBe("12 min");
+    expect(elapsed(725_000)).toBe("12 min 5 s");
+    expect(elapsed(3 * 60 * 60_000 + 5_000)).toBe("3 hours");
   });
 
   it("GivenGateStates_WhenDescribed_ThenNotRunPassedOrHeldWithReasons", () => {
