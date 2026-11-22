@@ -61,6 +61,14 @@ export function WhatsNewPage() {
             ))}
           </select>
         )}
+        {/* AI-335: the digest left the header; AI-341 folds it into this page. */}
+        <Link
+          to="/p/$projectId/digest"
+          params={{ projectId }}
+          className="ml-auto text-sm text-muted-foreground underline-offset-2 hover:underline"
+        >
+          Digest
+        </Link>
       </header>
       {whatsNew.isPending ? (
         <Loading />

@@ -33,11 +33,11 @@ async function seeded(path: string) {
 }
 
 describe("digest page", () => {
-  it("GivenAProjectScreen_WhenAndyClicksDigest_ThenTheDigestPageOpens", async () => {
-    const harness = await seeded("/p/ai");
+  it("GivenWhatsNew_WhenAndyClicksDigest_ThenTheDigestPageOpens", async () => {
+    const harness = await seeded("/p/ai/whats-new");
     await harness.user.click(await screen.findByRole("link", { name: "Digest" }));
     await waitFor(() => expect(harness.router.state.location.pathname).toBe("/p/ai/digest"));
-    expect(screen.getByRole("link", { name: "Digest" }).getAttribute("aria-current")).toBe("page");
+    expect(await screen.findByRole("heading", { name: "Digest" })).toBeTruthy();
   });
 
   it("GivenActivity_WhenTheDigestOpens_ThenSectionsInOrderWithReasonsAndCost", async () => {
@@ -62,9 +62,9 @@ describe("digest page", () => {
     expect(await screen.findByText("AI digest · last 24 hours: nothing happened.")).toBeTruthy();
   });
 
-  it("GivenAllProjects_WhenTheHeaderShows_ThenNoDigestLink", async () => {
-    renderApp("/all/inbox");
-    await screen.findByRole("link", { name: "Inbox" });
-    expect(screen.queryByRole("link", { name: "Digest" })).toBeNull();
+  it("GivenAProject_WhenTheHeaderShows_ThenNoDigestLink", async () => {
+    await seeded("/p/ai/inbox");
+    const nav = await screen.findByRole("navigation", { name: "Main" });
+    expect(within(nav).queryByRole("link", { name: "Digest" })).toBeNull();
   });
 });
