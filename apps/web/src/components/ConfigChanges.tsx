@@ -17,24 +17,42 @@ export function ConfigChanges({ projectId }: { projectId?: string }) {
   const sweep = useSweepConfigProposals();
   const pending = changes.data ?? [];
   if (!projectId && pending.length === 0) return null;
+  const check = projectId ? () => sweep.mutate(projectId) : null;
+  const title =
+    "Look for finding kinds the PR reviews flagged on 3 or more recent PRs and propose a rule for each. Applies nothing.";
 
+  // Nothing pending (a project's inbox): no zero row, only the check as a small link (AI-331).
   return (
     <section aria-label="Config proposals" className="space-y-2">
-      <h3 className="text-sm font-medium">
-        Config proposals{" "}
-        <span className="text-muted-foreground tabular-nums">{pending.length}</span>
-        {projectId && (
+      {pending.length > 0 ? (
+        <h3 className="text-sm font-medium">
+          Config proposals{" "}
+          <span className="text-muted-foreground tabular-nums">{pending.length}</span>
+          {check && (
+            <button
+              type="button"
+              className={`${button} ml-3`}
+              title={title}
+              disabled={sweep.isPending}
+              onClick={check}
+            >
+              Check review findings
+            </button>
+          )}
+        </h3>
+      ) : (
+        check && (
           <button
             type="button"
-            className={`${button} ml-3`}
-            title="Look for finding kinds the PR reviews flagged on 3 or more recent PRs and propose a rule for each. Applies nothing."
+            className="text-xs text-muted-foreground underline-offset-2 hover:text-foreground hover:underline disabled:opacity-50"
+            title={title}
             disabled={sweep.isPending}
-            onClick={() => sweep.mutate(projectId)}
+            onClick={check}
           >
             Check review findings
           </button>
-        )}
-      </h3>
+        )
+      )}
       {sweep.data && <p className="text-xs text-muted-foreground">{sweepText(sweep.data)}</p>}
       {sweep.error && <QueryError error={sweep.error} />}
       {changes.error && <QueryError error={changes.error} />}

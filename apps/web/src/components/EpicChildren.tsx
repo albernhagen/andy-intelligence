@@ -1,3 +1,4 @@
+import type * as React from "react";
 import { Link } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import { NightLaunch } from "@/components/NightLaunch";
@@ -46,28 +47,33 @@ export function formatEpicRollup(r: Pick<EpicRollup, "progress" | "cost" | "part
     .join(" · ");
 }
 
-/** The epic's stories in dependency order, with progress and summed cost. */
-export function EpicChildren(path: TicketPath) {
+/**
+ * The epic's lead (AI-336): its tickets with progress, then its milestone (a slot the panel fills),
+ * then Plan the night once it has tickets.
+ */
+export function EpicChildren({ milestone, ...path }: TicketPath & { milestone?: React.ReactNode }) {
   const rollup = useEpicRollup(path);
   const r = rollup.data;
   return (
     <>
-      <StoryList path={path} />
+      <EpicTickets path={path} />
+      {milestone}
       {r && r.children.length > 0 && <NightLaunch {...path} />}
     </>
   );
 }
 
-function StoryList({ path }: { path: TicketPath }) {
+/** The epic's tickets in dependency order, with progress and summed cost. */
+function EpicTickets({ path }: { path: TicketPath }) {
   const rollup = useEpicRollup(path);
   const r = rollup.data;
   return (
-    <section aria-label="Stories" className="space-y-2">
-      <h3 className="text-sm font-medium">Stories</h3>
+    <section aria-label="Tickets" className="space-y-2">
+      <h3 className="text-sm font-medium">Tickets</h3>
       {rollup.isPending && <Loading />}
       {showsError(rollup) && <QueryError error={rollup.error} />}
       {r && r.children.length === 0 && (
-        <p className="text-sm text-muted-foreground">No stories under this epic yet.</p>
+        <p className="text-sm text-muted-foreground">No tickets under this epic yet.</p>
       )}
       {r && r.children.length > 0 && (
         <>
@@ -76,7 +82,7 @@ function StoryList({ path }: { path: TicketPath }) {
           </p>
           {r.partial && (
             <p className="text-xs text-muted-foreground">
-              Cost counts {r.costedChildren} of {r.progress.total} stories, those likeliest to have
+              Cost counts {r.costedChildren} of {r.progress.total} tickets, those likeliest to have
               agent tasks.
             </p>
           )}

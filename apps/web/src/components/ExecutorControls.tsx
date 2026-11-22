@@ -6,7 +6,7 @@ import { useExecutor, useSetExecutor, useUpdateProject } from "@/lib/queries";
 
 /** Where a ticket's runs execute (ADR-0089): the ticket's switch and the project default. */
 
-const EXECUTOR_LABELS: Record<ExecutorKind, string> = {
+export const EXECUTOR_LABELS: Record<ExecutorKind, string> = {
   actions: "GitHub Actions",
   local: "Local runner",
 };
