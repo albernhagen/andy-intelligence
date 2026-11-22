@@ -158,6 +158,15 @@ describe("go-to shortcuts and help", () => {
     expect(screen.queryByRole("dialog", { name: "Keyboard shortcuts" })).toBeNull();
     expect(path(h)).toBe("/p/ai");
   });
+
+  it("GivenTheHelpListOpen_WhenOtherShortcutsArePressed_ThenNothingHappensBehindIt", async () => {
+    const h = await inProject();
+    await h.user.keyboard("?");
+    const help = await screen.findByRole("dialog", { name: "Keyboard shortcuts" });
+    await h.user.keyboard("jgi");
+    expect(path(h)).toBe("/p/ai");
+    expect(help.contains(document.activeElement)).toBe(true);
+  });
 });
 
 describe("shortcutHandler", () => {

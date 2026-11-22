@@ -89,6 +89,8 @@ function focusInItem(selector: string, index = 0): boolean {
 export interface ShortcutActions {
   go: (target: GoTarget) => void;
   toggleHelp: () => void;
+  /** True while the `?` list is open: only `?` (and its own Esc) work then. */
+  helpOpen?: () => boolean;
 }
 
 /**
@@ -99,6 +101,10 @@ export function shortcutHandler(actions: ShortcutActions, now: () => number = Da
   let gAt: number | null = null;
   return (e: KeyboardEvent) => {
     if (e.defaultPrevented || e.ctrlKey || e.metaKey || e.altKey || isTyping(e.target)) {
+      gAt = null;
+      return;
+    }
+    if (actions.helpOpen?.() && e.key !== "?") {
       gAt = null;
       return;
     }

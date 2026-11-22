@@ -29,18 +29,7 @@ Below `sm` (640px; `useIsPhone`); screens adopt these in their own M7: Mobile sl
 
 ## Keyboard
 
-`src/lib/shortcuts.ts` (AI-338); `?` lists them. Never while typing in a field; no single key writes (a number focuses an answer, `Enter` chooses).
-
-| Keys                  | Does                                                      |
-| --------------------- | --------------------------------------------------------- |
-| `j` / `k`             | Next or previous inbox question or board card             |
-| `Enter`               | Open the focused ticket, or choose the focused answer     |
-| `a`                   | Focus the focused question's answer field                 |
-| `1`–`9`               | Focus that answer                                         |
-| `g i` / `g b` / `g r` | Inbox, board, roadmap, in the current scope               |
-| `?` / `Esc`           | Show / close the list; `Esc` also closes the ticket panel |
-
-Screens opt in with `data-nav-item` (`tabIndex={-1}`, focus outline), `data-nav-open`, `data-nav-answer`, `data-nav-choice`; new shortcuts go in `SHORTCUTS` and here.
+Shortcuts (`j`/`k`, `Enter`, `a`, `1`–`9`, `g i`/`g b`/`g r`, `?`) live in `SHORTCUTS` (`src/lib/shortcuts.ts`, AI-338); `?` lists them. Never while typing in a field; no single key writes. Screens opt in with `data-nav-*` attributes and a visible focus outline.
 
 ## Type
 

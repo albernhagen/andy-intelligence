@@ -14,11 +14,14 @@ export function KeyboardShortcuts({ scope }: { scope: Scope }) {
   // The listener is added once; it reads the latest scope through the ref.
   const scopeRef = useRef(scope);
   scopeRef.current = scope;
+  const helpRef = useRef(helpOpen);
+  helpRef.current = helpOpen;
 
   useEffect(() => {
     const onKeyDown = shortcutHandler({
       go: (target) => void navigate({ href: scopePath(scopeRef.current, target) }),
       toggleHelp: () => setHelpOpen((open) => !open),
+      helpOpen: () => helpRef.current,
     });
     document.addEventListener("keydown", onKeyDown);
     return () => document.removeEventListener("keydown", onKeyDown);
