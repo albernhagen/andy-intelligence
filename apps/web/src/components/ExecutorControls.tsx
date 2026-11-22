@@ -59,10 +59,10 @@ export function DefaultExecutorSelect({ project }: { project: Project }) {
   const update = useUpdateProject(project.id);
   return (
     <>
-      <label className="ml-3 inline-flex items-center gap-1 text-sm text-muted-foreground">
+      <label className="ml-3 inline-flex items-center gap-1 text-sm text-muted-foreground max-sm:min-h-11">
         {SETTING_LABELS.executor}
         <select
-          className="rounded border border-border bg-background px-1"
+          className="rounded border border-border bg-background px-1 max-sm:h-11 max-sm:text-base"
           value={project.executor}
           disabled={update.isPending}
           onChange={(e) => update.mutate({ executor: ExecutorKind.parse(e.target.value) })}

@@ -102,7 +102,7 @@ export function BoardPage() {
 
   return (
     <section className="space-y-4">
-      <div className="flex flex-wrap items-center justify-between gap-2">
+      <div className="flex flex-wrap items-center justify-between gap-2 max-sm:flex-col max-sm:items-start">
         <h2 className="text-lg font-medium">
           Board <BoardDispatchStatus projectId={projectId} />
         </h2>
@@ -117,7 +117,7 @@ export function BoardPage() {
             epicId={epicId}
             onEpicChange={setChosenEpic}
           />
-          <label className="flex items-center gap-1 text-sm">
+          <label className="flex items-center gap-1 text-sm max-sm:min-h-11">
             <input
               type="checkbox"
               checked={showArchived}

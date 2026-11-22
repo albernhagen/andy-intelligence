@@ -155,14 +155,14 @@ function DailyQuestionCap({ project }: { project: Project }) {
   const update = useUpdateProject(project.id);
   return (
     <>
-      <label className="ml-3 inline-flex items-center gap-1 text-sm">
+      <label className="ml-3 inline-flex items-center gap-1 text-sm max-sm:min-h-11">
         {SETTING_LABELS.dailyQuestionCap}
         <input
           type="number"
           min={0}
           max={50}
           aria-label="Questions per day"
-          className="w-14 rounded-md border border-border bg-background px-1"
+          className="w-14 rounded-md border border-border bg-background px-1 max-sm:h-11 max-sm:text-base"
           defaultValue={project.dailyQuestionCap}
           disabled={update.isPending}
           onBlur={(e) => {
@@ -184,7 +184,7 @@ function AutoRefineToggle({ project }: { project: Project }) {
   const update = useUpdateProject(project.id);
   return (
     <>
-      <label className="ml-3 inline-flex items-center gap-1 text-sm">
+      <label className="ml-3 inline-flex items-center gap-1 text-sm max-sm:min-h-11">
         <input
           type="checkbox"
           checked={project.autoRefine}
@@ -208,7 +208,7 @@ function BuildsEnabledToggle({ project }: { project: Project }) {
   const when = project.buildEnabledAt ? dateOnly(project.buildEnabledAt) : null;
   return (
     <>
-      <label className="ml-3 inline-flex items-center gap-1 text-sm">
+      <label className="ml-3 inline-flex items-center gap-1 text-sm max-sm:min-h-11">
         <input
           type="checkbox"
           checked={project.buildEnabled}
@@ -233,7 +233,7 @@ function AutoBuildToggle({ project }: { project: Project }) {
   const update = useUpdateProject(project.id);
   return (
     <>
-      <label className="ml-3 inline-flex items-center gap-1 text-sm">
+      <label className="ml-3 inline-flex items-center gap-1 text-sm max-sm:min-h-11">
         <input
           type="checkbox"
           checked={project.autoBuild}
@@ -259,10 +259,10 @@ function PlanApprovalSelect({ project }: { project: Project }) {
   const update = useUpdateProject(project.id);
   return (
     <>
-      <label className="ml-3 inline-flex items-center gap-1 text-sm">
+      <label className="ml-3 inline-flex items-center gap-1 text-sm max-sm:min-h-11">
         {SETTING_LABELS.planApproval}
         <select
-          className="rounded border border-border bg-background px-1"
+          className="rounded border border-border bg-background px-1 max-sm:h-11 max-sm:text-base"
           value={project.planApproval}
           disabled={update.isPending}
           onChange={(e) => update.mutate({ planApproval: e.target.value as PlanApproval })}
@@ -290,10 +290,10 @@ function EnvironmentsSelect({ project }: { project: Project }) {
   const update = useUpdateProject(project.id);
   return (
     <>
-      <label className="ml-3 inline-flex items-center gap-1 text-sm">
+      <label className="ml-3 inline-flex items-center gap-1 text-sm max-sm:min-h-11">
         {SETTING_LABELS.environments}
         <select
-          className="rounded border border-border bg-background px-1"
+          className="rounded border border-border bg-background px-1 max-sm:h-11 max-sm:text-base"
           value={project.environments}
           disabled={update.isPending}
           onChange={(e) => update.mutate({ environments: EnvironmentPolicy.parse(e.target.value) })}
@@ -327,10 +327,10 @@ function MergeModeSelect({ project }: { project: Project }) {
   const mode = effectiveMergeMode(project);
   return (
     <div className="ml-3 space-y-1 text-sm">
-      <label className="inline-flex items-center gap-1">
+      <label className="inline-flex items-center gap-1 max-sm:min-h-11">
         {SETTING_LABELS.mergeMode}
         <select
-          className="rounded border border-border bg-background px-1"
+          className="rounded border border-border bg-background px-1 max-sm:h-11 max-sm:text-base"
           value={mode}
           disabled={update.isPending}
           onChange={(e) => update.mutate({ mergeMode: MergeMode.parse(e.target.value) })}
@@ -357,10 +357,10 @@ function AutoMergeSelect({ project }: { project: Project }) {
   const update = useUpdateProject(project.id);
   return (
     <>
-      <label className="ml-3 inline-flex items-center gap-1 text-sm">
+      <label className="ml-3 inline-flex items-center gap-1 text-sm max-sm:min-h-11">
         {SETTING_LABELS.autoMerge}
         <select
-          className="rounded border border-border bg-background px-1"
+          className="rounded border border-border bg-background px-1 max-sm:h-11 max-sm:text-base"
           value={project.autoMerge}
           disabled={update.isPending}
           onChange={(e) => update.mutate({ autoMerge: e.target.value as AutoMerge })}
