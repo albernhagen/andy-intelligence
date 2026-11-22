@@ -14,6 +14,7 @@ Stack: React, Tailwind v4, shadcn/ui components in `src/components/ui/`, icons f
 ## Layout
 
 - One shell on every screen (`src/components/AppShell.tsx`): project picker, navigation, "Needs you N". Pages never draw their own header.
+- The header holds at most six destinations (Inbox, Board, Roadmap, Work, Dashboards, What's new); every settings page and Sign out sit in one Settings menu, and settings pages share `SettingsTabs`. A new screen goes under an existing destination or replaces one (AI-335).
 - The picker is the global scope: project screens under `/p/<project>/…`, cross-project under `/all/…`. A new screen gets both, or says why not (the board needs one project).
 - Content is full width with `px-4 sm:px-6` and `py-4`. Forms and prose cap at `max-w-2xl`.
 - A ticket opens as a panel over the board, led by its status line; prose uses `Markdown`.
