@@ -47,6 +47,7 @@ jobs:
             docs/security/risks/
           has-token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN != '' }}
           resync-bot: andy-intelligence-control[bot] # ADR-0111 re-sync App; ADR-0140
+          agent-bot: andy-intelligence-control[bot] # agent PRs (agent/*) get a real review; ADR-0141
           github-token: ${{ github.token }}
 
       - name: Security-review agent
@@ -58,6 +59,7 @@ jobs:
         with:
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
           github_token: ${{ github.token }}
+          allowed_bots: ${{ steps.prep.outputs.allowed-bots }} # the agent App on agent/* only (ADR-0141)
           settings: '{"disableAllHooks": true}'
           prompt: |
             You are the security reviewer for pull request ${{ github.event.pull_request.number }} in ${{ github.repository }}.

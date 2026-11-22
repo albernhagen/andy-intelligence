@@ -33,6 +33,14 @@ inputs:
       Login of the re-sync bot (ADR-0111), e.g. my-app[bot]. A push it makes can carry the
       previous verdict forward when the PR's own diff is unchanged (ADR-0140); "" turns that off.
     default: ""
+  agent-bot:
+    description: >-
+      Login of the App that opens agent PRs, e.g. my-app[bot]. The review agents may run on a push
+      it makes, but only to a branch under agent-branch-prefix (ADR-0141); "" turns that off.
+    default: ""
+  agent-branch-prefix:
+    description: Branch prefix of agent PRs.
+    default: agent/
   github-token:
     description: Token for reading comments and removing the label.
     required: true
@@ -46,6 +54,10 @@ outputs:
   reason:
     description: Why the agent won't run (skipped and unavailable modes).
     value: ${{ steps.carry.outputs.reason || steps.scope.outputs.reason || steps.ctx.outputs.reason }}
+  allowed-bots:
+    description: >-
+      For the review action's allowed_bots: agent-bot on an agent PR it pushed to, else "" (ADR-0141).
+    value: ${{ steps.ctx.outputs.allowed-bots }}
   carried-from:
     description: The reviewed commit whose verdict carries forward (carried mode).
     value: ${{ steps.carry.outputs.carried-from }}
@@ -78,8 +90,11 @@ runs:
         HEAD_REPO: ${{ github.event.pull_request.head.repo.full_name }}
         DRAFT: ${{ github.event.pull_request.draft }}
         ACTOR: ${{ github.actor }}
+        HEAD_REF: ${{ github.event.pull_request.head.ref }}
         HAS_TOKEN: ${{ inputs.has-token }}
         LABEL: ${{ inputs.label }}
+        AGENT_BOT: ${{ inputs.agent-bot }}
+        AGENT_PREFIX: ${{ inputs.agent-branch-prefix }}
       run: |
         labelled=$(jq -r --arg l "$LABEL" 'index($l) != null' <<<"$LABELS")
         accepted=false
@@ -92,13 +107,24 @@ runs:
         elif [ "$HAS_TOKEN" != true ]; then mode=unavailable; reason="repository secret CLAUDE_CODE_OAUTH_TOKEN is not set (docs/runbooks/security-review.md)"
         else mode=review
         fi
+        # The review action refuses bot-started runs; let the agent App through on its own agent
+        # PRs only (ADR-0141). Any other bot-started run stays refused and fails the check.
+        agent_pr=false
+        allowed_bots=""
+        if [ -n "$AGENT_BOT" ] && [ -n "$AGENT_PREFIX" ] && [ "$ACTOR" = "$AGENT_BOT" ] \
+          && [ "${HEAD_REF#"$AGENT_PREFIX"}" != "$HEAD_REF" ]; then
+          agent_pr=true
+          allowed_bots=$AGENT_BOT
+        fi
         {
           echo "mode=$mode"
           echo "accepted=$accepted"
           echo "labelled=$labelled"
           echo "reason=$reason"
+          echo "agent-pr=$agent_pr"
+          echo "allowed-bots=$allowed_bots"
         } >> "$GITHUB_OUTPUT"
-        echo "mode=$mode accepted=$accepted"
+        echo "mode=$mode accepted=$accepted agent-pr=$agent_pr"
 
     - name: Override label added
       if: steps.ctx.outputs.mode == 'skip'
@@ -139,7 +165,8 @@ runs:
       id: carry
       if: >-
         steps.scope.outputs.mode == 'review' && github.event.action == 'synchronize' &&
-        inputs.resync-bot != '' && github.actor == inputs.resync-bot
+        inputs.resync-bot != '' && github.actor == inputs.resync-bot &&
+        steps.ctx.outputs.agent-pr != 'true'
       shell: bash
       env:
         GH_TOKEN: ${{ inputs.github-token }}
