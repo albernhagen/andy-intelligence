@@ -47,7 +47,8 @@ Step 1 of AI-285: Web UI and MCP parity: every action in both, enforced by a tes
 | AI-291: Parity: edit_ticket sets needs-attention, risk and confidence  | done      | S    | `PATCH` fields → `edit_ticket`                               |
 | AI-292: Parity: set the daily question cap over MCP                    | done      | S    | `PATCH dailyQuestionCap` → `set_daily_question_cap`          |
 | AI-293: Parity: a ticket's full history and runs over MCP              | done      | S    | Built: `ticket_history`, `list_runs`, `get_run` (now matched) |
-| AI-294: Parity: list and revoke runners over MCP | UI-only | S | List built (`list_runners`, ADR-0135); revoke waits on its own decision → `revoke_runner` |
+| AI-294: Parity: list runners over MCP | done | S | Built: `list_runners` (ADR-0135; now matched) |
+| AI-351: Parity: revoke a runner over MCP | UI-only | S | revoke → `revoke_runner` (owner only), if Andy amends ADR-0089 |
 | AI-295: Parity: dashboards and DORA metrics over MCP                   | UI-only   | S    | Built: `dashboard` (now matched)                             |
 | AI-296: Parity: the board, every stage, over MCP | UI-only | S | Built: `board` (now matched) |
 | AI-321: Milestone create and edit over MCP | done | S | Built: `create_milestone`, `edit_milestone` (ADR-0136, proposed; now matched) |
@@ -70,7 +71,7 @@ M6, M7 and M8 add no gap today: their settings that exist (environments) are alr
 
 ## One side on purpose (the parity test records the reason)
 
-The registry `apps/api/src/parity.ts` (AI-300) holds every action with its routes and tools; `parity.test.ts` fails when a route or tool is in no action, names one that doesn't exist, or has one side without a reason. Open gaps carry their ticket: AI-294. AI-320 matched starting the plan-project and ideate agent tasks: `start_plan_project` and `start_ideate` over MCP; in the web, the Project plan card's button and the board's Ideate form (AI-299).
+The registry `apps/api/src/parity.ts` (AI-300) holds every action with its routes and tools; `parity.test.ts` fails when a route or tool is in no action, names one that doesn't exist, or has one side without a reason. Open gaps carry their ticket: AI-351. AI-320 matched starting the plan-project and ideate agent tasks: `start_plan_project` and `start_ideate` over MCP; in the web, the Project plan card's button and the board's Ideate form (AI-299).
 
 | Action                                                | Side     | Reason                                                                                                   |
 | ----------------------------------------------------- | -------- | -------------------------------------------------------------------------------------------------------- |

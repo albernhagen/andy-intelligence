@@ -7,7 +7,7 @@ amends: 0089 (local executor: runner secret credential row)
 
 # 0135 — Runners can be listed over MCP
 
-AI-294: Parity: list and revoke runners over MCP, under AI-285: Web UI and MCP parity.
+AI-294: Parity: list runners over MCP, under AI-285: Web UI and MCP parity.
 
 ## Context
 
@@ -17,11 +17,11 @@ ADR-0089: Local executor's credential table says "MCP can't mint, list or revoke
 
 Andy decided on 2026-11-22: runners may be listed over MCP.
 
-| Action          | Web UI / REST       | MCP                                                        |
-| --------------- | ------------------- | ---------------------------------------------------------- |
-| List            | `GET /api/runners`  | `list_runners`: same service call, read-only, same callers |
-| Register (mint) | `POST /api/runners` | None: the secret is shown once and must not land in a chat |
-| Revoke          | `POST …/:id/revoke` | None for now: revoking over MCP needs its own decision     |
+| Action          | Web UI / REST       | MCP                                                            |
+| --------------- | ------------------- | -------------------------------------------------------------- |
+| List            | `GET /api/runners`  | `list_runners`: same service call, read-only, same callers     |
+| Register (mint) | `POST /api/runners` | None: the secret is shown once and must not land in a chat     |
+| Revoke          | `POST …/:id/revoke` | None for now: AI-351: Parity: revoke a runner over MCP decides |
 
 - `list_runners` returns what the route returns: name, project ids, agent tasks at once, who registered it and when, expiry, last seen, presence and state. Never a secret or its hash.
 - Callers: allow-listed users, as for the route. No owner check until AI-18: Project members; the route and the tool get one together then.

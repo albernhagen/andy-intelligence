@@ -11,7 +11,10 @@ import { ownerOnlyAccess } from "../project-access";
 import { ClientMetadataResolver } from "./client-metadata";
 import { mcpCaller, mcpToolNames } from "./test-client";
 
-/** AI-294: list_runners returns what GET /api/runners returns; register and revoke stay web-only. */
+/**
+ * AI-294: list_runners returns what GET /api/runners returns. Register stays web-only on purpose;
+ * revoke stays web-only until AI-351: Parity: revoke a runner over MCP.
+ */
 
 const PUBLIC_URL = "https://control-plane.example.run.app";
 const RESOURCE = `${PUBLIC_URL}/mcp`;

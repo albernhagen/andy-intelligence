@@ -314,8 +314,8 @@ export const PARITY: readonly ParityEntry[] = [
     routes: ["POST /api/runners/:runnerId/revoke"],
     tools: [],
     oneSide:
-      "Web only: ADR-0135 allows listing runners over MCP, not revoking; that needs its own decision.",
-    pending: { ticket: "AI-294", missing: "revoke_runner (owner only), if Andy allows it" },
+      "Web only: ADR-0135 allows listing runners over MCP, not revoking; AI-351 decides that.",
+    pending: { ticket: "AI-351", missing: "revoke_runner (owner only), if Andy allows it" },
   },
   {
     action: "The board, every stage",
