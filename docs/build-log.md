@@ -31,6 +31,7 @@ Generated from tickets, never edited here (AI-148). Every ticket sits under a mi
 - ADR-0134 (PR #328, AI-215: Merge modes): fail the review check on should-fix findings?
 - AI-113: M5.14: baseline on a new repo: App opens the PR without workflows, Andy adds them?
 - Re-sync cap (`scripts/resync-prs.mjs`, 4 an hour): raise to 12 and skip counting skipped runs?
+- ADR-0136: Milestone create and edit over MCP (AI-321, PR #343): extend ADR-0131 to five MCP milestone tools?
 
 ## Blocked on Andy
 
