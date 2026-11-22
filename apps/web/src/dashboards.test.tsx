@@ -74,6 +74,22 @@ async function open(path: string, seed: (h: Harness) => Promise<unknown>) {
 const region = (name: string) => screen.findByRole("region", { name });
 
 describe("dashboards page", () => {
+  it("GivenNoFinishedAgentTasks_WhenTheProjectDashboardOpens_ThenCostIsOneLineNotEmptyCards", async () => {
+    // A ticket but no agent task: the page shows, its cost section has nothing to chart.
+    await open("/p/ai/dashboards", async (h) => {
+      await h.tracker.createProject({ name: "AI", key: "AI" });
+      await h.tracker.createTicket("ai", { title: "Something to do" }, "andy");
+    });
+
+    const cost = await region("Cost");
+    expect(
+      within(cost).getByText(
+        "No agent tasks finished in these weeks, so no cost, tokens or quota to chart.",
+      ),
+    ).toBeTruthy();
+    expect(within(cost).queryByRole("region", { name: "Tokens" })).toBeNull();
+  });
+
   it("GivenAProjectScreen_WhenAndyClicksDashboards_ThenTheDashboardOpens", async () => {
     const { h } = await open("/p/ai", (h) => seedProject(h, "AI", 1.5));
     await h.user.click(await screen.findByRole("link", { name: "Dashboards" }));

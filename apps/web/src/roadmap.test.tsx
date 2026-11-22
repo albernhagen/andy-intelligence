@@ -136,7 +136,9 @@ describe("roadmap", () => {
 
     expect(await screen.findByRole("region", { name: "Andy Intelligence" })).toBeTruthy();
     const ops = screen.getByRole("region", { name: "Ops" });
-    expect(within(ops).getByText("No milestones or epics yet.")).toBeTruthy();
+    expect(
+      within(ops).getByText(/No milestones or epics yet. To start, ask a Claude session/),
+    ).toBeTruthy();
   });
 
   it("GivenTheShell_WhenAProjectIsOpen_ThenRoadmapIsLinked", async () => {

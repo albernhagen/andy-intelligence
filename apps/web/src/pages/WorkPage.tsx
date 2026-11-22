@@ -40,7 +40,7 @@ type WorkRow = WorkData["projects"][number]["tickets"][number];
 
 /**
  * Work (AI-198, ADR-0108): one fixed view's open tickets, under All projects grouped by project
- * (a heading with its count, as the inbox does). The chip is in the URL (`?view=`), Needs me by
+ * (a heading with its count, as the inbox does). The chip is in the URL (`?view=`), Needs you by
  * default. Rows open the ticket in its project. Read-only: moves happen on the board.
  */
 export function WorkPage() {
