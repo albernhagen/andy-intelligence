@@ -26,7 +26,7 @@ Andy chose 1(c) with (a) built now, 2 "share the engine", 3 "daily on first read
 - **Step:** new run step `summarize`, tier `fast`. It runs wherever routing sends it: today an agent task on the subscription; the direct executor once Andy turns on a paid route. No paid call otherwise. A config stored before the step existed reads it as `fast` (`LATER_STEP_TIERS`).
 - **Day:** ends at midnight in `America/Denver` (`DIGEST_SUMMARY_TIME_ZONE`), a named zone, so daylight saving is right. The digest shows the latest finished day's summary, with its date.
 - **Store:** `DigestSummaryStore`, one document per project per day (id `YYYY-MM-DD`): status `writing`, `ready` or `failed` (with the reason), output, task id, route, input hash. A digest read adds one point read.
-- **Claim:** the first digest read after the day ends claims it atomically, then starts the task. A second reader sees `writing`.
+- **Claim:** Andy's first digest read after the day ends claims it atomically, then starts the task. A second reader sees `writing`. A day with nothing merged or changed is stored as `nothing_happened`, with no task.
 - **Input:** the day's release notes (ADR-0121), ticket and milestone changes, the digest's counts, as JSON fenced as untrusted data, never instructions.
 - **Output:** a summary of at most 120 words and at most 12 lines, one per milestone or epic. Each cites at least one ticket or PR, and every one it cites must be in its input, or the summary fails. Checked by the executor's JSON schema and again in the domain.
 - **AI-208** keeps only the display: the latest line for an epic on its roadmap row.
@@ -42,7 +42,9 @@ Andy chose 1(c) with (a) built now, 2 "share the engine", 3 "daily on first read
 
 ### Fail closed
 
-Any failure (cap, pause, quota, no route, failed task, bad output, unknown citation) stores `failed` with the reason. The digest shows its plain list and says why. Nothing retries on its own, and nothing falls back to a paid route.
+- **Waits, no model call:** pause, the quota reserve or the run caps leave the claimed day `writing` with no task. Andy's next digest read tries the start again.
+- **Fails:** no route, a dispatch error, a failed or timed-out task, bad output, or an unknown citation store `failed` with the reason.
+- Either way the digest shows its plain list and says why. Nothing retries a failure on its own, and nothing falls back to a paid route.
 
 ### Consequences
 

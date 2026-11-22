@@ -96,6 +96,7 @@ export type DigestSummaryStatus = z.infer<typeof DigestSummaryStatus>;
  * `paused`, `quota_reserve`, `no_route`: dispatch refused. `run_failed`: the task failed or
  * timed out. `invalid_output`: the output failed the schema. `unknown_ref`: it cited a ticket
  * or PR that wasn't in its input. `dispatch_failed`: the executor couldn't be started.
+ * `nothing_happened`: nothing merged or changed that day, so no task ran; not retryable.
  */
 export const DigestSummaryFailureReason = z.enum([
   "paused",
@@ -105,6 +106,7 @@ export const DigestSummaryFailureReason = z.enum([
   "run_failed",
   "invalid_output",
   "unknown_ref",
+  "nothing_happened",
 ]);
 export type DigestSummaryFailureReason = z.infer<typeof DigestSummaryFailureReason>;
 
@@ -195,7 +197,7 @@ export function claimedDigestSummary(
 
 /** Why a retry can't start, or null when it can. */
 export function digestSummaryRetryRefusal(s: DigestSummary): "not_failed" | "attempts_used" | null {
-  if (s.status !== "failed") return "not_failed";
+  if (s.status !== "failed" || s.failure?.reason === "nothing_happened") return "not_failed";
   if (s.attempts >= L.attempts) return "attempts_used";
   return null;
 }

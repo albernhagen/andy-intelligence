@@ -138,6 +138,15 @@ export function digestSummaryStoreContract(name: string, make: () => Promise<Dig
       expect((await store.retry("ai", "2026-11-21", 10, later)).outcome).toBe("attempts_used");
     });
 
+    it("GivenADayWhereNothingHappened_WhenRetried_ThenNotFailedAndUnchanged", async () => {
+      const store = await make();
+      await store.claim("ai", period(), 10, now);
+      const quiet = { reason: "nothing_happened" as const, detail: null };
+      await store.fail("ai", "2026-11-21", null, quiet, now);
+      expect((await store.retry("ai", "2026-11-21", 10, later)).outcome).toBe("not_failed");
+      expect((await store.get("ai", "2026-11-21"))?.attempts).toBe(1);
+    });
+
     it("GivenTheDaysCapUsed_WhenRetried_ThenCappedAndStillFailed", async () => {
       const store = await make();
       await store.claim("ai", period(), 1, now);
