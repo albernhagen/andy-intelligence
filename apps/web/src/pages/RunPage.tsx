@@ -1,9 +1,11 @@
-import type { ReactNode } from "react";
+import { Children, isValidElement, type ReactNode } from "react";
 import { Link, useParams } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
-import type { BuildCheck, Run } from "@andy/contracts";
+import { ExternalLink } from "lucide-react";
+import type { BuildCheck, Run, RunOutcome, RunStep } from "@andy/contracts";
 import { Loading, QueryError } from "@/components/Status";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { STATUS_VARIANT, Summary, formatCost, httpsHref } from "@/components/Runs";
 import { formatQuotaDelta } from "@/components/TicketCostLine";
 import { ApiError, unwrap, useApi } from "@/lib/api";
@@ -51,6 +53,8 @@ function RunDetail({ run }: { run: Run }) {
   const started = run.startedAt ?? run.createdAt;
   const wall = wallMs(run);
   const quota = run.quotaDelta && formatQuotaDelta(run.quotaDelta);
+  const tokensIn = run.tokensIn ?? run.usage?.inputTokens ?? null;
+  const tokensOut = run.tokensOut ?? run.usage?.outputTokens ?? null;
   return (
     <article className="max-w-2xl space-y-4 wrap-anywhere" aria-label="Agent task">
       <header className="flex flex-wrap items-center gap-2">
@@ -58,47 +62,54 @@ function RunDetail({ run }: { run: Run }) {
         <Badge variant={STATUS_VARIANT[run.status]}>{run.status}</Badge>
       </header>
 
+      {/* AI-340: one sentence saying what it did or is doing, then the PR and log. */}
+      {run.ticketId ? (
+        <TicketSummary run={run} ticketId={run.ticketId} />
+      ) : (
+        <WhatHappened run={run} ticketKey={null} />
+      )}
       <Links run={run} />
 
       <Facts title="Details">
+        <Fact label="Model">{run.route.model}</Fact>
         <Fact label="Harness">{run.route.harness}</Fact>
         <Fact label="Provider">{run.route.provider}</Fact>
-        <Fact label="Model">{run.route.model}</Fact>
-        <Fact label="Tier">{run.tier ?? "—"}</Fact>
-        <Fact label="Attempt">
-          {run.attempt}
-          {run.retryOf && (
-            <>
-              {" · "}
-              <Link
-                to="/p/$projectId/runs/$runId"
-                params={{ projectId: run.projectId, runId: run.retryOf }}
-                className="underline"
-              >
-                Retry of the earlier agent task
-              </Link>
-            </>
-          )}
-        </Fact>
-        <Fact label="Started">{started ? <Time iso={started} /> : "—"}</Fact>
-        <Fact label="Ended">{run.endedAt ? <Time iso={run.endedAt} /> : "—"}</Fact>
-        <Fact label="Wall time">{wall === null ? "—" : elapsed(wall)}</Fact>
+        <Fact label="Tier">{run.tier}</Fact>
+        {(run.attempt > 1 || run.retryOf) && (
+          <Fact label="Attempt">
+            {run.attempt}
+            {run.retryOf && (
+              <>
+                {" · "}
+                <Link
+                  to="/p/$projectId/runs/$runId"
+                  params={{ projectId: run.projectId, runId: run.retryOf }}
+                  className="underline"
+                >
+                  Retry of the earlier agent task
+                </Link>
+              </>
+            )}
+          </Fact>
+        )}
+        <Fact label="Started">{started && <Time iso={started} />}</Fact>
+        <Fact label="Ended">{run.endedAt && <Time iso={run.endedAt} />}</Fact>
+        <Fact label="Wall time">{wall !== null && elapsed(wall)}</Fact>
+        <Fact label="Outcome">{run.outcome && OUTCOME_TEXT[run.outcome]}</Fact>
+        <Fact label="Gate">{gateText(run)}</Fact>
       </Facts>
 
       <Facts title="Usage and cost">
-        <Fact label="Tokens in">{orDash(run.tokensIn ?? run.usage?.inputTokens ?? null)}</Fact>
-        <Fact label="Tokens out">{orDash(run.tokensOut ?? run.usage?.outputTokens ?? null)}</Fact>
-        <Fact label="Cache read">{orDash(run.usage?.cacheReadTokens ?? null)}</Fact>
-        <Fact label="Cache write">{orDash(run.usage?.cacheWriteTokens ?? null)}</Fact>
-        <Fact label="Turns">{orDash(run.usage?.turns ?? null)}</Fact>
-        {/* No usage reported means unknown, never $0 (ADR-0046). */}
-        <Fact label="Cost">{run.costUsd === null ? "unknown" : formatCost(run)}</Fact>
-        <Fact label="Quota used">{quota ?? "unknown"}</Fact>
-      </Facts>
-
-      <Facts title="Outcome">
-        <Fact label="Outcome">{run.outcome ?? "—"}</Fact>
-        <Fact label="Gate">{gateText(run)}</Fact>
+        <Fact label="Tokens in">{tokensIn !== null && count(tokensIn)}</Fact>
+        <Fact label="Tokens out">{tokensOut !== null && count(tokensOut)}</Fact>
+        <Fact label="Cache read">{run.usage && count(run.usage.cacheReadTokens)}</Fact>
+        <Fact label="Cache write">{run.usage && count(run.usage.cacheWriteTokens)}</Fact>
+        <Fact label="Turns">{run.usage && count(run.usage.turns)}</Fact>
+        {/* No usage reported means unknown, never $0 (ADR-0046); said once the task ends. */}
+        <Fact label="Cost">
+          {run.costUsd !== null ? formatCost(run) : !isActiveRun(run) && "unknown"}
+        </Fact>
+        <Fact label="Quota used">{quota}</Fact>
       </Facts>
 
       {run.error && <p className="whitespace-pre-wrap text-sm text-destructive">{run.error}</p>}
@@ -113,14 +124,45 @@ function RunDetail({ run }: { run: Run }) {
   );
 }
 
-function Links({ run }: { run: Run }) {
+function WhatHappened({ run, ticketKey }: { run: Run; ticketKey: string | null }) {
   return (
-    <p className="flex flex-wrap gap-x-4 gap-y-1 text-sm">
-      {run.ticketId && <TicketLink projectId={run.projectId} ticketId={run.ticketId} />}
-      <External href={run.links.executorRun}>Task log</External>
-      <External href={run.links.pullRequest}>Pull request</External>
-      {run.branch && <span className="text-muted-foreground">branch {run.branch}</span>}
+    <p aria-label="What happened" className="text-sm">
+      {runSummary(run, ticketKey, new Date())}
     </p>
+  );
+}
+
+/** The summary names the ticket by key once it loads (the same query the ticket link uses). */
+function TicketSummary({ run, ticketId }: { run: Run; ticketId: string }) {
+  const key = useTicketByRef(run.projectId, ticketId).data?.key ?? null;
+  return <WhatHappened run={run} ticketKey={key} />;
+}
+
+/** The PR and the log as buttons (one click from the top); the ticket and branch beside them. */
+function Links({ run }: { run: Run }) {
+  const pr = httpsHref(run.links.pullRequest);
+  const log = httpsHref(run.links.executorRun);
+  return (
+    <div className="flex flex-wrap items-center gap-2 text-sm">
+      {pr && (
+        <Button asChild size="sm" variant="outline" className="h-11 sm:h-8">
+          <a href={pr} target="_blank" rel="noopener noreferrer">
+            {prLabel(pr)}
+            <ExternalLink aria-hidden className="size-3.5" />
+          </a>
+        </Button>
+      )}
+      {log && (
+        <Button asChild size="sm" variant="outline" className="h-11 sm:h-8">
+          <a href={log} target="_blank" rel="noopener noreferrer">
+            Task log
+            <ExternalLink aria-hidden className="size-3.5" />
+          </a>
+        </Button>
+      )}
+      {run.ticketId && <TicketLink projectId={run.projectId} ticketId={run.ticketId} />}
+      {run.branch && <span className="text-muted-foreground">branch {run.branch}</span>}
+    </div>
   );
 }
 
@@ -189,17 +231,24 @@ function Section({ title, children }: { title: string; children: ReactNode }) {
   );
 }
 
+/** A two-column list of facts; with no fact that has a value, the whole section is left out. */
 function Facts({ title, children }: { title: string; children: ReactNode }) {
+  const shown = Children.toArray(children).filter(
+    (c) => isValidElement<{ children?: ReactNode }>(c) && hasValue(c.props.children),
+  );
+  if (shown.length === 0) return null;
   return (
     <Section title={title}>
       <dl className="grid grid-cols-[7rem_minmax(0,1fr)] gap-x-3 gap-y-1 sm:grid-cols-[8rem_1fr]">
-        {children}
+        {shown}
       </dl>
     </Section>
   );
 }
 
+/** A label and its value; a row with no value doesn't show (AI-340). */
 function Fact({ label, children }: { label: string; children: ReactNode }) {
+  if (!hasValue(children)) return null;
   return (
     <>
       <dt className="text-muted-foreground">{label}</dt>
@@ -208,22 +257,11 @@ function Fact({ label, children }: { label: string; children: ReactNode }) {
   );
 }
 
-/** Nothing for a missing or non-https URL. */
-function External({ href, children }: { href: string | undefined; children: ReactNode }) {
-  const safe = httpsHref(href);
-  if (!safe) return null;
-  return (
-    <a href={safe} target="_blank" rel="noopener noreferrer" className="underline">
-      {children}
-    </a>
-  );
-}
+const hasValue = (v: ReactNode) => v !== null && v !== undefined && v !== false && v !== "";
 
 function Time({ iso }: { iso: string }) {
   return <time dateTime={iso}>{dateTime(iso)}</time>;
 }
-
-const orDash = (n: number | null) => (n === null ? "—" : count(n));
 
 /** The harness's own wall time, else ended minus started; null while either is missing. */
 export function wallMs(run: Pick<Run, "usage" | "startedAt" | "endedAt">): number | null {
@@ -232,9 +270,93 @@ export function wallMs(run: Pick<Run, "usage" | "startedAt" | "endedAt">): numbe
   return Math.max(0, Date.parse(run.endedAt) - Date.parse(run.startedAt));
 }
 
-/** The gate's verdict on a build's PR: passed, held with its reasons, or not run. */
-export function gateText(run: Pick<Run, "wouldAutoMerge" | "gateReasons">): string {
-  if (run.wouldAutoMerge === null) return "not run";
-  if (run.wouldAutoMerge) return "would auto-merge";
-  return run.gateReasons.length ? `held: ${run.gateReasons.join(", ")}` : "held";
+/** The gate's verdict on a build's PR in words; null when the gate hasn't looked at it. */
+export function gateText(run: Pick<Run, "wouldAutoMerge" | "gateReasons">): string | null {
+  if (run.wouldAutoMerge === null) return null;
+  if (run.wouldAutoMerge) return "would merge on its own";
+  return run.gateReasons.length
+    ? `waits for you: ${run.gateReasons.map(words).join(", ")}`
+    : "waits for you";
+}
+
+const words = (code: string) => code.replaceAll("_", " ");
+
+const OUTCOME_TEXT: Record<RunOutcome, string> = {
+  merged_clean: "merged with no rework",
+  reworked: "merged after rework",
+  reverted: "reverted",
+  failed: "failed",
+};
+
+/** "Building", "Built"… for the summary line, by step and whether it is still going. */
+const STEP_VERBS: Record<RunStep, [going: string, done: string]> = {
+  refine: ["Refining", "Refined"],
+  plan: ["Planning", "Planned"],
+  build: ["Building", "Built"],
+  review: ["Reviewing", "Reviewed"],
+  verify: ["Verifying", "Verified"],
+  scout: ["Scouting", "Scouted"],
+  sync: ["Syncing", "Synced"],
+  "plan-project": ["Planning the project", "Planned the project"],
+  ideate: ["Ideating", "Ideated"],
+};
+
+/** "PR #72", or "Pull request" for a URL without a number. */
+export function prLabel(url: string): string {
+  const n = /\/pull\/(\d+)/.exec(url)?.[1];
+  return n ? `PR #${n}` : "Pull request";
+}
+
+/**
+ * One sentence on what the agent task did or is doing (AI-340), from fields the API already
+ * returns: "Refining AI-3 for 12 min on sonnet", "Built AI-7 in 10 min: PR #72, waits for you:
+ * protected path", "Failed after 3 min: <first line of the error>".
+ */
+export function runSummary(
+  run: Pick<
+    Run,
+    | "step"
+    | "status"
+    | "route"
+    | "createdAt"
+    | "startedAt"
+    | "endedAt"
+    | "usage"
+    | "links"
+    | "error"
+    | "wouldAutoMerge"
+    | "gateReasons"
+  >,
+  ticketKey: string | null,
+  now: Date,
+): string {
+  const [going, done] = STEP_VERBS[run.step];
+  // A sentence reads in whole minutes once past one ("10 min", not "10 min 10 s").
+  const about = (ms: number) => elapsed(ms < 60_000 ? ms : Math.round(ms / 60_000) * 60_000);
+  const what = ticketKey ? ` ${ticketKey}` : "";
+  const on = ` on ${run.route.model}`;
+  const wall = wallMs(run);
+  switch (run.status) {
+    case "queued":
+      return `Waiting to start: ${going.toLowerCase()}${what}${on}.`;
+    case "running": {
+      const since = Date.parse(run.startedAt ?? run.createdAt);
+      return `${going}${what} for ${about(now.getTime() - since)}${on}.`;
+    }
+    case "succeeded": {
+      const took = wall === null ? "" : ` in ${about(wall)}`;
+      const pr = run.links.pullRequest ? prLabel(run.links.pullRequest) : null;
+      const gate = gateText(run);
+      const tail = [pr, gate].filter(Boolean).join(", ");
+      return `${done}${what}${took}${tail ? `: ${tail}` : ""}.`;
+    }
+    case "failed": {
+      const after = wall === null ? "" : ` after ${about(wall)}`;
+      const reason = run.error?.split("\n")[0]?.trim();
+      if (!reason) return `Failed${after}: ${going.toLowerCase()}${what}.`;
+      return `Failed${after}: ${reason}${reason.endsWith(".") ? "" : "."}`;
+    }
+    case "cancelled":
+      return `Cancelled: ${going.toLowerCase()}${what}.`;
+  }
 }
