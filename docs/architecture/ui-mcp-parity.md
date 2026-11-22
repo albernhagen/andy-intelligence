@@ -68,7 +68,7 @@ M6, M7 and M8 add no gap today: their settings that exist (environments) are alr
 
 ## One side on purpose (the parity test records the reason)
 
-The registry `apps/api/src/parity.ts` (AI-300) holds every action with its routes and tools; `parity.test.ts` fails when a route or tool is in no action, names one that doesn't exist, or has one side without a reason. Open gaps carry their ticket: AI-294, AI-299, AI-320.
+The registry `apps/api/src/parity.ts` (AI-300) holds every action with its routes and tools; `parity.test.ts` fails when a route or tool is in no action, names one that doesn't exist, or has one side without a reason. Open gaps carry their ticket: AI-294, AI-299. AI-320 matched starting the plan-project and ideate agent tasks: `start_plan_project` and `start_ideate` over MCP, the Project plan card's button in the web.
 
 | Action                                                | Side     | Reason                                                                                                   |
 | ----------------------------------------------------- | -------- | -------------------------------------------------------------------------------------------------------- |
