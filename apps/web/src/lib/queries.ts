@@ -64,7 +64,24 @@ export function useDigest(projectId: string, hours: number) {
           params: { path: { projectId }, query: { hours } },
         }),
       ),
+    // AI-323: while the day's summary is being written, look again every 30 s.
+    refetchInterval: (query) =>
+      query.state.data?.summary?.state === "writing" ? DIGEST_SUMMARY_POLL_MS : false,
   });
+}
+
+export const DIGEST_SUMMARY_POLL_MS = 30_000;
+
+/** Andy's one retry of a failed digest summary (AI-323). */
+export function useRetryDigestSummary(projectId: string) {
+  const api = useApi();
+  return useWrite(async () =>
+    unwrap(
+      await api.POST("/api/projects/{projectId}/digest/summary/retry", {
+        params: { path: { projectId } },
+      }),
+    ),
+  );
 }
 
 /**

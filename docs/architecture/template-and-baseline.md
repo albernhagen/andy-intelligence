@@ -50,7 +50,7 @@ Build runs (plan approval, sandbox, publish limits) and read caps (AI-222): [`ba
 | System security review + drift | 0025, 0030 | `system-security-review.yml`, `platform/procedures/threat-model.md` | — | not yet carried (M6: Dev → prod releases; its drift plan is GCP-specific) |
 | Lefthook (push: affected tests, ¼ of cores), format hook, Prettier | 0027, 0113 | `lefthook.yml`, `.claude/settings.json`, `scripts/format-edited-file.mjs`, `.prettierrc.json` | M | carried (M1.16) |
 | Dependabot (npm, Actions; cooldown) | 0025, 0030 | `template/.github/dependabot.yml` (this repo's adds Terraform) | M | carried (M1.16) |
-| PR release-note block | 0121 | `release-note.yml` → `platform/actions/release-note-check` | A | not yet carried |
+| PR release-note block | 0121 | `release-note.yml` → `platform/actions/release-note-check` | A | not yet carried; required here only (`github/source-only.json`, AI-350) |
 | PR template (docs + security checklist) | 0022, 0025 | `template/.github/pull_request_template.md` | M | carried (M1.16) |
 | Agent rules; docs ship with the change | 0022 | `template/AGENTS.md.template` | S | carried (M1.16) |
 | Threat model seed | 0025 | `template/docs/security/threat-model.md` | S | carried (M1.16) |
@@ -65,7 +65,7 @@ Build runs (plan approval, sandbox, publish limits) and read caps (AI-222): [`ba
 | Alert: config change not in the change log (AI-136); test keeps filter and message in step | — | `infra/control-plane`, `config-changes.test.ts` | TF | not yet carried (M6: Dev → prod releases) |
 | Cost kill switch (opt-in) | 0028, 0036 | `infra/billing/kill-switch.tf` + workflow YAML | TF | not yet carried (M6: Dev → prod releases) |
 | Safe deploy: no-traffic revision, smoke test, then traffic | 0076 | `platform/actions/cloud-run-safe-deploy` | A | control plane only until M6: Dev → prod releases |
-| UI screenshot checks (Playwright): a diff fails, actual images uploaded; 10-minute cap | 0045, 0059 | `ui-screenshots.yml` → `platform/actions/ui-screenshots`; config and images in `apps/web/e2e/` | — | control plane only; a managed web UI can call the action (needs `playwright.config.ts`). Not required yet |
+| UI screenshot checks (Playwright): a diff fails, actual images uploaded; 10-minute cap | 0045, 0059 | `ui-screenshots.yml` → `platform/actions/ui-screenshots`; config and images in `apps/web/e2e/` | — | control plane only; a managed web UI can call the action (needs `playwright.config.ts`). Required here only (`github/source-only.json`, AI-350) |
 | Refine caps (questions, children); email (20/day, 10-min batch) | 0028, 0075 | `packages/domain/src/{refine-gate,notify-email}.ts` | — | control plane |
 | Push caps (6/hour, 30/day, then one "more waiting" push per window); quiet hours; no agent text in pushes; 10 subscriptions per user | 0028, 0052 | `packages/domain/src/notify-push.ts`, `packages/store/src/push-subscription-store.ts` | — | control plane |
 | Spend notices: 80% of a cap and a stop, once per cap and window, 10 a day, no agent text | 0028 | `packages/domain/src/spend-notices.ts` | — | control plane |

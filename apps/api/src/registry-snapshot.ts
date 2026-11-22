@@ -39,6 +39,7 @@ export function fullAppDeps(
     routing: new contracts.InMemoryRoutingConfigStore(),
     milestones: new contracts.InMemoryMilestoneStore(),
     releaseNotes: new contracts.InMemoryReleaseNoteStore(),
+    digestSummaries: new contracts.InMemoryDigestSummaryStore(),
     projectVersions: new contracts.InMemoryProjectVersions(),
     publicHost: "localhost",
     watchdog: {

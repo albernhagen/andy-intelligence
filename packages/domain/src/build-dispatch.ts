@@ -23,10 +23,10 @@ import { isInFlight, mayDispatch, waitsForSlot, wasDispatched } from "./dispatch
 import { blockingRun, editingRuns } from "./dispatch-conflicts";
 import { checkDor } from "./dor";
 import { MAX_PLAN_RUNS_PER_TICKET, planRequired } from "./plans";
-import { dispatchQuotaLevel, subscriptionLevel } from "./route-fallback";
+import { dispatchQuotaLevel, subscriptionQuotaLevels } from "./route-fallback";
 import type { EffectiveRouting } from "./route-resolver";
 import { blockersDoneAt, replanNote, staleBlocker, writtenPlan } from "./replan";
-import { PROVIDER_BILLING, type RouteFallback, type RunService } from "./runs";
+import type { RouteFallback, RunService } from "./runs";
 import { isDispatchable } from "./worker";
 import { epicOf, withEpicOverrides } from "./overrides";
 import { ACTIONS_ROUTE, routeTakes, type DispatchRoute } from "./executor";
@@ -418,19 +418,7 @@ export class BuildDispatcher {
   private async quotaLevels(
     routing: EffectiveRouting,
   ): Promise<Partial<Record<ProviderKey, QuotaLevel>>> {
-    const store = this.quota;
-    if (!store) return {};
-    const now = this.now();
-    const subscriptions = ProviderKey.options.filter(
-      (p) => routing.providers[p].enabled && PROVIDER_BILLING[p] === "subscription",
-    );
-    const levels = await Promise.all(
-      subscriptions.map(async (p) => {
-        const readings = await store.latest(p);
-        return [p, subscriptionLevel(p, readings, routing.providers[p], now)] as const;
-      }),
-    );
-    return Object.fromEntries(levels);
+    return subscriptionQuotaLevels(this.quota, routing, this.now());
   }
 
   /** What to start for a waiting ticket, or null when it doesn't wait. */
