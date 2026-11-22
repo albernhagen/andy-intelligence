@@ -29,6 +29,10 @@ Below `sm` (640px; `useIsPhone`); screens adopt these in their own M7: Mobile sl
 - No hover-only actions; panels open full-screen.
 - Nothing scrolls sideways at 390px: a strip that scrolls (the board's lanes) does so in its own `relative overflow-x-auto` box. Phone specs check it with `expectPageFits` (`e2e/phone.ts`, AI-325).
 
+## Keyboard
+
+`SHORTCUTS` in `src/lib/shortcuts.ts` (AI-338); `?` lists them. Never while typing; no single key writes. Screens opt in with `data-nav-*` and a visible focus outline.
+
 ## Type
 
 System font stack. Four sizes (phone inputs add `text-base`):
