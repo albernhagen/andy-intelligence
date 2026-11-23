@@ -26,8 +26,8 @@ Enterprise-shaped (durable state, policy, gates, least privilege, audit, contrac
 | §9 Security                                                            | [`security.md`](security.md)                                                                                                       | Auth, IAM, secrets, review agents                                               |
 | §10 Observability and cost                                             | [`observability-and-cost.md`](observability-and-cost.md)                                                                           | Caps, alerts, local gates, data                                                 |
 | Moved detail (AI-221) | [`review-gate.md`](review-gate.md), [`routing-and-policy.md`](routing-and-policy.md), [`api-and-mcp-agent-runs.md`](api-and-mcp-agent-runs.md), [`baseline-github-settings.md`](baseline-github-settings.md), [`baseline-build-and-reads.md`](baseline-build-and-reads.md), [`data-evolution.md`](data-evolution.md), [`ports-stores.md`](ports-stores.md) | — |
-| Glossary: project, milestone, epic, ticket | [`glossary.md`](glossary.md) | Naming work anywhere |
-| §12 Milestones | table here; detail [`milestones.md`](milestones.md); merged M1 tickets [`history/m1-merged-slices.md`](history/m1-merged-slices.md); each milestone's tickets: the roadmap (MCP `roadmap`, `milestone_map`) | Every ticket: its milestone |
+| Terms | [`glossary.md`](glossary.md) | Naming work |
+| §12 Milestones | table here; detail [`milestones.md`](milestones.md); merged M1 tickets [`history/m1-merged-slices.md`](history/m1-merged-slices.md); tickets: the roadmap | Every ticket: its milestone |
 | §14 Documentation                                                      | [`documentation.md`](documentation.md)                                                                                             | Which doc to update                                                             |
 
 ---
@@ -115,7 +115,7 @@ Every ticket gets a refinement pass that asks Andy 1–5 structured questions; a
 
 ### 4.4 Epics
 
-Child tickets with dependencies, each an end-to-end change merged to `main`, just-in-time re-planning, roll-ups. [`workflow.md` §4.4](workflow.md#44-epics)
+Child tickets with dependencies merged to `main`, just-in-time re-planning, roll-ups. [`workflow.md` §4.4](workflow.md#44-epics)
 
 ### 4.5 Review gate (v1.x: rules only)
 

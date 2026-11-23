@@ -23,4 +23,6 @@ The only words for planning work, as the system stores them (ADR-0058: Ticket mo
 
 ## Naming
 
+Branch names keep `m<N>.<slice>/<short-name>` until Andy decides on a rename: there `<slice>` means the ticket's number within milestone `M<N>`.
+
 Write every milestone or ticket reference as `ID: title`: "M4: Epics + ticket board", "AI-205: M4.27: One glossary". `M<N>.<n>` in a ticket title is its place in milestone `M<N>`.
