@@ -50,9 +50,9 @@ Pick one:
 
 An epic never runs; split it:
 
-- Each child: a vertical slice, mergeable on its own.
+- Each child: an end-to-end change, mergeable on its own.
 - `blockedBy`: indexes (from 0) of siblings that must merge first, only for real dependencies; never itself, no cycles.
-- `touches` per child, disjoint where possible, so slices build in parallel.
+- `touches` per child, disjoint where possible, so child tickets build in parallel.
 - Over 5: make 5 bigger ones that split again later.
 
 ## Gaps: the measured rule

@@ -3,7 +3,7 @@ import { fireEvent, screen, waitFor, within } from "@testing-library/react";
 import { DEFAULT_ROUTE } from "@andy/domain";
 import { readyStory, renderApp } from "@/test/harness";
 
-/** AI-29: Story panel: the ticket as a side panel with a status line and markdown. */
+/** AI-29: the ticket panel: the ticket as a side panel with a status line and markdown. */
 
 async function seeded(fields: Record<string, unknown> = {}) {
   const harness = renderApp();
@@ -22,7 +22,7 @@ async function seeded(fields: Record<string, unknown> = {}) {
 
 const status = () => screen.getByRole("status", { name: "Status" });
 
-describe("story panel", () => {
+describe("ticket panel", () => {
   it("GivenTheBoard_WhenAndyClicksACard_ThenThePanelOpensOverTheBoardAndTheUrlIsTheTickets", async () => {
     const { router, user } = await seeded();
     await router.navigate({ to: "/p/ai" });

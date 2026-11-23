@@ -1,22 +1,22 @@
 # Build log — status
 
-Slice status lives in **tickets in project `AI`** (ADR-0047 phase 1). This page keeps only what tickets can't hold yet: pending decisions and blockers. What happened and why goes in the history: [`docs/build-log/`](build-log/), one new file per entry (`YYYY-MM-DD-<slug>.md`).
+Status lives in **tickets in project `AI`** (ADR-0047 phase 1). This page keeps only what tickets can't hold yet: pending decisions and blockers. What happened and why goes in the history: [`docs/build-log/`](build-log/), one new file per entry (`YYYY-MM-DD-<slug>.md`).
 
 ## Where to look
 
 - **Tickets:** the UI at `https://ai.andybernhagen.com`, or the MCP `status` tool (connector `andy-intelligence`): no key → counts per stage; a key (e.g. `AI-1`) → stage, Definition of Ready gaps, questions, history.
 - **Moving a ticket:** Andy, in the UI, any move; cancel and archive also over MCP `cancel_ticket` / `archive_ticket`. Sessions and agents: MCP `move_ticket`, one step forward. PRs move their ticket (AI-14): name the key in the branch, or start the description with the ticket link; opened → Ready for review, merged → Done, from any open stage (ADR-0067); closed unmerged → In progress + Needs-you.
-- **Slice definitions:** [`architecture/milestones.md`](architecture/milestones.md) (ARCHITECTURE §12). A ticket's body names its row.
+- **Milestones:** scope and Done when in [`architecture/milestones.md`](architecture/milestones.md) (ARCHITECTURE §12); each milestone's tickets on the roadmap. Terms: [`architecture/glossary.md`](architecture/glossary.md).
 
 ## Milestone map (ADR-0060: Milestones in completion order)
 
-Generated from tickets, never edited here (AI-148). Every ticket sits under a milestone epic in project `AI`. MCP `milestone_map` (`project: "AI"`, optional `epic` key) or `GET /api/projects/ai/milestone-map` lists each open epic's tickets: done, in review with the PR, in progress, blocked and on what, not started; "needs Andy" marks Needs-you. The board groups by epic; an epic's panel shows its stories. Merged M1 slices: [`history/m1-merged-slices.md`](architecture/history/m1-merged-slices.md).
+Generated from tickets, never edited here (AI-148). Every ticket sits under a milestone epic in project `AI`. MCP `milestone_map` (`project: "AI"`, optional `epic` key) or `GET /api/projects/ai/milestone-map` lists each open epic's tickets: done, in review with the PR, in progress, blocked and on what, not started; "needs Andy" marks Needs-you. The board groups by epic; an epic's panel shows its child tickets. Merged M1 tickets: [`history/m1-merged-slices.md`](architecture/history/m1-merged-slices.md).
 
 ## Pending decisions (Andy)
 
 - AI-322 UX review: approve the ranked list in [`build-log/2026-11-21-ux-review.md`](build-log/2026-11-21-ux-review.md) (AI-325 to AI-343, all in Ideas) before any is built.
 - Contract suites for ports with one adapter (`OAuthGrantStore`, `CodeHostConnectionStore`): keep the fakes, drop the shared suite?
-- Production monitoring (alerts, error budget per project) as part of "shipped" (brief): add to M6: Dev → prod releases at slicing.
+- Production monitoring (alerts, error budget per project) as part of "shipped" (brief): add to M6: Dev → prod releases when it is split into tickets.
 - `autoMerge` on for project `AI`: after a trial of five tickets where the gate's `would_auto_merge` calls are compared with the coordinator's (Andy, 2026-11-10).
 - Context sources design (open question 12).
 - ADR-0094: Local executor build choices (AI-79, PR review): accept the six, or change any?
@@ -38,7 +38,7 @@ Generated from tickets, never edited here (AI-148). Every ticket sits under a mi
 - Firestore export before the next schema-changing deploy (runbook `ticket-core.md`); the bucket exists.
 - For AI-77: Email notifications: a Resend account, a verified domain, one secret, then `terraform apply` (runbook `email-notifications.md`).
 - M2: Self-hosting: the "Done when" trial (auto-build on), Andy's to start.
-- M3: New UI and MCP: local executor slice 7 (runbook, live proof) needs Andy's Mac (ADR-0089).
+- M3: New UI and MCP: local executor part 7 (runbook, live proof) needs Andy's Mac (ADR-0089).
 - AI-111: M5.4 needs a second repo.
 - AI-307: M4.37: Create project AI's milestones; the OpenRouter and Claude API keys (AI-266, AI-267, AI-269).
 - What's new: the backfill (runbook `whats-new-backfill.md`) and `release-note` as a required check; `terraform apply` of `infra/control-plane` for PR #217.

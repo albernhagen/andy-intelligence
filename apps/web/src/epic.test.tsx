@@ -5,7 +5,7 @@ import { formatEpicRollup } from "@/components/EpicChildren";
 
 const route = { harness: "claude-code", provider: "claude-sub", model: "sonnet" } as const;
 
-/** The epic's stories in the story panel (AI-85: M4.1: Epic panel: children and roll-ups). */
+/** The epic's child tickets in the ticket panel (AI-85: M4.1: Epic panel: children and roll-ups). */
 describe("epic panel", () => {
   async function withEpic() {
     const harness = renderApp();

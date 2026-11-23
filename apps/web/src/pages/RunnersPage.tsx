@@ -9,7 +9,7 @@ import { useMintRunner, useProjects, useRevokeRunner, useRunners } from "@/lib/q
 import { dateOnly, dateTime } from "@/lib/format";
 
 /**
- * Settings → Local runners (ADR-0089 slice 3): mint a runner secret (shown once), see which
+ * Settings → Local runners (ADR-0089 part 3): mint a runner secret (shown once), see which
  * runners are present, revoke one. Only here, never over MCP: a stolen MCP token can't add one.
  */
 export function RunnersPage() {

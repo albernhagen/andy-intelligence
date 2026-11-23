@@ -49,7 +49,7 @@ Repeat section 3 signed in to a Google account **not** on the allow-list (or sig
 
 After the M1.4 deploy, in a Claude desktop chat (reconnect the connector if Claude still lists `ping`). Each step should match what the UI shows for the same ticket.
 
-1. "Create a story in project AI titled 'MCP smoke test' with body 'check MCP tools'." Expect a new key (e.g. `AI-7`), stage `backlog`, and DoR gaps (acceptance criteria, size, tier).
+1. "Create a ticket in project AI titled 'MCP smoke test' with body 'check MCP tools'." Expect a new key (e.g. `AI-7`), stage `backlog`, and DoR gaps (acceptance criteria, size, tier).
 2. In the UI, open that ticket → **Ask a question…** → "Kanban or list?".
 3. "What needs me?" (`list_needs_me`). Expect the question with the ticket key and the ticket flagged.
 4. "Answer it: Kanban." (`answer_question`). Expect `answeredVia: mcp`; the UI's inbox no longer shows it and the ticket's history shows the answer.

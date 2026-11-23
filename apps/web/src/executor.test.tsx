@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { screen } from "@testing-library/react";
 import { PAGE_LOAD, readyStory, renderApp } from "@/test/harness";
 
-/** AI-79 (ADR-0089 slice 2): where a ticket's runs execute, in the story panel and settings. */
+/** AI-79 (ADR-0089 part 2): where a ticket's runs execute, in the ticket panel and settings. */
 
 async function readyTicket() {
   const harness = renderApp();
