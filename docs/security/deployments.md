@@ -22,6 +22,6 @@ No new credential. The deploy job already holds `id-token: write` (for Workload 
 
 ## Residual risks (R-AI-180)
 
-- **Push access to `main` can write records.** Whoever can change `deploy.yml` on `main` (Andy; later collaborators) can report deployments with any digest and status. The record is informational until verification and promotion read it (M6.5 on); those slices recheck what they act on.
+- **Push access to `main` can write records.** Whoever can change `deploy.yml` on `main` (Andy; later collaborators) can report deployments with any digest and status. The record is informational until verification and promotion read it (M6.5 on); those tickets recheck what they act on.
 - **Rerun of an old workflow run.** A rerun of an earlier `deploy.yml` run on `main` reports a new deployment of that earlier commit, which is true: it did deploy it again.
 - **Lost reports.** A report that fails (control plane down, deploy of the control plane itself in progress) is a job-summary warning; the deploy goes on and the record is missing or stays `started`. The first deploy containing this route reports to the old revision, which answers `404`, so that one deploy isn't recorded.

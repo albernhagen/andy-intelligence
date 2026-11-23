@@ -99,7 +99,7 @@ Design rules: [`apps/web/design.md`](apps/web/design.md). One header on every sc
 
 - API client: `openapi-fetch` typed by `apps/web/src/lib/api.gen.ts`, generated (not committed) by `pnpm typecheck` or `pnpm --filter @andy/web gen:api`.
 - Tests (`apps/web/src/**/*.test.tsx`, jsdom) render the UI against the real API in-process (`createApp` + fakes), so they also exercise auth and the ticket rules.
-- Screenshot checks (`apps/web/e2e/`, Playwright): shell, board, story panel and a busy inbox against the API over seeded fakes. CI job `ui-screenshots` fails on a diff and uploads the actual images. Stored images are Linux renders:
+- Screenshot checks (`apps/web/e2e/`, Playwright): shell, board, ticket panel and a busy inbox against the API over seeded fakes. CI job `ui-screenshots` fails on a diff and uploads the actual images. Stored images are Linux renders:
 
 ```sh
 pnpm --filter @andy/web screenshots:update   # in Docker: write changed images, then commit them

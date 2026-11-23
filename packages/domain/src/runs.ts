@@ -134,7 +134,7 @@ export const ADR_DIR = "docs/architecture/adr";
 /**
  * How each provider is billed (ARCHITECTURE §5 Provider). The executor takes the run's
  * credential kind from here (ADR-0050): moving Claude to a capped API key is a change here plus
- * one repo secret, until provider config moves to Firestore with M4: Epics + story board.
+ * one repo secret, until provider config moves to Firestore with M4: Epics + ticket board.
  */
 export const PROVIDER_BILLING: Record<ProviderKey, BillingType> = {
   "claude-sub": "subscription",

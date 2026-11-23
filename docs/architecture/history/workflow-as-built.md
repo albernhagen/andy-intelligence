@@ -1,6 +1,6 @@
 # Workflow as built (§4)
 
-As-built notes for finished slices, moved out of [`workflow.md`](../workflow.md) to keep the rules short (ADR-0046, ADR-0061). Section numbers match it.
+As-built notes for finished tickets, moved out of [`workflow.md`](../workflow.md) to keep the rules short (ADR-0046, ADR-0061). Section numbers match it.
 
 ## §4.1 Stages
 

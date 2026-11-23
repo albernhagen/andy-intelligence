@@ -49,7 +49,7 @@ export function buildProject(input: NewProject): Project {
   };
 }
 
-/** Rank sorts lexically; zero-padded ticket numbers keep creation order until M4: Epics + story board adds reordering. */
+/** Rank sorts lexically; zero-padded ticket numbers keep creation order until M4: Epics + ticket board adds reordering. */
 export function rankFor(ticketNumber: number): string {
   return String(ticketNumber).padStart(10, "0");
 }
