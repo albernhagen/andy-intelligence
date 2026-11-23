@@ -17,6 +17,7 @@ The **project baseline** is the set of guardrails every repo Andy manages gets: 
 | `… files <owner/repo> --ref <ref>`                                         | Clones the repo, writes the files, runs `pnpm install` (lockfile + hooks). Empty repo: pushes to `main`. Otherwise: opens a PR from `baseline/<sha>` |
 | `… apply <owner/repo> [--dry-run]`                                         | Sets repo, security, Actions, labels and `protect-main` ruleset (without `github/source-only.json` checks); `--dry-run` only prints the diff         |
 | `… check <owner/repo> [--only repo,security,actions,labels,ruleset,files]` | Prints drift; exit 1 on drift, 2 on error                                                                                                            |
+| `… finish <owner/repo> --ref <sha> --branch baseline/<sha7>`               | Adds the workflows and agent settings the App's baseline PR left out to that PR's branch; missing ones only (AI-113)                                 |
 
 Before you start: `gh auth status` shows you logged in; Node 22+; `pnpm` (or `npx` falls back to pnpm 10.28.0); `git fetch` in andy-intelligence so the ref resolves.
 
@@ -47,7 +48,18 @@ Then tag the baseline version that repos will pin:
 git tag v1.0.0 origin/main && git push origin v1.0.0
 ```
 
-## 2. Onboard a new repo
+## 2. Registering a repo on a project (AI-113)
+
+Adding a repo to a project (UI or MCP `create_project`) makes the App open `baseline/<sha7>` with the files the repo is missing. Its description is the report (ADR-0142):
+
+1. Review **Differs: left unchanged**: those files stay as they are unless you change them.
+2. Run the **Left out for you to add** command (`finish …`), then review its commit on the PR.
+3. Run **GitHub settings** `apply --dry-run`, then `apply` after the PR merges (the ruleset's checks must exist on `main`).
+4. Merge the PR. The project's setup checklist shows "Baseline merged" once every managed file is on `main`.
+
+An empty repo, or a PR the App couldn't open, shows in Needs-you as a ticket `Baseline … <repo>` with the error and the `onboard` command: run it (§3), then move that ticket to Done.
+
+## 3. Onboard a new repo
 
 ```sh
 gh repo create albernhagen/<name> --public
@@ -68,7 +80,7 @@ Then:
 
 Use a **public** repo: on a free GitHub plan, rulesets and code scanning only work on public repos.
 
-## 3. Onboard an existing repo
+## 4. Onboard an existing repo
 
 ```sh
 node platform/baseline/baseline.mjs files albernhagen/<name> --ref v1.0.0   # opens a PR
@@ -76,7 +88,7 @@ node platform/baseline/baseline.mjs files albernhagen/<name> --ref v1.0.0   # op
 
 Review and merge the PR (an existing repo needs `pnpm lint/typecheck/test/build` scripts, `.nvmrc`, and `lefthook` as a dev dependency with `"prepare": "lefthook install"`). Then `apply` (a dry run first) and `check`. Apply the ruleset only after the PR merges: before that, its required checks don't exist on `main`.
 
-## 4. Update a repo to a newer baseline
+## 5. Update a repo to a newer baseline
 
 Dependabot bumps the action pins weekly. `check` then reports `pins …, but .andy/baseline.json says …`: run `files` at the new tag to update every managed file and the record in one PR.
 
@@ -84,7 +96,7 @@ Dependabot bumps the action pins weekly. `check` then reports `pins …, but .an
 node platform/baseline/baseline.mjs files albernhagen/<name> --ref v1.1.0
 ```
 
-## 5. M1.16: Project baseline v1 demo ("Done when")
+## 6. M1.16: Project baseline v1 demo ("Done when")
 
 Run it before merging, from the PR branch. The scratch repo gets no Claude token, so both review agents report "not reviewed" under the same check names and use no quota. Since ADR-0140 those two checks fail; add `security-accepted` and `review-accepted` to the test PR.
 
@@ -108,7 +120,7 @@ gh pr create --fill && gh pr checks --watch
 3. **Hand change shows as drift:** Settings → Actions → General → Workflow permissions → **Read and write** → Save. `check` again → `actions: drift`, `workflow.default_workflow_permissions: want "read", have "write"`, exit 1. `apply` puts it back.
 4. Clean up: `gh auth refresh -s delete_repo` (once), then `gh repo delete albernhagen/baseline-scratch --yes`.
 
-## 6. Dependabot auto-merge and CODEOWNERS (ADR-0042)
+## 7. Dependabot auto-merge and CODEOWNERS (ADR-0042)
 
 Once, after the PR that adds them merges:
 
@@ -128,7 +140,7 @@ Check on the next Dependabot PR:
 
 Your next merge deploys the update. If `Deploy control plane` did deploy the bot's merge, note it in the build log: the `deploy.yml` guard failed.
 
-Managed repos get both with the next baseline tag (§4: Update a repo to a newer baseline).
+Managed repos get both with the next baseline tag (§5: Update a repo to a newer baseline).
 
 ## Troubleshooting
 

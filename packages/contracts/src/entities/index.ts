@@ -947,6 +947,67 @@ export const FileProposal = z.object({
 });
 export type FileProposal = z.infer<typeof FileProposal>;
 
+/** A plain relative path: no leading or doubled `/`, backslash, `%`, or `.`/`..` segment. */
+const PlainRepoPath = z
+  .string()
+  .regex(/^[A-Za-z0-9._-]+(\/[A-Za-z0-9._-]+)*$/)
+  .max(200)
+  .refine((p) => p.split("/").every((seg) => seg !== "." && seg !== ".."), {
+    message: "a path can't have . or .. segments",
+  });
+
+/** At most this many files in one baseline pull request (ADR-0028). */
+export const MAX_BASELINE_FILES = 40;
+
+/**
+ * The project baseline as one pull request from the App (AI-113): its files committed on a new
+ * branch cut from the default branch, opened into it, with the report as the description. The
+ * files come from the platform's pinned source, never from agent text. Never workflows (the App
+ * has no `workflows` permission) or agent settings, whoever calls it: Andy adds those himself.
+ */
+export const BaselineProposal = z.object({
+  branch: z.string().regex(/^baseline\/[a-z0-9-]{1,60}$/),
+  files: z
+    .array(
+      z.object({
+        path: PlainRepoPath.refine((p) => !/^\.github\/workflows(\/|$)/i.test(p), {
+          message: "a baseline proposal can't write workflows",
+        }).refine((p) => !/^\.claude(\/|$)/i.test(p), {
+          message: "a baseline proposal can't write under .claude/",
+        }),
+        content: z.string().max(100_000),
+      }),
+    )
+    .min(1)
+    .max(MAX_BASELINE_FILES),
+  message: z.string().min(1).max(200),
+  title: z.string().min(1).max(200),
+  /** GitHub caps a description at 65,536 characters. */
+  body: z.string().max(60_000),
+});
+export type BaselineProposal = z.infer<typeof BaselineProposal>;
+
+/** What a settings read returned: the host's status and its parsed body (AI-113). */
+export const RepoSettingRead = z.object({
+  status: z.number().int(),
+  data: z.unknown(),
+});
+export type RepoSettingRead = z.infer<typeof RepoSettingRead>;
+
+/**
+ * A settings read's path under the repo: plain segments and an optional query, never `..`, a
+ * leading `/`, `#` or a scheme, so the read can't leave the repo. Throws otherwise.
+ */
+export function assertSettingSubpath(subpath: string): void {
+  const [path = "", query] = subpath.split("?", 2);
+  const pathOk = path === "" || /^[A-Za-z0-9._%-]+(\/[A-Za-z0-9._%-]+)*$/.test(path);
+  const segmentsOk = path.split("/").every((seg) => !/^(\.|%2e)+$/i.test(seg));
+  const queryOk = query === undefined || /^[A-Za-z0-9_=&-]*$/.test(query);
+  if (!pathOk || !segmentsOk || !queryOk || /%2f/i.test(path)) {
+    throw new Error(`unsafe settings path: ${JSON.stringify(subpath)}`);
+  }
+}
+
 export const ProposedPullRequest = z.object({
   number: z.number().int().positive(),
   url: z.url(),
