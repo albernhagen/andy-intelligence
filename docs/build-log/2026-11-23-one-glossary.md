@@ -8,9 +8,9 @@ Andy, 2026-11-21: use only the system's terms. Project, milestone, epic, ticket;
 - **Open tickets reworded** over MCP (about 60); Done and cancelled tickets left as written.
 - **Kept on purpose:** the `slices` field of project plans and ideation (an API field), `history/m1-merged-slices.md` (history links point at it), the v1 ticket type `story` in the v2 upgrader note, code identifiers such as `NightStatus.stories`, and ADR bodies.
 - **Deleted tables stay readable** in git: `git show 104a5182:docs/architecture/m4-slices.md` (also `m5`, `m6`, `m8`, `m9`, `m10`). ADR-0108 and older build-log entries name them as text; that is history, left as written.
-- **Risk column not carried over** (every ticket's `risk` is empty; Andy decides whether to set it). The tables said:
+- **Risk column carried over** (Andy, 2026-11-23) onto the 33 open tickets with a row, reason "From the retired M<N> table"; Done and cancelled tickets left empty. The tables said:
   - M4: high AI-87, AI-103, AI-121, AI-122, AI-124, AI-127, AI-186, AI-197, AI-205; low AI-126, AI-129; AI-208 high if built; AI-128 "Andy merges"; the rest medium.
   - M5: high AI-83, AI-92, AI-93, AI-94, AI-97, AI-98, AI-99, AI-105, AI-106, AI-107, AI-109, AI-110, AI-111, AI-112, AI-113; the rest medium.
   - M6: medium AI-160, AI-161, AI-169, AI-170, AI-183, AI-189, AI-200; the rest high.
   - M8: medium AI-251, AI-262, AI-264, AI-265, AI-270; low AI-272; the rest high. M9 and M10 had a "who merges" column, not risk.
-- **Branch pattern** `m<N>.<slice>/<short-name>` is kept until Andy decides; the glossary says what `<slice>` means there.
+- **Branch pattern** is now `m<N>.<n>/<short-name>` (Andy, 2026-11-23); no script, hook or workflow enforced the old one.

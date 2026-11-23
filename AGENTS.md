@@ -4,7 +4,7 @@ Always loaded (`CLAUDE.md` is a symlink to this file). Full operating rules: [`d
 
 ## Every session
 
-1. Read `docs/build-log.md` (pending decisions, blockers) and your ticket in project `AI` (MCP `status`, ADR-0047); work on exactly one ticket, on a branch `m<N>.<slice>/<short-name>` cut from the latest `main`. No stacked PRs: if a blocker hasn't merged, the ticket isn't ready.
+1. Read `docs/build-log.md` (pending decisions, blockers) and your ticket in project `AI` (MCP `status`, ADR-0047); work on exactly one ticket, on a branch `m<N>.<n>/<short-name>` cut from the latest `main`. No stacked PRs: if a blocker hasn't merged, the ticket isn't ready.
 2. Stop and ask before anything that costs money, touches cloud resources, IAM, secrets, external accounts, or `main` (a coordinator merges PRs that pass every check and both reviews; Andy keeps four kinds: ADR-0120), or deviates from ARCHITECTURE.md.
 3. The repo is public: no secrets, tokens, personal emails, `*.tfvars`, `.env*`, or Terraform state — ever (ADR-0015).
 4. Talking to Andy (chat, PRs, docs): be brief, and never use a bare ID. Write `ID: title`: "M1.2: Ticket core", "M0: Foundations: repo, sign-in, GCP infra", "ADR-0019: Actions OIDC callbacks", "PR #1: Foundations". Milestone titles: ARCHITECTURE §12. Ask Andy a question as a plain line ending in `?`, then two to four sentences of context, the options with what each does or costs, and your recommendation (`platform/procedures/refine.md`).
