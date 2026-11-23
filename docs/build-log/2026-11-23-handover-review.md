@@ -10,19 +10,40 @@ The build is finished for now. Andy's order (2026-11-23): finish the build, do t
 
 Project AI now has eleven milestones (ADR-0131: Milestones), each with its epics attached:
 
-| Milestone                                 | Status   | Done     | Open tickets, and why                                                                                                                                                                                                                                                             |
-| ----------------------------------------- | -------- | -------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| M0: Foundations: repo, sign-in, GCP infra | approved | no epic  | None                                                                                                                                                                                                                                                                              |
-| M1 to M3                                  | approved | 38 of 38 | None                                                                                                                                                                                                                                                                              |
-| M4: Epics + ticket board                  | approved | 77 of 80 | AI-129: M4.23: First overnight run trial (after the review); AI-347: Needs you counts the same unit everywhere (Andy to decide); AI-351: revoke a runner over MCP (held)                                                                                                          |
-| M5: Multi-project in parallel             | approved | 38 of 46 | AI-111: M5.4: First managed project live (after the review); AI-216, AI-217, AI-220 (merge modes) and AI-110: M5.18: Merge queue per repo (deferred to the review); AI-109: M5.16: Deploy scaffold (waits on parked M6); AI-284: Require a PR to be up to date with main (parked) |
-| M10: Paid models + spend caps             | approved | 16 of 19 | AI-266, AI-267, AI-269: keys and the first paid task. Parked: Andy uses his subscription; the paid path stays built and disabled                                                                                                                                                  |
-| M6: Dev → prod releases                   | parked   | 5 of 20  | Design PR #227                                                                                                                                                                                                                                                                    |
-| M7: Mobile                                | parked   | 9 of 18  | PR #221, PR #249                                                                                                                                                                                                                                                                  |
-| M8: Project members                       | parked   | 2 of 15  | Design PR #267                                                                                                                                                                                                                                                                    |
-| M9: Add Jules + model routing             | parked   | 9 of 16  | PR #268, PR #265                                                                                                                                                                                                                                                                  |
+| Milestone                                 | Status   | Tickets done |
+| ----------------------------------------- | -------- | ------------ |
+| M0: Foundations: repo, sign-in, GCP infra | approved | no epic      |
+| M1 to M3                                  | approved | 38 of 38     |
+| M4: Epics + ticket board                  | approved | 77 of 80     |
+| M5: Multi-project in parallel             | approved | 38 of 46     |
+| M10: Paid models + spend caps             | approved | 16 of 19     |
+| M6: Dev → prod releases                   | parked   | 5 of 20      |
+| M7: Mobile                                | parked   | 9 of 18      |
+| M8: Project members                       | parked   | 2 of 15      |
+| M9: Add Jules + model routing             | parked   | 9 of 16      |
 
-Epic AI-154: Dependency agent has no milestone; its design PR #218 is parked. The seven PRs named above are the only open PRs.
+**Open tickets in the approved milestones:**
+
+| Milestone | Ticket                                                                 | What it is                                                           | Why it is open                                         |
+| --------- | ---------------------------------------------------------------------- | -------------------------------------------------------------------- | ------------------------------------------------------ |
+| M4        | AI-129: M4.23: First overnight run trial                               | Andy launches one real night run on a small epic under a budget      | After the review                                       |
+| M4        | AI-347: Needs you counts the same unit everywhere                      | Header, inbox and work chip all count tickets, not questions         | Andy to decide                                         |
+| M4        | AI-351: Parity: revoke a runner over MCP                               | Remove a local runner's access from Claude, not only the web UI      | Held: needs Andy's yes on the security rule (ADR-0089) |
+| M5        | AI-111: M5.4: First managed project live                               | A second repo onboarded and built by agents                          | After the review                                       |
+| M5        | AI-109: M5.16: Deploy scaffold for new projects                        | A new project gets its deploy setup as a standard step               | Waits on parked M6                                     |
+| M5        | AI-110: M5.18: Merge queue per repo                                    | Clean PRs merge one at a time, each tested on the latest main        | Deferred to the review                                 |
+| M5        | AI-220: Merge modes: coordinator sessions merge through MCP `merge_pr` | Desktop sessions merge by the same verdict as the gate               | Deferred to the review                                 |
+| M5        | AI-216: Merge modes: epic PR mode                                      | Child tickets merge into an epic branch; Andy merges one PR per epic | Deferred to the review                                 |
+| M5        | AI-217: Merge modes: GitHub enforces the kinds Andy keeps              | CODEOWNERS approval on the paths only Andy merges                    | Deferred to the review                                 |
+| M5        | AI-150: Andy: connect GitHub and create the cloud environment          | Lets worker sessions run in Anthropic's cloud instead of on the Mac  | Andy's hands; not asked for yet                        |
+| M5        | AI-151: Prove a cloud worker end to end and fix the runbook to match   | One ticket built by a cloud worker session                           | Waits on AI-150                                        |
+| M10       | AI-266: M10.15: OpenRouter account, key and key limit                  | The paid gateway's key                                               | Parked: Andy uses his subscription                     |
+| M10       | AI-267: M10.16: Claude API key and workspace spend limit               | The paid Claude key                                                  | Parked                                                 |
+| M10       | AI-269: M10.18: First paid agent task under a cap                      | One paid task end to end under a test cap                            | Parked                                                 |
+
+The paid path stays built and disabled. Outside any milestone: epic AI-154: Dependency agent (design PR #218, parked); AI-284: Require a PR to be up to date with main (parked, PR #300 closed); AI-139: Local-runner and executor git-isolation tests time out on the Mac; AI-211: MCP OAuth: revoke a stolen token's chains together; AI-259: M10.12: OpenCode executor via Actions (dropped from M10).
+
+Parked milestones wait on their design PRs: M6 on PR #227, M7 on PR #221 and PR #249, M8 on PR #267, M9 on PR #268 and PR #265. Those and PR #218 are the only open PRs.
 
 ## 2. Open decisions for Andy
 
