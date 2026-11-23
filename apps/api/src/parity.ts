@@ -283,6 +283,12 @@ export const PARITY: readonly ParityEntry[] = [
     tools: ["start_plan_project", "start_ideate"],
     note: "One service (`RunService.requestProjectTask`, AI-134), same caps and refusals (AI-320). The web starts plan-project from the project settings' Project plan card and ideate from the board (AI-299).",
   },
+  {
+    action: "List local runners",
+    routes: ["GET /api/runners"],
+    tools: ["list_runners"],
+    note: "One service (`RunnerService.list`), never a secret; listing over MCP is ADR-0135. Registering stays web only (see Register a runner).",
+  },
   // ── One side on purpose ─────────────────────────────────────────────────────
   {
     action: "Register a runner",
@@ -304,11 +310,12 @@ export const PARITY: readonly ParityEntry[] = [
   },
   // ── Open gaps, each with its ticket ─────────────────────────────────────────
   {
-    action: "List and revoke runners",
-    routes: ["GET /api/runners", "POST /api/runners/:runnerId/revoke"],
+    action: "Revoke a runner",
+    routes: ["POST /api/runners/:runnerId/revoke"],
     tools: [],
-    oneSide: "Web only until Andy decides on amending ADR-0089 (runner credentials).",
-    pending: { ticket: "AI-294", missing: "list_runners and revoke_runner (PR #327, held)" },
+    oneSide:
+      "Web only: ADR-0135 allows listing runners over MCP, not revoking; AI-351 decides that.",
+    pending: { ticket: "AI-351", missing: "revoke_runner (owner only), if Andy allows it" },
   },
   {
     action: "The board, every stage",

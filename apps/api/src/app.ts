@@ -3,7 +3,7 @@ import {
   WorkTrackerError,
   type CodeEventLog,
   type ConfigChangeStore,
-  type ReviewFindingSource,
+  type ReviewFindingLog,
   type CodeHostConnectionStore,
   type OAuthGrantStore,
   type RunStore,
@@ -67,7 +67,7 @@ export interface AppDeps {
    */
   configChanges?: ConfigChangeStore;
   /** Stored review findings (ADR-0097 PR B); until then none, so sweeps propose nothing. */
-  reviewFindings?: ReviewFindingSource;
+  reviewFindings?: ReviewFindingLog;
   /**
    * Release notes (AI-159): merged PRs store one (webhook) and What's new reads them. Off (no
    * route, no MCP tool) when unset.

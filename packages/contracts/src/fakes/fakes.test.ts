@@ -2,6 +2,7 @@ import {
   codeEventLogContract,
   configChangeStoreContract,
   reviewFindingSourceContract,
+  reviewFindingLogContract,
   codeHostConnectionStoreContract,
   codeHostContract,
   evaluatorContract,
@@ -106,3 +107,4 @@ reviewFindingSourceContract("in-memory", async (findings) => {
   source.add(...findings);
   return source;
 });
+reviewFindingLogContract("in-memory", async () => new InMemoryReviewFindingSource());
