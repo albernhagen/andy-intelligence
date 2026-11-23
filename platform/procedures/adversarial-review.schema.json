@@ -12,6 +12,26 @@
         "type": "object",
         "properties": {
           "severity": { "type": "string", "enum": ["blocker", "should-fix", "question"] },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "logic-error",
+              "edge-case",
+              "missing-test",
+              "missing-docs",
+              "contract-drift",
+              "spec-gap",
+              "unbounded",
+              "injection",
+              "authz",
+              "secret-exposure",
+              "unsafe-workflow",
+              "dependency",
+              "concurrency",
+              "other"
+            ],
+            "description": "The category of the finding, one from this list (other when none fits). Repeated kinds across PRs become proposed agent rules (ADR-0097)."
+          },
           "title": { "type": "string" },
           "file": { "type": "string" },
           "line": { "type": "integer" },
@@ -21,7 +41,7 @@
           },
           "recommendation": { "type": "string" }
         },
-        "required": ["severity", "title", "scenario", "recommendation"]
+        "required": ["severity", "kind", "title", "scenario", "recommendation"]
       }
     },
     "resolved": {
