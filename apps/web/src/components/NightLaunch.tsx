@@ -58,7 +58,7 @@ export function formatSpend(
 }
 
 /**
- * "Plan the night" (ADR-0049 launch step): every story's open questions and plan with links,
+ * "Plan the night" (ADR-0049 launch step): every child ticket's open questions and plan with links,
  * the budget and stop time, Launch (off, with the reasons, while anything is open), and while a
  * launch runs its progress, spend against budget and Stop.
  */

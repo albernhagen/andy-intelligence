@@ -13,7 +13,7 @@ docs/architecture/adr/NNNN-*.md   # MADR, immutable
 docs/agent/*.md                   # shared procedures: size-rubric, build, review, escalation, security
 docs/product/brief.md             # project brief (ADR-0053) + further product docs
 docs/security/threat-model.md     # living threat model + open risks (§9.1)
-specs/NNN-name/{design.md, tech-design.md, tasks.md, stories/*.md, mockups/}
+specs/NNN-name/{design.md, tech-design.md, tasks.md, tickets/*.md, mockups/}
 .github/workflows/                # thin callers → platform composite actions, pinned by SHA (ADR-0038)
 .andy/baseline.json               # baseline version (andy-intelligence commit) this repo is on
 CODEOWNERS                        # `*` requests Andy's review (ADR-0042); further lines = always-gated paths
@@ -25,7 +25,7 @@ Onboarding a project = UI/MCP "Add project" → each repo gets a baseline PR fro
 
 ### 8.1 Project baseline (ADR-0031)
 
-Every guardrail built here reaches each managed project the same way, this repo included; a slice that adds or changes one updates this table.
+Every guardrail built here reaches each managed project the same way, this repo included; a ticket that adds or changes one updates this table.
 
 Carried by (ADR-0038): **A** = composite action in `platform/actions/`; managed repos get the caller workflow with the action pinned by SHA · **M** = managed file (kept identical; listed in `platform/baseline/manifest.json`) · **S** = seed file, copied once from `template/` · **G** = GitHub config in `platform/baseline/github/`, applied by `platform/baseline/baseline.mjs` · **TF** = Terraform module in `infra/modules/` · **RB** = runbook step (secrets).
 
@@ -57,7 +57,7 @@ Build runs (plan approval, sandbox, publish limits) and read caps (AI-222): [`ba
 | Design file seed; UI tickets follow it (agent rule, build prompt) | 0045, 0132 | `template/design.md` | S | carried (AI-128) |
 | Dispatch, sync, night and local-runner caps (2 runners, claim/10 s, lookup caps), pause, warn cap | 0079, 0083, 0094, 0049, 0100 | `dispatch-caps.ts`, `night-budget.ts`, `sync-runs.ts`, `runners.ts`, `local-claims.ts` | — | control plane |
 | Spend gate (AI-248): a `pay_per_use` task reserves its per-task cap (`--max-budget-usd`, AI-260) before it starts; no price, unreadable caps or ledger, or a passed cap refuses it (`spend_cap`); a reservation is released or kept in full, never dropped | 0028 | `packages/domain/src/spend-gate.ts`, `runs.ts` | — | control plane |
-| Night merges into `epic/<KEY>`: same gate (rules from the default branch), once per story (claim before the merge call), ≤ 50 per launch; morning PR never auto-merges | 0049, 0107 | `night-merge.ts`, `gate-service.ts` | — | control plane |
+| Night merges into `epic/<KEY>`: same gate (rules from the default branch), once per child ticket (claim before the merge call), ≤ 50 per launch; morning PR never auto-merges | 0049, 0107 | `night-merge.ts`, `gate-service.ts` | — | control plane |
 | Public-repo hygiene (`.gitignore`: tfvars, state, `.env*`) | 0015 | `template/gitignore.lines` | M (lines) | carried (M1.16) |
 | Reviewer token secret | 0030 | `CLAUDE_CODE_OAUTH_TOKEN` | RB | carried (M1.16: `docs/runbooks/onboard-a-repo.md`) |
 | GCP budget + alerts | 0028, 0029 | `infra/billing` | TF | not yet carried (M6: Dev → prod releases) |

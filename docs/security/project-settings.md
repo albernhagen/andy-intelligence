@@ -13,11 +13,11 @@ Per-project settings Andy changes; their PRs update this file. Environments (AI-
 ## What it changes
 
 - **Today:** the stored setting only. Nothing deploys, creates a GCP project or runs a workflow from it.
-- **Later:** M6 slices read it to decide whether a release goes to dev first (AI-181: M6.5: Verifying stage, AI-109: M5.16: Deploy scaffold). Each slice that acts on it adds its own entry points and risks here.
+- **Later:** M6 tickets read it to decide whether a release goes to dev first (AI-181: M6.5: Verifying stage, AI-109: M5.16: Deploy scaffold). Each ticket that acts on it adds its own entry points and risks here.
 
 ## Threat and residual risk
 
-- Only the owner can change it. A wrong value has no effect until an M6 slice reads it, and the change log shows who set it and allows a revert.
+- Only the owner can change it. A wrong value has no effect until an M6 ticket reads it, and the change log shows who set it and allows a revert.
 
 ## Settings change log and revert (AI-119: M4.12)
 

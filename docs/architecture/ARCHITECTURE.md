@@ -26,7 +26,8 @@ Enterprise-shaped (durable state, policy, gates, least privilege, audit, contrac
 | §9 Security                                                            | [`security.md`](security.md)                                                                                                       | Auth, IAM, secrets, review agents                                               |
 | §10 Observability and cost                                             | [`observability-and-cost.md`](observability-and-cost.md)                                                                           | Caps, alerts, local gates, data                                                 |
 | Moved detail (AI-221) | [`review-gate.md`](review-gate.md), [`routing-and-policy.md`](routing-and-policy.md), [`api-and-mcp-agent-runs.md`](api-and-mcp-agent-runs.md), [`baseline-github-settings.md`](baseline-github-settings.md), [`baseline-build-and-reads.md`](baseline-build-and-reads.md), [`data-evolution.md`](data-evolution.md), [`ports-stores.md`](ports-stores.md) | — |
-| §12 Milestones and slices                                              | table here; detail [`milestones.md`](milestones.md); merged M1 slices [`history/m1-merged-slices.md`](history/m1-merged-slices.md); M5 slices [`m5-slices.md`](m5-slices.md) | Every ticket: its milestone and slice row                                       |
+| Glossary: project, milestone, epic, ticket | [`glossary.md`](glossary.md) | Naming work anywhere |
+| §12 Milestones | table here; detail [`milestones.md`](milestones.md); merged M1 tickets [`history/m1-merged-slices.md`](history/m1-merged-slices.md); each milestone's tickets: the roadmap (MCP `roadmap`, `milestone_map`) | Every ticket: its milestone |
 | §14 Documentation                                                      | [`documentation.md`](documentation.md)                                                                                             | Which doc to update                                                             |
 
 ---
@@ -80,7 +81,7 @@ Enterprise-shaped (durable state, policy, gates, least privilege, audit, contrac
 ```
  Interfaces                         Control plane (one Cloud Run service)              Executors
  ┌───────────────────────┐   ┌───────────────────────────────────────────────┐   ┌────────────────────────────┐
- │ Web UI + story board  │──▶│ REST API (OpenAPI)                             │   │ GitHub Actions:            │
+ │ Web UI + ticket board │──▶│ REST API (OpenAPI)                             │   │ GitHub Actions:            │
  │ Claude desktop (MCP)  │──▶│ Remote MCP endpoint (/mcp)                     │──▶│  • Claude Code (claude-sub)│
  │ GitHub (PRs, checks)  │──▶│ GitHub App webhook receiver                    │   │  • OpenCode (openrouter)   │
  └───────────────────────┘   │ Pipeline engine (stages, DoR, gates)           │──▶│ Jules REST API (google-sub)│
@@ -114,7 +115,7 @@ Every ticket gets a refinement pass that asks Andy 1–5 structured questions; a
 
 ### 4.4 Epics
 
-Child tickets with dependencies, vertical-slice stories merged to `main`, just-in-time re-planning, roll-ups. [`workflow.md` §4.4](workflow.md#44-epics)
+Child tickets with dependencies, each an end-to-end change merged to `main`, just-in-time re-planning, roll-ups. [`workflow.md` §4.4](workflow.md#44-epics)
 
 ### 4.5 Review gate (v1.x: rules only)
 
@@ -172,7 +173,7 @@ The file layout every managed repo starts with, its required CI checks, and how 
 
 ### 8.1 Project baseline (ADR-0031)
 
-The inventory of every guardrail built here and how managed projects get it (composite action, managed or seed file, GitHub config, Terraform, runbook). **Every slice that adds or changes a guardrail updates that table in the same PR.** Detail: [`template-and-baseline.md` §8.1](template-and-baseline.md#81-project-baseline-adr-0031)
+The inventory of every guardrail built here and how managed projects get it (composite action, managed or seed file, GitHub config, Terraform, runbook). **Every ticket that adds or changes a guardrail updates that table in the same PR.** Detail: [`template-and-baseline.md` §8.1](template-and-baseline.md#81-project-baseline-adr-0031)
 
 ---
 
@@ -238,9 +239,9 @@ Each milestone must work **end to end** before the next starts (a ticket may sta
 | M0  | Foundations: repo, sign-in, GCP infra          | Empty app on Cloud Run, Andy-only sign-in, Terraform in place                                                 |
 | M1  | First end-to-end flow: ticket → PR with Claude | One project; ticket created from Claude desktop is refined, built by Claude Code, and merged                  |
 | M2  | Self-hosting: andy-intelligence builds itself  | Project `AI` builds and merges its own tickets, several at once, while Andy is away                           |
-| M3  | New UI and MCP                                 | Project picker, board that shows status, story panel, command palette; MCP tools to edit and organize tickets |
-| M4  | Epics + story board                            | Epics; epic grouping on the board; config editing; design file per project and dashboards; roadmap and work views                       |
-| M5  | Multi-project in parallel                      | Several repos onboarded; stories per project; runs across projects at once under caps and quota               |
+| M3  | New UI and MCP                                 | Project picker, board that shows status, ticket panel, command palette; MCP tools to edit and organize tickets |
+| M4  | Epics + ticket board                           | Epics; epic grouping on the board; config editing; design file per project and dashboards; roadmap and work views                       |
+| M5  | Multi-project in parallel                      | Several repos onboarded; tickets per project; runs across projects at once under caps and quota               |
 | M6  | Dev → prod releases                            | Per-project dev/prod deploys, verification, one-click promote, DORA metrics                                   |
 | M7  | Mobile                                         | The UI installed on Andy's phone with push notifications; answer, approve, promote and pause from anywhere    |
 | M8  | Project members                                | Other users on a project, with basic roles                                                                    |
@@ -251,9 +252,9 @@ Each milestone must work **end to end** before the next starts (a ticket may sta
 
 **Older documents** use earlier numbers: ADR-0060 has the mapping (ADR-0035 for ADRs before 2026-11-01).
 
-**Naming:** always write a milestone or slice as `ID: title`, e.g. "M1.2: Ticket core". The ID alone means nothing to a reader.
+**Naming:** always write a milestone or ticket as `ID: title`, e.g. "M1.2: Ticket core". The ID alone means nothing to a reader.
 
-**Detail** in [`milestones.md`](milestones.md): how milestones are built as slices, each milestone's scope and "Done when", the open M1 slice rows, and **Later** (explicitly deferred work, e.g. "Control plane in dev + prod"). Merged M1 slices: [`history/m1-merged-slices.md`](history/m1-merged-slices.md).
+**Detail** in [`milestones.md`](milestones.md): how milestones are built, each milestone's scope and "Done when", the open M1 ticket rows, and **Later** (explicitly deferred work, e.g. "Control plane in dev + prod"). Merged M1 tickets: [`history/m1-merged-slices.md`](history/m1-merged-slices.md).
 
 ---
 
@@ -261,7 +262,7 @@ Each milestone must work **end to end** before the next starts (a ticket may sta
 
 Resolved in M0: GitHub home (personal account, public repos — ADR-0003); GCP project `andy-intelligence-512400` in `us-central1` (ADR-0007); Firestore (ADR-0017); default run.app URL (ADR-0007; replaced by `ai.andybernhagen.com` in M1.20: Custom domain, ADR-0044); work tracking native (ADR-0016).
 
-Resolved in M1.0: Docs sync (ADR-0018 – ADR-0024): Jules completion detection (PR webhook + deadline watchdog); agent callback auth (GitHub Actions OIDC); rollups (aggregation queries); M1 scope cuts and slicing; docs upkeep; contract suites for every port (ADR-0012 rejected).
+Resolved in M1.0: Docs sync (ADR-0018 – ADR-0024): Jules completion detection (PR webhook + deadline watchdog); agent callback auth (GitHub Actions OIDC); rollups (aggregation queries); M1 scope cuts and its split into tickets; docs upkeep; contract suites for every port (ADR-0012 rejected).
 
 Remaining:
 

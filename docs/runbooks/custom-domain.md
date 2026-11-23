@@ -103,7 +103,7 @@ Claude desktop → Settings → Connectors → remove `andy-intelligence` → Ad
 
 ## Roll back
 
-Changing `custom_domain` alone won't do it. To return to `run.app`: revert this slice's PR, apply `infra/control-plane` (domain mapping destroyed; `PUBLIC_URL` and authorized domains back), redo steps 6–7 with the `run.app` URL, then `terraform destroy` in `infra/dns`.
+Changing `custom_domain` alone won't do it. To return to `run.app`: revert this ticket's PR, apply `infra/control-plane` (domain mapping destroyed; `PUBLIC_URL` and authorized domains back), redo steps 6–7 with the `run.app` URL, then `terraform destroy` in `infra/dns`.
 
 ## Troubleshooting
 

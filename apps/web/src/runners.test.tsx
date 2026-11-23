@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { screen, within } from "@testing-library/react";
 import { renderApp } from "@/test/harness";
 
-/** AI-79 (ADR-0089 slice 3): Settings → Local runners. */
+/** AI-79 (ADR-0089 part 3): Settings → Local runners. */
 
 describe("runners page", () => {
   it("GivenAProject_WhenAndyMintsARunner_ThenTheSecretShowsOnceAndOnlyItsHashIsStored", async () => {

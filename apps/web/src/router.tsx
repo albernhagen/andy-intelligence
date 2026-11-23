@@ -96,7 +96,7 @@ const routeTree = rootRoute.addChildren([
     component: NewProjectPage,
   }),
   boardRoute.addChildren([
-    // The story panel opens over the board, in its <Outlet /> (ADR-0059: UX foundation).
+    // The ticket panel opens over the board, in its <Outlet /> (ADR-0059: UX foundation).
     createRoute({ getParentRoute: () => boardRoute, path: "t/$ticketRef", component: TicketPage }),
   ]),
   createRoute({

@@ -122,7 +122,7 @@ function label(stage: unknown): string {
     : String(stage);
 }
 
-/** One entry in the story panel's activity timeline (ADR-0059). */
+/** One entry in the ticket panel's activity timeline (ADR-0059). */
 export type TimelineItem =
   { kind: "event"; at: string; event: TicketEvent } | { kind: "run"; at: string; run: Run };
 

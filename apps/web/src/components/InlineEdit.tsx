@@ -12,7 +12,7 @@ import { type TicketPatch, ticketQueryKey, useUpdateTicket } from "@/lib/queries
 import { cn } from "@/lib/utils";
 
 /**
- * In-place editing for the story panel (ADR-0059: "every field edits in place"). Each editor
+ * In-place editing for the ticket panel (ADR-0059: "every field edits in place"). Each editor
  * saves only its own fields with `ifUpdatedAt`; a 409 asks Andy to reload, and his draft stays
  * so he can save again.
  */
