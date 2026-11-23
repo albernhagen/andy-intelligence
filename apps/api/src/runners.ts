@@ -19,7 +19,8 @@ import type { RouteModule } from "./services";
 
 /**
  * Local runners (ADR-0089 slice 3). Andy mints, lists and revokes runners under /api (Firebase
- * sign-in + allow-list); MCP has no runner tools, so a stolen MCP token can't add one. The
+ * sign-in + allow-list); MCP only lists them (`list_runners`, AI-294), so a stolen MCP token
+ * can't add or revoke one. The
  * runner itself calls `POST /runner/claim` outside /api with its secret.
  */
 
