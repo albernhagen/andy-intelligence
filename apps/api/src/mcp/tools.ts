@@ -26,6 +26,7 @@ import {
   type DashboardReader,
   type DoraReader,
 } from "@andy/domain";
+import type { RunnerService } from "@andy/domain";
 import type { SetupChecklistReader } from "../setup";
 import type { SpendSettingsService } from "../spend";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
@@ -75,6 +76,8 @@ export interface ToolDeps {
   night?: NightDeps | null;
   /** Work across projects (AI-198); the app always passes it, unit tests may not. */
   work?: WorkReader;
+  /** Local runners (ADR-0089); null without a runner store. MCP reads them only (AI-294). */
+  runners?: RunnerService | null;
   /** Roadmaps over epics (AI-193); the app always passes it, unit tests may not. */
   roadmap?: RoadmapReader;
   /** The board's read (AI-296), shared with GET …/board; the app always passes it. */
