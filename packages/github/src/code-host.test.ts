@@ -591,4 +591,161 @@ describe("GitHubCodeHost", () => {
       expect(await host(fetch).proposeFile("albernhagen/other", proposal)).toBeNull();
     });
   });
+  describe("proposeFiles", () => {
+    const R = "/repos/albernhagen/andy-intelligence";
+    const proposal = {
+      branch: "baseline/abc1234",
+      files: [
+        { path: "lefthook.yml", content: "pre-commit: {}\n" },
+        { path: ".andy/baseline.json", content: "{}\n" },
+      ],
+      message: "Project baseline main (abc1234)",
+      title: "Project baseline main (abc1234)",
+      body: "Report",
+    };
+    const routes = (overrides: Record<string, (init?: RequestInit) => Response> = {}) => ({
+      ...installed,
+      [`GET ${R}/git/ref/heads/main`]: () => json(200, { object: { sha: "basesha" } }),
+      [`GET ${R}/git/commits/basesha`]: () => json(200, { tree: { sha: "basetree" } }),
+      [`POST ${R}/git/trees`]: () => json(201, { sha: "newtree" }),
+      [`POST ${R}/git/commits`]: () => json(201, { sha: "newcommit" }),
+      [`POST ${R}/git/refs`]: () => json(201, {}),
+      [`POST ${R}/pulls`]: () =>
+        json(201, {
+          number: 9,
+          html_url: "https://github.com/albernhagen/andy-intelligence/pull/9",
+        }),
+      ...overrides,
+    });
+
+    it("GivenAnInstalledRepo_WhenProposed_ThenOneCommitOnANewBranchFromTheDefaultHeadAndAPrOpens", async () => {
+      const tree = vi.fn((_init?: RequestInit) => json(201, { sha: "newtree" }));
+      const commit = vi.fn((_init?: RequestInit) => json(201, { sha: "newcommit" }));
+      const ref = vi.fn((_init?: RequestInit) => json(201, {}));
+      const fetch = fakeGitHub(
+        routes({
+          [`POST ${R}/git/trees`]: tree,
+          [`POST ${R}/git/commits`]: commit,
+          [`POST ${R}/git/refs`]: ref,
+        }),
+      );
+      expect(await host(fetch).proposeFiles("albernhagen/andy-intelligence", proposal)).toEqual({
+        number: 9,
+        url: "https://github.com/albernhagen/andy-intelligence/pull/9",
+        branch: "baseline/abc1234",
+      });
+      const treeBody = JSON.parse(String(tree.mock.calls[0]![0]!.body));
+      expect(treeBody.base_tree).toBe("basetree");
+      expect(treeBody.tree).toEqual([
+        { path: "lefthook.yml", mode: "100644", type: "blob", content: "pre-commit: {}\n" },
+        { path: ".andy/baseline.json", mode: "100644", type: "blob", content: "{}\n" },
+      ]);
+      expect(JSON.parse(String(commit.mock.calls[0]![0]!.body))).toMatchObject({
+        tree: "newtree",
+        parents: ["basesha"],
+      });
+      expect(JSON.parse(String(ref.mock.calls[0]![0]!.body))).toEqual({
+        ref: "refs/heads/baseline/abc1234",
+        sha: "newcommit",
+      });
+    });
+
+    it("GivenAnEmptyRepo_WhenProposed_ThenItThrowsBeforeWriting", async () => {
+      const tree = vi.fn((_init?: RequestInit) => json(201, { sha: "newtree" }));
+      const fetch = fakeGitHub(
+        routes({
+          [`GET ${R}/git/ref/heads/main`]: () => json(409, { message: "Git Repository is empty." }),
+          [`POST ${R}/git/trees`]: tree,
+        }),
+      );
+      await expect(
+        host(fetch).proposeFiles("albernhagen/andy-intelligence", proposal),
+      ).rejects.toThrow(/is empty/);
+      expect(tree).not.toHaveBeenCalled();
+    });
+
+    it("GivenTheBranchExists_WhenProposed_ThenItThrowsAndNoPrOpens", async () => {
+      const pulls = vi.fn((_init?: RequestInit) => json(201, {}));
+      const fetch = fakeGitHub(
+        routes({
+          [`POST ${R}/git/refs`]: () => json(422, { message: "Reference already exists" }),
+          [`POST ${R}/pulls`]: pulls,
+        }),
+      );
+      await expect(
+        host(fetch).proposeFiles("albernhagen/andy-intelligence", proposal),
+      ).rejects.toThrow(/already exists/);
+      expect(pulls).not.toHaveBeenCalled();
+    });
+
+    it("GivenThePrFails_WhenProposed_ThenTheNewBranchIsDeletedAndItThrows", async () => {
+      const del = vi.fn((_init?: RequestInit) => new Response(null, { status: 204 }));
+      const fetch = fakeGitHub(
+        routes({
+          [`POST ${R}/pulls`]: () => json(500, { message: "boom" }),
+          [`DELETE ${R}/git/refs/heads/baseline/abc1234`]: del,
+        }),
+      );
+      await expect(
+        host(fetch).proposeFiles("albernhagen/andy-intelligence", proposal),
+      ).rejects.toThrow(/boom/);
+      expect(del).toHaveBeenCalledOnce();
+    });
+
+    it("GivenAWorkflowPath_WhenProposed_ThenItThrowsWithoutCallingGitHub", async () => {
+      const fetch = fakeGitHub(routes());
+      await expect(
+        host(fetch).proposeFiles("albernhagen/andy-intelligence", {
+          ...proposal,
+          files: [{ path: ".github/workflows/ci.yml", content: "x" }],
+        }),
+      ).rejects.toThrow();
+      expect(fetch.mock.calls.some(([u]) => String(u).includes("/git/"))).toBe(false);
+    });
+  });
+
+  describe("readRepoSetting", () => {
+    const R = "/repos/albernhagen/andy-intelligence";
+
+    it("GivenAReadableSetting_WhenRead_ThenItsStatusAndBodyComeBack", async () => {
+      const fetch = fakeGitHub({
+        ...installed,
+        [`GET ${R}/rulesets`]: () => json(200, [{ id: 1, name: "protect-main" }]),
+      });
+      expect(
+        await host(fetch).readRepoSetting(
+          "albernhagen/andy-intelligence",
+          "rulesets?includes_parents=false",
+        ),
+      ).toEqual({ status: 200, data: [{ id: 1, name: "protect-main" }] });
+    });
+
+    it("GivenARefusedRead_WhenRead_ThenTheStatusComesBackInsteadOfThrowing", async () => {
+      const fetch = fakeGitHub({
+        ...installed,
+        [`GET ${R}/actions/permissions`]: () => json(403, { message: "Resource not accessible" }),
+      });
+      expect(
+        await host(fetch).readRepoSetting("albernhagen/andy-intelligence", "actions/permissions"),
+      ).toMatchObject({ status: 403 });
+    });
+
+    it.each(["../orgs/x", "/user", "a/../../b", "a?x=1#y", "a%2F..%2Fb", "%2e%2e/x"])(
+      "GivenTheUnsafeSubpath%s_WhenRead_ThenItThrowsWithoutCallingGitHub",
+      async (subpath) => {
+        const fetch = fakeGitHub(installed);
+        await expect(
+          host(fetch).readRepoSetting("albernhagen/andy-intelligence", subpath),
+        ).rejects.toThrow(/unsafe/);
+        expect(fetch).not.toHaveBeenCalled();
+      },
+    );
+
+    it("GivenTheAppIsNotInstalled_WhenRead_ThenNull", async () => {
+      const fetch = fakeGitHub({
+        "GET /repos/albernhagen/other/installation": () => json(404, { message: "Not Found" }),
+      });
+      expect(await host(fetch).readRepoSetting("albernhagen/other", "")).toBeNull();
+    });
+  });
 });

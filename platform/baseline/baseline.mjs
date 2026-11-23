@@ -7,13 +7,17 @@
 //   baseline.mjs files   <owner/repo> --ref <tag|branch|sha>   write baseline files (push or PR)
 //   baseline.mjs apply   <owner/repo> [--dry-run]              GitHub config
 //   baseline.mjs check   <owner/repo> [--only a,b]             drift report; exit 1 on drift
+//   baseline.mjs finish  <owner/repo> --ref <sha> --branch <baseline/x>
+//                        add the workflows and agent settings the App's baseline PR left out
+//                        (AI-113) to that PR's branch; only missing ones, never overwrites
 import { spawnSync } from "node:child_process";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { applySections, checkSections, SECTIONS } from "./github.mjs";
+import { applySections, checkSections, configFor, parseConfig, SECTIONS } from "./github.mjs";
 import { baselineRecord, fileDrift, mergeLines, renderFiles, seedsToWrite } from "./files.mjs";
+import { heldToAdd } from "./plan.mjs";
 import { cleanGitEnv } from "../../scripts/git-env.mjs";
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
@@ -30,6 +34,8 @@ function run(cmd, args, opts = {}) {
   }
   return r;
 }
+
+export { configFor };
 
 /** `gh api` with the status code: { status, data }. Never throws on HTTP errors. */
 export function ghApi(method, apiPath, body) {
@@ -60,35 +66,7 @@ export function parseGhResponse(stdout, stderr = "") {
 }
 
 export function loadConfig(dir = path.join(HERE, "github")) {
-  const read = (f) => JSON.parse(readFileSync(path.join(dir, f), "utf8"));
-  return {
-    repo: read("repo.json"),
-    security: read("security.json"),
-    actions: read("actions.json"),
-    labels: read("labels.json"),
-    ruleset: read("ruleset-main.json"),
-    sourceOnlyChecks: read("source-only.json").required_status_checks,
-  };
-}
-
-/** The config for one repo: repos other than the baseline source don't get source-only checks. */
-export function configFor(config, repo, source) {
-  if (repo.toLowerCase() === source.toLowerCase()) return config;
-  const drop = new Set(config.sourceOnlyChecks);
-  const rules = config.ruleset.rules.map((rule) =>
-    rule.type === "required_status_checks"
-      ? {
-          ...rule,
-          parameters: {
-            ...rule.parameters,
-            required_status_checks: rule.parameters.required_status_checks.filter(
-              (c) => !drop.has(c.context),
-            ),
-          },
-        }
-      : rule,
-  );
-  return { ...config, ruleset: { ...config.ruleset, rules } };
+  return parseConfig((f) => readFileSync(path.join(dir, f), "utf8"));
 }
 
 const manifest = () => JSON.parse(readFileSync(path.join(HERE, "manifest.json"), "utf8"));
@@ -199,6 +177,41 @@ function filesCommand(repo, ref) {
   );
 }
 
+/**
+ * Adds the files the App can't write (workflows, agent settings; `heldToAdd`) to the App's
+ * baseline PR branch, with Andy's `gh` login: only the missing ones, so a differing file stays
+ * for review (AI-113).
+ */
+function finishCommand(repo, ref, branch) {
+  const m = manifest();
+  const sha = resolveRef(ref, m.source);
+  const rendered = renderFiles(m, readAt(sha), { sha, ref });
+  const dir = mkdtempSync(path.join(tmpdir(), "baseline-finish-"));
+  const env = repoEnv();
+  run("gh", ["repo", "clone", repo, dir, "--", "--quiet", "--branch", branch], { env });
+  for (const key of ["user.name", "user.email"]) {
+    const value = run("git", ["-C", SOURCE_ROOT, "config", key], { allowFail: true }).stdout.trim();
+    if (value) run("git", ["-C", dir, "config", key, value], { env });
+  }
+  const added = [];
+  for (const f of heldToAdd(rendered, (p) => existsSync(path.join(dir, p)))) {
+    writeFile(dir, f.path, f.content);
+    added.push(f.path);
+  }
+  if (added.length === 0) {
+    console.log(`${repo}: ${branch} already has every workflow and agent settings file`);
+    return;
+  }
+  run("git", ["-C", dir, "add", "--", ...added], { env });
+  const message = `Project baseline: workflows and agent settings (${sha.slice(0, 7)})`;
+  run("git", ["-C", dir, "commit", "-q", "-m", message], { stdio: "inherit", env });
+  run("git", ["-C", dir, "push", "-q", "origin", `HEAD:refs/heads/${branch}`], {
+    stdio: "inherit",
+    env,
+  });
+  console.log(`${repo}: pushed ${added.length} files to ${branch}:\n  ${added.join("\n  ")}`);
+}
+
 function printSections(results) {
   for (const r of results) {
     console.log(`${r.section}: ${r.status}${r.error ? ` (${r.error})` : ""}`);
@@ -265,21 +278,24 @@ async function checkCommand(repo, only) {
   return failed ? 1 : 0;
 }
 
-/** Parses argv into { command, repo, ref, dryRun, only }. */
+/** Parses argv into { command, repo, ref, branch, dryRun, only }. */
 export function parseArgs(argv) {
   const [command, repo, ...rest] = argv;
-  const opts = { command, repo, ref: undefined, dryRun: false, only: undefined };
+  const opts = { command, repo, ref: undefined, branch: undefined, dryRun: false, only: undefined };
   for (let i = 0; i < rest.length; i++) {
     if (rest[i] === "--ref") opts.ref = rest[++i];
+    else if (rest[i] === "--branch") opts.branch = rest[++i];
     else if (rest[i] === "--dry-run") opts.dryRun = true;
     else if (rest[i] === "--only") opts.only = rest[++i].split(",");
     else throw new Error(`unknown option ${rest[i]}`);
   }
-  if (!["onboard", "files", "apply", "check"].includes(command))
+  if (!["onboard", "files", "apply", "check", "finish"].includes(command))
     throw new Error(`unknown command ${command}`);
   if (!/^[\w.-]+\/[\w.-]+$/.test(repo ?? "")) throw new Error("repo must be owner/name");
-  if ((command === "onboard" || command === "files") && !opts.ref)
+  if (["onboard", "files", "finish"].includes(command) && !opts.ref)
     throw new Error(`${command} needs --ref`);
+  if (command === "finish" && !/^baseline\/[a-z0-9-]{1,60}$/.test(opts.branch ?? ""))
+    throw new Error("finish needs --branch baseline/<name> (the App's baseline PR branch)");
   const unknown = (opts.only ?? []).filter((n) => !ALL.includes(n));
   if (unknown.length > 0) throw new Error(`unknown --only section(s): ${unknown.join(", ")}`);
   return opts;
@@ -293,6 +309,10 @@ async function main(argv) {
   }
   if (o.command === "apply") return applyCommand(o.repo, o.dryRun);
   if (o.command === "check") return checkCommand(o.repo, o.only);
+  if (o.command === "finish") {
+    finishCommand(o.repo, o.ref, o.branch);
+    return 0;
+  }
   filesCommand(o.repo, o.ref);
   const status = await applyCommand(o.repo, false);
   console.log(
