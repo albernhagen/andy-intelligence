@@ -24,6 +24,19 @@ describe("parseArgs", () => {
     expect(() => parseArgs(["files", "albernhagen/scratch"])).toThrow("needs --ref");
   });
 
+  it("GivenFinishWithRefAndBaselineBranch_WhenParsed_ThenOptions", () => {
+    expect(
+      parseArgs(["finish", "a/b", "--ref", "abc1234", "--branch", "baseline/abc1234"]),
+    ).toMatchObject({ command: "finish", ref: "abc1234", branch: "baseline/abc1234" });
+  });
+
+  it("GivenFinishWithoutABaselineBranch_WhenParsed_ThenError", () => {
+    expect(() => parseArgs(["finish", "a/b", "--ref", "abc1234"])).toThrow("--branch");
+    expect(() =>
+      parseArgs(["finish", "a/b", "--ref", "abc1234", "--branch", "main; rm -rf /"]),
+    ).toThrow("--branch");
+  });
+
   it("GivenABadRepoOrSection_WhenParsed_ThenError", () => {
     expect(() => parseArgs(["check", "scratch"])).toThrow("owner/name");
     expect(() => parseArgs(["check", "a/b", "--only", "ruleset,secrets"])).toThrow("secrets");

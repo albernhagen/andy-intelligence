@@ -21,7 +21,7 @@ infra/                            # Terraform: dev/prod Cloud Run, deployers, re
 ```
 **Required CI checks** on `main`: tests, lint, typecheck, protected-path check, secret scan, security scans and security-review agent (§9.1), "PR references a ticket" (ticket key in branch name or PR body, verified against the control-plane API).
 
-Onboarding a project = UI/MCP "Add project" → onboarding interview → brief PR (ADR-0053) → bootstrap (applies the project baseline, §8.1; until then `platform/baseline/baseline.mjs onboard`, runbook `docs/runbooks/onboard-a-repo.md`) → Andy approves Terraform PR.
+Onboarding a project = UI/MCP "Add project" → each repo gets a baseline PR from the App (ADR-0142; runbook `onboard-a-repo.md`) → onboarding interview → brief PR (ADR-0053) → Andy approves Terraform PR.
 
 ### 8.1 Project baseline (ADR-0031)
 
@@ -75,6 +75,7 @@ Build runs (plan approval, sandbox, publish limits) and read caps (AI-222): [`ba
 | Review agents: lockfiles out of the diff (code first, 120 KB cap with truncation note); lockfile sources must be the npm registry with integrity | 0046 | `platform/actions/agent-review-prepare`; `scripts/lockfile-sources.mjs` in `platform/actions/ci-check` | A | carried (next baseline tag) |
 | Agent evals (`agent-evals` check) | 0040, 0086 | `platform/actions/agent-evals` | A | control plane only, not required |
 | Executor permission profile (headless Claude Code) | 0040, 0051 | `platform/executor/profile.json` + `scripts/executor-profile.mjs`, installed by the reusable `claude-executor.yml` | M (`agent-run.yml` caller) | built (M1.6a); managed repos get the caller from the baseline; its token sits in a `main`-only `agent` environment (AI-106) |
+| Baseline PR on registration: missing files only, never workflows or settings, capped | 0142 | `github/registration.ts`, `baseline/plan.mjs` | — | control plane |
 | Webhook caps (1 MB body, 300 signed deliveries/minute per instance) + HMAC + 30-day TTL on records | 0028, 0041 | `apps/api/src/webhooks.ts`, `infra/control-plane` | — | control plane only (managed repos only send webhooks) |
 | Bot-opened PRs run their checks (repo token from the control plane via Actions OIDC; agent job holds no write credential) | 0041, 0043 | `system-security-review.yml` (`publish` job), `apps/api/src/github/token.ts` | — | not yet carried (until M6: Dev → prod releases) |
 | Re-sync open PRs (clean merges only, capped; `no-auto-sync` label) | 0111 | `platform/actions/resync-prs` | A, G | label carried; caller needs per-project tokens |

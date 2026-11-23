@@ -45,6 +45,12 @@ export class ProjectService {
     private readonly newId: () => string = () => configChangeId(),
     /** The global spend caps a project's own may not pass (AI-249); defaults until AI-276. */
     private readonly globalSpendCaps: () => Promise<SpendCaps> = async () => DEFAULT_SPEND_CAPS,
+    /**
+     * Runs once after a project with repos is stored (AI-113: the baseline PRs). It bounds its own
+     * work (repo cap, deadline) and reports its own failures (Needs-you); anything it throws is
+     * logged, never fails the registration.
+     */
+    private readonly onReposRegistered: ((project: Project) => Promise<unknown>) | null = null,
   ) {}
 
   /**
@@ -170,8 +176,8 @@ export class ProjectService {
 
   /**
    * Creates a project: owner only (`register_project`), the same rule for `POST /api/projects`
-   * and MCP `create_project` (AI-297). It only validates repos and stores the project: no GitHub
-   * App flow, brief or agent task starts here.
+   * and MCP `create_project` (AI-297). It validates repos and stores the project; then its repos
+   * get their baseline PRs (AI-113), bounded by the hook. No brief or agent task starts here.
    */
   async register(input: NewProject, by: EventActor): Promise<Project> {
     requireCan(by, "register_project", null);
@@ -191,7 +197,19 @@ export class ProjectService {
       if (repos.some((r) => r.toLowerCase() === name.toLowerCase())) continue;
       repos.push(await this.canonical(name));
     }
-    return this.tracker.createProject({ ...parsed, repos });
+    const project = await this.tracker.createProject({ ...parsed, repos });
+    if (project.repos.length > 0 && this.onReposRegistered) {
+      try {
+        await this.onReposRegistered(project);
+      } catch (err) {
+        log("ERROR", "repos registered hook failed", {
+          projectId: project.id,
+          repos: project.repos,
+          error: String(err),
+        });
+      }
+    }
+    return project;
   }
 
   private async canonical(name: string): Promise<string> {
