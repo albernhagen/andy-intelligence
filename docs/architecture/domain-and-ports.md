@@ -21,7 +21,7 @@ All records carry `project_id` where applicable. Zod schemas in `packages/contra
 | **Release** | project, image digest, tickets included, notes, status |
 | **ReleaseNote** | merged PR's untrusted note, ticket, doc links (ADR-0121) |
 | **CodeHostEvent** | delivery ID (document ID), project, repo, kind (pull_request / check_run / workflow_run), action, normalized PR / check / workflow fields, received_at; TTL 30 days (ADR-0041) |
-| **NightLaunch** | epic, project, budget (agent tasks, tokens, USD), stop time (≤ 16 h away), status (planned to ended), started/ended, end reason, story keys, epic branch, start sha (ADR-0049) |
+| **NightLaunch** | epic, project, budget (agent tasks, tokens, USD), stop time (≤ 16 h away), status (planned to ended), started/ended, end reason, child ticket keys, epic branch, start sha (ADR-0049) |
 
 Provider, Harness, Model, Tier, Policy; configuration rules; default quota policy: [`routing-and-policy.md`](routing-and-policy.md).
 

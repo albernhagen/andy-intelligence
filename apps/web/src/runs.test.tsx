@@ -5,7 +5,7 @@ import { PAGE_LOAD, renderApp } from "@/test/harness";
 import { LIVE_POLL_MS } from "@/lib/live";
 import { formatCost } from "@/components/Runs";
 
-/** Story panel → runs in the activity timeline (M1.6a: Claude Code executor), in-process API. */
+/** Ticket panel → runs in the activity timeline (M1.6a: Claude Code executor), in-process API. */
 
 const REPO = "albernhagen/andy-intelligence";
 const plan = {

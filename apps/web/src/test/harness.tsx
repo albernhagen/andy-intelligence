@@ -163,7 +163,7 @@ export function renderApp(
   };
 }
 
-/** A story that meets the Definition of Ready. */
+/** A ticket that meets the Definition of Ready. */
 export const readyStory = {
   type: "feature" as const,
   title: "Board",

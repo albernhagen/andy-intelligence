@@ -17,7 +17,7 @@ import { reserveFor, settleFor, type PricedModel } from "./spend-estimate";
 import type { SpendEvent } from "./spend-notices";
 
 /**
- * Spend gate (AI-248: M10.7, m10-slices.md). Every agent task on a `pay_per_use` route reserves
+ * Spend gate (AI-248: M10.7). Every agent task on a `pay_per_use` route reserves
  * its worst case in the spend ledger before it starts, and settles or releases it when it ends.
  * Subscription routes never come here. It fails closed: no price, unreadable caps or totals, a
  * cap that would be passed, or a ledger error means the task doesn't start (`spend_cap`). A
