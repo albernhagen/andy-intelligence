@@ -233,3 +233,46 @@ export async function applySections(gh, repo, config, names) {
   }
   return checkSections(gh, repo, config, names);
 }
+
+/** The github/*.json files as one config; `read(name)` returns a file's text. */
+export function parseConfig(read) {
+  const json = (f) => JSON.parse(read(f));
+  return {
+    repo: json("repo.json"),
+    security: json("security.json"),
+    actions: json("actions.json"),
+    labels: json("labels.json"),
+    ruleset: json("ruleset-main.json"),
+    sourceOnlyChecks: json("source-only.json").required_status_checks,
+  };
+}
+
+/** The config files `parseConfig` reads, in `platform/baseline/github/`. */
+export const CONFIG_FILES = [
+  "repo.json",
+  "security.json",
+  "actions.json",
+  "labels.json",
+  "ruleset-main.json",
+  "source-only.json",
+];
+
+/** The config for one repo: repos other than the baseline source don't get source-only checks. */
+export function configFor(config, repo, source) {
+  if (repo.toLowerCase() === source.toLowerCase()) return config;
+  const drop = new Set(config.sourceOnlyChecks);
+  const rules = config.ruleset.rules.map((rule) =>
+    rule.type === "required_status_checks"
+      ? {
+          ...rule,
+          parameters: {
+            ...rule.parameters,
+            required_status_checks: rule.parameters.required_status_checks.filter(
+              (c) => !drop.has(c.context),
+            ),
+          },
+        }
+      : rule,
+  );
+  return { ...config, ruleset: { ...config.ruleset, rules } };
+}

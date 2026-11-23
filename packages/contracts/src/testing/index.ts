@@ -927,6 +927,56 @@ export function codeHostContract(
       expect(await host.proposeFile(unknownRepo, proposal)).toBeNull();
     });
 
+    const baseline = {
+      branch: "baseline/contract-test",
+      files: [{ path: "docs/contract-test.md", content: "x" }],
+      message: "x",
+      title: "x",
+      body: "",
+    };
+
+    itProposes(
+      "GivenAnInstalledRepo_WhenABaselineIsProposed_ThenAPrOnThatBranchComesBack",
+      async () => {
+        const { host, knownRepo } = await make();
+        const pr = await host.proposeFiles(knownRepo, baseline);
+        expect(pr).toMatchObject({ branch: baseline.branch });
+        expect(pr!.number).toBeGreaterThan(0);
+      },
+    );
+
+    itProposes("GivenAnExistingBaselineBranch_WhenProposedAgain_ThenItThrows", async () => {
+      const { host, knownRepo } = await make();
+      await host.proposeFiles(knownRepo, baseline);
+      await expect(host.proposeFiles(knownRepo, baseline)).rejects.toThrow();
+    });
+
+    it("GivenAWorkflowOrAgentSettingsPath_WhenABaselineIsProposed_ThenItThrows", async () => {
+      const { host, knownRepo } = await make();
+      for (const path of [".github/workflows/ci.yml", ".claude/settings.json"]) {
+        await expect(
+          host.proposeFiles(knownRepo, { ...baseline, files: [{ path, content: "x" }] }),
+        ).rejects.toThrow();
+      }
+    });
+
+    it("GivenARepoWithoutTheApp_WhenABaselineIsProposed_ThenNull", async () => {
+      const { host, unknownRepo } = await make();
+      expect(await host.proposeFiles(unknownRepo, baseline)).toBeNull();
+    });
+
+    it("GivenAnInstalledRepo_WhenASettingIsRead_ThenAStatusComesBack", async () => {
+      const { host, knownRepo } = await make();
+      const read = await host.readRepoSetting(knownRepo, "labels/no-such-label-contract-test");
+      expect(read?.status).toBeGreaterThanOrEqual(200);
+    });
+
+    it("GivenAnUnsafeSubpathOrUnknownRepo_WhenASettingIsRead_ThenItThrowsOrIsNull", async () => {
+      const { host, knownRepo, unknownRepo } = await make();
+      await expect(host.readRepoSetting(knownRepo, "../../orgs/x")).rejects.toThrow();
+      expect(await host.readRepoSetting(unknownRepo, "")).toBeNull();
+    });
+
     it("GivenAnInstalledRepo_WhenItsDefaultBranchIsRead_ThenItsTipShaComesBack", async () => {
       const { host, knownRepo } = await make();
       const repo = await host.getRepo(knownRepo);
