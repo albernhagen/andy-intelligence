@@ -28,7 +28,7 @@ export function useEpicRollup(path: TicketPath) {
   });
 }
 
-/** "3 of 5 done · Cost ~$1.50 (estimate)", with "partial" when the cost missed some stories. */
+/** "3 of 5 done · Cost ~$1.50 (estimate)", with "partial" when the cost missed some tickets. */
 export function formatEpicRollup(r: Pick<EpicRollup, "progress" | "cost" | "partial">): string {
   const { cost } = r;
   const allUnknown = cost.completedRuns > 0 && cost.unknownRuns === cost.completedRuns;
@@ -74,7 +74,7 @@ function EpicTickets({ path }: { path: TicketPath }) {
       {showsError(rollup) && (
         <QueryError
           error={rollup.error}
-          what="the epic's stories"
+          what="the epic's tickets"
           onRetry={() => void rollup.refetch()}
         />
       )}

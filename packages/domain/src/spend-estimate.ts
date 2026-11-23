@@ -1,7 +1,7 @@
 import type { Model, RunUsage } from "@andy/contracts";
 
 /**
- * Paid-call estimate (AI-236: M10.4, m10-slices.md). Pure: what to reserve in the spend ledger
+ * Paid-call estimate (AI-236: M10.4). Pure: what to reserve in the spend ledger
  * before a paid call or agent task, and what to settle to from its usage. Amounts are integer
  * micro-USD (1 USD = 1,000,000), always rounded up, so an estimate is never below the real cost.
  * Anything unknown returns null: no price, no estimate, so no paid call can be reserved (fail

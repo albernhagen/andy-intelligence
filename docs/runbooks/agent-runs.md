@@ -12,7 +12,7 @@ How Andy enables and checks agent tasks (M1.6a: Claude Code executor: dispatch +
 
 ## 1. Give the GitHub App Actions write (once)
 
-Dispatching a workflow needs **Actions: Read and write**. Apps created before this slice have read only; new ones get write from the manifest.
+Dispatching a workflow needs **Actions: Read and write**. Apps created before this change have read only; new ones get write from the manifest.
 
 1. GitHub → Settings → Developer settings → GitHub Apps → your control-plane App (e.g. `andy-intelligence-control`) → **Permissions & events** → Repository permissions → **Actions: Read and write** → **Save changes**.
 2. GitHub emails the installation owner; or open Settings → Applications → Installed GitHub Apps → **Configure** → **Review request** → **Accept new permissions**. Until you accept, starting a run fails with `502 … Resource not accessible by integration` and the run shows `failed`.
@@ -29,7 +29,7 @@ To use a capped API key instead: add secret `ANTHROPIC_API_KEY` and set `claude-
 
 ## 3. Start an agent task (done-when demo 1)
 
-1. Merge and deploy this slice; finish §1.
+1. Merge and deploy this change; finish §1.
 2. UI → project `AI` → a ticket (e.g. AI-2: M1.7: Refinement) → **Start refine task**.
 3. Expect: task `queued` → `running` → `succeeded` within a few minutes; a **Task log** link to the Actions run; the report (Ask, Gaps, Files, Risks) plus "Asked N question(s)" as a comment by `agent:<run id>` in History; the questions under Questions and in Needs you; tokens and `~$… (estimate)` on the run.
 4. A second start while one is in flight: `409 … already has an agent task in flight`. A start while questions are open: `422 … open question(s)`.
@@ -88,7 +88,7 @@ Off switch: untick "Auto-refine" in Project settings (`/p/ai/settings`) or `set_
 
 ## 8. Build a ticket (M1.8a: Build run demo)
 
-Nothing to apply: no Terraform, secret or App permission changes (the App already has Contents and Pull requests write, ADR-0043, and keeps no `workflows` permission). After this slice merges and deploys:
+Nothing to apply: no Terraform, secret or App permission changes (the App already has Contents and Pull requests write, ADR-0043, and keeps no `workflows` permission). After this change merges and deploys:
 
 0. In Project settings (header link, `/p/ai/settings`), tick **Builds** for the project (recorded: who and when). Until then every build start is refused with "builds are off", and Auto-build can't be ticked. Do §9 first.
 1. Pick a small, Ready S ticket in project `AI` (Definition of Ready met, blockers Done). Ticket → **Activity** → **Start build task** (or MCP `build`).

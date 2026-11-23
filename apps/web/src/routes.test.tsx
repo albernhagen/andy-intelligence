@@ -24,7 +24,7 @@ describe("a URL for every page", () => {
     ["/p/ai/inbox", "Which layout?"],
     ["/p/ai", "Backlog"],
     ["/all/board", "A board shows one project. Pick one:"],
-    // The story panel (AI-29): its heading splits key and title, so check the description.
+    // The ticket panel (AI-29): its heading splits key and title, so check the description.
     ["/p/ai/t/AI-1", "Andy can't see tickets."],
     ["/p/ai/settings", "AI: Andy Intelligence settings"],
     ["/projects/new", "Add project"],

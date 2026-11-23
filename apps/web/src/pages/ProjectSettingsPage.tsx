@@ -276,7 +276,7 @@ const ENVIRONMENT_LABELS: Record<EnvironmentPolicy, string> = {
   "dev-and-prod": "dev and prod",
 };
 
-/** Where the project's releases go (ADR-0050, AI-160: M6.2); later M6 slices read it. */
+/** Where the project's releases go (ADR-0050, AI-160: M6.2); later M6 tickets read it. */
 function EnvironmentsSelect({ project }: { project: Project }) {
   const update = useUpdateProject(project.id);
   return (

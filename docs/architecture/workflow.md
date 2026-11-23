@@ -8,7 +8,7 @@ Overview and reading map: [ARCHITECTURE.md](ARCHITECTURE.md). Section numbers ma
 
 | Stage | What happens | Exit criteria (automatic unless overridden) |
 |---|---|---|
-| **Backlog** | Refinement agent enriches; splits epics into stories (child tickets with dependencies); sizes; assigns tier; **asks Andy questions** | **Definition of Ready (DoR)** met |
+| **Backlog** | Refinement agent enriches; splits epics into child tickets with dependencies; sizes; assigns tier; **asks Andy questions** | **Definition of Ready (DoR)** met |
 | **Ready** | Waits for dependencies, a worker that is an agent (ADR-0082), quota/budget | Dispatcher starts a run |
 | **In progress** | Build task: plans read-only, then implements (ADR-0050; plan approval below). One automatic retry, then flags Needs-you | PR opened with structured run summary (plan, deviations, verification output) |
 | **Ready for review** | Rule-based gate decides auto-merge vs. Andy | Merged. No stage after it until M6: Dev → prod releases adds one for dev verification (ADR-0069) |
@@ -19,7 +19,7 @@ Overview and reading map: [ARCHITECTURE.md](ARCHITECTURE.md). Section numbers ma
 
 As built (PR events, build dispatch, plan approval): [`history/workflow-as-built.md`](history/workflow-as-built.md).
 
-**Dispatch (ADR-0079, ADR-0080):** the build dispatcher takes Ready tickets from the top while `mayDispatch` says start (pause, dial, global and PR caps, quota) and records why. Then a night launch skips its stories at its task, token, USD or stop-time limit (caps' reason wins), ending once idle (AI-121). A run's end at the global cap offers others the slot first (AI-91). A ticket whose `touches` overlap a build in flight (empty overlaps any) waits. Builds record touches and a reserved ADR number (`list_in_flight`, board). **Sync runs (ADR-0083):** when `main` moves, each open agent PR behind it gets a run: merge `main`, resolve conflicts, check, push; global cap, not the dial; conflicts or failing checks flag Needs-you.
+**Dispatch (ADR-0079, ADR-0080):** the build dispatcher takes Ready tickets from the top while `mayDispatch` says start (pause, dial, global and PR caps, quota) and records why. Then a night launch skips its child tickets at its task, token, USD or stop-time limit (caps' reason wins), ending once idle (AI-121). A run's end at the global cap offers others the slot first (AI-91). A ticket whose `touches` overlap a build in flight (empty overlaps any) waits. Builds record touches and a reserved ADR number (`list_in_flight`, board). **Sync runs (ADR-0083):** when `main` moves, each open agent PR behind it gets a run: merge `main`, resolve conflicts, check, push; global cap, not the dial; conflicts or failing checks flag Needs-you.
 
 **Needs-you is a flag, not a stage:** flagged items stay put and appear in the Needs-you inbox (UI + MCP).
 
@@ -44,9 +44,9 @@ As built (PR events, build dispatch, plan approval): [`history/workflow-as-built
 
 ### 4.4 Epics
 - Ticket types (Epic / Feature / Chore / Bug, ADR-0058) + **child tickets** (`parent_id`).
-- Epic refinement (built) produces stories with `blockedBy`: vertical slices, independently mergeable behind flags; no long-lived branches. Exception: an **overnight run** (ADR-0049) merges stories into `epic/<key>`, one PR for Andy next morning; AI-122 builds on it, AI-124 merges there (ADR-0107), AI-125 posts the morning report on the epic.
+- Epic refinement (built) produces child tickets with `blockedBy`: each an end-to-end change, independently mergeable behind flags; no long-lived branches. Exception: an **overnight run** (ADR-0049) merges child tickets into `epic/<key>`, one PR for Andy next morning; AI-122 builds on it, AI-124 merges there (ADR-0107), AI-125 posts the morning report on the epic.
 - **Just-in-time re-planning** (built, M4.6): dispatch re-runs plans older than a blocker's Done.
-- Epic status, cost and progress roll up; an epic's overrides cascade to its stories.
+- Epic status, cost and progress roll up; an epic's overrides cascade to its child tickets.
 
 ### 4.5 Review gate (v1.x: rules only)
 Detail: [`review-gate.md`](review-gate.md).

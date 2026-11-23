@@ -11,7 +11,7 @@ v1.x screens:
 - **Quota & spend** (per provider gauges with reset times; paid spend vs caps; built: header gauge, banner on warn/pause/unknown).
 - **Project settings** (AI-46, built): `/p/:projectId/settings`, header link; switches explained, saved by PATCH; setup checklist first (AI-95). `/projects` opens the current project's; `/projects/new` adds one.
 - **What's new** (ADR-0121, AI-341): `…/whats-new`, digest exceptions first.
-- **Tickets** — M1: board, ticket detail with history and linked runs/PRs/cost. M3 (ADR-0059): status on cards, story panel, command palette. M5: filter and group by project. M4: overrides editing; Roadmap (AI-202); work views (ADR-0108): board chips; Work (`/all/work`, `/p/:id/work`, MCP `list_work`, AI-198).
+- **Tickets** — M1: board, ticket detail with history and linked runs/PRs/cost. M3 (ADR-0059): status on cards, ticket panel, command palette. M5: filter and group by project. M4: overrides editing; Roadmap (AI-202); work views (ADR-0108): board chips; Work (`/all/work`, `/p/:id/work`, MCP `list_work`, AI-198).
 - **Run detail** — built (AI-101): `/p/:projectId/runs/:runId`, opened from Activity; another project's task: not found. Jules links M9.
 - **Config** (providers, harnesses, models, tiers, policies; audit log with revert (M4.12); pending approvals).
 - **Releases** (dev status, promote to prod, rollback).
@@ -43,7 +43,7 @@ v1.x screens:
 - Group by epic (AI-86, remembered): per lane, a header per epic (key, title, done of total), No epic last; rank stays per lane. Epic filter.
 - Work view chips (AI-187): All plus five views, counted; one at a time, `?view=`, with the epic filter.
 
-**Built in AI-29: Story panel (M3, ADR-0059):**
+**Built in AI-29: Ticket panel (M3, ADR-0059):**
 - The ticket route is the board's child (`<Outlet />`): a 640px panel, full page under 900px; Esc closes.
 - Status line (`lib/status-line.ts`), e.g. "Waiting for you: 2 questions".
 - One document (markdown with Write / Preview, checklist, scope lists), a rail of moves and facts, questions, one timeline. Epics: outcome, checklist "Done when" (AI-186).

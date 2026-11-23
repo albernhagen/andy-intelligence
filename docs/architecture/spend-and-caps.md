@@ -1,6 +1,6 @@
 # andy-intelligence — Spend and caps
 
-How paid model spend is bounded (ADR-0129, proposed; M10: Paid models + spend caps, slices in [`m10-slices.md`](m10-slices.md)). Providers, tiers and routes: [`routing-and-policy.md`](routing-and-policy.md). GCP budgets: [`observability-and-cost.md`](observability-and-cost.md) §10.1.
+How paid model spend is bounded (ADR-0129, proposed; M10: Paid models + spend caps; its tickets are on the roadmap). Providers, tiers and routes: [`routing-and-policy.md`](routing-and-policy.md). GCP budgets: [`observability-and-cost.md`](observability-and-cost.md) §10.1.
 
 **Terms.** A _paid_ route is one whose provider bills `pay_per_use` (OpenRouter, the `claude-api` provider); subscription routes (`claude-sub`, `google-sub`) are not paid. A _reservation_ is the worst-case cost held for a task before it starts. A _scope_ is global or one project; a _window_ is a UTC day or a UTC month.
 
