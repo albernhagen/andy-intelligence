@@ -59,6 +59,7 @@ import type { AppDeps } from "./app";
 import type { AuthEnv } from "./auth";
 import { noReviewFindings } from "./config-proposals";
 import { ConnectedCodeHost, GitHubConnection, gitHubCodeHost } from "./github/connection";
+import { BaselineProposer } from "./github/registration";
 import { DirectExecutor } from "./direct-executor";
 import { actionsTokenVerifier, type ActionsTokenVerifier } from "./github/token";
 import type { ToolServices } from "./mcp/tools";
@@ -403,14 +404,18 @@ export function createServices(raw: AppDeps): Services {
       }
     : null;
 
+  const projectHost = connection ? new ConnectedCodeHost(connection) : null;
+  // AI-113: a registered repo gets its baseline PR through the App (none without a code host).
+  const baseline = projectHost ? new BaselineProposer(projectHost, deps.tracker, now) : null;
   const projects = new ProjectService(
     deps.tracker,
-    connection ? new ConnectedCodeHost(connection) : null,
+    projectHost,
     dispatchNext,
     now,
     deps.configChanges ?? null,
     undefined,
     () => globalSpendCaps.caps(),
+    baseline ? (project) => baseline.onProjectRegistered(project) : null,
   );
   // AI-74: a clear wakes every project, as a settings change wakes one. AI-261: it clears at
   // the lowest claude-sub pause level any project's routing dispatches under.

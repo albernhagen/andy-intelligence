@@ -2,6 +2,7 @@ import type {
   CodeHost,
   CodeHostConnection,
   CodeHostConnectionStore,
+  BaselineProposal,
   FileProposal,
 } from "@andy/contracts";
 import { GitHubCodeHost } from "@andy/github";
@@ -129,6 +130,14 @@ export class ConnectedCodeHost implements CodeHost {
 
   async proposeFile(fullName: string, proposal: FileProposal) {
     return (await this.connection.codeHost())?.proposeFile(fullName, proposal) ?? null;
+  }
+
+  async proposeFiles(fullName: string, proposal: BaselineProposal) {
+    return (await this.connection.codeHost())?.proposeFiles(fullName, proposal) ?? null;
+  }
+
+  async readRepoSetting(fullName: string, subpath: string) {
+    return (await this.connection.codeHost())?.readRepoSetting(fullName, subpath) ?? null;
   }
 
   async branchSha(fullName: string, branch: string) {

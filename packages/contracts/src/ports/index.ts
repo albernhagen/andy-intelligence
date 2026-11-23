@@ -38,6 +38,8 @@ import {
   type CodeHostConnection,
   type ChangedFile,
   type FileProposal,
+  type BaselineProposal,
+  type RepoSettingRead,
   type CodeHostEvent,
   type HeadCheck,
   type Listing,
@@ -685,6 +687,21 @@ export interface CodeHost {
    * Throws when the branch already exists or the host refuses.
    */
   proposeFile(fullName: string, proposal: FileProposal): Promise<ProposedPullRequest | null>;
+  /**
+   * Commits the project baseline's files in one commit on a new `baseline/<x>` branch cut from
+   * the default branch, with the App's identity, and opens a pull request into the default
+   * branch (AI-113). Null when the App isn't installed. Throws when the repo is empty, the branch
+   * already exists or the host refuses; a branch this call created is deleted again.
+   */
+  proposeFiles(fullName: string, proposal: BaselineProposal): Promise<ProposedPullRequest | null>;
+  /**
+   * One read of a repo setting for the baseline report (AI-113): `subpath` is the code host's API
+   * path under the repo (e.g. `rulesets`, `labels/x`; "" is the repo itself), read with the
+   * App's identity. Answers the host's status, so a refused read (401/403: the App has no
+   * administration permission) is told apart from a missing one (404). Null when the App isn't
+   * installed. Read-only; throws for a subpath with `..`, a leading `/` or other unsafe text.
+   */
+  readRepoSetting(fullName: string, subpath: string): Promise<RepoSettingRead | null>;
   /** The branch's tip commit; null when the branch, the repo or the App's install is missing. */
   branchSha(fullName: string, branch: string): Promise<string | null>;
   /**
