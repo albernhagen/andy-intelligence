@@ -188,7 +188,7 @@ function ChartCard(props: {
   return (
     <section
       aria-label={props.title}
-      className="space-y-2 rounded-lg border border-border bg-raised p-3"
+      className="min-w-0 space-y-2 rounded-lg border border-border bg-raised p-3"
     >
       <h3 className="flex items-center gap-2 text-sm font-semibold">
         {props.title}
@@ -378,7 +378,10 @@ function CostCharts({ weeks, partial }: { weeks: DashboardWeek[]; partial: Set<D
   const total = weeks.reduce((n, w) => n + w.cost.estimatedCostUsd, 0);
 
   return (
-    <section aria-label="Cost" className="space-y-2 rounded-lg border border-border bg-raised p-3">
+    <section
+      aria-label="Cost"
+      className="min-w-0 space-y-2 rounded-lg border border-border bg-raised p-3"
+    >
       <header className="flex flex-wrap items-center gap-2">
         <h3 className="text-sm font-semibold">Cost, tokens and quota</h3>
         <Segmented
@@ -523,51 +526,54 @@ function ExpensiveRuns({ runs, partial }: { runs: DashboardRun[]; partial: Set<D
       partial={partial}
       empty={runs.length ? null : "No agent tasks with a known cost in these weeks."}
     >
-      <table className="w-full text-sm">
-        <thead className="text-xs text-muted-foreground">
-          <tr className="h-8 text-left">
-            <th className="font-normal">Agent task</th>
-            <th className="font-normal">Ticket</th>
-            <th className="text-right font-normal">Cost</th>
-            <th className="text-right font-normal">Ended</th>
-          </tr>
-        </thead>
-        <tbody>
-          {runs.map((r) => (
-            <tr key={r.id} className="h-8 border-t border-border">
-              <td>
-                <Link
-                  to="/p/$projectId/runs/$runId"
-                  params={{ projectId: r.projectId, runId: r.id }}
-                  className="underline-offset-2 hover:underline"
-                >
-                  Agent task · {r.step}
-                </Link>
-              </td>
-              <td className="tabular-nums">
-                {r.ticketKey ? (
+      {/* A phone scrolls the table in its own box, not the page (design.md "Phone"). */}
+      <div className="relative overflow-x-auto">
+        <table className="w-full text-sm">
+          <thead className="text-xs text-muted-foreground">
+            <tr className="h-8 text-left">
+              <th className="font-normal">Agent task</th>
+              <th className="font-normal">Ticket</th>
+              <th className="text-right font-normal">Cost</th>
+              <th className="text-right font-normal">Ended</th>
+            </tr>
+          </thead>
+          <tbody>
+            {runs.map((r) => (
+              <tr key={r.id} className="h-8 border-t border-border">
+                <td>
                   <Link
-                    to="/p/$projectId/t/$ticketRef"
-                    params={{ projectId: r.projectId, ticketRef: r.ticketKey }}
+                    to="/p/$projectId/runs/$runId"
+                    params={{ projectId: r.projectId, runId: r.id }}
                     className="underline-offset-2 hover:underline"
                   >
-                    {r.ticketKey}
+                    Agent task · {r.step}
                   </Link>
-                ) : (
-                  <span className="text-muted-foreground">No ticket</span>
-                )}
-              </td>
-              <td className="text-right tabular-nums">
-                {usd(r.costUsd)}
-                {r.costIsEstimate ? " (estimate)" : ""}
-              </td>
-              <td className="text-right text-xs text-muted-foreground tabular-nums">
-                {weekLabel(r.endedAt)}
-              </td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
+                </td>
+                <td className="tabular-nums">
+                  {r.ticketKey ? (
+                    <Link
+                      to="/p/$projectId/t/$ticketRef"
+                      params={{ projectId: r.projectId, ticketRef: r.ticketKey }}
+                      className="underline-offset-2 hover:underline"
+                    >
+                      {r.ticketKey}
+                    </Link>
+                  ) : (
+                    <span className="text-muted-foreground">No ticket</span>
+                  )}
+                </td>
+                <td className="text-right tabular-nums">
+                  {usd(r.costUsd)}
+                  {r.costIsEstimate ? " (estimate)" : ""}
+                </td>
+                <td className="text-right text-xs text-muted-foreground tabular-nums">
+                  {weekLabel(r.endedAt)}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
     </ChartCard>
   );
 }
@@ -575,50 +581,57 @@ function ExpensiveRuns({ runs, partial }: { runs: DashboardRun[]; partial: Set<D
 /** All projects: each project's window totals, linking to its own dashboard. */
 function ProjectBreakdown({ projects }: { projects: ProjectDashboard[] }) {
   return (
-    <section aria-label="By project" className="space-y-2 rounded-md border border-border p-3">
-      <h3 className="text-sm font-medium">By project</h3>
-      <table className="w-full text-sm">
-        <thead className="text-xs text-muted-foreground">
-          <tr className="h-8 text-left">
-            <th className="font-normal">Project</th>
-            <th className="text-right font-normal">Done</th>
-            <th className="text-right font-normal">Reworks</th>
-            <th className="text-right font-normal">Agent tasks</th>
-            <th className="text-right font-normal">Tokens</th>
-            <th className="text-right font-normal">Cost</th>
-          </tr>
-        </thead>
-        <tbody>
-          {projects.map((p) => {
-            const sum = (f: (w: DashboardWeek) => number) => p.weeks.reduce((n, w) => n + f(w), 0);
-            return (
-              <tr key={p.projectId} className="h-8 border-t border-border tabular-nums">
-                <td>
-                  <Link
-                    to="/p/$projectId/dashboards"
-                    params={{ projectId: p.projectId }}
-                    className="underline-offset-2 hover:underline"
-                  >
-                    {p.key}
-                  </Link>
-                  {p.partial.length > 0 && (
-                    <Badge variant="attention" className="ml-2">
-                      Partial
-                    </Badge>
-                  )}
-                </td>
-                <td className="text-right">{p.weeks.at(-1)?.ticketsByStage.done ?? 0}</td>
-                <td className="text-right">{sum((w) => w.reworks)}</td>
-                <td className="text-right">{sum((w) => w.cost.runs)}</td>
-                <td className="text-right">
-                  {compact.format(sum((w) => w.cost.tokensIn + w.cost.tokensOut))}
-                </td>
-                <td className="text-right">{usd(sum((w) => w.cost.estimatedCostUsd))}</td>
-              </tr>
-            );
-          })}
-        </tbody>
-      </table>
+    <section
+      aria-label="By project"
+      className="min-w-0 space-y-2 rounded-lg border border-border bg-raised p-3"
+    >
+      <h3 className="text-sm font-semibold">By project</h3>
+      {/* A phone scrolls the table in its own box, not the page (design.md "Phone"). */}
+      <div className="relative overflow-x-auto">
+        <table className="w-full text-sm">
+          <thead className="text-xs text-muted-foreground">
+            <tr className="h-8 text-left">
+              <th className="font-normal">Project</th>
+              <th className="text-right font-normal">Done</th>
+              <th className="text-right font-normal">Reworks</th>
+              <th className="text-right font-normal">Agent tasks</th>
+              <th className="text-right font-normal">Tokens</th>
+              <th className="text-right font-normal">Cost</th>
+            </tr>
+          </thead>
+          <tbody>
+            {projects.map((p) => {
+              const sum = (f: (w: DashboardWeek) => number) =>
+                p.weeks.reduce((n, w) => n + f(w), 0);
+              return (
+                <tr key={p.projectId} className="h-8 border-t border-border tabular-nums">
+                  <td>
+                    <Link
+                      to="/p/$projectId/dashboards"
+                      params={{ projectId: p.projectId }}
+                      className="underline-offset-2 hover:underline"
+                    >
+                      {p.key}
+                    </Link>
+                    {p.partial.length > 0 && (
+                      <Badge variant="attention" className="ml-2">
+                        Partial
+                      </Badge>
+                    )}
+                  </td>
+                  <td className="text-right">{p.weeks.at(-1)?.ticketsByStage.done ?? 0}</td>
+                  <td className="text-right">{sum((w) => w.reworks)}</td>
+                  <td className="text-right">{sum((w) => w.cost.runs)}</td>
+                  <td className="text-right">
+                    {compact.format(sum((w) => w.cost.tokensIn + w.cost.tokensOut))}
+                  </td>
+                  <td className="text-right">{usd(sum((w) => w.cost.estimatedCostUsd))}</td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
     </section>
   );
 }
