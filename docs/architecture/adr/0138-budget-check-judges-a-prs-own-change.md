@@ -1,6 +1,6 @@
 ---
 title: "Context budgets: a PR is judged on its own change; an over-budget main opens a trim issue"
-status: proposed (AI-344; Andy approved the plan 2026-11-21, decides at review)
+status: proposed (AI-344; Andy approved the plan 2026-11-21, decides at review); amended by 0147 (hard-limit files only)
 date: 2026-11-21
 amends: 0046 (what fails CI), 0106 (half the room, kept)
 ---
