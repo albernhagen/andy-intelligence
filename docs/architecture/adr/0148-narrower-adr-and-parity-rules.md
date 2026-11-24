@@ -30,7 +30,7 @@ Any other build choice goes in the PR description (and the topic file when the d
 
 **2. MCP parity is required only for actions Andy does from Claude:** tickets, questions, plans, milestones, runs. A new settings action may be web only. Existing MCP tools stay; none is removed.
 
-- `parity.ts` holds `WEB_ONLY_ALLOWED`, the explicit list of actions allowed without a tool (today: register a runner, OAuth consent, GitHub App setup). `webOnlyViolations` fails a web-only action that is off the list, and any web-only action whose route is under tickets, questions, the Needs-you inbox, plans, milestones, runs or the night launch, even when listed.
+- `parity.ts` holds `WEB_ONLY_ALLOWED`, the explicit list of actions allowed without a tool (today: register a runner, OAuth consent, GitHub App setup). `webOnlyViolations` fails a web-only action that is off the list, and any web-only action whose route is under tickets, epics, questions, the Needs-you inbox, plans, milestones, runs, agent tasks, ideate, the roadmap or the night launch, even when listed. The route match is best effort; the allow-list is the main control and review checks every name added to it.
 - An open gap marked `pending` gets no pass: a web-only action in those areas fails until its tool exists.
 - Inventory and rule text: `docs/architecture/ui-mcp-parity.md`.
 

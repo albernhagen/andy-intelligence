@@ -344,9 +344,13 @@ export const WEB_ONLY_ALLOWED: ReadonlySet<string> = new Set([
   "GitHub App setup",
 ]);
 
-/** Routes in the areas Andy works in from Claude; an action touching one always needs a tool. */
+/**
+ * Routes in the areas Andy works in from Claude; an action touching one always needs a tool.
+ * Matched by path segment, singular or plural, and any `plan-…` segment (`plan-project`). Best
+ * effort: the allow-list stays the main control, and review checks a name added to it.
+ */
 export const CLAUDE_AREA_ROUTE =
-  /\/(tickets|questions|needs-you|plan|project-plans|milestones|runs|night)(\/|$)/;
+  /\/(tickets?|questions?|needs-you|plans?|plan-[a-z-]+|project-plans|milestones?|runs?|agent-tasks?|epics?|ideate|night|roadmap)(\/|$)/;
 
 /** What breaks the ADR-0148 rule: web-only actions off the allow-list or in a Claude area. */
 export function webOnlyViolations(

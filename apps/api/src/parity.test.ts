@@ -117,6 +117,9 @@ describe("Web-only actions: settings only (ADR-0148)", () => {
     ["plan", "POST /api/projects/:projectId/plan/archive"],
     ["milestone", "POST /api/projects/:projectId/milestones/:milestoneId/close"],
     ["run", "POST /api/projects/:projectId/tickets/:ticketId/runs/:runId/retry"],
+    ["epic", "POST /api/projects/:projectId/epics/:epicId/close"],
+    ["agent task", "POST /api/projects/:projectId/agent-tasks"],
+    ["plan-project", "POST /api/projects/:projectId/plan-project"],
   ])(
     "GivenANewWebOnly%sActionWithNoMcpTool_WhenChecked_ThenItFailsEvenOnTheAllowList",
     (kind, route) => {
