@@ -4,6 +4,7 @@ import {
   FirestoreCodeEventLog,
   FirestoreConfigChangeStore,
   FirestoreReviewFindingLog,
+  FirestoreMergeQueueStore,
   FirestoreReleaseNoteStore,
   FirestoreDigestSummaryStore,
   GcpCodeHostConnectionStore,
@@ -107,6 +108,7 @@ async function main() {
     spendNotices: new FirestoreSpendNoticeLedger(db),
     configChanges: new FirestoreConfigChangeStore(db),
     reviewFindings: new FirestoreReviewFindingLog(db),
+    mergeQueues: new FirestoreMergeQueueStore(db),
     releaseNotes: new FirestoreReleaseNoteStore(db),
     digestSummaries: new FirestoreDigestSummaryStore(db),
     // Serve only the public URL's host; the run.app URLs answer /health alone (ADR-0044).
