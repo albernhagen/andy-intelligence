@@ -14,7 +14,7 @@ What is built on `main` now, moved from `README.md` so its "How it works today" 
 - A header gauge and banner show Claude quota from task reports; on a phone the header shows the fullest window and a one-tap **Pause**/**Resume** (AI-176).
 - Ticket panel: next move first; worker, executor, routing under How it runs (AI-336).
 - Agent task cost: ticket panel, Activity (links each task's page), MCP `status`.
-- Epics: child tickets, cost; map: MCP `milestone_map`; Roadmap (header, MCP `roadmap`): milestones and their epics; epics and the board's epic groups show their milestone's status, which Andy sets there or on the roadmap (AI-311).
+- Epics: child tickets, cost; map: MCP `milestone_map`; Roadmap (header, MCP `roadmap`): milestones and their epics; epics and the board's epic groups show their milestone's status, which Andy sets there or on the roadmap (AI-311). A not-reviewed milestone shows its case (who it serves, expected return, cheapest test) and effort (its tickets by size) beside that control; plan-project writes the cases (ADR-0149).
 - Dispatch starts a ticket only when its milestone is approved or it has none (AI-306).
 - A daily digest (MCP `digest`) leads with a model-written summary of yesterday (Mountain time; one agent task a day, AI-323), then lists the last 24 hours: exceptions, merges and cost, work in progress, totals. What's new shows that summary, then its exceptions, with a 24 hours window (AI-341).
 - What's new (header, MCP `whats_new`): milestones, the merge mode, merged PRs' release notes and who merged each (the mode or a person, AI-218).

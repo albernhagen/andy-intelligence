@@ -164,6 +164,13 @@ function WaitingPlan({ projectId, plan }: { projectId: string; plan: Plan }) {
             <span className="block text-xs text-muted-foreground">
               Done when: {m.doneWhen.join("; ")}
             </span>
+            {m.case && (
+              // ADR-0149: approving the plan approves its milestones, so the case shows here.
+              <span className="block text-xs text-muted-foreground">
+                Serves: {m.case.serves}. Expected return: {m.case.expectedReturn} Cheapest test:{" "}
+                {m.case.cheapestTest}
+              </span>
+            )}
           </li>
         ))}
       </ol>
