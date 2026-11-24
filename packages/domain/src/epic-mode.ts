@@ -88,12 +88,22 @@ export class EpicMode {
   /**
    * A build's base branch in epic mode: `epic/<KEY>` of the ticket's epic, made from the default
    * branch's tip when it doesn't exist yet. An existing branch is reused: in epic mode it collects
-   * the epic's child tickets until Andy merges its PR. Null: not epic mode, no epic, no host.
+   * the epic's child tickets until Andy merges its PR. Null: not epic mode, no epic, no host, or
+   * an epic over `MAX_EPIC_CHILDREN` (its child tickets then build on the default branch and their
+   * PRs wait for Andy with `mode_epic`, instead of opening PRs into a branch nothing merges into).
    */
   async baseBranch(projectId: string, ticket: Ticket): Promise<BaseBranch | null> {
     if (!this.host) return null;
     const epic = await this.epicFor(projectId, ticket);
     if (!epic) return null;
+    if ((await this.children(projectId, epic.id)).length > MAX_EPIC_CHILDREN) {
+      log("WARNING", "epic over the child ticket bound; building on the default branch", {
+        projectId,
+        ticket: ticket.key,
+        epic: epic.key,
+      });
+      return null;
+    }
     const project = await this.tracker.getProject(projectId);
     const fullName = project?.repos[0];
     const repo = fullName ? await this.host.getRepo(fullName) : null;
@@ -141,7 +151,9 @@ export class EpicMode {
 
   /**
    * After a child ticket's merge into its epic branch: opens the epic PR for Andy when the epic's
-   * last open child ticket is Done. Safe to call again: the host refuses a second open PR for the
+   * last open child ticket is Done. Two last merges racing can't both miss it: each caller moves
+   * its own ticket to Done before it reads the child tickets, so whichever reads last sees both
+   * Done (a second open is refused by the host). The close webhook calls this again. Safe to call again: the host refuses a second open PR for the
    * same head and base. Never throws; a failure is a comment on the epic.
    */
   async openWhenDone(projectId: string, child: Ticket): Promise<EpicPrResult> {

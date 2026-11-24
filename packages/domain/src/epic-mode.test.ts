@@ -271,6 +271,22 @@ describe("epic merge mode (AI-216)", () => {
       expect(host.merges.map((m) => m.number)).toEqual([prA.number, prB.number]);
     });
 
+    it("GivenTheLastTwoChildTicketsMergeAtOnce_WhenBothGatesRunInterleaved_ThenExactlyOneEpicPrOpens", async () => {
+      const a = await child("A");
+      const b = await child("B");
+      const prA = (await agentPr(a)).pr;
+      const prB = (await agentPr(b)).pr;
+      // Both gates read the project before either merges, then run side by side.
+      const p = await project();
+
+      await Promise.all([gate().apply(opened(prA), p), gate().apply(opened(prB), p)]);
+
+      expect(host.merges.map((m) => m.number).sort()).toEqual([prA.number, prB.number]);
+      expect(await stageOf(a)).toBe("done");
+      expect(await stageOf(b)).toBe("done");
+      expect(host.opened).toHaveLength(1);
+    });
+
     it("GivenTheEpicPrIsOpen_WhenAskedAgain_ThenItIsNotOpenedTwice", async () => {
       const a = await child("A");
       await gate().apply(opened((await agentPr(a)).pr), await project());
@@ -367,6 +383,20 @@ describe("epic merge mode (AI-216)", () => {
       const b = await child("B");
       expect(await epicMode.baseBranch(projectId, b)).toBe(`epic/${epic.key}`);
       expect(host.created).toHaveLength(1);
+    });
+
+    it("GivenAnEpicOverTheChildTicketBound_WhenAChildTicketBuilds_ThenItBuildsOnTheDefaultBranch", async () => {
+      const a = await child("A");
+      for (let i = 0; i < MAX_EPIC_CHILDREN; i++) {
+        await tracker.createTicket(
+          projectId,
+          { type: "feature", title: `c${i}`, parentId: epic.id },
+          "andy",
+        );
+      }
+
+      expect(await epicMode.baseBranch(projectId, a)).toBeNull();
+      expect(host.created).toEqual([]);
     });
 
     it("GivenAnotherMode_WhenAChildTicketBuilds_ThenItBuildsOnTheDefaultBranch", async () => {
