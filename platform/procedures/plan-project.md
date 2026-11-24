@@ -22,6 +22,11 @@ Procedure for project planning (AI-65: Project planning baked into the flow; ADR
 6. **Goal**: one sentence, who can do what when it is done.
 7. **Done when**: two to five checks Andy can verify in minutes by looking: a URL that loads, a command that passes, a flow he can try, a number on a dashboard. Not "code is clean" or "well tested": the quality bar applies to every milestone already.
 8. **Candidate tickets** (`slices`): rough, one line each, for orientation only; refinement cuts the real tickets later. At most ten.
+9. **Case** (ADR-0149): why it is worth building, so Andy can approve or park it. Three lines, at most 300 characters each, from the brief only (you have no web access: no market figures you can't trace to it):
+   - `serves`: who gains, named as the brief names them.
+   - `expectedReturn`: what they gain, and the sign Andy will see that it paid off.
+   - `cheapestTest`: the cheapest way to test it is worth building first: a mock-up, a manual run, one ticket, a question to a user.
+     Don't estimate effort: the roadmap counts the milestone's tickets once they exist.
 
 ## Steps
 
@@ -35,6 +40,6 @@ Procedure for project planning (AI-65: Project planning baked into the flow; ADR
 End with the structured output the run asks for (the schema `plan-project.schema.json` sits next to this file):
 
 - `summary`: markdown, at most 300 words: the shape of the plan in two or three sentences, which goals each milestone serves, **Open** (gaps or contradictions in the brief and the default you used), and anything you left out of the brief and why.
-- `milestones`: ordered, first to finish first; each `title`, `goal`, `doneWhen`, `slices`.
+- `milestones`: ordered, first to finish first; each `title`, `goal`, `doneWhen`, `slices`, `case`.
 
-The proposal waits for Andy; nothing is created from it until he approves. Approved, each milestone becomes an epic ticket, in order (the approval flow is M5.13: Approve a project plan). If the prompt includes his reasons for rejecting an earlier plan, your plan must answer them; say how in `summary`. A result that doesn't match the schema fails the run.
+The proposal waits for Andy; nothing is created from it until he approves. Approved, each milestone becomes an epic ticket, in order (the approval flow is M5.13: Approve a project plan), and a not-reviewed milestone holding its case, which Andy approves or parks on the roadmap. If the prompt includes his reasons for rejecting an earlier plan, your plan must answer them; say how in `summary`. A result that doesn't match the schema fails the run.

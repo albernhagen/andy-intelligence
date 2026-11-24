@@ -8,6 +8,7 @@ import {
   notFound,
   type ConfigChangeLog,
   type EventActor,
+  type MilestoneCase,
   type MilestoneStatus,
   type MilestoneStore,
   type Ticket,
@@ -28,8 +29,8 @@ import { requireCan } from "./permissions";
 
 export const MILESTONE_ENTITY = "milestone";
 
-/** The milestone fields a change can set. */
-const FIELDS = ["name", "outcome", "order", "status"] as const;
+/** The milestone fields a change can set. `case` (ADR-0149) is an object; `null` clears it. */
+const FIELDS = ["name", "outcome", "order", "status", "case"] as const;
 type Field = (typeof FIELDS)[number];
 
 export interface NewMilestone {
@@ -37,6 +38,8 @@ export interface NewMilestone {
   outcome: string;
   /** Position on the roadmap; default: after the last one. */
   order?: number;
+  /** Why it is worth building (ADR-0149); optional. */
+  case?: MilestoneCase;
 }
 
 export type MilestonePatch = Partial<{
@@ -44,6 +47,8 @@ export type MilestonePatch = Partial<{
   outcome: string;
   order: number;
   status: MilestoneStatus;
+  /** A new case, or `null` to remove it. */
+  case: MilestoneCase | null;
 }>;
 
 type Diff = Record<string, { from: unknown; to: unknown }>;
@@ -91,6 +96,7 @@ export class MilestoneService {
           outcome: input.outcome,
           order,
           status: "not_reviewed",
+          ...(input.case ? { case: input.case } : {}),
           createdAt: at,
           updatedAt: at,
         }),
@@ -104,7 +110,13 @@ export class MilestoneService {
     const diff: Diff = {
       created: {
         from: null,
-        to: { name: created.name, outcome: created.outcome, order, status: created.status },
+        to: {
+          name: created.name,
+          outcome: created.outcome,
+          order,
+          status: created.status,
+          ...(created.case ? { case: created.case } : {}),
+        },
       },
     };
     await this.record(projectId, created.id, diff, actor, reason);
@@ -132,14 +144,18 @@ export class MilestoneService {
     const diff: Diff = {};
     for (const field of FIELDS) {
       const to = patch[field];
-      if (to !== undefined && to !== current[field]) diff[field] = { from: current[field], to };
+      const from = valueOf(current, field);
+      if (to !== undefined && !same(to, from)) diff[field] = { from, to };
     }
     if (Object.keys(diff).length === 0) return current;
-    const next = Milestone.parse({
+    const merged: Record<string, unknown> = {
       ...current,
       ...Object.fromEntries(Object.entries(diff).map(([k, v]) => [k, v.to])),
       updatedAt: laterThan(current.updatedAt, this.now()),
-    });
+    };
+    // A removed case is left out, never stored as null (the field is optional, ADR-0035).
+    if (merged.case === null) delete merged.case;
+    const next = Milestone.parse(merged);
     // Only if unchanged since the read: a concurrent write is a 409, never silently overwritten.
     const stored = await this.store.replace(next, current.updatedAt);
     if (!stored) throw notFound("milestone", milestoneId);
@@ -246,7 +262,7 @@ export class MilestoneService {
         "its diff holds no milestone field this version can restore",
       ]);
     }
-    if (fields.some((f) => current[f] !== diff[f]!.to)) throw changedSince(change);
+    if (fields.some((f) => !same(valueOf(current, f), diff[f]!.to))) throw changedSince(change);
     const patch = Object.fromEntries(fields.map((f) => [f, diff[f]!.from])) as MilestonePatch;
     // Written only against the version checked above: a change in between is a conflict.
     const milestone = await this.update(
@@ -328,6 +344,27 @@ export class MilestoneService {
     if (!found) throw notFound("milestone", milestoneId);
     return found;
   }
+}
+
+/** A field's value as the change log records it: an absent case is `null`. */
+function valueOf(m: Milestone, field: Field): unknown {
+  return field === "case" ? (m.case ?? null) : m[field];
+}
+
+/**
+ * Equal values: scalars by `===`; a case by its three lines (the only object field), so the
+ * same case sent again changes and logs nothing.
+ */
+function same(a: unknown, b: unknown): boolean {
+  if (a === b) return true;
+  if (!a || !b || typeof a !== "object" || typeof b !== "object") return false;
+  const x = a as MilestoneCase;
+  const y = b as MilestoneCase;
+  return (
+    x.serves === y.serves &&
+    x.expectedReturn === y.expectedReturn &&
+    x.cheapestTest === y.cheapestTest
+  );
 }
 
 /**

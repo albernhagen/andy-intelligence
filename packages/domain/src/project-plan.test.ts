@@ -1,5 +1,11 @@
-import { InMemoryWorkTracker, type ProjectPlanProposal } from "@andy/contracts";
+import {
+  InMemoryConfigChangeStore,
+  InMemoryMilestoneStore,
+  InMemoryWorkTracker,
+  type ProjectPlanProposal,
+} from "@andy/contracts";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { MilestoneService } from "./milestone-service";
 import { ProjectPlanService, epicBody } from "./project-plan";
 import { TicketService } from "./tickets";
 
@@ -233,5 +239,88 @@ describe("ProjectPlanService", () => {
     );
     await plans.propose(project.id, proposal, OWNER);
     expect(told).toEqual(["trl:3"]);
+  });
+});
+
+describe("ProjectPlanService with milestones (ADR-0149, AI-365)", () => {
+  const CASE = {
+    serves: "Runners",
+    expectedReturn: "Log a run in 10 s.",
+    cheapestTest: "Paper form.",
+  };
+  const withCases: ProjectPlanProposal = {
+    ...proposal,
+    milestones: proposal.milestones.map((m, i) => (i === 2 ? m : { ...m, case: CASE })),
+  };
+
+  beforeEach(() => {
+    vi.spyOn(console, "log").mockImplementation(() => {});
+  });
+
+  async function setupWithMilestones(create?: TicketService["create"]) {
+    const tracker = new InMemoryWorkTracker();
+    const project = await tracker.createProject({ name: "Trail log", key: "TRL" });
+    const tickets = new TicketService(tracker, null, null, () => T0);
+    const store = new InMemoryMilestoneStore();
+    const changes = new InMemoryConfigChangeStore();
+    const milestones = new MilestoneService(tracker, store, changes, () => T0);
+    const plans = new ProjectPlanService(
+      tracker,
+      create ? { create } : tickets,
+      () => T0,
+      undefined,
+      milestones,
+    );
+    return { tracker, project, plans, milestones, changes, tickets };
+  }
+
+  it("GivenAPlanWithCases_WhenApproved_ThenEachMilestoneIsCreatedNotReviewedWithItsCaseAndEpic", async () => {
+    const { tracker, project, plans, milestones, changes } = await setupWithMilestones();
+    await plans.propose(project.id, withCases, OWNER);
+    const { epics } = await plans.decide(project.id, { decision: "approved" }, OWNER);
+
+    const listed = await milestones.list(project.id);
+    expect(listed.map((m) => [m.name, m.outcome, m.status, m.case ?? null])).toEqual([
+      ["M1: Walking skeleton", "Andy can open the app.", "not_reviewed", CASE],
+      ["M2: Log a run", "Andy can log a run.", "not_reviewed", CASE],
+      ["M3: Weekly summary", "Andy sees his week.", "not_reviewed", null],
+    ]);
+    const stored = await tracker.listTickets(project.id);
+    expect(stored.map((t) => t.milestoneId)).toEqual(listed.map((m) => m.id));
+    expect(epics).toHaveLength(3);
+    const logged = (await changes.listForProject(project.id)).map((c) => Object.keys(c.diff)[0]);
+    expect(logged.filter((k) => k === "created")).toHaveLength(3);
+    expect(logged.filter((k) => k === "milestoneId")).toHaveLength(3);
+  });
+
+  it("GivenAMilestoneWriteThatFails_WhenApprovedAgain_ThenEachMilestoneExistsOnce", async () => {
+    let failOnce = true;
+    const { tracker, project, plans, milestones } = await setupWithMilestones();
+    const realCreate = milestones.create.bind(milestones);
+    let creates = 0;
+    milestones.create = async (...args) => {
+      const made = await realCreate(...args);
+      creates += 1;
+      if (creates === 2 && failOnce) {
+        failOnce = false;
+        throw new Error("lost the reply");
+      }
+      return made;
+    };
+    await plans.propose(project.id, withCases, OWNER);
+    await expect(plans.decide(project.id, { decision: "approved" }, OWNER)).rejects.toThrow(
+      "lost the reply",
+    );
+    await plans.decide(project.id, { decision: "approved" }, OWNER);
+
+    const listed = await milestones.list(project.id);
+    expect(listed.map((m) => m.name)).toEqual([
+      "M1: Walking skeleton",
+      "M2: Log a run",
+      "M3: Weekly summary",
+    ]);
+    expect((await tracker.listTickets(project.id)).map((t) => t.milestoneId)).toEqual(
+      listed.map((m) => m.id),
+    );
   });
 });

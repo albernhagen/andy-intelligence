@@ -3,6 +3,7 @@ import {
   MILESTONE_NAME_MAX,
   MILESTONE_OUTCOME_MAX,
   Milestone,
+  MilestoneCase,
   MilestoneId,
   MilestoneStatus,
   Ticket,
@@ -15,7 +16,8 @@ import type { RouteModule } from "./services";
  * Milestones (ADR-0131, AI-304: M4.34), under /api (Firebase sign-in + allow-list; the project in
  * the path is checked by `project-access.ts`). Reads for anyone who can read the project; every
  * write is the owner's (`change_milestones`) and is a config change in the project's change log,
- * revertable there. The same `MilestoneService` serves the MCP milestone tools.
+ * revertable there. The same `MilestoneService` serves the MCP milestone tools. A milestone's case
+ * (ADR-0149) is set on create or patch like any field; `case: null` removes it.
  */
 
 const ErrorBody = z.object({ error: z.string(), details: z.array(z.string()).optional() });
@@ -34,6 +36,7 @@ export const CreateMilestone = z
     name: z.string().trim().min(1).max(MILESTONE_NAME_MAX),
     outcome: z.string().trim().min(1).max(MILESTONE_OUTCOME_MAX),
     order: z.number().int().min(0).max(10_000).optional(),
+    case: MilestoneCase.optional(),
     reason: Reason,
   })
   .openapi("CreateMilestone");
@@ -44,6 +47,8 @@ export const PatchMilestone = z
     outcome: z.string().trim().min(1).max(MILESTONE_OUTCOME_MAX).optional(),
     order: z.number().int().min(0).max(10_000).optional(),
     status: MilestoneStatus.optional(),
+    /** ADR-0149: a new case, or null to remove it. */
+    case: MilestoneCase.nullable().optional(),
     reason: Reason,
   })
   .openapi("PatchMilestone");

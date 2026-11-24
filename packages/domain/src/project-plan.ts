@@ -12,6 +12,7 @@ import {
 } from "@andy/contracts";
 import { plainAnswer } from "./brief";
 import { DomainError } from "./errors";
+import type { MilestoneService } from "./milestone-service";
 import { requireCan, requireOwnAgentTask } from "./permissions";
 import type { TicketService } from "./tickets";
 
@@ -22,6 +23,11 @@ import type { TicketService } from "./tickets";
  * milestone, in order, titled `M<N>: <title>` (ADR-0060); a rejection records his reason and
  * creates nothing. The result comes from a plan-project agent task (AI-134, `proposeFromRun`) or
  * the owner submits it through the API or MCP. Re-planning an approved project is not built.
+ *
+ * Milestones (ADR-0149, AI-365): with a milestone service, approval also creates one milestone
+ * per planned milestone (named like its epic, its goal as the outcome, its case, not reviewed)
+ * and attaches the epic to it, so each case shows on the roadmap where Andy approves or parks it.
+ * Both writes are logged in the project's change log like any milestone change.
  */
 
 export interface WaitingPlan {
@@ -43,6 +49,11 @@ export class ProjectPlanService {
       projectId: string,
       plan: ProjectPlan,
     ) => Promise<void> = async () => {},
+    /** ADR-0149: creates a milestone per approved planned milestone; absent: epics only. */
+    private readonly milestones: Pick<
+      MilestoneService,
+      "list" | "create" | "setEpicMilestone"
+    > | null = null,
   ) {}
 
   async get(projectId: string): Promise<ProjectPlan | null> {
@@ -162,6 +173,11 @@ export class ProjectPlanService {
             (t) => t.type === "epic" && !t.archived,
           )
         : [];
+    // Likewise a milestone an earlier attempt created is found by its name and outcome.
+    const existingMilestones =
+      this.milestones && current.epicIds.length < plan.proposal.milestones.length
+        ? await this.milestones.list(projectId)
+        : [];
     for (const [i, milestone] of plan.proposal.milestones.entries()) {
       if (i < current.epicIds.length) continue;
       const title = `M${i + 1}: ${plainAnswer(milestone.title)}`;
@@ -183,6 +199,25 @@ export class ProjectPlanService {
           },
           actor,
         ));
+      // Before the epic is recorded, so a failure here is retried by approving again.
+      if (this.milestones) {
+        const outcome = oneLine(milestone.goal);
+        const named =
+          existingMilestones.find((m) => m.name === title && m.outcome === outcome) ??
+          (await this.milestones.create(
+            projectId,
+            { name: title, outcome, ...(milestone.case ? { case: milestone.case } : {}) },
+            actor,
+            "approved project plan",
+          ));
+        await this.milestones.setEpicMilestone(
+          projectId,
+          epic.id,
+          named.id,
+          actor,
+          "approved project plan",
+        );
+      }
       epics.push(epic);
       current = { ...current, epicIds: [...current.epicIds, epic.id] };
       await this.tracker.updateProject(projectId, { projectPlan: current });

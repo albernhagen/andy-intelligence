@@ -148,3 +148,64 @@ describe("roadmap", () => {
     expect(link.getAttribute("href")).toBe("/p/ai/roadmap");
   });
 });
+
+describe("roadmap milestone case (ADR-0149, AI-365)", () => {
+  const CASE = {
+    serves: "Andy, deciding what to build",
+    expectedReturn: "He decides in a minute.",
+    cheapestTest: "Ask him with one case.",
+  };
+
+  it("GivenANotReviewedMilestoneWithNoCase_WhenOpened_ThenItSaysSoAndAndyCanStillApprove", async () => {
+    const { harness } = await seeded("/p/ai/roadmap");
+
+    await harness.user.click(await screen.findByRole("button", { name: /^M2: Self-hosting/ }));
+
+    const kase = await screen.findByRole("region", { name: "Case for M2: Self-hosting" });
+    expect(within(kase).getByText("No case written yet. You can still approve it.")).toBeTruthy();
+    expect(within(kase).getByText("2 tickets: 2 unsized")).toBeTruthy();
+    await harness.user.selectOptions(
+      screen.getByRole("combobox", { name: "Status of M2: Self-hosting" }),
+      "Approved",
+    );
+    await waitFor(async () =>
+      expect((await harness.milestones.get("ai", "m2"))?.status).toBe("approved"),
+    );
+  });
+
+  it("GivenANotReviewedMilestone_WhenTheOwnerWritesItsCase_ThenItIsShownSavedAndLogged", async () => {
+    const { harness } = await seeded("/p/ai/roadmap");
+    await harness.user.click(await screen.findByRole("button", { name: /^M2: Self-hosting/ }));
+    const kase = await screen.findByRole("region", { name: "Case for M2: Self-hosting" });
+
+    await harness.user.click(within(kase).getByRole("button", { name: "Write case" }));
+    await harness.user.type(within(kase).getByRole("textbox", { name: "Serves" }), CASE.serves);
+    await harness.user.type(
+      within(kase).getByRole("textbox", { name: "Expected return" }),
+      CASE.expectedReturn,
+    );
+    await harness.user.type(
+      within(kase).getByRole("textbox", { name: "Cheapest test" }),
+      CASE.cheapestTest,
+    );
+    await harness.user.click(within(kase).getByRole("button", { name: "Save case" }));
+
+    await waitFor(async () =>
+      expect((await harness.milestones.get("ai", "m2"))?.case).toEqual(CASE),
+    );
+    expect(await within(kase).findByText(CASE.expectedReturn)).toBeTruthy();
+    const log = await harness.configChanges.listForProject("ai");
+    expect(log.find((c) => c.entity === "milestone" && "case" in c.diff)?.diff).toEqual({
+      case: { from: null, to: CASE },
+    });
+  });
+
+  it("GivenAnApprovedMilestoneWithoutACase_WhenOpened_ThenNoCaseBlockShows", async () => {
+    const { harness } = await seeded("/p/ai/roadmap");
+
+    await harness.user.click(await screen.findByRole("button", { name: /^M1: First flow/ }));
+
+    await screen.findByRole("combobox", { name: "Status of M1: First flow" });
+    expect(screen.queryByRole("region", { name: "Case for M1: First flow" })).toBeNull();
+  });
+});
