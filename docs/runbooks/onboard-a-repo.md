@@ -96,7 +96,7 @@ gh api repos/albernhagen/andy-intelligence/rulesets/26001673 --jq '{bypass_actor
 The last line shows `bypass_actors` with only `{"actor_id":5,"actor_type":"RepositoryRole","bypass_mode":"pull_request"}` (no `Integration`), `"codeowners": true`, `"strict": false` (ADR-0144). Then on the next open PR that touches a kept path, once its checks are green:
 
 - The PR page shows "Review required" / "Waiting on code owner review from albernhagen", and the merge button offers you only "bypass rules".
-- `gh pr view <n> --json reviewDecision,mergeStateStatus` shows `"reviewDecision":"REVIEW_REQUIRED"`. The App gets the same requirement and no bypass, so GitHub refuses its merge (MCP `merge_pr` already refuses kept paths before asking GitHub).
+- `gh pr view <n> --json reviewDecision,mergeStateStatus` shows `"reviewDecision":"REVIEW_REQUIRED"`. The App gets the same requirement and no bypass, so GitHub refuses its merge. If instead the PR shows no review requirement, GitHub doesn't enforce code-owner review at 0 approvals: open a ticket to change the ruleset and correct R23. Until then MCP `merge_pr` and the gate still refuse kept paths themselves.
 - A PR touching no kept path still shows no review requirement and merges by `merge_pr` as before.
 
 ## 2. Registering a repo on a project (AI-113)

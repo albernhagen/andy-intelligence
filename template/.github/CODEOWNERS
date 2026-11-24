@@ -1,6 +1,7 @@
 # Kept kinds (ADR-0124 in andy-intelligence): the paths only Andy merges, in every merge mode.
 # The baseline's `protect-main` ruleset requires a code owner's approval on them, so the GitHub
-# App cannot merge them; Andy merges them with his admin bypass. Every other PR needs no approval.
+# App can't merge them (checked by onboard-a-repo.md §1b in andy-intelligence); Andy merges
+# them with his admin bypass. Every other PR needs no approval.
 # The control plane's list (KEPT_PATHS, packages/domain/src/merge-paths.ts) is the source; paths
 # that don't exist in this repo match nothing. Build agents can't edit a path listed here, and
 # the gate never auto-merges one. No `*` line: it would require approval on every PR.
