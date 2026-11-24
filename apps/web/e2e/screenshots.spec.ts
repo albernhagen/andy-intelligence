@@ -111,7 +111,7 @@ test("story panel with a question", async ({ page }) => {
 
 test("board grouped by epic", async ({ page }) => {
   await open(page, "/p/ops", "Monthly restore drill");
-  await page.getByRole("checkbox", { name: "Group by epic" }).check();
+  await page.getByRole("switch", { name: "Group by epic" }).click();
   await expect(page.getByText("1 of 3 done").first()).toBeVisible();
   await expect(page.getByText("M2: Backups · Parked").first()).toBeVisible();
   await expect(page).toHaveScreenshot("board-grouped.png", { fullPage: true });

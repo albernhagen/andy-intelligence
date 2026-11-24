@@ -54,15 +54,16 @@ test("GivenThePhoneBoard_WhenAViewIsPicked_ThenTheUrlKeepsItAndOptionsHoldTheRes
 }) => {
   await openBoard(page);
   await expect(page.getByRole("group", { name: "Work view" })).toHaveCount(0);
-  await page.getByLabel("View").selectOption("agents");
+  await page.getByRole("combobox", { name: "View" }).click();
+  await page.getByRole("option", { name: /^Agents/ }).click();
   await expect(page).toHaveURL(/view=agents/);
-  await expect(page.getByRole("checkbox", { name: "Group by epic" })).toBeHidden();
+  await expect(page.getByRole("switch", { name: "Group by epic" })).toBeHidden();
   await page.getByRole("button", { name: "Options" }).click();
-  await expect(page.getByRole("checkbox", { name: "Group by epic" })).toBeVisible();
+  await expect(page.getByRole("switch", { name: "Group by epic" })).toBeVisible();
   await expect(page.getByRole("button", { name: "Ideate" })).toBeVisible();
   // A filter on still shows once Options closes: its count on the button.
-  await page.getByRole("checkbox", { name: "Group by epic" }).check();
+  await page.getByRole("switch", { name: "Group by epic" }).click();
   await page.getByRole("button", { name: "Options" }).click();
-  await expect(page.getByRole("checkbox", { name: "Group by epic" })).toBeHidden();
+  await expect(page.getByRole("switch", { name: "Group by epic" })).toBeHidden();
   await expect(page.getByRole("button", { name: "Options, 1 on" })).toBeVisible();
 });
