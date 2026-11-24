@@ -38,8 +38,7 @@ Generated from tickets, never edited here (AI-148). Every ticket sits under a mi
 - For AI-77: Email notifications: a Resend account, a verified domain, one secret, then `terraform apply` (runbook `email-notifications.md`).
 - M2: Self-hosting: the "Done when" trial (auto-build on), Andy's to start.
 - M3: New UI and MCP: local executor part 7 (runbook, live proof) needs Andy's Mac (ADR-0089).
-- AI-111: M5.4 needs a second repo.
-- AI-307: M4.37: Create project AI's milestones; the OpenRouter and Claude API keys (AI-266, AI-267, AI-269).
-- What's new: the backfill (runbook `whats-new-backfill.md`) and `release-note` as a required check; `terraform apply` of `infra/control-plane` for PR #217.
-- After AI-352: Baseline ruleset: sandbox-self-test, agent-evals and agent-evals-plumbing are required checks merges: apply the ruleset (runbook `onboard-a-repo.md` §1a).
+- AI-111: M5.4: First managed project live needs a second repo (runbook `managed-project.md`).
+- The OpenRouter and Claude API keys (AI-266, AI-267, AI-269).
+- What's new: `release-note` as a required check; `terraform apply` of `infra/control-plane` for PR #217.
 - M4 questions, each in its ticket body: AI-128: M4.15: Pluggable design skills (build now or move to Later), AI-129: M4.23: First overnight run trial (which epic and budget).
