@@ -16,6 +16,7 @@ import { InboxPage } from "@/pages/InboxPage";
 import { NewProjectPage, ProjectsPage } from "@/pages/ProjectsPage";
 import { ModelsPage } from "@/pages/ModelsPage";
 import { ProjectSettingsPage } from "@/pages/ProjectSettingsPage";
+import { SetupPage } from "@/pages/SetupPage";
 import { readySearch } from "@/lib/ready";
 import type { ReadyFilters } from "@andy/contracts";
 import { RunnersPage } from "@/pages/RunnersPage";
@@ -128,6 +129,12 @@ const routeTree = rootRoute.addChildren([
     getParentRoute: () => rootRoute,
     path: "/p/$projectId/settings",
     component: ProjectSettingsPage,
+  }),
+  // AI-373: a new project's setup path, from create to first build.
+  createRoute({
+    getParentRoute: () => rootRoute,
+    path: "/p/$projectId/setup",
+    component: SetupPage,
   }),
   // AI-341: the Digest screen folded into What's new (24 hours, exceptions first); MCP digest stays.
   createRoute({

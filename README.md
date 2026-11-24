@@ -92,7 +92,8 @@ Design rules: [`apps/web/design.md`](apps/web/design.md). One shell on every scr
 | `/all/board`                                  | Asks for a project                                                                                                                      |
 | `/p/:projectId/dashboards`, `/all/dashboards` | Dashboards: weekly delivery and cost charts                                                                                             |
 | `/p/:projectId/settings`                      | Project settings (Settings menu): section links, every option with what it does; MCP `get_project_settings` reads them                  |
-| `/projects`, `/projects/new`                  | Open the current project's settings; add a project (picker → Add project)                                                               |
+| `/projects`, `/projects/new`                  | Open the current project's settings; add a project (picker → Add project), which opens its setup path                                   |
+| `/p/:projectId/setup`                         | A new project's setup: brief, plan, approve milestones, baseline and first build (AI-373)                                               |
 | `/settings/github`                            | Connect the GitHub App, install link, installed repos                                                                                   |
 | `/p/:projectId`                               | Board: lanes with status on cards, quick add, drag to reorder or move                                                                   |
 | `/p/:projectId/t/:ticketRef`                  | Ticket detail (ref = key, e.g. `AI-2`): edit, Definition of Ready, moves, agent tasks, questions, history                               |
