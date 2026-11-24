@@ -39,7 +39,7 @@ describe("routingChanges", () => {
     draft.tiers.strong = [draft.tiers.strong[0]!];
     draft.tiers.frontier = [{ ...draft.tiers.frontier[0]!, model: "opus-4" }];
     expect(routingChanges(saved, draft).map((c) => c.summary)).toEqual([
-      "Frontier: route 1 now Opus 4",
+      "Frontier: route 1 model → Opus 4",
       "Strong: removed a route",
       "Cheap: routes reordered",
     ]);
@@ -54,6 +54,16 @@ describe("routingChanges", () => {
       { part: "step:build", summary: "Build: By size → Frontier" },
       { part: "provider:claude-sub", summary: "Claude subscription: warn 60%" },
       { part: "provider:openrouter", summary: "OpenRouter: on" },
+    ]);
+  });
+
+  it("GivenOnlyAHarnessOrProvider_WhenChanged_ThenTheSummaryNamesThatFieldNotTheModel", () => {
+    const draft = base();
+    draft.tiers.fast = [{ ...draft.tiers.fast[0]!, harness: "opencode" }];
+    draft.tiers.cheap = [{ ...draft.tiers.cheap[0]!, provider: "openrouter" }];
+    expect(routingChanges(base(), draft).map((c) => c.summary)).toEqual([
+      "Fast: route 1 harness → OpenCode",
+      "Cheap: route 1 provider → OpenRouter",
     ]);
   });
 });

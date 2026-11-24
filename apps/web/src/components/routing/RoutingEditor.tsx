@@ -36,11 +36,14 @@ export function RoutingEditor({
   start,
   ifUpdatedAt,
   global,
+  onDirtyChange,
 }: {
   projectId: string | null;
   start: RoutingConfig;
   ifUpdatedAt: string | null;
   global: RoutingConfig;
+  /** How many unsaved changes the draft holds, so the page can ask before dropping them. */
+  onDirtyChange?: (count: number) => void;
 }) {
   // What the server holds as far as this editor knows, and the version it was read at.
   const [saved, setSaved] = useState<RoutingFields>(() => fieldsOf(start));
@@ -55,6 +58,7 @@ export function RoutingEditor({
 
   const changes = routingChanges(saved, draft);
   const edited = new Set(changes.map((c) => c.part));
+  useEffect(() => onDirtyChange?.(changes.length), [changes.length, onDirtyChange]);
   const changedElsewhere = ifUpdatedAt !== base;
   // Percentages being typed that aren't whole numbers from 0 to 100: nothing is saved until fixed.
   const invalid = ProviderKey.options.flatMap((key) =>

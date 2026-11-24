@@ -1,4 +1,4 @@
-import { beforeAll, describe, expect, it } from "vitest";
+import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import { fireEvent, screen, waitFor, within } from "@testing-library/react";
 import { HarnessKey, ProviderKey, RunStep, TierKey } from "@andy/contracts";
 import { renderApp } from "@/test/harness";
@@ -302,5 +302,57 @@ describe("Models settings page", () => {
       ).toBe("true"),
     );
     expect(await within(changes).findByText("Reverted")).toBeTruthy();
+  });
+
+  describe("unsaved changes are never dropped silently", () => {
+    afterEach(() => vi.restoreAllMocks());
+
+    it("GivenUnsavedChanges_WhenAnotherScopeIsPickedAndKept_ThenTheDraftStays", async () => {
+      const { h, form } = await modelsPage();
+      await h.user.click(within(form).getByRole("switch", { name: "OpenRouter on" }));
+      const confirm = vi.spyOn(window, "confirm").mockReturnValue(false);
+      await h.user.click(screen.getByRole("combobox", { name: "Routing for" }));
+      await h.user.click(await screen.findByRole("option", { name: /AI: Andy Intelligence/ }));
+
+      expect(confirm).toHaveBeenCalledWith("Discard 1 unsaved routing change?");
+      expect(screen.getByRole("form", { name: "Global routing" })).toBeTruthy();
+      expect(within(bar()!).getByText("OpenRouter: on")).toBeTruthy();
+
+      confirm.mockReturnValue(true);
+      await h.user.click(screen.getByRole("combobox", { name: "Routing for" }));
+      await h.user.click(await screen.findByRole("option", { name: /AI: Andy Intelligence/ }));
+      expect(await screen.findByRole("form", { name: "Routing for ai" })).toBeTruthy();
+    });
+
+    it("GivenUnsavedChanges_WhenLeavingThePageAndKept_ThenItStays", async () => {
+      const { h, form } = await modelsPage();
+      await h.user.click(within(form).getByRole("switch", { name: "OpenRouter on" }));
+      const confirm = vi.spyOn(window, "confirm").mockReturnValue(false);
+      await h.user.click(
+        within(screen.getByRole("navigation", { name: "Settings pages" })).getByRole("link", {
+          name: "Local runners",
+        }),
+      );
+
+      expect(confirm).toHaveBeenCalled();
+      expect(h.router.state.location.pathname).toBe("/settings/models");
+      expect(within(bar()!).getByText("1 unsaved change")).toBeTruthy();
+    });
+
+    it("GivenUnsavedChanges_WhenAChangeIsRevertedFromTheLog_ThenTheDraftStaysAndReloadIsOffered", async () => {
+      const { h, form } = await modelsPage();
+      const review = within(form).getByRole("listitem", { name: "Review" });
+      await h.user.click(within(review).getByRole("button", { name: "Cheap" }));
+      await h.user.click(within(bar()!).getByRole("button", { name: /^Save/ }));
+      await waitFor(() => expect(bar()).toBeNull());
+      await h.user.click(within(form).getByRole("switch", { name: "OpenRouter on" }));
+
+      const changes = await screen.findByRole("region", { name: "Global changes" });
+      const row = await within(changes).findByText("Routing: steps changed");
+      await h.user.click(within(row.closest("li")!).getByRole("button", { name: "Revert" }));
+
+      expect(await within(form).findByText(/Routing changed since you opened it/)).toBeTruthy();
+      expect(within(bar()!).getByText("OpenRouter: on")).toBeTruthy();
+    });
   });
 });

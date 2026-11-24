@@ -6,7 +6,13 @@ import {
   type RoutingConfig,
   type StepTier,
 } from "@andy/contracts";
-import { PROVIDER_LABELS, STEP_LABELS, TIER_LABELS, modelName } from "@/lib/settings-labels";
+import {
+  HARNESS_LABELS,
+  PROVIDER_LABELS,
+  STEP_LABELS,
+  TIER_LABELS,
+  modelName,
+} from "@/lib/settings-labels";
 
 /** The parts of a routing config the Models editor changes. */
 export type RoutingFields = Pick<RoutingConfig, "providers" | "tiers" | "steps">;
@@ -42,7 +48,15 @@ function tierSummary(name: string, before: Route[], after: Route[]): string {
     before.every((b) => after.some((r) => sameRoute(b, r)));
   if (sameSet) return `${name}: routes reordered`;
   const first = after.findIndex((r, i) => !before[i] || !sameRoute(r, before[i]!));
-  return `${name}: route ${first + 1} now ${modelName(after[first]!.model)}`;
+  const now = after[first]!;
+  const was = before[first];
+  // Name only the fields that changed, so a harness edit never reads as a model change.
+  const fields = [
+    (!was || was.harness !== now.harness) && `harness → ${HARNESS_LABELS[now.harness].name}`,
+    (!was || was.provider !== now.provider) && `provider → ${PROVIDER_LABELS[now.provider].name}`,
+    (!was || was.model !== now.model) && `model → ${modelName(now.model)}`,
+  ].filter(Boolean);
+  return `${name}: route ${first + 1} ${fields.join(", ")}`;
 }
 
 /** A provider's change in words: its switch, else which levels changed. */

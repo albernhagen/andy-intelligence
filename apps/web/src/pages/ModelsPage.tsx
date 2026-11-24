@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useBlocker } from "@tanstack/react-router";
 import { TierKey } from "@andy/contracts";
 import { effectiveRouting } from "@andy/domain";
 import { LayerOrderHint } from "@/components/RouteLayers";
@@ -31,6 +32,22 @@ export function ModelsPage() {
   const projects = useProjects().data ?? [];
   const [scope, setScope] = useState<string | null>(null);
   const [reverts, setReverts] = useState(0);
+  // Unsaved changes in the editor: picking another scope, leaving or reloading asks first.
+  const [dirty, setDirty] = useState(0);
+  const keepDraft = () =>
+    dirty > 0 &&
+    !window.confirm(
+      `Discard ${dirty === 1 ? "1 unsaved routing change" : `${dirty} unsaved routing changes`}?`,
+    );
+  useBlocker({
+    shouldBlockFn: ({ current, next }) => current.pathname !== next.pathname && keepDraft(),
+    enableBeforeUnload: () => dirty > 0,
+  });
+  const pickScope = (next: string | null) => {
+    if (next === scope || keepDraft()) return;
+    setDirty(0);
+    setScope(next);
+  };
   const data = routing.data;
   const project = scope === null ? undefined : data?.projects.find((p) => p.projectId === scope);
   return (
@@ -40,7 +57,7 @@ export function ModelsPage() {
         <h1 className="text-lg font-semibold">Models</h1>
         <label className="flex items-center gap-2 text-sm text-muted-foreground">
           Routing for
-          <Select value={scope ?? GLOBAL} onValueChange={(v) => setScope(v === GLOBAL ? null : v)}>
+          <Select value={scope ?? GLOBAL} onValueChange={(v) => pickScope(v === GLOBAL ? null : v)}>
             <SelectTrigger aria-label="Routing for" className="w-56 text-foreground">
               <SelectValue />
             </SelectTrigger>
@@ -76,10 +93,12 @@ export function ModelsPage() {
             start={data.global}
             ifUpdatedAt={data.global.updatedAt}
             global={data.global}
+            onDirtyChange={setDirty}
           />
           <LayerOrderHint />
-          {/* A revert Andy chose starts the editor again from the reverted routing. */}
-          <RoutingChanges onReverted={() => setReverts((n) => n + 1)} />
+          {/* A revert starts the editor again from the reverted routing. With unsaved changes it
+              doesn't: the editor keeps them and offers Reload, as for any change made elsewhere. */}
+          <RoutingChanges onReverted={() => dirty === 0 && setReverts((n) => n + 1)} />
           <GlobalSpendCaps />
         </>
       )}
@@ -97,6 +116,7 @@ export function ModelsPage() {
             start={project.effective}
             ifUpdatedAt={project.config?.updatedAt ?? null}
             global={data.global}
+            onDirtyChange={setDirty}
           />
           <LayerOrderHint />
         </>
