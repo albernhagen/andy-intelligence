@@ -66,6 +66,7 @@ Build runs (plan approval, sandbox, publish limits) and read caps (AI-222): [`ba
 | Cost kill switch (opt-in) | 0028, 0036 | `infra/billing/kill-switch.tf` + workflow YAML | TF | not yet carried (M6: Dev → prod releases) |
 | Safe deploy: no-traffic revision, smoke test, then traffic | 0076 | `platform/actions/cloud-run-safe-deploy` | A | control plane only until M6: Dev → prod releases |
 | UI screenshot checks (Playwright): a diff fails, actual images uploaded; 10-minute cap | 0045, 0059 | `ui-screenshots.yml` → `platform/actions/ui-screenshots`; config and images in `apps/web/e2e/` | — | control plane only; a managed web UI can call the action (needs `playwright.config.ts`). Required here only (`github/source-only.json`, AI-350) |
+| Fonts served by the app: the web build fails if a built file names a font host or loads a font from another host | 0151 | `apps/web/scripts/check-fonts.ts` (run by `pnpm build`) | — | control plane only; a managed web UI can copy the script |
 | Refine caps (questions, children); email (20/day, 10-min batch) | 0028, 0075 | `packages/domain/src/{refine-gate,notify-email}.ts` | — | control plane |
 | Push caps (6/hour, 30/day, then one "more waiting" push per window); quiet hours; no agent text in pushes; 10 subscriptions per user | 0028, 0052 | `packages/domain/src/notify-push.ts`, `packages/store/src/push-subscription-store.ts` | — | control plane |
 | Spend notices: 80% of a cap and a stop, once per cap and window, 10 a day, no agent text | 0028 | `packages/domain/src/spend-notices.ts` | — | control plane |

@@ -7,7 +7,7 @@ export interface SegmentedOption<T> {
 }
 
 /**
- * A toggle that picks one view (AI-333: design.md "Toggles"). The picked option is `bg-muted`
+ * A toggle that picks one view (AI-333: design.md "Toggles"). The picked option is `bg-selected`
  * with `aria-pressed`, like the current nav link; `primary` stays for the one main action.
  */
 export function Segmented<T extends string | number | null>({
@@ -38,7 +38,7 @@ export function Segmented<T extends string | number | null>({
               "inline-flex h-11 items-center gap-1.5 whitespace-nowrap rounded-md px-3 text-sm sm:h-8",
               "focus-visible:outline-2 focus-visible:outline-ring",
               picked
-                ? "bg-muted font-medium text-foreground"
+                ? "bg-selected font-medium text-foreground"
                 : // Hover is a lighter tint than the picked option's, so the two never look alike.
                   "text-muted-foreground hover:bg-foreground/5 hover:text-foreground",
             )}

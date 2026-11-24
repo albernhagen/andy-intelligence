@@ -1,8 +1,8 @@
 # Design source — control-plane UI
 
-Every UI change follows this file (ADR-0059: UX foundation; ADR-0045: UI design system). A minimalist design of our own, biased toward deciding: answer, approve, watch (ADR-0070).
+Every UI change follows this file (ADR-0151: Design direction A "Instrument"). A dense, calm design of our own, biased toward deciding: answer, approve, watch (ADR-0070).
 
-Reference tables (type, colour roles, do and don't): [`design-details.md`](design-details.md).
+Reference tables (type scale, surfaces, colour roles, motion, do and don't): [`design-details.md`](design-details.md).
 
 Stack: React, Tailwind v4, shadcn/ui components in `src/components/ui/`, icons from `lucide-react`. Tokens live in `src/index.css`; use them through Tailwind classes (`bg-muted`, `text-attention`), never raw colours.
 
@@ -11,19 +11,20 @@ Stack: React, Tailwind v4, shadcn/ui components in `src/components/ui/`, icons f
 - Simple before complete. One obvious way to do each thing.
 - Status visible without opening anything: a card says where it is and what it waits for.
 - Automatic by default, editable everywhere.
-- Fast: keyboard first, nothing animates.
+- Fast: keyboard first; moves apply at once. Motion only explains a change (Motion below).
+- Every write confirms where it happened (Feedback below).
 
 ## Layout
 
 - One shell on every screen (`src/components/AppShell.tsx`): project picker, navigation, "Needs you N". Pages never draw their own header.
 - The header holds at most six destinations (Inbox, Board, Roadmap, Work, Dashboards, What's new); every settings page and Sign out sit in one Settings menu, and settings pages share `SettingsTabs`. A new screen goes under an existing destination or replaces one (AI-335).
 - The picker is the global scope: project screens under `/p/<project>/…`, cross-project under `/all/…`. A new screen gets both, or says why not (the board needs one project).
-- Content is full width with `px-4 sm:px-6` and `py-4`. Forms and prose cap at `max-w-2xl`.
+- Every page uses one of three [page templates](design-details.md#page-templates): list with detail, settings with section nav, reading page (screens move to them from AI-370). Padding `px-4 sm:px-6 py-4`.
 - A ticket opens as a panel over the board, led by its status line; prose uses `Markdown`.
 
 ## Phone
 
-Below `sm` (640px; `useIsPhone`); screens adopt these in their own M7: Mobile slices:
+Below `sm` (640px; `useIsPhone`):
 
 - Navigation is a bottom bar: Board, Inbox, Dashboards, More.
 - Touch targets at least 44px (`h-11 sm:h-8`); a checkbox's label is its target (`max-sm:min-h-11`). Inputs `text-base` so iOS doesn't zoom. Phone specs check it with `expectTouchTargets` (AI-334).
@@ -38,15 +39,23 @@ Below `sm` (640px; `useIsPhone`); screens adopt these in their own M7: Mobile sl
 
 ## Type
 
-System font stack. Four sizes (phone inputs add `text-base`): [type table](design-details.md#type).
+Inter (`font-sans`) and Geist Mono (`font-mono`, keys and aligned numbers), both served by the app; never load a font from another host (the build checks). Six sizes, 13 px body: [type scale](design-details.md#type).
 
-Counts, durations and ticket keys use `tabular-nums`. No sizes above `text-lg`, no bold beyond `font-semibold`.
+Counts, durations and ticket keys use `tabular-nums`. No sizes above `text-lg` (19 px), no bold beyond `font-semibold`.
 
-## Colour roles
+## Surfaces and colour
 
-Eight roles, each with one use: [colour roles](design-details.md#colour-roles). `primary` is the one main button on a screen.
+Cool neutrals tinted toward indigo; three surface levels (sunken `muted`, base `background`, raised `raised`), a selected state (`bg-selected`, never the `primary` fill) and role colours: [table](design-details.md#surfaces-and-colour-roles). `primary` (indigo) is the one main button on a screen.
 
-A role colour is text or a 15% tint behind text (`bg-attention/15 text-attention`), never a solid block. Colour never carries meaning alone: a marker always has a word or icon too. Dark mode comes from the tokens; don't add `dark:` classes.
+- A role colour is text or a 15% tint behind text (`bg-attention/15 text-attention`), never a solid block. Colour never carries meaning alone: a marker always has a word or icon too.
+
+## Theme
+
+System, light or dark from the Settings menu (More on a phone), remembered in this browser (`lib/theme.ts`). Tokens switch; no `dark:` classes. Check both.
+
+## Motion
+
+Motion explains a change (something appeared, moved or confirmed), never decorates: 120 to 180 ms, opacity and transform only, off under `prefers-reduced-motion`, never delays input. Tokens: [motion](design-details.md#motion).
 
 ## Spacing and density
 
@@ -54,12 +63,16 @@ Data-heavy screens favour density over air:
 
 - 4px grid: gaps `1`, `2`, `3`, `4`, `6`. Header height `h-12`. List rows `h-8`. Cards `p-2` with `gap-1`.
 - Sections in a page: `space-y-4`. Header controls: `gap-2`, groups `gap-4`.
-- Radius from `--radius` (`rounded-md`). Borders 1px `border-border`. Shadows only on things that float (menus, a dragged card).
+- Radii: `rounded-sm` keys, `rounded-md` controls, `rounded-lg` cards and menus. Borders 1px `border-border`. Shadows only on things that float (menus, a dragged card).
 - Show the number (lane count, minutes), not a chart.
 
 ## Status markers
 
 The marker set: [`design-status-markers.md`](design-status-markers.md).
+
+## Feedback
+
+Every write confirms where it happened: the changed row, card or field shows the new value, and a failure shows the API's message there (`QueryError`). Shared confirmation components: AI-369.
 
 ## Copy
 
@@ -73,4 +86,4 @@ The marker set: [`design-status-markers.md`](design-status-markers.md).
 
 ## Checks
 
-Playwright screenshots (`apps/web/e2e/`, phone ones at 390×844) fail CI on a diff; a deliberate change updates them in the same PR.
+Playwright screenshots (`apps/web/e2e/`: every screen at 1280×800 and 390×844, four in dark) fail CI on a diff; a deliberate change updates them in the same PR (`pnpm --filter @andy/web screenshots:update`, in Docker).

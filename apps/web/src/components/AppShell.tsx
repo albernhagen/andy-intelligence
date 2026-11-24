@@ -19,6 +19,8 @@ import {
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuLabel,
+  DropdownMenuRadioGroup,
+  DropdownMenuRadioItem,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
@@ -40,6 +42,7 @@ import {
   type Scope,
   type Section,
 } from "@/lib/scope";
+import { THEMES, useTheme, type Theme } from "@/lib/theme";
 import { useIsPhone } from "@/lib/use-phone";
 import { KeyboardShortcuts } from "@/components/KeyboardShortcuts";
 import { cn } from "@/lib/utils";
@@ -169,7 +172,7 @@ function PhoneNav(props: { links: NavItem[]; settings: NavItem[]; headerEnd: Rea
   return (
     <nav
       aria-label="Main"
-      className="fixed inset-x-0 bottom-0 z-20 flex border-t border-border bg-background px-2 pb-[env(safe-area-inset-bottom)]"
+      className="fixed inset-x-0 bottom-0 z-20 flex border-t border-border bg-raised px-2 pb-[env(safe-area-inset-bottom)]"
     >
       {links
         .filter((l) => l.icon)
@@ -200,6 +203,7 @@ function PhoneNav(props: { links: NavItem[]; settings: NavItem[]; headerEnd: Rea
           {more.map(item)}
           <DropdownMenuSeparator />
           {settings.map(item)}
+          <ThemeItems className="min-h-11" />
           <SignOutItem headerEnd={headerEnd} className="min-h-11" />
         </DropdownMenuContent>
       </DropdownMenu>
@@ -233,6 +237,7 @@ function SettingsMenu({ links, headerEnd }: { links: NavItem[]; headerEnd: React
             {l.label}
           </DropdownMenuItem>
         ))}
+        <ThemeItems />
         <SignOutItem headerEnd={headerEnd} />
       </DropdownMenuContent>
     </DropdownMenu>
@@ -240,6 +245,28 @@ function SettingsMenu({ links, headerEnd }: { links: NavItem[]; headerEnd: React
 }
 
 /** The signed-in app's Sign out (HeaderEndContext), as the last menu item. */
+/** The theme switch (ADR-0151): system, light or dark; applied at once and remembered here. */
+function ThemeItems({ className }: { className?: string }) {
+  const [theme, setTheme] = useTheme();
+  return (
+    <>
+      <DropdownMenuSeparator />
+      <DropdownMenuLabel>Theme</DropdownMenuLabel>
+      <DropdownMenuRadioGroup
+        aria-label="Theme"
+        value={theme}
+        onValueChange={(v) => setTheme(v as Theme)}
+      >
+        {THEMES.map((t) => (
+          <DropdownMenuRadioItem key={t.value} value={t.value} className={className}>
+            {t.label}
+          </DropdownMenuRadioItem>
+        ))}
+      </DropdownMenuRadioGroup>
+    </>
+  );
+}
+
 function SignOutItem({ headerEnd, className }: { headerEnd: ReactNode; className?: string }) {
   if (!isValidElement(headerEnd)) return null;
   return (
@@ -259,7 +286,7 @@ function NavLink(props: { to: string; current: boolean; children: ReactNode }) {
       aria-current={props.current ? "page" : undefined}
       className={cn(
         "whitespace-nowrap rounded-md px-2 py-1 text-muted-foreground hover:bg-muted hover:text-foreground",
-        props.current && "bg-muted text-foreground",
+        props.current && "bg-raised text-foreground ring-1 ring-border hover:bg-raised",
       )}
     >
       {props.children}

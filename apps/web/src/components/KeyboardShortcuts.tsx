@@ -51,7 +51,7 @@ function ShortcutHelp({ onClose }: { onClose: () => void }) {
         role="dialog"
         aria-modal="true"
         aria-labelledby="shortcut-help-title"
-        className="w-full max-w-md space-y-3 rounded-md border border-border bg-background p-4 text-sm"
+        className="w-full max-w-md space-y-3 animate-enter rounded-lg border border-border bg-raised p-4 text-sm"
       >
         <div className="flex items-center justify-between">
           <h2 id="shortcut-help-title" className="font-medium">

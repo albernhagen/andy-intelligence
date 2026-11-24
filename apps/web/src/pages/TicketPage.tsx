@@ -105,9 +105,9 @@ export function TicketPage() {
       role="dialog"
       aria-modal="false"
       aria-label={loaded ? `${loaded.key}: ${loaded.title}` : ticketRef}
-      className="fixed inset-x-0 top-12 bottom-0 z-30 overflow-y-auto bg-background shadow-lg outline-none min-[900px]:left-auto min-[900px]:w-[640px] min-[900px]:border-l min-[900px]:border-border"
+      className="fixed inset-x-0 top-12 bottom-0 z-30 overflow-y-auto bg-raised shadow-lg outline-none min-[900px]:left-auto min-[900px]:w-[640px] min-[900px]:border-l min-[900px]:border-border"
     >
-      <div className="sticky top-0 z-10 flex min-h-10 items-center gap-2 border-b border-border bg-background px-4 py-1 sm:h-10 sm:py-0 sm:px-6">
+      <div className="sticky top-0 z-10 flex min-h-10 items-center gap-2 border-b border-border bg-raised px-4 py-1 sm:h-10 sm:py-0 sm:px-6">
         {loaded && <StatusLine ticket={loaded} />}
         <Button
           size="sm"
