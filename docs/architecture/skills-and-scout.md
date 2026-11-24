@@ -5,7 +5,7 @@ Overview and reading map: [ARCHITECTURE.md](ARCHITECTURE.md). Section numbers ma
 ## 7. Components
 
 ### 7.3 Skills (platform plugin, versioned) — the devkit
-`/ideate`, `/refine`, `/spec`, `/plan`, `/build`, `/review`, `/security-review` (per PR), `/threat-model` (system review), `/verify`, `/scout-models`, (later `/digest`).
+`/discover` (Andy's session, web search; ADR-0145), `/ideate`, `/refine`, `/spec`, `/plan`, `/build`, `/review`, `/security-review` (per PR), `/threat-model` (system review), `/verify`, `/scout-models`, (later `/digest`).
 Substance lives in shared procedure docs (`docs/agent/*.md`) so non-Claude harnesses use the same knowledge; Claude skills/subagents are thin wrappers. Subagents with least-privilege tools: researcher (read-only), designer, critic (read-only), security reviewer (read-only, no shell or network), test-writer, implementer, verifier (run, no edit).
 
 **Build runs prove their work (ADR-0040):** `/build` runs the project's lint/typecheck/test/build commands (listed in its `AGENTS.md`) and puts the results in the run summary; bug tickets commit a failing test first and don't change it afterwards; the verifier does a fresh-context final check.
