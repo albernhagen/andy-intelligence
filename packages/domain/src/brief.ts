@@ -110,6 +110,13 @@ export function discoveryPrefill(markdown: string): DiscoveryPrefill {
 export type BriefStatus =
   | { readable: true; onDefaultBranch: boolean; prefill: DiscoveryPrefill }
   | { readable: false; problem: string; prefill: DiscoveryPrefill };
+/**
+ * How long a brief status read is reused per project and instance (ADR-0028): each read costs
+ * up to three code-host calls, and the setup page polls. A merged brief shows within a minute.
+ */
+export const BRIEF_STATUS_CACHE_MS = 60_000;
+/** Projects whose status is cached per instance; past it the cache starts over. */
+const BRIEF_STATUS_CACHE_MAX = 200;
 /** Brief PRs opened per instance per rolling hour (ADR-0028); more are refused until it frees. */
 export const BRIEF_PRS_PER_HOUR = 5;
 const HOUR_MS = 60 * 60_000;
@@ -125,6 +132,8 @@ export type BriefSubmission =
  */
 export class BriefService {
   private readonly opened: number[] = [];
+  /** `status` answers per project, so polling can't multiply code-host reads (ADR-0028). */
+  private readonly statusCache = new Map<string, { at: number; status: BriefStatus }>();
 
   constructor(
     private readonly tracker: Pick<WorkTracker, "getProject">,
@@ -190,6 +199,7 @@ export class BriefService {
         revised: current !== null,
       }),
     );
+    this.statusCache.delete(projectId);
     return { status: "opened", pullRequest, revised: current !== null };
   }
 
@@ -202,6 +212,20 @@ export class BriefService {
     requireCan(actor, "submit_brief", projectId);
     const project = await this.tracker.getProject(projectId);
     if (!project) throw new WorkTrackerError("not_found", `project ${projectId} not found`);
+    const nowMs = this.now().getTime();
+    const cached = this.statusCache.get(projectId);
+    if (cached && nowMs - cached.at < BRIEF_STATUS_CACHE_MS) return cached.status;
+    const status = await this.readStatus(projectId, project);
+    if (this.statusCache.size >= BRIEF_STATUS_CACHE_MAX) this.statusCache.clear();
+    this.statusCache.set(projectId, { at: nowMs, status });
+    return status;
+  }
+
+  /** At most three code-host reads: the repo, the brief and discovery. */
+  private async readStatus(
+    projectId: string,
+    project: { key: string; repos: string[] },
+  ): Promise<BriefStatus> {
     const none = { readable: false as const, prefill: {} };
     if (!this.codeHost) return { ...none, problem: "GitHub is not connected" };
     const repoName = project.repos[0];

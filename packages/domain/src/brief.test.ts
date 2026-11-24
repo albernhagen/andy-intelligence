@@ -6,10 +6,11 @@ import {
   InMemoryCodeHost,
   InMemoryWorkTracker,
 } from "@andy/contracts";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import {
   BRIEF_PATH,
   BRIEF_PRS_PER_HOUR,
+  BRIEF_STATUS_CACHE_MS,
   BriefService,
   DISCOVERY_PATH,
   countWords,
@@ -442,6 +443,34 @@ describe("BriefService.status", () => {
     expect(await service.status(project.id, OWNER)).toMatchObject({
       readable: false,
       problem: "project TRL has no repo",
+    });
+  });
+
+  it("GivenARepeatedRead_WhenWithinTheCacheWindow_ThenTheCodeHostIsReadOnce", async () => {
+    const tracker = new InMemoryWorkTracker();
+    const host = new InMemoryCodeHost([
+      { fullName: REPO, defaultBranch: "main", private: false, url: `https://github.com/${REPO}` },
+    ]);
+    const project = await tracker.createProject({ name: "Trail log", key: "TRL", repos: [REPO] });
+    let now = new Date("2026-11-12T08:00:00.000Z");
+    const service = new BriefService(tracker, host, () => now);
+    const reads = vi.spyOn(host, "readFile");
+    await service.status(project.id, OWNER);
+    host.files.set(BRIEF_PATH, "# Project brief");
+    expect(await service.status(project.id, OWNER)).toMatchObject({ onDefaultBranch: false });
+    expect(reads).toHaveBeenCalledTimes(2);
+    now = new Date(now.getTime() + BRIEF_STATUS_CACHE_MS);
+    expect(await service.status(project.id, OWNER)).toMatchObject({ onDefaultBranch: true });
+    expect(reads).toHaveBeenCalledTimes(4);
+  });
+
+  it("GivenACodeHostThatFails_WhenRead_ThenUnreadableWithTheReasonNotAThrow", async () => {
+    const { host, project, service } = await setup();
+    vi.spyOn(host, "readFile").mockRejectedValue(new Error("502 from GitHub"));
+    vi.spyOn(console, "log").mockImplementation(() => {});
+    expect(await service.status(project.id, OWNER)).toMatchObject({
+      readable: false,
+      problem: `couldn't read ${REPO}: 502 from GitHub`,
     });
   });
 

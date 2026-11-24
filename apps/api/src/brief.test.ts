@@ -137,6 +137,23 @@ describe("GET /api/projects/{projectId}/brief", () => {
     });
   });
 
+  it("GivenAProjectWithNoRepo_WhenRead_Then200UnreadableWithTheReason", async () => {
+    const s = await setup();
+    await s.tracker.createProject({ name: "Ops", key: "OPS" });
+    const res = await s.call("/api/projects/ops/brief");
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({
+      readable: false,
+      problem: "project OPS has no repo",
+      prefill: {},
+    });
+  });
+
+  it("GivenNoSuchProject_WhenRead_Then404", async () => {
+    const s = await setup();
+    expect((await s.call("/api/projects/nope/brief")).status).toBe(404);
+  });
+
   it("GivenGitHubNotConnected_WhenRead_ThenUnreadableWithTheReason", async () => {
     const s = await setup(false);
     expect(await (await s.call("/api/projects/ai/brief")).json()).toMatchObject({
