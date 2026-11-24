@@ -39,6 +39,41 @@ const nativeControls = (root: HTMLElement) =>
     .filter((el) => el.getAttribute("aria-hidden") !== "true")
     .map((el) => el.outerHTML.slice(0, 80));
 
+describe("the header's PR line", () => {
+  async function withPr(state: "open" | "merged") {
+    const h = renderApp();
+    await h.tracker.createProject({
+      name: "AI",
+      key: "AI",
+      repos: ["albernhagen/andy-intelligence"],
+    });
+    const ticket = await h.service.create("ai", readyStory, "andy");
+    await h.tracker.linkPullRequest(
+      "ai",
+      ticket.id,
+      { number: 88, url: "https://github.com/albernhagen/andy-intelligence/pull/88", state },
+      "agent",
+    );
+    await h.router.navigate({ to: `/p/ai/t/${ticket.key}` });
+    const panel = await screen.findByRole("dialog", { name: /^AI-1: / });
+    await within(panel).findByRole("status", { name: "Status" });
+    return panel;
+  }
+
+  it("GivenAnOpenPr_WhenThePanelOpens_ThenTheHeaderSaysItWaitsAndTheRowLinksToIt", async () => {
+    const panel = await withPr("open");
+    expect(await within(panel).findByText("PR #88 waits for you")).toBeTruthy();
+    expect(within(panel).getByRole("link", { name: "Open PR #88" })).toBeTruthy();
+  });
+
+  it("GivenAMergedPr_WhenThePanelOpens_ThenNeitherTheLineNorTheLinkShows", async () => {
+    const panel = await withPr("merged");
+    await within(panel).findByRole("region", { name: "Next" });
+    expect(within(panel).queryByText(/waits for you/)).toBeNull();
+    expect(within(panel).queryByRole("link", { name: /Open PR/ })).toBeNull();
+  });
+});
+
 describe("ticket and epic panel on the new design", () => {
   it("GivenATicketPanel_WhenEveryPartIsOpen_ThenNoControlIsANativeSelectOrCheckbox", async () => {
     const { h, panel } = await openPanel(readyStory);
@@ -89,5 +124,32 @@ describe("ticket and epic panel on the new design", () => {
     // Undo is itself not undoable: its toast has no Undo, so it can't ping-pong.
     await waitFor(() => expect(toast).toHaveBeenCalledTimes(2));
     expect(vi.mocked(toast).mock.calls[1]![0].undo).toBeUndefined();
+  });
+
+  it("GivenTwoSavesToOneField_WhenAndyUndoesTheFirst_ThenItRefusesAndKeepsTheLaterEdit", async () => {
+    const { h, ticket, panel } = await openPanel(readyStory);
+    const group = within(panel).getByRole("group", { name: "How it runs" });
+    await h.user.click(group.querySelector("summary")!);
+    const overrides = await within(group).findByRole("region", { name: "Overrides" });
+    vi.mocked(toast).mockClear();
+
+    // Both write the one `overrides` field: Undo on the first would also drop the second.
+    await pick(h.user, within(overrides).getByRole("combobox", { name: "Tier" }), "cheap (pinned)");
+    await waitFor(() => expect(toast).toHaveBeenCalledTimes(1));
+    await pick(h.user, within(overrides).getByRole("combobox", { name: "Autonomy" }), "gated");
+    await waitFor(async () =>
+      expect((await h.tracker.getTicket("ai", ticket.id))?.overrides).toMatchObject({
+        tier: "cheap",
+        autonomy: "gated",
+      }),
+    );
+    const firstUndo = vi.mocked(toast).mock.calls[0]![0].undo!;
+
+    expect(() => firstUndo()).toThrow(/changed again since/);
+
+    expect((await h.tracker.getTicket("ai", ticket.id))?.overrides).toMatchObject({
+      tier: "cheap",
+      autonomy: "gated",
+    });
   });
 });

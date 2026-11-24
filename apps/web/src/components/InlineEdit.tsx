@@ -67,9 +67,21 @@ export function useTicketSave(ticket: Ticket, what?: string) {
         // The saved ticket at once (before the refetch), so the panel shows it.
         queryClient.setQueryData(ticketQueryKey(saved.projectId, saved.key), saved);
         onSaved?.();
+        const undo = () => {
+          // Undo writes whole fields back, so it refuses once a field changed after this save
+          // (another override, another list item): it never overwrites a later edit.
+          const now = queryClient.getQueryData<Ticket>(ticketQueryKey(saved.projectId, saved.key));
+          const changed = Object.keys(patch).filter(
+            (k) =>
+              JSON.stringify(now?.[k as keyof Ticket]) !== JSON.stringify(saved[k as keyof Ticket]),
+          );
+          if (changed.length > 0)
+            throw new Error(`${what ?? "This field"} changed again since; undo it by hand.`);
+          save(before, undefined, { undoable: false });
+        };
         toast({
           title: what ? `Saved ${what} on ${ticket.key}` : `Saved ${ticket.key}`,
-          undo: undoable ? () => save(before, undefined, { undoable: false }) : undefined,
+          undo: undoable ? undo : undefined,
         });
       } catch {
         // Shown through `update.error` next to the field.
