@@ -127,6 +127,13 @@ async function setup(opts: { mode?: MergeMode | null } = {}) {
     checks: { items: passed, complete: true },
     commits: { items: [], complete: true },
   });
+  // The PR-opened webhook's link, recorded from GitHub's event.
+  await tracker.linkPullRequest(
+    "ai",
+    ticket.id,
+    { number: 7, url: pullRequest.url, state: "open" },
+    "system",
+  );
   const call = await mcpCaller(app, grants, RESOURCE);
   const mergePr = (args: Record<string, unknown> = {}) =>
     call("merge_pr", { project: "AI", repo: REPO, number: 7, ...args });
@@ -204,6 +211,72 @@ describe("merge_pr (AI-220)", () => {
     expect(t.host.merges).toEqual([]);
     const events = await t.tracker.listEvents("ai", t.ticket.id);
     expect(events.find((e) => e.kind === "comment")?.body).toContain("didn't merge");
+  });
+
+  it("GivenAPrNamingATicketLinkedToAnotherPr_WhenMergePrIsCalled_ThenItWaitsAsNotReadyForReview", async () => {
+    const t = await setup();
+    await t.tracker.linkPullRequest(
+      "ai",
+      t.ticket.id,
+      { number: 8, url: `https://github.com/${REPO}/pull/8`, state: "open" },
+      "system",
+    );
+    const res = await t.mergePr();
+    expect(res.data).toMatchObject({ merged: false, ticket: null });
+    expect(res.data.reasons).toEqual(["not_ready_for_review"]);
+    expect(t.host.merges).toEqual([]);
+  });
+
+  it("GivenTwoCleanPrsOnTheSameMain_WhenMergePrIsCalledForBothAtOnce_ThenOnlyTheFirstMergesAndTheSecondWaitsBehind", async () => {
+    const t = await setup();
+    const second = await t.tracker.createTicket(
+      "ai",
+      { title: "Second change", type: "feature" },
+      "andy",
+    );
+    await t.tracker.updateTicket(
+      "ai",
+      second.id,
+      { stage: { to: "ready_for_review", reason: null } },
+      "andy",
+    );
+    const head8 = "f".repeat(40);
+    const url8 = `https://github.com/${REPO}/pull/8`;
+    t.host.pullRequests.set(8, {
+      ...structuredClone(t.pr),
+      pullRequest: {
+        ...t.pr.pullRequest,
+        number: 8,
+        headSha: head8,
+        url: url8,
+        bodyFirstLine: `https://ai.andybernhagen.com/p/ai/t/${second.key}`,
+      },
+    });
+    await t.tracker.linkPullRequest(
+      "ai",
+      second.id,
+      { number: 8, url: url8, state: "open" },
+      "system",
+    );
+    // The fake's checks are found by head; give PR 8 its own.
+    const listHeadChecks = t.host.listHeadChecks.bind(t.host);
+    t.host.listHeadChecks = async (repo, sha) =>
+      sha === head8 ? { items: passed, complete: true } : listHeadChecks(repo, sha);
+    // A merge moves main: every other open head is now behind it.
+    const merge = t.host.mergePullRequest.bind(t.host);
+    t.host.mergePullRequest = async (repo, number, sha) => {
+      const squash = await merge(repo, number, sha);
+      t.host.branches.set(`${REPO}#main`, "9".repeat(40));
+      for (const p of t.host.pullRequests.values()) {
+        if (p.pullRequest.state === "open") t.host.behindDefault.add(p.pullRequest.headSha);
+      }
+      return squash;
+    };
+    const [a, b] = await Promise.all([t.mergePr(), t.mergePr({ number: 8 })]);
+    expect(a.data.merged).toBe(true);
+    expect(b.data).toMatchObject({ merged: false, verdict: "wait" });
+    expect(b.data.reasons).toEqual(["behind_default_branch"]);
+    expect(t.host.merges.map((m) => m.number)).toEqual([7]);
   });
 
   it("GivenTheDefaultBranchMovesBeforeTheMerge_WhenMergePrIsCalled_ThenItWaitsAsBehind", async () => {

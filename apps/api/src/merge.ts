@@ -30,10 +30,12 @@ import { FixedWindowLimiter } from "./mcp/rate-limit";
  * makes) or answers `wait` with every reason. Never PR text: the description's first line only
  * selects a ticket of this project, as it does for ticket moves.
  *
- * No queue and no lock (AI-110: M5.18: Merge queue per repo orders merges). Two near-simultaneous
- * calls are kept apart by the clean rule's "head contains the latest default branch", read fresh
- * at the call against the base tip's sha, the base tip read again just before merging, and the
- * merge pinned to the assessed head: a PR whose head or base moved doesn't merge.
+ * No queue (AI-110: M5.18: Merge queue per repo orders merges). Calls for one repo run one at a
+ * time within an instance, so a second call is judged after the first merged and sees itself
+ * behind. Across the two instances nothing serialises them: two overlapping calls judged on the
+ * same base tip can both merge, so one call at a time stays procedural until AI-110. Each call
+ * also checks "head contains the latest default branch" against the base tip's sha, re-reads the
+ * tip just before merging, and pins the merge to the judged head.
  */
 
 /** ADR-0028: `merge_pr` calls per project per hour, per instance (max 2 instances). */
@@ -55,7 +57,7 @@ export interface MergePrResult {
   url: string;
   /** The head the verdict judged and the merge was pinned to. */
   headSha: string;
-  /** The ticket the PR names (head branch, then the description's first line); null: none. */
+  /** The ticket the PR names whose latest linked PR is this one; null: none. */
   ticket: string | null;
   mode: MergeMode | null;
   verdict: "merge" | "wait";
@@ -81,6 +83,8 @@ const errorText = (err: unknown) =>
 
 export class PullRequestMerger {
   private readonly limiters = new Map<string, FixedWindowLimiter>();
+  /** The last judge-and-merge per repo in this instance: the next one waits for it. */
+  private readonly repoTails = new Map<string, Promise<unknown>>();
 
   constructor(
     private readonly tracker: WorkTracker,
@@ -115,7 +119,21 @@ export class PullRequestMerger {
         `PR #${pr.number} is a build agent's PR: the gate merges it by the merge mode`,
       );
     }
-    return this.judgeAndMerge(project, repo, pr, actor);
+    return this.oneAtATime(repo, () => this.judgeAndMerge(project, repo, pr.number, actor));
+  }
+
+  /** Runs `fn` after every earlier call for `repo` in this instance has finished. */
+  private async oneAtATime<T>(repo: string, fn: () => Promise<T>): Promise<T> {
+    const key = repo.toLowerCase();
+    const before = this.repoTails.get(key) ?? Promise.resolve();
+    const mine = before.then(fn, fn);
+    const tail = mine.catch(() => undefined);
+    this.repoTails.set(key, tail);
+    try {
+      return await mine;
+    } finally {
+      if (this.repoTails.get(key) === tail) this.repoTails.delete(key);
+    }
   }
 
   /** ADR-0028: refuses past the hourly cap; every call counts, waits included. */
@@ -136,12 +154,17 @@ export class PullRequestMerger {
   private async judgeAndMerge(
     project: Project,
     repo: string,
-    pr: PullRequest,
+    number: number,
     actor: EventActor,
   ): Promise<MergePrResult> {
     const host = this.host!;
-    const key = ticketKeyFor(project.key, pr);
-    const ticket = key ? await this.tracker.getTicketByKey(project.id, key) : null;
+    // Read again inside the lock: an earlier call may have changed it.
+    const pr = await host.getPullRequest(repo, number);
+    if (!pr) throw notFound("pull request", `${repo}#${number}`);
+    if (pr.state !== "open") {
+      throw new DomainError("invalid_field", `PR #${pr.number} is ${pr.state}, not open`);
+    }
+    const ticket = await this.ticketOf(project, pr);
     const [files, required, checks, baseSha] = await Promise.all([
       host.listChangedFiles(repo, pr.number),
       host.listRequiredChecks(repo, pr.baseRef),
@@ -205,6 +228,19 @@ export class PullRequestMerger {
       );
       return { ...result, mergeError };
     }
+  }
+
+  /**
+   * The ticket the PR names (head branch, then the description's first line), only when its
+   * latest linked PR is this one: PR text can name any ticket, but the link is recorded from
+   * GitHub's own PR events, so a PR can't borrow another PR's ticket in Ready for review.
+   */
+  private async ticketOf(project: Project, pr: PullRequest): Promise<Ticket | null> {
+    const key = ticketKeyFor(project.key, pr);
+    const ticket = key ? await this.tracker.getTicketByKey(project.id, key) : null;
+    if (!ticket) return null;
+    const linked = await this.tracker.getLatestPullRequest(project.id, ticket.id);
+    return linked?.number === pr.number && linked.url === pr.url ? ticket : null;
   }
 
   /** Whether the head contains the base tip that was read; null (wait) when the host can't say. */

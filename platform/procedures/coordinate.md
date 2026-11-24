@@ -65,7 +65,7 @@ Hand over between batches, never during one. Write a log entry: what merged, wha
 Never merge any other way (ADR-0124). MCP `merge_pr` (project, repo, PR number) reads the code host's facts, applies the merge mode and either squash-merges with the App's identity at the judged head or answers `wait` with every reason (details: runbook `coordinating-sessions.md` §5).
 
 - `wait`: fix what the reasons name and call again; kept kinds and accepted labels are the owner's; call those ready only when synced, green and review-clean. Docs-only PRs wait for the owner.
-- No queue or lock (AI-110: M5.18: Merge queue per repo): one call at a time; a moved head or default branch doesn't merge.
+- No queue (AI-110: M5.18: Merge queue per repo): overlapping calls can both merge, so one call at a time; a moved head or default branch doesn't merge.
 - A refusal or the cap (30 calls per project per hour) is never a reason to merge by hand. Record each merge in the digest.
 
 ## 8. Asking the owner
