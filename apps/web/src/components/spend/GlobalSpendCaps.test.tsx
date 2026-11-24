@@ -86,7 +86,7 @@ describe("project Spend caps panel after a global save", () => {
     await h.user.click(within(panel).getByRole("button", { name: "Save global caps" }));
     await within(panel).findByText("daily $5.00 → $3.00");
 
-    await h.router.navigate({ to: "/p/ai/settings" });
+    await h.router.navigate({ to: "/p/ai/settings", hash: "limits" });
     const project = await screen.findByRole("region", { name: "Spend caps" }, PAGE_LOAD);
     const daily = within(project).getByRole("row", { name: /^Daily/ });
     expect(await within(daily).findAllByText("$3.00")).toHaveLength(2);

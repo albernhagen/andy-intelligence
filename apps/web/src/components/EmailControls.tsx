@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button";
 import { QueryError } from "@/components/Status";
 import { unwrap, useApi } from "@/lib/api";
 import { useUpdateProject } from "@/lib/queries";
-import { SavedCue } from "@/components/SavedCue";
+import { SwitchRow } from "@/components/SettingRow";
 import { SETTING_LABELS } from "@/lib/settings-labels";
 
 /**
@@ -27,33 +27,33 @@ export function EmailNotificationsControl({ project }: { project: Project }) {
 
   return (
     <>
-      <label className="ml-3 inline-flex items-center gap-1 text-sm max-sm:min-h-11">
-        <input
-          type="checkbox"
-          checked={configured && project.emailNotifications}
-          disabled={!configured || update.isPending}
-          onChange={(e) => update.mutate({ emailNotifications: e.target.checked })}
-        />
-        {SETTING_LABELS.emailNotifications}
-        {status.data && !configured && (
-          <span className="text-muted-foreground">(off: email is not configured)</span>
-        )}
-        {status.data && configured && (
-          <span className="text-muted-foreground">
-            ({status.data.sentToday} of {status.data.dailyCap} sent today)
-          </span>
-        )}
-      </label>
+      <SwitchRow
+        label={SETTING_LABELS.emailNotifications}
+        description="Email you when a ticket here starts to need you: items within 10 minutes share one email, at most 20 a day."
+        note={
+          status.data &&
+          (configured
+            ? `${status.data.sentToday} of ${status.data.dailyCap} sent today.`
+            : "Off: email is not configured.")
+        }
+        checked={configured && project.emailNotifications}
+        disabled={!configured || update.isPending}
+        onCheckedChange={(emailNotifications) => update.mutate({ emailNotifications })}
+        state={update}
+      />
       {configured && (
-        <Button
-          size="sm"
-          variant="outline"
-          className="ml-3"
-          disabled={test.isPending}
-          onClick={() => test.mutate()}
-        >
-          {test.isSuccess ? "Test sent" : "Send test email"}
-        </Button>
+        <div className="flex flex-wrap items-center gap-2 py-2.5">
+          <Button
+            size="sm"
+            variant="outline"
+            className="max-sm:h-11"
+            disabled={test.isPending}
+            onClick={() => test.mutate()}
+          >
+            {test.isSuccess ? "Test sent" : "Send test email"}
+          </Button>
+          {test.error && <QueryError error={test.error} />}
+        </div>
       )}
       {status.error && (
         <QueryError
@@ -62,9 +62,6 @@ export function EmailNotificationsControl({ project }: { project: Project }) {
           onRetry={() => void status.refetch()}
         />
       )}
-      {update.error && <QueryError error={update.error} />}
-      <SavedCue pending={update.isPending} saved={update.isSuccess} />
-      {test.error && <QueryError error={test.error} />}
     </>
   );
 }

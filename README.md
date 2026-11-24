@@ -91,7 +91,7 @@ Design rules: [`apps/web/design.md`](apps/web/design.md). One shell on every scr
 | `/p/:projectId/inbox`, `/all/inbox`           | Needs you: a card per ticket; each question with context, options and their consequences, a recommendation; one-click answers |
 | `/all/board`                                  | Asks for a project                                                                                                            |
 | `/p/:projectId/dashboards`, `/all/dashboards` | Dashboards: weekly delivery and cost charts                                                                                   |
-| `/p/:projectId/settings`                      | Project settings (Settings menu): every switch and what it does; MCP `get_project_settings` reads them                        |
+| `/p/:projectId/settings`                      | Project settings (Settings menu): section links, every option with what it does; MCP `get_project_settings` reads them        |
 | `/projects`, `/projects/new`                  | Open the current project's settings; add a project (picker → Add project)                                                     |
 | `/settings/github`                            | Connect the GitHub App, install link, installed repos                                                                         |
 | `/p/:projectId`                               | Board: lanes with status on cards, quick add, drag to reorder or move                                                         |

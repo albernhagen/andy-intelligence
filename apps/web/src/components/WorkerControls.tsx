@@ -1,12 +1,18 @@
-import { Worker, type Project, type Stage, type Ticket, type TicketType } from "@andy/contracts";
+import {
+  type Worker,
+  type Project,
+  type Stage,
+  type Ticket,
+  type TicketType,
+} from "@andy/contracts";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { QueryError } from "@/components/Status";
 import { workerStatus } from "@/lib/needs-you";
 import { useSetWorker, useTicketRouting, useUpdateProject, useWorker } from "@/lib/queries";
 import { layerText } from "@/lib/route-layers";
-import { SavedCue } from "@/components/SavedCue";
-import { SETTING_LABELS } from "@/lib/settings-labels";
+import { PickerRow } from "@/components/SettingRow";
+import { SETTING_LABELS, WORKER_OPTIONS } from "@/lib/settings-labels";
 
 /** Who does the work (ADR-0082): markers, the ticket's one-click switch, the project default. */
 
@@ -79,34 +85,18 @@ export function WorkerControl({ ticket }: { ticket: Ticket }) {
   );
 }
 
-const DEFAULT_WORKER_LABELS: Record<Worker, string> = {
-  agent: "agent",
-  me: "me",
-  ask: "ask each ticket",
-};
-
 /** Who works a ticket that has no pick of its own; applies to existing tickets too. */
 export function DefaultWorkerSelect({ project }: { project: Project }) {
   const update = useUpdateProject(project.id);
   return (
-    <>
-      <label className="ml-3 inline-flex items-center gap-1 text-sm text-muted-foreground max-sm:min-h-11">
-        {SETTING_LABELS.defaultWorker}
-        <select
-          className="rounded border border-border bg-background px-1 max-sm:h-11 max-sm:text-base"
-          value={project.defaultWorker}
-          disabled={update.isPending}
-          onChange={(e) => update.mutate({ defaultWorker: Worker.parse(e.target.value) })}
-        >
-          {Worker.options.map((o) => (
-            <option key={o} value={o}>
-              {DEFAULT_WORKER_LABELS[o]}
-            </option>
-          ))}
-        </select>
-        {update.error && <QueryError error={update.error} />}
-      </label>
-      <SavedCue pending={update.isPending} saved={update.isSuccess} />
-    </>
+    <PickerRow
+      label={SETTING_LABELS.defaultWorker}
+      description="Who works a ticket that has no pick of its own; applies to existing tickets too."
+      value={project.defaultWorker}
+      options={WORKER_OPTIONS}
+      disabled={update.isPending}
+      onValueChange={(defaultWorker) => update.mutate({ defaultWorker })}
+      state={update}
+    />
   );
 }

@@ -64,7 +64,7 @@ describe("routing layers", () => {
     await harness.router.navigate({ to: "/settings/models" });
     expect(await screen.findByText(LAYER_ORDER_LINE)).toBeTruthy();
 
-    await harness.router.navigate({ to: "/p/ai/settings" });
+    await harness.router.navigate({ to: "/p/ai/settings", hash: "defaults" });
     expect(await screen.findByText(LAYER_ORDER_LINE)).toBeTruthy();
   });
 });

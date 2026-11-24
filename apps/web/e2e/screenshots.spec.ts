@@ -166,10 +166,10 @@ test("ticket panel routing layers", async ({ page }) => {
   await expect(routing).toHaveScreenshot("ticket-routing.png");
 });
 
-/** M4.12: AI's settings with the Changes list: a reverted flip and the revert, logged too. */
+/** M4.12: AI's settings with the Changes list (its own section since AI-372): a reverted flip and the revert, logged too. */
 test("project settings with changes", async ({ page }) => {
   await page.clock.setFixedTime(SEED_NOW);
-  await open(page, "/p/ai/settings", "AI: Andy Intelligence settings");
+  await open(page, "/p/ai/settings#changes", "AI: Andy Intelligence settings");
   await expect(page.getByText("Revert of change-flip", { exact: false })).toBeVisible();
   await expect(page).toHaveScreenshot("project-settings-changes.png", { fullPage: true });
 });

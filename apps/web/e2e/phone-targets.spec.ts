@@ -9,15 +9,19 @@ import { expectPageFits, expectTouchTargets } from "./phone";
 
 test.use({ viewport: { width: 390, height: 844 }, hasTouch: true });
 
-test("phone targets: project settings", async ({ page }) => {
-  await page.goto("/p/ai/settings");
-  await expect(page.getByRole("region", { name: "Settings" })).toBeVisible();
-  await expect(
-    page.getByRole("region", { name: "Changes" }).getByRole("button").first(),
-  ).toBeVisible();
-  await expectTouchTargets(page.locator("main"));
-  await expectPageFits(page);
-});
+// AI-372: one section at a time, so each section is checked.
+for (const section of ["setup", "automation", "limits", "defaults", "notifications", "changes"]) {
+  test(`phone targets: project settings, ${section}`, async ({ page }) => {
+    await page.goto(`/p/ai/settings#${section}`);
+    await expect(page.getByRole("region", { name: "Settings" })).toBeVisible();
+    if (section === "changes")
+      await expect(
+        page.getByRole("region", { name: "Changes" }).getByRole("button").first(),
+      ).toBeVisible();
+    await expectTouchTargets(page.locator("main"));
+    await expectPageFits(page);
+  });
+}
 
 test("phone targets: Models", async ({ page }) => {
   await page.goto("/settings/models");

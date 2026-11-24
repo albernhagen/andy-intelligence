@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { screen } from "@testing-library/react";
+import { screen, within } from "@testing-library/react";
 import { PAGE_LOAD, readyStory, renderApp } from "@/test/harness";
 
 /** AI-79 (ADR-0089 part 2): where a ticket's runs execute, in the ticket panel and settings. */
@@ -34,11 +34,13 @@ describe("executor controls", () => {
   it("GivenTheSettingsPage_WhenAndyPicksTheLocalRunner_ThenTheProjectDefaultIsStored", async () => {
     const { harness } = await readyTicket();
 
-    await harness.router.navigate({ to: "/p/$projectId/settings", params: { projectId: "ai" } });
-    await harness.user.selectOptions(
-      await screen.findByRole("combobox", { name: "Default executor" }, PAGE_LOAD),
-      "local",
-    );
+    await harness.router.navigate({
+      to: "/p/$projectId/settings",
+      params: { projectId: "ai" },
+      hash: "defaults",
+    });
+    const picker = await screen.findByRole("radiogroup", { name: "Default executor" }, PAGE_LOAD);
+    await harness.user.click(within(picker).getByRole("radio", { name: /^Local runner/ }));
 
     await expect.poll(async () => (await harness.tracker.getProject("ai"))?.executor).toBe("local");
   });
