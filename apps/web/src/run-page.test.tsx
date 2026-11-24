@@ -1,8 +1,18 @@
 import { describe, expect, it } from "vitest";
 import { screen, waitFor, within } from "@testing-library/react";
+import type { Run, TicketEvent } from "@andy/contracts";
 import { DEFAULT_ROUTE } from "@andy/domain";
 import { renderApp } from "@/test/harness";
-import { errorReason, gateText, prLabel, runSummary, wallMs } from "@/pages/RunPage";
+import {
+  errorReason,
+  gateText,
+  prLabel,
+  runSummary,
+  statusText,
+  timeline,
+  waitingText,
+  wallMs,
+} from "@/pages/RunPage";
 import { elapsed } from "@/lib/format";
 import { httpsHref } from "@/components/Runs";
 
@@ -69,16 +79,18 @@ describe("agent task page", () => {
     await open(h, `/p/ai/runs/${run.id}`);
 
     const page = await screen.findByRole("article", { name: "Agent task" });
-    expect(within(page).getByRole("heading", { name: "Agent task · build" })).toBeTruthy();
-    expect(within(page).getByText("succeeded")).toBeTruthy();
+    expect(within(page).getByRole("heading", { name: "Agent task · Build" })).toBeTruthy();
+    expect(within(page).getByText("Succeeded · 12 min")).toBeTruthy();
     const details = within(page).getByRole("region", { name: "Details" });
-    expect(details.textContent).toContain(DEFAULT_ROUTE.model);
     expect(details.textContent).toContain("12 min");
-    const usage = within(page).getByRole("region", { name: "Usage and cost" });
+    const usage = within(page).getByRole("region", { name: "Usage" });
     expect(usage.textContent).toContain((12000).toLocaleString());
     expect(usage.textContent).toContain((50000).toLocaleString());
-    expect(usage.textContent).toContain("~$1.25 (estimate)");
-    expect(usage.textContent).toContain("5h +4%, weekly +1%");
+    // AI-377: model, cost, quota and PR beside the timeline.
+    const side = within(page).getByRole("complementary", { name: "Cost and links" });
+    expect(side.textContent).toContain(DEFAULT_ROUTE.model);
+    expect(side.textContent).toContain("~$1.25 (estimate)");
+    expect(side.textContent).toContain("5h +4%, weekly +1%");
     expect(details.textContent).toContain("merged with no rework");
     expect(details.textContent).toContain("waits for you: protected path");
     // AI-340: one sentence first, naming the ticket, the time, the PR and the gate.
@@ -88,9 +100,9 @@ describe("agent task page", () => {
     expect(within(page).getByRole("region", { name: "Verification" }).textContent).toContain(
       "pnpm test",
     );
-    expect(within(page).getByRole("link", { name: "Task log" }).getAttribute("href")).toBe(LOG);
-    expect(within(page).getByRole("link", { name: "PR #7" }).getAttribute("href")).toBe(PR);
-    const ticket = await within(page).findByRole("link", { name: "AI-1: Board" });
+    expect(within(page).getByRole("link", { name: "Open log" }).getAttribute("href")).toBe(LOG);
+    expect(within(side).getByRole("link", { name: "PR #7" }).getAttribute("href")).toBe(PR);
+    const ticket = await within(side).findByRole("link", { name: "AI-1: Board" });
     expect(ticket.getAttribute("href")).toBe("/p/ai/t/AI-1");
   });
 
@@ -102,9 +114,9 @@ describe("agent task page", () => {
     ]);
     await open(h, `/p/ai/runs/${run.id}`);
 
-    const usage = await screen.findByRole("region", { name: "Usage and cost" });
-    expect(usage.textContent).toContain("Costunknown");
-    expect(usage.textContent).not.toContain("$0");
+    const side = await screen.findByRole("complementary", { name: "Cost and links" });
+    expect(side.textContent).toContain("Costunknown");
+    expect(side.textContent).not.toContain("$0");
   });
 
   it("GivenARetry_WhenItsPageOpens_ThenItLinksToTheRunItRetries", async () => {
@@ -180,7 +192,7 @@ describe("agent task page", () => {
     await h.user.click(await within(activity).findByRole("link", { name: "Agent task · build" }));
 
     await waitFor(() => expect(h.router.state.location.pathname).toBe(`/p/ai/runs/${run.id}`));
-    expect(await screen.findByRole("heading", { name: "Agent task · build" })).toBeTruthy();
+    expect(await screen.findByRole("heading", { name: "Agent task · Build" })).toBeTruthy();
   });
 });
 
@@ -242,8 +254,8 @@ describe("agent task page helpers", () => {
     for (const label of ["Ended", "Wall time", "Tokens in", "Cost", "Quota used", "Tier"])
       expect(within(page).queryByText(label, { selector: "dt" })).toBeNull();
     expect(within(page).getByText("Started", { selector: "dt" })).toBeTruthy();
-    // Nothing reported yet: no Usage and cost heading over an empty list.
-    expect(within(page).queryByRole("region", { name: "Usage and cost" })).toBeNull();
+    // Nothing reported yet: no Usage heading over an empty list.
+    expect(within(page).queryByRole("region", { name: "Usage" })).toBeNull();
   });
 
   it("GivenEachStatus_WhenSummarised_ThenOneSentenceSaysWhatHappened", () => {
@@ -359,5 +371,188 @@ describe("agent task page helpers", () => {
     expect(httpsHref("http://example.com")).toBeUndefined();
     expect(httpsHref("not a url")).toBeUndefined();
     expect(httpsHref(undefined)).toBeUndefined();
+  });
+});
+
+/** AI-377: the page on direction A: live progress, a timeline, and the outcome first. */
+describe("agent task page: live progress and outcome", () => {
+  const startRefine = async (h: Awaited<ReturnType<typeof setup>>, startedAt: string) => {
+    const run = await h.runs.create({
+      projectId: "ai",
+      ticketId: h.ticket.id,
+      step: "refine",
+      route: DEFAULT_ROUTE,
+      tier: "fast",
+    });
+    await h.runs.update(run.id, { status: "running", startedAt }, ["queued"]);
+    return run;
+  };
+
+  it("GivenARunningTask_WhenTimePasses_ThenItsCurrentStepAndElapsedTimeUpdateWithoutAReload", async () => {
+    const h = await setup();
+    const run = await startRefine(h, new Date(Date.now() - 5_000).toISOString());
+    await open(h, `/p/ai/runs/${run.id}`);
+
+    const page = await screen.findByRole("article", { name: "Agent task" });
+    const current = await within(page).findByRole("listitem", { current: "step" });
+    expect(current.textContent).toContain("Refining now");
+    const badge = within(page).getByText(/^Running · \d+ s$/);
+    const first = badge.textContent;
+
+    // The clock ticks on the page itself; no navigation, no refetch.
+    await waitFor(() => expect(badge.textContent).not.toBe(first));
+    expect(within(page).getByRole("listitem", { current: "step" }).textContent).toMatch(
+      /for \d+ s/,
+    );
+  });
+
+  it("GivenARunningTask_WhenItEndsOnTheServer_ThenTheNextPollShowsTheOutcomeInPlace", async () => {
+    const h = await setup();
+    const run = await startRefine(h, new Date(Date.now() - 60_000).toISOString());
+    await open(h, `/p/ai/runs/${run.id}`);
+    const page = await screen.findByRole("article", { name: "Agent task" });
+    await within(page).findByText(/^Running · /);
+
+    await h.runs.update(run.id, { status: "succeeded", endedAt: new Date().toISOString() }, [
+      "running",
+    ]);
+    // What the live poll does while the task is in flight.
+    await h.queryClient.refetchQueries({ type: "active" });
+
+    expect(await within(page).findByText(/^Succeeded · /)).toBeTruthy();
+    expect(within(page).queryByRole("listitem", { current: "step" })).toBeNull();
+    expect(within(page).getByLabelText("What happened", { selector: "p" }).textContent).toMatch(
+      /^Refined AI-1 in /,
+    );
+  });
+
+  it("GivenAnOpenQuestion_WhenTheTaskRuns_ThenItWaitsOnYourAnswerWithALinkToTheInbox", async () => {
+    const h = await setup();
+    const run = await startRefine(h, new Date(Date.now() - 60_000).toISOString());
+    await h.service.ask("ai", h.ticket.id, { text: "Should Esc close the panel?" }, "agent");
+    await open(h, `/p/ai/runs/${run.id}`);
+
+    const page = await screen.findByRole("article", { name: "Agent task" });
+    const current = await within(page).findByRole("listitem", { current: "step" });
+    await waitFor(() => expect(current.textContent).toContain("Waiting on your answer"));
+    expect(current.textContent).toContain("Should Esc close the panel?");
+    expect(
+      within(current).getByRole("link", { name: "Answer in inbox" }).getAttribute("href"),
+    ).toBe("/p/ai/inbox");
+    expect(within(page).getByLabelText("What happened", { selector: "p" }).textContent).toContain(
+      "It waits on your answer to one question.",
+    );
+  });
+
+  it("GivenAnEndedTask_WhenItsPageOpens_ThenOneSentenceOfOutcomeLeadsThenThePrCostAndQuota", async () => {
+    const h = await setup();
+    const run = await h.newRun();
+    await h.runs.update(
+      run.id,
+      {
+        status: "succeeded",
+        startedAt: "2026-11-04T14:00:00.000Z",
+        endedAt: "2026-11-04T14:10:00.000Z",
+        costUsd: 0.4,
+        quotaDelta: { "5h": 2, weekly: null },
+        links: { executorRun: LOG, pullRequest: PR },
+      },
+      ["queued"],
+    );
+    await open(h, `/p/ai/runs/${run.id}`);
+
+    const page = await screen.findByRole("article", { name: "Agent task" });
+    const sentence = within(page).getByLabelText("What happened", { selector: "p" });
+    await waitFor(() => expect(sentence.textContent).toBe("Built AI-1 in 10 min: PR #7."));
+    const side = within(page).getByRole("complementary", { name: "Cost and links" });
+    // The sentence comes first in reading order; the PR, cost and quota follow it.
+    expect(sentence.compareDocumentPosition(side) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(within(page).getByRole("list", { name: "Timeline" }).compareDocumentPosition(side)).toBe(
+      Node.DOCUMENT_POSITION_PRECEDING,
+    );
+    const text = side.textContent ?? "";
+    expect(text.indexOf("Quota used")).toBeLessThan(text.indexOf("Cost"));
+    expect(text).toContain("$0.40");
+    expect(text).toContain("5h +2%");
+    expect(within(side).getByRole("link", { name: "PR #7" })).toBeTruthy();
+  });
+});
+
+describe("agent task page: timeline", () => {
+  const run = (over: Partial<Run> = {}): Run =>
+    ({
+      id: "r1",
+      projectId: "ai",
+      ticketId: "t1",
+      step: "build",
+      route: DEFAULT_ROUTE,
+      tier: "fast",
+      status: "running",
+      createdAt: "2026-11-04T14:00:00.000Z",
+      startedAt: "2026-11-04T14:01:00.000Z",
+      endedAt: null,
+      attempt: 1,
+      pushGrantedAt: null,
+      branch: null,
+      error: null,
+      usage: null,
+      ...over,
+    }) as Run;
+  const event = (kind: TicketEvent["kind"], at: string, runId: string | null, data = {}) =>
+    ({
+      id: `${kind}-${at}`,
+      ticketId: "t1",
+      kind,
+      actor: "system",
+      runId,
+      body: null,
+      data,
+      createdAt: at,
+    }) as TicketEvent;
+  const now = new Date("2026-11-04T14:05:00.000Z");
+
+  it("GivenARunWithEvents_WhenTheTimelineIsBuilt_ThenItsStepsShowNewestFirstAndOthersRunsAreLeftOut", () => {
+    const entries = timeline(
+      run({ pushGrantedAt: "2026-11-04T14:04:00.000Z", branch: "agent/AI-1/x" }),
+      [
+        event("pr_linked", "2026-11-04T14:04:30.000Z", "r1", { url: PR }),
+        event("pr_linked", "2026-11-04T14:03:00.000Z", "other-run", { url: PR }),
+        event("comment", "2026-11-04T14:02:00.000Z", "r1"),
+      ],
+      [],
+      now,
+    );
+
+    expect(entries.map((e) => [e.title, e.at])).toEqual([
+      ["Building now", null],
+      ["Opened PR #7", "2026-11-04T14:04:30.000Z"],
+      ["Publishing its branch", "2026-11-04T14:04:00.000Z"],
+      ["Started", "2026-11-04T14:01:00.000Z"],
+      ["Queued", "2026-11-04T14:00:00.000Z"],
+    ]);
+    expect(entries[0]).toMatchObject({ tone: "now", detail: "for 4 min" });
+    expect(entries[3]!.detail).toBe(`${DEFAULT_ROUTE.harness} · ${DEFAULT_ROUTE.model}`);
+  });
+
+  it("GivenAFailedRun_WhenTheTimelineIsBuilt_ThenItEndsInFailedAndNothingIsInProgress", () => {
+    const entries = timeline(
+      run({ status: "failed", endedAt: "2026-11-04T14:03:00.000Z", error: "Checks failed" }),
+      [],
+      [],
+      now,
+    );
+
+    expect(entries[0]).toMatchObject({ title: "Failed", tone: "failed" });
+    expect(entries.some((e) => e.tone === "now")).toBe(false);
+  });
+
+  it("GivenStatuses_WhenTheBadgeIsWritten_ThenItSaysTheStatusAndHowLong", () => {
+    expect(statusText(run(), now)).toBe("Running · 4 min");
+    expect(statusText(run({ status: "queued", startedAt: null }), now)).toBe("Queued");
+    expect(statusText(run({ status: "succeeded", endedAt: "2026-11-04T14:13:00.000Z" }), now)).toBe(
+      "Succeeded · 12 min",
+    );
+    expect(waitingText(1)).toBe("It waits on your answer to one question.");
+    expect(waitingText(2)).toBe("It waits on your answers to 2 questions.");
   });
 });

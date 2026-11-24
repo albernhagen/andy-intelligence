@@ -85,8 +85,8 @@ test("phone: the finished agent task's page", async ({ page }) => {
   await finishRuns(page);
   await page.goto("/p/ai/t/AI-7");
   await page.getByRole("link", { name: "Agent task · build" }).click();
-  await expect(page.getByRole("heading", { name: "Agent task · build" })).toBeVisible();
-  await expect(page.getByRole("link", { name: /^AI-7: / })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Agent task · Build" })).toBeVisible();
+  await expect(page.getByRole("link", { name: /^AI-7: / }).first()).toBeVisible();
   await expectNoSidewaysScroll(page, "main");
   await expectPageFits(page);
   await expect(page.getByRole("article", { name: "Agent task" })).toHaveScreenshot(

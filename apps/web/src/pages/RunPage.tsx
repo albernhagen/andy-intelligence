@@ -1,19 +1,29 @@
-import { Children, isValidElement, type ReactNode } from "react";
+import { Children, isValidElement, useEffect, useState, type ReactNode } from "react";
 import { Link, useParams } from "@tanstack/react-router";
-import { ExternalLink } from "lucide-react";
-import type { BuildCheck, Run, RunOutcome, RunStep } from "@andy/contracts";
+import { ChevronRight, ExternalLink } from "lucide-react";
+import type {
+  BuildCheck,
+  Question,
+  Run,
+  RunOutcome,
+  RunStep,
+  Ticket,
+  TicketEvent,
+} from "@andy/contracts";
 import { Loading, QueryError } from "@/components/Status";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { STATUS_VARIANT, Summary, formatCost, httpsHref } from "@/components/Runs";
 import { formatQuotaDelta } from "@/components/TicketCostLine";
 import { ApiError } from "@/lib/api";
-import { count, dateTime, elapsed } from "@/lib/format";
-import { isActiveRun, useRun, useTicketByRef } from "@/lib/queries";
+import { count, dateTime, elapsed, timeOfDay } from "@/lib/format";
+import { isActiveRun, useEvents, useRun, useTicketByRef, useTicketQuestions } from "@/lib/queries";
+import { cn } from "@/lib/utils";
 
 /**
- * The agent task detail screen (AI-101) at `/p/<project>/runs/<runId>`: what ran, what it cost,
- * how it ended and where its log, PR and ticket are. Project-scoped only: a task's URL names its
+ * The agent task detail screen (AI-101; AI-377: direction A) at `/p/<project>/runs/<runId>`: one
+ * sentence on what it is doing or how it ended, a timeline of its steps with their times, and its
+ * model, quota, cost and PR beside them. It updates without a reload while the task runs. Project-scoped only: a task's URL names its
  * project, and another project's task reads as not found. Agent text is untrusted: plain text.
  */
 export function RunPage() {
@@ -28,140 +38,290 @@ export function RunPage() {
       <QueryError error={run.error} what="the agent task" onRetry={() => void run.refetch()} />
     );
   }
-  return <RunDetail run={run.data} />;
+  return run.data.ticketId ? (
+    <TicketRun run={run.data} ticketId={run.data.ticketId} />
+  ) : (
+    <RunDetail run={run.data} ticket={undefined} questions={[]} events={[]} />
+  );
 }
 
-function RunDetail({ run }: { run: Run }) {
+/** A ticket's task also reads the ticket's name, open questions and events (one poll each). */
+function TicketRun({ run, ticketId }: { run: Run; ticketId: string }) {
+  const path = { projectId: run.projectId, ticketId };
+  const ticket = useTicketByRef(run.projectId, ticketId).data;
+  const questions = useTicketQuestions(path).data ?? [];
+  const events = useEvents(path).data ?? [];
+  return <RunDetail run={run} ticket={ticket} questions={questions} events={events} />;
+}
+
+function RunDetail({
+  run,
+  ticket,
+  questions,
+  events,
+}: {
+  run: Run;
+  ticket: Pick<Ticket, "key" | "title"> | undefined;
+  questions: readonly Question[];
+  events: readonly TicketEvent[];
+}) {
   const started = run.startedAt ?? run.createdAt;
   const wall = wallMs(run);
-  const quota = run.quotaDelta && formatQuotaDelta(run.quotaDelta);
   const tokensIn = run.tokensIn ?? run.usage?.inputTokens ?? null;
   const tokensOut = run.tokensOut ?? run.usage?.outputTokens ?? null;
+  const active = isActiveRun(run);
+  // Ticks while the task runs, so its elapsed time moves between polls (AI-377).
+  const now = useNow(active);
+  // A task in flight waits on its ticket's open questions; an ended one waits on nothing.
+  const waitingOn = active ? questions.filter((q) => q.status === "open") : [];
+  const log = httpsHref(run.links.executorRun);
   return (
-    <article className="max-w-2xl space-y-4 wrap-anywhere" aria-label="Agent task">
-      <header className="flex flex-wrap items-center gap-2">
-        <h2 className="text-lg font-medium">Agent task · {run.step}</h2>
-        <Badge variant={STATUS_VARIANT[run.status]}>{run.status}</Badge>
+    <article className="space-y-4 wrap-anywhere" aria-label="Agent task">
+      <header className="flex flex-wrap items-center justify-between gap-2">
+        <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
+          {run.ticketId && (
+            <Crumbs projectId={run.projectId} ticketId={run.ticketId} ticket={ticket} />
+          )}
+          <h2 className="text-md font-semibold">
+            <span className="sr-only">Agent task ·</span> {STEP_TITLE[run.step]}
+          </h2>
+          <Badge variant={STATUS_VARIANT[run.status]}>{statusText(run, now)}</Badge>
+        </div>
+        {log && (
+          <Button asChild size="sm" variant="outline" className="h-11 sm:h-8">
+            <a href={log} target="_blank" rel="noopener noreferrer">
+              Open log
+              <ExternalLink aria-hidden className="size-3.5" />
+            </a>
+          </Button>
+        )}
       </header>
 
-      {/* AI-340: one sentence saying what it did or is doing, then the PR and log. */}
-      {run.ticketId ? (
-        <TicketSummary run={run} ticketId={run.ticketId} />
-      ) : (
-        <WhatHappened run={run} ticketKey={null} />
-      )}
-      <Links run={run} />
+      <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_16rem] lg:gap-6">
+        {/* AI-340, AI-377: one sentence first: what it is doing, or how it ended. */}
+        <p aria-label="What happened" className="text-base font-semibold lg:col-start-1">
+          {runSummary(run, ticket?.key ?? null, now)}
+          {waitingOn.length > 0 && ` ${waitingText(waitingOn.length)}`}
+        </p>
 
-      <Facts title="Details">
-        <Fact label="Model">{run.route.model}</Fact>
-        <Fact label="Harness">{run.route.harness}</Fact>
-        <Fact label="Provider">{run.route.provider}</Fact>
-        <Fact label="Tier">{run.tier}</Fact>
-        {(run.attempt > 1 || run.retryOf) && (
-          <Fact label="Attempt">
-            {run.attempt}
-            {run.retryOf && (
-              <>
-                {" · "}
-                <Link
-                  to="/p/$projectId/runs/$runId"
-                  params={{ projectId: run.projectId, runId: run.retryOf }}
-                  className="underline"
-                >
-                  Retry of the earlier agent task
-                </Link>
-              </>
+        <SidePanel run={run} ticket={ticket} active={active} />
+
+        <div className="space-y-4 lg:col-start-1">
+          <Timeline entries={timeline(run, events, waitingOn, now)} projectId={run.projectId} />
+
+          {/* The summary already says the first line; the full error shows only when it says more. */}
+          {errorReason(run.error)?.more && (
+            <p className="whitespace-pre-wrap text-sm text-destructive">{run.error?.trim()}</p>
+          )}
+          {run.summary && (
+            <Section title="Report">
+              <Summary text={run.summary} />
+            </Section>
+          )}
+          {run.plan && <Plan plan={run.plan} />}
+          {run.verification.length > 0 && <Verification checks={run.verification} />}
+
+          <Facts title="Details">
+            <Fact label="Harness">{run.route.harness}</Fact>
+            <Fact label="Provider">{run.route.provider}</Fact>
+            <Fact label="Tier">{run.tier}</Fact>
+            {(run.attempt > 1 || run.retryOf) && (
+              <Fact label="Attempt">
+                {run.attempt}
+                {run.retryOf && (
+                  <>
+                    {" · "}
+                    <Link
+                      to="/p/$projectId/runs/$runId"
+                      params={{ projectId: run.projectId, runId: run.retryOf }}
+                      className="underline"
+                    >
+                      Retry of the earlier agent task
+                    </Link>
+                  </>
+                )}
+              </Fact>
             )}
-          </Fact>
-        )}
-        <Fact label="Started">{started && <Time iso={started} />}</Fact>
-        <Fact label="Ended">{run.endedAt && <Time iso={run.endedAt} />}</Fact>
-        <Fact label="Wall time">{wall !== null && elapsed(wall)}</Fact>
-        <Fact label="Outcome">{run.outcome && OUTCOME_TEXT[run.outcome]}</Fact>
-        <Fact label="Gate">{gateText(run)}</Fact>
-      </Facts>
+            <Fact label="Started">{started && <Time iso={started} />}</Fact>
+            <Fact label="Ended">{run.endedAt && <Time iso={run.endedAt} />}</Fact>
+            <Fact label="Wall time">{wall !== null && elapsed(wall)}</Fact>
+            <Fact label="Outcome">{run.outcome && OUTCOME_TEXT[run.outcome]}</Fact>
+            <Fact label="Gate">{gateText(run)}</Fact>
+            <Fact label="Branch">{run.branch}</Fact>
+          </Facts>
 
-      <Facts title="Usage and cost">
-        <Fact label="Tokens in">{countOf(tokensIn)}</Fact>
-        <Fact label="Tokens out">{countOf(tokensOut)}</Fact>
-        <Fact label="Cache read">{countOf(run.usage?.cacheReadTokens)}</Fact>
-        <Fact label="Cache write">{countOf(run.usage?.cacheWriteTokens)}</Fact>
-        <Fact label="Turns">{countOf(run.usage?.turns)}</Fact>
-        {/* No usage reported means unknown, never $0 (ADR-0046); said once the task ends. */}
-        <Fact label="Cost">
-          {run.costUsd !== null ? formatCost(run) : !isActiveRun(run) && "unknown"}
-        </Fact>
-        <Fact label="Quota used">{quota}</Fact>
-      </Facts>
-
-      {/* The summary already says the first line; the full error shows only when it says more. */}
-      {errorReason(run.error)?.more && (
-        <p className="whitespace-pre-wrap text-sm text-destructive">{run.error?.trim()}</p>
-      )}
-      {run.summary && (
-        <Section title="Report">
-          <Summary text={run.summary} />
-        </Section>
-      )}
-      {run.plan && <Plan plan={run.plan} />}
-      {run.verification.length > 0 && <Verification checks={run.verification} />}
+          <Facts title="Usage">
+            <Fact label="Tokens in">{countOf(tokensIn)}</Fact>
+            <Fact label="Tokens out">{countOf(tokensOut)}</Fact>
+            <Fact label="Cache read">{countOf(run.usage?.cacheReadTokens)}</Fact>
+            <Fact label="Cache write">{countOf(run.usage?.cacheWriteTokens)}</Fact>
+            <Fact label="Turns">{countOf(run.usage?.turns)}</Fact>
+          </Facts>
+        </div>
+      </div>
     </article>
   );
 }
 
-function WhatHappened({ run, ticketKey }: { run: Run; ticketKey: string | null }) {
+/** "Board › AI-3 Story side panel ›": where the task belongs, each part a link. */
+function Crumbs({
+  projectId,
+  ticketId,
+  ticket,
+}: {
+  projectId: string;
+  ticketId: string;
+  ticket: Pick<Ticket, "key" | "title"> | undefined;
+}) {
   return (
-    <p aria-label="What happened" className="text-sm">
-      {runSummary(run, ticketKey, new Date())}
-    </p>
+    <nav aria-label="Breadcrumb" className="flex min-w-0 items-center gap-1 text-sm">
+      <Link
+        to="/p/$projectId/board"
+        params={{ projectId }}
+        className="text-muted-foreground hover:text-foreground"
+      >
+        Board
+      </Link>
+      <ChevronRight aria-hidden className="size-3.5 text-muted-foreground" />
+      <Link
+        to="/p/$projectId/t/$ticketRef"
+        params={{ projectId, ticketRef: ticket?.key ?? ticketId }}
+        className="truncate text-muted-foreground hover:text-foreground"
+      >
+        {ticket ? `${ticket.key}: ${ticket.title}` : "Ticket"}
+      </Link>
+      <ChevronRight aria-hidden className="size-3.5 text-muted-foreground" />
+    </nav>
   );
 }
 
-/** The summary names the ticket by key once it loads (the same query the ticket link uses). */
-function TicketSummary({ run, ticketId }: { run: Run; ticketId: string }) {
-  const key = useTicketByRef(run.projectId, ticketId).data?.key ?? null;
-  return <WhatHappened run={run} ticketKey={key} />;
+/**
+ * Model, quota, cost and PR beside the timeline (below the sentence on a phone): once the task
+ * ends, the outcome sentence leads and these follow (AI-377).
+ */
+function SidePanel({
+  run,
+  ticket,
+  active,
+}: {
+  run: Run;
+  ticket: Pick<Ticket, "key" | "title"> | undefined;
+  active: boolean;
+}) {
+  const quota = run.quotaDelta && formatQuotaDelta(run.quotaDelta);
+  const pr = httpsHref(run.links.pullRequest);
+  const route = [run.tier && `${run.tier} tier`, run.route.harness, run.route.provider]
+    .filter(Boolean)
+    .join(" · ");
+  return (
+    <aside
+      aria-label="Cost and links"
+      className="space-y-3 self-start rounded-lg border border-border bg-raised p-4 text-sm lg:col-start-2 lg:row-span-2 lg:row-start-1"
+    >
+      <SideFact label="Model" sub={route}>
+        {run.route.model}
+      </SideFact>
+      <SideFact label={active ? "Quota used so far" : "Quota used"}>
+        {quota ?? (active ? "None reported yet" : "Not reported")}
+      </SideFact>
+      {/* No usage reported means unknown, never $0 (ADR-0046); said once the task ends. */}
+      <SideFact label="Cost">
+        {run.costUsd !== null ? formatCost(run) : active ? "None reported yet" : "unknown"}
+      </SideFact>
+      <SideFact label="Pull request">
+        {pr ? (
+          <a href={pr} target="_blank" rel="noopener noreferrer" className="underline">
+            {prLabel(pr)}
+          </a>
+        ) : (
+          "None yet"
+        )}
+      </SideFact>
+      {run.ticketId && (
+        <SideFact label="Ticket">
+          <Link
+            to="/p/$projectId/t/$ticketRef"
+            params={{ projectId: run.projectId, ticketRef: ticket?.key ?? run.ticketId }}
+            className="underline"
+          >
+            {ticket ? `${ticket.key}: ${ticket.title}` : "Ticket"}
+          </Link>
+        </SideFact>
+      )}
+    </aside>
+  );
 }
 
-/** The PR and the log as buttons (one click from the top); the ticket and branch beside them. */
-function Links({ run }: { run: Run }) {
-  const pr = httpsHref(run.links.pullRequest);
-  const log = httpsHref(run.links.executorRun);
+function SideFact({ label, sub, children }: { label: string; sub?: string; children: ReactNode }) {
   return (
-    <div className="flex flex-wrap items-center gap-2 text-sm">
-      {pr && (
-        <Button asChild size="sm" variant="outline" className="h-11 sm:h-8">
-          <a href={pr} target="_blank" rel="noopener noreferrer">
-            {prLabel(pr)}
-            <ExternalLink aria-hidden className="size-3.5" />
-          </a>
-        </Button>
-      )}
-      {log && (
-        <Button asChild size="sm" variant="outline" className="h-11 sm:h-8">
-          <a href={log} target="_blank" rel="noopener noreferrer">
-            Task log
-            <ExternalLink aria-hidden className="size-3.5" />
-          </a>
-        </Button>
-      )}
-      {run.ticketId && <TicketLink projectId={run.projectId} ticketId={run.ticketId} />}
-      {run.branch && <span className="text-muted-foreground">branch {run.branch}</span>}
+    <div className="space-y-0.5">
+      <p className="text-xs text-muted-foreground">{label}</p>
+      <p className="font-medium tabular-nums">{children}</p>
+      {sub && <p className="text-xs text-muted-foreground">{sub}</p>}
     </div>
   );
 }
 
-/** "AI-7: Title" once the ticket loads; the link works before that too. */
-function TicketLink({ projectId, ticketId }: { projectId: string; ticketId: string }) {
-  const ticket = useTicketByRef(projectId, ticketId).data;
+/** One moment in the task, newest first. `now` is the step in progress; `waiting` holds questions. */
+export interface TimelineEntry {
+  key: string;
+  at: string | null;
+  title: string;
+  detail?: string;
+  tone: "done" | "now" | "failed";
+  questions?: readonly Pick<Question, "id" | "text">[];
+}
+
+function Timeline({ entries, projectId }: { entries: TimelineEntry[]; projectId: string }) {
   return (
-    <Link
-      to="/p/$projectId/t/$ticketRef"
-      params={{ projectId, ticketRef: ticket?.key ?? ticketId }}
-      className="underline"
-    >
-      {ticket ? `${ticket.key}: ${ticket.title}` : "Ticket"}
-    </Link>
+    <ol aria-label="Timeline" className="space-y-0">
+      {entries.map((e, i) => (
+        <li
+          key={e.key}
+          aria-current={e.tone === "now" ? "step" : undefined}
+          className="grid grid-cols-[4.5rem_1rem_minmax(0,1fr)] gap-x-2 sm:grid-cols-[5.5rem_1rem_minmax(0,1fr)]"
+        >
+          <span className="pt-0.5 text-sm text-muted-foreground tabular-nums">
+            {e.at && <time dateTime={e.at}>{timeOfDay(e.at)}</time>}
+          </span>
+          {/* The rail: a dot per entry, a line down to the next. */}
+          <span aria-hidden className="relative flex justify-center">
+            <span
+              className={cn(
+                "relative z-10 mt-1.5 size-2.5 rounded-full",
+                e.tone === "now" && "bg-running ring-4 ring-running/20",
+                e.tone === "done" && "bg-success",
+                e.tone === "failed" && "bg-destructive",
+              )}
+            />
+            {i < entries.length - 1 && <span className="absolute top-3 bottom-0 w-px bg-border" />}
+          </span>
+          <div className="space-y-2 pb-4">
+            <div>
+              <p className="font-medium">{e.title}</p>
+              {e.detail && <p className="text-sm text-muted-foreground">{e.detail}</p>}
+            </div>
+            {e.questions && e.questions.length > 0 && (
+              <div className="space-y-2 rounded-lg border border-border bg-raised p-3">
+                {e.questions.map((q) => (
+                  <div key={q.id} className="flex flex-wrap items-center justify-between gap-2">
+                    <p className="flex min-w-0 items-center gap-2 text-sm">
+                      <span aria-hidden className="size-1.5 shrink-0 rounded-full bg-attention" />
+                      {q.text}
+                    </p>
+                  </div>
+                ))}
+                <Button asChild size="sm" variant="outline" className="h-11 sm:h-8">
+                  <Link to="/p/$projectId/inbox" params={{ projectId }}>
+                    Answer in inbox
+                  </Link>
+                </Button>
+              </div>
+            )}
+          </div>
+        </li>
+      ))}
+    </ol>
   );
 }
 
@@ -288,6 +448,157 @@ const STEP_VERBS: Record<RunStep, [going: string, done: string]> = {
   ideate: ["Ideating", "Ideated"],
   summarize: ["Summarizing", "Summarized"],
 };
+
+/** The page title per step: "Refine", "Build". */
+const STEP_TITLE: Record<RunStep, string> = {
+  refine: "Refine",
+  plan: "Plan",
+  build: "Build",
+  review: "Review",
+  verify: "Verify",
+  scout: "Scout",
+  sync: "Sync",
+  "plan-project": "Plan the project",
+  ideate: "Ideate",
+  summarize: "Summarize",
+};
+
+const STATUS_WORD: Record<Run["status"], string> = {
+  queued: "Queued",
+  running: "Running",
+  succeeded: "Succeeded",
+  failed: "Failed",
+  cancelled: "Cancelled",
+};
+
+/** Whole minutes once past one: "1 min", "12 min"; seconds before that. */
+const about = (ms: number) => elapsed(ms < 60_000 ? ms : Math.round(ms / 60_000) * 60_000);
+
+/** The badge: "Running · 1 min" while it runs (from when it started), "Succeeded · 12 min" after. */
+export function statusText(
+  run: Pick<Run, "status" | "createdAt" | "startedAt" | "endedAt" | "usage">,
+  now: Date,
+): string {
+  const word = STATUS_WORD[run.status];
+  if (run.status === "running") {
+    const since = run.startedAt ?? run.createdAt;
+    return since ? `${word} · ${about(now.getTime() - Date.parse(since))}` : word;
+  }
+  const wall = wallMs(run);
+  return run.status !== "queued" && wall !== null ? `${word} · ${about(wall)}` : word;
+}
+
+/** "It waits on your answer to one question." */
+export function waitingText(n: number): string {
+  return n === 1
+    ? "It waits on your answer to one question."
+    : `It waits on your answers to ${count(n)} questions.`;
+}
+
+/**
+ * The task's steps, newest first, from what the API already returns (AI-377): queued, started,
+ * the questions it asked and the PR it opened (ticket events that name it), publishing its branch,
+ * how it ended, and while it runs, what it is doing now: waiting on Andy's answer or the step.
+ */
+export function timeline(
+  run: Run,
+  events: readonly TicketEvent[],
+  waitingOn: readonly Pick<Question, "id" | "text" | "createdAt">[],
+  now: Date,
+): TimelineEntry[] {
+  const [going, done] = STEP_VERBS[run.step];
+  const entries: TimelineEntry[] = [];
+  if (run.createdAt) {
+    const why = run.attempt > 1 ? "Automatic retry" : run.tier ? `${run.tier} tier` : undefined;
+    entries.push({ key: "queued", at: run.createdAt, title: "Queued", detail: why, tone: "done" });
+  }
+  if (run.startedAt) {
+    entries.push({
+      key: "started",
+      at: run.startedAt,
+      title: "Started",
+      detail: `${run.route.harness} · ${run.route.model}`,
+      tone: "done",
+    });
+  }
+  for (const e of events) {
+    if (e.runId !== run.id) continue;
+    const entry = eventEntry(e);
+    if (entry) entries.push(entry);
+  }
+  if (run.pushGrantedAt) {
+    entries.push({
+      key: "push",
+      at: run.pushGrantedAt,
+      title: "Publishing its branch",
+      detail: run.branch ?? undefined,
+      tone: "done",
+    });
+  }
+  if (run.endedAt || !isActiveRun(run)) {
+    const failed = run.status === "failed";
+    entries.push({
+      key: "ended",
+      at: run.endedAt,
+      // The reason is in the sentence above; said once.
+      title: failed ? "Failed" : run.status === "cancelled" ? "Cancelled" : done,
+      tone: failed ? "failed" : "done",
+    });
+  }
+  // Oldest first by time; an entry without one (an end not yet stamped) goes last.
+  entries.sort((a, b) => (a.at ?? "\uffff").localeCompare(b.at ?? "\uffff"));
+  if (isActiveRun(run)) {
+    const since = run.startedAt ?? run.createdAt;
+    entries.push(
+      waitingOn.length > 0
+        ? {
+            key: "now",
+            at: waitingOn.reduce((t, q) => (q.createdAt > t ? q.createdAt : t), ""),
+            title: "Waiting on your answer",
+            tone: "now",
+            questions: waitingOn,
+          }
+        : run.status === "queued"
+          ? { key: "now", at: null, title: "Waiting to start", tone: "now" }
+          : {
+              key: "now",
+              at: null,
+              title: `${going} now`,
+              detail: since ? `for ${about(now.getTime() - Date.parse(since))}` : undefined,
+              tone: "now",
+            },
+    );
+  }
+  return entries.reverse();
+}
+
+/** A ticket event the task caused, as a timeline entry; null for events it doesn't show. */
+function eventEntry(e: TicketEvent): TimelineEntry | null {
+  const base = { key: e.id, at: e.createdAt, tone: "done" as const };
+  switch (e.kind) {
+    case "question_asked":
+      return { ...base, title: "Asked you a question", detail: e.body ?? undefined };
+    case "question_answered":
+      return { ...base, title: "Got your answer", detail: e.body ?? undefined };
+    case "pr_linked": {
+      const url = typeof e.data.url === "string" ? e.data.url : null;
+      return { ...base, title: url ? `Opened ${prLabel(url)}` : "Opened a pull request" };
+    }
+    default:
+      return null;
+  }
+}
+
+/** Re-renders every second while `on`, so elapsed times move between polls. */
+function useNow(on: boolean): Date {
+  const [now, setNow] = useState(() => new Date());
+  useEffect(() => {
+    if (!on) return;
+    const id = window.setInterval(() => setNow(new Date()), 1000);
+    return () => window.clearInterval(id);
+  }, [on]);
+  return now;
+}
 
 /** "PR #72", or "Pull request" for a URL without a number. */
 export function prLabel(url: string): string {
