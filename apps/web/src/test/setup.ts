@@ -11,6 +11,14 @@ configure({ asyncUtilTimeout: PAGE_LOAD.timeout });
 // jsdom has no scrollTo; the router calls it on navigation.
 if (typeof window !== "undefined") window.scrollTo = () => {};
 
+// jsdom lacks the pointer-capture and scroll APIs Radix Select calls (AI-375: the ticket panel's
+// selects are Radix, and many page tests open the panel).
+if (typeof Element !== "undefined") {
+  Element.prototype.hasPointerCapture ??= () => false;
+  Element.prototype.releasePointerCapture ??= () => {};
+  Element.prototype.scrollIntoView ??= () => {};
+}
+
 afterEach(() => {
   cleanup();
   // The remembered project scope (lib/scope.ts) must not leak between tests.

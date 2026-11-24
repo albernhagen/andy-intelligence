@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { screen, waitFor, within } from "@testing-library/react";
 import type { MilestoneStatus } from "@andy/contracts";
 import { PAGE_LOAD, readyStory, renderApp } from "@/test/harness";
+import { pick } from "@/test/pick";
 
 /**
  * AI-311: M4.38: the epic panel and the board's epic groups show the epic's milestone and its
@@ -77,7 +78,8 @@ describe("milestone on the epic panel (AI-311)", () => {
     await harness.router.navigate({ to: `/p/ai/t/${loose.key}` });
     const section = await screen.findByRole("region", { name: "Milestone" }, PAGE_LOAD);
 
-    await harness.user.selectOptions(
+    await pick(
+      harness.user,
       await within(section).findByRole("combobox", { name: "Milestone" }),
       "M4: Epics",
     );
@@ -95,7 +97,8 @@ describe("milestone on the epic panel (AI-311)", () => {
     await harness.router.navigate({ to: `/p/ai/t/${epic.key}` });
     const section = await screen.findByRole("region", { name: "Milestone" }, PAGE_LOAD);
 
-    await harness.user.selectOptions(
+    await pick(
+      harness.user,
       await within(section).findByRole("combobox", { name: "Status of M6: Dev → prod releases" }),
       "Approved",
     );

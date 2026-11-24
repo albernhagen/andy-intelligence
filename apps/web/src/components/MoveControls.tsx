@@ -1,9 +1,9 @@
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import type { Stage, Ticket } from "@andy/contracts";
 import { isForwardMove } from "@andy/domain";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Field, Input, Select } from "@/components/ui/input";
+import { Field, Input } from "@/components/ui/input";
+import { PanelSelect } from "@/components/PanelSelect";
 import { QueryError } from "@/components/Status";
 import { useMoveTicket, useSetUpNext } from "@/lib/queries";
 import { STAGE_LABELS, moveOptions } from "@/lib/tickets";
@@ -23,7 +23,7 @@ export function nextMove(stage: Stage): Stage | null {
  * (ADR-0057, optional reason; history marks it forced) sit under "Move…". The API enforces the
  * rules (e.g. DoR for Backlog → Ready); its errors show here.
  */
-export function MoveControls({ ticket }: { ticket: Ticket }) {
+export function MoveControls({ ticket, aside }: { ticket: Ticket; aside?: ReactNode }) {
   const move = useMoveTicket({ projectId: ticket.projectId, ticketId: ticket.id });
   const upNext = useSetUpNext(ticket.projectId);
   const inUpNext = ticket.upNextRank !== null;
@@ -37,14 +37,12 @@ export function MoveControls({ ticket }: { ticket: Ticket }) {
 
   return (
     <section aria-label="Move" className="space-y-2">
+      {/* AI-375: the stage shows in the panel's status line; this row is the decision. */}
       <div className="flex flex-wrap items-center gap-2">
-        <span className="flex items-center gap-2">
-          <span className="text-xs text-muted-foreground">Stage</span>
-          <Badge>{STAGE_LABELS[ticket.stage]}</Badge>
-        </span>
         {next && (
           <Button
             size="sm"
+            className="max-sm:w-full"
             disabled={move.isPending}
             onClick={() => move.mutate({ to: next, force: false, reason: null })}
           >
@@ -53,7 +51,7 @@ export function MoveControls({ ticket }: { ticket: Ticket }) {
         )}
         <Button
           size="sm"
-          variant="ghost"
+          variant="outline"
           aria-expanded={more}
           aria-controls={`more-moves-${ticket.id}`}
           onClick={() => {
@@ -64,6 +62,7 @@ export function MoveControls({ ticket }: { ticket: Ticket }) {
         >
           Move…
         </Button>
+        {aside}
       </div>
 
       {more && (
@@ -116,16 +115,13 @@ export function MoveControls({ ticket }: { ticket: Ticket }) {
             );
           }}
         >
-          <Field label="Force to">
-            <Select required value={to} onChange={(e) => setTo(e.target.value as Stage)}>
-              <option value="">Pick a stage</option>
-              {forced.map((s) => (
-                <option key={s} value={s}>
-                  {STAGE_LABELS[s]}
-                </option>
-              ))}
-            </Select>
-          </Field>
+          <PanelSelect
+            label="Force to"
+            placeholder="Pick a stage"
+            value={to}
+            options={forced.map((s) => ({ value: s, label: STAGE_LABELS[s] }))}
+            onValueChange={(v) => setTo(v as Stage)}
+          />
           <Field label="Reason (optional)">
             <Input value={reason} onChange={(e) => setReason(e.target.value)} />
           </Field>

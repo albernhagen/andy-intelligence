@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { fireEvent, screen, waitFor, within } from "@testing-library/react";
 import { DEFAULT_ROUTE } from "@andy/domain";
 import { readyStory, renderApp } from "@/test/harness";
+import { pick } from "@/test/pick";
 
 /** AI-29: the ticket panel: the ticket as a side panel with a status line and markdown. */
 
@@ -112,7 +113,7 @@ describe("status line", () => {
     const panel = await open();
     await waitFor(() => expect(status().textContent).toBe("Backlog · ready to move to Ready"));
 
-    await user.selectOptions(within(panel).getByLabelText("Add a blocker"), "AI-2: Auth");
+    await pick(user, within(panel).getByRole("combobox", { name: "Add a blocker" }), "AI-2: Auth");
 
     await waitFor(() => expect(status().textContent).toBe("Blocked by AI-2"));
     const blockers = within(panel).getByRole("region", { name: "Blocked by" });
@@ -333,41 +334,45 @@ describe("unsaved drafts and quick saves (PR #80 review)", () => {
     expect(confirm).not.toHaveBeenCalled();
   });
 
+  // AI-375: the rail's selects are Radix now, so two one-click saves in one tick are two list
+  // removals in different fields; the per-ticket save queue under test is the same.
+  const twoLists = { outOfScope: ["billing"], touches: ["apps/web/**"] };
+
   it("GivenTwoFieldsChangedBeforeTheFirstSaveReturns_WhenSaved_ThenBothSaveWithoutAConflict", async () => {
-    const harness = await seeded();
+    const harness = await seeded(twoLists);
     const panel = await harness.open();
 
     // Both changes in the same tick: the second save starts before the first returns.
-    fireEvent.change(within(panel).getByLabelText("Size"), { target: { value: "M" } });
-    fireEvent.change(within(panel).getByLabelText("Type"), { target: { value: "bug" } });
+    fireEvent.click(within(panel).getByRole("button", { name: "Remove: billing" }));
+    fireEvent.click(within(panel).getByRole("button", { name: "Remove: apps/web/**" }));
 
     await waitFor(async () =>
       expect(await harness.tracker.getTicket("ai", harness.ticket.id)).toMatchObject({
-        size: "M",
-        type: "bug",
+        outOfScope: [],
+        touches: [],
       }),
     );
     expect(within(panel).queryByRole("alert")).toBeNull();
   });
 
   it("GivenASaveQueuedBehindAnother_WhenShown_ThenItsFieldIsPendingUntilItSaves", async () => {
-    const harness = await seeded();
+    const harness = await seeded(twoLists);
     const panel = await harness.open();
-    const size = within(panel).getByLabelText("Size") as HTMLSelectElement;
-    const type = within(panel).getByLabelText("Type") as HTMLSelectElement;
+    const first = within(panel).getByRole("button", { name: "Remove: billing" });
+    const second = within(panel).getByRole("button", { name: "Remove: apps/web/**" });
 
-    fireEvent.change(size, { target: { value: "M" } });
-    fireEvent.change(type, { target: { value: "bug" } });
+    fireEvent.click(first);
+    fireEvent.click(second);
 
-    // The Type save waits behind the Size save, and is already shown as pending (disabled),
-    // so it can't be sent twice.
-    expect(size.disabled).toBe(true);
-    expect(type.disabled).toBe(true);
-    await waitFor(() => expect(type.disabled).toBe(false));
-    expect(size.disabled).toBe(false);
-    expect(await harness.tracker.getTicket("ai", harness.ticket.id)).toMatchObject({
-      size: "M",
-      type: "bug",
-    });
+    // The second save waits behind the first, and is already shown as pending (disabled), so it
+    // can't be sent twice.
+    expect((first as HTMLButtonElement).disabled).toBe(true);
+    expect((second as HTMLButtonElement).disabled).toBe(true);
+    await waitFor(async () =>
+      expect(await harness.tracker.getTicket("ai", harness.ticket.id)).toMatchObject({
+        outOfScope: [],
+        touches: [],
+      }),
+    );
   });
 });

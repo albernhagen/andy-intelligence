@@ -1,6 +1,5 @@
-import { type ExecutorKind, type Project, type Ticket } from "@andy/contracts";
-import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
+import { ExecutorKind, type Project, type Ticket } from "@andy/contracts";
+import { OptionCards, type OptionCard } from "@/components/ui/option-cards";
 import { QueryError } from "@/components/Status";
 import { useExecutor, useSetExecutor, useUpdateProject } from "@/lib/queries";
 import { PickerRow } from "@/components/SettingRow";
@@ -13,42 +12,38 @@ export const EXECUTOR_LABELS: Record<ExecutorKind, string> = {
   local: EXECUTOR_OPTIONS.local.label,
 };
 
-/** The ticket's side rail: its executor, and one click to switch between Actions and local. */
+/**
+ * Where the ticket's agent tasks run (AI-375, handed over from AI-372): every choice as an option
+ * card, from the same list as the project default (`EXECUTOR_OPTIONS`), plus "Use project
+ * default".
+ */
 export function ExecutorControl({ ticket }: { ticket: Ticket }) {
   const path = { projectId: ticket.projectId, ticketId: ticket.id };
   const view = useExecutor(path).data;
   const set = useSetExecutor(path);
   if (!view) return null;
-  const other: ExecutorKind = view.executor === "local" ? "actions" : "local";
+  const options: OptionCard<ExecutorKind | "default">[] = [
+    ...ExecutorKind.options.map((e) => ({ value: e, ...EXECUTOR_OPTIONS[e] })),
+    {
+      value: "default",
+      label: "Use project default",
+      description:
+        view.override === null
+          ? `Now ${EXECUTOR_LABELS[view.executor]}, from the project.`
+          : "Whatever the project says.",
+    },
+  ];
   return (
     <div className="space-y-1">
-      <p className="flex flex-wrap items-center gap-2">
-        <span className="text-xs text-muted-foreground">Runs on</span>
-        <Badge>{EXECUTOR_LABELS[view.executor]}</Badge>
-        {view.override === null && (
-          <span className="text-xs text-muted-foreground">(project default)</span>
-        )}
-      </p>
-      <p className="flex flex-wrap gap-2">
-        <Button
-          size="sm"
-          variant="outline"
-          disabled={set.isPending}
-          onClick={() => set.mutate({ executor: other })}
-        >
-          {other === "local" ? "Run locally" : "Run on Actions"}
-        </Button>
-        {view.override !== null && (
-          <Button
-            size="sm"
-            variant="ghost"
-            disabled={set.isPending}
-            onClick={() => set.mutate({ executor: null })}
-          >
-            Use project executor
-          </Button>
-        )}
-      </p>
+      <span className="block text-xs text-muted-foreground">Runs on</span>
+      <OptionCards
+        label="Runs on"
+        className="sm:grid-cols-1"
+        value={view.override ?? "default"}
+        disabled={set.isPending}
+        onValueChange={(v) => set.mutate({ executor: v === "default" ? null : v })}
+        options={options}
+      />
       {set.error && <QueryError error={set.error} />}
     </div>
   );

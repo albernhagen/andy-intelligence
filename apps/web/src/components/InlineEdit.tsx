@@ -7,6 +7,7 @@ import { QueryError } from "@/components/Status";
 import { Button } from "@/components/ui/button";
 import { Segmented } from "@/components/ui/segmented";
 import { Input, Textarea } from "@/components/ui/input";
+import { toast } from "@/components/ui/toast";
 import { ApiError } from "@/lib/api";
 import { type TicketPatch, ticketQueryKey, useUpdateTicket } from "@/lib/queries";
 import { cn } from "@/lib/utils";
@@ -37,16 +38,27 @@ function latestOwnVersion(ticketId: string, base: string): string {
   return version;
 }
 
-export function useTicketSave(ticket: Ticket) {
+/**
+ * `what` names the field in the toast after a save (AI-375: "Saved Size on AI-1", with Undo
+ * writing the old values back through the same queue). Without it the toast says "Saved AI-1".
+ */
+export function useTicketSave(ticket: Ticket, what?: string) {
   const update = useUpdateTicket({ projectId: ticket.projectId, ticketId: ticket.id });
   const queryClient = useQueryClient();
   // Saves of this field queued or in flight: pending from the click, not only once it runs.
   const [inFlight, setInFlight] = useState(0);
   const began = useRef<string | null>(null);
   const begin = () => void (began.current = ticket.updatedAt);
-  const save = (patch: Omit<TicketPatch, "ifUpdatedAt">, onSaved?: () => void) => {
+  const save = (
+    patch: Omit<TicketPatch, "ifUpdatedAt">,
+    onSaved?: () => void,
+    { undoable = true }: { undoable?: boolean } = {},
+  ) => {
     setInFlight((n) => n + 1);
     const base = began.current ?? ticket.updatedAt;
+    const before = Object.fromEntries(
+      Object.keys(patch).map((k) => [k, ticket[k as keyof Ticket]]),
+    ) as Omit<TicketPatch, "ifUpdatedAt">;
     const run = async () => {
       const ifUpdatedAt = latestOwnVersion(ticket.id, base);
       try {
@@ -55,6 +67,10 @@ export function useTicketSave(ticket: Ticket) {
         // The saved ticket at once (before the refetch), so the panel shows it.
         queryClient.setQueryData(ticketQueryKey(saved.projectId, saved.key), saved);
         onSaved?.();
+        toast({
+          title: what ? `Saved ${what} on ${ticket.key}` : `Saved ${ticket.key}`,
+          undo: undoable ? () => save(before, undefined, { undoable: false }) : undefined,
+        });
       } catch {
         // Shown through `update.error` next to the field.
       } finally {

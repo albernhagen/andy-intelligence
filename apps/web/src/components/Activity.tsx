@@ -38,7 +38,7 @@ export function Activity(props: {
         <h3 className="text-sm font-medium">Activity</h3>
         <StartRuns path={path} runs={props.runs} />
       </div>
-      <ol className="space-y-2">
+      <ol className="ml-1 space-y-3 border-l border-border py-1">
         {timeline(props.events, props.runs).map((item) =>
           item.kind === "run" ? (
             <RunItem
@@ -80,12 +80,24 @@ export function Activity(props: {
   );
 }
 
+/** The timeline dot's colour (AI-375 mockup): comments and PRs stand out; the rest is quiet. */
+function dotTone(kind: TicketEvent["kind"]): string {
+  if (kind === "comment" || kind === "question_asked") return "bg-primary";
+  if (kind === "pr_linked") return "bg-success";
+  return "bg-border";
+}
+
 function EventItem({ event: e }: { event: TicketEvent }) {
   return (
-    <li className="space-y-1 border-l-2 border-border pl-3 text-sm wrap-anywhere">
+    <li className="relative space-y-1 pl-4 text-sm wrap-anywhere">
+      {/* A dot on the timeline's line; colour is never the only marker: the text says what. */}
+      <span
+        aria-hidden
+        className={`absolute top-1.5 -left-[5px] size-2.5 rounded-full ring-2 ring-raised ${dotTone(e.kind)}`}
+      />
       <p>
         <span className="font-medium">{actorLabel(e.actor)}</span> {describeEvent(e)}{" "}
-        <time dateTime={e.createdAt} className="text-xs text-muted-foreground">
+        <time dateTime={e.createdAt} className="text-xs text-muted-foreground tabular-nums">
           {dateTime(e.createdAt)}
         </time>
       </p>

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { screen, within } from "@testing-library/react";
+import { screen, waitFor, within } from "@testing-library/react";
 import { PAGE_LOAD, readyStory, renderApp } from "@/test/harness";
 
 /** AI-79 (ADR-0089 part 2): where a ticket's runs execute, in the ticket panel and settings. */
@@ -20,11 +20,23 @@ describe("executor controls", () => {
       to: "/p/$projectId/t/$ticketRef",
       params: { projectId: "ai", ticketRef: ticket.key },
     });
-    expect(await screen.findByText("GitHub Actions", {}, PAGE_LOAD)).toBeTruthy();
-    await harness.user.click(await screen.findByRole("button", { name: "Run locally" }));
+    // AI-375: every choice as an option card, the project default picked until Andy picks one.
+    const runsOn = await screen.findByRole("radiogroup", { name: "Runs on" }, PAGE_LOAD);
+    const useDefault = within(runsOn).getByRole("radio", { name: /^Use project default/ });
+    expect(useDefault.getAttribute("aria-checked")).toBe("true");
+    expect(useDefault.textContent).toContain("Now GitHub Actions, from the project.");
+    await harness.user.click(within(runsOn).getByRole("radio", { name: /^Local runner/ }));
 
-    await screen.findByRole("button", { name: "Run on Actions" });
-    expect((await harness.tracker.getTicket("ai", ticket.id))?.overrides.executor).toBe("local");
+    await waitFor(async () =>
+      expect((await harness.tracker.getTicket("ai", ticket.id))?.overrides.executor).toBe("local"),
+    );
+    await waitFor(() =>
+      expect(
+        within(runsOn)
+          .getByRole("radio", { name: /^Local runner/ })
+          .getAttribute("aria-checked"),
+      ).toBe("true"),
+    );
     // No runner is present, so the override waits for one (ADR-0089).
     expect((await screen.findByRole("status", { name: "Status" })).textContent).toContain(
       "Waiting: local runner away",
