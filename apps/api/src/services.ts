@@ -474,11 +474,17 @@ export function createServices(raw: AppDeps): Services {
     connection ? new ConnectedCodeHost(connection) : null,
     now,
   );
+  // AI-304: milestones (ADR-0131); each write is logged when the change log is configured.
+  const milestoneService = deps.milestones
+    ? new MilestoneService(deps.tracker, deps.milestones, deps.configChanges ?? null, now)
+    : null;
+  // ADR-0149: approving a plan also creates its milestones, approved, each with its case.
   const plans = new ProjectPlanService(
     deps.tracker,
     service,
     now,
     email ? (id, plan) => email.planNeedsYou(id, plan.proposal.milestones.length) : undefined,
+    milestoneService,
   );
   const configProposals = deps.configChanges
     ? new ConfigProposals(
@@ -495,10 +501,6 @@ export function createServices(raw: AppDeps): Services {
   // AI-239: routing settings; each save is logged when the change log is configured.
   const routing = deps.routing
     ? new RoutingSettings(deps.routing, deps.tracker, deps.configChanges ?? null, now)
-    : null;
-  // AI-304: milestones (ADR-0131); each write is logged when the change log is configured.
-  const milestoneService = deps.milestones
-    ? new MilestoneService(deps.tracker, deps.milestones, deps.configChanges ?? null, now)
     : null;
   // AI-275: a routing change in a project's log reverts through routing settings; AI-304: a
   // milestone change through the milestone service.

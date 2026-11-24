@@ -50,9 +50,35 @@
               "minLength": 1,
               "maxLength": 200
             }
+          },
+          "case": {
+            "type": "object",
+            "additionalProperties": false,
+            "description": "Why this milestone is worth building, for Andy to decide whether to approve or park it. From the brief only: you have no web access, so no market figures not traceable to it.",
+            "properties": {
+              "serves": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 300,
+                "description": "Who it serves: the users or system that gain from it, named as the brief names them."
+              },
+              "expectedReturn": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 300,
+                "description": "What they gain when it is done, and the sign Andy will see that it paid off."
+              },
+              "cheapestTest": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 300,
+                "description": "The cheapest way to test it is worth building before building all of it: a mock-up, a manual run, one ticket, a question to a user."
+              }
+            },
+            "required": ["serves", "expectedReturn", "cheapestTest"]
           }
         },
-        "required": ["title", "goal", "doneWhen", "slices"]
+        "required": ["title", "goal", "doneWhen", "slices", "case"]
       }
     }
   },

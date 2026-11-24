@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { Id, Timestamp } from "./common";
+import { MilestoneCase } from "./milestone";
 
 /** An `EventActor` (defined in ./index, which imports this file); set only by the domain. */
 const Actor = z.string().min(1).max(200);
@@ -29,6 +30,11 @@ export const PlannedMilestone = z.object({
   goal: z.string().trim().min(1).max(PLAN_LIMITS.goal),
   doneWhen: z.array(Line).min(1).max(PLAN_LIMITS.doneWhen),
   slices: z.array(Line).min(1).max(PLAN_LIMITS.slices),
+  /**
+   * Why it is worth building (ADR-0149): the agent schema requires it; optional here so plans
+   * stored before it still parse. Approval stores it on the milestone it creates.
+   */
+  case: MilestoneCase.optional(),
 });
 export type PlannedMilestone = z.infer<typeof PlannedMilestone>;
 
