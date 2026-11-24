@@ -31,7 +31,7 @@ Any other build choice goes in the PR description (and the topic file when the d
 **2. MCP parity is required only for actions Andy does from Claude:** tickets, questions, plans, milestones, runs. A new settings action may be web only. Existing MCP tools stay; none is removed.
 
 - `parity.ts` holds `WEB_ONLY_ALLOWED`, the explicit list of actions allowed without a tool (today: register a runner, OAuth consent, GitHub App setup). `webOnlyViolations` fails a web-only action that is off the list, and any web-only action whose route is under tickets, questions, the Needs-you inbox, plans, milestones, runs or the night launch, even when listed.
-- An open gap with its ticket (`pending`) is not counted: it is being closed.
+- An open gap marked `pending` gets no pass: a web-only action in those areas fails until its tool exists.
 - Inventory and rule text: `docs/architecture/ui-mcp-parity.md`.
 
 **3. The proposed ADRs** are listed once for Andy to decide in one sitting: `docs/build-log/2026-11-23-proposed-adrs.md`. ADR-0133: Board and ticket list read changed tickets is accepted by Andy on the ticket and left out of it.
@@ -42,4 +42,5 @@ Any other build choice goes in the PR description (and the topic file when the d
 - Good: the parity test now refuses a web-only ticket, question, plan, milestone or run action, where before a `oneSide` reason was enough.
 - Bad: why a build choice was made lives in a PR description, found through `git log` or the PR, not the ADR index.
 - Bad: a settings change can't be made from Claude unless an existing tool already covers it.
+- Not relaxed: a web-only action still gets the security review, and a trust-boundary change still updates `docs/security/` and takes an ADR.
 - Not changed: managed projects' `template/AGENTS.md.template` still says "A decision → a new ADR"; carrying this rule there is separate work.

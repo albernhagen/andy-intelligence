@@ -128,6 +128,18 @@ describe("Web-only actions: settings only (ADR-0148)", () => {
     },
   );
 
+  it("GivenANewWebOnlyTicketActionMarkedPending_WhenChecked_ThenItStillFails", () => {
+    const route = "POST /api/projects/:projectId/tickets/:ticketId/pin";
+    const entry: ParityEntry = {
+      ...webOnly("Pin a ticket", route),
+      pending: { ticket: "AI-1", missing: "pin_ticket" },
+    };
+    expect(webOnlyViolations([...PARITY, entry])).toEqual([
+      "Pin a ticket: web only but not on WEB_ONLY_ALLOWED",
+      `Pin a ticket: needs an MCP tool (${route})`,
+    ]);
+  });
+
   it("GivenANewTicketActionWithBothSides_WhenChecked_ThenItPasses", () => {
     const entry: ParityEntry = {
       action: "Pin a ticket",

@@ -355,8 +355,7 @@ export function webOnlyViolations(
 ): string[] {
   const violations: string[] = [];
   for (const e of entries) {
-    // An open gap with its ticket (`pending`) is being closed, not kept web only.
-    if (e.routes.length === 0 || e.tools.length > 0 || e.pending) continue;
+    if (e.routes.length === 0 || e.tools.length > 0) continue;
     if (!allowed.has(e.action)) {
       violations.push(`${e.action}: web only but not on WEB_ONLY_ALLOWED`);
     }
