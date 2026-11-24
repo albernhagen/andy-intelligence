@@ -45,6 +45,8 @@ export const SCREENS: Screen[] = [
     name: "ticket",
     url: "/p/ai/t/AI-1",
     ready: "Picking a project should feel like picking a tenant.",
+    // AI-375: the ticket panel on direction A is checked in dark too.
+    dark: true,
   },
   {
     route: "/p/$projectId/inbox",

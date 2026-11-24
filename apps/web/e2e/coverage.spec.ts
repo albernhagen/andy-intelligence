@@ -5,7 +5,7 @@ import { SCREENS, type Screen } from "./screens";
 
 /**
  * AI-366: every screen in src/router.tsx (e2e/screens.ts) at 1280×800 and 390×844, and the shell,
- * inbox, board and project settings also dark. Viewport-sized images, so each is the first screen
+ * inbox, board, ticket panel and project settings also dark. Viewport-sized images, so each is the first screen
  * Andy sees; the other specs keep the full-page and state-specific images.
  */
 
