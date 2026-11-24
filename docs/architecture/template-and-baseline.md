@@ -21,7 +21,7 @@ infra/                            # Terraform: dev/prod Cloud Run, Cloud Deploy 
 ```
 **Required CI checks** on `main`: tests, lint, typecheck, protected-path check, secret scan, security scans and security-review agent (§9.1), "PR references a ticket" (ticket key in branch name or PR body, verified against the control-plane API).
 
-Onboarding a project = UI/MCP "Add project" → each repo gets a baseline PR from the App (ADR-0142; runbook `onboard-a-repo.md`) → onboarding interview → brief PR (ADR-0053) → Andy approves Terraform PR.
+Onboarding a project = optional discovery in Andy's session (`/discover`, ADR-0145) → UI/MCP "Add project" → each repo gets a baseline PR from the App (ADR-0142; runbook `onboard-a-repo.md`) → onboarding interview → brief PR (ADR-0053) → Andy approves Terraform PR.
 
 ### 8.1 Project baseline (ADR-0031)
 
