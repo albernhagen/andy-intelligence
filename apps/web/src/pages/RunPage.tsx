@@ -16,6 +16,7 @@ import { Button } from "@/components/ui/button";
 import { STATUS_VARIANT, Summary, formatCost, httpsHref } from "@/components/Runs";
 import { formatQuotaDelta } from "@/components/TicketCostLine";
 import { ApiError } from "@/lib/api";
+import { showsError } from "@/lib/live";
 import { count, dateTime, elapsed, timeOfDay } from "@/lib/format";
 import { isActiveRun, useEvents, useRun, useTicketByRef, useTicketQuestions } from "@/lib/queries";
 import { cn } from "@/lib/utils";
@@ -41,16 +42,47 @@ export function RunPage() {
   return run.data.ticketId ? (
     <TicketRun run={run.data} ticketId={run.data.ticketId} />
   ) : (
-    <RunDetail run={run.data} ticket={undefined} questions={[]} events={[]} />
+    <RunDetail run={run.data} ticket={undefined} questions={NONE} events={NONE} />
   );
 }
 
-/** A ticket's task also reads the ticket's name, open questions and events (one poll each). */
+/** Nothing to read: a task without a ticket, or questions of a task that has ended. */
+const NONE = { data: [], error: null, refetch: () => {} };
+
+/** What a ticket read gives the page: its data once loaded, its error, and a retry. */
+interface Read<T> {
+  data: readonly T[] | undefined;
+  error: unknown;
+  refetch: () => unknown;
+}
+
+/**
+ * A ticket's task also reads the ticket's name and events; while it is in flight, the ticket's
+ * questions too (an ended task waits on nothing, so it doesn't poll them).
+ */
 function TicketRun({ run, ticketId }: { run: Run; ticketId: string }) {
   const path = { projectId: run.projectId, ticketId };
   const ticket = useTicketByRef(run.projectId, ticketId).data;
-  const questions = useTicketQuestions(path).data ?? [];
-  const events = useEvents(path).data ?? [];
+  const events = useEvents(path);
+  return isActiveRun(run) ? (
+    <ActiveTicketRun run={run} path={path} ticket={ticket} events={events} />
+  ) : (
+    <RunDetail run={run} ticket={ticket} questions={NONE} events={events} />
+  );
+}
+
+function ActiveTicketRun({
+  run,
+  path,
+  ticket,
+  events,
+}: {
+  run: Run;
+  path: { projectId: string; ticketId: string };
+  ticket: Pick<Ticket, "key" | "title"> | undefined;
+  events: Read<TicketEvent>;
+}) {
+  const questions = useTicketQuestions(path);
   return <RunDetail run={run} ticket={ticket} questions={questions} events={events} />;
 }
 
@@ -62,8 +94,8 @@ function RunDetail({
 }: {
   run: Run;
   ticket: Pick<Ticket, "key" | "title"> | undefined;
-  questions: readonly Question[];
-  events: readonly TicketEvent[];
+  questions: Read<Question>;
+  events: Read<TicketEvent>;
 }) {
   const started = run.startedAt ?? run.createdAt;
   const wall = wallMs(run);
@@ -72,8 +104,13 @@ function RunDetail({
   const active = isActiveRun(run);
   // Ticks while the task runs, so its elapsed time moves between polls (AI-377).
   const now = useNow(active);
-  // A task in flight waits on its ticket's open questions; an ended one waits on nothing.
-  const waitingOn = active ? questions.filter((q) => q.status === "open") : [];
+  // A task in flight waits on the open questions it asked (their `runId`), not on questions an
+  // earlier task or a person asked; an ended one waits on nothing. Null until they load.
+  const waitingOn = !active
+    ? []
+    : questions.data
+      ? questions.data.filter((q) => q.status === "open" && q.runId === run.id)
+      : null;
   const log = httpsHref(run.links.executorRun);
   return (
     <article className="space-y-4 wrap-anywhere" aria-label="Agent task">
@@ -101,13 +138,31 @@ function RunDetail({
         {/* AI-340, AI-377: one sentence first: what it is doing, or how it ended. */}
         <p aria-label="What happened" className="text-base font-semibold lg:col-start-1">
           {runSummary(run, ticket?.key ?? null, now)}
-          {waitingOn.length > 0 && ` ${waitingText(waitingOn.length)}`}
+          {waitingOn && waitingOn.length > 0 && ` ${waitingText(waitingOn.length)}`}
         </p>
 
         <SidePanel run={run} ticket={ticket} active={active} />
 
         <div className="space-y-4 lg:col-start-1">
-          <Timeline entries={timeline(run, events, waitingOn, now)} projectId={run.projectId} />
+          <Timeline
+            entries={timeline(run, events.data ?? [], waitingOn, now)}
+            projectId={run.projectId}
+          />
+          {/* A failed read never reads as "nothing happened": say so, with Retry. */}
+          {showsError(questions) && (
+            <QueryError
+              error={questions.error}
+              what="the task's questions"
+              onRetry={() => void questions.refetch()}
+            />
+          )}
+          {showsError(events) && (
+            <QueryError
+              error={events.error}
+              what="the task's history"
+              onRetry={() => void events.refetch()}
+            />
+          )}
 
           {/* The summary already says the first line; the full error shows only when it says more. */}
           {errorReason(run.error)?.more && (
@@ -495,12 +550,14 @@ export function waitingText(n: number): string {
 /**
  * The task's steps, newest first, from what the API already returns (AI-377): queued, started,
  * the questions it asked and the PR it opened (ticket events that name it), publishing its branch,
- * how it ended, and while it runs, what it is doing now: waiting on Andy's answer or the step.
+ * how it ended, and while it runs, what it is doing now: waiting on Andy's answer to a question
+ * it asked, or the step.
  */
 export function timeline(
   run: Run,
   events: readonly TicketEvent[],
-  waitingOn: readonly Pick<Question, "id" | "text" | "createdAt">[],
+  /** Null while the questions load: then the page doesn't say what the task is doing now. */
+  waitingOn: readonly Pick<Question, "id" | "text" | "createdAt">[] | null,
   now: Date,
 ): TimelineEntry[] {
   const [going, done] = STEP_VERBS[run.step];
@@ -546,7 +603,7 @@ export function timeline(
   }
   // Oldest first by time; an entry without one (an end not yet stamped) goes last.
   entries.sort((a, b) => (a.at ?? "\uffff").localeCompare(b.at ?? "\uffff"));
-  if (isActiveRun(run)) {
+  if (isActiveRun(run) && waitingOn) {
     const since = run.startedAt ?? run.createdAt;
     entries.push(
       waitingOn.length > 0

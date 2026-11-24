@@ -21,8 +21,8 @@ import { httpsHref } from "@/components/Runs";
 const LOG = "https://github.com/albernhagen/andy-intelligence/actions/runs/42";
 const PR = "https://github.com/albernhagen/andy-intelligence/pull/7";
 
-async function setup(path = "/") {
-  const harness = renderApp(path);
+async function setup(path = "/", opts: Parameters<typeof renderApp>[1] = {}) {
+  const harness = renderApp(path, opts);
   await harness.tracker.createProject({ name: "AI", key: "AI" });
   const ticket = await harness.tracker.createTicket(
     "ai",
@@ -251,8 +251,13 @@ describe("agent task page helpers", () => {
     expect(text).not.toContain("—");
     expect(text).not.toContain("unknown");
     expect(text).not.toContain("Gate");
-    for (const label of ["Ended", "Wall time", "Tokens in", "Cost", "Quota used", "Tier"])
+    for (const label of ["Ended", "Wall time", "Tokens in"])
       expect(within(page).queryByText(label, { selector: "dt" })).toBeNull();
+    // AI-377: the side panel says what isn't reported yet, never "unknown" or $0 mid-task.
+    const side = within(page).getByRole("complementary", { name: "Cost and links" });
+    expect(side.textContent).toContain("Quota used so farNone reported yet");
+    expect(side.textContent).toContain("CostNone reported yet");
+    expect(side.textContent).toContain("Pull requestNone yet");
     expect(within(page).getByText("Started", { selector: "dt" })).toBeTruthy();
     // Nothing reported yet: no Usage heading over an empty list.
     expect(within(page).queryByRole("region", { name: "Usage" })).toBeNull();
@@ -419,17 +424,38 @@ describe("agent task page: live progress and outcome", () => {
     // What the live poll does while the task is in flight.
     await h.queryClient.refetchQueries({ type: "active" });
 
-    expect(await within(page).findByText(/^Succeeded · /)).toBeTruthy();
-    expect(within(page).queryByRole("listitem", { current: "step" })).toBeNull();
-    expect(within(page).getByLabelText("What happened", { selector: "p" }).textContent).toMatch(
+    // The ended page drops the questions read, so it renders afresh: find it again.
+    expect(await screen.findByText(/^Succeeded · /)).toBeTruthy();
+    const ended = screen.getByRole("article", { name: "Agent task" });
+    expect(within(ended).queryByRole("listitem", { current: "step" })).toBeNull();
+    expect(within(ended).getByLabelText("What happened", { selector: "p" }).textContent).toMatch(
       /^Refined AI-1 in /,
     );
   });
 
-  it("GivenAnOpenQuestion_WhenTheTaskRuns_ThenItWaitsOnYourAnswerWithALinkToTheInbox", async () => {
+  it("GivenAQueuedTask_WhenItsPageOpens_ThenTheSidePanelSaysNothingIsReportedYet", async () => {
+    const h = await setup();
+    const run = await h.newRun();
+    await open(h, `/p/ai/runs/${run.id}`);
+
+    const side = await screen.findByRole("complementary", { name: "Cost and links" });
+    expect(side.textContent).toContain("Quota used so farNone reported yet");
+    expect(side.textContent).toContain("CostNone reported yet");
+    expect(side.textContent).not.toContain("$0");
+    expect(side.textContent).not.toContain("unknown");
+    expect(await screen.findByText("Waiting to start")).toBeTruthy();
+  });
+
+  it("GivenAQuestionTheTaskAsked_WhenTheTaskRuns_ThenItWaitsOnYourAnswerWithALinkToTheInbox", async () => {
     const h = await setup();
     const run = await startRefine(h, new Date(Date.now() - 60_000).toISOString());
-    await h.service.ask("ai", h.ticket.id, { text: "Should Esc close the panel?" }, "agent");
+    await h.tracker.askQuestions(
+      "ai",
+      h.ticket.id,
+      [{ text: "Should Esc close the panel?" }],
+      `agent:${run.id}`,
+      run.id,
+    );
     await open(h, `/p/ai/runs/${run.id}`);
 
     const page = await screen.findByRole("article", { name: "Agent task" });
@@ -475,6 +501,44 @@ describe("agent task page: live progress and outcome", () => {
     expect(text).toContain("$0.40");
     expect(text).toContain("5h +2%");
     expect(within(side).getByRole("link", { name: "PR #7" })).toBeTruthy();
+  });
+});
+
+describe("agent task page: questions it didn't ask", () => {
+  const startBuild = async (h: Awaited<ReturnType<typeof setup>>) => {
+    const run = await h.newRun();
+    await h.runs.update(run.id, { status: "running", startedAt: new Date().toISOString() }, [
+      "queued",
+    ]);
+    return run;
+  };
+
+  it("GivenAnOpenQuestionFromSomeoneElse_WhenATaskRuns_ThenItIsNotWaitingOnYou", async () => {
+    const h = await setup();
+    await h.service.ask("ai", h.ticket.id, { text: "Which region?" }, "andy");
+    const run = await startBuild(h);
+    await open(h, `/p/ai/runs/${run.id}`);
+
+    const page = await screen.findByRole("article", { name: "Agent task" });
+    const current = await within(page).findByRole("listitem", { current: "step" });
+    expect(current.textContent).toContain("Building now");
+    expect(page.textContent).not.toContain("Which region?");
+    expect(page.textContent).not.toContain("waits on your answer");
+  });
+
+  it("GivenTheQuestionsReadFails_WhenATaskRuns_ThenTheErrorShowsAndItDoesNotClaimWhatItIsDoing", async () => {
+    const h = await setup("/", {
+      beforeFetch: async (request) => {
+        if (new URL(request.url).pathname.endsWith("/questions")) throw new Error("offline");
+      },
+    });
+    const run = await startBuild(h);
+    await open(h, `/p/ai/runs/${run.id}`);
+
+    const page = await screen.findByRole("article", { name: "Agent task" });
+    expect((await within(page).findByRole("alert")).textContent).toContain("offline");
+    expect(within(page).queryByRole("listitem", { current: "step" })).toBeNull();
+    expect(within(page).getByRole("button", { name: "Retry" })).toBeTruthy();
   });
 });
 

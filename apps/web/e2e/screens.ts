@@ -78,7 +78,7 @@ export const SCREENS: Screen[] = [
     route: "/p/$projectId/runs/$runId",
     name: "agent-task",
     url: "/p/ai/t/AI-3",
-    ready: "Waiting on your answer",
+    ready: "Refining now",
     dark: true,
   },
   { route: "/settings/github", name: "github", url: "/settings/github", ready: "Connect GitHub" },
