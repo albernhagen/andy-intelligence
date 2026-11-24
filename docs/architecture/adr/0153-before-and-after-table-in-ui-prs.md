@@ -25,7 +25,8 @@ The `ui-screenshots` check (Playwright, ADR-0045) fails on a diff from the store
 
 - No new workflow permission and no bot comment: the job lists the PR's files with its own `contents: read` token (retried without it if refused). Never `pull_request_target`.
 - The description is untrusted: strict row parsing, nothing reaches a shell (`docs/security/review-pipeline.md`).
-- A table from an older commit than the head passes with a warning (rerun the script); requiring the exact head would fail every later push.
+- An after image must come from one of the PR's commits (else it fails); one from an older PR commit than the head passes with a warning (rerun the script), since requiring the exact head would fail every later push. The before image's commit isn't verified.
+- A PR file list longer than the API returns (3,000 files) fails the check rather than passing unread.
 
 ## Managed projects
 

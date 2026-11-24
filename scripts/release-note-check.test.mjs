@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
-import { applies, check, prFiles } from "./release-note-check.mjs";
+import { applies, check, prCommits, prFiles } from "./release-note-check.mjs";
 import { buildTable } from "./screenshot-table.mjs";
 
 const event = (body, extra = {}) => ({
@@ -91,10 +91,27 @@ describe("before and after (AI-353)", () => {
     expect(result.summary).not.toContain("/x/y/");
   });
 
-  it("GivenATableFromAnOlderCommit_WhenChecked_ThenPassesWithAWarning", () => {
-    const result = check(pr(`${GOOD}\n\n${tableFor(changed, "c".repeat(40))}`), changed);
+  it("GivenATableFromAnOlderCommitOfThePr_WhenChecked_ThenPassesWithAWarning", () => {
+    const older = "c".repeat(40);
+    const body = `${GOOD}\n\n${tableFor(changed, older)}`;
+    const result = check(pr(body), changed, undefined, [older, HEAD]);
     expect(result.ok).toBe(true);
     expect(result.warnings.join("\n")).toContain("older commit");
+  });
+
+  it("GivenAfterImagesFromACommitOutsideThePr_WhenChecked_ThenFails", () => {
+    const body = `${GOOD}\n\n${tableFor(changed, "d".repeat(40))}`;
+    const result = check(pr(body), changed, undefined, [HEAD]);
+    expect(result.ok).toBe(false);
+    expect(result.lines.join("\n")).toContain("must come from this PR's commits");
+  });
+
+  it("GivenAStoredImageWithAnUnsafeName_WhenChecked_ThenFailsWithoutPrintingTheName", () => {
+    const evil = "x\n::stop-commands::t/__screenshots__/a.png";
+    const result = check(pr(GOOD), [{ path: evil, status: "added" }]);
+    expect(result.ok).toBe(false);
+    expect(result.lines.join("\n")).not.toContain("stop-commands");
+    expect(result.lines.join("\n")).toContain("1 stored screenshot name(s)");
   });
 
   it("GivenOnlyARemovedImage_WhenCheckedWithAnEmptyTable_ThenPasses", () => {
@@ -138,7 +155,12 @@ describe("prFiles", () => {
     repository: { full_name: "o/r", private: priv },
     pull_request: { number: 7 },
   });
-  const reply = (status, body) => ({ ok: status < 300, status, json: async () => body });
+  const reply = (status, body, headers = {}) => ({
+    ok: status < 300,
+    status,
+    headers: new globalThis.Headers(headers),
+    json: async () => body,
+  });
 
   it("GivenAPrivateRepo_WhenListed_ThenNullAndNoCall", async () => {
     let calls = 0;
@@ -173,6 +195,42 @@ describe("prFiles", () => {
     });
     expect(auth).toEqual(["Bearer t", null]);
     expect(files).toEqual([{ path: "x", status: "added" }]);
+  });
+
+  it("GivenARateLimitedToken_WhenListed_ThenNotRetriedAndThrows", async () => {
+    let calls = 0;
+    const fetchFn = async () => (calls++, reply(403, {}, { "x-ratelimit-remaining": "0" }));
+    await expect(prFiles(ev(false), "t", fetchFn)).rejects.toThrow("HTTP 403");
+    expect(calls).toBe(1);
+  });
+
+  it("GivenMoreFilesThanTheCheckReads_WhenListed_ThenThrows", async () => {
+    const full = Array.from({ length: 100 }, (_, i) => ({ filename: `f${i}`, status: "added" }));
+    await expect(prFiles(ev(false), "t", async () => reply(200, full))).rejects.toThrow(
+      "more files than the check reads (3000)",
+    );
+  });
+
+  it("GivenAnEventWithABadRepoName_WhenListed_ThenThrowsBeforeAnyCall", async () => {
+    let calls = 0;
+    const bad = {
+      repository: { full_name: "o/r/../x", private: false },
+      pull_request: { number: 7 },
+    };
+    await expect(prFiles(bad, "t", async () => (calls++, reply(200, [])))).rejects.toThrow(
+      "no valid repository",
+    );
+    expect(calls).toBe(0);
+  });
+
+  it("GivenAPr_WhenCommitsListed_ThenTheirShas", async () => {
+    const urls = [];
+    const shas = await prCommits(ev(false), "t", async (url) => {
+      urls.push(url);
+      return reply(200, [{ sha: "a".repeat(40) }]);
+    });
+    expect(urls).toEqual(["https://api.github.com/repos/o/r/pulls/7/commits?per_page=100&page=1"]);
+    expect(shas).toEqual(["a".repeat(40)]);
   });
 
   it("GivenTheApiFails_WhenListed_ThenThrows", async () => {

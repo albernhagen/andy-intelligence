@@ -20,7 +20,8 @@ export function isStoredImage(path) {
   return /(^|\/)__screenshots__\/.+\.png$/.test(path);
 }
 
-const SAFE_PATH = /^(?!.*\.\.)[A-Za-z0-9._/-]+\.png$/;
+/** A path safe to print and to put in a URL: no `..`, no spaces, pipes or control characters. */
+export const SAFE_PATH = /^(?!.*\.\.)[A-Za-z0-9._/-]+\.png$/;
 const SHA = /^[0-9a-f]{40}$/;
 const OWNER = /^[A-Za-z0-9-]+$/;
 const REPO = /^[A-Za-z0-9._-]+$/;

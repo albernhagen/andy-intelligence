@@ -16,7 +16,7 @@
 import { appendFileSync, readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { parseReleaseNote } from "../packages/domain/src/release-note.ts";
-import { isStoredImage, parseTable } from "./screenshot-table.mjs";
+import { SAFE_PATH, isStoredImage, parseTable } from "./screenshot-table.mjs";
 
 /** Authors whose PRs never carry a note (their merges are listed by title, as "no note"). */
 export const SKIPPED_AUTHORS = ["dependabot[bot]"];
@@ -24,18 +24,21 @@ export const SKIPPED_AUTHORS = ["dependabot[bot]"];
 /** The web app's source folder by default; the action's `ui-src` input overrides it. */
 export const DEFAULT_UI_SRC = "apps/web/src";
 
-/** Most files the PR files API returns (30 pages of 100). */
+/** Most files the PR files API returns (30 pages of 100); a fuller list fails the check. */
 const MAX_FILE_PAGES = 30;
+/** Most commits the PR commits API returns (250); older ones can't back an after image. */
+const MAX_COMMIT_PAGES = 3;
 
 const HOW_TO =
   "Add it: push, then run `pnpm screenshots:table --write` (or paste its output into the description).";
 
 /**
  * The before-and-after rule. `files`: the PR's changed files (`{ path, status }`, the REST API's
- * statuses), or null for a private repo, where the rule doesn't apply.
+ * statuses), or null for a private repo, where the rule doesn't apply. `commits`: the PR's commit
+ * SHAs; an after image must come from one of them (the head always counts).
  * @returns {{ problems: string[], warnings: string[], summary: string | null, note: string | null }}
  */
-export function checkScreenshots(event, files, uiSrc = DEFAULT_UI_SRC) {
+export function checkScreenshots(event, files, uiSrc = DEFAULT_UI_SRC, commits = []) {
   const none = { problems: [], warnings: [], summary: null, note: null };
   if (files === null) {
     return { ...none, note: "Before and after: skipped, raw image URLs need a public repo." };
@@ -43,6 +46,16 @@ export function checkScreenshots(event, files, uiSrc = DEFAULT_UI_SRC) {
   const pr = event.pull_request;
   const [owner, repo] = String(event.repository?.full_name ?? "").split("/");
   const images = files.filter((f) => isStoredImage(f.path));
+  // File names are the PR author's: none goes into a message (workflow commands) unless safe.
+  const unsafe = images.filter((f) => !SAFE_PATH.test(f.path));
+  if (unsafe.length > 0) {
+    return {
+      ...none,
+      problems: [
+        `Before and after (AI-353): ${unsafe.length} stored screenshot name(s) use characters outside A-Z a-z 0-9 . _ / -; rename them.`,
+      ],
+    };
+  }
   const shown = images.filter((f) => f.status !== "removed").map((f) => f.path);
   if (images.length === 0) {
     const src = `${uiSrc.replace(/\/+$/, "")}/`;
@@ -87,7 +100,17 @@ export function checkScreenshots(event, files, uiSrc = DEFAULT_UI_SRC) {
   if (table.invalid.length > 0) {
     warnings.push(`Before and after: ${table.invalid.length} malformed row(s) ignored.`);
   }
-  const stale = table.rows.filter((r) => r.after.present && r.after.sha !== pr.head?.sha);
+  const inPr = new Set([pr.head?.sha, ...commits].filter(Boolean));
+  const outside = table.rows.filter((r) => r.after.present && !inPr.has(r.after.sha));
+  if (outside.length > 0) {
+    problems.push(
+      `Before and after (AI-353): after images must come from this PR's commits: ${outside.map((r) => r.path).join(", ")}.`,
+      HOW_TO,
+    );
+  }
+  const stale = table.rows.filter(
+    (r) => r.after.present && inPr.has(r.after.sha) && r.after.sha !== pr.head?.sha,
+  );
   if (stale.length > 0) {
     warnings.push(
       "Before and after: some after images are from an older commit than the head; rerun `pnpm screenshots:table --write`.",
@@ -124,9 +147,10 @@ export function applies(event) {
 
 /**
  * @param files the PR's changed files, null for a private repo; undefined skips the rule
+ * @param commits the PR's commit SHAs (an after image must come from one)
  * @returns {{ ok: boolean, lines: string[], warnings: string[], summary: string | null }}
  */
-export function check(event, files, uiSrc = DEFAULT_UI_SRC) {
+export function check(event, files, uiSrc = DEFAULT_UI_SRC, commits = []) {
   const pass = (line) => ({ ok: true, lines: [line], warnings: [], summary: null });
   const pr = event?.pull_request;
   if (!pr) return pass("Not a pull request: nothing to check.");
@@ -141,7 +165,7 @@ export function check(event, files, uiSrc = DEFAULT_UI_SRC) {
   const shots =
     files === undefined
       ? { problems: [], warnings: [], summary: null, note: null }
-      : checkScreenshots(event, files, uiSrc);
+      : checkScreenshots(event, files, uiSrc, commits);
   const lines = [];
   if (problems.length === 0) lines.push("Release note: OK.");
   else {
@@ -160,39 +184,66 @@ export function check(event, files, uiSrc = DEFAULT_UI_SRC) {
   };
 }
 
+const FULL_NAME = /^[A-Za-z0-9-]+\/[A-Za-z0-9._-]+$/;
+
+/**
+ * Every page of a PR list endpoint (`files`, `commits`), 100 a page. The repo and PR number come
+ * from GitHub's event file and are checked before they form the URL. A refused job token is
+ * retried without it (the repo is public; no new workflow permission), except when rate-limited.
+ * A list longer than `maxPages` throws, so a truncated list fails visibly.
+ */
+async function listPages(event, token, endpoint, maxPages, fetchFn) {
+  const fullName = String(event.repository?.full_name ?? "");
+  const number = event.pull_request?.number;
+  if (!FULL_NAME.test(fullName) || !Number.isInteger(number) || number <= 0) {
+    throw new Error("the event names no valid repository and PR number");
+  }
+  const accept = { accept: "application/vnd.github+json" };
+  const items = [];
+  for (let page = 1; page <= maxPages; page++) {
+    const url = `https://api.github.com/repos/${fullName}/pulls/${number}/${endpoint}?per_page=100&page=${page}`;
+    let res = await fetchFn(url, {
+      headers: token ? { ...accept, authorization: `Bearer ${token}` } : accept,
+    });
+    const limited = res.headers?.get?.("x-ratelimit-remaining") === "0";
+    if (token && (res.status === 401 || (res.status === 403 && !limited))) {
+      res = await fetchFn(url, { headers: accept });
+    }
+    if (!res.ok) throw new Error(`listing the PR's ${endpoint} failed: HTTP ${res.status}`);
+    const batch = await res.json();
+    items.push(...batch);
+    if (batch.length < 100) return items;
+  }
+  throw new Error(`the PR has more ${endpoint} than the check reads (${maxPages * 100})`);
+}
+
 /** The PR's changed files from the REST API; null for a private repo. */
 export async function prFiles(event, token, fetchFn = globalThis.fetch) {
   if (event.repository?.private !== false) return null;
   const files = [];
-  for (let page = 1; page <= MAX_FILE_PAGES; page++) {
-    const url = `https://api.github.com/repos/${event.repository.full_name}/pulls/${event.pull_request.number}/files?per_page=100&page=${page}`;
-    const accept = { accept: "application/vnd.github+json" };
-    let res = await fetchFn(url, {
-      headers: token ? { ...accept, authorization: `Bearer ${token}` } : accept,
-    });
-    // A job token without `pull-requests: read` may be refused; the repo is public, so retry
-    // without it (no new workflow permission).
-    if (token && (res.status === 401 || res.status === 403)) {
-      res = await fetchFn(url, { headers: accept });
-    }
-    if (!res.ok) throw new Error(`listing the PR's files failed: HTTP ${res.status}`);
-    const batch = await res.json();
-    for (const f of batch) {
-      if (f.status === "renamed") {
-        files.push({ path: f.previous_filename, status: "removed" });
-        files.push({ path: f.filename, status: "added" });
-      } else files.push({ path: f.filename, status: f.status });
-    }
-    if (batch.length < 100) break;
+  for (const f of await listPages(event, token, "files", MAX_FILE_PAGES, fetchFn)) {
+    if (f.status === "renamed") {
+      files.push({ path: f.previous_filename, status: "removed" });
+      files.push({ path: f.filename, status: "added" });
+    } else files.push({ path: f.filename, status: f.status });
   }
   return files;
+}
+
+/** The PR's commit SHAs (up to 250, the API's limit). */
+export async function prCommits(event, token, fetchFn = globalThis.fetch) {
+  const commits = await listPages(event, token, "commits", MAX_COMMIT_PAGES, fetchFn);
+  return commits.map((c) => String(c.sha));
 }
 
 async function main() {
   const path = process.env.GITHUB_EVENT_PATH;
   const event = path ? JSON.parse(readFileSync(path, "utf8")) : null;
-  const files = applies(event) ? await prFiles(event, process.env.GITHUB_TOKEN) : undefined;
-  const { ok, lines, warnings, summary } = check(event, files, process.env.UI_SRC || undefined);
+  const token = process.env.GITHUB_TOKEN;
+  const files = applies(event) ? await prFiles(event, token) : undefined;
+  const commits = files?.some((f) => isStoredImage(f.path)) ? await prCommits(event, token) : [];
+  const uiSrc = process.env.UI_SRC || undefined;
+  const { ok, lines, warnings, summary } = check(event, files, uiSrc, commits);
   for (const line of lines) process.stdout.write(`${ok ? "" : "::error::"}${line}\n`);
   for (const w of warnings) process.stdout.write(`::warning::${w}\n`);
   const summaryPath = process.env.GITHUB_STEP_SUMMARY;

@@ -25,13 +25,13 @@ Onboarding a project = optional discovery in Andy's session (`/discover`, ADR-01
 
 ### 8.1 Project baseline (ADR-0031)
 
-Every guardrail built here reaches each managed project the same way, this repo included (ARCHITECTURE §8.1).
+Every guardrail built here reaches each managed project the same way, this repo included; a ticket that adds or changes one updates this table.
 
 Carried by (ADR-0038): **A** = composite action in `platform/actions/`; managed repos get the caller workflow with the action pinned by SHA · **M** = managed file (kept identical; listed in `platform/baseline/manifest.json`) · **S** = seed file, copied once from `template/` · **G** = GitHub config in `platform/baseline/github/`, applied by `platform/baseline/baseline.mjs` · **TF** = Terraform module in `infra/modules/` · **RB** = runbook step (secrets).
 
 This repo's Dependabot bumps third-party pins in `platform/actions/`; managed repos get them through the baseline pin. Drift: `baseline.mjs check <repo>`; the weekly system review checks labels and ruleset.
 
-GitHub settings rows (ruleset, merge, CODEOWNERS, Actions, labels): [`baseline-github-settings.md`](baseline-github-settings.md).
+GitHub settings rows (ruleset, merge settings, `autoMerge`, `planApproval`, Dependabot auto-merge, CODEOWNERS, security and analysis, Actions, labels): [`baseline-github-settings.md`](baseline-github-settings.md).
 
 Build runs (plan approval, sandbox, publish limits) and read caps (AI-222): [`baseline-build-and-reads.md`](baseline-build-and-reads.md).
 
@@ -50,7 +50,7 @@ Build runs (plan approval, sandbox, publish limits) and read caps (AI-222): [`ba
 | System security review + drift | 0025, 0030 | `system-security-review.yml`, `platform/procedures/threat-model.md` | — | not yet carried (M6: Dev → prod releases; its drift plan is GCP-specific) |
 | Lefthook (push: affected tests, ¼ of cores), format hook, Prettier | 0027, 0113 | `lefthook.yml`, `.claude/settings.json`, `scripts/format-edited-file.mjs`, `.prettierrc.json` | M | carried (M1.16) |
 | Dependabot (npm, Actions; cooldown) | 0025, 0030 | `template/.github/dependabot.yml` (this repo's adds Terraform) | M | carried (M1.16) |
-| PR release-note block; before-and-after table when a stored screenshot changes (AI-353) | 0121, 0153 | `release-note.yml` → `platform/actions/release-note-check` | A | not yet carried; required here only (`github/source-only.json`, AI-350). Screenshot rule: public repos only (private raw URLs don't render; image source open) |
+| PR release-note block; screenshot table (public repos; private: image source open) | 0121, 0153 | `release-note.yml` → `platform/actions/release-note-check` | A | not yet carried; required here only (`github/source-only.json`, AI-350) |
 | PR template (docs + security checklist) | 0022, 0025 | `template/.github/pull_request_template.md` | M | carried (M1.16) |
 | Agent rules; docs ship with the change | 0022 | `template/AGENTS.md.template` | S | carried (M1.16) |
 | Threat model seed | 0025 | `template/docs/security/threat-model.md` | S | carried (M1.16) |
