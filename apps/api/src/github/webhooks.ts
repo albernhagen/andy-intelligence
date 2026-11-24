@@ -14,6 +14,7 @@ import {
 } from "@andy/contracts";
 import {
   EpicMerges,
+  type EpicMode,
   type MergeQueue,
   PullRequestGate,
   PullRequestTickets,
@@ -68,6 +69,8 @@ export interface WebhookDeps {
   onDefaultBranchMoved?: (projectId: string) => Promise<boolean>;
   /** Night launches: a story PR into its launch's epic branch merges there (AI-124). */
   nightLaunches?: NightLaunchStore;
+  /** The `epic` merge mode (AI-216); absent: only night launches merge into epic branches. */
+  epicMode?: EpicMode;
   /** Release notes (AI-159): a PR merged into the default branch stores one. Off when unset. */
   releaseNotes?: ReleaseNoteStore;
   /**
@@ -115,7 +118,7 @@ export function registerGitHubWebhook(app: Hono<AuthEnv>, deps: WebhookDeps): vo
   const limiter = new FixedWindowLimiter(WEBHOOK_RATE_LIMIT, 60_000, () => now().getTime());
   const repos = new RepoIndex(deps.tracker, () => now().getTime());
   const prTickets = new PullRequestTickets(deps.tickets, deps.tracker);
-  const epicMerges = deps.nightLaunches ? new EpicMerges(deps.nightLaunches, deps.runs) : null;
+  const epicMerges = new EpicMerges(deps.nightLaunches ?? null, deps.runs, deps.epicMode ?? null);
   const gate = new PullRequestGate(
     deps.codeHost,
     deps.tracker,
@@ -330,6 +333,7 @@ export const publicRoutes: RouteModule = (app, s) => {
     runs: s.deps.runs,
     onDefaultBranchMoved: (projectId) => s.syncer.defaultBranchMoved(projectId),
     nightLaunches: s.deps.nightLaunches,
+    epicMode: s.epicMode,
     releaseNotes: s.deps.releaseNotes,
     reviewFindings: s.deps.reviewFindings,
     mergeQueue: s.mergeQueue,
