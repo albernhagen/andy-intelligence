@@ -1,6 +1,6 @@
 # /onboard — interview Andy for a project brief
 
-Procedure for the onboarding interview (ADR-0053: Project brief, ARCHITECTURE §7). It writes the answers behind a project's brief, `docs/product/brief.md`: the product and domain context that later steps read (ideate and refine all of it, plan and build the Architectural expectations, reviews the Goals and non-goals). Two front ends ask the same questions: the `/onboard` skill (Claude Code or Claude desktop through MCP) and the UI's new-project form. Both submit the answers to the same API, which renders the brief and opens a PR; Andy merges it.
+Procedure for the onboarding interview (ADR-0053: Project brief, ARCHITECTURE §7). It writes the answers behind a project's brief, `docs/product/brief.md`: the product and domain context that later steps read (ideate and refine all of it, plan and build the Architectural expectations, reviews the Goals and non-goals). The `/onboard` skill (Claude Code or Claude desktop) asks the questions and submits the answers with MCP `submit_brief`; the UI's new-project form asks only name, key and repo. The API renders the brief and opens a PR; Andy merges it.
 
 **Your job is to get Andy's answers to the questions below, in his words, with as little of his time as possible.** You don't write the brief yourself: `renderBrief` (`packages/domain/src/brief.ts`) turns the answers into `brief.md` with a fixed template, no model call.
 
