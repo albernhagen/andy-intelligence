@@ -25,7 +25,7 @@ export function IdeateForm({ projectId, onClose }: { projectId: string; onClose:
   return (
     <form
       aria-label="Ideate"
-      className="max-w-2xl space-y-2 rounded-md border border-border p-3"
+      className="max-w-2xl space-y-2 rounded-lg border border-border bg-raised p-3"
       onSubmit={(e) => {
         e.preventDefault();
         if (idea.trim()) start.mutate(idea.trim());
@@ -70,7 +70,7 @@ function IdeateProgress({ run: started, onClose }: { run: Run; onClose: () => vo
   return (
     <section
       aria-label="Ideate agent task"
-      className="max-w-2xl space-y-2 rounded-md border border-border p-3 text-sm"
+      className="max-w-2xl space-y-2 rounded-lg border border-border bg-raised p-3 text-sm"
     >
       <p className="flex flex-wrap items-center gap-2">
         <Link

@@ -38,8 +38,12 @@ import {
   ReadySortToggle,
 } from "@/components/board/Lane";
 import { readySearch } from "@/lib/ready";
-import { Loading, QueryError } from "@/components/Status";
+import { QueryError } from "@/components/Status";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Kbd } from "@/components/ui/kbd";
+import { Skeleton } from "@/components/ui/skeleton";
+import { Switch } from "@/components/ui/switch";
 import {
   COLLAPSED_STAGES,
   IDEAS_ZONE,
@@ -118,6 +122,16 @@ export function BoardPage() {
   const pickView = (next: WorkView | null) =>
     void navigate({ search: { sort, ...filters, view: next ?? undefined } });
 
+  const chips = board.data && !isPhone && (
+    <WorkViewChips
+      view={view}
+      counts={counts}
+      needsYou={needsYou}
+      total={inScope.length}
+      onChange={pickView}
+    />
+  );
+
   return (
     <section className="space-y-4 max-sm:space-y-2">
       {board.data && (
@@ -126,10 +140,14 @@ export function BoardPage() {
           storyCount={board.data.filter((t) => t.type !== "epic").length}
         />
       )}
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <h2 className="text-lg font-medium">
-          Board <BoardDispatchStatus projectId={projectId} />
-        </h2>
+      <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
+        {/* Title and work views share one row, as in the approved board mockup (AI-374). */}
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+          <h2 className="text-lg font-semibold">
+            Board <BoardDispatchStatus projectId={projectId} />
+          </h2>
+          {chips}
+        </div>
         {isPhone && (
           <div className="flex items-center gap-2">
             {board.data && (
@@ -158,6 +176,21 @@ export function BoardPage() {
         <div
           className={`flex flex-wrap items-center gap-x-4 gap-y-2 ${isPhone ? (optionsOpen ? "w-full" : "hidden") : ""}`}
         >
+          <EpicControls
+            epics={epics}
+            grouped={grouped}
+            onGroupedChange={(on) => {
+              setGrouped(on);
+              saveGroupByEpic(on);
+            }}
+            epicId={epicId}
+            onEpicChange={setChosenEpic}
+          />
+          <Switch
+            label="Show cancelled and archived"
+            checked={showArchived}
+            onCheckedChange={setShowArchived}
+          />
           {/* AI-299: an idea into an epic in Ideas, as MCP `ideate`; outline, not the primary. */}
           <Button
             type="button"
@@ -169,38 +202,11 @@ export function BoardPage() {
           >
             Ideate
           </Button>
-          <EpicControls
-            epics={epics}
-            grouped={grouped}
-            onGroupedChange={(on) => {
-              setGrouped(on);
-              saveGroupByEpic(on);
-            }}
-            epicId={epicId}
-            onEpicChange={setChosenEpic}
-          />
-          <label className="flex items-center gap-1 text-sm max-sm:min-h-11">
-            <input
-              type="checkbox"
-              checked={showArchived}
-              onChange={(e) => setShowArchived(e.target.checked)}
-            />
-            Show cancelled and archived
-          </label>
         </div>
       </div>
 
       {ideating && <IdeateForm projectId={projectId} onClose={() => setIdeating(false)} />}
-      {board.data && !isPhone && (
-        <WorkViewChips
-          view={view}
-          counts={counts}
-          needsYou={needsYou}
-          total={inScope.length}
-          onChange={pickView}
-        />
-      )}
-      {board.isPending && <Loading />}
+      {board.isPending && <BoardSkeleton />}
       {showsError(board) && (
         <QueryError error={board.error} what="the board" onRetry={() => void board.refetch()} />
       )}
@@ -218,8 +224,46 @@ export function BoardPage() {
           phone={isPhone}
         />
       )}
+      {board.data && !isPhone && <KeyHints />}
       <Outlet />
     </section>
+  );
+}
+
+/** The board's shape while it loads (design.md "Feedback components"): four lanes of cards. */
+export function BoardSkeleton() {
+  return (
+    <div role="status" aria-label="Loading the board" className="flex gap-3">
+      {[3, 2, 2, 1].map((cards, lane) => (
+        <div
+          key={lane}
+          data-slot="lane-skeleton"
+          className="flex w-64 shrink-0 flex-col gap-1.5 rounded-lg border border-border bg-muted p-2 xl:w-auto xl:flex-1 max-sm:w-full max-sm:[&:not(:first-child)]:hidden"
+        >
+          <Skeleton className="h-6 w-24 bg-foreground/10" />
+          {Array.from({ length: cards }, (_, i) => (
+            <Skeleton key={i} className="h-16 rounded-lg bg-raised" />
+          ))}
+        </div>
+      ))}
+    </div>
+  );
+}
+
+/**
+ * The keys that work on the board (design.md "Keyboard"): `j`/`k` and Enter from the shortcut
+ * layer, Space and the arrows from the drag sensor. Only keys that exist are listed.
+ */
+export function KeyHints() {
+  return (
+    <p
+      aria-label="Board keys"
+      className="flex flex-wrap items-center gap-x-1.5 gap-y-1 border-t border-border pt-2 text-xs text-muted-foreground"
+    >
+      <Kbd>J</Kbd>
+      <Kbd>K</Kbd> card ·<Kbd>↵</Kbd> open ·<Kbd>Space</Kbd> pick up, arrows move,
+      <Kbd>Space</Kbd> drop ·<Kbd>Esc</Kbd> cancel
+    </p>
   );
 }
 
@@ -470,7 +514,12 @@ function Lanes({
       >
         {!collapsed && split && (
           <>
-            <LaneZone id={UP_NEXT_ZONE} label="Up next" count={count(parts[0]!)} />
+            <LaneZone
+              id={UP_NEXT_ZONE}
+              label="Up next"
+              count={count(parts[0]!)}
+              hint="Drag a ticket here to start refine."
+            />
             {list(parts[0]!)}
             <LaneZone id={IDEAS_ZONE} label="Ideas" count={count(parts[1]!)} />
             {list(parts[1]!)}
@@ -531,13 +580,13 @@ function QuickAdd({ projectId }: { projectId: string }) {
 
   return (
     <form onSubmit={submit} className="space-y-1">
-      <input
+      <Input
         aria-label="Add a ticket"
         placeholder="Add a ticket"
         value={title}
         onChange={(e) => setTitle(e.target.value)}
         disabled={add.isPending}
-        className="h-8 w-full rounded-md border border-border bg-background px-2 text-sm placeholder:text-muted-foreground focus-visible:outline-2 focus-visible:outline-ring"
+        className="h-11 text-base sm:h-8 sm:text-sm"
       />
       {add.error && <QueryError error={add.error} />}
     </form>

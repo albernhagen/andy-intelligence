@@ -120,7 +120,7 @@ describe("milestone on the board's epic groups (AI-311)", () => {
     await harness.router.navigate({ to: "/p/ai" });
     await screen.findByText("AI-3", undefined, PAGE_LOAD);
 
-    await harness.user.click(screen.getByRole("checkbox", { name: "Group by epic" }));
+    await harness.user.click(screen.getByRole("switch", { name: "Group by epic" }));
 
     // AI-3's group is its child epic's, which takes M6 from its top-level epic.
     const header = document.querySelector<HTMLElement>(`[data-epic="${child.key}"]`)!;

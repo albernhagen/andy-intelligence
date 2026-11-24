@@ -26,6 +26,12 @@ export const TYPE_ICONS: Record<TicketType, LucideIcon> = {
   spike: FlaskConical,
 };
 
+/**
+ * How cards slide aside while one is dragged and settle on drop (design.md "Motion"): the base
+ * duration and the standard easing. index.css turns it off under `prefers-reduced-motion`.
+ */
+export const MOVE_TRANSITION = { duration: 150, easing: "cubic-bezier(0.2, 0, 0, 1)" };
+
 export interface CardProps {
   ticket: BoardTicket;
   projectId: string;
@@ -54,6 +60,7 @@ export function BoardCard({
 }: CardProps) {
   const { setNodeRef, attributes, listeners, transform, transition, isDragging } = useSortable({
     id: t.id,
+    transition: MOVE_TRANSITION,
   });
   const style = {
     transform: transform ? `translate3d(${transform.x}px, ${transform.y}px, 0)` : undefined,
@@ -77,27 +84,36 @@ export function BoardCard({
         style={style}
         data-ticket={t.key}
         data-nav-item
-        className={`flex flex-col gap-1 rounded-md border border-border bg-raised p-2 text-sm hover:border-foreground/30 focus-visible:outline-2 focus-visible:outline-ring ${
-          isDragging ? "relative z-10 shadow-lg" : ""
+        className={`flex flex-col gap-1 rounded-lg border border-border bg-raised p-2 text-sm hover:border-foreground/30 focus-visible:outline-2 focus-visible:outline-ring ${
+          isDragging ? "relative z-10 shadow-md" : ""
         }`}
       >
         <span className="flex items-center gap-1 text-xs text-muted-foreground tabular-nums">
           {position !== null && (
-            <span className="font-medium text-foreground" aria-label={`Position ${position}`}>
-              {position}
-            </span>
+            <>
+              <span className="font-medium text-foreground" aria-label={`Position ${position}`}>
+                {position}
+              </span>
+              <span aria-hidden>·</span>
+            </>
           )}
           <span title={typeLabel(t.type)}>
             <Icon className="size-3.5" aria-hidden />
           </span>
-          <span>{t.key}</span>
-          {next && (
+          <span className="font-mono">{t.key}</span>
+          {next ? (
             <Badge variant="success" className="ml-auto">
               Next
             </Badge>
+          ) : (
+            t.type && (
+              <span className="ml-auto" aria-hidden>
+                {typeLabel(t.type)}
+              </span>
+            )
           )}
         </span>{" "}
-        <span>{t.title}</span>
+        <span className="font-medium">{t.title}</span>
         <Markers
           ticket={t}
           openQuestions={openQuestions}

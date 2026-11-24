@@ -40,7 +40,9 @@ describe("Ready lane filters", () => {
     await waitFor(async () => expect(await readyTitles()).toHaveLength(3));
 
     await h.user.click(screen.getByRole("button", { name: "Filter" }));
-    await h.user.selectOptions(screen.getByLabelText("Size"), "S");
+    await h.user.click(
+      within(screen.getByRole("group", { name: "Size" })).getByRole("button", { name: "S" }),
+    );
 
     await waitFor(() => expect(h.router.state.location.search).toEqual({ size: "S" }));
     await waitFor(async () => {

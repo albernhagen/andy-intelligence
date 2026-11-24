@@ -34,7 +34,7 @@ test("phone targets: the board's title row", async ({ page }) => {
   await page.goto("/p/ops");
   const title = page.getByRole("heading", { name: /^Board/ });
   await page.getByRole("button", { name: "Options" }).click();
-  await expect(page.getByRole("checkbox", { name: "Group by epic" })).toBeVisible();
+  await expect(page.getByRole("switch", { name: "Group by epic" })).toBeVisible();
   const row = page.locator("main section > div").first();
   await expectTouchTargets(row);
   // The title is one line, and the controls under Options sit below it; the View menu sits
