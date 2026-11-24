@@ -11,34 +11,32 @@
 
 ## Reviewer seam (AI-361)
 
-What any reviewer, ours or a hosted one, must post for `mergeVerdict` to count it. Written from the code on 2026-11-23; each row names its source, so drift can be checked.
+What any reviewer, ours or a hosted one, must post for `mergeVerdict` to count it. From the code on 2026-11-23; each row names its source so drift can be checked.
 
 | The gate reads | Exactly | Source |
 | --- | --- | --- |
-| Two check runs on the PR head | Names `adversarial-review` and `security-review`, required on every PR even if the branch rules omit them | `packages/domain/src/gate.ts` `REVIEW_CHECKS` |
-| Who reported them | The check's reporter (`sourceId`, the GitHub App) must be the one the branch rules name for that check, else the rules' reporter for other checks; any other reporter's check of that name is ignored | `gate.ts` `assessChecks` |
-| A pass | `completed` with conclusion `success` only; `neutral`, `skipped` or missing is not a pass (waits or fails) | `gate.ts` `reviewPasses` |
-| Labels | `review-accepted` or `security-accepted` on the PR → verdict `wait` (`accepted_label`): an accepted finding is Andy's merge, never the gate's | `packages/domain/src/merge-verdict.ts` `ACCEPTED_LABELS` |
-| Stored findings | Open findings recorded for this repo, PR number and head SHA → `wait` (`open_review_findings`); a failed or cut-short read → `wait` | `merge-verdict.ts` `openFindingsOn`; `gate-service.ts` `openFindings` (newest 30 PRs, 300 findings) |
+| Two check runs on the head | `adversarial-review` and `security-review`, required on every PR even if the branch rules omit them | `packages/domain/src/gate.ts` `REVIEW_CHECKS` |
+| Reporter | The GitHub App (`sourceId`) the branch rules name for that check, else for other checks; another reporter's check of that name is ignored | `gate.ts` `assessChecks` |
+| Pass | `completed` + `success` only; `neutral`, `skipped` or missing is not a pass | `gate.ts` `reviewPasses` |
+| Labels | `review-accepted` or `security-accepted` → `wait` (`accepted_label`): Andy's merge, never the gate's | `packages/domain/src/merge-verdict.ts` `ACCEPTED_LABELS` |
+| Stored findings | Open findings for this repo, PR and head SHA → `wait`; a failed or cut-short read → `wait` | `merge-verdict.ts` `openFindingsOn`; `gate-service.ts` `openFindings` |
 
-**Severity words.** Each review's check must fail on its blocking words, so a passing check means a clean PR (ADR-0134). The gate's own list, `OPEN_FINDING_SEVERITIES`, is the union: `blocker`, `should-fix`, `critical`, `high`.
+**Severity words.** Each check fails on its blocking words, so a passing check means a clean PR (ADR-0134); the gate's `OPEN_FINDING_SEVERITIES` is their union. Any other word makes the output invalid: "not reviewed", which fails (`parseFindings`).
 
-| Check | Words | Blocking (fails the check) | Source |
+| Check | Words | Blocking | Source |
 | --- | --- | --- | --- |
-| `adversarial-review` | `blocker`, `should-fix`, `question` | `blocker`, `should-fix` | `scripts/review-gate.mjs` `ROLES.adversarial`; `platform/procedures/adversarial-review.schema.json` |
-| `security-review` | `critical`, `high`, `medium`, `low`, `info` | `critical`, `high` | `ROLES.security`; `security-review.schema.json` |
-
-A finding with any other word makes the whole output invalid: "not reviewed", which fails (`parseFindings`).
+| `adversarial-review` | `blocker`, `should-fix`, `question` | `blocker`, `should-fix` | `scripts/review-gate.mjs` `ROLES`; `platform/procedures/adversarial-review.schema.json` |
+| `security-review` | `critical`, `high`, `medium`, `low`, `info` | `critical`, `high` | `ROLES`; `security-review.schema.json` |
 
 **Where findings live.**
 
-- **Sticky PR comment**, one per check, posted by `github-actions[bot]` and starting with `<!-- adversarial-review -->` or `<!-- security-review -->`. A completed review adds `<!-- reviewed-sha: <40-hex head> -->` (`reviewedShaMarker`); "not reviewed", skipped and fork comments don't, so the next incremental review never skips unreviewed commits (`review-gate.mjs` `evaluate`; `platform/actions/agent-review-finish`). The re-sync carry-forward reads this marker and a `### ✅` heading (`scripts/review-carry.mjs`, ADR-0140). The gate never reads comments.
-- **Findings store**: `POST /review/findings` with the review job's Actions OIDC token; the repo, PR and reviewer come only from the token's `workflow_ref`, which must be `.github/workflows/(security|adversarial)-review.yml@refs/pull/<n>/merge`; the body is the head SHA plus each finding's severity, kind, title and file, capped (`apps/api/src/review-findings.ts`, `scripts/review-findings.mjs`, ADR-0097). Wired in production (`apps/api/src/main.ts`), so the gate reads it.
+- **Sticky PR comment** per check, by `github-actions[bot]`, starting `<!-- adversarial-review -->` or `<!-- security-review -->`. Only a completed review adds `<!-- reviewed-sha: <40-hex head> -->`, so the next incremental review never skips unreviewed commits (`review-gate.mjs` `evaluate`, `platform/actions/agent-review-finish`); re-sync carry-forward reads it (`scripts/review-carry.mjs`, ADR-0140). The gate never reads comments.
+- **Findings store**: `POST /review/findings` with the job's Actions OIDC token, whose `workflow_ref` must be `.github/workflows/(security|adversarial)-review.yml@refs/pull/<n>/merge`; body: head SHA plus each finding's severity, kind, title, file (`apps/api/src/review-findings.ts`, `scripts/review-findings.mjs`, ADR-0097). Wired in production (`apps/api/src/main.ts`).
 
-**Accepted labels** (`review-accepted`, `security-accepted`): adding one passes its check without re-running the agent, and the comment shows ⚠️ accepted; the next push removes it (`platform/actions/agent-review-prepare`). It never lets the gate merge: `mergeVerdict` waits on either label.
+**Accepted labels** pass their check without re-running the agent (⚠️ in the comment) and are removed on the next push (`platform/actions/agent-review-prepare`); `mergeVerdict` still waits.
 
-**Modes that pass or fail** (ADR-0140): skipped by design (docs-only, draft, Dependabot) passes; a review that should have run and didn't (no token, agent failure, a re-sync merge that changed the PR) fails unless labelled; fork PRs pass only with the label.
+**Modes** (ADR-0140): skipped by design (docs-only, draft, Dependabot) passes; should have run and didn't fails unless labelled; forks pass only with the label.
 
-**To swap in a hosted reviewer**, it must report both check names from the trusted reporter, with `success` only when no blocking word is open on that head, and honour the labels. Posting to the findings store needs a new caller in `reviewCaller`; without it the checks alone carry the verdict.
+**A hosted reviewer** must report both check names from the trusted reporter, `success` only with no blocking word open on that head, and honour the labels. Using the findings store needs a new caller in `reviewCaller`.
 
-**Frozen, no new features** (2026-11-23 review, `docs/build-log/2026-11-23-review-outcome.md`): `scripts/resync-prs.mjs` and `scripts/coordinator/`. Desktop worker sessions rely on Auto-fix for CI failures, conflicts and review comments, so more PR babysitting there would duplicate it; fixes for bugs still land. **Revisit a hosted reviewer** only when one is open to a personal account, by running it beside these two reviews on ten real PRs and comparing the findings.
+**Frozen, no new features** (`docs/build-log/2026-11-23-review-outcome.md`): `scripts/resync-prs.mjs` and `scripts/coordinator/`. Worker sessions rely on Auto-fix for CI failures, conflicts and comments, so more PR babysitting would duplicate it; bug fixes still land. **Revisit a hosted reviewer** only when one is open to a personal account, comparing it with these reviews on ten real PRs.
