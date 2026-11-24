@@ -1,3 +1,4 @@
+import { useId } from "react";
 import { WORK_VIEWS, WORK_VIEW_LABELS, type NeedsYouParts, type WorkView } from "@andy/domain";
 import {
   Select,
@@ -93,11 +94,18 @@ export function WorkViewMenu({
   total: number;
   onChange: (view: WorkView | null) => void;
 }) {
+  const id = useId();
   return (
     <Select value={view ?? ALL} onValueChange={(v) => onChange(v === ALL ? null : (v as WorkView))}>
-      <SelectTrigger aria-label="View" className="w-auto">
-        <span className="text-muted-foreground">View</span>
-        <SelectValue />
+      {/* A combobox takes no name from its content: name it by both visible parts, so a screen
+          reader hears the current view and its count ("View All 11"). */}
+      <SelectTrigger aria-labelledby={`${id}-label ${id}-value`} className="w-auto">
+        <span id={`${id}-label`} className="text-muted-foreground">
+          View
+        </span>
+        <span id={`${id}-value`}>
+          <SelectValue />
+        </span>
       </SelectTrigger>
       <SelectContent>
         {chipList(counts, needsYou, total).map((chip) => (

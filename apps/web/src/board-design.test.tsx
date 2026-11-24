@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { render, screen, within } from "@testing-library/react";
 import { Markers, MOVE_TRANSITION } from "@/components/board/BoardCard";
+import { WorkViewMenu } from "@/components/board/WorkViewChips";
 import { BoardSkeleton, KeyHints } from "@/pages/BoardPage";
 import { PAGE_LOAD, renderApp } from "@/test/harness";
 
@@ -64,6 +65,20 @@ describe("board on direction A", () => {
     expect(options("Risk")).toEqual(["Any", "low", "medium", "high"]);
     expect(options("Confidence")).toEqual(["Any", "high", "medium", "low"]);
     expect(screen.queryByRole("combobox", { name: "Size" })).toBeNull();
+  });
+
+  it("GivenThePhoneViewMenu_WhenAScreenReaderReachesIt_ThenItHearsTheCurrentViewAndCount", () => {
+    render(
+      <WorkViewMenu
+        view="agents"
+        counts={{ "needs-me": 1, mine: 0, agents: 9, blocked: 1, "in-review": 2 }}
+        needsYou={{ tickets: 1, stale: 0, toPickWorker: 0 }}
+        total={11}
+        onChange={() => {}}
+      />,
+    );
+
+    expect(screen.getByRole("combobox", { name: "View Agents 9" })).toBeTruthy();
   });
 
   it("GivenACardBeingDragged_WhenOthersMakeRoom_ThenTheyMoveInTheBaseDurationWithStandardEasing", () => {
