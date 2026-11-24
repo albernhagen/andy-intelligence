@@ -64,6 +64,8 @@ for (const screen of SCREENS) {
       await page.setViewportSize(PHONE);
       await page.emulateMedia({ colorScheme: "dark" });
       await open(page, screen);
+      await expectPageFits(page);
+      await expectTouchTargets(page.locator("body"));
       await expect(page).toHaveScreenshot(`phone-screen-${screen.name}-dark.png`);
     });
   }
