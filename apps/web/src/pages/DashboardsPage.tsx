@@ -439,7 +439,7 @@ function CostCharts({ weeks, partial }: { weeks: DashboardWeek[]; partial: Set<D
  * The window's four headline numbers (AI-378), above the charts: lead time, CI green on first
  * try, rework and blockers, cost. "—" with the reason when there is nothing to measure yet.
  */
-function StatTiles({ weeks, span }: { weeks: DashboardWeek[]; span: number }) {
+export function StatTiles({ weeks, span }: { weeks: DashboardWeek[]; span: number }) {
   const latest = [...weeks].reverse().find((w) => w.leadTimeHours.count > 0);
   const green = weeks.reduce((n, w) => n + w.ciGreenFirstTry.green, 0);
   const known = weeks.reduce((n, w) => n + w.ciGreenFirstTry.known, 0);
@@ -450,9 +450,14 @@ function StatTiles({ weeks, span }: { weeks: DashboardWeek[]; span: number }) {
   const median = latest?.leadTimeHours.median ?? null;
   const tiles: { title: string; value: string; note: string }[] = [
     {
-      title: "Lead time, Ready to Done",
+      // The read gives medians per week, not per ticket, so the window has no true median:
+      // the tile says which week it shows.
+      title: "Lead time, latest week",
       value: median === null ? "—" : durationText(Math.round(median * 60)),
-      note: median === null ? "No ticket reached Done yet" : "median, latest week with one",
+      note:
+        median === null
+          ? "No ticket reached Done yet"
+          : `median, Ready to Done, week of ${weekLabel(latest!.start)}`,
     },
     {
       title: "CI green on first try",

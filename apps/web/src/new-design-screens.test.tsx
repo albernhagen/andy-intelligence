@@ -119,3 +119,25 @@ describe("AI-378 screens", () => {
     ).toEqual(["Plan this project"]);
   });
 });
+
+describe("AI-378: Plan this project", () => {
+  it("GivenAPlanTaskAlreadyStarted_WhenTheRoadmapReloadsAndPlanIsPressedAgain_ThenTheApiRefusesAndNoSecondTaskStarts", async () => {
+    const h = renderApp("/projects", { githubConnected: true });
+    await h.tracker.createProject({
+      name: "Andy Intelligence",
+      key: "AI",
+      repos: ["albernhagen/andy-intelligence"],
+    });
+    await h.router.navigate({ href: "/p/ai/roadmap" });
+    await h.user.click(await screen.findByRole("button", { name: "Plan this project" }, PAGE_LOAD));
+    expect(await screen.findByRole("link", { name: "Agent task · plan-project" })).toBeTruthy();
+
+    // A reload: the page forgets the started task and the button shows again.
+    await h.router.navigate({ href: "/p/ai/work" });
+    await h.router.navigate({ href: "/p/ai/roadmap" });
+    await h.user.click(await screen.findByRole("button", { name: "Plan this project" }, PAGE_LOAD));
+
+    expect(await screen.findByRole("alert")).toBeTruthy();
+    expect(await h.runs.listActive("ai")).toHaveLength(1);
+  });
+});
