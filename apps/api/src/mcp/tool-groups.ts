@@ -13,6 +13,7 @@ export { registerExecutorTools as executor } from "./tools-executor";
 export { registerHistoryTools as history } from "./tools-history";
 export { registerIdeateTools as ideate } from "./tools-ideate";
 export { registerInFlightTools as inFlight } from "./tools-inflight";
+export { registerMergeTools as merge } from "./tools-merge";
 export { registerMilestoneMapTools as milestoneMap } from "./tools-milestone-map";
 export { registerMilestoneTools as milestones } from "./tools-milestones";
 export { registerNightTools as night } from "./tools-night";

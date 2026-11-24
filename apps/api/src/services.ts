@@ -67,6 +67,7 @@ import type { NightDeps } from "./night";
 import { measureReads, meterReads } from "./read-meter";
 import { runnerCredentials } from "./runners";
 import { OpenRouterGateway } from "./openrouter";
+import { PullRequestMerger } from "./merge";
 import { SetupChecklistReader } from "./setup";
 import { SpendSettingsService } from "./spend";
 
@@ -551,6 +552,13 @@ export function createServices(raw: AppDeps): Services {
       now,
     ),
     digestSummaries,
+    // AI-220: MCP `merge_pr`, through the connected host with the gate's findings source.
+    merges: new PullRequestMerger(
+      deps.tracker,
+      connection ? new ConnectedCodeHost(connection) : null,
+      deps.reviewFindings ?? null,
+      now,
+    ),
     milestones: deps.milestones ?? null,
     // AI-295: one reader each for the Dashboards routes and MCP `dashboard`.
     dashboard: new DashboardReader(deps.tracker, deps.runs, tickets),
