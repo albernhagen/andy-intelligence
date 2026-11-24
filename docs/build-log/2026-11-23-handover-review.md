@@ -45,15 +45,15 @@ The paid path stays built and disabled. Outside any milestone: epic AI-154: Depe
 
 Parked milestones wait on their design PRs: M6 on PR #227, M7 on PR #221 and PR #249, M8 on PR #267, M9 on PR #268 and PR #265. Those and PR #218 are the only open PRs.
 
-## 2. Open decisions for Andy
+## 2. Decisions Andy made on 2026-11-23, and one still open
 
-| Question                                                                          | Recommended                                     |
-| --------------------------------------------------------------------------------- | ----------------------------------------------- |
-| Require the checks `sandbox-self-test`, `agent-evals` and `agent-evals-plumbing`? | Decide in the review                            |
-| Permission rules for `mcp__ccd_pr__bind_pr` and `mcp__ccd_pr__set_monitor`?       | Allow both, so Auto-fix can always be turned on |
-| Which merge mode for project AI (ADR-0124: Merge modes)?                          | Decide in the review                            |
-| Run the What's new backfill (runbook `whats-new-backfill.md`)?                    | Yes, once                                       |
-| AI-347: count tickets, not questions, in every Needs-you count?                   | Yes                                             |
+| Decision                                                                                                                                                   | Andy's answer | State                                                                                                  |
+| ---------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------- | ------------------------------------------------------------------------------------------------------ |
+| Require the checks `sandbox-self-test`, `agent-evals` and `agent-evals-plumbing`? They already run on every PR but are not required.                       | Yes           | AI-352: Baseline ruleset: three more required checks, in progress; Andy merges and applies the ruleset |
+| Allow `mcp__ccd_pr__bind_pr` and `mcp__ccd_pr__set_monitor` without a prompt, so Auto-fix can always be turned on?                                         | Yes           | Allow rules added to Andy's user settings; not yet verified in a new session                           |
+| Run the What's new backfill (runbook `whats-new-backfill.md`)?                                                                                             | Yes           | Run: wrote 158 notes, skipped 90 PRs that already had one; the page was not checked in a browser       |
+| AI-347: count tickets, not questions, in every Needs-you count?                                                                                            | Yes           | AI-347 in progress                                                                                     |
+| Which merge mode for project AI (ADR-0124: Merge modes)? `mergeMode` is unset, so the gate merges nothing without Andy; the suggested mode is `all-clean`. | Open          | Andy to choose: `manual`, `low-risk`, `all-clean` or `epic`                                            |
 
 ## 3. Questions for the review
 
