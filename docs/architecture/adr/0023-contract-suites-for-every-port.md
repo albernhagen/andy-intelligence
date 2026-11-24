@@ -1,6 +1,6 @@
 ---
 title: Every port gets a fake and a contract suite
-status: accepted (amended by 0034: emulator suites run locally)
+status: accepted (amended by 0034: emulator suites run locally; by AI-360: shared suite required only from the second real adapter)
 date: 2026-10-22
 supersedes: 0012
 ---
