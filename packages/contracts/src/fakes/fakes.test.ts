@@ -3,11 +3,9 @@ import {
   configChangeStoreContract,
   reviewFindingSourceContract,
   reviewFindingLogContract,
-  codeHostConnectionStoreContract,
   codeHostContract,
   evaluatorContract,
   executorContract,
-  oauthGrantStoreContract,
   quotaStoreContract,
   runStoreContract,
   runnerStoreContract,
@@ -22,10 +20,8 @@ import {
   InMemoryReleaseNoteStore,
   InMemoryReviewFindingSource,
   InMemoryCodeHost,
-  InMemoryCodeHostConnectionStore,
   InMemoryEvaluator,
   InMemoryExecutor,
-  InMemoryOAuthGrantStore,
   InMemoryRunnerStore,
   InMemoryQuotaStore,
   InMemoryRunStore,
@@ -53,8 +49,6 @@ executorContract("in-memory", async () => ({
 
 quotaStoreContract("in-memory", async () => new InMemoryQuotaStore());
 
-oauthGrantStoreContract("in-memory", async (now) => new InMemoryOAuthGrantStore(now));
-
 codeHostContract(
   "in-memory",
   async () => ({
@@ -75,8 +69,6 @@ codeHostContract(
 runStoreContract("in-memory", async () => new InMemoryRunStore());
 
 codeEventLogContract("in-memory", async () => new InMemoryCodeEventLog());
-
-codeHostConnectionStoreContract("in-memory", async () => new InMemoryCodeHostConnectionStore());
 
 watchdogQueueContract("in-memory", async () => new InMemoryWatchdogQueue());
 
