@@ -85,17 +85,17 @@ GitHub (ADR-0043: GitHub App setup from the UI) is on when `PUBLIC_URL` is set: 
 
 Design rules: [`apps/web/design.md`](apps/web/design.md). One shell on every screen (AI-370): on desktop a left sidebar with the project picker (the scope, remembered), Inbox, Board, Roadmap, Work, Dashboards, What's new (in a project), the projects with their Needs-you counts, the quota, "Search and commands" (Cmd+K: tickets and commands) and a Settings menu (project settings, GitHub, Local runners, Models, theme, Sign out); on a phone a header and a bottom bar.
 
-| Route                                         | Screen                                                                                                                        |
-| --------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------- |
-| `/`                                           | Opens the inbox in the last-picked scope                                                                                      |
-| `/p/:projectId/inbox`, `/all/inbox`           | Needs you: a card per ticket; each question with context, options and their consequences, a recommendation; one-click answers |
-| `/all/board`                                  | Asks for a project                                                                                                            |
-| `/p/:projectId/dashboards`, `/all/dashboards` | Dashboards: weekly delivery and cost charts                                                                                   |
-| `/p/:projectId/settings`                      | Project settings (Settings menu): section links, every option with what it does; MCP `get_project_settings` reads them        |
-| `/projects`, `/projects/new`                  | Open the current project's settings; add a project (picker → Add project)                                                     |
-| `/settings/github`                            | Connect the GitHub App, install link, installed repos                                                                         |
-| `/p/:projectId`                               | Board: lanes with status on cards, quick add, drag to reorder or move                                                         |
-| `/p/:projectId/t/:ticketRef`                  | Ticket detail (ref = key, e.g. `AI-2`): edit, Definition of Ready, moves, agent tasks, questions, history                     |
+| Route                                         | Screen                                                                                                                                  |
+| --------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------- |
+| `/`                                           | Opens the inbox in the last-picked scope                                                                                                |
+| `/p/:projectId/inbox`, `/all/inbox`           | Needs you: tickets listed beside the picked one's questions (one at a time on a phone); keyed, one-click answers; a toast confirms each |
+| `/all/board`                                  | Asks for a project                                                                                                                      |
+| `/p/:projectId/dashboards`, `/all/dashboards` | Dashboards: weekly delivery and cost charts                                                                                             |
+| `/p/:projectId/settings`                      | Project settings (Settings menu): section links, every option with what it does; MCP `get_project_settings` reads them                  |
+| `/projects`, `/projects/new`                  | Open the current project's settings; add a project (picker → Add project)                                                               |
+| `/settings/github`                            | Connect the GitHub App, install link, installed repos                                                                                   |
+| `/p/:projectId`                               | Board: lanes with status on cards, quick add, drag to reorder or move                                                                   |
+| `/p/:projectId/t/:ticketRef`                  | Ticket detail (ref = key, e.g. `AI-2`): edit, Definition of Ready, moves, agent tasks, questions, history                               |
 
 - API client: `openapi-fetch` typed by `apps/web/src/lib/api.gen.ts`, generated (not committed) by `pnpm typecheck` or `pnpm --filter @andy/web gen:api`.
 - Tests (`apps/web/src/**/*.test.tsx`, jsdom) render the UI against the real API in-process (`createApp` + fakes), so they also exercise auth and the ticket rules.
