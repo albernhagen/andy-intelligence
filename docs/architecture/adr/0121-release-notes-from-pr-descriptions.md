@@ -1,6 +1,6 @@
 ---
 title: Release notes from a block in each PR description
-status: proposed (AI-159; Andy decides at review)
+status: proposed (AI-159; Andy decides at review); amended by 0153
 date: 2026-11-20
 ---
 

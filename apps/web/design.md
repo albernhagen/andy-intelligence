@@ -73,4 +73,4 @@ The marker set: [`design-status-markers.md`](design-status-markers.md).
 
 ## Checks
 
-Playwright screenshots (`apps/web/e2e/`, phone ones at 390×844) fail CI on a diff; a deliberate change updates them in the same PR.
+Playwright screenshots (`apps/web/e2e/`, phone ones at 390×844) fail CI on a diff; a deliberate change updates them in the same PR, with the before-and-after table (`pnpm screenshots:table --write`).
