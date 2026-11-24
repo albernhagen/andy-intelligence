@@ -6,6 +6,9 @@ import { expectShellLoaded } from "./shell";
  * change updates the stored images in the same PR (README: "Screenshot checks").
  */
 
+/** The seed's clock (e2e/fake-api.ts), so "Building · 12 min" on a card or the panel never changes. */
+const SEED_NOW = new Date("2026-11-04T15:00:00.000Z");
+
 async function open(page: Page, path: string, ready: string) {
   await page.goto(path);
   await expect(page.getByText(ready).first()).toBeVisible();
@@ -18,6 +21,8 @@ test("shell: inbox under All projects", async ({ page }) => {
 });
 
 test("shell: command palette finds a ticket", async ({ page }) => {
+  // The board behind the palette shows "Refining · N days": pin the clock or the image ages daily.
+  await page.clock.setFixedTime(SEED_NOW);
   await open(page, "/p/ai", "Story side panel");
   await page.keyboard.press("ControlOrMeta+k");
   await page.getByRole("combobox", { name: "Search tickets and commands" }).fill("story");
@@ -36,9 +41,6 @@ test("shell: project picker open", async ({ page }) => {
   await expect(page.getByRole("menuitem", { name: /Add project/ })).toBeVisible();
   await expect(page).toHaveScreenshot("shell-picker-open.png");
 });
-
-/** The seed's clock (e2e/fake-api.ts), so "Building · 12 min" on a card or the panel never changes. */
-const SEED_NOW = new Date("2026-11-04T15:00:00.000Z");
 
 test("board: every card marker, Done as a strip", async ({ page }) => {
   await page.clock.setFixedTime(SEED_NOW);
