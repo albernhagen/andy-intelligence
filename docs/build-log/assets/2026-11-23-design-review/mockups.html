@@ -1,0 +1,2248 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Control Plane Design Review</title>
+    <link
+      rel="stylesheet"
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Space+Grotesk:wght@500;600&family=Hanken+Grotesk:wght@400;500;600;700&family=Geist:wght@400;500;600&family=Geist+Mono:wght@400;500&display=swap"
+    />
+    <style>
+      /* Layout: one reading column (max 72ch) for the review; mockup artboards break out to full width and scroll sideways in their own box. */
+      :root {
+        --bg: oklch(0.985 0.003 265);
+        --panel: oklch(1 0 0);
+        --fg: oklch(0.22 0.02 265);
+        --muted: oklch(0.5 0.02 265);
+        --line: oklch(0.9 0.008 265);
+        --accent: oklch(0.5 0.19 275);
+        --accent-soft: oklch(0.95 0.03 275);
+        --warn: oklch(0.55 0.15 60);
+        --warn-soft: oklch(0.95 0.05 75);
+        --ok: oklch(0.5 0.13 155);
+        --ok-soft: oklch(0.95 0.05 155);
+        --run: oklch(0.52 0.17 255);
+        --run-soft: oklch(0.95 0.035 255);
+        --bad: oklch(0.55 0.2 27);
+        --bad-soft: oklch(0.95 0.04 27);
+        --display: "Space Grotesk", system-ui, sans-serif;
+        --body: "Inter", system-ui, sans-serif;
+        --mono: "Geist Mono", ui-monospace, Menlo, monospace;
+      }
+      @media (prefers-color-scheme: dark) {
+        :root:not([data-theme="light"]) {
+          --bg: oklch(0.17 0.012 265);
+          --panel: oklch(0.21 0.014 265);
+          --fg: oklch(0.94 0.008 265);
+          --muted: oklch(0.7 0.015 265);
+          --line: oklch(0.3 0.015 265);
+          --accent: oklch(0.74 0.14 275);
+          --accent-soft: oklch(0.3 0.07 275);
+          --warn: oklch(0.8 0.14 75);
+          --warn-soft: oklch(0.32 0.06 70);
+          --ok: oklch(0.78 0.14 155);
+          --ok-soft: oklch(0.3 0.06 155);
+          --run: oklch(0.76 0.12 255);
+          --run-soft: oklch(0.3 0.06 255);
+          --bad: oklch(0.74 0.16 27);
+          --bad-soft: oklch(0.32 0.07 27);
+          color-scheme: dark;
+        }
+      }
+      :root[data-theme="dark"] {
+        --bg: oklch(0.17 0.012 265);
+        --panel: oklch(0.21 0.014 265);
+        --fg: oklch(0.94 0.008 265);
+        --muted: oklch(0.7 0.015 265);
+        --line: oklch(0.3 0.015 265);
+        --accent: oklch(0.74 0.14 275);
+        --accent-soft: oklch(0.3 0.07 275);
+        --warn: oklch(0.8 0.14 75);
+        --warn-soft: oklch(0.32 0.06 70);
+        --ok: oklch(0.78 0.14 155);
+        --ok-soft: oklch(0.3 0.06 155);
+        --run: oklch(0.76 0.12 255);
+        --run-soft: oklch(0.3 0.06 255);
+        --bad: oklch(0.74 0.16 27);
+        --bad-soft: oklch(0.32 0.07 27);
+        color-scheme: dark;
+      }
+
+      body {
+        margin: 0;
+        background: var(--bg);
+        color: var(--fg);
+        font: 15px/1.55 var(--body);
+        padding-block: 40px 80px;
+        padding-left: max(16px, env(safe-area-inset-left, 0px));
+        padding-right: max(16px, env(safe-area-inset-right, 0px));
+      }
+      .col {
+        max-width: 72ch;
+        margin-inline: auto;
+        display: flex;
+        flex-direction: column;
+        gap: 14px;
+      }
+      .wide {
+        max-width: 1240px;
+        margin-inline: auto;
+        display: flex;
+        flex-direction: column;
+        gap: 14px;
+      }
+      section {
+        display: flex;
+        flex-direction: column;
+        gap: 28px;
+        margin-top: 56px;
+      }
+      h1,
+      h2,
+      h3 {
+        font-family: var(--display);
+        text-wrap: balance;
+        margin: 0;
+        letter-spacing: -0.01em;
+      }
+      h1 {
+        font-size: 34px;
+        line-height: 1.1;
+        font-weight: 600;
+      }
+      h2 {
+        font-size: 23px;
+        font-weight: 600;
+      }
+      h3 {
+        font-size: 16px;
+        font-weight: 600;
+        margin-top: 10px;
+      }
+      p,
+      ul,
+      ol {
+        margin: 0;
+      }
+      ul,
+      ol {
+        padding-left: 20px;
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+      }
+      .lede {
+        font-size: 17px;
+        color: var(--fg);
+      }
+      .eyebrow {
+        font: 500 12px var(--mono);
+        color: var(--muted);
+        letter-spacing: 0.06em;
+        text-transform: uppercase;
+      }
+      .muted {
+        color: var(--muted);
+      }
+      small,
+      .small {
+        font-size: 13px;
+      }
+      code {
+        font: 13px var(--mono);
+        background: var(--accent-soft);
+        padding: 1px 5px;
+        border-radius: 4px;
+      }
+      .note {
+        border-left: 3px solid var(--accent);
+        padding: 2px 0 2px 14px;
+        color: var(--muted);
+        font-size: 14px;
+      }
+      .tw {
+        overflow-x: auto;
+      }
+      table {
+        border-collapse: collapse;
+        width: 100%;
+        font-size: 14px;
+        min-width: 560px;
+      }
+      th {
+        text-align: left;
+        font: 500 12px var(--mono);
+        color: var(--muted);
+        letter-spacing: 0.04em;
+        text-transform: uppercase;
+        padding: 6px 10px 6px 0;
+        border-bottom: 1px solid var(--line);
+      }
+      td {
+        padding: 9px 10px 9px 0;
+        border-bottom: 1px solid var(--line);
+        vertical-align: top;
+      }
+      td.n {
+        font: 13px var(--mono);
+        color: var(--muted);
+        white-space: nowrap;
+      }
+      .shots {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+        gap: 18px;
+      }
+      figure {
+        margin: 0;
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+        min-width: 0;
+      }
+      figure a {
+        display: block;
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        overflow: hidden;
+        background: var(--panel);
+        height: 200px;
+      }
+      figure img {
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+        object-position: top left;
+        display: block;
+      }
+      figcaption {
+        font-size: 13px;
+        color: var(--muted);
+      }
+      figcaption b {
+        color: var(--fg);
+        font-weight: 600;
+      }
+      .q {
+        background: var(--panel);
+        border: 1px solid var(--line);
+        border-radius: 10px;
+        padding: 16px 18px;
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+      }
+      .q b.ask {
+        font-family: var(--display);
+        font-size: 16px;
+      }
+      .rec {
+        color: var(--accent);
+        font-weight: 600;
+      }
+      .dirhead {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 6px 14px;
+        align-items: baseline;
+      }
+      .pick {
+        font: 500 11px var(--mono);
+        letter-spacing: 0.05em;
+        text-transform: uppercase;
+        background: var(--accent);
+        color: var(--panel);
+        padding: 2px 8px;
+        border-radius: 99px;
+      }
+      .cap {
+        font: 500 12px var(--mono);
+        color: var(--muted);
+        letter-spacing: 0.04em;
+        text-transform: uppercase;
+        margin-top: 6px;
+      }
+
+      /* ---------- mockups: shared ---------- */
+      .scroll {
+        overflow-x: auto;
+        border-radius: 12px;
+        border: 1px solid var(--line);
+      }
+      .ab {
+        min-width: 1040px;
+        background: var(--m-bg);
+        color: var(--m-fg);
+        font-family: var(--m-font);
+        font-size: 13px;
+        line-height: 1.4;
+        font-variant-numeric: tabular-nums;
+      }
+      .ab * {
+        box-sizing: border-box;
+      }
+      .ab .mu {
+        color: var(--m-mu);
+      }
+      .ab .k {
+        font-family: var(--m-mono);
+        color: var(--m-mu);
+        font-size: 12px;
+      }
+      .ab .tag {
+        display: inline-flex;
+        align-items: center;
+        gap: 4px;
+        font-size: 11px;
+        font-weight: 500;
+        padding: 1px 7px;
+        border-radius: 99px;
+        white-space: nowrap;
+      }
+      .ab .t-warn {
+        background: var(--warn-soft);
+        color: var(--warn);
+      }
+      .ab .t-ok {
+        background: var(--ok-soft);
+        color: var(--ok);
+      }
+      .ab .t-run {
+        background: var(--run-soft);
+        color: var(--run);
+      }
+      .ab .t-n {
+        background: var(--m-sub);
+        color: var(--m-mu);
+      }
+      .ab kbd {
+        font: 500 10.5px var(--m-mono);
+        border: 1px solid var(--m-line);
+        border-bottom-width: 2px;
+        border-radius: 4px;
+        padding: 0 4px;
+        color: var(--m-mu);
+        background: var(--m-bg);
+      }
+      .ab .sw {
+        width: 28px;
+        height: 16px;
+        border-radius: 99px;
+        background: var(--m-line);
+        position: relative;
+        flex: none;
+      }
+      .ab .sw::after {
+        content: "";
+        position: absolute;
+        top: 2px;
+        left: 2px;
+        width: 12px;
+        height: 12px;
+        border-radius: 50%;
+        background: var(--m-panel);
+      }
+      .ab .sw.on {
+        background: var(--m-acc);
+      }
+      .ab .sw.on::after {
+        left: 14px;
+      }
+      .ab .radio {
+        width: 15px;
+        height: 15px;
+        border-radius: 50%;
+        border: 1.5px solid var(--m-line);
+        flex: none;
+        margin-top: 2px;
+      }
+      .ab .radio.on {
+        border: 4.5px solid var(--m-acc);
+      }
+      .ab .dot {
+        width: 7px;
+        height: 7px;
+        border-radius: 50%;
+        background: var(--warn);
+        flex: none;
+      }
+
+      /* ---------- A: Instrument ---------- */
+      .dA {
+        --m-bg: oklch(0.985 0.003 270);
+        --m-panel: oklch(1 0 0);
+        --m-sub: oklch(0.96 0.006 270);
+        --m-fg: oklch(0.24 0.02 270);
+        --m-mu: oklch(0.52 0.02 270);
+        --m-line: oklch(0.91 0.008 270);
+        --m-acc: oklch(0.52 0.2 277);
+        --m-accs: oklch(0.95 0.035 277);
+        --m-font: "Inter", system-ui, sans-serif;
+        --m-mono: "Geist Mono", ui-monospace, monospace;
+      }
+      .dA.ab {
+        display: grid;
+        grid-template-columns: 212px 1fr;
+        height: 600px;
+      }
+      .dA .side {
+        background: var(--m-sub);
+        border-right: 1px solid var(--m-line);
+        padding: 12px 8px;
+        display: flex;
+        flex-direction: column;
+        gap: 2px;
+      }
+      .dA .proj {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        padding: 6px 8px;
+        font-weight: 600;
+        margin-bottom: 8px;
+      }
+      .dA .logo {
+        width: 20px;
+        height: 20px;
+        border-radius: 5px;
+        background: var(--m-fg);
+        color: var(--m-bg);
+        font-size: 10px;
+        font-weight: 600;
+        display: grid;
+        place-items: center;
+      }
+      .dA .nav {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 5px 8px;
+        border-radius: 6px;
+        color: var(--m-mu);
+        font-weight: 500;
+      }
+      .dA .nav.on {
+        background: var(--m-panel);
+        color: var(--m-fg);
+        box-shadow: 0 0 0 1px var(--m-line);
+      }
+      .dA .nav b {
+        font-weight: 500;
+        font-size: 11px;
+        color: var(--warn);
+      }
+      .dA .grp {
+        font-size: 11px;
+        color: var(--m-mu);
+        padding: 14px 8px 4px;
+        font-weight: 500;
+      }
+      .dA .quota {
+        margin-top: auto;
+        padding: 8px;
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+        font-size: 11px;
+        color: var(--m-mu);
+      }
+      .dA .bar {
+        height: 3px;
+        border-radius: 9px;
+        background: var(--m-line);
+      }
+      .dA .bar i {
+        display: block;
+        height: 100%;
+        border-radius: 9px;
+        background: var(--m-acc);
+      }
+      .dA .main {
+        display: grid;
+        grid-template-columns: 400px 1fr;
+        min-width: 0;
+      }
+      .dA .list {
+        border-right: 1px solid var(--m-line);
+        display: flex;
+        flex-direction: column;
+        min-width: 0;
+      }
+      .dA .hd {
+        height: 44px;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 0 16px;
+        border-bottom: 1px solid var(--m-line);
+        font-weight: 600;
+        font-size: 14px;
+        flex: none;
+      }
+      .dA .sec {
+        font-size: 11px;
+        font-weight: 500;
+        color: var(--m-mu);
+        padding: 12px 16px 4px;
+      }
+      .dA .row {
+        display: grid;
+        grid-template-columns: auto 1fr auto;
+        gap: 2px 8px;
+        padding: 8px 16px;
+        align-items: center;
+        border-left: 2px solid transparent;
+      }
+      .dA .row.on {
+        background: var(--m-accs);
+        border-left-color: var(--m-acc);
+      }
+      .dA .row .ti {
+        font-weight: 500;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+      .dA .row .sub {
+        grid-column: 2/4;
+        color: var(--m-mu);
+        font-size: 12px;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+      .dA .det {
+        background: var(--m-panel);
+        display: flex;
+        flex-direction: column;
+        min-width: 0;
+      }
+      .dA .body {
+        padding: 22px 28px;
+        display: flex;
+        flex-direction: column;
+        gap: 18px;
+        flex: 1;
+      }
+      .dA .ttl {
+        font-size: 19px;
+        font-weight: 600;
+        letter-spacing: -0.01em;
+      }
+      .dA .qq {
+        display: flex;
+        flex-direction: column;
+        gap: 9px;
+        padding-bottom: 18px;
+        border-bottom: 1px solid var(--m-line);
+      }
+      .dA .qq .qt {
+        font-size: 14px;
+        font-weight: 500;
+        display: flex;
+        gap: 8px;
+        align-items: center;
+      }
+      .dA .opts {
+        display: flex;
+        gap: 8px;
+        flex-wrap: wrap;
+      }
+      .dA .opt {
+        display: inline-flex;
+        gap: 8px;
+        align-items: center;
+        border: 1px solid var(--m-line);
+        border-radius: 7px;
+        padding: 6px 10px;
+        font-weight: 500;
+        background: var(--m-panel);
+        box-shadow: 0 1px 0 var(--m-line);
+      }
+      .dA .opt.sug {
+        border-color: var(--m-acc);
+        box-shadow: 0 0 0 3px var(--m-accs);
+      }
+      .dA .inp {
+        border: 1px solid var(--m-line);
+        border-radius: 7px;
+        padding: 7px 10px;
+        color: var(--m-mu);
+        background: var(--m-bg);
+      }
+      .dA .foot {
+        border-top: 1px solid var(--m-line);
+        padding: 10px 28px;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        color: var(--m-mu);
+        font-size: 12px;
+      }
+      .dA .btn {
+        background: var(--m-acc);
+        color: #fff;
+        border-radius: 7px;
+        padding: 7px 12px;
+        font-weight: 500;
+        display: inline-flex;
+        gap: 8px;
+        align-items: center;
+      }
+      .dA .btn kbd {
+        background: transparent;
+        border-color: rgb(255 255 255/0.4);
+        color: #fff;
+      }
+      .dA .set {
+        background: var(--m-panel);
+        overflow: hidden;
+        display: grid;
+        grid-template-columns: 170px 1fr;
+        min-width: 0;
+      }
+      .dA .sub2 {
+        border-right: 1px solid var(--m-line);
+        padding: 52px 8px 0;
+        display: flex;
+        flex-direction: column;
+        gap: 2px;
+      }
+      .dA .sbody {
+        padding: 18px 28px;
+        display: flex;
+        flex-direction: column;
+        gap: 14px;
+        min-width: 0;
+      }
+      .dA .srow {
+        display: grid;
+        grid-template-columns: 1fr auto;
+        gap: 16px;
+        align-items: center;
+        padding: 10px 0;
+        border-bottom: 1px solid var(--m-line);
+      }
+      .dA .srow b,
+      .dA .mm b {
+        font-weight: 500;
+        display: block;
+      }
+      .dA .ladder {
+        display: grid;
+        grid-template-columns: repeat(4, 1fr);
+        gap: 8px;
+      }
+      .dA .mm {
+        border: 1px solid var(--m-line);
+        border-radius: 9px;
+        padding: 10px 11px;
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+        font-size: 12px;
+      }
+      .dA .mm.on {
+        border-color: var(--m-acc);
+        box-shadow: 0 0 0 3px var(--m-accs);
+      }
+      .dA .mm .top {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        font-size: 13px;
+      }
+      .dA .mm .you {
+        margin-top: auto;
+        padding-top: 6px;
+        border-top: 1px dashed var(--m-line);
+        color: var(--m-fg);
+      }
+      .dA .scale {
+        display: flex;
+        justify-content: space-between;
+        font-size: 11px;
+        color: var(--m-mu);
+      }
+
+      /* ---------- B: Focus ---------- */
+      .dB {
+        --m-bg: oklch(0.975 0.004 200);
+        --m-panel: oklch(1 0 0);
+        --m-sub: oklch(0.95 0.006 200);
+        --m-fg: oklch(0.25 0.02 220);
+        --m-mu: oklch(0.5 0.02 220);
+        --m-line: oklch(0.9 0.008 200);
+        --m-acc: oklch(0.48 0.09 195);
+        --m-accs: oklch(0.94 0.03 195);
+        --m-font: "Hanken Grotesk", system-ui, sans-serif;
+        --m-mono: "Geist Mono", ui-monospace, monospace;
+      }
+      .dB.ab {
+        font-size: 14px;
+        height: 640px;
+        display: flex;
+        flex-direction: column;
+      }
+      .dB .top {
+        height: 52px;
+        display: flex;
+        align-items: center;
+        gap: 22px;
+        padding: 0 24px;
+        flex: none;
+      }
+      .dB .top .br {
+        font-weight: 700;
+        display: flex;
+        gap: 8px;
+        align-items: center;
+      }
+      .dB .logo {
+        width: 22px;
+        height: 22px;
+        border-radius: 7px;
+        background: var(--m-acc);
+        color: #fff;
+        font-size: 10px;
+        font-weight: 700;
+        display: grid;
+        place-items: center;
+      }
+      .dB .top a {
+        color: var(--m-mu);
+        font-weight: 500;
+      }
+      .dB .top a.on {
+        color: var(--m-fg);
+        font-weight: 700;
+      }
+      .dB .top .r {
+        margin-left: auto;
+        display: flex;
+        gap: 14px;
+        align-items: center;
+        color: var(--m-mu);
+        font-size: 13px;
+      }
+      .dB .stage {
+        flex: 1;
+        display: grid;
+        grid-template-columns: 1fr 250px;
+        gap: 28px;
+        padding: 8px 24px 24px;
+        max-width: 1010px;
+        width: 100%;
+        margin: 0 auto;
+        min-height: 0;
+      }
+      .dB .card {
+        background: var(--m-panel);
+        border-radius: 16px;
+        box-shadow:
+          0 1px 2px rgb(0 0 0/0.06),
+          0 12px 32px -12px rgb(0 0 0/0.18);
+        padding: 26px 30px;
+        display: flex;
+        flex-direction: column;
+        gap: 16px;
+      }
+      .dB .prog {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        color: var(--m-mu);
+        font-size: 13px;
+      }
+      .dB .pips {
+        display: flex;
+        gap: 4px;
+      }
+      .dB .pips i {
+        width: 22px;
+        height: 4px;
+        border-radius: 9px;
+        background: var(--m-line);
+      }
+      .dB .pips i.d {
+        background: var(--m-acc);
+      }
+      .dB .big {
+        font-size: 24px;
+        font-weight: 700;
+        letter-spacing: -0.015em;
+        line-height: 1.2;
+      }
+      .dB .choice {
+        display: grid;
+        grid-template-columns: auto 1fr auto;
+        gap: 12px;
+        align-items: center;
+        border: 1.5px solid var(--m-line);
+        border-radius: 12px;
+        padding: 12px 14px;
+      }
+      .dB .choice.sug {
+        border-color: var(--m-acc);
+        background: var(--m-accs);
+      }
+      .dB .choice b {
+        font-weight: 600;
+        display: block;
+      }
+      .dB .choice span.d {
+        font-size: 13px;
+        color: var(--m-mu);
+      }
+      .dB .inp {
+        border: 1.5px solid var(--m-line);
+        border-radius: 12px;
+        padding: 11px 14px;
+        color: var(--m-mu);
+      }
+      .dB .acts {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-top: auto;
+        color: var(--m-mu);
+        font-size: 13px;
+      }
+      .dB .btn {
+        background: var(--m-fg);
+        color: var(--m-bg);
+        border-radius: 10px;
+        padding: 9px 16px;
+        font-weight: 600;
+      }
+      .dB .next {
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+        font-size: 13px;
+      }
+      .dB .next h4 {
+        margin: 6px 0 2px;
+        font-size: 12px;
+        font-weight: 600;
+        color: var(--m-mu);
+      }
+      .dB .ni {
+        background: var(--m-panel);
+        border-radius: 10px;
+        padding: 9px 11px;
+        display: flex;
+        flex-direction: column;
+        gap: 2px;
+        border: 1px solid var(--m-line);
+      }
+      .dB .ni b {
+        font-weight: 600;
+      }
+      .dB .setcol {
+        max-width: 720px;
+        width: 100%;
+        margin: 0 auto;
+        padding: 8px 24px 24px;
+        display: flex;
+        flex-direction: column;
+        gap: 14px;
+      }
+      .dB .h {
+        font-size: 22px;
+        font-weight: 700;
+        letter-spacing: -0.015em;
+      }
+      .dB .tabs {
+        display: flex;
+        gap: 18px;
+        color: var(--m-mu);
+        font-weight: 500;
+        border-bottom: 1px solid var(--m-line);
+        padding-bottom: 8px;
+      }
+      .dB .tabs .on {
+        color: var(--m-fg);
+        font-weight: 700;
+      }
+      .dB .grp {
+        background: var(--m-panel);
+        border-radius: 14px;
+        border: 1px solid var(--m-line);
+        overflow: hidden;
+      }
+      .dB .gr {
+        display: grid;
+        grid-template-columns: auto 1fr auto;
+        gap: 12px;
+        padding: 12px 16px;
+        border-bottom: 1px solid var(--m-line);
+        align-items: start;
+      }
+      .dB .gr:last-child {
+        border-bottom: 0;
+      }
+      .dB .gr.on {
+        background: var(--m-accs);
+      }
+      .dB .gr b {
+        font-weight: 600;
+        display: block;
+      }
+      .dB .gr .d {
+        font-size: 13px;
+        color: var(--m-mu);
+      }
+      .dB .gh {
+        padding: 12px 16px 10px;
+        border-bottom: 1px solid var(--m-line);
+      }
+      .dB .gh b {
+        font-weight: 700;
+        display: block;
+      }
+
+      /* ---------- C: Console ---------- */
+      .dC {
+        --m-bg: oklch(0.99 0 0);
+        --m-panel: oklch(1 0 0);
+        --m-sub: oklch(0.965 0.002 250);
+        --m-fg: oklch(0.2 0.01 250);
+        --m-mu: oklch(0.5 0.012 250);
+        --m-line: oklch(0.9 0.004 250);
+        --m-acc: oklch(0.52 0.19 255);
+        --m-accs: oklch(0.95 0.03 255);
+        --m-font: "Geist", system-ui, sans-serif;
+        --m-mono: "Geist Mono", ui-monospace, monospace;
+      }
+      .dC.ab {
+        height: 560px;
+        display: flex;
+        flex-direction: column;
+      }
+      .dC .top {
+        height: 44px;
+        border-bottom: 1px solid var(--m-line);
+        display: flex;
+        align-items: stretch;
+        gap: 4px;
+        padding: 0 16px;
+        flex: none;
+      }
+      .dC .top > * {
+        display: flex;
+        align-items: center;
+        padding: 0 10px;
+        color: var(--m-mu);
+        font-weight: 500;
+        border-bottom: 2px solid transparent;
+      }
+      .dC .top .br {
+        color: var(--m-fg);
+        font-weight: 600;
+        gap: 8px;
+        padding-left: 0;
+      }
+      .dC .top .on {
+        color: var(--m-fg);
+        border-bottom-color: var(--m-fg);
+      }
+      .dC .top .cmd {
+        margin-left: auto;
+        gap: 8px;
+        border: 1px solid var(--m-line);
+        border-radius: 6px;
+        height: 28px;
+        align-self: center;
+        font-weight: 400;
+        font-size: 12px;
+        width: 210px;
+        justify-content: space-between;
+      }
+      .dC .top .qt {
+        font: 12px var(--m-mono);
+        gap: 8px;
+      }
+      .dC .bar {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        padding: 12px 16px;
+      }
+      .dC .bar .h {
+        font-size: 15px;
+        font-weight: 600;
+      }
+      .dC .chip {
+        border: 1px solid var(--m-line);
+        border-radius: 5px;
+        padding: 2px 8px;
+        font-size: 12px;
+        color: var(--m-mu);
+      }
+      .dC .chip.on {
+        background: var(--m-fg);
+        color: var(--m-bg);
+        border-color: var(--m-fg);
+      }
+      .dC table {
+        min-width: 0;
+        font-size: 13px;
+        margin: 0 16px;
+        width: calc(100% - 32px);
+        border: 1px solid var(--m-line);
+        border-radius: 6px;
+        border-collapse: separate;
+        border-spacing: 0;
+        overflow: hidden;
+      }
+      .dC th {
+        background: var(--m-sub);
+        font: 500 11px var(--m-mono);
+        padding: 6px 10px;
+        color: var(--m-mu);
+        border-bottom: 1px solid var(--m-line);
+      }
+      .dC td {
+        padding: 7px 10px;
+        border-bottom: 1px solid var(--m-line);
+        vertical-align: middle;
+      }
+      .dC tr:last-child td {
+        border-bottom: 0;
+      }
+      .dC tr.on td {
+        background: var(--m-accs);
+      }
+      .dC td .k {
+        margin-right: 6px;
+      }
+      .dC .ans {
+        display: inline-flex;
+        gap: 6px;
+        align-items: center;
+        border: 1px solid var(--m-line);
+        border-radius: 5px;
+        padding: 2px 8px;
+        margin-right: 4px;
+        font-weight: 500;
+        background: var(--m-panel);
+      }
+      .dC .ans.sug {
+        border-color: var(--m-acc);
+        color: var(--m-acc);
+      }
+      .dC .hint {
+        margin-top: auto;
+        border-top: 1px solid var(--m-line);
+        padding: 8px 16px;
+        display: flex;
+        gap: 18px;
+        color: var(--m-mu);
+        font-size: 12px;
+      }
+      .dC .cols {
+        display: grid;
+        grid-template-columns: 180px 1fr;
+        gap: 24px;
+        padding: 16px;
+        min-height: 0;
+      }
+      .dC .sn {
+        display: flex;
+        flex-direction: column;
+        gap: 2px;
+      }
+      .dC .sn a {
+        padding: 5px 8px;
+        border-radius: 5px;
+        color: var(--m-mu);
+      }
+      .dC .sn a.on {
+        background: var(--m-sub);
+        color: var(--m-fg);
+        font-weight: 500;
+      }
+      .dC .pc {
+        border: 1px solid var(--m-line);
+        border-radius: 6px;
+        background: var(--m-panel);
+        overflow: hidden;
+      }
+      .dC .pc .ph {
+        padding: 12px 14px;
+      }
+      .dC .pc .ph b {
+        font-weight: 600;
+        font-size: 14px;
+        display: block;
+      }
+      .dC .pc table {
+        margin: 0;
+        width: 100%;
+        border: 0;
+        border-top: 1px solid var(--m-line);
+        border-radius: 0;
+      }
+      .dC .pc .pf {
+        background: var(--m-sub);
+        border-top: 1px solid var(--m-line);
+        padding: 7px 14px;
+        font-size: 12px;
+        color: var(--m-mu);
+        display: flex;
+        justify-content: space-between;
+      }
+      .dC .stack {
+        display: flex;
+        flex-direction: column;
+        gap: 12px;
+        min-width: 0;
+      }
+      .dC .two {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 12px;
+      }
+      .dC .seg {
+        display: inline-flex;
+        border: 1px solid var(--m-line);
+        border-radius: 6px;
+        overflow: hidden;
+        font-size: 12px;
+        font-weight: 500;
+      }
+      .dC .seg span {
+        padding: 4px 10px;
+        border-right: 1px solid var(--m-line);
+        color: var(--m-mu);
+      }
+      .dC .seg span:last-child {
+        border: 0;
+      }
+      .dC .seg .on {
+        background: var(--m-fg);
+        color: var(--m-bg);
+      }
+
+      /* mockup dark values follow the page theme */
+      @media (prefers-color-scheme: dark) {
+        :root:not([data-theme="light"]) .dA {
+          --m-bg: oklch(0.17 0.012 270);
+          --m-panel: oklch(0.2 0.014 270);
+          --m-sub: oklch(0.15 0.012 270);
+          --m-fg: oklch(0.94 0.008 270);
+          --m-mu: oklch(0.66 0.016 270);
+          --m-line: oklch(0.28 0.014 270);
+          --m-acc: oklch(0.62 0.19 277);
+          --m-accs: oklch(0.27 0.07 277);
+        }
+        :root:not([data-theme="light"]) .dB {
+          --m-bg: oklch(0.19 0.012 210);
+          --m-panel: oklch(0.235 0.014 210);
+          --m-sub: oklch(0.16 0.012 210);
+          --m-fg: oklch(0.94 0.008 200);
+          --m-mu: oklch(0.68 0.016 205);
+          --m-line: oklch(0.31 0.014 210);
+          --m-acc: oklch(0.7 0.1 195);
+          --m-accs: oklch(0.29 0.045 195);
+        }
+        :root:not([data-theme="light"]) .dC {
+          --m-bg: oklch(0.13 0.003 250);
+          --m-panel: oklch(0.16 0.004 250);
+          --m-sub: oklch(0.19 0.005 250);
+          --m-fg: oklch(0.95 0.003 250);
+          --m-mu: oklch(0.66 0.01 250);
+          --m-line: oklch(0.27 0.006 250);
+          --m-acc: oklch(0.7 0.15 255);
+          --m-accs: oklch(0.25 0.06 255);
+        }
+      }
+      :root[data-theme="dark"] .dA {
+        --m-bg: oklch(0.17 0.012 270);
+        --m-panel: oklch(0.2 0.014 270);
+        --m-sub: oklch(0.15 0.012 270);
+        --m-fg: oklch(0.94 0.008 270);
+        --m-mu: oklch(0.66 0.016 270);
+        --m-line: oklch(0.28 0.014 270);
+        --m-acc: oklch(0.62 0.19 277);
+        --m-accs: oklch(0.27 0.07 277);
+      }
+      :root[data-theme="dark"] .dB {
+        --m-bg: oklch(0.19 0.012 210);
+        --m-panel: oklch(0.235 0.014 210);
+        --m-sub: oklch(0.16 0.012 210);
+        --m-fg: oklch(0.94 0.008 200);
+        --m-mu: oklch(0.68 0.016 205);
+        --m-line: oklch(0.31 0.014 210);
+        --m-acc: oklch(0.7 0.1 195);
+        --m-accs: oklch(0.29 0.045 195);
+      }
+      :root[data-theme="dark"] .dC {
+        --m-bg: oklch(0.13 0.003 250);
+        --m-panel: oklch(0.16 0.004 250);
+        --m-sub: oklch(0.19 0.005 250);
+        --m-fg: oklch(0.95 0.003 250);
+        --m-mu: oklch(0.66 0.01 250);
+        --m-line: oklch(0.27 0.006 250);
+        --m-acc: oklch(0.7 0.15 255);
+        --m-accs: oklch(0.25 0.06 255);
+      }
+    </style>
+  </head>
+  <body>
+    <div class="col">
+      <span class="eyebrow">andy-intelligence · design and UX review · 2026-11-23</span>
+      <h1>The UI is tidy. It is not yet designed.</h1>
+      <p class="lede">
+        The 2026-11-21 review removed clutter and fixed the phone. What is left is an unstyled
+        shadcn default: grey boxes, the system font, native form controls, and no feedback when
+        something changes. Three directions are mocked below for the Needs-you inbox and Project
+        settings. Pick one and the rest follows from it.
+      </p>
+      <p class="note">
+        <b>Verified:</b> 27 screens rendered at 1280×800 and 390×844, light and dark, against the
+        seeded fake API (198 images, system Chrome, throwaway spec removed). Production untouched.
+        <b>Not verified:</b> live interactions after a click (answering, saving, drag), GitHub and
+        Local runners beyond their error state, and real data volumes.
+      </p>
+    </div>
+
+    <section>
+      <div class="col">
+        <span class="eyebrow">1 · Critique</span>
+        <h2>What the screens show today</h2>
+      </div>
+      <div class="wide">
+        <div class="shots">
+          <figure>
+            <a href="shots/inbox.png"
+              ><img src="shots/inbox.png" alt="Needs-you inbox, all projects"
+            /></a>
+            <figcaption>
+              <b>Inbox.</b> Cards span 1,350 px while their content stops at 650. Boxes inside
+              boxes; the question, the thing to decide, is the same size and weight as everything
+              else.
+            </figcaption>
+          </figure>
+          <figure>
+            <a href="shots/settings.png"><img src="shots/settings.png" alt="Project settings" /></a>
+            <figcaption>
+              <b>Project settings.</b> 1,750 px tall in a 620 px column; 60% of the screen is empty.
+              Merge mode reads <code>low-risk</code>, plan approval <code>none</code>; only the
+              picked option is explained.
+            </figcaption>
+          </figure>
+          <figure>
+            <a href="shots/new-project.png"
+              ><img src="shots/new-project.png" alt="Add project form"
+            /></a>
+            <figcaption>
+              <b>Add project.</b> Three fields with help text packed into labels. No brief, and
+              nothing says what happens after Create.
+            </figcaption>
+          </figure>
+          <figure>
+            <a href="shots/models.png"><img src="shots/models.png" alt="Models settings" /></a>
+            <figcaption>
+              <b>Models.</b> About twenty native selects of raw ids (<code>claude-sub</code>),
+              lower-case tier names, six Save buttons.
+            </figcaption>
+          </figure>
+          <figure>
+            <a href="shots/board-dark.png"
+              ><img src="shots/board-dark.png" alt="Board in dark mode"
+            /></a>
+            <figcaption>
+              <b>Dark mode.</b> Follows the OS only, no switch. Native checkboxes stay bright white.
+            </figcaption>
+          </figure>
+          <figure>
+            <a href="shots/agent-task.png"
+              ><img src="shots/agent-task.png" alt="Agent task page"
+            /></a>
+            <figcaption>
+              <b>Agent task.</b> Five lines of text on an empty page. No progress, log or timeline
+              while it runs.
+            </figcaption>
+          </figure>
+        </div>
+      </div>
+      <div class="col">
+        <h3>Visual</h3>
+        <ul>
+          <li>
+            <b>Type has no hierarchy.</b> System font, four sizes, the largest 18 px medium. A page
+            title and a section heading look alike.
+          </li>
+          <li>
+            <b>Colour is the library default.</b> Every neutral has zero chroma and the one action
+            colour is black. Status tints are the only colour, and they work.
+          </li>
+          <li>
+            <b>One kind of surface.</b> Everything is a white box with a 1 px grey border. Nothing
+            is raised, sunken or selected, so nothing leads the eye.
+          </li>
+          <li>
+            <b>Width is unmanaged.</b> Lists stretch to the full window; forms stop at 672 px.
+            Neither uses the screen.
+          </li>
+          <li>
+            <b>Nothing moves and nothing confirms.</b> An answered card disappears; a saved setting
+            shows grey "Saved" text. No toast, no transition, no skeleton while loading.
+          </li>
+          <li>
+            <b>Empty states are a sentence.</b> Roadmap, dashboards and the agent task page leave
+            most of the screen blank.
+          </li>
+        </ul>
+        <h3>Interaction</h3>
+        <ul>
+          <li>
+            <b>Every picker is a native select</b> that shows raw enum values and hides the other
+            options' meaning. Merge mode, plan approval, default worker, executor, environments,
+            tiers and routes.
+          </li>
+          <li>
+            <b>Switches are native checkboxes</b>, about 13 px, with the consequence written in
+            small grey text below.
+          </li>
+          <li>
+            <b>Keyboard exists but is invisible.</b> Shortcuts shipped (AI-338: Keyboard: move
+            through and act on the inbox and board without the mouse), yet no key hint appears on
+            any control and there is no command palette, though M3: New UI and MCP lists one.
+          </li>
+          <li>
+            <b>Six primitives</b> in <code>components/ui/</code>: badge, button, chart, dropdown
+            menu, input, segmented. No select, switch, dialog, tooltip, toast, tabs or field
+            wrapper, so every page hand-rolls them.
+          </li>
+        </ul>
+        <h3>Flow: new idea to merged work</h3>
+        <ul>
+          <li>Add project is three fields and then drops you on an empty board.</li>
+          <li>The brief has no form; it exists only over MCP.</li>
+          <li>
+            "Start plan-project task" sits inside Project settings, and the plan to approve appears
+            there too.
+          </li>
+          <li>
+            The empty roadmap says to "ask a Claude session". Ideate is a button on the board.
+          </li>
+          <li>
+            So one path crosses Settings, Roadmap, Board and Inbox with no guide. It needs one
+            visible sequence: <b>Brief → Plan → Approve milestones → Build</b>, shown on the project
+            until it is done.
+          </li>
+        </ul>
+        <h3>Where design.md holds the UI back</h3>
+      </div>
+      <div class="col">
+        <div class="tw">
+          <table>
+            <tr>
+              <th>Rule today</th>
+              <th>Change to</th>
+            </tr>
+            <tr>
+              <td>"Nothing animates."</td>
+              <td>
+                Motion explains a change: 120 to 180 ms, opacity and transform only, off under
+                reduced motion, never delays input.
+              </td>
+            </tr>
+            <tr>
+              <td>System font, four sizes, nothing above <code>text-lg</code>.</td>
+              <td>
+                One chosen face plus a mono for keys and numbers; a six-step scale with a real page
+                title.
+              </td>
+            </tr>
+            <tr>
+              <td>Eight colour roles, all neutrals grey.</td>
+              <td>
+                Add surface levels (sunken, base, raised), a selected state, and an accent that is
+                not black. Tinted neutrals.
+              </td>
+            </tr>
+            <tr>
+              <td>"Content is full width"; forms cap at <code>max-w-2xl</code>.</td>
+              <td>
+                Three page templates: list with detail, settings with section nav, reading page.
+              </td>
+            </tr>
+            <tr>
+              <td>Component list: Button, Badge, DropdownMenu.</td>
+              <td>
+                Name the full set and forbid native <code>select</code> and checkbox. A picker with
+                fewer than six options shows all of them with descriptions.
+              </td>
+            </tr>
+            <tr>
+              <td>Dark mode from the OS only.</td>
+              <td>A switch (system, light, dark); dark screenshots in the check.</td>
+            </tr>
+            <tr>
+              <td>No rule for feedback.</td>
+              <td>
+                Every write confirms where it happened, and a toast offers Undo when the write can
+                be reversed.
+              </td>
+            </tr>
+          </table>
+        </div>
+        <p class="small muted">
+          Keep: density, sentence case, role colours as tints, "status visible without opening
+          anything", the copy rules.
+        </p>
+        <h3>The bar: three reference products</h3>
+        <ul>
+          <li>
+            <b>Linear</b>, for the whole: a dense tracker one person drives from the keyboard, with
+            list and detail side by side and motion that never slows it.
+          </li>
+          <li>
+            <b>Vercel dashboard</b>, for settings: every option on screen with a plain description,
+            one card per setting, saved in place.
+          </li>
+          <li>
+            <b>Superhuman</b>, for the inbox: triage as a flow, one decision in focus, a key on
+            every action, and Undo after each.
+          </li>
+        </ul>
+      </div>
+    </section>
+
+    <section>
+      <div class="col">
+        <span class="eyebrow">2 · Directions</span>
+        <h2>Three directions, same two screens</h2>
+        <p>
+          Same seeded data in each. Switch this page's theme to see each direction in dark. These
+          are static mockups: layout, type, colour and the picker pattern are the decision, not
+          pixel detail.
+        </p>
+      </div>
+
+      <div class="wide">
+        <div class="dirhead">
+          <h3>A · Instrument</h3>
+          <span class="pick">Recommended</span
+          ><span class="muted"
+            >Sidebar, list beside detail, indigo accent, Inter 13 px. The Linear bar.</span
+          >
+        </div>
+        <div class="cap">Needs-you inbox</div>
+        <div class="scroll">
+          <div class="ab dA">
+            <div class="side">
+              <div class="proj">
+                <span class="logo">AI</span>All projects
+                <span class="mu" style="margin-left: auto">⌄</span>
+              </div>
+              <div class="nav on">Inbox <b>5</b></div>
+              <div class="nav">Board</div>
+              <div class="nav">Roadmap</div>
+              <div class="nav">Work</div>
+              <div class="nav">Dashboards</div>
+              <div class="nav">What's new</div>
+              <div class="grp">Projects</div>
+              <div class="nav">Andy Intelligence <b>2</b></div>
+              <div class="nav">Ops <b>3</b></div>
+              <div class="quota">
+                <span>Claude 5-hour · 38%</span>
+                <div class="bar"><i style="width: 38%"></i></div>
+                <span>Weekly · 61%</span>
+                <div class="bar"><i style="width: 61%"></i></div>
+                <div style="display: flex; justify-content: space-between; margin-top: 6px">
+                  <span>Search and commands</span><kbd>⌘K</kbd>
+                </div>
+              </div>
+            </div>
+            <div class="main">
+              <div class="list">
+                <div class="hd">Needs you <span class="k">5 tickets</span></div>
+                <div class="sec">Waiting for your merge</div>
+                <div class="row">
+                  <span class="dot"></span><span class="ti">Dropping a card opens the ticket</span
+                  ><span class="k">AI-2</span><span class="sub">PR #74 · touches a kept path</span>
+                </div>
+                <div class="sec">Andy Intelligence</div>
+                <div class="row">
+                  <span class="dot"></span><span class="ti">Story side panel</span
+                  ><span class="k">AI-3</span><span class="sub">Should Esc close the panel?</span>
+                </div>
+                <div class="sec">Ops</div>
+                <div class="row on">
+                  <span class="dot"></span><span class="ti">Rotate the deploy key</span
+                  ><span class="k">OPS-2</span
+                  ><span class="sub">2 questions · 1 urgent · both have a suggestion</span>
+                </div>
+                <div class="row">
+                  <span class="dot"></span><span class="ti">Alert e-mails arrive twice</span
+                  ><span class="k">OPS-3</span
+                  ><span class="sub">Can the old alert rule be deleted?</span>
+                </div>
+                <div class="row">
+                  <span class="dot"></span><span class="ti">Nightly backups</span
+                  ><span class="k">OPS-1</span
+                  ><span class="sub">Keep backups for 7 or 30 days?</span>
+                </div>
+              </div>
+              <div class="det">
+                <div class="hd" style="font-weight: 400">
+                  <span class="mu"
+                    >Ops · Chore · <span class="k">OPS-2</span> ·
+                    <span class="tag t-n">Backlog</span></span
+                  ><span class="mu">Open ticket <kbd>O</kbd></span>
+                </div>
+                <div class="body">
+                  <div class="ttl">Rotate the deploy key</div>
+                  <div class="qq">
+                    <div class="qt">
+                      <span class="tag t-warn">Urgent</span>Rotate every 90 days or on every
+                      release?
+                    </div>
+                    <div class="mu">Only CI uses the key.</div>
+                    <div class="opts">
+                      <span class="opt sug"
+                        ><kbd>1</kbd>Every 90 days <span class="tag t-ok">Suggested</span></span
+                      ><span class="opt"><kbd>2</kbd>Every release</span>
+                    </div>
+                    <div class="inp">Or type an answer…</div>
+                  </div>
+                  <div class="qq" style="border: 0">
+                    <div class="qt">Who gets the alert when a rotation fails?</div>
+                    <div class="opts">
+                      <span class="opt sug"
+                        ><kbd>1</kbd>Andy <span class="tag t-ok">Suggested</span></span
+                      ><span class="opt"><kbd>2</kbd>Nobody</span>
+                    </div>
+                    <div class="inp">Or type an answer…</div>
+                  </div>
+                </div>
+                <div class="foot">
+                  <span
+                    ><kbd>J</kbd> <kbd>K</kbd> move · <kbd>1</kbd>–<kbd>9</kbd> pick ·
+                    <kbd>Z</kbd> undo</span
+                  ><span class="btn">Accept both suggested <kbd>⌘↵</kbd></span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="cap">Project settings · merge mode</div>
+        <div class="scroll">
+          <div class="ab dA" style="height: 560px">
+            <div class="side">
+              <div class="proj">
+                <span class="logo">AI</span>Andy Intelligence
+                <span class="mu" style="margin-left: auto">⌄</span>
+              </div>
+              <div class="nav">Inbox <b>2</b></div>
+              <div class="nav">Board</div>
+              <div class="nav">Roadmap</div>
+              <div class="nav">Work</div>
+              <div class="nav">Dashboards</div>
+              <div class="nav">What's new</div>
+              <div class="grp">Settings</div>
+              <div class="nav on">This project</div>
+              <div class="nav">GitHub</div>
+              <div class="nav">Local runners</div>
+              <div class="nav">Models</div>
+            </div>
+            <div class="set">
+              <div class="sub2">
+                <div class="nav">Setup <b>5 left</b></div>
+                <div class="nav on">Automation</div>
+                <div class="nav">Limits</div>
+                <div class="nav">Defaults</div>
+                <div class="nav">Notifications</div>
+                <div class="nav">Changes</div>
+              </div>
+              <div class="sbody">
+                <div>
+                  <div class="ttl">Automation</div>
+                  <div class="mu">
+                    What runs on its own in Andy Intelligence, and what waits for you.
+                  </div>
+                </div>
+                <div>
+                  <div
+                    style="
+                      display: flex;
+                      justify-content: space-between;
+                      align-items: baseline;
+                      margin-bottom: 8px;
+                    "
+                  >
+                    <b style="font-weight: 500">Merge mode</b
+                    ><span class="mu" style="font-size: 12px"
+                      >Who merges agent PRs once every check and both reviews pass</span
+                    >
+                  </div>
+                  <div class="ladder">
+                    <div class="mm">
+                      <div class="top"><b>Manual</b><span class="radio"></span></div>
+                      <span class="mu">Nothing merges into the default branch without you.</span
+                      ><span class="you">You merge: every PR</span>
+                    </div>
+                    <div class="mm">
+                      <div class="top"><b>Per epic</b><span class="radio"></span></div>
+                      <span class="mu">Clean tickets merge into the epic's branch.</span
+                      ><span class="you">You merge: one PR per epic, and tickets with no epic</span>
+                    </div>
+                    <div class="mm on">
+                      <div class="top"><b>Low risk</b><span class="radio on"></span></div>
+                      <span class="mu"
+                        >A clean PR merges unless its diff touches the high-risk list.</span
+                      ><span class="you">You merge: high-risk PRs</span>
+                    </div>
+                    <div class="mm">
+                      <div class="top"><b>All clean</b><span class="radio"></span></div>
+                      <span class="mu">A clean PR merges unless it is a kind you always merge.</span
+                      ><span class="you">You merge: kept kinds only</span>
+                    </div>
+                  </div>
+                  <div class="scale" style="margin-top: 6px">
+                    <span>← Strictest</span
+                    ><span>Loosening is only possible here, never over MCP</span
+                    ><span>Loosest →</span>
+                  </div>
+                </div>
+                <div class="srow">
+                  <div>
+                    <b>Plan approval</b
+                    ><span class="mu"
+                      >Which tickets wait for you to approve a read-only plan before their
+                      build.</span
+                    >
+                  </div>
+                  <div class="opts">
+                    <span class="opt sug">Never</span><span class="opt">Medium and large</span
+                    ><span class="opt">Every ticket</span>
+                  </div>
+                </div>
+                <div class="srow">
+                  <div>
+                    <b>Auto-refine</b
+                    ><span class="mu"
+                      >Refine starts on its own for tickets entering Up next and answered
+                      ones.</span
+                    >
+                  </div>
+                  <span class="sw on"></span>
+                </div>
+                <div class="srow">
+                  <div>
+                    <b>Builds</b
+                    ><span class="mu"
+                      >Build tasks may start at all. Set here only, never over MCP.</span
+                    >
+                  </div>
+                  <span class="sw"></span>
+                </div>
+                <div class="srow" style="border: 0">
+                  <div>
+                    <b>Auto-build</b
+                    ><span class="mu"
+                      >Ready tickets are built on their own, top of the order first. Needs Builds
+                      on.</span
+                    >
+                  </div>
+                  <span class="sw"></span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="wide">
+        <div class="dirhead">
+          <h3>B · Focus</h3>
+          <span class="muted"
+            >One decision at a time, centred column, soft depth, larger type. The Superhuman
+            bar.</span
+          >
+        </div>
+        <div class="cap">Needs-you inbox</div>
+        <div class="scroll">
+          <div class="ab dB">
+            <div class="top">
+              <span class="br"><span class="logo">AI</span>All projects ⌄</span
+              ><a class="on">Inbox</a><a>Board</a><a>Roadmap</a><a>Work</a><a>Dashboards</a
+              ><span class="r"
+                ><span>Quota 38%</span><span class="tag t-warn">Needs you 5</span></span
+              >
+            </div>
+            <div class="stage">
+              <div class="card">
+                <div class="prog">
+                  <span class="pips"
+                    ><i class="d"></i><i class="d"></i><i class="d"></i><i></i><i></i></span
+                  >Ticket 3 of 5 · question 1 of 2
+                </div>
+                <div class="mu">
+                  Ops · <span class="k">OPS-2</span> Rotate the deploy key ·
+                  <span class="tag t-warn">Urgent</span>
+                </div>
+                <div class="big">Rotate every 90 days or on every release?</div>
+                <div class="mu">Only CI uses the key.</div>
+                <div class="choice sug">
+                  <kbd>1</kbd>
+                  <div><b>Every 90 days</b><span class="d">The agent's suggestion</span></div>
+                  <span class="tag t-ok">Suggested</span>
+                </div>
+                <div class="choice">
+                  <kbd>2</kbd>
+                  <div><b>Every release</b></div>
+                  <span></span>
+                </div>
+                <div class="inp">Or type an answer…</div>
+                <div class="acts">
+                  <span><kbd>S</kbd> Skip for now &nbsp; <kbd>O</kbd> Open ticket</span
+                  ><span class="btn">Accept suggestion ↵</span>
+                </div>
+              </div>
+              <div class="next">
+                <h4>Done just now</h4>
+                <div class="ni mu">
+                  <span><span class="k">AI-2</span> Merged PR #74</span
+                  ><span>Undo <kbd>Z</kbd></span>
+                </div>
+                <div class="ni mu">
+                  <span><span class="k">AI-3</span> Answered "Yes"</span>
+                </div>
+                <h4>Up next</h4>
+                <div class="ni">
+                  <span class="k">OPS-2</span><b>Who gets the alert when a rotation fails?</b>
+                </div>
+                <div class="ni">
+                  <span class="k">OPS-3</span><b>Can the old alert rule be deleted?</b>
+                </div>
+                <div class="ni">
+                  <span class="k">OPS-1</span><b>Keep backups for 7 or 30 days?</b>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="cap">Project settings · merge mode</div>
+        <div class="scroll">
+          <div class="ab dB" style="height: auto">
+            <div class="top">
+              <span class="br"><span class="logo">AI</span>Andy Intelligence ⌄</span><a>Inbox</a
+              ><a>Board</a><a>Roadmap</a><a>Work</a><a>Dashboards</a
+              ><span class="r"
+                ><span>Quota 38%</span><span class="tag t-warn">Needs you 5</span></span
+              >
+            </div>
+            <div class="setcol">
+              <div class="h">Settings</div>
+              <div class="tabs">
+                <span>Setup</span><span class="on">Automation</span><span>Limits</span
+                ><span>Defaults</span><span>Notifications</span><span>Changes</span>
+              </div>
+              <div class="grp">
+                <div class="gh">
+                  <b>Merge mode</b
+                  ><span class="mu" style="font-size: 13px"
+                    >Who merges agent PRs once every check and both reviews pass. Strictest
+                    first.</span
+                  >
+                </div>
+                <div class="gr">
+                  <span class="radio"></span>
+                  <div>
+                    <b>Manual</b
+                    ><span class="d">Nothing merges into the default branch without you.</span>
+                  </div>
+                  <span class="mu" style="font-size: 13px">You merge everything</span>
+                </div>
+                <div class="gr">
+                  <span class="radio"></span>
+                  <div>
+                    <b>Per epic</b
+                    ><span class="d"
+                      >A clean ticket in an epic merges into the epic's branch. Tickets with no epic
+                      wait for you.</span
+                    >
+                  </div>
+                  <span class="mu" style="font-size: 13px">One PR per epic</span>
+                </div>
+                <div class="gr on">
+                  <span class="radio on"></span>
+                  <div>
+                    <b>Low risk</b
+                    ><span class="d"
+                      >A clean PR merges unless its diff touches the high-risk list; the rest wait
+                      for you.</span
+                    >
+                  </div>
+                  <span class="mu" style="font-size: 13px">High-risk PRs</span>
+                </div>
+                <div class="gr">
+                  <span class="radio"></span>
+                  <div>
+                    <b>All clean</b
+                    ><span class="d">A clean PR merges unless it is a kind you always merge.</span>
+                  </div>
+                  <span class="mu" style="font-size: 13px">Kept kinds only</span>
+                </div>
+              </div>
+              <div class="grp">
+                <div class="gr">
+                  <span></span>
+                  <div>
+                    <b>Auto-refine</b
+                    ><span class="d"
+                      >Refine starts on its own for tickets entering Up next and answered
+                      ones.</span
+                    >
+                  </div>
+                  <span class="sw on"></span>
+                </div>
+                <div class="gr">
+                  <span></span>
+                  <div>
+                    <b>Builds</b
+                    ><span class="d"
+                      >Build tasks may start at all. Set here only, never over MCP.</span
+                    >
+                  </div>
+                  <span class="sw"></span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="wide">
+        <div class="dirhead">
+          <h3>C · Console</h3>
+          <span class="muted"
+            >Top tabs, dense table, answers in the row, mono keys, hairlines. The Vercel bar.</span
+          >
+        </div>
+        <div class="cap">Needs-you inbox</div>
+        <div class="scroll">
+          <div class="ab dC">
+            <div class="top">
+              <span class="br">▲ All projects ⌄</span><span class="on">Inbox</span><span>Board</span
+              ><span>Roadmap</span><span>Work</span><span>Dashboards</span><span>What's new</span
+              ><span class="cmd">Search or run a command <kbd>⌘K</kbd></span
+              ><span class="qt">5h 38% · wk 61%</span>
+            </div>
+            <div class="bar">
+              <span class="h">Needs you</span><span class="chip on">All 5</span
+              ><span class="chip">Merges 1</span><span class="chip">Questions 4</span
+              ><span class="chip">Urgent 1</span
+              ><span style="margin-left: auto" class="chip"
+                >Accept all suggested (3) <kbd>⇧A</kbd></span
+              >
+            </div>
+            <table>
+              <tr>
+                <th style="width: 28%">Ticket</th>
+                <th style="width: 32%">Decision</th>
+                <th>Answer</th>
+                <th style="width: 70px">Waiting</th>
+              </tr>
+              <tr>
+                <td><span class="k">AI-2</span>Dropping a card opens the ticket</td>
+                <td>Merge PR #74 <span class="tag t-warn">Kept path</span></td>
+                <td><span class="ans">Review diff</span><span class="ans">Merge</span></td>
+                <td class="k">2 h</td>
+              </tr>
+              <tr>
+                <td><span class="k">AI-3</span>Story side panel</td>
+                <td>Should Esc close the panel?</td>
+                <td><span class="ans mu" style="font-weight: 400">Type an answer…</span></td>
+                <td class="k">1 h</td>
+              </tr>
+              <tr class="on">
+                <td><span class="k">OPS-2</span>Rotate the deploy key</td>
+                <td>
+                  <span class="tag t-warn">Urgent</span> Rotate every 90 days or on every release?
+                </td>
+                <td>
+                  <span class="ans sug"><kbd>1</kbd>Every 90 days ✓</span
+                  ><span class="ans"><kbd>2</kbd>Every release</span>
+                </td>
+                <td class="k">3 h</td>
+              </tr>
+              <tr>
+                <td><span class="k">OPS-2</span><span class="mu">Rotate the deploy key</span></td>
+                <td>Who gets the alert when a rotation fails?</td>
+                <td><span class="ans sug">Andy ✓</span><span class="ans">Nobody</span></td>
+                <td class="k">3 h</td>
+              </tr>
+              <tr>
+                <td><span class="k">OPS-3</span>Alert e-mails arrive twice</td>
+                <td>Can the old alert rule be deleted?</td>
+                <td><span class="ans">Yes</span><span class="ans">No</span></td>
+                <td class="k">5 h</td>
+              </tr>
+              <tr>
+                <td><span class="k">OPS-1</span>Nightly backups</td>
+                <td>Keep backups for 7 or 30 days?</td>
+                <td><span class="ans sug">30 days ✓</span><span class="ans">7 days</span></td>
+                <td class="k">1 d</td>
+              </tr>
+            </table>
+            <div class="hint">
+              <span><kbd>J</kbd> <kbd>K</kbd> row</span><span><kbd>1</kbd>–<kbd>9</kbd> answer</span
+              ><span><kbd>↵</kbd> open ticket</span><span><kbd>Z</kbd> undo</span>
+            </div>
+          </div>
+        </div>
+        <div class="cap">Project settings · merge mode</div>
+        <div class="scroll">
+          <div class="ab dC" style="height: auto">
+            <div class="top">
+              <span class="br">▲ Andy Intelligence ⌄</span><span>Inbox</span><span>Board</span
+              ><span>Roadmap</span><span>Work</span><span>Dashboards</span
+              ><span class="on">Settings</span
+              ><span class="cmd">Search or run a command <kbd>⌘K</kbd></span
+              ><span class="qt">5h 38% · wk 61%</span>
+            </div>
+            <div class="cols">
+              <div class="sn">
+                <a>Setup</a><a class="on">Automation</a><a>Limits</a><a>Defaults</a
+                ><a>Notifications</a><a>Changes</a><a>GitHub</a><a>Local runners</a><a>Models</a>
+              </div>
+              <div class="stack">
+                <div class="pc">
+                  <div class="ph">
+                    <b>Merge mode</b
+                    ><span class="mu"
+                      >Who merges this project's agent PRs once every check and both reviews
+                      pass.</span
+                    >
+                  </div>
+                  <table>
+                    <tr>
+                      <th></th>
+                      <th>Mode</th>
+                      <th>Merges on its own</th>
+                      <th>Waits for you</th>
+                    </tr>
+                    <tr>
+                      <td><span class="radio"></span></td>
+                      <td><b>Manual</b></td>
+                      <td class="mu">Nothing</td>
+                      <td>Every PR</td>
+                    </tr>
+                    <tr>
+                      <td><span class="radio"></span></td>
+                      <td><b>Per epic</b></td>
+                      <td>Clean tickets, into the epic's branch</td>
+                      <td>One PR per epic; tickets with no epic</td>
+                    </tr>
+                    <tr class="on">
+                      <td><span class="radio on"></span></td>
+                      <td><b>Low risk</b></td>
+                      <td>Clean PRs off the high-risk list</td>
+                      <td>PRs that touch the high-risk list</td>
+                    </tr>
+                    <tr>
+                      <td><span class="radio"></span></td>
+                      <td><b>All clean</b></td>
+                      <td>Every clean PR</td>
+                      <td>Kinds you always merge</td>
+                    </tr>
+                  </table>
+                  <div class="pf">
+                    <span>Can be loosened only here, never over MCP.</span
+                    ><span>Saved · Nov 4, 2:50 PM</span>
+                  </div>
+                </div>
+                <div class="two">
+                  <div class="pc">
+                    <div class="ph">
+                      <b>Plan approval</b
+                      ><span class="mu"
+                        >Tickets that wait for you to approve a plan before their build.</span
+                      >
+                      <div style="margin-top: 10px">
+                        <span class="seg"
+                          ><span class="on">Never</span><span>Medium and large</span
+                          ><span>Every ticket</span></span
+                        >
+                      </div>
+                    </div>
+                  </div>
+                  <div class="pc">
+                    <div
+                      class="ph"
+                      style="display: flex; justify-content: space-between; gap: 12px"
+                    >
+                      <div>
+                        <b>Auto-refine</b
+                        ><span class="mu"
+                          >Refine starts on its own for tickets entering Up next.</span
+                        >
+                      </div>
+                      <span class="sw on"></span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="col">
+        <h3>How they compare</h3>
+        <div class="tw">
+          <table>
+            <tr>
+              <th></th>
+              <th>A · Instrument</th>
+              <th>B · Focus</th>
+              <th>C · Console</th>
+            </tr>
+            <tr>
+              <td>Best at</td>
+              <td>Deciding with context beside the list</td>
+              <td>Clearing a queue fast, and the phone</td>
+              <td>Seeing everything at once</td>
+            </tr>
+            <tr>
+              <td>Weak at</td>
+              <td>Needs a new shell (sidebar)</td>
+              <td>Board and dashboards gain little; wastes a wide screen</td>
+              <td>Long questions and context do not fit a row</td>
+            </tr>
+            <tr>
+              <td>Merge-mode picker</td>
+              <td>Four cards on a strict-to-loose scale</td>
+              <td>Radio list, full sentences</td>
+              <td>Comparison table</td>
+            </tr>
+            <tr>
+              <td>Build cost</td>
+              <td>Highest: shell changes on every screen</td>
+              <td>Middle</td>
+              <td>Lowest: closest to today</td>
+            </tr>
+          </table>
+        </div>
+        <p>
+          <span class="rec">Recommendation: A,</span> with B's one-at-a-time card as the phone inbox
+          and C's comparison table kept as the picker pattern whenever options differ on two facts.
+          A is the only one that fixes the wasted width and gives every later screen (board, ticket,
+          agent task) a place to put detail.
+        </p>
+      </div>
+    </section>
+
+    <section>
+      <div class="col">
+        <span class="eyebrow">3 · Screenshots on UI PRs</span>
+        <h2>AI-353: UI PRs show before and after screenshots</h2>
+        <p>
+          The stored images are committed, and the repo is public, so both versions of every changed
+          image already have a URL: the base commit's and the PR head's. Nothing needs uploading.
+        </p>
+        <ul>
+          <li>
+            <b>Recommended:</b> a script (<code>pnpm screenshots:table</code>) writes a "Before and
+            after" table into the PR description, one row per changed image. The existing
+            release-note check fails a PR that changes a stored image without that table. The check
+            also prints the table to the job summary. <b>No new permission.</b>
+          </li>
+          <li>
+            <b>Alternative:</b> a bot comment with the same table. Needs
+            <code>pull-requests: write</code> on a new job, which is a permission change you merge,
+            and it buys little over the description.
+          </li>
+          <li>
+            <b>Gap to close first:</b> only 30 images exist, all light, and several screens have
+            none (Models, Add project, GitHub, Local runners, dashboards on a phone). A screen with
+            no stored image shows no before. Add one desktop and one phone image per screen, plus
+            dark for the shell, inbox, board and settings, inside the five-minute cap.
+          </li>
+        </ul>
+        <p>
+          The design milestone should require it, and it should be the first ticket: every ticket
+          after it is a visual change you will want to judge from the PR. The workflow edit is yours
+          to merge.
+        </p>
+      </div>
+    </section>
+
+    <section>
+      <div class="col">
+        <span class="eyebrow">4 · Proposal</span>
+        <h2>M11: Design system and UI rebuild</h2>
+        <p>
+          Design system first, then screens in the order you meet them. Each screen ticket starts
+          with a mockup you approve; no build starts without one. Nothing here is created yet.
+        </p>
+      </div>
+      <div class="wide">
+        <div class="tw">
+          <table>
+            <tr>
+              <th>#</th>
+              <th>Ticket</th>
+              <th>Size</th>
+              <th>Risk</th>
+              <th>Notes</th>
+            </tr>
+            <tr>
+              <td class="n">1</td>
+              <td>AI-353: UI PRs show before and after screenshots (exists, in Ideas)</td>
+              <td>S</td>
+              <td>Medium</td>
+              <td>Workflow change; you merge</td>
+            </tr>
+            <tr>
+              <td class="n">2</td>
+              <td>Screenshot coverage: every screen, desktop and phone, dark for four</td>
+              <td>S</td>
+              <td>Low</td>
+              <td>Gives every later PR a before</td>
+            </tr>
+            <tr>
+              <td class="n">3</td>
+              <td>
+                Design direction: tokens, type scale, surfaces, motion and theme switch; rewrite
+                design.md; new ADR
+              </td>
+              <td>M</td>
+              <td>Low</td>
+              <td>Changes all stored images once</td>
+            </tr>
+            <tr>
+              <td class="n">4</td>
+              <td>Form components: select, option cards, switch, checkbox, field, tabs</td>
+              <td>M</td>
+              <td>Low</td>
+              <td>shadcn on Radix; no new library family</td>
+            </tr>
+            <tr>
+              <td class="n">5</td>
+              <td>
+                Feedback components: toast with Undo, dialog, tooltip, skeleton, empty state, key
+                hint
+              </td>
+              <td>M</td>
+              <td>Low</td>
+              <td></td>
+            </tr>
+            <tr>
+              <td class="n">6</td>
+              <td>Shell: navigation, quota meter, command palette</td>
+              <td>M</td>
+              <td>Low</td>
+              <td>Sidebar if A is picked</td>
+            </tr>
+            <tr>
+              <td class="n">7</td>
+              <td>Needs-you inbox on the new direction</td>
+              <td>M</td>
+              <td>Low</td>
+              <td>Mocked above</td>
+            </tr>
+            <tr>
+              <td class="n">8</td>
+              <td>
+                Project settings: section nav; every picker shows all options with descriptions
+              </td>
+              <td>M</td>
+              <td>Low</td>
+              <td>Mocked above</td>
+            </tr>
+            <tr>
+              <td class="n">9</td>
+              <td>
+                New project to first build: create, brief form, plan, approve milestones as one path
+              </td>
+              <td>L</td>
+              <td>Medium</td>
+              <td>Needs a brief endpoint in the web API; may split</td>
+            </tr>
+            <tr>
+              <td class="n">10</td>
+              <td>Board and cards</td>
+              <td>M</td>
+              <td>Low</td>
+              <td></td>
+            </tr>
+            <tr>
+              <td class="n">11</td>
+              <td>Ticket and epic panel</td>
+              <td>M</td>
+              <td>Low</td>
+              <td></td>
+            </tr>
+            <tr>
+              <td class="n">12</td>
+              <td>Models: routing editor with named tiers and one save model</td>
+              <td>M</td>
+              <td>Low</td>
+              <td></td>
+            </tr>
+            <tr>
+              <td class="n">13</td>
+              <td>Agent task page: live progress, log and outcome</td>
+              <td>M</td>
+              <td>Low</td>
+              <td></td>
+            </tr>
+            <tr>
+              <td class="n">14</td>
+              <td>Roadmap, Work, What's new, Dashboards: new templates and empty states</td>
+              <td>M</td>
+              <td>Low</td>
+              <td></td>
+            </tr>
+            <tr>
+              <td class="n">15</td>
+              <td>Phone pass on every rebuilt screen</td>
+              <td>M</td>
+              <td>Low</td>
+              <td>B's card for the inbox</td>
+            </tr>
+          </table>
+        </div>
+      </div>
+      <div class="col">
+        <h3>Three things to decide</h3>
+        <div class="q">
+          <b class="ask">Which direction: A, B or C?</b
+          ><span
+            >It sets the shell, the tokens and every later mockup.
+            <span class="rec">Recommended: A</span>, with B's card on the phone.</span
+          >
+        </div>
+        <div class="q">
+          <b class="ask">Design system first, or screens first?</b
+          ><span
+            >System first costs four tickets before a screen looks different, but each screen is
+            then built once. Screens first shows change sooner and reworks each screen when the
+            components land. <span class="rec">Recommended: system first.</span></span
+          >
+        </div>
+        <div class="q">
+          <b class="ask">Is this M11, ahead of M4, M5 and M10?</b
+          ><span
+            >Those three are approved and the build is paused for the review. Running M11 first
+            restyles screens that M4 and M5 will still add to; running it after means new screens
+            are built in the old style.
+            <span class="rec"
+              >Recommended: tickets 1 to 5 now, screens after the product review settles which
+              screens stay.</span
+            ></span
+          >
+        </div>
+      </div>
+    </section>
+  </body>
+</html>
