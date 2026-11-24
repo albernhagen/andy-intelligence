@@ -21,8 +21,12 @@
 // warns in the job summary and exits 0; `context-budget-issue.mjs` records one trim issue.
 // Locally (no base) every file over budget fails, so nothing is hidden.
 //
-// Usage: node scripts/context-budget.mjs [repo-dir] [--base <ref>] [--report]. Exit 1 when a file
-// is over budget (locally) or the PR breaks a rule above, 2 on a bad config.
+// Hard limits only where every agent loads the file (AI-362, ADR-0147): an entry with
+// `"warn": true` never fails: over its number, the file is printed as a WARN line with its size
+// and the check passes, locally and on a PR. Entries without it fail as above.
+//
+// Usage: node scripts/context-budget.mjs [repo-dir] [--base <ref>] [--report]. Exit 1 when a hard-limit
+// file is over budget (locally) or the PR breaks a rule above, 2 on a bad config.
 import { execFileSync } from "node:child_process";
 import { appendFileSync, existsSync, lstatSync, readFileSync } from "node:fs";
 import { join } from "node:path";
@@ -55,7 +59,7 @@ export function measure(text) {
   };
 }
 
-/** @returns {{ path: string, lines: number, words: number, maxLines?: number, maxWords?: number, over: boolean }[]} */
+/** @returns {{ path: string, lines: number, words: number, maxLines?: number, maxWords?: number, over: boolean, warn: boolean }[]} */
 export function check(files, budgets, read) {
   const matchers = budgets.map((b) => ({ ...b, re: globToRegExp(b.pattern) }));
   const results = [];
@@ -73,6 +77,7 @@ export function check(files, budgets, read) {
       maxLines: budget.maxLines,
       maxWords: budget.maxWords,
       over,
+      warn: budget.warn === true,
     });
   }
   return results;
@@ -111,10 +116,11 @@ export function checkHeadroom(results, readBase) {
  * @returns {{ problems: string[], untouched: string[] }}
  */
 export function prFailures(results, readBase) {
-  const problems = checkHeadroom(results, readBase);
+  const hard = results.filter((r) => !r.warn);
+  const problems = checkHeadroom(hard, readBase);
   const failed = new Set(problems.map((p) => p.slice(0, p.indexOf(":"))));
   const untouched = [];
-  for (const r of results.filter((x) => x.over)) {
+  for (const r of hard.filter((x) => x.over)) {
     if (readBase(r.path) === null) {
       problems.push(`${r.path}: a new file over budget (${describe(r)})`);
     } else if (!failed.has(r.path)) {
@@ -122,6 +128,13 @@ export function prFailures(results, readBase) {
     }
   }
   return { problems, untouched };
+}
+
+/** Warn-only files over their number (ADR-0147): one line each, naming the file and its size. */
+export function warnLines(results) {
+  return results
+    .filter((r) => r.warn && r.over)
+    .map((r) => `WARN ${r.path}: over its budget (${describe(r)}); warn-only, never fails a PR`);
 }
 
 /** The job summary for `main` (AI-344): a warning table of files over budget, or nothing. */
@@ -156,9 +169,13 @@ export function loadBudgets(dir) {
     budgets.every(
       (b) =>
         typeof b.pattern === "string" &&
-        (Number.isInteger(b.maxLines) || Number.isInteger(b.maxWords)),
+        (Number.isInteger(b.maxLines) || Number.isInteger(b.maxWords)) &&
+        (b.warn === undefined || typeof b.warn === "boolean"),
     );
-  if (!valid) throw new Error(`${file}: "budgets" must list { pattern, maxLines and/or maxWords }`);
+  if (!valid)
+    throw new Error(
+      `${file}: "budgets" must list { pattern, maxLines and/or maxWords, optional boolean warn }`,
+    );
   return budgets;
 }
 
@@ -241,12 +258,13 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
   }
   const results = check(trackedFiles(dir), budgets, (f) => readFileSync(join(dir, f), "utf8"));
   for (const r of results) {
-    const status = r.over ? "OVER" : "ok  ";
+    const status = !r.over ? "ok  " : r.warn ? "warn" : "OVER";
     process.stdout.write(
       `${status} ${r.path}: ${limit(r.lines, r.maxLines, "lines")}, ${limit(r.words, r.maxWords, "words")}\n`,
     );
   }
   const over = results.filter((r) => r.over);
+  const hardOver = over.filter((r) => !r.warn);
 
   if (args.includes("--report")) {
     // `main` (AI-344): over budget warns and a trim issue follows; it never fails CI.
@@ -260,9 +278,10 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
     process.exit(0);
   }
 
+  for (const line of warnLines(results)) process.stdout.write(`${line}\n`);
   const base = baseRefFrom(args, process.env);
   if (!base) {
-    if (over.length > 0) {
+    if (hardOver.length > 0) {
       process.stdout.write(
         "\nOver budget: trim the file (move detail to an on-demand doc) rather than raising the budget (ADR-0046).\n",
       );
