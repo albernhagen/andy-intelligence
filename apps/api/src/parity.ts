@@ -289,6 +289,12 @@ export const PARITY: readonly ParityEntry[] = [
     tools: ["list_runners"],
     note: "One service (`RunnerService.list`), never a secret; listing over MCP is ADR-0135. Registering stays web only (see Register a runner).",
   },
+  {
+    action: "Revoke a runner",
+    routes: ["POST /api/runners/:runnerId/revoke"],
+    tools: ["revoke_runner"],
+    note: "One service (`RunnerService.revoke`), owner only (`revoke_runner`), same log; revoking over MCP is ADR-0143.",
+  },
   // ── One side on purpose ─────────────────────────────────────────────────────
   {
     action: "Register a runner",
@@ -316,14 +322,6 @@ export const PARITY: readonly ParityEntry[] = [
       "For coordinator sessions (AI-220, ADR-0124); Andy merges in GitHub, which shows the same PR.",
   },
   // ── Open gaps, each with its ticket ─────────────────────────────────────────
-  {
-    action: "Revoke a runner",
-    routes: ["POST /api/runners/:runnerId/revoke"],
-    tools: [],
-    oneSide:
-      "Web only: ADR-0135 allows listing runners over MCP, not revoking; AI-351 decides that.",
-    pending: { ticket: "AI-351", missing: "revoke_runner (owner only), if Andy allows it" },
-  },
   {
     action: "The board, every stage",
     routes: [`GET ${P}/board`],

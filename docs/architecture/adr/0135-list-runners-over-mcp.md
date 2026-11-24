@@ -1,6 +1,6 @@
 ---
 title: "Runners can be listed over MCP; minting and revoking stay in the app"
-status: accepted (Andy, 2026-11-22; AI-294)
+status: accepted (Andy, 2026-11-22; AI-294); amended by 0143
 date: 2026-11-22
 amends: 0089 (local executor: runner secret credential row)
 ---
