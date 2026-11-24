@@ -104,6 +104,7 @@ describe("night merges into the epic branch (AI-124)", () => {
     host = new NightHost([REPO]);
     host.requiredChecks = REQUIRED.map((name) => ({ name, sourceId: "15368" }));
     host.branches.set("epic/AI-1", START_SHA);
+    host.branches.set("main", "e".repeat(40));
     nights = new InMemoryNightLaunchStore();
     findings = new InMemoryReviewFindingSource();
     tickets = new TicketService(tracker, null, null, now);
