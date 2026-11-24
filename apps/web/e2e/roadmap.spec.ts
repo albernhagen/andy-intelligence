@@ -35,6 +35,11 @@ const epic = (
   children: [],
 });
 
+const effort = (tickets = 0, S = 0, M = 0, L = 0, unsized = 0) => ({
+  tickets,
+  sizes: { S, M, L, unsized },
+});
+
 const ROADMAP: ProjectRoadmap = {
   projectId: "ai",
   projectKey: "AI",
@@ -50,6 +55,8 @@ const ROADMAP: ProjectRoadmap = {
       progress: { done: 9, total: 9 },
       counts: counts(),
       epicKeys: ["AI-21"],
+      case: null,
+      effort: effort(9, 3, 5, 1),
     },
     {
       id: "m4",
@@ -61,6 +68,8 @@ const ROADMAP: ProjectRoadmap = {
       progress: { done: 23, total: 32 },
       counts: counts({ needsYou: 2, inReview: 3, inProgress: 1, blocked: 4, notStarted: 1 }),
       epicKeys: ["AI-84", "AI-285"],
+      case: null,
+      effort: effort(32, 10, 18, 2, 2),
     },
     {
       id: "m6",
@@ -72,6 +81,8 @@ const ROADMAP: ProjectRoadmap = {
       progress: { done: 5, total: 20 },
       counts: counts({ inReview: 1, blocked: 13 }),
       epicKeys: ["AI-153"],
+      case: null,
+      effort: effort(20, 4, 12, 4),
     },
     {
       id: "m11",
@@ -80,9 +91,15 @@ const ROADMAP: ProjectRoadmap = {
       order: 11,
       status: "not_reviewed",
       done: false,
-      progress: { done: 0, total: 0 },
-      counts: counts(),
-      epicKeys: [],
+      progress: { done: 0, total: 6 },
+      counts: counts({ notStarted: 6 }),
+      epicKeys: ["AI-290"],
+      case: {
+        serves: "People Andy brings onto a project",
+        expectedReturn: "A second person reviews PRs; Andy's review queue halves.",
+        cheapestTest: "Share one project read-only with one person for a week.",
+      },
+      effort: effort(6, 2, 3, 0, 1),
     },
   ],
   noMilestone: ["AI-140"],
@@ -97,6 +114,7 @@ const ROADMAP: ProjectRoadmap = {
     }),
     epic("AI-285", "Web UI and MCP parity", "not_started", 0, 0),
     epic("AI-153", "M6: Dev → prod releases", "in_progress", 5, 20, { inReview: 1, blocked: 13 }),
+    epic("AI-290", "Project members", "not_started", 0, 6, { notStarted: 6 }),
     epic("AI-140", "Parallel development without merge conflicts", "in_progress", 12, 16, {
       inReview: 2,
     }),
@@ -118,6 +136,13 @@ test("roadmap: milestones with one expanded, parked dimmed, no milestone last", 
 }) => {
   await open(page);
   await expect(page).toHaveScreenshot("roadmap.png", { fullPage: true });
+});
+
+test("roadmap: a not-reviewed milestone's case and effort beside its status", async ({ page }) => {
+  await open(page);
+  await page.getByRole("button", { name: /^M11: Members/ }).click();
+  await expect(page.getByRole("region", { name: "Case for M11: Members" })).toBeVisible();
+  await expect(page).toHaveScreenshot("roadmap-case.png", { fullPage: true });
 });
 
 test.describe("phone", () => {

@@ -1,5 +1,6 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
+import { MILESTONE_CASE_LINE_MAX, MilestoneCase } from "./milestone";
 import { PLAN_LIMITS, ProjectPlanDecision, ProjectPlanProposal } from "./project-plan";
 
 // The schema the plan-project agent gets; ProjectPlanProposal is the control plane's check.
@@ -37,6 +38,29 @@ describe("ProjectPlanProposal", () => {
     expect(Object.keys(ProjectPlanProposal.shape.milestones.element.shape).sort()).toEqual(
       [...milestone.required].sort(),
     );
+    const kase = milestone.properties.case;
+    expect(Object.keys(MilestoneCase.shape).sort()).toEqual([...kase.required].sort());
+    for (const field of kase.required) {
+      expect(kase.properties[field].maxLength).toBe(MILESTONE_CASE_LINE_MAX);
+    }
+  });
+
+  it("GivenAPlanStoredBeforeCases_WhenParsed_ThenStillAccepted", () => {
+    expect(ProjectPlanProposal.parse(valid).milestones[0]!.case).toBeUndefined();
+  });
+
+  it("GivenAMilestoneWithACase_WhenParsed_ThenTheCaseIsKept", () => {
+    const kase = { serves: "Runners", expectedReturn: "Log a run.", cheapestTest: "A form." };
+    const input = { ...valid, milestones: [{ ...valid.milestones[0], case: kase }] };
+    expect(ProjectPlanProposal.parse(input).milestones[0]!.case).toEqual(kase);
+  });
+
+  it("GivenACaseMissingALine_WhenParsed_ThenRefused", () => {
+    const input = {
+      ...valid,
+      milestones: [{ ...valid.milestones[0], case: { serves: "Runners", expectedReturn: "x" } }],
+    };
+    expect(ProjectPlanProposal.safeParse(input).success).toBe(false);
   });
 
   it("GivenAValidResult_WhenParsed_ThenAccepted", () => {
