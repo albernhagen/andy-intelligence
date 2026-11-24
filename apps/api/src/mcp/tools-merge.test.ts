@@ -2,6 +2,7 @@ import {
   InMemoryCodeEventLog,
   InMemoryCodeHost,
   InMemoryCodeHostConnectionStore,
+  InMemoryMergeQueueStore,
   InMemoryOAuthGrantStore,
   InMemoryRunStore,
   InMemoryWorkTracker,
@@ -12,6 +13,7 @@ import {
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { sign } from "@octokit/webhooks-methods";
 import { describe, expect, it } from "vitest";
+import { MergeQueue } from "@andy/domain";
 import { createApp } from "../app";
 import { WEBHOOK_PATH } from "../github/webhooks";
 import type { TokenVerifier } from "../auth";
@@ -428,5 +430,61 @@ describe("merge_pr owner rule (AI-220)", () => {
       expect(JSON.stringify(res.content)).toContain("only the owner can merge a pull request");
     }
     expect(host.merges).toEqual([]);
+  });
+
+  it("GivenAQueuedMergeWhoseCallerMayNoLongerMerge_WhenTheQueueReachesIt_ThenItIsNotMergedAndTheTicketSaysWhy", async () => {
+    const tracker = new InMemoryWorkTracker();
+    await tracker.createProject({ name: "Andy Intelligence", key: "AI", repos: [REPO] });
+    await tracker.updateProject("ai", { mergeMode: "all-clean" });
+    const created = await tracker.createTicket("ai", { title: "Queued", type: "feature" }, "andy");
+    const ticket = await tracker.updateTicket(
+      "ai",
+      created.id,
+      { stage: { to: "ready_for_review", reason: null } },
+      "andy",
+    );
+    const host = new InMemoryCodeHost([
+      { fullName: REPO, defaultBranch: "main", private: false, url: `https://github.com/${REPO}` },
+    ]);
+    host.requiredChecks = REQUIRED.map((name) => ({ name, sourceId: REVIEWER }));
+    const url = `https://github.com/${REPO}/pull/7`;
+    host.pullRequests.set(7, {
+      pullRequest: {
+        number: 7,
+        state: "open",
+        draft: false,
+        title: `${ticket.key}: Queued`,
+        bodyFirstLine: `https://ai.andybernhagen.com/p/ai/t/${ticket.key}`,
+        fromFork: false,
+        intoDefaultBranch: true,
+        headRef: "m4/queued",
+        headSha: HEAD,
+        baseRef: "main",
+        url,
+        labels: [],
+      },
+      files: { items: [{ path: "apps/api/src/merge.ts", previousPath: null }], complete: true },
+      checks: { items: passed, complete: true },
+      commits: { items: [], complete: true },
+    });
+    await tracker.linkPullRequest("ai", ticket.id, { number: 7, url, state: "open" }, "system");
+    const queue = new MergeQueue(new InMemoryMergeQueueStore(), host);
+    new PullRequestMerger(tracker, host, null, () => new Date(), queue);
+
+    // An entry stored for a caller who can't merge now: the merge-time check refuses it.
+    const result = await queue.offer(REPO, {
+      projectId: "ai",
+      number: 7,
+      kind: "merge_pr",
+      actor: "agent:run-1",
+      headSha: HEAD,
+    });
+
+    expect(result).toMatchObject({ result: "dropped" });
+    expect((result as { reason: string }).reason).toContain("the merge was refused");
+    expect(host.merges).toEqual([]);
+    const events = await tracker.listEvents("ai", ticket.id);
+    expect(events.some((e) => e.body?.includes("may no longer merge"))).toBe(true);
+    expect((await queue.state(REPO)).entries).toEqual([]);
   });
 });
