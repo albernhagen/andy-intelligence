@@ -77,7 +77,7 @@ export interface ToolDeps {
   night?: NightDeps | null;
   /** Work across projects (AI-198); the app always passes it, unit tests may not. */
   work?: WorkReader;
-  /** Local runners (ADR-0089); null without a runner store. MCP reads them only (AI-294). */
+  /** Local runners (ADR-0089); null without a runner store. MCP lists and revokes them (AI-294, AI-351). */
   runners?: RunnerService | null;
   /** Roadmaps over epics (AI-193); the app always passes it, unit tests may not. */
   roadmap?: RoadmapReader;

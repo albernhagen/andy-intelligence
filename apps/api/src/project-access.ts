@@ -88,6 +88,8 @@ export const CROSS_PROJECT_TOOLS: Readonly<Record<string, string>> = {
     "Local runners, read-only: allow-listed callers, like GET /api/runners; no owner check until members (AI-18).",
   list_work: "Without `project`, every project's open tickets: keep readable projects.",
   reject_config_change: "Check the change's project.",
+  revoke_runner:
+    "Local runners, like POST /api/runners/:runnerId/revoke: owner only (`revoke_runner`, enforced).",
   revert_routing_change:
     "Reverts a global or project routing change (AI-275): the change's project is checked with canRead.",
   set_global_spend_caps:

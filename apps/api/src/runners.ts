@@ -19,8 +19,8 @@ import type { RouteModule } from "./services";
 
 /**
  * Local runners (ADR-0089 slice 3). Andy mints, lists and revokes runners under /api (Firebase
- * sign-in + allow-list); MCP only lists them (`list_runners`, AI-294), so a stolen MCP token
- * can't add or revoke one. The
+ * sign-in + allow-list). MCP lists and revokes them (`list_runners`, ADR-0135; `revoke_runner`,
+ * ADR-0143) but never mints one, so a stolen MCP token can't add a runner or see a secret. The
  * runner itself calls `POST /runner/claim` outside /api with its secret.
  */
 
@@ -53,7 +53,9 @@ const json = <S extends z.ZodType>(schema: S, description: string) => ({
   description,
 });
 const secured = { security: [{ bearer: [] }] };
-const RunnerParams = z.object({ runnerId: z.string().regex(/^[A-Za-z0-9-]{1,64}$/) });
+/** A runner id as the revoke route and `revoke_runner` accept it. */
+export const RUNNER_ID_SHAPE = /^[A-Za-z0-9-]{1,64}$/;
+const RunnerParams = z.object({ runnerId: z.string().regex(RUNNER_ID_SHAPE) });
 
 const routes = {
   list: createRoute({
