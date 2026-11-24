@@ -534,6 +534,15 @@ describe("agent task page: timeline", () => {
     expect(entries[3]!.detail).toBe(`${DEFAULT_ROUTE.harness} · ${DEFAULT_ROUTE.model}`);
   });
 
+  it("GivenAQueueStampAfterTheStart_WhenTheTimelineIsBuilt_ThenQueuedStaysOldest", () => {
+    const entries = timeline(run({ createdAt: "2026-11-04T14:02:00.000Z" }), [], [], now);
+
+    expect(entries.map((e) => [e.title, e.at]).slice(1)).toEqual([
+      ["Started", "2026-11-04T14:01:00.000Z"],
+      ["Queued", "2026-11-04T14:01:00.000Z"],
+    ]);
+  });
+
   it("GivenAFailedRun_WhenTheTimelineIsBuilt_ThenItEndsInFailedAndNothingIsInProgress", () => {
     const entries = timeline(
       run({ status: "failed", endedAt: "2026-11-04T14:03:00.000Z", error: "Checks failed" }),

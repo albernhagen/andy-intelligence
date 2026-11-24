@@ -122,9 +122,6 @@ function RunDetail({
           {run.verification.length > 0 && <Verification checks={run.verification} />}
 
           <Facts title="Details">
-            <Fact label="Harness">{run.route.harness}</Fact>
-            <Fact label="Provider">{run.route.provider}</Fact>
-            <Fact label="Tier">{run.tier}</Fact>
             {(run.attempt > 1 || run.retryOf) && (
               <Fact label="Attempt">
                 {run.attempt}
@@ -510,7 +507,9 @@ export function timeline(
   const entries: TimelineEntry[] = [];
   if (run.createdAt) {
     const why = run.attempt > 1 ? "Automatic retry" : run.tier ? `${run.tier} tier` : undefined;
-    entries.push({ key: "queued", at: run.createdAt, title: "Queued", detail: why, tone: "done" });
+    // A task can't start before it was queued: a later queue stamp (clock skew) reads as the start.
+    const at = run.startedAt && run.startedAt < run.createdAt ? run.startedAt : run.createdAt;
+    entries.push({ key: "queued", at, title: "Queued", detail: why, tone: "done" });
   }
   if (run.startedAt) {
     entries.push({
