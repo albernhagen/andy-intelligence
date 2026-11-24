@@ -3,10 +3,11 @@ import { expectShellLoaded } from "./shell";
 import { mockDashboards, waitForStableCharts } from "./dashboard-fixtures";
 import { mockBriefStep } from "./setup-fixtures";
 import { SCREENS, type Screen } from "./screens";
+import { expectPageFits, expectTouchTargets } from "./phone";
 
 /**
  * AI-366: every screen in src/router.tsx (e2e/screens.ts) at 1280×800 and 390×844, and the shell,
- * inbox, board, ticket panel and project settings also dark. Viewport-sized images, so each is the first screen
+ * screens marked `dark` also dark, at both widths (AI-379). Every phone case checks fit and 44 px targets. Viewport-sized images, so each is the first screen
  * Andy sees; the other specs keep the full-page and state-specific images.
  */
 
@@ -43,9 +44,12 @@ for (const screen of SCREENS) {
     await expect(page).toHaveScreenshot(`screen-${screen.name}.png`);
   });
 
+  // AI-379: every screen fits 390 px and every control is a 44 px target, shell included.
   test(`screen ${screen.route} on a phone`, async ({ page }) => {
     await page.setViewportSize(PHONE);
     await open(page, screen);
+    await expectPageFits(page);
+    await expectTouchTargets(page.locator("body"));
     await expect(page).toHaveScreenshot(`phone-screen-${screen.name}.png`);
   });
 
@@ -54,6 +58,13 @@ for (const screen of SCREENS) {
       await page.emulateMedia({ colorScheme: "dark" });
       await open(page, screen);
       await expect(page).toHaveScreenshot(`screen-${screen.name}-dark.png`);
+    });
+
+    test(`screen ${screen.route} dark on a phone`, async ({ page }) => {
+      await page.setViewportSize(PHONE);
+      await page.emulateMedia({ colorScheme: "dark" });
+      await open(page, screen);
+      await expect(page).toHaveScreenshot(`phone-screen-${screen.name}-dark.png`);
     });
   }
 }

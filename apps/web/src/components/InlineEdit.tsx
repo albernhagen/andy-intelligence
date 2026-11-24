@@ -205,7 +205,7 @@ export function InlineText({
               setDraft(value);
             }}
             className={cn(
-              "rounded-md text-left hover:bg-muted focus-visible:outline-2 focus-visible:outline-ring",
+              "rounded-md text-left hover:bg-muted focus-visible:outline-2 focus-visible:outline-ring max-sm:min-h-11",
               !value && "text-muted-foreground",
               className,
             )}

@@ -16,7 +16,7 @@ export interface Screen {
   url: string;
   /** Text that shows once the screen has loaded. */
   ready: string;
-  /** Also stored dark (`screen-<name>-dark.png`, desktop). */
+  /** Also stored dark: `screen-<name>-dark.png` and `phone-screen-<name>-dark.png` (AI-379). */
   dark?: boolean;
 }
 

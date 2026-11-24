@@ -25,6 +25,8 @@ describe("scope", () => {
     ["/p/ai/dashboards", "dashboards"],
     ["/all/dashboards", "dashboards"],
     ["/settings/github", null],
+    // AI-379: the setup path is no destination, so the bottom bar doesn't mark Board.
+    ["/p/ai/setup", null],
   ])("GivenPath%s_WhenParsed_ThenSectionIs%s", (path, section) => {
     expect(sectionFromPath(path)).toBe(section);
   });
