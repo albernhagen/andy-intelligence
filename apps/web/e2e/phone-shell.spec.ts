@@ -18,6 +18,14 @@ test("phone shell: inbox", async ({ page }) => {
   await expect(page).toHaveScreenshot("phone-shell-inbox.png");
 });
 
+test("phone shell: inbox, dark", async ({ page }) => {
+  await page.emulateMedia({ colorScheme: "dark" });
+  await page.goto("/p/ai/inbox");
+  await expect(page.getByText("Should Esc close the panel?").first()).toBeVisible();
+  await expect(page.getByRole("link", { name: "Needs you 5" })).toBeVisible();
+  await expect(page).toHaveScreenshot("phone-shell-inbox-dark.png");
+});
+
 test("phone shell: More menu open on the board", async ({ page }) => {
   await page.clock.setFixedTime(new Date("2026-11-04T15:00:00.000Z"));
   await page.goto("/p/ai");
