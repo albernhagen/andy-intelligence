@@ -26,6 +26,12 @@ export function loadTheme(): Theme {
   }
 }
 
+/** The theme applied to the page now (`data-theme`), whatever storage holds. */
+export function appliedTheme(): Theme {
+  const applied = document.documentElement.dataset.theme;
+  return applied === "light" || applied === "dark" ? applied : "system";
+}
+
 /** Sets the theme on the page at once. */
 export function applyTheme(theme: Theme): void {
   const root = document.documentElement;
@@ -44,9 +50,12 @@ export function saveTheme(theme: Theme): void {
   }
 }
 
-/** The current choice and a setter that applies and remembers it. */
+/**
+ * The current choice and a setter that applies and remembers it. Starts from the applied theme,
+ * not storage, so the menu matches the page even if storage fails or is cleared mid-visit.
+ */
 export function useTheme(): [Theme, (theme: Theme) => void] {
-  const [theme, setTheme] = useState<Theme>(loadTheme);
+  const [theme, setTheme] = useState<Theme>(appliedTheme);
   return [
     theme,
     (next) => {
