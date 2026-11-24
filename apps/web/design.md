@@ -66,6 +66,10 @@ Data-heavy screens favour density over air:
 - Radii: `rounded-sm` keys, `rounded-md` controls, `rounded-lg` cards and menus. Borders 1px `border-border`. Shadows only on things that float (menus, a dragged card).
 - Show the number (lane count, minutes), not a chart.
 
+## Form components
+
+shadcn/ui on Radix (`src/components/ui/`, AI-368); never a native `<select>` or checkbox. Fewer than six options: `OptionCards`, every option with its description (`OptionTable` when they differ on two facts); six or more: `Select`. `Switch` applies at once; `Checkbox` for independent choices; `Field` adds label, help, error and saved cue; `Tabs` for views. With `label`, a switch or checkbox row is the 44 px target.
+
 ## Status markers
 
 The marker set: [`design-status-markers.md`](design-status-markers.md).
