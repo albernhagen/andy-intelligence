@@ -299,6 +299,17 @@ describe("inbox v2", () => {
     expect(screen.getByRole("link", { name: "Inbox 2 tickets waiting on you" })).toBeTruthy();
   });
 
+  it("GivenATicketsOnlyQuestion_WhenItIsAnsweredAndItsRowAndDetailLeave_ThenTheToastStillShows", async () => {
+    const h = await twoTickets();
+    render(<Toaster />);
+    const panel = await card("AI-2: Panel");
+    await h.user.click(within(panel).getByRole("button", { name: "Andy" }));
+
+    await waitFor(() => expect(screen.queryByRole("button", { name: "AI-2: Panel" })).toBeNull());
+    expect(screen.queryByRole("article", { name: "AI-2: Panel" })).toBeNull();
+    expect(await screen.findByText("Answered AI-2: Panel")).toBeTruthy();
+  });
+
   it("GivenAnAnswer_WhenTheApiTakesIt_ThenAToastConfirmsItWithoutUndo", async () => {
     const h = await twoTickets();
     render(<Toaster />);

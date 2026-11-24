@@ -44,11 +44,16 @@ export function InboxQuestion({
 }) {
   const [text, setText] = useState("");
   const submit = useAnswerQuestion(question.ticketId);
-  const answer = (value: string) =>
-    submit.mutate(
-      { questionId: question.id, answer: value },
-      { onSuccess: () => toast({ title: `Answered ${ticketLabel}`, description: value }) },
-    );
+  // The toast fires after the awaited write, not from a per-call callback: the answer removes
+  // this question, and a per-call callback is skipped once its component has unmounted.
+  const answer = async (value: string) => {
+    try {
+      await submit.mutateAsync({ questionId: question.id, answer: value });
+    } catch {
+      return; // Shown below from `submit.error`.
+    }
+    toast({ title: `Answered ${ticketLabel}`, description: value });
+  };
   const choices = answerChoices(question);
   const mark = question.recommendation ? "Recommended" : "Suggested";
   // Older questions keep their layout: assumptions right under the line (AI-73: render as today).
@@ -73,7 +78,7 @@ export function InboxQuestion({
         disabled={locked}
         data-nav-choice
         aria-keyshortcuts={key <= MAX_KEY ? String(key) : undefined}
-        onClick={() => answer(choice)}
+        onClick={() => void answer(choice)}
       >
         {key <= MAX_KEY && <Kbd className="text-muted-foreground">{key}</Kbd>}
         {choice}
@@ -116,7 +121,7 @@ export function InboxQuestion({
         className="flex max-w-2xl gap-2"
         onSubmit={(e) => {
           e.preventDefault();
-          if (text.trim()) answer(text.trim());
+          if (text.trim()) void answer(text.trim());
         }}
       >
         <Input

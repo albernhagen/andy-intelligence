@@ -114,7 +114,7 @@ export function InboxPage() {
         ))}
         <ConfigChanges projectId={projectId} />
       </div>
-      <div id={DETAIL_ID} className="bg-raised px-6 py-4">
+      <div id={DETAIL_ID} data-nav-detail-root className="bg-raised px-6 py-4">
         {current && <Detail entry={current} />}
       </div>
     </section>

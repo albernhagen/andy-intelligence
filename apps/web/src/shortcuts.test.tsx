@@ -91,6 +91,29 @@ describe("keyboard shortcuts in the inbox", () => {
     });
   });
 
+  it("GivenAFocusedAnswer_WhenAnotherNumberIsPressed_ThenThatAnswerIsFocused", async () => {
+    const { user } = await inbox();
+    await user.keyboard("j");
+    await user.keyboard("1");
+    await user.keyboard("3");
+    expect(document.activeElement).toBe(
+      within(question("Which colour?")).getByRole("button", { name: /Blue/ }),
+    );
+    await user.keyboard("a");
+    expect(document.activeElement).toBe(
+      within(question("Which layout?")).getByRole("textbox", { name: "Your answer" }),
+    );
+  });
+
+  it("GivenAFocusedAnswer_WhenJIsPressed_ThenTheNextRowIsFocusedAndPicked", async () => {
+    const { user } = await inbox();
+    await user.keyboard("j");
+    await user.keyboard("1");
+    await user.keyboard("j");
+    expect(document.activeElement).toBe(row("AI-2: Other"));
+    expect(within(detail()).getByRole("article", { name: "AI-2: Other" })).toBeTruthy();
+  });
+
   it("GivenAFocusedRow_WhenEnterIsPressed_ThenItsTicketOpens", async () => {
     const h = await inbox();
     await h.user.keyboard("j");

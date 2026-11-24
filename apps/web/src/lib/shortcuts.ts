@@ -6,7 +6,8 @@
  * - `data-nav-open`: the link `Enter` follows from a focused item (or from its group).
  * - `data-nav-answer`: the field `a` focuses; `data-nav-choice`: the buttons `1`–`9` focus.
  * - `data-nav-detail="<id>"` on an item: its open link, answer field and choices live in that
- *   element instead of inside the item (a list row whose detail sits beside it, AI-371).
+ *   element instead of inside the item (a list row whose detail sits beside it, AI-371); that
+ *   element carries `data-nav-detail-root`, and the picked row `aria-current="true"`.
  * No single key writes anything: `1`–`9` only focus a choice, and `Enter` then presses it.
  */
 
@@ -62,9 +63,22 @@ export function isTyping(target: EventTarget | null): boolean {
 
 const navItems = (root: ParentNode) => [...root.querySelectorAll<HTMLElement>("[data-nav-item]")];
 
-/** The item holding focus (the item itself or anything inside it), if any. */
+/**
+ * The item holding focus (the item itself or anything inside it), if any. Focus inside a detail
+ * (`data-nav-detail-root`, AI-371) belongs to the picked item (`aria-current`) pointing at it, so
+ * a second number key, `a`, `j` and `k` keep working from there.
+ */
 export function currentItem(active: Element | null = document.activeElement): HTMLElement | null {
-  return active instanceof HTMLElement ? active.closest<HTMLElement>("[data-nav-item]") : null;
+  if (!(active instanceof HTMLElement)) return null;
+  const item = active.closest<HTMLElement>("[data-nav-item]");
+  if (item) return item;
+  const detail = active.closest<HTMLElement>("[data-nav-detail-root]");
+  if (!detail?.id) return null;
+  return (
+    navItems(document).find(
+      (i) => i.dataset.navDetail === detail.id && i.getAttribute("aria-current") === "true",
+    ) ?? null
+  );
 }
 
 function focus(el: HTMLElement) {
