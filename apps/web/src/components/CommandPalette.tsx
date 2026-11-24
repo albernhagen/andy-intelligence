@@ -76,6 +76,11 @@ function PaletteBody(props: {
   const inScope = (projects.data ?? []).filter(
     (p) => scope.kind === "all" || p.id === scope.projectId,
   );
+  // Tickets come from the picked scope only, as on every other screen; the placeholder names it.
+  const whose =
+    scope.kind === "all"
+      ? "all projects'"
+      : `${inScope[0]?.name ?? scope.projectId.toUpperCase()}'s`;
   const tickets = usePaletteTickets(
     inScope.map((p) => p.id),
     true,
@@ -177,7 +182,7 @@ function PaletteBody(props: {
             setActive(0);
           }}
           onKeyDown={onKeyDown}
-          placeholder="Search tickets by key or title, or type a command"
+          placeholder={`Search ${whose} tickets by key or title, or type a command`}
           className="h-12 min-w-0 flex-1 bg-transparent text-base outline-none placeholder:text-muted-foreground sm:text-md"
         />
         <span className="hidden shrink-0 font-mono text-xs text-muted-foreground sm:inline">
