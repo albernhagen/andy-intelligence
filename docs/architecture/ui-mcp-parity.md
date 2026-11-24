@@ -28,6 +28,7 @@ Step 1 of AI-285: Web UI and MCP parity: every action in both, enforced by a tes
 | Create a project | `POST /projects` | `create_project` (AI-297) |
 | Milestones: list, create, edit, set status, attach an epic | `GET`/`POST …/milestones`, `PATCH …/milestones/:id`, `PUT …/tickets/:id/milestone` (AI-311: epic panel, roadmap, board) | `list_milestones`, `create_milestone`, `edit_milestone`, `set_milestone_status`, `set_epic_milestone` (AI-304) |
 | List local runners | `GET /runners` | `list_runners` (AI-294) |
+| Revoke a local runner | `POST /runners/:id/revoke` | `revoke_runner`, owner only (AI-351, ADR-0143) |
 | Settings changes: list, revert                           | `GET …/config-changes`, `POST …/config-changes/:id/revert`                      | `list_settings_changes`, `revert_settings_change`                                                                          |
 | Config proposals: list, accept, reject, sweep            | `GET /config-changes`, `POST …/accept`, `…/reject`, `…/config-proposals/sweep`  | `list_config_changes`, `accept_config_change`, `reject_config_change`, `sweep_config_proposals`                            |
 | Pause, runs at once                                      | `PATCH /projects/:id`                                                           | `set_paused`, `set_runs_at_once`                                                                                           |
@@ -48,7 +49,7 @@ Step 1 of AI-285: Web UI and MCP parity: every action in both, enforced by a tes
 | AI-292: Parity: set the daily question cap over MCP                    | done      | S    | `PATCH dailyQuestionCap` → `set_daily_question_cap`          |
 | AI-293: Parity: a ticket's full history and runs over MCP              | done      | S    | Built: `ticket_history`, `list_runs`, `get_run` (now matched) |
 | AI-294: Parity: list runners over MCP | done | S | Built: `list_runners` (ADR-0135; now matched) |
-| AI-351: Parity: revoke a runner over MCP | UI-only | S | revoke → `revoke_runner` (owner only), if Andy amends ADR-0089 |
+| AI-351: Parity: revoke a runner over MCP | done | S | Built: `revoke_runner`, owner only (ADR-0143; now matched) |
 | AI-295: Parity: dashboards and DORA metrics over MCP                   | UI-only   | S    | Built: `dashboard` (now matched)                             |
 | AI-296: Parity: the board, every stage, over MCP | UI-only | S | Built: `board` (now matched) |
 | AI-321: Milestone create and edit over MCP | done | S | Built: `create_milestone`, `edit_milestone` (ADR-0136, proposed; now matched) |
@@ -71,7 +72,7 @@ M6, M7 and M8 add no gap today: their settings that exist (environments) are alr
 
 ## One side on purpose (the parity test records the reason)
 
-The registry `apps/api/src/parity.ts` (AI-300) holds every action with its routes and tools; `parity.test.ts` fails when a route or tool is in no action, names one that doesn't exist, or has one side without a reason. Open gaps carry their ticket: AI-351. AI-320 matched starting the plan-project and ideate agent tasks: `start_plan_project` and `start_ideate` over MCP; in the web, the Project plan card's button and the board's Ideate form (AI-299).
+The registry `apps/api/src/parity.ts` (AI-300) holds every action with its routes and tools; `parity.test.ts` fails when a route or tool is in no action, names one that doesn't exist, or has one side without a reason. No open gaps today (AI-351 matched revoking a runner). AI-320 matched starting the plan-project and ideate agent tasks: `start_plan_project` and `start_ideate` over MCP; in the web, the Project plan card's button and the board's Ideate form (AI-299).
 
 | Action                                                | Side     | Reason                                                                                                   |
 | ----------------------------------------------------- | -------- | -------------------------------------------------------------------------------------------------------- |
