@@ -1,17 +1,13 @@
-import { createContext, isValidElement, useContext, useEffect, type ReactNode } from "react";
-import { Link, Outlet, useNavigate, useRouterState } from "@tanstack/react-router";
 import {
-  ChartColumn,
-  Check,
-  ChevronsUpDown,
-  Ellipsis,
-  Inbox,
-  Layers,
-  Plus,
-  Settings,
-  SquareKanban,
-  type LucideIcon,
-} from "lucide-react";
+  createContext,
+  isValidElement,
+  useContext,
+  useEffect,
+  useState,
+  type ReactNode,
+} from "react";
+import { Link, Outlet, useNavigate, useRouterState } from "@tanstack/react-router";
+import { Check, ChevronsUpDown, Ellipsis, Layers, Plus, Settings } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -27,14 +23,14 @@ import {
 import { PhonePauseButton } from "@/components/DispatchControls";
 import { LiveUpdatesBanner } from "@/components/LiveUpdatesBanner";
 import { QuotaBanner } from "@/components/QuotaBanner";
-import { QuotaGauge } from "@/components/QuotaGauge";
+import { QuotaGauge, QuotaMeters } from "@/components/QuotaGauge";
+import { Kbd } from "@/components/ui/kbd";
 import { waitingCounts } from "@/lib/needs-you";
 import { useNeedsYou, useProjects } from "@/lib/queries";
 import {
   ALL,
   loadScope,
   saveScope,
-  settingsTabs,
   scopeFromPath,
   scopeKey,
   scopePath,
@@ -42,6 +38,7 @@ import {
   type Scope,
   type Section,
 } from "@/lib/scope";
+import { destinations, settingsLinks, type NavItem } from "@/lib/shell-routes";
 import { THEMES, useTheme, type Theme } from "@/lib/theme";
 import { useIsPhone } from "@/lib/use-phone";
 import { KeyboardShortcuts } from "@/components/KeyboardShortcuts";
@@ -51,8 +48,10 @@ import { cn } from "@/lib/utils";
 export const HeaderEndContext = createContext<ReactNode>(null);
 
 /**
- * The one layout for every screen (design.md): project picker, navigation, "Needs you N".
- * The scope comes from the URL; screens outside a scope (settings) show the remembered one.
+ * The one layout for every screen (design.md). Desktop: a left sidebar with the project picker,
+ * the six destinations, the projects (or the settings pages), the quota and the command palette
+ * (AI-370). Phone: a header and a bottom bar (AI-173). The scope comes from the URL; screens
+ * outside a scope (settings) show the remembered one.
  */
 export function AppShell() {
   const pathname = useRouterState({ select: (s) => s.location.pathname });
@@ -67,87 +66,182 @@ export function AppShell() {
 
   const phone = useIsPhone();
   const headerEnd = useContext(HeaderEndContext);
+  const [paletteOpen, setPaletteOpen] = useState(false);
   const links = destinations(scope, pathname, section);
   const settings = settingsLinks(scope, pathname);
+  const shortcuts = (
+    <KeyboardShortcuts
+      scope={scope}
+      section={section}
+      paletteOpen={paletteOpen}
+      setPaletteOpen={setPaletteOpen}
+    />
+  );
+
+  if (phone)
+    return (
+      <div className="min-h-screen">
+        {/* Safe-area insets keep the header clear of the iPhone status bar when installed. */}
+        <header className="flex h-[calc(3rem+env(safe-area-inset-top))] items-center gap-2 border-b border-border px-4 pt-[env(safe-area-inset-top)]">
+          <ProjectPicker scope={scope} section={section ?? "inbox"} />
+          <div className="ml-auto flex shrink-0 items-center gap-2">
+            <QuotaGauge />
+            <PhonePauseButton scope={scope} />
+            <NeedsYouCount />
+          </div>
+        </header>
+        <LiveUpdatesBanner />
+        <QuotaBanner />
+        <main className="px-4 py-4 pb-[calc(5rem+env(safe-area-inset-bottom))]">
+          <Outlet />
+        </main>
+        <PhoneNav links={links} settings={settings} headerEnd={headerEnd} />
+        {shortcuts}
+      </div>
+    );
 
   return (
-    <div className="min-h-screen">
-      {/* Safe-area insets keep the header clear of the iPhone status bar when installed. */}
-      <header className="flex h-[calc(3rem+env(safe-area-inset-top))] items-center gap-2 border-b border-border px-4 pt-[env(safe-area-inset-top)] sm:gap-4 sm:px-6">
-        <ProjectPicker scope={scope} section={section ?? "inbox"} />
-        {!phone && (
-          <nav aria-label="Main" className="flex items-center gap-1 text-sm">
-            {links.map((l) => (
-              <NavLink key={l.label} to={l.to} current={l.current}>
-                {l.label}
-              </NavLink>
-            ))}
-          </nav>
-        )}
-        <div className="ml-auto flex shrink-0 items-center gap-2">
-          <QuotaGauge />
-          <PhonePauseButton scope={scope} />
-          <NeedsYouCount />
-          {/* On a phone settings and Sign out move under More, so the header fits 390px. */}
-          {!phone && <SettingsMenu links={settings} headerEnd={headerEnd} />}
-        </div>
-      </header>
-      <LiveUpdatesBanner />
-      <QuotaBanner />
-      <main
-        className={cn("px-4 py-4 sm:px-6", phone && "pb-[calc(5rem+env(safe-area-inset-bottom))]")}
-      >
-        <Outlet />
-      </main>
-      {phone && <PhoneNav links={links} settings={settings} headerEnd={headerEnd} />}
-      <KeyboardShortcuts scope={scope} />
+    <div className="flex min-h-screen">
+      <Sidebar
+        scope={scope}
+        section={section}
+        pathname={pathname}
+        links={links}
+        settings={settings}
+        headerEnd={headerEnd}
+        openPalette={() => setPaletteOpen(true)}
+      />
+      <div className="min-w-0 flex-1">
+        <LiveUpdatesBanner />
+        <QuotaBanner />
+        <main className="px-4 py-4 sm:px-6">
+          <Outlet />
+        </main>
+      </div>
+      {shortcuts}
     </div>
   );
 }
 
-interface NavItem {
-  label: string;
-  to: string;
-  current: boolean;
-  /** Shown in the phone's bottom bar; the rest go under More. */
-  icon?: LucideIcon;
-}
+/** Settings screens swap the sidebar's Projects group for the settings pages (mockup). */
+const isSettingsPath = (pathname: string) =>
+  /^\/settings\//.test(pathname) || /^\/p\/[^/]+\/settings\/?$/.test(pathname);
 
 /**
- * The header's destinations (AI-335), one list for both layouts so desktop and phone never offer
- * different screens. Inbox leads: it is where Andy decides. What's new is per project.
+ * The desktop sidebar (AI-370; mockup `screen-shell.png`). Plain links and buttons in reading
+ * order, so Tab walks it top to bottom and Enter opens; the current page is `aria-current`.
  */
-function destinations(scope: Scope, pathname: string, section: Section | null): NavItem[] {
-  const items: NavItem[] = [
-    { label: "Inbox", to: scopePath(scope, "inbox"), current: section === "inbox", icon: Inbox },
-    {
-      label: "Board",
-      to: scopePath(scope, "board"),
-      current: section === "board",
-      icon: SquareKanban,
-    },
-    // AI-202 and AI-198: under More on a phone (no icon).
-    { label: "Roadmap", to: scopePath(scope, "roadmap"), current: section === "roadmap" },
-    { label: "Work", to: scopePath(scope, "work"), current: section === "work" },
-    {
-      label: "Dashboards",
-      to: scopePath(scope, "dashboards"),
-      current: section === "dashboards",
-      icon: ChartColumn,
-    },
-  ];
-  if (scope.kind === "project")
-    items.push({
-      label: "What's new",
-      to: `/p/${encodeURIComponent(scope.projectId)}/whats-new`,
-      current: /\/whats-new\/?$/.test(pathname),
-    });
-  return items;
+function Sidebar(props: {
+  scope: Scope;
+  section: Section | null;
+  pathname: string;
+  links: NavItem[];
+  settings: NavItem[];
+  headerEnd: ReactNode;
+  openPalette: () => void;
+}) {
+  const { scope, section, pathname, links, settings, headerEnd, openPalette } = props;
+  const needsYou = useNeedsYou();
+  const counts = needsYou.data ? waitingCounts(needsYou.data) : null;
+  const inboxCount =
+    counts && (scope.kind === "all" ? counts.total : (counts.byProject.get(scope.projectId) ?? 0));
+  return (
+    <aside className="sticky top-0 flex h-screen w-60 shrink-0 flex-col overflow-y-auto border-r border-border bg-muted px-2 py-3">
+      <ProjectPicker scope={scope} section={section ?? "inbox"} wide />
+      <nav aria-label="Main" aria-busy={!counts} className="mt-2 flex flex-col gap-0.5">
+        {links.map((l) => (
+          <SideLink key={l.label} item={l} count={l.label === "Inbox" ? inboxCount : null} />
+        ))}
+      </nav>
+      {isSettingsPath(pathname) ? (
+        <nav aria-label="Settings" className="flex flex-col gap-0.5">
+          <SideGroupLabel>Settings</SideGroupLabel>
+          {settings.map((l) => (
+            <SideLink key={l.label} item={l} />
+          ))}
+        </nav>
+      ) : (
+        <ProjectsGroup scope={scope} section={section} counts={counts} />
+      )}
+      <div className="mt-auto space-y-3 px-2 pt-6">
+        <QuotaMeters />
+        <div className="flex items-center gap-1">
+          <button
+            type="button"
+            onClick={openPalette}
+            aria-keyshortcuts="Meta+K Control+K"
+            className="-ml-2 flex h-8 flex-1 items-center justify-between gap-2 rounded-md px-2 text-xs text-muted-foreground hover:bg-raised hover:text-foreground focus-visible:outline-2 focus-visible:outline-ring"
+          >
+            <span className="whitespace-nowrap">Search and commands</span>
+            <Kbd>⌘K</Kbd>
+          </button>
+          <SettingsMenu links={settings} headerEnd={headerEnd} />
+        </div>
+      </div>
+    </aside>
+  );
 }
 
-/** The Settings menu's pages: this project's settings while one is in scope, then global ones. */
-function settingsLinks(scope: Scope, pathname: string): NavItem[] {
-  return settingsTabs(scope).map((t) => ({ ...t, current: pathname === t.to }));
+/** The projects with their Needs-you counts; picking one keeps the current screen. */
+function ProjectsGroup(props: {
+  scope: Scope;
+  section: Section | null;
+  counts: ReturnType<typeof waitingCounts> | null;
+}) {
+  const { scope, section, counts } = props;
+  const projects = useProjects();
+  if (!projects.data?.length) return null;
+  return (
+    <nav aria-label="Projects" className="flex flex-col gap-0.5">
+      <SideGroupLabel>Projects</SideGroupLabel>
+      {projects.data.map((p) => {
+        const to: Scope = { kind: "project", projectId: p.id };
+        return (
+          <SideLink
+            key={p.id}
+            item={{
+              label: p.name,
+              to: scopePath(to, section ?? "inbox"),
+              current: scopeKey(scope) === scopeKey(to),
+            }}
+            count={counts?.byProject.get(p.id) ?? 0}
+          />
+        );
+      })}
+    </nav>
+  );
+}
+
+function SideGroupLabel({ children }: { children: ReactNode }) {
+  return (
+    <h2 aria-hidden className="px-2 pt-4 pb-1 text-xs font-medium text-muted-foreground">
+      {children}
+    </h2>
+  );
+}
+
+/** A sidebar row: label, and a Needs-you count when there is one. */
+function SideLink({ item, count }: { item: NavItem; count?: number | null }) {
+  return (
+    <Link
+      to={item.to}
+      aria-current={item.current ? "page" : undefined}
+      aria-label={
+        count ? `${item.label} ${count} ticket${count === 1 ? "" : "s"} waiting on you` : undefined
+      }
+      className={cn(
+        "flex h-8 items-center justify-between gap-2 rounded-md px-2 text-sm font-medium text-muted-foreground hover:bg-raised hover:text-foreground focus-visible:outline-2 focus-visible:outline-ring",
+        item.current && "bg-raised text-foreground ring-1 ring-border",
+      )}
+    >
+      <span className="truncate">{item.label}</span>
+      {!!count && (
+        <span aria-hidden className="text-xs font-medium text-attention tabular-nums">
+          {count}
+        </span>
+      )}
+    </Link>
+  );
 }
 
 /**
@@ -279,23 +373,9 @@ function SignOutItem({ headerEnd, className }: { headerEnd: ReactNode; className
   );
 }
 
-function NavLink(props: { to: string; current: boolean; children: ReactNode }) {
-  return (
-    <Link
-      to={props.to}
-      aria-current={props.current ? "page" : undefined}
-      className={cn(
-        "whitespace-nowrap rounded-md px-2 py-1 text-muted-foreground hover:bg-muted hover:text-foreground",
-        props.current && "bg-raised text-foreground ring-1 ring-border hover:bg-raised",
-      )}
-    >
-      {props.children}
-    </Link>
-  );
-}
-
 /** The global scope: pick a project like a tenant, or All projects. Keeps the current screen. */
-function ProjectPicker({ scope, section }: { scope: Scope; section: Section }) {
+function ProjectPicker(props: { scope: Scope; section: Section; wide?: boolean }) {
+  const { scope, section, wide } = props;
   const projects = useProjects();
   const needsYou = useNeedsYou();
   const navigate = useNavigate();
@@ -307,7 +387,14 @@ function ProjectPicker({ scope, section }: { scope: Scope; section: Section }) {
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
-        <Button variant="ghost" size="sm" className="-ml-2 h-11 gap-2 px-2 font-medium sm:h-8">
+        <Button
+          variant="ghost"
+          size="sm"
+          className={cn(
+            "h-11 gap-2 px-2 font-medium sm:h-8",
+            wide ? "w-full justify-start hover:bg-raised" : "-ml-2",
+          )}
+        >
           {scope.kind === "all" ? (
             <>
               <Layers aria-hidden className="size-4 text-muted-foreground" />
@@ -316,12 +403,15 @@ function ProjectPicker({ scope, section }: { scope: Scope; section: Section }) {
           ) : (
             <>
               <KeyBadge>{current?.key ?? scope.projectId.toUpperCase()}</KeyBadge>{" "}
-              <span className="max-w-48 truncate max-sm:sr-only">
+              <span className={cn("truncate max-sm:sr-only", !wide && "max-w-48")}>
                 {current?.name ?? scope.projectId}
               </span>
             </>
           )}
-          <ChevronsUpDown aria-hidden className="size-3.5 text-muted-foreground" />
+          <ChevronsUpDown
+            aria-hidden
+            className={cn("size-3.5 text-muted-foreground", wide && "ml-auto")}
+          />
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="start">
@@ -387,7 +477,7 @@ function PickerItem(props: {
 /** A project's key, e.g. "AI": the tenant mark beside its name. */
 function KeyBadge({ children }: { children: ReactNode }) {
   return (
-    <span className="inline-flex h-5 min-w-5 items-center justify-center rounded bg-primary px-1 text-xs font-semibold text-primary-foreground">
+    <span className="inline-flex h-5 min-w-5 items-center justify-center rounded bg-foreground px-1 text-2xs font-semibold text-background">
       {children}
     </span>
   );

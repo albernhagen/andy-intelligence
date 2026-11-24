@@ -16,10 +16,10 @@ Stack: React, Tailwind v4, shadcn/ui components in `src/components/ui/`, icons f
 
 ## Layout
 
-- One shell on every screen (`src/components/AppShell.tsx`): project picker, navigation, "Needs you N". Pages never draw their own header.
-- The header holds at most six destinations (Inbox, Board, Roadmap, Work, Dashboards, What's new); every settings page and Sign out sit in one Settings menu, and settings pages share `SettingsTabs`. A new screen goes under an existing destination or replaces one (AI-335).
+- One shell on every screen (`src/components/AppShell.tsx`, AI-370). Desktop: a sunken left sidebar (picker, destinations, projects, quota, palette, Settings menu); phone: header and bottom bar. Pages never draw their own navigation.
+- At most six destinations (Inbox, Board, Roadmap, Work, Dashboards, What's new); settings, theme and Sign out sit in the Settings menu. A new screen goes under a destination or replaces one (AI-335); `lib/shell-routes.ts` lists it (a test checks every route).
 - The picker is the global scope: project screens under `/p/<project>/…`, cross-project under `/all/…`. A new screen gets both, or says why not (the board needs one project).
-- Every page uses one of three [page templates](design-details.md#page-templates): list with detail, settings with section nav, reading page (screens move to them from AI-370). Padding `px-4 sm:px-6 py-4`.
+- Every page uses one of three [page templates](design-details.md#page-templates) beside the sidebar: list with detail, settings with section nav, reading page (AI-371 to AI-378). Padding `px-4 sm:px-6 py-4`.
 - A ticket opens as a panel over the board, led by its status line; prose uses `Markdown`.
 
 ## Phone
@@ -35,7 +35,7 @@ Below `sm` (640px; `useIsPhone`):
 
 ## Keyboard
 
-`SHORTCUTS` in `src/lib/shortcuts.ts` (AI-338); `?` lists them. Never while typing; no single key writes. Screens opt in with `data-nav-*` and a visible focus outline.
+`SHORTCUTS` in `src/lib/shortcuts.ts` (AI-338); `?` lists them. Never while typing (except Cmd+K); no single key writes. Screens opt in with `data-nav-*` and a visible focus outline. Cmd+K opens the command palette: tickets, shortcut `command`s, pages.
 
 ## Type
 

@@ -1,4 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
+import { expectShellLoaded } from "./shell";
 
 /**
  * AI-26: screenshot checks for the shell, board, story panel (AI-29), inbox (AI-30), agent task page (AI-101) and project settings (M4.12). A diff fails CI; a deliberate
@@ -8,13 +9,20 @@ import { expect, test, type Page } from "@playwright/test";
 async function open(page: Page, path: string, ready: string) {
   await page.goto(path);
   await expect(page.getByText(ready).first()).toBeVisible();
-  // The header count is loaded once every screen has it.
-  await expect(page.getByRole("link", { name: "Needs you 5" })).toBeVisible();
+  await expectShellLoaded(page);
 }
 
 test("shell: inbox under All projects", async ({ page }) => {
   await open(page, "/all/inbox", "Keep backups for 7 or 30 days?");
   await expect(page).toHaveScreenshot("shell-all-projects-inbox.png");
+});
+
+test("shell: command palette finds a ticket", async ({ page }) => {
+  await open(page, "/p/ai", "Story side panel");
+  await page.keyboard.press("ControlOrMeta+k");
+  await page.getByRole("combobox", { name: "Search tickets and commands" }).fill("story");
+  await expect(page.getByRole("group", { name: "Tickets" })).toBeVisible();
+  await expect(page).toHaveScreenshot("shell-command-palette.png");
 });
 
 test("inbox: busy project with a stale ticket", async ({ page }) => {

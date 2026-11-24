@@ -20,10 +20,26 @@ const pathname = (h: { router: { state: { location: { pathname: string } } } }) 
   h.router.state.location.pathname;
 
 describe("app shell", () => {
-  it("GivenItemsInTwoProjects_WhenAnyScreenIsOpen_ThenTheHeaderCountsAllOfThem", async () => {
+  it("GivenItemsInTwoProjects_WhenAProjectScreenIsOpen_ThenTheSidebarCountsEachProject", async () => {
     const harness = await twoProjects("/p/ai");
-    expect(await screen.findByRole("link", { name: "Needs you 2" })).toBeTruthy();
+    const main = await screen.findByRole("navigation", { name: "Main" });
+    expect(
+      await within(main).findByRole("link", { name: "Inbox 1 ticket waiting on you" }),
+    ).toBeTruthy();
+    const projects = screen.getByRole("navigation", { name: "Projects" });
+    expect(
+      within(projects)
+        .getByRole("link", { name: "Ops 1 ticket waiting on you" })
+        .getAttribute("href"),
+    ).toBe("/p/ops");
     expect(pathname(harness)).toBe("/p/ai");
+  });
+
+  it("GivenItemsInTwoProjects_WhenAllProjectsIsOpen_ThenTheInboxCountsAllOfThem", async () => {
+    await twoProjects("/all/work");
+    expect(
+      await screen.findByRole("link", { name: "Inbox 2 tickets waiting on you" }),
+    ).toBeTruthy();
   });
 
   it("GivenAllProjects_WhenTheInboxOpens_ThenItListsEveryProjectsQuestions", async () => {
@@ -107,7 +123,9 @@ describe("app shell", () => {
   it("GivenASettingsPage_WhenItOpens_ThenTabsLeadToTheOtherSettingsPages", async () => {
     window.localStorage.setItem("andy.scope", "p:ops");
     const harness = await twoProjects("/settings/models");
-    const tabs = await screen.findByRole("navigation", { name: "Settings pages" });
+    const tabs = await screen
+      .findByRole("main")
+      .then((m) => within(m).findByRole("navigation", { name: "Settings pages" }));
     expect(within(tabs).getByRole("link", { name: "Models" }).getAttribute("aria-current")).toBe(
       "page",
     );

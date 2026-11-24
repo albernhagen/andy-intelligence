@@ -276,7 +276,7 @@ describe("Needs-you inbox", () => {
         "Waiting for you: 1 question",
       ),
     );
-    await user.click(await screen.findByRole("link", { name: "Needs you 1" }));
+    await user.click(await screen.findByRole("link", { name: "Inbox 1 ticket waiting on you" }));
     expect(await screen.findByRole("listitem", { name: "Question: Dark mode too?" })).toBeTruthy();
     await waitFor(async () =>
       expect((await harness.tracker.getTicket("ai", ticket.id))?.needsAttention).toBe(true),

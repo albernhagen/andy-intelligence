@@ -8,24 +8,39 @@
  * No single key writes anything: `1`–`9` only focus a choice, and `Enter` then presses it.
  */
 
+/** What the command palette (AI-370) runs for a shortcut; none for keys that act on a focused item. */
+export type ShortcutCommand =
+  { kind: "go"; target: GoTarget } | { kind: "move"; delta: 1 | -1 } | { kind: "help" };
+
 export interface Shortcut {
   keys: string;
   does: string;
+  command?: ShortcutCommand;
 }
 
 /** Every shortcut, in the order the `?` help and `apps/web/design.md` list them. */
 export const SHORTCUTS: readonly Shortcut[] = [
-  { keys: "j", does: "Next question in the inbox, next card on the board" },
-  { keys: "k", does: "Previous question or card" },
+  {
+    keys: "j",
+    does: "Next question in the inbox, next card on the board",
+    command: { kind: "move", delta: 1 },
+  },
+  { keys: "k", does: "Previous question or card", command: { kind: "move", delta: -1 } },
   { keys: "Enter", does: "Open the focused ticket; on a focused answer, choose it" },
   { keys: "a", does: "Focus the answer field of the focused question" },
   { keys: "1–9", does: "Focus that answer of the focused question (Enter chooses it)" },
-  { keys: "g i", does: "Go to the inbox" },
-  { keys: "g b", does: "Go to the board" },
-  { keys: "g r", does: "Go to the roadmap" },
-  { keys: "?", does: "Show these shortcuts" },
+  { keys: "g i", does: "Go to the inbox", command: { kind: "go", target: "inbox" } },
+  { keys: "g b", does: "Go to the board", command: { kind: "go", target: "board" } },
+  { keys: "g r", does: "Go to the roadmap", command: { kind: "go", target: "roadmap" } },
+  { keys: "⌘K", does: "Search tickets and run a command (Ctrl+K off a Mac)" },
+  { keys: "?", does: "Show these shortcuts", command: { kind: "help" } },
   { keys: "Esc", does: "Close this list or the ticket panel" },
 ];
+
+/** Cmd+K on a Mac, Ctrl+K elsewhere: opens the command palette, even from a field. */
+export function isPaletteKey(e: KeyboardEvent): boolean {
+  return e.key.toLowerCase() === "k" && (e.metaKey || e.ctrlKey) && !e.altKey && !e.shiftKey;
+}
 
 /** How long `g` waits for its second key. */
 export const SEQUENCE_MS = 1500;

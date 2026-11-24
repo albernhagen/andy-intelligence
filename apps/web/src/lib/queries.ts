@@ -1,5 +1,11 @@
 import { useEffect, useRef } from "react";
-import { type QueryClient, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import {
+  type QueryClient,
+  useMutation,
+  useQueries,
+  useQuery,
+  useQueryClient,
+} from "@tanstack/react-query";
 import type {
   AutoMerge,
   MergeMode,
@@ -134,6 +140,28 @@ export function useTickets(projectId: string) {
       unwrap(
         await api.GET("/api/projects/{projectId}/tickets", { params: { path: { projectId } } }),
       ),
+  });
+}
+
+/**
+ * The command palette's tickets (AI-370): every listed project's tickets, read only while the
+ * palette is open and shared with `useTickets`' cache. Archived tickets are left out.
+ */
+export function usePaletteTickets(projectIds: readonly string[], enabled: boolean) {
+  const api = useApi();
+  return useQueries({
+    queries: projectIds.map((projectId) => ({
+      queryKey: ["tickets", projectId],
+      enabled,
+      queryFn: async () =>
+        unwrap(
+          await api.GET("/api/projects/{projectId}/tickets", { params: { path: { projectId } } }),
+        ),
+    })),
+    combine: (results) => ({
+      tickets: results.flatMap((r) => (r.data ?? []).filter((t) => !t.archived)),
+      pending: results.some((r) => r.isPending && r.fetchStatus !== "idle"),
+    }),
   });
 }
 

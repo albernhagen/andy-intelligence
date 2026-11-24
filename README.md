@@ -83,7 +83,7 @@ GitHub (ADR-0043: GitHub App setup from the UI) is on when `PUBLIC_URL` is set: 
 
 ### Web UI (M1.3: UI: tickets + inbox; AI-26: Design source and app shell)
 
-Design rules: [`apps/web/design.md`](apps/web/design.md). One header on every screen (AI-335): project picker (the scope, remembered), Inbox, Board, Roadmap, Work, Dashboards, What's new (in a project), "Needs you N" and a Settings menu (project settings, GitHub, Local runners, Models, Sign out).
+Design rules: [`apps/web/design.md`](apps/web/design.md). One shell on every screen (AI-370): on desktop a left sidebar with the project picker (the scope, remembered), Inbox, Board, Roadmap, Work, Dashboards, What's new (in a project), the projects with their Needs-you counts, the quota, "Search and commands" (Cmd+K: tickets and commands) and a Settings menu (project settings, GitHub, Local runners, Models, theme, Sign out); on a phone a header and a bottom bar.
 
 | Route                                         | Screen                                                                                                                        |
 | --------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------- |

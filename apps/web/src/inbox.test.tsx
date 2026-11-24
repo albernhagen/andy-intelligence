@@ -123,7 +123,9 @@ describe("inbox v2", () => {
     const h = await twoTickets();
     await card("AI-1: Board");
     // Two tickets, three questions: the header counts tickets (AI-347).
-    expect(await screen.findByRole("link", { name: "Needs you 2" })).toBeTruthy();
+    expect(
+      await screen.findByRole("link", { name: "Inbox 2 tickets waiting on you" }),
+    ).toBeTruthy();
 
     await h.user.click(
       within(question("Which layout?") as HTMLElement).getByRole("button", { name: "Columns" }),
@@ -131,7 +133,7 @@ describe("inbox v2", () => {
 
     await waitFor(() => expect(question("Which layout?")).toBeNull());
     // AI-1 still has a question open, so it still counts.
-    expect(screen.getByRole("link", { name: "Needs you 2" })).toBeTruthy();
+    expect(screen.getByRole("link", { name: "Inbox 2 tickets waiting on you" })).toBeTruthy();
     expect(screen.getByRole("heading", { level: 2 }).textContent).toBe("Needs you 2");
     const [answered] = await h.tracker.listQuestions({ ticketId: h.board.id, status: "answered" });
     expect(answered).toMatchObject({ id: "run1-q1", answer: "Columns", answeredVia: "ui" });
@@ -162,7 +164,7 @@ describe("inbox v2", () => {
       ["Which colour?", "answered", "Blue"],
     ]);
     expect((await h.tracker.getTicket("ai", h.board.id))?.stage).toBe("ready");
-    expect(screen.getByRole("link", { name: "Needs you 1" })).toBeTruthy();
+    expect(screen.getByRole("link", { name: "Inbox 1 ticket waiting on you" })).toBeTruthy();
     // A card with no suggestion offers no bulk action.
     expect(
       within(await card("AI-2: Panel")).queryByRole("button", { name: /Accept all/ }),
@@ -262,7 +264,7 @@ describe("inbox v2", () => {
     await h.user.click(within(ops).getByRole("button", { name: /^Yes/ }));
     await waitFor(() => expect(screen.queryByRole("region", { name: "OPS: Ops" })).toBeNull());
     expect(within(ai).getByRole("heading").textContent).toBe("AI: Andy Intelligence 2");
-    expect(screen.getByRole("link", { name: "Needs you 2" })).toBeTruthy();
+    expect(screen.getByRole("link", { name: "Inbox 2 tickets waiting on you" })).toBeTruthy();
   });
 
   describe("question format (AI-73)", () => {

@@ -1,4 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
+import { expectShellLoaded } from "./shell";
 import { mockDashboards, waitForStableCharts } from "./dashboard-fixtures";
 import { SCREENS, type Screen } from "./screens";
 
@@ -29,8 +30,7 @@ async function open(page: Page, screen: Screen) {
     await expect(page.getByRole("heading", { name: "Agent task · refine" })).toBeVisible();
   }
   await expect(page.getByText(screen.ready).first()).toBeVisible();
-  // The header count is loaded once every screen has it.
-  await expect(page.getByRole("link", { name: "Needs you 5" })).toBeVisible();
+  await expectShellLoaded(page);
   if (screen.name.endsWith("dashboards")) await waitForStableCharts(page);
 }
 
