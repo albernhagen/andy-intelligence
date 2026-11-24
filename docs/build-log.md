@@ -25,6 +25,7 @@ Generated from tickets, never edited here (AI-148). Every ticket sits under a mi
 - AI-144: Threat model: one file per risk: cap each risk file at 300 words and `threat-model.md` at 1000 (was 3600)?
 - ADR-0111: Re-sync open PRs: its App token?
 - ADR-0133: Board and ticket list read changed tickets (AI-317): accept the 60 s overlap and the hourly full re-read?
+- Night of 2026-11-23, PRs waiting for Andy's merge and the epic PR: [2026-11-24-handover-night.md](build-log/2026-11-24-handover-night.md).
 - Review handover, current state and questions: [2026-11-23-handover-review.md](build-log/2026-11-23-handover-review.md) (earlier: [2026-11-21](build-log/2026-11-21-handover-review.md)).
 - Re-sync cap (`scripts/resync-prs.mjs`, 4 an hour): raise to 12 and skip counting skipped runs?
 - ADR-0136: Milestone create and edit over MCP (AI-321, PR #343): extend ADR-0131 to five MCP milestone tools?
