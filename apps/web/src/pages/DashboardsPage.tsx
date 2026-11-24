@@ -499,7 +499,14 @@ function WeekChart(props: {
     <ChartContainer config={props.config} className="h-48 w-full" initialDimension={INITIAL_SIZE}>
       <Chart data={props.rows} accessibilityLayer>
         <CartesianGrid vertical={false} />
-        <XAxis dataKey="week" tickLine={false} axisLine={false} />
+        {/* A line's first and last points sit on the edges; padding keeps their week labels
+            inside the chart, so the last one doesn't move between renders. */}
+        <XAxis
+          dataKey="week"
+          tickLine={false}
+          axisLine={false}
+          padding={props.kind === "line" ? { left: 16, right: 16 } : undefined}
+        />
         <YAxis
           tickLine={false}
           axisLine={false}
