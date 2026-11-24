@@ -16,9 +16,8 @@ import {
   type WorkTracker,
 } from "@andy/contracts";
 import { CODEOWNERS_PATHS, codeownersGlobs, decideGate, type GateDecision } from "./gate";
-import { effectiveTicketMergeMode } from "./merge-mode";
-import { mergeVerdict, openFindingsOn, type MergeVerdict } from "./merge-verdict";
-import { cascadesFrom } from "./overrides";
+import { openFindingsFor, ticketMergeMode } from "./merge-facts";
+import { mergeVerdict, type MergeVerdict } from "./merge-verdict";
 import { intoEpicBranch, passesIntoEpic, type EpicMerges } from "./night-merge";
 import { syncPendingFor } from "./sync-runs";
 import type { NightUnattended } from "./night-unattended";
@@ -39,9 +38,6 @@ const AGENT_BRANCH = /^agent\/([A-Z][A-Z0-9]{0,9}-\d+)\/([^/]+)$/;
 /** A check can name several PRs; each costs host reads (ADR-0028). */
 const MAX_PRS_PER_CHECK = 3;
 const MAX_LISTED_FILES = 20;
-/** Review findings read per verdict (ADR-0028): the project's latest reviewed PRs only. */
-const FINDING_PULLS = 30;
-const FINDING_LIMIT = 300;
 
 function log(severity: "INFO" | "WARNING" | "ERROR", message: string, fields: object = {}) {
   console.log(JSON.stringify({ severity, message, component: "gate", ...fields }));
@@ -186,13 +182,8 @@ export class PullRequestGate {
   }
 
   /** The ticket's mode: the stricter of the project's, its own override and its epic's. */
-  private async ticketMode(project: Project, ticket: Ticket): Promise<MergeMode | null> {
-    if (project.mergeMode === null) return null;
-    const epic = ticket.parentId
-      ? cascadesFrom(await this.tracker.getTicket(ticket.projectId, ticket.parentId))
-      : null;
-    const withEpic = effectiveTicketMergeMode(project, epic?.overrides.mergeMode);
-    return effectiveTicketMergeMode({ mergeMode: withEpic }, ticket.overrides.mergeMode);
+  private ticketMode(project: Project, ticket: Ticket): Promise<MergeMode | null> {
+    return ticketMergeMode(this.tracker, project, ticket);
   }
 
   /** Whether the head contains the default branch's tip; null (wait) when the host can't say. */
@@ -205,32 +196,9 @@ export class PullRequestGate {
     }
   }
 
-  /**
-   * Open findings recorded for this head. Without a source, 0: the review checks fail on every
-   * open finding (ADR-0134, Andy's answer (a)), so a clean gate already means none, and an
-   * override label makes the verdict wait. With one, null (wait) when the read fails or may
-   * have been cut short: `recent` returns the newest PRs' findings, so a PR missing from a full
-   * page (or a read at the findings cap) may have findings it didn't return.
-   */
-  private async openFindings(
-    projectId: string,
-    repo: string,
-    pr: PullRequest,
-  ): Promise<number | null> {
-    if (!this.findings) return 0;
-    try {
-      const recent = await this.findings.recent(projectId, {
-        maxPulls: FINDING_PULLS,
-        maxFindings: FINDING_LIMIT,
-      });
-      const pulls = new Set(recent.map((f) => `${f.repo}#${f.pullNumber}`));
-      const listed = pulls.has(`${repo}#${pr.number}`);
-      if (recent.length >= FINDING_LIMIT || (!listed && pulls.size >= FINDING_PULLS)) return null;
-      return openFindingsOn(recent, { repo, number: pr.number, headSha: pr.headSha });
-    } catch (err) {
-      log("WARNING", "review findings read failed", { pr: pr.number, error: errorText(err) });
-      return null;
-    }
+  /** Open findings recorded for this head (`openFindingsFor`); null: wait. */
+  private openFindings(projectId: string, repo: string, pr: PullRequest): Promise<number | null> {
+    return openFindingsFor(this.findings, projectId, repo, pr, "gate");
   }
 
   /**
