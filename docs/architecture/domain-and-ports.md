@@ -28,7 +28,7 @@ Provider, Harness, Model, Tier, Policy; configuration rules; default quota polic
 
 ## 6. Ports (contracts) and adapters
 
-Contracts live in `packages/contracts` (Zod schemas, TypeScript interfaces; OpenAPI generated). **Every port has an in-memory fake and a shared contract test suite that every adapter, including the fake, must pass** (ADR-0023). CI runs suites on the fakes, and on the emulator when adapters or suites change (`firestore-suite.yml`, ADR-0048; locally `pnpm test:firestore`). A port's fake and suite land before its first real adapter.
+Contracts live in `packages/contracts` (Zod schemas, TypeScript interfaces; OpenAPI generated). **Every port has an in-memory fake with its own tests, and every adapter has its own tests; a shared contract test suite that the fake and every adapter must pass is required from the second real adapter; the fake does not count** (ADR-0023, AI-360). CI runs suites on the fakes, and on the emulator when adapters or suites change (`firestore-suite.yml`, ADR-0048; locally `pnpm test:firestore`). A port's fake and its tests land before its first real adapter.
 
 | Port | Domain concepts | v1.x adapters | Later |
 |---|---|---|---|
