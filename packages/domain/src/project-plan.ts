@@ -25,9 +25,9 @@ import type { TicketService } from "./tickets";
  * the owner submits it through the API or MCP. Re-planning an approved project is not built.
  *
  * Milestones (ADR-0149, AI-365): with a milestone service, approval also creates one milestone
- * per planned milestone (named like its epic, its goal as the outcome, its case, not reviewed)
- * and attaches the epic to it, so each case shows on the roadmap where Andy approves or parks it.
- * Both writes are logged in the project's change log like any milestone change.
+ * per planned milestone (named like its epic, its goal as the outcome, its case) and attaches the
+ * epic to it. Created approved (Andy, 2026-11-23): approving the plan approves its milestones, so
+ * nothing is held. Both writes are logged in the project's change log like any milestone change.
  */
 
 export interface WaitingPlan {
@@ -206,7 +206,12 @@ export class ProjectPlanService {
           existingMilestones.find((m) => m.name === title && m.outcome === outcome) ??
           (await this.milestones.create(
             projectId,
-            { name: title, outcome, ...(milestone.case ? { case: milestone.case } : {}) },
+            {
+              name: title,
+              outcome,
+              status: "approved",
+              ...(milestone.case ? { case: milestone.case } : {}),
+            },
             actor,
             "approved project plan",
           ));

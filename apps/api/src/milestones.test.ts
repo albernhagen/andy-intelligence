@@ -336,11 +336,11 @@ describe("milestone case from plan to change log (ADR-0149, AI-365)", () => {
     const [first, second] = roadmap.milestones;
     expect(first).toMatchObject({
       name: "M1: Walking skeleton",
-      status: "not_reviewed",
+      status: "approved",
       case: CASE,
       effort: { tickets: 1, sizes: { S: 0, M: 1, L: 0, unsized: 0 } },
     });
-    // The no-case branch: shown as null, and the milestone can still be approved.
+    // The no-case branch: shown as null.
     expect(second).toMatchObject({ name: "M2: Log a run", case: null, effort: { tickets: 0 } });
     expect((await mcp("roadmap", { project: "AI" })).data.milestones).toEqual(roadmap.milestones);
 
@@ -367,9 +367,12 @@ describe("milestone case from plan to change log (ADR-0149, AI-365)", () => {
         [first.id, { case: { from: CASE, to: null } }],
       ]),
     );
+    // A milestone added later starts not reviewed and can be approved with no case.
+    const later = await mcp("create_milestone", { project: "AI", name: "M3", outcome: "Later" });
+    expect(later.data).toMatchObject({ status: "not_reviewed" });
     const approved = await mcp("set_milestone_status", {
       project: "AI",
-      milestone: first.id,
+      milestone: later.data.id,
       status: "approved",
     });
     expect(approved.data).toMatchObject({ status: "approved" });

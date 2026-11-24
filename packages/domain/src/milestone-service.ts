@@ -40,6 +40,11 @@ export interface NewMilestone {
   order?: number;
   /** Why it is worth building (ADR-0149); optional. */
   case?: MilestoneCase;
+  /**
+   * Default `not_reviewed`. Plan approval passes `approved` (Andy, 2026-11-23, ADR-0149): his
+   * approval of the plan approves its milestones. The API and MCP don't expose it.
+   */
+  status?: MilestoneStatus;
 }
 
 export type MilestonePatch = Partial<{
@@ -95,7 +100,7 @@ export class MilestoneService {
           name: input.name,
           outcome: input.outcome,
           order,
-          status: "not_reviewed",
+          status: input.status ?? "not_reviewed",
           ...(input.case ? { case: input.case } : {}),
           createdAt: at,
           updatedAt: at,

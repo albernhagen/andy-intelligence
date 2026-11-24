@@ -281,6 +281,13 @@ describe("MilestoneService", () => {
       expect((created!.diff.created as { to: { case: unknown } }).to.case).toEqual(CASE);
     });
 
+    it("GivenAStatus_WhenCreated_ThenStoredWithItAndLogged", async () => {
+      const m = await service.create("ai", { name: "M4", outcome: "x", status: "approved" }, OWNER);
+      expect(m.status).toBe("approved");
+      const [created] = await logged();
+      expect((created!.diff.created as { to: { status: string } }).to.status).toBe("approved");
+    });
+
     it("GivenNoCase_WhenCreated_ThenStoredWithout", async () => {
       const m = await service.create("ai", { name: "M4", outcome: "x" }, OWNER);
       expect(m).not.toHaveProperty("case");

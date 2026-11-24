@@ -43,7 +43,7 @@ export function registerProjectPlanTools(
     "approve_project_plan",
     {
       description:
-        "Owner only. Approves the project's waiting plan: creates one epic per milestone, in order, titled M<N>: <title>, and a not-reviewed milestone of the same name holding its case (who it serves, expected return, cheapest test) with the epic attached. Approve or park each milestone on the roadmap or with set_milestone_status.",
+        "Owner only. Approves the project's waiting plan: creates one epic per milestone, in order, titled M<N>: <title>, and an approved milestone of the same name holding its case (who it serves, expected return, cheapest test) with the epic attached.",
       inputSchema: { project: ProjectKey },
       annotations: { destructiveHint: false, idempotentHint: false, openWorldHint: false },
     },

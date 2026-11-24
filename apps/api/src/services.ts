@@ -463,7 +463,7 @@ export function createServices(raw: AppDeps): Services {
   const milestoneService = deps.milestones
     ? new MilestoneService(deps.tracker, deps.milestones, deps.configChanges ?? null, now)
     : null;
-  // ADR-0149: approving a plan also creates its milestones, each with its case.
+  // ADR-0149: approving a plan also creates its milestones, approved, each with its case.
   const plans = new ProjectPlanService(
     deps.tracker,
     service,

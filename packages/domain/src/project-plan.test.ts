@@ -274,16 +274,16 @@ describe("ProjectPlanService with milestones (ADR-0149, AI-365)", () => {
     return { tracker, project, plans, milestones, changes, tickets };
   }
 
-  it("GivenAPlanWithCases_WhenApproved_ThenEachMilestoneIsCreatedNotReviewedWithItsCaseAndEpic", async () => {
+  it("GivenAPlanWithCases_WhenApproved_ThenEachMilestoneIsCreatedApprovedWithItsCaseAndEpic", async () => {
     const { tracker, project, plans, milestones, changes } = await setupWithMilestones();
     await plans.propose(project.id, withCases, OWNER);
     const { epics } = await plans.decide(project.id, { decision: "approved" }, OWNER);
 
     const listed = await milestones.list(project.id);
     expect(listed.map((m) => [m.name, m.outcome, m.status, m.case ?? null])).toEqual([
-      ["M1: Walking skeleton", "Andy can open the app.", "not_reviewed", CASE],
-      ["M2: Log a run", "Andy can log a run.", "not_reviewed", CASE],
-      ["M3: Weekly summary", "Andy sees his week.", "not_reviewed", null],
+      ["M1: Walking skeleton", "Andy can open the app.", "approved", CASE],
+      ["M2: Log a run", "Andy can log a run.", "approved", CASE],
+      ["M3: Weekly summary", "Andy sees his week.", "approved", null],
     ]);
     const stored = await tracker.listTickets(project.id);
     expect(stored.map((t) => t.milestoneId)).toEqual(listed.map((m) => m.id));
