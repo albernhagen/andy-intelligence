@@ -3,9 +3,21 @@ import { Link, useNavigate, useParams, useSearch } from "@tanstack/react-router"
 import type { WhatsNew, WhatsNewMilestone, WhatsNewNote } from "@andy/contracts";
 import { mergedByText } from "@andy/domain";
 import { DailySummary } from "@/components/DailySummary";
-import { Loading, QueryError } from "@/components/Status";
+import { PageHeader } from "@/components/PageHeader";
+import { ListSkeleton } from "@/components/PageSkeleton";
+import { QueryError } from "@/components/Status";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { EmptyState } from "@/components/ui/empty-state";
+import { Kbd } from "@/components/ui/kbd";
 import { Segmented } from "@/components/ui/segmented";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { useDigest, useWhatsNew } from "@/lib/queries";
 import { dateTime } from "@/lib/format";
 
@@ -41,58 +53,76 @@ export function WhatsNewPage() {
   const whatsNew = useWhatsNew(projectId, days, epic);
 
   return (
-    <section className="space-y-4">
-      <header className="flex flex-wrap items-center gap-2">
-        <h2 className="text-lg font-medium">What's new</h2>
+    <section>
+      <PageHeader
+        title="What's new"
+        actions={
+          whatsNew.data &&
+          whatsNew.data.milestones.length > 0 && (
+            <Select value={epic ?? ALL} onValueChange={(v) => setEpic(v === ALL ? null : v)}>
+              <SelectTrigger aria-label="Epic" className="w-56">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value={ALL}>All epics</SelectItem>
+                {whatsNew.data.milestones.map((m) => (
+                  <SelectItem key={m.key} value={m.key}>
+                    {m.key}: {m.title}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          )
+        }
+      >
         <Segmented
           label="Window"
           value={days}
           options={WINDOWS.map((w) => ({ value: w.days, label: w.label }))}
           onChange={setDays}
         />
-        {whatsNew.data && whatsNew.data.milestones.length > 0 && (
-          <select
-            aria-label="Epic"
-            className="h-8 rounded-md border border-border bg-background px-2 text-sm"
-            value={epic ?? ""}
-            onChange={(e) => setEpic(e.target.value || null)}
-          >
-            <option value="">All epics</option>
-            {whatsNew.data.milestones.map((m) => (
-              <option key={m.key} value={m.key}>
-                {m.key}: {m.title}
-              </option>
-            ))}
-          </select>
-        )}
-      </header>
-      <DailySummary projectId={projectId} />
-      <Exceptions projectId={projectId} />
-      {whatsNew.isPending ? (
-        <Loading />
-      ) : whatsNew.isError ? (
-        <QueryError
-          error={whatsNew.error}
-          what="what's new"
-          onRetry={() => void whatsNew.refetch()}
-        />
-      ) : (
-        <>
-          <Status whatsNew={whatsNew.data} projectId={projectId} />
-          <Changes whatsNew={whatsNew.data} projectId={projectId} days={days} />
-        </>
-      )}
+      </PageHeader>
+      <div className="space-y-4">
+        <DailySummary projectId={projectId} />
+        {/* Waiting and status first in the page order (a phone reads them first); beside the
+            changes from lg. */}
+        <div className="grid items-start gap-4 lg:grid-cols-[1fr_20rem]">
+          <aside className="space-y-3 lg:order-2">
+            <Exceptions projectId={projectId} />
+            {whatsNew.data && <Status whatsNew={whatsNew.data} projectId={projectId} />}
+          </aside>
+          <div className="min-w-0 lg:order-1">
+            {whatsNew.isPending ? (
+              <ListSkeleton />
+            ) : whatsNew.isError ? (
+              <QueryError
+                error={whatsNew.error}
+                what="what's new"
+                onRetry={() => void whatsNew.refetch()}
+              />
+            ) : (
+              <Changes whatsNew={whatsNew.data} projectId={projectId} days={days} />
+            )}
+          </div>
+        </div>
+      </div>
     </section>
   );
 }
+
+/** Radix Select can't hold an empty value, so "every epic" has its own. */
+const ALL = "__all__";
 
 function Status({ whatsNew, projectId }: { whatsNew: WhatsNew; projectId: string }) {
   const open = whatsNew.milestones.filter((m) => m.notStarted + m.inProgress + m.inReview > 0);
   const finished = whatsNew.milestones.filter((m) => !open.includes(m));
   const { needsYou } = whatsNew;
   return (
-    <section aria-label="Status" className="space-y-1">
-      <h3 className="text-sm font-medium">Status</h3>
+    <section
+      aria-label="Status"
+      className="space-y-2 rounded-lg border border-border bg-raised p-3"
+    >
+      <h3 className="text-sm font-semibold">Status</h3>
       {/* AI-218: who merges this project's PRs now (ADR-0124). */}
       <p className="text-sm" aria-label="Merge mode">
         <span className="text-xs text-muted-foreground">Merge mode</span>{" "}
@@ -102,7 +132,7 @@ function Status({ whatsNew, projectId }: { whatsNew: WhatsNew; projectId: string
         <p className="text-sm text-muted-foreground">No epics yet.</p>
       )}
       {open.length > 0 && (
-        <table className="text-sm">
+        <table className="w-full text-sm">
           <thead className="text-xs text-muted-foreground">
             <tr className="text-left">
               <th className="pr-4 font-normal">Epic</th>
@@ -165,16 +195,28 @@ function Changes(props: { whatsNew: WhatsNew; projectId: string; days: number })
   return (
     <section aria-label="Changes" className="space-y-4">
       {notes.length === 0 && (
-        <p className="text-sm text-muted-foreground">
-          Nothing merged in the last {props.days === 1 ? "24 hours" : `${props.days} days`}.
-        </p>
+        <EmptyState
+          title={`Nothing merged in the last ${props.days === 1 ? "24 hours" : `${props.days} days`}.`}
+          description={
+            props.days < 90 ? "A longer window may show older changes." : "Merged PRs show here."
+          }
+          action={
+            props.days < 90 ? (
+              <Button asChild variant="outline" className="h-11 sm:h-9">
+                <Link to="." search={{ days: 90 }} replace>
+                  Show 90 days
+                </Link>
+              </Button>
+            ) : undefined
+          }
+        />
       )}
       {[...days].map(([day, list]) => (
-        <section key={day} aria-label={day} className="space-y-1">
-          <h3 className="text-sm font-medium">
-            {day} <span className="text-muted-foreground tabular-nums">{list.length}</span>
+        <section key={day} aria-label={day} className="space-y-2">
+          <h3 className="text-xs font-medium text-muted-foreground">
+            {day} <span className="tabular-nums">{list.length}</span>
           </h3>
-          <ul className="space-y-1 text-sm">
+          <ul className="divide-y divide-border overflow-hidden rounded-lg border border-border bg-raised text-sm">
             {list.map((n) => (
               <ChangeLine key={n.id} note={n} projectId={props.projectId} />
             ))}
@@ -194,24 +236,30 @@ function ChangeLine({ note: n, projectId }: { note: WhatsNewNote; projectId: str
   return (
     <li>
       <details className="group">
-        <summary className="cursor-pointer list-none rounded-md px-1 py-1 hover:bg-muted">
-          {n.whatChanged ?? n.prTitle}{" "}
-          <span className="text-xs text-muted-foreground">
-            {n.ticketKey && (
-              <>
-                <TicketKeyLink projectId={projectId} ticketKey={n.ticketKey} /> ·{" "}
-              </>
-            )}
-            <a href={n.prUrl} rel="noreferrer" className="underline-offset-2 hover:underline">
-              PR #{n.prNumber}
-            </a>{" "}
-            · {mergedByText(n)}
-          </span>{" "}
+        <summary className="flex min-h-11 cursor-pointer list-none flex-wrap items-center gap-x-2 gap-y-1 px-3 py-2 hover:bg-muted/60 focus-visible:outline-2 focus-visible:outline-ring">
+          <span
+            aria-hidden
+            className={`size-1.5 shrink-0 rounded-full ${n.source === "no_note" ? "bg-border" : "bg-success"}`}
+          />
+          <span className="min-w-0 flex-1 basis-64">
+            <span className="block font-medium">{n.whatChanged ?? n.prTitle}</span>
+            <span className="block text-xs text-muted-foreground">
+              {n.ticketKey && (
+                <>
+                  <TicketKeyLink projectId={projectId} ticketKey={n.ticketKey} /> ·{" "}
+                </>
+              )}
+              <a href={n.prUrl} rel="noreferrer" className="underline-offset-2 hover:underline">
+                PR #{n.prNumber}
+              </a>{" "}
+              · {mergedByText(n)}
+            </span>
+          </span>
           {n.source === "no_note" && <Badge>No note</Badge>}
           {n.source === "backfill" && <Badge>Backfilled</Badge>}
           {n.needsYou && <Badge variant="attention">Needs you</Badge>}
         </summary>
-        <dl className="ml-1 mt-1 grid max-w-2xl grid-cols-[auto_1fr] gap-x-3 gap-y-1 border-l border-border pl-3 text-sm">
+        <dl className="mx-3 mb-3 ml-6 grid max-w-2xl grid-cols-[auto_1fr] gap-x-3 gap-y-1 border-l border-border pl-3 text-sm">
           {n.howItWorks && <Field label="How it works">{n.howItWorks}</Field>}
           {n.needsYou && <Field label="Needs you">{n.needsYou}</Field>}
           {n.links.length > 0 && (
@@ -287,12 +335,19 @@ function Exceptions({ projectId }: { projectId: string }) {
     );
   const exceptions = digest.data?.exceptions ?? [];
   if (exceptions.length === 0) return null;
+  const allWaiting = exceptions.every((e) => e.kind === "waiting_on_andy");
   return (
-    <section aria-label="Exceptions" className="space-y-1">
-      <h3 className="text-sm font-medium">
-        Exceptions <span className="text-muted-foreground tabular-nums">{exceptions.length}</span>
+    <section
+      aria-label="Exceptions"
+      className="space-y-2 rounded-lg border border-attention/60 bg-raised p-3"
+    >
+      <h3 className="flex items-center gap-2 text-sm font-semibold">
+        {allWaiting ? "Waiting for you" : "Exceptions"}
+        <Badge variant="attention" className="tabular-nums">
+          {exceptions.length}
+        </Badge>
       </h3>
-      <ul className="space-y-1 text-sm">
+      <ul className="space-y-1.5 text-sm">
         {exceptions.map((e, i) => (
           <li key={i}>
             {e.ticketKey ? (
@@ -307,6 +362,11 @@ function Exceptions({ projectId }: { projectId: string }) {
           </li>
         ))}
       </ul>
+      <Button asChild variant="outline" size="sm" className="h-11 sm:h-8" aria-keyshortcuts="G I">
+        <Link to="/p/$projectId/inbox" params={{ projectId }}>
+          Open inbox <Kbd>G</Kbd> <Kbd>I</Kbd>
+        </Link>
+      </Button>
     </section>
   );
 }
