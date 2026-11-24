@@ -41,7 +41,9 @@ export function LaneZone({
         <span aria-hidden>·</span>
         <span className="tabular-nums">{count}</span>
       </span>
-      {hint && count === 0 && <span className="pb-1 text-xs text-muted-foreground">{hint}</span>}
+      {hint && count === 0 && (
+        <span className="pb-1 text-xs text-muted-foreground max-sm:hidden">{hint}</span>
+      )}
     </li>
   );
 }
