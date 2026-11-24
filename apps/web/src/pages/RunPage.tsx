@@ -116,6 +116,11 @@ function RunDetail({
   return (
     <article className="space-y-4 wrap-anywhere" aria-label="Agent task">
       <PageHeader
+        breadcrumb={
+          run.ticketId && (
+            <Crumbs projectId={run.projectId} ticketId={run.ticketId} ticket={ticket} />
+          )
+        }
         title={
           <>
             <span className="sr-only">Agent task ·</span> {STEP_TITLE[run.step]}
@@ -134,7 +139,6 @@ function RunDetail({
       >
         <Badge variant={STATUS_VARIANT[run.status]}>{statusText(run, now)}</Badge>
       </PageHeader>
-      {run.ticketId && <Crumbs projectId={run.projectId} ticketId={run.ticketId} ticket={ticket} />}
 
       <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_16rem] lg:gap-6">
         {/* AI-340, AI-377: one sentence first: what it is doing, or how it ended. */}
@@ -217,7 +221,7 @@ function RunDetail({
   );
 }
 
-/** "Board › AI-3: Story side panel": where the task belongs, each part a link, under the header. */
+/** "Board › AI-3: Story side panel ›": where the task belongs, each part a link; `PageHeader` wraps it. */
 function Crumbs({
   projectId,
   ticketId,
@@ -228,23 +232,20 @@ function Crumbs({
   ticket: Pick<Ticket, "key" | "title"> | undefined;
 }) {
   return (
-    <nav aria-label="Breadcrumb" className="flex min-w-0 items-center gap-1 text-sm">
-      <Link
-        to="/p/$projectId/board"
-        params={{ projectId }}
-        className="text-muted-foreground hover:text-foreground"
-      >
+    <>
+      <Link to="/p/$projectId/board" params={{ projectId }} className="hover:text-foreground">
         Board
       </Link>
       <ChevronRight aria-hidden className="size-3.5 text-muted-foreground" />
       <Link
         to="/p/$projectId/t/$ticketRef"
         params={{ projectId, ticketRef: ticket?.key ?? ticketId }}
-        className="truncate text-muted-foreground hover:text-foreground"
+        className="truncate hover:text-foreground"
       >
         {ticket ? `${ticket.key}: ${ticket.title}` : "Ticket"}
       </Link>
-    </nav>
+      <ChevronRight aria-hidden className="size-3.5" />
+    </>
   );
 }
 
