@@ -133,7 +133,7 @@ Project, Ticket, TicketEvent, Question, Run, Provider, Harness, Model, Tier, Pol
 
 ## 6. Ports (contracts) and adapters
 
-Every external dependency sits behind a port in `packages/contracts` with an in-memory fake and a shared contract suite (ADR-0023); the port table lists v1.x and later adapters; freeze `Executor` after two real adapters. Detail: [`domain-and-ports.md` §6](domain-and-ports.md#6-ports-contracts-and-adapters)
+Every external dependency sits behind a port in `packages/contracts` with an in-memory fake, and a shared contract suite required from its second real adapter (ADR-0023); the port table lists v1.x and later adapters; freeze `Executor` after two real adapters. Detail: [`domain-and-ports.md` §6](domain-and-ports.md#6-ports-contracts-and-adapters)
 
 ---
 

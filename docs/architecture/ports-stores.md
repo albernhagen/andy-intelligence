@@ -1,6 +1,6 @@
 # andy-intelligence — Store ports
 
-Moved unchanged from [domain-and-ports.md](domain-and-ports.md) §6 (main went over its word budget when three PRs merged at once): the store and ledger ports. Every one has an in-memory fake and a shared contract suite (ADR-0023).
+Moved unchanged from [domain-and-ports.md](domain-and-ports.md) §6 (main went over its word budget when three PRs merged at once): the store and ledger ports. Every one has an in-memory fake (ADR-0023); a shared contract suite is required from its second real adapter (AI-360).
 
 | Port | Domain concepts | v1.x adapters | Later |
 |---|---|---|---|
