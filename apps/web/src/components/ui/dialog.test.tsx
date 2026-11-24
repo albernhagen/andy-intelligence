@@ -1,5 +1,5 @@
-import { describe, expect, it } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { describe, expect, it, vi } from "vitest";
+import { act, fireEvent, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import {
   Dialog,
@@ -10,6 +10,7 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
+import { Toaster, resetToasts, toast } from "@/components/ui/toast";
 import { expectTokenMotion, expectTokensOnly } from "@/test/tokens";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
@@ -94,5 +95,39 @@ describe("Dialog", () => {
     const reduced = css.slice(css.indexOf("@media (prefers-reduced-motion: reduce)"));
     expect(reduced).toMatch(/animation-duration:\s*0s !important/);
     expect(reduced).toMatch(/transition-duration:\s*0s !important/);
+  });
+
+  // Adversarial review on PR #407: Undo pressed while a modal is open must not close it. Radix's
+  // toast viewport is a DismissableLayer branch, so a press or focus in a toast is not "outside".
+  it("GivenAnOpenDialogAndAToast_WhenUndoIsPressed_ThenTheDialogStaysOpenAndTheUndoRuns", async () => {
+    const user = userEvent.setup();
+    const undo = vi.fn();
+    const outside = vi.fn();
+    render(
+      <>
+        <Dialog>
+          <DialogTrigger>Cancel ticket</DialogTrigger>
+          <DialogContent onInteractOutside={outside}>
+            <DialogTitle>Cancel AI-3?</DialogTitle>
+          </DialogContent>
+        </Dialog>
+        <Toaster />
+      </>,
+    );
+    await user.click(screen.getByRole("button", { name: "Cancel ticket" }));
+    act(() => void toast({ title: "Answered AI-3", undo }));
+    // Radix starts listening for outside presses after a tick.
+    await new Promise((r) => setTimeout(r, 0));
+
+    // The modal hides the rest of the page from the accessibility tree, toasts included.
+    const undoButton = screen.getByRole("button", { name: "Undo", hidden: true });
+    fireEvent.pointerDown(undoButton);
+    fireEvent.focusIn(undoButton);
+    fireEvent.click(undoButton);
+
+    expect(outside).not.toHaveBeenCalled();
+    expect(screen.getByRole("dialog")).toBeTruthy();
+    expect(undo).toHaveBeenCalledOnce();
+    act(() => resetToasts());
   });
 });
