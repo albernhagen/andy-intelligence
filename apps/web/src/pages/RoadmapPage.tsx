@@ -334,7 +334,7 @@ function MilestoneRow({
       data-status={m.done ? "done" : m.status}
       className={m.status === "parked" ? "opacity-60" : undefined}
     >
-      <div className="flex items-start">
+      <div className="flex flex-wrap items-start">
         {reorder && (
           <div
             role="group"
@@ -388,7 +388,7 @@ function MilestoneRow({
           {!m.done && <CountChips counts={m.counts} />}
         </button>
         {!m.done && (
-          <div className="shrink-0 py-1.5 pr-2">
+          <div className="shrink-0 py-1.5 pr-2 max-sm:basis-full max-sm:pb-2 max-sm:pl-9">
             <StatusPick projectId={projectId} milestone={m} />
           </div>
         )}

@@ -137,7 +137,7 @@ function Row({ ticket: t, projectId }: { ticket: WorkRow; projectId: string }) {
       data-ticket={t.key}
       className="flex min-h-11 flex-wrap items-center gap-x-3 gap-y-1 px-3 py-2 text-sm hover:bg-muted/60"
     >
-      <span className="flex w-20 shrink-0 items-center gap-1 font-mono text-xs text-muted-foreground tabular-nums">
+      <span className="flex shrink-0 items-center gap-1 font-mono sm:w-20 text-xs text-muted-foreground tabular-nums">
         <span title={typeLabel(t.type)}>
           <Icon className="size-3.5" aria-hidden />
         </span>
@@ -146,7 +146,7 @@ function Row({ ticket: t, projectId }: { ticket: WorkRow; projectId: string }) {
       <Link
         to="/p/$projectId/t/$ticketRef"
         params={{ projectId, ticketRef: t.key }}
-        className="min-w-0 flex-1 font-medium hover:underline focus-visible:outline-2 focus-visible:outline-ring"
+        className="min-w-0 flex-1 basis-48 font-medium hover:underline focus-visible:outline-2 focus-visible:outline-ring"
       >
         {t.title}
       </Link>
@@ -163,7 +163,9 @@ function Row({ ticket: t, projectId }: { ticket: WorkRow; projectId: string }) {
         type={t.type}
         sentBack={null}
       />
-      <span className="w-28 text-right text-xs text-muted-foreground">{STAGE_LABELS[t.stage]}</span>
+      <span className="text-xs text-muted-foreground sm:w-28 sm:text-right">
+        {STAGE_LABELS[t.stage]}
+      </span>
     </li>
   );
 }

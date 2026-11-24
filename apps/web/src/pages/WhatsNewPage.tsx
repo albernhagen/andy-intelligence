@@ -133,16 +133,6 @@ function Status({ whatsNew, projectId }: { whatsNew: WhatsNew; projectId: string
       )}
       {open.length > 0 && (
         <table className="w-full text-sm">
-          <thead className="text-xs text-muted-foreground">
-            <tr className="text-left">
-              <th className="pr-4 font-normal">Epic</th>
-              <th className="pr-3 text-right font-normal">Done</th>
-              <th className="pr-3 text-right font-normal">In review</th>
-              <th className="pr-3 text-right font-normal">In progress</th>
-              <th className="pr-3 text-right font-normal">Not started</th>
-              <th className="font-normal" />
-            </tr>
-          </thead>
           <tbody className="tabular-nums">
             {open.map((m) => (
               <MilestoneRow key={m.key} milestone={m} projectId={projectId} />
@@ -174,16 +164,31 @@ function MilestoneRow({
   milestone: WhatsNewMilestone;
   projectId: string;
 }) {
+  const total = m.done + m.inReview + m.inProgress + m.notStarted;
   return (
-    <tr className="h-8">
-      <td className="pr-4">
+    <tr className="align-top">
+      <td className="py-1.5 pr-2">
         <TicketLink projectId={projectId} ticketKey={m.key} title={m.title} />
+        <div className="mt-1 flex items-center gap-2 text-xs text-muted-foreground">
+          <span
+            role="progressbar"
+            aria-label={`${m.done} of ${total} done`}
+            aria-valuemin={0}
+            aria-valuemax={total}
+            aria-valuenow={m.done}
+            className="h-1 w-16 shrink-0 overflow-hidden rounded-full bg-muted"
+          >
+            <span
+              className="block h-full bg-success"
+              style={{ width: `${total ? Math.round((m.done / total) * 100) : 0}%` }}
+            />
+          </span>
+          {m.done} of {total} done · {m.inReview} in review · {m.inProgress} in progress
+        </div>
       </td>
-      <td className="pr-3 text-right">{m.done}</td>
-      <td className="pr-3 text-right">{m.inReview}</td>
-      <td className="pr-3 text-right">{m.inProgress}</td>
-      <td className="pr-3 text-right">{m.notStarted}</td>
-      <td>{m.needsYou > 0 && <Badge variant="attention">{m.needsYou} need you</Badge>}</td>
+      <td className="py-1.5 text-right">
+        {m.needsYou > 0 && <Badge variant="attention">{m.needsYou} need you</Badge>}
+      </td>
     </tr>
   );
 }

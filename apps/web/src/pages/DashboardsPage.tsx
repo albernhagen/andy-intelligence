@@ -93,7 +93,7 @@ export function DashboardsPage() {
 
   return (
     <section className="space-y-4">
-      <PageHeader title="Dashboards" className="mb-0">
+      <PageHeader title="Dashboards">
         <Segmented
           label="Weeks"
           value={weeks}
