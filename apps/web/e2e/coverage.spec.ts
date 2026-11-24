@@ -30,7 +30,7 @@ async function open(page: Page, screen: Screen) {
   if (screen.name === "agent-task") {
     // The run's id is random, so open it from its ticket's panel.
     await page.getByRole("link", { name: "Agent task · refine" }).click();
-    await expect(page.getByRole("heading", { name: "Agent task · refine" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Agent task · Refine" })).toBeVisible();
   }
   await expect(page.getByText(screen.ready).first()).toBeVisible();
   await expectShellLoaded(page);

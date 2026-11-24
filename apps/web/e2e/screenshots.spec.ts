@@ -121,8 +121,8 @@ test("agent task page from the story panel", async ({ page }) => {
   await page.clock.setFixedTime(SEED_NOW);
   await open(page, "/p/ai/t/AI-3", "Waiting for you: 1 question");
   await page.getByRole("link", { name: "Agent task · refine" }).click();
-  await expect(page.getByRole("heading", { name: "Agent task · refine" })).toBeVisible();
-  await expect(page.getByRole("link", { name: /^AI-3: / })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Agent task · Refine" })).toBeVisible();
+  await expect(page.getByRole("link", { name: /^AI-3: / }).first()).toBeVisible();
   await expect(page).toHaveScreenshot("agent-task-page.png");
 });
 
