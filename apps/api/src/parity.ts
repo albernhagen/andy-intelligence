@@ -308,6 +308,13 @@ export const PARITY: readonly ParityEntry[] = [
     tools: [],
     oneSide: "GitHub's manifest flow needs a browser.",
   },
+  {
+    action: "Merge a session PR by the merge mode",
+    routes: [],
+    tools: ["merge_pr"],
+    oneSide:
+      "For coordinator sessions (AI-220, ADR-0124); Andy merges in GitHub, which shows the same PR.",
+  },
   // ── Open gaps, each with its ticket ─────────────────────────────────────────
   {
     action: "Revoke a runner",

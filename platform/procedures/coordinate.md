@@ -47,7 +47,7 @@ Ticket first (under its epic, with spec and criteria); the brief adds what it ca
 
 ## 4. Merging
 
-- **One PR at a time.** After each merge the remaining PRs merge the default branch and rerun before merging. Two green PRs can break `main` together.
+- **Merge only through MCP `merge_pr`** (§7), never with your own code-host token or a merge button. **One PR at a time.** After each merge the remaining PRs merge the default branch and rerun before merging. Two green PRs can break `main` together.
 - After every merge check the default branch's own checks; red comes first.
 - State hand-applied changes (infrastructure, a deploy) and their expected result before the merge.
 
@@ -60,9 +60,13 @@ Ticket first (under its epic, with spec and criteria); the brief adds what it ca
 
 Hand over between batches, never during one. Write a log entry: what merged, what is open and why, questions waiting on the owner, the next batch. The next coordinator starts from it, the milestone map and this procedure; one per milestone, or sooner once your context is summarized.
 
-## 7. Merging PRs yourself
+## 7. Merging PRs yourself: only through `merge_pr`
 
-Only where the owner decided it in a decision record (here ADR-0120, runbook `coordinating-sessions.md` §5). Always required: every check green on the head commit; both review agents posted a verdict on that head with no open blocker, should-fix, high or critical finding (a neutral check does not count: read a docs-only PR's whole diff yourself and record it; a fix clears a finding, a reply does not); no accepted-label override; the default branch merged in and rerun. The owner keeps what the record lists: what judges a PR (CI, reviews, baseline); a change to who merges or to your own rules; a PR that only takes effect when the owner acts (infrastructure to apply, a secret, an external account); and anything with a finding open or that you are unsure of. Call those ready only when synced, green and review-clean. Never merge a change to your own authority. Squash, one at a time (§4); record each merge (PR, ticket, who, verdicts) in the digest.
+Never merge any other way (ADR-0124). MCP `merge_pr` (project, repo, PR number) reads the code host's facts, applies the merge mode and either squash-merges with the App's identity at the judged head or answers `wait` with every reason (details: runbook `coordinating-sessions.md` §5).
+
+- `wait`: fix what the reasons name and call again; kept kinds and accepted labels are the owner's; call those ready only when synced, green and review-clean. Docs-only PRs wait for the owner.
+- No queue or lock (AI-110: M5.18: Merge queue per repo): one call at a time; a moved head or default branch doesn't merge.
+- A refusal or the cap (30 calls per project per hour) is never a reason to merge by hand. Record each merge in the digest.
 
 ## 8. Asking the owner
 

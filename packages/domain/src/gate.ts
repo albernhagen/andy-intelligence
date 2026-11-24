@@ -220,7 +220,11 @@ const hostPasses = (c: HeadCheck) =>
 /** A review agent that errored reports `neutral` for Andy to decide (ADR-0025): not a pass. */
 const reviewPasses = (c: HeadCheck) => c.status === "completed" && c.conclusion === "success";
 
-function assessChecks(required: RequiredCheck[], checks: Listing<HeadCheck>) {
+/**
+ * The checks part of the gate: every required check and both review checks passed on the head,
+ * from the trusted reporter. Exported for MCP `merge_pr` (AI-220), which judges session PRs.
+ */
+export function assessChecks(required: RequiredCheck[], checks: Listing<HeadCheck>) {
   const reasons: GateReason[] = [];
   if (!checks.complete) reasons.push("checks_incomplete");
   if (required.length === 0) reasons.push("no_required_checks");
