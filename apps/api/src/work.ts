@@ -34,6 +34,8 @@ export const WorkListBody = z.object({
     blocked: Count,
     "in-review": Count,
   }),
+  /** The Needs-you chip: the header's tickets for the same projects, and its named parts (AI-347). */
+  needsYou: z.object({ tickets: Count, stale: Count, toPickWorker: Count }),
   projects: z.array(
     z.object({
       id: z.string(),

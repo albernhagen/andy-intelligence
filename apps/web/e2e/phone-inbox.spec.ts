@@ -10,7 +10,7 @@ test.use({ viewport: { width: 390, height: 844 }, hasTouch: true });
 test("phone inbox: busy project", async ({ page }) => {
   await page.goto("/p/ops/inbox");
   await expect(page.getByText("Delete the old bucket too?").first()).toBeVisible();
-  await expect(page.getByRole("link", { name: "Needs you 6" })).toBeVisible();
+  await expect(page.getByRole("link", { name: "Needs you 5" })).toBeVisible();
   const overflow = await page.evaluate(() => {
     const main = document.querySelector("main")!;
     return main.scrollWidth - main.clientWidth;

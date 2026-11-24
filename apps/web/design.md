@@ -64,7 +64,7 @@ The marker set: [`design-status-markers.md`](design-status-markers.md).
 ## Copy
 
 - Sentence case everywhere: "New ticket", "All projects", "Add project".
-- "Needs you" in the UI for items waiting on the viewer; "Needs attention" is the ticket fact (docs, API). The header counts things to answer; the work chip counts tickets: "Needs you · 4 tickets" (AI-326).
+- "Needs you" in the UI for items waiting on the viewer; "Needs attention" is the ticket fact (docs, API). Every Needs-you count is tickets, one per inbox card however many questions it holds: header, picker, inbox headings and the work chip agree for the same scope. The chip names its extra parts: "Needs you · 4 tickets · 1 stale · 2 to pick a worker" (AI-347).
 - Never a bare ID in prose or links: "AI-26: Design source and app shell".
 - Say "agent task", never "run".
 - Buttons are verbs. Empty states say what's missing: "Nothing needs you."

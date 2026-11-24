@@ -1,6 +1,7 @@
 import { InMemoryWorkTracker, type NewTicket, type Run } from "@andy/contracts";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { DomainError, RECENT_EVENTS, TicketService, type RunCanceller } from "./tickets";
+import { waitingCounts } from "./inbox-order";
 
 const readyStory: NewTicket = {
   type: "feature",
@@ -342,7 +343,19 @@ describe("TicketService", () => {
         ticketsByStage: expect.objectContaining({ backlog: 0 }),
       }),
     ]);
-    expect(overview.needsYou).toEqual({ questions: 1, tickets: 1 });
+    expect(overview.needsYou).toEqual({ tickets: 1, stale: 0 });
+  });
+
+  it("GivenADoneTicketWithAnOpenQuestionAndNoFlag_WhenTheInboxIsCounted_ThenItIsStale", async () => {
+    const t = await service.create(projectId, readyStory, "andy");
+    await service.move(projectId, t.id, "done", "andy", { force: true, reason: "shipped" });
+    // Written straight to the tracker, so nothing sets the flag (AI-347 review).
+    await tracker.askQuestion(projectId, t.id, { text: "Still needed?" }, "agent:r1");
+
+    const inbox = await service.needsYou();
+    expect(inbox.tickets.map((x) => x.id)).toEqual([t.id]);
+    expect(waitingCounts(inbox)).toMatchObject({ total: 1, stale: 1 });
+    expect((await service.overview()).needsYou).toEqual({ tickets: 1, stale: 1 });
   });
 
   describe("cancel and archive", () => {
@@ -591,7 +604,7 @@ describe("TicketService", () => {
       expect(inbox).toEqual({ questions: [], tickets: [] });
       const overview = await service.overview();
       expect(overview.projects[0]?.ticketsByStage).toMatchObject({ backlog: 1, done: 0 });
-      expect(overview.needsYou).toEqual({ questions: 0, tickets: 0 });
+      expect(overview.needsYou).toEqual({ tickets: 0, stale: 0 });
     });
   });
 

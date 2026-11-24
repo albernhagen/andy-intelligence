@@ -87,6 +87,25 @@ describe("board work views", () => {
     expect(chip(/^In review 1$/)).toBeTruthy();
   });
 
+  it("GivenAStaleTicketAndAWorkerToPick_WhenTheBoardLoads_ThenTheChipNamesThemAndMatchesTheHeader", async () => {
+    const harness = await seeded();
+    const { service } = harness;
+    const [, , , asked, , , done] = await harness.tracker.listTickets("ai");
+    // AI-4 gets a second question (still one ticket); AI-7 is Done with one (stale); AI-8 waits
+    // only for a worker to be picked (AI-347).
+    await service.ask("ai", asked!.id, { text: "And when?" }, "andy");
+    await service.ask("ai", done!.id, { text: "Still needed?" }, "andy");
+    // Every seeded ticket picked its worker, so only the new one follows the default.
+    await harness.tracker.updateProject("ai", { defaultWorker: "ask" });
+    await service.create("ai", { title: "Who builds it?" }, "andy");
+    await harness.queryClient.invalidateQueries();
+
+    await waitFor(() =>
+      expect(chip(/^Needs you · 2 tickets · 1 stale · 1 to pick a worker$/)).toBeTruthy(),
+    );
+    await waitFor(() => expect(screen.getByRole("link", { name: "Needs you 2" })).toBeTruthy());
+  });
+
   it("GivenAChip_WhenClicked_ThenOnlyItsTicketsShowAndTheUrlNamesIt", async () => {
     const harness = await seeded();
 

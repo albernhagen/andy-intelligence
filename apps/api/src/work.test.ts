@@ -17,6 +17,7 @@ const verifier: TokenVerifier = {
 type Body = {
   view: string;
   counts: Record<string, number>;
+  needsYou: { tickets: number; stale: number; toPickWorker: number };
   truncated: boolean;
   projects: { key: string; count: number; tickets: { key: string; blockers: string[] }[] }[];
 };
@@ -71,6 +72,28 @@ describe("work across projects (AI-198)", () => {
     ]);
     expect(body.counts["needs-me"]).toBe(2);
     expect(body.truncated).toBe(false);
+  });
+
+  it("GivenTwoQuestionsAStaleTicketAndAWorkerToPick_WhenCounted_ThenTheChipTheInboxAndStatusAgree", async () => {
+    // AI-347: OPS-2 is Done with an open question (stale); AI-1 gets a second question; PK-1 only
+    // waits for a worker to be picked, so the chip names it but the header doesn't count it.
+    const [asked] = await tracker.listTickets("ai");
+    await tracker.askQuestion("ai", asked!.id, { text: "And which colour?" }, "andy");
+    const [, done] = await tracker.listTickets("ops");
+    await tracker.askQuestion("ops", done!.id, { text: "Still needed?" }, "andy");
+    const pick = await tracker.createProject({ name: "Pick", key: "PK" });
+    await tracker.updateProject(pick.id, { defaultWorker: "ask" });
+    await tracker.createTicket(pick.id, { title: "Who builds it?" }, "andy");
+
+    const { body } = await get("/api/work?view=needs-me");
+    const work = await call("list_work", { view: "needs-me" });
+    const inbox = await call("list_needs_me");
+    const status = await call("status");
+
+    expect(body.needsYou).toEqual({ tickets: 3, stale: 1, toPickWorker: 1 });
+    expect(work.data.needsYou).toEqual(body.needsYou);
+    expect(inbox.data.counts).toEqual({ tickets: 3, stale: 1, byProject: { ai: 1, ops: 2 } });
+    expect(status.data.needsYou).toMatchObject({ tickets: 3, stale: 1 });
   });
 
   it("GivenAProjectFilter_WhenBlockedIsRead_ThenOnlyThatProjectsBlockedTicketsComeBack", async () => {
