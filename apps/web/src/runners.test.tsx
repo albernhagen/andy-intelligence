@@ -4,6 +4,13 @@ import { renderApp } from "@/test/harness";
 
 /** AI-79 (ADR-0089 part 3): Settings → Local runners. */
 
+// Radix Checkbox measures its hidden input; jsdom has no ResizeObserver.
+globalThis.ResizeObserver ??= class {
+  observe() {}
+  unobserve() {}
+  disconnect() {}
+};
+
 describe("runners page", () => {
   it("GivenAProject_WhenAndyMintsARunner_ThenTheSecretShowsOnceAndOnlyItsHashIsStored", async () => {
     const h = renderApp("/settings/runners");

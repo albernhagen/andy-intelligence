@@ -13,8 +13,12 @@ import type {
 } from "@andy/contracts";
 import { DoraPanel } from "@/components/DoraPanel";
 import { SpendPanel } from "@/components/spend/SpendPanel";
-import { Loading, QueryError } from "@/components/Status";
+import { PageHeader } from "@/components/PageHeader";
+import { CardsSkeleton } from "@/components/PageSkeleton";
+import { QueryError } from "@/components/Status";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { EmptyState } from "@/components/ui/empty-state";
 import { Segmented } from "@/components/ui/segmented";
 import {
   chartColor,
@@ -26,6 +30,7 @@ import {
   type ChartConfig,
 } from "@/components/ui/chart";
 import { unwrap, useApi } from "@/lib/api";
+import { durationText } from "@andy/domain";
 
 /**
  * Dashboards (AI-117, ADR-0045) under `/p/<project>/dashboards` and `/all/dashboards`: delivery
@@ -88,17 +93,16 @@ export function DashboardsPage() {
 
   return (
     <section className="space-y-4">
-      <header className="flex flex-wrap items-center gap-2">
-        <h2 className="text-lg font-medium">Dashboards</h2>
+      <PageHeader title="Dashboards">
         <Segmented
           label="Weeks"
           value={weeks}
           options={WINDOWS.map((w) => ({ value: w, label: `${w} weeks` }))}
           onChange={setWeeks}
         />
-      </header>
+      </PageHeader>
       {dashboard.isPending ? (
-        <Loading />
+        <CardsSkeleton />
       ) : dashboard.isError ? (
         <QueryError
           error={dashboard.error}
@@ -106,7 +110,7 @@ export function DashboardsPage() {
           onRetry={() => void dashboard.refetch()}
         />
       ) : (
-        <DashboardBody data={dashboard.data} />
+        <DashboardBody data={dashboard.data} weeks={weeks} projectId={projectId} />
       )}
       {projectId && <DoraPanel projectId={projectId} />}
       <SpendPanel projectId={projectId} />
@@ -114,13 +118,33 @@ export function DashboardsPage() {
   );
 }
 
-function DashboardBody({ data }: { data: ProjectDashboard | Dashboard }) {
+function DashboardBody({
+  data,
+  weeks,
+  projectId,
+}: {
+  data: ProjectDashboard | Dashboard;
+  weeks: number;
+  projectId: string | undefined;
+}) {
   const projects = "projects" in data ? data.projects : null;
   if (isEmpty(data)) {
     return (
-      <p className="text-muted-foreground">
-        No tickets or agent tasks in these weeks. Charts appear once there are some.
-      </p>
+      <EmptyState
+        title="No tickets or agent tasks in these weeks."
+        description="Charts appear once there are some; nothing is drawn on empty axes."
+        action={
+          <Button asChild className="h-11 sm:h-9">
+            {projectId ? (
+              <Link to="/p/$projectId" params={{ projectId }}>
+                Open the board
+              </Link>
+            ) : (
+              <Link to="/all/board">Open the board</Link>
+            )}
+          </Button>
+        }
+      />
     );
   }
   const partial = new Set(data.partial);
@@ -132,6 +156,7 @@ function DashboardBody({ data }: { data: ProjectDashboard | Dashboard }) {
           counted: a read cap was reached.
         </p>
       )}
+      <StatTiles weeks={data.weeks} span={weeks} />
       <div className="grid gap-4 lg:grid-cols-2">
         <TicketsByStage weeks={data.weeks} partial={partial} />
         <LeadTime weeks={data.weeks} partial={partial} />
@@ -161,13 +186,20 @@ function ChartCard(props: {
 }) {
   const isPartial = props.figures.some((f) => props.partial.has(f));
   return (
-    <section aria-label={props.title} className="space-y-2 rounded-md border border-border p-3">
-      <h3 className="flex items-center gap-2 text-sm font-medium">
+    <section
+      aria-label={props.title}
+      className="min-w-0 space-y-2 rounded-lg border border-border bg-raised p-3"
+    >
+      <h3 className="flex items-center gap-2 text-sm font-semibold">
         {props.title}
         {isPartial && <Badge variant="attention">Partial: a read cap was reached</Badge>}
       </h3>
       {props.empty ? (
-        <p className="text-sm text-muted-foreground">{props.empty}</p>
+        // No axes for an empty figure: what is missing, in the chart's place.
+        <div className="flex h-48 flex-col items-center justify-center gap-1 text-center">
+          <p className="font-medium">Nothing to chart yet</p>
+          <p className="max-w-xs text-sm text-muted-foreground">{props.empty}</p>
+        </div>
       ) : (
         props.children
       )}
@@ -346,9 +378,12 @@ function CostCharts({ weeks, partial }: { weeks: DashboardWeek[]; partial: Set<D
   const total = weeks.reduce((n, w) => n + w.cost.estimatedCostUsd, 0);
 
   return (
-    <section aria-label="Cost" className="space-y-2">
+    <section
+      aria-label="Cost"
+      className="min-w-0 space-y-2 rounded-lg border border-border bg-raised p-3"
+    >
       <header className="flex flex-wrap items-center gap-2">
-        <h3 className="text-sm font-medium">Cost, tokens and quota</h3>
+        <h3 className="text-sm font-semibold">Cost, tokens and quota</h3>
         <Segmented
           label="Split by"
           value={by}
@@ -362,9 +397,12 @@ function CostCharts({ weeks, partial }: { weeks: DashboardWeek[]; partial: Set<D
       </header>
       {names.length === 0 ? (
         // AI-331: one line, not a card per metric with nothing in it.
-        <p className="text-sm text-muted-foreground">
-          No agent tasks finished in these weeks, so no cost, tokens or quota to chart.
-        </p>
+        <div className="flex min-h-32 flex-col items-center justify-center gap-1 text-center">
+          <p className="font-medium">Nothing to chart yet</p>
+          <p className="max-w-sm text-sm text-muted-foreground">
+            No agent tasks finished in these weeks, so no cost, tokens or quota to chart.
+          </p>
+        </div>
       ) : (
         <div className="grid gap-4 lg:grid-cols-3">
           {METRICS.map((m) => {
@@ -397,6 +435,55 @@ function CostCharts({ weeks, partial }: { weeks: DashboardWeek[]; partial: Set<D
         </div>
       )}
     </section>
+  );
+}
+
+/**
+ * The window's four headline numbers (AI-378), above the charts: lead time, CI green on first
+ * try, rework and blockers, cost. "—" with the reason when there is nothing to measure yet.
+ */
+export function StatTiles({ weeks, span }: { weeks: DashboardWeek[]; span: number }) {
+  const latest = [...weeks].reverse().find((w) => w.leadTimeHours.count > 0);
+  const green = weeks.reduce((n, w) => n + w.ciGreenFirstTry.green, 0);
+  const known = weeks.reduce((n, w) => n + w.ciGreenFirstTry.known, 0);
+  const rework = weeks.reduce((n, w) => n + w.reworks + w.reviewBlockers, 0);
+  const runs = weeks.reduce((n, w) => n + w.cost.runs, 0);
+  const unknown = weeks.reduce((n, w) => n + w.cost.unknownCostRuns, 0);
+  const cost = weeks.reduce((n, w) => n + w.cost.estimatedCostUsd, 0);
+  const median = latest?.leadTimeHours.median ?? null;
+  const tiles: { title: string; value: string; note: string }[] = [
+    {
+      // The read gives medians per week, not per ticket, so the window has no true median:
+      // the tile says which week it shows.
+      title: "Lead time, latest week",
+      value: median === null ? "—" : durationText(Math.round(median * 60)),
+      note:
+        median === null
+          ? "No ticket reached Done yet"
+          : `median, Ready to Done, week of ${weekLabel(latest!.start)}`,
+    },
+    {
+      title: "CI green on first try",
+      value: known ? `${Math.round((green / known) * 100)}%` : "—",
+      note: known ? `${green} of ${known} PRs` : "No closed agent PRs yet",
+    },
+    { title: "Rework and review blockers", value: String(rework), note: `in these ${span} weeks` },
+    {
+      title: "Cost, estimate",
+      value: usd(cost),
+      note: `${runs} agent task${runs === 1 ? "" : "s"}${unknown ? ` · ${unknown} with unknown cost` : ""}`,
+    },
+  ];
+  return (
+    <ul aria-label="Headline numbers" className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+      {tiles.map((t) => (
+        <li key={t.title} className="space-y-1 rounded-lg border border-border bg-raised p-3">
+          <p className="text-muted-foreground">{t.title}</p>
+          <p className="text-lg font-semibold tabular-nums">{t.value}</p>
+          <p className="text-xs text-muted-foreground">{t.note}</p>
+        </li>
+      ))}
+    </ul>
   );
 }
 
@@ -439,51 +526,54 @@ function ExpensiveRuns({ runs, partial }: { runs: DashboardRun[]; partial: Set<D
       partial={partial}
       empty={runs.length ? null : "No agent tasks with a known cost in these weeks."}
     >
-      <table className="w-full text-sm">
-        <thead className="text-xs text-muted-foreground">
-          <tr className="h-8 text-left">
-            <th className="font-normal">Agent task</th>
-            <th className="font-normal">Ticket</th>
-            <th className="text-right font-normal">Cost</th>
-            <th className="text-right font-normal">Ended</th>
-          </tr>
-        </thead>
-        <tbody>
-          {runs.map((r) => (
-            <tr key={r.id} className="h-8 border-t border-border">
-              <td>
-                <Link
-                  to="/p/$projectId/runs/$runId"
-                  params={{ projectId: r.projectId, runId: r.id }}
-                  className="underline-offset-2 hover:underline"
-                >
-                  Agent task · {r.step}
-                </Link>
-              </td>
-              <td className="tabular-nums">
-                {r.ticketKey ? (
+      {/* A phone scrolls the table in its own box, not the page (design.md "Phone"). */}
+      <div className="relative overflow-x-auto">
+        <table className="w-full text-sm">
+          <thead className="text-xs text-muted-foreground">
+            <tr className="h-8 text-left">
+              <th className="font-normal">Agent task</th>
+              <th className="font-normal">Ticket</th>
+              <th className="text-right font-normal">Cost</th>
+              <th className="text-right font-normal">Ended</th>
+            </tr>
+          </thead>
+          <tbody>
+            {runs.map((r) => (
+              <tr key={r.id} className="h-8 border-t border-border">
+                <td>
                   <Link
-                    to="/p/$projectId/t/$ticketRef"
-                    params={{ projectId: r.projectId, ticketRef: r.ticketKey }}
+                    to="/p/$projectId/runs/$runId"
+                    params={{ projectId: r.projectId, runId: r.id }}
                     className="underline-offset-2 hover:underline"
                   >
-                    {r.ticketKey}
+                    Agent task · {r.step}
                   </Link>
-                ) : (
-                  <span className="text-muted-foreground">No ticket</span>
-                )}
-              </td>
-              <td className="text-right tabular-nums">
-                {usd(r.costUsd)}
-                {r.costIsEstimate ? " (estimate)" : ""}
-              </td>
-              <td className="text-right text-xs text-muted-foreground tabular-nums">
-                {weekLabel(r.endedAt)}
-              </td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
+                </td>
+                <td className="tabular-nums">
+                  {r.ticketKey ? (
+                    <Link
+                      to="/p/$projectId/t/$ticketRef"
+                      params={{ projectId: r.projectId, ticketRef: r.ticketKey }}
+                      className="underline-offset-2 hover:underline"
+                    >
+                      {r.ticketKey}
+                    </Link>
+                  ) : (
+                    <span className="text-muted-foreground">No ticket</span>
+                  )}
+                </td>
+                <td className="text-right tabular-nums">
+                  {usd(r.costUsd)}
+                  {r.costIsEstimate ? " (estimate)" : ""}
+                </td>
+                <td className="text-right text-xs text-muted-foreground tabular-nums">
+                  {weekLabel(r.endedAt)}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
     </ChartCard>
   );
 }
@@ -491,50 +581,57 @@ function ExpensiveRuns({ runs, partial }: { runs: DashboardRun[]; partial: Set<D
 /** All projects: each project's window totals, linking to its own dashboard. */
 function ProjectBreakdown({ projects }: { projects: ProjectDashboard[] }) {
   return (
-    <section aria-label="By project" className="space-y-2 rounded-md border border-border p-3">
-      <h3 className="text-sm font-medium">By project</h3>
-      <table className="w-full text-sm">
-        <thead className="text-xs text-muted-foreground">
-          <tr className="h-8 text-left">
-            <th className="font-normal">Project</th>
-            <th className="text-right font-normal">Done</th>
-            <th className="text-right font-normal">Reworks</th>
-            <th className="text-right font-normal">Agent tasks</th>
-            <th className="text-right font-normal">Tokens</th>
-            <th className="text-right font-normal">Cost</th>
-          </tr>
-        </thead>
-        <tbody>
-          {projects.map((p) => {
-            const sum = (f: (w: DashboardWeek) => number) => p.weeks.reduce((n, w) => n + f(w), 0);
-            return (
-              <tr key={p.projectId} className="h-8 border-t border-border tabular-nums">
-                <td>
-                  <Link
-                    to="/p/$projectId/dashboards"
-                    params={{ projectId: p.projectId }}
-                    className="underline-offset-2 hover:underline"
-                  >
-                    {p.key}
-                  </Link>
-                  {p.partial.length > 0 && (
-                    <Badge variant="attention" className="ml-2">
-                      Partial
-                    </Badge>
-                  )}
-                </td>
-                <td className="text-right">{p.weeks.at(-1)?.ticketsByStage.done ?? 0}</td>
-                <td className="text-right">{sum((w) => w.reworks)}</td>
-                <td className="text-right">{sum((w) => w.cost.runs)}</td>
-                <td className="text-right">
-                  {compact.format(sum((w) => w.cost.tokensIn + w.cost.tokensOut))}
-                </td>
-                <td className="text-right">{usd(sum((w) => w.cost.estimatedCostUsd))}</td>
-              </tr>
-            );
-          })}
-        </tbody>
-      </table>
+    <section
+      aria-label="By project"
+      className="min-w-0 space-y-2 rounded-lg border border-border bg-raised p-3"
+    >
+      <h3 className="text-sm font-semibold">By project</h3>
+      {/* A phone scrolls the table in its own box, not the page (design.md "Phone"). */}
+      <div className="relative overflow-x-auto">
+        <table className="w-full text-sm">
+          <thead className="text-xs text-muted-foreground">
+            <tr className="h-8 text-left">
+              <th className="font-normal">Project</th>
+              <th className="text-right font-normal">Done</th>
+              <th className="text-right font-normal">Reworks</th>
+              <th className="text-right font-normal">Agent tasks</th>
+              <th className="text-right font-normal">Tokens</th>
+              <th className="text-right font-normal">Cost</th>
+            </tr>
+          </thead>
+          <tbody>
+            {projects.map((p) => {
+              const sum = (f: (w: DashboardWeek) => number) =>
+                p.weeks.reduce((n, w) => n + f(w), 0);
+              return (
+                <tr key={p.projectId} className="h-8 border-t border-border tabular-nums">
+                  <td>
+                    <Link
+                      to="/p/$projectId/dashboards"
+                      params={{ projectId: p.projectId }}
+                      className="underline-offset-2 hover:underline"
+                    >
+                      {p.key}
+                    </Link>
+                    {p.partial.length > 0 && (
+                      <Badge variant="attention" className="ml-2">
+                        Partial
+                      </Badge>
+                    )}
+                  </td>
+                  <td className="text-right">{p.weeks.at(-1)?.ticketsByStage.done ?? 0}</td>
+                  <td className="text-right">{sum((w) => w.reworks)}</td>
+                  <td className="text-right">{sum((w) => w.cost.runs)}</td>
+                  <td className="text-right">
+                    {compact.format(sum((w) => w.cost.tokensIn + w.cost.tokensOut))}
+                  </td>
+                  <td className="text-right">{usd(sum((w) => w.cost.estimatedCostUsd))}</td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
     </section>
   );
 }

@@ -136,11 +136,9 @@ describe("milestone status on the roadmap (AI-311)", () => {
     const { harness } = await seeded();
     await harness.router.navigate({ to: "/p/ai/roadmap" });
 
-    await harness.user.click(await screen.findByRole("button", { name: /^M4: Epics/ }, PAGE_LOAD));
-    await harness.user.selectOptions(
-      screen.getByRole("combobox", { name: "Status of M4: Epics" }),
-      "Parked",
-    );
+    // AI-378: the status pick sits in the row itself.
+    const status = await screen.findByRole("group", { name: "Status of M4: Epics" }, PAGE_LOAD);
+    await harness.user.click(within(status).getByRole("button", { name: "Parked" }));
 
     await waitFor(async () =>
       expect((await harness.milestones.get("ai", "m4"))?.status).toBe("parked"),
