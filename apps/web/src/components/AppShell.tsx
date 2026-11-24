@@ -305,7 +305,7 @@ function PhoneNav(props: { links: NavItem[]; settings: NavItem[]; headerEnd: Rea
   );
 }
 
-/** Desktop: one menu for every settings page and Sign out, so the header stays short (AI-335). */
+/** Desktop: one menu for every settings page, the theme and Sign out, at the sidebar's foot (AI-370). */
 function SettingsMenu({ links, headerEnd }: { links: NavItem[]; headerEnd: ReactNode }) {
   const navigate = useNavigate();
   const current = links.some((l) => l.current);
@@ -321,7 +321,7 @@ function SettingsMenu({ links, headerEnd }: { links: NavItem[]; headerEnd: React
           <Settings aria-hidden className="size-4" />
         </Button>
       </DropdownMenuTrigger>
-      <DropdownMenuContent align="end">
+      <DropdownMenuContent side="top" align="start">
         {links.map((l) => (
           <DropdownMenuItem
             key={l.label}

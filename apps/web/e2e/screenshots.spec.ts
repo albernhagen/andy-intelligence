@@ -130,7 +130,8 @@ test("agent task page from the story panel", async ({ page }) => {
 test("what's new: status, then changes by day, one opened", async ({ page }) => {
   await page.clock.setFixedTime(SEED_NOW);
   await open(page, "/p/ops/whats-new", "Backups now land in a second region");
-  await page.getByText("Backups now land in a second region").click();
+  // The row's start: its centre can be the PR link, which leaves the page.
+  await page.getByText("Backups now land in a second region").click({ position: { x: 8, y: 8 } });
   await expect(page.getByText("A nightly job copies each snapshot")).toBeVisible();
   await expect(page).toHaveScreenshot("whats-new.png", { fullPage: true });
 });
