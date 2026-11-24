@@ -2,6 +2,10 @@ import { describe, expect, it } from "vitest";
 import { screen, within } from "@testing-library/react";
 import { renderApp } from "@/test/harness";
 import { LAYER_ORDER_LINE } from "@/lib/route-layers";
+import { stubResizeObserver } from "@/test/resize-observer";
+
+// Models renders Radix Switch, which needs ResizeObserver (AI-376).
+stubResizeObserver();
 
 /** AI-282: M9: the layer that set a ticket's worker, tier and route, and the settings line. */
 describe("routing layers", () => {
