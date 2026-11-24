@@ -14,7 +14,7 @@ export function mergeQueueStoreContract(name: string, make: () => Promise<MergeQ
       headSha: "a".repeat(40),
       syncs: 0,
       syncRequestedSha: null,
-      headSince: null,
+      judgedSince: null,
     });
     const state = (repo: string, entries: MergeQueueEntry[], version: number): MergeQueueState => ({
       repo,

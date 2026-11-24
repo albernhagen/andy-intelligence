@@ -18,24 +18,27 @@ import type { MergeVerdict } from "./merge-verdict";
  * default branch:
  *
  * - **Order**: oldest clean first. A PR joins when it is clean or clean but behind, and keeps its
- *   place; only the first PR (the head) is ever merged.
- * - **Lease**: judging and merging the head happens under a lease on the repo's queue record,
- *   taken by compare-and-set, so it holds across API instances. A lease expires
- *   (`MERGE_QUEUE_LEASE_MS`), so a crashed holder can't block the repo; the next one takes it over.
+ *   place. The queue judges entries in order and stops at the first one that is in flight (clean,
+ *   or waiting on its checks); an entry parked on a sync it asked for is passed over until an
+ *   event about it arrives, so a sync that never comes can't block the repo.
+ * - **Lease**: judging and merging happens under a lease on the repo's queue record, taken by
+ *   compare-and-set, so it holds across API instances, and renewed just before each merge call
+ *   (a lost lease aborts the merge). A lease expires (`MERGE_QUEUE_LEASE_MS`), so a crashed
+ *   holder can't block the repo; the next one takes it over.
  * - **Sync, wait, merge**: a head behind the default branch gets one sync round per head (the
  *   existing paths: sync tasks for agent PRs, the re-sync workflow for the rest); the queue waits
  *   for the new head's checks and reviews, re-judges it, re-reads the base tip and merges pinned
  *   to the judged head. A head already up to date and clean merges with no extra round.
- * - **Drop**: failed checks, a cap, or a head that stops being clean leaves the queue; failed
- *   checks and caps go to Andy's Needs-you inbox with the reason.
+ * - **Drop**: failed checks, a cap, or a PR that stops being clean leaves the queue; failed checks
+ *   and caps flag its ticket (Andy's Needs-you inbox), a PR no longer clean gets a ticket comment.
  *
- * The queue moves on events (webhooks, `merge_pr` calls): no polling job. A head's hold cap is
- * checked on the next event in its repo.
+ * The queue moves on events (webhooks, `merge_pr` calls): no polling job. The hold cap is checked
+ * on the next event in its repo.
  */
 
 /** Sync rounds per PR while queued (ADR-0028); one more drops it with a Needs-you note. */
 export const MAX_SYNCS_PER_PR = 3;
-/** How long one PR may hold the head of the queue (ADR-0028) before it is dropped. */
+/** How long a PR may be judged without merging (ADR-0028) before it is dropped. */
 export const MAX_HEAD_HOLD_MS = 60 * 60_000;
 /** A lease covers one judge-and-merge; a holder gone longer than this is taken over. */
 export const MERGE_QUEUE_LEASE_MS = 90_000;
@@ -76,8 +79,11 @@ export interface QueueJudge {
   merge(repo: string, entry: MergeQueueEntry, headSha: string): Promise<QueueMergeResult>;
   /** Asks the existing path to merge the default branch into the PR. */
   requestSync(repo: string, entry: MergeQueueEntry, headSha: string): Promise<void>;
-  /** Puts the PR in Andy's Needs-you inbox with the reason. */
-  needsYou(repo: string, entry: MergeQueueEntry, reason: string): Promise<void>;
+  /**
+   * Records why the queue dropped the PR on its ticket; `flag` also puts it in Andy's Needs-you
+   * inbox (failed checks, caps), otherwise a comment only (no longer clean).
+   */
+  needsYou(repo: string, entry: MergeQueueEntry, reason: string, flag: boolean): Promise<void>;
 }
 
 export interface QueueOffer {
@@ -120,13 +126,19 @@ export function queueStateOf(
   if (verdict.verdict === "merge") return "merge";
   let failed = false;
   let pending = false;
+  let behind = false;
   for (const reason of verdict.reasons) {
-    if (reason === "behind_default_branch") continue;
+    if (reason === "behind_default_branch") {
+      behind = true;
+      continue;
+    }
     if (PENDING_VERDICT.includes(reason)) {
       pending = true;
       continue;
     }
     if (reason !== "gate_not_clean") return "ineligible";
+    // Not clean with no reason given: never read as clean.
+    if (gateReasons.length === 0) return "ineligible";
     for (const g of gateReasons) {
       if (g === "checks_failed") failed = true;
       else if ((PENDING_GATE as readonly string[]).includes(g)) pending = true;
@@ -135,12 +147,18 @@ export function queueStateOf(
   }
   if (failed) return "failed";
   if (pending) return "pending";
-  return "behind";
+  return behind ? "behind" : "ineligible";
 }
 
+/** After a step: `rescan` from the first entry (merged, dropped, base moved), `skip` to the next (parked on its sync), or `stop`. */
+type Then = "rescan" | "skip" | "stop";
 type Step =
-  | { kind: "remove"; outcome: QueueOutcome; next: boolean }
-  | { kind: "keep"; outcome: QueueOutcome; patch: Partial<MergeQueueEntry>; next: boolean };
+  | { kind: "remove"; outcome: QueueOutcome; then: Then }
+  | { kind: "keep"; outcome: QueueOutcome; patch: Partial<MergeQueueEntry>; then: Then };
+
+/** Parked: waiting on a sync it asked for, with no newer head seen. */
+const parked = (e: MergeQueueEntry) =>
+  e.syncRequestedSha !== null && e.syncRequestedSha === e.headSha;
 
 export class MergeQueue {
   private readonly judges = new Map<MergeQueueKind, QueueJudge>();
@@ -189,14 +207,14 @@ export class MergeQueue {
         headSha: offer.headSha,
         syncs: 0,
         syncRequestedSha: null,
-        headSince: null,
+        judgedSince: null,
       };
       return { next: { ...q, entries: [...q.entries, entry] }, result: "added" as const };
     });
     if (added === "full") {
       const reason = `the merge queue of ${key} is full (${MERGE_QUEUE_MAX_ENTRIES} PRs)`;
       log("WARNING", "merge queue drop", { ...fields, reason });
-      await this.notify(key, this.entryOf(offer), reason);
+      await this.notify(key, this.entryOf(offer), reason, true);
       return { result: "dropped", reason };
     }
     if (added === "added") log("INFO", "merge queue enqueue", fields);
@@ -210,59 +228,64 @@ export class MergeQueue {
     const q = await this.store.get(key);
     const position = q.entries.findIndex((e) => e.number === offer.number);
     if (position < 0) return { result: "dropped", reason: "left the queue" };
-    const reason =
-      mine?.reason ?? (position === 0 ? "the head is being judged elsewhere" : "waiting its turn");
+    const reason = mine?.reason ?? "waiting its turn";
     return { result: "queued", position: position + 1, reason };
   }
 
   /**
-   * Advances the queue for a webhook: when the default branch moved, when the event is about the
-   * head PR (its checks, a push, a close), or when the head is past its hold cap (so any event in
-   * the repo drops a stuck head). Other events cost one store read and no host reads.
+   * Advances the queue for a webhook: when the default branch moved, when the event is about a
+   * queued PR (its checks, a push, a close), or when a queued PR is past its hold cap (so any
+   * event in the repo drops a stuck one). Other events cost one store read and no host reads.
    */
   async advanceFor(repo: string, prNumbers: readonly number[], defaultBranchMoved: boolean) {
-    const head = (await this.store.get(repo)).entries[0];
-    if (!head) return [];
-    const stale =
-      head.headSince !== null &&
-      this.now().getTime() - Date.parse(head.headSince) > MAX_HEAD_HOLD_MS;
-    if (!defaultBranchMoved && !stale && !prNumbers.includes(head.number)) return [];
-    return this.advance(repo);
+    const { entries } = await this.store.get(repo);
+    if (entries.length === 0) return [];
+    const named = entries.some((e) => prNumbers.includes(e.number));
+    if (!defaultBranchMoved && !named && !entries.some((e) => this.stale(e))) return [];
+    return this.advance(repo, prNumbers);
   }
 
   /**
-   * Judges the head of the repo's queue under the lease, and merges, syncs, waits or drops it;
-   * after a merge or drop, the next head, up to `MAX_STEPS_PER_ADVANCE`. Another live holder
-   * means it returns at once (that holder carries on). Never throws: a failure is logged and the
-   * next event retries.
+   * Judges queued PRs in order under the lease, and merges, syncs, waits or drops each: after a
+   * merge or drop it starts again from the first; an entry parked on its sync is passed over
+   * unless `wake` names it or it is past its hold cap; the first entry in flight stops it. At most
+   * `MAX_STEPS_PER_ADVANCE` judgements. Another live holder means it returns at once (that holder
+   * carries on). Never throws: a failure is logged and the next event retries.
    */
-  async advance(repo: string): Promise<QueueOutcome[]> {
+  async advance(repo: string, wake: readonly number[] = []): Promise<QueueOutcome[]> {
     const key = repo.toLowerCase();
     const holder = this.newHolder();
     const outcomes: QueueOutcome[] = [];
+    const passed = new Set<number>();
     try {
       for (let i = 0; i < MAX_STEPS_PER_ADVANCE; i++) {
-        const head = await this.takeLease(key, holder);
-        if (!head) break;
+        const entry = await this.takeLease(
+          key,
+          holder,
+          (e) => !passed.has(e.number) && (!parked(e) || wake.includes(e.number) || this.stale(e)),
+        );
+        if (!entry) break;
         let step: Step;
         try {
-          step = await this.step(key, head);
+          step = await this.step(key, holder, entry);
         } catch (err) {
           log("ERROR", "merge queue step failed", {
             repo: key,
-            pr: head.number,
+            pr: entry.number,
             error: errorText(err),
           });
           step = {
             kind: "keep",
             patch: {},
-            next: false,
-            outcome: { number: head.number, outcome: "waiting", reason: "error" },
+            then: "stop",
+            outcome: { number: entry.number, outcome: "waiting", reason: "error" },
           };
         }
         outcomes.push(step.outcome);
-        await this.finish(key, holder, head.number, step);
-        if (!step.next) break;
+        await this.finish(key, holder, entry.number, step);
+        if (step.then === "stop") break;
+        if (step.then === "skip") passed.add(entry.number);
+        else passed.clear();
       }
     } catch (err) {
       log("ERROR", "merge queue advance failed", { repo: key, error: errorText(err) });
@@ -270,22 +293,35 @@ export class MergeQueue {
     return outcomes;
   }
 
-  /** The head entry with the lease now ours, or null (empty queue, or another live holder). */
-  private async takeLease(repo: string, holder: string): Promise<MergeQueueEntry | null> {
+  private stale(e: MergeQueueEntry): boolean {
+    return (
+      e.judgedSince !== null && this.now().getTime() - Date.parse(e.judgedSince) > MAX_HEAD_HOLD_MS
+    );
+  }
+
+  /** The first eligible entry with the lease now ours, or null (none, or another live holder). */
+  private async takeLease(
+    repo: string,
+    holder: string,
+    eligible: (e: MergeQueueEntry) => boolean,
+  ): Promise<MergeQueueEntry | null> {
     const now = this.now();
     type Taken =
-      { busy: string } | { head: MergeQueueEntry; takenOver: MergeQueueState["lease"] } | null;
+      { busy: string } | { entry: MergeQueueEntry; takenOver: MergeQueueState["lease"] } | null;
     const taken = await this.write<Taken>(repo, (q) => {
-      const first = q.entries[0];
-      if (!first) return { next: null, result: null };
+      const at = q.entries.findIndex(eligible);
+      if (at < 0) return { next: null, result: null };
       const lease = q.lease;
       const live = lease && lease.holder !== holder && Date.parse(lease.until) > now.getTime();
       if (live) return { next: null, result: { busy: lease.holder } };
-      const head = { ...first, headSince: first.headSince ?? now.toISOString() };
+      const found = q.entries[at]!;
+      const entry = { ...found, judgedSince: found.judgedSince ?? now.toISOString() };
+      const entries = [...q.entries];
+      entries[at] = entry;
       const until = new Date(now.getTime() + MERGE_QUEUE_LEASE_MS).toISOString();
       return {
-        next: { ...q, entries: [head, ...q.entries.slice(1)], lease: { holder, until } },
-        result: { head, takenOver: lease && lease.holder !== holder ? lease : null },
+        next: { ...q, entries, lease: { holder, until } },
+        result: { entry, takenOver: lease && lease.holder !== holder ? lease : null },
       };
     });
     if (!taken) return null;
@@ -296,12 +332,24 @@ export class MergeQueue {
     if (taken.takenOver) {
       log("WARNING", "merge queue lease takeover", {
         repo,
-        pr: taken.head.number,
+        pr: taken.entry.number,
         from: taken.takenOver.holder,
         expired: taken.takenOver.until,
       });
     }
-    return taken.head;
+    return taken.entry;
+  }
+
+  /**
+   * Extends our lease just before a merge call; false when another holder took it over (our step
+   * ran past the lease), so the merge is not made.
+   */
+  private async renewLease(repo: string, holder: string): Promise<boolean> {
+    const until = new Date(this.now().getTime() + MERGE_QUEUE_LEASE_MS).toISOString();
+    return this.write(repo, (q) => {
+      if (q.lease?.holder !== holder) return { next: null, result: false };
+      return { next: { ...q, lease: { holder, until } }, result: true };
+    });
   }
 
   /** Applies a step to the entry (if still queued) and releases our lease (if still ours). */
@@ -318,23 +366,28 @@ export class MergeQueue {
     });
   }
 
-  private async step(repo: string, head: MergeQueueEntry): Promise<Step> {
+  private async step(repo: string, holder: string, head: MergeQueueEntry): Promise<Step> {
     const fields = { repo, pr: head.number, kind: head.kind };
-    const wait = (reason: string, patch: Partial<MergeQueueEntry> = {}): Step => {
+    const wait = (
+      reason: string,
+      patch: Partial<MergeQueueEntry> = {},
+      then: Then = "stop",
+    ): Step => {
       log("INFO", "merge queue wait", { ...fields, reason });
       return {
         kind: "keep",
         patch,
-        next: false,
+        then,
         outcome: { number: head.number, outcome: "waiting", reason },
       };
     };
-    const drop = async (reason: string, needsYou: boolean): Promise<Step> => {
-      log(needsYou ? "WARNING" : "INFO", "merge queue drop", { ...fields, reason });
-      if (needsYou) await this.notify(repo, head, reason);
+    /** `note`: none (closed), a ticket comment (no longer clean), or a Needs-you flag. */
+    const drop = async (reason: string, note: "none" | "comment" | "flag"): Promise<Step> => {
+      log(note === "flag" ? "WARNING" : "INFO", "merge queue drop", { ...fields, reason });
+      if (note !== "none") await this.notify(repo, head, reason, note === "flag");
       return {
         kind: "remove",
-        next: true,
+        then: "rescan",
         outcome: { number: head.number, outcome: "dropped", reason },
       };
     };
@@ -344,62 +397,62 @@ export class MergeQueue {
       log("ERROR", "merge queue has no judge", fields);
       return wait("no judge registered");
     }
-    const heldMs = this.now().getTime() - Date.parse(head.headSince ?? this.now().toISOString());
-    if (heldMs > MAX_HEAD_HOLD_MS) {
+    if (this.stale(head)) {
       return drop(
-        `it held the head of the merge queue for over ${MAX_HEAD_HOLD_MS / 60_000} minutes without becoming clean on the latest default branch`,
-        true,
+        `it was in the merge queue for over ${MAX_HEAD_HOLD_MS / 60_000} minutes without becoming clean on the latest default branch (a sync that never came, or checks that never finished)`,
+        "flag",
       );
     }
 
     const j = await judge.judge(repo, head);
     switch (j.state) {
       case "gone":
-        return drop(j.detail, false);
+        return drop(j.detail, "none");
       case "failed":
         return drop(
           `its checks failed on ${j.headSha.slice(0, 12)}: ${j.reasons.join(", ")}`,
-          true,
+          "flag",
         );
       case "ineligible":
-        return drop(`no longer clean: ${j.reasons.join(", ")}`, false);
+        return drop(`no longer clean: ${j.reasons.join(", ")}`, "comment");
       case "pending":
         return wait(`pending: ${j.reasons.join(", ")}`, { headSha: j.headSha });
       case "behind": {
-        if (head.syncRequestedSha === j.headSha)
-          return wait("waiting for its sync", { headSha: j.headSha });
+        // Parked on its sync: the next entry may go first.
+        if (head.syncRequestedSha === j.headSha) {
+          return wait("waiting for its sync", { headSha: j.headSha }, "skip");
+        }
         if (head.syncs >= MAX_SYNCS_PER_PR) {
           return drop(
             `it still lacks the default branch after ${MAX_SYNCS_PER_PR} syncs in the merge queue`,
-            true,
+            "flag",
           );
         }
         log("INFO", "merge queue sync", { ...fields, headSha: j.headSha, syncs: head.syncs + 1 });
         await judge.requestSync(repo, head, j.headSha);
-        return wait("sync requested", {
-          headSha: j.headSha,
-          syncs: head.syncs + 1,
-          syncRequestedSha: j.headSha,
-        });
+        return wait(
+          "sync requested",
+          { headSha: j.headSha, syncs: head.syncs + 1, syncRequestedSha: j.headSha },
+          "skip",
+        );
       }
       case "merge": {
         // Only control-plane merges hold the lease: a merge by hand may still have moved it.
         const tip = await this.host.branchSha(repo, j.baseRef);
         if (tip !== j.baseSha) {
           log("INFO", "merge queue base moved", { ...fields, judged: j.baseSha, tip });
-          return {
-            kind: "keep",
-            patch: { headSha: j.headSha },
-            next: true,
-            outcome: { number: head.number, outcome: "waiting", reason: "base moved" },
-          };
+          return wait("base moved", { headSha: j.headSha }, "rescan");
+        }
+        if (!(await this.renewLease(repo, holder))) {
+          log("WARNING", "merge queue lease lost before merging", fields);
+          return wait("lease lost", { headSha: j.headSha });
         }
         const merged = await judge.merge(repo, head, j.headSha);
         if (merged.merged) {
           log("INFO", "merge queue merge", { ...fields, headSha: j.headSha, sha: merged.sha });
           return {
             kind: "remove",
-            next: true,
+            then: "rescan",
             outcome: {
               number: head.number,
               outcome: "merged",
@@ -410,9 +463,10 @@ export class MergeQueue {
         }
         // A push between judging and merging leaves a new head to judge; else it is Andy's.
         const again = await judge.judge(repo, head);
-        if (again.state === "gone") return drop(again.detail, false);
+        if (again.state === "gone") return drop(again.detail, "none");
         if (again.headSha !== j.headSha) return wait("head moved", { headSha: again.headSha });
-        return drop(`the merge was refused: ${merged.error}`, false);
+        // The entry point already recorded the refusal on the ticket.
+        return drop(`the merge was refused: ${merged.error}`, "none");
       }
     }
   }
@@ -427,14 +481,19 @@ export class MergeQueue {
       headSha: offer.headSha,
       syncs: 0,
       syncRequestedSha: null,
-      headSince: null,
+      judgedSince: null,
     };
   }
 
   /** Needs-you note through the entry's judge; a failure is logged, never thrown. */
-  private async notify(repo: string, entry: MergeQueueEntry, reason: string): Promise<void> {
+  private async notify(
+    repo: string,
+    entry: MergeQueueEntry,
+    reason: string,
+    flag: boolean,
+  ): Promise<void> {
     try {
-      await this.judges.get(entry.kind)?.needsYou(repo, entry, reason);
+      await this.judges.get(entry.kind)?.needsYou(repo, entry, reason, flag);
     } catch (err) {
       log("ERROR", "merge queue needs-you note failed", {
         repo,

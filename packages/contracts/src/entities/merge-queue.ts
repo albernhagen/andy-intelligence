@@ -35,8 +35,8 @@ export const MergeQueueEntry = z.object({
   syncs: z.number().int().nonnegative().max(1000),
   /** The head a sync was last asked for; null: none yet. */
   syncRequestedSha: Sha.nullable(),
-  /** When it reached the head of the queue; null while others are ahead of it. */
-  headSince: Timestamp.nullable(),
+  /** When the queue first judged it (the hold cap's start); null until then. */
+  judgedSince: Timestamp.nullable(),
 });
 export type MergeQueueEntry = z.infer<typeof MergeQueueEntry>;
 

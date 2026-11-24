@@ -30,9 +30,9 @@ class World implements QueueJudge {
   readonly prs = new Map<number, FakePr>();
   readonly merges: number[] = [];
   readonly syncs: { number: number; head: string }[] = [];
-  readonly notes: { number: number; reason: string }[] = [];
+  readonly notes: { number: number; reason: string; flag: boolean }[] = [];
   /** Test seam: runs once, after the judge's verdict and before the merge call. */
-  beforeMerge: (() => void) | null = null;
+  beforeMerge: (() => void | Promise<void>) | null = null;
 
   add(number: number, pr: Partial<FakePr> = {}): void {
     this.prs.set(number, {
@@ -67,7 +67,7 @@ class World implements QueueJudge {
     };
     const hook = this.beforeMerge;
     this.beforeMerge = null;
-    hook?.();
+    await hook?.();
     return judged;
   }
 
@@ -84,8 +84,8 @@ class World implements QueueJudge {
     this.syncs.push({ number: entry.number, head: headSha });
   }
 
-  async needsYou(_repo: string, entry: MergeQueueEntry, reason: string) {
-    this.notes.push({ number: entry.number, reason });
+  async needsYou(_repo: string, entry: MergeQueueEntry, reason: string, flag: boolean) {
+    this.notes.push({ number: entry.number, reason, flag });
   }
 
   async branchSha() {
@@ -119,6 +119,12 @@ describe("queueStateOf", () => {
     expect(queueStateOf(wait("gate_not_clean"), ["checks_failed", "checks_pending"])).toBe(
       "failed",
     );
+  });
+
+  it("GivenNotCleanWithNoGateReasonOrNoKnownReason_WhenRead_ThenIneligibleNeverBehind", () => {
+    expect(queueStateOf(wait("gate_not_clean"), [])).toBe("ineligible");
+    expect(queueStateOf(wait("gate_not_clean", "behind_default_branch"), [])).toBe("ineligible");
+    expect(queueStateOf(wait(), [])).toBe("ineligible");
   });
 
   it("GivenAnyOtherReason_WhenRead_ThenIneligibleEvenWithAFailedCheck", () => {
@@ -204,7 +210,7 @@ describe("MergeQueue", () => {
     expect(await queued()).toEqual([second]);
 
     world.synced(second, "pending");
-    await b.advance(REPO);
+    await b.advance(REPO, [second]);
     expect(world.merges).toEqual([first]);
     world.prs.get(second)!.checks = "green";
     await a.advance(REPO);
@@ -224,10 +230,10 @@ describe("MergeQueue", () => {
     expect(world.syncs).toHaveLength(1);
 
     world.synced(1, "pending");
-    await q.advance(REPO);
+    await q.advance(REPO, [1]);
     expect(world.merges).toEqual([]);
     world.prs.get(1)!.checks = "green";
-    const [outcome] = await q.advance(REPO);
+    const [outcome] = await q.advance(REPO, [1]);
     expect(outcome).toMatchObject({ number: 1, outcome: "merged" });
     expect(world.syncs).toHaveLength(1);
   });
@@ -239,9 +245,11 @@ describe("MergeQueue", () => {
     await offer(q, 1);
     await offer(q, 2);
     world.synced(1, "failed");
-    const outcomes = await q.advance(REPO);
+    const outcomes = await q.advance(REPO, [1]);
     expect(outcomes[0]).toMatchObject({ number: 1, outcome: "dropped" });
-    expect(world.notes).toEqual([{ number: 1, reason: expect.stringContaining("checks failed") }]);
+    expect(world.notes).toEqual([
+      { number: 1, reason: expect.stringContaining("checks failed"), flag: true },
+    ]);
     expect(world.syncs.map((s) => s.number)).toEqual([1, 2]);
     expect(await queued()).toEqual([2]);
   });
@@ -272,7 +280,9 @@ describe("MergeQueue", () => {
     }
     world.add(99);
     expect(await offer(q, 99)).toMatchObject({ result: "dropped" });
-    expect(world.notes).toEqual([{ number: 99, reason: expect.stringContaining("full") }]);
+    expect(world.notes).toEqual([
+      { number: 99, reason: expect.stringContaining("full"), flag: true },
+    ]);
     expect(world.merges).toEqual([]);
   });
 
@@ -283,12 +293,12 @@ describe("MergeQueue", () => {
     for (let i = 1; i < MAX_SYNCS_PER_PR; i++) {
       world.synced(1, "green");
       world.tip = sha(5000 + i);
-      await q.advance(REPO);
+      await q.advance(REPO, [1]);
     }
     expect(world.syncs).toHaveLength(MAX_SYNCS_PER_PR);
     world.synced(1, "green");
     world.tip = sha(6000);
-    const [outcome] = await q.advance(REPO);
+    const [outcome] = await q.advance(REPO, [1]);
     expect(outcome).toMatchObject({ outcome: "dropped" });
     expect(world.notes[0]?.reason).toContain(`${MAX_SYNCS_PER_PR} syncs`);
   });
@@ -300,7 +310,8 @@ describe("MergeQueue", () => {
     clock = new Date(clock.getTime() + MAX_HEAD_HOLD_MS + 1);
     const [outcome] = await q.advance(REPO);
     expect(outcome).toMatchObject({ outcome: "dropped" });
-    expect(world.notes[0]?.reason).toContain("held the head");
+    expect(world.notes[0]).toMatchObject({ flag: true });
+    expect(world.notes[0]?.reason).toContain("in the merge queue for over");
   });
 
   it("GivenALiveLeaseHeldByACrashedInstance_WhenAdvanced_ThenWaitsUntilItExpiresThenTakesOverAndMerges", async () => {
@@ -320,7 +331,7 @@ describe("MergeQueue", () => {
             headSha: world.prs.get(1)!.head,
             syncs: 0,
             syncRequestedSha: null,
-            headSince: clock.toISOString(),
+            judgedSince: clock.toISOString(),
           },
         ],
         lease: { holder: "crashed", until },
@@ -339,7 +350,7 @@ describe("MergeQueue", () => {
     expect(logs.mock.calls.some(([line]) => String(line).includes("lease takeover"))).toBe(true);
   });
 
-  it("GivenAClosedOrNoLongerCleanHead_WhenAdvanced_ThenDroppedWithoutANeedsYouNote", async () => {
+  it("GivenAClosedOrNoLongerCleanHead_WhenAdvanced_ThenDroppedAndOnlyTheNoLongerCleanOneGetsAComment", async () => {
     const q = queue();
     world.add(1, { checks: "pending" });
     world.add(2, { checks: "pending" });
@@ -349,7 +360,57 @@ describe("MergeQueue", () => {
     world.prs.get(2)!.ineligible = "mode_manual";
     const outcomes = await q.advance(REPO);
     expect(outcomes.map((o) => o.outcome)).toEqual(["dropped", "dropped"]);
-    expect(world.notes).toEqual([]);
+    expect(world.notes).toEqual([
+      { number: 2, reason: expect.stringContaining("mode_manual"), flag: false },
+    ]);
     expect(await queued()).toEqual([]);
+  });
+
+  it("GivenAHeadParkedOnASyncThatNeverComes_WhenACleanPrIsQueuedBehindIt_ThenTheCleanOneMergesAndTheParkedOneKeepsItsPlace", async () => {
+    const q = queue();
+    world.add(1, { contains: sha(0) });
+    world.add(2);
+    expect(await offer(q, 1)).toMatchObject({ result: "queued", reason: "sync requested" });
+    expect(await offer(q, 2)).toMatchObject({ result: "merged" });
+    expect(world.merges).toEqual([2]);
+    expect(await queued()).toEqual([1]);
+
+    // Its sync lands: the event about it wakes it, and it merges once green.
+    world.synced(1, "green");
+    expect(await q.advanceFor(REPO, [1], false)).toEqual([
+      expect.objectContaining({ number: 1, outcome: "merged" }),
+    ]);
+  });
+
+  it("GivenAParkedHeadPastTheHoldCap_WhenAnyEventArrives_ThenItIsDroppedWithANeedsYouNote", async () => {
+    const q = queue();
+    world.add(1, { contains: sha(0) });
+    await offer(q, 1);
+    clock = new Date(clock.getTime() + MAX_HEAD_HOLD_MS + 1);
+    const [outcome] = await q.advanceFor(REPO, [77], false);
+    expect(outcome).toMatchObject({ number: 1, outcome: "dropped" });
+    expect(world.notes[0]).toMatchObject({ number: 1, flag: true });
+  });
+
+  it("GivenAnEventAboutNoQueuedPr_WhenAdvancedFor_ThenNothingIsJudged", async () => {
+    const q = queue();
+    world.add(1, { checks: "pending" });
+    await offer(q, 1);
+    const judge = vi.spyOn(world, "judge");
+    expect(await q.advanceFor(REPO, [42], false)).toEqual([]);
+    expect(judge).not.toHaveBeenCalled();
+  });
+
+  it("GivenTheLeaseTakenOverWhileJudging_WhenAboutToMerge_ThenItDoesNotMerge", async () => {
+    world.add(1);
+    world.beforeMerge = async () => {
+      const q = await store.get(REPO);
+      const until = new Date(clock.getTime() + MERGE_QUEUE_LEASE_MS).toISOString();
+      await store.put({ ...q, lease: { holder: "other", until } }, q.version);
+    };
+    expect(await offer(queue(), 1)).toMatchObject({ result: "queued", reason: "lease lost" });
+    expect(world.merges).toEqual([]);
+    // The other holder's lease is left alone.
+    expect((await store.get(REPO)).lease?.holder).toBe("other");
   });
 });

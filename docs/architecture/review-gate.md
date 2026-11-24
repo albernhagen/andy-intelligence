@@ -45,8 +45,8 @@ What any reviewer, ours or a hosted one, must post for `mergeVerdict` to count i
 
 Every control-plane merge into a default branch goes through the repo's merge queue (ADR-0150, `packages/domain/src/merge-queue.ts`): the gate's merges of agent PRs and MCP `merge_pr`'s of session PRs.
 
-- **Joins:** a PR whose verdict is `merge`, or `wait` for `behind_default_branch` alone. Order: oldest first; only the head merges.
-- **Lease:** the head is judged and merged under a lease on the repo's `mergeQueues` record (compare-and-set, 90 s; an expired lease is taken over), so it holds across instances.
+- **Joins:** a PR whose verdict is `merge`, or `wait` for `behind_default_branch` alone. Order: oldest first, judged in order; the first one in flight stops the scan; one parked on its sync is passed over until an event about it arrives.
+- **Lease:** judging and merging happen under a lease on the repo's `mergeQueues` record (compare-and-set, 90 s, renewed just before the merge call; a lost lease aborts it; an expired lease is taken over), so it holds across instances.
 - **Head:** behind → one sync round per head (sync tick for agent PRs, the re-sync workflow for the rest); then wait for checks and reviews on the new head; re-judge with the full verdict, re-read the base tip, merge pinned to the judged head. Up to date and clean → merges at once.
-- **Drops:** failed checks, 20 PRs per repo, 3 syncs per PR, 60 minutes at the head → dropped and the ticket flagged (Needs-you). No longer clean or closed → dropped, logged.
+- **Drops:** failed checks, 20 PRs per repo, 3 syncs per PR, 60 minutes from first judged → dropped and the ticket flagged (Needs-you). No longer clean → dropped with a ticket comment. Closed → dropped, logged.
 - **Moves on:** webhooks (checks and PR events on the head, main moving; any event once the head is past its hold cap) and `merge_pr` calls. Logs: `merge queue enqueue|sync|wait|merge|drop|busy|lease takeover`.

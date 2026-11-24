@@ -116,7 +116,7 @@ export class PullRequestMerger {
         // Session PRs are kept current by the re-sync workflow (ADR-0111) when main moves.
         log("INFO", "merge_pr waits for the re-sync workflow", { repo, pr: entry.number, headSha });
       },
-      needsYou: (repo, entry, reason) => this.queueNeedsYou(repo, entry, reason),
+      needsYou: (repo, entry, reason, flag) => this.queueNeedsYou(repo, entry, reason, flag),
     });
   }
 
@@ -281,6 +281,19 @@ export class PullRequestMerger {
     if (pr.headSha !== headSha) return { merged: false, error: "head moved" };
     const actor = entry.enqueuedBy as EventActor;
     const ticket = await this.ticketOf(project, pr);
+    // The caller is checked again at merge time: a queued merge runs later, from a webhook.
+    try {
+      requireCan(actor, "merge_pr", project.id);
+    } catch (err) {
+      const error = `${actor} may no longer merge: ${errorText(err)}`;
+      log("WARNING", "merge_pr caller no longer allowed", { repo, pr: pr.number, actor });
+      await this.record(
+        ticket,
+        "system",
+        `The merge queue didn't merge PR #${pr.number}: ${error}`,
+      );
+      return { merged: false, error };
+    }
     const mode = ticket ? await ticketMergeMode(this.tracker, project, ticket) : project.mergeMode;
     const base = { projectId: project.id, repo, pr: pr.number, headSha, actor };
     try {
@@ -300,24 +313,26 @@ export class PullRequestMerger {
     }
   }
 
-  /** Andy's Needs-you inbox: the PR's ticket is flagged with the queue's reason. */
-  private async queueNeedsYou(repo: string, entry: MergeQueueEntry, reason: string) {
+  /** The queue's drop on the PR's ticket: flagged for Andy's Needs-you inbox, or a comment only. */
+  private async queueNeedsYou(repo: string, entry: MergeQueueEntry, reason: string, flag: boolean) {
     const found = await this.queuedPr(repo, entry);
     const ticket = "gone" in found ? null : await this.ticketOf(found.project, found.pr);
     if (!ticket) {
       log("WARNING", "merge queue drop with no ticket to flag", { repo, pr: entry.number, reason });
       return;
     }
-    await this.tracker.updateTicket(
-      ticket.projectId,
-      ticket.id,
-      { fields: { needsAttention: true } },
-      "system",
-    );
+    if (flag) {
+      await this.tracker.updateTicket(
+        ticket.projectId,
+        ticket.id,
+        { fields: { needsAttention: true } },
+        "system",
+      );
+    }
     await this.record(
       ticket,
       "system",
-      `Needs you: the merge queue dropped PR #${entry.number} (asked by ${entry.enqueuedBy}): ${reason}. Call merge_pr again once it is clean on the latest default branch, or merge it yourself.`,
+      `${flag ? "Needs you: " : ""}the merge queue dropped PR #${entry.number} (asked by ${entry.enqueuedBy}): ${reason}. Call merge_pr again once it is clean on the latest default branch, or merge it yourself.`,
     );
   }
 

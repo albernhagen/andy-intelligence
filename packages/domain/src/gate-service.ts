@@ -105,7 +105,7 @@ export class PullRequestGate {
       requestSync: async (_repo, entry) => {
         await this.syncTick?.(entry.projectId);
       },
-      needsYou: (repo, entry, reason) => this.queueNeedsYou(repo, entry, reason),
+      needsYou: (repo, entry, reason, flag) => this.queueNeedsYou(repo, entry, reason, flag),
     });
   }
 
@@ -263,19 +263,19 @@ export class PullRequestGate {
     };
   }
 
-  /** Andy's Needs-you inbox: the ticket is flagged with the queue's reason. */
-  private async queueNeedsYou(repo: string, entry: MergeQueueEntry, reason: string) {
+  /** The queue's drop on the ticket: flagged for Andy's Needs-you inbox, or a comment only. */
+  private async queueNeedsYou(repo: string, entry: MergeQueueEntry, reason: string, flag: boolean) {
     const found = await this.queuedPr(repo, entry);
     if ("gone" in found) {
       log("WARNING", "merge queue drop with no ticket to flag", { pr: entry.number, reason });
       return;
     }
     const { ticket } = found.agent;
-    await this.tickets.flag(ticket.projectId, ticket.id, "system");
+    if (flag) await this.tickets.flag(ticket.projectId, ticket.id, "system");
     await this.tracker.addComment(
       ticket.projectId,
       ticket.id,
-      `Needs you: the merge queue dropped PR #${entry.number}: ${reason}. It merges again once it is clean on the latest default branch, or merge it yourself.`,
+      `${flag ? "Needs you: " : ""}the merge queue dropped PR #${entry.number}: ${reason}. The gate offers it again once it is clean, or merge it yourself.`,
       "system",
     );
   }

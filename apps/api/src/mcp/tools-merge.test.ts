@@ -361,6 +361,21 @@ describe("merge_pr (AI-220)", () => {
     expect(events.some((e) => e.body?.includes("merge queue dropped PR #7"))).toBe(true);
   });
 
+  it("GivenAQueuedPrThatIsNoLongerCleanAfterItsSync_WhenTheCheckWebhookArrives_ThenItIsDroppedWithATicketCommentButNotFlagged", async () => {
+    const t = await setup();
+    t.host.behindDefault.add(HEAD);
+    expect((await t.mergePr()).data).toMatchObject({ queued: true, merged: false });
+    const synced = "3".repeat(40);
+    t.pr.pullRequest.headSha = synced;
+    t.pr.pullRequest.labels = ["review-accepted"];
+    await t.checkHook(7, synced, "d-10");
+    expect(t.host.merges).toEqual([]);
+    expect((await t.tracker.getTicket("ai", t.ticket.id))?.needsAttention).toBe(false);
+    const events = await t.tracker.listEvents("ai", t.ticket.id);
+    const note = events.find((e) => e.body?.includes("merge queue dropped PR #7"));
+    expect(note?.body).toContain("accepted_label");
+  });
+
   it("GivenARepoOutsideTheProject_WhenMergePrIsCalled_ThenItIsRefused", async () => {
     const t = await setup();
     const res = await t.mergePr({ repo: "someone/else" });
