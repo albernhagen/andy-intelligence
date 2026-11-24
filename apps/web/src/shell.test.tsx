@@ -44,8 +44,10 @@ describe("app shell", () => {
 
   it("GivenAllProjects_WhenTheInboxOpens_ThenItListsEveryProjectsQuestions", async () => {
     await twoProjects("/all/inbox");
-    expect(await screen.findByRole("listitem", { name: "Question: Which colour?" })).toBeTruthy();
-    expect(screen.getByRole("listitem", { name: "Question: Daily?" })).toBeTruthy();
+    // AI-371: a row per ticket, each saying its question; the first one's question beside them.
+    expect(await screen.findByRole("button", { name: "AI-1: Shell" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "OPS-1: Backups" }).textContent).toContain("Daily?");
+    expect(screen.getByRole("listitem", { name: "Question: Which colour?" })).toBeTruthy();
   });
 
   it("GivenAProjectScope_WhenTheInboxOpens_ThenItListsOnlyThatProject", async () => {

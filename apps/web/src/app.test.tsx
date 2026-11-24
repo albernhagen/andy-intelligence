@@ -249,7 +249,7 @@ describe("Needs-you inbox", () => {
     const { user } = harness;
 
     const card = await screen.findByRole("article", { name: "AI-1: Board" });
-    expect(within(card).getByRole("link", { name: "AI-1: Board" })).toBeTruthy();
+    expect(within(card).getByRole("link", { name: "Open ticket" })).toBeTruthy();
     // One click on an option answers it.
     await user.click(within(card).getByRole("button", { name: "List" }));
 

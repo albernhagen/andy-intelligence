@@ -45,7 +45,8 @@ describe("a URL for every page", () => {
     window.localStorage.setItem("andy.scope", "p:ai");
     const h = await load("/");
     await waitFor(() => expect(pathname(h)).toBe("/p/ai/inbox"));
-    expect(await screen.findByText("Which layout?")).toBeTruthy();
+    // In its list row and in the picked ticket's detail (AI-371).
+    expect(await screen.findAllByText("Which layout?")).toHaveLength(2);
   });
 
   it("GivenAllProjectsUrl_WhenLoadedDirectly_ThenItRedirectsToTheAllProjectsInbox", async () => {

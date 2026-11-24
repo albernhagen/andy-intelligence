@@ -11,35 +11,44 @@ type Harness = ReturnType<typeof renderApp>;
 const layout: NewQuestion = { text: "Which layout?", options: ["Columns", "List"] };
 const colour: NewQuestion = { text: "Which colour?", options: [], suggestedAnswer: "Blue" };
 
-/** AI-1 with two open questions, then the project inbox. */
+/** AI-1 with two open questions and AI-2 with one, then the project inbox. */
 async function inbox(): Promise<Harness & { ticketId: string }> {
   const h = renderApp("/all/board");
   await h.tracker.createProject({ name: "Andy Intelligence", key: "AI" });
   const ticket = await h.service.create("ai", readyStory, "andy");
   await h.tracker.askQuestions("ai", ticket.id, [layout, colour], "agent:run1", "run1");
+  const other = await h.service.create("ai", { type: "chore", title: "Other" }, "andy");
+  await h.tracker.askQuestions("ai", other.id, [owner], "agent:run2", "run2");
   await h.queryClient.invalidateQueries();
   await h.router.navigate({ href: "/p/ai/inbox" });
   await screen.findByRole("listitem", { name: "Question: Which colour?" });
   return { ...h, ticketId: ticket.id };
 }
 
+const owner: NewQuestion = { text: "Who owns it?", options: ["Andy", "Nobody"] };
 const question = (text: string) => screen.getByRole("listitem", { name: `Question: ${text}` });
+const row = (name: string) => screen.getByRole("button", { name });
+const detail = () => document.getElementById("inbox-detail")!;
 const path = (h: Harness) => h.router.state.location.pathname;
 
+/** AI-371: j and k walk the list; the number keys reach every answer of the picked ticket. */
 describe("keyboard shortcuts in the inbox", () => {
-  it("GivenTheInbox_WhenJAndKArePressed_ThenFocusMovesBetweenQuestions", async () => {
+  it("GivenTheInbox_WhenJAndKArePressed_ThenFocusMovesBetweenTicketsAndPicksEach", async () => {
     const { user } = await inbox();
     await user.keyboard("j");
-    expect(document.activeElement).toBe(question("Which layout?"));
+    expect(document.activeElement).toBe(row("AI-1: Board"));
     await user.keyboard("j");
-    expect(document.activeElement).toBe(question("Which colour?"));
+    expect(document.activeElement).toBe(row("AI-2: Other"));
+    expect(within(detail()).getByRole("article", { name: "AI-2: Other" })).toBeTruthy();
     await user.keyboard("j");
-    expect(document.activeElement).toBe(question("Which colour?"));
+    expect(document.activeElement).toBe(row("AI-2: Other"));
     await user.keyboard("k");
-    expect(document.activeElement).toBe(question("Which layout?"));
+    expect(document.activeElement).toBe(row("AI-1: Board"));
+    expect(row("AI-1: Board").getAttribute("aria-current")).toBe("true");
+    expect(within(detail()).getByRole("article", { name: "AI-1: Board" })).toBeTruthy();
   });
 
-  it("GivenAFocusedQuestion_WhenAIsPressed_ThenItsAnswerFieldIsFocusedAndEmpty", async () => {
+  it("GivenAPickedTicket_WhenAIsPressed_ThenItsAnswerFieldIsFocusedAndEmpty", async () => {
     const { user } = await inbox();
     await user.keyboard("j");
     await user.keyboard("a");
@@ -48,12 +57,24 @@ describe("keyboard shortcuts in the inbox", () => {
     expect((field as HTMLInputElement).value).toBe("");
   });
 
-  it("GivenAFocusedQuestion_WhenANumberIsPressed_ThenThatAnswerIsFocusedButNotChosen", async () => {
+  it("GivenAPickedTicket_WhenEveryAnswerRenders_ThenEachShowsTheKeyThatPicksIt", async () => {
+    await inbox();
+    const keyed = within(detail())
+      .getAllByRole("button")
+      .filter((b) => b.hasAttribute("aria-keyshortcuts"));
+    expect(keyed.map((b) => [b.getAttribute("aria-keyshortcuts"), b.textContent])).toEqual([
+      ["1", "1Columns"],
+      ["2", "2List"],
+      ["3", "3BlueSuggested"],
+    ]);
+  });
+
+  it("GivenAPickedTicket_WhenANumberIsPressed_ThenThatAnswerIsFocusedButNotChosen", async () => {
     const h = await inbox();
     await h.user.keyboard("j");
-    await h.user.keyboard("2");
+    await h.user.keyboard("3");
     expect(document.activeElement).toBe(
-      within(question("Which layout?")).getByRole("button", { name: "List" }),
+      within(question("Which colour?")).getByRole("button", { name: /Blue/ }),
     );
     const open = await h.tracker.listQuestions({ ticketId: h.ticketId });
     expect(open.filter((q) => q.status === "open")).toHaveLength(2);
@@ -70,7 +91,7 @@ describe("keyboard shortcuts in the inbox", () => {
     });
   });
 
-  it("GivenAFocusedQuestion_WhenEnterIsPressed_ThenItsTicketOpens", async () => {
+  it("GivenAFocusedRow_WhenEnterIsPressed_ThenItsTicketOpens", async () => {
     const h = await inbox();
     await h.user.keyboard("j");
     await h.user.keyboard("{Enter}");

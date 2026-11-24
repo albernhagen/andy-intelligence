@@ -1,10 +1,12 @@
 /**
  * Keyboard shortcuts (AI-338): one keydown listener, no dependency. Screens opt in by marking
  * elements, so the layer knows nothing about tickets:
- * - `data-nav-item`: a stop for `j` / `k` (an inbox question, a board card); focusable.
+ * - `data-nav-item`: a stop for `j` / `k` (an inbox row, a board card); focusable.
  * - `data-nav-group`: holds items that share one ticket (an inbox card).
  * - `data-nav-open`: the link `Enter` follows from a focused item (or from its group).
  * - `data-nav-answer`: the field `a` focuses; `data-nav-choice`: the buttons `1`–`9` focus.
+ * - `data-nav-detail="<id>"` on an item: its open link, answer field and choices live in that
+ *   element instead of inside the item (a list row whose detail sits beside it, AI-371).
  * No single key writes anything: `1`–`9` only focus a choice, and `Enter` then presses it.
  */
 
@@ -22,13 +24,13 @@ export interface Shortcut {
 export const SHORTCUTS: readonly Shortcut[] = [
   {
     keys: "j",
-    does: "Next question in the inbox, next card on the board",
+    does: "Next ticket in the inbox, next card on the board",
     command: { kind: "move", delta: 1 },
   },
-  { keys: "k", does: "Previous question or card", command: { kind: "move", delta: -1 } },
+  { keys: "k", does: "Previous ticket or card", command: { kind: "move", delta: -1 } },
   { keys: "Enter", does: "Open the focused ticket; on a focused answer, choose it" },
-  { keys: "a", does: "Focus the answer field of the focused question" },
-  { keys: "1–9", does: "Focus that answer of the focused question (Enter chooses it)" },
+  { keys: "a", does: "Focus the answer field of the picked ticket" },
+  { keys: "1–9", does: "Focus the answer with that key (Enter chooses it)" },
   { keys: "g i", does: "Go to the inbox", command: { kind: "go", target: "inbox" } },
   { keys: "g b", does: "Go to the board", command: { kind: "go", target: "board" } },
   { keys: "g r", does: "Go to the roadmap", command: { kind: "go", target: "roadmap" } },
@@ -81,12 +83,18 @@ export function moveFocus(delta: 1 | -1, root: ParentNode = document): boolean {
   return true;
 }
 
+/** Where an item's open link, answer field and choices live: its detail, else the item itself. */
+function scopeOf(item: HTMLElement): ParentNode {
+  const detail = item.dataset.navDetail;
+  return (detail && document.getElementById(detail)) || item;
+}
+
 /** `Enter` on a focused item follows its open link; inside the item, Enter keeps its own meaning. */
 function openItem(): boolean {
   const item = currentItem();
   if (!item || document.activeElement !== item) return false;
   const link =
-    item.querySelector<HTMLElement>("[data-nav-open]") ??
+    scopeOf(item).querySelector<HTMLElement>("[data-nav-open]") ??
     item.closest("[data-nav-group]")?.querySelector<HTMLElement>("[data-nav-open]");
   if (!link) return false;
   link.click();
@@ -95,7 +103,7 @@ function openItem(): boolean {
 
 function focusInItem(selector: string, index = 0): boolean {
   const item = currentItem();
-  const el = item?.querySelectorAll<HTMLElement>(selector)[index];
+  const el = item && scopeOf(item).querySelectorAll<HTMLElement>(selector)[index];
   if (!el) return false;
   focus(el);
   return true;
