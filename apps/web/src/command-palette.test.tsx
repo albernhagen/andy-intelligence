@@ -58,6 +58,34 @@ describe("command palette", () => {
     await waitFor(() => expect(pathname(h)).toBe("/p/ai/t/AI-1"));
   });
 
+  it("GivenAProjectScope_WhenAndySearchesAnotherProjectsKey_ThenNothingShowsAndThePlaceholderNamesTheScope", async () => {
+    const h = await project();
+    await h.tracker.createProject({ name: "Ops", key: "OPS" });
+    await h.service.create("ops", { type: "chore", title: "Rotate the deploy key" }, "andy");
+    await h.user.keyboard("{Meta>}k{/Meta}");
+    await palette();
+    expect(search().getAttribute("placeholder")).toMatch(/^Search Andy Intelligence's tickets/);
+    await h.user.type(search(), "OPS-1");
+    expect(await screen.findByText("Nothing matches.")).toBeTruthy();
+  });
+
+  it("GivenAllProjects_WhenAndySearchesAnyProjectsKey_ThenItIsFound", async () => {
+    const h = await project("/all/inbox");
+    await h.tracker.createProject({ name: "Ops", key: "OPS" });
+    await h.service.create("ops", { type: "chore", title: "Rotate the deploy key" }, "andy");
+    await h.queryClient.invalidateQueries();
+    await h.user.keyboard("{Meta>}k{/Meta}");
+    await palette();
+    expect(search().getAttribute("placeholder")).toMatch(/^Search all projects' tickets/);
+    await h.user.type(search(), "rotate");
+    const tickets = await screen.findByRole("group", { name: "Tickets" });
+    const keys = within(tickets)
+      .getAllByRole("option")
+      .map((o) => o.textContent);
+    expect(keys.some((k) => k?.includes("OPS-1"))).toBe(true);
+    expect(keys.some((k) => k?.includes("AI-1"))).toBe(true);
+  });
+
   it("GivenAShortcutAction_WhenAndyRunsItFromThePalette_ThenItRuns", async () => {
     const h = await project();
     await h.user.keyboard("{Meta>}k{/Meta}");
