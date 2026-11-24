@@ -37,4 +37,4 @@ Every process below runs as the runner's macOS user (`ai-runner`) under a Seatbe
 3. The runner's log for that build says "Bash sandbox check passed" (nesting works). If the task fails with "the check command didn't run in Bash", nesting doesn't: ADR-0122's open question.
 4. A build that edits `.github/` fails with "protected" and pushes nothing.
 
-**Runners over MCP (AI-294):** `list_runners` reads what `GET /api/runners` returns, never a secret; register and revoke stay in the app (ADR-0089, ADR-0135; risk [R-AI-294](risks/R-AI-294.md)).
+**Runners over MCP (AI-294, AI-351):** `list_runners` reads what `GET /api/runners` returns, never a secret; `revoke_runner` does what the revoke route does, owner only; registering stays in the app (ADR-0089, ADR-0135, ADR-0143; risks [R-AI-294](risks/R-AI-294.md), [R-AI-351](risks/R-AI-351.md)).
