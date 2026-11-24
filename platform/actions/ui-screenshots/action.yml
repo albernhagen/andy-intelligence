@@ -29,7 +29,9 @@ runs:
         fi
         # The container's checkout is owned by another user; let git read it.
         git config --global --add safe.directory "$GITHUB_WORKSPACE" || true
-        run=$(node "$GITHUB_ACTION_PATH/../../../scripts/review-scope.mjs" --gate "$BASE_REF") || run=run=true
+        # git's own error, if any, is printed above this line; a fallback says so.
+        run=$(node "$GITHUB_ACTION_PATH/../../../scripts/review-scope.mjs" --gate "$BASE_REF") || { echo "gate failed: running"; run=run=true; }
+        echo "Docs-only gate against $BASE_REF: $run ($(git diff --name-only "$BASE_REF" HEAD 2>/dev/null | wc -l | tr -d ' ') files changed)"
         echo "$run" >> "$GITHUB_OUTPUT"
         if [ "$run" = run=false ]; then
           echo "UI screenshots: skipped, docs-only change." | tee -a "$GITHUB_STEP_SUMMARY"
