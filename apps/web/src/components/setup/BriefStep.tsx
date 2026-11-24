@@ -6,7 +6,6 @@ import { QueryError } from "@/components/Status";
 import { toast } from "@/components/ui/toast";
 import {
   BRIEF_PAGES,
-  clearDraft,
   draftFrom,
   loadDraft,
   loadOpenedBrief,
@@ -92,7 +91,8 @@ export function BriefStep({
         } else {
           toast({ title: "The brief on the default branch already says this" });
         }
-        clearDraft(projectId);
+        // The draft stays until the brief is on the default branch (SetupPage clears it then),
+        // so "Edit the brief" after a reload still has every answer.
       },
     });
   };

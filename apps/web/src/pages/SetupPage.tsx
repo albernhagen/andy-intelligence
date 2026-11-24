@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Link, useNavigate, useParams } from "@tanstack/react-router";
 import { Check } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
@@ -8,6 +8,7 @@ import { QueryError } from "@/components/Status";
 import { BriefStep } from "@/components/setup/BriefStep";
 import { ApproveStep, PlanStep } from "@/components/setup/PlanSteps";
 import { MainButton, StepCard } from "@/components/setup/StepCard";
+import { clearDraft } from "@/lib/brief-draft";
 import { useSetupFacts } from "@/lib/setup-queries";
 import {
   STEP_COUNT,
@@ -29,6 +30,11 @@ export function SetupPage() {
   const navigate = useNavigate();
   const s = useSetupFacts(projectId);
   const [picked, setPicked] = useState<SetupStepKey | null>(null);
+  const merged = s.facts?.briefOnDefaultBranch === true;
+  // The brief is stored on the default branch: the draft kept in this browser has done its job.
+  useEffect(() => {
+    if (merged) clearDraft(projectId);
+  }, [merged, projectId]);
 
   if (s.error) return <QueryError error={s.error} what="this project's setup" onRetry={s.retry} />;
   if (!s.facts || !s.project)

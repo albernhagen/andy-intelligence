@@ -474,6 +474,14 @@ describe("BriefService.status", () => {
     });
   });
 
+  it("GivenALongCodeHostError_WhenRead_ThenTheProblemIsClipped", async () => {
+    const { host, project, service } = await setup();
+    vi.spyOn(host, "readFile").mockRejectedValue(new Error("x".repeat(1000)));
+    vi.spyOn(console, "log").mockImplementation(() => {});
+    const status = await service.status(project.id, OWNER);
+    expect(status.readable === false && status.problem.length).toBeLessThan(260);
+  });
+
   it("GivenAnAgent_WhenReading_ThenForbidden", async () => {
     const { project, service } = await setup();
     await expect(service.status(project.id, "agent:run-1")).rejects.toMatchObject({

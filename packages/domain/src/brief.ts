@@ -253,7 +253,8 @@ export class BriefService {
           error: message,
         }),
       );
-      return { ...none, problem: `couldn't read ${repoName}: ${message}` };
+      // Clipped, as the setup checklist clips code-host errors; the full text is in the log.
+      return { ...none, problem: `couldn't read ${repoName}: ${message.slice(0, 200)}` };
     }
   }
 

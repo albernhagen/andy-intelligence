@@ -208,7 +208,10 @@ export function loadOpenedBrief(projectId: string): OpenedBrief | null {
     const raw = localStorage.getItem(prKey(projectId));
     if (!raw) return null;
     const data = JSON.parse(raw) as Partial<OpenedBrief>;
-    return typeof data.number === "number" && typeof data.url === "string"
+    // Only a GitHub https link is rendered as the PR's href; anything else is ignored.
+    return typeof data.number === "number" &&
+      typeof data.url === "string" &&
+      data.url.startsWith("https://github.com/")
       ? { number: data.number, url: data.url }
       : null;
   } catch {

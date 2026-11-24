@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { fireEvent, screen, waitFor, within } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { Toaster, resetToasts } from "@/components/ui/toast";
 import { BRIEF_PATH, DISCOVERY_PATH, renderBrief } from "@andy/domain";
 import type { BriefAnswers, ProjectPlan } from "@andy/contracts";
 import { readyStory, renderApp } from "@/test/harness";
@@ -167,6 +168,52 @@ describe("setup path", () => {
         ["M3: Share", "parked"],
       ]),
     );
+  });
+
+  it("GivenAParkThatFails_WhenAndyApproves_ThenAToastNamesTheMilestoneAfterTheStepMovesOn", async () => {
+    resetToasts();
+    render(<Toaster />);
+    const h = renderApp("/p/trl/setup", {
+      githubConnected: true,
+      beforeFetch: async (request) => {
+        if (request.method === "PATCH" && request.url.includes("/milestones/"))
+          throw new Error("network down");
+      },
+    });
+    await h.tracker.createProject({ name: "Trail log", key: "TRL", repos: [REPO] });
+    h.codeHost.files.set(BRIEF_PATH, "# Project brief");
+    await h.tracker.updateProject("trl", { projectPlan: plan });
+    await h.queryClient.invalidateQueries();
+    await screen.findByRole("heading", { name: "Approve the plan" });
+    await h.user.click(
+      within(screen.getByRole("group", { name: "M3: Share" })).getByRole("button", {
+        name: "Park",
+      }),
+    );
+    await h.user.click(screen.getByRole("button", { name: /^Approve 2, park 1/ }));
+    expect(await screen.findByText("A milestone wasn't parked")).toBeTruthy();
+    expect(screen.getByText(/couldn't park M3: Share/)).toBeTruthy();
+    expect(await screen.findByRole("heading", { name: "Baseline and first build" })).toBeTruthy();
+    expect(screen.getByText("A milestone wasn't parked")).toBeTruthy();
+  });
+
+  it("GivenASubmittedBrief_WhenAndyReloadsAndEditsIt_ThenEveryAnswerIsStillThere", async () => {
+    const draft = { idea: "Trail runs.", vision: "Monday totals." };
+    localStorage.setItem("brief-draft:trl", JSON.stringify(draft));
+    localStorage.setItem(
+      "brief-pr:trl",
+      JSON.stringify({ number: 7, url: "https://github.com/albernhagen/andy-intelligence/pull/7" }),
+    );
+    const h = await project("/p/trl/setup");
+    await h.user.click(await screen.findByRole("button", { name: "Edit the brief" }));
+    expect(await screen.findByDisplayValue("Trail runs.")).toBeTruthy();
+  });
+
+  it("GivenTheBriefMerged_WhenSetupOpens_ThenTheDraftInThisBrowserIsCleared", async () => {
+    localStorage.setItem("brief-draft:trl", JSON.stringify({ idea: "Old." }));
+    await project("/p/trl/setup", { brief: true });
+    await screen.findByRole("heading", { name: "Plan milestones" });
+    await waitFor(() => expect(localStorage.getItem("brief-draft:trl")).toBeNull());
   });
 
   it("GivenAProposedPlan_WhenAndyPressesCmdEnter_ThenTheMainButtonsActionRuns", async () => {

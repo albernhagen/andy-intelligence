@@ -3,6 +3,8 @@ import type { BriefAnswers, ProjectPlan } from "@andy/contracts";
 import { plainAnswer } from "@andy/domain";
 import { unwrap, useApi } from "@/lib/api";
 import { useLivePoll } from "@/lib/live";
+import { toast } from "@/components/ui/toast";
+import { errorText } from "@/lib/api";
 import { useProjects } from "@/lib/queries";
 import type { SetupFacts } from "@/lib/setup-steps";
 
@@ -10,8 +12,14 @@ import type { SetupFacts } from "@/lib/setup-steps";
 
 export function useBriefStatus(projectId: string, enabled = true) {
   const api = useApi();
+  const poll = useLivePoll("slow");
   return useQuery({
-    ...useLivePoll("slow"),
+    ...poll,
+    // Merged is final for this path: stop polling, so an open tab costs no more code-host reads.
+    refetchInterval: (q: { state: { data: unknown } }) => {
+      const d = q.state.data as { readable?: boolean; onDefaultBranch?: boolean } | undefined;
+      return d?.readable && d.onDefaultBranch ? false : poll.refetchInterval(q);
+    },
     enabled,
     queryKey: ["brief", projectId],
     queryFn: async () =>
@@ -104,16 +112,28 @@ export function useApprovePlan(projectId: string) {
         const name = plannedMilestoneName(plan, i);
         const found = milestones.find((m) => m.name === name);
         if (!found) throw new Error(`Approved, but couldn't find ${name} to park it`);
-        unwrap(
-          await api.PATCH("/api/projects/{projectId}/milestones/{milestoneId}", {
-            params: { path: { projectId, milestoneId: found.id } },
-            body: { status: "parked" },
-          }),
-        );
+        try {
+          unwrap(
+            await api.PATCH("/api/projects/{projectId}/milestones/{milestoneId}", {
+              params: { path: { projectId, milestoneId: found.id } },
+              body: { status: "parked" },
+            }),
+          );
+        } catch (err) {
+          throw new Error(`Approved, but couldn't park ${name}: ${errorText(err)}`, { cause: err });
+        }
         names.push(name);
       }
       return { plan: decided.plan, parked: names };
     },
+    // On the hook, not the caller: an approved plan moves the page to the next step, which
+    // unmounts the approve step and would drop its error, so a park that failed is said here.
+    onError: (err) =>
+      toast({
+        title: "A milestone wasn't parked",
+        description: `${errorText(err)}. It is approved; park it on the roadmap.`,
+        tone: "destructive",
+      }),
     onSettled: () => queryClient.invalidateQueries(),
   });
 }
