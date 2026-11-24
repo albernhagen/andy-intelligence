@@ -95,7 +95,10 @@ describe("roadmap", () => {
       ]),
     );
     const hosting = row(/^M2: Self-hosting/);
-    expect(within(hosting).getByText("Not reviewed")).toBeTruthy();
+    const status = screen.getByRole("group", { name: "Status of M2: Self-hosting" });
+    expect(
+      within(status).getByRole("button", { name: "Not reviewed" }).getAttribute("aria-pressed"),
+    ).toBe("true");
     expect(within(hosting).getByText("0 of 2 done")).toBeTruthy();
     expect(within(hosting).getByText("1 in review")).toBeTruthy();
     expect(within(row(/^M1: First flow/)).getByText("Done")).toBeTruthy();
@@ -136,9 +139,8 @@ describe("roadmap", () => {
 
     expect(await screen.findByRole("region", { name: "Andy Intelligence" })).toBeTruthy();
     const ops = screen.getByRole("region", { name: "Ops" });
-    expect(
-      within(ops).getByText(/No milestones or epics yet. To start, ask a Claude session/),
-    ).toBeTruthy();
+    expect(within(ops).getByText("No milestones yet")).toBeTruthy();
+    expect(within(ops).getByRole("button", { name: "Plan this project" })).toBeTruthy();
   });
 
   it("GivenTheShell_WhenAProjectIsOpen_ThenRoadmapIsLinked", async () => {
@@ -164,9 +166,11 @@ describe("roadmap milestone case (ADR-0149, AI-365)", () => {
     const kase = await screen.findByRole("region", { name: "Case for M2: Self-hosting" });
     expect(within(kase).getByText("No case written yet. You can still approve it.")).toBeTruthy();
     expect(within(kase).getByText("2 tickets: 2 unsized")).toBeTruthy();
-    await harness.user.selectOptions(
-      screen.getByRole("combobox", { name: "Status of M2: Self-hosting" }),
-      "Approved",
+    await harness.user.click(
+      within(screen.getByRole("group", { name: "Status of M2: Self-hosting" })).getByRole(
+        "button",
+        { name: "Approved" },
+      ),
     );
     await waitFor(async () =>
       expect((await harness.milestones.get("ai", "m2"))?.status).toBe("approved"),
@@ -205,7 +209,7 @@ describe("roadmap milestone case (ADR-0149, AI-365)", () => {
 
     await harness.user.click(await screen.findByRole("button", { name: /^M1: First flow/ }));
 
-    await screen.findByRole("combobox", { name: "Status of M1: First flow" });
+    await screen.findByRole("group", { name: "Status of M1: First flow" });
     expect(screen.queryByRole("region", { name: "Case for M1: First flow" })).toBeNull();
   });
 });
