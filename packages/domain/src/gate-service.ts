@@ -9,7 +9,9 @@ import {
   type RunMetrics,
   type RunOutcome,
   type Listing,
+  InMemoryMergeQueueStore,
   type MergeMode,
+  type MergeQueueEntry,
   type ReviewFindingSource,
   type RunStore,
   type Ticket,
@@ -17,6 +19,12 @@ import {
 } from "@andy/contracts";
 import { CODEOWNERS_PATHS, codeownersGlobs, decideGate, type GateDecision } from "./gate";
 import { openFindingsFor, ticketMergeMode } from "./merge-facts";
+import {
+  MergeQueue,
+  queueStateOf,
+  type QueueJudgement,
+  type QueueMergeResult,
+} from "./merge-queue";
 import { mergeVerdict, type MergeVerdict } from "./merge-verdict";
 import { intoEpicBranch, passesIntoEpic, type EpicMerges } from "./night-merge";
 import { syncPendingFor } from "./sync-runs";
@@ -32,6 +40,10 @@ import type { TicketService } from "./tickets";
  * A night story's PR into its launch's `epic/<KEY>` branch merges there when the gate's only
  * reason is `not_default_branch`, whatever the policy, and the story moves to Done (AI-124,
  * ADR-0107); its required checks and CODEOWNERS are read from the default branch.
+ *
+ * Merges into the default branch go through the repo's merge queue (AI-110, ADR-0150): a clean
+ * PR, or one clean but behind, is offered; only the queue's head merges, under its lease, after
+ * a sync round when it was behind. The gate is the queue's judge for build agents' PRs.
  */
 
 const AGENT_BRANCH = /^agent\/([A-Z][A-Z0-9]{0,9}-\d+)\/([^/]+)$/;
@@ -47,10 +59,12 @@ const errorText = (err: unknown) =>
   (err instanceof Error ? err.message : String(err)).slice(0, 2000);
 
 export interface GateResult {
-  result: "ignored" | "assessed" | "merged" | "merge_failed" | "closed" | "reverted";
+  result: "ignored" | "assessed" | "queued" | "merged" | "merge_failed" | "closed" | "reverted";
   pr?: number;
   runId?: string;
   outcome?: RunOutcome;
+  /** The squash commit of a merge, when the host reported one. */
+  mergeSha?: string | null;
 }
 
 interface AgentPr {
@@ -59,6 +73,8 @@ interface AgentPr {
 }
 
 export class PullRequestGate {
+  private readonly queue: MergeQueue;
+
   constructor(
     private readonly host: CodeHost,
     private readonly tracker: WorkTracker,
@@ -74,7 +90,24 @@ export class PullRequestGate {
      * record, since they fail on any open blocker, should-fix, high or critical finding (ADR-0134).
      */
     private readonly findings: ReviewFindingSource | null = null,
-  ) {}
+    /**
+     * The merge queue shared by every entry point (AI-110). Null: a queue of this gate's own, in
+     * memory, which serialises one process only (tests, local dev); the API passes the shared one.
+     */
+    queue: MergeQueue | null = null,
+    /** Asks for a sync tick (sync tasks, ADR-0083) when a queued agent PR is behind; null: none. */
+    private readonly syncTick: ((projectId: string) => Promise<unknown>) | null = null,
+  ) {
+    this.queue = queue ?? new MergeQueue(new InMemoryMergeQueueStore(), host, now);
+    this.queue.register("gate", {
+      judge: (repo, entry) => this.judgeQueued(repo, entry),
+      merge: (repo, entry, headSha) => this.mergeQueued(repo, entry, headSha),
+      requestSync: async (_repo, entry) => {
+        await this.syncTick?.(entry.projectId);
+      },
+      needsYou: (repo, entry, reason, flag) => this.queueNeedsYou(repo, entry, reason, flag),
+    });
+  }
 
   /** One recorded delivery. Replays never get here; a second delivery of a close is a no-op. */
   async apply(event: CodeHostEvent, project: Project): Promise<GateResult[]> {
@@ -107,7 +140,15 @@ export class PullRequestGate {
     // gate_not_clean), recorded in the same write as the gate's facts so the Run never shows an
     // older head's verdict.
     const judged = pr.intoDefaultBranch
-      ? await this.verdictFor(repo, pr, agent.ticket, project, decision.wouldAutoMerge, files)
+      ? await this.verdictFor(
+          repo,
+          pr,
+          agent.ticket,
+          project,
+          decision.wouldAutoMerge,
+          files,
+          await this.baseTip(repo, pr),
+        )
       : null;
     const run = await this.runs.update(
       agent.run.id,
@@ -144,11 +185,116 @@ export class PullRequestGate {
         this.epicMerges && passesIntoEpic(decision)
           ? await this.epicMerges.target(pr, run, agent.ticket)
           : null;
-      if (launch) return this.merge(repo, pr, run, agent.ticket, launch.epicKey);
+      if (launch) return this.mergeNow(repo, pr, run, agent.ticket, launch.epicKey);
       return { result: "assessed", ...base };
     }
-    if (judged?.verdict.verdict !== "merge") return { result: "assessed", ...base };
-    return this.merge(repo, pr, run, agent.ticket, null, judged.mode);
+    if (!judged) return { result: "assessed", ...base };
+    const state = queueStateOf(judged.verdict, decision.reasons);
+    if (state !== "merge" && state !== "behind") return { result: "assessed", ...base };
+    // AI-110: only the merge queue's head merges, under its lease.
+    const offered = await this.queue.offer(repo, {
+      projectId: project.id,
+      number: pr.number,
+      kind: "gate",
+      actor: "system",
+      headSha: pr.headSha,
+    });
+    if (offered.result === "merged") return { result: "merged", ...base };
+    return { result: offered.result === "queued" ? "queued" : "assessed", ...base };
+  }
+
+  /** The default branch's tip, for "contains the latest default branch"; null when unread. */
+  private async baseTip(repo: string, pr: PullRequest): Promise<string | null> {
+    try {
+      return await this.host.branchSha(repo, pr.baseRef);
+    } catch (err) {
+      log("WARNING", "base tip read failed", { pr: pr.number, error: errorText(err) });
+      return null;
+    }
+  }
+
+  /** The queue's judge for a build agent's PR: the same facts and verdict as `review`. */
+  private async judgeQueued(repo: string, entry: MergeQueueEntry): Promise<QueueJudgement> {
+    const found = await this.queuedPr(repo, entry);
+    if ("gone" in found) return { state: "gone", detail: found.gone };
+    const { project, pr, agent } = found;
+    if (!pr.intoDefaultBranch) {
+      return { state: "ineligible", headSha: pr.headSha, reasons: ["not_default_branch"] };
+    }
+    const baseSha = await this.baseTip(repo, pr);
+    const { decision, files } = await this.assess(repo, pr, agent.run, agent.ticket);
+    const judged = await this.verdictFor(
+      repo,
+      pr,
+      agent.ticket,
+      project,
+      decision.wouldAutoMerge,
+      files,
+      baseSha,
+    );
+    const state = queueStateOf(judged.verdict, decision.reasons);
+    const reasons = [...judged.verdict.reasons, ...decision.reasons];
+    if (state === "merge") {
+      return { state, headSha: pr.headSha, baseRef: pr.baseRef, baseSha: baseSha! };
+    }
+    if (state === "behind") return { state, headSha: pr.headSha };
+    return { state, headSha: pr.headSha, reasons };
+  }
+
+  /** The queue's merge of its head: the gate's one attempt per head, pinned to `headSha`. */
+  private async mergeQueued(
+    repo: string,
+    entry: MergeQueueEntry,
+    headSha: string,
+  ): Promise<QueueMergeResult> {
+    const found = await this.queuedPr(repo, entry);
+    if ("gone" in found) return { merged: false, error: found.gone };
+    const { project, pr, agent } = found;
+    if (pr.headSha !== headSha) return { merged: false, error: "head moved" };
+    const mode = await this.ticketMode(project, agent.ticket);
+    const result = await this.mergeNow(repo, pr, agent.run, agent.ticket, null, mode);
+    if (result.result === "merged") return { merged: true, sha: result.mergeSha ?? null };
+    return {
+      merged: false,
+      error:
+        result.result === "merge_failed"
+          ? "the code host refused it (the ticket says why)"
+          : "a merge of this head was already tried",
+    };
+  }
+
+  /** The queue's drop on the ticket: flagged for Andy's Needs-you inbox, or a comment only. */
+  private async queueNeedsYou(repo: string, entry: MergeQueueEntry, reason: string, flag: boolean) {
+    const found = await this.queuedPr(repo, entry);
+    if ("gone" in found) {
+      log("WARNING", "merge queue drop with no ticket to flag", { pr: entry.number, reason });
+      return;
+    }
+    const { ticket } = found.agent;
+    if (flag) await this.tickets.flag(ticket.projectId, ticket.id, "system");
+    await this.tracker.addComment(
+      ticket.projectId,
+      ticket.id,
+      `${flag ? "Needs you: " : ""}the merge queue dropped PR #${entry.number}: ${reason}. The gate offers it again once it is clean, or merge it yourself.`,
+      "system",
+    );
+  }
+
+  private async queuedPr(
+    repo: string,
+    entry: MergeQueueEntry,
+  ): Promise<{ gone: string } | { project: Project; pr: PullRequest; agent: AgentPr }> {
+    const project = await this.tracker.getProject(entry.projectId);
+    if (!project) return { gone: `project ${entry.projectId} is gone` };
+    const pr = await this.host.getPullRequest(repo, entry.number);
+    if (!pr || pr.state !== "open") {
+      return { gone: `PR #${entry.number} is ${pr?.state ?? "not found"}` };
+    }
+    const agent = await this.agentPr(pr, project);
+    if (!agent || agent.run.outcome) {
+      return { gone: `PR #${entry.number} is no longer a build agent's open PR` };
+    }
+    return { project, pr, agent };
   }
 
   /**
@@ -163,6 +309,8 @@ export class PullRequestGate {
     project: Project,
     gateClean: boolean,
     files: Listing<ChangedFile>,
+    /** The default branch's tip the head must contain; null: unknown (wait). */
+    baseSha: string | null,
   ): Promise<{ mode: MergeMode | null; verdict: MergeVerdict }> {
     // The repo index caches projects for a minute: read the mode now.
     const fresh = (await this.tracker.getProject(project.id)) ?? project;
@@ -172,7 +320,7 @@ export class PullRequestGate {
         gateClean,
         files,
         labels: pr.labels ?? null,
-        upToDate: await this.upToDate(repo, pr),
+        upToDate: baseSha ? await this.upToDate(repo, pr, baseSha) : null,
         openFindings: await this.openFindings(project.id, repo, pr),
         readyForReview: ticket.stage === "ready_for_review",
       },
@@ -186,10 +334,10 @@ export class PullRequestGate {
     return ticketMergeMode(this.tracker, project, ticket);
   }
 
-  /** Whether the head contains the default branch's tip; null (wait) when the host can't say. */
-  private async upToDate(repo: string, pr: PullRequest): Promise<boolean | null> {
+  /** Whether the head contains the tip that was read; null (wait) when the host can't say. */
+  private async upToDate(repo: string, pr: PullRequest, baseSha: string): Promise<boolean | null> {
     try {
-      return await this.host.headContains(repo, pr.headSha, pr.baseRef);
+      return await this.host.headContains(repo, pr.headSha, baseSha);
     } catch (err) {
       log("WARNING", "up-to-date check failed", { pr: pr.number, error: errorText(err) });
       return null;
@@ -205,7 +353,7 @@ export class PullRequestGate {
    * One attempt per head commit: the claim is atomic, and a failure is left to Andy (no retry). A
    * new commit is a new head, assessed afresh.
    */
-  private async merge(
+  private async mergeNow(
     repo: string,
     pr: PullRequest,
     run: Run,
@@ -246,7 +394,7 @@ export class PullRequestGate {
       await this.recordEpicMerge(run, ticket, pr, sha);
       return { result: "merged", ...base };
     }
-    log("INFO", "auto-merged", { ...base, mode });
+    log("INFO", "auto-merged", { ...base, mode, sha });
     // ADR-0124 "Record": each merge without Andy says which mode allowed it.
     await this.tracker.addComment(
       ticket.projectId,
@@ -254,7 +402,7 @@ export class PullRequestGate {
       `The gate merged PR #${pr.number} under merge mode ${mode ?? "unknown"}: every check and both reviews passed and the merge verdict allowed it.`,
       "system",
     );
-    return { result: "merged", ...base };
+    return { result: "merged", ...base, mergeSha: sha };
   }
 
   /**
