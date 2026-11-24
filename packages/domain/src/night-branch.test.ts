@@ -344,7 +344,7 @@ describe("RunService build base branch (AI-122)", () => {
     const ticket = await tracker.getTicket("ai", story.id);
     expect(ticket?.needsAttention).toBe(true);
     const events = await tracker.listEvents("ai", story.id);
-    expect(events.at(-1)?.body).toContain("night launch is over");
+    expect(events.at(-1)?.body).toContain("no longer covers it");
   });
 
   it("GivenALaunchedStory_WhenALocalRunnerStartsItsBuild_ThenRefusedRatherThanBuiltOnMain", async () => {

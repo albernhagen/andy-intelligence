@@ -8,6 +8,7 @@ import {
   ProjectService,
   RefineDispatcher,
   RunService,
+  EpicMode,
   RunnerService,
   LocalClaims,
   ConfigProposals,
@@ -90,6 +91,8 @@ export interface Services extends Required<ToolServices> {
   syncer: SyncRuns;
   /** The merge queue per repo (AI-110), shared by the gate and `merge_pr`; null without GitHub. */
   mergeQueue: MergeQueue | null;
+  /** The `epic` merge mode (AI-216): epic branches for builds and the epic PR. */
+  epicMode: EpicMode;
   dispatchNext: (projectId: string, wakeWaiters?: boolean) => Promise<unknown>;
   /** The Actions OIDC verifier for CI callbacks; null without the GitHub App. */
   verifyActionsToken: ActionsTokenVerifier | null;
@@ -258,6 +261,14 @@ export function createServices(raw: AppDeps): Services {
         now,
       )
     : null;
+  // AI-216: in the `epic` merge mode a child ticket builds on and merges into its epic's branch.
+  const epicMode = new EpicMode(
+    deps.tracker,
+    deps.runs,
+    connection ? new ConnectedCodeHost(connection) : null,
+    github?.publicUrl ?? "",
+    deps.nightLaunches ?? null,
+  );
   const runs = new RunService(
     deps.tracker,
     deps.runs,
@@ -273,6 +284,7 @@ export function createServices(raw: AppDeps): Services {
     spendGate,
     projectTasks,
     summaryResults,
+    epicMode,
   );
   const refiner = new RefineDispatcher(deps.tracker, deps.runs, runs, now, deps.milestones ?? null);
   // AI-124/AI-125: when a launch ends, its morning PR opens (or an empty epic branch goes),
@@ -516,6 +528,7 @@ export function createServices(raw: AppDeps): Services {
     claims,
     syncer,
     mergeQueue,
+    epicMode,
     dispatchNext,
     verifyActionsToken:
       github && connection

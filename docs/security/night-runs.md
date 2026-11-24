@@ -25,9 +25,9 @@ Overnight launches (ADR-0049, AI-104, AI-123, AI-124). Risks: [R-AI-123](risks/R
 - Start a ticket whose blocker failed, was rejected or was vetoed: it waits on `blockedBy`, the launch lists it as skipped and it is flagged for the morning. When only stopped or skipped tickets are left, the launch ends instead of idling to its stop time (with the night budget, AI-121).
 - Keep going once the launch is `stopping` or ended: questions are asked again as usual.
 
-## Merging into the epic branch (AI-124, ADR-0107)
+## Merging into the epic branch (AI-124, ADR-0107; by day in the `epic` mode, AI-216)
 
-A new App-token write: the control plane squash-merges a ticket's PR into `epic/<KEY>`, then opens one PR `epic/<KEY>` → `main` when the launch ends, or deletes an epic branch nothing merged into.
+A new App-token write: the control plane squash-merges a ticket's PR into `epic/<KEY>`, then opens one PR `epic/<KEY>` → `main` when the launch ends, or deletes an epic branch nothing merged into. In the `epic` merge mode the same path runs by day: the build's base and the merge target are the ticket's epic's branch (stored parent, saved mode, never PR text), created from `main`'s tip with the App token when missing (an existing one is reused); the epic PR opens when the epic's last open child ticket is Done. Bound: once per child ticket, and an epic with more than 50 open or Done child tickets merges none. These merges skip the default branch's merge queue: they never change `main`; two child PRs judged on the same epic tip can both merge, and the epic PR's checks, both reviews and Andy catch a break before `main`.
 
 | Rule            | How                                                                                                                                                                                      |
 | --------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |

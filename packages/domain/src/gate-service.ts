@@ -181,12 +181,18 @@ export class PullRequestGate {
     }
     // `wouldAutoMerge` needs the default branch, so a PR into an epic branch never takes it.
     if (!decision.wouldAutoMerge) {
-      const launch =
+      // A story PR into its epic's branch (night launch, or epic mode by day: AI-216) merges
+      // there now, outside the default branch's merge queue: it never changes the default branch.
+      const target =
         this.epicMerges && passesIntoEpic(decision)
           ? await this.epicMerges.target(pr, run, agent.ticket)
           : null;
-      if (launch) return this.mergeNow(repo, pr, run, agent.ticket, launch.epicKey);
-      return { result: "assessed", ...base };
+      if (!target) return { result: "assessed", ...base };
+      const merged = await this.mergeNow(repo, pr, run, agent.ticket, target.epicKey);
+      if (merged.result === "merged" && !target.launch) {
+        await this.epicMerges!.afterDaytimeMerge(project.id, agent.ticket);
+      }
+      return merged;
     }
     if (!judged) return { result: "assessed", ...base };
     const state = queueStateOf(judged.verdict, decision.reasons);
@@ -428,7 +434,7 @@ export class PullRequestGate {
         ticket.projectId,
         ticket.id,
         "done",
-        `PR #${pr.number} merged into ${pr.baseRef} (night launch): ${pr.url}`,
+        `PR #${pr.number} merged into ${pr.baseRef} (epic branch): ${pr.url}`,
       );
       return true;
     } catch (err) {
@@ -465,7 +471,10 @@ export class PullRequestGate {
       intoEpicBranch(pr) &&
       run.baseBranch === pr.baseRef
     ) {
-      await this.recordEpicMerge(run, ticket, pr, null);
+      // Epic mode (AI-216): the epic PR, if this close finished the epic's last child ticket.
+      if (await this.recordEpicMerge(run, ticket, pr, null)) {
+        await this.epicMerges.afterDaytimeMerge(project.id, ticket);
+      }
     }
 
     let decision: GateDecision | null = null;
