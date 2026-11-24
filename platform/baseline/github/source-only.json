@@ -1,4 +1,11 @@
 {
-  "$comment": "Required checks only the baseline source repo (manifest.json `source`) gets; baseline.mjs drops them from ruleset-main.json for every other repo, whose baseline carries no such job. firestore-suite: the control plane's Firestore adapter suites (ADR-0048). release-note: the PR release-note block (ADR-0121), not carried yet. ui-screenshots: the control plane's Playwright screenshots (ADR-0059).",
-  "required_status_checks": ["firestore-suite", "release-note", "ui-screenshots"]
+  "$comment": "Required checks only the baseline source repo (manifest.json `source`) gets; baseline.mjs drops them from ruleset-main.json for every other repo, whose baseline carries no such job. firestore-suite: the control plane's Firestore adapter suites (ADR-0048). release-note: the PR release-note block (ADR-0121), not carried yet. ui-screenshots: the control plane's Playwright screenshots (ADR-0059). sandbox-self-test, agent-evals, agent-evals-plumbing: this repo's executor and eval checks (ADR-0071, ADR-0040), not carried.",
+  "required_status_checks": [
+    "firestore-suite",
+    "release-note",
+    "ui-screenshots",
+    "sandbox-self-test",
+    "agent-evals",
+    "agent-evals-plumbing"
+  ]
 }
