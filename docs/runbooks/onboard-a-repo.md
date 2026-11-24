@@ -48,6 +48,19 @@ Then tag the baseline version that repos will pin:
 git tag v1.0.0 origin/main && git push origin v1.0.0
 ```
 
+### 1a. After a PR changes `github/ruleset-main.json` merges
+
+Apply only the ruleset to andy-intelligence, then check it took effect (e.g. AI-352 adds `sandbox-self-test`, `agent-evals`, `agent-evals-plumbing`):
+
+```sh
+git switch main && git pull
+node platform/baseline/baseline.mjs apply albernhagen/andy-intelligence --dry-run   # drift only in ruleset required checks; anything else: stop, ask
+node platform/baseline/baseline.mjs apply albernhagen/andy-intelligence
+node platform/baseline/baseline.mjs check albernhagen/andy-intelligence --only ruleset   # exit 0
+```
+
+Then open any PR: the new checks show as **Required** in its checks list.
+
 ## 2. Registering a repo on a project (AI-113)
 
 Adding a repo to a project (UI or MCP `create_project`) makes the App open `baseline/<sha7>` with the files the repo is missing. Its description is the report (ADR-0142):

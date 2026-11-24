@@ -215,6 +215,7 @@ describe("list_needs_me", () => {
   it("GivenNothingOpen_WhenListed_ThenTheInboxIsEmpty", async () => {
     const ctx = await withProject();
     expect((await ctx.call("list_needs_me")).data).toEqual({
+      counts: { tickets: 0, stale: 0, byProject: {} },
       cards: [],
       questions: [],
       tickets: [],
@@ -264,6 +265,7 @@ describe("answer_question", () => {
     });
     expect(res.data.ticket).toMatchObject({ key: "AI-1", needsAttention: false, dorStatus: "met" });
     expect((await ctx.call("list_needs_me")).data).toEqual({
+      counts: { tickets: 0, stale: 0, byProject: {} },
       cards: [],
       questions: [],
       tickets: [],
@@ -333,7 +335,7 @@ describe("status", () => {
           dispatch: { runsAtOnce: 2, paused: false, lastDispatch: null },
         },
       ],
-      needsYou: { questions: 0, tickets: 0, projectPlans: 0 },
+      needsYou: { tickets: 0, stale: 0, projectPlans: 0 },
     });
   });
 

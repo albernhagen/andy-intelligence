@@ -66,3 +66,36 @@ export function workViewCounts(
   for (const t of tickets) for (const v of workViews(t, byId)) counts[v]++;
   return counts;
 }
+
+/**
+ * The Needs-you chip's number and its named parts (AI-347). `tickets` is what the header and
+ * inbox count for the same tickets: an open question or the API's flag on a ticket not archived
+ * or cancelled; a Done one counts only with an open question, as `stale` (part of `tickets`, but
+ * not in the view, which lists open tickets). `toPickWorker`: open tickets in the view only because
+ * their worker is still to be picked (ADR-0082); the inbox leaves them out, so they are not in
+ * `tickets`.
+ */
+export type NeedsYouParts = { tickets: number; stale: number; toPickWorker: number };
+
+export function needsYouParts(tickets: readonly BoardTicket[]): NeedsYouParts {
+  const parts: NeedsYouParts = { tickets: 0, stale: 0, toPickWorker: 0 };
+  for (const t of tickets) {
+    if (t.archived || t.stage === "cancelled") continue;
+    const questions = t.summary.openQuestions > 0;
+    if (t.stage === "done") {
+      if (questions) {
+        parts.tickets++;
+        parts.stale++;
+      }
+    } else if (questions || t.needsAttention) parts.tickets++;
+    else if (t.type !== "epic" && t.summary.worker === "ask") parts.toPickWorker++;
+  }
+  return parts;
+}
+
+/** Adds one project's parts to a running total. */
+export const addNeedsYouParts = (a: NeedsYouParts, b: NeedsYouParts): NeedsYouParts => ({
+  tickets: a.tickets + b.tickets,
+  stale: a.stale + b.stale,
+  toPickWorker: a.toPickWorker + b.toPickWorker,
+});

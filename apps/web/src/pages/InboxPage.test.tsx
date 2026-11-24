@@ -94,7 +94,7 @@ describe("InboxPage", () => {
     expect(within(list).getByRole("link", { name: "PR #9" }).getAttribute("href")).toBe(
       "https://github.com/albernhagen/andy-intelligence/pull/9",
     );
-    // Three ticket questions plus the one merge.
-    expect(screen.getByRole("heading", { name: /Needs you/ }).textContent).toBe("Needs you 4");
+    // Three tickets, as the header counts them; the merge has its own heading (AI-347).
+    expect(screen.getByRole("heading", { name: /Needs you/ }).textContent).toBe("Needs you 3");
   });
 });

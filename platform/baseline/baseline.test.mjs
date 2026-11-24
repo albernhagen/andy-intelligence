@@ -141,6 +141,14 @@ describe("configFor", () => {
     expect(requiredChecks(base)).toContain("firestore-suite");
   });
 
+  it("GivenAManagedRepoWithoutTheJobs_WhenConfigured_ThenSandboxAndEvalChecksAreNotRequired", () => {
+    const evalChecks = ["sandbox-self-test", "agent-evals", "agent-evals-plumbing"];
+    const base = loadConfig();
+    const config = configFor(base, "albernhagen/managed", manifest.source);
+    expect(requiredChecks(base)).toEqual(expect.arrayContaining(evalChecks));
+    for (const check of evalChecks) expect(requiredChecks(config)).not.toContain(check);
+  });
+
   it("GivenAManagedRepoWithoutTheJobs_WhenConfigured_ThenReleaseNoteAndUiScreenshotsAreNotRequired", () => {
     const base = loadConfig();
     const config = configFor(base, "albernhagen/managed", manifest.source);

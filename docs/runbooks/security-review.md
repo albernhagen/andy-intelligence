@@ -41,7 +41,7 @@ Steps 2–4 are now declared in `platform/baseline/github/` and applied with `no
 Settings → Rules → Rulesets → New branch ruleset, target `main`, enforcement Active:
 
 - **Require a pull request before merging** (0 approvals is fine; you merge).
-- **Require status checks to pass**, add: `check`, `actionlint`, `terraform`, `trufflehog`, `security-review`, `dependency-review`, `terraform-misconfig`, `codeql (javascript-typescript)`, `codeql (actions)`. The full list, with `firestore-suite`, `adversarial-review`, `release-note` and `ui-screenshots`, is `platform/baseline/github/ruleset-main.json`.
+- **Require status checks to pass**, add: `check`, `actionlint`, `terraform`, `trufflehog`, `security-review`, `dependency-review`, `terraform-misconfig`, `codeql (javascript-typescript)`, `codeql (actions)`. The full list, with `firestore-suite`, `adversarial-review`, `release-note`, `ui-screenshots`, `sandbox-self-test`, `agent-evals` and `agent-evals-plumbing`, is `platform/baseline/github/ruleset-main.json`.
 - **Require code scanning results**: tool `CodeQL`, alerts **Errors**, security alerts **High or higher**.
 - **Block force pushes.**
 

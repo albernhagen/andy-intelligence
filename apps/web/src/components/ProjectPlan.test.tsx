@@ -59,10 +59,11 @@ describe("project plan", () => {
     expect(await h.tracker.listTickets("trl")).toEqual([]);
   });
 
-  it("GivenOnlyAWaitingPlan_WhenTheInboxOpens_ThenItCountsOneAndDoesNotSayNothingNeedsYou", async () => {
+  it("GivenOnlyAWaitingPlan_WhenTheInboxOpens_ThenItCountsNoTicketsAndDoesNotSayNothingNeedsYou", async () => {
     await open("/all/inbox");
     await screen.findByRole("region", { name: "Project plans" });
     expect(screen.queryByText("Nothing needs you.")).toBeNull();
-    expect(screen.getByRole("heading", { name: /Needs you/ }).textContent).toContain("1");
+    // The heading counts tickets, as the header does (AI-347); the plan has its own section.
+    expect(screen.getByRole("heading", { name: /Needs you/ }).textContent).toBe("Needs you 0");
   });
 });

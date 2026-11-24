@@ -19,6 +19,7 @@ import {
   milestoneOf,
   parseWorkView,
   sortByStartScore,
+  needsYouParts,
   workViewCounts,
   workViews,
   type WorkView,
@@ -110,6 +111,7 @@ export function BoardPage() {
   // Counts follow the epic filter, so a chip's number is what clicking it shows.
   const inScope = useMemo(() => tickets.filter((t) => inEpic(t, epicId)), [tickets, epicId]);
   const counts = useMemo(() => workViewCounts(inScope, allById), [inScope, allById]);
+  const needsYou = useMemo(() => needsYouParts(inScope), [inScope]);
   // Folded under Options on a phone, a filter on still shows: its count on the button.
   const optionsOn = [epicId !== null, grouped, showArchived].filter(Boolean).length;
   const pickView = (next: WorkView | null) =>
@@ -127,6 +129,7 @@ export function BoardPage() {
               <WorkViewMenu
                 view={view}
                 counts={counts}
+                needsYou={needsYou}
                 total={inScope.length}
                 onChange={pickView}
               />
@@ -182,7 +185,13 @@ export function BoardPage() {
 
       {ideating && <IdeateForm projectId={projectId} onClose={() => setIdeating(false)} />}
       {board.data && !isPhone && (
-        <WorkViewChips view={view} counts={counts} total={inScope.length} onChange={pickView} />
+        <WorkViewChips
+          view={view}
+          counts={counts}
+          needsYou={needsYou}
+          total={inScope.length}
+          onChange={pickView}
+        />
       )}
       {board.isPending && <Loading />}
       {showsError(board) && (

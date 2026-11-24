@@ -29,9 +29,21 @@ describe("needs you", () => {
     expect(flagged).toEqual([]);
   });
 
-  it("GivenItemsInTwoProjects_WhenCounted_ThenTotalAndPerProjectCountsMatchTheInbox", () => {
+  it("GivenATicketWithTwoQuestions_WhenCounted_ThenItCountsOnceLikeItsInboxCard", () => {
     const counts = waitingCounts(data);
+    expect(counts.total).toBe(3);
+    expect(counts.stale).toBe(0);
+    expect(Object.fromEntries(counts.byProject)).toEqual({ ai: 2, ops: 1 });
+  });
+
+  it("GivenADoneTicketWithAQuestion_WhenCounted_ThenItIsInTheTotalAndCountedStale", () => {
+    const done = { ...ticket("ai3", "ai"), stage: "done" } as Ticket;
+    const counts = waitingCounts({
+      questions: [...data.questions, question("q4", "ai3", "ai")],
+      tickets: [...data.tickets, done],
+    });
     expect(counts.total).toBe(4);
+    expect(counts.stale).toBe(1);
     expect(Object.fromEntries(counts.byProject)).toEqual({ ai: 3, ops: 1 });
   });
 });
