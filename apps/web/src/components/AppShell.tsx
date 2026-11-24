@@ -244,7 +244,6 @@ function SettingsMenu({ links, headerEnd }: { links: NavItem[]; headerEnd: React
   );
 }
 
-/** The signed-in app's Sign out (HeaderEndContext), as the last menu item. */
 /** The theme switch (ADR-0151): system, light or dark; applied at once and remembered here. */
 function ThemeItems({ className }: { className?: string }) {
   const [theme, setTheme] = useTheme();
@@ -267,6 +266,7 @@ function ThemeItems({ className }: { className?: string }) {
   );
 }
 
+/** The signed-in app's Sign out (HeaderEndContext), as the last menu item. */
 function SignOutItem({ headerEnd, className }: { headerEnd: ReactNode; className?: string }) {
   if (!isValidElement(headerEnd)) return null;
   return (

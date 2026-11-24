@@ -51,6 +51,15 @@ describe("theme switch", () => {
     expect(window.localStorage.getItem("andy.theme")).toBeNull();
   });
 
+  it("GivenDarkAppliedButStorageEmptied_WhenTheMenuOpens_ThenDarkIsPicked", async () => {
+    applyTheme("dark");
+    window.localStorage.clear();
+    const { group } = await openThemeMenu();
+    expect(
+      within(group).getByRole("menuitemradio", { name: "Dark" }).getAttribute("aria-checked"),
+    ).toBe("true");
+  });
+
   it("GivenAStoredValueThatIsNotATheme_WhenLoaded_ThenSystem", () => {
     window.localStorage.setItem("andy.theme", "sepia");
     expect(loadTheme()).toBe("system");
