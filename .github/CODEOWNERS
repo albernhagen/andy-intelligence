@@ -1,5 +1,30 @@
-# Requests Andy's review on every PR, Dependabot's included, so each one notifies him (ADR-0042).
-# Review is not required by the ruleset; GitHub never requests review from a PR's own author.
-# Add lines below for always-gated paths (auth, payments, migrations, infra); the review gate
-# treats every path listed after `*` as protected (ARCHITECTURE §4.5).
-* @albernhagen
+# Kept kinds (ADR-0124): the paths only Andy merges, in every merge mode. The `protect-main`
+# ruleset requires a code owner's approval on them, so the GitHub App cannot merge them; Andy
+# merges them with his admin bypass. Every other PR needs no approval.
+# Same list as KEPT_PATHS in packages/domain/src/merge-paths.ts (a leading `/` here = a path
+# there with no leading `**/`); merge-paths.test.ts fails if they differ. Change both together.
+# Build agents can't edit any path listed here (executor profile), and the gate never
+# auto-merges one (ARCHITECTURE §4.5). No `*` line: it would require approval on every PR.
+
+# Who merges.
+/docs/architecture/adr/0124-merge-modes.md @albernhagen
+/docs/architecture/adr/0134-*.md @albernhagen
+/platform/procedures/coordinate.md @albernhagen
+/docs/runbooks/coordinating-sessions.md @albernhagen
+/AGENTS.md @albernhagen
+/CLAUDE.md @albernhagen
+/packages/domain/src/merge-* @albernhagen
+
+# What judges a PR.
+**/.github/** @albernhagen
+**/CODEOWNERS @albernhagen
+/platform/actions/** @albernhagen
+/platform/baseline/** @albernhagen
+/platform/procedures/** @albernhagen
+/platform/evals/** @albernhagen
+/scripts/review-* @albernhagen
+/packages/domain/src/gate* @albernhagen
+
+# Needs Andy's hands.
+/infra/** @albernhagen
+/.terraform-version @albernhagen
