@@ -40,7 +40,7 @@ describe("work across projects", () => {
       }),
     ).toBeNull();
     const ai = await screen.findByRole("region", { name: "Andy Intelligence" });
-    expect(within(ai).getByRole("heading").textContent).toBe("Andy Intelligence 1");
+    expect(within(ai).getByRole("heading").textContent).toBe("Andy Intelligence · 1");
     expect(within(ai).getByRole("link", { name: "Pick a lane" })).toBeTruthy();
     expect(
       within(screen.getByRole("region", { name: "Ops" })).getByText("1 question"),
