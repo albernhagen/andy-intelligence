@@ -1,6 +1,7 @@
 import { expect, test, type Page } from "@playwright/test";
 import { expectShellLoaded } from "./shell";
 import { mockDashboards, waitForStableCharts } from "./dashboard-fixtures";
+import { mockBriefStep } from "./setup-fixtures";
 import { SCREENS, type Screen } from "./screens";
 
 /**
@@ -18,6 +19,8 @@ const OPEN: Record<string, (page: Page) => Promise<void>> = {
   // The dashboard reads use the server's real clock; serve the fixed ones.
   "all-dashboards": mockDashboards,
   dashboards: mockDashboards,
+  // AI-373: the fake API has no GitHub, so the brief's state is served.
+  setup: mockBriefStep,
 };
 
 async function open(page: Page, screen: Screen) {

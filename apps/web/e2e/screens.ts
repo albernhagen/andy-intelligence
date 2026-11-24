@@ -62,6 +62,14 @@ export const SCREENS: Screen[] = [
     ready: "AI: Andy Intelligence settings",
     dark: true,
   },
+  // AI-373: the brief step, with the brief read mocked (coverage.spec.ts) as the fake has no GitHub.
+  {
+    route: "/p/$projectId/setup",
+    name: "setup",
+    url: "/p/ai/setup",
+    ready: "What are you building, and for whom?",
+    dark: true,
+  },
   {
     route: "/p/$projectId/whats-new",
     name: "whats-new",

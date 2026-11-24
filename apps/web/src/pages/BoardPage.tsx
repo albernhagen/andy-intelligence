@@ -27,6 +27,7 @@ import {
 import { BoardCard } from "@/components/board/BoardCard";
 import { BoardDispatchStatus } from "@/components/DispatchControls";
 import { IdeateForm } from "@/components/IdeateForm";
+import { SetupNextStep } from "@/components/setup/SetupNextStep";
 import { EpicControls } from "@/components/board/EpicControls";
 import { WorkViewChips, WorkViewMenu } from "@/components/board/WorkViewChips";
 import {
@@ -119,6 +120,12 @@ export function BoardPage() {
 
   return (
     <section className="space-y-4 max-sm:space-y-2">
+      {board.data && (
+        <SetupNextStep
+          projectId={projectId}
+          storyCount={board.data.filter((t) => t.type !== "epic").length}
+        />
+      )}
       <div className="flex flex-wrap items-center justify-between gap-2">
         <h2 className="text-lg font-medium">
           Board <BoardDispatchStatus projectId={projectId} />

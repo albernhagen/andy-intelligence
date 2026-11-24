@@ -79,6 +79,37 @@ export function renderBrief(answers: BriefAnswers): BriefRender {
 
 /** Where the brief lives in a project repo (ADR-0053). */
 export const BRIEF_PATH = "docs/product/brief.md";
+/** Where product discovery records its result (ADR-0145, `platform/procedures/discover.md`). */
+export const DISCOVERY_PATH = "docs/product/discovery.md";
+
+/** The brief answers discovery may settle (`discover.md` "Brief answers"), in its table order. */
+export const DISCOVERY_FIELDS = ["idea", "problem", "users", "business"] as const;
+export type DiscoveryPrefill = Partial<Record<(typeof DISCOVERY_FIELDS)[number], string>>;
+
+/**
+ * The answers in a discovery doc's "Brief answers" table, to pre-fill the brief form (AI-373).
+ * The doc is untrusted repo text: only the four known ids are read, each as one plain line cut to
+ * an answer's length; rows with "…" or nothing are left out. No table: nothing.
+ */
+export function discoveryPrefill(markdown: string): DiscoveryPrefill {
+  const section = /^## Brief answers\s*$([\s\S]*?)(?=^## |(?![\s\S]))/m.exec(markdown)?.[1] ?? "";
+  const out: DiscoveryPrefill = {};
+  for (const line of section.split("\n")) {
+    const cells = line.split("|").map((c) => c.trim());
+    if (cells.length < 4) continue;
+    const id = cells[1]!.replace(/`/g, "");
+    const answer = plainAnswer(cells.slice(2, -1).join("|")).slice(0, 2000);
+    if (!(DISCOVERY_FIELDS as readonly string[]).includes(id)) continue;
+    if (answer === "" || answer === "…" || answer === "...") continue;
+    out[id as (typeof DISCOVERY_FIELDS)[number]] ??= answer;
+  }
+  return out;
+}
+
+/** Whether the brief is on the default branch, and discovery's answers to pre-fill (AI-373). */
+export type BriefStatus =
+  | { readable: true; onDefaultBranch: boolean; prefill: DiscoveryPrefill }
+  | { readable: false; problem: string; prefill: DiscoveryPrefill };
 /** Brief PRs opened per instance per rolling hour (ADR-0028); more are refused until it frees. */
 export const BRIEF_PRS_PER_HOUR = 5;
 const HOUR_MS = 60 * 60_000;
@@ -160,6 +191,46 @@ export class BriefService {
       }),
     );
     return { status: "opened", pullRequest, revised: current !== null };
+  }
+
+  /**
+   * The brief's state for the setup path (AI-373): whether `docs/product/brief.md` is on the
+   * default branch, and discovery's brief answers to pre-fill the form. Owner only, as the write
+   * is. A repo that can't be read is reported, never read as "no brief".
+   */
+  async status(projectId: string, actor: EventActor): Promise<BriefStatus> {
+    requireCan(actor, "submit_brief", projectId);
+    const project = await this.tracker.getProject(projectId);
+    if (!project) throw new WorkTrackerError("not_found", `project ${projectId} not found`);
+    const none = { readable: false as const, prefill: {} };
+    if (!this.codeHost) return { ...none, problem: "GitHub is not connected" };
+    const repoName = project.repos[0];
+    if (!repoName) return { ...none, problem: `project ${project.key} has no repo` };
+    try {
+      const repo = await this.codeHost.getRepo(repoName);
+      if (!repo) return { ...none, problem: `the App isn't installed on ${repoName}` };
+      const [brief, discovery] = await Promise.all([
+        this.codeHost.readFile(repo.fullName, BRIEF_PATH, repo.defaultBranch),
+        this.codeHost.readFile(repo.fullName, DISCOVERY_PATH, repo.defaultBranch),
+      ]);
+      return {
+        readable: true,
+        onDefaultBranch: brief !== null,
+        prefill: discovery === null ? {} : discoveryPrefill(discovery),
+      };
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      console.log(
+        JSON.stringify({
+          severity: "WARNING",
+          message: "brief status read failed",
+          component: "brief",
+          projectId,
+          error: message,
+        }),
+      );
+      return { ...none, problem: `couldn't read ${repoName}: ${message}` };
+    }
   }
 
   /** The hourly cap: refuses when BRIEF_PRS_PER_HOUR were opened in the last hour. */

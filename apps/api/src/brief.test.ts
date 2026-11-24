@@ -1,4 +1,4 @@
-import { renderBrief, BRIEF_PATH } from "@andy/domain";
+import { renderBrief, BRIEF_PATH, DISCOVERY_PATH } from "@andy/domain";
 import type { BriefAnswers } from "@andy/contracts";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { REPO, createdApp, githubApp } from "./github/test-app";
@@ -98,5 +98,49 @@ describe("POST /api/projects/{projectId}/brief", () => {
     expect(res.status).toBe(422);
     expect(await res.json()).toMatchObject({ error: "project AI has no repo with the App" });
     expect(s.host.proposals).toHaveLength(0);
+  });
+});
+
+describe("GET /api/projects/{projectId}/brief", () => {
+  beforeEach(() => {
+    vi.spyOn(console, "log").mockImplementation(() => {});
+  });
+
+  it("GivenNoBrief_WhenAndyReads_ThenNotOnTheDefaultBranch", async () => {
+    const s = await setup();
+    const res = await s.call("/api/projects/ai/brief");
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ readable: true, onDefaultBranch: false, prefill: {} });
+  });
+
+  it("GivenAMergedBriefAndADiscovery_WhenRead_ThenOnTheDefaultBranchWithThePrefill", async () => {
+    const s = await setup();
+    s.host.files.set(BRIEF_PATH, "# Project brief");
+    s.host.files.set(
+      DISCOVERY_PATH,
+      "## Brief answers\n\n| Id | Answer |\n|---|---|\n| `users` | Andy. |\n",
+    );
+    expect(await (await s.call("/api/projects/ai/brief")).json()).toEqual({
+      readable: true,
+      onDefaultBranch: true,
+      prefill: { users: "Andy." },
+    });
+  });
+
+  it("GivenTheBriefSubmittedInTheUi_WhenItsPrMerges_ThenTheReadSaysOnTheDefaultBranch", async () => {
+    const s = await setup();
+    await s.submit(answers);
+    const content = s.host.proposals[0]!.proposal.content;
+    s.host.files.set(BRIEF_PATH, content);
+    expect(await (await s.call("/api/projects/ai/brief")).json()).toMatchObject({
+      onDefaultBranch: true,
+    });
+  });
+
+  it("GivenGitHubNotConnected_WhenRead_ThenUnreadableWithTheReason", async () => {
+    const s = await setup(false);
+    expect(await (await s.call("/api/projects/ai/brief")).json()).toMatchObject({
+      readable: false,
+    });
   });
 });

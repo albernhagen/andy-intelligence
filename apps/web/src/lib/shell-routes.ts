@@ -76,5 +76,7 @@ export const REACHED_OTHERWISE: Readonly<Record<string, string>> = {
   "/p/$projectId/t/$ticketRef":
     "a ticket: the palette finds it by key or title, or a card opens it",
   "/p/$projectId/runs/$runId": "an agent task: opened from its ticket's Activity",
+  "/p/$projectId/setup":
+    "a new project's setup: Add project opens it, and the board's setup bar (AI-373)",
   "/settings/github/callback": "GitHub's return address after connecting",
 };

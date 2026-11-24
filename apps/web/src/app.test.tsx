@@ -6,12 +6,15 @@ import { readyStory, renderApp } from "@/test/harness";
 
 describe("tickets UI", () => {
   it("GivenNoProjects_WhenAndyCreatesAProjectAndTicket_ThenTheTicketIsInBacklog", async () => {
-    const { user } = renderApp("/projects");
+    const { user, router } = renderApp("/projects");
     expect(await screen.findByText("No projects yet.")).toBeTruthy();
 
     await user.type(screen.getByLabelText("Name"), "Andy Intelligence");
     await user.type(screen.getByLabelText(/^Key/), "ai");
     await user.click(screen.getByRole("button", { name: "Create project" }));
+    // AI-373: a new project opens its setup path; the board is one click away.
+    await screen.findByRole("navigation", { name: "Set up Andy Intelligence" });
+    await router.navigate({ to: "/p/ai" });
 
     await user.type(await screen.findByLabelText("Add a ticket"), "Ticket board{Enter}");
 
@@ -65,7 +68,7 @@ describe("tickets UI", () => {
     await harness.user.type(screen.getByLabelText(/^GitHub repo/), "albernhagen/andy-intelligence");
     await harness.user.click(screen.getByRole("button", { name: "Create project" }));
 
-    await screen.findByLabelText("Add a ticket");
+    await screen.findByRole("navigation", { name: "Set up Andy Intelligence" });
     expect((await harness.tracker.getProject("ai"))?.repos).toEqual([
       "albernhagen/andy-intelligence",
     ]);
