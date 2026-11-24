@@ -68,3 +68,17 @@ Opacity and transform only. `prefers-reduced-motion` turns every animation and t
 | Fade a menu in with `animate-enter`                               | Animate height, width or colour                           |
 | Bundled fonts (`font-sans`, `font-mono`)                          | A `<link>` to a font host                                 |
 | Put a new screen under `/p/$projectId/…` and `/all/…`             | Add a project dropdown inside one page                    |
+
+## Feedback components
+
+In `src/components/ui/` (AI-369), on Radix. Each works by keyboard alone, shows a focus ring, has 44px targets on a phone and moves only with `animate-enter` (150 ms, off under reduced motion).
+
+| Component    | Use                                                                                                                                                                                     |
+| ------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `toast()`    | After a write succeeds: `toast({ title: "Answered AI-3", undo })`. Undo only when the write can be reversed; a failed undo shows its error. `<Toaster />` is mounted once in `main.tsx` |
+| `Dialog`     | A decision that blocks: confirm a destructive write. Needs a `DialogTitle`; traps focus; Esc closes                                                                                     |
+| `Sheet`      | Secondary detail or filters from an edge; full screen on a phone                                                                                                                        |
+| `Tooltip`    | Repeats or explains a control; never the only place for information                                                                                                                     |
+| `Skeleton`   | The shape of content while it loads; static, no pulse                                                                                                                                   |
+| `EmptyState` | What is missing and the one next step                                                                                                                                                   |
+| `Kbd`        | The key on the control it triggers; the control sets `aria-keyshortcuts`                                                                                                                |

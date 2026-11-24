@@ -72,7 +72,11 @@ The marker set: [`design-status-markers.md`](design-status-markers.md).
 
 ## Feedback
 
-Every write confirms where it happened: the changed row, card or field shows the new value, and a failure shows the API's message there (`QueryError`). Shared confirmation components: AI-369.
+Every write confirms where it happened: the changed row, card or field shows the new value, and a failure shows the API's message there (`QueryError`).
+
+## Feedback components
+
+Toast with Undo (reversible writes), Dialog, Sheet, Tooltip, Skeleton, EmptyState and Kbd (AI-369): [when to use each](design-details.md#feedback-components).
 
 ## Copy
 
