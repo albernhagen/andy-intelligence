@@ -342,7 +342,7 @@ describe("TicketService", () => {
         ticketsByStage: expect.objectContaining({ backlog: 0 }),
       }),
     ]);
-    expect(overview.needsYou).toEqual({ questions: 1, tickets: 1 });
+    expect(overview.needsYou).toEqual({ tickets: 1, stale: 0 });
   });
 
   describe("cancel and archive", () => {
@@ -591,7 +591,7 @@ describe("TicketService", () => {
       expect(inbox).toEqual({ questions: [], tickets: [] });
       const overview = await service.overview();
       expect(overview.projects[0]?.ticketsByStage).toMatchObject({ backlog: 1, done: 0 });
-      expect(overview.needsYou).toEqual({ questions: 0, tickets: 0 });
+      expect(overview.needsYou).toEqual({ tickets: 0, stale: 0 });
     });
   });
 

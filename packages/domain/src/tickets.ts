@@ -28,7 +28,7 @@ import {
 import { checkDor, heldGaps, isHeld, type DorResult } from "./dor";
 import { DomainError } from "./errors";
 import { requireCan } from "./permissions";
-import { inboxCards } from "./inbox-order";
+import { inboxCards, waitingCounts } from "./inbox-order";
 import {
   blockerKeys,
   blockerProblem,
@@ -83,7 +83,8 @@ export interface Overview {
     ticketsByStage: Record<Stage, number>;
     dispatch: Pick<Project, "runsAtOnce" | "paused" | "lastDispatch">;
   }[];
-  needsYou: { questions: number; tickets: number };
+  /** Tickets waiting on Andy, as the header counts them (AI-347); `stale` is the Done part. */
+  needsYou: { tickets: number; stale: number };
 }
 
 /** How many history events `status` returns, newest last. */
@@ -1004,9 +1005,10 @@ export class TicketService {
         };
       }),
     );
+    const needs = waitingCounts(inbox);
     return {
       projects: counted,
-      needsYou: { questions: inbox.questions.length, tickets: inbox.tickets.length },
+      needsYou: { tickets: needs.total, stale: needs.stale },
     };
   }
 

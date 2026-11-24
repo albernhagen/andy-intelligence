@@ -344,7 +344,10 @@ function PickerItem(props: {
       {props.children}
       <span className="ml-auto flex items-center gap-2 pl-4">
         {props.waiting > 0 && (
-          <Badge variant="attention" aria-label={`${props.waiting} waiting on you`}>
+          <Badge
+            variant="attention"
+            aria-label={`${props.waiting} ticket${props.waiting === 1 ? "" : "s"} waiting on you`}
+          >
             {props.waiting}
           </Badge>
         )}
@@ -363,18 +366,14 @@ function KeyBadge({ children }: { children: ReactNode }) {
   );
 }
 
-/** Things to answer (questions and flagged tickets) across every project; opens that inbox. */
+/** Tickets waiting on Andy across every project, one per inbox card (AI-347); opens that inbox. */
 function NeedsYouCount() {
   const needsYou = useNeedsYou();
   const total = needsYou.data ? waitingCounts(needsYou.data).total : null;
   return (
     <Link
       to={scopePath(ALL, "inbox")}
-      title={
-        total === null
-          ? undefined
-          : `${total} question${total === 1 ? "" : "s"} or flagged ticket${total === 1 ? "" : "s"} to answer`
-      }
+      title={total === null ? undefined : `${total} ticket${total === 1 ? "" : "s"} waiting on you`}
       className={cn(
         "inline-flex h-11 items-center gap-1.5 whitespace-nowrap sm:h-7 rounded-md px-2 text-xs font-medium tabular-nums",
         total ? "bg-attention/15 text-attention" : "text-muted-foreground hover:bg-muted",

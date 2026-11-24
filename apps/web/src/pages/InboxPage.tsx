@@ -5,7 +5,7 @@ import { InboxTicketCard } from "@/components/inbox/InboxTicketCard";
 import { MergesWaiting } from "@/components/inbox/MergesWaiting";
 import { ProjectPlansWaiting, useWaitingPlans } from "@/components/ProjectPlan";
 import { Loading, QueryError } from "@/components/Status";
-import { cardCount, inboxCards, type InboxCard } from "@/lib/needs-you";
+import { inboxCards, type InboxCard } from "@/lib/needs-you";
 import { useNeedsYou, useProjects } from "@/lib/queries";
 import { showsError } from "@/lib/live";
 
@@ -32,7 +32,9 @@ export function InboxPage() {
   const { active, stale } = inboxCards(needsYou.data, projectId);
   const { waitingMerges } = needsYou.data;
   const merges = waitingMerges.merges.filter((m) => !projectId || m.projectId === projectId);
-  const total = sum([...active, ...stale]) + plans.shown.length + merges.length;
+  // Tickets, as the header and picker count them (AI-347); plans and merges have their own headings.
+  const total = active.length + stale.length;
+  const nothing = total + plans.shown.length + merges.length === 0;
 
   return (
     <section className="space-y-4">
@@ -41,7 +43,7 @@ export function InboxPage() {
       </h2>
       <ProjectPlansWaiting projectId={projectId} />
       <MergesWaiting merges={merges} truncated={waitingMerges.truncated} />
-      {total === 0 && <p className="text-muted-foreground">Nothing needs you.</p>}
+      {nothing && <p className="text-muted-foreground">Nothing needs you.</p>}
       {projectId ? (
         <Cards cards={active} />
       ) : (
@@ -55,13 +57,11 @@ export function InboxPage() {
   );
 }
 
-const sum = (cards: InboxCard[]) => cards.reduce((n, c) => n + cardCount(c), 0);
-
 function Group({ title, cards }: { title: string; cards: InboxCard[] }) {
   return (
     <section aria-label={title} className="space-y-2">
       <h3 className="text-sm font-medium">
-        {title} <span className="text-muted-foreground tabular-nums">{sum(cards)}</span>
+        {title} <span className="text-muted-foreground tabular-nums">{cards.length}</span>
       </h3>
       <Cards cards={cards} />
     </section>
