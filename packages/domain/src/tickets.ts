@@ -925,7 +925,7 @@ export class TicketService {
   }
 
   /**
-   * The Needs-you inbox: open questions plus flagged tickets, across all projects. Archived and
+   * The Needs-you inbox: open questions, their tickets and flagged tickets, across all projects. Archived and
    * cancelled tickets are left out, so a question that slips past a cancel never shows.
    */
   async needsYou(): Promise<{ questions: Question[]; tickets: Ticket[] }> {
@@ -942,13 +942,12 @@ export class TicketService {
     );
     const visible = questions.filter((q) => !hidden.has(q.ticketId));
     // A flag left on a finished ticket (AI-2) isn't waiting on anyone, unless a question is open
-    // (the inbox lists those under Stale).
-    const flagged = tickets
-      .filter((t) => t.needsAttention && !t.archived)
-      .filter(
-        (t) =>
-          !hidden.has(t.id) && (t.stage !== "done" || questions.some((q) => q.ticketId === t.id)),
-      );
+    // (the inbox lists those under Stale). A ticket with an open question comes back even without
+    // its flag, so every card has its ticket and a Done one counts as stale (AI-347).
+    const asked = new Set(visible.map((q) => q.ticketId));
+    const flagged = tickets.filter(
+      (t) => !hidden.has(t.id) && (asked.has(t.id) || (t.needsAttention && t.stage !== "done")),
+    );
     // Every reader gets the inbox's order (AI-40).
     const { active, stale } = inboxCards({ questions: visible, tickets: flagged });
     return { questions: [...active, ...stale].flatMap((c) => c.questions), tickets: flagged };

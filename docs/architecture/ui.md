@@ -28,7 +28,7 @@ v1.x screens:
 
 **Built in AI-26: Design source and app shell (M3, ADR-0059):**
 - `apps/web/design.md` and the tokens in `index.css` (status roles `attention`, `running`, `success`; a `Badge` variant per marker).
-- One shell (`AppShell.tsx`, the router's root): project picker (key + name, each project's waiting count, All projects, Add project), Board / Inbox / Project settings / Settings, "Needs you N" across projects (tickets, AI-347).
+- One shell (`AppShell.tsx`, the router's root): project picker (key + name, each project's waiting count, All projects, Add project), Board / Inbox / Project settings / Settings, "Needs you N" across projects.
 - Scope in the URL: `/p/:projectId/…` or `/all/…` (`/all/board` asks for a project). Last scope in `localStorage`; `/` redirects to its inbox. Every screen has its own URL (`routes.test.tsx`).
 - Inbox (AI-30): one card per ticket (type, key, linked title, stage) holding its open questions, or "Flagged for you" when it has none; under All projects, a counted heading per project.
   - Order (`inboxCards`, `lib/needs-you.ts`): Backlog tickets whose only Definition of Ready gap is their questions, then tickets past Backlog, then other Backlog; ties by rank, then urgency. Done, Cancelled and archived last, under "Stale".

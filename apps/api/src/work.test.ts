@@ -81,8 +81,6 @@ describe("work across projects (AI-198)", () => {
     await tracker.askQuestion("ai", asked!.id, { text: "And which colour?" }, "andy");
     const [, done] = await tracker.listTickets("ops");
     await tracker.askQuestion("ops", done!.id, { text: "Still needed?" }, "andy");
-    // TicketService.ask flags the ticket; this test writes the tracker directly.
-    await tracker.updateTicket("ops", done!.id, { fields: { needsAttention: true } }, "system");
     const pick = await tracker.createProject({ name: "Pick", key: "PK" });
     await tracker.updateProject(pick.id, { defaultWorker: "ask" });
     await tracker.createTicket(pick.id, { title: "Who builds it?" }, "andy");
