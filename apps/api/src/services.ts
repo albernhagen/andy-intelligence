@@ -4,6 +4,7 @@ import {
   MilestoneService,
   BuildDispatcher,
   SyncRuns,
+  MergeQueue,
   ProjectService,
   RefineDispatcher,
   RunService,
@@ -50,6 +51,7 @@ import {
   type EpicBranchOpener,
 } from "@andy/domain";
 import {
+  InMemoryMergeQueueStore,
   type EventActor,
   type NightLaunchStore,
   type Ticket,
@@ -86,6 +88,8 @@ export interface Services extends Required<ToolServices> {
   runners: RunnerService | null;
   claims: LocalClaims | null;
   syncer: SyncRuns;
+  /** The merge queue per repo (AI-110), shared by the gate and `merge_pr`; null without GitHub. */
+  mergeQueue: MergeQueue | null;
   dispatchNext: (projectId: string, wakeWaiters?: boolean) => Promise<unknown>;
   /** The Actions OIDC verifier for CI callbacks; null without the GitHub App. */
   verifyActionsToken: ActionsTokenVerifier | null;
@@ -139,6 +143,7 @@ export const METERED_READS = {
   spendCapsStore: ["getGlobal"],
   spendNotices: ["get"],
   projectVersions: ["get"],
+  mergeQueues: ["get"],
 } satisfies { [K in keyof AppDeps]?: readonly (keyof NonNullable<AppDeps[K]> & string)[] };
 
 /** `deps` with each store's reads counted per request and per dispatch (AI-315). */
@@ -319,6 +324,15 @@ export function createServices(raw: AppDeps): Services {
     now,
     deps.quota ?? null,
   );
+  // AI-110 (ADR-0150): one queue per process over the shared store, so every merge into a
+  // default branch (the gate's and merge_pr's) is serialised per repo across instances.
+  const mergeQueue = connection
+    ? new MergeQueue(
+        deps.mergeQueues ?? new InMemoryMergeQueueStore(),
+        new ConnectedCodeHost(connection),
+        now,
+      )
+    : null;
   const dispatchOnce = async (projectId: string, wakeWaiters: boolean) => {
     // AI-75 (ADR-0087): held gaps are asked first, as the question caps allow; no run needed.
     await refiner.askHeld(projectId);
@@ -501,6 +515,7 @@ export function createServices(raw: AppDeps): Services {
     runners,
     claims,
     syncer,
+    mergeQueue,
     dispatchNext,
     verifyActionsToken:
       github && connection
@@ -558,6 +573,7 @@ export function createServices(raw: AppDeps): Services {
       connection ? new ConnectedCodeHost(connection) : null,
       deps.reviewFindings ?? null,
       now,
+      mergeQueue,
     ),
     milestones: deps.milestones ?? null,
     // AI-295: one reader each for the Dashboards routes and MCP `dashboard`.
