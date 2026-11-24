@@ -10,6 +10,7 @@ import type {
   Ticket,
   TicketEvent,
 } from "@andy/contracts";
+import { PageHeader } from "@/components/PageHeader";
 import { Loading, QueryError } from "@/components/Status";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -114,25 +115,26 @@ function RunDetail({
   const log = httpsHref(run.links.executorRun);
   return (
     <article className="space-y-4 wrap-anywhere" aria-label="Agent task">
-      <header className="flex flex-wrap items-center justify-between gap-2">
-        <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
-          {run.ticketId && (
-            <Crumbs projectId={run.projectId} ticketId={run.ticketId} ticket={ticket} />
-          )}
-          <h2 className="text-md font-semibold">
+      <PageHeader
+        title={
+          <>
             <span className="sr-only">Agent task ·</span> {STEP_TITLE[run.step]}
-          </h2>
-          <Badge variant={STATUS_VARIANT[run.status]}>{statusText(run, now)}</Badge>
-        </div>
-        {log && (
-          <Button asChild size="sm" variant="outline" className="h-11 sm:h-8">
-            <a href={log} target="_blank" rel="noopener noreferrer">
-              Open log
-              <ExternalLink aria-hidden className="size-3.5" />
-            </a>
-          </Button>
-        )}
-      </header>
+          </>
+        }
+        actions={
+          log && (
+            <Button asChild size="sm" variant="outline" className="h-11 sm:h-8">
+              <a href={log} target="_blank" rel="noopener noreferrer">
+                Open log
+                <ExternalLink aria-hidden className="size-3.5" />
+              </a>
+            </Button>
+          )
+        }
+      >
+        <Badge variant={STATUS_VARIANT[run.status]}>{statusText(run, now)}</Badge>
+      </PageHeader>
+      {run.ticketId && <Crumbs projectId={run.projectId} ticketId={run.ticketId} ticket={ticket} />}
 
       <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_16rem] lg:gap-6">
         {/* AI-340, AI-377: one sentence first: what it is doing, or how it ended. */}
@@ -215,7 +217,7 @@ function RunDetail({
   );
 }
 
-/** "Board › AI-3 Story side panel ›": where the task belongs, each part a link. */
+/** "Board › AI-3: Story side panel": where the task belongs, each part a link, under the header. */
 function Crumbs({
   projectId,
   ticketId,
@@ -242,7 +244,6 @@ function Crumbs({
       >
         {ticket ? `${ticket.key}: ${ticket.title}` : "Ticket"}
       </Link>
-      <ChevronRight aria-hidden className="size-3.5 text-muted-foreground" />
     </nav>
   );
 }
