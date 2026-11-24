@@ -1,6 +1,6 @@
 # Web UI and MCP parity — inventory
 
-Step 1 of AI-285: Web UI and MCP parity: every action in both, enforced by a test. Taken from `main` at `8a635f1` on 2026-11-21: the 79 signed-in `/api/*` routes and 62 MCP tools (`pnpm --filter @andy/api snapshot`), and every route the web calls (`apps/web/src`). **Parity** means Andy can do the same thing in the web UI and from Claude over MCP. Nothing here is built yet; Andy reviews the list first. Gaps in parked milestones (M6: Dev → prod releases, M7: Mobile, M8: Project members, M9: Add Jules + model routing) are listed apart and get no tickets.
+Step 1 of AI-285: Web UI and MCP parity: every action in both, enforced by a test. Taken from `main` at `8a635f1` on 2026-11-21: the 79 signed-in `/api/*` routes and 62 MCP tools (`pnpm --filter @andy/api snapshot`), and every route the web calls (`apps/web/src`). **Parity** means Andy can do the same thing in the web UI and from Claude over MCP; since 2026-11-23 it is required only for actions Andy does from Claude (ADR-0148, rule under "One side on purpose"). Nothing here is built yet; Andy reviews the list first. Gaps in parked milestones (M6: Dev → prod releases, M7: Mobile, M8: Project members, M9: Add Jules + model routing) are listed apart and get no tickets.
 
 ## Matched: in both
 
@@ -71,7 +71,9 @@ M6, M7 and M8 add no gap today: their settings that exist (environments) are alr
 
 ## One side on purpose (the parity test records the reason)
 
-The registry `apps/api/src/parity.ts` (AI-300) holds every action with its routes and tools; `parity.test.ts` fails when a route or tool is in no action, names one that doesn't exist, or has one side without a reason. No open gaps today (AI-351 matched revoking a runner). AI-320 matched starting the plan-project and ideate agent tasks: `start_plan_project` and `start_ideate` over MCP; in the web, the Project plan card's button and the board's Ideate form (AI-299).
+The registry `apps/api/src/parity.ts` (AI-300) holds every action with its routes and tools; `parity.test.ts` fails when a route or tool is in no action, names one that doesn't exist, or has one side without a reason. No open gaps today (AI-351 matched revoking a runner).
+
+**Which actions need both sides (ADR-0148):** those Andy does from Claude: tickets, questions, plans, milestones and runs. A new settings action may be web only: add its name to `WEB_ONLY_ALLOWED` in `parity.ts` with a `oneSide` reason. The test fails for a web-only action off that list, and for any web-only action whose route is under tickets, questions, the Needs-you inbox, plans, milestones, runs or the night launch, even if listed. Existing MCP tools stay. AI-320 matched starting the plan-project and ideate agent tasks: `start_plan_project` and `start_ideate` over MCP; in the web, the Project plan card's button and the board's Ideate form (AI-299).
 
 | Action                                                | Side     | Reason                                                                                                   |
 | ----------------------------------------------------- | -------- | -------------------------------------------------------------------------------------------------------- |
