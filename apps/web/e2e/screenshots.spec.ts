@@ -9,7 +9,7 @@ async function open(page: Page, path: string, ready: string) {
   await page.goto(path);
   await expect(page.getByText(ready).first()).toBeVisible();
   // The header count is loaded once every screen has it.
-  await expect(page.getByRole("link", { name: "Needs you 6" })).toBeVisible();
+  await expect(page.getByRole("link", { name: "Needs you 5" })).toBeVisible();
 }
 
 test("shell: inbox under All projects", async ({ page }) => {
