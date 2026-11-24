@@ -2,27 +2,52 @@ name: Baseline — UI screenshots
 description: >-
   Playwright screenshot checks for a web app (ADR-0059: Visual checks, project baseline ADR-0031/ADR-0038).
   Runs `playwright test` in the app's folder and fails on any diff from the stored images; on failure
-  uploads the actual, expected and diff images as the `ui-screenshots` artifact. Run after
-  actions/checkout, in the Playwright container image so renders match the stored ones.
+  uploads the actual, expected and diff images as the `ui-screenshots` artifact. With `base-ref`
+  set (a PR), a docs-only change (scripts/review-scope.mjs, the review agents' rule) reports a pass
+  without running; if the change can't be read, it runs. Run after actions/checkout (fetch-depth 2
+  on a PR), in the Playwright container image so renders match the stored ones.
 
 inputs:
   working-directory:
     description: The web app's folder (holds playwright.config.ts).
     default: apps/web
+  base-ref:
+    description: Ref to diff HEAD against to skip a docs-only change (HEAD^1 on a PR merge commit). Empty runs always.
+    default: ""
 
 runs:
   using: composite
   steps:
-    - uses: pnpm/action-setup@73e46992e05b19abd31f2f3c20e0e7370d762115 # v6.1.1
-    - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+    - name: Docs-only change?
+      id: scope
+      shell: bash
+      env:
+        BASE_REF: ${{ inputs.base-ref }}
+      run: |
+        if [ -z "$BASE_REF" ]; then
+          echo "run=true" >> "$GITHUB_OUTPUT"; exit 0
+        fi
+        # The container's checkout is owned by another user; let git read it.
+        git config --global --add safe.directory "$GITHUB_WORKSPACE" || true
+        run=$(node "$GITHUB_ACTION_PATH/../../../scripts/review-scope.mjs" --gate "$BASE_REF") || run=run=true
+        echo "$run" >> "$GITHUB_OUTPUT"
+        if [ "$run" = run=false ]; then
+          echo "UI screenshots: skipped, docs-only change." | tee -a "$GITHUB_STEP_SUMMARY"
+        fi
+    - if: steps.scope.outputs.run == 'true'
+      uses: pnpm/action-setup@73e46992e05b19abd31f2f3c20e0e7370d762115 # v6.1.1
+    - if: steps.scope.outputs.run == 'true'
+      uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
       with:
         node-version-file: .nvmrc
         cache: pnpm
     # No install scripts: the root `prepare` (git hooks) fails on the container's checkout
     # ownership, and the image already has the browsers.
-    - shell: bash
+    - if: steps.scope.outputs.run == 'true'
+      shell: bash
       run: pnpm install --frozen-lockfile --ignore-scripts
     - name: Screenshot checks
+      if: steps.scope.outputs.run == 'true'
       shell: bash
       working-directory: ${{ inputs.working-directory }}
       run: pnpm exec playwright test
