@@ -44,7 +44,7 @@ describe("app shell", () => {
     await user.click(await screen.findByRole("button", { name: /All projects/ }));
     const menu = await screen.findByRole("menu");
     const ops = within(menu).getByRole("menuitem", { name: /Ops/ });
-    expect(within(ops).getByLabelText("1 waiting on you")).toBeTruthy();
+    expect(within(ops).getByLabelText("1 ticket waiting on you")).toBeTruthy();
     expect(within(menu).getByRole("menuitem", { name: /Add project/ })).toBeTruthy();
 
     await user.click(ops);

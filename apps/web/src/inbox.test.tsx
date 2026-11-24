@@ -122,13 +122,15 @@ describe("inbox v2", () => {
   it("GivenARunsQuestion_WhenAndyClicksAnOption_ThenItIsTheAnswerAndTheQuestionLeavesTheInbox", async () => {
     const h = await twoTickets();
     await card("AI-1: Board");
-    expect(await screen.findByRole("link", { name: "Needs you 3" })).toBeTruthy();
+    // Two tickets, three questions: the header counts tickets (AI-347).
+    expect(await screen.findByRole("link", { name: "Needs you 2" })).toBeTruthy();
 
     await h.user.click(
       within(question("Which layout?") as HTMLElement).getByRole("button", { name: "Columns" }),
     );
 
     await waitFor(() => expect(question("Which layout?")).toBeNull());
+    // AI-1 still has a question open, so it still counts.
     expect(screen.getByRole("link", { name: "Needs you 2" })).toBeTruthy();
     expect(screen.getByRole("heading", { level: 2 }).textContent).toBe("Needs you 2");
     const [answered] = await h.tracker.listQuestions({ ticketId: h.board.id, status: "answered" });
@@ -253,14 +255,14 @@ describe("inbox v2", () => {
 
     const ai = await screen.findByRole("region", { name: "AI: Andy Intelligence" });
     const ops = await screen.findByRole("region", { name: "OPS: Ops" });
-    expect(within(ai).getByRole("heading").textContent).toBe("AI: Andy Intelligence 3");
+    expect(within(ai).getByRole("heading").textContent).toBe("AI: Andy Intelligence 2");
     expect(within(ai).getAllByRole("article")).toHaveLength(2);
     expect(within(ops).getByRole("article", { name: "OPS-1: Backups" })).toBeTruthy();
 
     await h.user.click(within(ops).getByRole("button", { name: /^Yes/ }));
     await waitFor(() => expect(screen.queryByRole("region", { name: "OPS: Ops" })).toBeNull());
-    expect(within(ai).getByRole("heading").textContent).toBe("AI: Andy Intelligence 3");
-    expect(screen.getByRole("link", { name: "Needs you 3" })).toBeTruthy();
+    expect(within(ai).getByRole("heading").textContent).toBe("AI: Andy Intelligence 2");
+    expect(screen.getByRole("link", { name: "Needs you 2" })).toBeTruthy();
   });
 
   describe("question format (AI-73)", () => {

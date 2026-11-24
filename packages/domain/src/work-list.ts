@@ -7,7 +7,15 @@ import {
   type WorkTracker,
 } from "@andy/contracts";
 import { openBlockers } from "./status-line";
-import { WORK_VIEWS, workViewCounts, workViews, type WorkView } from "./work-views";
+import {
+  WORK_VIEWS,
+  addNeedsYouParts,
+  needsYouParts,
+  workViewCounts,
+  workViews,
+  type NeedsYouParts,
+  type WorkView,
+} from "./work-views";
 
 /** Projects one work list reads (ADR-0028); past it the list says `truncated`. */
 export const MAX_WORK_PROJECTS = 50;
@@ -30,6 +38,8 @@ export type WorkList = {
   view: WorkView;
   /** Open tickets per view across the projects read (the first 50 by key): the chips' counts. */
   counts: Record<WorkView, number>;
+  /** The Needs-you chip's number (the header's tickets) and its named parts (AI-347). */
+  needsYou: NeedsYouParts;
   projects: WorkProject[];
   truncated: boolean;
 };
@@ -70,12 +80,14 @@ export class WorkReader {
 
     const boards = await Promise.all(projects.map((p) => this.board.tickets(p.id)));
     const counts = Object.fromEntries(WORK_VIEWS.map((v) => [v, 0])) as Record<WorkView, number>;
+    let needsYou: NeedsYouParts = { tickets: 0, stale: 0, toPickWorker: 0 };
     let room = MAX_WORK_TICKETS;
     const groups: WorkProject[] = projects.map((project, i) => {
       const tickets = boards[i]!;
       const byId = new Map(tickets.map((t) => [t.id, t]));
       const projectCounts = workViewCounts(tickets, byId);
       for (const v of WORK_VIEWS) counts[v] += projectCounts[v];
+      needsYou = addNeedsYouParts(needsYou, needsYouParts(tickets));
       const matches = tickets
         .filter((t) => workViews(t, byId).includes(view))
         .sort(
@@ -93,6 +105,6 @@ export class WorkReader {
         tickets: kept.map((t) => ({ ...t, blockers: openBlockers(t, byId).map((b) => b.key) })),
       };
     });
-    return { view, counts, projects: groups.filter((g) => g.count > 0), truncated };
+    return { view, counts, needsYou, projects: groups.filter((g) => g.count > 0), truncated };
   }
 }

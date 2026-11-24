@@ -68,7 +68,7 @@ test("phone: a ticket with a finished agent task", async ({ page }) => {
   await page.goto("/p/ai/t/AI-7");
   const panel = page.getByRole("dialog", { name: /^AI-7: / });
   await expect(panel.getByText("Agent task · build")).toBeVisible();
-  await expect(page.getByRole("link", { name: "Needs you 6" })).toBeVisible();
+  await expect(page.getByRole("link", { name: "Needs you 5" })).toBeVisible();
   // Full width, status line first.
   const box = (await panel.boundingBox())!;
   expect(box.x).toBe(0);

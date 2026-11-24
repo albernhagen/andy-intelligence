@@ -63,6 +63,7 @@ export function WorkPage() {
           <WorkViewChips
             view={view}
             counts={work.data.counts}
+            needsYou={work.data.needsYou}
             total={null}
             onChange={(next) =>
               void navigate({ to: pathname, search: { view: next ?? undefined } })

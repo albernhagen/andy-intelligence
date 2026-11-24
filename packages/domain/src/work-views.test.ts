@@ -1,6 +1,6 @@
 import type { BoardTicket, Ticket } from "@andy/contracts";
 import { describe, expect, it } from "vitest";
-import { WORK_VIEWS, parseWorkView, workViewCounts, workViews } from "./work-views";
+import { WORK_VIEWS, needsYouParts, parseWorkView, workViewCounts, workViews } from "./work-views";
 
 type Over = Partial<Omit<BoardTicket, "summary">> & { summary?: Partial<BoardTicket["summary"]> };
 
@@ -100,6 +100,43 @@ describe("workViewCounts", () => {
       blocked: 0,
       "in-review": 1,
     });
+  });
+});
+
+describe("needsYouParts", () => {
+  it("GivenATicketWithTwoQuestions_WhenCounted_ThenItIsOneTicket", () => {
+    expect(needsYouParts([ticket(1, { summary: { openQuestions: 2 } })])).toEqual({
+      tickets: 1,
+      stale: 0,
+      toPickWorker: 0,
+    });
+  });
+
+  it("GivenADoneTicketWithAQuestion_WhenCounted_ThenItCountsAndIsStale", () => {
+    const done = ticket(1, { stage: "done", summary: { openQuestions: 1 } });
+    expect(needsYouParts([done])).toEqual({ tickets: 1, stale: 1, toPickWorker: 0 });
+  });
+
+  it("GivenADoneFlaggedTicketWithoutQuestions_WhenCounted_ThenItIsLeftOutLikeTheInbox", () => {
+    const done = ticket(1, { stage: "done", needsAttention: true });
+    expect(needsYouParts([done])).toEqual({ tickets: 0, stale: 0, toPickWorker: 0 });
+  });
+
+  it.each([{ archived: true }, { stage: "cancelled" as const }])(
+    "GivenAHiddenTicket %o_WhenCounted_ThenItIsLeftOut",
+    (over) => {
+      const hidden = ticket(1, { ...over, needsAttention: true, summary: { openQuestions: 1 } });
+      expect(needsYouParts([hidden])).toEqual({ tickets: 0, stale: 0, toPickWorker: 0 });
+    },
+  );
+
+  it("GivenAWorkerToPick_WhenCounted_ThenItIsNamedApartFromTheTickets", () => {
+    const parts = needsYouParts([
+      ticket(1, { summary: { worker: "ask" } }),
+      ticket(2, { summary: { worker: "ask", openQuestions: 1 } }),
+      ticket(3, { type: "epic", summary: { worker: "ask" } }),
+    ]);
+    expect(parts).toEqual({ tickets: 1, stale: 0, toPickWorker: 1 });
   });
 });
 
