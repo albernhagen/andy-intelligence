@@ -11,6 +11,7 @@ import {
   type Ticket,
   type WorkTracker,
 } from "@andy/contracts";
+import type { EpicMode } from "./epic-mode";
 import type { GateDecision } from "./gate";
 import { NIGHT_END_TEXT } from "./night-budget";
 import type { TicketService } from "./tickets";
@@ -50,32 +51,41 @@ export function passesIntoEpic(decision: Pick<GateDecision, "reasons">): boolean
 /** Story stages a merge into the epic branch may start from: the PR is open, the story isn't Done. */
 const MERGEABLE_STAGES: readonly Ticket["stage"][] = ["in_progress", "ready_for_review"];
 
+/** Where a story PR merges: its epic's branch, under a night launch or epic mode (AI-216). */
+export interface EpicTarget {
+  epicKey: string;
+  epicId: string;
+  /** The night launch whose branch it is; null: epic merge mode in the daytime. */
+  launch: NightLaunch | null;
+}
+
 /**
- * Decides which story PRs may merge into an epic branch. Facts come from the stored launch and
- * the run, never from PR text: the PR's base must be the active launch's recorded epic branch
- * and the run's own base branch, and the ticket one of the launch's stories.
+ * Decides which story PRs may merge into an epic branch. Facts come from the stored launch, the
+ * tickets and the run, never from PR text: the PR's base must be the run's own base branch and
+ * either the active launch's recorded epic branch (the ticket one of its stories) or, in the
+ * `epic` merge mode, the branch of the ticket's epic (`EpicMode`, AI-216).
  */
 export class EpicMerges {
   constructor(
-    private readonly launches: Pick<NightLaunchStore, "findActive">,
+    /** Night launches; null: none, only epic mode merges into epic branches. */
+    private readonly launches: Pick<NightLaunchStore, "findActive"> | null,
     private readonly runs: Pick<RunStore, "listForTicket">,
+    /** The `epic` merge mode in the daytime (AI-216); null: night launches only. */
+    private readonly epicMode: Pick<EpicMode, "target" | "openWhenDone"> | null = null,
   ) {}
 
-  /** The active launch the PR may merge into, or null (the PR then stays open). */
+  /** Where the PR may merge now, or null (the PR then stays open). */
   async target(
     pr: Pick<PullRequest, "number" | "intoDefaultBranch" | "baseRef">,
     run: Pick<Run, "projectId" | "baseBranch">,
-    ticket: Pick<Ticket, "id" | "key" | "stage">,
-  ): Promise<NightLaunch | null> {
+    ticket: Ticket,
+  ): Promise<EpicTarget | null> {
     if (!intoEpicBranch(pr) || run.baseBranch !== pr.baseRef) return null;
-    const launch = await this.launches.findActive(run.projectId);
-    if (
-      !launch ||
-      !nightLaunchIsActive(launch) ||
-      launch.epicBranch?.name !== pr.baseRef ||
-      !launch.storyKeys.includes(ticket.key) ||
-      !MERGEABLE_STAGES.includes(ticket.stage)
-    ) {
+    const launch = this.launches ? await this.launches.findActive(run.projectId) : null;
+    if (!launch || !nightLaunchIsActive(launch) || launch.epicBranch?.name !== pr.baseRef) {
+      return this.epicMode ? this.epicMode.target(pr, run, ticket) : null;
+    }
+    if (!launch.storyKeys.includes(ticket.key) || !MERGEABLE_STAGES.includes(ticket.stage)) {
       return null;
     }
     // Once per story, from the merge claims, not the stage or the merge record: the claim is
@@ -90,7 +100,12 @@ export class EpicMerges {
       });
       return null;
     }
-    return launch;
+    return { epicKey: launch.epicKey, epicId: launch.epicId, launch };
+  }
+
+  /** After a daytime merge into an epic branch: the epic PR once every child ticket is Done. */
+  async afterDaytimeMerge(projectId: string, ticket: Ticket): Promise<void> {
+    await this.epicMode?.openWhenDone(projectId, ticket);
   }
 }
 
