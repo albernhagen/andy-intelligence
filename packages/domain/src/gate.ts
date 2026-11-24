@@ -146,7 +146,8 @@ export function globToRegExp(glob: string): RegExp {
 }
 
 /**
- * Globs for a CODEOWNERS file's patterns, except the catch-all `*`, which only requests review
+ * Globs for every pattern a CODEOWNERS file lists (the kept paths, ADR-0124), except a catch-all `*`,
+ * which a repo seeded before AI-217 may still have and which would protect every file
  * (ADR-0063, §4.5). A pattern may name a file or a directory, so both are matched.
  */
 export function codeownersGlobs(text: string): string[] {

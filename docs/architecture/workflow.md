@@ -44,7 +44,7 @@ As built (PR events, build dispatch, plan approval): [`history/workflow-as-built
 
 ### 4.4 Epics
 - Ticket types (Epic / Feature / Chore / Bug, ADR-0058) + **child tickets** (`parent_id`).
-- Epic refinement (built) produces child tickets with `blockedBy`: each an end-to-end change, independently mergeable behind flags; no long-lived branches. Exception: an **overnight run** (ADR-0049) merges child tickets into `epic/<key>`, one PR for Andy next morning; AI-122 builds on it, AI-124 merges there (ADR-0107), AI-125 posts the morning report on the epic.
+- Epic refinement (built) produces child tickets with `blockedBy`: each an end-to-end change, independently mergeable behind flags; no long-lived branches. Exception: an **overnight run** (ADR-0049) merges child tickets into `epic/<key>`, one PR for Andy next morning; AI-122 builds on it, AI-124 merges there (ADR-0107), AI-125 posts the morning report on the epic. The `epic` merge mode (ADR-0124, AI-216) does the same by day: a child ticket builds on `epic/<key>` (made from the default branch's tip if missing), its clean PR merges there through the same path and it is Done; when the epic's last open child ticket is Done, one PR `epic/<key>` → default branch opens for Andy. A ticket with no epic builds on the default branch and waits for Andy, as in `manual`. Epic-branch merges skip the default branch's merge queue (AI-110): they never change the default branch.
 - **Just-in-time re-planning** (built, M4.6): dispatch re-runs plans older than a blocker's Done.
 - Epic status, cost and progress roll up; an epic's overrides cascade to its child tickets.
 
