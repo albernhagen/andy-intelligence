@@ -8,3 +8,35 @@
 - **Dependabot** (ADR-0042): npm patches and 1.0+ minors auto-merge once checks pass, deploying with Andy's next merge; the rest go to Andy. CODEOWNERS (`* @albernhagen`) requests Andy's review on every PR he didn't author; paths listed after `*` are the protected paths above.
 - **Adversarial review** on every PR (ADR-0026): a fresh reviewer session looks for reasons not to merge, each finding with a concrete failing scenario. Three passes: bugs and logic, plus (from M1.8: Build + gate) compliance with the ticket's acceptance criteria and approved plan; nits capped at 5 (ADR-0040). The implementer answers every finding. An unresolved `blocker` or `should-fix` fails the check unless Andy labels `review-accepted` (should-fix since ADR-0134). From M9 the reviewer is a different vendor than the implementer.
 - Security review on every PR (§9.1). A high/critical security finding is a hard veto unless Andy marks it `security-accepted`.
+
+## Reviewer seam (AI-361)
+
+What any reviewer, ours or a hosted one, must post for `mergeVerdict` to count it. From the code on 2026-11-23; each row names its source so drift can be checked.
+
+| The gate reads | Exactly | Source |
+| --- | --- | --- |
+| Two check runs on the head | `adversarial-review` and `security-review`, required on every PR even if the branch rules omit them | `packages/domain/src/gate.ts` `REVIEW_CHECKS` |
+| Reporter | The GitHub App (`sourceId`) the branch rules name for that check, else for other checks; another reporter's check of that name is ignored | `gate.ts` `assessChecks` |
+| Pass | `completed` + `success` only; `neutral`, `skipped` or missing is not a pass | `gate.ts` `reviewPasses` |
+| Labels | `review-accepted` or `security-accepted` → `wait` (`accepted_label`): Andy's merge, never the gate's | `packages/domain/src/merge-verdict.ts` `ACCEPTED_LABELS` |
+| Stored findings | Open findings for this repo, PR and head SHA → `wait`; a failed or cut-short read → `wait` | `merge-verdict.ts` `openFindingsOn`; `gate-service.ts` `openFindings` |
+
+**Severity words.** Each check fails on its blocking words, so a passing check means a clean PR (ADR-0134); the gate's `OPEN_FINDING_SEVERITIES` is their union. Any other word makes the output invalid: "not reviewed", which fails (`parseFindings`).
+
+| Check | Words | Blocking | Source |
+| --- | --- | --- | --- |
+| `adversarial-review` | `blocker`, `should-fix`, `question` | `blocker`, `should-fix` | `scripts/review-gate.mjs` `ROLES`; `platform/procedures/adversarial-review.schema.json` |
+| `security-review` | `critical`, `high`, `medium`, `low`, `info` | `critical`, `high` | `ROLES`; `security-review.schema.json` |
+
+**Where findings live.**
+
+- **Sticky PR comment** per check, by `github-actions[bot]`, starting `<!-- adversarial-review -->` or `<!-- security-review -->`. Only a completed review adds `<!-- reviewed-sha: <40-hex head> -->`, so the next incremental review never skips unreviewed commits (`review-gate.mjs` `evaluate`, `platform/actions/agent-review-finish`); re-sync carry-forward reads it (`scripts/review-carry.mjs`, ADR-0140). The gate never reads comments.
+- **Findings store**: `POST /review/findings` with the job's Actions OIDC token, whose `workflow_ref` must be `.github/workflows/(security|adversarial)-review.yml@refs/pull/<n>/merge`; body: head SHA plus each finding's severity, kind, title, file (`apps/api/src/review-findings.ts`, `scripts/review-findings.mjs`, ADR-0097). Wired in production (`apps/api/src/main.ts`).
+
+**Accepted labels** pass their check without re-running the agent (⚠️ in the comment) and are removed on the next push (`platform/actions/agent-review-prepare`); `mergeVerdict` still waits.
+
+**Modes** (ADR-0140): skipped by design (docs-only, draft, Dependabot) passes; should have run and didn't fails unless labelled; forks pass only with the label.
+
+**A hosted reviewer** must report both check names from the trusted reporter, `success` only with no blocking word open on that head, and honour the labels. Using the findings store needs a new caller in `reviewCaller`.
+
+**Frozen, no new features** (`docs/build-log/2026-11-23-review-outcome.md`): `scripts/resync-prs.mjs` and `scripts/coordinator/`. Worker sessions rely on Auto-fix for CI failures, conflicts and comments, so more PR babysitting would duplicate it; bug fixes still land. **Revisit a hosted reviewer** only when one is open to a personal account, comparing it with these reviews on ten real PRs.
