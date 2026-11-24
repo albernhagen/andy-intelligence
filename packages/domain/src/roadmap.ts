@@ -5,9 +5,11 @@ import {
   notFound,
   type BoardTicket,
   type Milestone,
+  type MilestoneCase,
   type MilestoneStatus,
   type MilestoneStore,
   type Project,
+  type Size,
   type Stage,
   type Ticket,
   type WorkTracker,
@@ -29,6 +31,9 @@ import { workViews } from "./work-views";
  * whether it is done (computed: approved, with every epic Done), progress and counts summed over
  * its epics, and its epics' keys; epics with no milestone are listed under `noMilestone`. One
  * milestone-list read per project, capped at 50 (ADR-0028). `epics` keeps its AI-193 shape.
+ *
+ * A milestone's case and effort (ADR-0149, AI-365): its stored case (or null) and its effort,
+ * derived from the same tickets as its progress: how many and how many of each size.
  */
 
 /** Projects one all-projects roadmap reads, first by key; past it the roadmap says `truncated`. */
@@ -89,6 +94,16 @@ export interface RoadmapMilestone {
   counts: RoadmapCounts;
   /** Its top-level epics' keys in rank order; each is in `epics` unless that list was cut. */
   epicKeys: string[];
+  /** Why it is worth building (ADR-0149), or null when nobody wrote one. */
+  case: MilestoneCase | null;
+  /** Derived, never stored (ADR-0149): its tickets that aren't Cancelled, and their sizes. */
+  effort: RoadmapEffort;
+}
+
+/** A milestone's effort: its tickets (not epics, not Cancelled) and how many of each size. */
+export interface RoadmapEffort {
+  tickets: number;
+  sizes: Record<Size, number> & { unsized: number };
 }
 
 export interface ProjectRoadmap {
@@ -217,8 +232,24 @@ const NO_COUNTS: RoadmapCounts = {
   notStarted: 0,
 };
 
+/** Ticket count and size tally over `tickets`, Cancelled ones left out. */
+export function effortOf(tickets: readonly Pick<Ticket, "stage" | "size">[]): RoadmapEffort {
+  const sizes = { S: 0, M: 0, L: 0, unsized: 0 };
+  let count = 0;
+  for (const t of tickets) {
+    if (t.stage === "cancelled") continue;
+    count += 1;
+    sizes[t.size ?? "unsized"] += 1;
+  }
+  return { tickets: count, sizes };
+}
+
 /** A milestone's row: its epics' roll-ups summed, and done when approved with every epic Done. */
-function milestoneEntry(m: Milestone, epics: readonly RoadmapEpicFields[]): RoadmapMilestone {
+function milestoneEntry(
+  m: Milestone,
+  epics: readonly RoadmapEpicFields[],
+  tickets: readonly Pick<Ticket, "stage" | "size">[],
+): RoadmapMilestone {
   return {
     id: m.id,
     name: m.name,
@@ -232,6 +263,8 @@ function milestoneEntry(m: Milestone, epics: readonly RoadmapEpicFields[]): Road
     },
     counts: epics.reduce((c, e) => sum(c, e.counts), NO_COUNTS),
     epicKeys: epics.map((e) => e.key),
+    case: m.case ?? null,
+    effort: effortOf(tickets),
   };
 }
 
@@ -256,17 +289,23 @@ export function buildRoadmap(
   const listCut = milestones.length >= MILESTONES_PER_PROJECT_MAX;
   const unlisted = (e: Ticket) => e.milestoneId !== null && !known.has(e.milestoneId);
   // Every top-level epic counts in its milestone, even one past the `epics` cap.
-  const rolled = top.map((e) => ({ epic: e, fields: fields(e, tickets, byId) }));
+  const rolled = top.map((e) => ({
+    epic: e,
+    fields: fields(e, tickets, byId),
+    under: ticketsUnder(e, tickets),
+  }));
   return {
     projectId: project.id,
     projectKey: project.key,
     projectName: project.name,
-    milestones: ordered.map((m) =>
-      milestoneEntry(
+    milestones: ordered.map((m) => {
+      const own = rolled.filter((r) => r.epic.milestoneId === m.id);
+      return milestoneEntry(
         m,
-        rolled.filter((r) => r.epic.milestoneId === m.id).map((r) => r.fields),
-      ),
-    ),
+        own.map((r) => r.fields),
+        own.flatMap((r) => r.under),
+      );
+    }),
     noMilestone: top
       .filter((e) => e.milestoneId === null || (unlisted(e) && !listCut))
       .map((e) => e.key),

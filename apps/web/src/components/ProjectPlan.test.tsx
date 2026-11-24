@@ -14,6 +14,7 @@ const plan = {
         goal: "Andy can open it.",
         doneWhen: ["URL loads"],
         slices: ["CI"],
+        case: { serves: "Runners", expectedReturn: "Log a run fast.", cheapestTest: "A form." },
       },
       { title: "Log a run", goal: "Andy logs a run.", doneWhen: ["Run listed"], slices: ["Form"] },
     ],
@@ -35,6 +36,21 @@ async function open(path: string) {
 }
 
 describe("project plan", () => {
+  it("GivenAWaitingPlanWithACase_WhenShown_ThenTheCaseIsBesideItsMilestoneAndApprovalStoresIt", async () => {
+    const h = await open("/all/inbox");
+    const section = await screen.findByRole("region", { name: "Project plans" });
+    expect(
+      within(section).getByText(/Serves: Runners\. Expected return: Log a run fast\./),
+    ).toBeTruthy();
+    await h.user.click(within(section).getByRole("button", { name: "Approve: create 2 epics" }));
+    await waitFor(async () =>
+      expect((await h.milestones.list("trl")).map((m) => [m.status, m.case?.serves])).toEqual([
+        ["approved", "Runners"],
+        ["approved", undefined],
+      ]),
+    );
+  });
+
   it("GivenAWaitingPlan_WhenAndyApprovesFromTheInbox_ThenTheEpicsAreCreatedInOrder", async () => {
     const h = await open("/all/inbox");
     const section = await screen.findByRole("region", { name: "Project plans" });

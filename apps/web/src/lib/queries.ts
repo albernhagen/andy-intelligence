@@ -3,6 +3,7 @@ import { type QueryClient, useMutation, useQuery, useQueryClient } from "@tansta
 import type {
   AutoMerge,
   MergeMode,
+  MilestoneCase,
   MilestoneStatus,
   EnvironmentPolicy,
   ExecutorKind,
@@ -161,6 +162,20 @@ export function useSetMilestoneStatus(projectId: string) {
         await api.PATCH("/api/projects/{projectId}/milestones/{milestoneId}", {
           params: { path: { projectId, milestoneId } },
           body: { status },
+        }),
+      ),
+  );
+}
+
+/** Writes or removes (`null`) a milestone's case (ADR-0149); logged like any milestone change. */
+export function useSetMilestoneCase(projectId: string) {
+  const api = useApi();
+  return useWrite(
+    async ({ milestoneId, case: kase }: { milestoneId: string; case: MilestoneCase | null }) =>
+      unwrap(
+        await api.PATCH("/api/projects/{projectId}/milestones/{milestoneId}", {
+          params: { path: { projectId, milestoneId } },
+          body: { case: kase },
         }),
       ),
   );

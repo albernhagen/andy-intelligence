@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { Project, Ticket } from ".";
 import { applyTicketChange, buildTicket } from "../ports/work-tracker-support";
-import { milestoneTargetProblem } from "./milestone";
+import { Milestone, milestoneTargetProblem } from "./milestone";
 
 /** AI-302: M4.33: only a top-level epic holds a milestone (ADR-0131). */
 
@@ -28,6 +28,33 @@ describe("milestoneTargetProblem", () => {
     expect(milestoneTargetProblem({ key: "AI-4", type: null, parentId: null })).toMatch(
       /AI-4 is untyped/,
     );
+  });
+});
+
+describe("Milestone case (ADR-0149)", () => {
+  const stored = {
+    id: "m1",
+    projectId: "ai",
+    name: "M4",
+    outcome: "Epics on a board.",
+    order: 0,
+    status: "approved",
+    createdAt: AT.toISOString(),
+    updatedAt: AT.toISOString(),
+  };
+
+  it("GivenAMilestoneStoredBeforeCases_WhenParsed_ThenItParsesWithNoCase", () => {
+    expect(Milestone.parse(stored).case).toBeUndefined();
+  });
+
+  it("GivenACaseWithABlankLine_WhenParsed_ThenRefused", () => {
+    const kase = { serves: " ", expectedReturn: "Less waiting.", cheapestTest: "Ask Andy." };
+    expect(Milestone.safeParse({ ...stored, case: kase }).success).toBe(false);
+  });
+
+  it("GivenACaseWithAnExtraField_WhenParsed_ThenRefused", () => {
+    const kase = { serves: "Andy", expectedReturn: "x", cheapestTest: "y", effort: "L" };
+    expect(Milestone.safeParse({ ...stored, case: kase }).success).toBe(false);
   });
 });
 

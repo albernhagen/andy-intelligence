@@ -266,4 +266,73 @@ describe("MilestoneService", () => {
       await expect(service.revert(change, AGENT)).rejects.toMatchObject({ code: "forbidden" });
     });
   });
+
+  describe("case (ADR-0149, AI-365)", () => {
+    const CASE = {
+      serves: "Andy",
+      expectedReturn: "Decides in a minute.",
+      cheapestTest: "Ask him.",
+    };
+
+    it("GivenACase_WhenCreated_ThenStoredAndInTheCreationLog", async () => {
+      const m = await service.create("ai", { name: "M4", outcome: "x", case: CASE }, OWNER);
+      expect(m.case).toEqual(CASE);
+      const [created] = await logged();
+      expect((created!.diff.created as { to: { case: unknown } }).to.case).toEqual(CASE);
+    });
+
+    it("GivenAStatus_WhenCreated_ThenStoredWithItAndLogged", async () => {
+      const m = await service.create("ai", { name: "M4", outcome: "x", status: "approved" }, OWNER);
+      expect(m.status).toBe("approved");
+      const [created] = await logged();
+      expect((created!.diff.created as { to: { status: string } }).to.status).toBe("approved");
+    });
+
+    it("GivenNoCase_WhenCreated_ThenStoredWithout", async () => {
+      const m = await service.create("ai", { name: "M4", outcome: "x" }, OWNER);
+      expect(m).not.toHaveProperty("case");
+    });
+
+    it("GivenAMilestoneWithoutACase_WhenOneIsSet_ThenSavedAndLoggedFromNull", async () => {
+      const m = await service.create("ai", { name: "M4", outcome: "x" }, OWNER);
+      const saved = await service.update("ai", m.id, { case: CASE }, OWNER, "worth it");
+      expect(saved.case).toEqual(CASE);
+      const change = (await logged()).find((c) => "case" in c.diff)!;
+      expect(change.diff).toEqual({ case: { from: null, to: CASE } });
+      expect(change.reason).toBe("worth it");
+    });
+
+    it("GivenTheSameCase_WhenSetAgain_ThenNothingIsLogged", async () => {
+      const m = await service.create("ai", { name: "M4", outcome: "x", case: CASE }, OWNER);
+      const same = await service.update("ai", m.id, { case: { ...CASE } }, OWNER);
+      expect(same.updatedAt).toBe(m.updatedAt);
+      expect(await logged()).toHaveLength(1);
+    });
+
+    it("GivenACase_WhenRemovedWithNull_ThenStoredWithoutAndLogged", async () => {
+      const m = await service.create("ai", { name: "M4", outcome: "x", case: CASE }, OWNER);
+      const saved = await service.update("ai", m.id, { case: null }, OWNER);
+      expect(saved).not.toHaveProperty("case");
+      expect((await store.get("ai", m.id))?.case).toBeUndefined();
+      expect((await logged()).find((c) => "case" in c.diff)!.diff).toEqual({
+        case: { from: CASE, to: null },
+      });
+    });
+
+    it("GivenACaseEdit_WhenReverted_ThenThePreviousCaseIsBack", async () => {
+      const m = await service.create("ai", { name: "M4", outcome: "x", case: CASE }, OWNER);
+      await service.update("ai", m.id, { case: { ...CASE, serves: "Runners" } }, OWNER);
+      const change = (await logged()).find((c) => "case" in c.diff)!;
+      const { milestone } = await service.revert(change, OWNER);
+      expect(milestone!.case).toEqual(CASE);
+    });
+
+    it("GivenASetCase_WhenReverted_ThenTheMilestoneHasNoCaseAgain", async () => {
+      const m = await service.create("ai", { name: "M4", outcome: "x" }, OWNER);
+      await service.update("ai", m.id, { case: CASE }, OWNER);
+      const change = (await logged()).find((c) => "case" in c.diff)!;
+      const { milestone } = await service.revert(change, OWNER);
+      expect(milestone).not.toHaveProperty("case");
+    });
+  });
 });
