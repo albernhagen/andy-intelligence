@@ -1,4 +1,3 @@
-import { randomUUID } from "node:crypto";
 import {
   MERGE_QUEUE_MAX_ENTRIES,
   WorkTrackerError,
@@ -168,7 +167,8 @@ export class MergeQueue {
     private readonly host: Pick<CodeHost, "branchSha">,
     private readonly now: () => Date = () => new Date(),
     /** Test seam: a new lease holder ID per advance. */
-    private readonly newHolder: () => string = randomUUID,
+    // Web Crypto, not node:crypto: @andy/domain is also bundled for the browser (UI e2e).
+    private readonly newHolder: () => string = () => globalThis.crypto.randomUUID(),
   ) {}
 
   /** Each entry point registers its judge once, at startup. */
