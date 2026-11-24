@@ -18,6 +18,7 @@ import {
 } from "@dnd-kit/sortable";
 import { ArrowDown, ArrowUp, ChevronDown, ChevronRight, GripVertical } from "lucide-react";
 import { milestoneReorder } from "@andy/domain";
+import { MilestoneCaseView } from "@/components/MilestoneCase";
 import { MILESTONE_STATUS, MilestoneStatusSelect } from "@/components/MilestoneControls";
 import { Loading, QueryError } from "@/components/Status";
 import { Badge } from "@/components/ui/badge";
@@ -62,7 +63,8 @@ function useRoadmap(projectId: string | undefined) {
  * Roadmap (AI-202: M4.26, ADR-0131): a project's milestones in order, each with its status and
  * progress, expanding in place to its epics; parked ones dimmed, done ones compact, epics with
  * no milestone last. Under All projects, one section per project. An open row sets the
- * milestone's status (AI-311), and milestones reorder by dragging their handle or with Move up
+ * milestone's status (AI-311) beside its case and effort (ADR-0149: a not-reviewed one always,
+ * saying so when it has no case), and milestones reorder by dragging their handle or with Move up
  * and Move down (AI-324); both go through the milestone route, so only the owner can and it's
  * logged.
  */
@@ -289,8 +291,16 @@ function MilestoneRow({
       {open && (
         <div className="space-y-2 px-2 pb-2 pl-8">
           {m.done && <p className="text-sm text-muted-foreground">{m.outcome}</p>}
-          <div className="max-w-48">
-            <MilestoneStatusSelect projectId={projectId} milestone={m} />
+          <div className="flex flex-wrap items-start gap-x-6 gap-y-2">
+            <div className="w-48 shrink-0">
+              <MilestoneStatusSelect projectId={projectId} milestone={m} />
+            </div>
+            {/* ADR-0149: the case where Andy decides; once reviewed, only one that was written. */}
+            {(m.status === "not_reviewed" || m.case) && (
+              <div className="min-w-0 flex-1 basis-64">
+                <MilestoneCaseView projectId={projectId} milestone={m} />
+              </div>
+            )}
           </div>
           {epics.length === 0 ? (
             <p className="text-sm text-muted-foreground">No epics in this milestone yet.</p>

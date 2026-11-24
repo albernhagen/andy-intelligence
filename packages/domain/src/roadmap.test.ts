@@ -341,3 +341,57 @@ describe("roadmap child epics and milestones (AI-305)", () => {
     expect(roadmap.truncated).toBe(false);
   });
 });
+
+describe("roadmap milestone case and effort (ADR-0149, AI-365)", () => {
+  const ms = (over: Partial<Milestone> = {}): Milestone => ({
+    id: "m1",
+    projectId: "ai",
+    name: "M1",
+    outcome: "Works",
+    order: 1,
+    status: "not_reviewed",
+    createdAt: "2026-11-21T00:00:00.000Z",
+    updatedAt: "2026-11-21T00:00:00.000Z",
+    ...over,
+  });
+  const CASE = { serves: "Andy", expectedReturn: "Less waiting.", cheapestTest: "A sketch." };
+
+  it("GivenAMilestoneWithACase_WhenBuilt_ThenItsCaseIsShown", () => {
+    const roadmap = buildRoadmap(PROJECT, [], [ms({ case: CASE })]);
+
+    expect(roadmap.milestones[0]!.case).toEqual(CASE);
+  });
+
+  it("GivenAMilestoneWithoutACase_WhenBuilt_ThenItsCaseIsNull", () => {
+    expect(buildRoadmap(PROJECT, [], [ms()]).milestones[0]!.case).toBeNull();
+  });
+
+  it("GivenTicketsOfSeveralSizesUnderItsEpics_WhenBuilt_ThenEffortCountsThemBySizeWithoutCancelledOrEpics", () => {
+    const tickets = [
+      epic(1, { milestoneId: "m1", size: "L" }),
+      epic(2, { milestoneId: "m1" }),
+      epic(3, { parentId: "ai-t2" }),
+      epic(4),
+      under(1, 10, { size: "S" }),
+      under(1, 11, { size: "M", stage: "done" }),
+      under(2, 20, { size: "M" }),
+      under(2, 21, { size: "L", stage: "cancelled" }),
+      under(3, 30, { size: null }),
+      under(4, 40, { size: "L" }),
+    ];
+
+    const roadmap = buildRoadmap(PROJECT, tickets, [ms()]);
+
+    expect(roadmap.milestones[0]!.effort).toEqual({
+      tickets: 4,
+      sizes: { S: 1, M: 2, L: 0, unsized: 1 },
+    });
+  });
+
+  it("GivenAMilestoneWithNoEpics_WhenBuilt_ThenEffortIsZero", () => {
+    expect(buildRoadmap(PROJECT, [], [ms()]).milestones[0]!.effort).toEqual({
+      tickets: 0,
+      sizes: { S: 0, M: 0, L: 0, unsized: 0 },
+    });
+  });
+});

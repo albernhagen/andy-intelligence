@@ -1,5 +1,5 @@
 import { createRoute, z, type OpenAPIHono } from "@hono/zod-openapi";
-import { MilestoneStatus, Stage } from "@andy/contracts";
+import { MilestoneCase, MilestoneStatus, Stage } from "@andy/contracts";
 import type {
   ProjectRoadmap as ProjectRoadmapValue,
   RoadmapEpic as RoadmapEpicValue,
@@ -60,6 +60,13 @@ const RoadmapMilestone = z.object({
   progress: z.object({ done: Count, total: Count }),
   counts: epicFields.counts,
   epicKeys: z.array(z.string()),
+  case: MilestoneCase.nullable().describe("Why it is worth building (ADR-0149); null: none yet"),
+  effort: z
+    .object({
+      tickets: Count,
+      sizes: z.object({ S: Count, M: Count, L: Count, unsized: Count }),
+    })
+    .describe("Derived: its tickets that aren't Cancelled, and how many of each size"),
 });
 
 export const ProjectRoadmap = z
