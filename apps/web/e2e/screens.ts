@@ -82,7 +82,13 @@ export const SCREENS: Screen[] = [
   },
   { route: "/settings/github", name: "github", url: "/settings/github", ready: "Connect GitHub" },
   { route: "/settings/runners", name: "runners", url: "/settings/runners", ready: "Old laptop" },
-  { route: "/settings/models", name: "models", url: "/settings/models", ready: "Global routing" },
+  {
+    route: "/settings/models",
+    name: "models",
+    url: "/settings/models",
+    ready: "Runs now",
+    dark: true,
+  },
   // Opened without the state its "Connect GitHub" click stores, so it says to start again.
   {
     route: "/settings/github/callback",

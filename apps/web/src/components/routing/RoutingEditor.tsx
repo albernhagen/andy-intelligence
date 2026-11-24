@@ -1,42 +1,35 @@
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { ProviderKey, TierKey, type Route, type RoutingConfig } from "@andy/contracts";
 import { effectiveRouting, routeSkipReason } from "@andy/domain";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { SavedCue } from "@/components/SavedCue";
+import { Kbd } from "@/components/ui/kbd";
 import { useSaveRouting } from "@/lib/queries";
+import { PROVIDER_LABELS, TIER_LABELS } from "@/lib/settings-labels";
 import { ProviderSettings } from "./ProviderSettings";
 import { StepTiers } from "./StepTiers";
-import { TierRoutes } from "./TierRoutes";
+import { TierCard } from "./TierCard";
 import { routeKey, routingErrors } from "./routing-errors";
+import { routingChanges, type RoutingFields, type RoutingPart } from "./routing-diff";
 
-type Fields = Pick<RoutingConfig, "providers" | "tiers" | "steps">;
-
-const fieldsOf = (c: RoutingConfig): Fields =>
-  structuredClone({
-    providers: c.providers,
-    tiers: c.tiers,
-    steps: c.steps,
-  });
+const fieldsOf = (c: RoutingConfig): RoutingFields =>
+  structuredClone({ providers: c.providers, tiers: c.tiers, steps: c.steps });
 
 const sameRoute = (a: Route, b: Route) =>
   a.harness === b.harness && a.provider === b.provider && a.model === b.model;
 
-/** Which part a save was for, so its "Saved" cue and refusal sit there. */
-type Part = "providers" | "steps" | TierKey;
-
-const sameJson = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b);
+/** "Cmd+S" on a Mac, "Ctrl+S" elsewhere, for the Save button's key hint. */
+const isMac = typeof navigator !== "undefined" && /Mac|iPhone|iPad/.test(navigator.platform);
 
 /**
- * The routing editor for global (`projectId` null) or one project (AI-243: M9.8). It saves the
- * way project settings do (AI-339): a step's tier and a provider's switch save at once, a
- * provider's number when its field is left, and each tier with its own Save (a route spans three
- * selects, and a half-edited one is refused). One optional reason goes with the next save. Each
- * save sends the last saved routing with that one part changed, against the version it was read
- * at; a newer version arriving (another tab, MCP) keeps unsaved edits and offers a reload. A
- * refused tier keeps its draft and puts each of the API's reasons next to the route it names.
- * Each route shows why the resolver would skip it (AI-238: M9.6), and for a project, a route
- * global doesn't list for that tier.
+ * The routing editor for global (`projectId` null) or one project (AI-376: Models). Every change
+ * (a route, a step's tier, a provider's switch or levels) collects in one bar at the bottom: how
+ * many, what each is, an optional reason for the change log, Discard and Save (Cmd+S). Save sends
+ * the whole draft against the version it was read at, as one change. When it lands, each changed
+ * card or row says "Saved" where the change was made; a refusal keeps the draft and puts each of
+ * the API's reasons next to the route it names, or in the bar. A newer version arriving (another
+ * tab, MCP) keeps unsaved edits and offers a reload. For a project, a route global doesn't list
+ * for that tier is skipped, since global is the ceiling.
  */
 export function RoutingEditor({
   projectId,
@@ -49,82 +42,78 @@ export function RoutingEditor({
   ifUpdatedAt: string | null;
   global: RoutingConfig;
 }) {
-  // What the server holds as far as this editor knows; every save builds on it.
-  const [saved, setSaved] = useState<Fields>(() => fieldsOf(start));
-  // Unsaved edits: provider numbers being typed and tiers being edited.
-  const [draft, setDraft] = useState<Fields>(() => fieldsOf(start));
-  // The version `saved` was read at: saves go against it, so a change elsewhere is a 409.
+  // What the server holds as far as this editor knows, and the version it was read at.
+  const [saved, setSaved] = useState<RoutingFields>(() => fieldsOf(start));
   const [base, setBase] = useState(ifUpdatedAt);
+  const [draft, setDraft] = useState<RoutingFields>(() => fieldsOf(start));
   const [reason, setReason] = useState("");
-  const [part, setPart] = useState<Part | null>(null);
-  const save = useSaveRouting(projectId);
-  // Saves run one after another (AI-339): each builds on the routing and version the one before
-  // it returned, so a quick second save never goes out against a stale version, and every save's
-  // own success handling runs. The refs hold the latest values for the queued saves.
-  const queue = useRef<Promise<void>>(Promise.resolve());
-  const savedRef = useRef(saved);
-  const baseRef = useRef(base);
-  // Bumped by Reload, so the fields that hold typed text start again from the new values.
+  // The parts the last save changed: each shows "Saved" until it is edited again.
+  const [justSaved, setJustSaved] = useState<ReadonlySet<RoutingPart>>(new Set());
+  // Bumped by Discard and Reload, so fields holding typed text start again.
   const [loads, setLoads] = useState(0);
-  const reload = () => {
-    setLoads((n) => n + 1);
-    save.reset();
-    setPart(null);
-    savedRef.current = fieldsOf(start);
-    baseRef.current = ifUpdatedAt;
-    setSaved(savedRef.current);
-    setDraft(fieldsOf(start));
-    setBase(ifUpdatedAt);
-  };
+  const save = useSaveRouting(projectId);
+
+  const changes = routingChanges(saved, draft);
+  const edited = new Set(changes.map((c) => c.part));
   const changedElsewhere = ifUpdatedAt !== base;
   // Percentages being typed that aren't whole numbers from 0 to 100: nothing is saved until fixed.
   const invalid = ProviderKey.options.flatMap((key) =>
     (["reservePct", "warnPct", "pausePct"] as const)
       .filter((f) => !Number.isInteger(draft.providers[key][f]))
-      .map((f) => `${key} ${f.replace("Pct", "")}`),
+      .map((f) => `${PROVIDER_LABELS[key].name} ${f.replace("Pct", "")}`),
   );
-  const errors = routingErrors(
-    part !== null && part !== "providers" && part !== "steps" ? save.error : null,
-  );
-  const generalError =
-    part === "providers" || part === "steps" ? routingErrors(save.error).general : errors.general;
+  const errors = routingErrors(save.error);
 
-  /** Queues a save of the last saved routing with `change` applied, with the reason typed now. */
-  const write = (which: Part, change: (last: Fields) => Fields) => {
-    const why = reason.trim() || undefined;
-    queue.current = queue.current.then(async () => {
-      const next = structuredClone(change(savedRef.current));
-      setPart(which);
-      try {
-        const config = await save.mutateAsync({
-          ...next,
-          ifUpdatedAt: baseRef.current,
-          reason: why,
-        });
-        savedRef.current = next;
-        baseRef.current = config.updatedAt;
-        setSaved(next);
-        setBase(config.updatedAt);
-        setReason((r) => (r.trim() === (why ?? "") ? "" : r));
-      } catch {
-        // The refusal shows from `save.error` beside the part it was for; later saves still run.
-      }
-    });
-  };
-  // Any edit clears an old refusal: its route numbers may no longer match the draft.
-  const editDraft = (next: Fields) => {
+  const edit = (next: RoutingFields) => {
+    // An old refusal's route numbers may no longer match the draft.
     if (save.isError) save.reset();
     setDraft(next);
   };
-  const commitProviders = (providers: Fields["providers"]) => {
-    const bad = ProviderKey.options.some((key) =>
-      (["reservePct", "warnPct", "pausePct"] as const).some(
-        (f) => !Number.isInteger(providers[key][f]),
-      ),
-    );
-    if (bad || sameJson(providers, savedRef.current.providers)) return;
-    write("providers", (last) => ({ ...last, providers }));
+  const discard = () => {
+    save.reset();
+    setDraft(structuredClone(saved));
+    setLoads((n) => n + 1);
   };
+  const reload = () => {
+    save.reset();
+    setSaved(fieldsOf(start));
+    setDraft(fieldsOf(start));
+    setBase(ifUpdatedAt);
+    setJustSaved(new Set());
+    setLoads((n) => n + 1);
+  };
+  const canSave = changes.length > 0 && invalid.length === 0 && !save.isPending;
+  const submit = async () => {
+    if (!canSave) return;
+    const next = structuredClone(draft);
+    const parts = new Set(changes.map((c) => c.part));
+    try {
+      const config = await save.mutateAsync({
+        ...next,
+        ifUpdatedAt: base,
+        reason: reason.trim() || undefined,
+      });
+      setSaved(next);
+      setBase(config.updatedAt);
+      setReason("");
+      setJustSaved(parts);
+    } catch {
+      // The refusal shows from `save.error`: by its route, or in the bar.
+    }
+  };
+  // Cmd+S / Ctrl+S saves from anywhere on the page, even while typing the reason.
+  const submitRef = useRef(submit);
+  submitRef.current = submit;
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && !e.altKey && e.key.toLowerCase() === "s") {
+        e.preventDefault();
+        void submitRef.current();
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, []);
 
   // The providers a route runs under: the draft's, narrowed to global for a project.
   const providers =
@@ -133,21 +122,19 @@ export function RoutingEditor({
       : effectiveRouting(global, { ...start, ...draft }).providers;
   const skipReason = (tier: TierKey) => (route: Route) => {
     if (projectId !== null && !global.tiers[tier].some((g) => sameRoute(g, route))) {
-      return `not a global ${tier} route`;
+      return `not a global ${TIER_LABELS[tier].name.toLowerCase()} route`;
     }
     return routeSkipReason(route, providers);
   };
-  const cue = (which: Part) =>
-    part === which && <SavedCue pending={save.isPending} saved={save.isSuccess} />;
+  const isSaved = (part: RoutingPart) => justSaved.has(part) && !edited.has(part);
 
   return (
     <form
       aria-label={projectId === null ? "Global routing" : `Routing for ${projectId}`}
-      className="space-y-4"
+      className="flex flex-col gap-4"
       onSubmit={(e) => {
-        // Enter in a provider's number saves it, as leaving the field does.
         e.preventDefault();
-        commitProviders(draft.providers);
+        void submit();
       }}
     >
       {changedElsewhere && (
@@ -155,7 +142,7 @@ export function RoutingEditor({
           role="status"
           className="flex flex-wrap items-center gap-2 rounded-md bg-attention/15 p-2 text-sm text-attention"
         >
-          Routing changed since you opened it; saves from here will be refused until you reload.
+          Routing changed since you opened it; saving from here will be refused until you reload.
           <Button
             type="button"
             size="sm"
@@ -167,90 +154,96 @@ export function RoutingEditor({
           </Button>
         </div>
       )}
-      <Input
-        aria-label="Reason for the change"
-        placeholder="Why (optional; goes with the next save into the change log)"
-        className="h-11 max-w-md text-base sm:h-9 sm:text-sm"
-        value={reason}
-        onChange={(e) => setReason(e.target.value)}
-      />
-      {generalError.length > 0 && (
-        <div role="alert" className="rounded-md bg-destructive/15 p-2 text-sm text-destructive">
-          {generalError.map((line) => (
-            <p key={line}>{line}</p>
+      <section aria-label="Tiers" className="flex flex-col gap-2">
+        <h2 className="font-medium">Tiers</h2>
+        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+          {TierKey.options.map((tier) => (
+            <TierCard
+              key={`${tier}-${loads}`}
+              tier={tier}
+              routes={draft.tiers[tier]}
+              edited={edited.has(`tier:${tier}`)}
+              saved={isSaved(`tier:${tier}`)}
+              onChange={(routes) => edit({ ...draft, tiers: { ...draft.tiers, [tier]: routes } })}
+              skipReason={skipReason(tier)}
+              refusal={(i) => errors.routes.get(routeKey(tier, i))}
+            />
           ))}
         </div>
-      )}
-      <div>
+      </section>
+      <div className="grid gap-4 lg:grid-cols-[3fr_2fr]">
+        <StepTiers
+          steps={draft.steps}
+          edited={(s) => edited.has(`step:${s}`)}
+          saved={(s) => isSaved(`step:${s}`)}
+          onChange={(steps) => edit({ ...draft, steps })}
+        />
         <ProviderSettings
           key={loads}
           providers={draft.providers}
-          onChange={(p) => editDraft({ ...draft, providers: p })}
-          onCommit={commitProviders}
+          edited={(k) => edited.has(`provider:${k}`)}
+          saved={(k) => isSaved(`provider:${k}`)}
+          onChange={(p) => edit({ ...draft, providers: p })}
         />
-        {cue("providers")}
-        {invalid.length > 0 && (
-          <p role="alert" className="text-xs text-destructive">
-            Not saved: {invalid.join(", ")} must be a whole number from 0 to 100.
-          </p>
-        )}
       </div>
-      <section aria-label="Tiers" className="space-y-2">
-        <h3 className="text-sm font-medium">Tiers</h3>
-        <p className="text-xs text-muted-foreground">
-          The first usable route of a tier runs; the rest are skipped with the reason shown. Each
-          tier saves on its own.
-        </p>
-        <div className="grid gap-2 lg:grid-cols-2">
-          {TierKey.options.map((tier) => {
-            const changed = !sameJson(draft.tiers[tier], saved.tiers[tier]);
-            return (
-              <div key={tier} className="space-y-1">
-                <TierRoutes
-                  tier={tier}
-                  routes={draft.tiers[tier]}
-                  onChange={(routes) =>
-                    editDraft({ ...draft, tiers: { ...draft.tiers, [tier]: routes } })
-                  }
-                  skipReason={skipReason(tier)}
-                  refusal={(i) =>
-                    part === tier ? errors.routes.get(routeKey(tier, i)) : undefined
-                  }
-                />
-                <div className="flex items-center">
-                  <Button
-                    type="button"
-                    size="sm"
-                    variant="outline"
-                    className="h-11 sm:h-8"
-                    disabled={!changed || save.isPending}
-                    onClick={() => {
-                      const routes = draft.tiers[tier];
-                      write(tier, (last) => ({
-                        ...last,
-                        tiers: { ...last.tiers, [tier]: routes },
-                      }));
-                    }}
-                  >
-                    Save {tier}
-                  </Button>
-                  {cue(tier)}
-                </div>
-              </div>
-            );
-          })}
+      {(changes.length > 0 || errors.general.length > 0) && (
+        <div
+          role="region"
+          aria-label="Unsaved changes"
+          className="sticky bottom-0 z-10 -mx-4 flex flex-col gap-2 border-t border-border bg-selected px-4 py-2 pb-[max(0.5rem,env(safe-area-inset-bottom))] sm:-mx-6 sm:px-6"
+        >
+          {errors.general.length > 0 && (
+            <div role="alert" className="text-sm text-destructive">
+              {errors.general.map((line) => (
+                <p key={line}>Not saved: {line}</p>
+              ))}
+            </div>
+          )}
+          {invalid.length > 0 && (
+            <p role="alert" className="text-xs text-destructive">
+              Not saved: {invalid.join(", ")} must be a whole number from 0 to 100.
+            </p>
+          )}
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="text-sm font-medium tabular-nums">
+              {changes.length === 1 ? "1 unsaved change" : `${changes.length} unsaved changes`}
+            </span>
+            <span
+              className="min-w-0 truncate text-sm text-muted-foreground"
+              title={changes.map((c) => c.summary).join("; ")}
+            >
+              {changes.map((c) => c.summary).join("; ")}
+            </span>
+            <Input
+              aria-label="Reason for the change"
+              placeholder="Why? Goes in the change log (optional)"
+              className="h-11 min-w-48 flex-1 bg-raised text-base sm:h-8 sm:text-sm"
+              value={reason}
+              onChange={(e) => setReason(e.target.value)}
+            />
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="h-11 sm:h-8"
+              disabled={save.isPending}
+              onClick={discard}
+            >
+              Discard
+            </Button>
+            <Button
+              type="submit"
+              size="sm"
+              className="h-11 sm:h-8"
+              disabled={!canSave}
+              aria-keyshortcuts={isMac ? "Meta+S" : "Control+S"}
+            >
+              {save.isPending ? "Saving…" : "Save"}
+              <Kbd>{isMac ? "⌘S" : "Ctrl S"}</Kbd>
+            </Button>
+          </div>
         </div>
-      </section>
-      <div>
-        <StepTiers
-          steps={draft.steps}
-          onChange={(steps) => {
-            setDraft({ ...draft, steps });
-            write("steps", (last) => ({ ...last, steps: { ...last.steps, ...steps } }));
-          }}
-        />
-        {cue("steps")}
-      </div>
+      )}
     </form>
   );
 }

@@ -1,6 +1,10 @@
 import { describe, expect, it } from "vitest";
 import { screen, waitFor, within } from "@testing-library/react";
 import { renderApp } from "@/test/harness";
+import { stubResizeObserver } from "@/test/resize-observer";
+
+// Models renders Radix Switch, which needs ResizeObserver (AI-376).
+stubResizeObserver();
 
 /** AI-26: the app shell and the project picker as the global scope (ADR-0059). */
 

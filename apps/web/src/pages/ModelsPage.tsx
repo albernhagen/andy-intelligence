@@ -1,20 +1,30 @@
 import { useState } from "react";
 import { TierKey } from "@andy/contracts";
-import { LayerOrderHint } from "@/components/RouteLayers";
 import { effectiveRouting } from "@andy/domain";
+import { LayerOrderHint } from "@/components/RouteLayers";
 import { RoutingChanges } from "@/components/routing/RoutingChanges";
 import { RoutingEditor } from "@/components/routing/RoutingEditor";
 import { GlobalSpendCaps } from "@/components/spend/GlobalSpendCaps";
 import { Loading, QueryError } from "@/components/Status";
-import { Select } from "@/components/ui/input";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { useProjects, useRouting } from "@/lib/queries";
 import { SettingsTabs } from "@/components/SettingsTabs";
+import { HARNESS_LABELS, PROVIDER_LABELS, TIER_LABELS, modelName } from "@/lib/settings-labels";
+
+const GLOBAL = "global";
 
 /**
- * Settings → Models (AI-243: M9.8): model routing, global or one project's. Providers with their
- * switch and quota levels, each tier's routes in order (the first usable one runs; each skipped
- * one says why), and which tier each step uses. A project's config may only narrow global; its
- * narrowed view shows what its agent tasks would run on.
+ * Settings → Models (AI-243: M9.8; rebuilt on direction A by AI-376): model routing, global or
+ * one project's. Four tier cards say what each tier is for and which route runs now; steps pick a
+ * tier; providers are switches with plain names. Every change collects in one save bar. A
+ * project's config may only narrow global; its "Runs on" line shows what its agent tasks would
+ * run on. Below: the change log and the global spend caps.
  */
 export function ModelsPage() {
   const routing = useRouting();
@@ -24,30 +34,32 @@ export function ModelsPage() {
   const data = routing.data;
   const project = scope === null ? undefined : data?.projects.find((p) => p.projectId === scope);
   return (
-    <section className="max-w-4xl space-y-4">
+    <section className="flex flex-col gap-4">
       <SettingsTabs />
-      <h2 className="text-lg font-medium">Models</h2>
-      <p className="text-sm text-muted-foreground">
-        Which providers are on, each tier&apos;s routes in order, and which tier each step uses.
-        Global is the ceiling: a project can only narrow it. Every save is in the change log.
-      </p>
-      <LayerOrderHint />
-      <label className="flex items-center gap-2 text-sm">
-        Routing for
-        <Select
-          aria-label="Routing for"
-          className="h-11 w-auto text-base sm:h-9 sm:text-sm"
-          value={scope ?? ""}
-          onChange={(e) => setScope(e.target.value || null)}
-        >
-          <option value="">Global</option>
-          {projects.map((p) => (
-            <option key={p.id} value={p.id}>
-              {p.key}: {p.name}
-            </option>
-          ))}
-        </Select>
-      </label>
+      <header className="flex flex-wrap items-center gap-x-4 gap-y-2">
+        <h1 className="text-lg font-semibold">Models</h1>
+        <label className="flex items-center gap-2 text-sm text-muted-foreground">
+          Routing for
+          <Select value={scope ?? GLOBAL} onValueChange={(v) => setScope(v === GLOBAL ? null : v)}>
+            <SelectTrigger aria-label="Routing for" className="w-56 text-foreground">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value={GLOBAL} description="The ceiling for every project">
+                Global
+              </SelectItem>
+              {projects.map((p) => (
+                <SelectItem key={p.id} value={p.id}>
+                  {p.key}: {p.name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </label>
+        <p className="text-sm text-muted-foreground sm:ml-auto">
+          Global is the ceiling; a project can only narrow it
+        </p>
+      </header>
       {routing.isPending && <Loading />}
       {routing.isError && (
         <QueryError
@@ -65,6 +77,7 @@ export function ModelsPage() {
             ifUpdatedAt={data.global.updatedAt}
             global={data.global}
           />
+          <LayerOrderHint />
           {/* A revert Andy chose starts the editor again from the reverted routing. */}
           <RoutingChanges onReverted={() => setReverts((n) => n + 1)} />
           <GlobalSpendCaps />
@@ -85,6 +98,7 @@ export function ModelsPage() {
             ifUpdatedAt={project.config?.updatedAt ?? null}
             global={data.global}
           />
+          <LayerOrderHint />
         </>
       )}
     </section>
@@ -94,15 +108,23 @@ export function ModelsPage() {
 /** What a project's agent tasks run on after narrowing: each tier's remaining routes. */
 function NarrowedView({ tiers }: { tiers: ReturnType<typeof effectiveRouting>["tiers"] }) {
   return (
-    <section aria-label="Narrowed view" className="space-y-1 rounded-md border border-border p-2">
-      <h3 className="text-sm font-medium">Runs on</h3>
-      <ul className="space-y-0.5 text-xs">
+    <section
+      aria-label="Narrowed view"
+      className="flex flex-col gap-1 rounded-lg border border-border bg-raised p-3"
+    >
+      <h2 className="text-sm font-medium">Runs on</h2>
+      <ul className="flex flex-col gap-0.5 text-xs">
         {TierKey.options.map((tier) => (
           <li key={tier}>
-            <span className="font-medium">{tier}:</span>{" "}
+            <span className="font-medium">{TIER_LABELS[tier].name}:</span>{" "}
             {tiers[tier].length === 0
               ? "no route"
-              : tiers[tier].map((r) => `${r.harness}/${r.provider}/${r.model}`).join(", ")}
+              : tiers[tier]
+                  .map(
+                    (r) =>
+                      `${modelName(r.model)} (${HARNESS_LABELS[r.harness].name} · ${PROVIDER_LABELS[r.provider].name})`,
+                  )
+                  .join(", ")}
           </li>
         ))}
       </ul>
