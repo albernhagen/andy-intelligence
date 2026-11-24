@@ -63,7 +63,14 @@ describe("Web UI and MCP parity registry (AI-300)", () => {
       expect(e.pending!.missing.trim()).not.toBe("");
     }
     // The gaps held open on purpose today; a ticket that closes one removes its mark here.
-    expect(gaps.map((e) => e.pending!.ticket).sort()).toEqual(["AI-351"]);
+    expect(gaps.map((e) => e.pending!.ticket).sort()).toEqual([]);
+  });
+
+  it("GivenRunnerRevocation_WhenChecked_ThenCoveredByRevokeRunner", () => {
+    const revoke = PARITY.find((e) => e.routes.includes("POST /api/runners/:runnerId/revoke"));
+    expect(revoke).toMatchObject({ tools: ["revoke_runner"] });
+    expect(revoke?.pending).toBeUndefined();
+    expect(revoke?.oneSide).toBeUndefined();
   });
 
   it("GivenTheActions_WhenListed_ThenEachIsNamedOnce", () => {

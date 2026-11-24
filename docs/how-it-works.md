@@ -7,7 +7,7 @@ What is built on `main` now, moved from `README.md` so its "How it works today" 
 - tickets on a board (Backlog split into Up next and Ideas; only Up next gets refined; cards show size, risk and confidence; Ready sorts by them; MCP `list_ready` filters them; MCP `board` reads it) with a Needs-you inbox, answerable in the UI or with the `/inbox` skill in Claude Code; product discovery before the brief with the `/discover` skill (ADR-0145); a Claude connector (MCP) with every ticket decision the UI offers; GitHub PRs that move tickets; Refine and Build agent tasks on GitHub Actions; PR checks and review agents; the merge gate (an agent PR merges itself when checks and reviews pass, no veto applies and `autoMerge` covers its size; `AI` stays `none`); Dependabot; the project baseline (a registered repo gets its baseline PR from the App, ADR-0142); agent evals (runbook `agent-evals.md`); cost guardrails.
 - Each feature: [`docs/features/`](features/).
 - Each project has a default worker (agent, Andy or ask) and executor (GitHub Actions or a local runner); a ticket can override both; only an agent's tickets build.
-- Settings → Local runners mints secrets for `apps/local-runner` (refine and plan on Andy's Mac, ADR-0089).
+- Settings → Local runners mints secrets for `apps/local-runner` (refine and plan on Andy's Mac, ADR-0089); MCP lists runners and revokes one (owner only, ADR-0143), never mints.
 - Project settings (`/p/<project>/settings`): switches, setup checklist, changes with Revert.
 - Pages poll: 5 s in use, 60 s idle, none hidden (ADR-0091).
 - Keyboard: `?` lists the shortcuts (AI-338).
