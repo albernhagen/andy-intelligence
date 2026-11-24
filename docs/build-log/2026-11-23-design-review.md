@@ -94,9 +94,29 @@ All under epic AI-357, in Ideas, in build order. Every screen ticket starts with
 
 Risk is this review's estimate; the tickets' own risk scores are not set. AI-353 is medium because it changes what judges a PR. AI-373 is medium because the web API may need a brief route.
 
+## Approved mockups for the remaining screens
+
+Andy approved these on 2026-11-23, all in direction A. A build matches its mockup's layout, components and hierarchy; the copy in them is placeholder where noted. All thirteen in light and dark: [`screens.html`](assets/2026-11-23-design-review/screens.html).
+
+| Ticket                                                                                     | Mockup                                                                                                                                                                                                                                                                                                                                 |
+| ------------------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| AI-370: Shell: sidebar navigation, quota meter and command palette                         | [shell](assets/2026-11-23-design-review/screen-shell.png)                                                                                                                                                                                                                                                                              |
+| AI-373: New project to first build: create, brief, plan and approve milestones as one path | [brief step](assets/2026-11-23-design-review/screen-onboard-brief.png), [approve step](assets/2026-11-23-design-review/screen-onboard-approve.png)                                                                                                                                                                                     |
+| AI-374: Board and cards on the new design                                                  | [board](assets/2026-11-23-design-review/screen-board.png)                                                                                                                                                                                                                                                                              |
+| AI-375: Ticket and epic panel on the new design                                            | [ticket panel](assets/2026-11-23-design-review/screen-ticket.png)                                                                                                                                                                                                                                                                      |
+| AI-376: Models: routing editor with named tiers, described options and one save model      | [models](assets/2026-11-23-design-review/screen-models.png)                                                                                                                                                                                                                                                                            |
+| AI-377: Agent task page: live progress, log and outcome                                    | [agent task](assets/2026-11-23-design-review/screen-agent-task.png)                                                                                                                                                                                                                                                                    |
+| AI-378: Roadmap, Work, What's new, Dashboards, GitHub and Local runners on the new design  | [roadmap](assets/2026-11-23-design-review/screen-roadmap.png), [work](assets/2026-11-23-design-review/screen-work.png), [what's new](assets/2026-11-23-design-review/screen-whats-new.png), [dashboards](assets/2026-11-23-design-review/screen-dashboards.png), [connections](assets/2026-11-23-design-review/screen-connections.png) |
+| AI-379: Phone pass: every rebuilt screen at 390 px                                         | [phone](assets/2026-11-23-design-review/screen-phone.png)                                                                                                                                                                                                                                                                              |
+
+Limits of these mockups:
+
+- Placeholder copy: tier descriptions, quota percentages, the agent task's timeline steps and the "Trail Log" project.
+- AI-377: whether the API returns timeline steps was not checked; if not, the ticket needs an API change or a simpler timeline.
+- Not drawn: the epic panel (it follows the ticket panel), steps 1, 3 and 5 of the new-project path, and phone versions of Models, Roadmap, Work, What's new and Dashboards (they follow the phone frames' pattern).
+
 ## Open
 
 - M11: Design system and UI rebuild is `not_reviewed`: Andy approves or parks it on the roadmap. ARCHITECTURE §12 and `docs/architecture/milestones.md` do not list it yet; that row goes in with the ADR for AI-367.
-- AI-370 and AI-373 to AI-378 each need a mockup approved before their build.
 - AI-353 for private managed projects: raw image URLs do not work there; refine settles the source.
 - `docs/build-log.md` is unchanged by this entry.

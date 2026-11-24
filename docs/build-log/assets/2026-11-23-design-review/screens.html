@@ -1,0 +1,2179 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Direction A Screens</title>
+    <link
+      rel="stylesheet"
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Space+Grotesk:wght@500;600&family=Geist+Mono:wght@400;500&display=swap"
+    />
+    <style>
+      /* Layout: a short reading column introduces each ticket; its artboards break out to full width and scroll sideways in their own box. */
+      :root {
+        --bg: oklch(0.985 0.003 265);
+        --panel: oklch(1 0 0);
+        --fg: oklch(0.22 0.02 265);
+        --muted: oklch(0.5 0.02 265);
+        --line: oklch(0.9 0.008 265);
+        --accent: oklch(0.5 0.19 275);
+        --accent-soft: oklch(0.95 0.03 275);
+        --warn: oklch(0.55 0.15 60);
+        --warn-soft: oklch(0.95 0.05 75);
+        --ok: oklch(0.5 0.13 155);
+        --ok-soft: oklch(0.95 0.05 155);
+        --run: oklch(0.52 0.17 255);
+        --run-soft: oklch(0.95 0.035 255);
+        --bad: oklch(0.55 0.2 27);
+        --bad-soft: oklch(0.95 0.04 27);
+        --m-bg: oklch(0.985 0.003 270);
+        --m-panel: oklch(1 0 0);
+        --m-sub: oklch(0.96 0.006 270);
+        --m-fg: oklch(0.24 0.02 270);
+        --m-mu: oklch(0.52 0.02 270);
+        --m-line: oklch(0.91 0.008 270);
+        --m-acc: oklch(0.52 0.2 277);
+        --m-accs: oklch(0.95 0.035 277);
+        --m-shadow: 0 1px 2px rgb(20 20 60/0.06), 0 8px 24px -8px rgb(20 20 60/0.16);
+        --display: "Space Grotesk", system-ui, sans-serif;
+        --body: "Inter", system-ui, sans-serif;
+        --mono: "Geist Mono", ui-monospace, Menlo, monospace;
+      }
+      @media (prefers-color-scheme: dark) {
+        :root:not([data-theme="light"]) {
+          --bg: oklch(0.17 0.012 265);
+          --panel: oklch(0.21 0.014 265);
+          --fg: oklch(0.94 0.008 265);
+          --muted: oklch(0.7 0.015 265);
+          --line: oklch(0.3 0.015 265);
+          --accent: oklch(0.74 0.14 275);
+          --accent-soft: oklch(0.3 0.07 275);
+          --warn: oklch(0.8 0.14 75);
+          --warn-soft: oklch(0.32 0.06 70);
+          --ok: oklch(0.78 0.14 155);
+          --ok-soft: oklch(0.3 0.06 155);
+          --run: oklch(0.76 0.12 255);
+          --run-soft: oklch(0.3 0.06 255);
+          --bad: oklch(0.74 0.16 27);
+          --bad-soft: oklch(0.32 0.07 27);
+          --m-bg: oklch(0.17 0.012 270);
+          --m-panel: oklch(0.2 0.014 270);
+          --m-sub: oklch(0.15 0.012 270);
+          --m-fg: oklch(0.94 0.008 270);
+          --m-mu: oklch(0.66 0.016 270);
+          --m-line: oklch(0.28 0.014 270);
+          --m-acc: oklch(0.62 0.19 277);
+          --m-accs: oklch(0.27 0.07 277);
+          --m-shadow: 0 1px 2px rgb(0 0 0/0.4), 0 10px 28px -8px rgb(0 0 0/0.6);
+          color-scheme: dark;
+        }
+      }
+      :root[data-theme="dark"] {
+        --bg: oklch(0.17 0.012 265);
+        --panel: oklch(0.21 0.014 265);
+        --fg: oklch(0.94 0.008 265);
+        --muted: oklch(0.7 0.015 265);
+        --line: oklch(0.3 0.015 265);
+        --accent: oklch(0.74 0.14 275);
+        --accent-soft: oklch(0.3 0.07 275);
+        --warn: oklch(0.8 0.14 75);
+        --warn-soft: oklch(0.32 0.06 70);
+        --ok: oklch(0.78 0.14 155);
+        --ok-soft: oklch(0.3 0.06 155);
+        --run: oklch(0.76 0.12 255);
+        --run-soft: oklch(0.3 0.06 255);
+        --bad: oklch(0.74 0.16 27);
+        --bad-soft: oklch(0.32 0.07 27);
+        --m-bg: oklch(0.17 0.012 270);
+        --m-panel: oklch(0.2 0.014 270);
+        --m-sub: oklch(0.15 0.012 270);
+        --m-fg: oklch(0.94 0.008 270);
+        --m-mu: oklch(0.66 0.016 270);
+        --m-line: oklch(0.28 0.014 270);
+        --m-acc: oklch(0.62 0.19 277);
+        --m-accs: oklch(0.27 0.07 277);
+        --m-shadow: 0 1px 2px rgb(0 0 0/0.4), 0 10px 28px -8px rgb(0 0 0/0.6);
+        color-scheme: dark;
+      }
+
+      body {
+        margin: 0;
+        background: var(--bg);
+        color: var(--fg);
+        font: 15px/1.55 var(--body);
+        padding-block: 40px 80px;
+        padding-left: max(16px, env(safe-area-inset-left, 0px));
+        padding-right: max(16px, env(safe-area-inset-right, 0px));
+      }
+      .col {
+        max-width: 72ch;
+        margin-inline: auto;
+        display: flex;
+        flex-direction: column;
+        gap: 12px;
+      }
+      .wide {
+        max-width: 1240px;
+        margin-inline: auto;
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+      }
+      section {
+        display: flex;
+        flex-direction: column;
+        gap: 18px;
+        margin-top: 52px;
+      }
+      h1,
+      h2 {
+        font-family: var(--display);
+        text-wrap: balance;
+        margin: 0;
+        letter-spacing: -0.01em;
+        font-weight: 600;
+      }
+      h1 {
+        font-size: 32px;
+        line-height: 1.1;
+      }
+      h2 {
+        font-size: 21px;
+      }
+      p,
+      ul {
+        margin: 0;
+      }
+      ul {
+        padding-left: 20px;
+        display: flex;
+        flex-direction: column;
+        gap: 4px;
+      }
+      .eyebrow,
+      .cap {
+        font: 500 12px var(--mono);
+        color: var(--muted);
+        letter-spacing: 0.05em;
+        text-transform: uppercase;
+      }
+      .lede {
+        font-size: 17px;
+      }
+      .muted {
+        color: var(--muted);
+      }
+      .small {
+        font-size: 13.5px;
+      }
+      .note {
+        border-left: 3px solid var(--accent);
+        padding: 2px 0 2px 14px;
+        color: var(--muted);
+        font-size: 14px;
+      }
+      .scroll {
+        overflow-x: auto;
+        border-radius: 12px;
+        border: 1px solid var(--line);
+      }
+
+      /* ---------- mockup system (direction A) ---------- */
+      .ab {
+        min-width: 1060px;
+        background: var(--m-bg);
+        color: var(--m-fg);
+        font: 13px/1.4 var(--body);
+        font-variant-numeric: tabular-nums;
+        display: grid;
+        grid-template-columns: 208px 1fr;
+        position: relative;
+        overflow: hidden;
+      }
+      .ab * {
+        box-sizing: border-box;
+      }
+      .ab h4 {
+        margin: 0;
+        font: 600 13px var(--body);
+      }
+      .mu {
+        color: var(--m-mu);
+      }
+      .k {
+        font: 12px var(--mono);
+        color: var(--m-mu);
+      }
+      .b {
+        font-weight: 500;
+      }
+      .sm {
+        font-size: 12px;
+      }
+      .r {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+      }
+      .c {
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+      }
+      .sp {
+        margin-left: auto;
+      }
+      .grow {
+        flex: 1;
+        min-width: 0;
+      }
+      .tag {
+        display: inline-flex;
+        align-items: center;
+        gap: 4px;
+        font-size: 11px;
+        font-weight: 500;
+        padding: 1px 7px;
+        border-radius: 99px;
+        white-space: nowrap;
+      }
+      .t-warn {
+        background: var(--warn-soft);
+        color: var(--warn);
+      }
+      .t-ok {
+        background: var(--ok-soft);
+        color: var(--ok);
+      }
+      .t-run {
+        background: var(--run-soft);
+        color: var(--run);
+      }
+      .t-bad {
+        background: var(--bad-soft);
+        color: var(--bad);
+      }
+      .t-n {
+        background: var(--m-sub);
+        color: var(--m-mu);
+        box-shadow: inset 0 0 0 1px var(--m-line);
+      }
+      .ab kbd {
+        font: 500 10.5px var(--mono);
+        border: 1px solid var(--m-line);
+        border-bottom-width: 2px;
+        border-radius: 4px;
+        padding: 0 4px;
+        color: var(--m-mu);
+        background: var(--m-bg);
+      }
+      .sw {
+        width: 28px;
+        height: 16px;
+        border-radius: 99px;
+        background: var(--m-line);
+        position: relative;
+        flex: none;
+      }
+      .sw::after {
+        content: "";
+        position: absolute;
+        top: 2px;
+        left: 2px;
+        width: 12px;
+        height: 12px;
+        border-radius: 50%;
+        background: var(--m-panel);
+      }
+      .sw.on {
+        background: var(--m-acc);
+      }
+      .sw.on::after {
+        left: 14px;
+      }
+      .btn {
+        background: var(--m-acc);
+        color: #fff;
+        border-radius: 7px;
+        padding: 6px 12px;
+        font-weight: 500;
+        display: inline-flex;
+        gap: 8px;
+        align-items: center;
+        white-space: nowrap;
+      }
+      .btn kbd {
+        background: transparent;
+        border-color: rgb(255 255 255/0.4);
+        color: #fff;
+      }
+      .btn2 {
+        border: 1px solid var(--m-line);
+        background: var(--m-panel);
+        border-radius: 7px;
+        padding: 5px 11px;
+        font-weight: 500;
+        display: inline-flex;
+        gap: 8px;
+        align-items: center;
+        white-space: nowrap;
+        box-shadow: 0 1px 0 var(--m-line);
+      }
+      .sel {
+        border: 1px solid var(--m-line);
+        background: var(--m-panel);
+        border-radius: 7px;
+        padding: 5px 9px;
+        display: flex;
+        justify-content: space-between;
+        gap: 10px;
+        align-items: center;
+      }
+      .sel::after {
+        content: "⌄";
+        color: var(--m-mu);
+        line-height: 1;
+      }
+      .inp {
+        border: 1px solid var(--m-line);
+        border-radius: 7px;
+        padding: 7px 10px;
+        color: var(--m-mu);
+        background: var(--m-bg);
+      }
+      .seg {
+        display: inline-flex;
+        background: var(--m-sub);
+        border-radius: 8px;
+        padding: 2px;
+        gap: 2px;
+        box-shadow: inset 0 0 0 1px var(--m-line);
+      }
+      .seg span {
+        padding: 3px 10px;
+        border-radius: 6px;
+        color: var(--m-mu);
+        font-weight: 500;
+        white-space: nowrap;
+      }
+      .seg .on {
+        background: var(--m-panel);
+        color: var(--m-fg);
+        box-shadow: 0 1px 2px rgb(0 0 0/0.12);
+      }
+      .card {
+        background: var(--m-panel);
+        border: 1px solid var(--m-line);
+        border-radius: 9px;
+        padding: 12px 14px;
+      }
+      .dot {
+        width: 7px;
+        height: 7px;
+        border-radius: 50%;
+        background: var(--warn);
+        flex: none;
+      }
+      .bar {
+        height: 4px;
+        border-radius: 9px;
+        background: var(--m-line);
+        overflow: hidden;
+      }
+      .bar i {
+        display: block;
+        height: 100%;
+        background: var(--ok);
+      }
+      /* shell */
+      .side {
+        background: var(--m-sub);
+        border-right: 1px solid var(--m-line);
+        padding: 12px 8px;
+        display: flex;
+        flex-direction: column;
+        gap: 2px;
+      }
+      .proj {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        padding: 6px 8px;
+        font-weight: 600;
+        margin-bottom: 8px;
+      }
+      .logo {
+        width: 20px;
+        height: 20px;
+        border-radius: 5px;
+        background: var(--m-fg);
+        color: var(--m-bg);
+        font-size: 9px;
+        font-weight: 600;
+        display: grid;
+        place-items: center;
+        flex: none;
+      }
+      .nav {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 5px 8px;
+        border-radius: 6px;
+        color: var(--m-mu);
+        font-weight: 500;
+      }
+      .nav.on {
+        background: var(--m-panel);
+        color: var(--m-fg);
+        box-shadow: 0 0 0 1px var(--m-line);
+      }
+      .nav b {
+        font-weight: 500;
+        font-size: 11px;
+        color: var(--warn);
+      }
+      .grp {
+        font-size: 11px;
+        color: var(--m-mu);
+        padding: 14px 8px 4px;
+        font-weight: 500;
+      }
+      .quota {
+        margin-top: auto;
+        padding: 8px;
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+        font-size: 11px;
+        color: var(--m-mu);
+      }
+      .quota .bar {
+        height: 3px;
+      }
+      .quota .bar i {
+        background: var(--m-acc);
+      }
+      .main {
+        display: flex;
+        flex-direction: column;
+        min-width: 0;
+        background: var(--m-panel);
+      }
+      .hd {
+        height: 46px;
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        padding: 0 20px;
+        border-bottom: 1px solid var(--m-line);
+        flex: none;
+      }
+      .hd .t {
+        font-size: 15px;
+        font-weight: 600;
+      }
+      .pad {
+        padding: 18px 20px;
+        display: flex;
+        flex-direction: column;
+        gap: 16px;
+        flex: 1;
+        min-width: 0;
+      }
+      .tabs {
+        display: flex;
+        gap: 4px;
+      }
+      .tabs span {
+        padding: 4px 9px;
+        border-radius: 6px;
+        color: var(--m-mu);
+        font-weight: 500;
+      }
+      .tabs .on {
+        background: var(--m-sub);
+        color: var(--m-fg);
+      }
+      .tabs i {
+        font-style: normal;
+        font-size: 11px;
+        margin-left: 4px;
+        color: var(--m-mu);
+      }
+      .row {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        padding: 8px 12px;
+        border-bottom: 1px solid var(--m-line);
+      }
+      .row:last-child {
+        border-bottom: 0;
+      }
+      .list {
+        border: 1px solid var(--m-line);
+        border-radius: 9px;
+        background: var(--m-panel);
+        overflow: hidden;
+      }
+      .sec {
+        font-size: 11px;
+        font-weight: 500;
+        color: var(--m-mu);
+      }
+      /* overlay */
+      .dim {
+        position: absolute;
+        inset: 0;
+        background: rgb(10 10 30/0.35);
+      }
+      .pal {
+        position: absolute;
+        left: 50%;
+        top: 70px;
+        transform: translateX(-50%);
+        width: 560px;
+        background: var(--m-panel);
+        border: 1px solid var(--m-line);
+        border-radius: 12px;
+        box-shadow: var(--m-shadow);
+        overflow: hidden;
+      }
+      .pal .q {
+        padding: 13px 16px;
+        border-bottom: 1px solid var(--m-line);
+        font-size: 15px;
+      }
+      .pal .row {
+        border: 0;
+        padding: 7px 16px;
+      }
+      .pal .row.on {
+        background: var(--m-accs);
+      }
+      .pal .sec {
+        padding: 10px 16px 2px;
+      }
+      /* board */
+      .lanes {
+        display: grid;
+        grid-template-columns: repeat(4, 1fr) 36px;
+        gap: 10px;
+        flex: 1;
+        min-height: 0;
+      }
+      .lane {
+        background: var(--m-sub);
+        border-radius: 10px;
+        padding: 8px;
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+        box-shadow: inset 0 0 0 1px var(--m-line);
+      }
+      .lane > .r {
+        padding: 2px 4px 4px;
+      }
+      .tk {
+        background: var(--m-panel);
+        border-radius: 8px;
+        padding: 8px 10px;
+        display: flex;
+        flex-direction: column;
+        gap: 5px;
+        box-shadow:
+          0 0 0 1px var(--m-line),
+          0 1px 2px rgb(20 20 60/0.06);
+      }
+      .tk.sel2 {
+        box-shadow:
+          0 0 0 1.5px var(--m-acc),
+          0 0 0 4px var(--m-accs);
+      }
+      /* panel */
+      .panel {
+        position: absolute;
+        right: 0;
+        top: 0;
+        bottom: 0;
+        width: 620px;
+        background: var(--m-panel);
+        border-left: 1px solid var(--m-line);
+        box-shadow: var(--m-shadow);
+        display: flex;
+        flex-direction: column;
+      }
+      .fld {
+        display: flex;
+        flex-direction: column;
+        gap: 4px;
+      }
+      .fld > span:first-child {
+        font-size: 11px;
+        color: var(--m-mu);
+        font-weight: 500;
+      }
+      .chk {
+        width: 14px;
+        height: 14px;
+        border-radius: 4px;
+        border: 1.5px solid var(--m-line);
+        flex: none;
+      }
+      .chk.on {
+        background: var(--m-acc);
+        border-color: var(--m-acc);
+      }
+      /* timeline */
+      .tl {
+        display: flex;
+        flex-direction: column;
+      }
+      .tl .ev {
+        display: grid;
+        grid-template-columns: 70px 16px 1fr;
+        gap: 10px;
+        padding-bottom: 16px;
+        position: relative;
+      }
+      .tl .ev::before {
+        content: "";
+        position: absolute;
+        left: 87px;
+        top: 14px;
+        bottom: 0;
+        width: 1.5px;
+        background: var(--m-line);
+      }
+      .tl .ev:last-child::before {
+        display: none;
+      }
+      .tl .p {
+        width: 9px;
+        height: 9px;
+        border-radius: 50%;
+        background: var(--m-line);
+        margin: 4px auto 0;
+        z-index: 1;
+      }
+      .tl .p.ok {
+        background: var(--ok);
+      }
+      .tl .p.now {
+        background: var(--run);
+        box-shadow: 0 0 0 4px var(--run-soft);
+      }
+      /* onboarding */
+      .steps {
+        display: flex;
+        flex-direction: column;
+        gap: 2px;
+        width: 220px;
+        flex: none;
+      }
+      .st {
+        display: flex;
+        gap: 10px;
+        align-items: center;
+        padding: 7px 8px;
+        border-radius: 7px;
+        color: var(--m-mu);
+        font-weight: 500;
+      }
+      .st .n {
+        width: 20px;
+        height: 20px;
+        border-radius: 50%;
+        border: 1.5px solid var(--m-line);
+        display: grid;
+        place-items: center;
+        font-size: 11px;
+        flex: none;
+      }
+      .st.done .n {
+        background: var(--ok);
+        border-color: var(--ok);
+        color: #fff;
+      }
+      .st.on {
+        background: var(--m-panel);
+        color: var(--m-fg);
+        box-shadow: 0 0 0 1px var(--m-line);
+      }
+      .st.on .n {
+        border-color: var(--m-acc);
+        color: var(--m-acc);
+      }
+      .focus {
+        background: var(--m-panel);
+        border-radius: 14px;
+        box-shadow: var(--m-shadow);
+        border: 1px solid var(--m-line);
+        padding: 24px 28px;
+        display: flex;
+        flex-direction: column;
+        gap: 14px;
+        flex: 1;
+        max-width: 640px;
+      }
+      .big {
+        font-size: 21px;
+        font-weight: 600;
+        letter-spacing: -0.015em;
+        line-height: 1.2;
+      }
+      .ta {
+        border: 1px solid var(--m-line);
+        border-radius: 9px;
+        padding: 10px 12px;
+        background: var(--m-bg);
+        min-height: 74px;
+      }
+      /* charts */
+      .tiles {
+        display: grid;
+        grid-template-columns: repeat(4, 1fr);
+        gap: 10px;
+      }
+      .tile .v {
+        font-size: 22px;
+        font-weight: 600;
+        letter-spacing: -0.02em;
+      }
+      .bars {
+        display: flex;
+        align-items: flex-end;
+        gap: 10px;
+        height: 110px;
+        border-bottom: 1px solid var(--m-line);
+        padding: 0 6px;
+      }
+      .bars > div {
+        flex: 1;
+        display: flex;
+        flex-direction: column-reverse;
+        border-radius: 3px 3px 0 0;
+        overflow: hidden;
+      }
+      .bars i {
+        display: block;
+      }
+      .s1 {
+        background: var(--m-mu);
+      }
+      .s2 {
+        background: var(--m-acc);
+      }
+      .s3 {
+        background: var(--run);
+      }
+      .s4 {
+        background: var(--warn);
+      }
+      .s5 {
+        background: var(--ok);
+      }
+      /* phone */
+      .phones {
+        display: grid;
+        grid-template-columns: repeat(4, 300px);
+        gap: 22px;
+        padding: 22px;
+        background: var(--m-sub);
+        min-width: 1310px;
+      }
+      .ph {
+        background: var(--m-bg);
+        color: var(--m-fg);
+        font: 14px/1.4 var(--body);
+        border-radius: 26px;
+        border: 1px solid var(--m-line);
+        box-shadow: var(--m-shadow);
+        height: 600px;
+        display: flex;
+        flex-direction: column;
+        overflow: hidden;
+      }
+      .ph * {
+        box-sizing: border-box;
+      }
+      .ph .top {
+        padding: 14px 16px 8px;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        font-weight: 600;
+      }
+      .ph .bd {
+        flex: 1;
+        padding: 6px 14px;
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+        min-height: 0;
+        overflow: hidden;
+      }
+      .ph .tb {
+        display: grid;
+        grid-template-columns: repeat(4, 1fr);
+        border-top: 1px solid var(--m-line);
+        background: var(--m-panel);
+        padding: 8px 0 12px;
+        font-size: 11px;
+        color: var(--m-mu);
+        text-align: center;
+      }
+      .ph .tb .on {
+        color: var(--m-acc);
+        font-weight: 600;
+      }
+      .ph .choice {
+        border: 1.5px solid var(--m-line);
+        border-radius: 12px;
+        padding: 12px;
+        min-height: 44px;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        font-weight: 500;
+        background: var(--m-panel);
+      }
+      .ph .choice.sug {
+        border-color: var(--m-acc);
+        background: var(--m-accs);
+      }
+      .ph .btn {
+        justify-content: center;
+        padding: 12px;
+        border-radius: 12px;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="col">
+      <span class="eyebrow">andy-intelligence · direction A mockups · 2026-11-23</span>
+      <h1>The remaining screens in direction A</h1>
+      <p class="lede">
+        One mockup for each ticket that waits on your approval: the shell, the new-project path,
+        board, ticket panel, Models, agent task page, the six lighter screens, and the phone. The
+        inbox and Project settings are already approved.
+      </p>
+      <p class="note">
+        Static mockups on the seeded data. Tier descriptions, quota numbers and the agent task's
+        steps are placeholder copy; each build ticket uses what the API returns. Switch this page's
+        theme to see dark. Reply with the tickets you approve, or what to change on any of them.
+      </p>
+    </div>
+
+    <section>
+      <div class="col">
+        <span class="eyebrow">AI-370</span>
+        <h2>Shell: sidebar navigation, quota meter and command palette</h2>
+        <p class="small muted">
+          The sidebar is the same on every screen below. Shown here with the command palette open
+          (Cmd+K): tickets by key or title, then actions with their keys.
+        </p>
+      </div>
+      <div class="wide">
+        <div class="scroll">
+          <div class="ab" style="height: 520px">
+            <div class="side" data-on="Board" data-proj="Andy Intelligence"></div>
+            <div class="main">
+              <div class="hd"><span class="t">Board</span></div>
+              <div class="pad">
+                <div class="lanes" style="opacity: 0.5">
+                  <div class="lane"></div>
+                  <div class="lane"></div>
+                  <div class="lane"></div>
+                  <div class="lane"></div>
+                  <div class="lane"></div>
+                </div>
+              </div>
+            </div>
+            <div class="dim"></div>
+            <div class="pal">
+              <div class="q r">
+                <span>rot</span><span class="mu">|</span><span class="sp k">Esc to close</span>
+              </div>
+              <div class="sec">Tickets</div>
+              <div class="row on">
+                <span class="k">OPS-2</span><span class="b">Rotate the deploy key</span
+                ><span class="tag t-warn">2 questions</span
+                ><span class="sp mu sm">Ops · Backlog</span><kbd>↵</kbd>
+              </div>
+              <div class="row">
+                <span class="k">AI-9</span><span>Rotate runner secrets</span
+                ><span class="sp mu sm">Andy Intelligence · Done</span>
+              </div>
+              <div class="sec">Actions</div>
+              <div class="row">
+                <span class="b">New ticket</span><span class="sp"></span><kbd>C</kbd>
+              </div>
+              <div class="row">
+                <span class="b">Go to Roadmap</span><span class="sp"></span><kbd>G</kbd><kbd>R</kbd>
+              </div>
+              <div class="row">
+                <span class="b">Pause Andy Intelligence</span
+                ><span class="mu sm">Dispatch starts nothing; tasks in flight finish</span>
+              </div>
+              <div class="row"><span class="b">Theme: switch to dark</span></div>
+              <div class="sec">Projects</div>
+              <div class="row" style="padding-bottom: 12px">
+                <span class="logo">OP</span><span class="b">Ops</span
+                ><span class="tag t-warn">3 need you</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section>
+      <div class="col">
+        <span class="eyebrow">AI-373</span>
+        <h2>New project to first build: one path</h2>
+        <p class="small muted">
+          Direction B's one-step card inside the A shell. The steps stay on the project until all
+          are done; each step has one button. Step 2 is the brief form that does not exist today;
+          step 4 is the plan approval that sits in settings today.
+        </p>
+      </div>
+      <div class="wide">
+        <div class="cap">Step 2 · Brief</div>
+        <div class="scroll">
+          <div class="ab" style="height: 540px">
+            <div class="side" data-on="" data-proj="Trail Log"></div>
+            <div class="main" style="background: var(--m-bg)">
+              <div class="pad" style="flex-direction: row; gap: 28px; padding: 28px">
+                <div class="steps">
+                  <div class="sec" style="padding: 0 8px 6px">Set up Trail Log</div>
+                  <div class="st done"><span class="n">✓</span>Create project</div>
+                  <div class="st on"><span class="n">2</span>Write the brief</div>
+                  <div class="st"><span class="n">3</span>Plan milestones</div>
+                  <div class="st"><span class="n">4</span>Approve the plan</div>
+                  <div class="st"><span class="n">5</span>Baseline and first build</div>
+                  <div class="mu sm" style="padding: 14px 8px">
+                    Created with repo albernhagen/trail-log. The GitHub App is installed on it.
+                  </div>
+                </div>
+                <div class="focus">
+                  <div class="mu sm">Step 2 of 5 · about 3 minutes</div>
+                  <div class="big">What are you building, and for whom?</div>
+                  <div class="ta">
+                    A log of trail runs that pulls each run from my watch and shows weekly distance
+                    and climb. For me first, then a few running friends.
+                  </div>
+                  <div class="fld">
+                    <span>What is true when version one is done?</span>
+                    <div class="ta" style="min-height: 52px">
+                      I open it on Monday and see last week's runs, total distance and total climb
+                      without typing anything.
+                    </div>
+                  </div>
+                  <div class="fld">
+                    <span>Anything it must not do or cost?</span>
+                    <div class="inp">Optional: limits, stack, things to avoid…</div>
+                  </div>
+                  <div class="r" style="margin-top: auto">
+                    <span class="mu sm">Saved as you type. The plan step reads this brief.</span
+                    ><span class="sp btn2">Save and finish later</span
+                    ><span class="btn">Plan milestones <kbd>⌘↵</kbd></span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="cap">Step 4 · Approve the plan</div>
+        <div class="scroll">
+          <div class="ab" style="height: 500px">
+            <div class="side" data-on="" data-proj="Trail Log"></div>
+            <div class="main" style="background: var(--m-bg)">
+              <div class="pad" style="flex-direction: row; gap: 28px; padding: 28px">
+                <div class="steps">
+                  <div class="sec" style="padding: 0 8px 6px">Set up Trail Log</div>
+                  <div class="st done"><span class="n">✓</span>Create project</div>
+                  <div class="st done"><span class="n">✓</span>Write the brief</div>
+                  <div class="st done"><span class="n">✓</span>Plan milestones</div>
+                  <div class="st on"><span class="n">4</span>Approve the plan</div>
+                  <div class="st"><span class="n">5</span>Baseline and first build</div>
+                </div>
+                <div class="focus" style="max-width: 720px">
+                  <div class="mu sm">
+                    Step 4 of 5 · the plan agent proposed 3 milestones from your brief
+                  </div>
+                  <div class="big">Approve the plan</div>
+                  <div class="list">
+                    <div class="row">
+                      <div class="c grow" style="gap: 2px">
+                        <span class="b">M0: Sign-in and one imported run</span
+                        ><span class="mu sm"
+                          >You sign in and see one run pulled from the watch. 4 tickets.</span
+                        >
+                      </div>
+                      <span class="seg"><span class="on">Approve</span><span>Park</span></span>
+                    </div>
+                    <div class="row">
+                      <div class="c grow" style="gap: 2px">
+                        <span class="b">M1: Weekly summary</span
+                        ><span class="mu sm"
+                          >Monday view with distance and climb for last week. 5 tickets.</span
+                        >
+                      </div>
+                      <span class="seg"><span class="on">Approve</span><span>Park</span></span>
+                    </div>
+                    <div class="row">
+                      <div class="c grow" style="gap: 2px">
+                        <span class="b">M2: Share with friends</span
+                        ><span class="mu sm"
+                          >Invite a friend who sees their own runs. 6 tickets.</span
+                        >
+                      </div>
+                      <span class="seg"><span>Approve</span><span class="on">Park</span></span>
+                    </div>
+                  </div>
+                  <div class="r" style="margin-top: auto">
+                    <span class="btn2">Send back with a note</span
+                    ><span class="sp btn">Approve 2, park 1 <kbd>⌘↵</kbd></span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section>
+      <div class="col">
+        <span class="eyebrow">AI-374</span>
+        <h2>Board and cards</h2>
+        <p class="small muted">
+          Lanes are sunken, cards raised. Work views are tabs with counts; the two checkboxes become
+          switches. Markers keep their words.
+        </p>
+      </div>
+      <div class="wide">
+        <div class="scroll">
+          <div class="ab" style="height: 540px">
+            <div class="side" data-on="Board" data-proj="Andy Intelligence"></div>
+            <div class="main">
+              <div class="hd">
+                <span class="t">Board</span
+                ><span class="tabs"
+                  ><span class="on">All<i>11</i></span
+                  ><span>Needs you<i>1</i></span
+                  ><span>Mine<i>0</i></span
+                  ><span>Agents<i>9</i></span
+                  ><span>Blocked<i>1</i></span
+                  ><span>In review<i>2</i></span></span
+                >
+                <span class="sp r mu sm">Group by epic <span class="sw"></span></span
+                ><span class="btn2">Ideate <kbd>I</kbd></span
+                ><span class="btn">New ticket <kbd>C</kbd></span>
+              </div>
+              <div class="pad" style="background: var(--m-bg)">
+                <div class="lanes">
+                  <div class="lane">
+                    <div class="r">
+                      <h4>Backlog</h4>
+                      <span class="k">3</span>
+                    </div>
+                    <div class="sec" style="padding: 0 4px">Up next · 0</div>
+                    <div class="mu sm" style="padding: 0 4px 4px">
+                      Drag a ticket here to start refine.
+                    </div>
+                    <div class="sec" style="padding: 0 4px">Ideas · 3</div>
+                    <div class="tk">
+                      <div class="r">
+                        <span class="k">AI-3</span><span class="sp mu sm">Feature</span>
+                      </div>
+                      <span class="b">Story side panel</span>
+                      <div class="r">
+                        <span class="tag t-warn">1 question</span
+                        ><span class="tag t-run">Refining · 1 min</span>
+                      </div>
+                    </div>
+                    <div class="tk">
+                      <div class="r">
+                        <span class="k">AI-4</span><span class="sp mu sm">Chore</span>
+                      </div>
+                      <span class="b">Command palette</span>
+                    </div>
+                    <div class="tk">
+                      <div class="r"><span class="k">AI-11</span></div>
+                      <span class="b">Keyboard shortcuts</span>
+                    </div>
+                  </div>
+                  <div class="lane">
+                    <div class="r">
+                      <h4>Ready</h4>
+                      <span class="k">2</span><span class="sp mu sm">By score ⌄</span>
+                    </div>
+                    <div class="tk">
+                      <div class="r">
+                        <span class="k">1 · AI-6</span><span class="sp mu sm">Feature</span>
+                      </div>
+                      <span class="b">Epic grouping on the board</span>
+                      <div class="r">
+                        <span class="tag t-n">M</span><span class="tag t-bad">Blocked by AI-4</span>
+                      </div>
+                    </div>
+                    <div class="tk sel2">
+                      <div class="r">
+                        <span class="k">2 · AI-5</span><span class="sp tag t-ok">Next</span>
+                      </div>
+                      <span class="b">Ticket model v2</span>
+                      <div class="r"><span class="tag t-n">M</span></div>
+                    </div>
+                  </div>
+                  <div class="lane">
+                    <div class="r">
+                      <h4>In progress</h4>
+                      <span class="k">2</span>
+                    </div>
+                    <div class="tk">
+                      <div class="r">
+                        <span class="k">AI-1</span><span class="sp mu sm">Feature</span>
+                      </div>
+                      <span class="b">Design source and app shell</span>
+                      <div class="r">
+                        <span class="tag t-n">M</span><span class="tag t-n">PR #72 · open</span>
+                      </div>
+                    </div>
+                    <div class="tk">
+                      <div class="r">
+                        <span class="k">AI-7</span><span class="sp mu sm">Feature</span>
+                      </div>
+                      <span class="b">Run cost on cards</span>
+                      <div class="r">
+                        <span class="tag t-n">M</span
+                        ><span class="tag t-run">Building · 12 min</span>
+                      </div>
+                    </div>
+                  </div>
+                  <div class="lane">
+                    <div class="r">
+                      <h4>Ready for review</h4>
+                      <span class="k">2</span>
+                    </div>
+                    <div class="tk">
+                      <div class="r">
+                        <span class="k">AI-2</span><span class="sp mu sm">Bug</span>
+                      </div>
+                      <span class="b">Dropping a card opens the ticket</span>
+                      <div class="r">
+                        <span class="tag t-n">S</span
+                        ><span class="tag t-warn">Waits for your merge</span>
+                      </div>
+                    </div>
+                    <div class="tk">
+                      <div class="r">
+                        <span class="k">AI-8</span><span class="sp mu sm">Bug</span>
+                      </div>
+                      <span class="b">Inbox loses its scroll position</span>
+                      <div class="r">
+                        <span class="tag t-n">M</span><span class="tag t-n">PR #62 · open</span>
+                      </div>
+                    </div>
+                  </div>
+                  <div class="lane" style="align-items: center; padding-top: 12px">
+                    <span class="k">2</span
+                    ><span class="b" style="writing-mode: vertical-rl; margin-top: 6px">Done</span>
+                  </div>
+                </div>
+              </div>
+              <div class="r mu sm" style="padding: 8px 20px; border-top: 1px solid var(--m-line)">
+                <kbd>J</kbd><kbd>K</kbd> card · <kbd>H</kbd><kbd>L</kbd> lane · <kbd>↵</kbd> open ·
+                <kbd>M</kbd> move
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section>
+      <div class="col">
+        <span class="eyebrow">AI-375</span>
+        <h2>Ticket and epic panel</h2>
+        <p class="small muted">
+          The decision leads: status, the one next move, then the PR. Details use the new select;
+          "How it runs" stays folded. The panel slides in over the board in 150 ms.
+        </p>
+      </div>
+      <div class="wide">
+        <div class="scroll">
+          <div class="ab" style="height: 600px">
+            <div class="side" data-on="Board" data-proj="Andy Intelligence"></div>
+            <div class="main">
+              <div class="hd"><span class="t">Board</span></div>
+              <div class="pad" style="background: var(--m-bg)">
+                <div class="lanes" style="opacity: 0.55">
+                  <div class="lane"></div>
+                  <div class="lane"></div>
+                  <div class="lane"></div>
+                  <div class="lane"></div>
+                  <div class="lane"></div>
+                </div>
+              </div>
+            </div>
+            <div class="panel">
+              <div class="hd">
+                <span class="tag t-run">In progress</span
+                ><span class="mu">PR #72 open · waits for you</span
+                ><span class="sp mu">Close <kbd>Esc</kbd></span>
+              </div>
+              <div class="pad" style="gap: 14px">
+                <div class="r">
+                  <span class="btn">Move to Ready for review <kbd>M</kbd></span
+                  ><span class="btn2">Move… </span><span class="btn2">Open PR #72 ↗</span
+                  ><span class="sp tag t-ok">Definition of Ready met</span>
+                </div>
+                <div>
+                  <span class="k">AI-1</span>
+                  <div class="big" style="font-size: 19px">Design source and app shell</div>
+                </div>
+                <div style="display: grid; grid-template-columns: 1fr 190px; gap: 22px">
+                  <div class="c" style="gap: 12px">
+                    <div class="c" style="gap: 4px">
+                      <div class="r">
+                        <h4>Description</h4>
+                        <span class="sp mu sm">Edit <kbd>E</kbd></span>
+                      </div>
+                      <span>Picking a project should feel like picking a tenant.</span
+                      ><span class="mu"
+                        >One <b>shell</b> on every screen, with the project picker. Tokens in
+                        <span class="k">index.css</span>.</span
+                      >
+                    </div>
+                    <div class="c" style="gap: 5px">
+                      <h4>Acceptance criteria</h4>
+                      <div class="r">
+                        <span class="chk on"></span>When Andy opens the app, the system shall show
+                        the project picker.
+                      </div>
+                      <div class="r mu"><span class="chk"></span>Add a criterion…</div>
+                    </div>
+                    <div class="c" style="gap: 5px">
+                      <h4>Out of scope</h4>
+                      <div class="r">
+                        <span class="tag t-n">Dashboards</span
+                        ><span class="tag t-n">Command palette</span
+                        ><span class="mu sm">+ Add</span>
+                      </div>
+                    </div>
+                    <div class="c" style="gap: 0">
+                      <h4 style="margin-bottom: 8px">Activity</h4>
+                      <div class="tl">
+                        <div class="ev">
+                          <span class="mu sm">2:50 PM</span><span class="p now"></span
+                          ><span
+                            ><b class="b">Andy</b> commented: Screenshots look right. Ship it after
+                            CI.</span
+                          >
+                        </div>
+                        <div class="ev">
+                          <span class="mu sm">2:31 PM</span><span class="p ok"></span
+                          ><span>PR #72 opened by the build task</span>
+                        </div>
+                        <div class="ev">
+                          <span class="mu sm">2:10 PM</span><span class="p"></span
+                          ><span>Moved Ready → In progress</span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                  <div class="c" style="gap: 10px">
+                    <div class="fld">
+                      <span>Type</span>
+                      <div class="sel">Feature</div>
+                    </div>
+                    <div class="fld">
+                      <span>Size</span>
+                      <div class="sel">M · medium</div>
+                      <span class="mu sm">A layout, routes and a CI job.</span>
+                    </div>
+                    <div class="fld">
+                      <span>Epic</span>
+                      <div class="sel mu">None</div>
+                    </div>
+                    <div class="fld">
+                      <span>Blocked by</span>
+                      <div class="sel mu">Add a ticket…</div>
+                    </div>
+                    <div class="fld">
+                      <span>How it runs ▸</span
+                      ><span class="sm">Agent · GitHub Actions · strong tier · Opus</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section>
+      <div class="col">
+        <span class="eyebrow">AI-376</span>
+        <h2>Models: routing editor</h2>
+        <p class="small muted">
+          Each tier says what it is for and which route runs now. Providers are switches with plain
+          names. Changes collect in one bar at the bottom, the same save pattern as Project settings
+          when a change needs a reason.
+        </p>
+      </div>
+      <div class="wide">
+        <div class="scroll">
+          <div class="ab" style="height: 640px">
+            <div
+              class="side"
+              data-on="Models"
+              data-proj="Andy Intelligence"
+              data-settings="1"
+            ></div>
+            <div class="main">
+              <div class="hd">
+                <span class="t">Models</span><span class="mu">Routing for</span
+                ><span class="sel" style="min-width: 130px">Global</span
+                ><span class="sp mu sm">Global is the ceiling; a project can only narrow it</span>
+              </div>
+              <div class="pad" style="gap: 14px">
+                <div class="c">
+                  <h4>Tiers</h4>
+                  <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px">
+                    <div class="card c">
+                      <div class="r"><span class="b">Frontier</span></div>
+                      <span class="mu sm">Hardest work: large builds and project plans.</span>
+                      <div
+                        class="row"
+                        style="padding: 6px 0; border: 0; border-top: 1px solid var(--m-line)"
+                      >
+                        <span class="k">1</span>
+                        <div class="c grow" style="gap: 0">
+                          <span class="b">Opus</span
+                          ><span class="mu sm">Claude Code · subscription</span>
+                        </div>
+                        <span class="tag t-ok">Runs now</span>
+                      </div>
+                      <span class="mu sm">+ Add a fallback route</span>
+                    </div>
+                    <div class="card c">
+                      <div class="r"><span class="b">Strong</span></div>
+                      <span class="mu sm">Medium builds, ideate and plans.</span>
+                      <div
+                        class="row"
+                        style="padding: 6px 0; border: 0; border-top: 1px solid var(--m-line)"
+                      >
+                        <span class="k">1</span>
+                        <div class="c grow" style="gap: 0">
+                          <span class="b">Opus</span
+                          ><span class="mu sm">Claude Code · subscription</span>
+                        </div>
+                        <span class="tag t-ok">Runs now</span>
+                      </div>
+                      <span class="mu sm">+ Add a fallback route</span>
+                    </div>
+                    <div
+                      class="card c"
+                      style="box-shadow: 0 0 0 3px var(--m-accs); border-color: var(--m-acc)"
+                    >
+                      <div class="r">
+                        <span class="b">Fast</span><span class="sp tag t-warn">Edited</span>
+                      </div>
+                      <span class="mu sm">Refine, review, verify and small builds.</span>
+                      <div
+                        class="row"
+                        style="padding: 6px 0; border: 0; border-top: 1px solid var(--m-line)"
+                      >
+                        <span class="k">1</span>
+                        <div class="c grow" style="gap: 0">
+                          <span class="b">Sonnet</span
+                          ><span class="mu sm">Claude Code · subscription</span>
+                        </div>
+                        <span class="tag t-ok">Runs now</span>
+                      </div>
+                      <div
+                        class="row"
+                        style="padding: 6px 0; border: 0; border-top: 1px solid var(--m-line)"
+                      >
+                        <span class="k">2</span>
+                        <div class="c grow" style="gap: 0">
+                          <span class="b">Gemini Flash</span
+                          ><span class="mu sm">OpenCode · OpenRouter</span>
+                        </div>
+                        <span class="tag t-n">Skipped: provider off</span>
+                      </div>
+                    </div>
+                    <div class="card c">
+                      <div class="r"><span class="b">Cheap</span></div>
+                      <span class="mu sm">Summaries and single calls.</span>
+                      <div
+                        class="row"
+                        style="padding: 6px 0; border: 0; border-top: 1px solid var(--m-line)"
+                      >
+                        <span class="k">1</span>
+                        <div class="c grow" style="gap: 0">
+                          <span class="b">Sonnet</span
+                          ><span class="mu sm">Claude Code · subscription</span>
+                        </div>
+                        <span class="tag t-ok">Runs now</span>
+                      </div>
+                      <span class="mu sm">+ Add a fallback route</span>
+                    </div>
+                  </div>
+                </div>
+                <div style="display: grid; grid-template-columns: 1.25fr 1fr; gap: 16px">
+                  <div class="c">
+                    <h4>Steps</h4>
+                    <div class="list">
+                      <div class="row">
+                        <div class="c grow" style="gap: 0">
+                          <span class="b">Refine</span
+                          ><span class="mu sm">Turns an idea into a ready ticket</span>
+                        </div>
+                        <span class="seg"
+                          ><span>By size</span><span>Frontier</span><span>Strong</span
+                          ><span class="on">Fast</span><span>Cheap</span></span
+                        >
+                      </div>
+                      <div class="row">
+                        <div class="c grow" style="gap: 0">
+                          <span class="b">Build</span
+                          ><span class="mu sm">Writes the code and opens the PR</span>
+                        </div>
+                        <span class="seg"
+                          ><span class="on">By size</span><span>Frontier</span><span>Strong</span
+                          ><span>Fast</span><span>Cheap</span></span
+                        >
+                      </div>
+                      <div class="row">
+                        <div class="c grow" style="gap: 0">
+                          <span class="b">Review</span
+                          ><span class="mu sm">Adversarial and security review of a PR</span>
+                        </div>
+                        <span class="seg"
+                          ><span>By size</span><span>Frontier</span><span>Strong</span
+                          ><span class="on">Fast</span><span>Cheap</span></span
+                        >
+                      </div>
+                      <div class="row mu sm">
+                        7 more steps: plan, verify, sync, scout, ideate, plan-project, summarize
+                      </div>
+                    </div>
+                  </div>
+                  <div class="c">
+                    <h4>Providers</h4>
+                    <div class="list">
+                      <div class="row">
+                        <span class="sw on"></span>
+                        <div class="c grow" style="gap: 0">
+                          <span class="b">Claude subscription</span
+                          ><span class="mu sm">Warn at 70%, pause at 80%, keep 20% in reserve</span>
+                        </div>
+                        <span class="mu sm">Edit</span>
+                      </div>
+                      <div class="row">
+                        <span class="sw"></span>
+                        <div class="c grow" style="gap: 0">
+                          <span class="b">Google subscription</span><span class="mu sm">Off</span>
+                        </div>
+                      </div>
+                      <div class="row">
+                        <span class="sw"></span>
+                        <div class="c grow" style="gap: 0">
+                          <span class="b">OpenRouter</span
+                          ><span class="mu sm">Off · paid, counts against spend caps</span>
+                        </div>
+                      </div>
+                      <div class="row">
+                        <span class="sw"></span>
+                        <div class="c grow" style="gap: 0">
+                          <span class="b">Claude API</span
+                          ><span class="mu sm">Off · paid, counts against spend caps</span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+              <div
+                class="r"
+                style="
+                  padding: 10px 20px;
+                  border-top: 1px solid var(--m-line);
+                  background: var(--m-accs);
+                "
+              >
+                <span class="b">1 unsaved change</span><span class="mu">Fast: added route 2</span
+                ><span class="inp grow" style="background: var(--m-panel)"
+                  >Why? Goes in the change log (optional)</span
+                ><span class="btn2">Discard</span><span class="btn">Save <kbd>⌘S</kbd></span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section>
+      <div class="col">
+        <span class="eyebrow">AI-377</span>
+        <h2>Agent task page</h2>
+        <p class="small muted">
+          A sentence of status, then a timeline that fills in as the task runs, with facts on the
+          right. When it ends, the first line becomes the outcome with cost and quota used.
+        </p>
+      </div>
+      <div class="wide">
+        <div class="scroll">
+          <div class="ab" style="height: 480px">
+            <div class="side" data-on="Board" data-proj="Andy Intelligence"></div>
+            <div class="main">
+              <div class="hd">
+                <span class="mu">Board ›</span><span class="k">AI-3</span
+                ><span class="mu">Story side panel ›</span><span class="t">Refine</span
+                ><span class="tag t-run">Running · 1 min</span
+                ><span class="sp btn2">Open log ↗</span><span class="btn2">Stop task</span>
+              </div>
+              <div class="pad" style="flex-direction: row; gap: 36px">
+                <div class="c grow" style="gap: 16px">
+                  <div class="big" style="font-size: 18px">
+                    Refining AI-3: Story side panel. It has asked you one question.
+                  </div>
+                  <div class="tl">
+                    <div class="ev">
+                      <span class="mu sm">2:59 PM</span><span class="p now"></span>
+                      <div class="c" style="gap: 6px">
+                        <span class="b">Waiting on your answer</span>
+                        <div class="card r" style="max-width: 520px">
+                          <span class="dot"></span
+                          ><span class="grow">Should Esc close the panel?</span
+                          ><span class="btn2">Answer in inbox</span>
+                        </div>
+                      </div>
+                    </div>
+                    <div class="ev">
+                      <span class="mu sm">2:59 PM</span><span class="p ok"></span>
+                      <div class="c" style="gap: 0">
+                        <span class="b">Read the ticket and the repo</span
+                        ><span class="mu sm"
+                          >14 files · found the panel in apps/web/src/pages/TicketPage.tsx</span
+                        >
+                      </div>
+                    </div>
+                    <div class="ev">
+                      <span class="mu sm">2:59 PM</span><span class="p ok"></span
+                      ><span class="b">Started on GitHub Actions</span>
+                    </div>
+                    <div class="ev">
+                      <span class="mu sm">2:58 PM</span><span class="p ok"></span>
+                      <div class="c" style="gap: 0">
+                        <span class="b">Queued</span
+                        ><span class="mu sm">Auto-refine: the ticket entered Up next</span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+                <div class="c" style="width: 230px; gap: 12px">
+                  <div class="card c" style="gap: 10px">
+                    <div class="fld">
+                      <span>Model</span><span class="b">Sonnet</span
+                      ><span class="mu sm">Fast tier · Claude Code · subscription</span>
+                    </div>
+                    <div class="fld">
+                      <span>Quota used so far</span><span class="b">0.4% of the 5-hour window</span>
+                    </div>
+                    <div class="fld">
+                      <span>Cost</span><span class="b">$0.00</span
+                      ><span class="mu sm">Subscription, not billed</span>
+                    </div>
+                    <div class="fld"><span>Pull request</span><span class="mu">None yet</span></div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section>
+      <div class="col">
+        <span class="eyebrow">AI-378</span>
+        <h2>Roadmap, Work, What's new, Dashboards, GitHub and Local runners</h2>
+        <p class="small muted">
+          Six lighter screens on the same templates. Empty states name what is missing and offer the
+          one step that fixes it.
+        </p>
+      </div>
+      <div class="wide">
+        <div class="cap">Roadmap · all projects</div>
+        <div class="scroll">
+          <div class="ab" style="height: 400px">
+            <div class="side" data-on="Roadmap" data-proj="All projects"></div>
+            <div class="main">
+              <div class="hd">
+                <span class="t">Roadmap</span
+                ><span class="sp seg"
+                  ><span class="on">Open</span><span>Parked</span><span>Done</span></span
+                >
+              </div>
+              <div class="pad">
+                <div class="c">
+                  <div class="r">
+                    <span class="logo">OP</span>
+                    <h4>Ops</h4>
+                  </div>
+                  <div class="list">
+                    <div class="row">
+                      <span class="mu">▾</span>
+                      <div class="c grow" style="gap: 0">
+                        <span class="b">M2: Backups</span
+                        ><span class="mu sm">Every backup restores, and a failed one alerts</span>
+                      </div>
+                      <div class="bar" style="width: 110px"><i style="width: 33%"></i></div>
+                      <span class="mu sm">1 of 3 done</span
+                      ><span class="tag t-run">1 in progress</span
+                      ><span class="seg"><span>Approved</span><span class="on">Parked</span></span>
+                    </div>
+                    <div class="row" style="padding-left: 40px; background: var(--m-bg)">
+                      <span class="k">OPS-5</span><span class="grow">Backups you can trust</span
+                      ><span class="tag t-warn">3 need you</span
+                      ><span class="mu sm">Epic · 3 tickets</span>
+                    </div>
+                  </div>
+                </div>
+                <div class="c">
+                  <div class="r">
+                    <span class="logo">AI</span>
+                    <h4>Andy Intelligence</h4>
+                  </div>
+                  <div class="card r" style="border-style: dashed; padding: 16px">
+                    <div class="c grow" style="gap: 2px">
+                      <span class="b">No milestones yet</span
+                      ><span class="mu sm"
+                        >A plan turns this project's brief into milestones and epics for you to
+                        approve.</span
+                      >
+                    </div>
+                    <span class="btn2">Ideate an epic</span
+                    ><span class="btn">Plan this project</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="cap">Work · all projects</div>
+        <div class="scroll">
+          <div class="ab" style="height: 360px">
+            <div class="side" data-on="Work" data-proj="All projects"></div>
+            <div class="main">
+              <div class="hd">
+                <span class="t">Work</span
+                ><span class="tabs"
+                  ><span class="on">Needs you<i>5</i></span
+                  ><span>Mine<i>0</i></span
+                  ><span>Agents<i>14</i></span
+                  ><span>Blocked<i>1</i></span
+                  ><span>In review<i>2</i></span></span
+                ><span class="sp mu sm">5 tickets · 1 stale</span>
+              </div>
+              <div class="pad">
+                <div class="list">
+                  <div class="row" style="background: var(--m-sub)">
+                    <span class="sec">Andy Intelligence · 1</span>
+                  </div>
+                  <div class="row">
+                    <span class="k" style="width: 52px">AI-3</span
+                    ><span class="b grow">Story side panel</span
+                    ><span class="tag t-warn">1 question</span
+                    ><span class="tag t-run">Refining · 1 min</span
+                    ><span class="mu sm" style="width: 80px; text-align: right">Backlog</span>
+                  </div>
+                  <div class="row" style="background: var(--m-sub)">
+                    <span class="sec">Ops · 3</span>
+                  </div>
+                  <div class="row">
+                    <span class="k" style="width: 52px">OPS-1</span
+                    ><span class="b grow">Nightly backups</span
+                    ><span class="tag t-warn">1 question</span
+                    ><span class="mu sm" style="width: 80px; text-align: right">Backlog</span>
+                  </div>
+                  <div class="row" style="background: var(--m-accs)">
+                    <span class="k" style="width: 52px">OPS-2</span
+                    ><span class="b grow">Rotate the deploy key</span><span class="tag t-n">S</span
+                    ><span class="tag t-warn">2 questions · 1 urgent</span
+                    ><span class="mu sm" style="width: 80px; text-align: right">Backlog</span>
+                  </div>
+                  <div class="row">
+                    <span class="k" style="width: 52px">OPS-3</span
+                    ><span class="b grow">Alert e-mails arrive twice</span
+                    ><span class="tag t-n">S</span><span class="tag t-warn">1 question</span
+                    ><span class="mu sm" style="width: 80px; text-align: right">In progress</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="cap">What's new · Ops</div>
+        <div class="scroll">
+          <div class="ab" style="height: 440px">
+            <div class="side" data-on="What's new" data-proj="Ops"></div>
+            <div class="main">
+              <div class="hd">
+                <span class="t">What's new</span
+                ><span class="seg"
+                  ><span>24 hours</span><span class="on">14 days</span><span>30 days</span
+                  ><span>90 days</span></span
+                ><span class="sel sp" style="min-width: 150px">All epics</span>
+              </div>
+              <div class="pad" style="flex-direction: row; gap: 24px">
+                <div class="c grow" style="gap: 14px">
+                  <div class="c">
+                    <div class="sec">Wed, Nov 4</div>
+                    <div class="list">
+                      <div class="row">
+                        <span
+                          class="p"
+                          style="width: 8px; height: 8px; border-radius: 50%; background: var(--ok)"
+                        ></span>
+                        <div class="c grow" style="gap: 0">
+                          <span class="b"
+                            >Backups now land in a second region, so one outage can't lose
+                            them.</span
+                          ><span class="mu sm">OPS-8 · PR #12 · merged by you</span>
+                        </div>
+                        <span class="tag t-warn">Needs you</span>
+                      </div>
+                      <div class="row">
+                        <span
+                          class="p"
+                          style="
+                            width: 8px;
+                            height: 8px;
+                            border-radius: 50%;
+                            background: var(--m-line);
+                          "
+                        ></span>
+                        <div class="c grow" style="gap: 0">
+                          <span>Chore(deps): Bump the test runner</span
+                          ><span class="mu sm">PR #11 · merged by you</span>
+                        </div>
+                        <span class="tag t-n">No note</span>
+                      </div>
+                    </div>
+                  </div>
+                  <div class="c">
+                    <div class="sec">Tue, Nov 3</div>
+                    <div class="list">
+                      <div class="row">
+                        <span
+                          class="p"
+                          style="width: 8px; height: 8px; border-radius: 50%; background: var(--ok)"
+                        ></span>
+                        <div class="c grow" style="gap: 0">
+                          <span class="b">A failed backup now pages the on-call channel.</span
+                          ><span class="mu sm">OPS-7 · PR #9 · merged by you</span>
+                        </div>
+                        <span class="tag t-n">Backfilled</span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+                <div class="c" style="width: 300px; gap: 12px">
+                  <div class="card c" style="border-color: var(--warn)">
+                    <div class="r">
+                      <h4>Waiting for you</h4>
+                      <span class="tag t-warn">3</span>
+                    </div>
+                    <span class="sm"
+                      ><span class="k">OPS-1</span> Keep backups for 7 or 30 days?</span
+                    ><span class="sm"
+                      ><span class="k">OPS-2</span> Rotate every 90 days or on every release?
+                      +1</span
+                    ><span class="sm"
+                      ><span class="k">OPS-3</span> Can the old alert rule be deleted?</span
+                    ><span class="btn2" style="align-self: start"
+                      >Open inbox <kbd>G</kbd><kbd>I</kbd></span
+                    >
+                  </div>
+                  <div class="card c">
+                    <h4>Status</h4>
+                    <div class="r sm">
+                      <span class="grow"><span class="k">OPS-5</span> Backups you can trust</span
+                      ><span class="mu">1 of 3</span>
+                    </div>
+                    <div class="bar"><i style="width: 33%"></i></div>
+                    <span class="mu sm">Merge mode: Low risk</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="cap">Dashboards · Andy Intelligence</div>
+        <div class="scroll">
+          <div class="ab" style="height: 470px">
+            <div class="side" data-on="Dashboards" data-proj="Andy Intelligence"></div>
+            <div class="main">
+              <div class="hd">
+                <span class="t">Dashboards</span
+                ><span class="seg"
+                  ><span>4 weeks</span><span class="on">8 weeks</span><span>12 weeks</span
+                  ><span>26 weeks</span></span
+                >
+              </div>
+              <div class="pad" style="background: var(--m-bg); gap: 12px">
+                <div class="tiles">
+                  <div class="card tile c" style="gap: 2px">
+                    <span class="mu sm">Lead time, Ready to Done</span><span class="v">—</span
+                    ><span class="mu sm">No ticket reached Done yet</span>
+                  </div>
+                  <div class="card tile c" style="gap: 2px">
+                    <span class="mu sm">CI green on first try</span><span class="v">—</span
+                    ><span class="mu sm">No closed agent PRs yet</span>
+                  </div>
+                  <div class="card tile c" style="gap: 2px">
+                    <span class="mu sm">Rework and review blockers</span><span class="v">0</span
+                    ><span class="mu sm">in these 8 weeks</span>
+                  </div>
+                  <div class="card tile c" style="gap: 2px">
+                    <span class="mu sm">Cost, estimate</span><span class="v">$0.00</span
+                    ><span class="mu sm">1 agent task · 1 with unknown cost</span>
+                  </div>
+                </div>
+                <div style="display: grid; grid-template-columns: 1.4fr 1fr; gap: 12px; flex: 1">
+                  <div class="card c">
+                    <div class="r">
+                      <h4>Tickets by stage</h4>
+                      <span class="sp mu sm">At each week's end</span>
+                    </div>
+                    <div class="bars">
+                      <div></div>
+                      <div></div>
+                      <div></div>
+                      <div></div>
+                      <div>
+                        <i class="s1" style="height: 27px"></i
+                        ><i class="s2" style="height: 18px"></i
+                        ><i class="s3" style="height: 18px"></i
+                        ><i class="s4" style="height: 18px"></i
+                        ><i class="s5" style="height: 18px"></i>
+                      </div>
+                      <div>
+                        <i class="s1" style="height: 27px"></i
+                        ><i class="s2" style="height: 18px"></i
+                        ><i class="s3" style="height: 18px"></i
+                        ><i class="s4" style="height: 18px"></i
+                        ><i class="s5" style="height: 18px"></i>
+                      </div>
+                      <div>
+                        <i class="s1" style="height: 27px"></i
+                        ><i class="s2" style="height: 18px"></i
+                        ><i class="s3" style="height: 18px"></i
+                        ><i class="s4" style="height: 18px"></i
+                        ><i class="s5" style="height: 18px"></i>
+                      </div>
+                      <div>
+                        <i class="s1" style="height: 27px"></i
+                        ><i class="s2" style="height: 18px"></i
+                        ><i class="s3" style="height: 18px"></i
+                        ><i class="s4" style="height: 18px"></i
+                        ><i class="s5" style="height: 18px"></i>
+                      </div>
+                    </div>
+                    <div class="r mu sm" style="justify-content: space-between; padding: 0 6px">
+                      <span>Oct 5</span><span>Oct 12</span><span>Oct 19</span><span>Oct 26</span
+                      ><span>Nov 2</span><span>Nov 9</span><span>Nov 16</span><span>Nov 23</span>
+                    </div>
+                    <div class="r sm" style="flex-wrap: wrap">
+                      <span class="r" style="gap: 4px"
+                        ><i class="s1" style="width: 8px; height: 8px; border-radius: 2px"></i
+                        >Backlog 3</span
+                      ><span class="r" style="gap: 4px"
+                        ><i class="s2" style="width: 8px; height: 8px; border-radius: 2px"></i>Ready
+                        2</span
+                      ><span class="r" style="gap: 4px"
+                        ><i class="s3" style="width: 8px; height: 8px; border-radius: 2px"></i>In
+                        progress 2</span
+                      ><span class="r" style="gap: 4px"
+                        ><i class="s4" style="width: 8px; height: 8px; border-radius: 2px"></i>Ready
+                        for review 2</span
+                      ><span class="r" style="gap: 4px"
+                        ><i class="s5" style="width: 8px; height: 8px; border-radius: 2px"></i>Done
+                        2</span
+                      >
+                    </div>
+                  </div>
+                  <div class="card c">
+                    <div class="r">
+                      <h4>Cost, tokens and quota</h4>
+                      <span class="sp seg"
+                        ><span class="on">By step</span><span>By size</span></span
+                      >
+                    </div>
+                    <div
+                      class="c"
+                      style="
+                        flex: 1;
+                        align-items: center;
+                        justify-content: center;
+                        text-align: center;
+                        gap: 4px;
+                      "
+                    >
+                      <span class="b">Nothing to chart yet</span
+                      ><span class="mu sm" style="max-width: 240px"
+                        >Charts appear after the first agent task finishes with a known cost.</span
+                      >
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="cap">Settings · GitHub and Local runners</div>
+        <div class="scroll">
+          <div class="ab" style="height: 400px">
+            <div
+              class="side"
+              data-on="GitHub"
+              data-proj="Andy Intelligence"
+              data-settings="1"
+            ></div>
+            <div class="main">
+              <div class="hd">
+                <span class="t">Connections</span
+                ><span class="tabs"><span class="on">GitHub</span><span>Local runners</span></span>
+              </div>
+              <div class="pad" style="flex-direction: row; gap: 16px; background: var(--m-bg)">
+                <div class="card c grow" style="gap: 12px">
+                  <div class="r">
+                    <h4>GitHub App</h4>
+                    <span class="tag t-ok">Connected</span
+                    ><span class="sp btn2">Install on another repo ↗</span>
+                  </div>
+                  <div class="list">
+                    <div class="row">
+                      <span class="b grow">albernhagen/andy-intelligence</span
+                      ><span class="mu sm">Project: Andy Intelligence</span
+                      ><span class="tag t-ok">Installed</span>
+                    </div>
+                    <div class="row">
+                      <span class="b grow">albernhagen/ops</span
+                      ><span class="mu sm">Project: Ops</span
+                      ><span class="tag t-ok">Installed</span>
+                    </div>
+                    <div class="row">
+                      <span class="b grow">albernhagen/trail-log</span
+                      ><span class="mu sm">No project yet</span
+                      ><span class="btn2">Add project</span>
+                    </div>
+                  </div>
+                  <span class="mu sm"
+                    >If the read fails, this card says what is missing and offers Retry, not
+                    "request failed (404)".</span
+                  >
+                </div>
+                <div class="card c" style="width: 340px; gap: 12px">
+                  <div class="r">
+                    <h4>Local runners</h4>
+                    <span class="sp btn2">Add runner</span>
+                  </div>
+                  <div class="list">
+                    <div class="row">
+                      <span class="dot" style="background: var(--ok)"></span>
+                      <div class="c grow" style="gap: 0">
+                        <span class="b">Andy's Mac</span
+                        ><span class="mu sm">Seen 2 minutes ago · idle</span>
+                      </div>
+                      <span class="mu sm">Revoke</span>
+                    </div>
+                  </div>
+                  <div
+                    class="c"
+                    style="background: var(--m-sub); border-radius: 8px; padding: 10px; gap: 4px"
+                  >
+                    <span class="b sm">New runner secret</span
+                    ><span class="k">air_••••••••••••••••3f9c</span
+                    ><span class="mu sm">Shown once. Copy it into the runner's config now.</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section>
+      <div class="col">
+        <span class="eyebrow">AI-379 · and the phone layout of each screen ticket</span>
+        <h2>Phone, 390 px</h2>
+        <p class="small muted">
+          The sidebar becomes the bottom bar. The inbox uses direction B's one-decision card. The
+          board shows one stage at a time, as today.
+        </p>
+      </div>
+      <div class="wide">
+        <div class="scroll">
+          <div class="phones">
+            <div class="ph">
+              <div class="top">
+                <span class="logo">AI</span>Needs you<span class="sp tag t-warn">3 of 5</span>
+              </div>
+              <div class="bd">
+                <span class="mu sm">Ops · <span class="k">OPS-2</span> Rotate the deploy key</span
+                ><span class="r"><span class="tag t-warn">Urgent</span></span
+                ><span class="big">Rotate every 90 days or on every release?</span
+                ><span class="mu">Only CI uses the key.</span>
+                <div class="choice sug">Every 90 days<span class="tag t-ok">Suggested</span></div>
+                <div class="choice">Every release</div>
+                <div class="inp" style="padding: 12px; border-radius: 12px">Or type an answer…</div>
+                <div class="r" style="margin-top: auto">
+                  <span class="mu grow">Skip</span><span class="btn grow">Accept suggestion</span>
+                </div>
+              </div>
+              <div class="tb">
+                <span class="on">Inbox</span><span>Board</span><span>Dashboards</span
+                ><span>More</span>
+              </div>
+            </div>
+            <div class="ph">
+              <div class="top">
+                <span class="logo">AI</span>Board<span class="sp btn2" style="font-size: 13px"
+                  >New</span
+                >
+              </div>
+              <div class="bd">
+                <div class="seg" style="align-self: stretch; overflow: hidden">
+                  <span>Backlog 3</span><span class="on">Ready 2</span><span>In progress 2</span
+                  ><span>Review 2</span>
+                </div>
+                <div class="tk">
+                  <div class="r">
+                    <span class="k">1 · AI-6</span><span class="sp mu sm">Feature</span>
+                  </div>
+                  <span class="b">Epic grouping on the board</span>
+                  <div class="r">
+                    <span class="tag t-n">M</span><span class="tag t-bad">Blocked by AI-4</span>
+                  </div>
+                </div>
+                <div class="tk">
+                  <div class="r">
+                    <span class="k">2 · AI-5</span><span class="sp tag t-ok">Next</span>
+                  </div>
+                  <span class="b">Ticket model v2</span>
+                  <div class="r"><span class="tag t-n">M</span></div>
+                </div>
+              </div>
+              <div class="tb">
+                <span>Inbox</span><span class="on">Board</span><span>Dashboards</span
+                ><span>More</span>
+              </div>
+            </div>
+            <div class="ph">
+              <div class="top">
+                <span class="mu">‹ Board</span><span class="sp tag t-run">In progress</span>
+              </div>
+              <div class="bd">
+                <span class="k">AI-1</span
+                ><span class="big" style="font-size: 19px">Design source and app shell</span
+                ><span class="mu sm">PR #72 open · waits for you</span>
+                <span class="btn">Move to Ready for review</span
+                ><span
+                  class="btn2"
+                  style="justify-content: center; padding: 11px; border-radius: 12px"
+                  >Open PR #72 ↗</span
+                >
+                <h4 style="margin: 6px 0 0; font: 600 14px var(--body)">Description</h4>
+                <span>Picking a project should feel like picking a tenant.</span>
+                <div class="list">
+                  <div class="row">
+                    <span class="mu grow">Type</span><span class="b">Feature</span>
+                  </div>
+                  <div class="row"><span class="mu grow">Size</span><span class="b">M</span></div>
+                  <div class="row">
+                    <span class="mu grow">Epic</span><span class="mu">None</span>
+                  </div>
+                </div>
+              </div>
+              <div class="tb">
+                <span>Inbox</span><span class="on">Board</span><span>Dashboards</span
+                ><span>More</span>
+              </div>
+            </div>
+            <div class="ph">
+              <div class="top">Set up Trail Log<span class="sp mu sm">Step 2 of 5</span></div>
+              <div class="bd">
+                <div class="bar"><i style="width: 30%; background: var(--m-acc)"></i></div>
+                <span class="big">What are you building, and for whom?</span>
+                <div class="ta" style="min-height: 120px">
+                  A log of trail runs that pulls each run from my watch and shows weekly distance
+                  and climb.
+                </div>
+                <span class="mu sm">What is true when version one is done?</span>
+                <div class="ta" style="min-height: 70px; color: var(--m-mu)">
+                  I open it on Monday and see…
+                </div>
+                <span class="btn" style="margin-top: auto">Plan milestones</span
+                ><span class="mu sm" style="text-align: center; padding-bottom: 10px"
+                  >Saved as you type</span
+                >
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <script>
+      document.querySelectorAll(".side").forEach(function (el) {
+        var on = el.dataset.on,
+          proj = el.dataset.proj,
+          all = proj === "All projects";
+        var item = function (n, c) {
+          return (
+            '<div class="nav' +
+            (n === on ? " on" : "") +
+            '">' +
+            n +
+            (c ? " <b>" + c + "</b>" : "") +
+            "</div>"
+          );
+        };
+        var h =
+          '<div class="proj"><span class="logo">' +
+          (all ? "∗" : proj === "Andy Intelligence" ? "AI" : proj === "Ops" ? "OP" : "TL") +
+          "</span>" +
+          proj +
+          ' <span class="mu" style="margin-left:auto">⌄</span></div>';
+        h +=
+          item("Inbox", all ? 5 : proj === "Ops" ? 3 : proj === "Trail Log" ? 0 : 2) +
+          item("Board") +
+          item("Roadmap") +
+          item("Work") +
+          item("Dashboards") +
+          item("What's new");
+        if (el.dataset.settings)
+          h +=
+            '<div class="grp">Settings</div>' +
+            item("This project") +
+            item("GitHub") +
+            item("Local runners") +
+            item("Models");
+        else h += '<div class="grp">Projects</div>' + item("Andy Intelligence", 2) + item("Ops", 3);
+        h +=
+          '<div class="quota"><span>Claude 5-hour · 38%</span><div class="bar"><i style="width:38%"></i></div><span>Weekly · 61%</span><div class="bar"><i style="width:61%"></i></div><div style="display:flex;justify-content:space-between;margin-top:6px"><span>Search and commands</span><kbd>⌘K</kbd></div></div>';
+        el.innerHTML = h;
+      });
+    </script>
+  </body>
+</html>
