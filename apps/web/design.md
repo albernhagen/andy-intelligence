@@ -20,6 +20,7 @@ Stack: React, Tailwind v4, shadcn/ui components in `src/components/ui/`, icons f
 - At most six destinations (Inbox, Board, Roadmap, Work, Dashboards, What's new); settings, theme and Sign out sit in the Settings menu. A new screen goes under a destination or replaces one (AI-335); `lib/shell-routes.ts` lists it (a test checks every route).
 - The picker is the global scope: project screens under `/p/<project>/…`, cross-project under `/all/…`. A new screen gets both, or says why not (the board needs one project).
 - Every page uses one of three [page templates](design-details.md#page-templates) beside the sidebar: list with detail, settings with section nav, reading page (AI-371 to AI-378). Padding `px-4 sm:px-6 py-4`.
+- A page opens with `PageHeader` (`src/components/PageHeader.tsx`): title, view controls beside it, actions at the end, a border below.
 - A ticket opens as a panel over the board, led by its status line; prose uses `Markdown`.
 
 ## Phone
