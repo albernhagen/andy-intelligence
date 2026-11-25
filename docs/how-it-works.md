@@ -11,6 +11,7 @@ What is built on `main` now, moved from `README.md` so its "How it works today" 
 - Project settings (`/p/<project>/settings`): switches, setup checklist, changes with Revert.
 - Pages poll: 5 s in use, 60 s idle, none hidden (ADR-0091).
 - Keyboard: `?` lists the shortcuts (AI-338).
+- Look: design direction A tokens (indigo accent, surfaces, Inter and Geist Mono served by the app); theme switch (system, light, dark) in the Settings menu (ADR-0151).
 - A header gauge and banner show Claude quota from task reports; on a phone the header shows the fullest window and a one-tap **Pause**/**Resume** (AI-176).
 - Ticket panel: next move first; worker, executor, routing under How it runs (AI-336).
 - Agent task cost: ticket panel, Activity (links each task's page), MCP `status`.

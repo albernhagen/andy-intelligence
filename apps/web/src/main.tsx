@@ -4,7 +4,11 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { App } from "./App";
 import { OAuthConsent } from "./OAuthConsent";
 import { registerServiceWorker } from "./lib/service-worker";
+import { applyTheme, loadTheme } from "./lib/theme";
 import "./index.css";
+
+// The remembered theme (ADR-0151) before the first render.
+applyTheme(loadTheme());
 
 const queryClient = new QueryClient();
 
