@@ -16,7 +16,7 @@ Docs are part of the change, not a follow-up. Every ticket's PR updates the docs
 | `docs/architecture/ARCHITECTURE.md` | Overview of the target design: goals, principles, system diagram, one summary per numbered section, technology, milestone table, open questions, reading map (ADR-0061) | Design intent, a component list or the milestone table changes. No revision counter: `git log` is its history (ADR-0046). |
 | `docs/architecture/<topic>.md` | Detail per topic, numbered like the overview (ADR-0061): `workflow`, `domain-and-ports`, `api-and-mcp`, `executors`, `skills-and-scout`, `ui`, `context-sources`, `template-and-baseline`, `security`, `observability-and-cost`, `milestones` (milestone plan), `glossary` (terms), `documentation` (this doc) | The design, scope, or plan in that topic changes. Never let it describe something the code contradicts. |
 | `docs/architecture/history/` | As-built notes and merged-ticket plans moved out of topic files (unbudgeted, ADR-0061) | A finished ticket's notes would crowd the rules |
-| `docs/architecture/adr/NNNN-*.md` | Why a decision was made (MADR) | Any architecture decision or deviation. ADR bodies are immutable; to change a decision write a new ADR and update the old one's `status` (`superseded by` / `amended by`). |
+| `docs/architecture/adr/NNNN-*.md` | Why a decision was made (MADR) | Only a decision on a trust boundary, the data model or who merges (below, ADR-0148). ADR bodies are immutable; to change a decision write a new ADR and update the old one's `status` (`superseded by` / `amended by`). |
 | `docs/architecture/adr/` | One file per ADR; frontmatter `title` and `status` feed the index `pnpm adr` prints (ADR-0046, ADR-0104) | With every new ADR or status change (a test checks) |
 | `docs/build-log.md` | Decisions pending, blockers (≤ 1 page, ADR-0046); milestone map: MCP `milestone_map`; status is in tickets in project `AI` (ADR-0047 phase 1) | When a decision or blocker changes. What happened goes in a new file per entry, `docs/build-log/YYYY-MM-DD-<slug>.md` (never append to a shared file). |
 | `docs/runbooks/*.md` | Steps Andy runs by hand (setup, secrets, apply, release) | Any manual step is added, changed, or removed |
@@ -26,6 +26,17 @@ Docs are part of the change, not a follow-up. Every ticket's PR updates the docs
 | `AGENTS.md` (`CLAUDE.md` → symlink) | Short, always-loaded rules for agents working in the repo; nested `AGENTS.md` in `infra/`, `.github/`, `packages/contracts/` load only when working there (ADR-0046) | Rules or doc map change |
 | §8.1 Project baseline inventory | Every guardrail and how managed projects get it | A quality, security, cost or scaling guardrail is added or changed |
 | Package/app `README.md` | Only when a package has setup or usage the root README can't cover in a line | That package's usage changes |
+
+**When an ADR is required (ADR-0148):**
+
+| Decision | Record it in |
+|---|---|
+| A trust boundary: a credential, entry point, sandbox, IAM grant, or what untrusted input can reach | A new ADR (and `docs/security/`) |
+| The data model: an entity, a stored field, a collection, a schema version | A new ADR |
+| Who merges: the gate, merge modes, review verdicts, who may merge what | A new ADR |
+| Any other build choice: code structure, a library, a script, a check, a cap's number, a doc layout | The PR description (and the topic file if the design changes); no ADR |
+
+Changing an existing ADR's decision still takes a new ADR, whatever its kind.
 
 Managed projects get the same rule through the template (§8): `docs/features.md` (here: `docs/features/`, one file each) is updated on merge, `docs/architecture/overview.md` when the design changes, ADRs for decisions.
 

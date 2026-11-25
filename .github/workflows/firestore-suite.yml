@@ -35,9 +35,13 @@ jobs:
           if [ -z "$BASE" ] || ! git cat-file -e "$BASE^{commit}" 2>/dev/null; then
             echo "run=true" >> "$GITHUB_OUTPUT"; exit 0
           fi
-          changed=$(git diff --name-only "$BASE" HEAD -- \
-            packages/store packages/contracts/src firebase.json package.json pnpm-lock.yaml \
-            .github/workflows/firestore-suite.yml)
+          # If the diff can't be read, run (AI-358: detection fails safe).
+          if ! changed=$(git diff --name-only "$BASE" HEAD -- \
+            packages/store packages/contracts firebase.json package.json pnpm-lock.yaml \
+            vitest.config.ts vitest.temp-dir.ts scripts/gen-exports.mjs \
+            .github/workflows/firestore-suite.yml); then
+            echo "run=true" >> "$GITHUB_OUTPUT"; exit 0
+          fi
           echo "$changed"
           if [ -n "$changed" ]; then echo "run=true"; else echo "run=false"; fi >> "$GITHUB_OUTPUT"
 

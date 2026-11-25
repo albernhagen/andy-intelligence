@@ -1,6 +1,6 @@
 ---
 title: Decisions as MADR
-status: accepted
+status: accepted, amended by 0148 (an ADR only for a trust boundary, the data model or who merges)
 date: 2026-10-21
 ---
 
