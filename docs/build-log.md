@@ -18,19 +18,9 @@ Generated from tickets, never edited here (AI-148). Every ticket sits under a mi
 - Production monitoring (alerts, error budget per project) as part of "shipped" (brief): add to M6: Dev → prod releases when it is split into tickets.
 - `autoMerge` on for project `AI`: after a trial of five tickets where the gate's `would_auto_merge` calls are compared with the coordinator's (Andy, 2026-11-10).
 - Context sources design (open question 12).
-- ADR-0094: Local executor build choices (AI-79, PR review): accept the six, or change any?
-- ADR-0097: Review findings → config proposals (AI-100): accept the two-PR plan, the 3-PR threshold and `AGENTS.md` as the only target?
-- ADR-0099: Agent read access (AI-97): steps, tools, live or bundled?
-- ADR-0108: Roadmap view over epics, and fixed work views (M4.24 to M4.31): accept one new epic field (`outcome`), Done-when as the epic's acceptance criteria, and the five views?
-- AI-144: Threat model: one file per risk: cap each risk file at 300 words and `threat-model.md` at 1000 (was 3600)?
-- ADR-0111: Re-sync open PRs: its App token?
-- ADR-0133: Board and ticket list read changed tickets (AI-317): accept the 60 s overlap and the hourly full re-read?
+- Proposed ADRs (29, with what accepting each means and a recommendation): accept, reject or supersede each in [2026-11-23-proposed-adrs.md](build-log/2026-11-23-proposed-adrs.md).
 - Night of 2026-11-23, PRs waiting for Andy's merge and the epic PR: [2026-11-24-handover-night.md](build-log/2026-11-24-handover-night.md).
 - Review handover, current state and questions: [2026-11-23-handover-review.md](build-log/2026-11-23-handover-review.md) (earlier: [2026-11-21](build-log/2026-11-21-handover-review.md)).
-- Re-sync cap (`scripts/resync-prs.mjs`, 4 an hour): raise to 12 and skip counting skipped runs?
-- ADR-0136: Milestone create and edit over MCP (AI-321, PR #343): extend ADR-0131 to five MCP milestone tools?
-- ADR-0140: Review check fails when not reviewed (AI-346, PR #356): carry verdicts over re-sync merges, and fail repos with no token?
-- ADR-0141: Agent PRs get a real review (AI-348, PR #377): allow the App on `agent/*` branches only?
 
 ## Blocked on Andy
 
