@@ -50,6 +50,11 @@ async function seeded(path: string) {
   return { ...harness, epic, story };
 }
 
+// jsdom lacks the pointer-capture and scroll APIs Radix Select calls.
+Element.prototype.hasPointerCapture ??= () => false;
+Element.prototype.releasePointerCapture ??= () => {};
+Element.prototype.scrollIntoView ??= () => {};
+
 describe("What's new page", () => {
   it("GivenAProjectScreen_WhenAndyClicksWhatsNew_ThenThePageOpens", async () => {
     const harness = await seeded("/p/ai");
@@ -98,7 +103,9 @@ describe("What's new page", () => {
 
   it("GivenAnEpicFilter_WhenPicked_ThenOnlyItsChanges", async () => {
     const harness = await seeded("/p/ai/whats-new");
-    await harness.user.selectOptions(await screen.findByLabelText("Epic"), "AI-1");
+    // AI-378: the epic filter is a Radix Select.
+    await harness.user.click(await screen.findByRole("combobox", { name: "Epic" }));
+    await harness.user.click(await screen.findByRole("option", { name: /^AI-1/ }));
     await waitFor(() => expect(screen.queryByText("PR title 8")).toBeNull());
     expect(screen.getByText("Andy sees the board by epic.")).toBeTruthy();
   });

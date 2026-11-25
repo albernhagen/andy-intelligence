@@ -1,5 +1,12 @@
+import { useId } from "react";
 import { WORK_VIEWS, WORK_VIEW_LABELS, type NeedsYouParts, type WorkView } from "@andy/domain";
-import { Select } from "@/components/ui/input";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Segmented } from "@/components/ui/segmented";
 
 type Chip = { id: WorkView | null; label: string; count: number };
@@ -70,6 +77,9 @@ export function WorkViewChips({
   );
 }
 
+/** Radix Select can't hold an empty value; this one stands for All. */
+const ALL = "all";
+
 /** The same choice as one menu, "View: All 11 ▾", for the phone board (AI-337). */
 export function WorkViewMenu({
   view,
@@ -84,20 +94,26 @@ export function WorkViewMenu({
   total: number;
   onChange: (view: WorkView | null) => void;
 }) {
+  const id = useId();
   return (
-    <label className="flex items-center gap-2 text-sm">
-      View
-      <Select
-        className="h-11 w-auto text-base"
-        value={view ?? ""}
-        onChange={(e) => onChange((e.target.value || null) as WorkView | null)}
-      >
+    <Select value={view ?? ALL} onValueChange={(v) => onChange(v === ALL ? null : (v as WorkView))}>
+      {/* A combobox takes no name from its content: name it by both visible parts, so a screen
+          reader hears the current view and its count ("View All 11"). */}
+      <SelectTrigger aria-labelledby={`${id}-label ${id}-value`} className="w-auto">
+        <span id={`${id}-label`} className="text-muted-foreground">
+          View
+        </span>
+        <span id={`${id}-value`}>
+          <SelectValue />
+        </span>
+      </SelectTrigger>
+      <SelectContent>
         {chipList(counts, needsYou, total).map((chip) => (
-          <option key={chip.id ?? "all"} value={chip.id ?? ""}>
+          <SelectItem key={chip.id ?? ALL} value={chip.id ?? ALL}>
             {chip.label} {countText(chip, needsYou)}
-          </option>
+          </SelectItem>
         ))}
-      </Select>
-    </label>
+      </SelectContent>
+    </Select>
   );
 }

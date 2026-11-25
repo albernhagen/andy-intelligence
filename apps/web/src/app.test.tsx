@@ -1,17 +1,21 @@
 import { describe, expect, it } from "vitest";
 import { screen, waitFor, within } from "@testing-library/react";
 import { readyStory, renderApp } from "@/test/harness";
+import { pick } from "@/test/pick";
 
 /** UI flows from the M1.3: UI: tickets + inbox "Done when", against the in-process API. */
 
 describe("tickets UI", () => {
   it("GivenNoProjects_WhenAndyCreatesAProjectAndTicket_ThenTheTicketIsInBacklog", async () => {
-    const { user } = renderApp("/projects");
+    const { user, router } = renderApp("/projects");
     expect(await screen.findByText("No projects yet.")).toBeTruthy();
 
     await user.type(screen.getByLabelText("Name"), "Andy Intelligence");
     await user.type(screen.getByLabelText(/^Key/), "ai");
     await user.click(screen.getByRole("button", { name: "Create project" }));
+    // AI-373: a new project opens its setup path; the board is one click away.
+    await screen.findByRole("navigation", { name: "Set up Andy Intelligence" });
+    await router.navigate({ to: "/p/ai" });
 
     await user.type(await screen.findByLabelText("Add a ticket"), "Ticket board{Enter}");
 
@@ -27,21 +31,21 @@ describe("tickets UI", () => {
     expect(ticket.type).toBeNull();
     await harness.router.navigate({ to: `/p/ai/t/${ticket.id}` });
     const { user } = harness;
-    const type = (await screen.findByLabelText("Type")) as HTMLSelectElement;
-    expect(type.value).toBe("");
+    const type = (await screen.findByRole("combobox", { name: "Type" })) as HTMLButtonElement;
+    expect(type.textContent).toContain("No type");
 
     // Each rail field saves as soon as it changes; no Save button, no page change.
-    await user.selectOptions(type, "Bug");
+    await pick(user, type, "Bug");
     await waitFor(() => expect(type.disabled).toBe(false));
-    await user.selectOptions(screen.getByLabelText("Size"), "M");
-    const tier = screen.getByLabelText("Tier") as HTMLSelectElement;
-    expect(await within(tier).findByRole("option", { name: "strong (from size)" })).toBeTruthy();
-    await user.selectOptions(tier, "frontier");
+    await pick(user, screen.getByRole("combobox", { name: "Size" }), "M · medium");
+    const tier = screen.getByRole("combobox", { name: "Tier" });
+    await waitFor(() => expect(tier.textContent).toContain("strong (from size)"));
+    await pick(user, tier, "frontier (pinned)");
     // Empty lists fold into the Add row (AI-330): pick one, type, Enter.
-    await user.selectOptions(screen.getByLabelText("Add a list"), "Out of scope");
+    await pick(user, screen.getByRole("combobox", { name: "Add a list" }), "Out of scope");
     await user.type(screen.getByLabelText("Add to out of scope"), "billing{Enter}");
     await screen.findByRole("button", { name: "Remove: billing" });
-    await user.selectOptions(screen.getByLabelText("Add a list"), "Touches");
+    await pick(user, screen.getByRole("combobox", { name: "Add a list" }), "Touches");
     await user.type(screen.getByLabelText("Add to touches"), "apps/web/**{Enter}");
 
     await waitFor(async () =>
@@ -53,8 +57,8 @@ describe("tickets UI", () => {
         touches: ["apps/web/**"],
       }),
     );
-    await waitFor(() => expect(tier.value).toBe("frontier"));
-    expect(type.value).toBe("bug");
+    await waitFor(() => expect(tier.textContent).toBe("frontier (pinned)"));
+    expect(type.textContent).toBe("Bug");
     expect(harness.router.state.location.pathname).toBe("/p/ai/t/AI-1");
   });
 
@@ -65,7 +69,7 @@ describe("tickets UI", () => {
     await harness.user.type(screen.getByLabelText(/^GitHub repo/), "albernhagen/andy-intelligence");
     await harness.user.click(screen.getByRole("button", { name: "Create project" }));
 
-    await screen.findByLabelText("Add a ticket");
+    await screen.findByRole("navigation", { name: "Set up Andy Intelligence" });
     expect((await harness.tracker.getProject("ai"))?.repos).toEqual([
       "albernhagen/andy-intelligence",
     ]);
@@ -118,8 +122,11 @@ describe("tickets UI", () => {
     const ticket = await harness.service.create("ai", { type: "feature", title: "Board" }, "andy");
     await harness.router.navigate({ to: `/p/ai/t/${ticket.id}` });
 
+    // AI-375: a marker in the action row, and what is missing listed under it.
     const dor = await screen.findByRole("region", { name: "Definition of Ready" });
-    expect(await within(dor).findByText("acceptance criteria")).toBeTruthy();
+    expect(await within(dor).findByText(/Definition of Ready: \d+ missing/)).toBeTruthy();
+    const missing = screen.getByRole("region", { name: "Definition of Ready missing" });
+    expect(within(missing).getByText("acceptance criteria")).toBeTruthy();
 
     await harness.user.click(screen.getByRole("button", { name: "Move to Ready" }));
     expect((await screen.findByRole("alert")).textContent).toMatch(
@@ -135,7 +142,7 @@ describe("tickets UI", () => {
     await harness.router.navigate({ to: `/p/ai/t/${ticket.id}` });
 
     const dor = await screen.findByRole("region", { name: "Definition of Ready" });
-    expect(await within(dor).findByText("Definition of Ready: met.")).toBeTruthy();
+    expect(await within(dor).findByText("Definition of Ready met")).toBeTruthy();
     await harness.user.click(screen.getByRole("button", { name: "Move to Ready" }));
 
     // From Ready the next move is In progress; back to Backlog is under "Move…".
@@ -158,7 +165,7 @@ describe("tickets UI", () => {
     const submit = screen.getByRole("button", { name: "Force move" });
     expect((submit as HTMLButtonElement).disabled).toBe(true);
 
-    await user.selectOptions(screen.getByLabelText("Force to"), "Done");
+    await pick(user, screen.getByRole("combobox", { name: "Force to" }), "Done");
     await user.type(screen.getByLabelText("Reason (optional)"), "shipped by hand");
     await user.click(submit);
 
@@ -177,7 +184,7 @@ describe("tickets UI", () => {
 
     await user.click(await screen.findByRole("button", { name: "Move…" }));
     await user.click(screen.getByRole("button", { name: "Force move…" }));
-    await user.selectOptions(screen.getByLabelText("Force to"), "Ready");
+    await pick(user, screen.getByRole("combobox", { name: "Force to" }), "Ready");
     await user.click(screen.getByRole("button", { name: "Force move" }));
 
     const history = screen.getByRole("region", { name: "Activity" });
@@ -249,7 +256,7 @@ describe("Needs-you inbox", () => {
     const { user } = harness;
 
     const card = await screen.findByRole("article", { name: "AI-1: Board" });
-    expect(within(card).getByRole("link", { name: "AI-1: Board" })).toBeTruthy();
+    expect(within(card).getByRole("link", { name: "Open ticket" })).toBeTruthy();
     // One click on an option answers it.
     await user.click(within(card).getByRole("button", { name: "List" }));
 
@@ -276,7 +283,7 @@ describe("Needs-you inbox", () => {
         "Waiting for you: 1 question",
       ),
     );
-    await user.click(await screen.findByRole("link", { name: "Needs you 1" }));
+    await user.click(await screen.findByRole("link", { name: "Inbox 1 ticket waiting on you" }));
     expect(await screen.findByRole("listitem", { name: "Question: Dark mode too?" })).toBeTruthy();
     await waitFor(async () =>
       expect((await harness.tracker.getTicket("ai", ticket.id))?.needsAttention).toBe(true),

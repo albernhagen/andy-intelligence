@@ -1,9 +1,10 @@
+import { useId, type ReactNode } from "react";
 import { RUNS_AT_ONCE_MAX, type DispatchDecision, type Project } from "@andy/contracts";
-import { QueryError } from "@/components/Status";
+import { Input } from "@/components/ui/input";
+import { SettingRow, SwitchRow } from "@/components/SettingRow";
 import { useProjects, useUpdateProject } from "@/lib/queries";
 import type { Scope } from "@/lib/scope";
 import { cn } from "@/lib/utils";
-import { SavedCue } from "@/components/SavedCue";
 import { dateTime } from "@/lib/format";
 
 const DECISION_TEXT: Record<DispatchDecision, string> = {
@@ -37,44 +38,56 @@ export function BoardDispatchStatus({ projectId }: { projectId: string }) {
   return project ? <DispatchStatus project={project} /> : null;
 }
 
-/** Andy's dial and pause switch, and the last dispatch decision (ADR-0079). */
-export function DispatchControls({ project }: { project: Project }) {
-  const update = useUpdateProject(project.id);
+/**
+ * Andy's dial and pause switch, and the last dispatch decision (ADR-0079). Each saves on its own
+ * and confirms at its own control (AI-372); `children` sits beside the dial (Clear quota idle).
+ */
+export function DispatchControls({
+  project,
+  children,
+}: {
+  project: Project;
+  children?: ReactNode;
+}) {
+  const dial = useUpdateProject(project.id);
+  const pause = useUpdateProject(project.id);
+  const id = useId();
   return (
     <>
-      <label className="ml-3 inline-flex min-h-11 items-center gap-1 text-sm text-muted-foreground md:min-h-0">
-        Agent tasks at once
-        <input
+      <SettingRow
+        label="Agent tasks at once"
+        htmlFor={id}
+        description={`Agent tasks this project may have in flight (1 to ${RUNS_AT_ONCE_MAX}).`}
+        state={dial}
+      >
+        <Input
+          id={id}
           // Remount after a save or a refetch, so a refused value doesn't stay in the box.
           key={project.runsAtOnce}
           type="number"
           min={1}
           max={RUNS_AT_ONCE_MAX}
-          aria-label="Agent tasks at once"
-          className="w-12 rounded-md border border-border bg-background px-1"
+          className="w-16 tabular-nums max-sm:h-11 max-sm:text-base"
           defaultValue={project.runsAtOnce}
-          disabled={update.isPending}
+          disabled={dial.isPending}
           onBlur={(e) => {
             const value = Number(e.target.value);
             if (Number.isInteger(value) && value !== project.runsAtOnce) {
-              update.mutate({ runsAtOnce: value });
+              dial.mutate({ runsAtOnce: value });
             }
           }}
         />
-      </label>
-      <label className="ml-3 inline-flex min-h-11 items-center gap-1 text-sm text-muted-foreground md:min-h-0">
-        <input
-          type="checkbox"
-          className="size-5 md:size-auto"
-          checked={project.paused}
-          disabled={update.isPending}
-          onChange={(e) => update.mutate({ paused: e.target.checked })}
-        />
-        Paused
-      </label>
-      {update.error && <QueryError error={update.error} />}
-      <SavedCue pending={update.isPending} saved={update.isSuccess} />
-      <DispatchStatus project={project} />
+        <DispatchStatus project={project} />
+        {children}
+      </SettingRow>
+      <SwitchRow
+        label="Paused"
+        description="Dispatch starts nothing here; agent tasks in flight finish."
+        checked={project.paused}
+        disabled={pause.isPending}
+        onCheckedChange={(paused) => pause.mutate({ paused })}
+        state={pause}
+      />
     </>
   );
 }

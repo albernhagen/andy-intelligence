@@ -48,7 +48,7 @@ export function NewProjectPage() {
   );
 }
 
-/** Creates a project and opens its board. */
+/** Creates a project and opens its setup path at the brief (AI-373), not an empty board. */
 function NewProjectForm() {
   const create = useCreateProject();
   const github = useGitHub();
@@ -65,7 +65,8 @@ function NewProjectForm() {
         create.mutate(
           { name: name.trim(), key: key.trim(), repos: repo.trim() ? [repo.trim()] : [] },
           {
-            onSuccess: (p) => void navigate({ to: "/p/$projectId", params: { projectId: p.id } }),
+            onSuccess: (p) =>
+              void navigate({ to: "/p/$projectId/setup", params: { projectId: p.id } }),
           },
         );
       }}

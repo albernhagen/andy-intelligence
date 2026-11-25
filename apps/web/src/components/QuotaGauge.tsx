@@ -104,3 +104,51 @@ function QuotaWindows({ windows }: { windows: QuotaStatus["windows"] }) {
     </ul>
   );
 }
+
+/**
+ * The desktop sidebar's quota (AI-370): one small meter per window ("Claude 5-hour · 38%"). With no
+ * reading at all, or none known, one quiet marker instead of a label per window; its hint says what
+ * unknown means. A window unknown beside a known one says so in its own row.
+ */
+export function QuotaMeters() {
+  const quota = useQuota();
+  if (quota.isPending) return null;
+  const windows = quota.data?.windows ?? [];
+  if (!windows.some((w) => w.usedPct !== null))
+    return (
+      <p className="flex items-center gap-1.5 text-xs text-muted-foreground" title={UNKNOWN_HINT}>
+        <span aria-hidden className="size-1.5 rounded-full border border-muted-foreground/60" />
+        Quota unknown
+        <Hint />
+      </p>
+    );
+  return (
+    <ul aria-label="Claude quota" className="space-y-1.5 text-xs text-muted-foreground">
+      {windows.map((w, i) => {
+        const label = `${i === 0 ? "Claude " : ""}${WINDOW_LABEL[w.window]}`;
+        return (
+          <li key={w.window} className="space-y-1">
+            <span className={cn("block tabular-nums", TEXT[w.level])}>
+              {label} · {w.usedPct === null ? "unknown" : `${Math.round(w.usedPct)}%`}
+              {w.usedPct === null && <Hint />}
+            </span>
+            <span
+              role="meter"
+              aria-label={`${WINDOW_LABEL[w.window]} quota used`}
+              aria-valuemin={0}
+              aria-valuemax={100}
+              aria-valuenow={w.usedPct ?? undefined}
+              aria-valuetext={w.usedPct === null ? "unknown" : undefined}
+              className="block h-[3px] overflow-hidden rounded-full bg-border"
+            >
+              <span
+                className={cn("block h-full", BAR[w.level])}
+                style={{ width: `${w.usedPct ?? 0}%` }}
+              />
+            </span>
+          </li>
+        );
+      })}
+    </ul>
+  );
+}

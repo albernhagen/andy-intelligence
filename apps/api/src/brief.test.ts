@@ -1,7 +1,10 @@
-import { renderBrief, BRIEF_PATH } from "@andy/domain";
+import { renderBrief, BRIEF_PATH, DISCOVERY_PATH } from "@andy/domain";
 import type { BriefAnswers } from "@andy/contracts";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { InMemoryOAuthGrantStore } from "@andy/contracts";
 import { REPO, createdApp, githubApp } from "./github/test-app";
+import { ClientMetadataResolver } from "./mcp/client-metadata";
+import { mcpCaller } from "./mcp/test-client";
 
 /** AI-107: `POST /api/projects/{id}/brief` end to end in-process, with the code host fake. */
 
@@ -98,5 +101,95 @@ describe("POST /api/projects/{projectId}/brief", () => {
     expect(res.status).toBe(422);
     expect(await res.json()).toMatchObject({ error: "project AI has no repo with the App" });
     expect(s.host.proposals).toHaveLength(0);
+  });
+});
+
+describe("GET /api/projects/{projectId}/brief", () => {
+  beforeEach(() => {
+    vi.spyOn(console, "log").mockImplementation(() => {});
+  });
+
+  it("GivenNoBrief_WhenAndyReads_ThenNotOnTheDefaultBranch", async () => {
+    const s = await setup();
+    const res = await s.call("/api/projects/ai/brief");
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ readable: true, onDefaultBranch: false, prefill: {} });
+  });
+
+  it("GivenAMergedBriefAndADiscovery_WhenRead_ThenOnTheDefaultBranchWithThePrefill", async () => {
+    const s = await setup();
+    s.host.files.set(BRIEF_PATH, "# Project brief");
+    s.host.files.set(
+      DISCOVERY_PATH,
+      "## Brief answers\n\n| Id | Answer |\n|---|---|\n| `users` | Andy. |\n",
+    );
+    expect(await (await s.call("/api/projects/ai/brief")).json()).toEqual({
+      readable: true,
+      onDefaultBranch: true,
+      prefill: { users: "Andy." },
+    });
+  });
+
+  it("GivenTheBriefSubmittedInTheUi_WhenItsPrMerges_ThenTheReadSaysOnTheDefaultBranch", async () => {
+    const s = await setup();
+    await s.submit(answers);
+    const content = s.host.proposals[0]!.proposal.content;
+    s.host.files.set(BRIEF_PATH, content);
+    expect(await (await s.call("/api/projects/ai/brief")).json()).toMatchObject({
+      onDefaultBranch: true,
+    });
+  });
+
+  it("GivenAProjectWithNoRepo_WhenRead_Then200UnreadableWithTheReason", async () => {
+    const s = await setup();
+    await s.tracker.createProject({ name: "Ops", key: "OPS" });
+    const res = await s.call("/api/projects/ops/brief");
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({
+      readable: false,
+      problem: "project OPS has no repo",
+      prefill: {},
+    });
+  });
+
+  it("GivenNoSuchProject_WhenRead_Then404", async () => {
+    const s = await setup();
+    expect((await s.call("/api/projects/nope/brief")).status).toBe(404);
+  });
+
+  it("GivenGitHubNotConnected_WhenRead_ThenUnreadableWithTheReason", async () => {
+    const s = await setup(false);
+    expect(await (await s.call("/api/projects/ai/brief")).json()).toMatchObject({
+      readable: false,
+    });
+  });
+});
+
+describe("MCP brief_status (AI-373 parity with GET /api/projects/{projectId}/brief)", () => {
+  const PUBLIC_URL = "https://control-plane.example.run.app";
+
+  beforeEach(() => {
+    vi.spyOn(console, "log").mockImplementation(() => {});
+  });
+
+  it("GivenAMergedBriefAndADiscovery_WhenReadOverMcpAndRest_ThenTheSameState", async () => {
+    const grants = new InMemoryOAuthGrantStore();
+    const t = githubApp(
+      {},
+      { mcp: { publicUrl: PUBLIC_URL, grants, clients: new ClientMetadataResolver() } },
+    );
+    await t.connections.save({ ...createdApp, connectedAt: "2026-11-03T00:00:00Z" });
+    await t.tracker.createProject({ name: "AI", key: "AI", repos: [REPO] });
+    t.host.files.set(BRIEF_PATH, "# Project brief");
+    t.host.files.set(
+      DISCOVERY_PATH,
+      "## Brief answers\n\n| Id | Answer |\n|---|---|\n| `users` | Andy. |\n",
+    );
+    const call = await mcpCaller(t.app, grants, `${PUBLIC_URL}/mcp`);
+    const viaMcp = await call("brief_status", { project: "ai" });
+    const viaRest = await (await t.call("/api/projects/ai/brief")).json();
+    expect(viaMcp.isError).toBe(false);
+    expect(viaMcp.data).toEqual(viaRest);
+    expect(viaMcp.data).toMatchObject({ onDefaultBranch: true, prefill: { users: "Andy." } });
   });
 });

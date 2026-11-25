@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { screen, waitFor, within } from "@testing-library/react";
 import type { MilestoneStatus } from "@andy/contracts";
 import { PAGE_LOAD, readyStory, renderApp } from "@/test/harness";
+import { pick } from "@/test/pick";
 
 /**
  * AI-311: M4.38: the epic panel and the board's epic groups show the epic's milestone and its
@@ -77,7 +78,8 @@ describe("milestone on the epic panel (AI-311)", () => {
     await harness.router.navigate({ to: `/p/ai/t/${loose.key}` });
     const section = await screen.findByRole("region", { name: "Milestone" }, PAGE_LOAD);
 
-    await harness.user.selectOptions(
+    await pick(
+      harness.user,
       await within(section).findByRole("combobox", { name: "Milestone" }),
       "M4: Epics",
     );
@@ -95,7 +97,8 @@ describe("milestone on the epic panel (AI-311)", () => {
     await harness.router.navigate({ to: `/p/ai/t/${epic.key}` });
     const section = await screen.findByRole("region", { name: "Milestone" }, PAGE_LOAD);
 
-    await harness.user.selectOptions(
+    await pick(
+      harness.user,
       await within(section).findByRole("combobox", { name: "Status of M6: Dev → prod releases" }),
       "Approved",
     );
@@ -117,7 +120,7 @@ describe("milestone on the board's epic groups (AI-311)", () => {
     await harness.router.navigate({ to: "/p/ai" });
     await screen.findByText("AI-3", undefined, PAGE_LOAD);
 
-    await harness.user.click(screen.getByRole("checkbox", { name: "Group by epic" }));
+    await harness.user.click(screen.getByRole("switch", { name: "Group by epic" }));
 
     // AI-3's group is its child epic's, which takes M6 from its top-level epic.
     const header = document.querySelector<HTMLElement>(`[data-epic="${child.key}"]`)!;
@@ -133,11 +136,9 @@ describe("milestone status on the roadmap (AI-311)", () => {
     const { harness } = await seeded();
     await harness.router.navigate({ to: "/p/ai/roadmap" });
 
-    await harness.user.click(await screen.findByRole("button", { name: /^M4: Epics/ }, PAGE_LOAD));
-    await harness.user.selectOptions(
-      screen.getByRole("combobox", { name: "Status of M4: Epics" }),
-      "Parked",
-    );
+    // AI-378: the status pick sits in the row itself.
+    const status = await screen.findByRole("group", { name: "Status of M4: Epics" }, PAGE_LOAD);
+    await harness.user.click(within(status).getByRole("button", { name: "Parked" }));
 
     await waitFor(async () =>
       expect((await harness.milestones.get("ai", "m4"))?.status).toBe("parked"),

@@ -3,6 +3,7 @@ import { milestoneOf, topLevelOf } from "@andy/domain";
 import { QueryError } from "@/components/Status";
 import { Badge } from "@/components/ui/badge";
 import { Select } from "@/components/ui/input";
+import { PanelSelect } from "@/components/PanelSelect";
 import { cn } from "@/lib/utils";
 import {
   useMilestones,
@@ -90,6 +91,36 @@ export function MilestoneStatusSelect({
 }
 
 /**
+ * The epic panel's status pick (AI-375: no native select in the panel). Same write and refusal
+ * as `MilestoneStatusSelect`, which the roadmap keeps until its own rebuild (AI-378).
+ */
+function MilestoneStatusPick({
+  projectId,
+  milestone: m,
+}: {
+  projectId: string;
+  milestone: Pick<Milestone, "id" | "name" | "status">;
+}) {
+  const set = useSetMilestoneStatus(projectId);
+  return (
+    <div className="space-y-1">
+      <PanelSelect
+        label="Milestone status"
+        ariaLabel={`Status of ${m.name}`}
+        value={m.status}
+        disabled={set.isPending}
+        onValueChange={(v) => set.mutate({ milestoneId: m.id, status: MilestoneStatus.parse(v) })}
+        options={MilestoneStatus.options.map((s) => ({
+          value: s,
+          label: MILESTONE_STATUS[s].label,
+        }))}
+      />
+      {set.error && <QueryError error={set.error} />}
+    </div>
+  );
+}
+
+/**
  * The epic panel's milestone: a top-level epic picks one and sets its status; a child epic or a
  * ticket shows the one it takes from its top-level epic.
  */
@@ -115,7 +146,7 @@ export function TicketMilestone({ ticket: t }: { ticket: Ticket }) {
           {!own && <span className="text-xs text-muted-foreground">from {top.key}</span>}
         </p>
       )}
-      {milestone && own && <MilestoneStatusSelect projectId={t.projectId} milestone={milestone} />}
+      {milestone && own && <MilestoneStatusPick projectId={t.projectId} milestone={milestone} />}
     </section>
   );
 }
@@ -124,22 +155,16 @@ function EpicMilestonePick({ ticket: t, milestones }: { ticket: Ticket; mileston
   const set = useSetEpicMilestone({ projectId: t.projectId, ticketId: t.id });
   return (
     <div className="space-y-1">
-      <label className="block space-y-1">
-        <span className="text-xs text-muted-foreground">Milestone</span>
-        <Select
-          className="h-8"
-          value={t.milestoneId ?? ""}
-          disabled={set.isPending}
-          onChange={(e) => set.mutate(e.target.value || null)}
-        >
-          <option value="">No milestone</option>
-          {milestones.map((m) => (
-            <option key={m.id} value={m.id}>
-              {m.name}
-            </option>
-          ))}
-        </Select>
-      </label>
+      <PanelSelect
+        label="Milestone"
+        value={t.milestoneId ?? ""}
+        disabled={set.isPending}
+        onValueChange={(v) => set.mutate(v || null)}
+        options={[
+          { value: "", label: "No milestone" },
+          ...milestones.map((m) => ({ value: m.id, label: m.name })),
+        ]}
+      />
       {set.error && <QueryError error={set.error} />}
     </div>
   );

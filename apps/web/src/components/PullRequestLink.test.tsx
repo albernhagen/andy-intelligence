@@ -61,13 +61,12 @@ describe("waitingPullRequest", () => {
 });
 
 describe("PullRequestLink", () => {
-  it("GivenAnOpenPr_WhenShown_ThenOpenInGitHubLinksToItInANewTab", () => {
+  it("GivenAnOpenPr_WhenShown_ThenOpenPrLinksToItInANewTab", () => {
     render(<PullRequestLink events={[pr("open")]} repos={REPOS} />);
-    const link = screen.getByRole("link", { name: "Open in GitHub" });
+    const link = screen.getByRole("link", { name: "Open PR #88" });
     expect(link.getAttribute("href")).toBe(URL);
     expect(link.getAttribute("target")).toBe("_blank");
     expect(link.getAttribute("rel")).toContain("noopener");
-    expect(screen.getByText("PR #88 waits for you")).toBeTruthy();
   });
 
   it("GivenNoOpenPr_WhenShown_ThenNothing", () => {

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { screen, within } from "@testing-library/react";
+import { screen, waitFor, within } from "@testing-library/react";
 import { readyStory, renderApp } from "@/test/harness";
 import { workerStatus } from "@/lib/needs-you";
 
@@ -43,17 +43,45 @@ describe("worker markers", () => {
     expect(within(card as HTMLElement).getByText("Needs a worker")).toBeTruthy();
   });
 
-  it("GivenAMineTicket_WhenAndyClicksGiveToAgent_ThenTheWorkerIsStored", async () => {
+  it("GivenAMineTicket_WhenAndyPicksAgent_ThenTheWorkerIsStored", async () => {
     const { harness, ticket } = await boardWithReady("me");
 
     await harness.router.navigate({
       to: "/p/$projectId/t/$ticketRef",
       params: { projectId: "ai", ticketRef: ticket.key },
     });
-    await harness.user.click(await screen.findByRole("button", { name: "Give to agent" }));
+    // AI-375: the shared worker options (AI-372) plus "Use project default", as option cards.
+    const worker = await screen.findByRole("radiogroup", { name: "Worker" });
+    const names = within(worker)
+      .getAllByRole("radio")
+      .map((r) => r.querySelector(".font-medium")?.textContent?.trim());
+    expect(names).toEqual(["Agent", "Me", "Use project default"]);
+    await harness.user.click(within(worker).getByRole("radio", { name: /^Agent/ }));
 
-    await screen.findByRole("button", { name: "Make it mine" });
-    expect((await harness.tracker.getTicket("ai", ticket.id))?.overrides.assignee).toBe("agent");
+    await waitFor(async () =>
+      expect((await harness.tracker.getTicket("ai", ticket.id))?.overrides.assignee).toBe("agent"),
+    );
+  });
+
+  it("GivenAnOverriddenWorker_WhenAndyPicksUseProjectDefault_ThenTheOverrideIsCleared", async () => {
+    const { harness, ticket } = await boardWithReady("me");
+    await harness.router.navigate({
+      to: "/p/$projectId/t/$ticketRef",
+      params: { projectId: "ai", ticketRef: ticket.key },
+    });
+    const worker = await screen.findByRole("radiogroup", { name: "Worker" });
+    await harness.user.click(within(worker).getByRole("radio", { name: /^Agent/ }));
+    await waitFor(async () =>
+      expect((await harness.tracker.getTicket("ai", ticket.id))?.overrides.assignee).toBe("agent"),
+    );
+
+    await harness.user.click(within(worker).getByRole("radio", { name: /^Use project default/ }));
+
+    await waitFor(async () =>
+      expect(
+        (await harness.tracker.getTicket("ai", ticket.id))?.overrides.assignee,
+      ).toBeUndefined(),
+    );
   });
 });
 

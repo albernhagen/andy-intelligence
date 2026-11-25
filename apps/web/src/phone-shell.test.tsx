@@ -1,22 +1,9 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { screen, waitFor, within } from "@testing-library/react";
 import { renderApp } from "@/test/harness";
-import { PHONE_QUERY } from "@/lib/use-phone";
+import { emulateWidth } from "@/test/phone";
 
 /** AI-173: M7.3: Phone shell — bottom navigation below `sm` (design.md "Phone"). */
-
-function emulateWidth(phone: boolean) {
-  vi.stubGlobal(
-    "matchMedia",
-    (query: string) =>
-      ({
-        matches: phone && query === PHONE_QUERY,
-        media: query,
-        addEventListener: () => {},
-        removeEventListener: () => {},
-      }) as unknown as MediaQueryList,
-  );
-}
 
 async function project(path: string) {
   const harness = renderApp(path);
@@ -61,7 +48,7 @@ describe("phone shell", () => {
     await waitFor(() => expect(harness.router.state.location.pathname).toBe("/settings/github"));
   });
 
-  it("GivenADesktopScreen_WhenTheShellRenders_ThenNavigationStaysInTheHeader", async () => {
+  it("GivenADesktopScreen_WhenTheShellRenders_ThenNavigationIsInTheSidebar", async () => {
     emulateWidth(false);
     await project("/p/ai/inbox");
     const nav = await screen.findByRole("navigation", { name: "Main" });

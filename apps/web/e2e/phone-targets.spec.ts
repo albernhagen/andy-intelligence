@@ -9,15 +9,19 @@ import { expectPageFits, expectTouchTargets } from "./phone";
 
 test.use({ viewport: { width: 390, height: 844 }, hasTouch: true });
 
-test("phone targets: project settings", async ({ page }) => {
-  await page.goto("/p/ai/settings");
-  await expect(page.getByRole("region", { name: "Settings" })).toBeVisible();
-  await expect(
-    page.getByRole("region", { name: "Changes" }).getByRole("button").first(),
-  ).toBeVisible();
-  await expectTouchTargets(page.locator("main"));
-  await expectPageFits(page);
-});
+// AI-372: one section at a time, so each section is checked.
+for (const section of ["setup", "automation", "limits", "defaults", "notifications", "changes"]) {
+  test(`phone targets: project settings, ${section}`, async ({ page }) => {
+    await page.goto(`/p/ai/settings#${section}`);
+    await expect(page.getByRole("region", { name: "Settings" })).toBeVisible();
+    if (section === "changes")
+      await expect(
+        page.getByRole("region", { name: "Changes" }).getByRole("button").first(),
+      ).toBeVisible();
+    await expectTouchTargets(page.locator("main"));
+    await expectPageFits(page);
+  });
+}
 
 test("phone targets: Models", async ({ page }) => {
   await page.goto("/settings/models");
@@ -30,7 +34,7 @@ test("phone targets: the board's title row", async ({ page }) => {
   await page.goto("/p/ops");
   const title = page.getByRole("heading", { name: /^Board/ });
   await page.getByRole("button", { name: "Options" }).click();
-  await expect(page.getByRole("checkbox", { name: "Group by epic" })).toBeVisible();
+  await expect(page.getByRole("switch", { name: "Group by epic" })).toBeVisible();
   const row = page.locator("main section > div").first();
   await expectTouchTargets(row);
   // The title is one line, and the controls under Options sit below it; the View menu sits

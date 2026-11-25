@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 import { fireEvent, render, screen } from "@testing-library/react";
 import { Segmented } from "@/components/ui/segmented";
 
-/** AI-333: one shared toggle; the picked option is quiet (`bg-muted`), never the primary fill. */
+/** AI-333: one shared toggle; the picked option is the selected state (`bg-selected`, ADR-0151), never the primary fill. */
 
 const options = [
   { value: 7, label: "7 days" },
@@ -16,14 +16,14 @@ describe("Segmented", () => {
     const group = screen.getByRole("group", { name: "Window" });
     const picked = screen.getByRole("button", { name: "30 days" });
     expect(picked.getAttribute("aria-pressed")).toBe("true");
-    expect(picked.className).toContain("bg-muted");
+    expect(picked.className).toContain("bg-selected");
     expect(screen.getByRole("button", { name: "7 days" }).getAttribute("aria-pressed")).toBe(
       "false",
     );
     expect(group.innerHTML).not.toContain("bg-primary");
-    // An unpicked option's hover is lighter than the picked option's bg-muted.
+    // An unpicked option's hover is not the selected state.
     const other = screen.getByRole("button", { name: "7 days" });
-    expect(other.className).not.toMatch(/(^|\s)(hover:)?bg-muted(\s|$)/);
+    expect(other.className).not.toMatch(/(^|\s)bg-selected(\s|$)/);
     expect(other.className).toContain("hover:bg-foreground/5");
   });
 

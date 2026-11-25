@@ -1,10 +1,14 @@
-import { useState } from "react";
+import { useRef, useState, type RefObject } from "react";
 import type { MintedRunner, RunnerView } from "@andy/contracts";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Field, Input } from "@/components/ui/input";
+import { PageHeader } from "@/components/PageHeader";
+import { ListSkeleton } from "@/components/PageSkeleton";
 import { SettingsTabs } from "@/components/SettingsTabs";
-import { Loading, QueryError } from "@/components/Status";
+import { QueryError } from "@/components/Status";
+import { Checkbox } from "@/components/ui/checkbox";
+import { EmptyState } from "@/components/ui/empty-state";
 import { useMintRunner, useProjects, useRevokeRunner, useRunners } from "@/lib/queries";
 import { dateOnly, dateTime } from "@/lib/format";
 
@@ -15,43 +19,70 @@ import { dateOnly, dateTime } from "@/lib/format";
 export function RunnersPage() {
   const runners = useRunners();
   const [minted, setMinted] = useState<MintedRunner | null>(null);
+  const nameRef = useRef<HTMLInputElement>(null);
   return (
-    <section className="max-w-2xl space-y-4">
-      <SettingsTabs />
-      <h2 className="text-lg font-medium">Local runners</h2>
-      <p className="text-sm text-muted-foreground">
-        A runner on your Mac polls this control plane for tickets set to run locally; nothing
-        connects in. It is present while it polled in the last 2 minutes. At most 2 runners; secrets
-        expire after 90 days.
-      </p>
-      {minted ? (
-        <ShownOnce minted={minted} onDone={() => setMinted(null)} />
-      ) : (
-        <MintForm onMinted={setMinted} />
-      )}
-      {runners.isPending && <Loading />}
-      {runners.isError && (
-        <QueryError
-          error={runners.error}
-          what="the local runners"
-          onRetry={() => void runners.refetch()}
-        />
-      )}
-      {runners.data && runners.data.length === 0 && (
-        <p className="text-sm text-muted-foreground">No runners yet.</p>
-      )}
-      {runners.data && runners.data.length > 0 && (
-        <ul aria-label="Runners" className="divide-y divide-border rounded-md border border-border">
-          {runners.data.map((r) => (
-            <RunnerRow key={r.id} runner={r} />
-          ))}
-        </ul>
-      )}
+    <section>
+      <PageHeader title="Local runners">
+        <SettingsTabs />
+      </PageHeader>
+      <div className="grid max-w-5xl items-start gap-4 lg:grid-cols-[1fr_22rem]">
+        <section
+          aria-label="Your runners"
+          className="space-y-3 rounded-lg border border-border bg-raised p-4"
+        >
+          <h3 className="text-md font-semibold">Local runners</h3>
+          <p className="text-muted-foreground">
+            A runner on your Mac polls this control plane for tickets set to run locally; nothing
+            connects in. It is present while it polled in the last 2 minutes. At most 2 runners;
+            secrets expire after 90 days.
+          </p>
+          {runners.isPending && <ListSkeleton rows={2} className="border-0 p-0" />}
+          {runners.isError && (
+            <QueryError
+              error={runners.error}
+              what="the local runners"
+              onRetry={() => void runners.refetch()}
+            />
+          )}
+          {runners.data && runners.data.length === 0 && (
+            <EmptyState
+              title="No runners yet."
+              description="Add one to run tickets set to run locally on your Mac."
+              action={
+                <Button className="h-11 sm:h-9" onClick={() => nameRef.current?.focus()}>
+                  Add runner
+                </Button>
+              }
+            />
+          )}
+          {runners.data && runners.data.length > 0 && (
+            <ul
+              aria-label="Runners"
+              className="divide-y divide-border rounded-md border border-border"
+            >
+              {runners.data.map((r) => (
+                <RunnerRow key={r.id} runner={r} />
+              ))}
+            </ul>
+          )}
+        </section>
+        {minted ? (
+          <ShownOnce minted={minted} onDone={() => setMinted(null)} />
+        ) : (
+          <MintForm onMinted={setMinted} nameRef={nameRef} />
+        )}
+      </div>
     </section>
   );
 }
 
-function MintForm({ onMinted }: { onMinted: (m: MintedRunner) => void }) {
+function MintForm({
+  onMinted,
+  nameRef,
+}: {
+  onMinted: (m: MintedRunner) => void;
+  nameRef: RefObject<HTMLInputElement | null>;
+}) {
   const projects = useProjects().data ?? [];
   const mint = useMintRunner();
   const [name, setName] = useState("Andy's Mac");
@@ -61,26 +92,38 @@ function MintForm({ onMinted }: { onMinted: (m: MintedRunner) => void }) {
   return (
     <form
       aria-label="New runner"
-      className="space-y-3 rounded-md border border-border p-3"
+      className="space-y-3 rounded-lg border border-border bg-raised p-4"
       onSubmit={(e) => {
         e.preventDefault();
         mint.mutate({ name, projectIds: picked }, { onSuccess: onMinted });
       }}
     >
+      <h3 className="text-md font-semibold">Add runner</h3>
       <Field label="Runner name">
-        <Input value={name} onChange={(e) => setName(e.target.value)} maxLength={60} />
+        <Input
+          ref={nameRef}
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+          maxLength={60}
+        />
       </Field>
       <fieldset className="space-y-1 text-sm">
         <legend className="font-medium">Projects it may run</legend>
         {projects.map((p) => (
-          <label key={p.id} className="mr-3 inline-flex items-center gap-1">
-            <input type="checkbox" checked={picked.includes(p.id)} onChange={() => toggle(p.id)} />
-            {p.key}: {p.name}
-          </label>
+          <Checkbox
+            key={p.id}
+            checked={picked.includes(p.id)}
+            onCheckedChange={() => toggle(p.id)}
+            label={`${p.key}: ${p.name}`}
+          />
         ))}
       </fieldset>
       {mint.error && <QueryError error={mint.error} />}
-      <Button type="submit" disabled={mint.isPending || picked.length === 0 || !name.trim()}>
+      <Button
+        type="submit"
+        className="h-11 sm:h-9"
+        disabled={mint.isPending || picked.length === 0 || !name.trim()}
+      >
         Create runner secret
       </Button>
     </form>
@@ -89,7 +132,7 @@ function MintForm({ onMinted }: { onMinted: (m: MintedRunner) => void }) {
 
 function ShownOnce({ minted, onDone }: { minted: MintedRunner; onDone: () => void }) {
   return (
-    <div role="alert" className="space-y-2 rounded-md border border-border p-3">
+    <div role="alert" className="space-y-2 rounded-lg border border-border bg-muted p-4">
       <p className="text-sm font-medium">
         Copy this secret now: it is shown once and can't be read again.
       </p>
@@ -113,7 +156,7 @@ function ShownOnce({ minted, onDone }: { minted: MintedRunner; onDone: () => voi
 function RunnerRow({ runner }: { runner: RunnerView }) {
   const revoke = useRevokeRunner();
   return (
-    <li className="flex flex-wrap items-center gap-2 px-3 py-2 text-sm">
+    <li className="flex min-h-11 flex-wrap items-center gap-2 px-3 py-2 text-sm">
       <span className="font-medium">{runner.name}</span>
       {runner.state === "active" ? (
         <Badge variant={runner.present ? "success" : "default"}>
