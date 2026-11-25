@@ -83,6 +83,5 @@ The registry `apps/api/src/parity.ts` (AI-300) holds every action with its route
 | Merge a session PR by the merge mode (`merge_pr`)     | MCP only | For coordinator sessions (AI-220: Merge modes: coordinator sessions merge through MCP merge_pr); Andy merges in GitHub |
 | GitHub App setup (`/github`, `/manifest`, `/connect`) | Web only | GitHub's manifest flow needs a browser                                                                   |
 | `submit_brief`, `submit_project_plan`                 | MCP only | Written by a Claude session following `onboard.md` and `plan-project.md`; the web shows and decides them; the setup path (AI-373) also submits the brief through `POST …/brief` |
-| `GET …/brief`                                         | Web only | The setup path's state; a Claude session reads the brief in the repo                                     |
 
 Not covered here: step 4 of AI-285 (refreshing a long-lived Claude session's tool list) has no ticket yet.

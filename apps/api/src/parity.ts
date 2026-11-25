@@ -59,9 +59,7 @@ export const PARITY: readonly ParityEntry[] = [
   {
     action: "Project brief: read its state for the setup path (AI-373)",
     routes: [`GET ${P}/brief`],
-    tools: [],
-    oneSide:
-      "The web's setup steps need it; a Claude session reads docs/product/brief.md in the repo itself (onboard.md).",
+    tools: ["brief_status"],
   },
   {
     action: "Ticket: create, list, read, edit, parent, comment, ask a question",
