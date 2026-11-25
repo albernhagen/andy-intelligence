@@ -1,5 +1,7 @@
 # 2026-11-23 — Proposed ADRs to decide in one sitting
 
+**Decided 2026-11-25:** Andy took every recommendation below ([2026-11-25-adr-decisions.md](2026-11-25-adr-decisions.md)).
+
 AI-359: Narrower rules. Every ADR whose frontmatter `status` still starts with `proposed` on `main` (read from the files on 2026-11-23, not from memory): **29**. ADR-0133: Board and ticket list read changed tickets is left out: Andy accepted it on the ticket, and this PR sets it to accepted.
 
 **Kind** says whether the ADR is one the new rule (ADR-0148: ADRs only for trust boundaries, the data model and who merges) still requires: **trust** (trust boundary), **data** (data model), **merge** (who merges), or **build** (a build choice that today would go in the PR description; accepting it only records what is built). **Built** means its code is on `main`. To decide: Andy answers each row; a session then sets each ADR's frontmatter `status` (bodies stay as they are).

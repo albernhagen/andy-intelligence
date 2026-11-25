@@ -1,6 +1,6 @@
 ---
 title: "Every project gets a design file now; pluggable design skills move to Later"
-status: proposed (AI-128; Andy decides at review)
+status: accepted (Andy, 2026-11-25)
 date: 2026-11-21
 amends: 0045 (Design skills row; timing of the managed projects' seed design.md)
 ---

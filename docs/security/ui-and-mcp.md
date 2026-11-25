@@ -4,10 +4,9 @@ Browser sign-in, GitHub setup and MCP. Risks: [risks/](risks/); assets, mitigati
 
 ## Trust boundaries and entry points
 
-| Entry point                                                                                                           | Who can reach it | Authn/authz                                                         | Notes                           |
-| --------------------------------------------------------------------------------------------------------------------- | ---------------- | ------------------------------------------------------------------- | ------------------------------- |
-| Firebase Auth (Google sign-in; authorized domain `ai.andybernhagen.com` only, plus `localhost` and `firebaseapp.com`) | Internet         | Google account; authorized domains                                  | Web API key is public by design |
-| `/mcp/agent` (ADR-0099, planned)                                                                                      | Agent tasks      | Run read token (dies at settle): three read tools, its project only | ADR-0099 caps; R-AI-97          |
+| Entry point                                                                                                           | Who can reach it | Authn/authz                        | Notes                           |
+| --------------------------------------------------------------------------------------------------------------------- | ---------------- | ---------------------------------- | ------------------------------- |
+| Firebase Auth (Google sign-in; authorized domain `ai.andybernhagen.com` only, plus `localhost` and `firebaseapp.com`) | Internet         | Google account; authorized domains | Web API key is public by design |
 
 MCP endpoint with its OAuth server, and GitHub setup: [ui-and-mcp-oauth-and-github-setup.md](ui-and-mcp-oauth-and-github-setup.md).
 
