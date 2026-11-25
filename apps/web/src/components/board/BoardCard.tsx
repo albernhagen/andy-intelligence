@@ -77,7 +77,7 @@ export function BoardCard({
         style={style}
         data-ticket={t.key}
         data-nav-item
-        className={`flex flex-col gap-1 rounded-md border border-border bg-background p-2 text-sm hover:border-foreground/30 focus-visible:outline-2 focus-visible:outline-ring ${
+        className={`flex flex-col gap-1 rounded-md border border-border bg-raised p-2 text-sm hover:border-foreground/30 focus-visible:outline-2 focus-visible:outline-ring ${
           isDragging ? "relative z-10 shadow-lg" : ""
         }`}
       >

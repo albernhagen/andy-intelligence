@@ -17,7 +17,7 @@ export function DropdownMenuContent({
       <DropdownMenuPrimitive.Content
         sideOffset={sideOffset}
         className={cn(
-          "z-50 min-w-56 overflow-hidden rounded-md border border-border bg-background p-1 text-sm text-foreground shadow-md",
+          "z-50 min-w-56 animate-enter overflow-hidden rounded-lg border border-border bg-raised p-1 text-sm text-foreground shadow-md",
           className,
         )}
         {...props}
@@ -62,5 +62,31 @@ export function DropdownMenuSeparator({
       className={cn("-mx-1 my-1 h-px bg-border", className)}
       {...props}
     />
+  );
+}
+
+export const DropdownMenuRadioGroup = DropdownMenuPrimitive.RadioGroup;
+
+/** A choice in a radio group: the picked one shows the selected state and a dot. */
+export function DropdownMenuRadioItem({
+  className,
+  children,
+  ...props
+}: React.ComponentProps<typeof DropdownMenuPrimitive.RadioItem>) {
+  return (
+    <DropdownMenuPrimitive.RadioItem
+      className={cn(
+        "flex h-8 cursor-default items-center gap-2 rounded-sm px-2 outline-none select-none data-[highlighted]:bg-muted data-[state=checked]:bg-selected data-[state=checked]:font-medium",
+        className,
+      )}
+      {...props}
+    >
+      <span className="flex size-3 items-center justify-center" aria-hidden>
+        <DropdownMenuPrimitive.ItemIndicator>
+          <span className="block size-1.5 rounded-full bg-selected-edge" />
+        </DropdownMenuPrimitive.ItemIndicator>
+      </span>
+      {children}
+    </DropdownMenuPrimitive.RadioItem>
   );
 }
