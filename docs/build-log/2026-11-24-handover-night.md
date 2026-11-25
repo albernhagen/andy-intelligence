@@ -34,7 +34,9 @@ One PR is left, **#409 (AI-353: UI PRs show before and after screenshots)**, a k
 
 Landed on `main` as one squash commit, PR #419 (AI-379: Phone pass), which held AI-366 to AI-379 except AI-353. The coordinator moved AI-366 to AI-378 to Done by hand (the PR event moved only AI-379).
 
-Still open and now empty against `main`: #402, #407, #408 and #410 to #418 (#406 was merged into #402's branch, not `main`). Close them; nothing in them is missing from `main`.
+Closed without merging on Andy's word, since their work is on `main`: #407, #408 and #410 to #418.
+
+**Not on `main`:** commit `b543c62a` (AI-367: Dashboard screenshots wait for the bundled fonts before the charts draw, one file, `apps/web/e2e/dashboard-fixtures.ts`). It was pushed to #406 a minute before #419 merged, and #406 was merged into #402's branch, not `main`. PR #402 stays open only because it holds this fix; without it the dashboard screenshot check can fail at random.
 
 Added on the epic branch after a merge of `main`: MCP read tool `brief_status`, so AI-373's `GET /api/projects/{id}/brief` passes ADR-0148's parity rule.
 
