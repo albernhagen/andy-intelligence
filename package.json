@@ -14,6 +14,7 @@
     "typecheck": "node scripts/gen-exports.mjs && pnpm -r --if-present typecheck",
     "test": "node scripts/gen-exports.mjs && vitest run",
     "context:check": "node scripts/context-budget.mjs",
+    "screenshots:table": "node scripts/screenshot-table.mjs",
     "risks": "node scripts/risks.mjs",
     "adr": "node scripts/adr-index.mjs",
     "features": "node scripts/features.mjs",

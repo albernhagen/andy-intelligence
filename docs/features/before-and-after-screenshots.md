@@ -1,0 +1,5 @@
+# Before and after screenshots
+
+A PR that changes a stored screenshot (`apps/web/e2e/__screenshots__/*.png`) shows each changed screen before and after in its description (AI-353, ADR-0153). `pnpm screenshots:table` writes a "Before and after" table: one row per added, changed or removed image, the base commit's raw file beside the head commit's, both pinned to commit SHAs so the table stays true after the branch is deleted. The release-note check fails a PR into `main` that changes a stored image without a row for it, warns (job summary and annotation, not a failure) on one that changes `apps/web/src` with no stored image, and prints the table to its job summary. Public repos only: raw URLs of a private repo don't render.
+
+**How to use:** after `pnpm --filter @andy/web screenshots:update` and a push, run `pnpm screenshots:table --write` (puts the table in the PR description with `gh`; `--base <branch>` for a stacked PR; without `--write` it prints the table). Rerun after pushing new images.

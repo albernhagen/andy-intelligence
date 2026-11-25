@@ -50,7 +50,7 @@ Build runs (plan approval, sandbox, publish limits) and read caps (AI-222): [`ba
 | System security review + drift | 0025, 0030 | `system-security-review.yml`, `platform/procedures/threat-model.md` | — | not yet carried (M6: Dev → prod releases; its drift plan is GCP-specific) |
 | Lefthook (push: affected tests, ¼ of cores), format hook, Prettier | 0027, 0113 | `lefthook.yml`, `.claude/settings.json`, `scripts/format-edited-file.mjs`, `.prettierrc.json` | M | carried (M1.16) |
 | Dependabot (npm, Actions; cooldown) | 0025, 0030 | `template/.github/dependabot.yml` (this repo's adds Terraform) | M | carried (M1.16) |
-| PR release-note block | 0121 | `release-note.yml` → `platform/actions/release-note-check` | A | not yet carried; required here only (`github/source-only.json`, AI-350) |
+| PR release-note block; screenshot table (public repos; private: image source open) | 0121, 0153 | `release-note.yml` → `platform/actions/release-note-check` | A | not yet carried; required here only (`github/source-only.json`, AI-350) |
 | PR template (docs + security checklist) | 0022, 0025 | `template/.github/pull_request_template.md` | M | carried (M1.16) |
 | Agent rules; docs ship with the change | 0022 | `template/AGENTS.md.template` | S | carried (M1.16) |
 | Threat model seed | 0025 | `template/docs/security/threat-model.md` | S | carried (M1.16) |

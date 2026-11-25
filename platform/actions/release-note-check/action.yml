@@ -2,8 +2,17 @@ name: Baseline — release-note check
 description: >-
   Fails a pull request into the default branch whose description lacks the release-note block
   ("What changed:", "How it works:", optional "Needs you:") or breaks a word cap (AI-159,
-  ADR-0121). Dependabot PRs are skipped. Reads the PR from the event file, never from an
-  expression. Needs no checkout of the caller (the parser ships with this action's repo).
+  ADR-0121). On a public repo it also fails a PR that changes a stored screenshot
+  (`__screenshots__/*.png`) without the "Before and after" table, warns on one that changes the
+  web app's source with no screenshot, and prints the table to the job summary (AI-353).
+  Dependabot PRs are skipped. Reads the PR from the event file, never from an expression; lists
+  its files with the job's token. Needs no checkout of the caller (the parser ships with this
+  action's repo).
+
+inputs:
+  ui-src:
+    description: The web app's source folder; a PR changing it with no stored screenshot is warned.
+    default: apps/web/src
 
 runs:
   using: composite
@@ -11,6 +20,9 @@ runs:
     - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
       with:
         node-version: 24
-    - name: Release note (ADR-0121)
+    - name: Release note (ADR-0121) and before and after (AI-353)
       shell: bash
+      env:
+        GITHUB_TOKEN: ${{ github.token }}
+        UI_SRC: ${{ inputs.ui-src }}
       run: node "$GITHUB_ACTION_PATH/../../../scripts/release-note-check.mjs"

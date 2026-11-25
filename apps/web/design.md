@@ -95,4 +95,4 @@ Toast with Undo (reversible writes), Dialog, Sheet, Tooltip, Skeleton, EmptyStat
 
 ## Checks
 
-Playwright screenshots (`apps/web/e2e/`: every screen at 1280×800 and 390×844, four in dark) fail CI on a diff; a deliberate change updates them in the same PR (`pnpm --filter @andy/web screenshots:update`, in Docker).
+Playwright screenshots (`apps/web/e2e/`: every screen at 1280×800 and 390×844, four in dark) fail CI on a diff; a deliberate change updates them in the same PR (`pnpm --filter @andy/web screenshots:update`, in Docker), with the before-and-after table (`pnpm screenshots:table --write`).
