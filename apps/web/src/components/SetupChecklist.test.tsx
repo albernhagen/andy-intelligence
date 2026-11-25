@@ -11,7 +11,7 @@ import { SetupChecklist } from "./SetupChecklist";
 const REPO = "albernhagen/andy-intelligence";
 
 async function open(prepare: (h: ReturnType<typeof renderApp>) => void = () => {}) {
-  const h = renderApp("/p/ai/settings", { githubConnected: true });
+  const h = renderApp("/p/ai/settings#setup", { githubConnected: true });
   await h.tracker.createProject({ name: "Andy Intelligence", key: "AI", repos: [REPO] });
   prepare(h);
   await h.queryClient.invalidateQueries();

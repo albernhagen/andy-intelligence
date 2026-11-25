@@ -1,9 +1,13 @@
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { fireEvent, screen, waitFor, within } from "@testing-library/react";
 import type { QuotaReading } from "@andy/contracts";
 import { renderApp } from "@/test/harness";
+import { emulateWidth } from "@/test/phone";
 
-/** M1.9: Quota capture: the header gauge and the persistent banner, over the real API. */
+/**
+ * M1.9: Quota capture: the gauge and the persistent banner, over the real API. Desktop shows the
+ * sidebar's meters (AI-370); the phone keeps the header gauge (AI-176).
+ */
 
 const reading = (window: "5h" | "weekly", usedPct: number): QuotaReading => ({
   provider: "claude-sub",
@@ -28,7 +32,8 @@ describe("quota gauge and banner", () => {
     await open([reading("5h", 42), reading("weekly", 10)]);
     const meter = await screen.findByRole("meter", { name: "5-hour quota used" });
     expect(meter.getAttribute("aria-valuenow")).toBe("42");
-    expect(screen.getByText("42%")).toBeTruthy();
+    expect(screen.getByText("Claude 5-hour · 42%")).toBeTruthy();
+    expect(screen.getByText("Weekly · 10%")).toBeTruthy();
   });
 
   it("GivenBothWindowsOk_WhenTheShellOpens_ThenNoBanner", async () => {
@@ -69,14 +74,20 @@ describe("quota gauge and banner", () => {
     expect(screen.queryByRole("button", { name: "Clear quota idle" })).toBeNull();
   });
 
-  it("GivenNoReadings_WhenTheShellOpens_ThenOnlyTheGaugeSaysUnknown", async () => {
+  it("GivenNoReadings_WhenTheShellOpens_ThenOneQuietMarkerNotTwoLabels", async () => {
     await open([]);
-    const gauge = await screen.findByRole("list", { name: "Claude quota" });
-    const unknown = await within(gauge).findAllByText("unknown");
-    expect(unknown).toHaveLength(2);
-    expect(unknown[0]?.getAttribute("title")).toMatch(/don't assume there is headroom/);
-    expect(screen.queryByText(/Claude quota unknown/)).toBeNull();
+    const marker = await screen.findByText("Quota unknown");
+    expect(marker.getAttribute("title")).toMatch(/don't assume there is headroom/);
+    expect(screen.getAllByText(/unknown/)).toHaveLength(1);
+    expect(screen.queryByRole("list", { name: "Claude quota" })).toBeNull();
+    expect(screen.queryByRole("meter")).toBeNull();
     expect(screen.queryByRole("alert")).toBeNull();
+  });
+
+  it("GivenOneWindowUnknown_WhenTheShellOpens_ThenItsRowSaysSoBesideTheKnownMeter", async () => {
+    await open([reading("5h", 42)]);
+    await screen.findByRole("meter", { name: "5-hour quota used" });
+    expect(screen.getByText(/^Weekly · unknown/)).toBeTruthy();
   });
 });
 
@@ -96,15 +107,18 @@ describe("quota gauge when a reading is missing or the read fails (AI-328)", () 
     expect(screen.queryByRole("alert")).toBeNull();
   });
 
-  it("GivenNoReadings_WhenTheShellOpens_ThenScreenReadersHearTheHint", async () => {
+  it("GivenNoReadings_WhenTheShellOpens_ThenScreenReadersHearTheHintOnce", async () => {
     await open([]);
-    const gauge = await screen.findByRole("list", { name: "Claude quota" });
-    expect(await within(gauge).findAllByText(/don't assume there is headroom/)).toHaveLength(2);
+    const marker = await screen.findByText("Quota unknown");
+    expect(within(marker).getAllByText(/don't assume there is headroom/)).toHaveLength(1);
   });
 });
 
 /** AI-176: M7.6: on a phone the header shows the fullest window and a one-tap pause. */
 describe("phone quota and pause", () => {
+  beforeEach(() => emulateWidth(true));
+  afterEach(() => vi.unstubAllGlobals());
+
   it("GivenTwoWindows_WhenTheShellOpens_ThenThePhoneGaugeShowsTheFullest", async () => {
     await open([reading("5h", 42), reading("weekly", 61)]);
     expect(await screen.findByText("Quota 61%")).toBeTruthy();

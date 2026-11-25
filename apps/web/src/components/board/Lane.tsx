@@ -1,7 +1,7 @@
 import { useState, type ReactNode } from "react";
 import { useDroppable } from "@dnd-kit/core";
 import { SortableContext, verticalListSortingStrategy } from "@dnd-kit/sortable";
-import { ChevronsLeftRight, ChevronsRightLeft } from "lucide-react";
+import { ArrowDownUp, ChevronsLeftRight, ChevronsRightLeft, ListFilter } from "lucide-react";
 import {
   Confidence,
   Risk,
@@ -10,22 +10,40 @@ import {
   type ReadyFilters,
   type Stage,
 } from "@andy/contracts";
-import { Select } from "@/components/ui/input";
+import { Segmented } from "@/components/ui/segmented";
 import { MilestoneChip } from "@/components/MilestoneControls";
 import { STAGE_LABELS } from "@/lib/tickets";
 
-/** A labelled part of a lane (Backlog's Up next and Ideas); a drop on it lands in that part. */
-export function LaneZone({ id, label, count }: { id: string; label: string; count: number }) {
+/**
+ * A labelled part of a lane (Backlog's Up next and Ideas); a drop on it lands in that part. `hint`
+ * shows under the label while the part is empty, e.g. what a drop there does.
+ */
+export function LaneZone({
+  id,
+  label,
+  count,
+  hint,
+}: {
+  id: string;
+  label: string;
+  count: number;
+  hint?: string;
+}) {
   const { setNodeRef, isOver } = useDroppable({ id });
   return (
     <li
       ref={setNodeRef}
       data-zone={id}
-      className={`flex h-7 items-center gap-1 rounded-md px-1 text-xs font-medium text-muted-foreground ${
-        isOver ? "bg-foreground/15" : "border-b border-border"
-      }`}
+      className={`flex flex-col rounded-md px-1 py-0.5 ${isOver ? "bg-selected" : ""}`}
     >
-      {label} <span className="tabular-nums">{count}</span>
+      <span className="flex h-6 items-center gap-1 text-xs font-medium text-muted-foreground">
+        <span>{label}</span>
+        <span aria-hidden>·</span>
+        <span className="tabular-nums">{count}</span>
+      </span>
+      {hint && count === 0 && (
+        <span className="pb-1 text-xs text-muted-foreground max-sm:hidden">{hint}</span>
+      )}
     </li>
   );
 }
@@ -82,8 +100,9 @@ export function ReadySortToggle({ sorted, onToggle }: { sorted: boolean; onToggl
       type="button"
       aria-pressed={sorted}
       onClick={onToggle}
-      className="rounded-md px-1 text-left text-xs text-muted-foreground hover:bg-foreground/10"
+      className="inline-flex h-11 items-center gap-1 rounded-md px-1 text-left text-xs text-muted-foreground hover:bg-foreground/5 hover:text-foreground focus-visible:outline-2 focus-visible:outline-ring sm:h-6"
     >
+      <ArrowDownUp className="size-3" aria-hidden />
       {sorted ? "Sorted by score · show queue order" : "Sort by score"}
     </button>
   );
@@ -116,39 +135,38 @@ export function ReadyFilterMenu({
         type="button"
         aria-expanded={open}
         onClick={() => setOpen(!open)}
-        className="rounded-md px-1 text-left text-xs text-muted-foreground hover:bg-foreground/10"
+        className="inline-flex h-11 items-center gap-1 rounded-md px-1 text-left text-xs text-muted-foreground hover:bg-foreground/5 hover:text-foreground focus-visible:outline-2 focus-visible:outline-ring sm:h-6"
       >
+        <ListFilter className="size-3" aria-hidden />
         {on ? `Filter · ${on}` : "Filter"}
       </button>
       {open && (
         <div
           role="group"
           aria-label="Ready filters"
-          className="flex w-full flex-wrap items-center gap-2"
+          className="flex w-full flex-col gap-1 rounded-md border border-border bg-raised p-2"
         >
+          {/* Every option shows (fewer than six): a toggle per filter, Any first (design.md). */}
           {READY_FILTERS.map((f) => (
-            <label key={f.key} className="flex items-center gap-1 text-xs text-muted-foreground">
-              {f.label}
-              <Select
-                aria-label={f.label}
-                className="h-11 w-auto px-1 text-base sm:h-7 sm:text-xs"
-                value={filters[f.key] ?? ""}
-                onChange={(e) => onChange({ ...filters, [f.key]: e.target.value || undefined })}
-              >
-                <option value="">Any</option>
-                {f.options.map((o) => (
-                  <option key={o} value={o}>
-                    {o}
-                  </option>
-                ))}
-              </Select>
-            </label>
+            <div key={f.key} className="flex flex-col gap-0.5">
+              <span className="text-xs text-muted-foreground">{f.label}</span>
+              <Segmented
+                label={f.label}
+                value={filters[f.key] ?? null}
+                className="[&>button]:h-11 [&>button]:px-2 [&>button]:text-xs sm:[&>button]:h-6"
+                options={[
+                  { value: null, label: "Any" },
+                  ...f.options.map((o) => ({ value: o, label: o })),
+                ]}
+                onChange={(value) => onChange({ ...filters, [f.key]: value ?? undefined })}
+              />
+            </div>
           ))}
           {on > 0 && (
             <button
               type="button"
               onClick={() => onChange({ size: undefined, risk: undefined, confidence: undefined })}
-              className="rounded-md px-1 text-xs text-muted-foreground hover:bg-foreground/10"
+              className="self-start rounded-md px-1 text-xs text-muted-foreground hover:bg-foreground/5 hover:text-foreground focus-visible:outline-2 focus-visible:outline-ring max-sm:min-h-11"
             >
               Clear
             </button>
@@ -187,7 +205,8 @@ export function Lane({
 }) {
   const { setNodeRef } = useDroppable({ id: stage });
   const label = STAGE_LABELS[stage];
-  const surface = highlight ? "bg-foreground/15" : "bg-muted";
+  // Sunken lanes under raised cards (design-details.md); a lane under a dragged card lights up.
+  const surface = `border border-border ${highlight ? "bg-selected" : "bg-muted"}`;
 
   if (collapsed) {
     return (
@@ -195,14 +214,14 @@ export function Lane({
         ref={setNodeRef}
         aria-label={label}
         data-stage={stage}
-        className={`w-10 shrink-0 rounded-md ${surface}`}
+        className={`w-10 shrink-0 rounded-lg ${surface}`}
       >
         <button
           type="button"
           onClick={onToggle}
           aria-expanded={false}
           aria-label={`Show ${label}, ${ids.length}`}
-          className="flex h-full w-full flex-col items-center gap-2 py-2 text-sm hover:bg-foreground/5"
+          className="flex h-full w-full flex-col items-center gap-2 rounded-lg py-3 text-sm hover:bg-foreground/5 focus-visible:outline-2 focus-visible:outline-ring"
         >
           <span className="text-xs text-muted-foreground tabular-nums">{ids.length}</span>
           <span className="font-medium [writing-mode:vertical-rl]">{label}</span>
@@ -217,9 +236,11 @@ export function Lane({
       ref={setNodeRef}
       aria-label={label}
       data-stage={stage}
-      className={`flex shrink-0 flex-col gap-2 rounded-md p-2 ${fill ? "w-full" : "w-64 xl:w-auto xl:min-w-44 xl:flex-1 xl:shrink"} ${surface}`}
+      className={`flex shrink-0 flex-col gap-1.5 rounded-lg p-2 ${fill ? "w-full" : "w-64 xl:w-auto xl:min-w-44 xl:flex-1 xl:shrink"} ${surface}`}
     >
-      <h3 className={`${fill ? "sr-only" : "flex"} h-6 items-center gap-1 text-sm font-medium`}>
+      <h3
+        className={`${fill ? "sr-only" : "flex"} h-6 items-center gap-1.5 px-1 text-sm font-medium`}
+      >
         {label} <span className="text-xs text-muted-foreground tabular-nums">{ids.length}</span>
         {onToggle && (
           <button
@@ -227,7 +248,7 @@ export function Lane({
             onClick={onToggle}
             aria-expanded
             aria-label={`Collapse ${label}`}
-            className="ml-auto rounded-md p-1 text-muted-foreground hover:bg-foreground/10"
+            className="ml-auto rounded-md p-1 text-muted-foreground hover:bg-foreground/5 focus-visible:outline-2 focus-visible:outline-ring"
           >
             <ChevronsRightLeft className="size-3.5" aria-hidden />
           </button>
@@ -235,7 +256,7 @@ export function Lane({
       </h3>
       {top}
       <SortableContext id={stage} items={ids} strategy={verticalListSortingStrategy}>
-        <ol className="flex min-h-8 flex-col gap-2">{children}</ol>
+        <ol className="flex min-h-8 flex-col gap-1.5">{children}</ol>
       </SortableContext>
     </section>
   );

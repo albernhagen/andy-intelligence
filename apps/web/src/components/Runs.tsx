@@ -81,7 +81,7 @@ export function RunItem({
   // A build in flight works on its branch before it reports one (the in-flight view's rule).
   const branch = run.branch ?? (building ? branchFor(ticket.key, run.id) : null);
   return (
-    <li className="space-y-1 rounded-md border border-border p-3 text-sm wrap-anywhere">
+    <li className="ml-4 space-y-1 rounded-md border border-border p-3 text-sm wrap-anywhere">
       <p className="flex flex-wrap items-center gap-2">
         <Badge variant={STATUS_VARIANT[run.status]}>{run.status}</Badge>
         {/* Opens the agent task's own page (AI-101); styled as the label it replaced. */}

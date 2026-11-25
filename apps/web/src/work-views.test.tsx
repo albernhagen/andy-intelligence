@@ -103,7 +103,9 @@ describe("board work views", () => {
     await waitFor(() =>
       expect(chip(/^Needs you · 2 tickets · 1 stale · 1 to pick a worker$/)).toBeTruthy(),
     );
-    await waitFor(() => expect(screen.getByRole("link", { name: "Needs you 2" })).toBeTruthy());
+    await waitFor(() =>
+      expect(screen.getByRole("link", { name: "Inbox 2 tickets waiting on you" })).toBeTruthy(),
+    );
   });
 
   it("GivenAChip_WhenClicked_ThenOnlyItsTicketsShowAndTheUrlNamesIt", async () => {

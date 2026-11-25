@@ -6,7 +6,7 @@ import { renderApp } from "@/test/harness";
 
 describe("dispatch status at the warn cap", () => {
   it("GivenDispatchIdleOnTheWarnCap_WhenTheSettingsPageOpens_ThenItSaysOneAgentTaskAtATime", async () => {
-    const h = renderApp("/p/ai/settings");
+    const h = renderApp("/p/ai/settings#limits");
     await h.tracker.createProject({ name: "Andy Intelligence", key: "AI" });
     await h.tracker.updateProject("ai", {
       autoBuild: true,

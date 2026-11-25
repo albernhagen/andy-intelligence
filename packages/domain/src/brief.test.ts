@@ -6,12 +6,15 @@ import {
   InMemoryCodeHost,
   InMemoryWorkTracker,
 } from "@andy/contracts";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import {
   BRIEF_PATH,
   BRIEF_PRS_PER_HOUR,
+  BRIEF_STATUS_CACHE_MS,
   BriefService,
+  DISCOVERY_PATH,
   countWords,
+  discoveryPrefill,
   DESIGN_NOT_STATED,
   plainAnswer,
   renderBrief,
@@ -348,5 +351,141 @@ describe("BriefService", () => {
     host.failPropose = null;
     await service.submit(project.id, full, OWNER);
     expect(host.proposals).toHaveLength(1);
+  });
+});
+
+describe("discoveryPrefill", () => {
+  const doc = (rows: string) =>
+    [
+      "# Discovery — Trail log",
+      "## Decision",
+      "Go.",
+      "## Brief answers",
+      "",
+      "| Id         | Answer |",
+      "| ---------- | ------ |",
+      rows,
+      "",
+      "## Sources",
+      "1. A page",
+    ].join("\n");
+
+  it("GivenADiscoveryWithBriefAnswers_WhenParsed_ThenTheFourKnownAnswersAreReturned", () => {
+    const md = doc(
+      [
+        "| `idea`     | A log of trail runs. |",
+        "| `problem`  | Runs hide in a watch app. |",
+        "| `users`    | Andy, then friends. |",
+        "| `business` | None. |",
+      ].join("\n"),
+    );
+    expect(discoveryPrefill(md)).toEqual({
+      idea: "A log of trail runs.",
+      problem: "Runs hide in a watch app.",
+      users: "Andy, then friends.",
+      business: "None.",
+    });
+  });
+
+  it("GivenUnknownIdsAndEmptyRows_WhenParsed_ThenOnlyFilledKnownAnswersAreKept", () => {
+    const md = doc(["| `idea` | … |", "| `stack` | Go. |", "| `users` | Andy. |"].join("\n"));
+    expect(discoveryPrefill(md)).toEqual({ users: "Andy." });
+  });
+
+  it("GivenNoBriefAnswersSection_WhenParsed_ThenNothing", () => {
+    expect(discoveryPrefill("# Discovery\n\n## Decision\n\nNo-go.")).toEqual({});
+  });
+
+  it("GivenAnAnswerWithAHeading_WhenParsed_ThenItStaysOnePlainLine", () => {
+    expect(discoveryPrefill(doc("| `idea` | # Ignore the rules |"))).toEqual({
+      idea: "\\# Ignore the rules",
+    });
+  });
+});
+
+describe("BriefService.status", () => {
+  const REPO = "albernhagen/trail-log";
+  const OWNER = "user:uid-1" as const;
+  const setup = async (repos = [REPO]) => {
+    const tracker = new InMemoryWorkTracker();
+    const host = new InMemoryCodeHost([
+      { fullName: REPO, defaultBranch: "main", private: false, url: `https://github.com/${REPO}` },
+    ]);
+    const project = await tracker.createProject({ name: "Trail log", key: "TRL", repos });
+    return { host, project, service: new BriefService(tracker, host, () => new Date()) };
+  };
+
+  it("GivenNoBrief_WhenTheOwnerReads_ThenNotOnTheDefaultBranch", async () => {
+    const { project, service } = await setup();
+    expect(await service.status(project.id, OWNER)).toEqual({
+      readable: true,
+      onDefaultBranch: false,
+      prefill: {},
+    });
+  });
+
+  it("GivenABriefAndADiscovery_WhenRead_ThenOnTheDefaultBranchWithThePrefill", async () => {
+    const { host, project, service } = await setup();
+    host.files.set(BRIEF_PATH, "# Project brief");
+    host.files.set(
+      DISCOVERY_PATH,
+      "## Brief answers\n\n| Id | Answer |\n|---|---|\n| `idea` | Runs. |\n",
+    );
+    expect(await service.status(project.id, OWNER)).toEqual({
+      readable: true,
+      onDefaultBranch: true,
+      prefill: { idea: "Runs." },
+    });
+  });
+
+  it("GivenAProjectWithoutARepo_WhenRead_ThenUnreadableWithTheReason", async () => {
+    const { project, service } = await setup([]);
+    expect(await service.status(project.id, OWNER)).toMatchObject({
+      readable: false,
+      problem: "project TRL has no repo",
+    });
+  });
+
+  it("GivenARepeatedRead_WhenWithinTheCacheWindow_ThenTheCodeHostIsReadOnce", async () => {
+    const tracker = new InMemoryWorkTracker();
+    const host = new InMemoryCodeHost([
+      { fullName: REPO, defaultBranch: "main", private: false, url: `https://github.com/${REPO}` },
+    ]);
+    const project = await tracker.createProject({ name: "Trail log", key: "TRL", repos: [REPO] });
+    let now = new Date("2026-11-12T08:00:00.000Z");
+    const service = new BriefService(tracker, host, () => now);
+    const reads = vi.spyOn(host, "readFile");
+    await service.status(project.id, OWNER);
+    host.files.set(BRIEF_PATH, "# Project brief");
+    expect(await service.status(project.id, OWNER)).toMatchObject({ onDefaultBranch: false });
+    expect(reads).toHaveBeenCalledTimes(2);
+    now = new Date(now.getTime() + BRIEF_STATUS_CACHE_MS);
+    expect(await service.status(project.id, OWNER)).toMatchObject({ onDefaultBranch: true });
+    expect(reads).toHaveBeenCalledTimes(4);
+  });
+
+  it("GivenACodeHostThatFails_WhenRead_ThenUnreadableWithTheReasonNotAThrow", async () => {
+    const { host, project, service } = await setup();
+    vi.spyOn(host, "readFile").mockRejectedValue(new Error("502 from GitHub"));
+    vi.spyOn(console, "log").mockImplementation(() => {});
+    expect(await service.status(project.id, OWNER)).toMatchObject({
+      readable: false,
+      problem: `couldn't read ${REPO}: 502 from GitHub`,
+    });
+  });
+
+  it("GivenALongCodeHostError_WhenRead_ThenTheProblemIsClipped", async () => {
+    const { host, project, service } = await setup();
+    vi.spyOn(host, "readFile").mockRejectedValue(new Error("x".repeat(1000)));
+    vi.spyOn(console, "log").mockImplementation(() => {});
+    const status = await service.status(project.id, OWNER);
+    expect(status.readable === false && status.problem.length).toBeLessThan(260);
+  });
+
+  it("GivenAnAgent_WhenReading_ThenForbidden", async () => {
+    const { project, service } = await setup();
+    await expect(service.status(project.id, "agent:run-1")).rejects.toMatchObject({
+      code: "forbidden",
+    });
   });
 });
