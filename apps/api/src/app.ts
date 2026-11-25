@@ -4,6 +4,7 @@ import {
   type CodeEventLog,
   type ConfigChangeStore,
   type ReviewFindingLog,
+  type MergeQueueStore,
   type CodeHostConnectionStore,
   type OAuthGrantStore,
   type RunStore,
@@ -66,6 +67,11 @@ export interface AppDeps {
    * the log every project-settings write appends to (M4.11; off when unset).
    */
   configChanges?: ConfigChangeStore;
+  /**
+   * The merge queue per repo (AI-110, ADR-0150). Unset (local dev, tests): an in-memory store,
+   * which serialises merges within one process only.
+   */
+  mergeQueues?: MergeQueueStore;
   /** Stored review findings (ADR-0097 PR B); until then none, so sweeps propose nothing. */
   reviewFindings?: ReviewFindingLog;
   /**

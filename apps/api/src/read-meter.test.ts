@@ -33,6 +33,7 @@ const FAKES: Record<keyof typeof METERED_READS, string> = {
   spendCapsStore: "InMemorySpendCapsStore",
   spendNotices: "InMemorySpendNoticeLedger",
   projectVersions: "InMemoryProjectVersions",
+  mergeQueues: "InMemoryMergeQueueStore",
 };
 
 /** Method names that read, by convention; each must be in its store's list. */
