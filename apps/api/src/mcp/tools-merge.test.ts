@@ -155,7 +155,7 @@ async function setup(opts: { mode?: MergeMode | null } = {}) {
       body,
     });
   };
-  return { tracker, host, ticket, call, mergePr, checkHook, pr: host.pullRequests.get(7)! };
+  return { app, tracker, host, ticket, call, mergePr, checkHook, pr: host.pullRequests.get(7)! };
 }
 
 describe("merge_pr (AI-220)", () => {
@@ -403,6 +403,109 @@ describe("merge_pr (AI-220)", () => {
     const res = await t.mergePr();
     expect(res.isError).toBe(true);
     expect(res.text).toContain(`capped at ${MERGE_PR_HOURLY_CAP} calls per project per hour`);
+  });
+});
+
+describe("merge_pr while main is red (AI-382)", () => {
+  const MAIN = "c".repeat(40);
+
+  /** Main's tip at `MAIN` with its `ci` run in `state`; signs check-run deliveries for main. */
+  async function redMain(state: "failure" | "in_progress" | "success") {
+    const t = await setup();
+    t.host.branches.set(`${REPO.toLowerCase()}#main`, MAIN);
+    const main = { ci: state };
+    const listHeadChecks = t.host.listHeadChecks.bind(t.host);
+    t.host.listHeadChecks = async (repo, sha) =>
+      sha === MAIN
+        ? {
+            items: [
+              {
+                name: "ci",
+                status: main.ci === "in_progress" ? "in_progress" : "completed",
+                conclusion: main.ci === "in_progress" ? null : main.ci,
+                sourceId: REVIEWER,
+              },
+            ],
+            complete: true,
+          }
+        : listHeadChecks(repo, sha);
+    /** A signed check_run completed delivery on main's tip: names no PR. */
+    const mainCheckHook = async (id: string) => {
+      const body = JSON.stringify({
+        action: "completed",
+        repository: { full_name: REPO },
+        check_run: {
+          id: 2,
+          name: "ci",
+          status: "completed",
+          conclusion: main.ci === "success" ? "success" : "failure",
+          head_sha: MAIN,
+          html_url: `https://github.com/${REPO}/runs/2`,
+          pull_requests: [],
+        },
+      });
+      return t.app.request(WEBHOOK_PATH, {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          "x-github-event": "check_run",
+          "x-github-delivery": id,
+          "x-hub-signature-256": await sign("whs", body),
+        },
+        body,
+      });
+    };
+    return { ...t, main, mainCheckHook };
+  }
+
+  it("GivenARequiredCheckFailedOnMain_WhenMergePrIsCalled_ThenItWaitsWithMainRedAndIsQueuedNotMerged", async () => {
+    const t = await redMain("failure");
+    const res = await t.mergePr();
+    expect(res.isError).toBe(false);
+    expect(res.data).toMatchObject({
+      merged: false,
+      verdict: "wait",
+      reasons: ["main_red"],
+      queued: true,
+      queuePosition: 1,
+      queueNote: "main_red: ci",
+    });
+    expect(t.host.merges).toEqual([]);
+  });
+
+  it("GivenAPrHeldForMainRed_WhenMainsCheckPassesAndItsWebhookArrives_ThenThePrMergesWithNoOneCallingAgain", async () => {
+    const t = await redMain("failure");
+    await t.mergePr();
+    // Still red: a check finishing on main doesn't merge anything.
+    expect((await t.mainCheckHook("m-1")).status).toBe(200);
+    expect(t.host.merges).toEqual([]);
+
+    t.main.ci = "success";
+    expect((await t.mainCheckHook("m-2")).status).toBe(200);
+    expect(t.host.merges).toEqual([{ fullName: REPO, number: 7, sha: HEAD }]);
+    const events = await t.tracker.listEvents("ai", t.ticket.id);
+    expect(events.some((e) => e.body?.includes("merge_pr merged PR #7"))).toBe(true);
+  });
+
+  it("GivenAPrHeldForMainRed_WhenStatusAndTheDigestAreRead_ThenBothShowTheHoldWithTheFailingCheck", async () => {
+    const t = await redMain("failure");
+    await t.mergePr();
+    const status = await t.call("status");
+    expect(status.data.mergeHolds).toEqual([
+      expect.objectContaining({ project: "AI", repo: REPO, checks: ["ci"], waiting: 1 }),
+    ]);
+    const digest = await t.call("digest", { project: "AI" });
+    expect(digest.data.exceptions).toContainEqual(
+      expect.objectContaining({
+        kind: "merge_held",
+        reason: expect.stringContaining("failing: ci"),
+      }),
+    );
+  });
+
+  it("GivenMainsRequiredChecksStillRunning_WhenMergePrIsCalled_ThenItMerges", async () => {
+    const t = await redMain("in_progress");
+    expect((await t.mergePr()).data).toMatchObject({ merged: true, reasons: [] });
   });
 });
 

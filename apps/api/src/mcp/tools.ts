@@ -26,7 +26,7 @@ import {
   type DashboardReader,
   type DoraReader,
 } from "@andy/domain";
-import type { RunnerService } from "@andy/domain";
+import type { MergeHoldReader, RunnerService } from "@andy/domain";
 import type { SetupChecklistReader } from "../setup";
 import type { SpendSettingsService } from "../spend";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
@@ -106,6 +106,8 @@ export interface ToolDeps {
   milestones?: MilestoneReader | null;
   /** A project's tickets through the ticket snapshot (AI-318); absent: a full read each call. */
   tickets?: ProjectTickets;
+  /** Merge holds while a default branch is red (AI-382), in `status`; absent or null: none. */
+  mergeHolds?: MergeHoldReader | null;
   /** MCP `merge_pr` (AI-220); absent or null: no `merge_pr` tool. */
   merges?: PullRequestMerger | null;
   /** Signed-in email, shown by `status` so it doubles as the connection check. */

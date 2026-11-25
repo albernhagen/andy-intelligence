@@ -23,6 +23,7 @@ import {
   requireCan,
   ticketKeyFor,
   ticketMergeMode,
+  readMainChecks,
   type QueueJudgement,
   type QueueMergeResult,
 } from "@andy/domain";
@@ -116,7 +117,8 @@ export class PullRequestMerger {
         // Session PRs are kept current by the re-sync workflow (ADR-0111) when main moves.
         log("INFO", "merge_pr waits for the re-sync workflow", { repo, pr: entry.number, headSha });
       },
-      needsYou: (repo, entry, reason, flag) => this.queueNeedsYou(repo, entry, reason, flag),
+      needsYou: (repo, entry, reason, flag, note) =>
+        this.queueNeedsYou(repo, entry, reason, flag, note),
     });
   }
 
@@ -156,7 +158,10 @@ export class PullRequestMerger {
       gateReasons: judged.result.gateReasons,
       queueState: judged.state,
     });
-    if (judged.state !== "merge" && judged.state !== "behind") return judged.result;
+    // Held (main is red, AI-382): queued, it merges once main is green without another call.
+    if (judged.state !== "merge" && judged.state !== "behind" && judged.state !== "held") {
+      return judged.result;
+    }
 
     // AI-110: the merge queue merges it when it is the repo's head and clean on the latest main.
     const offered = await this.queue.offer(repo, {
@@ -227,6 +232,7 @@ export class PullRequestMerger {
         upToDate: baseSha ? await this.upToDate(repo, pr, baseSha) : null,
         openFindings: await openFindingsFor(this.findings, project.id, repo, pr, "merge-pr"),
         readyForReview: ticket?.stage === "ready_for_review",
+        mainChecks: await readMainChecks(host, repo, pr.baseRef, baseSha, "merge-pr"),
       },
       mode,
     );
@@ -263,6 +269,9 @@ export class PullRequestMerger {
       return { state: "merge", headSha: pr.headSha, baseRef: pr.baseRef, baseSha: judged.baseSha! };
     }
     if (judged.state === "behind") return { state: "behind", headSha: pr.headSha };
+    if (judged.state === "held") {
+      return { state: "held", headSha: pr.headSha, checks: judged.verdict.mainRedChecks };
+    }
     return { state: judged.state, headSha: pr.headSha, reasons };
   }
 
@@ -314,11 +323,22 @@ export class PullRequestMerger {
   }
 
   /** The queue's drop on the PR's ticket: flagged for Andy's Needs-you inbox, or a comment only. */
-  private async queueNeedsYou(repo: string, entry: MergeQueueEntry, reason: string, flag: boolean) {
+  private async queueNeedsYou(
+    repo: string,
+    entry: MergeQueueEntry,
+    reason: string,
+    flag: boolean,
+    note: "dropped" | "held" = "dropped",
+  ) {
     const found = await this.queuedPr(repo, entry);
     const ticket = "gone" in found ? null : await this.ticketOf(found.project, found.pr);
     if (!ticket) {
-      log("WARNING", "merge queue drop with no ticket to flag", { repo, pr: entry.number, reason });
+      log("WARNING", "merge queue drop with no ticket to flag", {
+        repo,
+        pr: entry.number,
+        reason,
+        note,
+      });
       return;
     }
     if (flag) {
@@ -332,7 +352,9 @@ export class PullRequestMerger {
     await this.record(
       ticket,
       "system",
-      `${flag ? "Needs you: " : ""}the merge queue dropped PR #${entry.number} (asked by ${entry.enqueuedBy}): ${reason}. Call merge_pr again once it is clean on the latest default branch, or merge it yourself.`,
+      note === "held"
+        ? `${flag ? "Needs you: " : ""}the merge queue is holding PR #${entry.number} (asked by ${entry.enqueuedBy}): ${reason}. It stays queued and merges once the default branch is green, with no second call.`
+        : `${flag ? "Needs you: " : ""}the merge queue dropped PR #${entry.number} (asked by ${entry.enqueuedBy}): ${reason}. Call merge_pr again once it is clean on the latest default branch, or merge it yourself.`,
     );
   }
 

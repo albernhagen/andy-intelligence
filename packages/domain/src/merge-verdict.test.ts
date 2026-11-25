@@ -19,10 +19,31 @@ const clean = (over: Partial<MergeFacts> = {}): MergeFacts => ({
   upToDate: true,
   openFindings: 0,
   readyForReview: true,
+  mainChecks: { state: "passed", failing: [] },
   ...over,
 });
 
 describe("mergeVerdict", () => {
+  it("GivenARequiredCheckFailedOnMainsHead_WhenACleanPrIsJudged_ThenItWaitsWithMainRedNamingTheCheck", () => {
+    const v = mergeVerdict(
+      clean({ mainChecks: { state: "failed", failing: ["ci"] } }),
+      "all-clean",
+    );
+    expect(v).toMatchObject({ verdict: "wait", reasons: ["main_red"], mainRedChecks: ["ci"] });
+  });
+
+  it("GivenMainsChecksStillRunning_WhenACleanPrIsJudged_ThenItMerges", () => {
+    const v = mergeVerdict(clean({ mainChecks: { state: "running", failing: [] } }), "all-clean");
+    expect(v).toMatchObject({ verdict: "merge", reasons: [], mainRedChecks: [] });
+  });
+
+  it("GivenMainsChecksUnread_WhenACleanPrIsJudged_ThenItWaitsNeverCountedGreen", () => {
+    expect(mergeVerdict(clean({ mainChecks: null }), "all-clean")).toMatchObject({
+      verdict: "wait",
+      reasons: ["main_checks_unknown"],
+    });
+  });
+
   it.each<[MergeMode, "merge" | "wait"]>([
     ["all-clean", "merge"],
     ["low-risk", "merge"],

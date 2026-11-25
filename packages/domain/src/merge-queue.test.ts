@@ -3,6 +3,7 @@ import type { MergeQueueEntry } from "@andy/contracts";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
   MAX_HEAD_HOLD_MS,
+  MAX_MAIN_RED_HOLD_MS,
   MAX_SYNCS_PER_PR,
   MERGE_QUEUE_LEASE_MS,
   MergeQueue,
@@ -30,7 +31,9 @@ class World implements QueueJudge {
   readonly prs = new Map<number, FakePr>();
   readonly merges: number[] = [];
   readonly syncs: { number: number; head: string }[] = [];
-  readonly notes: { number: number; reason: string; flag: boolean }[] = [];
+  readonly notes: { number: number; reason: string; flag: boolean; note?: string }[] = [];
+  /** Repos whose default branch is red, with the failing checks (AI-382). */
+  readonly red = new Map<string, string[]>();
   /** Test seam: runs once, after the judge's verdict and before the merge call. */
   beforeMerge: (() => void | Promise<void>) | null = null;
 
@@ -50,10 +53,12 @@ class World implements QueueJudge {
     Object.assign(pr, { head: sha(this.next++), contains: this.tip, checks });
   }
 
-  async judge(_repo: string, entry: MergeQueueEntry): Promise<QueueJudgement> {
+  async judge(repo: string, entry: MergeQueueEntry): Promise<QueueJudgement> {
     const pr = this.prs.get(entry.number);
     if (!pr?.open) return { state: "gone", detail: "closed" };
     if (pr.ineligible) return { state: "ineligible", headSha: pr.head, reasons: [pr.ineligible] };
+    const red = this.red.get(repo);
+    if (red) return { state: "held", headSha: pr.head, checks: red };
     if (pr.checks === "failed")
       return { state: "failed", headSha: pr.head, reasons: ["checks_failed"] };
     if (pr.checks === "pending")
@@ -84,8 +89,14 @@ class World implements QueueJudge {
     this.syncs.push({ number: entry.number, head: headSha });
   }
 
-  async needsYou(_repo: string, entry: MergeQueueEntry, reason: string, flag: boolean) {
-    this.notes.push({ number: entry.number, reason, flag });
+  async needsYou(
+    _repo: string,
+    entry: MergeQueueEntry,
+    reason: string,
+    flag: boolean,
+    note?: "dropped" | "held",
+  ) {
+    this.notes.push({ number: entry.number, reason, flag, ...(note === "held" ? { note } : {}) });
   }
 
   async branchSha() {
@@ -125,6 +136,20 @@ describe("queueStateOf", () => {
     expect(queueStateOf(wait("gate_not_clean"), [])).toBe("ineligible");
     expect(queueStateOf(wait("gate_not_clean", "behind_default_branch"), [])).toBe("ineligible");
     expect(queueStateOf(wait(), [])).toBe("ineligible");
+  });
+
+  it("GivenMainRed_WhenRead_ThenHeldEvenWhenBehindPendingOrFailed", () => {
+    expect(queueStateOf(wait("main_red"), [])).toBe("held");
+    expect(queueStateOf(wait("main_red", "behind_default_branch"), [])).toBe("held");
+    expect(queueStateOf(wait("main_red", "gate_not_clean"), ["checks_failed"])).toBe("held");
+  });
+
+  it("GivenMainRedAndAReasonItDoesNotKnow_WhenRead_ThenIneligible", () => {
+    expect(queueStateOf(wait("main_red", "mode_manual"), [])).toBe("ineligible");
+  });
+
+  it("GivenMainChecksUnknown_WhenRead_ThenPending", () => {
+    expect(queueStateOf(wait("main_checks_unknown"), [])).toBe("pending");
   });
 
   it("GivenAnyOtherReason_WhenRead_ThenIneligibleEvenWithAFailedCheck", () => {
@@ -335,6 +360,7 @@ describe("MergeQueue", () => {
           },
         ],
         lease: { holder: "crashed", until },
+        mainRed: null,
         version: 0,
       },
       0,
@@ -412,5 +438,181 @@ describe("MergeQueue", () => {
     expect(world.merges).toEqual([]);
     // The other holder's lease is left alone.
     expect((await store.get(REPO)).lease?.holder).toBe("other");
+  });
+});
+
+describe("MergeQueue while main is red (AI-382)", () => {
+  const OTHER = "owner/other";
+  let clock: Date;
+  let store: InMemoryMergeQueueStore;
+  let world: World;
+  const queue = () => {
+    const q = new MergeQueue(store, world, () => clock);
+    q.register("gate", world);
+    q.register("merge_pr", world);
+    return q;
+  };
+  const offer = (q: MergeQueue, number: number, repo = REPO) =>
+    q.offer(repo, {
+      projectId: "ai",
+      number,
+      kind: "merge_pr",
+      actor: "andy",
+      headSha: world.prs.get(number)!.head,
+    });
+  const later = (ms: number) => {
+    clock = new Date(clock.getTime() + ms);
+  };
+
+  beforeEach(() => {
+    clock = new Date("2026-11-25T10:00:00.000Z");
+    store = new InMemoryMergeQueueStore();
+    world = new World();
+    vi.spyOn(console, "log").mockImplementation(() => {});
+  });
+
+  it("GivenARedMain_WhenACleanPrIsOffered_ThenItIsQueuedWithMainRedAndNeitherMergedNorSynced", async () => {
+    world.red.set(REPO, ["ci"]);
+    world.add(1);
+    world.add(2, { contains: sha(0) });
+    const q = queue();
+    expect(await offer(q, 1)).toMatchObject({
+      result: "queued",
+      position: 1,
+      reason: "main_red: ci",
+    });
+    expect(await offer(q, 2)).toMatchObject({ result: "queued", position: 2 });
+    expect(world.merges).toEqual([]);
+    expect(world.syncs).toEqual([]);
+    expect((await store.get(REPO)).mainRed).toEqual({
+      since: "2026-11-25T10:00:00.000Z",
+      checks: ["ci"],
+      raisedAt: null,
+    });
+  });
+
+  it("GivenAHeldQueue_WhenMainsChecksPassAndACheckCompletes_ThenItMergesUnaskedAndTheHoldIsReleased", async () => {
+    world.red.set(REPO, ["ci"]);
+    world.add(1);
+    const q = queue();
+    await offer(q, 1);
+    // A completed check while main is still red: still held.
+    expect(await q.advanceFor(REPO, [], false, true)).toEqual([
+      { number: 1, outcome: "waiting", reason: "main_red: ci" },
+    ]);
+    world.red.delete(REPO);
+    const [outcome] = await q.advanceFor(REPO, [], false, true);
+    expect(outcome).toMatchObject({ number: 1, outcome: "merged" });
+    expect(world.merges).toEqual([1]);
+    expect((await store.get(REPO)).mainRed).toBeNull();
+  });
+
+  it("GivenAHeldQueueThatIsNotRedAnyMore_WhenAPrIsStillPending_ThenTheHoldIsReleased", async () => {
+    world.red.set(REPO, ["ci"]);
+    world.add(1, { checks: "pending" });
+    const q = queue();
+    await offer(q, 1);
+    world.red.delete(REPO);
+    await q.advanceFor(REPO, [], true);
+    expect((await store.get(REPO)).mainRed).toBeNull();
+  });
+
+  it("GivenAQueueThatIsNotHeld_WhenACheckNamingNoQueuedPrCompletes_ThenNothingIsJudged", async () => {
+    world.add(1, { checks: "pending" });
+    const q = queue();
+    await offer(q, 1);
+    const judge = vi.spyOn(world, "judge");
+    expect(await q.advanceFor(REPO, [], false, true)).toEqual([]);
+    expect(judge).not.toHaveBeenCalled();
+  });
+
+  it("GivenOneRepoRed_WhenAPrInAnotherRepoIsOffered_ThenItMergesWhileTheRedOneStaysHeld", async () => {
+    world.red.set(REPO, ["ci"]);
+    world.add(1);
+    world.add(2);
+    const q = queue();
+    await offer(q, 1);
+    expect(await offer(q, 2, OTHER)).toMatchObject({ result: "merged" });
+    expect(world.merges).toEqual([2]);
+    expect((await store.get(OTHER)).mainRed).toBeNull();
+    expect((await store.get(REPO)).entries.map((e) => e.number)).toEqual([1]);
+  });
+
+  it("GivenMainRedPastTheCap_WhenAnyEventArrives_ThenOneNeedsYouNoteNamesTheCheckAndThePrStaysQueued", async () => {
+    world.red.set(REPO, ["ci", "e2e"]);
+    world.add(1);
+    const q = queue();
+    await offer(q, 1);
+    later(MAX_MAIN_RED_HOLD_MS - 1000);
+    await q.advanceFor(REPO, [], false, true);
+    expect(world.notes).toEqual([]);
+
+    later(2000);
+    // No check completed: the cap alone wakes the queue.
+    await q.advanceFor(REPO, [], false);
+    expect(world.notes).toEqual([
+      { number: 1, reason: expect.stringContaining("failing: ci, e2e"), flag: true, note: "held" },
+    ]);
+    expect((await store.get(REPO)).mainRed?.raisedAt).toBe(clock.toISOString());
+
+    // Held for hours: no second note, and the PR's own hold cap is paused, so it isn't dropped.
+    later(MAX_HEAD_HOLD_MS * 3);
+    await q.advanceFor(REPO, [], false, true);
+    await q.advanceFor(REPO, [1], false);
+    expect(world.notes).toHaveLength(1);
+    expect((await store.get(REPO)).entries.map((e) => e.number)).toEqual([1]);
+
+    world.red.delete(REPO);
+    await q.advanceFor(REPO, [], false, true);
+    expect(world.merges).toEqual([1]);
+  });
+
+  it("GivenARedSpellThatEnded_WhenMainTurnsRedAgain_ThenTheCapStartsAgainAndCanRaiseAgain", async () => {
+    world.red.set(REPO, ["ci"]);
+    world.add(1, { checks: "pending" });
+    const q = queue();
+    await offer(q, 1);
+    later(MAX_MAIN_RED_HOLD_MS + 1);
+    await q.advanceFor(REPO, [], false);
+    world.red.delete(REPO);
+    await q.advanceFor(REPO, [], true);
+    world.red.set(REPO, ["ci"]);
+    later(1000);
+    await q.advanceFor(REPO, [], true);
+    expect((await store.get(REPO)).mainRed).toMatchObject({
+      since: clock.toISOString(),
+      raisedAt: null,
+    });
+    later(MAX_MAIN_RED_HOLD_MS + 1);
+    await q.advanceFor(REPO, [], false);
+    expect(world.notes).toHaveLength(2);
+  });
+
+  it("GivenAPrParkedOnItsSyncWhenMainTurnsRed_WhenHeldLongerThanTheHoldCap_ThenItIsNotDroppedAsStuck", async () => {
+    world.add(1, { contains: sha(0) });
+    world.add(2, { contains: sha(0) });
+    const q = queue();
+    await offer(q, 1);
+    await offer(q, 2);
+    // Both parked on their syncs, each with its hold clock running.
+    world.red.set(REPO, ["ci"]);
+    world.synced(1, "green");
+    await q.advanceFor(REPO, [1], false);
+    later(MAX_HEAD_HOLD_MS * 2);
+    world.red.delete(REPO);
+    await q.advanceFor(REPO, [], false, true);
+    expect(world.merges).toEqual([1]);
+    expect(world.notes).toEqual([]);
+    expect((await store.get(REPO)).entries.map((e) => e.number)).toEqual([2]);
+  });
+
+  it("GivenAHeldQueue_WhenItsLastPrCloses_ThenTheHoldIsCleared", async () => {
+    world.red.set(REPO, ["ci"]);
+    world.add(1);
+    const q = queue();
+    await offer(q, 1);
+    world.prs.get(1)!.open = false;
+    await q.advanceFor(REPO, [1], false);
+    expect(await store.get(REPO)).toMatchObject({ entries: [], mainRed: null });
   });
 });
