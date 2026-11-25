@@ -9,6 +9,7 @@ import {
   type ConfigChangeLog,
   type SpendCaps,
   type EventActor,
+  type MarkableStepKey,
   type MergeMode,
   type Project,
   type WorkTracker,
@@ -69,6 +70,28 @@ export class ProjectService {
     if (!current) throw notFound("project", projectId);
     requireTightening(mode, current);
     return this.update(projectId, { mergeMode: mode }, by, reason);
+  }
+
+  /**
+   * Marks a setup step done by hand, or clears the mark (AI-381): only the steps whose result the
+   * App can't read. Owner-only like every setting; records who (`by.email`) and when. A mark is
+   * Andy's word that he did the step in GitHub; nothing is read or run.
+   */
+  async markSetupStep(
+    projectId: string,
+    step: MarkableStepKey,
+    isDone: boolean,
+    by: { actor: EventActor; email: string },
+  ): Promise<Project> {
+    requireCan(by.actor, "change_project_settings", projectId);
+    const current = await this.tracker.getProject(projectId);
+    if (!current) throw notFound("project", projectId);
+    const marks = { ...current.setupMarks };
+    if (isDone) marks[step] = { by: by.email, at: this.now().toISOString() };
+    else delete marks[step];
+    const project = await this.tracker.updateProject(projectId, { setupMarks: marks });
+    log("INFO", "setup step marked", { projectId, step, done: isDone, by: by.actor });
+    return project;
   }
 
   /**

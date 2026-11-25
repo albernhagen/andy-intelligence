@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { Toaster, resetToasts } from "@/components/ui/toast";
-import { BRIEF_PATH, DISCOVERY_PATH, renderBrief } from "@andy/domain";
+import { BASELINE_FILES, BRIEF_PATH, DISCOVERY_PATH, renderBrief } from "@andy/domain";
 import type { BriefAnswers, ProjectPlan } from "@andy/contracts";
 import { readyStory, renderApp } from "@/test/harness";
 
@@ -33,9 +33,36 @@ const plan: ProjectPlan = {
   epicIds: [],
 };
 
+/**
+ * AI-381: the GitHub and terminal steps done, as the App reads them (baseline files, ruleset,
+ * main-only environment) plus Andy's marks for the steps it can't read.
+ */
+async function onboard(h: ReturnType<typeof renderApp>) {
+  for (const path of [...BASELINE_FILES, "pnpm-lock.yaml", ".nvmrc"])
+    h.codeHost.files.set(path, "x");
+  const key = REPO.toLowerCase();
+  h.codeHost.settings.set(`${key}#rulesets`, {
+    status: 200,
+    data: [{ name: "protect-main", enforcement: "active" }],
+  });
+  h.codeHost.settings.set(`${key}#environments/agent`, {
+    status: 200,
+    data: { deployment_branch_policy: { custom_branch_policies: true } },
+  });
+  h.codeHost.settings.set(`${key}#environments/agent/deployment-branch-policies`, {
+    status: 200,
+    data: { branch_policies: [{ name: "main", type: "branch" }] },
+  });
+  const mark = { by: "andy@example.com", at: "2026-11-25T12:00:00.000Z" };
+  await h.tracker.updateProject("trl", {
+    setupMarks: { reusable_workflows: mark, reviewer_token: mark, agent_environment: mark },
+  });
+}
+
 async function project(path: string, opts: { brief?: boolean; plan?: ProjectPlan } = {}) {
   const h = renderApp(path, { githubConnected: true });
   await h.tracker.createProject({ name: "Trail log", key: "TRL", repos: [REPO] });
+  await onboard(h);
   if (opts.brief) h.codeHost.files.set(BRIEF_PATH, "# Project brief");
   if (opts.plan) await h.tracker.updateProject("trl", { projectPlan: opts.plan });
   await h.queryClient.invalidateQueries();
@@ -50,15 +77,28 @@ async function fill(h: Awaited<ReturnType<typeof project>>, label: string, text:
 }
 
 describe("setup path", () => {
+  it("GivenAddProject_WhenAndyTypesAnInstalledRepo_ThenTheRepoAndAppStepsShowItsLimits", async () => {
+    const h = renderApp("/projects/new", { githubConnected: true });
+    expect(
+      await screen.findByText("Before you add a project: the repo and the GitHub App"),
+    ).toBeTruthy();
+    expect(screen.getByText("gh repo create <owner>/<name> --public")).toBeTruthy();
+    await h.user.type(screen.getByLabelText(/^GitHub repo/), REPO);
+    expect(await screen.findByText("App installed")).toBeTruthy();
+    expect(screen.getByText("✓ Public")).toBeTruthy();
+    expect(screen.getByText(`gh repo create ${REPO} --public`)).toBeTruthy();
+  });
+
   it("GivenAddProject_WhenAndyCreatesAProject_ThenTheBriefStepOpensNotAnEmptyBoard", async () => {
     const h = renderApp("/projects/new", { githubConnected: true });
     await h.user.type(await screen.findByLabelText("Name"), "Trail log");
     await h.user.type(screen.getByLabelText(/^Key/), "TRL");
     await h.user.type(screen.getByLabelText(/^GitHub repo/), REPO);
     await h.user.click(screen.getByRole("button", { name: "Create project" }));
-    expect(await screen.findByText("What are you building, and for whom?")).toBeTruthy();
+    // AI-381: the repo and App steps came before Add project; the baseline PR is next.
+    expect(await screen.findByRole("heading", { name: "Finish the baseline PR" })).toBeTruthy();
     expect(h.router.state.location.pathname).toBe("/p/trl/setup");
-    expect(screen.getAllByText("Step 2 of 5", { exact: false }).length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Step 2 of 11", { exact: false }).length).toBeGreaterThan(0);
   });
 
   it("GivenTheBriefForm_WhenAndySubmitsIt_ThenTheProposedBriefIsWhatSubmitBriefStores", async () => {
@@ -114,6 +154,7 @@ describe("setup path", () => {
       "## Brief answers\n\n| Id | Answer |\n|---|---|\n| `idea` | Trail runs from the watch. |\n",
     );
     await h.tracker.createProject({ name: "Trail log", key: "TRL", repos: [REPO] });
+    await onboard(h);
     await h.queryClient.invalidateQueries();
     expect(await screen.findByDisplayValue("Trail runs from the watch.")).toBeTruthy();
   });
@@ -121,7 +162,7 @@ describe("setup path", () => {
   it("GivenANewProjectWithNoTickets_WhenItsBoardOpens_ThenTheNextStepShowsWithOneButtonThatOpensIt", async () => {
     const h = await project("/p/trl");
     const bar = await screen.findByRole("region", { name: "Setup" });
-    expect(within(bar).getByText(/step 2 of 5/)).toBeTruthy();
+    expect(within(bar).getByText(/step 7 of 11/)).toBeTruthy();
     const buttons = within(bar).getAllByRole("link");
     expect(buttons).toHaveLength(1);
     await h.user.click(buttons[0]!);
@@ -181,6 +222,7 @@ describe("setup path", () => {
       },
     });
     await h.tracker.createProject({ name: "Trail log", key: "TRL", repos: [REPO] });
+    await onboard(h);
     h.codeHost.files.set(BRIEF_PATH, "# Project brief");
     await h.tracker.updateProject("trl", { projectPlan: plan });
     await h.queryClient.invalidateQueries();
@@ -193,7 +235,7 @@ describe("setup path", () => {
     await h.user.click(screen.getByRole("button", { name: /^Approve 2, park 1/ }));
     expect(await screen.findByText("A milestone wasn't parked")).toBeTruthy();
     expect(screen.getByText(/couldn't park M3: Share/)).toBeTruthy();
-    expect(await screen.findByRole("heading", { name: "Baseline and first build" })).toBeTruthy();
+    expect(await screen.findByRole("heading", { name: "Prove one refine" })).toBeTruthy();
     expect(screen.getByText("A milestone wasn't parked")).toBeTruthy();
   });
 
@@ -235,5 +277,41 @@ describe("setup path", () => {
         reason: "Fewer steps.",
       }),
     );
+  });
+
+  it("GivenAHandStepTheAppCantRead_WhenAndyMarksItDone_ThenItShowsMarkedByHandAndTheNextStepOpens", async () => {
+    const h = await project("/p/trl/setup");
+    await h.tracker.updateProject("trl", { setupMarks: {} });
+    await h.queryClient.invalidateQueries();
+    expect(await screen.findByRole("heading", { name: "Allow reusable workflows" })).toBeTruthy();
+    const link = screen.getByRole("link", { name: /Open Actions settings/ });
+    expect(link.getAttribute("href")).toBe(`https://github.com/${REPO}/settings/actions`);
+
+    await h.user.click(screen.getByRole("button", { name: /^Mark done/ }));
+
+    expect(await screen.findByRole("heading", { name: "Reviewer token" })).toBeTruthy();
+    expect(screen.getByText(`gh secret set CLAUDE_CODE_OAUTH_TOKEN --repo ${REPO}`)).toBeTruthy();
+    const stored = (await h.tracker.getProject("trl"))?.setupMarks.reusable_workflows;
+    expect(stored?.by).toBe("andy@example.com");
+    await h.user.click(screen.getByRole("button", { name: /Allow reusable workflows/ }));
+    expect(await screen.findByText("Marked by hand")).toBeTruthy();
+  });
+
+  it("GivenARulesetTheAppMayNotRead_WhenSetupOpens_ThenTheStepSaysCantTellAndOffersMarkDone", async () => {
+    const h = renderApp("/p/trl/setup", { githubConnected: true });
+    await h.tracker.createProject({ name: "Trail log", key: "TRL", repos: [REPO] });
+    await onboard(h);
+    h.codeHost.settings.set(`${REPO.toLowerCase()}#rulesets`, { status: 403, data: null });
+    await h.queryClient.invalidateQueries();
+    const card = await screen.findByRole("region", { name: "Apply the repo settings" });
+    expect(within(card).getAllByText("Can't tell").length).toBeGreaterThan(0);
+    expect(
+      within(card).getByText(`node platform/baseline/baseline.mjs apply ${REPO} --dry-run`),
+    ).toBeTruthy();
+
+    await h.user.click(within(card).getByRole("button", { name: /^Mark done/ }));
+
+    expect(await screen.findByText("What are you building, and for whom?")).toBeTruthy();
+    expect((await h.tracker.getProject("trl"))?.setupMarks.repo_settings).toBeTruthy();
   });
 });

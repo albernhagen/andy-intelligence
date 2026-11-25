@@ -23,6 +23,7 @@ Step 1 of AI-285: Web UI and MCP parity: every action in both, enforced by a tes
 | Dashboards; DORA metrics                                 | `GET /dashboard`, `…/dashboard`, `…/dora`                                       | `dashboard` (AI-295)                                                                                                       |
 | Project list; settings (except below)                    | `GET /projects`, `GET`/`PATCH /projects/:id`                                    | `list_projects`, `get_project_settings`, the `set_*` tools, `set_spend_caps`                                               |
 | Project setup checklist | `GET …/setup` | `project_setup` (AI-287) |
+| Onboarding steps: read, mark a hand step done | `GET …/onboarding`, `POST …/onboarding/marks` | `project_setup` (`onboarding`, `mark`; AI-381) |
 | The board, every stage | `GET …/board` | `board` (AI-296) |
 | Roadmap of milestones; milestone map | `GET /roadmap`, `…/roadmap` (AI-202 screen) | `roadmap`; `milestone_map` (MCP only) |
 | Create a project | `POST /projects` | `create_project` (AI-297) |
