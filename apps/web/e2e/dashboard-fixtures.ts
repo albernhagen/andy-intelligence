@@ -1,4 +1,4 @@
-import { expect, type Page } from "@playwright/test";
+import { expect, type Page, type Route } from "@playwright/test";
 import type { DashboardCost, DashboardWeek, ProjectDashboard, RunStep } from "@andy/contracts";
 
 /**
@@ -162,12 +162,31 @@ export async function waitForStableCharts(page: Page) {
   expect(same, "chart layout still moving after 50 frame pairs").toBe(3);
 }
 
-/** Serves the fixed dashboard and DORA report for AI and for All projects. */
-export async function mockDashboards(page: Page) {
-  await page.route("**/api/projects/ai/dashboard*", (route) => route.fulfill({ json: DASHBOARD }));
-  await page.route("**/api/projects/ai/dora", (route) => route.fulfill({ json: DORA }));
-  // All projects: the same figures, with AI as its one project (extra fields are ignored).
-  await page.route("**/api/dashboard*", (route) =>
-    route.fulfill({ json: { ...DASHBOARD, projects: [DASHBOARD] } }),
+/**
+ * AI-367: Recharts measures each tick label once and caches the width, so a chart that draws
+ * before the bundled fonts load keeps fallback-font widths and can drop a different tick.
+ * `document.fonts.ready` can resolve before a face starts loading, so load both faces outright.
+ */
+async function loadFonts(page: Page) {
+  await page.evaluate(() =>
+    Promise.all([
+      document.fonts.load('12px "Inter Variable"'),
+      document.fonts.load('12px "Geist Mono Variable"'),
+    ]),
   );
+}
+
+/**
+ * Serves the fixed dashboard and DORA report for AI and for All projects, each only once the
+ * fonts have loaded, so the charts first measure their labels in Inter (`loadFonts`).
+ */
+export async function mockDashboards(page: Page) {
+  const serve = (json: unknown) => async (route: Route) => {
+    await loadFonts(page);
+    await route.fulfill({ json });
+  };
+  await page.route("**/api/projects/ai/dashboard*", serve(DASHBOARD));
+  await page.route("**/api/projects/ai/dora", serve(DORA));
+  // All projects: the same figures, with AI as its one project (extra fields are ignored).
+  await page.route("**/api/dashboard*", serve({ ...DASHBOARD, projects: [DASHBOARD] }));
 }
