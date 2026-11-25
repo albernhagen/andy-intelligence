@@ -1,6 +1,6 @@
 ---
 title: "Milestone create and edit over MCP: five milestone tools, not three"
-status: proposed (AI-321; Andy decides at review)
+status: accepted (Andy, 2026-11-25)
 date: 2026-11-21
 amends: 0131 (milestones)
 ---

@@ -1,6 +1,6 @@
 ---
 title: Agent read-only run token
-status: proposed (design; build sliced after Andy merges; Andy decides at review)
+status: rejected (Andy, 2026-11-25: never built; a new credential gets a fresh ADR when agents need it)
 date: 2026-11-12
 amends: 0051 (the agent may hold one read-only credential), 0040 (the executor profile allows one MCP server), 0089 (the claim also returns the read token)
 ---

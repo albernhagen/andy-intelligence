@@ -1,6 +1,6 @@
 ---
 title: Review-finding proposals
-status: proposed (AI-100; Andy decides at review)
+status: accepted (Andy, 2026-11-25)
 date: 2026-11-12
 implements: 0040 row 5 (repeated review findings become a pending ConfigChange)
 ---

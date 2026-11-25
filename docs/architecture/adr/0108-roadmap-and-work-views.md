@@ -1,6 +1,6 @@
 ---
 title: Roadmap over epics; five fixed work views
-status: proposed; decision 1 amended by 0131 (proposed)
+status: accepted (Andy, 2026-11-25); superseded in part by 0131 (decision 1: a milestone is an epic)
 date: 2026-11-20
 amends: 0059 (five fixed work views are built; custom views and saved filters stay not built)
 ---
