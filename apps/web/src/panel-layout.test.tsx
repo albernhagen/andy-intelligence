@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { screen, within } from "@testing-library/react";
 import { nextMove } from "@/components/MoveControls";
 import { readyStory, renderApp } from "@/test/harness";
+import { optionsOf, pick } from "@/test/pick";
 
 /**
  * AI-336: the ticket panel leads with the decision (the next move, open questions, the PR);
@@ -76,7 +77,7 @@ describe("ticket panel layout", () => {
     let panel = await open();
     await user.click(within(panel).getByRole("button", { name: "Move…" }));
     await user.click(within(panel).getByRole("button", { name: "Force move…" }));
-    await user.selectOptions(within(panel).getByLabelText("Force to"), "Done");
+    await pick(user, within(panel).getByRole("combobox", { name: "Force to" }), "Done");
 
     panel = await open("AI-2");
 
@@ -108,8 +109,8 @@ describe("ticket panel layout", () => {
     const summary = group.querySelector("summary")!;
     await within(summary).findByText(/Agent · GitHub Actions · \w+ tier/);
     // Every control the rail had stays inside it.
-    expect(within(group).getByRole("button", { name: "Make it mine" })).toBeTruthy();
-    expect(within(group).getByRole("button", { name: "Run locally" })).toBeTruthy();
+    expect(within(group).getByRole("radiogroup", { name: "Worker" })).toBeTruthy();
+    expect(within(group).getByRole("radiogroup", { name: "Runs on" })).toBeTruthy();
     expect(within(group).getByRole("region", { name: "Overrides" })).toBeTruthy();
     expect(await within(group).findByRole("region", { name: "Routing" })).toBeTruthy();
   });
@@ -164,35 +165,48 @@ describe("list fields", () => {
   const LISTS = ["Acceptance criteria", "Assumptions", "Out of scope", "Touches"];
 
   it("GivenATicketWithNoListItems_WhenThePanelOpens_ThenNoListHeadingsShowAndOneAddRowOffersEach", async () => {
-    const { open } = await seeded({ type: "feature", title: "Bare" });
+    const { open, user } = await seeded({ type: "feature", title: "Bare" });
     const panel = await open();
 
-    const add = await within(panel).findByLabelText("Add a list");
+    const add = await within(panel).findByRole("combobox", { name: "Add a list" });
+    const names = await optionsOf(user, add);
     for (const name of LISTS) {
       expect(within(panel).queryByRole("heading", { name })).toBeNull();
-      expect(within(add).getByRole("option", { name })).toBeTruthy();
+      expect(names).toContain(name);
     }
   });
 
   it("GivenOneListHasItems_WhenThePanelOpens_ThenItShowsAsTodayAndOnlyTheOthersFold", async () => {
-    const { open } = await seeded({ type: "feature", title: "Some", touches: ["apps/web/**"] });
+    const { open, user } = await seeded({
+      type: "feature",
+      title: "Some",
+      touches: ["apps/web/**"],
+    });
     const panel = await open();
 
     const touches = await within(panel).findByRole("region", { name: "Touches" });
     expect(within(touches).getByText("apps/web/**")).toBeTruthy();
-    const add = within(panel).getByLabelText("Add a list");
-    expect(within(add).queryByRole("option", { name: "Touches" })).toBeNull();
-    expect(within(add).getByRole("option", { name: "Out of scope" })).toBeTruthy();
+    const names = await optionsOf(
+      user,
+      within(panel).getByRole("combobox", { name: "Add a list" }),
+    );
+    expect(names).not.toContain("Touches");
+    expect(names).toContain("Out of scope");
   });
 
   it("GivenTheAddRow_WhenAndyPicksAListByKeyboardAndAddsAnItem_ThenTheFieldShowsFocusedAndSaves", async () => {
     const { open, tracker, ticket, user } = await seeded({ type: "feature", title: "Bare" });
     const panel = await open();
 
-    const add = await within(panel).findByLabelText("Add a list");
+    // Keyboard alone (Radix Select): focus, Enter opens on the first list, arrows, Enter picks.
+    const add = await within(panel).findByRole("combobox", { name: "Add a list" });
     add.focus();
-    await user.selectOptions(add, "Out of scope");
-    const input = within(panel).getByLabelText("Add to out of scope");
+    await user.keyboard("{Enter}");
+    await screen.findByRole("listbox");
+    await user.keyboard("{ArrowDown}");
+    await user.keyboard("{ArrowDown}");
+    await user.keyboard("{Enter}");
+    const input = await within(panel).findByLabelText("Add to out of scope");
     expect(document.activeElement).toBe(input);
     await user.type(input, "billing{Enter}");
 

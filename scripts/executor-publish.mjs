@@ -34,8 +34,8 @@ export const MAX_BODY = 60000;
 
 /**
  * Protected path globs (repo-relative): every any-depth Edit deny of the profile (rules like Edit of //, two stars, /x), and every
- * CODEOWNERS pattern after the catch-all `*` line (ARCHITECTURE §4.5: paths listed after `*` are
- * the protected ones; `*` itself only requests Andy's review).
+ * pattern CODEOWNERS lists (the kept paths, ADR-0124); a catch-all `*` line, if a repo still has
+ * one, is skipped, since it would protect every file.
  */
 export function protectedGlobs(profile, codeowners) {
   const fromProfile = profile.settings.permissions.deny

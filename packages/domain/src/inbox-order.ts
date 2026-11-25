@@ -14,7 +14,7 @@ export function sortQuestions(questions: readonly Question[]): Question[] {
 /**
  * The viewer's inbox from `GET /api/needs-you` (or MCP `list_needs_me`; one order everywhere, AI-40): open questions, then flagged tickets that have
  * no open question (a ticket with questions is already shown through them). The API decides which
- * tickets are flagged, so the flag's name stays out of the UI. One item = one thing to answer.
+ * tickets are flagged, so the flag's name stays out of the UI. Counts are per ticket (`waitingCounts`).
  */
 export type NeedsYou = { questions: Question[]; tickets: Ticket[] };
 
@@ -28,13 +28,25 @@ export function inboxItems(data: NeedsYou, projectId?: string) {
   };
 }
 
-/** How many items wait on the viewer: in total (header) and per project (picker). */
+/**
+ * How many tickets wait on the viewer: in total (header, inbox heading) and per project (picker).
+ * One inbox card = one ticket, however many questions it holds (AI-347); `stale` is the part of
+ * `total` whose ticket is Done, listed last.
+ */
 export function waitingCounts(data: NeedsYou) {
   const { questions, flagged } = inboxItems(data);
+  const tickets = new Map(data.tickets.map((t) => [t.id, t]));
+  // One entry per inbox card: the ticket a question is on, or the flagged ticket itself.
+  const cards = new Map<string, string>();
+  for (const q of questions) cards.set(q.ticketId, q.projectId);
+  for (const t of flagged) cards.set(t.id, t.projectId);
   const byProject = new Map<string, number>();
-  for (const { projectId } of [...questions, ...flagged])
+  let stale = 0;
+  for (const [ticketId, projectId] of cards) {
     byProject.set(projectId, (byProject.get(projectId) ?? 0) + 1);
-  return { total: questions.length + flagged.length, byProject };
+    if (isStale(tickets.get(ticketId))) stale++;
+  }
+  return { total: cards.size, stale, byProject };
 }
 
 /**
@@ -47,9 +59,6 @@ export type InboxCard = {
   ticket: Ticket | undefined;
   questions: Question[];
 };
-
-/** Items a card holds, as the header counts them: its questions, or 1 for a flagged ticket. */
-export const cardCount = (card: InboxCard) => card.questions.length || 1;
 
 /** Done, Cancelled or archived: nothing will build it, so its questions are listed last. */
 export const isStale = (t: Ticket | undefined) =>

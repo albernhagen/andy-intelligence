@@ -1,56 +1,170 @@
 @import "tailwindcss";
+/* Fonts are bundled with the app (OFL; licences in public/fonts/): no third-party font host. */
+@import "@fontsource-variable/inter/wght.css";
+@import "@fontsource-variable/geist-mono/wght.css";
 
-@custom-variant dark (&:is(.dark *));
+/*
+ * `dark:` follows the theme the shell picks (ADR-0151): the OS unless Andy chose light or dark.
+ * Components should not need it: the tokens below already switch.
+ */
+@custom-variant dark {
+  @media (prefers-color-scheme: dark) {
+    &:where(:root:not([data-theme="light"]) *) {
+      @slot;
+    }
+  }
+  &:where([data-theme="dark"] *) {
+    @slot;
+  }
+}
 
-/* Theme tokens: the colour roles in design.md. Components use them through Tailwind classes. */
+/*
+ * Direction A "Instrument" tokens (ADR-0151), from the approved mockup
+ * (docs/build-log/assets/2026-11-23-design-review/mockups.html, `.dA`): cool neutrals tinted
+ * toward hue 270, an indigo accent, three surface levels and a selected state. Components use
+ * them through Tailwind classes (design.md, design-details.md), never raw colours.
+ */
 :root {
-  --background: oklch(1 0 0);
-  --foreground: oklch(0.145 0 0);
-  --muted: oklch(0.97 0 0);
-  --muted-foreground: oklch(0.556 0 0);
-  --border: oklch(0.922 0 0);
-  --ring: oklch(0.708 0 0);
-  --primary: oklch(0.205 0 0);
-  --primary-foreground: oklch(0.985 0 0);
-  --destructive: oklch(0.577 0.245 27.325);
-  --attention: oklch(0.555 0.16 55);
-  --running: oklch(0.52 0.19 260);
-  --success: oklch(0.52 0.14 150);
-  --radius: 0.625rem;
+  color-scheme: light;
+  /* Surfaces: sunken (side areas, lanes, hovered rows) < base (the page) < raised (panels, menus). */
+  --background: oklch(0.985 0.003 270);
+  --muted: oklch(0.96 0.006 270);
+  --raised: oklch(1 0 0);
+  --foreground: oklch(0.24 0.02 270);
+  --muted-foreground: oklch(0.52 0.02 270);
+  --border: oklch(0.91 0.008 270);
+  --ring: oklch(0.52 0.2 277);
+  --primary: oklch(0.52 0.2 277);
+  --primary-foreground: oklch(1 0 0);
+  /* The picked row, option or tab: an accent tint with an accent edge. */
+  --selected: oklch(0.95 0.035 277);
+  --selected-edge: oklch(0.52 0.2 277);
+  --destructive: oklch(0.55 0.2 27);
+  --attention: oklch(0.55 0.15 60);
+  --running: oklch(0.52 0.17 255);
+  --success: oklch(0.5 0.13 155);
 }
 
 @media (prefers-color-scheme: dark) {
-  :root {
-    --background: oklch(0.145 0 0);
-    --foreground: oklch(0.985 0 0);
-    --muted: oklch(0.205 0 0);
-    --muted-foreground: oklch(0.708 0 0);
-    --border: oklch(1 0 0 / 10%);
-    --ring: oklch(0.556 0 0);
-    --primary: oklch(0.922 0 0);
-    --primary-foreground: oklch(0.205 0 0);
-    --attention: oklch(0.8 0.15 70);
-    --running: oklch(0.75 0.13 255);
-    --success: oklch(0.77 0.15 150);
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+    --background: oklch(0.17 0.012 270);
+    --muted: oklch(0.15 0.012 270);
+    --raised: oklch(0.2 0.014 270);
+    --foreground: oklch(0.94 0.008 270);
+    --muted-foreground: oklch(0.66 0.016 270);
+    --border: oklch(0.28 0.014 270);
+    --ring: oklch(0.62 0.19 277);
+    --primary: oklch(0.62 0.19 277);
+    --primary-foreground: oklch(0.99 0 0);
+    --selected: oklch(0.27 0.07 277);
+    --selected-edge: oklch(0.62 0.19 277);
+    --destructive: oklch(0.74 0.16 27);
+    --attention: oklch(0.8 0.14 75);
+    --running: oklch(0.76 0.12 255);
+    --success: oklch(0.78 0.14 155);
   }
+}
+
+/* The same dark values when Andy picks dark in the shell, whatever the OS says. */
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --background: oklch(0.17 0.012 270);
+  --muted: oklch(0.15 0.012 270);
+  --raised: oklch(0.2 0.014 270);
+  --foreground: oklch(0.94 0.008 270);
+  --muted-foreground: oklch(0.66 0.016 270);
+  --border: oklch(0.28 0.014 270);
+  --ring: oklch(0.62 0.19 277);
+  --primary: oklch(0.62 0.19 277);
+  --primary-foreground: oklch(0.99 0 0);
+  --selected: oklch(0.27 0.07 277);
+  --selected-edge: oklch(0.62 0.19 277);
+  --destructive: oklch(0.74 0.16 27);
+  --attention: oklch(0.8 0.14 75);
+  --running: oklch(0.76 0.12 255);
+  --success: oklch(0.78 0.14 155);
 }
 
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
   --color-muted: var(--muted);
+  --color-raised: var(--raised);
   --color-muted-foreground: var(--muted-foreground);
   --color-border: var(--border);
   --color-ring: var(--ring);
   --color-primary: var(--primary);
   --color-primary-foreground: var(--primary-foreground);
+  --color-selected: var(--selected);
+  --color-selected-edge: var(--selected-edge);
   --color-destructive: var(--destructive);
   --color-attention: var(--attention);
   --color-running: var(--running);
   --color-success: var(--success);
-  --radius-md: calc(var(--radius) - 2px);
+}
+
+@theme {
+  /* One face plus a mono for keys and numbers (ADR-0151). */
+  --font-sans: "Inter Variable", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: "Geist Mono Variable", ui-monospace, Menlo, monospace;
+
+  /* Six steps; 13px body. `text-base` stays 16px: phone inputs use it so iOS doesn't zoom. */
+  --text-2xs: 11px;
+  --text-2xs--line-height: 16px;
+  --text-xs: 12px;
+  --text-xs--line-height: 16px;
+  --text-sm: 13px;
+  --text-sm--line-height: 20px;
+  --text-md: 14px;
+  --text-md--line-height: 20px;
+  --text-base: 16px;
+  --text-base--line-height: 24px;
+  --text-lg: 19px;
+  --text-lg--line-height: 26px;
+
+  /* Radii from the mockup: keys 4, controls 7, cards 9. */
+  --radius-sm: 4px;
+  --radius-md: 7px;
+  --radius-lg: 9px;
+
+  /* Motion that explains a change: 120 to 180 ms, opacity and transform only (ADR-0151). */
+  --ease-standard: cubic-bezier(0.2, 0, 0, 1);
+  --animate-enter: enter 150ms var(--ease-standard);
+
+  @keyframes enter {
+    from {
+      opacity: 0;
+      transform: translateY(-2px);
+    }
+  }
+}
+
+:root {
+  --motion-fast: 120ms;
+  --motion-base: 150ms;
+  --motion-slow: 180ms;
+}
+
+/* Reduced motion: nothing moves or fades. Motion never gates input, so this changes timing only. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  ::before,
+  ::after {
+    animation-duration: 0s !important;
+    animation-delay: 0s !important;
+    transition-duration: 0s !important;
+    transition-delay: 0s !important;
+  }
 }
 
 body {
-  @apply bg-background text-sm text-foreground antialiased;
+  @apply bg-background font-sans text-sm text-foreground antialiased;
+  /* Native checkboxes, radios and ranges in the accent until AI-368 replaces them. */
+  accent-color: var(--primary);
+}
+
+/* Keys and counts in the mono (`<kbd>`; `font-mono` for keys and numbers elsewhere). */
+kbd {
+  @apply font-mono text-2xs;
 }

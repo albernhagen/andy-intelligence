@@ -1,9 +1,14 @@
-import { describe, expect, it } from "vitest";
-import { screen, waitFor, within } from "@testing-library/react";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import type { NewQuestion } from "@andy/contracts";
+import { resetToasts, Toaster } from "@/components/ui/toast";
 import { PAGE_LOAD, readyStory, renderApp } from "@/test/harness";
+import { emulateWidth } from "@/test/phone";
 
-/** AI-30: Inbox v2: questions grouped by ticket, one-click suggested answers. */
+/**
+ * AI-30: Inbox v2: questions grouped by ticket, one-click suggested answers. AI-371: a list of
+ * tickets beside the picked one's decisions; one decision at a time on a phone.
+ */
 
 type Harness = ReturnType<typeof renderApp>;
 
@@ -51,30 +56,52 @@ async function twoTickets(path = "/p/ai/inbox", more?: (h: Harness) => Promise<v
   return { ...h, board, panel };
 }
 
-const card = (name: string) => screen.findByRole("article", { name });
+/** Picks the ticket's row in the list, then returns its detail. */
+async function card(name: string) {
+  fireEvent.click(await screen.findByRole("button", { name }));
+  return screen.findByRole("article", { name });
+}
 const question = (text: string) => screen.queryByRole("listitem", { name: `Question: ${text}` });
+/** The list's rows, in order. */
+const rows = () =>
+  screen
+    .queryAllByRole("button")
+    .filter((b) => b.hasAttribute("data-nav-item"))
+    .map((b) => b.getAttribute("aria-label"));
+
+afterEach(() => {
+  vi.unstubAllGlobals();
+  resetToasts();
+});
 
 describe("inbox v2", () => {
-  it("GivenQuestionsOnSeveralTickets_WhenTheInboxOpens_ThenOneCardPerTicketHoldsItsQuestions", async () => {
+  it("GivenQuestionsOnSeveralTickets_WhenTheInboxOpens_ThenARowPerTicketSitsBesideThePickedOnesQuestions", async () => {
     await twoTickets();
-    const board = await card("AI-1: Board");
-    const panel = await card("AI-2: Panel");
-
+    // The first row is picked: its questions show beside the list, no other ticket's.
+    const board = await screen.findByRole("article", { name: "AI-1: Board" });
+    expect(screen.getAllByRole("article")).toHaveLength(1);
+    expect(screen.getByRole("button", { name: "AI-1: Board" }).getAttribute("aria-current")).toBe(
+      "true",
+    );
+    expect(screen.getByText("2 questions · 2 with a suggestion")).toBeTruthy();
+    expect(screen.getAllByText("Who signs off?")).toHaveLength(1);
     expect(within(board).getAllByRole("listitem", { name: /^Question:/ })).toHaveLength(2);
     expect(within(board).getByRole("listitem", { name: "Question: Which layout?" })).toBeTruthy();
-    expect(within(panel).getByRole("listitem", { name: "Question: Who signs off?" })).toBeTruthy();
     expect(within(board).getByText("Feature")).toBeTruthy();
     expect(within(board).getByText("Backlog")).toBeTruthy();
-    expect(within(board).getByRole("link", { name: "AI-1: Board" }).getAttribute("href")).toBe(
+    expect(within(board).getByRole("link", { name: "Open ticket" }).getAttribute("href")).toBe(
       "/p/ai/t/AI-1",
     );
+
+    const panel = await card("AI-2: Panel");
+    expect(within(panel).getByRole("listitem", { name: "Question: Who signs off?" })).toBeTruthy();
+    expect(question("Which layout?")).toBeNull();
   });
 
-  it("GivenATicketWhoseOnlyGapIsQuestions_WhenTheInboxOpens_ThenItsCardComesFirst", async () => {
+  it("GivenATicketWhoseOnlyGapIsQuestions_WhenTheInboxOpens_ThenItsRowComesFirst", async () => {
     await twoTickets();
-    await card("AI-1: Board");
-    const names = screen.getAllByRole("article").map((a) => a.getAttribute("aria-label"));
-    expect(names).toEqual(["AI-1: Board", "AI-2: Panel"]);
+    await screen.findByRole("article", { name: "AI-1: Board" });
+    expect(rows()).toEqual(["AI-1: Board", "AI-2: Panel"]);
   });
 
   it("GivenAQuestion_WhenTheInboxShowsIt_ThenTheSuggestedAnswerComesFirstAndIsMarked", async () => {
@@ -85,7 +112,8 @@ describe("inbox v2", () => {
     const choices = within(within(item).getByRole("group", { name: "Answers" })).getAllByRole(
       "button",
     );
-    expect(choices.map((b) => b.textContent)).toEqual(["ListSuggested", "Columns"]);
+    // Each answer shows the key that picks it (AI-371).
+    expect(choices.map((b) => b.textContent)).toEqual(["1ListSuggested", "2Columns"]);
     expect(within(item).getByRole("list", { name: "Assumptions" }).textContent).toBe(
       "Desktop first",
     );
@@ -96,8 +124,11 @@ describe("inbox v2", () => {
     await twoTickets();
     await card("AI-1: Board");
     const answers = screen.getAllByRole("button", { name: "Answer" });
-    expect(answers).toHaveLength(3);
+    expect(answers).toHaveLength(2);
     for (const b of answers) expect(b.className).not.toContain("bg-primary");
+    // The one primary action on the screen (design.md).
+    const primary = screen.getAllByRole("button").filter((b) => b.className.includes("bg-primary"));
+    expect(primary.map((b) => b.textContent)).toEqual(["Accept all suggested (2)"]);
     const field = screen.getAllByLabelText("Your answer")[0]!;
     expect(field.getAttribute("name")).toBe("answer");
     expect(field.getAttribute("autocomplete")).toBe("off");
@@ -110,6 +141,7 @@ describe("inbox v2", () => {
         { text: "Rotate now?", options: ["Yes", "No"], urgency: "high" },
       ]);
     });
+    await card("AI-3: Keys");
     const item = await waitFor(() => {
       const q = question("Rotate now?");
       if (!q) throw new Error("not shown yet");
@@ -122,14 +154,18 @@ describe("inbox v2", () => {
   it("GivenARunsQuestion_WhenAndyClicksAnOption_ThenItIsTheAnswerAndTheQuestionLeavesTheInbox", async () => {
     const h = await twoTickets();
     await card("AI-1: Board");
-    expect(await screen.findByRole("link", { name: "Needs you 3" })).toBeTruthy();
+    // Two tickets, three questions: the header counts tickets (AI-347).
+    expect(
+      await screen.findByRole("link", { name: "Inbox 2 tickets waiting on you" }),
+    ).toBeTruthy();
 
     await h.user.click(
       within(question("Which layout?") as HTMLElement).getByRole("button", { name: "Columns" }),
     );
 
     await waitFor(() => expect(question("Which layout?")).toBeNull());
-    expect(screen.getByRole("link", { name: "Needs you 2" })).toBeTruthy();
+    // AI-1 still has a question open, so it still counts.
+    expect(screen.getByRole("link", { name: "Inbox 2 tickets waiting on you" })).toBeTruthy();
     expect(screen.getByRole("heading", { level: 2 }).textContent).toBe("Needs you 2");
     const [answered] = await h.tracker.listQuestions({ ticketId: h.board.id, status: "answered" });
     expect(answered).toMatchObject({ id: "run1-q1", answer: "Columns", answeredVia: "ui" });
@@ -160,7 +196,7 @@ describe("inbox v2", () => {
       ["Which colour?", "answered", "Blue"],
     ]);
     expect((await h.tracker.getTicket("ai", h.board.id))?.stage).toBe("ready");
-    expect(screen.getByRole("link", { name: "Needs you 1" })).toBeTruthy();
+    expect(screen.getByRole("link", { name: "Inbox 1 ticket waiting on you" })).toBeTruthy();
     // A card with no suggestion offers no bulk action.
     expect(
       within(await card("AI-2: Panel")).queryByRole("button", { name: /Accept all/ }),
@@ -227,10 +263,9 @@ describe("inbox v2", () => {
     });
 
     const stale = await screen.findByRole("region", { name: "Stale" });
-    expect(within(stale).getByRole("article", { name: "AI-3: Old work" })).toBeTruthy();
-    expect(within(stale).getByText("Done")).toBeTruthy();
-    const names = screen.getAllByRole("article").map((a) => a.getAttribute("aria-label"));
-    expect(names.at(-1)).toBe("AI-3: Old work");
+    expect(within(stale).getByRole("button", { name: "AI-3: Old work" })).toBeTruthy();
+    expect(rows().at(-1)).toBe("AI-3: Old work");
+    expect(within(await card("AI-3: Old work")).getByText("Done")).toBeTruthy();
   });
 
   it("GivenAFlaggedTicketWithoutQuestions_WhenTheInboxOpens_ThenItsCardSaysItIsFlagged", async () => {
@@ -253,14 +288,79 @@ describe("inbox v2", () => {
 
     const ai = await screen.findByRole("region", { name: "AI: Andy Intelligence" });
     const ops = await screen.findByRole("region", { name: "OPS: Ops" });
-    expect(within(ai).getByRole("heading").textContent).toBe("AI: Andy Intelligence 3");
-    expect(within(ai).getAllByRole("article")).toHaveLength(2);
-    expect(within(ops).getByRole("article", { name: "OPS-1: Backups" })).toBeTruthy();
+    expect(within(ai).getByRole("heading").textContent).toBe("AI: Andy Intelligence 2");
+    expect(within(ai).getAllByRole("button")).toHaveLength(2);
+    expect(within(ops).getByRole("button", { name: "OPS-1: Backups" })).toBeTruthy();
 
-    await h.user.click(within(ops).getByRole("button", { name: /^Yes/ }));
+    const backups = await card("OPS-1: Backups");
+    await h.user.click(within(backups).getByRole("button", { name: /^Yes/ }));
     await waitFor(() => expect(screen.queryByRole("region", { name: "OPS: Ops" })).toBeNull());
-    expect(within(ai).getByRole("heading").textContent).toBe("AI: Andy Intelligence 3");
-    expect(screen.getByRole("link", { name: "Needs you 3" })).toBeTruthy();
+    expect(within(ai).getByRole("heading").textContent).toBe("AI: Andy Intelligence 2");
+    expect(screen.getByRole("link", { name: "Inbox 2 tickets waiting on you" })).toBeTruthy();
+  });
+
+  it("GivenATicketsOnlyQuestion_WhenItIsAnsweredAndItsRowAndDetailLeave_ThenTheToastStillShows", async () => {
+    const h = await twoTickets();
+    render(<Toaster />);
+    const panel = await card("AI-2: Panel");
+    await h.user.click(within(panel).getByRole("button", { name: "Andy" }));
+
+    await waitFor(() => expect(screen.queryByRole("button", { name: "AI-2: Panel" })).toBeNull());
+    expect(screen.queryByRole("article", { name: "AI-2: Panel" })).toBeNull();
+    expect(await screen.findByText("Answered AI-2: Panel")).toBeTruthy();
+  });
+
+  it("GivenAnAnswer_WhenTheApiTakesIt_ThenAToastConfirmsItWithoutUndo", async () => {
+    const h = await twoTickets();
+    render(<Toaster />);
+    await h.user.click(
+      within(question("Which layout?") as HTMLElement).getByRole("button", { name: "Columns" }),
+    );
+
+    // The API can't withdraw an answer, so the toast offers no Undo (AI-371).
+    const title = await screen.findByText("Answered AI-1: Board");
+    expect(title.parentElement?.textContent).toBe("Answered AI-1: BoardColumns");
+    expect(screen.queryByRole("button", { name: "Undo" })).toBeNull();
+  });
+
+  it("GivenAcceptAll_WhenItFinishes_ThenOneToastSaysHowManyWereAccepted", async () => {
+    const h = await twoTickets();
+    render(<Toaster />);
+    await h.user.click(
+      within(await card("AI-1: Board")).getByRole("button", { name: "Accept all suggested (2)" }),
+    );
+
+    expect(await screen.findByText("2 suggested answers accepted")).toBeTruthy();
+    expect(screen.getAllByText("Answered AI-1: Board")).toHaveLength(1);
+  });
+
+  it("GivenThePickedTicketsLastQuestionIsAnswered_WhenItLeaves_ThenTheNextRowIsPicked", async () => {
+    const h = await twoTickets();
+    await h.user.click(
+      within(await card("AI-1: Board")).getByRole("button", { name: "Accept all suggested (2)" }),
+    );
+
+    expect(await screen.findByRole("article", { name: "AI-2: Panel" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "AI-2: Panel" }).getAttribute("aria-current")).toBe(
+      "true",
+    );
+  });
+
+  it("GivenAPhone_WhenTheInboxOpens_ThenOneDecisionShowsWithItsPlaceInTheQueue", async () => {
+    emulateWidth(true);
+    const h = await twoTickets();
+
+    const board = await screen.findByRole("article", { name: "AI-1: Board" });
+    expect(screen.getByText("Ticket 1 of 2 · question 1 of 2")).toBeTruthy();
+    // One decision: the first question only, and no list of rows.
+    expect(within(board).getAllByRole("listitem", { name: /^Question:/ })).toHaveLength(1);
+    expect(rows()).toEqual([]);
+    expect(screen.getByRole("button", { name: "Previous" })).toHaveProperty("disabled", true);
+
+    await h.user.click(screen.getByRole("button", { name: "Next" }));
+    expect(await screen.findByRole("article", { name: "AI-2: Panel" })).toBeTruthy();
+    expect(screen.getByText("Ticket 2 of 2")).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Next" })).toHaveProperty("disabled", true);
   });
 
   describe("question format (AI-73)", () => {
@@ -298,8 +398,8 @@ describe("inbox v2", () => {
           .getAllByRole("listitem")
           .map((li) => li.textContent),
       ).toEqual([
-        "SubscriptionRecommendedNo new spend; shares the weekly quota.",
-        "API keyPay per call; needs a new secret.",
+        "1SubscriptionRecommendedNo new spend; shares the weekly quota.",
+        "2API keyPay per call; needs a new secret.",
       ]);
       expect(recommendation.textContent).toBe(
         "Recommended: Subscription. No new secret, no new bill.",

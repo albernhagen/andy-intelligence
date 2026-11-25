@@ -1,5 +1,8 @@
 import {
   ConfigChange,
+  InMemoryCodeEventLog,
+  InMemoryCodeHost,
+  InMemoryCodeHostConnectionStore,
   InMemoryConfigChangeStore,
   InMemoryMilestoneStore,
   InMemoryNightLaunchStore,
@@ -7,6 +10,7 @@ import {
   InMemoryRoutingConfigStore,
   InMemorySpendLedger,
   InMemoryRunStore,
+  InMemoryRunnerStore,
   InMemoryWorkTracker,
 } from "@andy/contracts";
 import type { NewTicket, Stage } from "@andy/contracts";
@@ -225,7 +229,47 @@ export async function createFakeApp() {
     releaseNotes: await seedReleaseNotes(),
     // AI-311: OPS's epic is in a parked milestone, so its board group and panel say so.
     milestones,
+    // AI-366: Settings → Local runners lists one runner away and one revoked.
+    runners: await seedRunners(),
+    // AI-366: Settings → GitHub, not connected yet, so it offers "Connect GitHub".
+    github: {
+      publicUrl: "http://127.0.0.1",
+      connections: new InMemoryCodeHostConnectionStore(),
+      events: new InMemoryCodeEventLog(),
+      codeHostFor: () => new InMemoryCodeHost(),
+      now: () => NOW,
+    },
   });
+}
+
+/**
+ * AI-366: two runners whose state never changes with the real clock: one active but away (last
+ * seen at the seed's clock, expiring far ahead) and one revoked.
+ */
+async function seedRunners() {
+  const store = new InMemoryRunnerStore(() => NOW);
+  const runner = (id: string, name: string, revokedAt: string | null) =>
+    store.create(
+      {
+        runner: {
+          id,
+          name,
+          projectIds: ["ai", "ops"],
+          runsAtOnce: 1,
+          createdAt: minutesAgo(60 * 24 * 7),
+          createdBy: "user:andy",
+          expiresAt: "2099-01-01T00:00:00.000Z",
+          revokedAt,
+          lastSeenAt: minutesAgo(5),
+        },
+        secretHash: `hash-${id}`,
+      },
+      2,
+      NOW,
+    );
+  await runner("runner-mini", "Mac mini", null);
+  await runner("runner-old", "Old laptop", minutesAgo(60 * 24));
+  return store;
 }
 
 /**

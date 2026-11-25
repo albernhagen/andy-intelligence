@@ -250,3 +250,29 @@ describe("applySections", () => {
 function gh(state) {
   return fakeGitHub(state).gh;
 }
+
+describe("protect-main kept kinds (ADR-0124, AI-217)", () => {
+  const rule = (type) => config.ruleset.rules.find((r) => r.type === type).parameters;
+
+  it("GivenTheRuleset_WhenPullRequestRuleRead_ThenCodeOwnerApprovalOnlyOnOwnedPaths", () => {
+    // Zero approvals, so the App still merges non-kept PRs. Code-owner review stays set, but
+    // GitHub did not enforce it on a PR authored by the only code owner (AI-380); the gate and
+    // merge_pr refuse kept paths in code. Requiring 1 approval would block every App merge.
+    expect(rule("pull_request")).toMatchObject({
+      require_code_owner_review: true,
+      required_approving_review_count: 0,
+    });
+  });
+
+  it("GivenTheRuleset_WhenBypassActorsRead_ThenOnlyTheAdminRoleOnPullRequests", () => {
+    // No Integration (GitHub App) bypass: the App never skips the ruleset's rules.
+    expect(config.ruleset.bypass_actors).toEqual([
+      { actor_id: 5, actor_type: "RepositoryRole", bypass_mode: "pull_request" },
+    ]);
+  });
+
+  it("GivenTheRuleset_WhenStatusChecksRead_ThenUpToDateBranchesNotRequired", () => {
+    // ADR-0144: GitHub does not require a PR to be up to date with main.
+    expect(rule("required_status_checks").strict_required_status_checks_policy).toBe(false);
+  });
+});

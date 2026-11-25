@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { screen, waitFor, within } from "@testing-library/react";
 import { renderApp } from "@/test/harness";
+import { pick } from "@/test/pick";
 
 /** The rail's Overrides section (AI-116: M4.5: Epic overrides cascade and overrides editor). */
 describe("overrides editor", () => {
@@ -27,8 +28,8 @@ describe("overrides editor", () => {
 
     const overrides = await screen.findByRole("region", { name: "Overrides" });
     await within(overrides).findByText(`From epic ${epic.key}`);
-    const tier = within(overrides).getByLabelText("Tier") as HTMLSelectElement;
-    expect(tier.selectedOptions[0]!.textContent).toBe(`frontier (from epic ${epic.key})`);
+    const tier = within(overrides).getByRole("combobox", { name: "Tier" });
+    expect(tier.textContent).toBe(`frontier (from epic ${epic.key})`);
     expect(within(overrides).getAllByText(`From epic ${epic.key}`)).toHaveLength(1);
     expect(within(overrides).getByText(`Worker: Andy (from epic ${epic.key})`)).toBeTruthy();
   });
@@ -39,7 +40,11 @@ describe("overrides editor", () => {
     const overrides = await screen.findByRole("region", { name: "Overrides" });
     await within(overrides).findByText(`From epic ${epic.key}`);
 
-    await harness.user.selectOptions(within(overrides).getByLabelText("Tier"), "cheap");
+    await pick(
+      harness.user,
+      within(overrides).getByRole("combobox", { name: "Tier" }),
+      "cheap (pinned)",
+    );
 
     await waitFor(async () => {
       expect((await harness.tracker.getTicket("ai", child.id))!.overrides.tier).toBe("cheap");
@@ -53,7 +58,11 @@ describe("overrides editor", () => {
     await harness.router.navigate({ to: `/p/ai/t/${epic.key}` });
     const overrides = await screen.findByRole("region", { name: "Overrides" });
 
-    await harness.user.selectOptions(within(overrides).getByLabelText("Autonomy"), "gated");
+    await pick(
+      harness.user,
+      within(overrides).getByRole("combobox", { name: "Autonomy" }),
+      "gated",
+    );
 
     await waitFor(async () => {
       expect((await harness.tracker.getTicket("ai", epic.id))!.overrides).toEqual({

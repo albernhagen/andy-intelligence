@@ -7,6 +7,10 @@
  *
  * Adding a route or a tool? Add it to its action here, or add the action. Only one side on
  * purpose? Say why in `oneSide`. Not built yet? Name the open ticket in `pending`.
+ *
+ * Which actions need both sides (ADR-0148): those Andy does from Claude (tickets, questions,
+ * plans, milestones, runs). A web-only action must be on `WEB_ONLY_ALLOWED` (settings, or a flow
+ * that needs a browser or returns a secret), and its routes may not touch those areas.
  */
 
 export interface ParityEntry {
@@ -51,6 +55,11 @@ export const PARITY: readonly ParityEntry[] = [
     routes: [`POST ${P}/brief`],
     tools: ["submit_brief"],
     note: "A Claude session writes the brief (onboard.md); the web shows it.",
+  },
+  {
+    action: "Project brief: read its state for the setup path (AI-373)",
+    routes: [`GET ${P}/brief`],
+    tools: ["brief_status"],
   },
   {
     action: "Ticket: create, list, read, edit, parent, comment, ask a question",
@@ -289,6 +298,12 @@ export const PARITY: readonly ParityEntry[] = [
     tools: ["list_runners"],
     note: "One service (`RunnerService.list`), never a secret; listing over MCP is ADR-0135. Registering stays web only (see Register a runner).",
   },
+  {
+    action: "Revoke a runner",
+    routes: ["POST /api/runners/:runnerId/revoke"],
+    tools: ["revoke_runner"],
+    note: "One service (`RunnerService.revoke`), owner only (`revoke_runner`), same log; revoking over MCP is ADR-0143.",
+  },
   // ── One side on purpose ─────────────────────────────────────────────────────
   {
     action: "Register a runner",
@@ -308,18 +323,55 @@ export const PARITY: readonly ParityEntry[] = [
     tools: [],
     oneSide: "GitHub's manifest flow needs a browser.",
   },
-  // ── Open gaps, each with its ticket ─────────────────────────────────────────
   {
-    action: "Revoke a runner",
-    routes: ["POST /api/runners/:runnerId/revoke"],
-    tools: [],
+    action: "Merge a session PR by the merge mode",
+    routes: [],
+    tools: ["merge_pr"],
     oneSide:
-      "Web only: ADR-0135 allows listing runners over MCP, not revoking; AI-351 decides that.",
-    pending: { ticket: "AI-351", missing: "revoke_runner (owner only), if Andy allows it" },
+      "For coordinator sessions (AI-220, ADR-0124); Andy merges in GitHub, which shows the same PR.",
   },
+  // ── Open gaps, each with its ticket ─────────────────────────────────────────
   {
     action: "The board, every stage",
     routes: [`GET ${P}/board`],
     tools: ["board"],
   },
 ];
+
+/**
+ * Web-only actions allowed without an MCP tool (ADR-0148): settings may be web-only for new work,
+ * plus flows that need a browser or return a secret. Existing MCP tools stay. Adding a web-only
+ * action means adding its name here; a ticket, question, plan, milestone or run action can't be.
+ */
+export const WEB_ONLY_ALLOWED: ReadonlySet<string> = new Set([
+  "Register a runner",
+  "OAuth consent",
+  "GitHub App setup",
+]);
+
+/**
+ * Routes in the areas Andy works in from Claude; an action touching one always needs a tool.
+ * Matched by path segment, singular or plural, and any `plan-…` segment (`plan-project`). Best
+ * effort: the allow-list stays the main control, and review checks a name added to it.
+ */
+export const CLAUDE_AREA_ROUTE =
+  /\/(tickets?|questions?|needs-you|plans?|plan-[a-z-]+|project-plans|milestones?|runs?|agent-tasks?|epics?|ideate|night|roadmap)(\/|$)/;
+
+/** What breaks the ADR-0148 rule: web-only actions off the allow-list or in a Claude area. */
+export function webOnlyViolations(
+  entries: readonly ParityEntry[],
+  allowed: ReadonlySet<string> = WEB_ONLY_ALLOWED,
+): string[] {
+  const violations: string[] = [];
+  for (const e of entries) {
+    if (e.routes.length === 0 || e.tools.length > 0) continue;
+    if (!allowed.has(e.action)) {
+      violations.push(`${e.action}: web only but not on WEB_ONLY_ALLOWED`);
+    }
+    const inArea = e.routes.filter((r) => CLAUDE_AREA_ROUTE.test(r.split(" ")[1] ?? ""));
+    if (inArea.length > 0) {
+      violations.push(`${e.action}: needs an MCP tool (${inArea.join(", ")})`);
+    }
+  }
+  return violations;
+}

@@ -4,20 +4,24 @@ What is built on `main` now, moved from `README.md` so its "How it works today" 
 
 **Working:**
 
-- tickets on a board (Backlog split into Up next and Ideas; only Up next gets refined; cards show size, risk and confidence; Ready sorts by them; MCP `list_ready` filters them; MCP `board` reads it) with a Needs-you inbox, answerable in the UI or with the `/inbox` skill in Claude Code; a Claude connector (MCP) with every ticket decision the UI offers; GitHub PRs that move tickets; Refine and Build agent tasks on GitHub Actions; PR checks and review agents; the merge gate (an agent PR merges itself when checks and reviews pass, no veto applies and `autoMerge` covers its size; `AI` stays `none`); Dependabot; the project baseline (a registered repo gets its baseline PR from the App, ADR-0142); agent evals (runbook `agent-evals.md`); cost guardrails.
+- tickets on a board (Backlog split into Up next and Ideas; only Up next gets refined; cards show size, risk and confidence; Ready sorts by them; MCP `list_ready` filters them; MCP `board` reads it) with a Needs-you inbox, answerable in the UI or with the `/inbox` skill in Claude Code; product discovery before the brief with the `/discover` skill (ADR-0145); a Claude connector (MCP) with every ticket decision the UI offers; GitHub PRs that move tickets; Refine and Build agent tasks on GitHub Actions; PR checks and review agents; the merge gate (an agent PR merges itself when checks and reviews pass, no veto applies and `autoMerge` covers its size; `AI` stays `none`); Dependabot; the project baseline (a registered repo gets its baseline PR from the App, ADR-0142); agent evals (runbook `agent-evals.md`); cost guardrails.
 - Each feature: [`docs/features/`](features/).
 - Each project has a default worker (agent, Andy or ask) and executor (GitHub Actions or a local runner); a ticket can override both; only an agent's tickets build.
-- Settings → Local runners mints secrets for `apps/local-runner` (refine and plan on Andy's Mac, ADR-0089).
+- Settings → Local runners mints secrets for `apps/local-runner` (refine and plan on Andy's Mac, ADR-0089); MCP lists runners and revokes one (owner only, ADR-0143), never mints.
 - Project settings (`/p/<project>/settings`): switches, setup checklist, changes with Revert.
 - Pages poll: 5 s in use, 60 s idle, none hidden (ADR-0091).
-- Keyboard: `?` lists the shortcuts (AI-338).
-- A header gauge and banner show Claude quota from task reports; on a phone the header shows the fullest window and a one-tap **Pause**/**Resume** (AI-176).
+- Keyboard: `?` lists the shortcuts (AI-338); Cmd+K (Ctrl+K) opens a command palette that finds a ticket by key or title and runs shortcut commands (AI-370).
+- Look: design direction A tokens (indigo accent, surfaces, Inter and Geist Mono served by the app); theme switch (system, light, dark) in the Settings menu (ADR-0151).
+- Sidebar meters and a banner show Claude quota from task reports (one "Quota unknown" marker with no reading, AI-370); on a phone the header shows the fullest window and a one-tap **Pause**/**Resume** (AI-176).
 - Ticket panel: next move first; worker, executor, routing under How it runs (AI-336).
 - Agent task cost: ticket panel, Activity (links each task's page), MCP `status`.
-- Epics: child tickets, cost; map: MCP `milestone_map`; Roadmap (header, MCP `roadmap`): milestones and their epics; epics and the board's epic groups show their milestone's status, which Andy sets there or on the roadmap (AI-311).
+- Epics: child tickets, cost; map: MCP `milestone_map`; Roadmap (header, MCP `roadmap`): milestones and their epics; epics and the board's epic groups show their milestone's status, which Andy sets there or on the roadmap (AI-311). A not-reviewed milestone shows its case (who it serves, expected return, cheapest test) and effort (its tickets by size) beside that control; plan-project writes the cases (ADR-0149).
 - Dispatch starts a ticket only when its milestone is approved or it has none (AI-306).
 - A daily digest (MCP `digest`) leads with a model-written summary of yesterday (Mountain time; one agent task a day, AI-323), then lists the last 24 hours: exceptions, merges and cost, work in progress, totals. What's new shows that summary, then its exceptions, with a 24 hours window (AI-341).
 - What's new (header, MCP `whats_new`): milestones, the merge mode, merged PRs' release notes and who merged each (the mode or a person, AI-218).
+- Coordinator sessions merge only through MCP `merge_pr` (AI-220): the merge mode decides, the App merges at the judged head, else it answers `wait` with every reason.
+- Epic merge mode (AI-216): a child ticket builds on and merges into `epic/<KEY>`; when the epic's last child ticket is Done one PR to `main` opens for Andy.
+- Merge queue per repo (AI-110): the gate's and `merge_pr`'s merges go one at a time per repo, oldest clean first; the next PR is synced with `main` and re-checked before it merges; a failed sync goes to Needs-you.
 - Needs-you lists "Waiting for your merge": clean PRs the merge mode leaves for Andy, with why and the release note (AI-218).
 - Dashboards chart delivery and cost per week (AI-117), and a project's DORA metrics over 30 or 90 days from its production deployment records (AI-200; lead time not measured until commit times are recorded).
 - Needs-you email (AI-77): each ticket that needs Andy, batched per 10 minutes, 20 a day; off until configured (runbook `email-notifications.md`).
@@ -39,4 +43,5 @@ What is built on `main` now, moved from `README.md` so its "How it works today" 
 
 - Andy starts plan-project or ideate as a read-only agent task (`POST …/plan/agent-task`, `…/ideate/agent-task`); its result is stored as a submitted one, so a plan waits for approval and an idea becomes an epic with a spec PR or a question.
 - Board → **Ideate** starts ideate from the web (AI-299).
+- A new project opens on its setup path (`/p/<project>/setup`, AI-373): write the brief in the UI (as `submit_brief`), start the plan agent, approve or park each milestone, then baseline and Builds; the board shows the next step until done.
 - MCP `start_plan_project` and `start_ideate` start them, as the routes do; the Project plan card has a **Start plan-project task** button (AI-320).

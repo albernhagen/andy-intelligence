@@ -1,5 +1,32 @@
-# Requests Andy's review on every PR, Dependabot's included, so each one notifies him (ADR-0042).
-# Review is not required by the ruleset; GitHub never requests review from a PR's own author.
-# Add lines below for always-gated paths (auth, payments, migrations, infra); the review gate
-# treats every path listed after `*` as protected (ARCHITECTURE §4.5).
-* @albernhagen
+# Kept kinds (ADR-0124 in andy-intelligence): the paths only Andy merges, in every merge mode.
+# The control plane's gate and MCP merge_pr refuse them in code. The baseline's `protect-main`
+# ruleset asks for a code owner's review on them; GitHub does not enforce that when the only
+# code owner authors the PR (AI-380, onboard-a-repo.md §1b in andy-intelligence). Every other
+# PR needs no approval.
+# The control plane's list (KEPT_PATHS, packages/domain/src/merge-paths.ts) is the source; paths
+# that don't exist in this repo match nothing. Build agents can't edit a path listed here, and
+# the gate never auto-merges one. No `*` line: it would require approval on every PR.
+# Add lines for paths this project always wants Andy to merge (auth, payments, migrations).
+
+# Who merges.
+/docs/architecture/adr/0124-merge-modes.md @albernhagen
+/docs/architecture/adr/0134-*.md @albernhagen
+/platform/procedures/coordinate.md @albernhagen
+/docs/runbooks/coordinating-sessions.md @albernhagen
+/AGENTS.md @albernhagen
+/CLAUDE.md @albernhagen
+/packages/domain/src/merge-* @albernhagen
+
+# What judges a PR.
+**/.github/** @albernhagen
+**/CODEOWNERS @albernhagen
+/platform/actions/** @albernhagen
+/platform/baseline/** @albernhagen
+/platform/procedures/** @albernhagen
+/platform/evals/** @albernhagen
+/scripts/review-* @albernhagen
+/packages/domain/src/gate* @albernhagen
+
+# Needs Andy's hands.
+/infra/** @albernhagen
+/.terraform-version @albernhagen

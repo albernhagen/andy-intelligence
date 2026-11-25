@@ -1,6 +1,6 @@
 ---
 title: UI design system, design skills (Hallmark first), dashboards in M5
-status: accepted, amended by 0059 (timing of design.md, tokens and screenshot checks) and 0132 (design file per project now; design skills Later)
+status: accepted, amended by 0059 (timing of design.md, tokens and screenshot checks) and 0132 (design file per project now; design skills Later); tokens superseded by 0151 (design direction A)
 date: 2026-11-03
 ---
 

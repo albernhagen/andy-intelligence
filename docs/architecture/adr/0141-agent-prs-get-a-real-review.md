@@ -1,6 +1,6 @@
 ---
 title: The review agents run on agent PRs the App pushes
-status: proposed (AI-348; Andy decides at review)
+status: accepted (Andy, 2026-11-25)
 date: 2026-11-21
 amends: 0140 (agent PRs failed closed)
 ---

@@ -48,6 +48,61 @@ Then tag the baseline version that repos will pin:
 git tag v1.0.0 origin/main && git push origin v1.0.0
 ```
 
+### 1a. After a PR changes `github/ruleset-main.json` merges
+
+Apply only the ruleset to andy-intelligence, then check it took effect (e.g. AI-352 adds `sandbox-self-test`, `agent-evals`, `agent-evals-plumbing`):
+
+```sh
+git switch main && git pull
+node platform/baseline/baseline.mjs apply albernhagen/andy-intelligence --dry-run   # drift only in ruleset required checks; anything else: stop, ask
+node platform/baseline/baseline.mjs apply albernhagen/andy-intelligence
+node platform/baseline/baseline.mjs check albernhagen/andy-intelligence --only ruleset   # exit 0
+```
+
+Then open any PR: the new checks show as **Required** in its checks list.
+
+### 1b. Code-owner review on kept paths (AI-217, once per repo; not enforced: AI-380)
+
+`protect-main` gets `require_code_owner_review: true` (with `required_approving_review_count: 0`) and one bypass actor, the repository-admin role (you), on pull requests only. The GitHub App is not a bypass actor. `.github/CODEOWNERS` lists only the kept paths (ADR-0124).
+
+**GitHub does not enforce it on a repo where you are the only code owner and author every PR (AI-380).** PR #409 changed `platform/actions/**`, showed no review requirement (`reviewDecision` empty, merge state `CLEAN`) and merged with no approval; the rule-suites API logged `pass`, not a bypass. Your sessions open PRs as `albernhagen`. GitHub's docs don't say how they treat an owner-authored PR or code-owner review at 0 approvals. Requiring 1 approval would require it on every PR, so the App could merge none.
+
+**What enforces kept paths:** `mergeVerdict` in the gate and MCP `merge_pr` refuse any PR touching `KEPT_PATHS` (`packages/domain/src/merge-paths.ts`). Those are the App's only merges into the default branch (story PRs merged into an epic branch are judged again as the epic PR). Dependabot auto-merge turns on GitHub auto-merge with the job token for npm updates only (`scripts/dependabot-merge.mjs`), which never touch a kept path. Never merge one with another token (R23).
+
+| PR                         | Who can merge it                                                                                    |
+| -------------------------- | --------------------------------------------------------------------------------------------------- |
+| Touches no CODEOWNERS path | The App (gate, `merge_pr`) once checks pass; no approval needed                                     |
+| Touches a kept path        | You, by hand. The gate and `merge_pr` refuse it; GitHub asks for no review when you authored the PR |
+
+```sh
+git switch main && git pull
+node platform/baseline/baseline.mjs apply albernhagen/andy-intelligence --dry-run
+```
+
+Expected: every section `ok` but the ruleset, then:
+
+```text
+ruleset: drift
+  bypass_actors: want [{"actor_id":5,"actor_type":"RepositoryRole","bypass_mode":"pull_request"}], have []
+  rules[3].parameters.require_code_owner_review: want true, have false
+dry run: nothing changed
+```
+
+Anything else in the diff: stop, ask. Then:
+
+```sh
+node platform/baseline/baseline.mjs apply albernhagen/andy-intelligence
+node platform/baseline/baseline.mjs check albernhagen/andy-intelligence --only ruleset   # ruleset: ok, exit 0
+gh api repos/albernhagen/andy-intelligence/rulesets/26001673 --jq '{bypass_actors, codeowners: (.rules[] | select(.type=="pull_request") | .parameters.require_code_owner_review), strict: (.rules[] | select(.type=="required_status_checks") | .parameters.strict_required_status_checks_policy)}'
+```
+
+The last line shows `bypass_actors` with only `{"actor_id":5,"actor_type":"RepositoryRole","bypass_mode":"pull_request"}` (no `Integration`), `"codeowners": true`, `"strict": false` (ADR-0144). Then check what enforces kept paths, once a PR's checks are green:
+
+- **The real control:** MCP `merge_pr` on a PR touching a kept path refuses it with reason `kept_path` (`merge-verdict.ts`), and the gate leaves it open.
+- **GitHub, on a PR you authored:** `gh pr view <n> --json reviewDecision,mergeStateStatus` shows an empty `reviewDecision` (expected: not enforced, AI-380).
+- **Cause check, no test PR needed:** on the next PR a non-owner opens on a kept path (a Dependabot GitHub Actions bump touches `.github/**`), run `gh pr view <n> --json author,reviewDecision,mergeStateStatus`. `REVIEW_REQUIRED`: GitHub enforces for non-owner authors, and the gap is only owner-authored PRs. Empty: code-owner review at 0 approvals does nothing. Add the answer to the AI-380 line under Pending decisions in `docs/build-log.md`.
+- A PR touching no kept path shows no review requirement and merges by `merge_pr` as before.
+
 ## 2. Registering a repo on a project (AI-113)
 
 Adding a repo to a project (UI or MCP `create_project`) makes the App open `baseline/<sha7>` with the files the repo is missing. Its description is the report (ADR-0142):
@@ -136,7 +191,7 @@ Check on the next Dependabot PR:
 | --------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | npm patch, or minor of a 1.0+ package                     | `dependabot-auto-merge` job enables auto-merge; GitHub squash-merges after the required checks pass; `Deploy control plane` starts no deploy job for that merge (bot actor) |
 | Major, 0.x minor, GitHub Actions, or a Terraform provider | Job logs "… merged by hand"; the PR waits for you                                                                                                                           |
-| Any                                                       | You get a review request (CODEOWNERS). No request? GitHub → Settings → Notifications: "Participating, @mentions and custom" on                                              |
+| Any                                                       | No review request: CODEOWNERS lists only the kept paths (§1b). A GitHub Actions bump touches `.github/**`: run the §1b cause check on it                                    |
 
 Your next merge deploys the update. If `Deploy control plane` did deploy the bot's merge, note it in the build log: the `deploy.yml` guard failed.
 

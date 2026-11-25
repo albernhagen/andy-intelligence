@@ -9,8 +9,8 @@ test.use({ viewport: { width: 390, height: 844 }, hasTouch: true });
 
 test("phone shell: inbox", async ({ page }) => {
   await page.goto("/p/ai/inbox");
-  await expect(page.getByText("Should Esc close the panel?").first()).toBeVisible();
-  await expect(page.getByRole("link", { name: "Needs you 6" })).toBeVisible();
+  await expect(page.getByText("Dropping a card opens the ticket").first()).toBeVisible();
+  await expect(page.getByRole("link", { name: "Needs you 5" })).toBeVisible();
   await expect(page.getByRole("navigation", { name: "Main" })).toBeVisible();
   const width = await page.evaluate(() => document.querySelector("header")!.scrollWidth);
   expect(width).toBeLessThanOrEqual(390);
@@ -18,11 +18,19 @@ test("phone shell: inbox", async ({ page }) => {
   await expect(page).toHaveScreenshot("phone-shell-inbox.png");
 });
 
+test("phone shell: inbox, dark", async ({ page }) => {
+  await page.emulateMedia({ colorScheme: "dark" });
+  await page.goto("/p/ai/inbox");
+  await expect(page.getByText("Dropping a card opens the ticket").first()).toBeVisible();
+  await expect(page.getByRole("link", { name: "Needs you 5" })).toBeVisible();
+  await expect(page).toHaveScreenshot("phone-shell-inbox-dark.png");
+});
+
 test("phone shell: More menu open on the board", async ({ page }) => {
   await page.clock.setFixedTime(new Date("2026-11-04T15:00:00.000Z"));
   await page.goto("/p/ai");
   await expect(page.getByText("Story side panel").first()).toBeVisible();
-  await expect(page.getByRole("link", { name: "Needs you 6" })).toBeVisible();
+  await expect(page.getByRole("link", { name: "Needs you 5" })).toBeVisible();
   await page.getByRole("button", { name: "More" }).click();
   await expect(page.getByRole("menuitem", { name: "Project settings" })).toBeVisible();
   await expect(page.getByRole("menuitem", { name: "Sign out" })).toBeVisible();

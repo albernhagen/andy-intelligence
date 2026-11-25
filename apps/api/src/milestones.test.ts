@@ -291,3 +291,121 @@ describe("milestones over REST and MCP (AI-304 parity)", () => {
     expect(after?.milestoneId).toBeNull();
   });
 });
+
+describe("milestone case from plan to change log (ADR-0149, AI-365)", () => {
+  beforeEach(() => {
+    vi.spyOn(console, "log").mockImplementation(() => {});
+  });
+
+  const CASE = {
+    serves: "Andy, deciding what to build next",
+    expectedReturn: "He approves or parks a milestone in a minute.",
+    cheapestTest: "Write one case by hand and ask him.",
+  };
+  const plan = {
+    summary: "Two milestones.",
+    milestones: [
+      {
+        title: "Walking skeleton",
+        goal: "Andy can open the app.",
+        doneWhen: ["The URL loads"],
+        slices: ["Repo"],
+        case: CASE,
+      },
+      {
+        title: "Log a run",
+        goal: "Andy can log a run.",
+        doneWhen: ["A run shows"],
+        slices: ["Form"],
+      },
+    ],
+  };
+
+  it("GivenAPlanWithCases_WhenApprovedReadAndEdited_ThenTheCaseShowsOnTheRoadmapAndEachEditIsLogged", async () => {
+    const { rest, mcp, tracker } = await setup();
+    expect((await mcp("submit_project_plan", { project: "AI", plan })).isError).toBe(false);
+    expect((await mcp("approve_project_plan", { project: "AI" })).isError).toBe(false);
+    const epics = await tracker.listTickets("ai");
+    await tracker.createTicket(
+      "ai",
+      { title: "Repo and CI", type: "chore", parentId: epics[0]!.id, size: "M" },
+      "andy",
+    );
+
+    const roadmap = (await rest("GET", "/api/projects/ai/roadmap")).json;
+    const [first, second] = roadmap.milestones;
+    expect(first).toMatchObject({
+      name: "M1: Walking skeleton",
+      status: "approved",
+      case: CASE,
+      effort: { tickets: 1, sizes: { S: 0, M: 1, L: 0, unsized: 0 } },
+    });
+    // The no-case branch: shown as null.
+    expect(second).toMatchObject({ name: "M2: Log a run", case: null, effort: { tickets: 0 } });
+    expect((await mcp("roadmap", { project: "AI" })).data.milestones).toEqual(roadmap.milestones);
+
+    const edited = await mcp("edit_milestone", {
+      project: "AI",
+      milestone: second.id,
+      case: { ...CASE, serves: "Runners" },
+      reason: "wrote it",
+    });
+    expect(edited.isError).toBe(false);
+    expect(edited.data.case.serves).toBe("Runners");
+    const viaRest = await rest("PATCH", `/api/projects/ai/milestones/${first.id}`, {
+      case: null,
+    });
+    expect(viaRest.status).toBe(200);
+    expect(viaRest.json.case).toBeUndefined();
+
+    const log = (await rest("GET", "/api/projects/ai/config-changes")).json.filter(
+      (c: { entity: string; diff: object }) => c.entity === "milestone" && "case" in c.diff,
+    );
+    expect(log.map((c: { entityId: string; diff: unknown }) => [c.entityId, c.diff])).toEqual(
+      expect.arrayContaining([
+        [second.id, { case: { from: null, to: { ...CASE, serves: "Runners" } } }],
+        [first.id, { case: { from: CASE, to: null } }],
+      ]),
+    );
+    // A milestone added later starts not reviewed and can be approved with no case.
+    const later = await mcp("create_milestone", { project: "AI", name: "M3", outcome: "Later" });
+    expect(later.data).toMatchObject({ status: "not_reviewed" });
+    const approved = await mcp("set_milestone_status", {
+      project: "AI",
+      milestone: later.data.id,
+      status: "approved",
+    });
+    expect(approved.data).toMatchObject({ status: "approved" });
+    expect(approved.data.case).toBeUndefined();
+  });
+
+  it("GivenACaseMissingALine_WhenSentOverEach_ThenBothRefuseAndNothingIsLogged", async () => {
+    const { rest, mcp } = await setup();
+    const m = (await rest("POST", "/api/projects/ai/milestones", { name: "M4", outcome: "x" }))
+      .json;
+    const bad = { serves: "Andy", expectedReturn: "x" };
+    const viaRest = await rest("PATCH", `/api/projects/ai/milestones/${m.id}`, { case: bad });
+    const viaMcp = await mcp("edit_milestone", { project: "AI", milestone: m.id, case: bad });
+    expect(viaRest.status).toBe(400);
+    expect(viaMcp.isError).toBe(true);
+    const log = (await rest("GET", "/api/projects/ai/config-changes")).json;
+    expect(log.filter((c: { diff: object }) => "case" in c.diff)).toEqual([]);
+  });
+
+  it("GivenACaseOnCreate_WhenCreatedOverEach_ThenBothStoreIt", async () => {
+    const { rest, mcp } = await setup();
+    const viaRest = await rest("POST", "/api/projects/ai/milestones", {
+      name: "M4",
+      outcome: "x",
+      case: CASE,
+    });
+    const viaMcp = await mcp("create_milestone", {
+      project: "AI",
+      name: "M5",
+      outcome: "y",
+      case: CASE,
+    });
+    expect(viaRest.json.case).toEqual(CASE);
+    expect(viaMcp.data.case).toEqual(CASE);
+  });
+});

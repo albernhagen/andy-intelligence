@@ -36,18 +36,16 @@ export function PullRequestLink({
 }) {
   const pr = waitingPullRequest(events, repos);
   if (!pr) return null;
+  // AI-375: a button in the panel's action row; the header says the PR waits for Andy.
   return (
-    <p className="flex items-center gap-2 text-sm">
-      <span className="text-muted-foreground">PR #{pr.number} waits for you</span>
-      <a
-        href={pr.url}
-        target="_blank"
-        rel="noopener noreferrer"
-        className="ml-auto inline-flex min-h-11 items-center gap-1 rounded-md border border-border px-3 font-medium hover:bg-muted sm:min-h-8"
-      >
-        Open in GitHub
-        <ExternalLink aria-hidden className="size-4" />
-      </a>
-    </p>
+    <a
+      href={pr.url}
+      target="_blank"
+      rel="noopener noreferrer"
+      className="inline-flex min-h-11 items-center gap-1 rounded-md border border-border bg-raised px-3 text-sm font-medium hover:bg-muted max-sm:w-full max-sm:justify-center sm:min-h-8"
+    >
+      Open PR #{pr.number}
+      <ExternalLink aria-hidden className="size-3.5" />
+    </a>
   );
 }

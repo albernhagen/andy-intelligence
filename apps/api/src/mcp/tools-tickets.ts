@@ -11,6 +11,7 @@ import {
 import {
   DomainError,
   inboxCards,
+  waitingCounts,
   readEpicRollup,
   statusLineTickets,
   ticketMilestoneHold,
@@ -184,7 +185,14 @@ export async function listNeedsMe(deps: ToolDeps) {
       };
     }),
   );
+  const counts = waitingCounts(inbox);
   return {
+    // The same numbers as the header and picker (AI-347).
+    counts: {
+      tickets: counts.total,
+      stale: counts.stale,
+      byProject: Object.fromEntries(counts.byProject),
+    },
     cards,
     questions: cards.flatMap((c) => c.questions),
     tickets: await withWorkers(deps, inbox.tickets),

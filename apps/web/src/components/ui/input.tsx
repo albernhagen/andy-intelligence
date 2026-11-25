@@ -4,8 +4,11 @@ import { cn } from "@/lib/utils";
 const field =
   "w-full rounded-md border border-border bg-background px-3 py-1.5 text-sm placeholder:text-muted-foreground focus-visible:outline-2 focus-visible:outline-primary disabled:opacity-50";
 
+/** Phones get a 44 px minimum height and 16 px text, so iOS doesn't zoom (design.md, AI-379). */
 export function Input({ className, ...props }: React.ComponentProps<"input">) {
-  return <input className={cn(field, "h-9", className)} {...props} />;
+  return (
+    <input className={cn(field, "h-9 max-sm:min-h-11 max-sm:text-base", className)} {...props} />
+  );
 }
 
 export function Textarea({ className, ...props }: React.ComponentProps<"textarea">) {

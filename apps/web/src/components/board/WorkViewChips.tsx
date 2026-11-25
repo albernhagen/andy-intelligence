@@ -1,33 +1,61 @@
-import { WORK_VIEWS, WORK_VIEW_LABELS, type WorkView } from "@andy/domain";
-import { Select } from "@/components/ui/input";
+import { useId } from "react";
+import { WORK_VIEWS, WORK_VIEW_LABELS, type NeedsYouParts, type WorkView } from "@andy/domain";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Segmented } from "@/components/ui/segmented";
 
 type Chip = { id: WorkView | null; label: string; count: number };
 
-function chipList(counts: Record<WorkView, number>, total: number | null): Chip[] {
+function chipList(
+  counts: Record<WorkView, number>,
+  needsYou: NeedsYouParts,
+  total: number | null,
+): Chip[] {
   return [
     ...(total === null ? [] : [{ id: null, label: "All", count: total }]),
-    ...WORK_VIEWS.map((id) => ({ id, label: WORK_VIEW_LABELS[id], count: counts[id] })),
+    ...WORK_VIEWS.map((id) => ({
+      id,
+      label: WORK_VIEW_LABELS[id],
+      count: id === "needs-me" ? needsYou.tickets : counts[id],
+    })),
   ];
 }
 
-const countText = ({ id, count }: Chip) =>
-  id === "needs-me" ? `· ${count} ticket${count === 1 ? "" : "s"}` : String(count);
+/** "· 3 tickets · 1 stale · 2 to pick a worker": each extra part only when it is not 0. */
+export function needsYouText({ tickets, stale, toPickWorker }: NeedsYouParts): string {
+  return [
+    `· ${tickets} ticket${tickets === 1 ? "" : "s"}`,
+    stale ? ` · ${stale} stale` : "",
+    toPickWorker ? ` · ${toPickWorker} to pick a worker` : "",
+  ].join("");
+}
+
+const countText = (chip: Chip, needsYou: NeedsYouParts) =>
+  chip.id === "needs-me" ? needsYouText(needsYou) : String(chip.count);
 
 /**
  * Work view chips (AI-187, ADR-0108): All plus five fixed views, each with its count of open
  * tickets. One is active at a time; the page keeps the choice in the URL. The Work list (AI-198)
- * always shows one view, so it leaves All out (`total` null). Needs you names its unit, "· 4 tickets",
- * because the header's "Needs you N" counts things to answer, not tickets (AI-326, design.md).
+ * always shows one view, so it leaves All out (`total` null). Needs you shows the header's number
+ * of tickets for the same scope and names the parts it holds or adds: Done tickets with an open
+ * question ("· 1 stale", counted but not listed) and tickets only waiting for a worker
+ * ("· 2 to pick a worker", listed but not counted) (AI-347, design.md).
  */
 export function WorkViewChips({
   view,
   counts,
+  needsYou,
   total,
   onChange,
 }: {
   view: WorkView | null;
   counts: Record<WorkView, number>;
+  needsYou: NeedsYouParts;
   /** Tickets "All" shows; null leaves the All chip out. */
   total: number | null;
   onChange: (view: WorkView | null) => void;
@@ -36,11 +64,11 @@ export function WorkViewChips({
     <Segmented
       label="Work view"
       value={view}
-      options={chipList(counts, total).map((chip) => ({
+      options={chipList(counts, needsYou, total).map((chip) => ({
         value: chip.id,
         label: (
           <>
-            {chip.label} <span className="tabular-nums">{countText(chip)}</span>
+            {chip.label} <span className="tabular-nums">{countText(chip, needsYou)}</span>
           </>
         ),
       }))}
@@ -49,32 +77,43 @@ export function WorkViewChips({
   );
 }
 
+/** Radix Select can't hold an empty value; this one stands for All. */
+const ALL = "all";
+
 /** The same choice as one menu, "View: All 11 ▾", for the phone board (AI-337). */
 export function WorkViewMenu({
   view,
   counts,
+  needsYou,
   total,
   onChange,
 }: {
   view: WorkView | null;
   counts: Record<WorkView, number>;
+  needsYou: NeedsYouParts;
   total: number;
   onChange: (view: WorkView | null) => void;
 }) {
+  const id = useId();
   return (
-    <label className="flex items-center gap-2 text-sm">
-      View
-      <Select
-        className="h-11 w-auto text-base"
-        value={view ?? ""}
-        onChange={(e) => onChange((e.target.value || null) as WorkView | null)}
-      >
-        {chipList(counts, total).map((chip) => (
-          <option key={chip.id ?? "all"} value={chip.id ?? ""}>
-            {chip.label} {countText(chip)}
-          </option>
+    <Select value={view ?? ALL} onValueChange={(v) => onChange(v === ALL ? null : (v as WorkView))}>
+      {/* A combobox takes no name from its content: name it by both visible parts, so a screen
+          reader hears the current view and its count ("View All 11"). */}
+      <SelectTrigger aria-labelledby={`${id}-label ${id}-value`} className="w-auto">
+        <span id={`${id}-label`} className="text-muted-foreground">
+          View
+        </span>
+        <span id={`${id}-value`}>
+          <SelectValue />
+        </span>
+      </SelectTrigger>
+      <SelectContent>
+        {chipList(counts, needsYou, total).map((chip) => (
+          <SelectItem key={chip.id ?? ALL} value={chip.id ?? ALL}>
+            {chip.label} {countText(chip, needsYou)}
+          </SelectItem>
         ))}
-      </Select>
-    </label>
+      </SelectContent>
+    </Select>
   );
 }

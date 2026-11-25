@@ -33,6 +33,7 @@ function decode(segment: string): string {
 export function sectionFromPath(pathname: string): Section | null {
   if (/^\/p\/[^/]+\/settings\/?$/.test(pathname)) return null;
   if (/^\/p\/[^/]+\/whats-new\/?$/.test(pathname)) return null; // So is What's new (AI-159).
+  if (/^\/p\/[^/]+\/setup\/?$/.test(pathname)) return null; // A new project's setup (AI-373).
   if (/^\/(all|p\/[^/]+)\/inbox\/?$/.test(pathname)) return "inbox";
   if (/^\/(all|p\/[^/]+)\/dashboards\/?$/.test(pathname)) return "dashboards";
   if (/^\/(all|p\/[^/]+)\/work\/?$/.test(pathname)) return "work"; // AI-198

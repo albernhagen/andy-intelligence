@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Link, useParams } from "@tanstack/react-router";
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   DndContext,
   KeyboardSensor,
@@ -17,12 +17,20 @@ import {
   verticalListSortingStrategy,
 } from "@dnd-kit/sortable";
 import { ArrowDown, ArrowUp, ChevronDown, ChevronRight, GripVertical } from "lucide-react";
+import { MilestoneStatus } from "@andy/contracts";
 import { milestoneReorder } from "@andy/domain";
-import { MILESTONE_STATUS, MilestoneStatusSelect } from "@/components/MilestoneControls";
-import { Loading, QueryError } from "@/components/Status";
+import { MilestoneCaseView } from "@/components/MilestoneCase";
+import { MILESTONE_STATUS } from "@/components/MilestoneControls";
+import { PageHeader } from "@/components/PageHeader";
+import { ListSkeleton } from "@/components/PageSkeleton";
+import { QueryError } from "@/components/Status";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { EmptyState } from "@/components/ui/empty-state";
+import { Segmented } from "@/components/ui/segmented";
 import { unwrap, useApi } from "@/lib/api";
-import { useReorderMilestones } from "@/lib/queries";
+import { useReorderMilestones, useSetMilestoneStatus } from "@/lib/queries";
+import { cn } from "@/lib/utils";
 import type { components } from "@/lib/api.gen";
 import { showsError, useLivePoll } from "@/lib/live";
 
@@ -62,58 +70,115 @@ function useRoadmap(projectId: string | undefined) {
  * Roadmap (AI-202: M4.26, ADR-0131): a project's milestones in order, each with its status and
  * progress, expanding in place to its epics; parked ones dimmed, done ones compact, epics with
  * no milestone last. Under All projects, one section per project. An open row sets the
- * milestone's status (AI-311), and milestones reorder by dragging their handle or with Move up
+ * milestone's status (AI-311) beside its case and effort (ADR-0149: a not-reviewed one always,
+ * saying so when it has no case), and milestones reorder by dragging their handle or with Move up
  * and Move down (AI-324); both go through the milestone route, so only the owner can and it's
  * logged.
  */
 export function RoadmapPage() {
   const { projectId } = useParams({ strict: false });
   const roadmap = useRoadmap(projectId);
+  const [show, setShow] = useState<Show>("all");
 
   return (
-    <section className="space-y-4">
-      <h2 className="text-lg font-medium">Roadmap</h2>
-      {roadmap.isPending && <Loading />}
-      {showsError(roadmap) && (
-        <QueryError
-          error={roadmap.error}
-          what="the roadmap"
-          onRetry={() => void roadmap.refetch()}
-        />
-      )}
-      {roadmap.data?.projects.map((p) => (
-        <ProjectSection key={p.projectId} roadmap={p} heading={!projectId} />
-      ))}
-      {roadmap.data && roadmap.data.projects.length === 0 && (
-        <p className="text-sm text-muted-foreground">No projects to show.</p>
-      )}
-      {roadmap.data?.truncated && (
-        <p className="text-sm text-muted-foreground">
-          Showing the first 50 projects by key. Open one project&apos;s Roadmap to see more.
-        </p>
-      )}
+    <section>
+      <PageHeader
+        title="Roadmap"
+        actions={
+          <Segmented label="Show milestones" value={show} options={SHOW} onChange={setShow} />
+        }
+      />
+      <div className="space-y-6">
+        {roadmap.isPending && <ListSkeleton />}
+        {showsError(roadmap) && (
+          <QueryError
+            error={roadmap.error}
+            what="the roadmap"
+            onRetry={() => void roadmap.refetch()}
+          />
+        )}
+        {roadmap.data?.projects.map((p) => (
+          <ProjectSection key={p.projectId} roadmap={p} heading={!projectId} show={show} />
+        ))}
+        {roadmap.data && roadmap.data.projects.length === 0 && (
+          <EmptyState
+            title="No projects to show."
+            description="A project's milestones and epics show here once it has some."
+            action={
+              <Button asChild className="h-11 sm:h-9">
+                <Link to="/projects/new">Add project</Link>
+              </Button>
+            }
+          />
+        )}
+        {roadmap.data?.truncated && (
+          <p className="text-sm text-muted-foreground">
+            Showing the first 50 projects by key. Open one project&apos;s Roadmap to see more.
+          </p>
+        )}
+      </div>
     </section>
   );
 }
 
-function ProjectSection({ roadmap: r, heading }: { roadmap: ProjectRoadmap; heading: boolean }) {
+type Show = "all" | "open" | "parked" | "done";
+const SHOW: { value: Show; label: string }[] = [
+  { value: "all", label: "All" },
+  { value: "open", label: "Open" },
+  { value: "parked", label: "Parked" },
+  { value: "done", label: "Done" },
+];
+
+/** Open: not done and not parked (approved or waiting for review). */
+function shows(m: Milestone, show: Show): boolean {
+  if (show === "all") return true;
+  if (show === "done") return m.done;
+  if (show === "parked") return !m.done && m.status === "parked";
+  return !m.done && m.status !== "parked";
+}
+
+function ProjectSection({
+  roadmap: r,
+  heading,
+  show,
+}: {
+  roadmap: ProjectRoadmap;
+  heading: boolean;
+  show: Show;
+}) {
   const byKey = new Map(r.epics.map((e) => [e.key, e]));
   const loose = r.noMilestone.flatMap((k) => byKey.get(k) ?? []);
+  const milestones = r.milestones.filter((m) => shows(m, show));
   return (
     <section aria-label={r.projectName} className="space-y-2">
-      {heading && <h3 className="text-sm font-medium">{r.projectName}</h3>}
+      {heading && (
+        <h3 className="flex items-center gap-2 text-md font-semibold">
+          <span
+            aria-hidden
+            className="inline-flex h-5 min-w-5 items-center justify-center rounded-sm bg-foreground px-1 text-2xs font-semibold text-background"
+          >
+            {r.projectKey}
+          </span>
+          {r.projectName}
+        </h3>
+      )}
       {r.milestones.length === 0 && loose.length === 0 && (
-        <p className="text-sm text-muted-foreground">
-          No milestones or epics yet. To start, ask a Claude session to plan this project or to
-          ideate an epic.
-        </p>
+        <EmptyState
+          className="items-start text-left sm:flex-row sm:items-center sm:justify-between"
+          title="No milestones yet"
+          description="A plan turns this project's brief into milestones and epics for you to approve."
+          action={<StartPlan projectId={r.projectId} />}
+        />
       )}
-      {r.milestones.length > 0 && (
-        <MilestoneList milestones={r.milestones} byKey={byKey} projectId={r.projectId} />
+      {milestones.length > 0 && (
+        <MilestoneList milestones={milestones} byKey={byKey} projectId={r.projectId} />
       )}
-      {loose.length > 0 && (
+      {r.milestones.length > 0 && milestones.length === 0 && (
+        <p className="text-sm text-muted-foreground">No {show} milestones.</p>
+      )}
+      {loose.length > 0 && show === "all" && (
         <section aria-label="No milestone" className="space-y-2">
-          <h4 className="text-sm font-medium">No milestone</h4>
+          <h4 className="text-xs font-medium text-muted-foreground">No milestone</h4>
           <EpicList epics={loose} projectId={r.projectId} />
         </section>
       )}
@@ -123,6 +188,45 @@ function ProjectSection({ roadmap: r, heading }: { roadmap: ProjectRoadmap; head
         </p>
       )}
     </section>
+  );
+}
+
+/**
+ * The empty roadmap's one next step: a plan-project agent task (AI-320's route, as MCP
+ * `start_plan_project`). Owner only; the API's refusal shows here.
+ */
+function StartPlan({ projectId }: { projectId: string }) {
+  const api = useApi();
+  const queryClient = useQueryClient();
+  const start = useMutation({
+    mutationFn: async () =>
+      unwrap(
+        await api.POST("/api/projects/{projectId}/plan/agent-task", {
+          params: { path: { projectId } },
+        }),
+      ),
+    onSuccess: () => queryClient.invalidateQueries(),
+  });
+  if (start.data)
+    return (
+      <p className="text-sm">
+        <Link
+          to="/p/$projectId/runs/$runId"
+          params={{ projectId, runId: start.data.id }}
+          className="underline underline-offset-2"
+        >
+          Agent task · plan-project
+        </Link>{" "}
+        started. Its plan waits in your inbox.
+      </p>
+    );
+  return (
+    <div className="space-y-1">
+      <Button className="h-11 sm:h-9" disabled={start.isPending} onClick={() => start.mutate()}>
+        Plan this project
+      </Button>
+      {start.error && <QueryError error={start.error} />}
+    </div>
   );
 }
 
@@ -172,7 +276,7 @@ function MilestoneList({
     <div className="space-y-2">
       <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={onDragEnd}>
         <SortableContext items={shown.map((m) => m.id)} strategy={verticalListSortingStrategy}>
-          <ul className="divide-y divide-border rounded-md border border-border">
+          <ul className="divide-y divide-border overflow-hidden rounded-lg border border-border bg-raised">
             {shown.map((m, i) => (
               <MilestoneRow
                 key={m.id}
@@ -230,7 +334,7 @@ function MilestoneRow({
       data-status={m.done ? "done" : m.status}
       className={m.status === "parked" ? "opacity-60" : undefined}
     >
-      <div className="flex items-start">
+      <div className="flex flex-wrap items-start">
         {reorder && (
           <div
             role="group"
@@ -272,26 +376,32 @@ function MilestoneRow({
           type="button"
           aria-expanded={open}
           onClick={() => setOpen(!open)}
-          className="flex min-w-0 flex-1 flex-wrap items-center gap-x-3 gap-y-1 p-2 text-left text-sm hover:bg-muted focus-visible:outline-2 focus-visible:outline-ring"
+          className="flex min-h-11 min-w-0 flex-1 flex-wrap items-center gap-x-3 gap-y-1 px-3 py-2 text-left text-sm hover:bg-muted/60 focus-visible:outline-2 focus-visible:outline-ring"
         >
           <Chevron className="size-4 shrink-0 text-muted-foreground" aria-hidden />
-          <span className="font-medium">{m.name}</span>
-          <Badge variant={status.variant}>{status.label}</Badge>
-          {!m.done && (
-            <span className="min-w-0 flex-1 text-muted-foreground max-sm:basis-full">
-              {m.outcome}
-            </span>
-          )}
+          <span className="min-w-0 flex-1 basis-48">
+            <span className="block font-medium">{m.name}</span>
+            {!m.done && <span className="block text-muted-foreground">{m.outcome}</span>}
+          </span>
+          {m.done && <Badge variant={status.variant}>{status.label}</Badge>}
           <Progress done={m.progress.done} total={m.progress.total} />
           {!m.done && <CountChips counts={m.counts} />}
         </button>
+        {!m.done && (
+          <div className="shrink-0 py-1.5 pr-2 max-sm:basis-full max-sm:pb-2 max-sm:pl-9">
+            <StatusPick projectId={projectId} milestone={m} />
+          </div>
+        )}
       </div>
       {open && (
-        <div className="space-y-2 px-2 pb-2 pl-8">
+        <div className="space-y-2 border-t border-border bg-background/40 px-3 pt-2 pb-3 pl-10">
           {m.done && <p className="text-sm text-muted-foreground">{m.outcome}</p>}
-          <div className="max-w-48">
-            <MilestoneStatusSelect projectId={projectId} milestone={m} />
-          </div>
+          {/* A done milestone keeps its status pick, out of the way in the open row. */}
+          {m.done && <StatusPick projectId={projectId} milestone={m} />}
+          {/* ADR-0149: the case where Andy decides; once reviewed, only one that was written. */}
+          {(m.status === "not_reviewed" || m.case) && (
+            <MilestoneCaseView projectId={projectId} milestone={m} />
+          )}
           {epics.length === 0 ? (
             <p className="text-sm text-muted-foreground">No epics in this milestone yet.</p>
           ) : (
@@ -311,19 +421,20 @@ const EPIC_STATE: Record<Epic["state"], string> = {
 
 function EpicList({ epics, projectId }: { epics: Epic[]; projectId: string }) {
   return (
-    <ul className="divide-y divide-border rounded-md border border-border">
+    <ul className="divide-y divide-border overflow-hidden rounded-lg border border-border bg-raised">
       {epics.map((e) => (
         <li
           key={e.key}
           data-epic={e.key}
-          className="flex flex-wrap items-center gap-x-3 gap-y-1 p-2 text-sm"
+          className="flex min-h-11 flex-wrap items-center gap-x-3 gap-y-1 px-3 py-2 text-sm"
         >
           <Link
             to="/p/$projectId/t/$ticketRef"
             params={{ projectId, ticketRef: e.key }}
             className="min-w-0 hover:underline focus-visible:outline-2 focus-visible:outline-ring"
           >
-            <span className="text-xs text-muted-foreground tabular-nums">{e.key}</span> {e.title}
+            <span className="font-mono text-xs text-muted-foreground tabular-nums">{e.key}</span>{" "}
+            {e.title}
           </Link>
           <span className="text-xs text-muted-foreground">{EPIC_STATE[e.state]}</span>
           {e.outcome && (
@@ -377,5 +488,35 @@ function CountChips({ counts }: { counts: Counts }) {
           </Badge>
         ))}
     </span>
+  );
+}
+
+/**
+ * The owner's status pick for one milestone, in its row (AI-378; the mockup's Approved | Parked):
+ * saved on click, the API's refusal shown. Every write goes through the milestone route (AI-304).
+ */
+function StatusPick({
+  projectId,
+  milestone: m,
+}: {
+  projectId: string;
+  milestone: Pick<Milestone, "id" | "name" | "status">;
+}) {
+  const set = useSetMilestoneStatus(projectId);
+  return (
+    <div className={cn("space-y-1", set.isPending && "opacity-60")}>
+      <Segmented
+        label={`Status of ${m.name}`}
+        value={m.status}
+        options={MilestoneStatus.options.map((s) => ({
+          value: s,
+          label: MILESTONE_STATUS[s].label,
+        }))}
+        onChange={(status) => {
+          if (status !== m.status && !set.isPending) set.mutate({ milestoneId: m.id, status });
+        }}
+      />
+      {set.error && <QueryError error={set.error} />}
+    </div>
   );
 }

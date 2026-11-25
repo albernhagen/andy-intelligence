@@ -1,6 +1,6 @@
 ---
 title: ADR index printed from frontmatter
-status: proposed (AI-142; Andy decides at review)
+status: accepted (Andy, 2026-11-25)
 date: 2026-11-20
 amends: 0046 (ADR index file), 0080 (where ADR numbers come from)
 ---

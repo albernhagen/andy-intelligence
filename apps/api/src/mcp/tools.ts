@@ -32,6 +32,7 @@ import type { SpendSettingsService } from "../spend";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import type { NightDeps } from "../night";
+import type { PullRequestMerger } from "../merge";
 import {
   CROSS_PROJECT_TOOLS,
   projectsOfInput,
@@ -76,7 +77,7 @@ export interface ToolDeps {
   night?: NightDeps | null;
   /** Work across projects (AI-198); the app always passes it, unit tests may not. */
   work?: WorkReader;
-  /** Local runners (ADR-0089); null without a runner store. MCP reads them only (AI-294). */
+  /** Local runners (ADR-0089); null without a runner store. MCP lists and revokes them (AI-294, AI-351). */
   runners?: RunnerService | null;
   /** Roadmaps over epics (AI-193); the app always passes it, unit tests may not. */
   roadmap?: RoadmapReader;
@@ -105,6 +106,8 @@ export interface ToolDeps {
   milestones?: MilestoneReader | null;
   /** A project's tickets through the ticket snapshot (AI-318); absent: a full read each call. */
   tickets?: ProjectTickets;
+  /** MCP `merge_pr` (AI-220); absent or null: no `merge_pr` tool. */
+  merges?: PullRequestMerger | null;
   /** Signed-in email, shown by `status` so it doubles as the connection check. */
   email: string;
   /** The signed-in user as an actor, `user:<uid>` (AI-19): every write is recorded as this. */

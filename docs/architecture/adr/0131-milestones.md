@@ -1,6 +1,6 @@
 ---
 title: "Milestones: a project's ordered groups of epics, with a status Andy sets"
-status: proposed (AI-301; Andy decides at review); amended by 0136 (five MCP milestone tools)
+status: accepted (Andy, 2026-11-25); amended by 0136 (five MCP milestone tools); extended by 0149 (a case on every milestone)
 date: 2026-11-21
 amends: 0058 (ticket model), 0108 (roadmap over epics)
 ---

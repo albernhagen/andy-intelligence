@@ -14,6 +14,7 @@ import {
   prFailures,
   renamesFrom,
   reportSummary,
+  warnLines,
 } from "./context-budget.mjs";
 import { cleanGitEnv } from "./git-env.mjs";
 
@@ -75,6 +76,32 @@ describe("loadBudgets", () => {
     const dir = mkdtempSync(join(tmpdir(), "budget-"));
     writeFileSync(join(dir, "context-budget.json"), '{"budgets":[{"pattern":"a.md"}]}');
     expect(() => loadBudgets(dir)).toThrow("budgets");
+  });
+
+  it("GivenANonBooleanWarn_WhenLoaded_ThenThrows", () => {
+    const dir = mkdtempSync(join(tmpdir(), "budget-"));
+    const budget = '{"budgets":[{"pattern":"a.md","maxWords":5,"warn":"yes"}]}';
+    writeFileSync(join(dir, "context-budget.json"), budget);
+    expect(() => loadBudgets(dir)).toThrow("warn");
+  });
+
+  // AI-362, ADR-0147: hard limits only on files every session or agent step loads.
+  it("GivenThisRepo_WhenLoaded_ThenOnlyAlwaysLoadedFilesHaveHardLimits", () => {
+    const hard = loadBudgets(join(import.meta.dirname, ".."))
+      .filter((b) => !b.warn)
+      .map((b) => b.pattern);
+    expect(hard).toEqual([
+      "AGENTS.md",
+      "**/AGENTS.md",
+      "**/CLAUDE.md",
+      "template/AGENTS.md.template",
+      "docs/build-log.md",
+      "docs/product/brief.md",
+      "docs/BUILD-PROMPT.md",
+      "docs/architecture/ARCHITECTURE.md",
+      "docs/security/threat-model.md",
+      "platform/procedures/*.md",
+    ]);
   });
 
   it("GivenThisRepo_WhenLoaded_ThenEveryEntryHasALimit", () => {
@@ -192,6 +219,29 @@ describe("prFailures", () => {
   it("GivenANewFileOverBudget_WhenChecked_ThenItFails", () => {
     const out = prFailures([result("docs/new.md", 300, 250)], base({}));
     expect(out.problems).toEqual(["docs/new.md: a new file over budget (300/250 words)"]);
+  });
+
+  // AI-362, ADR-0147: a warn-only file never fails a PR, grown, new or over on the base.
+  it("GivenWarnOnlyFilesGrownOrAddedOverBudget_WhenChecked_ThenNoProblems", () => {
+    const warn = (r) => ({ ...r, warn: true });
+    const out = prFailures(
+      [warn(result("README.md", 2101, 2000)), warn(result("docs/new.md", 300, 250))],
+      base({ "README.md": 1800 }),
+    );
+    expect(out).toEqual({ problems: [], untouched: [] });
+  });
+});
+
+describe("warnLines", () => {
+  it("GivenAWarnOnlyFileOverBudget_WhenListed_ThenOneLineNamesItsPathAndSize", () => {
+    const results = [
+      { path: "README.md", lines: 9, words: 2100, maxWords: 2000, over: true, warn: true },
+      { path: "AGENTS.md", lines: 120, words: 10, maxLines: 100, over: true, warn: false },
+      { path: "docs/a.md", lines: 1, words: 10, maxWords: 250, over: false, warn: true },
+    ];
+    expect(warnLines(results)).toEqual([
+      "WARN README.md: over its budget (2100/2000 words); warn-only, never fails a PR",
+    ]);
   });
 });
 
@@ -369,6 +419,61 @@ describe("CLI", () => {
     });
     expect(pr.stdout).not.toContain("a new file over budget");
     expect(pr.status).toBe(0);
+  });
+
+  // AI-362, ADR-0147: the two branches, locally and on a PR.
+  it("GivenAHardLimitFileGrownOverBudget_WhenAPrIsChecked_ThenItFails", () => {
+    const budget = '{"budgets":[{"pattern":"AGENTS.md","maxLines":3}]}';
+    const dir = repo({ "AGENTS.md": "a\nb\n", "context-budget.json": budget });
+    const env = cleanGitEnv();
+    const git = (...args) => execFileSync("git", args, { cwd: dir, env });
+    git("-c", "user.name=t", "-c", "user.email=t@example.com", "commit", "-qm", "base");
+    writeFileSync(join(dir, "AGENTS.md"), "a\n".repeat(5));
+    git("add", "AGENTS.md");
+    const pr = spawnSync(process.execPath, [script, dir, "--base", "HEAD"], {
+      encoding: "utf8",
+      env,
+    });
+    expect(pr.status).toBe(1);
+    expect(pr.stdout).toContain("FAIL AGENTS.md: grew 3 lines (2 → 5/3)");
+  });
+
+  it("GivenAWarnOnlyFileGrownOverBudget_WhenAPrIsChecked_ThenItPassesWithAWarning", () => {
+    const budget = '{"budgets":[{"pattern":"README.md","maxWords":3,"warn":true}]}';
+    const dir = repo({
+      "AGENTS.md": "rules\n",
+      "README.md": "one two\n",
+      "context-budget.json": budget,
+    });
+    const env = cleanGitEnv();
+    const git = (...args) => execFileSync("git", args, { cwd: dir, env });
+    git("-c", "user.name=t", "-c", "user.email=t@example.com", "commit", "-qm", "base");
+    writeFileSync(join(dir, "README.md"), "one two three four five\n");
+    git("add", "README.md");
+    const pr = spawnSync(process.execPath, [script, dir, "--base", "HEAD"], {
+      encoding: "utf8",
+      env,
+    });
+    expect(pr.status).toBe(0);
+    expect(pr.stdout).toContain(
+      "WARN README.md: over its budget (5/3 words); warn-only, never fails a PR",
+    );
+    expect(pr.stdout).not.toContain("FAIL");
+  });
+
+  it("GivenAWarnOnlyFileOverBudget_WhenRunLocally_ThenItPassesWithAWarning", () => {
+    const budget = '{"budgets":[{"pattern":"README.md","maxWords":3,"warn":true}]}';
+    const dir = repo({
+      "AGENTS.md": "rules\n",
+      "README.md": "one two three four five\n",
+      "context-budget.json": budget,
+    });
+    const result = run(dir);
+    expect(result.status).toBe(0);
+    expect(result.stdout).toContain("warn README.md:");
+    expect(result.stdout).toContain(
+      "WARN README.md: over its budget (5/3 words); warn-only, never fails a PR",
+    );
   });
 
   it("GivenOversizedFile_WhenRun_ThenExitsOne", () => {

@@ -73,28 +73,34 @@ vi.mock("@/components/inbox/InboxTicketCard", () => ({
 }));
 
 describe("InboxPage", () => {
-  it("GivenAnInbox_WhenRendered_ThenCardsFollowTheSharedDomainOrder", () => {
+  it("GivenAnInbox_WhenRendered_ThenRowsFollowTheSharedDomainOrder", () => {
     render(<InboxPage />);
     const { active, stale } = inboxCards(data, "ai");
-    const expected = [...active, ...stale].map((c) => c.ticket!.key);
-    expect(expected).toEqual(["AI-1", "AI-2", "AI-3"]);
-    expect(screen.getAllByRole("article").map((a) => a.getAttribute("aria-label"))).toEqual(
-      expected,
-    );
+    const expected = [...active, ...stale].map((c) => `${c.ticket!.key}: ${c.ticket!.title}`);
+    expect(expected).toEqual(["AI-1: Near ready", "AI-2: Other backlog", "AI-3: Finished"]);
+    const rows = screen
+      .getAllByRole("button")
+      .filter((b) => b.hasAttribute("data-nav-item"))
+      .map((b) => b.getAttribute("aria-label"));
+    // This project's merge first, then the tickets (AI-371: list beside detail).
+    expect(rows).toEqual(["AI-9: AI-9 title", ...expected]);
   });
 
   it("GivenAPrWaitingForAndysMerge_WhenRendered_ThenThisProjectsIsListedWithWhyAndItsNote", () => {
     render(<InboxPage />);
     const list = screen.getByRole("region", { name: "Waiting for your merge" });
+    expect(within(list).getByRole("button", { name: "AI-9: AI-9 title" }).textContent).toContain(
+      "PR #9 · touches a kept path, manual mode",
+    );
 
-    const items = within(list).getAllByRole("listitem");
-    expect(items.map((i) => i.getAttribute("aria-label"))).toEqual(["AI-9: AI-9 title"]);
-    expect(within(list).getByText("Yours: touches a kept path, manual mode")).toBeTruthy();
-    expect(within(list).getByText("Lanes show.")).toBeTruthy();
-    expect(within(list).getByRole("link", { name: "PR #9" }).getAttribute("href")).toBe(
+    // First in the list, so it is picked: the detail says why it is Andy's, with its note.
+    const detail = screen.getByRole("article", { name: "AI-9: AI-9 title" });
+    expect(within(detail).getByText("Yours: touches a kept path, manual mode")).toBeTruthy();
+    expect(within(detail).getByText("Lanes show.")).toBeTruthy();
+    expect(within(detail).getByRole("link", { name: "PR #9" }).getAttribute("href")).toBe(
       "https://github.com/albernhagen/andy-intelligence/pull/9",
     );
-    // Three ticket questions plus the one merge.
-    expect(screen.getByRole("heading", { name: /Needs you/ }).textContent).toBe("Needs you 4");
+    // Three tickets, as the header counts them; the merge has its own heading (AI-347).
+    expect(screen.getByRole("heading", { name: /Needs you/ }).textContent).toBe("Needs you 3");
   });
 });

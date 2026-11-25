@@ -1,6 +1,6 @@
 ---
 title: Coordinator merges every clean PR; Andy keeps four kinds
-status: accepted
+status: accepted; superseded in part by 0124 (who merges: MCP `merge_pr`, AI-220)
 date: 2026-11-20
 amends: 0088, 0092 (who merges); AGENTS.md rule 2
 ---

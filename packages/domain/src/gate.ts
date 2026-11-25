@@ -146,7 +146,8 @@ export function globToRegExp(glob: string): RegExp {
 }
 
 /**
- * Globs for a CODEOWNERS file's patterns, except the catch-all `*`, which only requests review
+ * Globs for every pattern a CODEOWNERS file lists (the kept paths, ADR-0124), except a catch-all `*`,
+ * which a repo seeded before AI-217 may still have and which would protect every file
  * (ADR-0063, §4.5). A pattern may name a file or a directory, so both are matched.
  */
 export function codeownersGlobs(text: string): string[] {
@@ -220,7 +221,11 @@ const hostPasses = (c: HeadCheck) =>
 /** A review agent that errored reports `neutral` for Andy to decide (ADR-0025): not a pass. */
 const reviewPasses = (c: HeadCheck) => c.status === "completed" && c.conclusion === "success";
 
-function assessChecks(required: RequiredCheck[], checks: Listing<HeadCheck>) {
+/**
+ * The checks part of the gate: every required check and both review checks passed on the head,
+ * from the trusted reporter. Exported for MCP `merge_pr` (AI-220), which judges session PRs.
+ */
+export function assessChecks(required: RequiredCheck[], checks: Listing<HeadCheck>) {
   const reasons: GateReason[] = [];
   if (!checks.complete) reasons.push("checks_incomplete");
   if (required.length === 0) reasons.push("no_required_checks");

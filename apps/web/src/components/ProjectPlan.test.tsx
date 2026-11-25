@@ -14,6 +14,7 @@ const plan = {
         goal: "Andy can open it.",
         doneWhen: ["URL loads"],
         slices: ["CI"],
+        case: { serves: "Runners", expectedReturn: "Log a run fast.", cheapestTest: "A form." },
       },
       { title: "Log a run", goal: "Andy logs a run.", doneWhen: ["Run listed"], slices: ["Form"] },
     ],
@@ -35,6 +36,21 @@ async function open(path: string) {
 }
 
 describe("project plan", () => {
+  it("GivenAWaitingPlanWithACase_WhenShown_ThenTheCaseIsBesideItsMilestoneAndApprovalStoresIt", async () => {
+    const h = await open("/all/inbox");
+    const section = await screen.findByRole("region", { name: "Project plans" });
+    expect(
+      within(section).getByText(/Serves: Runners\. Expected return: Log a run fast\./),
+    ).toBeTruthy();
+    await h.user.click(within(section).getByRole("button", { name: "Approve: create 2 epics" }));
+    await waitFor(async () =>
+      expect((await h.milestones.list("trl")).map((m) => [m.status, m.case?.serves])).toEqual([
+        ["approved", "Runners"],
+        ["approved", undefined],
+      ]),
+    );
+  });
+
   it("GivenAWaitingPlan_WhenAndyApprovesFromTheInbox_ThenTheEpicsAreCreatedInOrder", async () => {
     const h = await open("/all/inbox");
     const section = await screen.findByRole("region", { name: "Project plans" });
@@ -49,7 +65,7 @@ describe("project plan", () => {
   });
 
   it("GivenAWaitingPlan_WhenAndyRejectsOnTheSettingsPage_ThenNoTicketsAndTheReasonShows", async () => {
-    const h = await open("/p/trl/settings");
+    const h = await open("/p/trl/settings#setup");
     const section = await screen.findByRole("region", { name: "Project plan" });
     const reject = within(section).getByRole("button", { name: "Reject" }) as HTMLButtonElement;
     expect(reject.disabled).toBe(true);
@@ -59,10 +75,11 @@ describe("project plan", () => {
     expect(await h.tracker.listTickets("trl")).toEqual([]);
   });
 
-  it("GivenOnlyAWaitingPlan_WhenTheInboxOpens_ThenItCountsOneAndDoesNotSayNothingNeedsYou", async () => {
+  it("GivenOnlyAWaitingPlan_WhenTheInboxOpens_ThenItCountsNoTicketsAndDoesNotSayNothingNeedsYou", async () => {
     await open("/all/inbox");
     await screen.findByRole("region", { name: "Project plans" });
     expect(screen.queryByText("Nothing needs you.")).toBeNull();
-    expect(screen.getByRole("heading", { name: /Needs you/ }).textContent).toContain("1");
+    // The heading counts tickets, as the header does (AI-347); the plan has its own section.
+    expect(screen.getByRole("heading", { name: /Needs you/ }).textContent).toBe("Needs you 0");
   });
 });

@@ -1,6 +1,10 @@
 import { afterEach, describe, expect, it } from "vitest";
 import { screen, waitFor, within } from "@testing-library/react";
 import { PAGE_LOAD, renderApp } from "@/test/harness";
+import { stubResizeObserver } from "@/test/resize-observer";
+
+// Models renders Radix Switch, which needs ResizeObserver (AI-376).
+stubResizeObserver();
 
 /** AI-276: the global spend caps on Settings → Models, against the in-process API and store. */
 
@@ -86,7 +90,7 @@ describe("project Spend caps panel after a global save", () => {
     await h.user.click(within(panel).getByRole("button", { name: "Save global caps" }));
     await within(panel).findByText("daily $5.00 → $3.00");
 
-    await h.router.navigate({ to: "/p/ai/settings" });
+    await h.router.navigate({ to: "/p/ai/settings", hash: "limits" });
     const project = await screen.findByRole("region", { name: "Spend caps" }, PAGE_LOAD);
     const daily = within(project).getByRole("row", { name: /^Daily/ });
     expect(await within(daily).findAllByText("$3.00")).toHaveLength(2);

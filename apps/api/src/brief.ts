@@ -5,7 +5,8 @@ import { actorOf, type AuthEnv } from "./auth";
 import type { RouteModule } from "./services";
 
 /**
- * The project brief's one write (AI-107, ADR-0053 "What the API does"): owner-only answers in,
+ * The project brief's write and its state (AI-107, AI-373). The write (ADR-0053 "What the API
+ * does"): owner-only answers in,
  * a PR on the project's repo out. The MCP tool `submit_brief` calls the same service.
  */
 
@@ -25,6 +26,33 @@ export const BriefSubmissionView = z.discriminatedUnion("status", [
   }),
   z.object({ status: z.literal("unchanged") }),
 ]);
+
+const Prefill = z.object({
+  idea: z.string().optional(),
+  problem: z.string().optional(),
+  users: z.string().optional(),
+  business: z.string().optional(),
+});
+/** The setup path's read (AI-373): is the brief on the default branch; discovery's answers. */
+export const BriefStatusView = z.discriminatedUnion("readable", [
+  z.object({ readable: z.literal(true), onDefaultBranch: z.boolean(), prefill: Prefill }),
+  z.object({ readable: z.literal(false), problem: z.string(), prefill: Prefill }),
+]);
+
+const statusRoute = createRoute({
+  security: [{ bearer: [] }],
+  method: "get",
+  path: "/api/projects/{projectId}/brief",
+  request: { params: ProjectParams },
+  responses: {
+    200: json(
+      BriefStatusView,
+      "Whether the brief is on the default branch, with discovery's answers",
+    ),
+    403: json(ErrorBody, "Only the owner reads the brief's state"),
+    404: json(ErrorBody, "No such project"),
+  },
+});
 
 const submitRoute = createRoute({
   security: [{ bearer: [] }],
@@ -49,6 +77,9 @@ const submitRoute = createRoute({
 });
 
 export function registerBriefRoutes(app: OpenAPIHono<AuthEnv>, brief: BriefService): void {
+  app.openapi(statusRoute, async (c) =>
+    c.json(await brief.status(c.req.valid("param").projectId, actorOf(c.get("identity"))), 200),
+  );
   app.openapi(submitRoute, async (c) => {
     const result = await brief.submit(
       c.req.valid("param").projectId,

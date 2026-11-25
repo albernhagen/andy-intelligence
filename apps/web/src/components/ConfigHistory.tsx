@@ -20,8 +20,8 @@ export function ConfigHistory({ projectId }: { projectId: string }) {
   const list = changes.data ?? [];
 
   return (
+    // Titled by the settings page's "Changes" section (AI-372).
     <section aria-label="Changes" className="space-y-2">
-      <h3 className="text-sm font-medium">Changes</h3>
       {changes.error && (
         <QueryError
           error={changes.error}
@@ -63,7 +63,8 @@ function ChangeRow({
   const fields = routing
     ? [`Routing: ${Object.keys(change.diff).join(", ")} changed`]
     : Object.entries(change.diff).map(
-        ([field, value]) => `${settingLabel(field)}: ${show(value, "from")} → ${show(value, "to")}`,
+        ([field, value]) =>
+          `${settingLabel(field)}: ${show(field, value, "from")} → ${show(field, value, "to")}`,
       );
   return (
     <li aria-label={`Change ${change.id}`} className="flex items-start gap-2 px-3 py-2">
@@ -88,6 +89,6 @@ function ChangeRow({
 }
 
 /** One side of a field's before and after, in words (`settingValue`). */
-function show(value: unknown, side: "from" | "to"): string {
-  return settingValue((value as Record<string, unknown> | null)?.[side]);
+function show(field: string, value: unknown, side: "from" | "to"): string {
+  return settingValue((value as Record<string, unknown> | null)?.[side], field);
 }

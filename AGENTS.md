@@ -5,14 +5,14 @@ Always loaded (`CLAUDE.md` is a symlink to this file). Full operating rules: [`d
 ## Every session
 
 1. Read `docs/build-log.md` (pending decisions, blockers) and your ticket in project `AI` (MCP `status`, ADR-0047); work on exactly one ticket, on a branch `m<N>.<n>/<short-name>` cut from the latest `main`. No stacked PRs: if a blocker hasn't merged, the ticket isn't ready.
-2. Stop and ask before anything that costs money, touches cloud resources, IAM, secrets, external accounts, or `main` (a coordinator merges PRs that pass every check and both reviews; Andy keeps four kinds: ADR-0120), or deviates from ARCHITECTURE.md.
+2. Stop and ask before anything that costs money, touches cloud resources, IAM, secrets, external accounts, or `main` (a coordinator merges only through MCP `merge_pr`, by the project's merge mode; Andy keeps the kept kinds: ADR-0124), or deviates from ARCHITECTURE.md.
 3. The repo is public: no secrets, tokens, personal emails, `*.tfvars`, `.env*`, or Terraform state — ever (ADR-0015).
 4. Talking to Andy (chat, PRs, docs): be brief, and never use a bare ID. Write `ID: title`: "M1.2: Ticket core", "M0: Foundations: repo, sign-in, GCP infra", "ADR-0019: Actions OIDC callbacks", "PR #1: Foundations". Milestone titles: ARCHITECTURE §12. Ask Andy a question as a plain line ending in `?`, then two to four sentences of context, the options with what each does or costs, and your recommendation (`platform/procedures/refine.md`).
 
 ## Context: load only what the task needs (ADR-0046)
 
 - ARCHITECTURE.md is a short overview with a reading map (ADR-0061); open only the topic files (`docs/architecture/*.md`) your ticket needs.
-- ADRs: grep `^title:` and `^status:` in `docs/architecture/adr/*.md` (one line each; with a shell, `pnpm adr`), then open only the ones you need.
+- ADRs: grep `^title:` and `^status:` in `docs/architecture/adr/*.md` (or `pnpm adr`), then open only the ones you need.
 - Build-log history (`docs/build-log/`, one file per entry): only when you need why something happened.
 - Broad searches or reading many files: use a subagent and keep its summary, not the file dumps.
 - `pnpm context:check` enforces budgets (`context-budget.json`; ADR-0138: a PR's own change); trim, don't raise one, unless Andy agrees.
@@ -26,7 +26,7 @@ Update these in the **same PR** as the code:
 | Commands, env vars, packages/apps, layout      | `README.md`                                                                                                                                  |
 | A feature, component, or how to use the system | `README.md` "How it works today" (one screen); its file in `docs/features/`                                                                  |
 | Design, components, data model, scope, plan    | The topic file in `docs/architecture/`; `ARCHITECTURE.md` only if design intent, components or milestones change (ADR-0061)                  |
-| A decision, or deviated from ARCHITECTURE.md   | New ADR (frontmatter `title`, `status`); update the old ADR's status                                                                         |
+| A trust boundary, the data model, who merges   | New ADR (frontmatter `title`, `status`), old ADR's status; other build choices: PR description (ADR-0148)                                    |
 | Any step Andy runs by hand                     | `docs/runbooks/*.md`                                                                                                                         |
 | Ticket status, pending decisions, blockers     | Ticket in project `AI` (MCP `milestone_map`); `docs/build-log.md` (decisions, blockers); history → new `docs/build-log/YYYY-MM-DD-<slug>.md` |
 | Trust boundary, entry point, credential, IAM   | Its area file in `docs/security/`; a risk: its own file in `docs/security/risks/`                                                            |

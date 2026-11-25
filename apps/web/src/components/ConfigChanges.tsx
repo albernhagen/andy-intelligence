@@ -4,7 +4,7 @@ import { errorText } from "@/lib/api";
 import { useConfigChanges, useDecideConfigChange, useSweepConfigProposals } from "@/lib/queries";
 
 const button =
-  "rounded-md border border-border bg-background px-2 py-0.5 text-xs font-medium text-foreground hover:bg-muted disabled:opacity-50";
+  "rounded-md border border-border bg-background px-2 py-0.5 text-xs font-medium text-foreground hover:bg-muted disabled:opacity-50 max-sm:min-h-11";
 
 /**
  * Pending config changes from repeated review findings (ADR-0097), in the Needs-you inbox. In a
@@ -44,7 +44,7 @@ export function ConfigChanges({ projectId }: { projectId?: string }) {
         check && (
           <button
             type="button"
-            className="text-xs text-muted-foreground underline-offset-2 hover:text-foreground hover:underline disabled:opacity-50"
+            className="text-xs text-muted-foreground underline-offset-2 hover:text-foreground hover:underline disabled:opacity-50 max-sm:min-h-11"
             title={title}
             disabled={sweep.isPending}
             onClick={check}

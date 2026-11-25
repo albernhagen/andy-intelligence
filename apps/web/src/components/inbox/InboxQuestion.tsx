@@ -3,6 +3,8 @@ import type { Question } from "@andy/contracts";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Kbd } from "@/components/ui/kbd";
+import { toast } from "@/components/ui/toast";
 import { errorText } from "@/lib/api";
 import { useAnswerQuestion } from "@/lib/queries";
 import { QuestionContext, QuestionRecommendationLine, consequenceOf } from "./QuestionFormat";
@@ -14,16 +16,44 @@ export function answerChoices(question: Pick<Question, "options" | "suggestedAns
   return [suggestedAnswer, ...options.filter((o) => o !== suggestedAnswer)];
 }
 
+/** The keys `1`–`9` pick (shortcuts.ts); a choice past the ninth has none. */
+const MAX_KEY = 9;
+
 /**
  * One open question in the inbox, in the question format (AI-73): the question line, context,
  * options with their consequences, the recommendation. Older questions show the line and plain
  * option buttons. One click on a choice answers it; free text stays. `locked`
  * while any answer on its card is in flight, so two answers never race (AI-30 review).
+ *
+ * AI-371: each choice shows the key that focuses it, numbered across the picked ticket from
+ * `firstKey`, and an answer confirms in a toast naming the ticket. The API can't withdraw an
+ * answer, so the toast has no Undo.
  */
-export function InboxQuestion({ question, locked }: { question: Question; locked: boolean }) {
+export function InboxQuestion({
+  question,
+  locked,
+  firstKey = 1,
+  ticketLabel,
+}: {
+  question: Question;
+  locked: boolean;
+  /** The key of this question's first choice. */
+  firstKey?: number;
+  /** "OPS-2: Rotate the deploy key", for the toast. */
+  ticketLabel: string;
+}) {
   const [text, setText] = useState("");
   const submit = useAnswerQuestion(question.ticketId);
-  const answer = (value: string) => submit.mutate({ questionId: question.id, answer: value });
+  // The toast fires after the awaited write, not from a per-call callback: the answer removes
+  // this question, and a per-call callback is skipped once its component has unmounted.
+  const answer = async (value: string) => {
+    try {
+      await submit.mutateAsync({ questionId: question.id, answer: value });
+    } catch {
+      return; // Shown below from `submit.error`.
+    }
+    toast({ title: `Answered ${ticketLabel}`, description: value });
+  };
   const choices = answerChoices(question);
   const mark = question.recommendation ? "Recommended" : "Suggested";
   // Older questions keep their layout: assumptions right under the line (AI-73: render as today).
@@ -35,42 +65,43 @@ export function InboxQuestion({ question, locked }: { question: Question; locked
       ))}
     </ul>
   );
-  const choiceButton = (choice: string) => (
-    <Button
-      key={choice}
-      type="button"
-      size="sm"
-      variant="outline"
-      className="h-11 sm:h-8"
-      disabled={locked}
-      data-nav-choice
-      onClick={() => answer(choice)}
-    >
-      {choice}
-      {choice === question.suggestedAnswer && <Badge variant="success">{mark}</Badge>}
-    </Button>
-  );
+  const choiceButton = (choice: string, index: number) => {
+    const key = firstKey + index;
+    const suggested = choice === question.suggestedAnswer;
+    return (
+      <Button
+        key={choice}
+        type="button"
+        size="sm"
+        variant="outline"
+        className={suggested ? "h-11 border-selected-edge bg-selected sm:h-8" : "h-11 sm:h-8"}
+        disabled={locked}
+        data-nav-choice
+        aria-keyshortcuts={key <= MAX_KEY ? String(key) : undefined}
+        onClick={() => void answer(choice)}
+      >
+        {key <= MAX_KEY && <Kbd className="text-muted-foreground">{key}</Kbd>}
+        {choice}
+        {suggested && <Badge variant="success">{mark}</Badge>}
+      </Button>
+    );
+  };
 
   return (
-    // A stop for j / k (AI-338): focusable by the keyboard layer, not a Tab stop.
-    <li
-      aria-label={`Question: ${question.text}`}
-      data-nav-item
-      tabIndex={-1}
-      className="space-y-2 rounded-md py-2 outline-offset-2 focus-visible:outline-2 focus-visible:outline-ring"
-    >
+    // AI-371: j / k move between tickets in the list; this question's keys work from its row.
+    <li aria-label={`Question: ${question.text}`} className="space-y-2 py-3">
       {/* The mark sits beside what it marks (AI-316). */}
       <div className="flex flex-wrap items-start gap-2">
         {question.urgency === "high" && <Badge variant="attention">Urgent</Badge>}
-        <p className="whitespace-pre-wrap">{question.text}</p>
+        <p className="text-md font-medium whitespace-pre-wrap">{question.text}</p>
       </div>
       {!formatted && assumptions}
       <QuestionContext question={question} />
       {question.choices.length > 0 ? (
         <ul aria-label="Answers" className="space-y-1">
-          {choices.map((choice) => (
+          {choices.map((choice, i) => (
             <li key={choice} className="flex flex-wrap items-center gap-2">
-              {choiceButton(choice)}
+              {choiceButton(choice, i)}
               <span className="text-sm text-muted-foreground">
                 {consequenceOf(question, choice)}
               </span>
@@ -80,7 +111,7 @@ export function InboxQuestion({ question, locked }: { question: Question; locked
       ) : (
         choices.length > 0 && (
           <div className="flex flex-wrap gap-2" role="group" aria-label="Answers">
-            {choices.map(choiceButton)}
+            {choices.map((choice, i) => choiceButton(choice, i))}
           </div>
         )
       )}
@@ -90,7 +121,7 @@ export function InboxQuestion({ question, locked }: { question: Question; locked
         className="flex max-w-2xl gap-2"
         onSubmit={(e) => {
           e.preventDefault();
-          if (text.trim()) answer(text.trim());
+          if (text.trim()) void answer(text.trim());
         }}
       >
         <Input

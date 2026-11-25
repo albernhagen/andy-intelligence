@@ -51,6 +51,19 @@ export function milestoneStoreContract(
       expect(await store.list("p1")).toEqual([created]);
     });
 
+    it("GivenAMilestoneWithACase_WhenCreatedThenReplacedWithout_ThenTheCaseIsStoredThenCleared", async () => {
+      const store = await make();
+      const kase = { serves: "Andy", expectedReturn: "Fewer clicks.", cheapestTest: "A sketch." };
+      const created = await store.create(milestone({ case: kase }));
+      expect(created.case).toEqual(kase);
+      expect((await store.get("p1", "m1"))?.case).toEqual(kase);
+      const withoutCase: MilestoneInput = { ...created, updatedAt: "2026-11-21T12:00:01.000Z" };
+      delete withoutCase.case;
+      const replaced = await store.replace(withoutCase);
+      expect(replaced?.case).toBeUndefined();
+      expect((await store.get("p1", "m1"))?.case).toBeUndefined();
+    });
+
     it("GivenSeveralProjects_WhenListed_ThenOnlyThatProjectInRoadmapOrder", async () => {
       const store = await make();
       await store.create(milestone({ id: "late", name: "B", order: 2 }));

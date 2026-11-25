@@ -13,3 +13,9 @@ How PR review findings reach the control plane (ADR-0097: review findings become
 - **The job.** It checks out the base SHA, so the poster script comes from the base branch, holds only `contents: read` and `id-token: write`, and is `continue-on-error`: a failed post never fails the review.
 - **Forged findings (R5).** A PR can edit its own review workflow and post made-up findings for itself. They are untrusted data: they only feed the config proposals sweep, whose titles are sanitized and shown as plain text ([`ui-and-mcp.md`](ui-and-mcp.md)), and nothing changes until Andy accepts a proposal.
 - **No new credential.** It reuses the Actions OIDC verifier; no secret, IAM grant or GitHub permission is added.
+
+## Release-note check: the before-and-after table (AI-353)
+
+- **Untrusted input.** The PR description and its file names are data. `parseTable` (`scripts/screenshot-table.mjs`) accepts only rows of the exact shape the script writes: a safe `__screenshots__/*.png` path and `raw.githubusercontent.com` URLs of this repo pinned to 40-hex SHAs. Nothing reaches a shell; the job summary is rebuilt from the parsed rows, never copied from the description. A changed stored image whose file name isn't safe fails the check and is never printed (no workflow-command injection); the repo name and PR number from the event file are checked before they form an API URL.
+- **No new permission.** The job keeps `contents: read`; it lists the PR's files with the job token, and on a refusal retries without it (public repo). Private repos skip the rule.
+- **Residual.** As before, the check runs the PR's own copy of its scripts, so a PR could weaken it. ADR-0120 keeps `platform/actions/**` for Andy but not `scripts/release-note-check.mjs` or `scripts/screenshot-table.mjs`; the review agents still read such a change.

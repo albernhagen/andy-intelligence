@@ -1,7 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
   Assumption,
-  CodeHostConnection,
   CodeHostEvent,
   Project,
   Question,
@@ -15,17 +14,14 @@ import {
   TicketEvent,
 } from "../entities";
 import {
-  OAuthGrant,
   RunHandle,
   RunReport,
   WorkTrackerError,
   type CodeEventLog,
   type CodeHost,
-  type CodeHostConnectionStore,
   EvalCaseResult,
   type Evaluator,
   type Executor,
-  type OAuthGrantStore,
   type QuotaStore,
   quotaClearId,
   type NewRun,
@@ -775,81 +771,6 @@ export function quotaStoreContract(
   });
 }
 
-export interface OAuthGrantStoreContractOptions {
-  /** Timeout (ms) for the case that races three takes; see `RunStoreContractOptions` (AI-71). */
-  raceTimeoutMs?: number;
-}
-
-/**
- * `make` gets the clock the store must use, so the suite can test expiry without waiting.
- * Keys are random per test, so the suite can run against a shared store.
- */
-export function oauthGrantStoreContract(
-  name: string,
-  make: (now: () => Date) => Promise<OAuthGrantStore>,
-  options: OAuthGrantStoreContractOptions = {},
-): void {
-  /** A case that races takes of one grant: gets the adapter's race timeout. */
-  const itRaces = (title: string, fn: () => Promise<void>) => it(title, fn, options.raceTimeoutMs);
-
-  describe(`OAuthGrantStore contract: ${name}`, () => {
-    const start = new Date("2026-11-02T12:00:00Z");
-    const key = () => crypto.randomUUID();
-    const grant = (expiresAt = "2026-11-02T13:00:00Z"): OAuthGrant => ({
-      kind: "code",
-      clientId: "https://client.example/metadata.json",
-      email: "andy@example.com",
-      uid: "u1",
-      resource: "https://api.example/mcp",
-      scope: "mcp",
-      redirectUri: "https://client.example/callback",
-      codeChallenge: "challenge",
-      expiresAt,
-    });
-
-    it("GivenAStoredGrant_WhenRead_ThenItIsReturnedUnchangedAndStaysStored", async () => {
-      const store = await make(() => start);
-      const k = key();
-      await store.put(k, grant());
-      const read = await store.get(k);
-      expect(read).toEqual(grant());
-      expect(OAuthGrant.parse(read)).toEqual(read);
-      expect(await store.get(k)).toEqual(grant());
-    });
-
-    it("GivenAStoredGrant_WhenTaken_ThenItIsReturnedOnceOnly", async () => {
-      const store = await make(() => start);
-      const k = key();
-      await store.put(k, grant());
-      expect(await store.take(k)).toEqual(grant());
-      expect(await store.take(k)).toBeNull();
-      expect(await store.get(k)).toBeNull();
-    });
-
-    itRaces("GivenConcurrentTakes_WhenRacing_ThenExactlyOneWins", async () => {
-      const store = await make(() => start);
-      const k = key();
-      await store.put(k, grant());
-      const results = await Promise.all([store.take(k), store.take(k), store.take(k)]);
-      expect(results.filter((r) => r !== null)).toHaveLength(1);
-    });
-
-    it("GivenAnExpiredGrant_WhenReadOrTaken_ThenItIsMissing", async () => {
-      const store = await make(() => start);
-      const k = key();
-      await store.put(k, grant("2026-11-02T11:59:59Z"));
-      expect(await store.get(k)).toBeNull();
-      expect(await store.take(k)).toBeNull();
-    });
-
-    it("GivenAnUnknownKey_WhenRead_ThenNull", async () => {
-      const store = await make(() => start);
-      expect(await store.get(key())).toBeNull();
-      expect(await store.take(key())).toBeNull();
-    });
-  });
-}
-
 /**
  * CodeHost suite. `knownRepo` must exist with the App installed; `unknownRepo` must not (or
  * not have the App). The GitHub adapter runs this against a real repo locally (ADR-0041).
@@ -1059,43 +980,6 @@ export function codeHostContract(
       const { host, knownRepo, unknownRepo } = await make();
       expect(await host.listFiles(knownRepo, "no/such/folder", "main")).toBeNull();
       expect(await host.listFiles(unknownRepo, "docs", "main")).toBeNull();
-    });
-  });
-}
-
-/** CodeHostConnectionStore suite. `make` must return an empty store each time. */
-export function codeHostConnectionStoreContract(
-  name: string,
-  make: () => Promise<CodeHostConnectionStore>,
-): void {
-  describe(`CodeHostConnectionStore contract: ${name}`, () => {
-    const connection = (appId = "123"): CodeHostConnection => ({
-      appId,
-      slug: "andy-intelligence",
-      clientId: "Iv23abc",
-      owner: "albernhagen",
-      privateKey: "-----BEGIN RSA PRIVATE KEY-----\nabc\n-----END RSA PRIVATE KEY-----\n",
-      webhookSecret: "s3cret",
-      connectedAt: "2026-11-03T12:00:00.000Z",
-    });
-
-    it("GivenAnEmptyStore_WhenRead_ThenNull", async () => {
-      expect(await (await make()).get()).toBeNull();
-    });
-
-    it("GivenASavedConnection_WhenRead_ThenItIsReturnedUnchanged", async () => {
-      const store = await make();
-      expect(await store.save(connection())).toBe("saved");
-      const read = await store.get();
-      expect(read).toEqual(connection());
-      expect(CodeHostConnection.parse(read)).toEqual(read);
-    });
-
-    it("GivenASavedConnection_WhenSavedAgain_ThenExistsAndTheFirstStays", async () => {
-      const store = await make();
-      await store.save(connection());
-      expect(await store.save(connection("999"))).toBe("exists");
-      expect((await store.get())?.appId).toBe("123");
     });
   });
 }

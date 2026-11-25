@@ -8,6 +8,8 @@ describe("needsEvals", () => {
     "AGENTS.md",
     "CLAUDE.md",
     ".github/AGENTS.md",
+    "infra/AGENTS.md",
+    "packages/contracts/CLAUDE.md",
     "template/AGENTS.md.template",
     ".claude/settings.json",
     "platform/evals/cases/adversarial-clean-diff.json",
@@ -34,6 +36,12 @@ describe("needsEvals", () => {
   ])("GivenMachineryPath_WhenCheckedWithMachinery_ThenRuns: %s", (path) => {
     expect(needsEvals([path], { machinery: true })).toBe(true);
     expect(needsEvals([path])).toBe(false);
+  });
+
+  it("GivenDocsOnlyChange_WhenChecked_ThenSkips", () => {
+    expect(needsEvals(["docs/build-log.md", "docs/runbooks/agent-evals.md", "README.md"])).toBe(
+      false,
+    );
   });
 
   it("GivenNoPaths_WhenChecked_ThenSkips", () => {

@@ -1,8 +1,15 @@
 import { useEffect, useRef } from "react";
-import { type QueryClient, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import {
+  type QueryClient,
+  useMutation,
+  useQueries,
+  useQuery,
+  useQueryClient,
+} from "@tanstack/react-query";
 import type {
   AutoMerge,
   MergeMode,
+  MilestoneCase,
   MilestoneStatus,
   EnvironmentPolicy,
   ExecutorKind,
@@ -136,6 +143,28 @@ export function useTickets(projectId: string) {
   });
 }
 
+/**
+ * The command palette's tickets (AI-370): every listed project's tickets, read only while the
+ * palette is open and shared with `useTickets`' cache. Archived tickets are left out.
+ */
+export function usePaletteTickets(projectIds: readonly string[], enabled: boolean) {
+  const api = useApi();
+  return useQueries({
+    queries: projectIds.map((projectId) => ({
+      queryKey: ["tickets", projectId],
+      enabled,
+      queryFn: async () =>
+        unwrap(
+          await api.GET("/api/projects/{projectId}/tickets", { params: { path: { projectId } } }),
+        ),
+    })),
+    combine: (results) => ({
+      tickets: results.flatMap((r) => (r.data ?? []).filter((t) => !t.archived)),
+      pending: results.some((r) => r.isPending && r.fetchStatus !== "idle"),
+    }),
+  });
+}
+
 type TicketPath = { projectId: string; ticketId: string };
 
 /** A project's milestones in roadmap order (ADR-0131, AI-304); slow, as they change by hand. */
@@ -161,6 +190,20 @@ export function useSetMilestoneStatus(projectId: string) {
         await api.PATCH("/api/projects/{projectId}/milestones/{milestoneId}", {
           params: { path: { projectId, milestoneId } },
           body: { status },
+        }),
+      ),
+  );
+}
+
+/** Writes or removes (`null`) a milestone's case (ADR-0149); logged like any milestone change. */
+export function useSetMilestoneCase(projectId: string) {
+  const api = useApi();
+  return useWrite(
+    async ({ milestoneId, case: kase }: { milestoneId: string; case: MilestoneCase | null }) =>
+      unwrap(
+        await api.PATCH("/api/projects/{projectId}/milestones/{milestoneId}", {
+          params: { path: { projectId, milestoneId } },
+          body: { case: kase },
         }),
       ),
   );

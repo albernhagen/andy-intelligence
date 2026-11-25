@@ -1,12 +1,19 @@
-import { Worker, type Project, type Stage, type Ticket, type TicketType } from "@andy/contracts";
+import {
+  WorkerChoice,
+  type Worker,
+  type Project,
+  type Stage,
+  type Ticket,
+  type TicketType,
+} from "@andy/contracts";
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
+import { OptionCards, type OptionCard } from "@/components/ui/option-cards";
 import { QueryError } from "@/components/Status";
 import { workerStatus } from "@/lib/needs-you";
 import { useSetWorker, useTicketRouting, useUpdateProject, useWorker } from "@/lib/queries";
 import { layerText } from "@/lib/route-layers";
-import { SavedCue } from "@/components/SavedCue";
-import { SETTING_LABELS } from "@/lib/settings-labels";
+import { PickerRow } from "@/components/SettingRow";
+import { SETTING_LABELS, WORKER_OPTIONS } from "@/lib/settings-labels";
 
 /** Who does the work (ADR-0082): markers, the ticket's one-click switch, the project default. */
 
@@ -22,91 +29,63 @@ export function WorkerBadges(props: { worker: Worker; stage: Stage; type: Ticket
   );
 }
 
-/** The ticket's side rail: its worker, and one click to switch between agent and Andy. */
+/** The ticket's own pick, or "default": the worker comes from its epic or the project. */
+type TicketWorkerPick = WorkerChoice | "default";
+
+/**
+ * The ticket's worker (AI-375, handed over from AI-372): every choice as an option card, from
+ * the same list as the project default (`WORKER_OPTIONS`), plus "Use project default", which
+ * says where the worker then comes from (its epic or the project, AI-282: M9).
+ */
 export function WorkerControl({ ticket }: { ticket: Ticket }) {
   const path = { projectId: ticket.projectId, ticketId: ticket.id };
   const view = useWorker(path).data;
-  // Where an unpicked worker comes from: its epic or the project (AI-282: M9).
   const source = useTicketRouting(path).data?.worker;
   const set = useSetWorker(path);
   if (!view) return null;
+  const from = source ? layerText(source) : "project default";
+  const options: OptionCard<TicketWorkerPick>[] = [
+    ...WorkerChoice.options.map((w) => ({ value: w, ...WORKER_OPTIONS[w] })),
+    {
+      value: "default",
+      label: "Use project default",
+      description:
+        view.override === null
+          ? `Now ${WORKER_OPTIONS[view.worker].label.toLowerCase()}, from the ${from}.`
+          : `Whatever the ${from} says.`,
+    },
+  ];
   return (
     <div className="space-y-1">
       <p className="flex flex-wrap items-center gap-2">
         <span className="text-xs text-muted-foreground">Worker</span>
-        {view.worker === "agent" && <Badge>Agent</Badge>}
         <WorkerBadges worker={view.worker} stage={ticket.stage} type={ticket.type} />
-        {view.override === null && (
-          <span className="text-xs text-muted-foreground">
-            ({source ? layerText(source) : "project default"})
-          </span>
-        )}
       </p>
-      <p className="flex flex-wrap gap-2">
-        {view.worker !== "me" && (
-          <Button
-            size="sm"
-            variant="outline"
-            disabled={set.isPending}
-            onClick={() => set.mutate({ worker: "me" })}
-          >
-            Make it mine
-          </Button>
-        )}
-        {view.worker !== "agent" && (
-          <Button
-            size="sm"
-            variant="outline"
-            disabled={set.isPending}
-            onClick={() => set.mutate({ worker: "agent" })}
-          >
-            Give to agent
-          </Button>
-        )}
-        {view.override !== null && (
-          <Button
-            size="sm"
-            variant="ghost"
-            disabled={set.isPending}
-            onClick={() => set.mutate({ worker: null })}
-          >
-            Use project default
-          </Button>
-        )}
-      </p>
+      <OptionCards
+        label="Worker"
+        className="sm:grid-cols-1"
+        value={view.override ?? "default"}
+        disabled={set.isPending}
+        onValueChange={(v) => set.mutate({ worker: v === "default" ? null : v })}
+        options={options}
+      />
       {set.error && <QueryError error={set.error} />}
     </div>
   );
 }
 
-const DEFAULT_WORKER_LABELS: Record<Worker, string> = {
-  agent: "agent",
-  me: "me",
-  ask: "ask each ticket",
-};
-
 /** Who works a ticket that has no pick of its own; applies to existing tickets too. */
 export function DefaultWorkerSelect({ project }: { project: Project }) {
   const update = useUpdateProject(project.id);
   return (
-    <>
-      <label className="ml-3 inline-flex items-center gap-1 text-sm text-muted-foreground max-sm:min-h-11">
-        {SETTING_LABELS.defaultWorker}
-        <select
-          className="rounded border border-border bg-background px-1 max-sm:h-11 max-sm:text-base"
-          value={project.defaultWorker}
-          disabled={update.isPending}
-          onChange={(e) => update.mutate({ defaultWorker: Worker.parse(e.target.value) })}
-        >
-          {Worker.options.map((o) => (
-            <option key={o} value={o}>
-              {DEFAULT_WORKER_LABELS[o]}
-            </option>
-          ))}
-        </select>
-        {update.error && <QueryError error={update.error} />}
-      </label>
-      <SavedCue pending={update.isPending} saved={update.isSuccess} />
-    </>
+    <PickerRow
+      label={SETTING_LABELS.defaultWorker}
+      description="Who works a ticket that has no pick of its own; applies to existing tickets too."
+      value={project.defaultWorker}
+      options={WORKER_OPTIONS}
+      disabled={update.isPending}
+      onValueChange={(defaultWorker) => update.mutate({ defaultWorker })}
+      state={update}
+    />
   );
 }

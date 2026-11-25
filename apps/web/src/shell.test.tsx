@@ -1,6 +1,10 @@
 import { describe, expect, it } from "vitest";
 import { screen, waitFor, within } from "@testing-library/react";
 import { renderApp } from "@/test/harness";
+import { stubResizeObserver } from "@/test/resize-observer";
+
+// Models renders Radix Switch, which needs ResizeObserver (AI-376).
+stubResizeObserver();
 
 /** AI-26: the app shell and the project picker as the global scope (ADR-0059). */
 
@@ -20,16 +24,34 @@ const pathname = (h: { router: { state: { location: { pathname: string } } } }) 
   h.router.state.location.pathname;
 
 describe("app shell", () => {
-  it("GivenItemsInTwoProjects_WhenAnyScreenIsOpen_ThenTheHeaderCountsAllOfThem", async () => {
+  it("GivenItemsInTwoProjects_WhenAProjectScreenIsOpen_ThenTheSidebarCountsEachProject", async () => {
     const harness = await twoProjects("/p/ai");
-    expect(await screen.findByRole("link", { name: "Needs you 2" })).toBeTruthy();
+    const main = await screen.findByRole("navigation", { name: "Main" });
+    expect(
+      await within(main).findByRole("link", { name: "Inbox 1 ticket waiting on you" }),
+    ).toBeTruthy();
+    const projects = screen.getByRole("navigation", { name: "Projects" });
+    expect(
+      within(projects)
+        .getByRole("link", { name: "Ops 1 ticket waiting on you" })
+        .getAttribute("href"),
+    ).toBe("/p/ops");
     expect(pathname(harness)).toBe("/p/ai");
+  });
+
+  it("GivenItemsInTwoProjects_WhenAllProjectsIsOpen_ThenTheInboxCountsAllOfThem", async () => {
+    await twoProjects("/all/work");
+    expect(
+      await screen.findByRole("link", { name: "Inbox 2 tickets waiting on you" }),
+    ).toBeTruthy();
   });
 
   it("GivenAllProjects_WhenTheInboxOpens_ThenItListsEveryProjectsQuestions", async () => {
     await twoProjects("/all/inbox");
-    expect(await screen.findByRole("listitem", { name: "Question: Which colour?" })).toBeTruthy();
-    expect(screen.getByRole("listitem", { name: "Question: Daily?" })).toBeTruthy();
+    // AI-371: a row per ticket, each saying its question; the first one's question beside them.
+    expect(await screen.findByRole("button", { name: "AI-1: Shell" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "OPS-1: Backups" }).textContent).toContain("Daily?");
+    expect(screen.getByRole("listitem", { name: "Question: Which colour?" })).toBeTruthy();
   });
 
   it("GivenAProjectScope_WhenTheInboxOpens_ThenItListsOnlyThatProject", async () => {
@@ -44,7 +66,7 @@ describe("app shell", () => {
     await user.click(await screen.findByRole("button", { name: /All projects/ }));
     const menu = await screen.findByRole("menu");
     const ops = within(menu).getByRole("menuitem", { name: /Ops/ });
-    expect(within(ops).getByLabelText("1 waiting on you")).toBeTruthy();
+    expect(within(ops).getByLabelText("1 ticket waiting on you")).toBeTruthy();
     expect(within(menu).getByRole("menuitem", { name: /Add project/ })).toBeTruthy();
 
     await user.click(ops);
@@ -107,7 +129,9 @@ describe("app shell", () => {
   it("GivenASettingsPage_WhenItOpens_ThenTabsLeadToTheOtherSettingsPages", async () => {
     window.localStorage.setItem("andy.scope", "p:ops");
     const harness = await twoProjects("/settings/models");
-    const tabs = await screen.findByRole("navigation", { name: "Settings pages" });
+    const tabs = await screen
+      .findByRole("main")
+      .then((m) => within(m).findByRole("navigation", { name: "Settings pages" }));
     expect(within(tabs).getByRole("link", { name: "Models" }).getAttribute("aria-current")).toBe(
       "page",
     );
