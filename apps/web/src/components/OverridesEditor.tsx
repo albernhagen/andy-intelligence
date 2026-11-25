@@ -7,7 +7,7 @@ import {
 } from "@andy/contracts";
 import { TIER_FOR_SIZE, TIER_ROUTES, epicOf, inheritedOverrides } from "@andy/domain";
 import { useTicketSave } from "@/components/InlineEdit";
-import { Select } from "@/components/ui/input";
+import { PanelSelect } from "@/components/PanelSelect";
 
 /**
  * The ticket's overrides (AI-116): each edits the ticket's own value in place. A value the ticket
@@ -102,7 +102,7 @@ function OverrideField({
   epic: Ticket | null;
 }) {
   const spec = SPECS[field];
-  const s = useTicketSave(ticket);
+  const s = useTicketSave(ticket, spec.label);
   const own = spec.value(ticket.overrides);
   // A pinned model no longer in the route table still shows as itself.
   const extra =
@@ -117,24 +117,21 @@ function OverrideField({
   };
   return (
     <div className="space-y-1">
-      <label className="block space-y-1">
-        <span className="text-xs text-muted-foreground">{spec.label}</span>
-        <Select
-          className="h-8"
-          value={own}
-          disabled={s.pending}
-          onChange={(e) => save(e.target.value)}
-        >
-          <option value="">
-            {epic ? `${spec.show(epic.overrides)} (from epic ${epic.key})` : spec.fallback(ticket)}
-          </option>
-          {[...spec.options, ...extra].map(([v, text]) => (
-            <option key={v} value={v}>
-              {text}
-            </option>
-          ))}
-        </Select>
-      </label>
+      <PanelSelect
+        label={spec.label}
+        value={own}
+        disabled={s.pending}
+        onValueChange={save}
+        options={[
+          {
+            value: "",
+            label: epic
+              ? `${spec.show(epic.overrides)} (from epic ${epic.key})`
+              : spec.fallback(ticket),
+          },
+          ...[...spec.options, ...extra].map(([v, text]) => ({ value: v, label: text })),
+        ]}
+      />
       {epic && <p className="text-xs text-muted-foreground">From epic {epic.key}</p>}
       {s.error}
     </div>

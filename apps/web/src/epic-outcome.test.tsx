@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { screen, waitFor, within } from "@testing-library/react";
 import { renderApp } from "@/test/harness";
+import { optionsOf } from "@/test/pick";
 
 /** AI-186: M4.24: Epic outcome field in the epic's panel (ADR-0108). */
 describe("epic outcome", () => {
@@ -32,9 +33,10 @@ describe("epic outcome", () => {
     await harness.router.navigate({ to: `/p/ai/t/${epic.key}` });
 
     // Empty, so it's offered in the Add row (AI-330) under its epic name.
-    const add = await screen.findByLabelText("Add a list");
-    expect(within(add).getByRole("option", { name: "Done when" })).toBeTruthy();
-    expect(within(add).queryByRole("option", { name: "Acceptance criteria" })).toBeNull();
+    const add = await screen.findByRole("combobox", { name: "Add a list" });
+    const names = await optionsOf(harness.user, add);
+    expect(names).toContain("Done when");
+    expect(names).not.toContain("Acceptance criteria");
   });
 
   it("GivenAFeature_WhenItsPanelOpens_ThenThereIsNoOutcome", async () => {
@@ -43,8 +45,8 @@ describe("epic outcome", () => {
     const t = await harness.service.create("ai", { type: "feature", title: "Chips" }, "andy");
     await harness.router.navigate({ to: `/p/ai/t/${t.key}` });
 
-    const add = await screen.findByLabelText("Add a list");
-    expect(within(add).getByRole("option", { name: "Acceptance criteria" })).toBeTruthy();
+    const add = await screen.findByRole("combobox", { name: "Add a list" });
+    expect(await optionsOf(harness.user, add)).toContain("Acceptance criteria");
     expect(screen.queryByRole("region", { name: "Outcome" })).toBeNull();
   });
 });

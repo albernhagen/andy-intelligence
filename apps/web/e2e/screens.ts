@@ -16,7 +16,7 @@ export interface Screen {
   url: string;
   /** Text that shows once the screen has loaded. */
   ready: string;
-  /** Also stored dark (`screen-<name>-dark.png`, desktop). */
+  /** Also stored dark: `screen-<name>-dark.png` and `phone-screen-<name>-dark.png` (AI-379). */
   dark?: boolean;
 }
 
@@ -25,7 +25,7 @@ export const SCREENS: Screen[] = [
     route: "/all/inbox",
     name: "all-inbox",
     url: "/all/inbox",
-    ready: "Keep backups for 7 or 30 days?",
+    ready: "Dropping a card opens the ticket",
   },
   { route: "/all/board", name: "all-board", url: "/all/board", ready: "A board shows one project" },
   { route: "/all/work", name: "all-work", url: "/all/work", ready: "Story side panel" },
@@ -45,12 +45,14 @@ export const SCREENS: Screen[] = [
     name: "ticket",
     url: "/p/ai/t/AI-1",
     ready: "Picking a project should feel like picking a tenant.",
+    // AI-375: the ticket panel on direction A is checked in dark too.
+    dark: true,
   },
   {
     route: "/p/$projectId/inbox",
     name: "inbox",
     url: "/p/ops/inbox",
-    ready: "Delete the old bucket too?",
+    ready: "Rotate the deploy key",
     dark: true,
   },
   { route: "/p/$projectId/work", name: "work", url: "/p/ai/work", ready: "Story side panel" },
@@ -60,6 +62,14 @@ export const SCREENS: Screen[] = [
     name: "project-settings",
     url: "/p/ai/settings",
     ready: "AI: Andy Intelligence settings",
+    dark: true,
+  },
+  // AI-373: the brief step, with the brief read mocked (coverage.spec.ts) as the fake has no GitHub.
+  {
+    route: "/p/$projectId/setup",
+    name: "setup",
+    url: "/p/ai/setup",
+    ready: "What are you building, and for whom?",
     dark: true,
   },
   {
@@ -78,11 +88,18 @@ export const SCREENS: Screen[] = [
     route: "/p/$projectId/runs/$runId",
     name: "agent-task",
     url: "/p/ai/t/AI-3",
-    ready: "Agent task · refine",
+    ready: "Refining now",
+    dark: true,
   },
   { route: "/settings/github", name: "github", url: "/settings/github", ready: "Connect GitHub" },
   { route: "/settings/runners", name: "runners", url: "/settings/runners", ready: "Old laptop" },
-  { route: "/settings/models", name: "models", url: "/settings/models", ready: "Global routing" },
+  {
+    route: "/settings/models",
+    name: "models",
+    url: "/settings/models",
+    ready: "Runs now",
+    dark: true,
+  },
   // Opened without the state its "Connect GitHub" click stores, so it says to start again.
   {
     route: "/settings/github/callback",

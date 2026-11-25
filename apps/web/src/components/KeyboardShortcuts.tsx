@@ -1,14 +1,28 @@
 import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "@tanstack/react-router";
 import { Button } from "@/components/ui/button";
-import { scopePath, type Scope } from "@/lib/scope";
-import { SHORTCUTS, shortcutHandler } from "@/lib/shortcuts";
+import { CommandPalette } from "@/components/CommandPalette";
+import { scopePath, type Scope, type Section } from "@/lib/scope";
+import {
+  SHORTCUTS,
+  isPaletteKey,
+  moveFocus,
+  shortcutHandler,
+  type ShortcutCommand,
+} from "@/lib/shortcuts";
 
 /**
  * The shortcut layer (AI-338), mounted once in the shell: listens on the document and shows the
- * `?` list. `g i` / `g b` / `g r` stay in the current scope (one project or all projects).
+ * `?` list and the command palette (Cmd+K or Ctrl+K, AI-370). `g i` / `g b` / `g r` stay in the
+ * current scope (one project or all projects).
  */
-export function KeyboardShortcuts({ scope }: { scope: Scope }) {
+export function KeyboardShortcuts(props: {
+  scope: Scope;
+  section: Section | null;
+  paletteOpen: boolean;
+  setPaletteOpen: (open: boolean) => void;
+}) {
+  const { scope, section, paletteOpen, setPaletteOpen } = props;
   const navigate = useNavigate();
   const [helpOpen, setHelpOpen] = useState(false);
   // The listener is added once; it reads the latest scope through the ref.
@@ -23,11 +37,39 @@ export function KeyboardShortcuts({ scope }: { scope: Scope }) {
       toggleHelp: () => setHelpOpen((open) => !open),
       helpOpen: () => helpRef.current,
     });
+    // Cmd+K works even while typing in a field; the browser's own Cmd+K is not wanted here.
+    const onPaletteKey = (e: KeyboardEvent) => {
+      if (!isPaletteKey(e) || e.defaultPrevented) return;
+      e.preventDefault();
+      setHelpOpen(false);
+      setPaletteOpen(true);
+    };
     document.addEventListener("keydown", onKeyDown);
-    return () => document.removeEventListener("keydown", onKeyDown);
-  }, [navigate]);
+    document.addEventListener("keydown", onPaletteKey);
+    return () => {
+      document.removeEventListener("keydown", onKeyDown);
+      document.removeEventListener("keydown", onPaletteKey);
+    };
+  }, [navigate, setPaletteOpen]);
 
-  return helpOpen ? <ShortcutHelp onClose={() => setHelpOpen(false)} /> : null;
+  const runCommand = (command: ShortcutCommand) => {
+    if (command.kind === "go") void navigate({ href: scopePath(scope, command.target) });
+    else if (command.kind === "move") moveFocus(command.delta);
+    else setHelpOpen(true);
+  };
+
+  return (
+    <>
+      {helpOpen && <ShortcutHelp onClose={() => setHelpOpen(false)} />}
+      <CommandPalette
+        open={paletteOpen}
+        onOpenChange={setPaletteOpen}
+        scope={scope}
+        section={section}
+        runCommand={runCommand}
+      />
+    </>
+  );
 }
 
 function ShortcutHelp({ onClose }: { onClose: () => void }) {

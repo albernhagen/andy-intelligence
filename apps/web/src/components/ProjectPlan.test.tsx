@@ -65,7 +65,7 @@ describe("project plan", () => {
   });
 
   it("GivenAWaitingPlan_WhenAndyRejectsOnTheSettingsPage_ThenNoTicketsAndTheReasonShows", async () => {
-    const h = await open("/p/trl/settings");
+    const h = await open("/p/trl/settings#setup");
     const section = await screen.findByRole("region", { name: "Project plan" });
     const reject = within(section).getByRole("button", { name: "Reject" }) as HTMLButtonElement;
     expect(reject.disabled).toBe(true);

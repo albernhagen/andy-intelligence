@@ -1,20 +1,33 @@
 import { expect, test, type Page } from "@playwright/test";
+import { expectShellLoaded } from "./shell";
 
 /**
  * AI-26: screenshot checks for the shell, board, story panel (AI-29), inbox (AI-30), agent task page (AI-101) and project settings (M4.12). A diff fails CI; a deliberate
  * change updates the stored images in the same PR (README: "Screenshot checks").
  */
 
+/** The seed's clock (e2e/fake-api.ts), so "Building · 12 min" on a card or the panel never changes. */
+const SEED_NOW = new Date("2026-11-04T15:00:00.000Z");
+
 async function open(page: Page, path: string, ready: string) {
   await page.goto(path);
   await expect(page.getByText(ready).first()).toBeVisible();
-  // The header count is loaded once every screen has it.
-  await expect(page.getByRole("link", { name: "Needs you 5" })).toBeVisible();
+  await expectShellLoaded(page);
 }
 
 test("shell: inbox under All projects", async ({ page }) => {
   await open(page, "/all/inbox", "Keep backups for 7 or 30 days?");
   await expect(page).toHaveScreenshot("shell-all-projects-inbox.png");
+});
+
+test("shell: command palette finds a ticket", async ({ page }) => {
+  // The board behind the palette shows "Refining · N days": pin the clock or the image ages daily.
+  await page.clock.setFixedTime(SEED_NOW);
+  await open(page, "/p/ai", "Story side panel");
+  await page.keyboard.press("ControlOrMeta+k");
+  await page.getByRole("combobox", { name: "Search tickets and commands" }).fill("story");
+  await expect(page.getByRole("group", { name: "Tickets" })).toBeVisible();
+  await expect(page).toHaveScreenshot("shell-command-palette.png");
 });
 
 test("inbox: busy project with a stale ticket", async ({ page }) => {
@@ -28,9 +41,6 @@ test("shell: project picker open", async ({ page }) => {
   await expect(page.getByRole("menuitem", { name: /Add project/ })).toBeVisible();
   await expect(page).toHaveScreenshot("shell-picker-open.png");
 });
-
-/** The seed's clock (e2e/fake-api.ts), so "Building · 12 min" on a card or the panel never changes. */
-const SEED_NOW = new Date("2026-11-04T15:00:00.000Z");
 
 test("board: every card marker, Done as a strip", async ({ page }) => {
   await page.clock.setFixedTime(SEED_NOW);
@@ -103,7 +113,7 @@ test("story panel with a question", async ({ page }) => {
 
 test("board grouped by epic", async ({ page }) => {
   await open(page, "/p/ops", "Monthly restore drill");
-  await page.getByRole("checkbox", { name: "Group by epic" }).check();
+  await page.getByRole("switch", { name: "Group by epic" }).click();
   await expect(page.getByText("1 of 3 done").first()).toBeVisible();
   await expect(page.getByText("M2: Backups · Parked").first()).toBeVisible();
   await expect(page).toHaveScreenshot("board-grouped.png", { fullPage: true });
@@ -113,8 +123,8 @@ test("agent task page from the story panel", async ({ page }) => {
   await page.clock.setFixedTime(SEED_NOW);
   await open(page, "/p/ai/t/AI-3", "Waiting for you: 1 question");
   await page.getByRole("link", { name: "Agent task · refine" }).click();
-  await expect(page.getByRole("heading", { name: "Agent task · refine" })).toBeVisible();
-  await expect(page.getByRole("link", { name: /^AI-3: / })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Agent task · Refine" })).toBeVisible();
+  await expect(page.getByRole("link", { name: /^AI-3: / }).first()).toBeVisible();
   await expect(page).toHaveScreenshot("agent-task-page.png");
 });
 
@@ -122,7 +132,8 @@ test("agent task page from the story panel", async ({ page }) => {
 test("what's new: status, then changes by day, one opened", async ({ page }) => {
   await page.clock.setFixedTime(SEED_NOW);
   await open(page, "/p/ops/whats-new", "Backups now land in a second region");
-  await page.getByText("Backups now land in a second region").click();
+  // The row's start: its centre can be the PR link, which leaves the page.
+  await page.getByText("Backups now land in a second region").click({ position: { x: 8, y: 8 } });
   await expect(page.getByText("A nightly job copies each snapshot")).toBeVisible();
   await expect(page).toHaveScreenshot("whats-new.png", { fullPage: true });
 });
@@ -157,10 +168,10 @@ test("ticket panel routing layers", async ({ page }) => {
   await expect(routing).toHaveScreenshot("ticket-routing.png");
 });
 
-/** M4.12: AI's settings with the Changes list: a reverted flip and the revert, logged too. */
+/** M4.12: AI's settings with the Changes list (its own section since AI-372): a reverted flip and the revert, logged too. */
 test("project settings with changes", async ({ page }) => {
   await page.clock.setFixedTime(SEED_NOW);
-  await open(page, "/p/ai/settings", "AI: Andy Intelligence settings");
+  await open(page, "/p/ai/settings#changes", "AI: Andy Intelligence settings");
   await expect(page.getByText("Revert of change-flip", { exact: false })).toBeVisible();
   await expect(page).toHaveScreenshot("project-settings-changes.png", { fullPage: true });
 });

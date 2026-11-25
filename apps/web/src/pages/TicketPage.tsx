@@ -16,7 +16,7 @@ import { CancelArchiveControls } from "@/components/CancelArchiveControls";
 import { EpicChildren } from "@/components/EpicChildren";
 import { OverridesEditor } from "@/components/OverridesEditor";
 import { RouteLayers } from "@/components/RouteLayers";
-import { PullRequestLink } from "@/components/PullRequestLink";
+import { PullRequestLink, waitingPullRequest } from "@/components/PullRequestLink";
 import {
   EditableList,
   InlineText,
@@ -36,7 +36,9 @@ import { Markdown } from "@/components/Markdown";
 import { Loading, QueryError } from "@/components/Status";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Input, Select } from "@/components/ui/input";
+import { Input } from "@/components/ui/input";
+import { Kbd } from "@/components/ui/kbd";
+import { PanelSelect } from "@/components/PanelSelect";
 import {
   ticketQueryKey,
   useEvents,
@@ -97,6 +99,7 @@ export function TicketPage() {
   const drafts = useConfirmLeavingDrafts();
   // Keyboard first: the panel takes focus when it opens or shows another ticket.
   useEffect(() => panel.current?.focus({ preventScroll: true }), [ticketRef]);
+  useSlideIn(panel);
 
   return (
     <aside
@@ -105,19 +108,25 @@ export function TicketPage() {
       role="dialog"
       aria-modal="false"
       aria-label={loaded ? `${loaded.key}: ${loaded.title}` : ticketRef}
-      className="fixed inset-x-0 top-12 bottom-0 z-30 overflow-y-auto bg-raised shadow-lg outline-none min-[900px]:left-auto min-[900px]:w-[640px] min-[900px]:border-l min-[900px]:border-border"
+      // A phone gets the whole screen, clear of the notch (AI-379); the X closes it in one tap.
+      className="fixed inset-x-0 top-12 bottom-0 z-30 overflow-y-auto bg-raised shadow-lg outline-none max-sm:top-0 max-sm:pt-[env(safe-area-inset-top)] max-sm:pb-[env(safe-area-inset-bottom)] min-[900px]:left-auto min-[900px]:w-[640px] min-[900px]:border-l min-[900px]:border-border"
     >
       <div className="sticky top-0 z-10 flex min-h-10 items-center gap-2 border-b border-border bg-raised px-4 py-1 sm:h-10 sm:py-0 sm:px-6">
         {loaded && <StatusLine ticket={loaded} />}
         <Button
           size="sm"
           variant="ghost"
-          className="ml-auto size-11 shrink-0 px-1 sm:h-8 sm:w-auto"
+          className="ml-auto size-11 shrink-0 gap-1.5 px-1 text-muted-foreground sm:h-8 sm:w-auto sm:px-2"
           aria-label="Close"
+          aria-keyshortcuts="Escape"
           title="Close (Esc)"
           onClick={close}
         >
-          <X aria-hidden className="size-4" />
+          <X aria-hidden className="size-4 sm:hidden" />
+          <span aria-hidden className="max-sm:hidden">
+            Close
+          </span>
+          <Kbd className="max-sm:hidden">Esc</Kbd>
         </Button>
       </div>
       <div className="px-4 py-4 sm:px-6">
@@ -154,6 +163,24 @@ function useConfirmLeavingDrafts(): Set<string> {
     enableBeforeUnload: () => drafts.size > 0,
   });
   return drafts;
+}
+
+/**
+ * The panel slides in from the right when it opens (AI-375; design.md "Motion": 180 ms, opacity
+ * and transform only, off under reduced motion). Not on switching tickets: the panel stays.
+ */
+function useSlideIn(panel: React.RefObject<HTMLElement | null>) {
+  useEffect(() => {
+    const el = panel.current;
+    if (!el?.animate || window.matchMedia?.("(prefers-reduced-motion: reduce)").matches) return;
+    el.animate(
+      [
+        { transform: "translateX(24px)", opacity: 0 },
+        { transform: "none", opacity: 1 },
+      ],
+      { duration: 180, easing: "cubic-bezier(0.2, 0, 0, 1)" },
+    );
+  }, [panel]);
 }
 
 /** Esc closes the panel, unless a field, an open editor or a menu took it first. */
@@ -201,12 +228,17 @@ function StatusLine({ ticket }: { ticket: Ticket }) {
     },
     new Date(),
   );
+  const repos = useProjects().data?.find((p) => p.id === ticket.projectId)?.repos ?? [];
+  const pr = waitingPullRequest(events, repos);
   return (
-    <p role="status" aria-label="Status" className="min-w-0 sm:truncate">
-      <Badge variant={tone} className="text-sm wrap-anywhere">
-        {text}
-      </Badge>
-    </p>
+    <div className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1">
+      <p role="status" aria-label="Status" className="min-w-0 sm:truncate">
+        <Badge variant={tone} className="wrap-anywhere">
+          {text}
+        </Badge>
+      </p>
+      {pr && <span className="text-sm text-muted-foreground">PR #{pr.number} waits for you</span>}
+    </div>
   );
 }
 
@@ -215,8 +247,8 @@ function StatusLine({ ticket }: { ticket: Ticket }) {
  * An epic then shows its outcome, tickets, milestone and night plan before its fields.
  */
 function Story({ ticket: t }: { ticket: Ticket }) {
-  const title = useTicketSave(t);
-  const body = useTicketSave(t);
+  const title = useTicketSave(t, "Title");
+  const body = useTicketSave(t, "Description");
   const isEpic = t.type === "epic";
   return (
     <article className="space-y-6">
@@ -231,8 +263,13 @@ function Story({ ticket: t }: { ticket: Ticket }) {
           pending={title.pending}
           error={title.error}
           wrap={(button) => (
-            <h2 className="text-lg font-medium">
-              <span className="text-muted-foreground tabular-nums">{t.key}:</span> {button}
+            // The key above the title in mono (mockup); the heading still reads "AI-1: …".
+            <h2 className="text-lg font-semibold">
+              <span className="block font-mono text-xs font-normal text-muted-foreground">
+                {t.key}
+                <span className="sr-only">:</span>
+              </span>{" "}
+              {button}
             </h2>
           )}
         />
@@ -279,9 +316,16 @@ function Next({ ticket: t }: { ticket: Ticket }) {
   const repos = useProjects().data?.find((p) => p.id === t.projectId)?.repos ?? [];
   return (
     <section aria-label="Next" className="space-y-2">
-      <MoveControls ticket={t} />
-      <Readiness {...pathOf(t)} />
-      <PullRequestLink events={events} repos={repos} />
+      <MoveControls
+        ticket={t}
+        aside={
+          <>
+            <PullRequestLink events={events} repos={repos} />
+            <Readiness {...pathOf(t)} />
+          </>
+        }
+      />
+      <ReadinessMissing {...pathOf(t)} />
       <OpenQuestions {...pathOf(t)} />
     </section>
   );
@@ -333,22 +377,20 @@ function ListFields({ ticket: t }: { ticket: Ticket }) {
         />
       ))}
       {folded.length > 0 && (
-        <Select
-          aria-label="Add a list"
-          className="h-8 w-auto text-muted-foreground"
-          value=""
-          onChange={(e) => {
-            const f = e.target.value as ListKey;
-            if (f) setOpened(({ keys }) => ({ keys: [...keys, f], focus: f }));
-          }}
-        >
-          <option value="">Add…</option>
-          {folded.map((f) => (
-            <option key={f} value={f}>
-              {listLabel(t, f)}
-            </option>
-          ))}
-        </Select>
+        <div className="w-44">
+          <PanelSelect
+            label="Add a list"
+            hideLabel
+            placeholder="Add…"
+            keepFocusOnPick
+            value=""
+            options={folded.map((f) => ({ value: f, label: listLabel(t, f) }))}
+            onValueChange={(v) => {
+              const f = v as ListKey;
+              if (f) setOpened(({ keys }) => ({ keys: [...keys, f], focus: f }));
+            }}
+          />
+        </div>
       )}
     </>
   );
@@ -365,7 +407,7 @@ function ListField({
   label: string;
   autoFocus: boolean;
 }) {
-  const s = useTicketSave(ticket);
+  const s = useTicketSave(ticket, label);
   return (
     <EditableList
       label={label}
@@ -380,7 +422,7 @@ function ListField({
 
 /** An epic's outcome: one line saying what is true when it is done (ADR-0108). */
 function Outcome({ ticket: t }: { ticket: Ticket }) {
-  const outcome = useTicketSave(t);
+  const outcome = useTicketSave(t, "Outcome");
   return (
     <section aria-label="Outcome" className="space-y-1">
       <h3 className="text-sm font-medium">Outcome</h3>
@@ -404,7 +446,7 @@ function Outcome({ ticket: t }: { ticket: Ticket }) {
 function Rail({ ticket: t }: { ticket: Ticket }) {
   const tickets = useTickets(t.projectId).data ?? [];
   const epics = tickets.filter((o) => o.type === "epic" && o.id !== t.id);
-  const sizeReason = useTicketSave(t);
+  const sizeReason = useTicketSave(t, "Size reason");
 
   return (
     <aside aria-label="Details" className="min-w-0 space-y-4">
@@ -421,7 +463,7 @@ function Rail({ ticket: t }: { ticket: Ticket }) {
           ticket={t}
           label="Size"
           value={t.size ?? ""}
-          options={[["", "—"], ...Size.options.map((v) => [v, v] as const)]}
+          options={[["", "No size"], ...Size.options.map((v) => [v, SIZE_LABELS[v]] as const)]}
           patch={(v) => ({ size: v === "" ? null : Size.parse(v) })}
         />
         <InlineText
@@ -506,35 +548,29 @@ function SelectField({
   options: (readonly [string, string])[];
   patch: (value: string) => Parameters<ReturnType<typeof useTicketSave>["save"]>[0];
 }) {
-  const s = useTicketSave(ticket);
+  const s = useTicketSave(ticket, label);
   return (
     <div className="space-y-1">
-      <label className="block space-y-1">
-        <span className="text-xs text-muted-foreground">{label}</span>
-        <Select
-          className="h-8"
-          value={value}
-          disabled={s.pending}
-          onChange={(e) => s.save(patch(e.target.value))}
-        >
-          {options.map(([v, text]) => (
-            <option key={v} value={v}>
-              {text}
-            </option>
-          ))}
-        </Select>
-      </label>
+      <PanelSelect
+        label={label}
+        value={value}
+        options={options.map(([v, text]) => ({ value: v, label: text }))}
+        disabled={s.pending}
+        onValueChange={(v) => s.save(patch(v))}
+      />
       {s.error}
     </div>
   );
 }
+
+const SIZE_LABELS: Record<Size, string> = { S: "S · small", M: "M · medium", L: "L · large" };
 
 /**
  * Blockers are ticket keys in any project (AI-96); entries from before hold same-project ids.
  * A blocker from another project links to its own project, by its key.
  */
 function BlockedBy({ ticket: t, tickets }: { ticket: Ticket; tickets: Ticket[] }) {
-  const s = useTicketSave(t);
+  const s = useTicketSave(t, "Blocked by");
   const [key, setKey] = useState("");
   const byRef = ticketsByRef(tickets);
   const candidates = tickets.filter(
@@ -587,20 +623,15 @@ function BlockedBy({ ticket: t, tickets }: { ticket: Ticket; tickets: Ticket[] }
           })}
         </ul>
       )}
-      <Select
-        aria-label="Add a blocker"
-        className="h-8"
+      <PanelSelect
+        label="Add a blocker"
+        hideLabel
+        placeholder="Add a ticket…"
         value=""
         disabled={s.pending}
-        onChange={(e) => e.target.value && add(e.target.value)}
-      >
-        <option value="">Add a blocker…</option>
-        {candidates.map((o) => (
-          <option key={o.id} value={o.key}>
-            {o.key}: {o.title}
-          </option>
-        ))}
-      </Select>
+        options={candidates.map((o) => ({ value: o.key, label: `${o.key}: ${o.title}` }))}
+        onValueChange={(v) => v && add(v)}
+      />
       <form
         onSubmit={(e) => {
           e.preventDefault();
@@ -622,28 +653,40 @@ function BlockedBy({ ticket: t, tickets }: { ticket: Ticket; tickets: Ticket[] }
   );
 }
 
+/** The Definition of Ready as a marker at the end of the action row (mockup). */
 function Readiness(path: TicketPath) {
   const dor = useReadiness(path);
+  if (!dor.data) return null;
   return (
-    <section aria-label="Definition of Ready" className="space-y-1 text-xs">
-      {showsError(dor) && (
-        <QueryError
-          error={dor.error}
-          what="the Definition of Ready"
-          onRetry={() => void dor.refetch()}
-        />
+    <section aria-label="Definition of Ready" className="sm:ml-auto">
+      {dor.data.met ? (
+        <Badge variant="success">Definition of Ready met</Badge>
+      ) : (
+        <Badge variant="attention">Definition of Ready: {dor.data.missing.length} missing</Badge>
       )}
-      {dor.data?.met && <p className="text-muted-foreground">Definition of Ready: met.</p>}
-      {dor.data && !dor.data.met && (
-        <>
-          <p className="text-muted-foreground">Definition of Ready missing:</p>
-          <ul className="list-disc pl-4">
-            {dor.data.missing.map((m) => (
-              <li key={m}>{m}</li>
-            ))}
-          </ul>
-        </>
-      )}
+    </section>
+  );
+}
+
+/** What the Definition of Ready still lacks, under the action row; or why it couldn't be read. */
+function ReadinessMissing(path: TicketPath) {
+  const dor = useReadiness(path);
+  if (showsError(dor))
+    return (
+      <QueryError
+        error={dor.error}
+        what="the Definition of Ready"
+        onRetry={() => void dor.refetch()}
+      />
+    );
+  if (!dor.data || dor.data.met) return null;
+  return (
+    <section aria-label="Definition of Ready missing" className="text-xs">
+      <ul className="list-disc pl-4 text-muted-foreground">
+        {dor.data.missing.map((m) => (
+          <li key={m}>{m}</li>
+        ))}
+      </ul>
     </section>
   );
 }

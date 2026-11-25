@@ -16,10 +16,11 @@ Stack: React, Tailwind v4, shadcn/ui components in `src/components/ui/`, icons f
 
 ## Layout
 
-- One shell on every screen (`src/components/AppShell.tsx`): project picker, navigation, "Needs you N". Pages never draw their own header.
-- The header holds at most six destinations (Inbox, Board, Roadmap, Work, Dashboards, What's new); every settings page and Sign out sit in one Settings menu, and settings pages share `SettingsTabs`. A new screen goes under an existing destination or replaces one (AI-335).
+- One shell on every screen (`src/components/AppShell.tsx`, AI-370). Desktop: a sunken left sidebar (picker, destinations, projects, quota, palette, Settings menu); phone: header and bottom bar. Pages never draw their own navigation.
+- At most six destinations (Inbox, Board, Roadmap, Work, Dashboards, What's new); settings, theme and Sign out sit in the Settings menu. A new screen goes under a destination or replaces one (AI-335); `lib/shell-routes.ts` lists it (a test checks every route).
 - The picker is the global scope: project screens under `/p/<project>/…`, cross-project under `/all/…`. A new screen gets both, or says why not (the board needs one project).
-- Every page uses one of three [page templates](design-details.md#page-templates): list with detail, settings with section nav, reading page (screens move to them from AI-370). Padding `px-4 sm:px-6 py-4`.
+- Every page uses one of three [page templates](design-details.md#page-templates) beside the sidebar: list with detail, settings with section nav, reading page (AI-371 to AI-378). Padding `px-4 sm:px-6 py-4`.
+- A page opens with `PageHeader` (`src/components/PageHeader.tsx`): title, view controls beside it, actions at the end, a border below.
 - A ticket opens as a panel over the board, led by its status line; prose uses `Markdown`.
 
 ## Phone
@@ -35,7 +36,7 @@ Below `sm` (640px; `useIsPhone`):
 
 ## Keyboard
 
-`SHORTCUTS` in `src/lib/shortcuts.ts` (AI-338); `?` lists them. Never while typing; no single key writes. Screens opt in with `data-nav-*` and a visible focus outline.
+`SHORTCUTS` in `src/lib/shortcuts.ts` (AI-338); `?` lists them. Never while typing (except Cmd+K); no single key writes. Screens opt in with `data-nav-*` and a visible focus outline. Cmd+K opens the command palette: tickets, shortcut `command`s, pages.
 
 ## Type
 
@@ -66,13 +67,21 @@ Data-heavy screens favour density over air:
 - Radii: `rounded-sm` keys, `rounded-md` controls, `rounded-lg` cards and menus. Borders 1px `border-border`. Shadows only on things that float (menus, a dragged card).
 - Show the number (lane count, minutes), not a chart.
 
+## Form components
+
+shadcn/ui on Radix (`src/components/ui/`, AI-368); never a native `<select>` or checkbox. Fewer than six options: `OptionCards`, every option with its description (`OptionTable` when they differ on two facts); six or more: `Select`. `Switch` applies at once; `Checkbox` for independent choices; `Field` adds label, help, error and saved cue; `Tabs` for views. With `label`, a switch or checkbox row is the 44 px target.
+
 ## Status markers
 
 The marker set: [`design-status-markers.md`](design-status-markers.md).
 
 ## Feedback
 
-Every write confirms where it happened: the changed row, card or field shows the new value, and a failure shows the API's message there (`QueryError`). Shared confirmation components: AI-369.
+Every write confirms where it happened: the changed row, card or field shows the new value, and a failure shows the API's message there (`QueryError`).
+
+## Feedback components
+
+Toast with Undo (reversible writes), Dialog, Sheet, Tooltip, Skeleton, EmptyState and Kbd (AI-369): [when to use each](design-details.md#feedback-components).
 
 ## Copy
 

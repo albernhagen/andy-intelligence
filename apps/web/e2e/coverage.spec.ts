@@ -1,10 +1,13 @@
 import { expect, test, type Page } from "@playwright/test";
+import { expectShellLoaded } from "./shell";
 import { mockDashboards, waitForStableCharts } from "./dashboard-fixtures";
+import { mockBriefStep } from "./setup-fixtures";
 import { SCREENS, type Screen } from "./screens";
+import { expectPageFits, expectTouchTargets } from "./phone";
 
 /**
  * AI-366: every screen in src/router.tsx (e2e/screens.ts) at 1280×800 and 390×844, and the shell,
- * inbox, board and project settings also dark. Viewport-sized images, so each is the first screen
+ * screens marked `dark` also dark, at both widths (AI-379). Every phone case checks fit and 44 px targets. Viewport-sized images, so each is the first screen
  * Andy sees; the other specs keep the full-page and state-specific images.
  */
 
@@ -17,6 +20,8 @@ const OPEN: Record<string, (page: Page) => Promise<void>> = {
   // The dashboard reads use the server's real clock; serve the fixed ones.
   "all-dashboards": mockDashboards,
   dashboards: mockDashboards,
+  // AI-373: the fake API has no GitHub, so the brief's state is served.
+  setup: mockBriefStep,
 };
 
 async function open(page: Page, screen: Screen) {
@@ -26,11 +31,10 @@ async function open(page: Page, screen: Screen) {
   if (screen.name === "agent-task") {
     // The run's id is random, so open it from its ticket's panel.
     await page.getByRole("link", { name: "Agent task · refine" }).click();
-    await expect(page.getByRole("heading", { name: "Agent task · refine" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Agent task · Refine" })).toBeVisible();
   }
   await expect(page.getByText(screen.ready).first()).toBeVisible();
-  // The header count is loaded once every screen has it.
-  await expect(page.getByRole("link", { name: "Needs you 5" })).toBeVisible();
+  await expectShellLoaded(page);
   if (screen.name.endsWith("dashboards")) await waitForStableCharts(page);
 }
 
@@ -40,9 +44,12 @@ for (const screen of SCREENS) {
     await expect(page).toHaveScreenshot(`screen-${screen.name}.png`);
   });
 
+  // AI-379: every screen fits 390 px and every control is a 44 px target, shell included.
   test(`screen ${screen.route} on a phone`, async ({ page }) => {
     await page.setViewportSize(PHONE);
     await open(page, screen);
+    await expectPageFits(page);
+    await expectTouchTargets(page.locator("body"));
     await expect(page).toHaveScreenshot(`phone-screen-${screen.name}.png`);
   });
 
@@ -51,6 +58,15 @@ for (const screen of SCREENS) {
       await page.emulateMedia({ colorScheme: "dark" });
       await open(page, screen);
       await expect(page).toHaveScreenshot(`screen-${screen.name}-dark.png`);
+    });
+
+    test(`screen ${screen.route} dark on a phone`, async ({ page }) => {
+      await page.setViewportSize(PHONE);
+      await page.emulateMedia({ colorScheme: "dark" });
+      await open(page, screen);
+      await expectPageFits(page);
+      await expectTouchTargets(page.locator("body"));
+      await expect(page).toHaveScreenshot(`phone-screen-${screen.name}-dark.png`);
     });
   }
 }

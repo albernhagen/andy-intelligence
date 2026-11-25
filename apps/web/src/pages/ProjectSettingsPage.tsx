@@ -1,9 +1,8 @@
-import type { ReactNode } from "react";
-import { useParams } from "@tanstack/react-router";
+import { useId, type ReactNode } from "react";
+import { Link, useParams, useRouterState } from "@tanstack/react-router";
+import { MergeMode, type Project } from "@andy/contracts";
+import { suggestedMergeMode } from "@andy/domain";
 import { LayerOrderHint } from "@/components/RouteLayers";
-import { SettingsTabs } from "@/components/SettingsTabs";
-import { EnvironmentPolicy, MergeMode, PlanApproval, type Project } from "@andy/contracts";
-import { MERGE_MODE_TEXT, suggestedMergeMode } from "@andy/domain";
 import { ClearQuotaIdle } from "@/components/ClearQuotaIdle";
 import { ConfigHistory } from "@/components/ConfigHistory";
 import { DispatchControls } from "@/components/DispatchControls";
@@ -14,20 +13,63 @@ import { SpendCaps } from "@/components/spend/SpendCaps";
 import { Loading, QueryError } from "@/components/Status";
 import { DefaultWorkerSelect } from "@/components/WorkerControls";
 import { DefaultExecutorSelect } from "@/components/ExecutorControls";
-import { useProjects, useUpdateProject } from "@/lib/queries";
+import {
+  PickerRow,
+  SaveError,
+  SettingHeading,
+  SettingRow,
+  SwitchRow,
+} from "@/components/SettingRow";
+import { Badge } from "@/components/ui/badge";
+import { Input } from "@/components/ui/input";
+import { OptionCards } from "@/components/ui/option-cards";
+import { useProjects, useSetupChecklist, useUpdateProject } from "@/lib/queries";
 import { showsError } from "@/lib/live";
-import { SavedCue } from "@/components/SavedCue";
 import { dateOnly } from "@/lib/format";
-import { SETTING_LABELS } from "@/lib/settings-labels";
+import { cn } from "@/lib/utils";
+import {
+  ENVIRONMENT_OPTIONS,
+  MERGE_MODE_OPTIONS,
+  PLAN_APPROVAL_OPTIONS,
+  SETTING_LABELS,
+} from "@/lib/settings-labels";
 
 /**
- * One project's settings (AI-46), linked from the workspace header. Every switch saves on change
- * through PATCH /api/projects/{id}, the same rules MCP's set_* tools use. Builds has no MCP setter
- * (ADR-0063); `get_project_settings` reads all of them. Below them, every change with Revert (M4.12).
+ * One project's settings (AI-46), rebuilt on the "settings with section nav" template (AI-372):
+ * section links on the left, one section beside them, picked by the URL's hash (`#limits`) so a
+ * section can be linked. Every control saves on change through PATCH /api/projects/{id}, the
+ * same rules MCP's set_* tools use, and confirms at the control. Builds has no MCP setter
+ * (ADR-0063); `get_project_settings` reads all of them. Changes lists every change with Revert
+ * (M4.12).
  */
+
+const SECTIONS = [
+  { id: "setup", title: "Setup", what: "Where this project's plan and setup stand." },
+  { id: "automation", title: "Automation", what: "What runs on its own, and what waits for you." },
+  { id: "limits", title: "Limits", what: "How much this project may do at once, ask and spend." },
+  { id: "defaults", title: "Defaults", what: "What a ticket gets when it has no pick of its own." },
+  { id: "notifications", title: "Notifications", what: "When this project emails you." },
+  {
+    id: "changes",
+    title: "Changes",
+    what: "Every settings change, newest first; Revert writes the old value back.",
+  },
+] as const;
+
+type SectionId = (typeof SECTIONS)[number]["id"];
+
+/** Automation unless the hash names another section. */
+const DEFAULT_SECTION: SectionId = "automation";
+
+function sectionFrom(hash: string): SectionId {
+  const id = hash.replace(/^#/, "");
+  return SECTIONS.some((s) => s.id === id) ? (id as SectionId) : DEFAULT_SECTION;
+}
+
 export function ProjectSettingsPage() {
   const { projectId } = useParams({ strict: false });
   const projects = useProjects();
+  const hash = useRouterState({ select: (s) => s.location.hash });
   if (projects.isPending) return <Loading />;
   if (projects.data === undefined || showsError(projects))
     return (
@@ -40,153 +82,169 @@ export function ProjectSettingsPage() {
   const project = projects.data.find((p) => p.id === projectId);
   if (!project) return <p className="text-muted-foreground">Project not found.</p>;
 
+  const current = SECTIONS.find((s) => s.id === sectionFrom(hash))!;
   return (
-    <section className="max-w-2xl space-y-4">
-      <SettingsTabs />
-      <h2 className="text-lg font-medium">
+    <div className="grid gap-4 md:-my-4 md:min-h-dvh md:grid-cols-[10.5rem_minmax(0,1fr)] md:gap-0">
+      <SectionNav project={project} current={current.id} />
+      <div role="region" aria-label="Settings" className="min-w-0 space-y-3 md:py-4 md:pl-7">
+        <header className="space-y-0.5">
+          <h3 className="text-lg font-semibold">{current.title}</h3>
+          <p className="text-sm text-muted-foreground">{current.what}</p>
+        </header>
+        <Section id={current.id} project={project} />
+      </div>
+    </div>
+  );
+}
+
+/** The section links: one per section, the current one selected; a strip that scrolls on a phone. */
+function SectionNav({ project, current }: { project: Project; current: SectionId }) {
+  const setup = useSetupChecklist(project.id).data;
+  const left = setup && !setup.complete ? setup.items.filter((i) => i.status !== "done").length : 0;
+  return (
+    <div className="min-w-0 space-y-2 md:border-r md:border-border md:py-4 md:pr-2">
+      <h2 className="px-2 text-xs text-muted-foreground">
         {project.key}: {project.name} settings
       </h2>
-      {project.repos.length > 0 && (
-        <p className="text-sm text-muted-foreground">Repos: {project.repos.join(", ")}</p>
-      )}
-      <LayerOrderHint />
-      <ProjectPlanPanel projectId={project.id} />
-      <SetupChecklist projectId={project.id} />
-      <div role="region" aria-label="Settings" className="space-y-4">
-        <SettingsSection title="Automation" what="What runs on its own, and what waits for you.">
-          <Setting what="Build tasks may start at all, by hand or on their own. Owner only: set here in the app, never over MCP. Turn on after the live sandbox proof.">
-            <BuildsEnabledToggle project={project} />
-          </Setting>
-          <Setting what="Ready tickets are built on their own, top of the order first. Needs Builds on.">
-            <AutoBuildToggle project={project} />
-          </Setting>
-          <Setting what="Which tickets wait for you to approve a read-only plan before their build.">
-            <PlanApprovalSelect project={project} />
-          </Setting>
-          <Setting what="Refine starts on its own for tickets entering Up next and answered ones.">
-            <AutoRefineToggle project={project} />
-          </Setting>
-          <Setting what="Who merges this project's agent PRs once every check and both reviews pass (ADR-0124), strictest first. Until a mode is saved the gate merges nothing. Loosen it only here; over MCP it can only be tightened.">
-            <MergeModeSelect project={project} />
-          </Setting>
-        </SettingsSection>
-        <SettingsSection title="Limits" what="How much this project may do at once, ask and spend.">
-          <Setting what="Agent tasks at once: agent tasks this project may have in flight (1 to 4). Paused: dispatch starts nothing here; agent tasks in flight finish.">
-            <DispatchControls project={project} />
+      <nav aria-label="Settings sections" className="relative overflow-x-auto">
+        <ul className="flex gap-0.5 md:flex-col">
+          {SECTIONS.map((s) => (
+            <li key={s.id}>
+              <Link
+                to="/p/$projectId/settings"
+                params={{ projectId: project.id }}
+                hash={s.id}
+                resetScroll={false}
+                aria-current={s.id === current ? "page" : undefined}
+                className={cn(
+                  "flex h-11 items-center justify-between gap-2 whitespace-nowrap rounded-md border border-transparent px-2 text-sm text-muted-foreground hover:bg-muted hover:text-foreground md:h-8",
+                  "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring",
+                  s.id === current && "border-selected-edge bg-selected text-foreground",
+                )}
+              >
+                {s.title}
+                {s.id === "setup" && left > 0 && (
+                  <span className="text-2xs font-medium text-attention tabular-nums">
+                    {left} left
+                  </span>
+                )}
+              </Link>
+            </li>
+          ))}
+        </ul>
+      </nav>
+    </div>
+  );
+}
+
+function Section({ id, project }: { id: SectionId; project: Project }) {
+  switch (id) {
+    case "setup":
+      return (
+        <section aria-label="Setup" className="space-y-4">
+          {project.repos.length > 0 && (
+            <p className="text-sm text-muted-foreground">Repos: {project.repos.join(", ")}</p>
+          )}
+          <ProjectPlanPanel projectId={project.id} />
+          <SetupChecklist projectId={project.id} />
+        </section>
+      );
+    case "automation":
+      return (
+        <Rows label="Automation">
+          <MergeModePicker project={project} />
+          <PlanApprovalPicker project={project} />
+          <AutoRefineSwitch project={project} />
+          <BuildsSwitch project={project} />
+          <AutoBuildSwitch project={project} />
+        </Rows>
+      );
+    case "limits":
+      return (
+        <Rows label="Limits">
+          <DispatchControls project={project}>
             <ClearQuotaIdle />
-          </Setting>
-          <Setting what="Refine questions this project asks per rolling 24 hours; extras become assumptions.">
-            <DailyQuestionCap project={project} />
-          </Setting>
-          <li className="px-3 py-2">
+          </DispatchControls>
+          <DailyQuestionCap project={project} />
+          <div className="py-2.5">
             <SpendCaps projectId={project.id} />
-          </li>
-        </SettingsSection>
-        <SettingsSection title="Defaults" what="What a ticket gets when it has no pick of its own.">
-          <Setting what="Who works a ticket that has no pick of its own; applies to existing tickets too.">
-            <DefaultWorkerSelect project={project} />
-          </Setting>
-          <Setting what="Where tickets without their own pick run: GitHub Actions, or your local runner while it is present (else Actions).">
-            <DefaultExecutorSelect project={project} />
-          </Setting>
-          <Setting what="Where releases go: prod only (with PR previews), or dev first and then a promote to prod. Nothing deploys from it yet.">
-            <EnvironmentsSelect project={project} />
-          </Setting>
-        </SettingsSection>
-        <SettingsSection title="Notifications">
-          <Setting what="Email you when a ticket here starts to need you: items within 10 minutes share one email, at most 20 a day.">
-            <EmailNotificationsControl project={project} />
-          </Setting>
-        </SettingsSection>
-      </div>
-      <ConfigHistory projectId={project.id} />
-    </section>
-  );
+          </div>
+        </Rows>
+      );
+    case "defaults":
+      return (
+        <Rows label="Defaults">
+          <div className="pb-1">
+            <LayerOrderHint />
+          </div>
+          <DefaultWorkerSelect project={project} />
+          <DefaultExecutorSelect project={project} />
+          <EnvironmentsPicker project={project} />
+        </Rows>
+      );
+    case "notifications":
+      return (
+        <Rows label="Notifications">
+          <EmailNotificationsControl project={project} />
+        </Rows>
+      );
+    case "changes":
+      return <ConfigHistory projectId={project.id} />;
+  }
 }
 
-/**
- * A headed group of settings (AI-339): Automation, Limits, Defaults, Notifications, in that
- * order. Each setting still saves the moment it changes.
- */
-function SettingsSection({
-  title,
-  what,
-  children,
-}: {
-  title: string;
-  what?: string;
-  children: ReactNode;
-}) {
+/** One section's settings, a row each; each still saves the moment it changes. */
+function Rows({ label, children }: { label: string; children: ReactNode }) {
   return (
-    <section aria-label={title} className="space-y-1">
-      <h3 className="text-sm font-medium">{title}</h3>
-      {what && <p className="text-xs text-muted-foreground">{what}</p>}
-      <ul
-        aria-label={`${title} settings`}
-        className="divide-y divide-border rounded-md border border-border"
-      >
-        {children}
-      </ul>
+    <section aria-label={label} className="space-y-0">
+      {children}
     </section>
-  );
-}
-
-/** A row: the control, then one line on what it does. */
-function Setting({ what, children }: { what: string; children: ReactNode }) {
-  return (
-    <li className="space-y-1 px-3 py-2">
-      <div className="-ml-3 flex flex-wrap items-center gap-y-1">{children}</div>
-      <p className="text-xs text-muted-foreground">{what}</p>
-    </li>
   );
 }
 
 /** Refine questions the project takes per rolling 24 hours; extras become assumptions (ADR-0075). */
 function DailyQuestionCap({ project }: { project: Project }) {
   const update = useUpdateProject(project.id);
+  const id = useId();
   return (
-    <>
-      <label className="ml-3 inline-flex items-center gap-1 text-sm max-sm:min-h-11">
-        {SETTING_LABELS.dailyQuestionCap}
-        <input
-          type="number"
-          min={0}
-          max={50}
-          aria-label="Questions per day"
-          className="w-14 rounded-md border border-border bg-background px-1 max-sm:h-11 max-sm:text-base"
-          defaultValue={project.dailyQuestionCap}
-          disabled={update.isPending}
-          onBlur={(e) => {
-            const value = Number(e.target.value);
-            if (Number.isInteger(value) && value !== project.dailyQuestionCap) {
-              update.mutate({ dailyQuestionCap: value });
-            }
-          }}
-        />
-        {update.error && <QueryError error={update.error} />}
-      </label>
-      <SavedCue pending={update.isPending} saved={update.isSuccess} />
-    </>
+    <SettingRow
+      label={SETTING_LABELS.dailyQuestionCap}
+      htmlFor={id}
+      description="Refine questions this project asks per rolling 24 hours (0 to 50); extras become assumptions."
+      state={update}
+    >
+      <Input
+        id={id}
+        key={project.dailyQuestionCap}
+        type="number"
+        min={0}
+        max={50}
+        className="w-16 tabular-nums max-sm:h-11 max-sm:text-base"
+        defaultValue={project.dailyQuestionCap}
+        disabled={update.isPending}
+        onBlur={(e) => {
+          const value = Number(e.target.value);
+          if (Number.isInteger(value) && value !== project.dailyQuestionCap) {
+            update.mutate({ dailyQuestionCap: value });
+          }
+        }}
+      />
+    </SettingRow>
   );
 }
 
 /** On: refine starts on its own for tickets entering Up next and answered ones (ADR-0075). */
-function AutoRefineToggle({ project }: { project: Project }) {
+function AutoRefineSwitch({ project }: { project: Project }) {
   const update = useUpdateProject(project.id);
   return (
-    <>
-      <label className="ml-3 inline-flex items-center gap-1 text-sm max-sm:min-h-11">
-        <input
-          type="checkbox"
-          checked={project.autoRefine}
-          disabled={update.isPending}
-          onChange={(e) => update.mutate({ autoRefine: e.target.checked })}
-        />
-        {SETTING_LABELS.autoRefine}
-        {update.error && <QueryError error={update.error} />}
-      </label>
-      <SavedCue pending={update.isPending} saved={update.isSuccess} />
-    </>
+    <SwitchRow
+      label={SETTING_LABELS.autoRefine}
+      description="Refine starts on its own for tickets entering Up next and answered ones."
+      checked={project.autoRefine}
+      disabled={update.isPending}
+      onCheckedChange={(autoRefine) => update.mutate({ autoRefine })}
+      state={update}
+    />
   );
 }
 
@@ -194,147 +252,130 @@ function AutoRefineToggle({ project }: { project: Project }) {
  * On: build runs may start at all, by hand or on their own (ADR-0063). Turn on only after the live
  * sandbox proof (runbook agent-runs.md §9); who and when are recorded and shown.
  */
-function BuildsEnabledToggle({ project }: { project: Project }) {
+function BuildsSwitch({ project }: { project: Project }) {
   const update = useUpdateProject(project.id);
   const when = project.buildEnabledAt ? dateOnly(project.buildEnabledAt) : null;
   return (
-    <>
-      <label className="ml-3 inline-flex items-center gap-1 text-sm max-sm:min-h-11">
-        <input
-          type="checkbox"
-          checked={project.buildEnabled}
-          disabled={update.isPending}
-          onChange={(e) => update.mutate({ buildEnabled: e.target.checked })}
-        />
-        {SETTING_LABELS.buildEnabled}
-        {project.buildEnabledBy && when && (
-          <span className="text-muted-foreground" title={`by ${project.buildEnabledBy}`}>
+    <SwitchRow
+      label={SETTING_LABELS.buildEnabled}
+      description="Build tasks may start at all, by hand or on their own. Set here only, never over MCP; turn on after the live sandbox proof."
+      note={
+        project.buildEnabledBy &&
+        when && (
+          <span title={`by ${project.buildEnabledBy}`}>
             ({project.buildEnabled ? "on" : "off"} since {when})
           </span>
-        )}
-        {update.error && <QueryError error={update.error} />}
-      </label>
-      <SavedCue pending={update.isPending} saved={update.isSuccess} />
-    </>
+        )
+      }
+      checked={project.buildEnabled}
+      disabled={update.isPending}
+      onCheckedChange={(buildEnabled) => update.mutate({ buildEnabled })}
+      state={update}
+    />
   );
 }
 
 /** On: Ready tickets are built on their own, top of the order first (ADR-0063); needs Builds on. */
-function AutoBuildToggle({ project }: { project: Project }) {
+function AutoBuildSwitch({ project }: { project: Project }) {
   const update = useUpdateProject(project.id);
   return (
-    <>
-      <label className="ml-3 inline-flex items-center gap-1 text-sm max-sm:min-h-11">
-        <input
-          type="checkbox"
-          checked={project.autoBuild}
-          disabled={update.isPending || !project.buildEnabled}
-          onChange={(e) => update.mutate({ autoBuild: e.target.checked })}
-        />
-        {SETTING_LABELS.autoBuild}
-        {update.error && <QueryError error={update.error} />}
-      </label>
-      <SavedCue pending={update.isPending} saved={update.isSuccess} />
-    </>
+    <SwitchRow
+      label={SETTING_LABELS.autoBuild}
+      description="Ready tickets are built on their own, top of the order first. Needs Builds on."
+      checked={project.autoBuild}
+      disabled={update.isPending || !project.buildEnabled}
+      onCheckedChange={(autoBuild) => update.mutate({ autoBuild })}
+      state={update}
+    />
   );
 }
-
-const PLAN_APPROVAL_LABELS: Record<PlanApproval, string> = {
-  none: "none",
-  "m-and-l": "M and L tickets",
-  all: "all tickets",
-};
 
 /** Which tickets wait for Andy to approve a read-only plan before their build (ADR-0050). */
-function PlanApprovalSelect({ project }: { project: Project }) {
+function PlanApprovalPicker({ project }: { project: Project }) {
   const update = useUpdateProject(project.id);
   return (
-    <>
-      <label className="ml-3 inline-flex items-center gap-1 text-sm max-sm:min-h-11">
-        {SETTING_LABELS.planApproval}
-        <select
-          className="rounded border border-border bg-background px-1 max-sm:h-11 max-sm:text-base"
-          value={project.planApproval}
-          disabled={update.isPending}
-          onChange={(e) => update.mutate({ planApproval: e.target.value as PlanApproval })}
-        >
-          {PlanApproval.options.map((o) => (
-            <option key={o} value={o}>
-              {PLAN_APPROVAL_LABELS[o]}
-            </option>
-          ))}
-        </select>
-        {update.error && <QueryError error={update.error} />}
-      </label>
-      <SavedCue pending={update.isPending} saved={update.isSuccess} />
-    </>
+    <PickerRow
+      label={SETTING_LABELS.planApproval}
+      description="Which tickets wait for you to approve a read-only plan before their build."
+      value={project.planApproval}
+      options={PLAN_APPROVAL_OPTIONS}
+      disabled={update.isPending}
+      onValueChange={(planApproval) => update.mutate({ planApproval })}
+      state={update}
+    />
   );
 }
 
-const ENVIRONMENT_LABELS: Record<EnvironmentPolicy, string> = {
-  "prod-only": "prod only",
-  "dev-and-prod": "dev and prod",
-};
-
 /** Where the project's releases go (ADR-0050, AI-160: M6.2); later M6 tickets read it. */
-function EnvironmentsSelect({ project }: { project: Project }) {
+function EnvironmentsPicker({ project }: { project: Project }) {
   const update = useUpdateProject(project.id);
   return (
-    <>
-      <label className="ml-3 inline-flex items-center gap-1 text-sm max-sm:min-h-11">
-        {SETTING_LABELS.environments}
-        <select
-          className="rounded border border-border bg-background px-1 max-sm:h-11 max-sm:text-base"
-          value={project.environments}
-          disabled={update.isPending}
-          onChange={(e) => update.mutate({ environments: EnvironmentPolicy.parse(e.target.value) })}
-        >
-          {EnvironmentPolicy.options.map((o) => (
-            <option key={o} value={o}>
-              {ENVIRONMENT_LABELS[o]}
-            </option>
-          ))}
-        </select>
-        {update.error && <QueryError error={update.error} />}
-      </label>
-      <SavedCue pending={update.isPending} saved={update.isSuccess} />
-    </>
+    <PickerRow
+      label={SETTING_LABELS.environments}
+      description="Where releases go. Nothing deploys from it yet."
+      value={project.environments}
+      options={ENVIRONMENT_OPTIONS}
+      disabled={update.isPending}
+      onValueChange={(environments) => update.mutate({ environments })}
+      state={update}
+    />
   );
 }
 
 /**
- * The merge mode (ADR-0124): the saved one, with what merges without Andy in it. Not set (a
- * project stored before the setting): the gate merges nothing until Andy picks one (ADR-0134),
- * and ADR-0124's mapping is shown as a suggestion.
+ * The merge mode (ADR-0124) as four cards, strictest to loosest, each with what merges without
+ * Andy and what still waits for him. Not set (a project stored before the setting): no card is
+ * picked, the gate merges nothing until Andy picks one (ADR-0134), and ADR-0124's mapping is
+ * marked "Suggested".
  */
-function MergeModeSelect({ project }: { project: Project }) {
+function MergeModePicker({ project }: { project: Project }) {
   const update = useUpdateProject(project.id);
   const saved = project.mergeMode;
+  const suggested = saved === null ? suggestedMergeMode(project) : null;
   return (
-    <div className="ml-3 space-y-1 text-sm">
-      <label className="inline-flex items-center gap-1 max-sm:min-h-11">
-        {SETTING_LABELS.mergeMode}
-        <select
-          className="rounded border border-border bg-background px-1 max-sm:h-11 max-sm:text-base"
-          value={saved ?? ""}
-          disabled={update.isPending}
-          onChange={(e) => update.mutate({ mergeMode: MergeMode.parse(e.target.value) })}
-        >
-          {saved === null && <option value="">not set</option>}
-          {MergeMode.options.map((o) => (
-            <option key={o} value={o}>
-              {o}
-            </option>
-          ))}
-        </select>
-      </label>
-      <p className="text-xs">
-        {saved === null
-          ? `Not set: the gate merges nothing. Suggested: ${suggestedMergeMode(project)} (from the old auto-merge setting).`
-          : MERGE_MODE_TEXT[saved]}
-      </p>
-      {update.error && <QueryError error={update.error} />}
-      <SavedCue pending={update.isPending} saved={update.isSuccess} />
+    <div className="space-y-2 border-b border-border py-2.5">
+      <SettingHeading
+        label={SETTING_LABELS.mergeMode}
+        description={
+          saved === null
+            ? `Not set: the gate merges nothing. Suggested: ${MERGE_MODE_OPTIONS[suggested!].label} (from the old auto-merge setting).`
+            : "Who merges this project's agent PRs once every check and both reviews pass. Until a mode is saved the gate merges nothing."
+        }
+        state={update}
+      />
+      <OptionCards
+        label={SETTING_LABELS.mergeMode}
+        value={saved ?? undefined}
+        disabled={update.isPending}
+        onValueChange={(mode) => update.mutate({ mergeMode: mode })}
+        className="sm:grid-cols-2 lg:grid-cols-4"
+        options={MergeMode.options.map((mode) => {
+          const o = MERGE_MODE_OPTIONS[mode];
+          return {
+            value: mode,
+            label: o.label,
+            badge: mode === suggested ? <Badge variant="attention">Suggested</Badge> : undefined,
+            description: (
+              <span className="flex flex-col gap-2">
+                <span>{o.description}</span>
+                <span className="border-t border-dashed border-border pt-1.5 text-foreground">
+                  You merge: {o.youMerge}
+                </span>
+              </span>
+            ),
+          };
+        })}
+      />
+      <div className="flex justify-between gap-2 text-2xs text-muted-foreground">
+        <span aria-hidden className="max-sm:hidden">
+          ← Strictest
+        </span>
+        <span className="text-center">Loosen it only here; over MCP it can only be tightened.</span>
+        <span aria-hidden className="max-sm:hidden">
+          Loosest →
+        </span>
+      </div>
+      <SaveError state={update} />
     </div>
   );
 }

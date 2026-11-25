@@ -1,4 +1,15 @@
 import type { Ticket } from "@andy/contracts";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { Switch } from "@/components/ui/switch";
+
+/** Radix Select can't hold an empty value; this one stands for "every ticket". */
+const ALL = "all";
 
 /**
  * The board's epic view controls (AI-86): "Group by epic" (remembered per viewer) and a filter
@@ -19,30 +30,24 @@ export function EpicControls({
 }) {
   return (
     <>
-      <label className="flex items-center gap-1 text-sm max-sm:min-h-11">
-        <input
-          type="checkbox"
-          checked={grouped}
-          onChange={(e) => onGroupedChange(e.target.checked)}
-        />
-        Group by epic
-      </label>
+      <Switch label="Group by epic" checked={grouped} onCheckedChange={onGroupedChange} />
       {epics.length > 0 && (
-        <label className="flex items-center gap-1 text-sm max-sm:min-h-11">
-          Epic
-          <select
-            className="max-w-48 rounded border border-border bg-background px-1 max-sm:h-11 max-sm:text-base"
-            value={epicId ?? ""}
-            onChange={(e) => onEpicChange(e.target.value || null)}
-          >
-            <option value="">All tickets</option>
+        <Select
+          value={epicId ?? ALL}
+          onValueChange={(value) => onEpicChange(value === ALL ? null : value)}
+        >
+          <SelectTrigger aria-label="Epic" className="w-auto max-w-56 sm:h-8">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value={ALL}>All tickets</SelectItem>
             {epics.map((e) => (
-              <option key={e.id} value={e.id}>
+              <SelectItem key={e.id} value={e.id}>
                 {e.key}: {e.title}
-              </option>
+              </SelectItem>
             ))}
-          </select>
-        </label>
+          </SelectContent>
+        </Select>
       )}
     </>
   );

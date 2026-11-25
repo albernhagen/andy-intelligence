@@ -83,23 +83,24 @@ GitHub (ADR-0043: GitHub App setup from the UI) is on when `PUBLIC_URL` is set: 
 
 ### Web UI (M1.3: UI: tickets + inbox; AI-26: Design source and app shell)
 
-Design rules: [`apps/web/design.md`](apps/web/design.md). One header on every screen (AI-335): project picker (the scope, remembered), Inbox, Board, Roadmap, Work, Dashboards, What's new (in a project), "Needs you N" and a Settings menu (project settings, GitHub, Local runners, Models, Sign out).
+Design rules: [`apps/web/design.md`](apps/web/design.md). One shell on every screen (AI-370): on desktop a left sidebar with the project picker (the scope, remembered), Inbox, Board, Roadmap, Work, Dashboards, What's new (in a project), the projects with their Needs-you counts, the quota, "Search and commands" (Cmd+K: tickets and commands) and a Settings menu (project settings, GitHub, Local runners, Models, theme, Sign out); on a phone a header and a bottom bar.
 
-| Route                                         | Screen                                                                                                                        |
-| --------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------- |
-| `/`                                           | Opens the inbox in the last-picked scope                                                                                      |
-| `/p/:projectId/inbox`, `/all/inbox`           | Needs you: a card per ticket; each question with context, options and their consequences, a recommendation; one-click answers |
-| `/all/board`                                  | Asks for a project                                                                                                            |
-| `/p/:projectId/dashboards`, `/all/dashboards` | Dashboards: weekly delivery and cost charts                                                                                   |
-| `/p/:projectId/settings`                      | Project settings (Settings menu): every switch and what it does; MCP `get_project_settings` reads them                        |
-| `/projects`, `/projects/new`                  | Open the current project's settings; add a project (picker → Add project)                                                     |
-| `/settings/github`                            | Connect the GitHub App, install link, installed repos                                                                         |
-| `/p/:projectId`                               | Board: lanes with status on cards, quick add, drag to reorder or move                                                         |
-| `/p/:projectId/t/:ticketRef`                  | Ticket detail (ref = key, e.g. `AI-2`): edit, Definition of Ready, moves, agent tasks, questions, history                     |
+| Route                                         | Screen                                                                                                                                  |
+| --------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------- |
+| `/`                                           | Opens the inbox in the last-picked scope                                                                                                |
+| `/p/:projectId/inbox`, `/all/inbox`           | Needs you: tickets listed beside the picked one's questions (one at a time on a phone); keyed, one-click answers; a toast confirms each |
+| `/all/board`                                  | Asks for a project                                                                                                                      |
+| `/p/:projectId/dashboards`, `/all/dashboards` | Dashboards: weekly delivery and cost charts                                                                                             |
+| `/p/:projectId/settings`                      | Project settings (Settings menu): section links, every option with what it does; MCP `get_project_settings` reads them                  |
+| `/projects`, `/projects/new`                  | Open the current project's settings; add a project (picker → Add project), which opens its setup path                                   |
+| `/p/:projectId/setup`                         | A new project's setup: brief, plan, approve milestones, baseline and first build (AI-373)                                               |
+| `/settings/github`                            | Connect the GitHub App, install link, installed repos                                                                                   |
+| `/p/:projectId`                               | Board: lanes with status on cards, quick add, drag to reorder or move                                                                   |
+| `/p/:projectId/t/:ticketRef`                  | Ticket detail (ref = key, e.g. `AI-2`): edit, Definition of Ready, moves, agent tasks, questions, history                               |
 
 - API client: `openapi-fetch` typed by `apps/web/src/lib/api.gen.ts`, generated (not committed) by `pnpm typecheck` or `pnpm --filter @andy/web gen:api`.
 - Tests (`apps/web/src/**/*.test.tsx`, jsdom) render the UI against the real API in-process (`createApp` + fakes), so they also exercise auth and the ticket rules.
-- Screenshot checks (`apps/web/e2e/`, Playwright) against the API over seeded fakes: every screen in `apps/web/src/router.tsx` at 1280×800 and 390×844 (`e2e/screens.ts`), the shell, inbox, board and project settings also dark, plus state-specific images. A new route with no entry in `e2e/screens.ts` fails `pnpm test`. CI job `ui-screenshots` fails on a diff and uploads the actual images; a docs-only PR passes without running; a PR changing a stored image needs the before-and-after table (release-note check, AI-353). Stored images are Linux renders:
+- Screenshot checks (`apps/web/e2e/`, Playwright) against the API over seeded fakes: every screen in `apps/web/src/router.tsx` at 1280×800 and 390×844 (`e2e/screens.ts`), the shell, inbox, board, ticket panel and project settings also dark, plus state-specific images. A new route with no entry in `e2e/screens.ts` fails `pnpm test`. CI job `ui-screenshots` fails on a diff and uploads the actual images; a docs-only PR passes without running; a PR changing a stored image needs the before-and-after table (release-note check, AI-353). Stored images are Linux renders:
 
 ```sh
 pnpm --filter @andy/web screenshots:update   # in Docker: write changed images, then commit them

@@ -2,8 +2,9 @@ import { expect, test, type Page } from "@playwright/test";
 import type { TicketEvent } from "@andy/contracts";
 
 /**
- * AI-194: M7.15: Gated PRs from the phone. At 390 px, a ticket whose PR is open shows "Open in
- * GitHub" (ADR-0115 Q5, option a): a 44 px target to the PR on github.com, clear of the app
+ * AI-194: M7.15: Gated PRs from the phone. At 390 px, a ticket whose PR is open shows "Open PR
+ * #88" (AI-375; "Open in GitHub" before; ADR-0115 Q5, option a): a 44 px target to the PR
+ * on github.com, clear of the app
  * header, the panel's status line and the bottom bar. The seed links no PRs, so the ticket's
  * history response gets one added; no screenshot, so the shared images don't change.
  */
@@ -32,12 +33,12 @@ async function linkPr(page: Page, state: "open" | "merged") {
   });
 }
 
-test("phone: an open PR shows Open in GitHub, clear of the bars", async ({ page }) => {
+test("phone: an open PR shows Open PR, clear of the bars", async ({ page }) => {
   await page.clock.setFixedTime(SEED_NOW);
   await linkPr(page, "open");
   await page.goto("/p/ai/t/AI-7");
   const panel = page.getByRole("dialog", { name: /^AI-7: / });
-  const link = panel.getByRole("link", { name: "Open in GitHub" });
+  const link = panel.getByRole("link", { name: "Open PR #88" });
   await expect(link).toBeVisible();
   await expect(link).toHaveAttribute("href", PR_URL);
   await expect(link).toHaveAttribute("target", "_blank");
@@ -56,7 +57,7 @@ test("phone: an open PR shows Open in GitHub, clear of the bars", async ({ page 
     ({ x, y }) => document.elementFromPoint(x, y)?.closest("a")?.textContent ?? null,
     { x: box.x + box.width / 2, y: box.y + box.height / 2 },
   );
-  expect(hit).toBe("Open in GitHub");
+  expect(hit).toBe("Open PR #88");
 });
 
 test("phone: a merged PR shows no link", async ({ page }) => {
@@ -65,5 +66,5 @@ test("phone: a merged PR shows no link", async ({ page }) => {
   await page.goto("/p/ai/t/AI-7");
   const panel = page.getByRole("dialog", { name: /^AI-7: / });
   await expect(panel.getByRole("status", { name: "Status" })).toBeVisible();
-  await expect(panel.getByRole("link", { name: "Open in GitHub" })).toHaveCount(0);
+  await expect(panel.getByRole("link", { name: "Open PR #88" })).toHaveCount(0);
 });

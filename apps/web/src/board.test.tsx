@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { fireEvent, screen, waitFor, within } from "@testing-library/react";
 import { WorkTrackerError } from "@andy/contracts";
 import { STAGES } from "@/lib/tickets";
@@ -21,6 +21,13 @@ function fakeRect(el: Element): DOMRect {
   const row = Math.max(0, cards.indexOf(el));
   return new DOMRect(i * COLUMN_WIDTH + 10, 40 + row * CARD_STEP, COLUMN_WIDTH - 20, 50);
 }
+
+beforeAll(() => {
+  // jsdom lacks the pointer-capture and scroll APIs Radix Select calls (the epic filter, AI-374).
+  Element.prototype.hasPointerCapture ??= () => false;
+  Element.prototype.releasePointerCapture ??= () => {};
+  Element.prototype.scrollIntoView ??= () => {};
+});
 
 beforeEach(() => {
   vi.spyOn(Element.prototype, "getBoundingClientRect").mockImplementation(function (this: Element) {
@@ -470,7 +477,11 @@ describe("board grouped by epic", () => {
         ? `epic:${el.getAttribute("data-epic")}`
         : el.getAttribute("data-ticket"),
     );
-  const groupToggle = () => screen.getByRole("checkbox", { name: "Group by epic" });
+  const groupToggle = () => screen.getByRole("switch", { name: "Group by epic" });
+  const pickEpic = async (user: { click: (el: Element) => Promise<void> }, name: string) => {
+    await user.click(screen.getByRole("combobox", { name: "Epic" }));
+    await user.click(await screen.findByRole("option", { name }));
+  };
 
   it("GivenGroupByEpicOn_WhenTheBoardShows_ThenEachLaneHasAHeaderPerEpicAndNoEpicLast", async () => {
     const harness = await seeded();
@@ -488,12 +499,12 @@ describe("board grouped by epic", () => {
   it("GivenAnEpicPickedInTheFilter_WhenTheBoardShows_ThenOnlyItsChildrenShow", async () => {
     const harness = await seeded();
 
-    await harness.user.selectOptions(screen.getByLabelText("Epic"), "AI-1: Epics on the board");
+    await pickEpic(harness.user, "AI-1: Epics on the board");
 
     expect(rowsIn("Ready")).toEqual(["AI-2", "AI-4"]);
     expect(rowsIn("Backlog")).toEqual([]);
     expect(screen.getByRole("button", { name: "Show Done, 1" })).toBeTruthy();
-    await harness.user.selectOptions(screen.getByLabelText("Epic"), "All tickets");
+    await pickEpic(harness.user, "All tickets");
     expect(rowsIn("Ready")).toEqual(["AI-2", "AI-3", "AI-4"]);
   });
 
@@ -549,7 +560,7 @@ describe("board grouped by epic", () => {
     await harness.router.navigate({ to: "/p/ai" });
 
     await screen.findByText("AI-4");
-    expect(groupToggle()).toHaveProperty("checked", true);
+    expect(groupToggle().getAttribute("aria-checked")).toBe("true");
     expect(rowsIn("Ready")[0]).toBe("epic:AI-1");
   });
 
@@ -557,7 +568,7 @@ describe("board grouped by epic", () => {
     window.localStorage.setItem("andy.board.groupByEpic", "1");
     await seeded();
 
-    expect(groupToggle()).toHaveProperty("checked", true);
+    expect(groupToggle().getAttribute("aria-checked")).toBe("true");
     expect(rowsIn("Backlog")).toContain("epic:none");
   });
 });

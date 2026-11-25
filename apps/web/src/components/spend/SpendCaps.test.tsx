@@ -27,7 +27,7 @@ describe("parseUsd", () => {
 });
 
 async function settingsPage() {
-  const h = renderApp("/p/ai/settings");
+  const h = renderApp("/p/ai/settings#limits");
   await h.tracker.createProject({ name: "Andy Intelligence", key: "AI" });
   await h.queryClient.invalidateQueries();
   const panel = await screen.findByRole("region", { name: "Spend caps" }, PAGE_LOAD);
@@ -63,7 +63,10 @@ describe("Spend caps panel", () => {
     );
     const daily = within(panel).getByRole("row", { name: /^Daily/ });
     expect(await within(daily).findByText("$1.50")).toBeTruthy();
-    const changes = screen.getByRole("region", { name: "Changes" });
+    // The Changes list is its own settings section (AI-372).
+    const nav = screen.getByRole("navigation", { name: "Settings sections" });
+    await h.user.click(within(nav).getByRole("link", { name: "Changes" }));
+    const changes = await screen.findByRole("region", { name: "Changes" });
     expect(await within(changes).findByText(/^Spend caps: /)).toBeTruthy();
   });
 

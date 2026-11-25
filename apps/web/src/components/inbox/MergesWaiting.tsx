@@ -12,66 +12,41 @@ export const MERGE_REASON_TEXT: Partial<Record<MergeWaitReason, string>> = {
   accepted_label: "a review finding you accepted",
 };
 
-/**
- * "Waiting for your merge" (AI-218): clean PRs the merge mode leaves for Andy, in the order they
- * should merge, each with why it is his and its release note (the PR author's text, shown as
- * text). Merging or closing a PR drops it. Nothing waiting shows nothing.
- */
-export function MergesWaiting({
-  merges,
-  truncated,
-}: {
-  merges: WaitingMerge[];
-  truncated: boolean;
-}) {
-  if (merges.length === 0) return null;
-  return (
-    <section aria-label="Waiting for your merge" className="space-y-2">
-      <h3 className="text-sm font-medium">
-        Waiting for your merge{" "}
-        <span className="text-muted-foreground tabular-nums">{merges.length}</span>
-      </h3>
-      <ol className="space-y-2">
-        {merges.map((m) => (
-          <MergeCard key={m.prUrl} merge={m} />
-        ))}
-      </ol>
-      {truncated && (
-        <p className="text-xs text-muted-foreground">
-          More tickets are in review than one read checks: some PRs may be missing.
-        </p>
-      )}
-    </section>
-  );
-}
+/** "touches a kept path, manual mode": every reason the PR is Andy's. */
+export const mergeWhy = (m: WaitingMerge) =>
+  m.reasons.map((r) => MERGE_REASON_TEXT[r] ?? r).join(", ");
 
-function MergeCard({ merge: m }: { merge: WaitingMerge }) {
-  const why = m.reasons.map((r) => MERGE_REASON_TEXT[r] ?? r).join(", ");
+/**
+ * A clean PR the merge mode leaves for Andy (AI-218), picked in the inbox (AI-371): its ticket,
+ * the PR, why it is his and its release note (the PR author's text, shown as text). Merging or
+ * closing the PR drops it from the inbox.
+ */
+export function MergeDetail({ merge: m }: { merge: WaitingMerge }) {
   return (
-    <li
-      aria-label={`${m.ticketKey}: ${m.ticketTitle}`}
-      data-nav-group
-      className="space-y-1 rounded-md border border-border p-2 text-sm"
-    >
-      <header className="flex flex-wrap items-center gap-2">
+    <article aria-label={`${m.ticketKey}: ${m.ticketTitle}`} className="space-y-3 text-sm">
+      <header className="flex flex-wrap items-center gap-2 text-muted-foreground">
+        <span>Waiting for your merge</span>
+        <span className="font-mono text-xs tabular-nums">{m.ticketKey}</span>
         <Link
           to="/p/$projectId/t/$ticketRef"
           params={{ projectId: m.projectId, ticketRef: m.ticketKey }}
           data-nav-open
-          className="inline-flex items-center gap-1 font-medium underline-offset-2 hover:underline max-sm:min-h-11"
+          className="ml-auto inline-flex items-center text-foreground underline-offset-2 hover:underline max-sm:min-h-11"
         >
-          <span className="text-xs text-muted-foreground tabular-nums">{m.ticketKey}:</span>{" "}
-          {m.ticketTitle}
+          Open ticket
         </Link>
+      </header>
+      <h3 className="text-lg font-semibold">{m.ticketTitle}</h3>
+      <p className="flex flex-wrap items-center gap-2">
         <a
           href={m.prUrl}
           rel="noreferrer"
-          className="inline-flex items-center text-xs tabular-nums underline-offset-2 hover:underline max-sm:min-h-11"
+          className="inline-flex items-center tabular-nums underline underline-offset-2 max-sm:min-h-11"
         >
           PR #{m.prNumber}
         </a>
-        <Badge variant="attention">Yours: {why}</Badge>
-      </header>
+        <Badge variant="attention">Yours: {mergeWhy(m)}</Badge>
+      </p>
       {m.note ? (
         <dl className="grid max-w-2xl grid-cols-[auto_1fr] gap-x-3 gap-y-1">
           {m.note.whatChanged && <Line label="What changed">{m.note.whatChanged}</Line>}
@@ -81,7 +56,7 @@ function MergeCard({ merge: m }: { merge: WaitingMerge }) {
       ) : (
         <p className="text-xs text-muted-foreground">No release note read.</p>
       )}
-    </li>
+    </article>
   );
 }
 

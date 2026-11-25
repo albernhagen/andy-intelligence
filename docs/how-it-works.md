@@ -10,9 +10,9 @@ What is built on `main` now, moved from `README.md` so its "How it works today" 
 - Settings → Local runners mints secrets for `apps/local-runner` (refine and plan on Andy's Mac, ADR-0089); MCP lists runners and revokes one (owner only, ADR-0143), never mints.
 - Project settings (`/p/<project>/settings`): switches, setup checklist, changes with Revert.
 - Pages poll: 5 s in use, 60 s idle, none hidden (ADR-0091).
-- Keyboard: `?` lists the shortcuts (AI-338).
+- Keyboard: `?` lists the shortcuts (AI-338); Cmd+K (Ctrl+K) opens a command palette that finds a ticket by key or title and runs shortcut commands (AI-370).
 - Look: design direction A tokens (indigo accent, surfaces, Inter and Geist Mono served by the app); theme switch (system, light, dark) in the Settings menu (ADR-0151).
-- A header gauge and banner show Claude quota from task reports; on a phone the header shows the fullest window and a one-tap **Pause**/**Resume** (AI-176).
+- Sidebar meters and a banner show Claude quota from task reports (one "Quota unknown" marker with no reading, AI-370); on a phone the header shows the fullest window and a one-tap **Pause**/**Resume** (AI-176).
 - Ticket panel: next move first; worker, executor, routing under How it runs (AI-336).
 - Agent task cost: ticket panel, Activity (links each task's page), MCP `status`.
 - Epics: child tickets, cost; map: MCP `milestone_map`; Roadmap (header, MCP `roadmap`): milestones and their epics; epics and the board's epic groups show their milestone's status, which Andy sets there or on the roadmap (AI-311). A not-reviewed milestone shows its case (who it serves, expected return, cheapest test) and effort (its tickets by size) beside that control; plan-project writes the cases (ADR-0149).
@@ -43,4 +43,5 @@ What is built on `main` now, moved from `README.md` so its "How it works today" 
 
 - Andy starts plan-project or ideate as a read-only agent task (`POST …/plan/agent-task`, `…/ideate/agent-task`); its result is stored as a submitted one, so a plan waits for approval and an idea becomes an epic with a spec PR or a question.
 - Board → **Ideate** starts ideate from the web (AI-299).
+- A new project opens on its setup path (`/p/<project>/setup`, AI-373): write the brief in the UI (as `submit_brief`), start the plan agent, approve or park each milestone, then baseline and Builds; the board shows the next step until done.
 - MCP `start_plan_project` and `start_ideate` start them, as the routes do; the Project plan card has a **Start plan-project task** button (AI-320).
