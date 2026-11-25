@@ -28,7 +28,7 @@ The first eight merged before Andy went to bed; the rest during 2026-11-24 (main
 
 No session merged anything during the night: a worker's MCP `merge_pr` call was refused by the auto-mode permission check on Andy's machine, and the procedure allows no other way.
 
-One PR is left, **#409 (AI-353: UI PRs show before and after screenshots)**, a kind Andy keeps. Its base is now `main`; at 23:00 MST every check was green and both reviews were clean on head `8049a1b`. Nothing to apply after the merge.
+One PR is left, **#409 (AI-353: UI PRs show before and after screenshots)**, a kind Andy keeps. Its base is now `main`; at 22:30 MST every check was green and both reviews were clean on head `8049a1b`. Nothing to apply after the merge.
 
 ## 3. Epic AI-357: Design and UX
 
