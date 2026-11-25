@@ -19,6 +19,7 @@ Generated from tickets, never edited here (AI-148). Every ticket sits under a mi
 - `autoMerge` on for project `AI`: after a trial of five tickets where the gate's `would_auto_merge` calls are compared with the coordinator's (Andy, 2026-11-10).
 - Context sources design (open question 12).
 - Proposed ADRs (29, with what accepting each means and a recommendation): accept, reject or supersede each in [2026-11-23-proposed-adrs.md](build-log/2026-11-23-proposed-adrs.md).
+- Night of 2026-11-23, PRs waiting for Andy's merge and the epic PR: [2026-11-24-handover-night.md](build-log/2026-11-24-handover-night.md).
 - Review handover, current state and questions: [2026-11-23-handover-review.md](build-log/2026-11-23-handover-review.md) (earlier: [2026-11-21](build-log/2026-11-21-handover-review.md)).
 
 ## Blocked on Andy
