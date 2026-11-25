@@ -1,6 +1,6 @@
 ---
 title: Board and ticket list refresh from the tickets changed since the last read
-status: proposed (AI-317; Andy decides at review)
+status: accepted (Andy, 2026-11-23, on AI-359; revisit the read model past 10 projects or 2,000 tickets in one project)
 date: 2026-11-21
 amends: 0126 (the cache)
 ---
