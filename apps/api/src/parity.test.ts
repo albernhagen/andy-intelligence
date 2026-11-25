@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { mcpToolNames } from "./mcp/test-client";
-import { PARITY } from "./parity";
+import { PARITY, type ParityEntry, WEB_ONLY_ALLOWED, webOnlyViolations } from "./parity";
 import { fullApp } from "./registry-snapshot";
 
 /**
@@ -76,5 +76,79 @@ describe("Web UI and MCP parity registry (AI-300)", () => {
   it("GivenTheActions_WhenListed_ThenEachIsNamedOnce", () => {
     const actions = PARITY.map((e) => e.action);
     expect(actions.filter((a, i) => actions.indexOf(a) !== i)).toEqual([]);
+  });
+});
+
+describe("Web-only actions: settings only (ADR-0148)", () => {
+  const webOnly = (action: string, route: string): ParityEntry => ({
+    action,
+    routes: [route],
+    tools: [],
+    oneSide: "New for this test.",
+  });
+
+  it("GivenTheRegistry_WhenWebOnlyActionsAreChecked_ThenNoneBreaksTheRule", () => {
+    expect(webOnlyViolations(PARITY)).toEqual([]);
+  });
+
+  it("GivenTheAllowList_WhenComparedToTheRegistry_ThenEachNameIsAWebOnlyAction", () => {
+    const webOnlyActions = new Set(
+      PARITY.filter((e) => e.routes.length > 0 && e.tools.length === 0).map((e) => e.action),
+    );
+    expect([...WEB_ONLY_ALLOWED].filter((a) => !webOnlyActions.has(a))).toEqual([]);
+  });
+
+  it("GivenANewWebOnlySettingsActionOnTheAllowList_WhenChecked_ThenItPasses", () => {
+    const entry = webOnly("Set the board's colour theme", "PUT /api/projects/:projectId/theme");
+    const allowed = new Set([...WEB_ONLY_ALLOWED, entry.action]);
+    expect(webOnlyViolations([...PARITY, entry], allowed)).toEqual([]);
+  });
+
+  it("GivenANewWebOnlySettingsActionOffTheAllowList_WhenChecked_ThenItFails", () => {
+    const entry = webOnly("Set the board's colour theme", "PUT /api/projects/:projectId/theme");
+    expect(webOnlyViolations([...PARITY, entry])).toEqual([
+      "Set the board's colour theme: web only but not on WEB_ONLY_ALLOWED",
+    ]);
+  });
+
+  it.each([
+    ["ticket", "POST /api/projects/:projectId/tickets/:ticketId/pin"],
+    ["question", "POST /api/questions/:questionId/snooze"],
+    ["plan", "POST /api/projects/:projectId/plan/archive"],
+    ["milestone", "POST /api/projects/:projectId/milestones/:milestoneId/close"],
+    ["run", "POST /api/projects/:projectId/tickets/:ticketId/runs/:runId/retry"],
+    ["epic", "POST /api/projects/:projectId/epics/:epicId/close"],
+    ["agent task", "POST /api/projects/:projectId/agent-tasks"],
+    ["plan-project", "POST /api/projects/:projectId/plan-project"],
+  ])(
+    "GivenANewWebOnly%sActionWithNoMcpTool_WhenChecked_ThenItFailsEvenOnTheAllowList",
+    (kind, route) => {
+      const entry = webOnly(`New ${kind} action`, route);
+      const allowed = new Set([...WEB_ONLY_ALLOWED, entry.action]);
+      expect(webOnlyViolations([...PARITY, entry], allowed)).toEqual([
+        `New ${kind} action: needs an MCP tool (${route})`,
+      ]);
+    },
+  );
+
+  it("GivenANewWebOnlyTicketActionMarkedPending_WhenChecked_ThenItStillFails", () => {
+    const route = "POST /api/projects/:projectId/tickets/:ticketId/pin";
+    const entry: ParityEntry = {
+      ...webOnly("Pin a ticket", route),
+      pending: { ticket: "AI-1", missing: "pin_ticket" },
+    };
+    expect(webOnlyViolations([...PARITY, entry])).toEqual([
+      "Pin a ticket: web only but not on WEB_ONLY_ALLOWED",
+      `Pin a ticket: needs an MCP tool (${route})`,
+    ]);
+  });
+
+  it("GivenANewTicketActionWithBothSides_WhenChecked_ThenItPasses", () => {
+    const entry: ParityEntry = {
+      action: "Pin a ticket",
+      routes: ["POST /api/projects/:projectId/tickets/:ticketId/pin"],
+      tools: ["pin_ticket"],
+    };
+    expect(webOnlyViolations([...PARITY, entry])).toEqual([]);
   });
 });

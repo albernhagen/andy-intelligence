@@ -1,6 +1,6 @@
 ---
 title: Docs ship with the change
-status: accepted, amended by 0046, 0061, 0103
+status: accepted, amended by 0046, 0061, 0103, 0148 (the ADR row: trust boundary, data model, who merges)
 date: 2026-10-22
 ---
 

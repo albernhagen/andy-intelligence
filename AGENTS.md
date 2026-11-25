@@ -12,7 +12,7 @@ Always loaded (`CLAUDE.md` is a symlink to this file). Full operating rules: [`d
 ## Context: load only what the task needs (ADR-0046)
 
 - ARCHITECTURE.md is a short overview with a reading map (ADR-0061); open only the topic files (`docs/architecture/*.md`) your ticket needs.
-- ADRs: grep `^title:` and `^status:` in `docs/architecture/adr/*.md` (one line each; with a shell, `pnpm adr`), then open only the ones you need.
+- ADRs: grep `^title:` and `^status:` in `docs/architecture/adr/*.md` (or `pnpm adr`), then open only the ones you need.
 - Build-log history (`docs/build-log/`, one file per entry): only when you need why something happened.
 - Broad searches or reading many files: use a subagent and keep its summary, not the file dumps.
 - `pnpm context:check` enforces budgets (`context-budget.json`; ADR-0138: a PR's own change); trim, don't raise one, unless Andy agrees.
@@ -26,7 +26,7 @@ Update these in the **same PR** as the code:
 | Commands, env vars, packages/apps, layout      | `README.md`                                                                                                                                  |
 | A feature, component, or how to use the system | `README.md` "How it works today" (one screen); its file in `docs/features/`                                                                  |
 | Design, components, data model, scope, plan    | The topic file in `docs/architecture/`; `ARCHITECTURE.md` only if design intent, components or milestones change (ADR-0061)                  |
-| A decision, or deviated from ARCHITECTURE.md   | New ADR (frontmatter `title`, `status`); update the old ADR's status                                                                         |
+| A trust boundary, the data model, who merges   | New ADR (frontmatter `title`, `status`), old ADR's status; other build choices: PR description (ADR-0148)                                    |
 | Any step Andy runs by hand                     | `docs/runbooks/*.md`                                                                                                                         |
 | Ticket status, pending decisions, blockers     | Ticket in project `AI` (MCP `milestone_map`); `docs/build-log.md` (decisions, blockers); history → new `docs/build-log/YYYY-MM-DD-<slug>.md` |
 | Trust boundary, entry point, credential, IAM   | Its area file in `docs/security/`; a risk: its own file in `docs/security/risks/`                                                            |
