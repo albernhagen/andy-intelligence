@@ -47,9 +47,9 @@ When `.review/new-commits.diff` exists:
 | Behavior   | Wrong results, off-by-one, wrong conditions, unhandled null/empty/duplicate/concurrent cases, error paths that hide failures                         |
 | Tests      | New behavior without a test; tests that can't fail; assertions that don't check the claim; edge cases from your scenarios missing                    |
 | Contracts  | Port changes without fake and contract-suite updates (ADR-0023); vendor terms in the domain; Zod schema and type drift                               |
-| Decisions  | Code that contradicts the architecture docs (`docs/architecture/`) or an ADR without a new ADR; cost caps missing on anything that scales (ADR-0028) |
+| Decisions  | Code that contradicts the architecture docs or an ADR without a new ADR; cost caps missing on anything that scales (ADR-0028)                        |
 | Simplicity | Abstractions with one caller, dead code, config nobody sets: only when it causes a concrete problem                                                  |
-| Parity     | A decision Andy can make that lacks a UI control, API endpoint or MCP tool in this PR (`api-and-mcp.md`, "Parity rule")                              |
+| Parity     | A ticket, question, plan, milestone or run action missing a UI control, endpoint or MCP tool; web-only settings still get security checks (ADR-0148) |
 | Docs       | Docs the change makes wrong (README commands, runbooks, ARCHITECTURE, threat model), per the table in `AGENTS.md`                                    |
 
 ## Severity

@@ -2,6 +2,7 @@ import {
   InMemoryCodeEventLog,
   InMemoryCodeHost,
   InMemoryCodeHostConnectionStore,
+  InMemoryMergeQueueStore,
   InMemoryOAuthGrantStore,
   InMemoryRunStore,
   InMemoryWorkTracker,
@@ -10,8 +11,11 @@ import {
   type PullRequest,
 } from "@andy/contracts";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+import { sign } from "@octokit/webhooks-methods";
 import { describe, expect, it } from "vitest";
+import { MergeQueue } from "@andy/domain";
 import { createApp } from "../app";
+import { WEBHOOK_PATH } from "../github/webhooks";
 import type { TokenVerifier } from "../auth";
 import { MERGE_PR_HOURLY_CAP, PullRequestMerger } from "../merge";
 import { ownerOnlyAccess } from "../project-access";
@@ -47,22 +51,10 @@ const passed: HeadCheck[] = REQUIRED.map((name) => ({
   sourceId: REVIEWER,
 }));
 
-/** A host whose PR head moves during the last assessment read, before the merge call. */
-class MovingHeadHost extends InMemoryCodeHost {
-  moveHeadOnCheck = false;
-  override async headContains(fullName: string, head: string): Promise<boolean | null> {
-    const answer = await super.headContains(fullName, head);
-    if (this.moveHeadOnCheck) {
-      for (const pr of this.pullRequests.values()) pr.pullRequest.headSha = "b".repeat(40);
-    }
-    return answer;
-  }
-}
-
 async function setup(opts: { mode?: MergeMode | null } = {}) {
   const tracker = new InMemoryWorkTracker();
   const grants = new InMemoryOAuthGrantStore();
-  const host = new MovingHeadHost([
+  const host = new InMemoryCodeHost([
     { fullName: REPO, defaultBranch: "main", private: false, url: `https://github.com/${REPO}` },
   ]);
   const connections = new InMemoryCodeHostConnectionStore();
@@ -137,7 +129,33 @@ async function setup(opts: { mode?: MergeMode | null } = {}) {
   const call = await mcpCaller(app, grants, RESOURCE);
   const mergePr = (args: Record<string, unknown> = {}) =>
     call("merge_pr", { project: "AI", repo: REPO, number: 7, ...args });
-  return { tracker, host, ticket, call, mergePr, pr: host.pullRequests.get(7)! };
+  /** A signed check_run completed delivery for PR `number` at `sha` (AI-110: moves the queue). */
+  const checkHook = async (number: number, sha: string, id: string) => {
+    const body = JSON.stringify({
+      action: "completed",
+      repository: { full_name: REPO },
+      check_run: {
+        id: 1,
+        name: "ci",
+        status: "completed",
+        conclusion: "success",
+        head_sha: sha,
+        html_url: `https://github.com/${REPO}/runs/1`,
+        pull_requests: [{ number }],
+      },
+    });
+    return app.request(WEBHOOK_PATH, {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        "x-github-event": "check_run",
+        "x-github-delivery": id,
+        "x-hub-signature-256": await sign("whs", body),
+      },
+      body,
+    });
+  };
+  return { tracker, host, ticket, call, mergePr, checkHook, pr: host.pullRequests.get(7)! };
 }
 
 describe("merge_pr (AI-220)", () => {
@@ -200,14 +218,22 @@ describe("merge_pr (AI-220)", () => {
     expect(t.host.merges).toEqual([]);
   });
 
-  it("GivenTheHeadMovesBetweenAssessmentAndMerge_WhenMergePrIsCalled_ThenItDoesNotMerge", async () => {
+  it("GivenAPushBetweenTheQueuesVerdictAndTheMergeCall_WhenMergePrIsCalled_ThenTheOldHeadIsNotMergedAndTheNewHeadStaysQueued", async () => {
     const t = await setup();
-    t.host.moveHeadOnCheck = true;
+    const merge = t.host.mergePullRequest.bind(t.host);
+    t.host.mergePullRequest = async (repo, number, sha) => {
+      t.pr.pullRequest.headSha = "b".repeat(40);
+      return merge(repo, number, sha);
+    };
     const res = await t.mergePr();
     expect(res.isError).toBe(false);
-    expect(res.data.merged).toBe(false);
-    expect(res.data.headSha).toBe(HEAD);
-    expect(res.data.mergeError).toContain("head moved");
+    expect(res.data).toMatchObject({
+      merged: false,
+      headSha: HEAD,
+      queued: true,
+      queuePosition: 1,
+    });
+    expect(res.data.queueNote).toBe("head moved");
     expect(t.host.merges).toEqual([]);
     const events = await t.tracker.listEvents("ai", t.ticket.id);
     expect(events.find((e) => e.kind === "comment")?.body).toContain("didn't merge");
@@ -227,7 +253,7 @@ describe("merge_pr (AI-220)", () => {
     expect(t.host.merges).toEqual([]);
   });
 
-  it("GivenTwoCleanPrsOnTheSameMain_WhenMergePrIsCalledForBothAtOnce_ThenOnlyTheFirstMergesAndTheSecondWaitsBehind", async () => {
+  it("GivenTwoCleanPrsOnTheSameMain_WhenMergePrIsCalledForBothAtOnce_ThenTheFirstMergesAndTheSecondMergesOnlyAfterItsSyncAndGreenChecksFromTheWebhook", async () => {
     const t = await setup();
     const second = await t.tracker.createTicket(
       "ai",
@@ -258,37 +284,98 @@ describe("merge_pr (AI-220)", () => {
       { number: 8, url: url8, state: "open" },
       "system",
     );
-    // The fake's checks are found by head; give PR 8 its own.
+    // The fake's checks are found by head; PR 8's are set per head here.
+    const checks8 = new Map<string, HeadCheck[]>([[head8, passed]]);
     const listHeadChecks = t.host.listHeadChecks.bind(t.host);
     t.host.listHeadChecks = async (repo, sha) =>
-      sha === head8 ? { items: passed, complete: true } : listHeadChecks(repo, sha);
+      checks8.has(sha) ? { items: checks8.get(sha)!, complete: true } : listHeadChecks(repo, sha);
     // A merge moves main: every other open head is now behind it.
     const merge = t.host.mergePullRequest.bind(t.host);
     t.host.mergePullRequest = async (repo, number, sha) => {
       const squash = await merge(repo, number, sha);
-      t.host.branches.set(`${REPO}#main`, "9".repeat(40));
+      t.host.branches.set(`${REPO.toLowerCase()}#main`, "9".repeat(40));
       for (const p of t.host.pullRequests.values()) {
         if (p.pullRequest.state === "open") t.host.behindDefault.add(p.pullRequest.headSha);
       }
       return squash;
     };
+
     const [a, b] = await Promise.all([t.mergePr(), t.mergePr({ number: 8 })]);
-    expect(a.data.merged).toBe(true);
-    expect(b.data).toMatchObject({ merged: false, verdict: "wait" });
-    expect(b.data.reasons).toEqual(["behind_default_branch"]);
-    expect(t.host.merges.map((m) => m.number)).toEqual([7]);
+    // Exactly one merges; which one depends on which call takes the queue's lease first.
+    const [won, lost] = a.data.merged ? [a, b] : [b, a];
+    expect(won.data.merged).toBe(true);
+    expect(lost.data).toMatchObject({ merged: false, queued: true });
+    const [first, next] = [won.data.number as number, lost.data.number as number];
+    const firstHead = t.host.pullRequests.get(first)!.pullRequest.headSha;
+    expect(t.host.merges.map((m) => m.number)).toEqual([first]);
+    // Judged again on the new main, the other one is behind: it waits for its sync.
+    expect(t.host.behindDefault.has(t.host.pullRequests.get(next)!.pullRequest.headSha)).toBe(true);
+
+    // The re-sync workflow merges main into it: a new head, its checks running.
+    const synced = "1".repeat(40);
+    t.host.pullRequests.get(next)!.pullRequest.headSha = synced;
+    checks8.set(synced, [
+      { ...passed[0]!, status: "in_progress", conclusion: null },
+      ...passed.slice(1),
+    ]);
+    expect((await t.checkHook(next, synced, "d-1")).status).toBe(200);
+    expect(t.host.merges.map((m) => m.number)).toEqual([first]);
+
+    checks8.set(synced, passed);
+    expect((await t.checkHook(next, synced, "d-2")).status).toBe(200);
+    expect(t.host.merges).toEqual([
+      { fullName: REPO, number: first, sha: firstHead },
+      { fullName: REPO, number: next, sha: synced },
+    ]);
+    const events = await t.tracker.listEvents("ai", next === 8 ? second.id : t.ticket.id);
+    expect(events.some((e) => e.body?.includes(`merge_pr merged PR #${next}`))).toBe(true);
   });
 
-  it("GivenTheDefaultBranchMovesBeforeTheMerge_WhenMergePrIsCalled_ThenItWaitsAsBehind", async () => {
+  it("GivenTheDefaultBranchMovesBeforeTheMerge_WhenMergePrIsCalled_ThenItIsJudgedAgainOnTheNewTipAndWaitsForItsSync", async () => {
     const t = await setup();
     let reads = 0;
     const original = t.host.branchSha.bind(t.host);
-    t.host.branchSha = async (repo, branch) =>
-      ++reads > 1 ? "e".repeat(40) : original(repo, branch);
+    t.host.branchSha = async (repo, branch) => {
+      if (++reads <= 2) return original(repo, branch);
+      t.host.behindDefault.add(HEAD);
+      return "e".repeat(40);
+    };
     const res = await t.mergePr();
-    expect(res.data).toMatchObject({ merged: false, verdict: "wait" });
-    expect(res.data.reasons).toEqual(["behind_default_branch"]);
+    expect(res.data).toMatchObject({ merged: false, queued: true, queueNote: "sync requested" });
     expect(t.host.merges).toEqual([]);
+  });
+
+  it("GivenAQueuedPrWhoseChecksFailAfterItsSync_WhenTheCheckWebhookArrives_ThenItIsDroppedAndItsTicketNeedsAndy", async () => {
+    const t = await setup();
+    t.host.behindDefault.add(HEAD);
+    expect((await t.mergePr()).data).toMatchObject({ queued: true, merged: false });
+    const synced = "2".repeat(40);
+    t.pr.pullRequest.headSha = synced;
+    t.pr.checks = {
+      items: [{ ...passed[0]!, conclusion: "failure" }, ...passed.slice(1)],
+      complete: true,
+    };
+    await t.checkHook(7, synced, "d-9");
+    expect(t.host.merges).toEqual([]);
+    const ticket = await t.tracker.getTicket("ai", t.ticket.id);
+    expect(ticket?.needsAttention).toBe(true);
+    const events = await t.tracker.listEvents("ai", t.ticket.id);
+    expect(events.some((e) => e.body?.includes("merge queue dropped PR #7"))).toBe(true);
+  });
+
+  it("GivenAQueuedPrThatIsNoLongerCleanAfterItsSync_WhenTheCheckWebhookArrives_ThenItIsDroppedWithATicketCommentButNotFlagged", async () => {
+    const t = await setup();
+    t.host.behindDefault.add(HEAD);
+    expect((await t.mergePr()).data).toMatchObject({ queued: true, merged: false });
+    const synced = "3".repeat(40);
+    t.pr.pullRequest.headSha = synced;
+    t.pr.pullRequest.labels = ["review-accepted"];
+    await t.checkHook(7, synced, "d-10");
+    expect(t.host.merges).toEqual([]);
+    expect((await t.tracker.getTicket("ai", t.ticket.id))?.needsAttention).toBe(false);
+    const events = await t.tracker.listEvents("ai", t.ticket.id);
+    const note = events.find((e) => e.body?.includes("merge queue dropped PR #7"));
+    expect(note?.body).toContain("accepted_label");
   });
 
   it("GivenARepoOutsideTheProject_WhenMergePrIsCalled_ThenItIsRefused", async () => {
@@ -343,5 +430,61 @@ describe("merge_pr owner rule (AI-220)", () => {
       expect(JSON.stringify(res.content)).toContain("only the owner can merge a pull request");
     }
     expect(host.merges).toEqual([]);
+  });
+
+  it("GivenAQueuedMergeWhoseCallerMayNoLongerMerge_WhenTheQueueReachesIt_ThenItIsNotMergedAndTheTicketSaysWhy", async () => {
+    const tracker = new InMemoryWorkTracker();
+    await tracker.createProject({ name: "Andy Intelligence", key: "AI", repos: [REPO] });
+    await tracker.updateProject("ai", { mergeMode: "all-clean" });
+    const created = await tracker.createTicket("ai", { title: "Queued", type: "feature" }, "andy");
+    const ticket = await tracker.updateTicket(
+      "ai",
+      created.id,
+      { stage: { to: "ready_for_review", reason: null } },
+      "andy",
+    );
+    const host = new InMemoryCodeHost([
+      { fullName: REPO, defaultBranch: "main", private: false, url: `https://github.com/${REPO}` },
+    ]);
+    host.requiredChecks = REQUIRED.map((name) => ({ name, sourceId: REVIEWER }));
+    const url = `https://github.com/${REPO}/pull/7`;
+    host.pullRequests.set(7, {
+      pullRequest: {
+        number: 7,
+        state: "open",
+        draft: false,
+        title: `${ticket.key}: Queued`,
+        bodyFirstLine: `https://ai.andybernhagen.com/p/ai/t/${ticket.key}`,
+        fromFork: false,
+        intoDefaultBranch: true,
+        headRef: "m4/queued",
+        headSha: HEAD,
+        baseRef: "main",
+        url,
+        labels: [],
+      },
+      files: { items: [{ path: "apps/api/src/merge.ts", previousPath: null }], complete: true },
+      checks: { items: passed, complete: true },
+      commits: { items: [], complete: true },
+    });
+    await tracker.linkPullRequest("ai", ticket.id, { number: 7, url, state: "open" }, "system");
+    const queue = new MergeQueue(new InMemoryMergeQueueStore(), host);
+    new PullRequestMerger(tracker, host, null, () => new Date(), queue);
+
+    // An entry stored for a caller who can't merge now: the merge-time check refuses it.
+    const result = await queue.offer(REPO, {
+      projectId: "ai",
+      number: 7,
+      kind: "merge_pr",
+      actor: "agent:run-1",
+      headSha: HEAD,
+    });
+
+    expect(result).toMatchObject({ result: "dropped" });
+    expect((result as { reason: string }).reason).toContain("the merge was refused");
+    expect(host.merges).toEqual([]);
+    const events = await tracker.listEvents("ai", ticket.id);
+    expect(events.some((e) => e.body?.includes("may no longer merge"))).toBe(true);
+    expect((await queue.state(REPO)).entries).toEqual([]);
   });
 });

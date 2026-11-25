@@ -16,7 +16,7 @@ What is built on `main` now. Target design: [ARCHITECTURE.md](docs/architecture/
  Agent tasks ◀─▶ agent-run.yml → claude-executor.yml (GitHub Actions; dispatched by the App, call back with OIDC)
 ```
 
-**Working** (full list: [`docs/how-it-works.md`](docs/how-it-works.md)): a board and Needs-you inbox, the Claude connector (MCP), Refine and Build agent tasks on GitHub Actions or a local runner, PR checks and review agents, the merge gate and MCP `merge_pr` for coordinator sessions, dispatch under quota and spend caps, product discovery before the brief (`/discover`), epics and the roadmap (a case per milestone), digest, What's new, dashboards and Needs-you email. Each feature: [`docs/features/`](docs/features/). New detail goes in `docs/how-it-works.md`, so this section stays one screen.
+**Working** (full list: [`docs/how-it-works.md`](docs/how-it-works.md)): a board and Needs-you inbox, the Claude connector (MCP), Refine and Build agent tasks on GitHub Actions or a local runner, PR checks and review agents, the merge gate and MCP `merge_pr` for coordinator sessions through a merge queue per repo, dispatch under quota and spend caps, product discovery before the brief (`/discover`), epics and the roadmap (a case per milestone; the `epic` merge mode merges child tickets into the epic's branch), digest, What's new, dashboards and Needs-you email. Each feature: [`docs/features/`](docs/features/). New detail goes in `docs/how-it-works.md`, so this section stays one screen.
 
 **Not built yet:** Needs you has no push notification (M7); one task at a time per ticket; the digest is not sent anywhere.
 
@@ -99,7 +99,7 @@ Design rules: [`apps/web/design.md`](apps/web/design.md). One header on every sc
 
 - API client: `openapi-fetch` typed by `apps/web/src/lib/api.gen.ts`, generated (not committed) by `pnpm typecheck` or `pnpm --filter @andy/web gen:api`.
 - Tests (`apps/web/src/**/*.test.tsx`, jsdom) render the UI against the real API in-process (`createApp` + fakes), so they also exercise auth and the ticket rules.
-- Screenshot checks (`apps/web/e2e/`, Playwright) against the API over seeded fakes: every screen in `apps/web/src/router.tsx` at 1280×800 and 390×844 (`e2e/screens.ts`), the shell, inbox, board and project settings also dark, plus state-specific images. A new route with no entry in `e2e/screens.ts` fails `pnpm test`. CI job `ui-screenshots` fails on a diff and uploads the actual images; a PR changing a stored image needs the before-and-after table (release-note check, AI-353). Stored images are Linux renders:
+- Screenshot checks (`apps/web/e2e/`, Playwright) against the API over seeded fakes: every screen in `apps/web/src/router.tsx` at 1280×800 and 390×844 (`e2e/screens.ts`), the shell, inbox, board and project settings also dark, plus state-specific images. A new route with no entry in `e2e/screens.ts` fails `pnpm test`. CI job `ui-screenshots` fails on a diff and uploads the actual images; a docs-only PR passes without running; a PR changing a stored image needs the before-and-after table (release-note check, AI-353). Stored images are Linux renders:
 
 ```sh
 pnpm --filter @andy/web screenshots:update   # in Docker: write changed images, then commit them

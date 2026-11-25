@@ -14,6 +14,8 @@ import {
 } from "@andy/contracts";
 import {
   EpicMerges,
+  type EpicMode,
+  type MergeQueue,
   PullRequestGate,
   PullRequestTickets,
   ReleaseNoteRecorder,
@@ -67,6 +69,8 @@ export interface WebhookDeps {
   onDefaultBranchMoved?: (projectId: string) => Promise<boolean>;
   /** Night launches: a story PR into its launch's epic branch merges there (AI-124). */
   nightLaunches?: NightLaunchStore;
+  /** The `epic` merge mode (AI-216); absent: only night launches merge into epic branches. */
+  epicMode?: EpicMode;
   /** Release notes (AI-159): a PR merged into the default branch stores one. Off when unset. */
   releaseNotes?: ReleaseNoteStore;
   /**
@@ -74,6 +78,11 @@ export interface WebhookDeps {
    * can't see open should-fix findings, so nothing merges into the default branch.
    */
   reviewFindings?: ReviewFindingSource;
+  /**
+   * The merge queue per repo (AI-110), shared with `merge_pr`. Unset (tests): the gate's own
+   * in-memory queue.
+   */
+  mergeQueue?: MergeQueue | null;
   now?: () => Date;
 }
 
@@ -109,7 +118,7 @@ export function registerGitHubWebhook(app: Hono<AuthEnv>, deps: WebhookDeps): vo
   const limiter = new FixedWindowLimiter(WEBHOOK_RATE_LIMIT, 60_000, () => now().getTime());
   const repos = new RepoIndex(deps.tracker, () => now().getTime());
   const prTickets = new PullRequestTickets(deps.tickets, deps.tracker);
-  const epicMerges = deps.nightLaunches ? new EpicMerges(deps.nightLaunches, deps.runs) : null;
+  const epicMerges = new EpicMerges(deps.nightLaunches ?? null, deps.runs, deps.epicMode ?? null);
   const gate = new PullRequestGate(
     deps.codeHost,
     deps.tracker,
@@ -119,7 +128,11 @@ export function registerGitHubWebhook(app: Hono<AuthEnv>, deps: WebhookDeps): vo
     null,
     epicMerges,
     deps.reviewFindings ?? null,
+    deps.mergeQueue ?? null,
+    // A behind PR at the head of the merge queue asks for a sync tick (ADR-0083).
+    deps.onDefaultBranchMoved ?? null,
   );
+  const queue = deps.mergeQueue ?? null;
   const notes = deps.releaseNotes
     ? new ReleaseNoteRecorder(deps.codeHost, deps.tracker, deps.releaseNotes, now, deps.runs)
     : null;
@@ -170,19 +183,36 @@ export function registerGitHubWebhook(app: Hono<AuthEnv>, deps: WebhookDeps): vo
   }
 
   /**
+   * AI-110: moves the merge queue on from this event (checks or a push on the head PR, main
+   * moving). Logged, never retried: the next event in the repo advances it again.
+   */
+  async function advanceQueue(record: CodeHostEvent) {
+    if (!queue) return;
+    const numbers =
+      record.kind === "check_run"
+        ? record.checkRun.pullRequestNumbers
+        : record.kind === "pull_request"
+          ? [record.pullRequest.number]
+          : [];
+    try {
+      const outcomes = await queue.advanceFor(record.repo, numbers, movesDefaultBranch(record));
+      if (outcomes.length) {
+        log("INFO", "webhook merge queue", { deliveryId: record.deliveryId, outcomes });
+      }
+    } catch (err) {
+      const error = err instanceof Error ? err.message : String(err);
+      log("ERROR", "webhook merge queue failed", { deliveryId: record.deliveryId, error });
+    }
+  }
+
+  /**
    * Main moved: a push to the default branch, or a PR merged into it (the same move, and the only
    * one an App without the push event sees). Runs on redeliveries too: the tick is idempotent,
    * so a failed one (answered 500, logged) can be redelivered from GitHub; any later tick (a run
    * ending) also catches up, because each tick derives the stale PRs from the host again.
    */
   async function syncOnMove(record: CodeHostEvent, project: Project): Promise<boolean> {
-    const moved =
-      (record.kind === "push" && record.push.defaultBranch) ||
-      (record.kind === "pull_request" &&
-        record.action === "closed" &&
-        record.pullRequest.state === "merged" &&
-        record.pullRequest.intoDefaultBranch);
-    if (!moved || !deps.onDefaultBranchMoved) return true;
+    if (!movesDefaultBranch(record) || !deps.onDefaultBranchMoved) return true;
     log("INFO", "default branch moved: syncing open agent PRs", {
       deliveryId: record.deliveryId,
       projectId: project.id,
@@ -263,7 +293,9 @@ export function registerGitHubWebhook(app: Hono<AuthEnv>, deps: WebhookDeps): vo
           await applyGate(record, project);
           await recordNote(record, project);
         }
-        if (!(await syncOnMove(record, project))) {
+        const synced = await syncOnMove(record, project);
+        if (result === "recorded") await advanceQueue(record);
+        if (!synced) {
           return c.json({ error: "sync queueing failed; redeliver to retry" }, 500);
         }
         return c.json({ result }, 200);
@@ -273,6 +305,17 @@ export function registerGitHubWebhook(app: Hono<AuthEnv>, deps: WebhookDeps): vo
         return c.json({ error: err.message }, 400);
       }
     },
+  );
+}
+
+/** A push to the default branch, or a PR merged into it: the same move. */
+function movesDefaultBranch(record: CodeHostEvent): boolean {
+  return (
+    (record.kind === "push" && record.push.defaultBranch) ||
+    (record.kind === "pull_request" &&
+      record.action === "closed" &&
+      record.pullRequest.state === "merged" &&
+      record.pullRequest.intoDefaultBranch)
   );
 }
 
@@ -290,8 +333,10 @@ export const publicRoutes: RouteModule = (app, s) => {
     runs: s.deps.runs,
     onDefaultBranchMoved: (projectId) => s.syncer.defaultBranchMoved(projectId),
     nightLaunches: s.deps.nightLaunches,
+    epicMode: s.epicMode,
     releaseNotes: s.deps.releaseNotes,
     reviewFindings: s.deps.reviewFindings,
+    mergeQueue: s.mergeQueue,
     now: s.now,
   });
 };

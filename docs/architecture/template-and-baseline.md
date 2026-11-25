@@ -16,7 +16,7 @@ docs/security/threat-model.md     # living threat model + open risks (§9.1)
 specs/NNN-name/{design.md, tech-design.md, tasks.md, tickets/*.md, mockups/}
 .github/workflows/                # thin callers → platform composite actions, pinned by SHA (ADR-0038)
 .andy/baseline.json               # baseline version (andy-intelligence commit) this repo is on
-CODEOWNERS                        # `*` requests Andy's review (ADR-0042); further lines = always-gated paths
+CODEOWNERS                        # kept paths only (ADR-0124): code-owner approval required; no `*` line
 infra/                            # Terraform: dev/prod Cloud Run, Cloud Deploy pipeline, read-only agent SAs
 ```
 **Required CI checks** on `main`: tests, lint, typecheck, protected-path check, secret scan, security scans and security-review agent (§9.1), "PR references a ticket" (ticket key in branch name or PR body, verified against the control-plane API).
@@ -56,6 +56,7 @@ Build runs (plan approval, sandbox, publish limits) and read caps (AI-222): [`ba
 | Threat model seed | 0025 | `template/docs/security/threat-model.md` | S | carried (M1.16) |
 | Design file seed; UI tickets follow it (agent rule, build prompt) | 0045, 0132 | `template/design.md` | S | carried (AI-128) |
 | Dispatch, sync, night and local-runner caps (2 runners, claim/10 s, lookup caps), pause, warn cap | 0079, 0083, 0094, 0049, 0100 | `dispatch-caps.ts`, `night-budget.ts`, `sync-runs.ts`, `runners.ts`, `local-claims.ts` | — | control plane |
+| Merge queue caps: 20 PRs/repo, 3 syncs/PR, 60 min queued, 90 s lease | 0150 | `merge-queue.ts` | — | control plane |
 | Spend gate (AI-248): a `pay_per_use` task reserves its per-task cap (`--max-budget-usd`, AI-260) before it starts; no price, unreadable caps or ledger, or a passed cap refuses it (`spend_cap`); a reservation is released or kept in full, never dropped | 0028 | `packages/domain/src/spend-gate.ts`, `runs.ts` | — | control plane |
 | Night merges into `epic/<KEY>`: same gate (rules from the default branch), once per child ticket (claim before the merge call), ≤ 50 per launch; morning PR never auto-merges | 0049, 0107 | `night-merge.ts`, `gate-service.ts` | — | control plane |
 | Public-repo hygiene (`.gitignore`: tfvars, state, `.env*`) | 0015 | `template/gitignore.lines` | M (lines) | carried (M1.16) |
@@ -65,7 +66,7 @@ Build runs (plan approval, sandbox, publish limits) and read caps (AI-222): [`ba
 | Alert: config change not in the change log (AI-136); test keeps filter and message in step | — | `infra/control-plane`, `config-changes.test.ts` | TF | not yet carried (M6: Dev → prod releases) |
 | Cost kill switch (opt-in) | 0028, 0036 | `infra/billing/kill-switch.tf` + workflow YAML | TF | not yet carried (M6: Dev → prod releases) |
 | Safe deploy: no-traffic revision, smoke test, then traffic | 0076 | `platform/actions/cloud-run-safe-deploy` | A | control plane only until M6: Dev → prod releases |
-| UI screenshot checks (Playwright): a diff fails, actual images uploaded; 10-minute cap | 0045, 0059 | `ui-screenshots.yml` → `platform/actions/ui-screenshots`; config and images in `apps/web/e2e/` | — | control plane only; a managed web UI can call the action (needs `playwright.config.ts`). Required here only (`github/source-only.json`, AI-350) |
+| UI screenshot checks (Playwright): a diff fails, actual images uploaded; 10-minute cap; skips docs-only PRs | 0045, 0059 | `ui-screenshots.yml` → `platform/actions/ui-screenshots`; config and images in `apps/web/e2e/` | — | control plane only; a managed web UI can call the action (needs `playwright.config.ts`; input `base-ref`). Required here only (`github/source-only.json`, AI-350) |
 | Refine caps (questions, children); email (20/day, 10-min batch) | 0028, 0075 | `packages/domain/src/{refine-gate,notify-email}.ts` | — | control plane |
 | Push caps (6/hour, 30/day, then one "more waiting" push per window); quiet hours; no agent text in pushes; 10 subscriptions per user | 0028, 0052 | `packages/domain/src/notify-push.ts`, `packages/store/src/push-subscription-store.ts` | — | control plane |
 | Spend notices: 80% of a cap and a stop, once per cap and window, 10 a day, no agent text | 0028 | `packages/domain/src/spend-notices.ts` | — | control plane |
@@ -73,7 +74,7 @@ Build runs (plan approval, sandbox, publish limits) and read caps (AI-222): [`ba
 | API request body cap (256 KB); UI poll floor 5 s | 0028, 0091 | `apps/api/src/app.ts`, `apps/web/src/lib/live.ts` | — | control plane only |
 | Context budgets, PR ≤ half room, judged on its own change; hard only on files every session or agent step loads, `"warn": true` entries never fail; over on `main` warns and keeps one trim issue (`context-budget.json`; default `AGENTS.md`/`CLAUDE.md` ≤ 200 lines) | 0046, 0106, 0138, 0147 | `scripts/context-budget.mjs` in `platform/actions/ci-check`; `context-budget-trim` job (`ci.yml`) | A | carried (next baseline tag) |
 | Review agents: lockfiles out of the diff (code first, 120 KB cap with truncation note); lockfile sources must be the npm registry with integrity | 0046 | `platform/actions/agent-review-prepare`; `scripts/lockfile-sources.mjs` in `platform/actions/ci-check` | A | carried (next baseline tag) |
-| Agent evals (`agent-evals` check) | 0040, 0086 | `platform/actions/agent-evals` | A | control plane only; `agent-evals` and `agent-evals-plumbing` required here only (`github/source-only.json`, AI-352) |
+| Agent evals (`agent-evals` check); skips non-agent changes | 0040, 0086 | `platform/actions/agent-evals` | A | control plane only; `agent-evals` and `agent-evals-plumbing` required here only (`github/source-only.json`, AI-352) |
 | Executor permission profile (headless Claude Code) | 0040, 0051 | `platform/executor/profile.json` + `scripts/executor-profile.mjs`, installed by the reusable `claude-executor.yml` | M (`agent-run.yml` caller) | built (M1.6a); managed repos get the caller from the baseline; its token sits in a `main`-only `agent` environment (AI-106) |
 | Baseline PR on registration: missing files only, never workflows or settings, capped | 0142 | `github/registration.ts`, `baseline/plan.mjs` | — | control plane |
 | Webhook caps (1 MB body, 300 signed deliveries/minute per instance) + HMAC + 30-day TTL on records | 0028, 0041 | `apps/api/src/webhooks.ts`, `infra/control-plane` | — | control plane only (managed repos only send webhooks) |

@@ -19,6 +19,8 @@ What is built on `main` now, moved from `README.md` so its "How it works today" 
 - A daily digest (MCP `digest`) leads with a model-written summary of yesterday (Mountain time; one agent task a day, AI-323), then lists the last 24 hours: exceptions, merges and cost, work in progress, totals. What's new shows that summary, then its exceptions, with a 24 hours window (AI-341).
 - What's new (header, MCP `whats_new`): milestones, the merge mode, merged PRs' release notes and who merged each (the mode or a person, AI-218).
 - Coordinator sessions merge only through MCP `merge_pr` (AI-220): the merge mode decides, the App merges at the judged head, else it answers `wait` with every reason.
+- Epic merge mode (AI-216): a child ticket builds on and merges into `epic/<KEY>`; when the epic's last child ticket is Done one PR to `main` opens for Andy.
+- Merge queue per repo (AI-110): the gate's and `merge_pr`'s merges go one at a time per repo, oldest clean first; the next PR is synced with `main` and re-checked before it merges; a failed sync goes to Needs-you.
 - Needs-you lists "Waiting for your merge": clean PRs the merge mode leaves for Andy, with why and the release note (AI-218).
 - Dashboards chart delivery and cost per week (AI-117), and a project's DORA metrics over 30 or 90 days from its production deployment records (AI-200; lead time not measured until commit times are recorded).
 - Needs-you email (AI-77): each ticket that needs Andy, batched per 10 minutes, 20 a day; off until configured (runbook `email-notifications.md`).
