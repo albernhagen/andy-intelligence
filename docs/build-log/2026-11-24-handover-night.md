@@ -28,7 +28,7 @@ The first eight merged before Andy went to bed; the rest during 2026-11-24 (main
 
 No session merged anything during the night: a worker's MCP `merge_pr` call was refused by the auto-mode permission check on Andy's machine, and the procedure allows no other way.
 
-One PR is left, **#409 (AI-353: UI PRs show before and after screenshots)**, a kind Andy keeps. Its base is still `m11/ai-366-screenshots` and it conflicts with it; it needs its base changed to `main`, `main` merged in, and its checks and reviews run again. Not done at 22:20 MST.
+One PR is left, **#409 (AI-353: UI PRs show before and after screenshots)**, a kind Andy keeps. Its base is now `main`; at 23:00 MST every check was green and both reviews were clean on head `8049a1b`. Nothing to apply after the merge.
 
 ## 3. Epic AI-357: Design and UX
 
@@ -36,7 +36,7 @@ Landed on `main` as one squash commit, PR #419 (AI-379: Phone pass), which held 
 
 Closed without merging on Andy's word, since their work is on `main`: #402, #407, #408 and #410 to #418.
 
-**Not on `main`:** commit `b543c62a` (AI-367: Dashboard screenshots wait for the bundled fonts before the charts draw, one file, `apps/web/e2e/dashboard-fixtures.ts`). It was pushed to #406 a minute before #419 merged, and #406 was merged into #402's branch, not `main`. Without it the dashboard screenshot check can fail at random. It is now PR #422, base `main`, waiting for Andy's merge; #402 is closed.
+**Not on `main`:** commit `b543c62a` (AI-367: Dashboard screenshots wait for the bundled fonts before the charts draw, one file, `apps/web/e2e/dashboard-fixtures.ts`). It was pushed to #406 a minute before #419 merged, and #406 was merged into #402's branch, not `main`. Without it the dashboard screenshot check can fail at random. It landed as PR #422, which Andy merged; #402 is closed.
 
 Added on the epic branch after a merge of `main`: MCP read tool `brief_status`, so AI-373's `GET /api/projects/{id}/brief` passes ADR-0148's parity rule.
 
