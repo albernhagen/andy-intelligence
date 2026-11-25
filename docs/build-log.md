@@ -22,6 +22,8 @@ Generated from tickets, never edited here (AI-148). Every ticket sits under a mi
 - Night of 2026-11-23, PRs waiting for Andy's merge and the epic PR: [2026-11-24-handover-night.md](build-log/2026-11-24-handover-night.md).
 - Review handover, current state and questions: [2026-11-23-handover-review.md](build-log/2026-11-23-handover-review.md) (earlier: [2026-11-21](build-log/2026-11-21-handover-review.md)).
 
+- AI-380: GitHub does not enforce code-owner review on kept paths here; only code (`mergeVerdict`) refuses them. Keep that, or make GitHub a backstop: PRs opened by a non-owner identity (works only if the runbook `onboard-a-repo.md` §1b cause check shows `REVIEW_REQUIRED`), or 1 required approval with the App approving non-kept PRs before it merges.
+
 ## Blocked on Andy
 
 - Firestore export before the next schema-changing deploy (runbook `ticket-core.md`); the bucket exists.

@@ -4,4 +4,4 @@ Coordinator sessions merge session PRs only through MCP `merge_pr` (AI-220, ADR-
 
 **How to use:** MCP `merge_pr` with `project`, `repo` and `number`; runbook [`coordinating-sessions.md`](../runbooks/coordinating-sessions.md) §5
 
-**GitHub backs it up** (AI-217): `.github/CODEOWNERS` lists the kept paths and `protect-main` requires a code owner's approval on them with no App bypass, so GitHub itself should refuse the App's merge of a kept kind (expected: GitHub's docs don't spell out code-owner review with zero required approvals; the runbook check confirms it after apply); Andy merges those with his admin bypass (runbook [`onboard-a-repo.md`](../runbooks/onboard-a-repo.md) §1b).
+**GitHub does not back it up** (AI-380): `.github/CODEOWNERS` lists the kept paths and `protect-main` asks for a code owner's review, but GitHub let PR #409 (a kept path, no approval) merge. Every PR here is authored by `albernhagen`, the only code owner, and required approvals are 0. Kept paths are refused by code only: `mergeVerdict` checks `KEPT_PATHS` in `merge_pr` and the gate (R23). Andy merges them himself (runbook [`onboard-a-repo.md`](../runbooks/onboard-a-repo.md) §1b).
