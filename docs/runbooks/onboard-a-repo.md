@@ -67,7 +67,7 @@ Then open any PR: the new checks show as **Required** in its checks list.
 
 **GitHub does not enforce it on a repo where you are the only code owner and author every PR (AI-380).** PR #409 changed `platform/actions/**`, showed no review requirement (`reviewDecision` empty, merge state `CLEAN`) and merged with no approval; the rule-suites API logged `pass`, not a bypass. Your sessions open PRs as `albernhagen`. GitHub's docs don't say how they treat an owner-authored PR or code-owner review at 0 approvals. Requiring 1 approval would require it on every PR, so the App could merge none.
 
-**What enforces kept paths:** `mergeVerdict` in the gate and MCP `merge_pr` refuse any PR touching `KEPT_PATHS` (`packages/domain/src/merge-paths.ts`). Never merge one with another token (R23).
+**What enforces kept paths:** `mergeVerdict` in the gate and MCP `merge_pr` refuse any PR touching `KEPT_PATHS` (`packages/domain/src/merge-paths.ts`). Those are the App's only merges into the default branch (story PRs merged into an epic branch are judged again as the epic PR). Dependabot auto-merge turns on GitHub auto-merge with the job token for npm updates only (`scripts/dependabot-merge.mjs`), which never touch a kept path. Never merge one with another token (R23).
 
 | PR                         | Who can merge it                                                                                    |
 | -------------------------- | --------------------------------------------------------------------------------------------------- |
