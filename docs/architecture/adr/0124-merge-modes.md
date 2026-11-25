@@ -1,6 +1,6 @@
 ---
 title: Merge modes: one project setting decides who merges
-status: accepted (Andy, 2026-11-23); amended by 0134, 0144 (GitHub does not require up-to-date branches)
+status: accepted (Andy, 2026-11-23); amended by 0134, 0144 (GitHub does not require up-to-date branches); GitHub does not enforce its code-owner rule on this repo (AI-380, R23)
 date: 2026-11-20
 amends: 0050 (`autoMerge`), 0078, 0088, 0092, 0120 (who merges), 0107 (night runs)
 ---

@@ -1,7 +1,7 @@
-# Kept kinds (ADR-0124): the paths only Andy merges, in every merge mode. The `protect-main`
-# ruleset requires a code owner's approval on them, so the GitHub App can't merge them (checked
-# by runbook onboard-a-repo.md §1b); Andy merges them with his admin bypass. Every other PR
-# needs no approval.
+# Kept kinds (ADR-0124): the paths only Andy merges, in every merge mode. The gate and MCP
+# merge_pr refuse them in code (KEPT_PATHS). The `protect-main` ruleset asks for a code owner's
+# review on them, but GitHub does not enforce it here: every PR is authored by the only code
+# owner (AI-380, runbook onboard-a-repo.md §1b). Every other PR needs no approval.
 # Same list as KEPT_PATHS in packages/domain/src/merge-paths.ts (a leading `/` here = a path
 # there with no leading `**/`); merge-paths.test.ts fails if they differ. Change both together.
 # Build agents can't edit any path listed here (executor profile), and the gate never
