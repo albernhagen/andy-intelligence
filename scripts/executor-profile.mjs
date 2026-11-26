@@ -83,11 +83,20 @@ export const STEP_ALIASES = { sync: "build" };
  */
 export const HOST = /^([a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]([a-z0-9-]{0,61}[a-z0-9])?$/;
 
+/** Private-network suffixes (RFC 6762, 8375 and common internal names): never a deployment's host. */
+export const INTERNAL_SUFFIX =
+  /\.(internal|local|localhost|localdomain|lan|home\.arpa|intranet|corp)$/;
+
 /** Fills `${VERIFY_HOST}` in the step's rules; refuses a step that needs it without a valid host. */
 function withVerifyHost(stepRules, verifyHost) {
   const text = JSON.stringify(stepRules);
   if (!text.includes("${VERIFY_HOST}")) return stepRules;
-  if (!verifyHost || verifyHost.length > 253 || !HOST.test(verifyHost)) {
+  if (
+    !verifyHost ||
+    verifyHost.length > 253 ||
+    !HOST.test(verifyHost) ||
+    INTERNAL_SUFFIX.test(verifyHost)
+  ) {
     throw new Error("this step needs --verify-host <host>");
   }
   return JSON.parse(text.replaceAll("${VERIFY_HOST}", verifyHost));

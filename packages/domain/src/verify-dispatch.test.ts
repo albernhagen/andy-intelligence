@@ -275,7 +275,7 @@ describe("VerificationService and VerifyResults (AI-188)", () => {
       null, // digest summaries
       null, // epic mode
       null, // epic tasks
-      new VerifyResults(tracker, tickets, deployments),
+      new VerifyResults(tracker, tickets, deployments, () => NOW),
     );
     verification = new VerificationService({
       tracker,
@@ -370,6 +370,48 @@ describe("VerificationService and VerifyResults (AI-188)", () => {
 
     expect((await runs.get(run!.id))?.status).toBe("failed");
     expect((await tracker.getTicket(project.id, a.id))?.stage).toBe("verifying");
+  });
+
+  it("GivenAVerifyTaskThatEndsWithoutAVerdict_WhenItEnds_ThenTheDeploymentWaitsAndTheRetryStartsAnother", async () => {
+    const a = await verifyingTicket("Runs", sha("1"));
+    contains = new Set([sha("1")]);
+    const d = await deploy();
+    await verification.deploymentFinished(d, project);
+    const [first] = await runs.listActive(project.id);
+
+    await report(first!.id, { verdict: "pass" });
+
+    expect((await deployments.get(d.id))?.verification).toMatchObject({
+      status: "waiting",
+      runId: null,
+    });
+    await verification.retryWaiting();
+    const [second] = await runs.listActive(project.id);
+    expect(second?.id).not.toBe(first!.id);
+    expect(second?.verifyTicketIds).toEqual([a.id]);
+    expect((await deployments.get(d.id))?.verification).toMatchObject({
+      status: "started",
+      runId: second!.id,
+    });
+  });
+
+  it("GivenATicketWhoseVerifyTasksKeepFailing_WhenRetried_ThenItStopsAtTheCapAndAndyIsAsked", async () => {
+    const a = await verifyingTicket("Runs", sha("1"));
+    contains = new Set([sha("1")]);
+    const d = await deploy();
+    await verification.deploymentFinished(d, project);
+    for (let i = 0; i < MAX_VERIFY_TASKS_PER_TICKET; i++) {
+      const [run] = await runs.listActive(project.id);
+      await report(run!.id, { verdict: "pass" });
+      await verification.retryWaiting();
+    }
+
+    expect(await runs.listActive(project.id)).toHaveLength(0);
+    expect((await deployments.get(d.id))?.verification?.status).toBe("no_tickets");
+    expect(await tracker.getTicket(project.id, a.id)).toMatchObject({
+      stage: "verifying",
+      needsAttention: true,
+    });
   });
 
   it("GivenAFailedDeploy_WhenFinished_ThenItsVerifyingTicketsGoToInProgressWithNeedsYouAndNoTaskStarts", async () => {

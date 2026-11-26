@@ -24,6 +24,6 @@ Every ticket still in Verifying after 2 hours is flagged Needs-you. Look at, in 
 1. **The deploy:** did `deploy.yml` finish and report? `GET /api/projects/<id>/releases?env=dev` (or MCP `list_releases`) lists the deployment.
 2. **Waiting:** the deployment's verification is `waiting` while a cap, the quota reserve, a pause or the spend gate holds it; it retries when any agent task ends. The reason is in the API logs (`component: "verification"`, `"verification waits"`).
 3. **No merge commit:** a ticket merged before this shipped, or by a webhook GitHub didn't send, has none; logs say `"verifying ticket has no merge commit"`.
-4. **The task failed** (schema, deadline): the agent task page says why; the next deploy tries again, up to 3 tasks per ticket, then Needs-you.
+4. **The task failed** (schema, deadline, turns): the agent task page says why; another task starts when an agent task next ends, up to 3 per ticket, then Needs-you.
 
 In every case, moving the ticket by hand (Done, or In progress) is safe: a later verdict leaves a ticket that already left Verifying alone.

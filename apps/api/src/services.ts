@@ -253,7 +253,7 @@ export function createServices(raw: AppDeps): Services {
     flag: (projectId, ticketId, actor): Promise<Ticket> => service.flag(projectId, ticketId, actor),
   };
   const verifyResults: VerifyResults | null = deps.deployments
-    ? new VerifyResults(deps.tracker, verifyTickets, deps.deployments)
+    ? new VerifyResults(deps.tracker, verifyTickets, deps.deployments, now)
     : null;
   // AI-257: spend notices (80% of a cap, a stop) go to the Needs-you email when it is on, else
   // to the logs; their dedupe and daily cap live in the stored notice ledger.

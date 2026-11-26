@@ -444,8 +444,36 @@ export class VerifyResults {
   constructor(
     private readonly tracker: Pick<WorkTracker, "getTicket" | "addComment">,
     private readonly tickets: VerifyTickets,
-    private readonly deployments: Pick<DeploymentStore, "get">,
+    private readonly deployments: Pick<DeploymentStore, "get" | "setVerification">,
+    private readonly now: () => Date = () => new Date(),
   ) {}
+
+  /**
+   * After a verify task ends: one that didn't succeed (deadline, turns, a rejected verdict) puts
+   * its deployment back to `waiting`, so the next retry starts another task for the tickets still
+   * in Verifying; the per-ticket cap bounds it. Never throws.
+   */
+  async ended(run: Run): Promise<void> {
+    if (run.status === "succeeded" || !run.deploymentId) return;
+    try {
+      const deployment = await this.deployments.get(run.deploymentId);
+      const v = deployment?.verification;
+      if (!deployment || v?.status !== "started" || v.runId !== run.id) return;
+      await this.deployments.setVerification(
+        deployment.id,
+        DeploymentVerification.parse({
+          ...v,
+          status: "waiting",
+          runId: null,
+          reason: `verify task ${run.id} ended without a verdict`,
+          updatedAt: this.now().toISOString(),
+        }),
+        ["started"],
+      );
+    } catch (err) {
+      log("ERROR", "verify task end not recorded", { runId: run.id, error: String(err) });
+    }
+  }
 
   /** The executor's target for the task: its own project's deployment, which must have a URL. */
   async target(run: Run): Promise<VerifyTarget | null> {

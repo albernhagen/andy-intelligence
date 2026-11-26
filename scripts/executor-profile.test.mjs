@@ -301,6 +301,9 @@ describe("buildProfile: verify host (AI-188)", () => {
       "A.example.com",
       "x.example.com)",
       "*.example.com",
+      "169.254.169.254",
+      "metadata.google.internal",
+      "nas.home.arpa",
     ]) {
       expect(
         () => buildProfile({ profile, step: "verify", root: ROOT, verifyHost }),

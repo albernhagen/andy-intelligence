@@ -15,21 +15,26 @@ The `verify` agent task (AI-188: M6.7: Verification run, ADR-0159). Index: [thre
 
 - **The deployed app is untrusted.** Its pages, headers and errors can say anything. The procedure treats them as evidence, never instructions, and an attempt to steer it fails the criterion it was checking.
 - **Read-only by construction.** Managed settings (`platform/executor/profile.json`, step `verify`) and the action's flags allow Read, Glob, Grep and `WebFetch(domain:<deployed host>)` only; Bash, Edit, Write, WebSearch and Task are denied. No shell means no write, no other host and no request but WebFetch's `GET`, so prod is not written.
-- **The host is checked before the agent gets a credential.** The context job refuses a `verify` context without an `https` URL whose host is a plain DNS name (no user info, port, single label such as `localhost`, or IP address: the last label must start with a letter), with a ticket or branch, or over 30 turns; `executor-profile.mjs` refuses the step without a valid host. Other steps with a `verify` field are refused.
+- **The host is checked before the agent gets a credential.** The context job refuses a `verify` context without an `https` URL whose host is a plain DNS name (no user info, port, single label such as `localhost`, or IP address: the last label must start with a letter; private-network suffixes such as `.internal`, `.local`, `.lan`, `.home.arpa` refused), with a ticket or branch, or over 30 turns; `executor-profile.mjs` refuses the step without a valid host. Other steps with a `verify` field are refused.
 - **The checkout is the deployed commit,** read-only to the agent.
 - **Ticket text is untrusted.** It goes into the prompt as JSON inside `<verify-data>`, `<` escaped, criteria capped at 20 per ticket and 500 characters each, the prompt under 95,000 characters.
 - **The verdict is untrusted.** It must match the executor's JSON schema and the domain's `VerifyVerdict` (each verdict follows from its parts), and may name only the task's own tickets; otherwise the run fails and nothing moves. The evidence comment is capped at 6,000 characters, flattened, and labelled model-written.
 
 ## Caps (ADR-0028)
 
-| What        | Cap                                                                                                                           |
-| ----------- | ----------------------------------------------------------------------------------------------------------------------------- |
-| Tasks       | One per deployment; one per project in flight; project dial, global cap, pause, quota reserve and spend gate like any task    |
-| Turns, time | 30 turns; agent step 20 minutes; run deadline 25 minutes (the watchdog ends it)                                               |
-| Tickets     | 50 per task, fewer if the prompt is full; 3 verify tasks per ticket per entry into Verifying, then Needs-you                  |
-| Reads       | Per deploy: one Verifying ticket list, and per ticket (at most 50) one PR link read, one event list and one code-host compare |
-| Retries     | On each agent task's end: one project list and one deployment read per deploying project                                      |
+| What        | Cap                                                                                                                                                |
+| ----------- | -------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Tasks       | One per deployment; one per project in flight; project dial, global cap, pause, quota reserve and spend gate like any task                         |
+| Turns, time | 30 turns; agent step 20 minutes; run deadline 25 minutes (the watchdog ends it)                                                                    |
+| Tickets     | 50 per task, fewer if the prompt is full; 3 verify tasks per ticket per entry into Verifying (a task without a verdict is retried), then Needs-you |
+| Reads       | Per deploy: one Verifying ticket list, and per ticket (at most 50) one PR link read, one event list and one code-host compare                      |
+| Retries     | On each agent task's end: one project list and one deployment read per deploying project                                                           |
 
 ## Credentials
 
 None new. Compares use the connected GitHub App; the agent gets the model credential only, as other read-only steps do.
+
+## Residual risks (R-AI-188)
+
+- **Fetch back to the deployed host.** A page could steer the agent into a `GET` to the same host with repo text in the URL. The host is the project's own deployment, the checkout holds no secrets (credential files are Read-denied), and the agent has no other channel.
+- **The URL is the deploy workflow's report.** It isn't matched against a per-project host pattern; it comes only from the project's own `deploy.yml` on `main` (OIDC, ADR-0019), must be `https` with a public-style DNS name, and the runner is GitHub-hosted.

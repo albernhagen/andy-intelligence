@@ -312,7 +312,7 @@ export class RunService {
       "prepareTask" | "applyRun"
     > | null = null,
     /** Applies verify verdicts (AI-188: M6.7); null: verify tasks can't start. */
-    private readonly verifyResults: Pick<VerifyResults, "apply" | "target"> | null = null,
+    private readonly verifyResults: Pick<VerifyResults, "apply" | "target" | "ended"> | null = null,
   ) {}
 
   /** The refine gate with this service's tracker, clock and night launches. */
@@ -1617,6 +1617,9 @@ export class RunService {
   private async runEnded(run: Run): Promise<void> {
     // AI-323: a summarize run that ended without storing its summary fails it (no-op otherwise).
     if (run.step === "summarize" && this.digestSummaries) await this.digestSummaries.ended(run);
+    // AI-188: a verify task that ended without a verdict leaves its deployment waiting again, so
+    // the retry below starts another (each ticket in at most MAX_VERIFY_TASKS_PER_TICKET).
+    if (run.step === "verify" && this.verifyResults) await this.verifyResults.ended(run);
     if (!this.onRunEnded) return;
     await this.onRunEnded(run.projectId).catch((err: unknown) =>
       log("ERROR", "next run after a run ended failed", { runId: run.id, error: String(err) }),
