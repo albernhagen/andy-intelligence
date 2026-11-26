@@ -188,3 +188,38 @@ run "given_a_workflow_path_when_planned_then_rejected" {
 
   expect_failures = [var.main_deployer_workflows]
 }
+
+run "given_defaults_when_planned_then_prod_gets_an_uptime_and_a_5xx_alert" {
+  command = plan
+
+  assert {
+    condition     = length(module.prod_alerts) == 1 && length(output.alert_policy_names) == 2
+    error_message = "A public prod service gets the uptime alert and the 5xx alert (AI-209: M6.19)."
+  }
+}
+
+run "given_cloud_run_iam_on_when_planned_then_only_the_5xx_alert" {
+  command = plan
+
+  variables {
+    allow_unauthenticated = false
+  }
+
+  assert {
+    condition     = length(output.alert_policy_names) == 1
+    error_message = "The uptime check sends no identity token, so a service behind Cloud Run IAM gets the 5xx alert only."
+  }
+}
+
+run "given_prod_alerts_disabled_when_planned_then_no_prod_alerts" {
+  command = plan
+
+  variables {
+    prod_alerts_enabled = false
+  }
+
+  assert {
+    condition     = length(module.prod_alerts) == 0 && length(output.alert_policy_names) == 0
+    error_message = "A dev environment turns prod alerts off."
+  }
+}
