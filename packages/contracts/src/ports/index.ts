@@ -5,6 +5,7 @@ import {
   AutoMerge,
   MergeMode,
   EnvironmentPolicy,
+  DeployKind,
   ProjectSpendCaps,
   BillingType,
   DorStatus,
@@ -235,6 +236,7 @@ export const ProjectPatch = z.strictObject({
   defaultWorker: Worker.optional(),
   executor: ExecutorKind.optional(),
   environments: EnvironmentPolicy.optional(),
+  deployKind: DeployKind.optional(),
   spendCaps: ProjectSpendCaps.optional(),
 });
 export type ProjectPatch = z.infer<typeof ProjectPatch>;
@@ -254,6 +256,7 @@ export const ProjectSettings = ProjectPatch.pick({
   executor: true,
   emailNotifications: true,
   environments: true,
+  deployKind: true,
   spendCaps: true,
 });
 export type ProjectSettings = z.infer<typeof ProjectSettings>;

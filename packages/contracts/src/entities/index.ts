@@ -69,6 +69,14 @@ export type AutoMerge = z.infer<typeof AutoMerge>;
 export const EnvironmentPolicy = z.enum(["prod-only", "dev-and-prod"]);
 export type EnvironmentPolicy = z.infer<typeof EnvironmentPolicy>;
 
+/**
+ * How a project ships (ADR-0114, AI-387: M6.21): `none` (the default; it does not deploy) or
+ * `cloud-run`. `environments` is read only when it is `cloud-run`. Not a Deployment record's
+ * `kind` (deploy, promote or rollback). Nothing reads it for behaviour yet; M6 tickets do.
+ */
+export const DeployKind = z.enum(["none", "cloud-run"]);
+export type DeployKind = z.infer<typeof DeployKind>;
+
 export const Project = z.object({
   id: Id,
   name: z.string().min(1),
@@ -118,6 +126,8 @@ export const Project = z.object({
   executor: ExecutorKind.default("actions"),
   /** Release environments (AI-160); projects stored before it read as `prod-only`, unrewritten. */
   environments: EnvironmentPolicy.default("prod-only"),
+  /** How it ships (AI-387); projects stored before it read as `none`, unrewritten. */
+  deployKind: DeployKind.default("none"),
   /**
    * The project's own spend caps (AI-249: M10.8); each can only lower the global cap, and a
    * missing field takes the global value. Projects stored before it read as `{}`, unrewritten.
@@ -586,6 +596,10 @@ export const MergeWaitReason = z.enum([
   "review_findings_unknown",
   "open_review_findings",
   "not_ready_for_review",
+  // A required check failed on the default branch's head (AI-382, ADR-0154): main is red.
+  "main_red",
+  // The default branch's checks couldn't be read: never counted as green.
+  "main_checks_unknown",
 ]);
 export type MergeWaitReason = z.infer<typeof MergeWaitReason>;
 export type GateReason = z.infer<typeof GateReason>;

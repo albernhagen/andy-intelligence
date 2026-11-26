@@ -366,6 +366,7 @@ describe("epic merge mode (AI-216)", () => {
           upToDate: true,
           openFindings: 0,
           readyForReview: true,
+          mainChecks: { state: "passed", failing: [] },
         },
         "epic",
       );

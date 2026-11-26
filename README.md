@@ -16,9 +16,9 @@ What is built on `main` now. Target design: [ARCHITECTURE.md](docs/architecture/
  Agent tasks ◀─▶ agent-run.yml → claude-executor.yml (GitHub Actions; dispatched by the App, call back with OIDC)
 ```
 
-**Working** (full list: [`docs/how-it-works.md`](docs/how-it-works.md)): a board and Needs-you inbox, the Claude connector (MCP), Refine and Build agent tasks on GitHub Actions or a local runner (a build gets the packages its approved plan names, added outside the sandbox), PR checks and review agents, the merge gate and MCP `merge_pr` for coordinator sessions through a merge queue per repo, dispatch under quota and spend caps, product discovery before the brief (`/discover`), a setup path that walks a new managed repo through every onboarding step, epics and the roadmap (a case per milestone; the `epic` merge mode merges child tickets into the epic's branch), digest, What's new, dashboards and Needs-you email. Each feature: [`docs/features/`](docs/features/). New detail goes in `docs/how-it-works.md`, so this section stays one screen.
+**Working** (full list: [`docs/how-it-works.md`](docs/how-it-works.md)): a board and Needs-you inbox, the Claude connector (MCP), Refine and Build agent tasks on GitHub Actions or a local runner (a build gets the packages its approved plan names, added outside the sandbox), PR checks and review agents, the merge gate and MCP `merge_pr` for coordinator sessions through a merge queue per repo (held while `main` is red), dispatch under quota and spend caps, product discovery before the brief (`/discover`), a setup path that walks a new managed repo through every onboarding step, epics and the roadmap (a case per milestone; the `epic` merge mode merges child tickets into the epic's branch), digest, What's new, dashboards and Needs-you email. Each feature: [`docs/features/`](docs/features/). New detail goes in `docs/how-it-works.md`, so this section stays one screen.
 
-**Not built yet:** Needs you has no push notification (M7); one task at a time per ticket; the digest is not sent anywhere.
+**Not built yet:** releases: each project stores a deploy kind (`none` or `cloud-run`) and its environments, but nothing deploys from them (M6); Needs you has no push notification (M7); one task at a time per ticket; the digest is not sent anywhere.
 
 ## Docs
 
@@ -134,4 +134,4 @@ pnpm screenshots:table --write               # after a push: before-and-after ta
 | `lefthook.yml`        | Git hooks: pre-commit lint/format, pre-push checks                  |
 | `firebase.json`       | Firestore emulator config for `pnpm test:firestore`                 |
 
-Runbooks for every manual step: [`docs/runbooks/`](docs/runbooks/). Deploys and going back to an earlier revision: [`deploy-and-rollback.md`](docs/runbooks/deploy-and-rollback.md).
+Runbooks for every manual step: [`docs/runbooks/`](docs/runbooks/). Deploys (`deploy.yml`), and promote or rollback (`release.yml`, `workflow_dispatch` on `main`): [`deploy-and-rollback.md`](docs/runbooks/deploy-and-rollback.md).

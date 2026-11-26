@@ -47,12 +47,34 @@ export const MergeQueueLease = z.object({
 });
 export type MergeQueueLease = z.infer<typeof MergeQueueLease>;
 
+/**
+ * The queue is held because a required check failed on the default branch's head (AI-382,
+ * ADR-0154). Set when the queue first holds an entry for `main_red`, cleared when an entry is
+ * judged with main not red (or the queue empties).
+ */
+export const MainRedHold = z.object({
+  /** When the queue first held for it: the start of `MAX_MAIN_RED_HOLD_MS`. */
+  since: Timestamp,
+  /** The failing required checks, as last read. */
+  checks: z.array(z.string().min(1).max(256)).max(20),
+  /** When the one Needs-you note past the cap was raised; null: not yet. */
+  raisedAt: Timestamp.nullable(),
+  /**
+   * The default branch's tip last judged red: a completed check run on it wakes the held queue.
+   * Null: not known (any completed check run wakes it).
+   */
+  sha: z.string().min(1).max(64).nullable().default(null),
+});
+export type MainRedHold = z.infer<typeof MainRedHold>;
+
 export const MergeQueueState = z.object({
   /** `owner/name`, lower-cased. */
   repo: z.string().min(3).max(200),
   /** In merge order: the first is the head of the queue. */
   entries: z.array(MergeQueueEntry).max(MERGE_QUEUE_MAX_ENTRIES),
   lease: MergeQueueLease.nullable(),
+  /** Held for a red default branch (AI-382); null: not held. Absent in records stored before. */
+  mainRed: MainRedHold.nullable().default(null),
   /** Bumped by every write; 0 for a repo with no stored queue. */
   version: z.number().int().nonnegative(),
 });
@@ -63,5 +85,6 @@ export const emptyMergeQueue = (repo: string): MergeQueueState => ({
   repo: repo.toLowerCase(),
   entries: [],
   lease: null,
+  mainRed: null,
   version: 0,
 });

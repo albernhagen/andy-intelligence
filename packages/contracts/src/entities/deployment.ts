@@ -13,6 +13,9 @@ export const DEPLOYMENT_LIMITS = {
   maxPage: 100,
   actor: 200,
   revision: 100,
+  // Fits the callback's 1 KB report body with every other field.
+  url: 512,
+  request: 80,
 } as const;
 
 /** Where a deployment runs: a long-lived environment, or a pull request's preview. */
@@ -22,6 +25,23 @@ export type DeploymentEnvironment = z.infer<typeof DeploymentEnvironment>;
 /** `deploy`: a new build; `promote`: an image already tested elsewhere; `rollback`: an earlier one. */
 export const DeploymentKind = z.enum(["deploy", "promote", "rollback"]);
 export type DeploymentKind = z.infer<typeof DeploymentKind>;
+
+/** An `https` origin or URL; no credentials in it. */
+export const DeploymentUrl = z
+  .string()
+  .max(DEPLOYMENT_LIMITS.url)
+  .url()
+  .refine((u) => {
+    // Zod runs this even when `.url()` failed, so an unparsable value must not throw here.
+    if (!URL.canParse(u)) return false;
+    const url = new URL(u);
+    return url.protocol === "https:" && url.username === "" && url.password === "";
+  }, "an https URL without credentials");
+
+/** The control plane's id for a promote or rollback request (ADR-0114). */
+export const DeploymentRequestId = z
+  .string()
+  .regex(new RegExp(`^[A-Za-z0-9_-]{1,${DEPLOYMENT_LIMITS.request}}$`));
 
 export const DeploymentStatus = z.enum(["started", "succeeded", "failed"]);
 export type DeploymentStatus = z.infer<typeof DeploymentStatus>;
@@ -47,6 +67,10 @@ export const Deployment = z
     actor: z.string().min(1).max(DEPLOYMENT_LIMITS.actor),
     /** The deployment this one replaced in the same environment, if any. */
     previousDeploymentId: z.string().min(1).max(80).nullable().default(null),
+    /** Where the deployed environment answers, for verification tests (AI-190: M6.11); null if not reported. */
+    url: DeploymentUrl.nullable().default(null),
+    /** The control plane's request that started a promote or rollback (AI-190: M6.11); null otherwise. */
+    request: DeploymentRequestId.nullable().default(null),
   })
   .refine((d) => (d.status === "started") === (d.finishedAt === null), {
     message: "finishedAt is set exactly when the deployment has finished",
@@ -60,6 +84,24 @@ export type Deployment = z.infer<typeof Deployment>;
 
 /** What `record` takes: everything but the id, which the store assigns. */
 export type NewDeployment = Omit<z.input<typeof Deployment>, "id">;
+
+/** The environments a deploy or release workflow reports to; previews report elsewhere (ADR-0114). */
+export const ReportedEnvironment = DeploymentEnvironment.extract(["dev", "prod"]);
+export type ReportedEnvironment = z.infer<typeof ReportedEnvironment>;
+
+/**
+ * The body of a workflow's start report (AI-180: M6.4, widened by AI-190: M6.11). Only the image
+ * digest is required, so `deploy.yml` from before M6.11 keeps working (environment `prod`, kind
+ * `deploy`). The token, never this body, names the repository and the workflow.
+ */
+export const DeploymentStartReport = z.strictObject({
+  imageDigest: z.string().regex(/^sha256:[0-9a-f]{64}$/),
+  environment: ReportedEnvironment.optional(),
+  kind: DeploymentKind.optional(),
+  url: DeploymentUrl.optional(),
+  request: DeploymentRequestId.optional(),
+});
+export type DeploymentStartReport = z.infer<typeof DeploymentStartReport>;
 
 /** How a started deployment ends. */
 export const DeploymentFinish = z.object({

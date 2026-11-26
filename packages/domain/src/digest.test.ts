@@ -330,6 +330,19 @@ describe("buildDigest", () => {
     });
   });
 
+  it("GivenARepoHeldWhileMainIsRed_WhenBuiltNow_ThenAMergeHeldExceptionNamesTheFailingCheck", () => {
+    const hold = { repo: "o/r", since: IN, checks: ["ci"], waiting: 2, raised: false };
+    const d = buildDigest(WINDOW, data({ mergeHolds: [hold] }));
+    expect(d.exceptions).toEqual([
+      expect.objectContaining({
+        kind: "merge_held",
+        reason: "Merges into o/r are held: main is red (failing: ci); 2 PRs waiting",
+        at: IN,
+      }),
+    ]);
+    expect(d.text).toContain("main is red (failing: ci)");
+  });
+
   it("GivenQuotaPastThePauseLine_WhenBuilt_ThenQuotaReserveException", () => {
     const reading: QuotaReading = {
       provider: "claude-sub",
