@@ -23,6 +23,7 @@ import {
   BriefService,
   IdeateService,
   ProjectPlanService,
+  EpicBreakdownService,
   ProjectTaskResults,
   TicketService,
   WaitingMergesReader,
@@ -216,6 +217,15 @@ export function createServices(raw: AppDeps): Services {
     submitFromRun: (run, output) => ideate.submitFromRun(run, output),
   };
   const projectTasks: ProjectTaskResults = new ProjectTaskResults(plansLater, ideasLater);
+  // AI-383: plan-epic tasks are checked, prompted and stored by the breakdown service, built
+  // below with the ticket and milestone services; null without a breakdown or milestone store.
+  const epicTasks: Pick<EpicBreakdownService, "prepareTask" | "applyRun"> | null =
+    deps.epicBreakdowns && deps.milestones
+      ? {
+          prepareTask: (project, epicRef, repo) => breakdowns!.prepareTask(project, epicRef, repo),
+          applyRun: (run, output) => breakdowns!.applyRun(run, output),
+        }
+      : null;
   // AI-323: stores and fails digest summaries from summarize runs' reports and ends.
   const summaryResults =
     deps.digestSummaries && deps.releaseNotes
@@ -285,6 +295,7 @@ export function createServices(raw: AppDeps): Services {
     projectTasks,
     summaryResults,
     epicMode,
+    epicTasks,
   );
   const refiner = new RefineDispatcher(deps.tracker, deps.runs, runs, now, deps.milestones ?? null);
   // AI-124/AI-125: when a launch ends, its morning PR opens (or an empty epic branch goes),
@@ -498,6 +509,10 @@ export function createServices(raw: AppDeps): Services {
     email ? (id, plan) => email.planNeedsYou(id, plan.proposal.milestones.length) : undefined,
     milestoneService,
   );
+  const breakdowns: EpicBreakdownService | null =
+    deps.epicBreakdowns && milestoneService
+      ? new EpicBreakdownService(deps.tracker, deps.epicBreakdowns, service, milestoneService, now)
+      : null;
   const configProposals = deps.configChanges
     ? new ConfigProposals(
         deps.tracker,
@@ -544,6 +559,7 @@ export function createServices(raw: AppDeps): Services {
     brief,
     ideate,
     plans,
+    breakdowns,
     configProposals,
     configRevert,
     routing,

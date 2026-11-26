@@ -10,6 +10,7 @@ export { apiRoutes as configProposals } from "./config-proposals";
 export { apiRoutes as dashboard } from "./dashboard";
 export { apiRoutes as digest } from "./digest";
 export { apiRoutes as dora } from "./dora";
+export { apiRoutes as epicBreakdown } from "./epic-breakdown";
 export { apiRoutes as epics } from "./epics";
 export { apiRoutes as githubSetup } from "./github/setup";
 export { apiRoutes as ideate } from "./ideate";

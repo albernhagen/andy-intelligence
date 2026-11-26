@@ -220,6 +220,7 @@ describe("list_needs_me", () => {
       questions: [],
       tickets: [],
       projectPlans: [],
+      epicBreakdowns: [],
       waitingMerges: { merges: [], truncated: false },
     });
   });
@@ -270,6 +271,7 @@ describe("answer_question", () => {
       questions: [],
       tickets: [],
       projectPlans: [],
+      epicBreakdowns: [],
       waitingMerges: { merges: [], truncated: false },
     });
   });
@@ -335,7 +337,7 @@ describe("status", () => {
           dispatch: { runsAtOnce: 2, paused: false, lastDispatch: null },
         },
       ],
-      needsYou: { tickets: 0, stale: 0, projectPlans: 0 },
+      needsYou: { tickets: 0, stale: 0, projectPlans: 0, epicBreakdowns: 0 },
     });
   });
 

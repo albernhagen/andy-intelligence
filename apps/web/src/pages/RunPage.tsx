@@ -501,6 +501,7 @@ const STEP_VERBS: Record<RunStep, [going: string, done: string]> = {
   "plan-project": ["Planning the project", "Planned the project"],
   ideate: ["Ideating", "Ideated"],
   summarize: ["Summarizing", "Summarized"],
+  "plan-epic": ["Drafting tickets", "Drafted tickets"],
 };
 
 /** The page title per step: "Refine", "Build". */
@@ -515,6 +516,7 @@ const STEP_TITLE: Record<RunStep, string> = {
   "plan-project": "Plan the project",
   ideate: "Ideate",
   summarize: "Summarize",
+  "plan-epic": "Draft an epic's tickets",
 };
 
 const STATUS_WORD: Record<Run["status"], string> = {

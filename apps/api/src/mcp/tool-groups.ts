@@ -9,6 +9,7 @@ export { registerCoreTools as core } from "./tools-core";
 export { registerDashboardTools as dashboard } from "./tools-dashboard";
 export { registerDigestTools as digest } from "./tools-digest";
 export { registerDispatchTools as dispatch } from "./tools-dispatch";
+export { registerEpicBreakdownTools as epicBreakdown } from "./tools-epic-breakdown";
 export { registerExecutorTools as executor } from "./tools-executor";
 export { registerHistoryTools as history } from "./tools-history";
 export { registerIdeateTools as ideate } from "./tools-ideate";

@@ -160,6 +160,7 @@ export const STEP_LABELS: Record<RunStep, RoutingLabel> = {
   "plan-project": { name: "Plan project", description: "Turns a brief into milestones and epics" },
   ideate: { name: "Ideate", description: "Suggests new tickets for a project" },
   summarize: { name: "Summarize", description: "Writes the digest's summary" },
+  "plan-epic": { name: "Plan epic", description: "Drafts an epic's tickets for Andy's approval" },
 };
 
 /** Providers: who serves the model and how it is paid for. */

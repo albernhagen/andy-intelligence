@@ -10,6 +10,7 @@ import {
   type BriefService,
   type IdeateService,
   type ProjectPlanService,
+  type EpicBreakdownService,
   type ConfigProposals,
   type ConfigRevert,
   type RoutingSettings,
@@ -65,6 +66,8 @@ export interface ToolDeps {
   ideate?: IdeateService;
   /** Project plans (AI-108); the app always passes it, unit tests may not. */
   plans?: ProjectPlanService;
+  /** Epic breakdowns (AI-383); absent or null: no breakdown tools, none in `list_needs_me`. */
+  breakdowns?: EpicBreakdownService | null;
   /** Config proposals from review findings (ADR-0097); absent or null: no config tools. */
   configProposals?: ConfigProposals | null;
   /** The settings change log and revert (M4.12); absent or null: no change-log tools. */

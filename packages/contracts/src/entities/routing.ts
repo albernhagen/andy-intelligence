@@ -55,13 +55,14 @@ const Providers = z.preprocess(
 
 /**
  * Steps added after routing configs were first stored (AI-134: project agent tasks; AI-323: the
- * digest summary). A stored config without them reads with these tiers, so older documents still
+ * digest summary; AI-383: plan-epic). A stored config without them reads with these tiers, so older documents still
  * parse (additive change).
  */
 export const LATER_STEP_TIERS = {
   "plan-project": "strong",
   ideate: "strong",
   summarize: "fast",
+  "plan-epic": "strong",
 } as const;
 
 const StepTiers = z.preprocess(

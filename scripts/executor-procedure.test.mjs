@@ -26,7 +26,7 @@ describe("executor-procedure", () => {
     expect(schemaArgs(files.schema)).toMatch(/^--json-schema '\{"type":"object".*\}'$/);
   });
 
-  it.each(["plan-project", "ideate"])(
+  it.each(["plan-project", "ideate", "plan-epic"])(
     "GivenThe%sStep_WhenLoaded_ThenItsProcedureAndSchemaMakeValidArgs",
     (step) => {
       const files = loadStep(PROCEDURES, step);

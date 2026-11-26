@@ -38,6 +38,7 @@ export function fullAppDeps(
     nightLaunches: new contracts.InMemoryNightLaunchStore(),
     routing: new contracts.InMemoryRoutingConfigStore(),
     milestones: new contracts.InMemoryMilestoneStore(),
+    epicBreakdowns: new contracts.InMemoryEpicBreakdownStore(),
     releaseNotes: new contracts.InMemoryReleaseNoteStore(),
     digestSummaries: new contracts.InMemoryDigestSummaryStore(),
     projectVersions: new contracts.InMemoryProjectVersions(),

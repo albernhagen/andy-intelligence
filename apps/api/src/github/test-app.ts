@@ -51,6 +51,8 @@ export function githubApp(
     | "reviewFindings"
     | "configChanges"
     | "releaseNotes"
+    | "milestones"
+    | "epicBreakdowns"
   > = {},
 ) {
   const connections = new InMemoryCodeHostConnectionStore();

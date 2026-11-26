@@ -46,6 +46,7 @@ import {
   type WorkTracker,
   type NightLaunchStore,
   type BaseBranch,
+  BREAKDOWN_LIMITS,
 } from "@andy/contracts";
 import { buildBaseBranch } from "./night-branch";
 import type { EpicMode } from "./epic-mode";
@@ -80,6 +81,7 @@ import { briefContext } from "./brief-context";
 import type { NightUnattended } from "./night-unattended";
 import { RefineGate } from "./refine-gate";
 import { DomainError } from "./errors";
+import type { EpicBreakdownService } from "./epic-breakdown";
 import { ticketByRef } from "./ticket-reads";
 import { requireCan } from "./permissions";
 import { TIER_ROUTES } from "./tiers";
@@ -173,6 +175,9 @@ export const SYNC_RUN_LIMITS = { maxTurns: 80, timeoutMinutes: 105 } as const;
 
 /** Runs that count against a project's dial: every step but sync (ADR-0083). */
 const countsForDial = (r: Run) => r.step !== "sync";
+
+/** A plan-epic task's caps (ADR-0028), read-only like plan-project: turns and deadline. */
+export const EPIC_TASK_LIMITS = { maxTurns: 40, timeoutMinutes: 45 } as const;
 
 /**
  * Refine runs per ticket, counting every run that reached the executor (ADR-0028: each one
@@ -293,6 +298,11 @@ export class RunService {
     private readonly digestSummaries: DigestSummaryResults | null = null,
     /** The `epic` merge mode (AI-216): a child ticket builds on its epic's branch; null: off. */
     private readonly epicMode: Pick<EpicMode, "baseBranch"> | null = null,
+    /** Epic breakdowns (AI-383): checks and prompts plan-epic tasks, stores results; null: off. */
+    private readonly epicTasks: Pick<
+      EpicBreakdownService,
+      "prepareTask" | "applyRun"
+    > | null = null,
   ) {}
 
   /** The refine gate with this service's tracker, clock and night launches. */
@@ -455,6 +465,90 @@ export class RunService {
         null,
         repo,
         `Started a ${step} task (${run.route.model})`,
+        budget,
+      );
+    } catch (err) {
+      await this.closeSpend(run);
+      throw err;
+    }
+  }
+
+  /**
+   * A plan-epic agent task the owner asks for (AI-383, ADR-0155): drafts one top-level epic's
+   * child tickets as a proposal. A run on the epic, read-only on the cloud executor, never
+   * retried. Refused (with the reason) when the epic can't take one (`prepareTask`), while one is
+   * in flight for the epic, after BREAKDOWN_LIMITS.draftsPerEpic dispatched ones, at the project's
+   * dial or the global cap; the oldest wins a race, as for `requestProjectTask`.
+   */
+  async requestEpicTask(projectId: string, epicRef: string, actor: EventActor): Promise<Run> {
+    requireCan(actor, "start_run", projectId);
+    if (!this.executor || !this.epicTasks) {
+      throw new DomainError("executor_unavailable", "no executor: connect GitHub first");
+    }
+    const project = await this.tracker.getProject(projectId);
+    if (!project) throw notFound("project", projectId);
+    const repo = project.repos[0];
+    if (!repo) throw new DomainError("invalid_repo", `project ${project.key} has no repo`);
+    const { epic, prompt } = await this.epicTasks.prepareTask(project, epicRef, repo);
+    const drafts = (await this.runs.listForTicket(projectId, epic.id)).filter(
+      (r) => r.step === "plan-epic",
+    );
+    if (drafts.some((r) => isInFlight(r, this.now()))) {
+      throw new DomainError("run_limit", `a plan-epic task for ${epic.key} is in flight`);
+    }
+    if (drafts.filter(wasDispatched).length >= BREAKDOWN_LIMITS.draftsPerEpic) {
+      throw new DomainError(
+        "run_limit",
+        `${epic.key} has used its ${BREAKDOWN_LIMITS.draftsPerEpic} drafting tasks: write the tickets by hand or submit them over MCP (submit_epic_breakdown)`,
+        [`limit: ${BREAKDOWN_LIMITS.draftsPerEpic}`],
+      );
+    }
+    const everywhere = await this.inFlightEverywhere();
+    const active = everywhere.filter((r) => r.projectId === projectId);
+    if (active.filter(countsForDial).length >= project.runsAtOnce) {
+      throw new DomainError(
+        "run_limit",
+        `project ${project.key} is at its agent-tasks-at-once dial`,
+        [`limit: ${project.runsAtOnce}`],
+      );
+    }
+    if (everywhere.length >= MAX_ACTIVE_RUNS_GLOBAL) {
+      throw new DomainError("run_limit", "the cap on agent tasks across all projects is reached", [
+        `limit: ${MAX_ACTIVE_RUNS_GLOBAL}`,
+      ]);
+    }
+    const run = await this.runs.create({
+      projectId,
+      ticketId: epic.id,
+      step: "plan-epic",
+      route: TIER_ROUTES.strong,
+      tier: "strong",
+      deadline: new Date(
+        this.now().getTime() + EPIC_TASK_LIMITS.timeoutMinutes * 60_000,
+      ).toISOString(),
+      prompt,
+      maxTurns: EPIC_TASK_LIMITS.maxTurns,
+    });
+    const after = await this.inFlightEverywhere();
+    const inProject = after.filter((r) => r.projectId === projectId);
+    const won =
+      after.slice(0, MAX_ACTIVE_RUNS_GLOBAL).some((r) => r.id === run.id) &&
+      inProject
+        .filter(countsForDial)
+        .slice(0, project.runsAtOnce)
+        .some((r) => r.id === run.id) &&
+      inProject.find((r) => r.ticketId === epic.id && r.step === "plan-epic")?.id === run.id;
+    if (!won) {
+      await this.fail(run.id, "another agent task started at the same time");
+      throw new DomainError("run_limit", `project ${project.key} has no free agent task slot`);
+    }
+    const budget = await this.reserveSpend(run);
+    try {
+      return await this.dispatchRun(
+        run,
+        epic,
+        repo,
+        `Started a plan-epic task (${run.route.model})`,
         budget,
       );
     } catch (err) {
@@ -1202,6 +1296,19 @@ export class RunService {
         status = "failed";
         error = applied.error;
         log("WARNING", "project task result rejected", { runId: run.id, step: run.step, error });
+      } else {
+        summary = applied.summary.slice(0, RUN_SUMMARY_MAX);
+      }
+    }
+    // AI-383: stored as a breakdown waiting for Andy, or the rejected result fails the run.
+    if (run.step === "plan-epic" && status === "succeeded") {
+      const applied = this.epicTasks
+        ? await this.epicTasks.applyRun(run, result.output)
+        : { error: "epic breakdowns aren't wired on this instance" };
+      if ("error" in applied) {
+        status = "failed";
+        error = applied.error;
+        log("WARNING", "plan-epic result rejected", { runId: run.id, error });
       } else {
         summary = applied.summary.slice(0, RUN_SUMMARY_MAX);
       }
@@ -2059,7 +2166,10 @@ export class RunService {
   private async retryOrFlag(run: Run, reason: string): Promise<"retried" | "flagged"> {
     if (!run.ticketId) return "flagged";
     let why = `The ${run.step} task ${reason}`;
-    if (run.step === "sync") {
+    if (run.step === "plan-epic") {
+      // AI-383: each drafting task counts against the epic's cap; Andy decides whether to retry.
+      why += "; drafting tasks aren't retried";
+    } else if (run.step === "sync") {
       // No automatic retry (ADR-0083): the next move of main, or a run ending, queues another.
       why += "; sync tasks aren't retried";
     } else if (run.localRun) {

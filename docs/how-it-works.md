@@ -45,3 +45,4 @@ What is built on `main` now, moved from `README.md` so its "How it works today" 
 - Board → **Ideate** starts ideate from the web (AI-299).
 - A new project opens on its setup path (`/p/<project>/setup`, AI-373): write the brief in the UI (as `submit_brief`), start the plan agent, approve or park each milestone, then baseline and Builds; the board shows the next step until done.
 - MCP `start_plan_project` and `start_ideate` start them, as the routes do; the Project plan card has a **Start plan-project task** button (AI-320).
+- Epic breakdown (AI-383): MCP `start_epic_breakdown` has a read-only plan-epic agent task draft a top-level epic's tickets (up to 12) in an approved milestone. The draft waits in Needs-you (`list_needs_me` `epicBreakdowns`). Approving it creates the tickets in Ideas with blockers linked; sending it back keeps Andy's note for the next draft.
