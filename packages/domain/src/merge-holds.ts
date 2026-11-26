@@ -1,4 +1,4 @@
-import type { MergeQueueStore } from "@andy/contracts";
+import type { MergeQueueState, MergeQueueStore } from "@andy/contracts";
 
 /**
  * Merge holds (AI-382, ADR-0154): repos whose merge queue is held because a required check failed
@@ -24,13 +24,15 @@ export interface MergeHold {
 export class MergeHoldReader {
   constructor(private readonly store: MergeQueueStore) {}
 
-  /** The held repos among `repos` (at most `MAX_HOLD_REPOS` read), in the order given. */
+  /**
+   * The held repos among `repos` (at most `MAX_HOLD_REPOS` read), in the order given. A repo whose
+   * read fails is logged and left out: a hold is shown alongside the digest and `status`, and
+   * must never take them down.
+   */
   async forRepos(repos: readonly string[]): Promise<MergeHold[]> {
-    const queues = await Promise.all(
-      repos.slice(0, MAX_HOLD_REPOS).map((repo) => this.store.get(repo)),
-    );
+    const queues = await Promise.all(repos.slice(0, MAX_HOLD_REPOS).map((repo) => this.read(repo)));
     return queues.flatMap((q): MergeHold[] =>
-      q.mainRed && q.entries.length > 0
+      q?.mainRed && q.entries.length > 0
         ? [
             {
               repo: q.repo,
@@ -42,5 +44,22 @@ export class MergeHoldReader {
           ]
         : [],
     );
+  }
+
+  private async read(repo: string): Promise<MergeQueueState | null> {
+    try {
+      return await this.store.get(repo);
+    } catch (err) {
+      console.log(
+        JSON.stringify({
+          severity: "WARNING",
+          message: "merge hold read failed",
+          component: "merge-holds",
+          repo,
+          error: (err instanceof Error ? err.message : String(err)).slice(0, 2000),
+        }),
+      );
+      return null;
+    }
   }
 }

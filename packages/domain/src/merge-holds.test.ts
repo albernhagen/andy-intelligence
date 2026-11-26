@@ -1,5 +1,5 @@
 import { InMemoryMergeQueueStore, emptyMergeQueue } from "@andy/contracts";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { MAX_HOLD_REPOS, MergeHoldReader } from "./merge-holds";
 
 const entry = {
@@ -13,9 +13,25 @@ const entry = {
   syncRequestedSha: null,
   judgedSince: null,
 };
-const mainRed = { since: "2026-11-25T10:00:00.000Z", checks: ["ci"], raisedAt: null };
+const mainRed = {
+  since: "2026-11-25T10:00:00.000Z",
+  checks: ["ci"],
+  raisedAt: null,
+  checkedAt: null,
+};
 
 describe("MergeHoldReader", () => {
+  it("GivenOneRepoReadFails_WhenRead_ThenItIsLeftOutAndTheOthersAreListed", async () => {
+    vi.spyOn(console, "log").mockImplementation(() => {});
+    const store = new InMemoryMergeQueueStore();
+    await store.put({ ...emptyMergeQueue("o/red"), entries: [entry], mainRed }, 0);
+    const get = store.get.bind(store);
+    store.get = async (repo) =>
+      repo === "o/broken" ? Promise.reject(new Error("parse")) : get(repo);
+    const holds = await new MergeHoldReader(store).forRepos(["o/broken", "o/red"]);
+    expect(holds.map((h) => h.repo)).toEqual(["o/red"]);
+  });
+
   it("GivenOneRepoHeldAndOneNot_WhenRead_ThenOnlyTheHeldOneIsListed", async () => {
     const store = new InMemoryMergeQueueStore();
     await store.put({ ...emptyMergeQueue("o/red"), entries: [entry], mainRed }, 0);

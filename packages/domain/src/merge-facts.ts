@@ -85,6 +85,9 @@ export async function openFindingsFor(
 
 const passes = (c: HeadCheck) => ["success", "neutral", "skipped"].includes(c.conclusion ?? "");
 
+/** The `mainChecks` fact for a PR not into the default branch: main's checks don't apply. */
+export const NOT_MAIN: MainChecks = { state: "passed", failing: [] };
+
 /**
  * The default branch's own state (AI-382, ADR-0154) from its required checks on its head:
  * `failed` when every run of a required check has completed and one didn't pass, `running` when

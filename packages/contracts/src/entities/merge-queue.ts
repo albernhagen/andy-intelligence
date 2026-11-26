@@ -59,6 +59,8 @@ export const MainRedHold = z.object({
   checks: z.array(z.string().min(1).max(256)).max(20),
   /** When the one Needs-you note past the cap was raised; null: not yet. */
   raisedAt: Timestamp.nullable(),
+  /** When a judgement last found it still red: completed checks wake it at most once a minute. */
+  checkedAt: Timestamp.nullable().default(null),
 });
 export type MainRedHold = z.infer<typeof MainRedHold>;
 

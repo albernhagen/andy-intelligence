@@ -23,6 +23,7 @@ import {
   requireCan,
   ticketKeyFor,
   ticketMergeMode,
+  NOT_MAIN,
   readMainChecks,
   type QueueJudgement,
   type QueueMergeResult,
@@ -232,7 +233,9 @@ export class PullRequestMerger {
         upToDate: baseSha ? await this.upToDate(repo, pr, baseSha) : null,
         openFindings: await openFindingsFor(this.findings, project.id, repo, pr, "merge-pr"),
         readyForReview: ticket?.stage === "ready_for_review",
-        mainChecks: await readMainChecks(host, repo, pr.baseRef, baseSha, "merge-pr"),
+        mainChecks: pr.intoDefaultBranch
+          ? await readMainChecks(host, repo, pr.baseRef, baseSha, "merge-pr")
+          : NOT_MAIN,
       },
       mode,
     );

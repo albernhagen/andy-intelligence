@@ -50,6 +50,13 @@ export const MAX_HEAD_HOLD_MS = 60 * 60_000;
  * project with no coordinator reaches Andy within the hour.
  */
 export const MAX_MAIN_RED_HOLD_MS = 30 * 60_000;
+/**
+ * While held, a completed check run wakes the queue at most this often (ADR-0028): each wake is
+ * a judgement with several host reads, and anyone who can push a branch can make check runs.
+ */
+export const MAIN_RED_WAKE_MS = 60_000;
+/** A stored check name's longest: longer names are cut so the record always parses. */
+const MAX_CHECK_NAME = 256;
 /** A lease covers one judge-and-merge; a holder gone longer than this is taken over. */
 export const MERGE_QUEUE_LEASE_MS = 90_000;
 /** Heads one advance handles at most (each costs host reads, ADR-0028). */
@@ -280,9 +287,9 @@ export class MergeQueue {
   /**
    * Advances the queue for a webhook: when the default branch moved, when the event is about a
    * queued PR (its checks, a push, a close), when a queued PR is past its hold cap (so any event
-   * in the repo drops a stuck one), and while the queue is held for a red main (AI-382): on any
-   * completed check (main's own checks name no PR), or once the hold is past its cap. Other
-   * events cost one store read and no host reads.
+   * in the repo drops a stuck one), and while the queue is held for a red main (AI-382): on a
+   * completed check (main's own checks name no PR) at most once per `MAIN_RED_WAKE_MS`, or once
+   * the hold is past its cap. Other events cost one store read and no host reads.
    */
   async advanceFor(
     repo: string,
@@ -293,7 +300,7 @@ export class MergeQueue {
     const q = await this.store.get(repo);
     if (q.entries.length === 0) return [];
     const named = q.entries.some((e) => prNumbers.includes(e.number));
-    const held = q.mainRed !== null && (checkCompleted || this.redPastCap(q));
+    const held = q.mainRed !== null && ((checkCompleted && this.wakeDue(q)) || this.redPastCap(q));
     if (!defaultBranchMoved && !named && !held && !q.entries.some((e) => this.stale(e))) return [];
     return this.advance(repo, prNumbers);
   }
@@ -344,6 +351,12 @@ export class MergeQueue {
       log("ERROR", "merge queue advance failed", { repo: key, error: errorText(err) });
     }
     return outcomes;
+  }
+
+  /** Held for a red main and not judged within `MAIN_RED_WAKE_MS`. */
+  private wakeDue(q: MergeQueueState): boolean {
+    const checkedAt = q.mainRed?.checkedAt;
+    return !checkedAt || this.now().getTime() - Date.parse(checkedAt) >= MAIN_RED_WAKE_MS;
   }
 
   /** Held for a red main past the cap with no Needs-you note raised yet. */
@@ -451,16 +464,14 @@ export class MergeQueue {
       const raise = pastCap && !q.mainRed?.raisedAt;
       const mainRed = {
         since,
-        checks: checks.slice(0, 20),
+        checks: checks.slice(0, 20).map((c) => c.slice(0, MAX_CHECK_NAME)),
         raisedAt: raise ? now.toISOString() : (q.mainRed?.raisedAt ?? null),
+        checkedAt: now.toISOString(),
       };
-      const same =
-        q.mainRed !== null && !raise && q.mainRed.checks.join("\n") === mainRed.checks.join("\n");
       // Every entry's own hold cap is paused while held: none is dropped as stuck on a red main.
       const entries = q.entries.map((e) => (e.judgedSince ? { ...e, judgedSince: null } : e));
-      const paused = entries.some((e, i) => e !== q.entries[i]);
       return {
-        next: same && !paused ? null : { ...q, entries, mainRed },
+        next: { ...q, entries, mainRed },
         result: { started: q.mainRed === null, raise, since },
       };
     });

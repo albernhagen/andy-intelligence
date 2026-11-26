@@ -18,7 +18,7 @@ import {
   type WorkTracker,
 } from "@andy/contracts";
 import { CODEOWNERS_PATHS, codeownersGlobs, decideGate, type GateDecision } from "./gate";
-import { openFindingsFor, readMainChecks, ticketMergeMode } from "./merge-facts";
+import { NOT_MAIN, openFindingsFor, readMainChecks, ticketMergeMode } from "./merge-facts";
 import {
   MergeQueue,
   queueStateOf,
@@ -343,7 +343,10 @@ export class PullRequestGate {
         upToDate: baseSha ? await this.upToDate(repo, pr, baseSha) : null,
         openFindings: await this.openFindings(project.id, repo, pr),
         readyForReview: ticket.stage === "ready_for_review",
-        mainChecks: await readMainChecks(this.host, repo, pr.baseRef, baseSha, "gate"),
+        // Only a PR into the default branch is judged on main's checks: epic and night merges aren't.
+        mainChecks: pr.intoDefaultBranch
+          ? await readMainChecks(this.host, repo, pr.baseRef, baseSha, "gate")
+          : NOT_MAIN,
       },
       mode,
     );

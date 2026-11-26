@@ -146,6 +146,8 @@ export function mergeVerdict(facts: MergeFacts, mode: MergeMode | null): MergeVe
     keptFiles: cap(kept),
     highRiskFiles: cap(risky),
     mainRedChecks:
-      facts.mainChecks?.state === "failed" ? facts.mainChecks.failing.slice(0, 20) : [],
+      facts.mainChecks?.state === "failed"
+        ? facts.mainChecks.failing.slice(0, 20).map((c) => c.slice(0, 256))
+        : [],
   };
 }

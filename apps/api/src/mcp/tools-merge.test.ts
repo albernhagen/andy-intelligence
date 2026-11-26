@@ -12,8 +12,8 @@ import {
 } from "@andy/contracts";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { sign } from "@octokit/webhooks-methods";
-import { describe, expect, it } from "vitest";
-import { MergeQueue } from "@andy/domain";
+import { describe, expect, it, onTestFinished, vi } from "vitest";
+import { MAIN_RED_WAKE_MS, MergeQueue } from "@andy/domain";
 import { createApp } from "../app";
 import { WEBHOOK_PATH } from "../github/webhooks";
 import type { TokenVerifier } from "../auth";
@@ -474,14 +474,21 @@ describe("merge_pr while main is red (AI-382)", () => {
   });
 
   it("GivenAPrHeldForMainRed_WhenMainsCheckPassesAndItsWebhookArrives_ThenThePrMergesWithNoOneCallingAgain", async () => {
+    vi.useFakeTimers({ toFake: ["Date"], now: new Date("2026-11-25T10:00:00.000Z") });
+    onTestFinished(() => void vi.useRealTimers());
     const t = await redMain("failure");
     await t.mergePr();
-    // Still red: a check finishing on main doesn't merge anything.
+    // Still red: a check finishing on main a minute later doesn't merge anything.
+    vi.advanceTimersByTime(MAIN_RED_WAKE_MS);
     expect((await t.mainCheckHook("m-1")).status).toBe(200);
     expect(t.host.merges).toEqual([]);
 
     t.main.ci = "success";
+    // Within a minute of the last judgement: the wake is throttled.
     expect((await t.mainCheckHook("m-2")).status).toBe(200);
+    expect(t.host.merges).toEqual([]);
+    vi.advanceTimersByTime(MAIN_RED_WAKE_MS);
+    expect((await t.mainCheckHook("m-3")).status).toBe(200);
     expect(t.host.merges).toEqual([{ fullName: REPO, number: 7, sha: HEAD }]);
     const events = await t.tracker.listEvents("ai", t.ticket.id);
     expect(events.some((e) => e.body?.includes("merge_pr merged PR #7"))).toBe(true);
@@ -501,6 +508,20 @@ describe("merge_pr while main is red (AI-382)", () => {
         reason: expect.stringContaining("failing: ci"),
       }),
     );
+  });
+
+  it("GivenAPrIntoAnEpicBranchWhileMainIsRed_WhenMergePrIsCalled_ThenMainsChecksAreNotReadOrNamed", async () => {
+    const t = await redMain("failure");
+    const pr = t.host.pullRequests.get(7)!;
+    // A tip with a failing required check: the PR's base, but not into the default branch.
+    pr.pullRequest = { ...pr.pullRequest, intoDefaultBranch: false, baseRef: "main" };
+    const reads: string[] = [];
+    const listHeadChecks = t.host.listHeadChecks.bind(t.host);
+    t.host.listHeadChecks = async (repo, sha) => (reads.push(sha), listHeadChecks(repo, sha));
+    const res = await t.mergePr();
+    expect(res.data.reasons).not.toContain("main_red");
+    expect(res.data.reasons).not.toContain("main_checks_unknown");
+    expect(reads).not.toContain(MAIN);
   });
 
   it("GivenMainsRequiredChecksStillRunning_WhenMergePrIsCalled_ThenItMerges", async () => {

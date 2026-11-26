@@ -3,6 +3,7 @@ import type { MergeQueueEntry } from "@andy/contracts";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
   MAX_HEAD_HOLD_MS,
+  MAIN_RED_WAKE_MS,
   MAX_MAIN_RED_HOLD_MS,
   MAX_SYNCS_PER_PR,
   MERGE_QUEUE_LEASE_MS,
@@ -488,7 +489,33 @@ describe("MergeQueue while main is red (AI-382)", () => {
       since: "2026-11-25T10:00:00.000Z",
       checks: ["ci"],
       raisedAt: null,
+      checkedAt: "2026-11-25T10:00:00.000Z",
     });
+  });
+
+  it("GivenAHeldQueue_WhenChecksCompleteWithinAMinuteOfTheLastJudgement_ThenOnlyTheFirstWakesIt", async () => {
+    world.red.set(REPO, ["ci"]);
+    world.add(1);
+    const q = queue();
+    await offer(q, 1);
+    world.red.delete(REPO);
+    later(MAIN_RED_WAKE_MS - 1);
+    expect(await q.advanceFor(REPO, [], false, true)).toEqual([]);
+    later(1);
+    const [outcome] = await q.advanceFor(REPO, [], false, true);
+    expect(outcome).toMatchObject({ number: 1, outcome: "merged" });
+  });
+
+  it("GivenAFailingCheckWithAnOverLongName_WhenHeld_ThenTheStoredNameIsCutAndTheRecordStillReads", async () => {
+    const long = "x".repeat(300);
+    world.red.set(REPO, [long]);
+    world.add(1);
+    const q = queue();
+    await offer(q, 1);
+    expect((await store.get(REPO)).mainRed?.checks).toEqual(["x".repeat(256)]);
+    expect(await q.advanceFor(REPO, [1], false)).toEqual([
+      { number: 1, outcome: "waiting", reason: `main_red: ${long}` },
+    ]);
   });
 
   it("GivenAHeldQueue_WhenMainsChecksPassAndACheckCompletes_ThenItMergesUnaskedAndTheHoldIsReleased", async () => {
@@ -496,11 +523,13 @@ describe("MergeQueue while main is red (AI-382)", () => {
     world.add(1);
     const q = queue();
     await offer(q, 1);
+    later(MAIN_RED_WAKE_MS);
     // A completed check while main is still red: still held.
     expect(await q.advanceFor(REPO, [], false, true)).toEqual([
       { number: 1, outcome: "waiting", reason: "main_red: ci" },
     ]);
     world.red.delete(REPO);
+    later(MAIN_RED_WAKE_MS);
     const [outcome] = await q.advanceFor(REPO, [], false, true);
     expect(outcome).toMatchObject({ number: 1, outcome: "merged" });
     expect(world.merges).toEqual([1]);
@@ -563,6 +592,7 @@ describe("MergeQueue while main is red (AI-382)", () => {
     expect((await store.get(REPO)).entries.map((e) => e.number)).toEqual([1]);
 
     world.red.delete(REPO);
+    later(MAIN_RED_WAKE_MS);
     await q.advanceFor(REPO, [], false, true);
     expect(world.merges).toEqual([1]);
   });
@@ -600,6 +630,7 @@ describe("MergeQueue while main is red (AI-382)", () => {
     await q.advanceFor(REPO, [1], false);
     later(MAX_HEAD_HOLD_MS * 2);
     world.red.delete(REPO);
+    later(MAIN_RED_WAKE_MS);
     await q.advanceFor(REPO, [], false, true);
     expect(world.merges).toEqual([1]);
     expect(world.notes).toEqual([]);
