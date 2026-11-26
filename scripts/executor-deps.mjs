@@ -27,6 +27,7 @@ import {
 } from "node:fs";
 import { dirname, join, relative, sep } from "node:path";
 import { fileURLToPath } from "node:url";
+import { pnpmOffenders } from "./lockfile-sources.mjs";
 
 /** The 7-day cooldown Dependabot already uses, in minutes (pnpm's `minimumReleaseAge`). */
 export const RELEASE_AGE_MINUTES = 7 * 24 * 60;
@@ -35,6 +36,8 @@ export const MAX_PACKAGES = 5;
 /** A manifest or lockfile bigger than this is refused (the change cap is 5 MB). */
 export const MAX_FILE_BYTES = 5 * 1024 * 1024;
 export const LOCKFILE = "pnpm-lock.yaml";
+/** The first pnpm that knows `minimumReleaseAge`; an older one ignores the flag (no cooldown). */
+export const MIN_PNPM = [10, 16, 0];
 
 const NAME = /^(@[a-z0-9][a-z0-9._-]*\/)?[a-z0-9][a-z0-9._-]*$/;
 const WORKSPACE = /^(\.|[A-Za-z0-9_@][A-Za-z0-9._@-]*(\/[A-Za-z0-9_@][A-Za-z0-9._@-]*)*)$/;
@@ -141,10 +144,13 @@ function changedFiles(root) {
     .sort();
 }
 
-/** Throws unless `actual` is exactly `expected`. */
-export function checkFileSet(actual, expected, what) {
+/**
+ * Throws unless `actual` is exactly `expected` (`subset`: may also miss some, e.g. a package
+ * already in its manifest leaves the files as they were).
+ */
+export function checkFileSet(actual, expected, what, subset = false) {
   const extra = actual.filter((f) => !expected.includes(f));
-  const missing = expected.filter((f) => !actual.includes(f));
+  const missing = subset ? [] : expected.filter((f) => !actual.includes(f));
   if (extra.length > 0) throw new Error(`${what} changed files it may not: ${extra.join(", ")}`);
   if (missing.length > 0) throw new Error(`${what} is missing ${missing.join(", ")}`);
 }
@@ -189,19 +195,69 @@ export function runPnpm(args, opts, spawn = spawnSync) {
   throw new Error(`pnpm couldn't add ${names.join(", ")}: ${reason.slice(0, 200)}`);
 }
 
-export function add({ packagesJson, workspace, out, run = runPnpm }) {
+/** Throws unless pnpm `version` (e.g. "10.28.0") enforces the release-age cooldown. */
+export function checkPnpmVersion(version) {
+  const parts = String(version).trim().split(".").map(Number);
+  if (parts.length < 3 || parts.some((n) => !Number.isInteger(n))) {
+    throw new Error(`can't read the pnpm version ("${String(version).trim().slice(0, 40)}")`);
+  }
+  const newer = parts.findIndex((n, i) => n !== MIN_PNPM[i]);
+  if (newer >= 0 && parts[newer] < MIN_PNPM[newer]) {
+    throw new Error(
+      `pnpm ${parts.join(".")} can't enforce the 7-day cooldown; the project's packageManager needs pnpm ${MIN_PNPM.join(".")} or later`,
+    );
+  }
+}
+
+/**
+ * Throws if the project's pnpm settings exempt packages from the cooldown (a
+ * `minimumReleaseAgeExclude` list in pnpm-workspace.yaml or `.npmrc`): the plan's packages
+ * get the full cooldown or none are added.
+ */
+export function checkNoCooldownExemptions(root) {
+  for (const file of ["pnpm-workspace.yaml", ".npmrc"]) {
+    const path = join(root, file);
+    if (!existsSync(path)) continue;
+    if (/minimum-?release-?age-?exclude/i.test(readFileSync(path, "utf8"))) {
+      throw new Error(
+        `${file} exempts packages from the release-age cooldown; refusing to add any`,
+      );
+    }
+  }
+}
+
+/**
+ * Throws unless every package the lockfile resolves comes from the registry with an integrity
+ * hash, so a plan package can't pull a git, tarball or directory dependency into the frozen
+ * install that follows (the same rule as the CI lockfile-source check).
+ */
+export function checkLockfileSources(dir) {
+  const offenders = pnpmOffenders(readFileSync(join(dir, LOCKFILE), "utf8"));
+  if (offenders.length > 0) {
+    throw new Error(
+      `the lockfile resolves packages from outside the registry: ${offenders.slice(0, 3).join("; ")}`,
+    );
+  }
+}
+
+export function add({ packagesJson, workspace, out, run = runPnpm, pnpmVersion }) {
   const packages = parsePackages(packagesJson);
   for (const p of packages) checkWorkspaceDir(workspace, p.workspace);
   const isWorkspace = existsSync(join(workspace, "pnpm-workspace.yaml"));
   // No model credential or token exists in this job; the env is still kept to what pnpm needs.
   const env = { PATH: process.env.PATH ?? "", HOME: process.env.HOME ?? "", CI: "true" };
+  checkPnpmVersion(
+    pnpmVersion ?? execFileSync("pnpm", ["--version"], { cwd: workspace, env, encoding: "utf8" }),
+  );
+  checkNoCooldownExemptions(workspace);
   for (const args of addCommands(packages, isWorkspace)) {
     process.stdout.write(`pnpm ${args.join(" ")}\n`);
     run(args, { cwd: workspace, env });
   }
   const expected = expectedFiles(packages);
-  checkFileSet(changedFiles(workspace), expected, "The install");
+  checkFileSet(changedFiles(workspace), expected, "The install", true);
   checkManifests(workspace, packages);
+  checkLockfileSources(workspace);
   for (const file of expected) {
     mkdirSync(dirname(join(out, file)), { recursive: true });
     copyFileSync(join(workspace, file), join(out, file));
@@ -228,6 +284,7 @@ export function apply({ packagesJson, workspace, input, headSha }) {
     if (lstatSync(join(input, file)).size > MAX_FILE_BYTES) throw new Error(`${file} is too big`);
   }
   checkManifests(input, packages);
+  checkLockfileSources(input);
   for (const p of packages) checkWorkspaceDir(workspace, p.workspace);
   for (const file of files) copyFileSync(join(input, file), join(workspace, file));
   return files;

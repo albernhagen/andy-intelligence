@@ -10,6 +10,9 @@ import {
   addCommands,
   apply,
   checkFileSet,
+  checkLockfileSources,
+  checkNoCooldownExemptions,
+  checkPnpmVersion,
   expectedFiles,
   parsePackages,
   runPnpm,
@@ -206,7 +209,13 @@ describe("add and apply", () => {
     const resolver = project({ monorepo: true });
     const out = mkdtempSync(join(tmpdir(), "deps-out-"));
     const packages = json([pkg("zod"), pkg("react", { workspace: "apps/web", kind: "dev" })]);
-    add({ packagesJson: packages, workspace: resolver, out, run: fakePnpm(resolver) });
+    add({
+      packagesJson: packages,
+      workspace: resolver,
+      out,
+      pnpmVersion: "10.28.0",
+      run: fakePnpm(resolver),
+    });
     expect(readFileSync(join(out, "base.sha"), "utf8")).toBe(git(resolver, "rev-parse", "HEAD"));
 
     const agent = mkdtempSync(join(tmpdir(), "deps-agent-"));
@@ -233,6 +242,7 @@ describe("add and apply", () => {
         packagesJson: json([pkg("zod")]),
         workspace: dir,
         out,
+        pnpmVersion: "10.28.0",
         run: fakePnpm(dir, { alsoWrite: ".npmrc" }),
       }),
     ).toThrow(/changed files it may not: \.npmrc/);
@@ -246,6 +256,7 @@ describe("add and apply", () => {
         packagesJson: json([pkg("zod", { workspace: "apps/none" })]),
         workspace: dir,
         out,
+        pnpmVersion: "10.28.0",
         run: fakePnpm(dir),
       }),
     ).toThrow();
@@ -255,6 +266,7 @@ describe("add and apply", () => {
         packagesJson: json([pkg("zod", { workspace: "escape" })]),
         workspace: dir,
         out,
+        pnpmVersion: "10.28.0",
         run: fakePnpm(dir),
       }),
     ).toThrow(/outside the repo|no package.json/);
@@ -263,7 +275,13 @@ describe("add and apply", () => {
   it("GivenResolvedFilesFromAnotherCommit_WhenApplied_ThenItIsRefused", () => {
     const dir = project();
     const out = mkdtempSync(join(tmpdir(), "deps-out-"));
-    add({ packagesJson: json([pkg("zod")]), workspace: dir, out, run: fakePnpm(dir) });
+    add({
+      packagesJson: json([pkg("zod")]),
+      workspace: dir,
+      out,
+      pnpmVersion: "10.28.0",
+      run: fakePnpm(dir),
+    });
     expect(() =>
       apply({
         packagesJson: json([pkg("zod")]),
@@ -277,7 +295,13 @@ describe("add and apply", () => {
   it("GivenAnArtifactWithAnExtraFile_WhenApplied_ThenItIsRefused", () => {
     const dir = project();
     const out = mkdtempSync(join(tmpdir(), "deps-out-"));
-    add({ packagesJson: json([pkg("zod")]), workspace: dir, out, run: fakePnpm(dir) });
+    add({
+      packagesJson: json([pkg("zod")]),
+      workspace: dir,
+      out,
+      pnpmVersion: "10.28.0",
+      run: fakePnpm(dir),
+    });
     writeFileSync(join(out, ".npmrc"), "registry=https://evil.test");
     const head = git(dir, "rev-parse", "HEAD");
     expect(() =>
@@ -288,11 +312,88 @@ describe("add and apply", () => {
   it("GivenAManifestWithoutTheNamedPackage_WhenApplied_ThenItIsRefused", () => {
     const dir = project();
     const out = mkdtempSync(join(tmpdir(), "deps-out-"));
-    add({ packagesJson: json([pkg("zod")]), workspace: dir, out, run: fakePnpm(dir) });
+    add({
+      packagesJson: json([pkg("zod")]),
+      workspace: dir,
+      out,
+      pnpmVersion: "10.28.0",
+      run: fakePnpm(dir),
+    });
     writeFileSync(join(out, "package.json"), '{"name":"p"}');
     const head = git(dir, "rev-parse", "HEAD");
     expect(() =>
       apply({ packagesJson: json([pkg("zod")]), workspace: dir, input: out, headSha: head }),
     ).toThrow(/zod isn't in package.json/);
+  });
+});
+
+describe("cooldown and source guards (AI-386 review)", () => {
+  it("GivenAPnpmOlderThan10_16_WhenChecked_ThenItIsRefusedBecauseTheCooldownWouldBeIgnored", () => {
+    for (const v of ["10.8.0", "9.15.4", "10.15.9"]) {
+      expect(() => checkPnpmVersion(v), v).toThrow(/can't enforce the 7-day cooldown/);
+    }
+    for (const v of ["10.16.0", "10.28.0\n", "11.0.0"]) {
+      expect(() => checkPnpmVersion(v), v).not.toThrow();
+    }
+    expect(() => checkPnpmVersion("garbage")).toThrow(/can't read/);
+  });
+
+  it("GivenAnOldPnpm_WhenAdded_ThenNothingIsResolved", () => {
+    const dir = project();
+    const out = mkdtempSync(join(tmpdir(), "deps-out-"));
+    let ran = false;
+    expect(() =>
+      add({
+        packagesJson: json([pkg("zod")]),
+        workspace: dir,
+        out,
+        pnpmVersion: "10.8.0",
+        run: () => {
+          ran = true;
+        },
+      }),
+    ).toThrow(/cooldown/);
+    expect(ran).toBe(false);
+  });
+
+  it("GivenAProjectThatExemptsPackagesFromTheCooldown_WhenChecked_ThenItIsRefused", () => {
+    const dir = project();
+    expect(() => checkNoCooldownExemptions(dir)).not.toThrow();
+    writeFileSync(join(dir, "pnpm-workspace.yaml"), "minimumReleaseAgeExclude:\n  - zod\n");
+    expect(() => checkNoCooldownExemptions(dir)).toThrow(/exempts packages/);
+  });
+
+  it("GivenALockfileWithAGitOrTarballSource_WhenChecked_ThenItIsRefused", () => {
+    const dir = mkdtempSync(join(tmpdir(), "deps-lock-"));
+    writeFileSync(
+      join(dir, "pnpm-lock.yaml"),
+      "packages:\n  a@1.0.0:\n    resolution: {integrity: sha512-x}\n",
+    );
+    expect(() => checkLockfileSources(dir)).not.toThrow();
+    writeFileSync(
+      join(dir, "pnpm-lock.yaml"),
+      "packages:\n  b@1.0.0:\n    resolution: {tarball: https://evil.test/b.tgz}\n",
+    );
+    expect(() => checkLockfileSources(dir)).toThrow(/outside the registry/);
+  });
+
+  it("GivenAPackageAlreadyInItsManifest_WhenAdded_ThenItSucceedsWithTheFilesUnchanged", () => {
+    const dir = project();
+    writeFileSync(join(dir, "package.json"), '{"name":"p","dependencies":{"zod":"^1.0.0"}}');
+    git(dir, "commit", "-qam", "has zod");
+    const out = mkdtempSync(join(tmpdir(), "deps-out-"));
+    expect(
+      add({
+        packagesJson: json([pkg("zod")]),
+        workspace: dir,
+        out,
+        pnpmVersion: "10.28.0",
+        run: () => {},
+      }),
+    ).toEqual(["package.json", "pnpm-lock.yaml"]);
+    const head = git(dir, "rev-parse", "HEAD");
+    expect(
+      apply({ packagesJson: json([pkg("zod")]), workspace: dir, input: out, headSha: head }),
+    ).toEqual(["package.json", "pnpm-lock.yaml"]);
   });
 });
