@@ -71,6 +71,7 @@ import {
   type TicketChange,
   type TicketFilter,
   type WorkTracker,
+  type UpdateBranchResult,
 } from "../ports";
 import {
   applyTicketChange,
@@ -602,6 +603,10 @@ export class InMemoryCodeHost implements CodeHost {
   failMerge: Error | null = null;
   /** Test seam: head commits that don't contain the default branch yet (others do). */
   readonly behindDefault = new Set<string>();
+  /** Branch updates that went through (`updateBranch`), in order. */
+  readonly branchUpdates: { fullName: string; number: number; sha: string }[] = [];
+  /** Test seam: PRs whose branch update conflicts with the default branch. */
+  readonly conflicting = new Set<number>();
   /** Test seam: answers to `listCommitsBetween` by `<base>...<head>`; others are null (unknown). */
   readonly commitRanges = new Map<string, CommitRange>();
   /** Files proposed with `proposeFile`, in order. */
@@ -776,6 +781,28 @@ export class InMemoryCodeHost implements CodeHost {
     return !this.behindDefault.has(head);
   }
 
+  async updateBranch(
+    fullName: string,
+    number: number,
+    expectedHeadSha: string,
+  ): Promise<UpdateBranchResult> {
+    if (!(await this.getRepo(fullName))) throw new Error(`the App isn't installed on ${fullName}`);
+    const pr = this.pullRequests.get(number);
+    if (!pr || pr.pullRequest.state !== "open") throw new Error("not open");
+    if (pr.pullRequest.headSha !== expectedHeadSha) return "head_moved";
+    if (this.conflicting.has(number)) return "conflict";
+    this.branchUpdates.push({ fullName, number, sha: expectedHeadSha });
+    return "updated";
+  }
+
+  async diffDigest(fullName: string, number: number): Promise<string | null> {
+    if (!(await this.getRepo(fullName))) return null;
+    const pr = this.pullRequests.get(number);
+    if (!pr) return null;
+    // A PR's own diff, unless a test sets one: the same files read as the same diff.
+    return pr.diffDigest !== undefined ? pr.diffDigest : JSON.stringify(pr.files);
+  }
+
   async listCommitsBetween(
     fullName: string,
     base: string,
@@ -880,6 +907,8 @@ export interface FakePullRequest {
   commits: Listing<PullRequestCommit>;
   /** Description and merge (AI-159); an empty body and no merge when unset. */
   details?: PullRequestDetails;
+  /** `diffDigest`'s answer (AI-388); unset: derived from `files`. Null: the host can't say. */
+  diffDigest?: string | null;
 }
 
 /** In-memory CodeHostConnectionStore. */

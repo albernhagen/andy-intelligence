@@ -39,6 +39,7 @@ export function buildProject(input: NewProject): Project {
     executor: "actions",
     environments: "prod-only",
     deployKind: "none",
+    prSync: "queue",
     spendCaps: {},
     autoMerge: "s-and-m",
     mergeMode: "low-risk",

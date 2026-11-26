@@ -91,8 +91,11 @@ export interface QueueJudge {
   judge(repo: string, entry: MergeQueueEntry): Promise<QueueJudgement>;
   /** Merges pinned to `headSha` and records it; a host refusal is returned, not thrown. */
   merge(repo: string, entry: MergeQueueEntry, headSha: string): Promise<QueueMergeResult>;
-  /** Asks the existing path to merge the default branch into the PR. */
-  requestSync(repo: string, entry: MergeQueueEntry, headSha: string): Promise<void>;
+  /**
+   * Merges the default branch into the PR, or asks the existing path to. `conflict` (AI-388): it
+   * can't merge cleanly, so the PR leaves the queue with a Needs-you note.
+   */
+  requestSync(repo: string, entry: MergeQueueEntry, headSha: string): Promise<void | "conflict">;
   /**
    * Records why the queue dropped the PR on its ticket; `flag` also puts it in Andy's Needs-you
    * inbox (failed checks, caps), otherwise a comment only (no longer clean).
@@ -114,6 +117,11 @@ export interface QueueOffer {
   /** Who asked: `system` for the gate, the caller for `merge_pr`. */
   actor: string;
   headSha: string;
+  /**
+   * AI-388 (ADR-0157): Andy's own ask from the web app, with the PR's diff he approved. Set only by
+   * the owner route; an offer with it replaces an entry's earlier approval.
+   */
+  approval?: { by: "owner"; diff: string };
 }
 
 /** What happened to one PR in an advance. */
@@ -239,23 +247,21 @@ export class MergeQueue {
       const at = q.entries.findIndex((e) => e.number === offer.number);
       if (at >= 0) {
         const entries = [...q.entries];
-        if (entries[at]!.headSha === offer.headSha) return { next: null, result: "kept" as const };
-        entries[at] = { ...entries[at]!, headSha: offer.headSha };
+        const was = entries[at]!;
+        const approval = offer.approval
+          ? { approval: offer.approval.by, approvedDiff: offer.approval.diff }
+          : {};
+        const same =
+          was.headSha === offer.headSha &&
+          (!offer.approval ||
+            (was.approval === offer.approval.by && was.approvedDiff === offer.approval.diff));
+        if (same) return { next: null, result: "kept" as const };
+        entries[at] = { ...was, headSha: offer.headSha, ...approval };
         return { next: { ...q, entries }, result: "kept" as const };
       }
       if (q.entries.length >= MERGE_QUEUE_MAX_ENTRIES)
         return { next: null, result: "full" as const };
-      const entry: MergeQueueEntry = {
-        projectId: offer.projectId,
-        number: offer.number,
-        kind: offer.kind,
-        enqueuedAt: this.now().toISOString(),
-        enqueuedBy: offer.actor,
-        headSha: offer.headSha,
-        syncs: 0,
-        syncRequestedSha: null,
-        judgedSince: null,
-      };
+      const entry = this.entryOf(offer);
       return { next: { ...q, entries: [...q.entries, entry] }, result: "added" as const };
     });
     if (added === "full") {
@@ -528,7 +534,8 @@ export class MergeQueue {
       log("INFO", "merge queue wait", { ...fields, reason });
       return {
         kind: "keep",
-        patch,
+        // What it waits for, shown to Andy (AI-388).
+        patch: { ...patch, lastNote: reason.slice(0, 500) },
         then,
         outcome: { number: head.number, outcome: "waiting", reason },
       };
@@ -589,7 +596,12 @@ export class MergeQueue {
           );
         }
         log("INFO", "merge queue sync", { ...fields, headSha: j.headSha, syncs: head.syncs + 1 });
-        await judge.requestSync(repo, head, j.headSha);
+        if ((await judge.requestSync(repo, head, j.headSha)) === "conflict") {
+          return drop(
+            `it conflicts with the default branch at ${j.headSha.slice(0, 12)}: resolve the conflict on its branch, then merge it again`,
+            "flag",
+          );
+        }
         return wait(
           "sync requested",
           { headSha: j.headSha, syncs: head.syncs + 1, syncRequestedSha: j.headSha },
@@ -642,6 +654,9 @@ export class MergeQueue {
       syncs: 0,
       syncRequestedSha: null,
       judgedSince: null,
+      approval: offer.approval?.by ?? null,
+      approvedDiff: offer.approval?.diff ?? null,
+      lastNote: null,
     };
   }
 

@@ -87,6 +87,13 @@ export async function createFakeApp() {
   await service.move("ai", drop.id, "ready", "andy");
   await service.move("ai", drop.id, "in_progress", "andy");
   await service.move("ai", drop.id, "ready_for_review", "andy");
+  // AI-388: the PR's link from GitHub's event, so the ticket panel offers Merge.
+  await tracker.linkPullRequest(
+    "ai",
+    drop.id,
+    { number: 74, url: "https://github.com/albernhagen/andy-intelligence/pull/74", state: "open" },
+    "system",
+  );
   // AI-218: its PR is clean but touches a kept path, so it waits for Andy's merge in Needs-you.
   const dropBuild = await runs.create({
     projectId: "ai",
