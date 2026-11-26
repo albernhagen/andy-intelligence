@@ -207,6 +207,9 @@ export async function prSyncSetting({ env, fetchImpl, oidc }) {
     method: "POST",
     headers: { authorization: `Bearer ${oidc}` },
   });
+  // A control plane without the route yet (this script merged, the deploy not out) answers 404:
+  // read as the default, `queue`, which writes nothing. A refusal is 401/403, never 404.
+  if (res.status === 404) return "queue";
   const data = await res.json().catch(() => null);
   if (!res.ok || !["queue", "all"].includes(data?.prSync)) {
     throw new Error(

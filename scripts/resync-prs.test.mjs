@@ -214,6 +214,12 @@ describe("resync", () => {
     expect(w.lines.some((l) => l.includes("PR sync is `queue`"))).toBe(true);
   });
 
+  it("GivenAControlPlaneWithoutTheRouteYet_WhenRun_ThenItReadsAsQueueAndWritesNothing", async () => {
+    const w = world({ prSync: { status: 404, body: { error: "not found" } } });
+    expect(await w.run()).toEqual({ capped: false, results: [], prSync: "queue" });
+    expect(writes(w.calls)).toEqual([]);
+  });
+
   it.each([
     ["a refusal", { status: 403, body: { error: "forbidden" } }],
     ["an unknown value", { status: 200, body: { prSync: "some" } }],

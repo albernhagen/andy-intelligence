@@ -281,6 +281,32 @@ describe("POST /api/projects/{projectId}/merges (AI-388)", () => {
     expect(t.host.merges).toEqual([{ fullName: REPO, number: 7, sha: HEAD }]);
   });
 
+  it("GivenAPushWhileTheApprovedDiffIsRead_WhenAndyClicksMerge_Then422AndNothingIsQueued", async () => {
+    const t = await setup();
+    const digest = t.host.diffDigest.bind(t.host);
+    t.host.diffDigest = async (repo, number) => {
+      const d = await digest(repo, number);
+      t.pr.pullRequest.headSha = "b".repeat(40);
+      return d;
+    };
+    const res = await t.click();
+    expect(res.status).toBe(422);
+    expect((await body(res)).error).toContain("changed while it was read");
+    expect(t.host.merges).toEqual([]);
+    expect(t.host.branchUpdates).toEqual([]);
+  });
+
+  it("GivenAQueuedApprovedPrWhoseDiffCanNoLongerBeRead_WhenItsChecksPass_ThenItIsNotMergedAsStale", async () => {
+    const t = await setup();
+    t.host.behindDefault.add(HEAD);
+    await t.click();
+    t.pr.diffDigest = null;
+    t.synced();
+    await t.checkHook(SYNCED, "d-1");
+    expect(t.host.merges).toEqual([]);
+    expect((await t.comments()).join("\n")).toContain("owner_approval_stale");
+  });
+
   it("GivenADiffTheHostCannotShowInFull_WhenAndyClicksMerge_Then422AndNothingIsQueued", async () => {
     const t = await setup();
     t.pr.diffDigest = null;
