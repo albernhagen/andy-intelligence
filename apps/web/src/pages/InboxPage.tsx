@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useParams } from "@tanstack/react-router";
 import type { Project, WaitingMerge } from "@andy/contracts";
 import { ConfigChanges } from "@/components/ConfigChanges";
+import { EpicBreakdownsWaiting, useWaitingBreakdowns } from "@/components/EpicBreakdown";
 import { InboxTicketCard } from "@/components/inbox/InboxTicketCard";
 import { MergeDetail, mergeWhy } from "@/components/inbox/MergesWaiting";
 import { ProjectPlansWaiting, useWaitingPlans } from "@/components/ProjectPlan";
@@ -33,6 +34,7 @@ export function InboxPage() {
   const needsYou = useNeedsYou();
   const projects = useProjects();
   const plans = useWaitingPlans(projectId);
+  const breakdowns = useWaitingBreakdowns(projectId);
   const phone = useIsPhone();
   // The picked row, and where it was: when it leaves (answered), the row now there is picked.
   const [picked, setPicked] = useState<{ id: string; index: number } | null>(null);
@@ -52,7 +54,7 @@ export function InboxPage() {
   const entries = inboxEntries(merges, active, stale, projects.data ?? [], !projectId);
   // Tickets, as the header and picker count them (AI-347); plans and merges have their own headings.
   const total = active.length + stale.length;
-  const nothing = total + plans.shown.length + merges.length === 0;
+  const nothing = total + plans.shown.length + breakdowns.shown.length + merges.length === 0;
   const found = entries.findIndex((e) => e.id === picked?.id);
   const index = found !== -1 ? found : Math.min(picked?.index ?? 0, entries.length - 1);
   const current = entries[index];
@@ -69,6 +71,7 @@ export function InboxPage() {
       <section className="space-y-4">
         {heading}
         <ProjectPlansWaiting projectId={projectId} />
+        <EpicBreakdownsWaiting projectId={projectId} />
         {nothing && <p className="text-muted-foreground">Nothing needs you.</p>}
         {current && (
           <PhoneDecision
@@ -87,6 +90,7 @@ export function InboxPage() {
       <div className="space-y-4 border-r border-border p-3">
         {heading}
         <ProjectPlansWaiting projectId={projectId} />
+        <EpicBreakdownsWaiting projectId={projectId} />
         {nothing && <p className="text-muted-foreground">Nothing needs you.</p>}
         {groupsOf(entries).map(({ title, rows }) => (
           <section key={title ?? "tickets"} aria-label={title ?? "Tickets"} className="space-y-1">

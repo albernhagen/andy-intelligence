@@ -5,6 +5,7 @@ import {
   InMemoryCodeHostConnectionStore,
   InMemoryConfigChangeStore,
   InMemoryMilestoneStore,
+  InMemoryEpicBreakdownStore,
   InMemoryNightLaunchStore,
   InMemoryProjectLogoStore,
   InMemoryReleaseNoteStore,
@@ -252,6 +253,8 @@ export async function createFakeApp() {
     releaseNotes: await seedReleaseNotes(),
     // AI-311: OPS's epic is in a parked milestone, so its board group and panel say so.
     milestones,
+    // AI-383: none stored, so OPS's epic panel offers Draft tickets (its milestone is parked).
+    epicBreakdowns: new InMemoryEpicBreakdownStore(),
     // AI-366: Settings → Local runners lists one runner away and one revoked.
     runners: await seedRunners(),
     // AI-366: Settings → GitHub, not connected yet, so it offers "Connect GitHub".
