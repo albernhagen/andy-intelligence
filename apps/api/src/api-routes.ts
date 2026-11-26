@@ -16,6 +16,7 @@ export { apiRoutes as githubSetup } from "./github/setup";
 export { apiRoutes as ideate } from "./ideate";
 export { apiRoutes as inFlight } from "./in-flight";
 export { apiRoutes as mcp } from "./mcp";
+export { apiRoutes as merges } from "./merges";
 export { apiRoutes as milestoneMap } from "./milestone-map";
 export { apiRoutes as milestones } from "./milestones";
 export { apiRoutes as night } from "./night";

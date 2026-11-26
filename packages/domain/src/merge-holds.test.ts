@@ -12,6 +12,9 @@ const entry = {
   syncs: 0,
   syncRequestedSha: null,
   judgedSince: null,
+  approval: null,
+  approvedDiff: null,
+  lastNote: null,
 };
 const mainRed = {
   since: "2026-11-25T10:00:00.000Z",

@@ -40,7 +40,7 @@ const nativeControls = (root: HTMLElement) =>
     .map((el) => el.outerHTML.slice(0, 80));
 
 describe("the header's PR line", () => {
-  async function withPr(state: "open" | "merged") {
+  async function withPr(state: "open" | "merged", inReview = false) {
     const h = renderApp();
     await h.tracker.createProject({
       name: "AI",
@@ -48,6 +48,11 @@ describe("the header's PR line", () => {
       repos: ["albernhagen/andy-intelligence"],
     });
     const ticket = await h.service.create("ai", readyStory, "andy");
+    if (inReview) {
+      for (const to of ["ready", "in_progress", "ready_for_review"] as const) {
+        await h.service.move("ai", ticket.id, to, "andy");
+      }
+    }
     await h.tracker.linkPullRequest(
       "ai",
       ticket.id,
@@ -64,6 +69,17 @@ describe("the header's PR line", () => {
     const panel = await withPr("open");
     expect(await within(panel).findByText("PR #88 waits for you")).toBeTruthy();
     expect(within(panel).getByRole("link", { name: "Open PR #88" })).toBeTruthy();
+  });
+
+  it("GivenAnOpenPrOnATicketInReview_WhenThePanelOpens_ThenItOffersMergeThroughTheQueue", async () => {
+    const panel = await withPr("open", true);
+    expect(await within(panel).findByRole("button", { name: "Merge PR #88" })).toBeTruthy();
+  });
+
+  it("GivenAnOpenPrOnATicketNotInReview_WhenThePanelOpens_ThenNoMergeIsOffered", async () => {
+    const panel = await withPr("open");
+    await within(panel).findByText("PR #88 waits for you");
+    expect(within(panel).queryByRole("button", { name: /^Merge PR/ })).toBeNull();
   });
 
   it("GivenAMergedPr_WhenThePanelOpens_ThenNeitherTheLineNorTheLinkShows", async () => {

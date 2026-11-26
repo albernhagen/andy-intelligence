@@ -1,15 +1,18 @@
 import {
   WAITING_MERGES_MAX,
   type CodeHost,
-  type MergeWaitReason,
   type Run,
   type RunStore,
   type Ticket,
   type WaitingMerge,
+  type MergeQueueState,
   type WaitingMergeNote,
+  type WaitingMergeQueue,
   type WaitingMerges,
   type WorkTracker,
 } from "@andy/contracts";
+import type { MergeQueue } from "./merge-queue";
+import { ANDYS_MERGE_REASONS } from "./merge-verdict";
 import { parseReleaseNote } from "./release-note";
 import { ProjectTickets } from "./ticket-snapshots";
 
@@ -20,16 +23,6 @@ import { ProjectTickets } from "./ticket-snapshots";
  * reason is one below. A merged or closed PR drops out (its agent task gets an outcome, and a
  * merge moves the ticket to Done).
  */
-
-/** Reasons that leave a clean PR for Andy rather than for waiting or a fix. */
-export const ANDYS_MERGE_REASONS: readonly MergeWaitReason[] = [
-  "mode_not_set",
-  "mode_manual",
-  "mode_epic",
-  "kept_path",
-  "high_risk_path",
-  "accepted_label",
-];
 
 /** How long a PR's release note is reused before the description is read again. */
 const NOTE_TTL_MS = 5 * 60_000;
@@ -66,6 +59,8 @@ export class WaitingMergesReader {
     /** Tickets through the snapshot (AI-317), so an unchanged project costs one counter read. */
     private readonly tickets: Pick<ProjectTickets, "list"> = new ProjectTickets(tracker),
     private readonly now: () => Date = () => new Date(),
+    /** Each repo's merge queue (AI-388), to show a PR's place; null: not shown. */
+    private readonly queues: Pick<MergeQueue, "state"> | null = null,
   ) {}
 
   /** Every project's PRs waiting for Andy's merge, or one project's. */
@@ -80,14 +75,19 @@ export class WaitingMergesReader {
       .filter((t) => t.stage === "ready_for_review" && !t.archived)
       .sort((a, b) => a.rank.localeCompare(b.rank) || a.key.localeCompare(b.key));
     const checked = inReview.slice(0, WAITING_MERGES_MAX);
-    const found = await Promise.all(checked.map((t) => this.waitingFor(t)));
+    // One queue read per repo per call, however many of its PRs are listed.
+    const queues = new Map<string, Promise<MergeQueueState | null>>();
+    const found = await Promise.all(checked.map((t) => this.waitingFor(t, queues)));
     return {
       merges: found.filter((m): m is WaitingMerge => m !== null),
       truncated: inReview.length > WAITING_MERGES_MAX,
     };
   }
 
-  private async waitingFor(ticket: Ticket): Promise<WaitingMerge | null> {
+  private async waitingFor(
+    ticket: Ticket,
+    queues: Map<string, Promise<MergeQueueState | null>>,
+  ): Promise<WaitingMerge | null> {
     const run = waitingRun(await this.runs.listForTicket(ticket.projectId, ticket.id));
     if (!run) return null;
     const url = run.links.pullRequest;
@@ -102,7 +102,36 @@ export class WaitingMergesReader {
       mergeMode: run.mergeMode,
       reasons: run.verdictReasons,
       note: await this.noteFor(url, ref),
+      queue: await this.queuedAt(ref, queues),
     };
+  }
+
+  /** The PR's place in its repo's merge queue; null when not queued or the read failed. */
+  private async queuedAt(
+    ref: { repo: string; number: number },
+    queues: Map<string, Promise<MergeQueueState | null>>,
+  ): Promise<WaitingMergeQueue | null> {
+    if (!this.queues) return null;
+    const key = ref.repo.toLowerCase();
+    let read = queues.get(key);
+    if (!read) {
+      read = this.queues.state(key).catch((err: unknown) => {
+        console.error(
+          JSON.stringify({
+            severity: "WARNING",
+            message: "waiting merge: merge queue read failed",
+            repo: key,
+            error: err instanceof Error ? err.message : String(err),
+          }),
+        );
+        return null;
+      });
+      queues.set(key, read);
+    }
+    const q = await read;
+    const at = q?.entries.findIndex((e) => e.number === ref.number) ?? -1;
+    if (!q || at < 0) return null;
+    return { position: at + 1, note: q.entries[at]!.lastNote };
   }
 
   /** The PR's release note, read at most once per `NOTE_TTL_MS` per PR. */

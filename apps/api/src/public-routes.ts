@@ -2,6 +2,7 @@
 // caller (OIDC token, HMAC signature or runner secret). One line per module, sorted by module path
 // (AI-145). Adding one is an entry point: update docs/security/threat-model.md in the same PR.
 export { publicRoutes as deployments } from "./deployments";
+export { publicRoutes as githubPrSync } from "./github/pr-sync";
 export { publicRoutes as githubToken } from "./github/token";
 export { publicRoutes as githubWebhooks } from "./github/webhooks";
 export { publicRoutes as modelScout } from "./model-scout";

@@ -98,15 +98,3 @@ resource "google_artifact_registry_repository_iam_member" "promote_source_read" 
 
   depends_on = [google_project_service.apis]
 }
-
-# Promote also tags the digest it ships `release-<hex>` in that repo, so the dev repo's cleanup
-# keeps what prod runs (AI-389). No tag-only predefined role exists; writer also lets this
-# deployer push there, but dev deploys only the digest its own build pushed.
-resource "google_artifact_registry_repository_iam_member" "promote_source_tag" {
-  count      = var.promote_source_repository == null ? 0 : 1
-  project    = var.promote_source_repository.project_id
-  location   = var.promote_source_repository.location
-  repository = var.promote_source_repository.repository
-  role       = "roles/artifactregistry.writer"
-  member     = "serviceAccount:${google_service_account.deployer.email}"
-}

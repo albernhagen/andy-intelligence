@@ -21,6 +21,19 @@ import { DOCS_ONLY_HIGH_RISK_PATHS, HIGH_RISK_PATHS, KEPT_PATHS } from "./merge-
 /** Labels by which Andy accepts a review finding instead of a fix: his merge, never the gate's. */
 export const ACCEPTED_LABELS: readonly string[] = ["review-accepted", "security-accepted"];
 
+/**
+ * Reasons that leave an otherwise clean PR for Andy (ADR-0124): his merge, not a wait or a fix.
+ * The web app's Merge button waives exactly these (AI-388, ADR-0157).
+ */
+export const ANDYS_MERGE_REASONS: readonly MergeWaitReason[] = [
+  "mode_not_set",
+  "mode_manual",
+  "mode_epic",
+  "kept_path",
+  "high_risk_path",
+  "accepted_label",
+];
+
 /** Findings that keep a PR from being clean (ADR-0124 "Clean"). */
 export const OPEN_FINDING_SEVERITIES: readonly ReviewFinding["severity"][] = [
   "blocker",
@@ -117,7 +130,16 @@ export function openFindingsOn(
  * every reason. A null mode is a project with no mode saved: nothing merges (ADR-0134). `epic`
  * merges stories into their epic's branch (AI-216), never here, so it waits too.
  */
-export function mergeVerdict(facts: MergeFacts, mode: MergeMode | null): MergeVerdict {
+export function mergeVerdict(
+  facts: MergeFacts,
+  mode: MergeMode | null,
+  /**
+   * AI-388 (ADR-0157): Andy's own ask from the web app. It waives exactly
+   * `ANDYS_MERGE_REASONS` (the mode, kept and high-risk paths, his accepted label); every check,
+   * review, finding, unknown fact and a red main still hold the PR.
+   */
+  options: { ownerApproval?: boolean } = {},
+): MergeVerdict {
   const reasons: MergeWaitReason[] = [];
   if (mode === null) reasons.push("mode_not_set");
   else if (mode === "manual") reasons.push("mode_manual");
@@ -140,9 +162,12 @@ export function mergeVerdict(facts: MergeFacts, mode: MergeMode | null): MergeVe
   if (facts.mainChecks === null) reasons.push("main_checks_unknown");
   else if (facts.mainChecks.state === "failed") reasons.push("main_red");
 
+  const left = options.ownerApproval
+    ? reasons.filter((r) => !ANDYS_MERGE_REASONS.includes(r))
+    : reasons;
   return {
-    verdict: reasons.length === 0 ? "merge" : "wait",
-    reasons,
+    verdict: left.length === 0 ? "merge" : "wait",
+    reasons: left,
     keptFiles: cap(kept),
     highRiskFiles: cap(risky),
     mainRedChecks:

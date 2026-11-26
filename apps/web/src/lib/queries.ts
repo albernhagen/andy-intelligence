@@ -13,6 +13,7 @@ import type {
   MilestoneStatus,
   DeployKind,
   EnvironmentPolicy,
+  PrSync,
   ExecutorKind,
   PlanApproval,
   Run,
@@ -434,6 +435,22 @@ function useWrite<V, R>(
   });
 }
 
+/**
+ * Andy's Merge (AI-388, ADR-0157): puts the PR in its repo's merge queue with his click as the
+ * owner's approval. Answers merged, queued with its place, or waiting with every reason.
+ */
+export function useMergePr(projectId: string) {
+  const api = useApi();
+  return useWrite(async (body: { repo: string; number: number }) =>
+    unwrap(
+      await api.POST("/api/projects/{projectId}/merges", {
+        params: { path: { projectId } },
+        body,
+      }),
+    ),
+  );
+}
+
 /** Andy's clear of a quota idle (AI-74): discards the reading holding dispatch at the reserve. */
 export function useClearQuotaIdle() {
   const api = useApi();
@@ -555,6 +572,7 @@ export function useUpdateProject(projectId: string) {
       emailNotifications?: boolean;
       environments?: EnvironmentPolicy;
       deployKind?: DeployKind;
+      prSync?: PrSync;
     }) =>
       unwrap(
         await api.PATCH("/api/projects/{projectId}", { params: { path: { projectId } }, body }),
