@@ -22,6 +22,17 @@ mock_provider "google" {
   }
 }
 
+# Every other service account shares the mock's email; the main deployer gets its own, so a grant
+# that names the wrong identity fails.
+override_resource {
+  target          = google_service_account.deployer
+  override_during = plan
+  values = {
+    name  = "projects/example-prod-000000/serviceAccounts/example-deploy@example-prod-000000.iam.gserviceaccount.com"
+    email = "example-deploy@example-prod-000000.iam.gserviceaccount.com"
+  }
+}
+
 variables {
   project_id            = "example-prod-000000"
   service_name          = "example"
@@ -144,7 +155,7 @@ run "given_promote_from_dev_when_planned_then_service_agent_reads_that_repo_only
     error_message = "Promote should give only this project's Cloud Run service agent read on the dev repo."
   }
   assert {
-    condition     = google_artifact_registry_repository_iam_member.deployer_promote_read[0].project == "example-dev-000000" && google_artifact_registry_repository_iam_member.deployer_promote_read[0].repository == "example" && google_artifact_registry_repository_iam_member.deployer_promote_read[0].role == "roles/artifactregistry.reader" && google_artifact_registry_repository_iam_member.deployer_promote_read[0].member == "serviceAccount:sa@example-prod-000000.iam.gserviceaccount.com"
+    condition     = google_artifact_registry_repository_iam_member.deployer_promote_read[0].project == "example-dev-000000" && google_artifact_registry_repository_iam_member.deployer_promote_read[0].repository == "example" && google_artifact_registry_repository_iam_member.deployer_promote_read[0].role == "roles/artifactregistry.reader" && google_artifact_registry_repository_iam_member.deployer_promote_read[0].member == "serviceAccount:example-deploy@example-prod-000000.iam.gserviceaccount.com"
     error_message = "Promote should give the main deployer read on the dev repo only, so the release check can find the digest."
   }
 }
