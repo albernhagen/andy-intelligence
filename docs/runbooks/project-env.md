@@ -73,8 +73,12 @@ Plus `DEPLOY_SMOKE_CHECKS` (one check per line, `<path> <status>`, e.g. `/health
 Without `PREVIEW_SERVICE` the `Preview` jobs skip; with only some set, the run fails at its first step naming the missing ones. Check: open a PR that changes code; its `Preview` run comments a `pr-<n>` URL; close it and the comment says the preview was removed.
 
 - Check: the alert email channel shows in Monitoring → Alerting → Notification channels (Google sends no confirmation for email).
+- A deleted pool keeps its ID for 30 days: re-creating within that window fails; undelete it (`gcloud iam workload-identity-pools undelete`) or set another `wif_pool_id`.
+- The main service is public (Cloud Run IAM off) unless you set `allow_unauthenticated = false`; then deploys' smoke tests get 403.
+- Images are deleted after 30 days unless among the newest 10 or tagged `release-*`. The baseline `deploy.yml` (prod-only) and `release.yml` (promote) tag what prod runs `release-<digest hex>` before traffic moves (AI-389: M6.23); tags are never removed, so every image prod ever served is kept (a few hundred MB each). An image prod served before that tag landed is not: tag it once by hand, `gcloud artifacts docker tags add <image_repository>/<service>@<digest> <image_repository>/<service>:release-<digest hex>` (the digest from the Releases page or `gcloud run revisions describe`).
+- The main service has `deletion_protection`: set it false and apply before a destroy.
 
-### Prod alerts
+## Prod alerts
 
 Module `infra/modules/project-alerts` (AI-209: M6.19), called by `project-env` while `prod_alerts_enabled` (default on). Both alerts email `alert_email` and auto-close after 24h. About $0.20/month per prod service (2 alert conditions at $0.10); the uptime check (~26k runs a month) is inside the 1M free per project.
 
@@ -86,7 +90,3 @@ Module `infra/modules/project-alerts` (AI-209: M6.19), called by `project-env` w
 - Check after apply: Monitoring → Uptime checks shows `<service> /health` passing. The app must answer `/health` with 2xx.
 - When one fires: open the service's logs; if a release caused it, roll back from the Releases page or MCP (`deploy-and-rollback.md`).
 - With `allow_unauthenticated = false` there is no uptime check (it can't send a token); the 5xx alert stays.
-- A deleted pool keeps its ID for 30 days: re-creating within that window fails; undelete it (`gcloud iam workload-identity-pools undelete`) or set another `wif_pool_id`.
-- The main service is public (Cloud Run IAM off) unless you set `allow_unauthenticated = false`; then deploys' smoke tests get 403.
-- Images are deleted after 30 days unless among the newest 10 or tagged `release-*`. The baseline `deploy.yml` (prod-only) and `release.yml` (promote) tag what prod runs `release-<digest hex>` before traffic moves (AI-389: M6.23); tags are never removed, so every image prod ever served is kept (a few hundred MB each). An image prod served before that tag landed is not: tag it once by hand, `gcloud artifacts docker tags add <image_repository>/<service>@<digest> <image_repository>/<service>:release-<digest hex>` (the digest from the Releases page or `gcloud run revisions describe`).
-- The main service has `deletion_protection`: set it false and apply before a destroy.
