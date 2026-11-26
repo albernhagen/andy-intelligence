@@ -13,7 +13,7 @@ Uploaded logos (AI-393): the first entry point that stores a file Andy (or a Cla
 ## Controls
 
 - **Type:** only `svg` or `png` (else 400). PNG: base64 checked, signature checked, size capped.
-- **SVG sanitizer** (`apps/api/src/logo-sanitize.ts`, `fast-xml-parser`): refuses DOCTYPE and entity declarations, malformed XML, a root other than `<svg>`, more than 32 levels or 4,000 elements, `script`, `foreignObject`, `iframe`, `object`, `embed`, `image`, `a`, animation elements, any `on*` attribute, `javascript:`/`vbscript:`/`data:` anywhere, `href` or `url()` not starting `#`, and CSS with `@import`, `image-set`, `expression()` or escapes. Everything else outside the allowlist is dropped; only the rebuilt, re-escaped markup is stored.
+- **SVG sanitizer** (`apps/api/src/logo-sanitize.ts`, `fast-xml-parser`): refuses DOCTYPE and entity declarations, malformed XML, a root other than `<svg>`, more than 32 levels or 4,000 elements, `script`, `foreignObject`, `iframe`, `object`, `embed`, `image`, `a`, animation elements, any `on*` attribute, a repeated attribute (in any case), a value starting `javascript:`, `vbscript:` or `data:` (or such a URL quoted in CSS), `href` or `url()` not starting `#`, and CSS with `@import`, `image-set`, `expression()` or escapes. Everything else outside the allowlist is dropped; only the rebuilt, re-escaped markup is stored.
 - **Rendering:** the web shows a logo only as `<img src="data:…">`, which runs no script and fetches nothing, even if the sanitizer missed something.
 - **Storage:** Firestore `projectLogos/{project}`, server-only like every collection.
 

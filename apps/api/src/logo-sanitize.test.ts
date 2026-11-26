@@ -102,7 +102,7 @@ describe("sanitizeSvg", () => {
       "external reference",
     ],
     ["a javascript: href", svg('<use href="java\tscript:alert(1)"/>'), "script or data URL"],
-    ["a data: url", svg('<rect fill="url(data:image/png;base64,AAAA)"/>'), "script or data URL"],
+    ["a data: url", svg('<rect fill="url(data:image/png;base64,AAAA)"/>'), "external reference"],
     ["@import in style", svg("<rect style=\"@import 'x'\"/>"), "@import"],
     ["a CSS escape in style", svg('<rect style="fill:\\75 rl(x)"/>'), "a CSS escape"],
   ])("Given %s_When sanitized_Then it is refused and says why", (_, markup, reason) => {
@@ -122,6 +122,31 @@ describe("sanitizeSvg", () => {
     ["CDATA with @import", "<style><![CDATA[@import 'x';]]></style>", "@import"],
   ])("Given a style element with %s_When sanitized_Then it is refused", (_, inner, reason) => {
     expect(refused(svg(inner))).toContain(reason);
+  });
+
+  it("Given the same attribute twice in different case_When sanitized_Then it is refused", () => {
+    expect(refused(svg('<path d="M0 0" D="M1 1"/>'))).toContain(
+      "repeats the attribute D on <path>",
+    );
+  });
+
+  it("Given an upper-case XLINK:HREF_When sanitized_Then the xlink namespace is declared", () => {
+    const out = kept(
+      `<svg ${NS} xmlns:xlink="http://www.w3.org/1999/xlink"><defs><path id="p" d="M0 0"/></defs><use XLINK:HREF="#p"/></svg>`,
+    );
+    expect(out).toContain('xmlns:xlink="http://www.w3.org/1999/xlink"');
+    expect(out).toContain('<use xlink:href="#p"/>');
+  });
+
+  it("Given data or metadata in a selector or an id_When sanitized_Then it is kept", () => {
+    const markup = svg(
+      '<style>.metadata:hover{fill:red}.data:first-child{fill:blue}</style><path id="metadata:1" d="M0 0"/>',
+    );
+    expect(kept(markup)).toBe(markup);
+  });
+
+  it("Given a quoted data URL in CSS_When sanitized_Then it is refused", () => {
+    expect(refused(svg("<style>.a{fill:'data:x'}</style>"))).toContain("script or data URL");
   });
 
   it("Given a DOCTYPE with entities_When sanitized_Then it is refused", () => {

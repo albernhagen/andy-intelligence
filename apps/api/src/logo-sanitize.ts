@@ -222,7 +222,7 @@ function rebuild(node: Node, depth: number, counter: { elements: number }): stri
   if (!kept) return null;
   if (local === "svg" && depth === 0) {
     attrs.unshift(["xmlns", SVG_NS]);
-    if (attrs.some(([k]) => k === "xlink:href") || markupUsesXlink(node)) {
+    if (usesXlink(attrs, children)) {
       attrs.splice(1, 0, ["xmlns:xlink", XLINK_NS]);
     }
   }
@@ -235,6 +235,7 @@ function rebuild(node: Node, depth: number, counter: { elements: number }): stri
 /** Keeps the allowed attributes in SVG's own spelling; refuses dangerous ones. */
 function checkAttributes(element: string, raw: Record<string, string>): [string, string][] {
   const out: [string, string][] = [];
+  const seen = new Set<string>();
   for (const [key, rawValue] of Object.entries(raw)) {
     const name = key.toLowerCase();
     const value = String(rawValue);
@@ -243,7 +244,12 @@ function checkAttributes(element: string, raw: Record<string, string>): [string,
         `the SVG has an event handler (${key} on <${element}>), which is not allowed`,
       );
     }
-    if (/javascript:|vbscript:|data:/i.test(squeeze(value))) {
+    if (seen.has(name)) {
+      throw new Refusal(`the SVG repeats the attribute ${key} on <${element}>`);
+    }
+    seen.add(name);
+    // A script or data URL only where a URL starts: the value itself, or (below) inside url().
+    if (SCHEME.test(squeeze(value))) {
       throw new Refusal(`the SVG has a script or data URL in ${key} on <${element}>`);
     }
     if (localName(name) === "href") {
@@ -273,7 +279,8 @@ function checkUrls(value: string): void {
  * hides from these checks (`@import`, `image-set`, `expression()`, escapes, script schemes).
  */
 function checkCss(where: string, css: string): void {
-  if (/javascript:|vbscript:|data:/i.test(squeeze(css))) {
+  // Outside url() (checked below), a URL in CSS can only start a quoted string.
+  if (/['"](?:javascript|vbscript|data):/i.test(squeeze(css))) {
     throw new Refusal(`the SVG has a script or data URL in ${where}`);
   }
   checkUrls(css);
@@ -285,9 +292,15 @@ function checkCss(where: string, css: string): void {
   }
 }
 
-function markupUsesXlink(node: Node): boolean {
-  return JSON.stringify(node).includes('"xlink:href"');
+/** Whether the rebuilt element or its children use `xlink:href`: names are case-folded by then. */
+function usesXlink(attrs: [string, string][], children: string[]): boolean {
+  return (
+    attrs.some(([k]) => k === "xlink:href") || children.some((c) => c.includes(' xlink:href="'))
+  );
 }
+
+/** A value that starts with a script or data URL. */
+const SCHEME = /^(?:javascript|vbscript|data):/i;
 
 /** The value without whitespace or control characters, which browsers skip inside a scheme. */
 const squeeze = (value: string) =>
