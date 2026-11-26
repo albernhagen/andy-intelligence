@@ -555,7 +555,7 @@ jobs:
         if: steps.mode.outputs.edits == 'true'
         continue-on-error: true # the next step fails the job with the reason
         timeout-minutes: 5
-        uses: anthropics/claude-code-action@4fa93a88de49bbef68b10eb15aabedf28ca0e1ed # v1.0.271
+        uses: anthropics/claude-code-action@f431adaf77e0fecf918431e75a2b5b45b85af002 # v1.0.283
         env:
           CLAUDE_CODE_SUBPROCESS_ENV_SCRUB: "1"
           TMPDIR: /tmp/agent
@@ -674,7 +674,7 @@ jobs:
         if: steps.mode.outputs.skip_agent != 'true'
         continue-on-error: true # a failed agent is reported as a failed run, not a crashed job
         timeout-minutes: ${{ needs.context.outputs.step == 'build' && 55 || (needs.context.outputs.step == 'sync' && 40) || (needs.context.outputs.step == 'summarize' && 10) || (needs.context.outputs.step == 'verify' && 20) || 25 }}
-        uses: anthropics/claude-code-action@4fa93a88de49bbef68b10eb15aabedf28ca0e1ed # v1.0.271
+        uses: anthropics/claude-code-action@f431adaf77e0fecf918431e75a2b5b45b85af002 # v1.0.283
         env:
           # Build and sync: strip credentials from every subprocess and give Bash its own PID
           # namespace, so `cat /proc/<pid>/environ` can't reach the model credential (ADR-0063).
@@ -810,7 +810,7 @@ jobs:
         if: steps.checks_prepare.outcome == 'success'
         continue-on-error: true # the verify step judges it
         timeout-minutes: 30
-        uses: anthropics/claude-code-action@4fa93a88de49bbef68b10eb15aabedf28ca0e1ed # v1.0.271
+        uses: anthropics/claude-code-action@f431adaf77e0fecf918431e75a2b5b45b85af002 # v1.0.283
         env:
           CLAUDE_CODE_SUBPROCESS_ENV_SCRUB: "1"
           TMPDIR: /tmp/agent
