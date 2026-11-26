@@ -73,9 +73,49 @@ describe("callerConfig: deploy", () => {
   });
 
   it("GivenAnUnknownWorkflow_WhenConfig_ThenThrows", () => {
-    expect(() => callerConfig({ workflow: "preview", vars: PROD_ONLY })).toThrow(
-      "deploy or release",
+    expect(() => callerConfig({ workflow: "verify", vars: PROD_ONLY })).toThrow(
+      "deploy, release or preview",
     );
+  });
+});
+
+const preview = (prefix, project) => ({
+  [`${prefix}PREVIEW_SERVICE`]: "app-preview",
+  [`${prefix}PREVIEW_DEPLOYER_SA`]: `app-pr-deploy@${project}.iam.gserviceaccount.com`,
+  [`${prefix}PREVIEW_IMAGE_REPO`]: `us-central1-docker.pkg.dev/${project}/app-preview`,
+});
+
+describe("callerConfig: preview (AI-207: M6.18)", () => {
+  it("GivenProdOnlyWithPreviewVariables_WhenPreview_ThenUsesProdsPreviewService", () => {
+    const vars = { ...PROD_ONLY, ...preview("GCP_", "app-prod"), DEPLOY_SMOKE_CHECKS: "" };
+    expect(callerConfig({ workflow: "preview", vars })).toEqual({
+      environment: "prod",
+      project_id: "app-prod",
+      region: "us-central1",
+      wif_provider: PROD_ONLY.GCP_WIF_PROVIDER,
+      preview_service: "app-preview",
+      preview_deployer_sa: "app-pr-deploy@app-prod.iam.gserviceaccount.com",
+      preview_image_repo: "us-central1-docker.pkg.dev/app-prod/app-preview",
+      preview_image: "us-central1-docker.pkg.dev/app-prod/app-preview/app-preview",
+    });
+  });
+
+  it("GivenDevAndProd_WhenPreview_ThenUsesDevsPreviewService", () => {
+    const vars = { ...DEV_AND_PROD, ...preview("GCP_DEV_", "app-dev") };
+    const out = callerConfig({ workflow: "preview", vars });
+    expect(out.environment).toBe("dev");
+    expect(out.project_id).toBe("app-dev");
+  });
+
+  it("GivenNoPreviewVariables_WhenPreview_ThenNamesEachOne", () => {
+    expect(() => callerConfig({ workflow: "preview", vars: PROD_ONLY })).toThrow(
+      "missing repo variables GCP_PREVIEW_SERVICE, GCP_PREVIEW_DEPLOYER_SA, GCP_PREVIEW_IMAGE_REPO",
+    );
+  });
+
+  it("GivenOnlyProdPreviewVariablesInDevAndProd_WhenPreview_ThenNamesTheDevOnes", () => {
+    const vars = { ...DEV_AND_PROD, ...preview("GCP_", "app-prod") };
+    expect(() => callerConfig({ workflow: "preview", vars })).toThrow("GCP_DEV_PREVIEW_SERVICE");
   });
 });
 

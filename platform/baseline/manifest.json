@@ -44,6 +44,12 @@
       "pin": true,
       "deployKind": "cloud-run"
     },
+    {
+      "path": ".github/workflows/preview.yml",
+      "from": "template/.github/workflows/preview.yml",
+      "pin": true,
+      "deployKind": "cloud-run"
+    },
     { "path": ".github/dependabot.yml", "from": "template/.github/dependabot.yml" },
     {
       "path": ".github/pull_request_template.md",
