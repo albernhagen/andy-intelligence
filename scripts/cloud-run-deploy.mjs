@@ -137,6 +137,29 @@ export async function runChecks(
   }
 }
 
+/**
+ * The registry tag that keeps the image prod runs (AI-389): registry cleanup never deletes a
+ * version whose tag starts with a keep prefix (project-env `image_keep_tag_prefixes`), so a cold
+ * start or rollback can still pull it. `image` must be by digest, `<repo>/<name>@sha256:<hex>`, so
+ * the tag names exactly what was deployed; the tag is `<prefix><hex>`, the same for a re-promote.
+ */
+export function keepTag({ image, prefix }) {
+  if (!/^[a-z][a-z0-9._-]*$/.test(prefix ?? "")) {
+    throw new Error(
+      `keep-tag-prefix: expected lowercase letters, digits, ".", "_" or "-", got "${prefix}"`,
+    );
+  }
+  const match = /^([^@\s]+)@sha256:([0-9a-f]{64})$/.exec(image ?? "");
+  if (!match)
+    throw new Error(
+      `keep-tag-prefix needs the image by digest (<repo>/<name>@sha256:…), got "${image}"`,
+    );
+  const [, name, hex] = match;
+  if (/:[^/]*$/.test(name))
+    throw new Error(`image must not carry both a tag and a digest, got "${image}"`);
+  return { source: image, target: `${name}:${prefix}${hex}` };
+}
+
 export function rollbackCommand({ service, region, serving }) {
   return `gcloud run services update-traffic ${service} --region ${region} --to-revisions=${serving}`;
 }
@@ -144,11 +167,14 @@ export function rollbackCommand({ service, region, serving }) {
 /** What happened to traffic, from the action's step outcomes. Order matters: first match wins. */
 export function deployVerdict(o) {
   if (o.inputs === "failure")
-    return "The smoke checks are missing or malformed. Nothing was deployed.";
+    return "The smoke checks, keep tag prefix or image are missing or malformed. Nothing was deployed.";
   if (o.before !== "success") return "Could not read the serving revision. Nothing was deployed.";
   if (o.deploy !== "success") return "Candidate did not deploy. **Traffic did not move.**";
   if (o.candidate !== "success" || o.smoke !== "success") {
     return "Candidate failed before promotion. **Traffic did not move**; the command below is not needed unless the service looks wrong.";
+  }
+  if (o.keepTag === "failure") {
+    return "Could not tag the image so registry cleanup keeps it. **Traffic did not move.**";
   }
   if (o.promote !== "success") {
     return "Promotion failed. **Traffic may have moved**: compare the serving revision below; run the command if it is not the previous one.";
@@ -159,7 +185,7 @@ export function deployVerdict(o) {
   return "Deployed. The candidate serves 100 percent of traffic.";
 }
 
-export function renderSummary({ service, region, before, candidate, after, outcomes }) {
+export function renderSummary({ service, region, before, candidate, after, keepTag, outcomes }) {
   const lines = [
     `## Deploy: ${service}`,
     "",
@@ -171,6 +197,9 @@ export function renderSummary({ service, region, before, candidate, after, outco
     `| Candidate | \`${candidate || "none"}\` |`,
     `| Serving after | \`${after || "unknown"}\` |`,
   ];
+  if (keepTag && outcomes.keepTag === "success") {
+    lines.push("", `Registry cleanup keeps this image: tagged \`${keepTag}\`.`);
+  }
   if (outcomes.untag === "failure") {
     lines.push(
       "",
@@ -242,6 +271,8 @@ async function main([command, argument]) {
           smokeChecks(declaredChecks(env)),
         ),
       );
+    case "keep-tag":
+      return setOutputs(keepTag({ image: env.IMAGE, prefix: env.KEEP_TAG_PREFIX }));
     case "smoke-public":
       return runChecks(
         publicChecks(
@@ -258,12 +289,14 @@ async function main([command, argument]) {
           before: env.BEFORE,
           candidate: env.CANDIDATE,
           after: env.AFTER,
+          keepTag: env.KEEP_TAG,
           outcomes: {
             inputs: env.OUTCOME_INPUTS,
             before: env.OUTCOME_BEFORE,
             deploy: env.OUTCOME_DEPLOY,
             candidate: env.OUTCOME_CANDIDATE,
             smoke: env.OUTCOME_SMOKE,
+            keepTag: env.OUTCOME_KEEP_TAG,
             promote: env.OUTCOME_PROMOTE,
             verify: env.OUTCOME_VERIFY,
             publicSmoke: env.OUTCOME_PUBLIC_SMOKE,

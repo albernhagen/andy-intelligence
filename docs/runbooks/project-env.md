@@ -39,10 +39,18 @@ terraform apply env.tfplan
   | `DEPLOYER_SA`               | output `deployer_email`               |
   | `IMAGE_REPO`                | output `image_repository`             |
 
-  Plus `DEPLOY_SMOKE_CHECKS` once per repo (one check per line, `<path> <status>`, e.g. `/health 200`). Each with `gh variable set <NAME> --repo <owner>/<name> --body <value>`. Then run the baseline with `--deploy-kind cloud-run` (`onboard-a-repo.md` §5a). `preview_deployer_email` is for the preview workflow (AI-207: M6.18).
+  Plus `DEPLOY_SMOKE_CHECKS` once per repo (one check per line, `<path> <status>`, e.g. `/health 200`). Each with `gh variable set <NAME> --repo <owner>/<name> --body <value>`. Then run the baseline with `--deploy-kind cloud-run` (`onboard-a-repo.md` §5a). For PR previews (`preview.yml`, AI-207: M6.18; first environment only, with `preview_enabled = true`), also set, with the same prefix:
+
+  | Variable (after the prefix) | From                              |
+  | --------------------------- | --------------------------------- |
+  | `PREVIEW_SERVICE`           | output `preview_service_name`     |
+  | `PREVIEW_DEPLOYER_SA`       | output `preview_deployer_email`   |
+  | `PREVIEW_IMAGE_REPO`        | output `preview_image_repository` |
+
+  Without `PREVIEW_SERVICE` the `Preview` jobs skip; with only some set, the run fails at its first step naming the missing ones. Check: open a PR that changes code; its `Preview` run comments a `pr-<n>` URL; close it and the comment says the preview was removed.
 
 - Check: the alert email channel shows in Monitoring → Alerting → Notification channels (Google sends no confirmation for email).
 - A deleted pool keeps its ID for 30 days: re-creating within that window fails; undelete it (`gcloud iam workload-identity-pools undelete`) or set another `wif_pool_id`.
 - The main service is public (Cloud Run IAM off) unless you set `allow_unauthenticated = false`; then deploys' smoke tests get 403.
-- Images are deleted after 30 days unless among the newest 10 or tagged `release-*`, and nothing tags `release-*` yet (`release.yml` doesn't). Until it does, a cold start or rollback of prod onto an image past that window can fail to pull it: in `dev-and-prod`, raise `image_keep_count` or `image_max_age_days` on the dev environment.
+- Images are deleted after 30 days unless among the newest 10 or tagged `release-*`. The baseline `deploy.yml` (prod-only) and `release.yml` (promote) tag what prod runs `release-<digest hex>` before traffic moves (AI-389: M6.23); tags are never removed, so every image prod ever served is kept (a few hundred MB each). An image prod served before that tag landed is not: tag it once by hand, `gcloud artifacts docker tags add <image_repository>/<service>@<digest> <image_repository>/<service>:release-<digest hex>` (the digest from the Releases page or `gcloud run revisions describe`).
 - The main service has `deletion_protection`: set it false and apply before a destroy.

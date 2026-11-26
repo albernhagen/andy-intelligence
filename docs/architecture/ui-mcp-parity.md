@@ -21,6 +21,7 @@ Step 1 of AI-285: Web UI and MCP parity: every action in both, enforced by a tes
 | In flight; work across projects; digest                  | `GET …/in-flight`, `GET /work`, `GET …/digest`                                  | `list_in_flight`, `list_work`, `digest`                                                                                    |
 | Retry the digest summary (AI-323)                        | `POST …/digest/summary/retry`                                                   | `retry_digest_summary`                                                                                                     |
 | Dashboards; DORA metrics                                 | `GET /dashboard`, `…/dashboard`, `…/dora`                                       | `dashboard` (AI-295)                                                                                                       |
+| Releases: deployments, tickets, release notes | `GET …/releases` (page: AI-189: M6.10) | `list_releases` (AI-183: M6.9) |
 | Project list; settings (except below)                    | `GET /projects`, `GET`/`PATCH /projects/:id`                                    | `list_projects`, `get_project_settings`, the `set_*` tools, `set_spend_caps`                                               |
 | Project setup checklist | `GET …/setup` | `project_setup` (AI-287) |
 | Onboarding steps: read, mark a hand step done | `GET …/onboarding`, `POST …/onboarding/marks` | `project_setup` (`onboarding`, `mark`; AI-381) |

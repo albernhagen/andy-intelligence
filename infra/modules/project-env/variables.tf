@@ -153,7 +153,7 @@ variable "promote_source_repository" {
     location   = string
     repository = string
   })
-  description = "dev-and-prod only, on the prod environment: the dev registry repo promote ships from (ADR-0114: same image digest). Gives this project's Cloud Run service agent and main deployer read on that one repo. Null otherwise."
+  description = "dev-and-prod only, on the prod environment: the dev registry repo promote ships from (ADR-0114: same image digest). Gives this project's Cloud Run service agent read, and its main deployer write (to check the digest, AI-390, and tag it release-*, AI-389), on that one repo. Null otherwise."
   default     = null
 }
 
@@ -165,7 +165,7 @@ variable "image_keep_count" {
 
 variable "image_keep_tag_prefixes" {
   type        = list(string)
-  description = "Registry cleanup: versions with a tag starting with one of these are never deleted. Tag what prod runs (e.g. release-<n> on promote) so a later rollback or cold start can still pull it. Nothing tags release-* yet: until release.yml does, this rule keeps nothing."
+  description = "Registry cleanup: versions with a tag starting with one of these are never deleted. The baseline deploy.yml (prod-only) and release.yml (promote) tag what prod runs release-<digest hex> (AI-389), so a later rollback or cold start can still pull it."
   default     = ["release-"]
 }
 

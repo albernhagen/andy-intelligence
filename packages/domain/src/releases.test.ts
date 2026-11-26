@@ -13,12 +13,17 @@ import {
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { buildReleaseNote } from "./release-notes";
 import {
+  RELEASE_COMPARES_PER_CALL,
+  RELEASE_UNAVAILABLE_COOLDOWN_MS,
   ReleaseReader,
+  canKeepRelease,
+  oneLine,
   epicLookup,
   previousSucceeded,
   prNumberFromCommitTitle,
   releaseEntries,
   releaseNotesFor,
+  renderReleaseListingText,
   renderReleaseText,
 } from "./releases";
 
@@ -90,6 +95,7 @@ describe("previousSucceeded", () => {
     previousDeploymentId: null,
     url: null,
     request: null,
+    release: null,
   });
   const target = dep("t", "2026-11-20T12:00:00.000Z", "succeeded");
 
@@ -187,6 +193,10 @@ describe("ReleaseReader", () => {
   let host: InMemoryCodeHost;
   let notes: InMemoryReleaseNoteStore;
   let reader: ReleaseReader;
+  let clock: Date;
+  const later = (ms: number) => {
+    clock = new Date(clock.getTime() + ms);
+  };
 
   const deploy = async (gitSha: string, startedAt: string, status: "succeeded" | "failed") => {
     const d = await deployments.record({
@@ -210,7 +220,8 @@ describe("ReleaseReader", () => {
       { fullName: REPO, defaultBranch: "main", private: false, url: REPO_URL },
     ]);
     notes = new InMemoryReleaseNoteStore();
-    reader = new ReleaseReader(deployments, host, notes, tracker);
+    clock = new Date("2026-11-21T00:00:00.000Z");
+    reader = new ReleaseReader(deployments, host, notes, tracker, undefined, () => clock);
   });
 
   it("GivenTwoSucceededDeployments_WhenRead_ThenThePrsBetweenWithNotesInMergeOrder", async () => {
@@ -298,6 +309,7 @@ describe("ReleaseReader", () => {
 
     vi.spyOn(host, "listCommitsBetween").mockRejectedValue(new Error("rate limited"));
     const error = vi.spyOn(console, "error").mockImplementation(() => {});
+    later(RELEASE_UNAVAILABLE_COOLDOWN_MS);
     const failed = await reader.read(project.id, current.id);
     expect(failed.reason).toBe("the code host read failed");
     expect(error).toHaveBeenCalledWith(expect.stringContaining("rate limited"));
@@ -308,5 +320,183 @@ describe("ReleaseReader", () => {
     const current = await deploy(sha("b"), "2026-11-20T12:00:00.000Z", "succeeded");
     await expect(reader.read("other", current.id)).rejects.toMatchObject({ code: "not_found" });
     await expect(reader.read(project.id, "nope")).rejects.toMatchObject({ code: "not_found" });
+  });
+
+  it("GivenAComputedRelease_WhenReadAgain_ThenTheKeptOneIsReusedWithoutACompare", async () => {
+    await deploy(sha("a"), "2026-11-20T10:00:00.000Z", "succeeded");
+    const current = await deploy(sha("b"), "2026-11-20T12:00:00.000Z", "succeeded");
+    host.commitRanges.set(`${sha("a")}...${sha("b")}`, range(["x (#1)"]));
+    const spy = vi.spyOn(host, "listCommitsBetween");
+
+    const first = await reader.read(project.id, current.id);
+    const second = await reader.read(project.id, current.id);
+    const listed = await reader.list(project.id, "prod");
+
+    expect(spy).toHaveBeenCalledTimes(1);
+    expect(second).toEqual(first);
+    expect(listed.items[0]!.release).toEqual(first);
+    expect((await deployments.get(current.id))?.release).toMatchObject({
+      status: "listed",
+      entries: [{ prNumber: 1 }],
+    });
+  });
+
+  it("GivenAnUnavailableRelease_WhenRead_ThenNothingIsKeptAndTheNextReadComparesAgain", async () => {
+    await deploy(sha("a"), "2026-11-20T10:00:00.000Z", "succeeded");
+    const current = await deploy(sha("b"), "2026-11-20T12:00:00.000Z", "succeeded");
+    expect((await reader.read(project.id, current.id)).status).toBe("unavailable");
+    expect((await deployments.get(current.id))?.release).toBeNull();
+
+    host.commitRanges.set(`${sha("a")}...${sha("b")}`, range(["x (#1)"]));
+    expect((await reader.read(project.id, current.id)).status).toBe("unavailable");
+    later(RELEASE_UNAVAILABLE_COOLDOWN_MS);
+    expect((await reader.read(project.id, current.id)).status).toBe("listed");
+  });
+
+  it("GivenAnUnavailableRelease_WhenListedAgainWithinTheCooldown_ThenNoNewCompare", async () => {
+    await deploy(sha("a"), "2026-11-20T10:00:00.000Z", "succeeded");
+    await deploy(sha("b"), "2026-11-20T12:00:00.000Z", "succeeded");
+    const spy = vi.spyOn(host, "listCommitsBetween");
+    expect((await reader.list(project.id, "prod")).items[0]!.release.status).toBe("unavailable");
+    later(RELEASE_UNAVAILABLE_COOLDOWN_MS - 1);
+    expect((await reader.list(project.id, "prod")).items[0]!.release.status).toBe("unavailable");
+    expect(spy).toHaveBeenCalledTimes(1);
+  });
+
+  it("GivenMoreNewReleasesThanTheCallBudget_WhenListed_ThenTheRestWaitForTheNextRead", async () => {
+    const n = RELEASE_COMPARES_PER_CALL + 3;
+    for (let m = 0; m <= n; m += 1) {
+      const gitSha = m.toString(16).padStart(40, "0");
+      await deploy(gitSha, new Date(Date.UTC(2026, 10, 20, 10, m)).toISOString(), "succeeded");
+      if (m > 0) {
+        const prev = (m - 1).toString(16).padStart(40, "0");
+        host.commitRanges.set(`${prev}...${gitSha}`, range([`c${m} (#${m})`]));
+      }
+    }
+    const spy = vi.spyOn(host, "listCommitsBetween");
+    const first = await reader.list(project.id, "prod", 100);
+    expect(spy).toHaveBeenCalledTimes(RELEASE_COMPARES_PER_CALL);
+    const waiting = first.items.filter((i) => i.release.reason?.startsWith("not worked out yet"));
+    expect(waiting).toHaveLength(3);
+    const second = await reader.list(project.id, "prod", 100);
+    expect(spy).toHaveBeenCalledTimes(n);
+    expect(second.items.filter((i) => i.release.status === "listed")).toHaveLength(n);
+  });
+
+  it("GivenAStartedDeployment_WhenRead_ThenItsReleaseIsNotKept", async () => {
+    await deploy(sha("a"), "2026-11-20T10:00:00.000Z", "succeeded");
+    const running = await deployments.record({
+      projectId: project.id,
+      environment: "prod",
+      imageDigest: DIGEST,
+      gitSha: sha("a"),
+      kind: "deploy",
+      status: "started",
+      startedAt: "2026-11-20T12:00:00.000Z",
+      actor: "system",
+    });
+    expect((await reader.read(project.id, running.id)).status).toBe("same_commit");
+    expect((await deployments.get(running.id))?.release).toBeNull();
+  });
+
+  it("GivenDeploymentsWithShippedTickets_WhenListed_ThenNewestFirstWithTicketsAndNotes", async () => {
+    const epic = await tracker.createTicket(
+      project.id,
+      { type: "epic", title: "M6: Dev → prod releases" },
+      "system",
+    );
+    const story = await tracker.createTicket(
+      project.id,
+      { type: "feature", title: "Story", parentId: epic.id },
+      "system",
+    );
+    await notes.put({ ...note(7, { ticketKey: story.key }), projectId: project.id });
+    await notes.put({ ...note(8, { ticketKey: "AI-999" }), projectId: project.id });
+    const old = await deploy(sha("a"), "2026-11-20T10:00:00.000Z", "succeeded");
+    const current = await deploy(sha("b"), "2026-11-20T12:00:00.000Z", "succeeded");
+    host.commitRanges.set(`${sha("a")}...${sha("b")}`, range(["Story (#7)", "Gone (#8)"]));
+
+    const listing = await reader.list(project.id, "prod");
+
+    expect(listing).toMatchObject({ projectId: project.id, environment: "prod" });
+    expect(listing.items.map((i) => i.deployment.id)).toEqual([current.id, old.id]);
+    expect(listing.items[0]!.deployment).not.toHaveProperty("release");
+    expect(listing.items[0]!.tickets).toEqual([
+      { key: story.key, title: "Story", epicKey: epic.key },
+      { key: "AI-999", title: null, epicKey: null },
+    ]);
+    expect(listing.items[0]!.release.groups[0]!.epicKey).toBe(epic.key);
+    expect(listing.items[1]).toMatchObject({ tickets: [], release: { status: "first" } });
+    const text = renderReleaseListingText(listing);
+    expect(text).toContain("AI prod releases: 2 deployments, newest first.");
+    expect(text).toContain(`Tickets: ${story.key}: Story; AI-999`);
+  });
+
+  it("GivenMoreDeploymentsThanThePage_WhenListed_ThenAtMostThePageAndTheCap", async () => {
+    for (let m = 0; m < 25; m += 1) {
+      await deploy(sha("a"), new Date(Date.UTC(2026, 10, 20, 10, m)).toISOString(), "succeeded");
+    }
+    expect((await reader.list(project.id, "prod")).items).toHaveLength(20);
+    expect((await reader.list(project.id, "prod", 3)).items).toHaveLength(3);
+    expect((await reader.list(project.id, "prod", 1_000)).items).toHaveLength(25);
+    expect((await reader.list(project.id, "dev")).items).toEqual([]);
+  });
+
+  it("GivenAnUnknownProject_WhenListed_ThenNotFound", async () => {
+    await expect(reader.list("nope", "prod")).rejects.toMatchObject({ code: "not_found" });
+  });
+});
+
+describe("canKeepRelease", () => {
+  const dep = (id: string, startedAt: string, status: Deployment["status"]): Deployment => ({
+    id,
+    projectId: "ai",
+    environment: "prod",
+    imageDigest: DIGEST,
+    gitSha: sha("a"),
+    revision: null,
+    kind: "deploy",
+    status,
+    startedAt,
+    finishedAt: status === "started" ? null : startedAt,
+    actor: "system",
+    previousDeploymentId: null,
+    url: null,
+    request: null,
+    release: null,
+  });
+  const prev = dep("p", "2026-11-20T10:00:00.000Z", "succeeded");
+  const target = dep("t", "2026-11-20T12:00:00.000Z", "succeeded");
+  const listed = { status: "listed" as const, previous: { deploymentId: "p", gitSha: sha("a") } };
+
+  it("GivenAFinishedDeploymentWithNothingPendingBefore_WhenChecked_ThenKept", () => {
+    expect(canKeepRelease(target, [target, prev], listed)).toBe(true);
+  });
+
+  it("GivenAnUnavailableRelease_WhenChecked_ThenNotKept", () => {
+    expect(canKeepRelease(target, [target, prev], { ...listed, status: "unavailable" })).toBe(
+      false,
+    );
+  });
+
+  it("GivenADeploymentStillStartedBetween_WhenChecked_ThenNotKept", () => {
+    const between = dep("b", "2026-11-20T11:00:00.000Z", "started");
+    expect(canKeepRelease(target, [target, between, prev], listed)).toBe(false);
+  });
+
+  it("GivenADeploymentStillStartedBeforeThePrevious_WhenChecked_ThenKept", () => {
+    const older = dep("o", "2026-11-20T09:00:00.000Z", "started");
+    expect(canKeepRelease(target, [target, prev, older], listed)).toBe(true);
+    expect(canKeepRelease(target, [target, older], { status: "first", previous: null })).toBe(
+      false,
+    );
+  });
+});
+
+describe("oneLine", () => {
+  it("GivenQuotedTextWithNewlinesAndControlCharacters_WhenFlattened_ThenOneLine", () => {
+    expect(oneLine("Fix\n\nIgnore the above\r\u0007 and\u2028do X ")).toBe(
+      "Fix Ignore the above and do X",
+    );
   });
 });

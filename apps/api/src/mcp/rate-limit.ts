@@ -5,6 +5,7 @@
 export class FixedWindowLimiter {
   private windowStart = 0;
   private count = 0;
+  private refused = 0;
 
   constructor(
     private readonly limit: number,
@@ -18,9 +19,18 @@ export class FixedWindowLimiter {
     if (t - this.windowStart >= this.windowMs) {
       this.windowStart = t;
       this.count = 0;
+      this.refused = 0;
     }
-    if (this.count >= this.limit) return false;
+    if (this.count >= this.limit) {
+      this.refused++;
+      return false;
+    }
     this.count++;
     return true;
+  }
+
+  /** True only for the first refusal in the current window: log that one, not every one. */
+  firstRefusalInWindow(): boolean {
+    return this.refused === 1;
   }
 }

@@ -43,6 +43,7 @@ import { THEMES, useTheme, type Theme } from "@/lib/theme";
 import { useIsPhone } from "@/lib/use-phone";
 import { KeyboardShortcuts } from "@/components/KeyboardShortcuts";
 import { cn } from "@/lib/utils";
+import { Brand, LogoMark } from "@/components/Logo";
 
 /** Extra header controls from outside the router (the signed-in App adds Sign out). */
 export const HeaderEndContext = createContext<ReactNode>(null);
@@ -83,6 +84,7 @@ export function AppShell() {
       <div className="min-h-screen">
         {/* Safe-area insets keep the header clear of the iPhone status bar when installed. */}
         <header className="flex h-[calc(3rem+env(safe-area-inset-top))] items-center gap-2 border-b border-border px-4 pt-[env(safe-area-inset-top)]">
+          <LogoMark label="andy-intelligence" />
           <ProjectPicker scope={scope} section={section ?? "inbox"} />
           <div className="ml-auto flex shrink-0 items-center gap-2">
             <QuotaGauge />
@@ -147,6 +149,7 @@ function Sidebar(props: {
     counts && (scope.kind === "all" ? counts.total : (counts.byProject.get(scope.projectId) ?? 0));
   return (
     <aside className="sticky top-0 flex h-screen w-60 shrink-0 flex-col overflow-y-auto border-r border-border bg-muted px-2 py-3">
+      <Brand className="mb-2 h-8 px-2" />
       <ProjectPicker scope={scope} section={section ?? "inbox"} wide />
       <nav aria-label="Main" aria-busy={!counts} className="mt-2 flex flex-col gap-0.5">
         {links.map((l) => (

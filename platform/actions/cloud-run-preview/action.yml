@@ -1,0 +1,169 @@
+name: Baseline — Cloud Run PR preview
+description: >-
+  PR previews for the `cloud-run` deploy kind (AI-207: M6.18; ADR-0114). `deploy`: makes room
+  (at most `max-previews` `pr-<n>` tags on the preview service, oldest removed first), deploys an
+  already-pushed image as a no-traffic revision tagged `pr-<n>`, trims again, and creates or
+  updates one PR comment with the tagged URL. `remove`: removes the PR's tag and updates the
+  comment. The caller authenticates first with the preview deployer, on same-repo PRs only, and
+  gives the job `pull-requests: write`.
+
+inputs:
+  mode:
+    description: "`deploy` or `remove`."
+    required: true
+  service:
+    description: The preview Cloud Run service (`<service>-preview`).
+    required: true
+  region:
+    description: Cloud Run region.
+    required: true
+  project-id:
+    description: The service's GCP project (for the comment's proxy command).
+    required: true
+  pr:
+    description: The PR number; the tag is `pr-<n>`.
+    required: true
+  image:
+    description: "`deploy`: full image reference, by digest."
+    required: false
+    default: ""
+  max-previews:
+    description: "Cost cap (ADR-0028): most preview tags on the service, 1 to 10."
+    required: false
+    default: "10"
+  github-token:
+    description: "Token for the PR comment: `github.token` with `pull-requests: write`."
+    required: true
+
+outputs:
+  url:
+    description: "`deploy`: the preview's tagged URL."
+    value: ${{ steps.tagged.outputs.url }}
+  revision:
+    description: "`deploy`: the revision tagged `pr-<n>`."
+    value: ${{ steps.tagged.outputs.revision }}
+
+runs:
+  using: composite
+  steps:
+    - name: Check the mode
+      shell: bash
+      env:
+        MODE: ${{ inputs.mode }}
+        IMAGE: ${{ inputs.image }}
+      run: |
+        case "$MODE" in
+          deploy) [ -n "$IMAGE" ] || { echo "::error::image is required to deploy"; exit 1; } ;;
+          remove) ;;
+          *) echo "::error::mode must be deploy or remove"; exit 1 ;;
+        esac
+
+    # ── deploy ──────────────────────────────────────────────────────────────
+    - name: Make room under the cap
+      if: inputs.mode == 'deploy'
+      shell: bash
+      env:
+        SERVICE: ${{ inputs.service }}
+        REGION: ${{ inputs.region }}
+        PR: ${{ inputs.pr }}
+        MAX_PREVIEWS: ${{ inputs.max-previews }}
+      run: |
+        remove=$(gcloud run services describe "$SERVICE" --region "$REGION" --format=json |
+          node "$GITHUB_ACTION_PATH/../../../scripts/cloud-run-preview.mjs" trim | sed -n 's/^remove=//p')
+        if [ -n "$remove" ]; then
+          gcloud run services update-traffic "$SERVICE" --region "$REGION" --remove-tags "$remove" --quiet
+          echo "Removed the oldest previews to stay at most $MAX_PREVIEWS: $remove" >> "$GITHUB_STEP_SUMMARY"
+        fi
+
+    # No traffic: the service's own URL keeps serving what it served; only the tag reaches this one.
+    # The label changes the template, so every deploy makes a new revision even for an unchanged
+    # image: revision generation then orders previews by deploy time for the cap.
+    - name: Deploy the PR's revision with no traffic
+      if: inputs.mode == 'deploy'
+      shell: bash
+      env:
+        SERVICE: ${{ inputs.service }}
+        REGION: ${{ inputs.region }}
+        IMAGE: ${{ inputs.image }}
+        PR: ${{ inputs.pr }}
+      run: |
+        gcloud run deploy "$SERVICE" --region "$REGION" --image "$IMAGE" \
+          --no-traffic --tag "pr-$PR" --update-labels "preview-deployed-at=$(date +%s)" --quiet
+
+    # Another PR's preview may have deployed at the same time: trim again, keeping this one.
+    - name: Trim to the cap again
+      if: inputs.mode == 'deploy'
+      shell: bash
+      env:
+        SERVICE: ${{ inputs.service }}
+        REGION: ${{ inputs.region }}
+        PR: ${{ inputs.pr }}
+        MAX_PREVIEWS: ${{ inputs.max-previews }}
+      run: |
+        remove=$(gcloud run services describe "$SERVICE" --region "$REGION" --format=json |
+          node "$GITHUB_ACTION_PATH/../../../scripts/cloud-run-preview.mjs" trim | sed -n 's/^remove=//p')
+        if [ -n "$remove" ]; then
+          gcloud run services update-traffic "$SERVICE" --region "$REGION" --remove-tags "$remove" --quiet
+        fi
+
+    - name: Read the tagged URL
+      id: tagged
+      if: inputs.mode == 'deploy'
+      shell: bash
+      env:
+        SERVICE: ${{ inputs.service }}
+        REGION: ${{ inputs.region }}
+        PR: ${{ inputs.pr }}
+      run: |
+        gcloud run services describe "$SERVICE" --region "$REGION" --format=json |
+          node "$GITHUB_ACTION_PATH/../../../scripts/cloud-run-preview.mjs" tagged
+
+    - name: Comment the preview URL
+      if: inputs.mode == 'deploy'
+      shell: bash
+      env:
+        GH_TOKEN: ${{ inputs.github-token }}
+        REPO: ${{ github.repository }}
+        PR: ${{ inputs.pr }}
+        STATE: live
+        URL: ${{ steps.tagged.outputs.url }}
+        SERVICE: ${{ inputs.service }}
+        REGION: ${{ inputs.region }}
+        PROJECT: ${{ inputs.project-id }}
+        SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+      run: |
+        node "$GITHUB_ACTION_PATH/../../../scripts/cloud-run-preview.mjs" comment
+        echo "Preview: $URL (tag pr-$PR on $SERVICE)" >> "$GITHUB_STEP_SUMMARY"
+
+    # ── remove ──────────────────────────────────────────────────────────────
+    - name: Find the PR's tag
+      id: present
+      if: inputs.mode == 'remove'
+      shell: bash
+      env:
+        SERVICE: ${{ inputs.service }}
+        REGION: ${{ inputs.region }}
+        PR: ${{ inputs.pr }}
+      run: |
+        gcloud run services describe "$SERVICE" --region "$REGION" --format=json |
+          node "$GITHUB_ACTION_PATH/../../../scripts/cloud-run-preview.mjs" has-tag
+
+    - name: Remove the PR's tag
+      if: inputs.mode == 'remove' && steps.present.outputs.present == 'true'
+      shell: bash
+      env:
+        SERVICE: ${{ inputs.service }}
+        REGION: ${{ inputs.region }}
+        PR: ${{ inputs.pr }}
+      run: gcloud run services update-traffic "$SERVICE" --region "$REGION" --remove-tags "pr-$PR" --quiet
+
+    - name: Mark the comment removed
+      if: inputs.mode == 'remove'
+      shell: bash
+      env:
+        GH_TOKEN: ${{ inputs.github-token }}
+        REPO: ${{ github.repository }}
+        PR: ${{ inputs.pr }}
+        STATE: removed
+        SERVICE: ${{ inputs.service }}
+      run: node "$GITHUB_ACTION_PATH/../../../scripts/cloud-run-preview.mjs" comment

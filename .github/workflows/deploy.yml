@@ -76,7 +76,8 @@ jobs:
         with:
           service: ${{ env.SERVICE }}
           region: ${{ env.REGION }}
-          image: ${{ vars.GCP_IMAGE_REPO }}/control-plane:${{ github.sha }}
+          # By digest: exactly the image just built, and what the keep tag names.
+          image: ${{ vars.GCP_IMAGE_REPO }}/control-plane@${{ steps.build.outputs.digest }}
           # The API refuses every host but PUBLIC_URL's, except /health (ADR-0044): elsewhere
           # /api/me is 404; on the public host it reaches real auth, 401.
           smoke-checks: |
@@ -85,6 +86,8 @@ jobs:
           smoke-checks-other-hosts: |
             /health 200
             /api/me 404
+          # A release- tag so registry cleanup keeps what prod runs (AI-389: M6.23).
+          keep-tag-prefix: release-
 
       - if: always() && steps.report-start.outputs.deployment-id != ''
         uses: ./platform/actions/report-deployment

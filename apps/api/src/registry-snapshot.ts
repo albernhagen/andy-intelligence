@@ -40,6 +40,7 @@ export function fullAppDeps(
     milestones: new contracts.InMemoryMilestoneStore(),
     epicBreakdowns: new contracts.InMemoryEpicBreakdownStore(),
     releaseNotes: new contracts.InMemoryReleaseNoteStore(),
+    deployments: new contracts.InMemoryDeploymentStore(),
     digestSummaries: new contracts.InMemoryDigestSummaryStore(),
     projectVersions: new contracts.InMemoryProjectVersions(),
     publicHost: "localhost",
