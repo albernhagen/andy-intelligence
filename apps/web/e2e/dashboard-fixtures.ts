@@ -42,6 +42,7 @@ function week(i: number): DashboardWeek {
       ready: 3,
       in_progress: 1 + (i % 2),
       ready_for_review: i % 3 === 0 ? 2 : 1,
+      verifying: 0,
       done: 4 + i * 2,
       cancelled: 1,
     },

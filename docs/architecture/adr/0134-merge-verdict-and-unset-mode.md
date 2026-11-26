@@ -1,6 +1,6 @@
 ---
 title: The merge verdict, and an unset merge mode merges nothing
-status: proposed (AI-215; Andy decides at review)
+status: accepted (Andy, 2026-11-25)
 date: 2026-11-21
 amends: 0124 (the mapping, review findings, epic mode), 0050 (`autoMerge` and `set_auto_merge` retired)
 ---

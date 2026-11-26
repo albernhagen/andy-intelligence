@@ -8,6 +8,7 @@
     "build": "vite build && node --import tsx scripts/check-fonts.ts",
     "typecheck": "node --import tsx scripts/gen-api.ts && tsc --noEmit",
     "gen:api": "node --import tsx scripts/gen-api.ts",
+    "icons": "node --import tsx scripts/icons.ts",
     "screenshots": "playwright test",
     "screenshots:update": "sh e2e/update-in-docker.sh"
   },

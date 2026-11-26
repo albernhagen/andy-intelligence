@@ -83,6 +83,16 @@ resource "google_artifact_registry_repository" "images" {
       keep_count = 10
     }
   }
+  # deploy.yml and release.yml tag what prod runs release-<digest hex> (AI-389), so a cold start
+  # or rollback onto an older revision can still pull its image.
+  cleanup_policies {
+    id     = "keep-tagged-releases"
+    action = "KEEP"
+    condition {
+      tag_state    = "TAGGED"
+      tag_prefixes = ["release-"]
+    }
+  }
   cleanup_policies {
     id     = "delete-old"
     action = "DELETE"

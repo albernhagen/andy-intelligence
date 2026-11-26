@@ -1,6 +1,6 @@
 ---
 title: Paid spend reserved in a ledger against caps that fail closed
-status: proposed
+status: accepted (Andy, 2026-11-25)
 date: 2026-11-20
 amends: 0028 (caps on what spends), 0050 (capped API-key provider)
 ---

@@ -11,11 +11,12 @@ Overview and reading map: [ARCHITECTURE.md](ARCHITECTURE.md). Section numbers ma
 | **Backlog** | Refinement agent enriches; splits epics into child tickets with dependencies; sizes; assigns tier; **asks Andy questions** | **Definition of Ready (DoR)** met |
 | **Ready** | Waits for dependencies, a worker that is an agent (ADR-0082), quota/budget | Dispatcher starts a run |
 | **In progress** | Build task: plans read-only, then implements (ADR-0050; plan approval below). One automatic retry, then flags Needs-you | PR opened with structured run summary (plan, deviations, verification output) |
-| **Ready for review** | Rule-based gate decides auto-merge vs. Andy | Merged. No stage after it until M6: Dev → prod releases adds one for dev verification (ADR-0069) |
+| **Ready for review** | Rule-based gate decides auto-merge vs. Andy | Merged: → Done, or → Verifying (below) |
+| **Verifying** | Projects whose `deployKind` isn't `none` (ADR-0114, AI-181): the merge deployed; the verify task (AI-188, ADR-0159) checks it by `platform/procedures/verify.md`; only a failed criterion or test fails it, skipped ones don't (Andy, 2026-11-26). Merges changing only `docs/**`, `infra/**`, `*.md` skip it. `VERIFYING_SWITCH` on since AI-188 | Verified → Done; failed → In progress + Needs-you. Over 2 hours → Needs-you |
 | **Done** | Summary included in rollups | — |
 | **Cancelled** | Andy cancelled it; runs stop, questions withdrawn | Andy reopens it to Backlog |
 
-**Stage moves** (`packages/domain`): forward one step, plus back: re-refine (ready → backlog), retry (in progress → ready), rework (ready for review → in progress). Backlog → ready requires the DoR. Only the owner forces (reason optional, ADR-0057; history marks it), cancels (not a move), reopens, archives (policy `can`, AI-19); MCP `move_ticket` steps forward. **Archived** (Done/Cancelled only) hides it from board, inbox, counts.
+**Stage moves** (`packages/domain`): forward one step, plus back: re-refine (ready → backlog), retry (in progress → ready), rework (ready for review or verifying → in progress). Backlog → ready requires the DoR. Only the owner forces (reason optional, ADR-0057; history marks it), cancels (not a move), reopens, archives (policy `can`, AI-19); MCP `move_ticket` steps forward. **Archived** (Done/Cancelled only) hides it from board, inbox, counts.
 
 As built (PR events, build dispatch, plan approval): [`history/workflow-as-built.md`](history/workflow-as-built.md).
 
@@ -44,6 +45,7 @@ As built (PR events, build dispatch, plan approval): [`history/workflow-as-built
 
 ### 4.4 Epics
 - Ticket types (Epic / Feature / Chore / Bug, ADR-0058) + **child tickets** (`parent_id`).
+- Epic breakdown (AI-383, ADR-0155): for a top-level epic in an approved milestone, a read-only `plan-epic` agent task drafts up to 12 child tickets as a proposal. Approved, they land in Ideas with `blockedBy` set to sibling keys; sent back, Andy's note goes to the next draft. Caps: one task per epic in flight, 3 per epic in all.
 - Epic refinement (built) produces child tickets with `blockedBy`: each an end-to-end change, independently mergeable behind flags; no long-lived branches. Exception: an **overnight run** (ADR-0049) merges child tickets into `epic/<key>`, one PR for Andy next morning; AI-122 builds on it, AI-124 merges there (ADR-0107), AI-125 posts the morning report on the epic. The `epic` merge mode (ADR-0124, AI-216) does the same by day: a child ticket builds on `epic/<key>` (made from the default branch's tip if missing), its clean PR merges there through the same path and it is Done; when the epic's last open child ticket is Done, one PR `epic/<key>` → default branch opens for Andy. A ticket with no epic builds on the default branch and waits for Andy, as in `manual`. Epic-branch merges skip the default branch's merge queue (AI-110): they never change the default branch.
 - **Just-in-time re-planning** (built, M4.6): dispatch re-runs plans older than a blocker's Done.
 - Epic status, cost and progress roll up; an epic's overrides cascade to its child tickets.
@@ -52,8 +54,9 @@ As built (PR events, build dispatch, plan approval): [`history/workflow-as-built
 Detail: [`review-gate.md`](review-gate.md).
 
 ### 4.6 Environments and release
-- Per project: GCP projects `<app>-dev` and `<app>-prod`.
-- **Build once, promote the same image digest** via **Cloud Deploy** (dev → prod, approval required for prod, one-click rollback).
-- On merge: deploy to dev → smoke/e2e (Playwright + API) → a verification agent logs the results on the ticket.
-- **Release:** "Promote to prod" from UI or MCP → Cloud Deploy approval → deploy; notes from its tickets.
+- **Deploy kind** (ADR-0114), a project setting: `none` (default: no deploy, merge → Done) or `cloud-run`; other kinds (a static site) are later tickets.
+- **Release contract** every kind meets: `deploy.yml` (push to `main` → first environment) and `release.yml` (`workflow_dispatch`: `action`, `environment`, `digest`, `revision`, `request`), each reporting its Deployment (environment, sha, digest, revision, url, status) over the Actions OIDC callback. Promote and rollback (owner, UI or MCP) dispatch it; the API holds no cloud credential.
+- `cloud-run` kind: `environments` `prod-only` (`<app>-prod` + PR previews; default) or `dev-and-prod`; builds once and promotes the **same image digest** with the safe-deploy action; rollback pins an earlier revision.
+- On merge: deploy to the first environment → one `verify` agent task for the Verifying tickets the deployed commit contains (AI-188, ADR-0159: read-only, WebFetch of the deployed host only; held at caps, quota or pause and retried when a task ends) → pass: Done; fail: In progress + Needs-you with the evidence. A failed deploy sends its tickets back the same way.
+- Deploys are recorded (DORA); release notes from merged PRs' notes.
 - Agent write policy: dev writes per project policy; prod read-only.

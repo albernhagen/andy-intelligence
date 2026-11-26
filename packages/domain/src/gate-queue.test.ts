@@ -12,7 +12,7 @@ import {
 } from "@andy/contracts";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { PullRequestGate } from "./gate-service";
-import { MergeQueue } from "./merge-queue";
+import { MAX_MAIN_RED_HOLD_MS, MergeQueue } from "./merge-queue";
 import { TicketService } from "./tickets";
 
 /**
@@ -224,6 +224,57 @@ describe("PullRequestGate with the merge queue (AI-110)", () => {
       (e) => e.kind === "comment",
     );
     expect(comments.some((c) => c.body?.includes("merge queue dropped PR"))).toBe(true);
+  });
+
+  it("GivenACleanAgentPrWhileMainsRequiredCheckFailed_WhenAssessed_ThenQueuedWithMainRedAndMergedOnceMainIsGreen", async () => {
+    const mainChecks = { conclusion: "failure" as "success" | "failure" };
+    const listHeadChecks = host.listHeadChecks.bind(host);
+    host.listHeadChecks = async (repo, sha) =>
+      sha === tip(mainTip)
+        ? { items: [check("check", mainChecks.conclusion)], complete: true }
+        : listHeadChecks(repo, sha);
+    const { run, pr } = await agentPr(await readyTicket("A"));
+
+    expect(await gate().apply(opened(pr), await project())).toEqual([
+      expect.objectContaining({ result: "queued", pr: pr.number }),
+    ]);
+    expect(host.merges).toEqual([]);
+    expect((await runs.get(run.id))?.verdictReasons).toEqual(["main_red"]);
+    expect((await queue.state(REPO.fullName)).mainRed?.checks).toEqual(["check"]);
+
+    mainChecks.conclusion = "success";
+    expect((await queue.state(REPO.fullName)).mainRed?.sha).toBe(tip(mainTip));
+    // Main's own check finishing on its red tip: a completed check naming no PR.
+    await queue.advanceFor(REPO.fullName, [], false, tip(mainTip));
+    expect(host.merges.map((m) => m.number)).toEqual([pr.number]);
+    expect((await queue.state(REPO.fullName)).mainRed).toBeNull();
+  });
+
+  it("GivenAnAgentPrHeldWhileMainIsRedPastTheCap_WhenAnEventArrives_ThenItsTicketNeedsAndyOnceAndThePrStaysQueued", async () => {
+    let clock = now();
+    queue = new MergeQueue(new InMemoryMergeQueueStore(), host, () => clock);
+    const listHeadChecks = host.listHeadChecks.bind(host);
+    host.listHeadChecks = async (repo, sha) =>
+      sha === tip(mainTip)
+        ? { items: [check("check", "failure")], complete: true }
+        : listHeadChecks(repo, sha);
+    const ticket = await readyTicket("A");
+    const { pr } = await agentPr(ticket);
+    await gate().apply(opened(pr), await project());
+
+    clock = new Date(clock.getTime() + MAX_MAIN_RED_HOLD_MS + 1);
+    await queue.advanceFor(REPO.fullName, [], false);
+    await queue.advanceFor(REPO.fullName, [], false, tip(mainTip));
+
+    expect(host.merges).toEqual([]);
+    expect((await queue.state(REPO.fullName)).entries.map((e) => e.number)).toEqual([pr.number]);
+    expect((await tracker.getTicket(projectId, ticket.id))?.needsAttention).toBe(true);
+    const notes = (await tracker.listEvents(projectId, ticket.id)).filter(
+      (e) => e.kind === "comment" && e.body?.includes("merge queue"),
+    );
+    expect(notes.map((n) => n.body)).toEqual([
+      expect.stringMatching(/^Needs you: the merge queue is holding PR #\d+: .*failing: check/),
+    ]);
   });
 
   it("GivenAHeadTheGateAlreadyTriedToMerge_WhenTheQueueJudgesItClean_ThenItIsNotMergedAgain", async () => {

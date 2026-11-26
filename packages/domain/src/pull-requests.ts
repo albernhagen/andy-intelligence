@@ -1,5 +1,6 @@
 import {
   WorkTrackerError,
+  type CodeHost,
   type CodeHostEvent,
   type Project,
   type PullRequest,
@@ -9,11 +10,14 @@ import {
 } from "@andy/contracts";
 import type { PullRequestTarget } from "./stages";
 import type { TicketService } from "./tickets";
+import { VERIFYING_SWITCH, skipsVerifying, verifiesMerges } from "./verifying";
 
 /**
  * Tickets follow their pull requests (AI-14, AI-31, docs/architecture/workflow.md §4.1): opened
  * into the default branch → Ready for review from Backlog, Ready or In progress; merged into it →
- * Done from any open stage (ADR-0067); closed unmerged → In progress + Needs-you. The ticket key
+ * Done from any open stage (ADR-0067), or Verifying when the Verifying switch is on, the project
+ * deploys and the PR changed files that deploy (ADR-0114); closed unmerged → In progress +
+ * Needs-you. The ticket key
  * comes from the PR's head branch or the first line of its description. PR text is untrusted
  * data: it only ever selects a ticket of the repo's own project; nothing in it is executed or
  * followed. PRs from forks are ignored: on a public repo anyone can open one. Epics only get the
@@ -66,11 +70,23 @@ export interface PullRequestTicketResult {
   unflagged?: boolean;
 }
 
+export interface PullRequestTicketsOptions {
+  /** The system-wide Verifying switch (AI-181); defaults to `VERIFYING_SWITCH`. */
+  verifying?: boolean;
+  /** Reads a merged PR's changed files, to send docs- and infra-only merges straight to Done. */
+  files?: Pick<CodeHost, "listChangedFiles">;
+}
+
 export class PullRequestTickets {
+  private readonly verifying: boolean;
+
   constructor(
     private readonly tickets: TicketService,
     private readonly tracker: WorkTracker,
-  ) {}
+    private readonly options: PullRequestTicketsOptions = {},
+  ) {
+    this.verifying = options.verifying ?? VERIFYING_SWITCH;
+  }
 
   /** Applies one recorded `pull_request` delivery. Replays never get here (CodeEventLog). */
   async apply(
@@ -90,7 +106,7 @@ export class PullRequestTickets {
     await this.tracker.linkPullRequest(
       ticket.projectId,
       ticket.id,
-      { number: pr.number, url: pr.url, state: pr.state },
+      { number: pr.number, url: pr.url, state: pr.state, mergeSha: pr.mergeSha ?? null },
       "system",
     );
     const reason = `PR #${pr.number} ${outcome}: ${pr.url}`;
@@ -111,10 +127,41 @@ export class PullRequestTickets {
         return { ...base, moves, unflagged: !after.needsAttention };
       }
       case "merged":
-        // Merge means Done until M6: Dev → prod releases (ADR-0056, ADR-0069).
-        return { ...base, moves: await follow("done") };
+        // Done, or Verifying for a deploying project once the switch is on (ADR-0114).
+        return {
+          ...base,
+          moves: await follow(await this.mergeTarget(event.repo, pr.number, project)),
+        };
       case "closed":
         return this.rework(ticket, reason, base);
+    }
+  }
+
+  /**
+   * Where a merge moves the ticket. Files are read only when Verifying could apply; a failed or
+   * missing read verifies, so a deploying change never skips the stage by accident.
+   */
+  private async mergeTarget(
+    repo: string,
+    number: number,
+    project: Project,
+  ): Promise<"verifying" | "done"> {
+    if (!verifiesMerges(this.verifying, project)) return "done";
+    try {
+      const files = await this.options.files?.listChangedFiles(repo, number);
+      return files && skipsVerifying(files) ? "done" : "verifying";
+    } catch (err) {
+      console.log(
+        JSON.stringify({
+          severity: "WARNING",
+          message: "changed files unread; the merge goes to Verifying",
+          component: "pull-request-tickets",
+          repo,
+          number,
+          error: String(err),
+        }),
+      );
+      return "verifying";
     }
   }
 

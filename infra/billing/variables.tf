@@ -54,3 +54,29 @@ variable "kill_switch_service" {
   description = "Cloud Run service the kill switch takes offline."
   default     = "control-plane"
 }
+
+# Managed projects' budgets (AI-162: M6.14: Project budget module, ADR-0114). One entry per GCP
+# project (a managed project's environment); each gets infra/modules/project-budget. Real project
+# IDs go in the gitignored terraform.tfvars, never here.
+variable "managed_projects" {
+  type = map(object({
+    project_id             = string
+    budget_amount_usd      = optional(number, 10)
+    region                 = optional(string, "us-central1")
+    kill_switch_enabled    = optional(bool, false)
+    kill_switch_ratio      = optional(number, 1.5)
+    kill_switch_service    = optional(string)
+    kill_switch_runtime_sa = optional(string)
+  }))
+  description = "Budget per managed project environment, keyed by a label like \"<project>-dev\". Defaults: $10/month, kill switch off."
+  default     = {}
+
+  validation {
+    condition     = alltrue([for k, p in var.managed_projects : p.project_id != var.project_id])
+    error_message = "A managed project can't be the control-plane project: its budget and kill switch are already managed above."
+  }
+  validation {
+    condition     = length(distinct([for p in values(var.managed_projects) : p.project_id])) == length(var.managed_projects)
+    error_message = "Each managed project's project_id must appear once."
+  }
+}

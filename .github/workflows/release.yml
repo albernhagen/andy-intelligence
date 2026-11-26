@@ -1,0 +1,155 @@
+name: Release control plane
+
+# Promote or rollback (AI-190: M6.11; ADR-0114, "The release contract every kind meets"). Started
+# only by workflow_dispatch on main: by the control plane with its GitHub App token (M6.12), or by
+# hand from the Actions tab. Inputs show in public run logs, so they carry no secrets.
+on:
+  workflow_dispatch:
+    inputs:
+      action:
+        description: promote (ship an image digest) or rollback (return to a revision)
+        type: choice
+        options: [rollback, promote]
+        required: true
+      environment:
+        description: The environment to change
+        type: choice
+        options: [prod, dev]
+        required: true
+      digest:
+        description: "promote: a succeeded deployment's image digest (sha256:…)"
+        type: string
+        required: false
+        default: ""
+      revision:
+        description: "rollback: a succeeded deployment's revision"
+        type: string
+        required: false
+        default: ""
+      request:
+        description: The control plane's request id (empty when run by hand)
+        type: string
+        required: false
+        default: ""
+
+# One release or deploy at a time per environment: deploy.yml uses `deploy-prod` too. GitHub keeps
+# one waiting run per group; a third replaces the waiting one. A dispatch off main gets a group of
+# its own, so it can't push a waiting release or deploy out of the queue.
+concurrency:
+  group: ${{ github.ref == 'refs/heads/main' && format('deploy-{0}', inputs.environment) || format('off-main-{0}', github.run_id) }}
+  cancel-in-progress: false
+
+permissions: {}
+
+env:
+  REGION: us-central1
+  SERVICE: control-plane
+  IMAGE_NAME: control-plane
+  # The control plane's public URL (also the OIDC audience for deployment reports). Not secret.
+  CONTROL_PLANE_URL: https://ai.andybernhagen.com
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write # OIDC → Workload Identity Federation and the deployment report; dispatch only
+    # The deployer identity is bound to refs/heads/main; a dispatch on any other ref does nothing.
+    if: github.ref == 'refs/heads/main'
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      # Before any cloud call. Inputs reach the script through env, never interpolated into code.
+      # prod uses the repo variables deploy.yml uses; dev uses GCP_DEV_* (unset here: prod-only).
+      - id: inputs
+        name: Check the inputs
+        env:
+          ACTION: ${{ inputs.action }}
+          ENVIRONMENT: ${{ inputs.environment }}
+          DIGEST: ${{ inputs.digest }}
+          REVISION: ${{ inputs.revision }}
+          REQUEST: ${{ inputs.request }}
+          CONFIGURED: ${{ inputs.environment == 'prod' && vars.GCP_WIF_PROVIDER || vars.GCP_DEV_WIF_PROVIDER }}
+        run: node scripts/cloud-run-release.mjs inputs
+
+      - id: auth
+        uses: google-github-actions/auth@7c6bc770dae815cd3e89ee6cdf493a5fab2cc093 # v3.0.0
+        with:
+          workload_identity_provider: ${{ inputs.environment == 'prod' && vars.GCP_WIF_PROVIDER || vars.GCP_DEV_WIF_PROVIDER }}
+          service_account: ${{ inputs.environment == 'prod' && vars.GCP_DEPLOYER_SA || vars.GCP_DEV_DEPLOYER_SA }}
+
+      - uses: google-github-actions/setup-gcloud@aa5489c8933f4cc7a4f7d45035b3b1440c9c10db # v3.0.1
+
+      # Fails before traffic changes if the digest or revision does not exist.
+      - id: check
+        uses: ./platform/actions/cloud-run-release-check
+        with:
+          action: ${{ steps.inputs.outputs.action }}
+          service: ${{ env.SERVICE }}
+          region: ${{ env.REGION }}
+          image: ${{ inputs.environment == 'prod' && vars.GCP_IMAGE_REPO || vars.GCP_DEV_IMAGE_REPO }}/${{ env.IMAGE_NAME }}
+          digest: ${{ steps.inputs.outputs.digest }}
+          revision: ${{ steps.inputs.outputs.revision }}
+
+      # Deployment record (AI-180: M6.4, ADR-0019). Never fails the release.
+      - id: report-start
+        uses: ./platform/actions/report-deployment
+        with:
+          control-plane-url: ${{ env.CONTROL_PLANE_URL }}
+          phase: start
+          image-digest: ${{ steps.check.outputs.image-digest }}
+          environment: ${{ steps.inputs.outputs.environment }}
+          kind: ${{ steps.inputs.outputs.action }}
+          url: ${{ steps.check.outputs.url }}
+          request: ${{ steps.inputs.outputs.request }}
+
+      # A promote ships only a digest the control plane knows dev deployed successfully: its 422
+      # stops the run here. An unreachable control plane doesn't (a lost report never fails a
+      # release); a rollback isn't gated, so an emergency rollback never waits on the API.
+      - id: gate
+        name: Stop a promote the control plane refused
+        if: steps.inputs.outputs.action == 'promote' && steps.report-start.outputs.refused == 'true'
+        run: |
+          echo "::error::The control plane refused this promote: no succeeded dev deployment of that digest."
+          exit 1
+
+      # Promote: the same image by digest, no-traffic revision, smoke test, then traffic (ADR-0076).
+      - id: promote
+        if: steps.inputs.outputs.action == 'promote'
+        uses: ./platform/actions/cloud-run-safe-deploy
+        with:
+          service: ${{ env.SERVICE }}
+          region: ${{ env.REGION }}
+          image: ${{ inputs.environment == 'prod' && vars.GCP_IMAGE_REPO || vars.GCP_DEV_IMAGE_REPO }}/${{ env.IMAGE_NAME }}@${{ steps.check.outputs.image-digest }}
+          # The API refuses every host but PUBLIC_URL's, except /health (ADR-0044); the same as deploy.yml: elsewhere
+          # /api/me is 404; on the public host it reaches real auth, 401.
+          smoke-checks: |
+            /health 200
+            /api/me 401
+          smoke-checks-other-hosts: |
+            /health 200
+            /api/me 404
+          # Prod's image gets a release- tag so registry cleanup keeps it (AI-389: M6.23).
+          keep-tag-prefix: ${{ steps.inputs.outputs.environment == 'prod' && 'release-' || '' }}
+
+      # Rollback: pin all traffic to the revision, then check /health.
+      - id: rollback
+        if: steps.inputs.outputs.action == 'rollback'
+        uses: ./platform/actions/cloud-run-rollback
+        with:
+          service: ${{ env.SERVICE }}
+          region: ${{ env.REGION }}
+          revision: ${{ steps.inputs.outputs.revision }}
+          url: ${{ steps.check.outputs.url }}
+
+      - if: always() && steps.report-start.outputs.deployment-id != ''
+        uses: ./platform/actions/report-deployment
+        with:
+          control-plane-url: ${{ env.CONTROL_PLANE_URL }}
+          phase: finish
+          deployment-id: ${{ steps.report-start.outputs.deployment-id }}
+          status: ${{ (steps.promote.outcome == 'success' || steps.rollback.outcome == 'success') && 'succeeded' || 'failed' }}
+          # Whatever traffic moved to, even if a later check failed, so the record says what serves.
+          revision: ${{ steps.rollback.outputs.pinned == 'true' && steps.inputs.outputs.revision || steps.promote.outputs.promoted == 'true' && steps.promote.outputs.candidate || '' }}
+          service: ${{ env.SERVICE }}
+          region: ${{ env.REGION }}

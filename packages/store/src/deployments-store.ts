@@ -5,9 +5,14 @@ import {
   WorkTrackerError,
   deploymentPageSize,
   finishedDeployment,
+  withCachedRelease,
+  withVerification,
   type DeploymentEnvironment,
+  type DeploymentVerification,
+  type DeploymentVerificationStatus,
   type DeploymentStore,
   type NewDeployment,
+  type StoredRelease,
 } from "@andy/contracts";
 import { zodConverter } from "./index";
 
@@ -69,6 +74,33 @@ export class FirestoreDeploymentStore implements DeploymentStore {
 
   async get(deploymentId: string): Promise<Deployment | null> {
     return (await this.deployments().doc(deploymentId).get()).data() ?? null;
+  }
+
+  async cacheRelease(deploymentId: string, release: StoredRelease): Promise<Deployment> {
+    const ref = this.deployments().doc(deploymentId);
+    return this.db.runTransaction(async (tx) => {
+      const current = (await tx.get(ref)).data();
+      if (!current) throw new WorkTrackerError("not_found", `deployment ${deploymentId} not found`);
+      if (current.release) return current;
+      const next = withCachedRelease(current, release);
+      tx.set(ref, next);
+      return next;
+    });
+  }
+
+  async setVerification(
+    deploymentId: string,
+    verification: DeploymentVerification,
+    from: readonly (DeploymentVerificationStatus | null)[],
+  ): Promise<Deployment> {
+    const ref = this.deployments().doc(deploymentId);
+    return this.db.runTransaction(async (tx) => {
+      const current = (await tx.get(ref)).data();
+      if (!current) throw new WorkTrackerError("not_found", `deployment ${deploymentId} not found`);
+      const next = withVerification(current, verification, from);
+      tx.set(ref, next);
+      return next;
+    });
   }
 
   async list(

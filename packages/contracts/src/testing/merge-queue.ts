@@ -15,11 +15,15 @@ export function mergeQueueStoreContract(name: string, make: () => Promise<MergeQ
       syncs: 0,
       syncRequestedSha: null,
       judgedSince: null,
+      approval: null,
+      approvedDiff: null,
+      lastNote: null,
     });
     const state = (repo: string, entries: MergeQueueEntry[], version: number): MergeQueueState => ({
       repo,
       entries,
       lease: { holder: "i1", until: "2026-11-23T10:01:00.000Z" },
+      mainRed: null,
       version,
     });
     const isConflict = (err: unknown) => (err as { code?: string }).code === "conflict";
@@ -29,6 +33,7 @@ export function mergeQueueStoreContract(name: string, make: () => Promise<MergeQ
         repo: "owner/repo",
         entries: [],
         lease: null,
+        mainRed: null,
         version: 0,
       });
     });

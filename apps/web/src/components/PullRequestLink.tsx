@@ -4,7 +4,8 @@ import { PullRequestLink as PullRequestLinkData, type TicketEvent } from "@andy/
 /**
  * AI-194: M7.15: Gated PRs from the phone (ADR-0115 Q5, option a). A ticket whose PR is open,
  * so waiting for Andy, links to it on github.com; on an iPhone with the GitHub app, iOS opens it
- * there, where Andy reviews and merges as himself. No merge from this app, no App token.
+ * there, where Andy reviews and merges as himself. In Ready for review the panel also offers
+ * Merge, which goes through the merge queue (AI-388, `inbox/MergeButton.tsx`).
  */
 
 /** A pull request page on github.com; group 1 is `owner/repo`. */

@@ -42,7 +42,9 @@ import { destinations, settingsLinks, type NavItem } from "@/lib/shell-routes";
 import { THEMES, useTheme, type Theme } from "@/lib/theme";
 import { useIsPhone } from "@/lib/use-phone";
 import { KeyboardShortcuts } from "@/components/KeyboardShortcuts";
+import { KeyTile, ProjectMark } from "@/components/ProjectMark";
 import { cn } from "@/lib/utils";
+import { Brand, LogoMark } from "@/components/Logo";
 
 /** Extra header controls from outside the router (the signed-in App adds Sign out). */
 export const HeaderEndContext = createContext<ReactNode>(null);
@@ -83,6 +85,7 @@ export function AppShell() {
       <div className="min-h-screen">
         {/* Safe-area insets keep the header clear of the iPhone status bar when installed. */}
         <header className="flex h-[calc(3rem+env(safe-area-inset-top))] items-center gap-2 border-b border-border px-4 pt-[env(safe-area-inset-top)]">
+          <LogoMark label="andy-intelligence" />
           <ProjectPicker scope={scope} section={section ?? "inbox"} />
           <div className="ml-auto flex shrink-0 items-center gap-2">
             <QuotaGauge />
@@ -147,6 +150,7 @@ function Sidebar(props: {
     counts && (scope.kind === "all" ? counts.total : (counts.byProject.get(scope.projectId) ?? 0));
   return (
     <aside className="sticky top-0 flex h-screen w-60 shrink-0 flex-col overflow-y-auto border-r border-border bg-muted px-2 py-3">
+      <Brand className="mb-2 h-8 px-2" />
       <ProjectPicker scope={scope} section={section ?? "inbox"} wide />
       <nav aria-label="Main" aria-busy={!counts} className="mt-2 flex flex-col gap-0.5">
         {links.map((l) => (
@@ -205,6 +209,7 @@ function ProjectsGroup(props: {
               current: scopeKey(scope) === scopeKey(to),
             }}
             count={counts?.byProject.get(p.id) ?? 0}
+            mark={<ProjectMark project={p} />}
           />
         );
       })}
@@ -221,7 +226,16 @@ function SideGroupLabel({ children }: { children: ReactNode }) {
 }
 
 /** A sidebar row: label, and a Needs-you count when there is one. */
-function SideLink({ item, count }: { item: NavItem; count?: number | null }) {
+function SideLink({
+  item,
+  count,
+  mark,
+}: {
+  item: NavItem;
+  count?: number | null;
+  /** A project's mark before its name (AI-393). */
+  mark?: ReactNode;
+}) {
   return (
     <Link
       to={item.to}
@@ -234,7 +248,10 @@ function SideLink({ item, count }: { item: NavItem; count?: number | null }) {
         item.current && "bg-raised text-foreground ring-1 ring-border",
       )}
     >
-      <span className="truncate">{item.label}</span>
+      <span className="flex min-w-0 items-center gap-2">
+        {mark}
+        <span className="truncate">{item.label}</span>
+      </span>
       {!!count && (
         <span aria-hidden className="text-xs font-medium text-attention tabular-nums">
           {count}
@@ -402,7 +419,11 @@ function ProjectPicker(props: { scope: Scope; section: Section; wide?: boolean }
             </>
           ) : (
             <>
-              <KeyBadge>{current?.key ?? scope.projectId.toUpperCase()}</KeyBadge>{" "}
+              {current ? (
+                <ProjectMark project={current} />
+              ) : (
+                <KeyTile projectKey={scope.projectId.toUpperCase()} />
+              )}{" "}
               <span className={cn("truncate max-sm:sr-only", !wide && "max-w-48")}>
                 {current?.name ?? scope.projectId}
               </span>
@@ -425,7 +446,7 @@ function ProjectPicker(props: { scope: Scope; section: Section; wide?: boolean }
               waiting={counts?.byProject.get(p.id) ?? 0}
               onSelect={() => go(to)}
             >
-              <KeyBadge>{p.key}</KeyBadge> <span className="truncate">{p.name}</span>
+              <ProjectMark project={p} /> <span className="truncate">{p.name}</span>
             </PickerItem>
           );
         })}
@@ -475,14 +496,6 @@ function PickerItem(props: {
 }
 
 /** A project's key, e.g. "AI": the tenant mark beside its name. */
-function KeyBadge({ children }: { children: ReactNode }) {
-  return (
-    <span className="inline-flex h-5 min-w-5 items-center justify-center rounded bg-foreground px-1 text-2xs font-semibold text-background">
-      {children}
-    </span>
-  );
-}
-
 /** Tickets waiting on Andy across every project, one per inbox card (AI-347); opens that inbox. */
 function NeedsYouCount() {
   const needsYou = useNeedsYou();

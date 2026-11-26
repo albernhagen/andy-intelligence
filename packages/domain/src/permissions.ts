@@ -31,6 +31,7 @@ export const OWNER_ACTIONS = {
   send_test_email: "send a test email",
   change_milestones: "create, edit or order milestones, or attach an epic to one",
   merge_pr: "merge a pull request through merge_pr",
+  release: "promote or roll back a release",
 } as const;
 
 export type OwnerAction = keyof typeof OWNER_ACTIONS;
@@ -103,4 +104,29 @@ export function requireOwnAgentTask(
 /** How history shows an actor: the owner (old `andy` or a user uid) by label; others as stored. */
 export function actorLabel(actor: EventActor): string {
   return isOwner(actor) ? OWNER_LABEL : actor;
+}
+
+/**
+ * The agent path's rule for epic breakdowns (AI-383): a plan-epic agent task records a breakdown
+ * only for the epic it ran on, as `agent:<runId>`. Returns the actor to record the result as.
+ */
+export function requireOwnEpicTask(
+  run: Pick<Run, "id" | "step" | "ticketId">,
+  epicId: string,
+): EventActor {
+  if (run.step === "plan-epic" && run.ticketId === epicId) return `agent:${run.id}`;
+  console.log(
+    JSON.stringify({
+      severity: "WARNING",
+      message: "agent task result refused",
+      component: "permissions",
+      runId: run.id,
+      step: run.step,
+      wanted: "plan-epic",
+    }),
+  );
+  throw new DomainError(
+    "forbidden",
+    "only a plan-epic agent task on this epic can record its breakdown",
+  );
 }

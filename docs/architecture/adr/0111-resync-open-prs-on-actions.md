@@ -1,6 +1,6 @@
 ---
 title: Re-sync open PRs on Actions when main moves
-status: proposed (AI-147; Andy decides the token at review); amended by 0139 (hourly cap: 12 runs that re-synced)
+status: accepted (Andy, 2026-11-25: with the token it uses today); amended by 0139 (hourly cap: 12 runs that re-synced), 0157 (proposed: runs only for a project whose PR sync is `all`)
 date: 2026-11-20
 amends: 0083 (which PRs keep up with main), 0043 (TOKEN_POLICY gains a workflow)
 ---

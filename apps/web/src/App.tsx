@@ -6,6 +6,7 @@ import { HeaderEndContext } from "@/components/AppShell";
 import { Button } from "@/components/ui/button";
 import { ApiContext, createApi } from "@/lib/api";
 import { apiFetch, getIdToken, signIn, signOutUser, watchUser } from "@/lib/auth";
+import { Brand } from "@/components/Logo";
 import { makeRouter } from "./router";
 
 const api = createApi({ baseUrl: window.location.origin, getToken: getIdToken });
@@ -89,7 +90,9 @@ function Shell({ children, action }: { children: React.ReactNode; action?: React
   return (
     <div className="min-h-screen">
       <header className="flex h-12 items-center justify-between border-b border-border px-4 sm:px-6">
-        <h1 className="font-semibold">andy-intelligence</h1>
+        <h1>
+          <Brand />
+        </h1>
         {action}
       </header>
       <main className="px-4 py-4 sm:px-6">{children}</main>

@@ -142,6 +142,8 @@ function mainStatus(s: StatusInput, now: Date): { text: string; tone: StatusTone
       };
     case "ready_for_review":
       return { text: join("Ready for review", pr, waits(s.syncWaiting)), tone: "default" };
+    case "verifying":
+      return { text: join("Verifying", pr), tone: "default" };
   }
 }
 
@@ -240,6 +242,7 @@ const RUN_VERBS: Record<RunStep, string> = {
   sync: "Syncing with main",
   "plan-project": "Planning the project",
   ideate: "Shaping an idea",
+  "plan-epic": "Drafting tickets",
   summarize: "Summarizing",
 };
 

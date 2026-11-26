@@ -165,6 +165,33 @@ describe("agent task page", () => {
     expect(plan.textContent).toContain("Cross-project reads");
   });
 
+  it("GivenAPlanWithPackagesAndABuildThatNeededOne_WhenItsPageOpens_ThenBothShow", async () => {
+    const h = await setup();
+    const run = await h.newRun();
+    await h.runs.update(
+      run.id,
+      {
+        status: "failed",
+        plan: {
+          files: ["src/a.ts"],
+          steps: ["Parse input"],
+          tests: [],
+          riskiestStep: "None",
+          rejectedAlternatives: [],
+          packages: [{ name: "zod", kind: "runtime", workspace: ".", why: "Parses input." }],
+        },
+        neededPackages: ["date-fns"],
+      },
+      ["queued"],
+    );
+    await open(h, `/p/ai/runs/${run.id}`);
+
+    const plan = await screen.findByRole("region", { name: "Plan" });
+    expect(plan.textContent).toContain("zod (runtime, .): Parses input.");
+    const needed = screen.getByRole("region", { name: "Packages the plan didn't name" });
+    expect(needed.textContent).toContain("date-fns");
+  });
+
   it("GivenAnUnknownId_WhenTheRunPageOpens_ThenItSaysNotFound", async () => {
     const h = await setup();
     await open(h, "/p/ai/runs/no-such-task");

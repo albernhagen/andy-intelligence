@@ -1,6 +1,7 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { BUILD_LIMITS, BuildCheck, BuildOutput, BuildPlan, PlanOutput } from "./index";
+import { PACKAGE_LIMITS, PlanPackage } from "./packages";
 
 // The schema the executor hands the build agent (`--json-schema`). It must stay in step with
 // BuildOutput, which the control plane checks the result against.
@@ -20,10 +21,12 @@ const validBuildOutput = {
     tests: ["GivenReadyTickets_WhenNext_ThenTopRankStarts"],
     riskiestStep: "Ordering by rank",
     rejectedAlternatives: ["Polling: the system is event-driven"],
+    packages: [],
   },
   deviations: [],
   verification: [{ command: "pnpm test", passed: true, output: "42 passed" }],
   failingTestFiles: [],
+  neededPackages: [],
 };
 
 describe("BuildOutput", () => {
@@ -41,6 +44,13 @@ describe("BuildOutput", () => {
     expect(check.properties.command.maxLength).toBe(BUILD_LIMITS.command);
     expect(check.properties.output.maxLength).toBe(BUILD_LIMITS.checkOutput);
     expect(schema.properties.failingTestFiles.items.maxLength).toBe(BUILD_LIMITS.path);
+    expect(plan.properties.packages.maxItems).toBe(BUILD_LIMITS.maxPackages);
+    expect(plan.properties.packages.items.properties.name.maxLength).toBe(PACKAGE_LIMITS.name);
+    expect(plan.properties.packages.items.properties.why.maxLength).toBe(PACKAGE_LIMITS.why);
+    expect([...plan.properties.packages.items.required].sort()).toEqual(
+      Object.keys(PlanPackage.shape).sort(),
+    );
+    expect(schema.properties.neededPackages.maxItems).toBe(PACKAGE_LIMITS.maxPackages);
     expect([...schema.required].sort()).toEqual(Object.keys(BuildOutput.shape).sort());
     expect([...plan.required].sort()).toEqual(Object.keys(BuildPlan.shape).sort());
     expect([...check.required].sort()).toEqual(Object.keys(BuildCheck.shape).sort());
@@ -56,6 +66,16 @@ describe("BuildOutput", () => {
 
   it("GivenNoVerification_WhenParsed_ThenItIsRejected", () => {
     expect(BuildOutput.safeParse({ ...validBuildOutput, verification: [] }).success).toBe(false);
+  });
+
+  it("GivenAResultWrittenBeforePackages_WhenParsed_ThenPackagesDefaultToEmpty", () => {
+    const old: Record<string, unknown> = { ...validBuildOutput };
+    const oldPlan: Record<string, unknown> = { ...validBuildOutput.plan };
+    delete old.neededPackages;
+    delete oldPlan.packages;
+    const parsed = BuildOutput.parse({ ...old, plan: oldPlan });
+    expect(parsed.plan.packages).toEqual([]);
+    expect(parsed.neededPackages).toEqual([]);
   });
 
   it("GivenAnUnknownField_WhenParsed_ThenItIsRejected", () => {

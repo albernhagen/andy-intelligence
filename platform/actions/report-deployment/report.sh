@@ -1,10 +1,12 @@
 #!/usr/bin/env bash
-# Reports a deployment to the control plane (AI-180: M6.4). Called by action.yml with its inputs
+# Reports a deployment to the control plane (AI-180: M6.4, AI-190: M6.11). Called by action.yml with its inputs
 # in the environment. Never fails the job: every error is a warning and a job-summary line, exit 0.
 set -u
 # Every input may be unset or empty; nothing below may trip `set -u` and fail the deploy.
 PHASE="${PHASE:-}" IMAGE_DIGEST="${IMAGE_DIGEST:-}" DEPLOYMENT_ID="${DEPLOYMENT_ID:-}"
 STATUS="${STATUS:-}" SERVICE="${SERVICE:-}" REGION="${REGION:-}"
+ENVIRONMENT="${ENVIRONMENT:-}" KIND="${KIND:-}" URL="${URL:-}" REQUEST="${REQUEST:-}"
+REVISION="${REVISION:-}"
 CONTROL_PLANE_URL="${CONTROL_PLANE_URL:-}" GITHUB_STEP_SUMMARY="${GITHUB_STEP_SUMMARY:-/dev/null}"
 GITHUB_OUTPUT="${GITHUB_OUTPUT:-/dev/null}" RUNNER_TEMP="${RUNNER_TEMP:-/tmp}"
 # Keep the token out of logs: no `set -x` in this step.
@@ -18,16 +20,30 @@ not_recorded() {
 case "$PHASE" in
   start)
     [[ "$IMAGE_DIGEST" =~ ^sha256:[0-9a-f]{64}$ ]] || not_recorded "no image digest"
-    body=$(jq -cn --arg d "$IMAGE_DIGEST" '{imageDigest: $d}')
+    # Optional fields: empty means not sent, so a deploy.yml from before M6.11 sends what it did.
+    [[ -z "$ENVIRONMENT" || "$ENVIRONMENT" =~ ^(dev|prod)$ ]] || not_recorded "environment must be dev or prod"
+    [[ -z "$KIND" || "$KIND" =~ ^(deploy|promote|rollback)$ ]] || not_recorded "kind must be deploy, promote or rollback"
+    [[ -z "$URL" || "$URL" =~ ^https://[^@[:space:]]+$ ]] || not_recorded "url must be https"
+    [[ -z "$REQUEST" || "$REQUEST" =~ ^[A-Za-z0-9_-]{1,80}$ ]] || not_recorded "request is not a request id"
+    body=$(jq -cn --arg d "$IMAGE_DIGEST" --arg e "$ENVIRONMENT" --arg k "$KIND" --arg u "$URL" \
+      --arg r "$REQUEST" '{imageDigest: $d}
+        + (if $e == "" then {} else {environment: $e} end)
+        + (if $k == "" then {} else {kind: $k} end)
+        + (if $u == "" then {} else {url: $u} end)
+        + (if $r == "" then {} else {request: $r} end)')
     path="/deployments"
     ;;
   finish)
     [[ "$DEPLOYMENT_ID" =~ ^[A-Za-z0-9-]{1,80}$ ]] || not_recorded "the start report returned no deployment id"
     [[ "$STATUS" =~ ^(succeeded|failed)$ ]] || not_recorded "status must be succeeded or failed"
-    # Only a succeeded deploy is serving its candidate; after a failure the latest ready revision
-    # may be the previous good one, so a failed report names no revision.
+    # A revision the caller names (the one it moved traffic to) is sent with either status: traffic
+    # may have moved before a later check failed. Without one, only a succeeded deploy is serving
+    # its candidate; after a failure the latest ready revision may be the previous good one, so a
+    # failed report names no revision. A malformed name is dropped; the status still lands.
     revision=""
-    if [ "$STATUS" = succeeded ] && [ -n "$SERVICE" ] && [ -n "$REGION" ]; then
+    if [ -n "$REVISION" ]; then
+      [[ "$REVISION" =~ ^[a-z][a-z0-9-]{0,99}$ ]] && revision="$REVISION"
+    elif [ "$STATUS" = succeeded ] && [ -n "$SERVICE" ] && [ -n "$REGION" ]; then
       revision=$(gcloud run services describe "$SERVICE" --region "$REGION" \
         --format='value(status.latestReadyRevisionName)' 2>/dev/null) || revision=""
     fi
@@ -54,6 +70,11 @@ code=$(curl -sS --max-time 15 --retry "$retry" -o "$response" -w '%{http_code}' 
 case "$code" in
   2??) ;;
   409) [ "$PHASE" = finish ] || not_recorded "the control plane answered HTTP 409" ;;
+  # The control plane understood the start and refused it (wrong kind, or no succeeded deployment
+  # of that digest). A caller may stop on this output; the step itself still exits 0.
+  422)
+    [ "$PHASE" = start ] && echo "refused=true" >> "$GITHUB_OUTPUT"
+    not_recorded "the control plane refused it (HTTP 422)" ;;
   *) not_recorded "the control plane answered HTTP $code" ;;
 esac
 

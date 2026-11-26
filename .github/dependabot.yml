@@ -38,6 +38,7 @@ updates:
       - /infra/control-plane
       - /infra/billing
       - /infra/dns
+      - /infra/modules/project-env/examples/basic
     schedule:
       interval: weekly
     open-pull-requests-limit: 5

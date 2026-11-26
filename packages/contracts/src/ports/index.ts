@@ -5,6 +5,8 @@ import {
   AutoMerge,
   MergeMode,
   EnvironmentPolicy,
+  DeployKind,
+  PrSync,
   ProjectSpendCaps,
   BillingType,
   DorStatus,
@@ -45,6 +47,7 @@ import {
   type Listing,
   type PullRequest,
   type PullRequestCommit,
+  type CommitRange,
   type PullRequestDetails,
   type ProposedPullRequest,
   type Repo,
@@ -56,6 +59,7 @@ import {
   projectDispatchPatch,
   projectNotifyPatch,
   projectPlanPatch,
+  projectOnboardingPatch,
 } from "../entities";
 
 /**
@@ -170,6 +174,15 @@ export const PullRequestLink = z.object({
   number: z.number().int().positive(),
   url: z.url(),
   state: z.enum(["open", "closed", "merged"]),
+  /**
+   * The merge commit on the default branch (AI-188: M6.7), so a deployment can tell which
+   * Verifying tickets it contains; absent or null for links before it, or when not merged.
+   */
+  mergeSha: z
+    .string()
+    .regex(/^[0-9a-f]{40}$/)
+    .nullable()
+    .optional(),
 });
 export type PullRequestLink = z.infer<typeof PullRequestLink>;
 
@@ -230,10 +243,15 @@ export const ProjectPatch = z.strictObject({
   ...projectDispatchPatch,
   ...projectNotifyPatch,
   ...projectPlanPatch,
+  ...projectOnboardingPatch,
   defaultWorker: Worker.optional(),
   executor: ExecutorKind.optional(),
   environments: EnvironmentPolicy.optional(),
+  deployKind: DeployKind.optional(),
+  prSync: PrSync.optional(),
   spendCaps: ProjectSpendCaps.optional(),
+  /** Set only by the logo service (AI-393), never through ProjectSettings. */
+  logoUpdatedAt: Timestamp.nullable().optional(),
 });
 export type ProjectPatch = z.infer<typeof ProjectPatch>;
 
@@ -252,6 +270,8 @@ export const ProjectSettings = ProjectPatch.pick({
   executor: true,
   emailNotifications: true,
   environments: true,
+  deployKind: true,
+  prSync: true,
   spendCaps: true,
 });
 export type ProjectSettings = z.infer<typeof ProjectSettings>;
@@ -428,6 +448,8 @@ export const NewRun = Run.pick({
   baseBranch: true,
   idea: true,
   routeSkips: true,
+  deploymentId: true,
+  verifyTicketIds: true,
 });
 export type NewRun = z.input<typeof NewRun>;
 
@@ -449,6 +471,7 @@ export const RunPatch = Run.pick({
   plan: true,
   branch: true,
   toolingFiles: true,
+  neededPackages: true,
   pushGrantedAt: true,
   planDecision: true,
   outcome: true,
@@ -526,12 +549,26 @@ export type WatchdogCheck = z.infer<typeof WatchdogCheck>;
 
 /**
  * Other delayed checks on the same queue (ADR-0089): a local run's lease expiry, and whether a
- * runner is still away 2 minutes after its last claim.
+ * runner is still away 2 minutes after its last claim. AI-181: whether a ticket is still in
+ * Verifying 2 hours after it entered (ADR-0114). AI-199: how a promote or rollback's workflow run
+ * ended (ADR-0160).
  */
 const CheckSubject = z.string().regex(/^[A-Za-z0-9-]{1,64}$/);
 export const QueuedCheck = z.discriminatedUnion("kind", [
   z.object({ kind: z.literal("lease"), runId: CheckSubject, at: Timestamp }),
   z.object({ kind: z.literal("runner_away"), runnerId: CheckSubject, at: Timestamp }),
+  z.object({
+    kind: z.literal("verifying"),
+    projectId: CheckSubject,
+    ticketId: CheckSubject,
+    at: Timestamp,
+  }),
+  z.object({
+    kind: z.literal("release"),
+    projectId: CheckSubject,
+    requestId: CheckSubject,
+    at: Timestamp,
+  }),
 ]);
 export type QueuedCheck = z.infer<typeof QueuedCheck>;
 
@@ -542,8 +579,9 @@ export interface WatchdogQueue {
    */
   schedule(check: WatchdogCheck): Promise<"scheduled" | "duplicate">;
   /**
-   * Queues a lease or runner-away check for delivery at `at`. Idempotent per subject and time:
-   * a lease per run and second of `at`, a runner-away check per runner and minute of `at`.
+   * Queues a lease, runner-away or Verifying check for delivery at `at`. Idempotent per subject
+   * and time: a lease per run and second of `at`, a runner-away check per runner and minute of
+   * `at`, a Verifying check per ticket and second of `at`.
    */
   scheduleCheck(check: QueuedCheck): Promise<"scheduled" | "duplicate">;
 }
@@ -551,9 +589,16 @@ export interface WatchdogQueue {
 /** The idempotency key of a queued check (also its task name on the queue). */
 export function queuedCheckKey(check: QueuedCheck): string {
   const ms = Date.parse(check.at);
-  return check.kind === "lease"
-    ? `lease-${check.runId}-${Math.ceil(ms / 1000)}`
-    : `runner-away-${check.runnerId}-${Math.floor(ms / 60_000)}`;
+  switch (check.kind) {
+    case "lease":
+      return `lease-${check.runId}-${Math.ceil(ms / 1000)}`;
+    case "runner_away":
+      return `runner-away-${check.runnerId}-${Math.floor(ms / 60_000)}`;
+    case "verifying":
+      return `verifying-${check.ticketId}-${Math.ceil(ms / 1000)}`;
+    case "release":
+      return `release-${check.requestId}-${Math.ceil(ms / 1000)}`;
+  }
 }
 
 // ── QuotaSource ──────────────────────────────────────────────────────────────
@@ -621,9 +666,15 @@ export interface OAuthGrantStore {
   take(key: string): Promise<OAuthGrant | null>;
 }
 
+/** At most this many commits per `listCommitsBetween` (ADR-0028); a release past it is cut. */
+export const RANGE_COMMITS_MAX = 100;
+
 // ── CodeHost ─────────────────────────────────────────────────────────────────
 // The code host through our App (ARCHITECTURE §6). v1.x: GitHub App. Grows with the slices
 // that need it (workflow dispatch: M1.6a; PR/check reads for the watchdog: M1.6b).
+
+/** What `CodeHost.updateBranch` did (AI-388). */
+export type UpdateBranchResult = "updated" | "conflict" | "head_moved";
 
 export interface CodeHost {
   /** The repo, or null when it doesn't exist or our App isn't installed on it. */
@@ -681,6 +732,30 @@ export interface CodeHost {
    * ahead of it or the same. Null when the repo or a ref isn't known.
    */
   headContains(fullName: string, head: string, base: string): Promise<boolean | null>;
+  /**
+   * Merges the default branch into the PR's branch with the App's identity (a merge commit, never
+   * a rebase), only if its head is still `expectedHeadSha` (AI-388: the merge queue's own sync).
+   * `conflict`: the merge isn't clean; `head_moved`: the head changed first. Throws for any other
+   * refusal, or when the App isn't installed.
+   */
+  updateBranch(
+    fullName: string,
+    number: number,
+    expectedHeadSha: string,
+  ): Promise<UpdateBranchResult>;
+  /**
+   * A fingerprint of the PR's own changes against its base (AI-388): each changed path, its old
+   * path and its patch, with hunk line numbers left out, so merging an unrelated default branch in
+   * keeps it. Null when the host can't show every patch (too many files, a binary or huge file):
+   * callers treat that as changed.
+   */
+  diffDigest(fullName: string, number: number): Promise<string | null>;
+  /**
+   * The commits `head` has that `base` lacks, oldest first, at most `RANGE_COMMITS_MAX`
+   * (`complete` false past it), and how the two relate (AI-169: M6.8). Null when the repo, the
+   * App's install or a commit isn't known.
+   */
+  listCommitsBetween(fullName: string, base: string, head: string): Promise<CommitRange | null>;
   /**
    * Commits one file on a new branch cut from the default branch, with the App's identity, and
    * opens a pull request into the default branch (AI-107). Null when the App isn't installed.

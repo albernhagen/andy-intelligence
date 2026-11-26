@@ -1,5 +1,5 @@
 // Types for plan.mjs, so the API's TypeScript can import it (AI-113).
-import type { Rendered, RenderedFile } from "./files.mjs";
+import type { DeployKind, Environments, Rendered, RenderedFile } from "./files.mjs";
 import type { SectionResult } from "./github.mjs";
 
 export const HELD_BY_APP: RegExp;
@@ -19,7 +19,14 @@ export interface BaselinePlan {
 export function planBaselinePr(
   rendered: Rendered,
   target: Map<string, string | null>,
-  opts: { source: string; sha: string; ref: string; date: string },
+  opts: {
+    source: string;
+    sha: string;
+    ref: string;
+    date: string;
+    deployKind?: DeployKind;
+    environments?: Environments;
+  },
 ): BaselinePlan;
 export function heldToAdd(rendered: Rendered, exists: (path: string) => boolean): RenderedFile[];
 export function pathsToRead(rendered: Rendered): string[];
@@ -31,4 +38,5 @@ export function renderReport(r: {
   branch: string;
   plan: BaselinePlan;
   settings: { results: SectionResult[] } | { error: string };
+  deployKind?: DeployKind;
 }): string;

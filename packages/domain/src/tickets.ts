@@ -129,6 +129,11 @@ export class TicketService {
     private readonly routingStore: RoutingConfigStore | null = null,
     /** AI-319: each project's tickets through the snapshot, so Needs-you reads only what changed. */
     private readonly projectTickets: ProjectTickets = new ProjectTickets(tracker),
+    /**
+     * After a ticket enters Verifying (AI-181): queues its 2-hour Needs-you check
+     * (`VerifyingChecks.entered`). It never throws.
+     */
+    private readonly enteredVerifying: ((ticket: Ticket) => Promise<void>) | null = null,
   ) {}
 
   private async runnerPresent(projectId: string): Promise<boolean> {
@@ -618,6 +623,13 @@ export class TicketService {
       if (!canTransition(ticket.stage, to)) {
         throw new DomainError("invalid_transition", `can't move from ${ticket.stage} to ${to}`);
       }
+      // ADR-0114: only projects that deploy verify; Andy can still force it.
+      if (to === "verifying" && (await this.requireProject(projectId)).deployKind === "none") {
+        throw new DomainError(
+          "invalid_transition",
+          `${ticket.key}'s project doesn't deploy, so it has no Verifying stage`,
+        );
+      }
       if (ticket.stage === "backlog" && to === "ready") {
         const dor = checkDor(ticket, await this.openQuestionCount(ticketId));
         if (!dor.met) {
@@ -631,6 +643,8 @@ export class TicketService {
     // before the stage changes, so a failure leaves the ticket cancelled (hidden) and retryable.
     const reopen = ticket.stage === "cancelled";
     if (reopen) await this.withdrawOpenQuestions(ticketId, actor);
+    // ADR-0114: a ticket sent back from Verifying (failed verification) needs Andy.
+    const failedVerify = ticket.stage === "verifying" && to === "in_progress";
     const moved = await this.tracker.updateTicket(
       projectId,
       ticketId,
@@ -638,6 +652,7 @@ export class TicketService {
         fields: {
           ...(unarchive ? { archived: false } : {}),
           ...(reopen ? { needsAttention: false } : {}),
+          ...(failedVerify ? { needsAttention: true } : {}),
         },
         stage: { to, forced: force, reason: reason?.trim() || null },
         ifUpdatedAt: ticket.updatedAt,
@@ -650,6 +665,7 @@ export class TicketService {
       await this.dispatchNext?.(projectId);
     }
     if (to === "done") await this.wakeDependents(moved);
+    if (to === "verifying") await this.enteredVerifying?.(moved);
     return moved;
   }
 
@@ -768,6 +784,12 @@ export class TicketService {
     if (to === "done" && moved.includes("done")) {
       await this.completeByPullRequest(ticket);
       await this.wakeDependents(ticket);
+    }
+    if (moved.at(-1) === "verifying") {
+      // The merged PR's runs (sync, review) have nothing left to do; questions and Needs-you stay.
+      const runs = (await this.runs?.cancelForTicket(projectId, ticketId)) ?? [];
+      await this.reportCancelledRuns(projectId, ticketId, runs, "when its PR merged");
+      await this.enteredVerifying?.(ticket);
     }
     return moved;
   }

@@ -3,11 +3,15 @@ import {
   DeploymentFinish,
   deploymentPageSize,
   finishedDeployment,
+  withCachedRelease,
   type DeploymentEnvironment,
+  type DeploymentVerification,
+  type DeploymentVerificationStatus,
   type NewDeployment,
 } from "../entities/deployment";
+import type { StoredRelease } from "../entities/release-entry";
 import { WorkTrackerError } from "../ports";
-import type { DeploymentStore } from "../ports/deployments";
+import { withVerification, type DeploymentStore } from "../ports/deployments";
 
 /** Newest `startedAt` first; the id breaks ties so the order is stable. */
 const newestFirst = (a: Deployment, b: Deployment) =>
@@ -41,6 +45,26 @@ export class InMemoryDeploymentStore implements DeploymentStore {
   async get(deploymentId: string): Promise<Deployment | null> {
     const found = this.deployments.get(deploymentId);
     return found ? structuredClone(found) : null;
+  }
+
+  async cacheRelease(deploymentId: string, release: StoredRelease): Promise<Deployment> {
+    const current = this.deployments.get(deploymentId);
+    if (!current) throw new WorkTrackerError("not_found", `deployment ${deploymentId} not found`);
+    const next = withCachedRelease(current, release);
+    this.deployments.set(deploymentId, next);
+    return structuredClone(next);
+  }
+
+  async setVerification(
+    deploymentId: string,
+    verification: DeploymentVerification,
+    from: readonly (DeploymentVerificationStatus | null)[],
+  ): Promise<Deployment> {
+    const current = this.deployments.get(deploymentId);
+    if (!current) throw new WorkTrackerError("not_found", `deployment ${deploymentId} not found`);
+    const next = withVerification(current, verification, from);
+    this.deployments.set(deploymentId, next);
+    return structuredClone(next);
   }
 
   async list(

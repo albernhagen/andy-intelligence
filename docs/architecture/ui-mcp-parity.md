@@ -21,8 +21,11 @@ Step 1 of AI-285: Web UI and MCP parity: every action in both, enforced by a tes
 | In flight; work across projects; digest                  | `GET …/in-flight`, `GET /work`, `GET …/digest`                                  | `list_in_flight`, `list_work`, `digest`                                                                                    |
 | Retry the digest summary (AI-323)                        | `POST …/digest/summary/retry`                                                   | `retry_digest_summary`                                                                                                     |
 | Dashboards; DORA metrics                                 | `GET /dashboard`, `…/dashboard`, `…/dora`                                       | `dashboard` (AI-295)                                                                                                       |
+| Releases: deployments, tickets, release notes | `GET …/releases` (Releases page, AI-189: M6.10) | `list_releases` (AI-183: M6.9) |
+| Promote and rollback, and their requests | `ReleaseActions` on the Releases page (AI-199: M6.12) | `promote`, `rollback`, `list_release_requests` |
 | Project list; settings (except below)                    | `GET /projects`, `GET`/`PATCH /projects/:id`                                    | `list_projects`, `get_project_settings`, the `set_*` tools, `set_spend_caps`                                               |
 | Project setup checklist | `GET …/setup` | `project_setup` (AI-287) |
+| Onboarding steps: read, mark a hand step done | `GET …/onboarding`, `POST …/onboarding/marks` | `project_setup` (`onboarding`, `mark`; AI-381) |
 | The board, every stage | `GET …/board` | `board` (AI-296) |
 | Roadmap of milestones; milestone map | `GET /roadmap`, `…/roadmap` (AI-202 screen) | `roadmap`; `milestone_map` (MCP only) |
 | Create a project | `POST /projects` | `create_project` (AI-297) |
@@ -52,7 +55,7 @@ Step 1 of AI-285: Web UI and MCP parity: every action in both, enforced by a tes
 | AI-351: Parity: revoke a runner over MCP | done | S | Built: `revoke_runner`, owner only (ADR-0143; now matched) |
 | AI-295: Parity: dashboards and DORA metrics over MCP                   | UI-only   | S    | Built: `dashboard` (now matched)                             |
 | AI-296: Parity: the board, every stage, over MCP | UI-only | S | Built: `board` (now matched) |
-| AI-321: Milestone create and edit over MCP | done | S | Built: `create_milestone`, `edit_milestone` (ADR-0136, proposed; now matched) |
+| AI-321: Milestone create and edit over MCP | done | S | Built: `create_milestone`, `edit_milestone` (ADR-0136; now matched) |
 | AI-298: Parity: ranked Ready list in the web UI                        | MCP-only  | S    | Built: `GET …/ready` and the Ready view (now matched)        |
 | AI-299: Parity: ideate from the web UI                                 | MCP-only  | M    | Built: the board's Ideate form starts an ideate agent task (now matched) |
 | AI-300: Parity: registry test that every action has a route and a tool | done | M | Built: `apps/api/src/parity.ts` and `parity.test.ts` |
@@ -80,7 +83,6 @@ The registry `apps/api/src/parity.ts` (AI-300) holds every action with its route
 | Turn Builds on or off                                 | Web only | ADR-0063: Builds is set only in the app                                                                  |
 | Register a runner                                     | Web only | Returns the runner token once; a token should not land in a chat transcript                              |
 | OAuth consent (`POST /oauth/approve`)                 | Web only | The browser half of MCP sign-in                                                                          |
-| Merge a session PR by the merge mode (`merge_pr`)     | MCP only | For coordinator sessions (AI-220: Merge modes: coordinator sessions merge through MCP merge_pr); Andy merges in GitHub |
 | GitHub App setup (`/github`, `/manifest`, `/connect`) | Web only | GitHub's manifest flow needs a browser                                                                   |
 | `submit_brief`, `submit_project_plan`                 | MCP only | Written by a Claude session following `onboard.md` and `plan-project.md`; the web shows and decides them; the setup path (AI-373) also submits the brief through `POST …/brief` |
 

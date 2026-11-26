@@ -1,5 +1,5 @@
 {
-  "$comment": "Project baseline files (ADR-0031, ADR-0038). from = path in this repo at the pinned commit. pin = rewrite local ./platform/actions/ uses to the pinned remote action.",
+  "$comment": "Project baseline files (ADR-0031, ADR-0038). from = path in this repo at the pinned commit. pin = rewrite local ./platform/actions/ uses and ../infra/modules/ sources to the pinned remote ones. deployKind = written only for a project of that deploy kind (ADR-0114); environments = only for that environment policy (AI-109). group = seed files written only all together: none when any of them is already there. A new deploy kind adds its own entries; no code changes.",
   "source": "albernhagen/andy-intelligence",
   "managed": [
     { "path": ".github/workflows/ci.yml", "from": ".github/workflows/ci.yml", "pin": true },
@@ -32,6 +32,24 @@
       "path": ".github/workflows/agent-run.yml",
       "from": "template/.github/workflows/agent-run.yml"
     },
+    {
+      "path": ".github/workflows/deploy.yml",
+      "from": "template/.github/workflows/deploy.yml",
+      "pin": true,
+      "deployKind": "cloud-run"
+    },
+    {
+      "path": ".github/workflows/release.yml",
+      "from": "template/.github/workflows/release.yml",
+      "pin": true,
+      "deployKind": "cloud-run"
+    },
+    {
+      "path": ".github/workflows/preview.yml",
+      "from": "template/.github/workflows/preview.yml",
+      "pin": true,
+      "deployKind": "cloud-run"
+    },
     { "path": ".github/dependabot.yml", "from": "template/.github/dependabot.yml" },
     {
       "path": ".github/pull_request_template.md",
@@ -47,7 +65,80 @@
     { "path": "AGENTS.md", "from": "template/AGENTS.md.template" },
     { "path": ".github/CODEOWNERS", "from": "template/.github/CODEOWNERS" },
     { "path": "docs/security/threat-model.md", "from": "template/docs/security/threat-model.md" },
-    { "path": "design.md", "from": "template/design.md" }
+    { "path": "design.md", "from": "template/design.md" },
+    { "path": ".terraform-version", "from": ".terraform-version", "deployKind": "cloud-run" },
+    {
+      "path": "infra/main.tf",
+      "from": "template/infra/cloud-run/prod-only/main.tf",
+      "pin": true,
+      "deployKind": "cloud-run",
+      "environments": "prod-only",
+      "group": "infra"
+    },
+    {
+      "path": "infra/variables.tf",
+      "from": "template/infra/cloud-run/prod-only/variables.tf",
+      "deployKind": "cloud-run",
+      "environments": "prod-only",
+      "group": "infra"
+    },
+    {
+      "path": "infra/outputs.tf",
+      "from": "template/infra/cloud-run/prod-only/outputs.tf",
+      "deployKind": "cloud-run",
+      "environments": "prod-only",
+      "group": "infra"
+    },
+    {
+      "path": "infra/terraform.tfvars.example",
+      "from": "template/infra/cloud-run/prod-only/terraform.tfvars.example",
+      "deployKind": "cloud-run",
+      "environments": "prod-only",
+      "group": "infra"
+    },
+    {
+      "path": "infra/tests/plan.tftest.hcl",
+      "from": "template/infra/cloud-run/prod-only/tests/plan.tftest.hcl",
+      "deployKind": "cloud-run",
+      "environments": "prod-only",
+      "group": "infra"
+    },
+    {
+      "path": "infra/main.tf",
+      "from": "template/infra/cloud-run/dev-and-prod/main.tf",
+      "pin": true,
+      "deployKind": "cloud-run",
+      "environments": "dev-and-prod",
+      "group": "infra"
+    },
+    {
+      "path": "infra/variables.tf",
+      "from": "template/infra/cloud-run/dev-and-prod/variables.tf",
+      "deployKind": "cloud-run",
+      "environments": "dev-and-prod",
+      "group": "infra"
+    },
+    {
+      "path": "infra/outputs.tf",
+      "from": "template/infra/cloud-run/dev-and-prod/outputs.tf",
+      "deployKind": "cloud-run",
+      "environments": "dev-and-prod",
+      "group": "infra"
+    },
+    {
+      "path": "infra/terraform.tfvars.example",
+      "from": "template/infra/cloud-run/dev-and-prod/terraform.tfvars.example",
+      "deployKind": "cloud-run",
+      "environments": "dev-and-prod",
+      "group": "infra"
+    },
+    {
+      "path": "infra/tests/plan.tftest.hcl",
+      "from": "template/infra/cloud-run/dev-and-prod/tests/plan.tftest.hcl",
+      "deployKind": "cloud-run",
+      "environments": "dev-and-prod",
+      "group": "infra"
+    }
   ],
   "starter": [
     { "path": "package.json", "from": "template/starter/package.json.template" },

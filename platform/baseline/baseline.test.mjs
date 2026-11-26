@@ -2,8 +2,14 @@ import { existsSync, readdirSync, readFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
-import { configFor, loadConfig, parseArgs, parseGhResponse } from "./baseline.mjs";
-import { pinActions } from "./files.mjs";
+import { configFor, deployKindFor, loadConfig, parseArgs, parseGhResponse } from "./baseline.mjs";
+import { pinActions, renderFiles } from "./files.mjs";
+import {
+  ENVIRONMENT_VARIABLES,
+  PREFIX,
+  PREVIEW_VARIABLES,
+  SMOKE_VARIABLE,
+} from "../../scripts/cloud-run-caller.mjs";
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..");
 const manifest = JSON.parse(
@@ -37,10 +43,214 @@ describe("parseArgs", () => {
     ).toThrow("--branch");
   });
 
+  it("GivenFilesWithADeployKind_WhenParsed_ThenOptions", () => {
+    expect(parseArgs(["files", "a/b", "--ref", "v1", "--deploy-kind", "cloud-run"])).toMatchObject({
+      command: "files",
+      deployKind: "cloud-run",
+    });
+  });
+
+  it("GivenAnUnknownDeployKindOrOneOnCheck_WhenParsed_ThenError", () => {
+    expect(() => parseArgs(["files", "a/b", "--ref", "v1", "--deploy-kind", "static"])).toThrow(
+      "deploy kind must be one of",
+    );
+    expect(() => parseArgs(["check", "a/b", "--deploy-kind", "cloud-run"])).toThrow(
+      "takes no --deploy-kind",
+    );
+  });
+
+  it("GivenFilesWithEnvironments_WhenParsed_ThenOptions", () => {
+    expect(
+      parseArgs(["files", "a/b", "--ref", "v1", "--environments", "dev-and-prod"]),
+    ).toMatchObject({ environments: "dev-and-prod" });
+  });
+
+  it("GivenAnUnknownPolicyOrOneOnFinish_WhenParsed_ThenError", () => {
+    expect(() => parseArgs(["files", "a/b", "--ref", "v1", "--environments", "staging"])).toThrow(
+      "environments must be one of",
+    );
+    expect(() =>
+      parseArgs([
+        "finish",
+        "a/b",
+        "--ref",
+        "abc1234",
+        "--branch",
+        "baseline/abc1234",
+        "--environments",
+        "prod-only",
+      ]),
+    ).toThrow("takes no --environments");
+  });
+
   it("GivenABadRepoOrSection_WhenParsed_ThenError", () => {
     expect(() => parseArgs(["check", "scratch"])).toThrow("owner/name");
     expect(() => parseArgs(["check", "a/b", "--only", "ruleset,secrets"])).toThrow("secrets");
   });
+});
+
+describe("deployKindFor", () => {
+  it("GivenAFlag_WhenResolved_ThenTheFlagWinsOverTheRecord", () => {
+    expect(deployKindFor("none", '{"deployKind":"cloud-run"}')).toBe("none");
+  });
+
+  it("GivenNoFlag_WhenResolved_ThenTheRecordElseNone", () => {
+    expect(deployKindFor(undefined, '{"deployKind":"cloud-run"}')).toBe("cloud-run");
+    expect(deployKindFor(undefined, '{"version":"abc"}')).toBe("none");
+    expect(deployKindFor(undefined, null)).toBe("none");
+  });
+
+  it("GivenARecordThatIsNotJson_WhenResolved_ThenAsksForTheFlag", () => {
+    expect(() => deployKindFor(undefined, "nope")).toThrow("pass --deploy-kind");
+  });
+});
+
+/**
+ * AI-206: M6.17: deploy.yml and release.yml (and AI-207: M6.18: preview.yml) are written only for a
+ * `cloud-run` project (ADR-0114),
+ * with every andy-intelligence action pinned by SHA.
+ */
+describe("deploy caller in the baseline", () => {
+  const SHA = "f".repeat(40);
+  const DEPLOY_FILES = [
+    ".github/workflows/deploy.yml",
+    ".github/workflows/release.yml",
+    ".github/workflows/preview.yml",
+  ];
+  const render = (deployKind) =>
+    renderFiles(manifest, read, { sha: SHA, ref: "v1.0.0", deployKind }).managed;
+
+  it("GivenACloudRunProject_WhenRendered_ThenDeployAndReleaseArePinnedBySha", () => {
+    const files = render("cloud-run").filter((f) => DEPLOY_FILES.includes(f.path));
+    expect(files.map((f) => f.path)).toEqual(DEPLOY_FILES);
+    for (const f of files) {
+      const uses = [...f.content.matchAll(/uses:\s+(\S+)/g)].map((m) => m[1]);
+      expect(uses.length, f.path).toBeGreaterThan(0);
+      for (const u of uses) expect(u, f.path).toMatch(/@[0-9a-f]{40}$/);
+      if (!f.path.endsWith("preview.yml")) {
+        expect(f.content).toContain(
+          `${manifest.source}/platform/actions/cloud-run-safe-deploy@${SHA}`,
+        );
+      }
+      expect(f.content).toContain(
+        `${manifest.source}/platform/actions/cloud-run-caller-config@${SHA}`,
+      );
+    }
+  });
+
+  it("GivenACloudRunProject_WhenRendered_ThenPreviewUsesThePinnedPreviewAction", () => {
+    const preview = render("cloud-run").find((f) => f.path === ".github/workflows/preview.yml");
+    expect(preview.content).toContain(
+      `${manifest.source}/platform/actions/cloud-run-preview@${SHA}`,
+    );
+    expect(preview.content).not.toContain("uses: ./");
+  });
+
+  it("GivenADeployKindNoneProject_WhenRendered_ThenNeitherDeployNorRelease", () => {
+    const paths = render("none").map((f) => f.path);
+    for (const p of DEPLOY_FILES) expect(paths).not.toContain(p);
+  });
+
+  it("GivenTheManifest_WhenRead_ThenOnlyTheDeployFilesNeedAKind", () => {
+    const kinded = manifest.managed.filter((m) => m.deployKind);
+    expect(kinded.map((m) => [m.path, m.deployKind, m.pin])).toEqual([
+      [".github/workflows/deploy.yml", "cloud-run", true],
+      [".github/workflows/release.yml", "cloud-run", true],
+      [".github/workflows/preview.yml", "cloud-run", true],
+    ]);
+  });
+});
+
+/**
+ * AI-109: M6.22: the deploy scaffold. A `cloud-run` project's baseline PR seeds a template
+ * Terraform root in infra/ with one environment (`prod-only`) or two (`dev-and-prod`), each with a
+ * budget, its modules pinned by SHA; a `none` project gets none of it.
+ */
+describe("deploy scaffold in the baseline", () => {
+  const SHA = "e".repeat(40);
+  const seed = (deployKind, environments) =>
+    renderFiles(manifest, read, { sha: SHA, ref: "v1.0.0", deployKind, environments }).seed;
+  const file = (files, p) => files.find((f) => f.path === p)?.content ?? "";
+  const SCAFFOLD = [
+    ".terraform-version",
+    "infra/main.tf",
+    "infra/variables.tf",
+    "infra/outputs.tf",
+    "infra/terraform.tfvars.example",
+    "infra/tests/plan.tftest.hcl",
+  ];
+  const repoVariables = (environment, preview) => [
+    ...Object.keys(ENVIRONMENT_VARIABLES).map((n) => `${PREFIX[environment]}${n}`),
+    ...(preview ? Object.keys(PREVIEW_VARIABLES).map((n) => `${PREFIX[environment]}${n}`) : []),
+  ];
+
+  it("GivenDeployKindNone_WhenRendered_ThenNoDeployScaffold", () => {
+    const paths = seed("none", "dev-and-prod").map((f) => f.path);
+    for (const p of SCAFFOLD) expect(paths).not.toContain(p);
+  });
+
+  it("GivenCloudRunProdOnly_WhenRendered_ThenOneEnvironmentWithABudget", () => {
+    const files = seed("cloud-run", "prod-only");
+    expect(files.map((f) => f.path)).toEqual(expect.arrayContaining(SCAFFOLD));
+    const main = file(files, "infra/main.tf");
+    expect(main.match(/^module "\w+"/gm)).toEqual(['module "prod"', 'module "prod_budget"']);
+  });
+
+  it("GivenCloudRunDevAndProd_WhenRendered_ThenTwoEnvironmentsEachWithABudget", () => {
+    const main = file(seed("cloud-run", "dev-and-prod"), "infra/main.tf");
+    expect(main.match(/^module "\w+"/gm)).toEqual([
+      'module "dev"',
+      'module "prod"',
+      'module "dev_budget"',
+      'module "prod_budget"',
+    ]);
+  });
+
+  it.each(["prod-only", "dev-and-prod"])(
+    "Given%s_WhenRendered_ThenEveryModuleIsPinnedBySha",
+    (environments) => {
+      const main = file(seed("cloud-run", environments), "infra/main.tf");
+      const sources = [...main.matchAll(/^\s*source\s*=\s*"([^"]+)"/gm)]
+        .map((m) => m[1])
+        .filter((s) => s !== "hashicorp/google");
+      expect(sources.length).toBeGreaterThan(0);
+      for (const s of sources) {
+        expect(s).toMatch(
+          new RegExp(
+            `^git::https://github.com/${manifest.source}.git//infra/modules/[\\w-]+\\?ref=${SHA}$`,
+          ),
+        );
+      }
+    },
+  );
+
+  it("GivenProdOnly_WhenRendered_ThenOutputsNameEveryDeployCallerVariable", () => {
+    const outputs = file(seed("cloud-run", "prod-only"), "infra/outputs.tf");
+    for (const v of [...repoVariables("prod", true), SMOKE_VARIABLE])
+      expect(outputs).toMatch(new RegExp(`^\\s+${v}\\s+=`, "m"));
+  });
+
+  it("GivenDevAndProd_WhenRendered_ThenOutputsNameEveryDeployCallerVariable", () => {
+    const outputs = file(seed("cloud-run", "dev-and-prod"), "infra/outputs.tf");
+    for (const v of [
+      ...repoVariables("dev", true),
+      ...repoVariables("prod", false),
+      SMOKE_VARIABLE,
+    ])
+      expect(outputs).toMatch(new RegExp(`^\\s+${v}\\s+=`, "m"));
+  });
+
+  it.each(["prod-only", "dev-and-prod"])(
+    "Given%s_WhenRendered_ThenNoRealProjectOrBillingIds",
+    (environments) => {
+      for (const f of seed("cloud-run", environments).filter((f) => f.path.startsWith("infra/"))) {
+        for (const m of f.content.matchAll(/project_id\s*=\s*"([^"]+)"/g))
+          expect(m[1], f.path).toMatch(/^example-(dev|prod)-000000$/);
+        for (const m of f.content.matchAll(/[0-9A-F]{6}-[0-9A-F]{6}-[0-9A-F]{6}/g))
+          expect(m[0], f.path).toBe("000000-000000-000000");
+      }
+    },
+  );
 });
 
 describe("parseGhResponse", () => {

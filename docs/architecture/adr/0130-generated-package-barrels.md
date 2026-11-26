@@ -1,6 +1,6 @@
 ---
 title: "Generated package barrels: exports.gen.ts from the folder, not committed"
-status: proposed (AI-277; Andy decides at review)
+status: accepted (Andy, 2026-11-25)
 date: 2026-11-20
 amends: 0110 (Barrels bullet)
 ---

@@ -48,6 +48,30 @@ test("board: every card marker, Done as a strip", async ({ page }) => {
   await expect(page).toHaveScreenshot("board.png", { fullPage: true });
 });
 
+/**
+ * AI-181: a project that deploys shows the Verifying lane before Done. The seed's projects don't
+ * deploy, so this page's reads say AI does and its PR in review merged into Verifying (the shared
+ * fake server is left as it is).
+ */
+test("board: Verifying lane for a project that deploys", async ({ page }) => {
+  await page.clock.setFixedTime(SEED_NOW);
+  await page.route("**/api/projects", async (route) => {
+    const projects = (await (await route.fetch()).json()) as { id: string }[];
+    await route.fulfill({
+      json: projects.map((p) => (p.id === "ai" ? { ...p, deployKind: "cloud-run" } : p)),
+    });
+  });
+  await page.route("**/api/projects/ai/board", async (route) => {
+    const tickets = (await (await route.fetch()).json()) as { stage: string }[];
+    await route.fulfill({
+      json: tickets.map((t) => (t.stage === "ready_for_review" ? { ...t, stage: "verifying" } : t)),
+    });
+  });
+  await open(page, "/p/ai", "Building · 12 min");
+  await expect(page.getByRole("region", { name: "Verifying" })).toBeVisible();
+  await expect(page).toHaveScreenshot("board-verifying.png", { fullPage: true });
+});
+
 test("board: Done expanded", async ({ page }) => {
   await page.clock.setFixedTime(SEED_NOW);
   await open(page, "/p/ai", "Building · 12 min");
@@ -174,4 +198,20 @@ test("project settings with changes", async ({ page }) => {
   await open(page, "/p/ai/settings#changes", "AI: Andy Intelligence settings");
   await expect(page.getByText("Revert of change-flip", { exact: false })).toBeVisible();
   await expect(page).toHaveScreenshot("project-settings-changes.png", { fullPage: true });
+});
+
+/** AI-387: the Defaults section: worker, executor, deploy kind and environments, each option described. */
+test("project settings defaults", async ({ page }) => {
+  await page.clock.setFixedTime(SEED_NOW);
+  await open(page, "/p/ai/settings#defaults", "AI: Andy Intelligence settings");
+  await expect(page.getByRole("radiogroup", { name: "Environments" })).toBeVisible();
+  await expect(page).toHaveScreenshot("project-settings-defaults.png", { fullPage: true });
+});
+
+/** AI-393: Settings → Logo with AI's uploaded mark, Replace and Remove. */
+test("project settings logo", async ({ page }) => {
+  await page.clock.setFixedTime(SEED_NOW);
+  await open(page, "/p/ai/settings#logo", "AI: Andy Intelligence settings");
+  await expect(page.getByRole("img", { name: "Andy Intelligence logo" })).toBeVisible();
+  await expect(page).toHaveScreenshot("project-settings-logo.png", { fullPage: true });
 });

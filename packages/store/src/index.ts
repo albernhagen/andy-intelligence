@@ -14,6 +14,7 @@ import {
   OAuthGrant,
   Policy,
   Project,
+  ProjectLogo,
   Provider,
   PushSendState,
   PushSettings,
@@ -22,6 +23,7 @@ import {
   QuotaReading,
   Question,
   DigestSummary,
+  EpicBreakdown,
   Milestone,
   Release,
   ReleaseNote,
@@ -81,11 +83,18 @@ export const collections = {
     path: (projectId: string) => `projects/${projectId}/milestones`,
     schema: Milestone,
   },
+  /** AI-383: one breakdown per top-level epic, keyed by the epic's id (ADR-0155). */
+  epicBreakdowns: {
+    path: (projectId: string) => `projects/${projectId}/epicBreakdowns`,
+    schema: EpicBreakdown,
+  },
   /** AI-323: one model-written summary per project per day (ADR-0137). */
   digestSummaries: {
     path: (projectId: string) => `projects/${projectId}/digestSummaries`,
     schema: DigestSummary,
   },
+  /** AI-393: one sanitized logo per project, keyed by the project id; server-only. */
+  projectLogos: { path: () => "projectLogos", schema: ProjectLogo },
   /** Summary writes started per UTC day across projects (ADR-0137), server-only: `{ count }`. */
   digestSummaryDays: { path: () => "digestSummaryDays" },
   oauthGrants: { path: () => "oauthGrants", schema: OAuthGrant },

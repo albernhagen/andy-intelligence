@@ -23,6 +23,8 @@ import {
   requireCan,
   ticketKeyFor,
   ticketMergeMode,
+  NOT_MAIN,
+  readMainChecks,
   type QueueJudgement,
   type QueueMergeResult,
 } from "@andy/domain";
@@ -41,6 +43,12 @@ import { FixedWindowLimiter } from "./mcp/rate-limit";
  * queue's head merges, after a sync round when it was behind, re-judged on the latest default
  * branch and pinned to the judged head. The call answers `merged`, or `queued` with its place;
  * the queue merges it later from webhooks, and records that on the ticket.
+ *
+ * AI-388 (ADR-0157): the web app's Merge button calls the same `merge` with `ownerApproval`. Only
+ * Andy's browser sign-in reaches that route (the MCP grant can't), so his click waives what the
+ * mode keeps for him, pinned to the PR's own diff: a later head keeps the approval only while
+ * that diff is the same (a sync of the default branch), never after a new change. MCP `merge_pr`
+ * never passes it.
  */
 
 /** ADR-0028: `merge_pr` calls per project per hour, per instance (max 2 instances). */
@@ -49,6 +57,16 @@ const HOUR_MS = 60 * 60 * 1000;
 
 /** Build agents' branches: the gate merges those PRs (ADR-0124), never `merge_pr`. */
 const AGENT_BRANCH = /^agent\//;
+
+/** How a merge was asked for. */
+export interface MergeOptions {
+  /** AI-388: Andy's click in the web app; set only by the owner route, never over MCP. */
+  ownerApproval?: boolean;
+}
+
+/** The ineligible reason when a queued PR's diff isn't the one Andy approved. */
+export const APPROVAL_STALE =
+  "owner_approval_stale: the PR's own changes differ from the diff Andy approved; click Merge again";
 
 export interface MergePrInput {
   projectId: string;
@@ -112,15 +130,18 @@ export class PullRequestMerger {
     this.queue?.register("merge_pr", {
       judge: (repo, entry) => this.judgeQueued(repo, entry),
       merge: (repo, entry, headSha) => this.mergeQueued(repo, entry, headSha),
-      requestSync: async (repo, entry, headSha) => {
-        // Session PRs are kept current by the re-sync workflow (ADR-0111) when main moves.
-        log("INFO", "merge_pr waits for the re-sync workflow", { repo, pr: entry.number, headSha });
-      },
-      needsYou: (repo, entry, reason, flag) => this.queueNeedsYou(repo, entry, reason, flag),
+      requestSync: (repo, entry, headSha) => this.syncQueued(repo, entry, headSha),
+      needsYou: (repo, entry, reason, flag, note) =>
+        this.queueNeedsYou(repo, entry, reason, flag, note),
     });
   }
 
-  async merge(input: MergePrInput, actor: EventActor): Promise<MergePrResult> {
+  async merge(
+    input: MergePrInput,
+    actor: EventActor,
+    options: MergeOptions = {},
+  ): Promise<MergePrResult> {
+    const ownerApproval = options.ownerApproval === true;
     requireCan(actor, "merge_pr", input.projectId);
     const project = await this.tracker.getProject(input.projectId);
     if (!project) throw notFound("project", input.projectId);
@@ -141,14 +162,23 @@ export class PullRequestMerger {
     if (pr.state !== "open") {
       throw new DomainError("invalid_field", `PR #${pr.number} is ${pr.state}, not open`);
     }
-    if (AGENT_BRANCH.test(pr.headRef)) {
+    // Andy's click may merge a build agent's PR the gate left for him (Merges waiting, AI-218).
+    if (AGENT_BRANCH.test(pr.headRef) && !ownerApproval) {
       throw new DomainError(
         "invalid_field",
         `PR #${pr.number} is a build agent's PR: the gate merges it by the merge mode`,
       );
     }
-    const judged = await this.evaluate(project, repo, pr);
-    const base = { projectId: project.id, repo, pr: pr.number, headSha: pr.headSha, actor };
+    const approvedDiff = ownerApproval ? await this.approvedDiffOf(repo, pr) : null;
+    const judged = await this.evaluate(project, repo, pr, ownerApproval);
+    const base = {
+      projectId: project.id,
+      repo,
+      pr: pr.number,
+      headSha: pr.headSha,
+      actor,
+      ownerApproval,
+    };
     log("INFO", "merge_pr verdict", {
       ...base,
       mode: judged.result.mode,
@@ -156,7 +186,10 @@ export class PullRequestMerger {
       gateReasons: judged.result.gateReasons,
       queueState: judged.state,
     });
-    if (judged.state !== "merge" && judged.state !== "behind") return judged.result;
+    // Held (main is red, AI-382): queued, it merges once main is green without another call.
+    if (judged.state !== "merge" && judged.state !== "behind" && judged.state !== "held") {
+      return judged.result;
+    }
 
     // AI-110: the merge queue merges it when it is the repo's head and clean on the latest main.
     const offered = await this.queue.offer(repo, {
@@ -165,6 +198,7 @@ export class PullRequestMerger {
       kind: "merge_pr",
       actor,
       headSha: pr.headSha,
+      ...(approvedDiff ? { approval: { by: "owner" as const, diff: approvedDiff } } : {}),
     });
     if (offered.result === "merged") {
       return {
@@ -187,6 +221,26 @@ export class PullRequestMerger {
     };
   }
 
+  /**
+   * AI-388: the queue syncs its head itself, merging the default branch in with the App's identity
+   * pinned to `headSha`, so it doesn't depend on the re-sync workflow (now a project setting).
+   * Bounded by the queue's caps: one sync per head, three per PR. A moved head waits for its event.
+   */
+  private async syncQueued(
+    repo: string,
+    entry: MergeQueueEntry,
+    headSha: string,
+  ): Promise<void | "conflict"> {
+    const result = await this.host!.updateBranch(repo, entry.number, headSha);
+    log(result === "conflict" ? "WARNING" : "INFO", "merge_pr sync", {
+      repo,
+      pr: entry.number,
+      headSha,
+      result,
+    });
+    if (result === "conflict") return "conflict";
+  }
+
   /** ADR-0028: refuses past the hourly cap; every call counts, waits included. */
   private takeCall(project: Project): void {
     let limiter = this.limiters.get(project.id);
@@ -202,8 +256,30 @@ export class PullRequestMerger {
     );
   }
 
+  /**
+   * The PR's own diff Andy's click approves (AI-388). Refused when the host can't show all of it
+   * (the approval couldn't be pinned), or when the head moved while it was read.
+   */
+  private async approvedDiffOf(repo: string, pr: PullRequest): Promise<string> {
+    const digest = await this.host!.diffDigest(repo, pr.number);
+    if (!digest) {
+      throw new DomainError(
+        "invalid_field",
+        `PR #${pr.number}'s diff can't be read in full (binary or very large files), so a merge from here can't be pinned to what you approved: merge it in GitHub`,
+      );
+    }
+    const again = await this.host!.getPullRequest(repo, pr.number);
+    if (again?.headSha !== pr.headSha) {
+      throw new DomainError(
+        "invalid_field",
+        `PR #${pr.number} changed while it was read: try again`,
+      );
+    }
+    return digest;
+  }
+
   /** The verdict for the PR's head, judged on the default branch's current tip. */
-  private async evaluate(project: Project, repo: string, pr: PullRequest) {
+  private async evaluate(project: Project, repo: string, pr: PullRequest, ownerApproval = false) {
     const host = this.host!;
     const ticket = await this.ticketOf(project, pr);
     const [files, required, checks, baseSha] = await Promise.all([
@@ -227,8 +303,12 @@ export class PullRequestMerger {
         upToDate: baseSha ? await this.upToDate(repo, pr, baseSha) : null,
         openFindings: await openFindingsFor(this.findings, project.id, repo, pr, "merge-pr"),
         readyForReview: ticket?.stage === "ready_for_review",
+        mainChecks: pr.intoDefaultBranch
+          ? await readMainChecks(host, repo, pr.baseRef, baseSha, "merge-pr")
+          : NOT_MAIN,
       },
       mode,
+      { ownerApproval },
     );
     const allGateReasons = [...gateReasons, ...fork];
     const result: MergePrResult = {
@@ -257,12 +337,34 @@ export class PullRequestMerger {
     const found = await this.queuedPr(repo, entry);
     if ("gone" in found) return { state: "gone", detail: found.gone };
     const { project, pr } = found;
-    const judged = await this.evaluate(project, repo, pr);
+    // AI-388: Andy's approval covers this head only while the PR's own diff is the one he approved.
+    let ownerApproval = false;
+    if (entry.approval === "owner") {
+      const digest = await this.host!.diffDigest(repo, pr.number);
+      if (!digest || digest !== entry.approvedDiff) {
+        log("WARNING", "merge_pr owner approval stale", {
+          repo,
+          pr: pr.number,
+          headSha: pr.headSha,
+        });
+        return { state: "ineligible", headSha: pr.headSha, reasons: [APPROVAL_STALE] };
+      }
+      ownerApproval = true;
+    }
+    const judged = await this.evaluate(project, repo, pr, ownerApproval);
     const reasons = [...judged.verdict.reasons, ...judged.result.gateReasons];
     if (judged.state === "merge") {
       return { state: "merge", headSha: pr.headSha, baseRef: pr.baseRef, baseSha: judged.baseSha! };
     }
     if (judged.state === "behind") return { state: "behind", headSha: pr.headSha };
+    if (judged.state === "held") {
+      return {
+        state: "held",
+        headSha: pr.headSha,
+        checks: judged.verdict.mainRedChecks,
+        mainSha: judged.baseSha,
+      };
+    }
     return { state: judged.state, headSha: pr.headSha, reasons };
   }
 
@@ -299,7 +401,7 @@ export class PullRequestMerger {
     try {
       const mergeSha = await this.host!.mergePullRequest(repo, pr.number, headSha);
       log("INFO", "merge_pr merged", { ...base, mode, mergeSha });
-      await this.record(ticket, actor, mergeRecord(pr, mode, actor));
+      await this.record(ticket, actor, mergeRecord(pr, mode, actor, entry.approval === "owner"));
       return { merged: true, sha: mergeSha };
     } catch (err) {
       const mergeError = errorText(err);
@@ -314,11 +416,22 @@ export class PullRequestMerger {
   }
 
   /** The queue's drop on the PR's ticket: flagged for Andy's Needs-you inbox, or a comment only. */
-  private async queueNeedsYou(repo: string, entry: MergeQueueEntry, reason: string, flag: boolean) {
+  private async queueNeedsYou(
+    repo: string,
+    entry: MergeQueueEntry,
+    reason: string,
+    flag: boolean,
+    note: "dropped" | "held" = "dropped",
+  ) {
     const found = await this.queuedPr(repo, entry);
     const ticket = "gone" in found ? null : await this.ticketOf(found.project, found.pr);
     if (!ticket) {
-      log("WARNING", "merge queue drop with no ticket to flag", { repo, pr: entry.number, reason });
+      log("WARNING", "merge queue drop with no ticket to flag", {
+        repo,
+        pr: entry.number,
+        reason,
+        note,
+      });
       return;
     }
     if (flag) {
@@ -332,7 +445,9 @@ export class PullRequestMerger {
     await this.record(
       ticket,
       "system",
-      `${flag ? "Needs you: " : ""}the merge queue dropped PR #${entry.number} (asked by ${entry.enqueuedBy}): ${reason}. Call merge_pr again once it is clean on the latest default branch, or merge it yourself.`,
+      note === "held"
+        ? `${flag ? "Needs you: " : ""}the merge queue is holding PR #${entry.number} (asked by ${entry.enqueuedBy}): ${reason}. It stays queued and merges once the default branch is green, with no second call.`
+        : `${flag ? "Needs you: " : ""}the merge queue dropped PR #${entry.number} (asked by ${entry.enqueuedBy}): ${reason}. ${entry.approval === "owner" ? "Click Merge again" : "Call merge_pr again"} once it is clean on the latest default branch, or merge it yourself.`,
     );
   }
 
@@ -346,7 +461,9 @@ export class PullRequestMerger {
     if (!pr || pr.state !== "open") {
       return { gone: `PR #${entry.number} is ${pr?.state ?? "not found"}` };
     }
-    if (AGENT_BRANCH.test(pr.headRef)) return { gone: `PR #${entry.number} is a build agent's PR` };
+    if (AGENT_BRANCH.test(pr.headRef) && entry.approval !== "owner") {
+      return { gone: `PR #${entry.number} is a build agent's PR` };
+    }
     return { project, pr };
   }
 
@@ -387,6 +504,16 @@ export class PullRequestMerger {
   }
 }
 
-function mergeRecord(pr: PullRequest, mode: MergeMode | null, actor: EventActor): string {
-  return `merge_pr merged PR #${pr.number} at ${pr.headSha.slice(0, 12)}, asked by ${actor}, under merge mode ${mode}: verdict merge (every check and both reviews passed on that head, and it contains the latest default branch).`;
+function mergeRecord(
+  pr: PullRequest,
+  mode: MergeMode | null,
+  actor: EventActor,
+  ownerApproval: boolean,
+): string {
+  const checked =
+    "verdict merge (every check and both reviews passed on that head, and it contains the latest default branch).";
+  if (ownerApproval) {
+    return `Merged PR #${pr.number} at ${pr.headSha.slice(0, 12)} on Andy's Merge in the web app (ADR-0157), which waives what merge mode ${mode} keeps for him: ${checked}`;
+  }
+  return `merge_pr merged PR #${pr.number} at ${pr.headSha.slice(0, 12)}, asked by ${actor}, under merge mode ${mode}: ${checked}`;
 }

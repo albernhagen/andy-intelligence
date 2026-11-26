@@ -1,6 +1,6 @@
 ---
 title: Night story merges into the epic branch, Done there; one morning PR
-status: proposed (AI-124; Andy decides at review)
+status: accepted (Andy, 2026-11-25)
 date: 2026-11-20
 amends: 0049 (how "Epic branch" and "Morning review" are built), 0056 (which merge completes a ticket)
 ---

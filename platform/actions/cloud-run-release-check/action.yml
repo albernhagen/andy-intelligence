@@ -1,0 +1,72 @@
+name: Baseline — Cloud Run release check
+description: >-
+  Before a promote or rollback changes anything (AI-190: M6.11, ADR-0114): checks that the image
+  digest is in the registry (promote) or that the revision belongs to the service and is ready
+  (rollback), and fails the job otherwise. Outputs the image digest the Deployment record needs and
+  the service's URL. Read-only; the caller authenticates to GCP first.
+
+inputs:
+  action:
+    description: "`promote` or `rollback` (already checked by `scripts/cloud-run-release.mjs inputs`)."
+    required: true
+  service:
+    description: Cloud Run service name.
+    required: true
+  region:
+    description: Cloud Run region.
+    required: true
+  image:
+    description: "`promote`: the image repository and name, without tag or digest."
+    required: false
+    default: ""
+  digest:
+    description: "`promote`: the image digest to ship (`sha256:…`)."
+    required: false
+    default: ""
+  revision:
+    description: "`rollback`: the revision to return to."
+    required: false
+    default: ""
+
+outputs:
+  image-digest:
+    description: The digest the release ships (for a rollback, the revision's image).
+    value: ${{ steps.exists.outputs.image_digest }}
+  url:
+    description: Where the service answers (its PUBLIC_URL, else its run.app URL).
+    value: ${{ steps.target.outputs.url }}
+
+runs:
+  using: composite
+  steps:
+    - name: Check the digest or revision exists
+      id: exists
+      shell: bash
+      env:
+        ACTION: ${{ inputs.action }}
+        SERVICE: ${{ inputs.service }}
+        REGION: ${{ inputs.region }}
+        IMAGE: ${{ inputs.image }}
+        DIGEST: ${{ inputs.digest }}
+        REVISION: ${{ inputs.revision }}
+      run: |
+        script="$GITHUB_ACTION_PATH/../../../scripts/cloud-run-release.mjs"
+        case "$ACTION" in
+          promote)
+            gcloud artifacts docker images describe "$IMAGE@$DIGEST" --format=json |
+              node "$script" image "$DIGEST" ;;
+          rollback)
+            gcloud run revisions describe "$REVISION" --region "$REGION" --format=json |
+              node "$script" revision "$SERVICE" ;;
+          *) echo "::error::action must be promote or rollback"; exit 1 ;;
+        esac
+
+    - name: Read the service
+      id: target
+      shell: bash
+      env:
+        SERVICE: ${{ inputs.service }}
+        REGION: ${{ inputs.region }}
+      run: |
+        gcloud run services describe "$SERVICE" --region "$REGION" --format=json |
+          node "$GITHUB_ACTION_PATH/../../../scripts/cloud-run-release.mjs" target

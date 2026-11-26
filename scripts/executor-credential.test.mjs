@@ -41,7 +41,7 @@ function stepScript(lines, name) {
   return body.map((l) => l.slice(pad)).join("\n");
 }
 
-const JOBS = ["context", "agent", "publish", "report"];
+const JOBS = ["context", "deps", "agent", "publish", "report"];
 
 function checkCredential(env) {
   const dir = mkdtempSync(join(tmpdir(), "credential-step-"));

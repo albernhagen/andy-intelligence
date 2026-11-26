@@ -1,5 +1,6 @@
 import type { Page } from "@playwright/test";
-import type { ProjectPlan } from "@andy/contracts";
+import type { Onboarding, ProjectPlan } from "@andy/contracts";
+import { onboardingFixture } from "../src/lib/onboarding-fixture";
 
 /**
  * AI-373: the setup path's reads for the screenshots. The fake API (e2e/fake-api.ts) has no
@@ -9,7 +10,21 @@ import type { ProjectPlan } from "@andy/contracts";
 
 const PROJECT = "ai";
 
+/** AI-381: the onboarding steps, served as given (the fake API has no GitHub). */
+export async function mockOnboarding(page: Page, onboarding: Onboarding) {
+  await page.route(`**/api/projects/${PROJECT}/onboarding*`, (route) =>
+    route.fulfill({ json: onboarding }),
+  );
+}
+
+/** Every GitHub and terminal step done; the refine and builds still to come. */
+export const HAND_STEPS_DONE = onboardingFixture(
+  { proving_refine: "not_yet", builds_on: "not_yet" },
+  { marked: ["reusable_workflows", "reviewer_token", "agent_environment"] },
+);
+
 export async function mockBriefStep(page: Page) {
+  await mockOnboarding(page, HAND_STEPS_DONE);
   await page.route(`**/api/projects/${PROJECT}/brief`, (route) =>
     route.request().method() === "GET"
       ? route.fulfill({
@@ -68,6 +83,7 @@ export const PROPOSED_PLAN: ProjectPlan = {
 
 /** The approve step: the brief merged and a plan waiting. */
 export async function mockApproveStep(page: Page) {
+  await mockOnboarding(page, HAND_STEPS_DONE);
   await page.route(`**/api/projects/${PROJECT}/brief`, (route) =>
     route.request().method() === "GET"
       ? route.fulfill({ json: { readable: true, onDefaultBranch: true, prefill: {} } })

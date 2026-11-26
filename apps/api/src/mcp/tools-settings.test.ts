@@ -93,6 +93,8 @@ describe("get_project_settings", () => {
       executor: "local",
       emailNotifications: false,
       environments: "dev-and-prod",
+      deployKind: "cloud-run",
+      prSync: "all",
       lastDispatch: { decision: "paused", at: "2026-11-09T12:00:00.000Z" },
     });
 
@@ -117,6 +119,9 @@ describe("get_project_settings", () => {
       executor: "local",
       emailNotifications: false,
       environments: "dev-and-prod",
+      deployKind: "cloud-run",
+      prSync: "all",
+      logoUpdatedAt: null,
       lastDispatch: { decision: "paused", at: "2026-11-09T12:00:00.000Z" },
     });
   });
@@ -218,7 +223,75 @@ describe("set_environments (AI-160)", () => {
   });
 });
 
+/** AI-388 (ADR-0157): which open PRs are kept up to date. */
+describe("set_pr_sync (AI-388)", () => {
+  it("GivenANewProject_WhenSetToAll_ThenSavedReadBackAndRevertable", async () => {
+    const ctx = await setup();
+    expect((await ctx.call("get_project_settings", { project: "AI" })).data).toMatchObject({
+      prSync: "queue",
+    });
+
+    const res = await ctx.call("set_pr_sync", { project: "ai", prSync: "all" });
+
+    expect(res.data).toEqual({ project: "AI", prSync: "all" });
+    expect((await ctx.tracker.getProject("ops"))?.prSync).toBe("queue");
+    const [change] = (await ctx.call("list_settings_changes", { project: "AI" })).data.changes;
+    expect(change.diff).toEqual({ prSync: { from: "queue", to: "all" } });
+    expect(
+      (await ctx.call("revert_settings_change", { project: "AI", id: change.id })).isError,
+    ).toBe(false);
+    expect((await ctx.tracker.getProject("ai"))?.prSync).toBe("queue");
+  });
+
+  it("GivenAnUnknownValue_WhenSet_ThenRefusedAndNothingChanges", async () => {
+    const ctx = await setup();
+    expect((await ctx.call("set_pr_sync", { project: "AI", prSync: "none" })).isError).toBe(true);
+    expect((await ctx.tracker.getProject("ai"))?.prSync).toBe("queue");
+  });
+});
+
 /** ADR-0124: merge modes, stored only (AI-214). The page's PATCH and MCP share one rule (AI-40). */
+describe("set_deploy_kind (AI-387)", () => {
+  it("GivenANewProject_WhenSetToCloudRun_ThenSavedReadBackAndRevertable", async () => {
+    const ctx = await setup();
+    expect((await ctx.call("get_project_settings", { project: "AI" })).data).toMatchObject({
+      deployKind: "none",
+    });
+
+    const res = await ctx.call("set_deploy_kind", { project: "ai", deployKind: "cloud-run" });
+
+    expect(res.data).toEqual({ project: "AI", deployKind: "cloud-run" });
+    expect((await ctx.tracker.getProject("ai"))?.deployKind).toBe("cloud-run");
+    expect((await ctx.tracker.getProject("ops"))?.deployKind).toBe("none");
+
+    const [change] = (await ctx.call("list_settings_changes", { project: "AI" })).data.changes;
+    expect(change.diff).toEqual({ deployKind: { from: "none", to: "cloud-run" } });
+    expect(
+      (await ctx.call("revert_settings_change", { project: "AI", id: change.id })).isError,
+    ).toBe(false);
+    expect((await ctx.tracker.getProject("ai"))?.deployKind).toBe("none");
+  });
+
+  it("GivenAnUnknownKindOrProject_WhenSet_ThenRefusedAndNothingChanges", async () => {
+    const ctx = await setup();
+    // A Deployment record's kind is not a deploy kind.
+    expect(
+      (await ctx.call("set_deploy_kind", { project: "AI", deployKind: "deploy" })).isError,
+    ).toBe(true);
+    expect(
+      (await ctx.call("set_deploy_kind", { project: "NOPE", deployKind: "cloud-run" })).isError,
+    ).toBe(true);
+    expect((await ctx.tracker.getProject("ai"))?.deployKind).toBe("none");
+  });
+
+  it("GivenTheSettingsPageRoute_WhenPatched_ThenTheSameFieldIsSaved", async () => {
+    const ctx = await setup();
+    expect((await ctx.rest("/api/projects/ai", { deployKind: "cloud-run" })).status).toBe(200);
+    expect((await ctx.rest("/api/projects/ai", { deployKind: "vercel" })).status).toBe(400);
+    expect((await ctx.tracker.getProject("ai"))?.deployKind).toBe("cloud-run");
+  });
+});
+
 describe("set_merge_mode and the settings route", () => {
   const log = async (ctx: Awaited<ReturnType<typeof setup>>, project = "AI") =>
     (await ctx.call("list_settings_changes", { project })).data;

@@ -1,4 +1,11 @@
-import { EnvironmentPolicy, MergeMode, Project, WorkTrackerError } from "@andy/contracts";
+import {
+  DeployKind,
+  EnvironmentPolicy,
+  PrSync,
+  MergeMode,
+  Project,
+  WorkTrackerError,
+} from "@andy/contracts";
 import { MERGE_MODE_TEXT, effectiveMergeMode, suggestedMergeMode } from "@andy/domain";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
@@ -6,8 +13,8 @@ import { z } from "zod";
 import type { ToolDeps } from "./tools";
 
 /**
- * Every per-project setting the settings page shows (AI-46), and the environment policy's setter
- * (AI-160). Builds is read here and set only in the app (ADR-0063).
+ * Every per-project setting the settings page shows (AI-46), and their setters (environment policy
+ * AI-160, deploy kind AI-387, ...). Builds is read here and set only in the app (ADR-0063).
  */
 
 type Run = <T extends object>(fn: () => Promise<T>) => Promise<CallToolResult>;
@@ -41,6 +48,10 @@ export const settingsOf = (p: Project) => ({
   executor: p.executor,
   emailNotifications: p.emailNotifications,
   environments: p.environments,
+  deployKind: p.deployKind,
+  prSync: p.prSync,
+  // AI-393: when the logo last changed, null for the default mark; `get_project_logo` reads it.
+  logoUpdatedAt: p.logoUpdatedAt,
   lastDispatch: p.lastDispatch,
 });
 
@@ -48,6 +59,22 @@ const EnvironmentsInput = {
   project: SettingsInput.project,
   environments: EnvironmentPolicy.describe(
     "prod-only (default): one prod environment plus PR previews. dev-and-prod: releases go to dev first, then are promoted to prod.",
+  ),
+};
+
+// AI-387: how a project ships (ADR-0114). Not a Deployment record's kind (deploy/promote/rollback).
+const DeployKindInput = {
+  project: SettingsInput.project,
+  deployKind: DeployKind.describe(
+    "none (default): the project does not deploy. cloud-run: it ships to Cloud Run on GCP, and its environments setting applies.",
+  ),
+};
+
+// AI-388: which open PRs are kept up to date (ADR-0157).
+const PrSyncInput = {
+  project: SettingsInput.project,
+  prSync: PrSync.describe(
+    "queue (default): only the PR next in the merge queue is synced with main, by the queue. all: after each merge the re-sync workflow merges main into every open PR (each one's checks run again).",
   ),
 };
 
@@ -77,7 +104,7 @@ export function registerSettingsTools(
     "get_project_settings",
     {
       description:
-        "Reads every setting of one project: Builds (buildEnabled, with who turned it on or off and when; set only in the app), auto-build, plan approval, auto-refine, questions per day, merge mode (mergeMode: who merges PRs; null until one is saved, and then nothing merges without Andy; suggestedMergeMode while unset), agent tasks at once (runsAtOnce), paused, default worker, default executor (actions or local), email notifications (sent only once email is configured: set_email_notifications says), release environments (prod-only or dev-and-prod), and the dispatcher's last decision (lastDispatch: why it is idle, or what it did). Each setting has its own set_* tool except Builds.",
+        "Reads every setting of one project: Builds (buildEnabled, with who turned it on or off and when; set only in the app), auto-build, plan approval, auto-refine, questions per day, merge mode (mergeMode: who merges PRs; null until one is saved, and then nothing merges without Andy; suggestedMergeMode while unset), agent tasks at once (runsAtOnce), paused, default worker, default executor (actions or local), email notifications (sent only once email is configured: set_email_notifications says), release environments (prod-only or dev-and-prod; read only when deployKind is cloud-run), deploy kind (deployKind: none or cloud-run), PR sync (prSync: queue or all), when the logo last changed (logoUpdatedAt, null for the default mark; get_project_logo reads it), and the dispatcher's last decision (lastDispatch: why it is idle, or what it did). Each setting has its own set_* tool except Builds.",
       inputSchema: SettingsInput,
       annotations: { readOnlyHint: true },
     },
@@ -106,6 +133,46 @@ export function registerSettingsTools(
           { actor: deps.actor, email: deps.email },
         );
         return { project: updated.key, environments: updated.environments };
+      }),
+  );
+
+  // AI-387: the deploy kind; same rule as PATCH /api/projects/{id} (AI-40 parity).
+  server.registerTool(
+    "set_deploy_kind",
+    {
+      description:
+        "Sets how a project ships: none (default; it does not deploy) or cloud-run (Cloud Run on GCP). The environments setting is read only while it is cloud-run. Only Andy. Nothing deploys from it yet; later M6 tickets read it. Logged in the config change log.",
+      inputSchema: DeployKindInput,
+      annotations: { destructiveHint: false, idempotentHint: true, openWorldHint: false },
+    },
+    ({ project, deployKind }) =>
+      run(async () => {
+        const updated = await deps.projects.update(
+          project.toLowerCase(),
+          { deployKind },
+          { actor: deps.actor, email: deps.email },
+        );
+        return { project: updated.key, deployKind: updated.deployKind };
+      }),
+  );
+
+  // AI-388: PR sync; same rule as PATCH /api/projects/{id} (AI-40 parity).
+  server.registerTool(
+    "set_pr_sync",
+    {
+      description:
+        "Sets which open PRs are kept up to date with main: queue (default; only the PR next in the merge queue is synced, by the queue, so each merge reruns one PR's checks) or all (after each merge the re-sync workflow merges main into every open PR, ADR-0111). The repo variable RESYNC_PRS still pauses the workflow. Only Andy. Logged in the config change log.",
+      inputSchema: PrSyncInput,
+      annotations: { destructiveHint: false, idempotentHint: true, openWorldHint: false },
+    },
+    ({ project, prSync }) =>
+      run(async () => {
+        const updated = await deps.projects.update(
+          project.toLowerCase(),
+          { prSync },
+          { actor: deps.actor, email: deps.email },
+        );
+        return { project: updated.key, prSync: updated.prSync };
       }),
   );
 

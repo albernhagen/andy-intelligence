@@ -17,6 +17,12 @@ export const WaitingMergeNote = z.object({
 });
 export type WaitingMergeNote = z.infer<typeof WaitingMergeNote>;
 
+export const WaitingMergeQueue = z.object({
+  position: z.number().int().positive(),
+  note: z.string().max(500).nullable(),
+});
+export type WaitingMergeQueue = z.infer<typeof WaitingMergeQueue>;
+
 export const WaitingMerge = z.object({
   projectId: z.string(),
   ticketKey: z.string(),
@@ -29,6 +35,11 @@ export const WaitingMerge = z.object({
   reasons: z.array(MergeWaitReason),
   /** Null when the PR's description couldn't be read or has no release-note block. */
   note: WaitingMergeNote.nullable(),
+  /**
+   * In its repo's merge queue (AI-388): its place (1: next) and what the queue last did or waits
+   * for. Null when not queued, or the queue couldn't be read.
+   */
+  queue: WaitingMergeQueue.nullable().default(null),
 });
 export type WaitingMerge = z.infer<typeof WaitingMerge>;
 

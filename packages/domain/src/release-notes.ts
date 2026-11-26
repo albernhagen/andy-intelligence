@@ -239,7 +239,7 @@ export function whatsNewWindow(now: Date, since?: string, until?: string): Whats
 const DONE_STAGES = new Set(["done"]);
 
 /** The top-level epic over a ticket (itself when it is one); null when it has none. */
-function topEpic(ticket: Ticket, byId: ReadonlyMap<string, Ticket>): Ticket | null {
+export function topEpic(ticket: Ticket, byId: ReadonlyMap<string, Ticket>): Ticket | null {
   let top: Ticket | null = ticket.type === "epic" ? ticket : null;
   let current = ticket;
   // Bounded walk: a parent cycle can't loop forever.
@@ -271,7 +271,8 @@ export function milestoneStatus(tickets: readonly Ticket[]): WhatsNewMilestone[]
       needsYou: 0,
     };
     if (t.stage === "done") row.done++;
-    else if (t.stage === "ready_for_review") row.inReview++;
+    // AI-181: Verifying (merged, not yet verified) counts as in review, as on the roadmap.
+    else if (t.stage === "ready_for_review" || t.stage === "verifying") row.inReview++;
     else if (t.stage === "in_progress") row.inProgress++;
     else row.notStarted++;
     if (t.needsAttention && !t.archived && t.stage !== "done") row.needsYou++;

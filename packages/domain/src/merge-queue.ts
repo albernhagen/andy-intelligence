@@ -30,6 +30,11 @@ import type { MergeVerdict } from "./merge-verdict";
  *   to the judged head. A head already up to date and clean merges with no extra round.
  * - **Drop**: failed checks, a cap, or a PR that stops being clean leaves the queue; failed checks
  *   and caps flag its ticket (Andy's Needs-you inbox), a PR no longer clean gets a ticket comment.
+ * - **Hold** (AI-382, ADR-0154): while a required check has failed on the default branch's head
+ *   (`main_red` in the verdict), the head entry waits and nothing merges or syncs; its own hold
+ *   cap is paused. The repo's record keeps when the hold began; past `MAX_MAIN_RED_HOLD_MS` one
+ *   Needs-you note names the failing checks. The first judgement with main not red releases it,
+ *   from a check-run event (main's checks finishing) or a push: no polling.
  *
  * The queue moves on events (webhooks, `merge_pr` calls): no polling job. The hold cap is checked
  * on the next event in its repo.
@@ -39,6 +44,14 @@ import type { MergeVerdict } from "./merge-verdict";
 export const MAX_SYNCS_PER_PR = 3;
 /** How long a PR may be judged without merging (ADR-0028) before it is dropped. */
 export const MAX_HEAD_HOLD_MS = 60 * 60_000;
+/**
+ * How long a red default branch may hold a repo's queue (ADR-0028) before one Needs-you note is
+ * raised (AI-382). Long enough for a flaky check's re-run, short enough that a real break in a
+ * project with no coordinator reaches Andy within the hour.
+ */
+export const MAX_MAIN_RED_HOLD_MS = 30 * 60_000;
+/** A stored check name's longest: longer names are cut so the record always parses. */
+const MAX_CHECK_NAME = 256;
 /** A lease covers one judge-and-merge; a holder gone longer than this is taken over. */
 export const MERGE_QUEUE_LEASE_MS = 90_000;
 /** Heads one advance handles at most (each costs host reads, ADR-0028). */
@@ -61,6 +74,8 @@ export type QueueJudgement =
   | { state: "merge"; headSha: string; baseRef: string; baseSha: string }
   /** Clean except that it lacks the default branch's tip. */
   | { state: "behind"; headSha: string }
+  /** Clean or not, it can't merge: a required check failed on the default branch's head. */
+  | { state: "held"; headSha: string; checks: string[]; mainSha: string | null }
   /** Checks, reviews or a sync still running, or a fact not readable yet. */
   | { state: "pending"; headSha: string; reasons: string[] }
   /** A check failed. */
@@ -76,13 +91,23 @@ export interface QueueJudge {
   judge(repo: string, entry: MergeQueueEntry): Promise<QueueJudgement>;
   /** Merges pinned to `headSha` and records it; a host refusal is returned, not thrown. */
   merge(repo: string, entry: MergeQueueEntry, headSha: string): Promise<QueueMergeResult>;
-  /** Asks the existing path to merge the default branch into the PR. */
-  requestSync(repo: string, entry: MergeQueueEntry, headSha: string): Promise<void>;
+  /**
+   * Merges the default branch into the PR, or asks the existing path to. `conflict` (AI-388): it
+   * can't merge cleanly, so the PR leaves the queue with a Needs-you note.
+   */
+  requestSync(repo: string, entry: MergeQueueEntry, headSha: string): Promise<void | "conflict">;
   /**
    * Records why the queue dropped the PR on its ticket; `flag` also puts it in Andy's Needs-you
    * inbox (failed checks, caps), otherwise a comment only (no longer clean).
    */
-  needsYou(repo: string, entry: MergeQueueEntry, reason: string, flag: boolean): Promise<void>;
+  needsYou(
+    repo: string,
+    entry: MergeQueueEntry,
+    reason: string,
+    flag: boolean,
+    /** `held` (AI-382): the PR stays queued; the note must not say it was dropped. */
+    note?: "dropped" | "held",
+  ): Promise<void>;
 }
 
 export interface QueueOffer {
@@ -92,6 +117,11 @@ export interface QueueOffer {
   /** Who asked: `system` for the gate, the caller for `merge_pr`. */
   actor: string;
   headSha: string;
+  /**
+   * AI-388 (ADR-0157): Andy's own ask from the web app, with the PR's diff he approved. Set only by
+   * the owner route; an offer with it replaces an entry's earlier approval.
+   */
+  approval?: { by: "owner"; diff: string };
 }
 
 /** What happened to one PR in an advance. */
@@ -110,23 +140,31 @@ const PENDING_VERDICT: readonly MergeWaitReason[] = [
   "up_to_date_unknown",
   "labels_unknown",
   "review_findings_unknown",
+  "main_checks_unknown",
 ];
 const PENDING_GATE: readonly GateReason[] = ["checks_pending", "checks_incomplete", "sync_pending"];
 
 /**
  * The queue's reading of a merge verdict and the gate's reasons: `merge`, `behind` (clean but
- * lacks the default branch), `pending`, `failed` (a check failed) or `ineligible`. A reason it
- * doesn't know is `ineligible`: the queue never merges past it.
+ * lacks the default branch), `held` (main is red: it waits in the queue, never dropped, synced or
+ * merged), `pending`, `failed` (a check failed) or `ineligible`. A reason it doesn't know is
+ * `ineligible`: the queue never merges past it. `held` comes before `failed`: a PR's checks may
+ * fail only because the red main was synced into it.
  */
 export function queueStateOf(
   verdict: Pick<MergeVerdict, "verdict" | "reasons">,
   gateReasons: readonly string[],
-): "merge" | "behind" | "pending" | "failed" | "ineligible" {
+): "merge" | "behind" | "held" | "pending" | "failed" | "ineligible" {
   if (verdict.verdict === "merge") return "merge";
   let failed = false;
   let pending = false;
   let behind = false;
+  let held = false;
   for (const reason of verdict.reasons) {
+    if (reason === "main_red") {
+      held = true;
+      continue;
+    }
     if (reason === "behind_default_branch") {
       behind = true;
       continue;
@@ -144,6 +182,7 @@ export function queueStateOf(
       else return "ineligible";
     }
   }
+  if (held) return "held";
   if (failed) return "failed";
   if (pending) return "pending";
   return behind ? "behind" : "ineligible";
@@ -154,6 +193,22 @@ type Then = "rescan" | "skip" | "stop";
 type Step =
   | { kind: "remove"; outcome: QueueOutcome; then: Then }
   | { kind: "keep"; outcome: QueueOutcome; patch: Partial<MergeQueueEntry>; then: Then };
+
+/** A judgement that shows the default branch isn't red: releases a hold (AI-382). */
+const mainNotRed = (j: QueueJudgement) =>
+  j.state !== "gone" &&
+  j.state !== "held" &&
+  !("reasons" in j && j.reasons.some((r) => r === "main_red" || r === "main_checks_unknown"));
+
+/** Log fields of a hold: since when and on which checks. */
+const held = (q: Pick<MergeQueueState, "mainRed">, now: Date) =>
+  q.mainRed
+    ? {
+        since: q.mainRed.since,
+        checks: q.mainRed.checks,
+        heldMs: now.getTime() - Date.parse(q.mainRed.since),
+      }
+    : {};
 
 /** Parked: waiting on a sync it asked for, with no newer head seen. */
 const parked = (e: MergeQueueEntry) =>
@@ -192,23 +247,21 @@ export class MergeQueue {
       const at = q.entries.findIndex((e) => e.number === offer.number);
       if (at >= 0) {
         const entries = [...q.entries];
-        if (entries[at]!.headSha === offer.headSha) return { next: null, result: "kept" as const };
-        entries[at] = { ...entries[at]!, headSha: offer.headSha };
+        const was = entries[at]!;
+        const approval = offer.approval
+          ? { approval: offer.approval.by, approvedDiff: offer.approval.diff }
+          : {};
+        const same =
+          was.headSha === offer.headSha &&
+          (!offer.approval ||
+            (was.approval === offer.approval.by && was.approvedDiff === offer.approval.diff));
+        if (same) return { next: null, result: "kept" as const };
+        entries[at] = { ...was, headSha: offer.headSha, ...approval };
         return { next: { ...q, entries }, result: "kept" as const };
       }
       if (q.entries.length >= MERGE_QUEUE_MAX_ENTRIES)
         return { next: null, result: "full" as const };
-      const entry: MergeQueueEntry = {
-        projectId: offer.projectId,
-        number: offer.number,
-        kind: offer.kind,
-        enqueuedAt: this.now().toISOString(),
-        enqueuedBy: offer.actor,
-        headSha: offer.headSha,
-        syncs: 0,
-        syncRequestedSha: null,
-        judgedSince: null,
-      };
+      const entry = this.entryOf(offer);
       return { next: { ...q, entries: [...q.entries, entry] }, result: "added" as const };
     });
     if (added === "full") {
@@ -234,14 +287,23 @@ export class MergeQueue {
 
   /**
    * Advances the queue for a webhook: when the default branch moved, when the event is about a
-   * queued PR (its checks, a push, a close), or when a queued PR is past its hold cap (so any
-   * event in the repo drops a stuck one). Other events cost one store read and no host reads.
+   * queued PR (its checks, a push, a close), when a queued PR is past its hold cap (so any event
+   * in the repo drops a stuck one), and while the queue is held for a red main (AI-382): on a
+   * check run completed on the red tip (`completedCheckSha`; main's own checks name no PR), or
+   * once the hold is past its cap. A check run on any other commit doesn't wake it, so pushing
+   * branches can't buy judgements. Other events cost one store read and no host reads.
    */
-  async advanceFor(repo: string, prNumbers: readonly number[], defaultBranchMoved: boolean) {
-    const { entries } = await this.store.get(repo);
-    if (entries.length === 0) return [];
-    const named = entries.some((e) => prNumbers.includes(e.number));
-    if (!defaultBranchMoved && !named && !entries.some((e) => this.stale(e))) return [];
+  async advanceFor(
+    repo: string,
+    prNumbers: readonly number[],
+    defaultBranchMoved: boolean,
+    completedCheckSha: string | null = null,
+  ) {
+    const q = await this.store.get(repo);
+    if (q.entries.length === 0) return [];
+    const named = q.entries.some((e) => prNumbers.includes(e.number));
+    const held = q.mainRed !== null && (this.onRedTip(q, completedCheckSha) || this.redPastCap(q));
+    if (!defaultBranchMoved && !named && !held && !q.entries.some((e) => this.stale(e))) return [];
     return this.advance(repo, prNumbers);
   }
 
@@ -291,6 +353,21 @@ export class MergeQueue {
       log("ERROR", "merge queue advance failed", { repo: key, error: errorText(err) });
     }
     return outcomes;
+  }
+
+  /** A check run completed on the tip the hold was judged on (any commit when that isn't known). */
+  private onRedTip(q: MergeQueueState, completedCheckSha: string | null): boolean {
+    if (completedCheckSha === null || q.mainRed === null) return false;
+    return q.mainRed.sha === null || q.mainRed.sha === completedCheckSha;
+  }
+
+  /** Held for a red main past the cap with no Needs-you note raised yet. */
+  private redPastCap(q: MergeQueueState): boolean {
+    return (
+      q.mainRed !== null &&
+      q.mainRed.raisedAt === null &&
+      this.now().getTime() - Date.parse(q.mainRed.since) > MAX_MAIN_RED_HOLD_MS
+    );
   }
 
   private stale(e: MergeQueueEntry): boolean {
@@ -362,8 +439,89 @@ export class MergeQueue {
         else entries[at] = { ...entries[at]!, ...step.patch };
       }
       const lease = q.lease?.holder === holder ? null : q.lease;
-      return { next: { ...q, entries, lease }, result: undefined };
+      // An empty queue holds nothing: a red main no PR waits on is not a hold.
+      if (entries.length === 0 && q.mainRed) {
+        log("INFO", "merge queue release main_red", {
+          repo,
+          why: "queue empty",
+          ...held(q, this.now()),
+        });
+      }
+      const mainRed = entries.length === 0 ? null : q.mainRed;
+      return { next: { ...q, entries, lease, mainRed }, result: undefined };
     });
+  }
+
+  /**
+   * Holds the queue for a red main (AI-382): records when the hold began (logged once), pauses
+   * every entry's own hold cap, and past `MAX_MAIN_RED_HOLD_MS` raises one Needs-you note on the
+   * head entry's ticket naming the checks.
+   */
+  private async hold(
+    repo: string,
+    head: MergeQueueEntry,
+    checks: string[],
+    sha: string | null,
+  ): Promise<void> {
+    const now = this.now();
+    const named = checks.length > 0 ? checks.join(", ") : "a required check";
+    const change = await this.write(repo, (q) => {
+      const since = q.mainRed?.since ?? now.toISOString();
+      const pastCap = now.getTime() - Date.parse(since) > MAX_MAIN_RED_HOLD_MS;
+      const raise = pastCap && !q.mainRed?.raisedAt;
+      const mainRed = {
+        since,
+        checks: checks.slice(0, 20).map((c) => c.slice(0, MAX_CHECK_NAME)),
+        raisedAt: raise ? now.toISOString() : (q.mainRed?.raisedAt ?? null),
+        sha,
+      };
+      const same =
+        q.mainRed !== null &&
+        !raise &&
+        q.mainRed.sha === sha &&
+        q.mainRed.checks.join("\n") === mainRed.checks.join("\n");
+      // Every entry's own hold cap is paused while held: none is dropped as stuck on a red main.
+      const entries = q.entries.map((e) => (e.judgedSince ? { ...e, judgedSince: null } : e));
+      const paused = entries.some((e, i) => e !== q.entries[i]);
+      return {
+        next: same && !paused ? null : { ...q, entries, mainRed },
+        result: { started: q.mainRed === null, raise, since },
+      };
+    });
+    if (change.started) {
+      log("WARNING", "merge queue hold main_red", { repo, pr: head.number, checks });
+    }
+    if (change.raise) {
+      const minutes = MAX_MAIN_RED_HOLD_MS / 60_000;
+      log("WARNING", "merge queue main_red past cap", {
+        repo,
+        pr: head.number,
+        checks,
+        since: change.since,
+      });
+      await this.notify(
+        repo,
+        head,
+        `the default branch of ${repo} has been red for over ${minutes} minutes (failing: ${named}), so every merge into it is held; fix or re-run ${named} on the default branch, or merge by hand`,
+        true,
+        "held",
+      );
+    }
+  }
+
+  /** Clears a hold once a judgement shows main isn't red (AI-382); logged with how long it held. */
+  private async release(repo: string): Promise<void> {
+    const was = await this.write(repo, (q) =>
+      q.mainRed
+        ? { next: { ...q, mainRed: null }, result: q.mainRed }
+        : { next: null, result: null },
+    );
+    if (was)
+      log("INFO", "merge queue release main_red", {
+        repo,
+        why: "main not red",
+        ...held({ mainRed: was }, this.now()),
+      });
   }
 
   private async step(repo: string, holder: string, head: MergeQueueEntry): Promise<Step> {
@@ -376,7 +534,8 @@ export class MergeQueue {
       log("INFO", "merge queue wait", { ...fields, reason });
       return {
         kind: "keep",
-        patch,
+        // What it waits for, shown to Andy (AI-388).
+        patch: { ...patch, lastNote: reason.slice(0, 500) },
         then,
         outcome: { number: head.number, outcome: "waiting", reason },
       };
@@ -405,7 +564,15 @@ export class MergeQueue {
     }
 
     const j = await judge.judge(repo, head);
+    if (mainNotRed(j)) await this.release(repo);
     switch (j.state) {
+      case "held":
+        await this.hold(repo, head, j.checks, j.mainSha);
+        // Paused while held: the head's own hold cap starts again once main is green.
+        return wait(`main_red: ${j.checks.join(", ") || "a required check failed"}`, {
+          headSha: j.headSha,
+          judgedSince: null,
+        });
       case "gone":
         return drop(j.detail, "none");
       case "failed":
@@ -429,7 +596,12 @@ export class MergeQueue {
           );
         }
         log("INFO", "merge queue sync", { ...fields, headSha: j.headSha, syncs: head.syncs + 1 });
-        await judge.requestSync(repo, head, j.headSha);
+        if ((await judge.requestSync(repo, head, j.headSha)) === "conflict") {
+          return drop(
+            `it conflicts with the default branch at ${j.headSha.slice(0, 12)}: resolve the conflict on its branch, then merge it again`,
+            "flag",
+          );
+        }
         return wait(
           "sync requested",
           { headSha: j.headSha, syncs: head.syncs + 1, syncRequestedSha: j.headSha },
@@ -482,6 +654,9 @@ export class MergeQueue {
       syncs: 0,
       syncRequestedSha: null,
       judgedSince: null,
+      approval: offer.approval?.by ?? null,
+      approvedDiff: offer.approval?.diff ?? null,
+      lastNote: null,
     };
   }
 
@@ -491,9 +666,10 @@ export class MergeQueue {
     entry: MergeQueueEntry,
     reason: string,
     flag: boolean,
+    note: "dropped" | "held" = "dropped",
   ): Promise<void> {
     try {
-      await this.judges.get(entry.kind)?.needsYou(repo, entry, reason, flag);
+      await this.judges.get(entry.kind)?.needsYou(repo, entry, reason, flag, note);
     } catch (err) {
       log("ERROR", "merge queue needs-you note failed", {
         repo,

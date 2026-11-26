@@ -1,12 +1,18 @@
-import { InMemoryDeploymentStore, type Project } from "@andy/contracts";
+import {
+  InMemoryDeploymentStore,
+  InMemoryReleaseRequestStore,
+  type Deployment,
+  type Project,
+} from "@andy/contracts";
 import { Hono } from "hono";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import type { AuthEnv } from "./auth";
 import {
   DEPLOYMENTS_PATH,
   DEPLOYMENT_REPORT_RATE_LIMIT,
   deployWorkflowRef,
   registerDeploymentCallbacks,
+  releaseWorkflowRef,
 } from "./deployments";
 import type { ActionsClaims } from "./github/token";
 
@@ -26,7 +32,12 @@ const claims = (overrides: Partial<ActionsClaims> = {}): ActionsClaims => ({
 });
 
 /** `tickMs`: how far the clock moves on each read (0 keeps every call in one rate window). */
-function setup(projects: Record<string, Project> = { [REPO]: project }, tickMs = 60_000) {
+function setup(
+  projects: Record<string, Project> = { [REPO]: project },
+  tickMs = 60_000,
+  releaseRequests?: InMemoryReleaseRequestStore,
+  onFinished?: (deployment: Deployment, project: Project) => Promise<unknown>,
+) {
   const app = new Hono<AuthEnv>();
   const deployments = new InMemoryDeploymentStore();
   let clock = Date.parse("2026-11-21T10:00:00.000Z");
@@ -38,7 +49,9 @@ function setup(projects: Record<string, Project> = { [REPO]: project }, tickMs =
       return JSON.parse(jwt) as ActionsClaims;
     },
     registeredProject: async (repo) => projects[repo] ?? null,
+    ...(releaseRequests ? { releaseRequests } : {}),
     now: () => new Date((clock += tickMs)),
+    ...(onFinished ? { onFinished } : {}),
   });
   const post = (path: string, body: unknown, token: ActionsClaims | string | null = claims()) =>
     app.request(path, {
@@ -59,6 +72,12 @@ function setup(projects: Record<string, Project> = { [REPO]: project }, tickMs =
     post(`/deployments/${id}/finish`, body, token);
   return { deployments, start, finish };
 }
+
+/** release.yml's token: the run started on main at a later commit than the build it ships. */
+const MAIN_SHA = "f".repeat(40);
+const release = (overrides: Partial<ActionsClaims> = {}) =>
+  claims({ workflow_ref: releaseWorkflowRef(REPO), sha: MAIN_SHA, ...overrides });
+const idOf = async (r: Response) => ((await r.json()) as { deploymentId: string }).deploymentId;
 
 describe("deployment reports (AI-180: M6.4)", () => {
   it("GivenTheDeployWorkflowOnMain_WhenItStartsAndFinishes_ThenADeploymentIsRecordedFromTheToken", async () => {
@@ -162,5 +181,293 @@ describe("deployment reports (AI-180: M6.4)", () => {
     const { start } = setup(undefined, 0);
     for (let i = 0; i < DEPLOYMENT_REPORT_RATE_LIMIT; i += 1) await start();
     expect((await start()).status).toBe(429);
+  });
+});
+
+describe("verification hook (AI-188: M6.7)", () => {
+  it("GivenAFinishedDeploy_WhenRecorded_ThenTheHookGetsTheFinishedDeploymentAndItsProjectOnce", async () => {
+    const seen: [Deployment, Project][] = [];
+    const { start, finish } = setup(undefined, undefined, undefined, async (d, p) =>
+      seen.push([d, p]),
+    );
+    const id = await idOf(await start());
+
+    expect((await finish(id, { status: "succeeded" })).status).toBe(200);
+    expect((await finish(id, { status: "succeeded" })).status).toBe(409);
+
+    expect(seen).toHaveLength(1);
+    expect(seen[0]![0]).toMatchObject({ id, status: "succeeded" });
+    expect(seen[0]![1].id).toBe("ai");
+  });
+
+  it("GivenAHookThatThrows_WhenTheDeployFinishes_ThenTheFinishIsStillRecordedAnd200", async () => {
+    const { deployments, start, finish } = setup(undefined, undefined, undefined, async () => {
+      throw new Error("boom");
+    });
+    const id = await idOf(await start());
+
+    expect((await finish(id, { status: "failed" })).status).toBe(200);
+    expect((await deployments.get(id))?.status).toBe("failed");
+  });
+
+  it("GivenARefusedFinish_WhenReported_ThenTheHookIsNotCalled", async () => {
+    let calls = 0;
+    const { start, finish } = setup(undefined, undefined, undefined, async () => calls++);
+    const id = await idOf(await start());
+
+    expect(
+      (await finish(id, { status: "succeeded" }, claims({ sha: "c".repeat(40) }))).status,
+    ).toBe(404);
+    expect(calls).toBe(0);
+  });
+});
+
+describe("release reports (AI-190: M6.11)", () => {
+  it("GivenReleaseYmlRollingBackToADeployedBuild_WhenItReports_ThenARollbackIsRecordedWithTheBuildsCommitUrlAndRequest", async () => {
+    const { deployments, start, finish } = setup();
+    const built = await idOf(await start());
+    await finish(built, { status: "succeeded", revision: "control-plane-00041-old" });
+    const later = `sha256:${"c".repeat(64)}`;
+    const newer = await idOf(await start(undefined, { imageDigest: later }));
+    await finish(newer, { status: "succeeded", revision: "control-plane-00042-new" });
+
+    const started = await start(release(), {
+      imageDigest: DIGEST,
+      environment: "prod",
+      kind: "rollback",
+      url: "https://ai.example.com",
+      request: "req-1",
+    });
+    expect(started.status).toBe(201);
+    const id = await idOf(started);
+    expect(await deployments.get(id)).toMatchObject({
+      environment: "prod",
+      kind: "rollback",
+      imageDigest: DIGEST,
+      gitSha: SHA,
+      url: "https://ai.example.com",
+      request: "req-1",
+      previousDeploymentId: newer,
+      status: "started",
+    });
+
+    const done = await finish(
+      id,
+      { status: "succeeded", revision: "control-plane-00041-old" },
+      release(),
+    );
+    expect(done.status).toBe(200);
+    expect((await deployments.latestGood("ai", "prod"))?.id).toBe(id);
+  });
+
+  it("GivenADigestDevDeployed_WhenReleaseYmlPromotesItToProd_ThenAProdPromoteIsRecorded", async () => {
+    const { deployments, start, finish } = setup();
+    const dev = await idOf(await start(undefined, { imageDigest: DIGEST, environment: "dev" }));
+    await finish(dev, { status: "succeeded" });
+    const id = await idOf(
+      await start(release(), {
+        imageDigest: DIGEST,
+        environment: "prod",
+        kind: "promote",
+        url: "https://prod.example.com",
+      }),
+    );
+    expect(await deployments.get(id)).toMatchObject({
+      environment: "prod",
+      kind: "promote",
+      gitSha: SHA,
+      request: null,
+    });
+    expect(await deployments.list("ai", "dev")).toHaveLength(1);
+  });
+
+  it("GivenADigestNoSucceededDeploymentShipped_WhenReleaseYmlReportsIt_Then422AndNothingRecorded", async () => {
+    const { deployments, start, finish } = setup();
+    const failed = await idOf(await start());
+    await finish(failed, { status: "failed" });
+    const rollback = { imageDigest: DIGEST, environment: "prod", kind: "rollback" };
+    expect((await start(release(), rollback)).status).toBe(422);
+    // Promote reads dev: a prod deployment of the digest is not a source.
+    expect((await start(release(), { ...rollback, kind: "promote" })).status).toBe(422);
+    expect(await deployments.list("ai", "prod")).toHaveLength(1);
+  });
+
+  it("GivenAKindTheWorkflowDoesNotReport_WhenStarted_Then422AndNothingRecorded", async () => {
+    const { deployments, start } = setup();
+    expect((await start(undefined, { imageDigest: DIGEST, kind: "rollback" })).status).toBe(422);
+    expect((await start(undefined, { imageDigest: DIGEST, request: "r1" })).status).toBe(422);
+    expect((await start(release(), { imageDigest: DIGEST, environment: "prod" })).status).toBe(422);
+    expect(
+      (await start(release(), { imageDigest: DIGEST, environment: "prod", kind: "deploy" })).status,
+    ).toBe(422);
+    expect(
+      (await start(release(), { imageDigest: DIGEST, environment: "preview", kind: "rollback" }))
+        .status,
+    ).toBe(400);
+    expect(await deployments.list("ai", "prod")).toEqual([]);
+  });
+
+  it("GivenReleaseYmlOffMainOrFromAnotherRepo_WhenReporting_Then403", async () => {
+    const { deployments, start } = setup();
+    const body = { imageDigest: DIGEST, environment: "prod", kind: "rollback" };
+    for (const token of [
+      release({ workflow_ref: `${REPO}/.github/workflows/release.yml@refs/heads/evil` }),
+      release({ workflow_ref: `${REPO}/.github/workflows/release.yml@refs/tags/v1` }),
+      release({ workflow_ref: releaseWorkflowRef("someone/else") }),
+      release({ repository: "someone/else", workflow_ref: releaseWorkflowRef("someone/else") }),
+    ]) {
+      expect((await start(token, body)).status, JSON.stringify(token)).toBe(403);
+    }
+    expect(await deployments.list("ai", "prod")).toEqual([]);
+  });
+
+  it("GivenADeployAndARelease_WhenTheOtherWorkflowFinishesIt_Then404AndItStaysStarted", async () => {
+    const { deployments, start, finish } = setup();
+    const built = await idOf(await start());
+    await finish(built, { status: "succeeded" });
+    const deploy = await idOf(await start());
+    const rollback = await idOf(
+      await start(release(), { imageDigest: DIGEST, environment: "prod", kind: "rollback" }),
+    );
+    expect((await finish(deploy, { status: "succeeded" }, release({ sha: SHA }))).status).toBe(404);
+    expect((await finish(rollback, { status: "succeeded" })).status).toBe(404);
+    expect((await deployments.get(deploy))?.status).toBe("started");
+    expect((await deployments.get(rollback))?.status).toBe("started");
+  });
+});
+
+describe("release requests matched to reports (AI-199: M6.12)", () => {
+  const PROMOTED = `sha256:${"c".repeat(64)}`;
+  const at = "2026-11-21T09:00:00.000Z";
+  const asked = async (
+    requests: InMemoryReleaseRequestStore,
+    overrides: { action?: "promote" | "rollback"; digest?: string } = {},
+  ) => {
+    const made = await requests.create(
+      {
+        projectId: "ai",
+        action: overrides.action ?? "promote",
+        environment: "prod",
+        digest: overrides.digest ?? PROMOTED,
+        revision: overrides.action === "rollback" ? "control-plane-00041-old" : null,
+        sourceDeploymentId: "src",
+        actor: "user:andy",
+        createdAt: at,
+        status: "dispatched",
+        updatedAt: at,
+      },
+      0,
+    );
+    if (!("created" in made)) throw new Error("not created");
+    return made.created;
+  };
+  const devBuild = async (s: ReturnType<typeof setup>) => {
+    const dev = await idOf(await s.start(undefined, { imageDigest: PROMOTED, environment: "dev" }));
+    await s.finish(dev, { status: "succeeded", revision: "control-plane-dev-1" });
+  };
+
+  it("GivenTheOwnersPromoteRequest_WhenReleaseYmlReportsStartAndEnd_ThenTheRequestFollowsTheDeployment", async () => {
+    const requests = new InMemoryReleaseRequestStore();
+    const s = setup(undefined, undefined, requests);
+    await devBuild(s);
+    const request = await asked(requests);
+
+    const started = await s.start(release(), {
+      imageDigest: PROMOTED,
+      environment: "prod",
+      kind: "promote",
+      request: request.id,
+    });
+    expect(started.status).toBe(201);
+    const id = await idOf(started);
+    expect(await requests.get(request.id)).toMatchObject({ status: "started", deploymentId: id });
+
+    await s.finish(id, { status: "succeeded", revision: "control-plane-00050" }, release());
+    expect((await requests.get(request.id))?.status).toBe("succeeded");
+  });
+
+  it("GivenAReportNamingAnUnknownOrDifferentRequest_WhenItStarts_Then422AndNothingRecorded", async () => {
+    const requests = new InMemoryReleaseRequestStore();
+    const s = setup(undefined, undefined, requests);
+    await devBuild(s);
+    const rollback = await asked(requests, { action: "rollback" });
+    const before = await s.deployments.list("ai", "prod");
+    for (const request of ["nope", rollback.id]) {
+      const res = await s.start(release(), {
+        imageDigest: PROMOTED,
+        environment: "prod",
+        kind: "promote",
+        request,
+      });
+      expect(res.status).toBe(422);
+    }
+    expect(await s.deployments.list("ai", "prod")).toEqual(before);
+    expect((await requests.get(rollback.id))?.status).toBe("dispatched");
+  });
+
+  it("GivenARequestAlreadyMatched_WhenAReportReplaysIt_Then422", async () => {
+    const requests = new InMemoryReleaseRequestStore();
+    const s = setup(undefined, undefined, requests);
+    await devBuild(s);
+    const request = await asked(requests);
+    const body = {
+      imageDigest: PROMOTED,
+      environment: "prod",
+      kind: "promote",
+      request: request.id,
+    };
+    expect((await s.start(release(), body)).status).toBe(201);
+    expect((await s.start(release(), body)).status).toBe(422);
+  });
+
+  it("GivenTwoStartReportsForOneRequestAtOnce_WhenBothArrive_ThenOnlyOneDeploymentIsRecorded", async () => {
+    const requests = new InMemoryReleaseRequestStore();
+    const s = setup(undefined, undefined, requests);
+    await devBuild(s);
+    const request = await asked(requests);
+    const body = {
+      imageDigest: PROMOTED,
+      environment: "prod",
+      kind: "promote",
+      request: request.id,
+    };
+    const statuses = (await Promise.all([s.start(release(), body), s.start(release(), body)])).map(
+      (r) => r.status,
+    );
+    expect(statuses.sort()).toEqual([201, 422]);
+    expect(
+      (await s.deployments.list("ai", "prod")).filter((d) => d.kind === "promote"),
+    ).toHaveLength(1);
+  });
+
+  it("GivenTheRecordFailsAfterTheClaim_WhenTheWorkflowRetries_ThenTheRequestMatchesAgain", async () => {
+    const requests = new InMemoryReleaseRequestStore();
+    const s = setup(undefined, undefined, requests);
+    await devBuild(s);
+    const request = await asked(requests);
+    const body = {
+      imageDigest: PROMOTED,
+      environment: "prod",
+      kind: "promote",
+      request: request.id,
+    };
+    vi.spyOn(s.deployments, "record").mockRejectedValueOnce(new Error("store down"));
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    expect((await s.start(release(), body)).status).toBe(500);
+    expect((await requests.get(request.id))?.status).toBe("dispatched");
+    expect((await s.start(release(), body)).status).toBe(201);
+    expect((await requests.get(request.id))?.status).toBe("started");
+  });
+
+  it("GivenAReleaseRunByHand_WhenItReportsWithoutARequest_ThenItIsRecordedAsBefore", async () => {
+    const requests = new InMemoryReleaseRequestStore();
+    const s = setup(undefined, undefined, requests);
+    await devBuild(s);
+    const res = await s.start(release(), {
+      imageDigest: PROMOTED,
+      environment: "prod",
+      kind: "promote",
+    });
+    expect(res.status).toBe(201);
   });
 });

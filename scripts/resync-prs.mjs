@@ -14,6 +14,7 @@
 // PRs and comments), CONTROL_PLANE_URL, ACTIONS_ID_TOKEN_REQUEST_URL,
 // ACTIONS_ID_TOKEN_REQUEST_TOKEN, GITHUB_STEP_SUMMARY (optional). The write token comes from the
 // control plane (POST /github/token, ADR-0043) and only updates branches and writes the comment.
+// First, the project's PR sync setting (POST /github/pr-sync, AI-388): `queue` ends the run there.
 import { Buffer } from "node:buffer";
 import { spawnSync } from "node:child_process";
 import { appendFileSync } from "node:fs";
@@ -184,8 +185,8 @@ export function gitRunner(cwd) {
   };
 }
 
-/** The write token from the control plane (ADR-0043), masked. */
-async function writeToken({ env, fetchImpl, emit }) {
+/** The job's Actions OIDC token for the control plane (audience: its URL), masked. */
+async function oidcToken({ env, fetchImpl, emit }) {
   const audience = encodeURIComponent(env.CONTROL_PLANE_URL);
   const oidcRes = await fetchImpl(`${env.ACTIONS_ID_TOKEN_REQUEST_URL}&audience=${audience}`, {
     headers: { authorization: `bearer ${env.ACTIONS_ID_TOKEN_REQUEST_TOKEN}` },
@@ -193,6 +194,33 @@ async function writeToken({ env, fetchImpl, emit }) {
   if (!oidcRes.ok) throw new Error(`the Actions OIDC token request returned ${oidcRes.status}`);
   const { value: oidc } = await oidcRes.json();
   emit(`::add-mask::${oidc}`);
+  return oidc;
+}
+
+/**
+ * The project's PR sync setting (AI-388, ADR-0157), read with the same OIDC token: `queue` (the
+ * merge queue syncs the PR that is next; this run writes nothing) or `all`. Anything else fails
+ * the run, which then writes nothing either.
+ */
+export async function prSyncSetting({ env, fetchImpl, oidc }) {
+  const res = await fetchImpl(`${env.CONTROL_PLANE_URL}/github/pr-sync`, {
+    method: "POST",
+    headers: { authorization: `Bearer ${oidc}` },
+  });
+  // A control plane without the route yet (this script merged, the deploy not out) answers 404:
+  // read as the default, `queue`, which writes nothing. A refusal is 401/403, never 404.
+  if (res.status === 404) return "queue";
+  const data = await res.json().catch(() => null);
+  if (!res.ok || !["queue", "all"].includes(data?.prSync)) {
+    throw new Error(
+      `the control plane didn't say the PR sync setting (HTTP ${res.status}): ${oneLine(data?.error)}`,
+    );
+  }
+  return data.prSync;
+}
+
+/** The write token from the control plane (ADR-0043), masked. */
+async function writeToken({ env, fetchImpl, emit, oidc }) {
   const res = await fetchImpl(`${env.CONTROL_PLANE_URL}/github/token`, {
     method: "POST",
     headers: { authorization: `Bearer ${oidc}` },
@@ -378,6 +406,14 @@ export async function resync({ env, git, github, fetchImpl = globalThis.fetch, e
     emit(`#${r.number}: ${r.outcome}: ${r.detail}`);
   };
 
+  // AI-388: the project decides. `queue` leaves each PR alone until it is next in the merge queue.
+  const oidc = await oidcToken({ env, fetchImpl, emit });
+  const prSync = await prSyncSetting({ env, fetchImpl, oidc });
+  if (prSync === "queue") {
+    emit("PR sync is `queue`: the merge queue syncs the PR that is next; no re-sync");
+    return { capped: false, results, prSync };
+  }
+
   const basic = Buffer.from(`x-access-token:${env.READ_TOKEN}`).toString("base64");
   emit(`::add-mask::${basic}`);
   const auth = {
@@ -418,7 +454,7 @@ export async function resync({ env, git, github, fetchImpl = globalThis.fetch, e
     return { capped: true, results };
   }
 
-  const write = await writeToken({ env, fetchImpl, emit });
+  const write = await writeToken({ env, fetchImpl, emit, oidc });
   // A failure on one PR (locked conversation, a 403, a failed fetch) writes nothing more for it
   // and doesn't hold back the PRs after it; the run still ends red. Shared failures above (token,
   // a fetch, the hourly count) stop the whole run.
@@ -458,7 +494,11 @@ async function main() {
     return;
   }
   if (process.env.GITHUB_STEP_SUMMARY) {
-    appendFileSync(process.env.GITHUB_STEP_SUMMARY, `${summaryTable(outcome.results)}\n`);
+    const summary =
+      outcome.prSync === "queue"
+        ? "PR sync is `queue` (project setting): only the PR next in the merge queue is synced, by the queue."
+        : summaryTable(outcome.results);
+    appendFileSync(process.env.GITHUB_STEP_SUMMARY, `${summary}\n`);
   }
   const failed = outcome.results.filter((r) => r.outcome === "error");
   if (failed.length > 0) {
