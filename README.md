@@ -16,7 +16,7 @@ What is built on `main` now. Target design: [ARCHITECTURE.md](docs/architecture/
  Agent tasks ◀─▶ agent-run.yml → claude-executor.yml (GitHub Actions; dispatched by the App, call back with OIDC)
 ```
 
-**Working** (full list: [`docs/how-it-works.md`](docs/how-it-works.md)): a board and Needs-you inbox, the Claude connector (MCP), Refine and Build agent tasks on GitHub Actions or a local runner, PR checks and review agents, the merge gate and MCP `merge_pr` for coordinator sessions through a merge queue per repo, dispatch under quota and spend caps, product discovery before the brief (`/discover`), epics and the roadmap (a case per milestone; the `epic` merge mode merges child tickets into the epic's branch), digest, What's new, dashboards and Needs-you email. Each feature: [`docs/features/`](docs/features/). New detail goes in `docs/how-it-works.md`, so this section stays one screen.
+**Working** (full list: [`docs/how-it-works.md`](docs/how-it-works.md)): a board and Needs-you inbox, the Claude connector (MCP), Refine and Build agent tasks on GitHub Actions or a local runner, PR checks and review agents, the merge gate and MCP `merge_pr` for coordinator sessions through a merge queue per repo, dispatch under quota and spend caps, product discovery before the brief (`/discover`), a setup path that walks a new managed repo through every onboarding step, epics and the roadmap (a case per milestone; the `epic` merge mode merges child tickets into the epic's branch), digest, What's new, dashboards and Needs-you email. Each feature: [`docs/features/`](docs/features/). New detail goes in `docs/how-it-works.md`, so this section stays one screen.
 
 **Not built yet:** releases: each project stores a deploy kind (`none` or `cloud-run`) and its environments, but nothing deploys from them (M6); Needs you has no push notification (M7); one task at a time per ticket; the digest is not sent anywhere.
 
@@ -93,7 +93,7 @@ Design rules: [`apps/web/design.md`](apps/web/design.md). One shell on every scr
 | `/p/:projectId/dashboards`, `/all/dashboards` | Dashboards: weekly delivery and cost charts                                                                                             |
 | `/p/:projectId/settings`                      | Project settings (Settings menu): section links, every option with what it does; MCP `get_project_settings` reads them                  |
 | `/projects`, `/projects/new`                  | Open the current project's settings; add a project (picker → Add project), which opens its setup path                                   |
-| `/p/:projectId/setup`                         | A new project's setup: brief, plan, approve milestones, baseline and first build (AI-373)                                               |
+| `/p/:projectId/setup`                         | A new project's setup: every onboarding step (commands, live checks, Mark done), brief, plan, approve, proving refine, builds (AI-381)  |
 | `/settings/github`                            | Connect the GitHub App, install link, installed repos                                                                                   |
 | `/p/:projectId`                               | Board: lanes with status on cards, quick add, drag to reorder or move                                                                   |
 | `/p/:projectId/t/:ticketRef`                  | Ticket detail (ref = key, e.g. `AI-2`): edit, Definition of Ready, moves, agent tasks, questions, history                               |
@@ -121,8 +121,9 @@ pnpm screenshots:table --write               # after a push: before-and-after ta
 | `packages/github`     | GitHub App adapter: `GitHubCodeHost`, webhook HMAC + mapping        |
 | `infra/bootstrap`     | One-time GCP bootstrap (state bucket, GitHub OIDC)                  |
 | `infra/control-plane` | Control-plane GCP resources                                         |
-| `infra/billing`       | Billing budget, alerts, opt-in kill switch (local plans only)       |
+| `infra/billing`       | Budgets (control plane + managed projects), opt-in kill switches    |
 | `infra/dns`           | Cloudflare records for `ai.andybernhagen.com` (local plans only)    |
+| `infra/modules`       | Terraform modules for managed projects (`project-budget`)           |
 | `scripts`             | Repo tooling: format hook, review gate, coordinator tools           |
 | `platform/actions`    | Composite actions behind every required check (baseline)            |
 | `platform/baseline`   | Baseline manifest, GitHub config JSON, `baseline.mjs`               |

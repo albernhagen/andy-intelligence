@@ -1,6 +1,6 @@
 # Billing guardrails — runbook (Andy)
 
-GCP cost guardrails for the control plane (ADR-0028: GCP cost guardrails, ADR-0029: Billing root plans locally; kill switch split out). Budget and kill switch: Terraform root `infra/billing` (sections 1–4). Usage alerts and caps: `infra/control-plane` (sections 5–6). The config-change alert shares the usage alerts' email (section 7).
+GCP cost guardrails for the control plane (ADR-0028: GCP cost guardrails, ADR-0029: Billing root plans locally; kill switch split out). Budget and kill switch: Terraform root `infra/billing` (sections 1–4). Usage alerts and caps: `infra/control-plane` (sections 5–6). The config-change alert shares the usage alerts' email (section 7). Managed projects' budgets: section 8.
 
 | Term               | Meaning                                                                                                    |
 | ------------------ | ---------------------------------------------------------------------------------------------------------- |
@@ -146,3 +146,19 @@ A project-settings change succeeds even when its change-log entry fails to write
 **When it fires:** Logs Explorer, query `jsonPayload.message="config change not recorded"`. Each entry has `projectId`, `diff` (before and after per field), `by` and `error`. The settings change itself went through; only its log entry is missing. Fix the cause (usually Firestore errors or quota), and note the change by hand if its audit trail matters.
 
 **Don't reword the message.** The metric's filter matches `CONFIG_CHANGE_NOT_RECORDED` in `packages/domain/src/config-changes.ts`; `config-changes.test.ts` fails if the two differ.
+
+## 8. Managed project budgets (AI-162: M6.14: Project budget module)
+
+Each managed project environment (one GCP project) gets a budget from `infra/modules/project-budget`, called by `infra/billing` once per entry in `managed_projects` (ADR-0114). Same thresholds as the control plane: 50%, 90%, 100%, 150% actual and 100% forecast, to the same default recipients. Defaults: $10/month, kill switch off.
+
+**Add a project:**
+
+1. Add an entry to `managed_projects` in `infra/billing/terraform.tfvars` (shape in `terraform.tfvars.example`): `"<project>-dev" = { project_id = "<gcp-project-id>" }`. The project must be on the same billing account.
+2. `terraform plan -out=billing.tfplan`. Expect **1 to add, 0 to change, 0 to destroy** per new entry: `module.managed_project_budget["<key>"].google_billing_budget.this`. Anything else is drift: stop and check.
+3. `terraform apply billing.tfplan`. Check: Billing → Budgets & alerts shows `<gcp-project-id> monthly`.
+
+**Turn its kill switch on:** set `kill_switch_enabled = true`, `kill_switch_service = "<cloud-run-service>"` and `kill_switch_runtime_sa = "<runtime-sa-email>"` on that entry (the service and identity must exist). Plan: **15 to add, 1 to change** (3 APIs, topic + publisher grant, SA, 2 custom roles, 1 service grant, 3 project grants, actAs grant, workflow, trigger; the budget gains `all_updates_rule`). Test, re-enable and turn off as in section 4, with that project's ID, region and service. Custom roles are soft-deleted for 7 days after removal: turning the switch off and on again within that window fails until they're purged; wait or undelete them.
+
+**Remove a project:** delete its entry; plan shows 1 to destroy (plus the kill switch resources if it was on).
+
+The first apply after AI-162 merges, with no `managed_projects` entry, should show **No changes**: the kill switch workflow file moved to the module folder with the same content.

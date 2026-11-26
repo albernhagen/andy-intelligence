@@ -1,7 +1,8 @@
 name: Baseline — terraform
 description: >-
   terraform fmt -check and validate for every root under infra/ (a folder with .tf files, except
-  infra/modules/), using the version in .terraform-version (ADR-0024, project baseline
+  infra/modules/), then terraform test in each root with a tests/ folder (plan-only tests with
+  mocked providers: no credentials), using the version in .terraform-version (ADR-0024, project baseline
   ADR-0031/ADR-0038). Passes with a notice when the repo has no infra/. Run after actions/checkout.
 
 runs:
@@ -34,4 +35,7 @@ runs:
         for dir in $(find infra -name '*.tf' -not -path 'infra/modules/*' -not -path '*/.terraform/*' -exec dirname {} \; | sort -u); do
           terraform -chdir="$dir" init -backend=false -input=false
           terraform -chdir="$dir" validate
+          if compgen -G "$dir/tests/*.tftest.hcl" > /dev/null; then
+            terraform -chdir="$dir" test
+          fi
         done

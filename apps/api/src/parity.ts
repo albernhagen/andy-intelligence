@@ -170,6 +170,12 @@ export const PARITY: readonly ParityEntry[] = [
     tools: ["project_setup"],
   },
   {
+    action: "Onboarding steps: read, mark a hand step done (AI-381)",
+    routes: [`GET ${P}/onboarding`, `POST ${P}/onboarding/marks`],
+    tools: ["project_setup"],
+    note: "`project_setup` returns the steps as `onboarding` and marks with `mark`.",
+  },
+  {
     action: "Create a project",
     routes: ["POST /api/projects"],
     tools: ["create_project"],

@@ -1,17 +1,15 @@
 # New project setup path
 
-A new project opens on its setup path, `/p/<project>/setup` (AI-373), not an empty board. It has five steps, done in order on one card at a time (direction B's card, design review 2026-11-23):
+A new project opens on its setup path, `/p/<project>/setup` (AI-373, AI-381): one card at a time, from a new repo to the first agent task. It shows every step of runbook [`managed-project.md`](../runbooks/managed-project.md) in its order (the step table there says how each is checked), with Write the brief, Plan milestones and Approve the plan before the proving refine.
 
-| Step                     | What Andy does                                                                                            | Done when (read from the API)                                      |
-| ------------------------ | --------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------ |
-| Create project           | Add project (name, key, repo)                                                                             | Always                                                             |
-| Write the brief          | Answers four short pages; the brief is proposed as a PR, exactly as MCP `submit_brief` does; he merges it | `docs/product/brief.md` is on the default branch, or a plan exists |
-| Plan milestones          | Starts the plan-project agent task                                                                        | A plan is proposed                                                 |
-| Approve the plan         | Approves or parks each milestone (each shows its case), or sends the plan back with a note                | The plan is approved                                               |
-| Baseline and first build | Merges the baseline PR, turns Builds on in settings                                                       | Baseline merged and Builds on                                      |
+- **Repo limits** sit above every step (public, default branch `main`, `pnpm-lock.yaml`, `.nvmrc`, one repo); each failure is named.
+- **Hand steps** show a one-line instruction, each command with the repo filled in and Copy, and the GitHub page. They open in any order.
+- **Status:** Done, Not yet or Can't tell, read live through the App. Where it can't read (Actions settings, secrets) or a read fails: **Mark done**, stored with who and when, shown as "Marked by hand".
+- **Add project** shows the repo and App steps first: a project needs its repo, with the App installed, to be created.
+- **GitHub steps before the brief:** the brief is a PR whose checks need the baseline and reviewer token.
+- The app never runs a step or sees a token. A domain test keeps the commands equal to the runbook's.
+- The board shows the next step until setup is done.
 
-- `docs/product/discovery.md`'s Brief answers pre-fill a new brief (ADR-0145). The draft is kept in this browser as he types.
-- While a project with no story tickets has a step left, the board shows the next step and one button that opens it.
-- New read: `GET /api/projects/{id}/brief` (owner only): whether the brief is on the default branch, and discovery's answers.
+Routes (owner only): `GET …/brief`, `GET …/onboarding` (`?refresh=true`: Check again), `POST …/onboarding/marks`. MCP `project_setup` returns `onboarding` and takes `mark`.
 
 **How to use:** picker → Add project. Come back from the board's setup bar.
