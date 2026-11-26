@@ -2,6 +2,7 @@ import { expect, test, type Page } from "@playwright/test";
 import { expectShellLoaded } from "./shell";
 import { mockDashboards, waitForStableCharts } from "./dashboard-fixtures";
 import { mockBriefStep } from "./setup-fixtures";
+import { mockReleases } from "./release-fixtures";
 import { SCREENS, type Screen } from "./screens";
 import { expectPageFits, expectTouchTargets } from "./phone";
 
@@ -22,6 +23,8 @@ const OPEN: Record<string, (page: Page) => Promise<void>> = {
   dashboards: mockDashboards,
   // AI-373: the fake API has no GitHub, so the brief's state is served.
   setup: mockBriefStep,
+  // AI-189: M6.10: the fake API has no GitHub, so releases are served.
+  releases: mockReleases,
 };
 
 async function open(page: Page, screen: Screen) {
@@ -33,6 +36,8 @@ async function open(page: Page, screen: Screen) {
     await page.getByRole("link", { name: "Agent task · refine" }).click();
     await expect(page.getByRole("heading", { name: "Agent task · Refine" })).toBeVisible();
   }
+  if (screen.name === "releases")
+    await page.getByRole("button", { name: /control-plane-00043/ }).click();
   await expect(page.getByText(screen.ready).first()).toBeVisible();
   await expectShellLoaded(page);
   if (screen.name.endsWith("dashboards")) await waitForStableCharts(page);

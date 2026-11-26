@@ -21,7 +21,7 @@ What is built on `main` now, moved from `README.md` so its "How it works today" 
 - Dispatch starts a ticket only when its milestone is approved or it has none (AI-306).
 - A daily digest (MCP `digest`) leads with a model-written summary of yesterday (Mountain time; one agent task a day, AI-323), then lists the last 24 hours: exceptions, merges and cost, work in progress, totals. What's new shows that summary, then its exceptions, with a 24 hours window (AI-341).
 - What's new (header, MCP `whats_new`): milestones, the merge mode, merged PRs' release notes and who merged each (the mode or a person, AI-218).
-- Releases (MCP `list_releases`, AI-183: M6.9): a project's deployments to prod or dev, newest first, each with the tickets it shipped and its release notes; no page yet (AI-189: M6.10).
+- Releases (MCP `list_releases`, AI-183: M6.9): a project's deployments to prod or dev, newest first, each with the tickets it shipped and its release notes; the Releases page (AI-189: M6.10, under What's new) shows a column per environment, each deployment opening to its release notes.
 - Promote and rollback (AI-199: M6.12, ADR-0160): owner-only routes, MCP `promote` and `rollback`, and a `ReleaseActions` component with a confirm step start the project's `release.yml`; each is a recorded release request (one per project per minute) that follows the workflow's reports, or shows `cancelled` (MCP `list_release_requests`).
 - Coordinator sessions merge only through MCP `merge_pr` (AI-220): the merge mode decides, the App merges at the judged head, else it answers `wait` with every reason.
 - Epic merge mode (AI-216): a child ticket builds on and merges into `epic/<KEY>`; when the epic's last child ticket is Done one PR to `main` opens for Andy.

@@ -39,7 +39,8 @@ export function destinations(scope: Scope, pathname: string, section: Section | 
     items.push({
       label: "What's new",
       to: `/p/${encodeURIComponent(scope.projectId)}/whats-new`,
-      current: /\/whats-new\/?$/.test(pathname),
+      // Releases (AI-189: M6.10) sits under What's new.
+      current: /\/(whats-new|releases)\/?$/.test(pathname),
     });
   return items;
 }
@@ -54,10 +55,17 @@ export const PROJECTS_LINKS: readonly { label: string; to: string }[] = [
   { label: "Add project", to: "/projects/new" },
 ];
 
+/** Screens under a destination, reached from its page and the palette (AI-189: M6.10). */
+export function projectPageLinks(scope: Scope): { label: string; to: string }[] {
+  if (scope.kind !== "project") return [];
+  return [{ label: "Releases", to: `/p/${encodeURIComponent(scope.projectId)}/releases` }];
+}
+
 /** Every page the shell can open in this scope: what the palette's "Go to" lists. */
 export function shellLinks(scope: Scope, pathname = ""): { label: string; to: string }[] {
   return [
     ...destinations(scope, pathname, null),
+    ...projectPageLinks(scope),
     ...settingsLinks(scope, pathname),
     ...PROJECTS_LINKS,
   ].map(({ label, to }) => ({ label, to }));
