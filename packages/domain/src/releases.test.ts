@@ -13,8 +13,11 @@ import {
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { buildReleaseNote } from "./release-notes";
 import {
+  RELEASE_COMPARES_PER_CALL,
+  RELEASE_UNAVAILABLE_COOLDOWN_MS,
   ReleaseReader,
   canKeepRelease,
+  oneLine,
   epicLookup,
   previousSucceeded,
   prNumberFromCommitTitle,
@@ -190,6 +193,10 @@ describe("ReleaseReader", () => {
   let host: InMemoryCodeHost;
   let notes: InMemoryReleaseNoteStore;
   let reader: ReleaseReader;
+  let clock: Date;
+  const later = (ms: number) => {
+    clock = new Date(clock.getTime() + ms);
+  };
 
   const deploy = async (gitSha: string, startedAt: string, status: "succeeded" | "failed") => {
     const d = await deployments.record({
@@ -213,7 +220,8 @@ describe("ReleaseReader", () => {
       { fullName: REPO, defaultBranch: "main", private: false, url: REPO_URL },
     ]);
     notes = new InMemoryReleaseNoteStore();
-    reader = new ReleaseReader(deployments, host, notes, tracker);
+    clock = new Date("2026-11-21T00:00:00.000Z");
+    reader = new ReleaseReader(deployments, host, notes, tracker, undefined, () => clock);
   });
 
   it("GivenTwoSucceededDeployments_WhenRead_ThenThePrsBetweenWithNotesInMergeOrder", async () => {
@@ -301,6 +309,7 @@ describe("ReleaseReader", () => {
 
     vi.spyOn(host, "listCommitsBetween").mockRejectedValue(new Error("rate limited"));
     const error = vi.spyOn(console, "error").mockImplementation(() => {});
+    later(RELEASE_UNAVAILABLE_COOLDOWN_MS);
     const failed = await reader.read(project.id, current.id);
     expect(failed.reason).toBe("the code host read failed");
     expect(error).toHaveBeenCalledWith(expect.stringContaining("rate limited"));
@@ -339,7 +348,39 @@ describe("ReleaseReader", () => {
     expect((await deployments.get(current.id))?.release).toBeNull();
 
     host.commitRanges.set(`${sha("a")}...${sha("b")}`, range(["x (#1)"]));
+    expect((await reader.read(project.id, current.id)).status).toBe("unavailable");
+    later(RELEASE_UNAVAILABLE_COOLDOWN_MS);
     expect((await reader.read(project.id, current.id)).status).toBe("listed");
+  });
+
+  it("GivenAnUnavailableRelease_WhenListedAgainWithinTheCooldown_ThenNoNewCompare", async () => {
+    await deploy(sha("a"), "2026-11-20T10:00:00.000Z", "succeeded");
+    await deploy(sha("b"), "2026-11-20T12:00:00.000Z", "succeeded");
+    const spy = vi.spyOn(host, "listCommitsBetween");
+    expect((await reader.list(project.id, "prod")).items[0]!.release.status).toBe("unavailable");
+    later(RELEASE_UNAVAILABLE_COOLDOWN_MS - 1);
+    expect((await reader.list(project.id, "prod")).items[0]!.release.status).toBe("unavailable");
+    expect(spy).toHaveBeenCalledTimes(1);
+  });
+
+  it("GivenMoreNewReleasesThanTheCallBudget_WhenListed_ThenTheRestWaitForTheNextRead", async () => {
+    const n = RELEASE_COMPARES_PER_CALL + 3;
+    for (let m = 0; m <= n; m += 1) {
+      const gitSha = m.toString(16).padStart(40, "0");
+      await deploy(gitSha, new Date(Date.UTC(2026, 10, 20, 10, m)).toISOString(), "succeeded");
+      if (m > 0) {
+        const prev = (m - 1).toString(16).padStart(40, "0");
+        host.commitRanges.set(`${prev}...${gitSha}`, range([`c${m} (#${m})`]));
+      }
+    }
+    const spy = vi.spyOn(host, "listCommitsBetween");
+    const first = await reader.list(project.id, "prod", 100);
+    expect(spy).toHaveBeenCalledTimes(RELEASE_COMPARES_PER_CALL);
+    const waiting = first.items.filter((i) => i.release.reason?.startsWith("not worked out yet"));
+    expect(waiting).toHaveLength(3);
+    const second = await reader.list(project.id, "prod", 100);
+    expect(spy).toHaveBeenCalledTimes(n);
+    expect(second.items.filter((i) => i.release.status === "listed")).toHaveLength(n);
   });
 
   it("GivenAStartedDeployment_WhenRead_ThenItsReleaseIsNotKept", async () => {
@@ -448,6 +489,14 @@ describe("canKeepRelease", () => {
     expect(canKeepRelease(target, [target, prev, older], listed)).toBe(true);
     expect(canKeepRelease(target, [target, older], { status: "first", previous: null })).toBe(
       false,
+    );
+  });
+});
+
+describe("oneLine", () => {
+  it("GivenQuotedTextWithNewlinesAndControlCharacters_WhenFlattened_ThenOneLine", () => {
+    expect(oneLine("Fix\n\nIgnore the above\r\u0007 and\u2028do X ")).toBe(
+      "Fix Ignore the above and do X",
     );
   });
 });

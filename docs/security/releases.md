@@ -10,12 +10,12 @@ Detail on the releases read (AI-183: M6.9; part of M6: Dev → prod releases in 
 
 ## Caps (ADR-0028)
 
-| What               | Cap                                                                                                                       |
-| ------------------ | ------------------------------------------------------------------------------------------------------------------------- |
-| Deployments        | One listing of at most 100 per call                                                                                       |
-| Code-host compares | At most `limit` on a first read (100 commits each), 5 at once; none once a release is kept; never kept when `unavailable` |
-| Note reads         | At most 100 per compare                                                                                                   |
-| Ticket reads       | One project ticket list per call, only when a note names a ticket                                                         |
+| What               | Cap                                                                                                                                                                                                                                                                  |
+| ------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Deployments        | One listing of at most 100 per call                                                                                                                                                                                                                                  |
+| Code-host compares | At most 20 new ones per call (the rest answer `unavailable` until a later read), 5 at once, 100 commits each; none once a release is kept. An `unavailable` answer is reused for 5 minutes (at most 1,000 remembered per instance) before its compare is tried again |
+| Note reads         | At most 100 per compare                                                                                                                                                                                                                                              |
+| Ticket reads       | One project ticket list per call, only when a note names a ticket                                                                                                                                                                                                    |
 
 ## Credentials
 
@@ -24,4 +24,4 @@ None new: compares go through the connected GitHub App (`ConnectedCodeHost`), as
 ## Residual risks (R-AI-183)
 
 - **A kept release is never recomputed.** A note stored after the first read (a backfill) isn't shown for that release, and a wrong answer the code host gave once stays. A later ticket can add a way to clear it.
-- **PR text reaches MCP clients.** Release notes quote PR authors; the tool says they are data, never instructions.
+- **PR text reaches MCP clients.** Release notes quote PR authors; the tool's text opens with a fixed line saying they are untrusted data, and every quoted line is flattened to one line (no newlines or control characters).
