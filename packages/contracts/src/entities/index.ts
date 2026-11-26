@@ -19,6 +19,7 @@ import {
 import { projectDispatchFields } from "./dispatch-caps";
 import { projectNotifyFields } from "./notify-email";
 import { projectPlanFields } from "./project-plan";
+import { projectOnboardingFields } from "./onboarding";
 import { configChangeProposalFields } from "./config-proposals";
 import { RunCostFields } from "./cost";
 import { runInFlightFields } from "./in-flight";
@@ -109,6 +110,7 @@ export const Project = z.object({
   ...projectDispatchFields,
   ...projectNotifyFields,
   ...projectPlanFields,
+  ...projectOnboardingFields,
   /** Who does a ticket's work when it has no pick of its own (ADR-0082). */
   defaultWorker: Worker.default("agent"),
   /** Where a ticket's runs execute when it has no pick of its own (ADR-0089). */

@@ -1,0 +1,142 @@
+# Cost kill switch for one project (ADR-0028, ADR-0036): the same design as the control plane's
+# (infra/billing/kill-switch.tf) and the same workflow file, created in var.project_id. Opt-in:
+# nothing here exists unless kill_switch_enabled = true. At kill_switch_ratio of the budget the
+# workflow sets kill_switch_service to manual scaling at 0 instances and pauses every Cloud Tasks
+# queue in the region. It never disables billing (that can delete resources).
+#
+# Budget → Pub/Sub topic → Eventarc trigger → Workflow → Cloud Run + Cloud Tasks.
+
+locals {
+  kill_switch     = var.kill_switch_enabled ? 1 : 0
+  kill_switch_api = ["eventarc.googleapis.com", "pubsub.googleapis.com", "workflows.googleapis.com"]
+}
+
+resource "google_project_service" "kill_switch" {
+  for_each           = var.kill_switch_enabled ? toset(local.kill_switch_api) : toset([])
+  project            = var.project_id
+  service            = each.value
+  disable_on_destroy = false
+}
+
+resource "google_pubsub_topic" "budget" {
+  count   = local.kill_switch
+  project = var.project_id
+  name    = "budget-notifications"
+  # Messages are only useful while fresh; a day covers a short outage of the trigger.
+  message_retention_duration = "86400s"
+  depends_on                 = [google_project_service.kill_switch]
+}
+
+# Cloud Billing publishes budget status as this Google-managed identity.
+resource "google_pubsub_topic_iam_member" "billing_publishes" {
+  count   = local.kill_switch
+  project = var.project_id
+  topic   = google_pubsub_topic.budget[0].id
+  role    = "roles/pubsub.publisher"
+  member  = "serviceAccount:billing-budget-alert@system.gserviceaccount.com"
+}
+
+resource "google_service_account" "kill_switch" {
+  count        = local.kill_switch
+  project      = var.project_id
+  account_id   = "cost-kill-switch"
+  display_name = "Cost kill switch (ADR-0028)"
+}
+
+# Cloud Run permissions are bound on the one service only, so this SA can't update any other
+# service in the project.
+resource "google_project_iam_custom_role" "kill_switch_run" {
+  count       = local.kill_switch
+  project     = var.project_id
+  role_id     = "costKillSwitchRun"
+  title       = "Cost kill switch: Cloud Run"
+  description = "Scale one Cloud Run service to zero (ADR-0028). Bound on that service only."
+  permissions = ["run.services.get", "run.services.update"]
+}
+
+resource "google_cloud_run_v2_service_iam_member" "kill_switch_run" {
+  count    = local.kill_switch
+  project  = var.project_id
+  name     = var.kill_switch_service
+  location = var.region
+  role     = google_project_iam_custom_role.kill_switch_run[0].name
+  member   = "serviceAccount:${google_service_account.kill_switch[0].email}"
+}
+
+# Project level only where there's no narrower resource: listing queues happens at the location,
+# pausing must cover queues created later, and Cloud Run operations aren't service resources.
+resource "google_project_iam_custom_role" "kill_switch_project" {
+  count       = local.kill_switch
+  project     = var.project_id
+  role_id     = "costKillSwitch"
+  title       = "Cost kill switch: queues and operations"
+  description = "Pause Cloud Tasks queues and poll Cloud Run operations (ADR-0028)."
+  permissions = [
+    "run.operations.get",
+    "cloudtasks.queues.list",
+    "cloudtasks.queues.pause",
+  ]
+}
+
+# Static keys: for_each keys must be known at plan time, and the custom role's name isn't until
+# it exists.
+resource "google_project_iam_member" "kill_switch" {
+  for_each = var.kill_switch_enabled ? {
+    queues_and_operations = google_project_iam_custom_role.kill_switch_project[0].name
+    workflows_invoker     = "roles/workflows.invoker" # the Eventarc trigger starts the workflow as this SA
+    log_writer            = "roles/logging.logWriter"
+  } : {}
+  project = var.project_id
+  role    = each.value
+  member  = "serviceAccount:${google_service_account.kill_switch[0].email}"
+}
+
+# Cloud Run checks actAs on the service's runtime identity when the service is updated.
+resource "google_service_account_iam_member" "kill_switch_acts_as_runtime" {
+  count              = local.kill_switch
+  service_account_id = "projects/${var.project_id}/serviceAccounts/${var.kill_switch_runtime_sa}"
+  role               = "roles/iam.serviceAccountUser"
+  member             = "serviceAccount:${google_service_account.kill_switch[0].email}"
+}
+
+resource "google_workflows_workflow" "kill_switch" {
+  count               = local.kill_switch
+  project             = var.project_id
+  name                = "cost-kill-switch"
+  region              = var.region
+  description         = "Takes ${var.kill_switch_service} offline at ${var.kill_switch_ratio * 100}% of budget (ADR-0028)."
+  service_account     = google_service_account.kill_switch[0].id
+  call_log_level      = "LOG_ERRORS_ONLY"
+  deletion_protection = false # so kill_switch_enabled = false removes it
+  source_contents     = file("${path.module}/kill-switch.workflow.yaml")
+  user_env_vars = {
+    PROJECT_ID = var.project_id
+    REGION     = var.region
+    SERVICE    = var.kill_switch_service
+    RATIO      = tostring(var.kill_switch_ratio)
+  }
+  depends_on = [google_project_service.kill_switch]
+}
+
+resource "google_eventarc_trigger" "kill_switch" {
+  count           = local.kill_switch
+  project         = var.project_id
+  name            = "cost-kill-switch"
+  location        = var.region
+  service_account = google_service_account.kill_switch[0].email
+
+  matching_criteria {
+    attribute = "type"
+    value     = "google.cloud.pubsub.topic.v1.messagePublished"
+  }
+  transport {
+    pubsub {
+      topic = google_pubsub_topic.budget[0].id
+    }
+  }
+  destination {
+    workflow = google_workflows_workflow.kill_switch[0].id
+  }
+
+  depends_on = [google_project_iam_member.kill_switch, google_cloud_run_v2_service_iam_member.kill_switch_run]
+}

@@ -103,7 +103,7 @@ resource "google_workflows_workflow" "kill_switch" {
   service_account     = google_service_account.kill_switch[0].id
   call_log_level      = "LOG_ERRORS_ONLY"
   deletion_protection = false # so kill_switch_enabled = false removes it
-  source_contents     = file("${path.module}/kill-switch.workflow.yaml")
+  source_contents     = file("${path.module}/../modules/project-budget/kill-switch.workflow.yaml")
   user_env_vars = {
     PROJECT_ID = var.project_id
     REGION     = var.region
