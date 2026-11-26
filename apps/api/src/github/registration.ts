@@ -1,6 +1,6 @@
 import type { CodeHost, Project, WorkTracker } from "@andy/contracts";
 import manifestFile from "../../../../platform/baseline/manifest.json";
-import { renderFiles, type Manifest } from "../../../../platform/baseline/files.mjs";
+import { deployFlags, renderFiles, type Manifest } from "../../../../platform/baseline/files.mjs";
 import {
   checkSections,
   CONFIG_FILES,
@@ -115,7 +115,7 @@ export class BaselineProposer {
         `The App didn't finish the baseline PR in ${repo} within ${this.deadlineMs / 1000} s. Look for a \`baseline/\` branch or PR there; if there is none, from an up-to-date andy-intelligence checkout:`,
         "",
         "```bash",
-        `node platform/baseline/baseline.mjs onboard ${repo} --ref origin/main`,
+        `node platform/baseline/baseline.mjs onboard ${repo} --ref origin/main${deployFlags(project)}`,
         "```",
       ].join("\n"),
     );
@@ -141,7 +141,7 @@ export class BaselineProposer {
         repo,
         error,
       });
-      const command = `node platform/baseline/baseline.mjs onboard ${repo} --ref ${sha ?? BASELINE_REF}`;
+      const command = `node platform/baseline/baseline.mjs onboard ${repo} --ref ${sha ?? BASELINE_REF}${deployFlags(project)}`;
       const ticket = await this.needsYou(
         project,
         empty ? `Baseline for ${repo}: the repo is empty` : `Baseline PR for ${repo} failed`,
@@ -182,12 +182,14 @@ export class BaselineProposer {
     const all = [...froms, ...configPaths];
     const read = await Promise.all(all.map((from) => source(from)));
     all.forEach((from, i) => texts.set(from, read[i]!));
-    // Deploy files only for the project's deploy kind (ADR-0114; `none` gets none).
-    const deployKind = project.deployKind;
+    // Deploy files only for the project's deploy kind (ADR-0114; `none` gets none), and the
+    // template Terraform root for its environment policy (AI-109: M6.22).
+    const { deployKind, environments } = project;
     const rendered = renderFiles(manifest, (from) => texts.get(from)!, {
       sha,
       ref: BASELINE_REF,
       deployKind,
+      environments,
     });
 
     const target = await this.codeHost.getRepo(repo);
@@ -208,6 +210,7 @@ export class BaselineProposer {
       ref: BASELINE_REF,
       date: this.now().toISOString().slice(0, 10),
       deployKind,
+      environments,
     });
     const config = configFor(
       parseConfig((name) => texts.get(`platform/baseline/github/${name}`)!),

@@ -125,7 +125,7 @@ describe("planBaselinePr with a recorded deploy kind", () => {
     const p = planFor("none", "cloud-run");
     expect(p.differs).toContainEqual({
       path: RECORD_PATH,
-      note: "records deploy kind `none`, but the project's is `cloud-run`: run `files <repo> --ref <ref> --deploy-kind cloud-run`",
+      note: "records deploy kind `none`, but the project's is `cloud-run`: run `files <repo> --ref <ref> --deploy-kind cloud-run --environments prod-only`",
     });
   });
 

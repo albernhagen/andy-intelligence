@@ -40,7 +40,7 @@ Build runs (plan approval, sandbox, publish limits) and read caps (AI-222): [`ba
 | Lint, typecheck, test, build | 0022 | `ci.yml` (`check`) → `platform/actions/ci-check` | A | carried (M1.16) |
 | Firestore adapter contract suites on the emulator (path-gated) | 0034, 0048 | `firestore-suite.yml` | — | control plane only (`github/source-only.json`) |
 | Workflow linter (actionlint) | 0027 | `ci.yml` → `platform/actions/actionlint` | A | carried (M1.16) |
-| Terraform fmt/validate (roots, `infra/modules/` and their `examples/`); `terraform test` (mocked) where there is `tests/` | 0011, 0024 | `ci.yml` → `platform/actions/terraform-check` | A | carried (M1.16; tests: next baseline tag) |
+| Terraform fmt/validate (roots, `infra/modules/` and their `examples/`, and `template/infra/` when present); `terraform test` (mocked) where there is `tests/` | 0011, 0024 | `ci.yml` → `platform/actions/terraform-check` | A | carried (M1.16; tests: next baseline tag) |
 | Public-safe Terraform plan summary | 0011 | `terraform-plan.yml` | — | not yet carried (M6: Dev → prod releases; needs per-project WIF) |
 | Secret scan (TruffleHog) | 0015 | `secret-scan.yml` → `platform/actions/secret-scan` | A | carried (M1.16) |
 | CodeQL, dependency review, Terraform misconfig scan | 0025, 0030 | `security-scans.yml` → `platform/actions/{codeql,dependency-review,terraform-misconfig}` | A | carried (M1.16) |
@@ -63,7 +63,8 @@ Build runs (plan approval, sandbox, publish limits) and read caps (AI-222): [`ba
 | Night merges into `epic/<KEY>`: same gate (rules from the default branch), once per child ticket (claim before the merge call), ≤ 50 per launch; morning PR never auto-merges | 0049, 0107 | `night-merge.ts`, `gate-service.ts` | — | control plane |
 | Public-repo hygiene (`.gitignore`: tfvars, state, `.env*`) | 0015 | `template/gitignore.lines` | M (lines) | carried (M1.16) |
 | Reviewer token secret | 0030 | `CLAUDE_CODE_OAUTH_TOKEN` | RB | carried (M1.16: `docs/runbooks/onboard-a-repo.md`) |
-| GCP budget + alerts | 0028, 0029, 0114 | `infra/modules/project-budget` via `infra/billing` `managed_projects` | TF | carried (TF): Andy adds an entry and applies (billing runbook §8) |
+| GCP budget + alerts | 0028, 0029, 0114 | `infra/modules/project-budget` via the seeded template root (`template/infra/cloud-run/`), else `infra/billing` `managed_projects` | TF, S | carried (TF): a `cloud-run` project's baseline PR seeds one budget per environment (AI-109: M6.22); others: Andy adds an entry (billing runbook §8); Andy applies |
+| Deploy scaffold: Terraform root per deploy kind and environment policy (`project-env` + `project-budget` per environment, modules pinned by SHA, example values only, plan test, `repo_variables` output) | 0028, 0038, 0114 | `template/infra/cloud-run/{prod-only,dev-and-prod}/` → `infra/`; `.terraform-version` | S | carried (S): `cloud-run` projects' baseline PR (AI-109: M6.22); planned in CI by `terraform-check`; Andy applies (runbook `project-env.md`) |
 | Cloud Run caps (scale to zero, max instances, concurrency, timeout), log exclusions, usage alerts | 0028, 0114 | `infra/control-plane`; `infra/modules/project-env` | TF | carried (TF): `cloud-run` projects, one call per environment; Andy applies (runbook `project-env.md`) |
 | Deployers over WIF (main: `deploy.yml`/`release.yml` on `main` only; preview: same-repo PRs, preview service only); per-service runtime identities | 0114 | `infra/modules/project-env` | TF | carried (TF): `cloud-run` projects |
 | Daily Firestore backup (7-day retention), Cloud Tasks queue caps (rate, concurrency, retries) | 0028 | `infra/control-plane` | TF | not yet carried (M6: Dev → prod releases) |

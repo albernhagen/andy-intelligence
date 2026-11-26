@@ -153,13 +153,13 @@ node platform/baseline/baseline.mjs files albernhagen/<name> --ref v1.1.0
 
 ### 5a. A project that deploys (`deployKind` `cloud-run`, AI-206: M6.17)
 
-`files`, `onboard` and `finish` take `--deploy-kind none|cloud-run`; without it they use what the repo's `.andy/baseline.json` records, else `none`. `cloud-run` adds `deploy.yml` and `release.yml`; `check` reads the kind from the record. After setting the project to `cloud-run` (Settings or MCP `set_deploy_kind`), once per repo:
+`files`, `onboard` and `finish` take `--deploy-kind none|cloud-run`; without it they use what the repo's `.andy/baseline.json` records, else `none`. `cloud-run` adds `deploy.yml` and `release.yml`; `check` reads the kind from the record. `files` and `onboard` also take `--environments prod-only|dev-and-prod` (default `prod-only`): `cloud-run` seeds the template Terraform root for it in `infra/`, plus `.terraform-version` (AI-109: M6.22; seed files, never overwritten). The App's baseline PR does the same from the project's settings. After setting the project to `cloud-run` (Settings or MCP `set_deploy_kind`), once per repo:
 
 ```sh
-node platform/baseline/baseline.mjs files albernhagen/<name> --ref origin/main --deploy-kind cloud-run
+node platform/baseline/baseline.mjs files albernhagen/<name> --ref origin/main --deploy-kind cloud-run --environments prod-only
 ```
 
-Set its repo variables first (`project-env.md` "After"): until they are, every push to `main` fails `deploy.yml` at its first step, naming what is missing. Back to `none` leaves both workflows in the repo: delete them by hand. `check` renders from the recorded kind, so it can't see a setting changed since; the App's baseline PR report flags that mismatch on `.andy/baseline.json` with the command to run.
+Then apply `infra/` and set its repo variables (`project-env.md`): until they are, every push to `main` fails `deploy.yml` at its first step, naming what is missing. Back to `none` leaves both workflows in the repo: delete them by hand. `check` renders from the recorded kind, so it can't see a setting changed since; the App's baseline PR report flags that mismatch on `.andy/baseline.json` with the command to run.
 
 ## 6. M1.16: Project baseline v1 demo ("Done when")
 

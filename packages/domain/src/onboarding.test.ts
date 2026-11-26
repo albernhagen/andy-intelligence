@@ -60,6 +60,8 @@ function facts(over: Partial<OnboardingFacts> = {}): OnboardingFacts {
       url: "https://github.com/albernhagen/widgets/actions/runs/1",
     },
     buildEnabled: true,
+    deployKind: "none",
+    deployed: false,
     marks: {
       reusable_workflows: { by: "andy@example.com", at: AT },
       reviewer_token: { by: "andy@example.com", at: AT },
@@ -82,6 +84,7 @@ describe("onboarding", () => {
       "repo_app",
       "baseline_pr",
       "repo_settings",
+      "deploy_env",
       "reusable_workflows",
       "reviewer_token",
       "agent_environment",
@@ -262,6 +265,54 @@ describe("missingBaselineFiles", () => {
   });
 });
 
+describe("onboarding deploy environments (AI-109: M6.22)", () => {
+  it("GivenDeployKindNone_WhenDecided_ThenTheStepIsDoneWithNothingToApply", () => {
+    const s = step(onboarding(facts()), "deploy_env");
+    expect(s.status).toBe("done");
+    expect(s.commands).toEqual([]);
+  });
+
+  it("GivenACloudRunProject_WhenDecided_ThenTheApplyIsAHandStepNotYetDone", () => {
+    const o = onboarding(facts({ deployKind: "cloud-run" }));
+    const s = step(o, "deploy_env");
+    expect(s.how).toBe("hand");
+    expect(s.status).toBe("not_yet");
+    expect(o.complete).toBe(false);
+    expect(s.commands.map((c) => c.text)).toContain(
+      "terraform -chdir=infra plan -out=deploy.tfplan",
+    );
+    expect(s.commands.some((c) => c.text.includes(`--repo ${REPO} --body`))).toBe(true);
+    expect(s.link?.url).toBe(`https://github.com/${REPO}/settings/variables/actions`);
+  });
+
+  it("GivenACloudRunProjectThatHasDeployed_WhenDecided_ThenTheStepIsDoneWithNoCommandToReApply", () => {
+    const s = step(onboarding(facts({ deployKind: "cloud-run", deployed: true })), "deploy_env");
+    expect(s.status).toBe("done");
+    expect(s.commands).toEqual([]);
+  });
+
+  it("GivenACloudRunProject_WhenDecided_ThenVariablesAreSetOneByOneSoMultiLineValuesSurvive", () => {
+    const texts = step(onboarding(facts({ deployKind: "cloud-run" })), "deploy_env").commands.map(
+      (c) => c.text,
+    );
+    expect(texts.some((t) => t.includes('gh variable set "$name"') && t.includes("--body"))).toBe(
+      true,
+    );
+    expect(texts.some((t) => t.includes(" -f "))).toBe(false);
+    expect(texts.some((t) => t.includes("--public-access-prevention"))).toBe(true);
+  });
+
+  it("GivenACloudRunProjectMarkedDone_WhenDecided_ThenTheStepIsDone", () => {
+    const o = onboarding(
+      facts({
+        deployKind: "cloud-run",
+        marks: { ...facts().marks, deploy_env: { by: "andy@example.com", at: AT } },
+      }),
+    );
+    expect(step(o, "deploy_env").status).toBe("done");
+  });
+});
+
 describe("stepStatus", () => {
   it("GivenABothStepWhoseReadFailed_WhenMarked_ThenTheMarkStands", () => {
     expect(stepStatus("both", [{ label: "x", status: "unknown", detail: "403" }], true)).toBe(
@@ -281,7 +332,9 @@ describe("runbook managed-project.md", () => {
 
   it("GivenTheStepsCommands_WhenCompared_ThenTheRunbookHasEachOne", () => {
     // The runbook is the source the UI matches: each command, with the runbook's placeholder.
-    const commands = onboardingCommands(facts({ repo: { kind: "no_repo" } })).map((c) => c.text);
+    const commands = onboardingCommands(
+      facts({ repo: { kind: "no_repo" }, deployKind: "cloud-run" }),
+    ).map((c) => c.text);
     for (const command of commands) expect(runbook).toContain(command);
   });
 });
