@@ -19,9 +19,9 @@ Expected **adds, 0 to change, 0 to destroy**, where N = entries in `runtime_proj
 | Environment                                                     | Adds   |
 | --------------------------------------------------------------- | ------ |
 | First environment, with previews (`prod-only`, or dev)          | 38 + N |
-| Prod in `dev-and-prod` (`preview_enabled = false`, promote set) | 29 + N |
+| Prod in `dev-and-prod` (`preview_enabled = false`, promote set) | 30 + N |
 
-38 = 7 APIs, 2 registry repos, pool + provider, 4 service accounts, 4 runtime role grants, main deployer 5 grants (2 federation, push, run, actAs), preview deployer 4 grants, 2 services, 1 log exclusion, 1 email channel, 6 alerts. Anything else (a change or destroy) is drift: stop and check.
+38 = 7 APIs, 2 registry repos, pool + provider, 4 service accounts, 4 runtime role grants, main deployer 5 grants (2 federation, push, run, actAs), preview deployer 4 grants, 2 services, 1 log exclusion, 1 email channel, 6 alerts. Prod in `dev-and-prod` drops the 10 preview resources and adds 2 reads on the dev repo (Cloud Run service agent, main deployer). Anything else (a change or destroy) is drift: stop and check.
 
 ```bash
 terraform apply env.tfplan
