@@ -95,4 +95,10 @@ describe("POST /github/pr-sync (AI-388)", () => {
     for (let i = 0; i < PR_SYNC_RATE_LIMIT; i++) expect((await read()).status).toBe(200);
     expect((await read()).status).toBe(429);
   });
+
+  it("GivenManyAnonymousCalls_WhenTheWorkflowReads_ThenItIsNotRateLimited", async () => {
+    const { read } = setup({ tickMs: 0 });
+    for (let i = 0; i < PR_SYNC_RATE_LIMIT * 2; i++) expect((await read(null)).status).toBe(401);
+    expect((await read()).status).toBe(200);
+  });
 });

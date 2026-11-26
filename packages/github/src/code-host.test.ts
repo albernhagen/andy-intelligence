@@ -447,6 +447,8 @@ describe("GitHubCodeHost", () => {
 
     it("GivenAFileWithNoPatch_WhenDigested_ThenNullButAPureRenameStillDigests", async () => {
       expect(await digestOf([file(undefined, 10)])).toBeNull();
+      // A mode-only change (chmod +x): no patch, no changed lines.
+      expect(await digestOf([{ ...file(undefined, 0), status: "changed" }])).toBeNull();
       expect(
         await digestOf([{ ...file(undefined, 0), status: "renamed", previous_filename: "b.ts" }]),
       ).toMatch(/^[0-9a-f]{64}$/);

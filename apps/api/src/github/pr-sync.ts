@@ -15,7 +15,10 @@ import { RepoIndex } from "./webhooks";
  */
 
 export const PR_SYNC_PATH = "/github/pr-sync";
-/** Reads per instance per minute (max 2 instances; ADR-0028). One per push to main. */
+/**
+ * Reads per registered repo per instance per minute (max 2 instances; ADR-0028), counted after
+ * the caller is verified, so an anonymous caller can't use up a repo's reads. One per push to main.
+ */
 export const PR_SYNC_RATE_LIMIT = 30;
 export const RESYNC_WORKFLOW = "resync-prs.yml";
 
@@ -38,13 +41,18 @@ export interface PrSyncDeps {
 
 export function registerPrSync(app: Hono<AuthEnv>, deps: PrSyncDeps): void {
   const now = deps.now ?? (() => new Date());
-  const limiter = new FixedWindowLimiter(PR_SYNC_RATE_LIMIT, 60_000, () => now().getTime());
+  // One window per registered repo: keys exist only for verified callers of registered repos.
+  const limiters = new Map<string, FixedWindowLimiter>();
+  const limiterFor = (repo: string) => {
+    let limiter = limiters.get(repo);
+    if (!limiter) {
+      limiter = new FixedWindowLimiter(PR_SYNC_RATE_LIMIT, 60_000, () => now().getTime());
+      limiters.set(repo, limiter);
+    }
+    return limiter;
+  };
 
   app.post(PR_SYNC_PATH, async (c) => {
-    if (!limiter.tryTake()) {
-      log("WARNING", "pr sync read rate limited");
-      return c.json({ error: "rate_limited" }, 429);
-    }
     const jwt = /^Bearer\s+(\S+)$/i.exec(c.req.header("authorization") ?? "")?.[1];
     let claims: ActionsClaims;
     try {
@@ -68,6 +76,10 @@ export function registerPrSync(app: Hono<AuthEnv>, deps: PrSyncDeps): void {
     const registered = await deps.registeredProject(claims.repository);
     const project = registered ? await deps.getProject(registered.id) : null;
     if (!project?.enabled) return refuse("repo is not registered to an enabled project");
+    if (!limiterFor(claims.repository.toLowerCase()).tryTake()) {
+      log("WARNING", "pr sync read rate limited", { repository: claims.repository });
+      return c.json({ error: "rate_limited" }, 429);
+    }
     const prSync: PrSync = project.prSync;
     log("INFO", "pr sync read", { repository: claims.repository, project: project.key, prSync });
     return c.json({ prSync }, 200);

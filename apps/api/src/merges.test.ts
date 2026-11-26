@@ -16,6 +16,7 @@ import type { TokenVerifier } from "./auth";
 import { WEBHOOK_PATH } from "./github/webhooks";
 import { ClientMetadataResolver } from "./mcp/client-metadata";
 import { mcpCaller } from "./mcp/test-client";
+import { hashToken, newToken } from "./mcp/tokens";
 import { ownerOnlyAccess } from "./project-access";
 
 /**
@@ -200,6 +201,24 @@ describe("POST /api/projects/{projectId}/merges (AI-388)", () => {
     expect((await t.click("other")).status).toBe(403);
     expect((await t.click("nobody")).status).toBe(401);
     expect(read).not.toHaveBeenCalled();
+    expect(t.host.merges).toEqual([]);
+  });
+
+  it("GivenAnMcpAccessToken_WhenPostingMerge_Then401SoNoSessionCarriesAndysApproval", async () => {
+    const t = await setup();
+    const token = newToken();
+    await t.grants.put(hashToken(token), {
+      kind: "access",
+      clientId: "https://claude.ai/oauth/mcp-client-metadata",
+      email: "andy@example.com",
+      uid: "andy",
+      resource: `${PUBLIC_URL}/mcp`,
+      scope: "",
+      redirectUri: null,
+      codeChallenge: null,
+      expiresAt: "2999-01-01T00:00:00.000Z",
+    });
+    expect((await t.click(token)).status).toBe(401);
     expect(t.host.merges).toEqual([]);
   });
 

@@ -446,8 +446,9 @@ export class GitHubCodeHost implements CodeHost {
         { ...client.repo, pull_number: number, per_page: PER_PAGE, page },
       );
       for (const f of res.data) {
-        // GitHub leaves `patch` out of binary and very large files: the diff can't be compared.
-        if (f.patch === undefined && f.changes > 0) return null;
+        // GitHub leaves `patch` out of binary and very large files, and of mode-only changes: the
+        // diff can't be compared, so it isn't pinnable. Only a pure rename has no patch to show.
+        if (f.patch === undefined && !(f.status === "renamed" && f.changes === 0)) return null;
         parts.push(
           JSON.stringify([f.filename, f.previous_filename ?? null, f.status, ownPatch(f.patch)]),
         );
