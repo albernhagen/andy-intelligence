@@ -175,3 +175,11 @@ test("project settings with changes", async ({ page }) => {
   await expect(page.getByText("Revert of change-flip", { exact: false })).toBeVisible();
   await expect(page).toHaveScreenshot("project-settings-changes.png", { fullPage: true });
 });
+
+/** AI-387: the Defaults section: worker, executor, deploy kind and environments, each option described. */
+test("project settings defaults", async ({ page }) => {
+  await page.clock.setFixedTime(SEED_NOW);
+  await open(page, "/p/ai/settings#defaults", "AI: Andy Intelligence settings");
+  await expect(page.getByRole("radiogroup", { name: "Environments" })).toBeVisible();
+  await expect(page).toHaveScreenshot("project-settings-defaults.png", { fullPage: true });
+});

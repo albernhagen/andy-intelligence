@@ -11,6 +11,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
   CONFIG_CHANGE_NOT_RECORDED,
   changeActor,
+  revertPatch,
   projectSettingsChange,
   settingsDiff,
 } from "./config-changes";
@@ -160,6 +161,35 @@ describe("ProjectService config change log (M4.11)", () => {
         service.update("ai", { environments: "dev-and-prod" }, { actor, email: "x@example.com" }),
       ).rejects.toMatchObject({ code: "forbidden" });
       expect((await tracker.getProject("ai"))?.environments).toBe("prod-only");
+      expect(await changes.listForProject("ai")).toEqual([]);
+    },
+  );
+
+  it("GivenTheDeployKind_WhenTheOwnerSetsCloudRun_ThenItIsSavedAndLogged", async () => {
+    const updated = await service.update("ai", { deployKind: "cloud-run" }, OWNER);
+    const [change] = await changes.listForProject("ai");
+    expect(updated.deployKind).toBe("cloud-run");
+    expect(change?.diff).toEqual({ deployKind: { from: "none", to: "cloud-run" } });
+  });
+
+  it("GivenADeployKindChange_WhenReverted_ThenTheProjectIsBackToNoneAndTheRevertIsLogged", async () => {
+    await service.update("ai", { deployKind: "cloud-run" }, OWNER);
+    const [change] = await changes.listForProject("ai");
+    expect(revertPatch(change!)).toEqual({ deployKind: "none" });
+
+    await service.update("ai", revertPatch(change!), OWNER);
+
+    expect((await tracker.getProject("ai"))?.deployKind).toBe("none");
+    expect(await changes.listForProject("ai")).toHaveLength(2);
+  });
+
+  it.each(["agent:r1", "system"] as const)(
+    "GivenTheActor%s_WhenChangingTheDeployKind_ThenForbiddenAndNothingLogged",
+    async (actor) => {
+      await expect(
+        service.update("ai", { deployKind: "cloud-run" }, { actor, email: "x@example.com" }),
+      ).rejects.toMatchObject({ code: "forbidden" });
+      expect((await tracker.getProject("ai"))?.deployKind).toBe("none");
       expect(await changes.listForProject("ai")).toEqual([]);
     },
   );
