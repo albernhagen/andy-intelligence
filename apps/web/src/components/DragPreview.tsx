@@ -14,7 +14,7 @@ export const MOVE_TRANSITION = { duration: 150, easing: "cubic-bezier(0.2, 0, 0,
  * The copy settling into its slot on drop (design.md "Motion"): the base duration and standard
  * easing, well under the 200 ms in which the copy must be gone (AI-396).
  */
-export const DROP_ANIMATION: DropAnimation = { ...MOVE_TRANSITION };
+export const DROP_ANIMATION = { ...MOVE_TRANSITION } satisfies DropAnimation;
 
 function subscribe(onChange: () => void) {
   if (typeof window === "undefined" || !window.matchMedia) return () => {};
