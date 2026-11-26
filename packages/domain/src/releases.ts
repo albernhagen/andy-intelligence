@@ -214,7 +214,8 @@ export class ReleaseReader {
           error,
         }),
       );
-      return unavailable(`the code host read failed: ${error}`);
+      // A fixed reason: the raw upstream error goes to the log only, never to a caller.
+      return unavailable("the code host read failed");
     }
     if (!range) return unavailable("the code host does not know the repo or one of the commits");
     if (range.status === "identical") {

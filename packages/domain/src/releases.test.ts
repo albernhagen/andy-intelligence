@@ -299,8 +299,8 @@ describe("ReleaseReader", () => {
     vi.spyOn(host, "listCommitsBetween").mockRejectedValue(new Error("rate limited"));
     const error = vi.spyOn(console, "error").mockImplementation(() => {});
     const failed = await reader.read(project.id, current.id);
-    expect(failed.reason).toBe("the code host read failed: rate limited");
-    expect(error).toHaveBeenCalledWith(expect.stringContaining("commit range read failed"));
+    expect(failed.reason).toBe("the code host read failed");
+    expect(error).toHaveBeenCalledWith(expect.stringContaining("rate limited"));
     expect(renderReleaseText(failed)).toContain("could not be read: the code host read failed");
   });
 
