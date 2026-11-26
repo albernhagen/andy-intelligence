@@ -16,6 +16,15 @@ describe("phone shell", () => {
   beforeEach(() => emulateWidth(true));
   afterEach(() => vi.unstubAllGlobals());
 
+  it("GivenAPhoneScreen_WhenTheShellRenders_ThenTheHeaderLeadsWithTheMark", async () => {
+    await project("/p/ai/inbox");
+    const [header] = (await screen.findAllByRole("banner")) as [HTMLElement];
+
+    expect(header.firstElementChild).toBe(
+      within(header).getByRole("img", { name: "andy-intelligence" }),
+    );
+  });
+
   it("GivenAPhoneScreen_WhenTheShellRenders_ThenTheMainScreensAreInABottomBar", async () => {
     await project("/p/ai/inbox");
     const nav = await screen.findByRole("navigation", { name: "Main" });

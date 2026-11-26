@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { screen, waitFor } from "@testing-library/react";
+import { screen, waitFor, within } from "@testing-library/react";
 import { renderApp } from "@/test/harness";
 import { STATE_KEY } from "@/lib/github-setup";
 
@@ -32,8 +32,10 @@ describe("GitHub settings UI", () => {
   it("GivenGitHubRedirectsBackWithTheRightState_WhenTheCallbackLoads_ThenGitHubIsConnected", async () => {
     sessionStorage.setItem(STATE_KEY, "s1");
     const { connections } = renderApp("/settings/github/callback?code=abc123&state=s1");
-    expect(await screen.findByText("andy-intelligence")).toBeTruthy();
-    expect(screen.getByText("albernhagen/andy-intelligence")).toBeTruthy();
+    // The app's name, inside the page: the sidebar's brand row shows the product name too.
+    const main = await screen.findByRole("main");
+    expect(await within(main).findByText("andy-intelligence")).toBeTruthy();
+    expect(within(main).getByText("albernhagen/andy-intelligence")).toBeTruthy();
     expect((await connections.get())?.appId).toBe("42");
     expect(sessionStorage.getItem(STATE_KEY)).toBeNull();
   });

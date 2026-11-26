@@ -106,6 +106,7 @@ Design rules: [`apps/web/design.md`](apps/web/design.md). One shell on every scr
 pnpm --filter @andy/web screenshots:update   # in Docker: write changed images, then commit them
 pnpm --filter @andy/web screenshots          # local run (macOS renders differ)
 pnpm screenshots:table --write               # after a push: before-and-after table into the PR description
+pnpm --filter @andy/web icons                # rebuild favicon and app icons from the mark and tokens
 ```
 
 ## Layout
