@@ -153,7 +153,7 @@ variable "promote_source_repository" {
     location   = string
     repository = string
   })
-  description = "dev-and-prod only, on the prod environment: the dev registry repo promote ships from (ADR-0114: same image digest). Gives this project's Cloud Run service agent read on that one repo. Null otherwise."
+  description = "dev-and-prod only, on the prod environment: the dev registry repo promote ships from (ADR-0114: same image digest). Gives this project's Cloud Run service agent and main deployer read on that one repo. Null otherwise."
   default     = null
 }
 

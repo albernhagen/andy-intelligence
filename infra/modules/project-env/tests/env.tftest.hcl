@@ -143,6 +143,19 @@ run "given_promote_from_dev_when_planned_then_service_agent_reads_that_repo_only
     condition     = google_artifact_registry_repository_iam_member.promote_source_read[0].project == "example-dev-000000" && google_artifact_registry_repository_iam_member.promote_source_read[0].role == "roles/artifactregistry.reader" && google_artifact_registry_repository_iam_member.promote_source_read[0].member == "serviceAccount:service-123456789012@serverless-robot-prod.iam.gserviceaccount.com"
     error_message = "Promote should give only this project's Cloud Run service agent read on the dev repo."
   }
+  assert {
+    condition     = google_artifact_registry_repository_iam_member.deployer_promote_read[0].project == "example-dev-000000" && google_artifact_registry_repository_iam_member.deployer_promote_read[0].repository == "example" && google_artifact_registry_repository_iam_member.deployer_promote_read[0].role == "roles/artifactregistry.reader" && google_artifact_registry_repository_iam_member.deployer_promote_read[0].member == "serviceAccount:sa@example-prod-000000.iam.gserviceaccount.com"
+    error_message = "Promote should give the main deployer read on the dev repo only, so the release check can find the digest."
+  }
+}
+
+run "given_no_promote_source_when_planned_then_no_cross_project_read" {
+  command = plan
+
+  assert {
+    condition     = length(google_artifact_registry_repository_iam_member.promote_source_read) == 0 && length(google_artifact_registry_repository_iam_member.deployer_promote_read) == 0
+    error_message = "Without promote_source_repository, nothing should read another project's registry."
+  }
 }
 
 run "given_a_runtime_role_of_owner_when_planned_then_rejected" {
