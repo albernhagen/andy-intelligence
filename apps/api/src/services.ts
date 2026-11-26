@@ -30,6 +30,7 @@ import {
   WaitingMergesReader,
   WhatsNewReader,
   ReleaseReader,
+  ReleaseService,
   EmailNotifications,
   wakeAfterRunEnd,
   notifyOnNeedsYou,
@@ -148,6 +149,7 @@ export const METERED_READS = {
   quota: ["latest", "clearsSince"],
   nightLaunches: ["get", "listForProject", "findActive"],
   deployments: ["get", "list", "latestGood"],
+  releaseRequests: ["get", "list"],
   routing: ["getGlobal", "getProject"],
   spendLedger: ["get", "totals", "totalsByProvider"],
   spendCapsStore: ["getGlobal"],
@@ -553,6 +555,19 @@ export function createServices(raw: AppDeps): Services {
           now,
         )
       : null;
+  // AI-199: M6.12: promote and rollback; absent without a deployment or release-request store
+  // (routes and tools both). The code host is read per call, so connecting GitHub later works.
+  const releaseRequests =
+    deps.deployments && deps.releaseRequests
+      ? new ReleaseService({
+          tracker: deps.tracker,
+          deployments: deps.deployments,
+          requests: deps.releaseRequests,
+          codeHost: async () => (connection ? connection.codeHost() : null),
+          queue: deps.watchdog?.queue ?? null,
+          now,
+        })
+      : null;
   // AI-239: routing settings; each save is logged when the change log is configured.
   const routing = deps.routing
     ? new RoutingSettings(deps.routing, deps.tracker, deps.configChanges ?? null, now)
@@ -627,6 +642,7 @@ export function createServices(raw: AppDeps): Services {
     roadmap: new RoadmapReader(deps.tracker, board, deps.milestones ?? null),
     whatsNew,
     releases,
+    releaseRequests,
     // AI-218: PRs the merge mode leaves for Andy; release notes read from the connected host.
     waitingMerges: new WaitingMergesReader(
       deps.tracker,

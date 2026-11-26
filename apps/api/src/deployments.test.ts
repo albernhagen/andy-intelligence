@@ -1,4 +1,8 @@
-import { InMemoryDeploymentStore, type Project } from "@andy/contracts";
+import {
+  InMemoryDeploymentStore,
+  InMemoryReleaseRequestStore,
+  type Project,
+} from "@andy/contracts";
 import { Hono } from "hono";
 import { describe, expect, it } from "vitest";
 import type { AuthEnv } from "./auth";
@@ -27,7 +31,11 @@ const claims = (overrides: Partial<ActionsClaims> = {}): ActionsClaims => ({
 });
 
 /** `tickMs`: how far the clock moves on each read (0 keeps every call in one rate window). */
-function setup(projects: Record<string, Project> = { [REPO]: project }, tickMs = 60_000) {
+function setup(
+  projects: Record<string, Project> = { [REPO]: project },
+  tickMs = 60_000,
+  releaseRequests?: InMemoryReleaseRequestStore,
+) {
   const app = new Hono<AuthEnv>();
   const deployments = new InMemoryDeploymentStore();
   let clock = Date.parse("2026-11-21T10:00:00.000Z");
@@ -39,6 +47,7 @@ function setup(projects: Record<string, Project> = { [REPO]: project }, tickMs =
       return JSON.parse(jwt) as ActionsClaims;
     },
     registeredProject: async (repo) => projects[repo] ?? null,
+    ...(releaseRequests ? { releaseRequests } : {}),
     now: () => new Date((clock += tickMs)),
   });
   const post = (path: string, body: unknown, token: ActionsClaims | string | null = claims()) =>
@@ -283,5 +292,102 @@ describe("release reports (AI-190: M6.11)", () => {
     expect((await finish(rollback, { status: "succeeded" })).status).toBe(404);
     expect((await deployments.get(deploy))?.status).toBe("started");
     expect((await deployments.get(rollback))?.status).toBe("started");
+  });
+});
+
+describe("release requests matched to reports (AI-199: M6.12)", () => {
+  const PROMOTED = `sha256:${"c".repeat(64)}`;
+  const at = "2026-11-21T09:00:00.000Z";
+  const asked = async (
+    requests: InMemoryReleaseRequestStore,
+    overrides: { action?: "promote" | "rollback"; digest?: string } = {},
+  ) => {
+    const made = await requests.create(
+      {
+        projectId: "ai",
+        action: overrides.action ?? "promote",
+        environment: "prod",
+        digest: overrides.digest ?? PROMOTED,
+        revision: overrides.action === "rollback" ? "control-plane-00041-old" : null,
+        sourceDeploymentId: "src",
+        actor: "user:andy",
+        createdAt: at,
+        status: "dispatched",
+        updatedAt: at,
+      },
+      0,
+    );
+    if (!("created" in made)) throw new Error("not created");
+    return made.created;
+  };
+  const devBuild = async (s: ReturnType<typeof setup>) => {
+    const dev = await idOf(await s.start(undefined, { imageDigest: PROMOTED, environment: "dev" }));
+    await s.finish(dev, { status: "succeeded", revision: "control-plane-dev-1" });
+  };
+
+  it("GivenTheOwnersPromoteRequest_WhenReleaseYmlReportsStartAndEnd_ThenTheRequestFollowsTheDeployment", async () => {
+    const requests = new InMemoryReleaseRequestStore();
+    const s = setup(undefined, undefined, requests);
+    await devBuild(s);
+    const request = await asked(requests);
+
+    const started = await s.start(release(), {
+      imageDigest: PROMOTED,
+      environment: "prod",
+      kind: "promote",
+      request: request.id,
+    });
+    expect(started.status).toBe(201);
+    const id = await idOf(started);
+    expect(await requests.get(request.id)).toMatchObject({ status: "started", deploymentId: id });
+
+    await s.finish(id, { status: "succeeded", revision: "control-plane-00050" }, release());
+    expect((await requests.get(request.id))?.status).toBe("succeeded");
+  });
+
+  it("GivenAReportNamingAnUnknownOrDifferentRequest_WhenItStarts_Then422AndNothingRecorded", async () => {
+    const requests = new InMemoryReleaseRequestStore();
+    const s = setup(undefined, undefined, requests);
+    await devBuild(s);
+    const rollback = await asked(requests, { action: "rollback" });
+    const before = await s.deployments.list("ai", "prod");
+    for (const request of ["nope", rollback.id]) {
+      const res = await s.start(release(), {
+        imageDigest: PROMOTED,
+        environment: "prod",
+        kind: "promote",
+        request,
+      });
+      expect(res.status).toBe(422);
+    }
+    expect(await s.deployments.list("ai", "prod")).toEqual(before);
+    expect((await requests.get(rollback.id))?.status).toBe("dispatched");
+  });
+
+  it("GivenARequestAlreadyMatched_WhenAReportReplaysIt_Then422", async () => {
+    const requests = new InMemoryReleaseRequestStore();
+    const s = setup(undefined, undefined, requests);
+    await devBuild(s);
+    const request = await asked(requests);
+    const body = {
+      imageDigest: PROMOTED,
+      environment: "prod",
+      kind: "promote",
+      request: request.id,
+    };
+    expect((await s.start(release(), body)).status).toBe(201);
+    expect((await s.start(release(), body)).status).toBe(422);
+  });
+
+  it("GivenAReleaseRunByHand_WhenItReportsWithoutARequest_ThenItIsRecordedAsBefore", async () => {
+    const requests = new InMemoryReleaseRequestStore();
+    const s = setup(undefined, undefined, requests);
+    await devBuild(s);
+    const res = await s.start(release(), {
+      imageDigest: PROMOTED,
+      environment: "prod",
+      kind: "promote",
+    });
+    expect(res.status).toBe(201);
   });
 });

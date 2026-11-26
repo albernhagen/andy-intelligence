@@ -30,6 +30,7 @@ export class DomainError extends Error {
       | "code_host_unavailable"
       | "rate_limited"
       | "not_revertible"
+      | "not_releasable"
       | "invalid_field",
     message: string,
     readonly details: string[] = [],
