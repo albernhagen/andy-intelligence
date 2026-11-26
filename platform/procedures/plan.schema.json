@@ -60,9 +60,44 @@
           },
           "maxItems": 5,
           "description": "Approaches you considered and rejected, each with the reason."
+        },
+        "packages": {
+          "type": "array",
+          "maxItems": 5,
+          "description": "Packages the build must have installed that the repo does not have yet, each once; empty if none. A trusted step installs them before the build (newest version at least 7 days old, install scripts off). Andy sees them when he approves the plan.",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "name": {
+                "type": "string",
+                "maxLength": 214,
+                "pattern": "^(@[a-z0-9][a-z0-9._-]*/)?[a-z0-9][a-z0-9._-]*$",
+                "description": "The npm package name only: no version, range, tag, URL or alias."
+              },
+              "kind": {
+                "type": "string",
+                "enum": ["runtime", "dev"],
+                "description": "runtime: dependencies; dev: devDependencies."
+              },
+              "workspace": {
+                "type": "string",
+                "maxLength": 300,
+                "pattern": "^(\\.|[A-Za-z0-9_@][A-Za-z0-9._@-]*(/[A-Za-z0-9_@][A-Za-z0-9._@-]*)*)$",
+                "description": "The repo-relative directory whose package.json gets it, or . for the root."
+              },
+              "why": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 500,
+                "description": "Why the ticket needs it and why no installed package will do."
+              }
+            },
+            "required": ["name", "kind", "workspace", "why"]
+          }
         }
       },
-      "required": ["files", "steps", "tests", "riskiestStep", "rejectedAlternatives"]
+      "required": ["files", "steps", "tests", "riskiestStep", "rejectedAlternatives", "packages"]
     }
   },
   "required": ["summary", "plan"]
