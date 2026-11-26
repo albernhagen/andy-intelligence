@@ -1,4 +1,20 @@
-import { Deployment, WorkTrackerError, type DeploymentStore, type Project } from "@andy/contracts";
+import {
+  DEPLOYMENT_LIMITS,
+  Deployment,
+  DeploymentStartReport,
+  WorkTrackerError,
+  type DeploymentStore,
+  type Project,
+} from "@andy/contracts";
+import {
+  REPORTING_WORKFLOWS,
+  mayFinish,
+  planStart,
+  releaseSource,
+  reportingWorkflow,
+  reportingWorkflowRef,
+  type ReportingWorkflow,
+} from "@andy/domain";
 import { z } from "@hono/zod-openapi";
 import type { Hono } from "hono";
 import { bodyLimit } from "hono/body-limit";
@@ -9,28 +25,35 @@ import { FixedWindowLimiter } from "./mcp/rate-limit";
 import type { RouteModule } from "./services";
 
 /**
- * Deployment reports from deploy workflows (AI-180: M6.4; M6: Dev → prod releases in `docs/architecture/milestones.md`). The workflow proves who it
- * is with its GitHub Actions OIDC token, like the run callbacks (ADR-0019): only a registered,
- * enabled project's `deploy.yml` on `main` is accepted, and every other caller gets 403 with
- * nothing recorded. The token, not the body, says which repo and commit; the body adds only what
- * the token can't know (image digest at the start, status and revision at the end).
+ * Deployment reports from deploy and release workflows (AI-180: M6.4, AI-190: M6.11; ADR-0114).
+ * The workflow proves who it is with its GitHub Actions OIDC token, like the run callbacks
+ * (ADR-0019): only a registered, enabled project's `deploy.yml` or `release.yml` on `main` is
+ * accepted, and every other caller gets 403 with nothing recorded. The token, not the body, says
+ * which repo and workflow; the body adds what the token can't know (image digest, environment,
+ * kind, url and request at the start; status and revision at the end). Who may report which kind:
+ * `@andy/domain` `deployment-reports`.
  */
 
 export const DEPLOYMENTS_PATH = "/deployments";
 export const DEPLOYMENT_FINISH_PATH = "/deployments/:deploymentId/finish";
-/** The workflow file that may report (path under `.github/workflows/`). */
-export const DEPLOY_WORKFLOW = "deploy.yml";
+/** The workflow files that may report (paths under `.github/workflows/`). */
+export const DEPLOY_WORKFLOW = REPORTING_WORKFLOWS.deploy;
+export const RELEASE_WORKFLOW = REPORTING_WORKFLOWS.release;
 /** Verified reports per instance per minute (max 2 instances; ADR-0028). A deploy sends two. */
 export const DEPLOYMENT_REPORT_RATE_LIMIT = 30;
 /** Report bodies are a few fields; anything larger is refused before parsing. */
 export const DEPLOYMENT_REPORT_MAX_BYTES = 1024;
 
-/** The one caller accepted: the repo's own deploy workflow on `main`. */
+/** The repo's own deploy workflow on `main`. */
 export function deployWorkflowRef(repository: string): string {
-  return `${repository}/.github/workflows/${DEPLOY_WORKFLOW}@refs/heads/main`;
+  return reportingWorkflowRef(repository, "deploy");
 }
 
-const StartBody = z.strictObject({ imageDigest: Deployment.shape.imageDigest });
+/** The repo's own release workflow on `main` (promote and rollback). */
+export function releaseWorkflowRef(repository: string): string {
+  return reportingWorkflowRef(repository, "release");
+}
+
 const FinishBody = z.strictObject({
   status: z.enum(["succeeded", "failed"]),
   revision: Deployment.shape.revision.unwrap().unwrap().optional(),
@@ -50,7 +73,12 @@ export interface DeploymentCallbackDeps {
   now?: () => Date;
 }
 
-type Caller = { project: Project; sha: string; claims: ActionsClaims };
+type Caller = {
+  project: Project;
+  sha: string;
+  workflow: ReportingWorkflow;
+  claims: ActionsClaims;
+};
 
 export function registerDeploymentCallbacks(
   app: Hono<AuthEnv>,
@@ -61,7 +89,7 @@ export function registerDeploymentCallbacks(
     now().getTime(),
   );
 
-  /** The verified caller, or the status to answer: 401 bad token, 403 not the deploy workflow. */
+  /** The verified caller, or the status to answer: 401 bad token, 403 not a reporting workflow. */
   const authenticate = async (authorization: string | undefined): Promise<Caller | 401 | 403> => {
     const jwt = /^Bearer\s+(\S+)$/i.exec(authorization ?? "")?.[1];
     let claims: ActionsClaims;
@@ -80,14 +108,13 @@ export function registerDeploymentCallbacks(
       });
       return 403 as const;
     };
-    if (claims.workflow_ref !== deployWorkflowRef(claims.repository)) {
-      return refuse("not the repo's deploy workflow on main");
-    }
+    const workflow = reportingWorkflow(claims.repository, claims.workflow_ref);
+    if (!workflow) return refuse("not the repo's deploy or release workflow on main");
     if (!claims.sha || !GitSha.safeParse(claims.sha).success)
       return refuse("token has no commit sha");
     const project = await deps.registeredProject(claims.repository);
     if (!project?.enabled) return refuse("repo is not registered to an enabled project");
-    return { project, sha: claims.sha, claims };
+    return { project, sha: claims.sha, workflow, claims };
   };
 
   const limit = bodyLimit({
@@ -101,26 +128,59 @@ export function registerDeploymentCallbacks(
     if (caller === 403) return c.json({ error: "forbidden" }, 403);
     // After verification, so unauthenticated floods can't use up the cap.
     if (!limiter.tryTake()) return c.json({ error: "rate limited" }, 429);
-    const body = StartBody.safeParse(await c.req.json().catch(() => null));
+    const body = DeploymentStartReport.safeParse(await c.req.json().catch(() => null));
     if (!body.success) return c.json({ error: "invalid request" }, 400);
-    const previous = await deps.deployments.latestGood(caller.project.id, "prod");
+    const plan = planStart(caller.workflow, body.data);
+    if (!plan.ok) {
+      log("WARNING", "deployment start refused", {
+        reason: plan.reason,
+        workflow: caller.workflow,
+      });
+      return c.json({ error: plan.reason }, 422);
+    }
+    // A release ships an earlier build: record that build's commit, found from a succeeded
+    // deployment of the same digest (one bounded read). An unknown digest records nothing.
+    let gitSha = caller.sha;
+    if (plan.workflow === "release") {
+      const recent = await deps.deployments.list(
+        caller.project.id,
+        plan.sourceEnvironment,
+        DEPLOYMENT_LIMITS.maxPage,
+      );
+      const source = releaseSource(recent, body.data.imageDigest);
+      if (!source) {
+        log("WARNING", "deployment start refused", {
+          reason: "no succeeded deployment of that digest",
+          kind: plan.kind,
+          environment: plan.sourceEnvironment,
+        });
+        return c.json({ error: "no succeeded deployment of that image digest" }, 422);
+      }
+      gitSha = source.gitSha;
+    }
+    const previous = await deps.deployments.latestGood(caller.project.id, plan.environment);
     const deployment = await deps.deployments.record({
       projectId: caller.project.id,
-      environment: "prod",
+      environment: plan.environment,
       imageDigest: body.data.imageDigest,
-      gitSha: caller.sha,
+      gitSha,
       revision: null,
-      kind: "deploy",
+      kind: plan.kind,
       status: "started",
       startedAt: now().toISOString(),
       finishedAt: null,
       actor: "system",
       previousDeploymentId: previous?.id ?? null,
+      url: body.data.url ?? null,
+      request: body.data.request ?? null,
     });
     log("INFO", "deployment started", {
       deploymentId: deployment.id,
       projectId: caller.project.id,
-      gitSha: caller.sha,
+      environment: plan.environment,
+      kind: plan.kind,
+      gitSha,
+      request: deployment.request,
       runId: caller.claims.run_id ?? null,
     });
     return c.json({ deploymentId: deployment.id }, 201);
@@ -136,9 +196,21 @@ export function registerDeploymentCallbacks(
     const body = FinishBody.safeParse(await c.req.json().catch(() => null));
     if (!body.success) return c.json({ error: "invalid request" }, 400);
     const current = await deps.deployments.get(id.data);
-    // Only the deployment this project's deploy of this commit started may be finished by it.
-    if (!current || current.projectId !== caller.project.id || current.gitSha !== caller.sha) {
-      log("WARNING", "deployment finish refused", { deploymentId: id.data, gitSha: caller.sha });
+    // A deploy finishes only its own project's deploy of its commit; a release only its project's
+    // promote or rollback (domain `mayFinish`).
+    if (
+      !current ||
+      !mayFinish(current, {
+        workflow: caller.workflow,
+        projectId: caller.project.id,
+        sha: caller.sha,
+      })
+    ) {
+      log("WARNING", "deployment finish refused", {
+        deploymentId: id.data,
+        gitSha: caller.sha,
+        workflow: caller.workflow,
+      });
       return c.json({ error: "not found" }, 404);
     }
     try {
@@ -158,7 +230,7 @@ export function registerDeploymentCallbacks(
   });
 }
 
-/** Listed in `public-routes.ts` (AI-145): deploy workflows present an Actions OIDC token. */
+/** Listed in `public-routes.ts` (AI-145): deploy and release workflows present an Actions OIDC token. */
 export const publicRoutes: RouteModule = (app, s) => {
   const deployments = s.deps.deployments;
   if (!s.verifyActionsToken || !deployments) return;
