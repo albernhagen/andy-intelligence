@@ -1,6 +1,6 @@
 ---
 title: Spike tickets
-status: proposed
+status: accepted (Andy, 2026-11-25)
 date: 2026-11-12
 amends: 0058 (ticket types: spike), 0050 (gate vetoes)
 ---

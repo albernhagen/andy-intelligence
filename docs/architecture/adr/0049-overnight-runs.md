@@ -1,6 +1,6 @@
 ---
 title: "Overnight runs: epic launched at night, PR reviewed next morning"
-status: accepted, amended by 0107 (proposed)
+status: accepted, amended by 0107
 date: 2026-11-04
 amends: 0021, 0040
 ---

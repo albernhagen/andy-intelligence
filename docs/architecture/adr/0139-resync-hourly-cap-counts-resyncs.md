@@ -1,6 +1,6 @@
 ---
 title: Re-sync open PRs: the hourly cap is 12 and counts only runs that re-synced
-status: proposed (AI-345; Andy approved the change 2026-11-21)
+status: accepted (Andy, 2026-11-25)
 date: 2026-11-21
 amends: 0111 (the hourly cap)
 ---

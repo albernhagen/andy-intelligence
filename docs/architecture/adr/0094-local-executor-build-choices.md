@@ -1,6 +1,6 @@
 ---
 title: Local executor build choices
-status: proposed (AI-79; Andy decides at review)
+status: accepted (Andy, 2026-11-25)
 date: 2026-11-11
 amends: 0089 (what the control-plane side does where the design left it open)
 ---

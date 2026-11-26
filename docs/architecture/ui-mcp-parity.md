@@ -53,7 +53,7 @@ Step 1 of AI-285: Web UI and MCP parity: every action in both, enforced by a tes
 | AI-351: Parity: revoke a runner over MCP | done | S | Built: `revoke_runner`, owner only (ADR-0143; now matched) |
 | AI-295: Parity: dashboards and DORA metrics over MCP                   | UI-only   | S    | Built: `dashboard` (now matched)                             |
 | AI-296: Parity: the board, every stage, over MCP | UI-only | S | Built: `board` (now matched) |
-| AI-321: Milestone create and edit over MCP | done | S | Built: `create_milestone`, `edit_milestone` (ADR-0136, proposed; now matched) |
+| AI-321: Milestone create and edit over MCP | done | S | Built: `create_milestone`, `edit_milestone` (ADR-0136; now matched) |
 | AI-298: Parity: ranked Ready list in the web UI                        | MCP-only  | S    | Built: `GET …/ready` and the Ready view (now matched)        |
 | AI-299: Parity: ideate from the web UI                                 | MCP-only  | M    | Built: the board's Ideate form starts an ideate agent task (now matched) |
 | AI-300: Parity: registry test that every action has a route and a tool | done | M | Built: `apps/api/src/parity.ts` and `parity.test.ts` |

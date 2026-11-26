@@ -1,6 +1,6 @@
 ---
 title: "Threat model: one file per risk, register on demand"
-status: proposed (AI-144; Andy decides at review)
+status: accepted (Andy, 2026-11-25)
 date: 2026-11-20
 amends: 0025 (where risks live), 0046 (threat-model budget)
 ---
