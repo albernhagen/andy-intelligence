@@ -180,6 +180,7 @@ function RunDetail({
             </Section>
           )}
           {run.plan && <Plan plan={run.plan} />}
+          {(run.neededPackages ?? []).length > 0 && <NeededPackages names={run.neededPackages} />}
           {run.verification.length > 0 && <Verification checks={run.verification} />}
 
           <Facts title="Details">
@@ -393,6 +394,33 @@ function Plan({ plan }: { plan: NonNullable<Run["plan"]> }) {
         <p className="text-muted-foreground">Files: {plan.files.join(", ")}</p>
       )}
       <p className="text-muted-foreground">Riskiest step: {plan.riskiestStep}</p>
+      {(plan.packages ?? []).length > 0 && (
+        <div>
+          <p className="text-muted-foreground">
+            Packages installed before the build (newest version at least 7 days old, install scripts
+            off):
+          </p>
+          <ul className="list-disc pl-5">
+            {plan.packages.map((p) => (
+              <li key={p.name}>
+                <code>{p.name}</code> ({p.kind}, {p.workspace}): {p.why}
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+    </Section>
+  );
+}
+
+/** AI-386: packages the build stopped for; the next plan names them for Andy's approval. */
+function NeededPackages({ names }: { names: string[] }) {
+  return (
+    <Section title="Packages the plan didn't name">
+      <p>
+        The build stopped for <code>{names.join(", ")}</code>. Start the build again: a new plan
+        names them, and they're installed once you approve it.
+      </p>
     </Section>
   );
 }

@@ -14,6 +14,9 @@ name: Claude Code executor
 # build-sandboxed run on an open agent PR: the agent job merges the default branch into the PR
 # head before the agent, the agent resolves conflicts and runs the checks, and `publish` repeats
 # the merge, applies only the agent's edits and pushes the merge commit as a fast forward.
+# A build whose approved plan names packages (AI-386, ADR-0156) first runs `deps`: with no model
+# credential, OIDC token or write token, it resolves them into the manifests and lockfile (newest
+# version at least 7 days old, install scripts off) for the agent job to apply before its install.
 # The prompt is ticket text: untrusted data. It travels in env, job outputs and the action's
 # `prompt` input, never inside a `run:` script. So do the ticket title and the agent's output.
 
@@ -61,6 +64,7 @@ jobs:
       base_branch: ${{ steps.context.outputs.base_branch }}
       platform_sha: ${{ steps.context.outputs.platform_sha }}
       max_budget_usd: ${{ steps.context.outputs.max_budget_usd }}
+      packages: ${{ steps.context.outputs.packages }}
       error: ${{ steps.context.outputs.error }}
     steps:
       - name: Validate inputs and fetch the run context
@@ -72,6 +76,7 @@ jobs:
           MAX_BUDGET_USD_CAP: 50 # USD per pay_per_use run (AI-260), whatever the control plane asks
           SUMMARIZE_MAX_TURNS: 3 # the digest summary is one answer, no tools (AI-323, ADR-0137)
           MAX_PROMPT_CHARS: 200000
+          MAX_PACKAGES: 5 # plan-named packages per ticket (AI-386, ADR-0028)
         run: |
           fail() {
             echo "error=$1" >> "$GITHUB_OUTPUT"
@@ -103,7 +108,7 @@ jobs:
           fi
           jq -e --arg id "$RUN_ID" --argjson cap "$MAX_TURNS_CAP" --argjson max "$MAX_PROMPT_CHARS" \
             --argjson summarize_turns "$SUMMARIZE_MAX_TURNS" \
-            --argjson budgetcap "$MAX_BUDGET_USD_CAP" '
+            --argjson budgetcap "$MAX_BUDGET_USD_CAP" --argjson max_packages "$MAX_PACKAGES" '
             (.runId == $id)
             and ((.billingType // "subscription") as $b | ($b == "subscription" or $b == "pay_per_use"))
             and (if (.billingType // "subscription") == "pay_per_use"
@@ -132,6 +137,13 @@ jobs:
               (.step == "build")
               and (.baseBranch | type == "string" and test("^epic/[A-Z][A-Z0-9]{0,9}-[0-9]{1,9}$"))
               and ((.baseBranch | ltrimstr("epic/") | split("-") | .[0]) == (.ticket.key | split("-") | .[0]))))
+            and ((.packages // []) | type == "array" and length <= $max_packages and all(.[];
+              (.name | type == "string" and length <= 214 and test("^(@[a-z0-9][a-z0-9._-]*/)?[a-z0-9][a-z0-9._-]*$"))
+              and (.kind == "runtime" or .kind == "dev")
+              and (.workspace | type == "string" and length <= 300
+                and test("^([.]|[A-Za-z0-9_@][A-Za-z0-9._@-]*(/[A-Za-z0-9_@][A-Za-z0-9._@-]*)*)$")
+                and (split("/") | index("..") == null))))
+            and (.step == "build" or ((.packages // []) | length == 0))
           ' "$body" > /dev/null || fail "GET /runs/$RUN_ID/context: unexpected response shape"
 
           # AI-122: a night launch's story builds on its epic branch; empty means the default
@@ -172,6 +184,8 @@ jobs:
             echo "branch=$(jq -r '.branch // ""' "$body")"
             echo "head_sha=$(jq -r '.sync.headSha // ""' "$body")"
             echo "base_branch=$base_branch"
+            # AI-386: checked above; one line of JSON, only the fields the deps job needs.
+            echo "packages=$(jq -c '[(.packages // [])[] | {name, kind, workspace}]' "$body")"
             # One line: the title can't hold a newline here, and the delimiter is random.
             echo "ticket_title=$(jq -r '.ticket.title // "" | gsub("[\\r\\n]+"; " ")' "$body")"
             delimiter="PROMPT_$(openssl rand -hex 16)"
@@ -182,6 +196,77 @@ jobs:
           rm -f "$body"
           echo "Run $RUN_ID: step $step, read-only $read_only."
 
+  # AI-386 (ADR-0156): a build's plan-named packages, resolved outside the sandbox before the agent
+  # job starts. No `agent` environment (so no model credential), no id-token (so no OIDC and no App
+  # token): only a read-only repo token for the checkout, not persisted, then the registry. pnpm
+  # runs `add --lockfile-only` with install scripts and pnpmfile hooks off and a 7-day release-age
+  # cooldown, so no package or project code runs and node_modules isn't written; executor-deps.mjs
+  # refuses any change but the named workspaces' package.json and pnpm-lock.yaml. The agent job
+  # applies those files before its frozen install, so they ship in the PR, where dependency review
+  # checks them and the gate (tooling files) leaves the merge to Andy.
+  deps:
+    needs: context
+    if: needs.context.outputs.step == 'build' && needs.context.outputs.packages != '' && needs.context.outputs.packages != '[]'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read # checkout only (persist-credentials: false)
+    outputs:
+      error: ${{ steps.add.outputs.error }}
+    steps:
+      # The commit the agent job will check out; it refuses the files if its own differs.
+      - name: Check out the project (deps)
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ needs.context.outputs.base_branch || github.event.repository.default_branch }}
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Check out the platform (deps)
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: albernhagen/andy-intelligence
+          ref: ${{ needs.context.outputs.platform_sha || 'main' }}
+          path: .executor-platform
+          fetch-depth: 1
+          persist-credentials: false
+          sparse-checkout: |
+            scripts
+
+      - name: Set up pnpm (deps)
+        uses: pnpm/action-setup@73e46992e05b19abd31f2f3c20e0e7370d762115 # v6.1.1
+        with:
+          dest: ${{ runner.tool_cache }}/setup-pnpm
+      - name: Set up Node (deps)
+        if: hashFiles('.nvmrc') != ''
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: .nvmrc
+
+      - name: Resolve the plan's packages
+        id: add
+        env:
+          PACKAGES: ${{ needs.context.outputs.packages }}
+        run: |
+          # Out of the checkout first, so the change check sees only what pnpm wrote.
+          mv .executor-platform "$RUNNER_TEMP/platform"
+          mkdir -p "$RUNNER_TEMP/deps"
+          if ! WORKSPACE="$GITHUB_WORKSPACE" OUT="$RUNNER_TEMP/deps" ERROR_FILE="$RUNNER_TEMP/deps-error" \
+            node "$RUNNER_TEMP/platform/scripts/executor-deps.mjs" add; then
+            reason=$(head -c 300 "$RUNNER_TEMP/deps-error" 2>/dev/null | tr -d '\r\n') || reason=""
+            echo "error=${reason:-the install failed}" >> "$GITHUB_OUTPUT"
+            echo "::error title=claude-executor::Couldn't install the plan's packages: ${reason:-the install failed}"
+            exit 1
+          fi
+
+      - name: Upload the resolved packages
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: deps-${{ inputs.run_id }}
+          path: ${{ runner.temp }}/deps
+          retention-days: 1
+          if-no-files-found: error
+
   # Holds the model credential. The project is checked out from its default branch (not a PR).
   # Read-only steps only read it. A build run's agent edits it and runs its commands, but only
   # through Bash inside Claude Code's sandbox (ADR-0063): credentials unset and scrubbed, its own
@@ -189,7 +274,9 @@ jobs:
   # job's own steps after the agent treat the checkout as hostile: git runs from a copy of .git
   # taken before the agent started, and nothing from the checkout is executed.
   agent:
-    needs: context
+    needs: [context, deps]
+    # AI-386: runs after `deps` when it ran, and never after it failed (the report says why).
+    if: ${{ !cancelled() && needs.context.result == 'success' && (needs.deps.result == 'success' || needs.deps.result == 'skipped') }}
     runs-on: ubuntu-latest
     timeout-minutes: ${{ needs.context.outputs.step == 'build' && 65 || (needs.context.outputs.step == 'sync' && 80) || 30 }}
     # AI-106 (ADR-0096): the model credential lives in the calling repo's `agent` environment,
@@ -523,6 +610,26 @@ jobs:
       # or project code runs in this job (pnpm still reads the repo's .npmrc and workspace settings).
       # The store is under runner temp, which sandboxed commands can't read, so the agent can't
       # alter the files behind node_modules' hardlinks. A failed install fails the job.
+      # AI-386 (ADR-0156): the manifests and lockfile the `deps` job resolved, applied after the
+      # pristine .git copy (so they are part of the change and ship in the PR) and before the
+      # frozen install below. executor-deps.mjs refuses them unless they were resolved on this
+      # commit and are exactly the named workspaces' package.json and pnpm-lock.yaml.
+      - name: Download the plan's packages (build)
+        if: steps.mode.outputs.edits == 'true' && needs.deps.result == 'success'
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: deps-${{ inputs.run_id }}
+          path: ${{ runner.temp }}/deps
+      - name: Apply the plan's packages (build)
+        id: deps_apply
+        if: steps.mode.outputs.edits == 'true' && needs.deps.result == 'success'
+        env:
+          PACKAGES: ${{ needs.context.outputs.packages }}
+        run: |
+          head_sha=$(GIT_DIR="$RUNNER_TEMP/pristine.git" GIT_CONFIG_NOSYSTEM=1 GIT_CONFIG_GLOBAL=/dev/null git rev-parse HEAD)
+          WORKSPACE="$GITHUB_WORKSPACE" IN="$RUNNER_TEMP/deps" HEAD_SHA="$head_sha" \
+            node "$RUNNER_TEMP/platform/scripts/executor-deps.mjs" apply
+
       - name: Install dependencies (build)
         if: steps.mode.outputs.edits == 'true' && hashFiles('pnpm-lock.yaml') != ''
         run: pnpm install --frozen-lockfile --ignore-scripts --ignore-pnpmfile --store-dir "$RUNNER_TEMP/pnpm-store"
@@ -637,7 +744,7 @@ jobs:
         env:
           OUTCOME: ${{ steps.claude.outcome }}
           EXECUTION_FILE: ${{ steps.claude.outputs.execution_file }}
-          REASON: ${{ steps.sandbox_verify.outcome == 'failure' && 'The sandbox check failed, so the agent did not run (a sandboxed Bash call could not write the checkout and .git with credentials unset)' || (steps.claude.outcome == 'skipped' && 'Executor setup failed before the agent ran' || '') }}
+          REASON: ${{ steps.sandbox_verify.outcome == 'failure' && 'The sandbox check failed, so the agent did not run (a sandboxed Bash call could not write the checkout and .git with credentials unset)' || (steps.deps_apply.outcome == 'failure' && 'The packages the plan names could not be applied to the checkout, so the agent did not run (see the agent job log)' || (steps.claude.outcome == 'skipped' && 'Executor setup failed before the agent ran' || '')) }}
           STEP: ${{ needs.context.outputs.step }}
           ALREADY_CURRENT: ${{ steps.merge.outputs.already_current }}
           INSTALL_DRIFT: ${{ steps.merge.outputs.install_drift }}
@@ -856,7 +963,7 @@ jobs:
             node "$RUNNER_TEMP/platform/scripts/executor-publish.mjs" sync
 
   report:
-    needs: [context, agent, publish]
+    needs: [context, deps, agent, publish]
     if: always()
     runs-on: ubuntu-latest
     timeout-minutes: 5
@@ -869,6 +976,8 @@ jobs:
           REPORT: ${{ needs.agent.outputs.report }}
           CONTEXT_RESULT: ${{ needs.context.result }}
           CONTEXT_ERROR: ${{ needs.context.outputs.error }}
+          DEPS_RESULT: ${{ needs.deps.result }}
+          DEPS_ERROR: ${{ needs.deps.outputs.error }}
           AGENT_RESULT: ${{ needs.agent.result }}
           CREDENTIAL_ERROR: ${{ needs.agent.outputs.credential_error }}
           PUBLISH_RESULT: ${{ needs.publish.result }}
@@ -888,6 +997,9 @@ jobs:
           else
             if [ "$CONTEXT_RESULT" != success ]; then
               reason="Executor could not start: ${CONTEXT_ERROR:-context job $CONTEXT_RESULT}"
+            elif [ "$DEPS_RESULT" = failure ] || [ "$DEPS_RESULT" = cancelled ]; then
+              # AI-386: the build didn't start; the ticket shows pnpm's reason.
+              reason="Couldn't install the packages the plan names, so the build didn't start: ${DEPS_ERROR:-deps job $DEPS_RESULT}"
             else
               reason="Executor agent job $AGENT_RESULT before it built a report${CREDENTIAL_ERROR:+: $CREDENTIAL_ERROR}"
             fi

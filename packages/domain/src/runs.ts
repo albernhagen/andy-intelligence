@@ -7,6 +7,9 @@ import {
   RUNNER_LIMITS,
   PLAN_REASON_MAX,
   PlanOutput,
+  PACKAGE_LIMITS,
+  PlanPackages,
+  type PlanPackage,
   PR_SYNC_EMPTY,
   RUN_PROMPT_MAX,
   RUN_SUMMARY_MAX,
@@ -72,6 +75,7 @@ import {
   planPrompt,
   planRequired,
   planState,
+  packagesNeeded,
   renderPlan,
   type PlanState,
 } from "./plans";
@@ -703,9 +707,14 @@ export class RunService {
       await this.checkBuildable(await this.withEpic(ticket), project);
       const plan = await this.planStateOf(ticket, questions, project.planApproval);
       if (startable === "build") {
-        const gate = buildGate(planRequired(project.planApproval, ticket), plan, ticket, retryOf);
+        // AI-386: a build that stopped for packages its plan didn't name gets a plan first,
+        // whatever the policy, so Andy sees every package before it is installed.
+        const needed = packagesNeeded(await this.runs.listForTicket(projectId, ticketId));
+        const required = planRequired(project.planApproval, ticket) || needed.length > 0;
+        const gate = buildGate(required, plan, ticket, retryOf);
         approved = gate.approved;
         startable = gate.step;
+        if (startable === "build") checkPlanPackages(ticket, approved, !!opts.runner);
       }
       if (startable === "plan") await this.checkPlannable(ticket, plan);
     }
@@ -1211,7 +1220,19 @@ export class RunService {
       baseBranch: run.step === "build" ? run.baseBranch : null,
       billingType,
       maxBudgetUsd,
+      packages: await this.packagesFor(run),
     };
+  }
+
+  /**
+   * AI-386: a build's packages, from the approved plan its prompt carries (ADR-0156); the
+   * executor's trusted `deps` job installs them before the agent. Empty for other runs.
+   */
+  private async packagesFor(run: Run): Promise<PlanPackage[]> {
+    if (run.step !== "build" || !run.planRunId) return [];
+    const plan = await this.runs.get(run.planRunId);
+    if (plan?.projectId !== run.projectId || plan.planDecision?.decision !== "approved") return [];
+    return plan.plan?.packages ?? [];
   }
 
   /** How the run's route is billed; null for an unknown run. */
@@ -1367,6 +1388,7 @@ export class RunService {
                 branch: built.branch,
                 toolingFiles: built.toolingFiles,
                 verification: built.verification,
+                neededPackages: built.neededPackages,
                 links: { ...run.links, pullRequest: built.pullRequest ?? undefined },
               }
             : {}),
@@ -1395,6 +1417,10 @@ export class RunService {
           ? `\n\nChanges tooling or dependency files (review before running the branch locally): ${built.toolingFiles.join(", ")}`
           : "";
       const kept = status === "failed" && built?.branch ? `\n\nBranch kept: ${built.branch}` : "";
+      const needs =
+        built && built.neededPackages.length > 0
+          ? `\n\nNeeds you: the build needs packages its plan didn't name: ${built.neededPackages.join(", ")}. Start the build again: a new plan names them, and the build installs them once you approve it.`
+          : "";
       const decide = planned
         ? "\n\nNeeds you: approve or reject this plan in the ticket's Activity (or MCP approve_plan / reject_plan). The build starts when you approve."
         : "";
@@ -1406,7 +1432,7 @@ export class RunService {
         ? `${syncComment(done, synced, status, error, summary)}${syncTooling}`
         : status === "succeeded"
           ? `${summary ?? "The agent task finished without a summary."}${asks}${lateRefine}${pr}${tooling}${decide}`
-          : `The ${done.step} task failed.${error ? ` ${error}` : ""}${summary ? `\n\n${summary}` : ""}${kept}`;
+          : `The ${done.step} task failed.${error ? ` ${error}` : ""}${summary ? `\n\n${summary}` : ""}${kept}${needs}`;
       await this.tracker.addComment(done.projectId, done.ticketId, body, `agent:${run.id}`);
     }
     // A reported failure gets the watchdog policy (one retry, then Needs-you); a refine result
@@ -1849,9 +1875,23 @@ export class RunService {
       error =
         "It finished without opening a pull request (no changes, or the PR couldn't be opened).";
     }
+    const neededPackages = parsed.success ? parsed.data.neededPackages : [];
+    // AI-386: the build stopped for packages its plan didn't name; that, not a missing PR, is why.
+    if (neededPackages.length > 0) {
+      error = `It stopped: it needs packages its plan didn't name (${neededPackages.join(", ")}).`;
+    }
     const toolingFiles = toolingOf(result);
     const verification = parsed.success ? parsed.data.verification : [];
-    return { plan, branch, pullRequest, summary, error, toolingFiles, verification };
+    return {
+      plan,
+      branch,
+      pullRequest,
+      summary,
+      error,
+      toolingFiles,
+      verification,
+      neededPackages,
+    };
   }
 
   /**
@@ -2447,6 +2487,37 @@ export function buildGate(
   return { step: "plan", approved: null };
 }
 
+/**
+ * AI-386: refuses a build whose approved plan's packages can't be installed: over the cap (a
+ * plan stored before a cap change), or on the local runner, which has no trusted install step.
+ */
+export function checkPlanPackages(
+  ticket: Pick<Ticket, "key">,
+  approved: Run | null,
+  local: boolean,
+): void {
+  const packages = approved?.plan?.packages ?? [];
+  if (packages.length === 0) return;
+  const parsed = PlanPackages.safeParse(packages);
+  if (!parsed.success) {
+    throw new DomainError(
+      "not_buildable",
+      `${ticket.key}'s plan names packages the build can't install`,
+      [
+        issuesOf(parsed.error),
+        `limit: ${PACKAGE_LIMITS.maxPackages} per ticket; reject the plan with a reason`,
+      ],
+    );
+  }
+  if (local) {
+    throw new DomainError(
+      "not_buildable",
+      `${ticket.key}'s plan names packages, and the local runner can't install them`,
+      ["run this build on GitHub Actions (set its executor to actions)"],
+    );
+  }
+}
+
 /** Up to five schema issues, one line. */
 function issuesOf(error: { issues: readonly { path: PropertyKey[]; message: string }[] }): string {
   return error.issues
@@ -2550,6 +2621,8 @@ interface BuildRecord {
   error: string | null;
   toolingFiles: string[];
   verification: Run["verification"];
+  /** AI-386: packages the build needed that its plan didn't name. */
+  neededPackages: string[];
 }
 
 /** The executor handle a dispatched run was recorded with; null if it never got one. */
