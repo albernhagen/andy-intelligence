@@ -8,7 +8,7 @@ description: >-
 
 inputs:
   workflow:
-    description: "`deploy` or `release`."
+    description: "`deploy`, `release` or `preview` (PR previews: the first environment's preview service)."
     required: true
   vars:
     description: "The repo variables: `${{ toJSON(vars) }}`. Not secret; only names reach the log."
@@ -59,6 +59,15 @@ outputs:
   image:
     description: "The environment's image, without tag or digest: `<IMAGE_REPO>/<SERVICE>`."
     value: ${{ steps.config.outputs.image }}
+  preview-service:
+    description: "`preview`: the preview service (GCP_PREVIEW_SERVICE or GCP_DEV_PREVIEW_SERVICE)."
+    value: ${{ steps.config.outputs.preview_service }}
+  preview-deployer-sa:
+    description: "`preview`: the preview deployer (GCP_PREVIEW_DEPLOYER_SA or GCP_DEV_PREVIEW_DEPLOYER_SA)."
+    value: ${{ steps.config.outputs.preview_deployer_sa }}
+  preview-image:
+    description: "`preview`: `<PREVIEW_IMAGE_REPO>/<PREVIEW_SERVICE>`, without tag or digest."
+    value: ${{ steps.config.outputs.preview_image }}
   source-image:
     description: "`release` promote: the first environment's image, which promote ships by digest."
     value: ${{ steps.config.outputs.source_image }}

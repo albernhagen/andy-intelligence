@@ -22,6 +22,12 @@ export const ENVIRONMENT_VARIABLES = {
   DEPLOYER_SA: "deployer_sa",
   IMAGE_REPO: "image_repo",
 };
+/** PR previews (AI-207: M6.18): the first environment's preview service and its own identity. */
+export const PREVIEW_VARIABLES = {
+  PREVIEW_SERVICE: "preview_service",
+  PREVIEW_DEPLOYER_SA: "preview_deployer_sa",
+  PREVIEW_IMAGE_REPO: "preview_image_repo",
+};
 export const SMOKE_VARIABLE = "DEPLOY_SMOKE_CHECKS";
 export const SMOKE_OTHER_HOSTS_VARIABLE = "DEPLOY_SMOKE_CHECKS_OTHER_HOSTS";
 
@@ -31,9 +37,9 @@ export function firstEnvironment(vars) {
 }
 
 /** The environment's values by output name; adds each missing variable's name to `missing`. */
-function environmentValues(vars, environment, missing) {
+function environmentValues(vars, environment, missing, names = ENVIRONMENT_VARIABLES) {
   const values = {};
-  for (const [suffix, output] of Object.entries(ENVIRONMENT_VARIABLES)) {
+  for (const [suffix, output] of Object.entries(names)) {
     const name = `${PREFIX[environment]}${suffix}`;
     const value = (vars[name] ?? "").trim();
     if (!value) missing.push(name);
@@ -61,7 +67,7 @@ function checkSmoke(vars, missing) {
 }
 
 /**
- * `workflow` is `deploy` or `release`; `vars` the repo variables (`toJSON(vars)`); `inputs` the
+ * `workflow` is `deploy`, `release` or `preview`; `vars` the repo variables (`toJSON(vars)`); `inputs` the
  * release dispatch inputs. Throws with a message for the run log; returns the step outputs.
  */
 export function callerConfig({ workflow, vars, inputs = {} }) {
@@ -73,7 +79,26 @@ export function callerConfig({ workflow, vars, inputs = {} }) {
     requireNone(missing);
     return { environment, ...values, image: `${values.image_repo}/${values.service}` };
   }
-  if (workflow !== "release") throw new Error("workflow must be deploy or release");
+  if (workflow === "preview") {
+    // Previews live in the first environment's project, beside its main service (ADR-0114).
+    const environment = firstEnvironment(vars);
+    const { project_id, region, wif_provider } = environmentValues(vars, environment, missing, {
+      PROJECT_ID: "project_id",
+      REGION: "region",
+      WIF_PROVIDER: "wif_provider",
+    });
+    const values = environmentValues(vars, environment, missing, PREVIEW_VARIABLES);
+    requireNone(missing);
+    return {
+      environment,
+      project_id,
+      region,
+      wif_provider,
+      ...values,
+      preview_image: `${values.preview_image_repo}/${values.preview_service}`,
+    };
+  }
+  if (workflow !== "release") throw new Error("workflow must be deploy, release or preview");
 
   const checked = checkInputs({ ...inputs, configured: true });
   const values = environmentValues(vars, checked.environment, missing);
