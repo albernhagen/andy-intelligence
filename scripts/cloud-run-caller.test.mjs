@@ -240,3 +240,18 @@ describe("template deploy.yml keeps what prod runs (AI-389: M6.23)", () => {
     );
   });
 });
+
+describe("control-plane workflows keep what prod runs (AI-389: M6.23)", () => {
+  it("GivenTheControlPlaneDeploy_WhenRead_ThenItDeploysByDigestAndTagsRelease", () => {
+    const deploy = read(".github/workflows/deploy.yml");
+    const step = deploy.slice(deploy.indexOf("- id: deploy"));
+    expect(step).toContain("control-plane@${{ steps.build.outputs.digest }}");
+    expect(step).toContain("keep-tag-prefix: release-");
+  });
+
+  it("GivenTheControlPlaneRelease_WhenRead_ThenOnlyAProdPromoteTagsRelease", () => {
+    expect(read(".github/workflows/release.yml")).toContain(
+      "keep-tag-prefix: ${{ steps.inputs.outputs.environment == 'prod' && 'release-' || '' }}",
+    );
+  });
+});
