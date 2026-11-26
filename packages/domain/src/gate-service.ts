@@ -18,7 +18,7 @@ import {
   type WorkTracker,
 } from "@andy/contracts";
 import { CODEOWNERS_PATHS, codeownersGlobs, decideGate, type GateDecision } from "./gate";
-import { openFindingsFor, ticketMergeMode } from "./merge-facts";
+import { NOT_MAIN, openFindingsFor, readMainChecks, ticketMergeMode } from "./merge-facts";
 import {
   MergeQueue,
   queueStateOf,
@@ -105,7 +105,8 @@ export class PullRequestGate {
       requestSync: async (_repo, entry) => {
         await this.syncTick?.(entry.projectId);
       },
-      needsYou: (repo, entry, reason, flag) => this.queueNeedsYou(repo, entry, reason, flag),
+      needsYou: (repo, entry, reason, flag, note) =>
+        this.queueNeedsYou(repo, entry, reason, flag, note),
     });
   }
 
@@ -196,7 +197,10 @@ export class PullRequestGate {
     }
     if (!judged) return { result: "assessed", ...base };
     const state = queueStateOf(judged.verdict, decision.reasons);
-    if (state !== "merge" && state !== "behind") return { result: "assessed", ...base };
+    // Held (main is red, AI-382): it joins the queue and merges once main is green, unasked.
+    if (state !== "merge" && state !== "behind" && state !== "held") {
+      return { result: "assessed", ...base };
+    }
     // AI-110: only the merge queue's head merges, under its lease.
     const offered = await this.queue.offer(repo, {
       projectId: project.id,
@@ -244,6 +248,8 @@ export class PullRequestGate {
       return { state, headSha: pr.headSha, baseRef: pr.baseRef, baseSha: baseSha! };
     }
     if (state === "behind") return { state, headSha: pr.headSha };
+    if (state === "held")
+      return { state, headSha: pr.headSha, checks: judged.verdict.mainRedChecks, mainSha: baseSha };
     return { state, headSha: pr.headSha, reasons };
   }
 
@@ -270,10 +276,16 @@ export class PullRequestGate {
   }
 
   /** The queue's drop on the ticket: flagged for Andy's Needs-you inbox, or a comment only. */
-  private async queueNeedsYou(repo: string, entry: MergeQueueEntry, reason: string, flag: boolean) {
+  private async queueNeedsYou(
+    repo: string,
+    entry: MergeQueueEntry,
+    reason: string,
+    flag: boolean,
+    note: "dropped" | "held" = "dropped",
+  ) {
     const found = await this.queuedPr(repo, entry);
     if ("gone" in found) {
-      log("WARNING", "merge queue drop with no ticket to flag", { pr: entry.number, reason });
+      log("WARNING", "merge queue drop with no ticket to flag", { pr: entry.number, reason, note });
       return;
     }
     const { ticket } = found.agent;
@@ -281,7 +293,9 @@ export class PullRequestGate {
     await this.tracker.addComment(
       ticket.projectId,
       ticket.id,
-      `${flag ? "Needs you: " : ""}the merge queue dropped PR #${entry.number}: ${reason}. The gate offers it again once it is clean, or merge it yourself.`,
+      note === "held"
+        ? `${flag ? "Needs you: " : ""}the merge queue is holding PR #${entry.number}: ${reason}. It stays queued and merges once the default branch is green.`
+        : `${flag ? "Needs you: " : ""}the merge queue dropped PR #${entry.number}: ${reason}. The gate offers it again once it is clean, or merge it yourself.`,
       "system",
     );
   }
@@ -329,6 +343,10 @@ export class PullRequestGate {
         upToDate: baseSha ? await this.upToDate(repo, pr, baseSha) : null,
         openFindings: await this.openFindings(project.id, repo, pr),
         readyForReview: ticket.stage === "ready_for_review",
+        // Only a PR into the default branch is judged on main's checks: epic and night merges aren't.
+        mainChecks: pr.intoDefaultBranch
+          ? await readMainChecks(this.host, repo, pr.baseRef, baseSha, "gate")
+          : NOT_MAIN,
       },
       mode,
     );

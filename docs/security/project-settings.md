@@ -1,6 +1,6 @@
 # Threat model: Project settings
 
-Per-project settings Andy changes; their PRs update this file. Environments (AI-160), merge mode (AI-214); questions per day: MCP `set_daily_question_cap` (AI-292), rules and log as `PATCH`; others: [ui-and-mcp.md](ui-and-mcp.md).
+Per-project settings Andy changes. Environments (AI-160), deploy kind (AI-387), merge mode (AI-214); questions per day: MCP `set_daily_question_cap` (AI-292), rules and log as `PATCH`; others: [ui-and-mcp.md](ui-and-mcp.md).
 
 ## Entry points
 
@@ -8,16 +8,17 @@ Per-project settings Andy changes; their PRs update this file. Environments (AI-
 | ---------------------------------------------------------------------------------------- | --------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `PATCH /api/projects/:id` field `environments` (the settings page's Environments select) | Allow-listed users (Firebase ID token on `/api`)    | Owner-only through the project-settings rule (`change_project_settings` in `permissions.ts`, unchanged); agents and the system get 403 | A fixed two-value list, `prod-only` (default) or `dev-and-prod`; anything else is a 400. Each change goes into the config change log with who and when, and can be reverted there under the same rule |
 | MCP `set_environments`                                                                   | Allow-listed users, with our access token on `/mcp` | Same rule; the tool acts as the signed-in user (`user:<uid>`)                                                                          | Same value list and log; `get_project_settings` reads it                                                                                                                                              |
+| `PATCH …` field `deployKind`; MCP `set_deploy_kind` (AI-387, ADR-0114)                   | Same                                                | Same rule                                                                                                                              | `none` (default) or `cloud-run`; else 400. Logged, revertable. R-AI-387                                                                                                                               |
 | `PATCH …` field `mergeMode`; MCP `set_merge_mode` (AI-214, ADR-0124)                     | Same                                                | Same rule                                                                                                                              | Gate merges by it (AI-215); unset: none; MCP only tightens. R-AI-214                                                                                                                                  |
 
 ## What it changes
 
-- **Today:** the stored setting only. Nothing deploys, creates a GCP project or runs a workflow from it.
-- **Later:** M6 tickets read it to decide whether a release goes to dev first (AI-181: M6.5: Verifying stage, AI-109: M5.16: Deploy scaffold). Each ticket that acts on it adds its own entry points and risks here.
+- **Today:** the stored settings only. Nothing deploys, creates a GCP project or runs a workflow from it.
+- **Later:** M6 tickets read them (deploy kind: AI-181, AI-206, AI-199; environments: AI-181, AI-109). Each adds its entry points and risks here.
 
 ## Threat and residual risk
 
-- Only the owner can change it. A wrong value has no effect until an M6 ticket reads it, and the change log shows who set it and allows a revert.
+- Owner only. A wrong value does nothing until an M6 ticket reads it; the change log shows who set it and reverts it.
 
 ## Settings change log and revert (AI-119: M4.12)
 

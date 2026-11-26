@@ -32,6 +32,7 @@ import { quotaStatus } from "./quota";
 import { openBlockerKeys, runLabel, syncWaiting, ticketStatusLine } from "./status-line";
 import { resolveWorker } from "./worker";
 import { epicOf, withEpicOverrides } from "./overrides";
+import type { MergeHold, MergeHoldReader } from "./merge-holds";
 
 /**
  * The daily digest (AI-70, ADR-0081): what Andy reads when he comes back. Exceptions first, then
@@ -63,6 +64,8 @@ export interface DigestData {
   quota: readonly QuotaReading[];
   /** Quota readings Andy cleared in the window (AI-74), newest first. */
   quotaClears: readonly QuotaClear[];
+  /** Repos whose merges are held while their default branch is red (AI-382); absent: none read. */
+  mergeHolds?: readonly MergeHold[];
   /** A read cap was reached (`MAX_DIGEST_TICKET_READS` tickets or `MAX_DIGEST_RUNS` runs). */
   truncated: boolean;
   now: Date;
@@ -108,6 +111,7 @@ export function buildDigest(window: DigestWindow, data: DigestData): Digest {
     ...reviewBlockers(data, byId, inWindow, live),
     ...(live ? waitingAndBlocked(data) : []),
     ...(live ? dispatchIdle(data) : []),
+    ...(live ? mergesHeld(data) : []),
     ...(live ? quotaAtReserve(data) : []),
     ...quotaCleared(data, inWindow),
   ];
@@ -351,6 +355,20 @@ function dispatchIdle({ project }: DigestData): DigestException[] {
   return [{ kind: "dispatch_idle", ticketKey: null, title: null, prNumber: null, reason, at }];
 }
 
+/** A red default branch holding the merge queue (AI-382): named by its failing checks. */
+function mergesHeld(data: DigestData): DigestException[] {
+  return (data.mergeHolds ?? []).map((h) => ({
+    kind: "merge_held" as const,
+    ticketKey: null,
+    title: null,
+    prNumber: null,
+    reason: clip(
+      `Merges into ${h.repo} are held: main is red (failing: ${h.checks.join(", ") || "a required check"}); ${plural(h.waiting, "PR")} waiting`,
+    ),
+    at: h.since,
+  }));
+}
+
 const WINDOW_NAMES: Record<string, string> = { "5h": "5-hour", weekly: "Weekly" };
 
 function quotaAtReserve(data: DigestData): DigestException[] {
@@ -534,6 +552,8 @@ export class DigestReader {
     private readonly now: () => Date = () => new Date(),
     /** AI-318: the project's tickets through the snapshot, so a call reads only what changed. */
     private readonly tickets: ProjectTickets = new ProjectTickets(tracker),
+    /** AI-382: merge holds from the queue records; null: none shown. */
+    private readonly holds: MergeHoldReader | null = null,
   ) {}
 
   async digest(projectId: string, window: DigestWindow): Promise<Digest> {
@@ -541,16 +561,18 @@ export class DigestReader {
     if (!project) throw notFound("project", projectId);
     const from = window.from.toISOString();
     const to = window.to.toISOString();
-    const [tickets, questions, activeRuns, ended, quota, quotaClears] = await Promise.all([
-      this.tickets.list(projectId),
-      this.tracker.listQuestions({ projectId, status: "open" }),
-      this.runs.listActive(projectId),
-      this.runs.listEndedBetween(projectId, from, to, MAX_DIGEST_RUNS),
-      this.quota ? this.quota.latest("claude-sub") : Promise.resolve([]),
-      this.quota
-        ? this.quota.clearsSince("claude-sub", from, MAX_DIGEST_QUOTA_CLEARS)
-        : Promise.resolve([]),
-    ]);
+    const [tickets, questions, activeRuns, ended, quota, quotaClears, mergeHolds] =
+      await Promise.all([
+        this.tickets.list(projectId),
+        this.tracker.listQuestions({ projectId, status: "open" }),
+        this.runs.listActive(projectId),
+        this.runs.listEndedBetween(projectId, from, to, MAX_DIGEST_RUNS),
+        this.quota ? this.quota.latest("claude-sub") : Promise.resolve([]),
+        this.quota
+          ? this.quota.clearsSince("claude-sub", from, MAX_DIGEST_QUOTA_CLEARS)
+          : Promise.resolve([]),
+        this.holds ? this.holds.forRepos(project.repos) : Promise.resolve([]),
+      ]);
 
     const openQuestions = new Map<string, number>();
     for (const q of questions)
@@ -585,6 +607,7 @@ export class DigestReader {
       ticketEvents: new Map(histories.map((h) => [h.id, h.events])),
       quota,
       quotaClears,
+      mergeHolds,
       truncated: toRead.length > read.length || !ended.complete,
       now: this.now(),
     });
