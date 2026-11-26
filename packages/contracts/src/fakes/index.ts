@@ -745,7 +745,8 @@ export class InMemoryCodeHost implements CodeHost {
 
   async listFiles(fullName: string, dir: string): Promise<string[] | null> {
     if (!(await this.getRepo(fullName))) return null;
-    const prefix = `${dir}/`;
+    // "" is the repo's root, as the code host lists it.
+    const prefix = dir === "" ? "" : `${dir}/`;
     const names = [...this.files.keys()]
       .filter((p) => p.startsWith(prefix) && !p.slice(prefix.length).includes("/"))
       .map((p) => p.slice(prefix.length));

@@ -35,6 +35,42 @@ describe("ProjectService", () => {
     },
   );
 
+  it("GivenAndy_WhenHeMarksASetupStepDone_ThenItIsStoredWithWhoAndWhen", async () => {
+    await tracker.createProject({ name: "AI", key: "AI" });
+    const at = new Date("2026-11-25T12:00:00.000Z");
+    const marking = new ProjectService(tracker, host, null, () => at);
+
+    await marking.markSetupStep("ai", "reviewer_token", true, {
+      actor: "user:andy",
+      email: "andy@example.com",
+    });
+
+    expect((await tracker.getProject("ai"))?.setupMarks).toEqual({
+      reviewer_token: { by: "andy@example.com", at: at.toISOString() },
+    });
+  });
+
+  it("GivenAMarkedStep_WhenUnmarked_ThenTheMarkIsGone", async () => {
+    await tracker.createProject({ name: "AI", key: "AI" });
+    const by = { actor: "user:andy", email: "andy@example.com" };
+    await service.markSetupStep("ai", "reviewer_token", true, by);
+
+    await service.markSetupStep("ai", "reviewer_token", false, by);
+
+    expect((await tracker.getProject("ai"))?.setupMarks).toEqual({});
+  });
+
+  it.each(["agent:r1", "system"])(
+    "GivenTheActor%s_WhenMarkingASetupStep_ThenForbidden",
+    async (actor) => {
+      await tracker.createProject({ name: "AI", key: "AI" });
+      await rejects(
+        service.markSetupStep("ai", "reviewer_token", true, { actor, email: "x@example.com" }),
+        "forbidden",
+      );
+    },
+  );
+
   it("GivenAnInstalledRepo_WhenRegistered_ThenTheProjectStoresTheHostSpelling", async () => {
     const project = await service.register(
       {

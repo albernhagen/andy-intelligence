@@ -56,6 +56,7 @@ import {
   projectDispatchPatch,
   projectNotifyPatch,
   projectPlanPatch,
+  projectOnboardingPatch,
 } from "../entities";
 
 /**
@@ -230,6 +231,7 @@ export const ProjectPatch = z.strictObject({
   ...projectDispatchPatch,
   ...projectNotifyPatch,
   ...projectPlanPatch,
+  ...projectOnboardingPatch,
   defaultWorker: Worker.optional(),
   executor: ExecutorKind.optional(),
   environments: EnvironmentPolicy.optional(),

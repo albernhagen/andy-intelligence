@@ -34,13 +34,13 @@ async function setup(projectAccess: ProjectAccess = ownerOnlyAccess()) {
   await tracker.createProject({ name: "Andy Intelligence", key: "AI", repos: ["o/ai"] });
   await tracker.createProject({ name: "Ops", key: "OPS" });
   const call = await mcpCaller(app, grants, RESOURCE);
-  const rest = async (projectId: string) => {
-    const res = await app.request(`/api/projects/${projectId}/setup`, {
+  const rest = async (projectId: string, path = "setup") => {
+    const res = await app.request(`/api/projects/${projectId}/${path}`, {
       headers: { authorization: "Bearer andy" },
     });
     return { status: res.status, body: (await res.json()) as unknown };
   };
-  return { app, grants, call, rest };
+  return { app, grants, call, rest, tracker };
 }
 
 describe("project_setup (AI-287 parity with GET /api/projects/{id}/setup)", () => {
@@ -54,8 +54,41 @@ describe("project_setup (AI-287 parity with GET /api/projects/{id}/setup)", () =
       const viaRest = await rest(id);
       expect(viaMcp.isError).toBe(false);
       expect(viaRest.status).toBe(200);
-      expect(viaMcp.data).toEqual(viaRest.body);
+      const { onboarding, ...checklist } = viaMcp.data as { onboarding: unknown };
+      expect(checklist).toEqual(viaRest.body);
+      expect(onboarding).toEqual((await rest(id, "onboarding")).body);
     }
+  });
+
+  it("GivenAHandStep_WhenMarkedOverMcp_ThenRestShowsItMarkedByAndy", async () => {
+    const { call, rest } = await setup();
+
+    const viaMcp = await call("project_setup", {
+      project: "AI",
+      mark: { step: "reviewer_token", done: true },
+    });
+
+    expect(viaMcp.isError).toBe(false);
+    const steps = (
+      (await rest("ai", "onboarding")).body as {
+        steps: { key: string; status: string; marked: { by: string } | null }[];
+      }
+    ).steps;
+    expect(steps.find((s) => s.key === "reviewer_token")).toMatchObject({
+      status: "done",
+      marked: { by: "andy@example.com" },
+    });
+  });
+
+  it("GivenAStepTheAppReads_WhenMarkedOverMcp_ThenRefused", async () => {
+    const { call } = await setup();
+
+    const viaMcp = await call("project_setup", {
+      project: "AI",
+      mark: { step: "builds_on", done: true },
+    });
+
+    expect(viaMcp.isError).toBe(true);
   });
 
   it("GivenAnUnknownProject_WhenRead_ThenBothRefuseAsNotFound", async () => {
@@ -75,9 +108,22 @@ describe("project_setup (AI-287 parity with GET /api/projects/{id}/setup)", () =
     expect((await call("project_setup", { project: "OPS" })).isError).toBe(false);
   });
 
-  it("GivenTheToolList_WhenListed_ThenProjectSetupIsThereAndSaysItNeverDoesAStep", async () => {
+  it("GivenAProjectTheCallerCantRead_WhenMarkedOverMcp_ThenRefusedAndNothingStored", async () => {
+    const { call, tracker } = await setup({ canRead: async (_actor, id) => id !== "ai" });
+
+    const viaMcp = await call("project_setup", {
+      project: "AI",
+      mark: { step: "reviewer_token", done: true },
+    });
+
+    expect(viaMcp.isError).toBe(true);
+    expect(viaMcp.text).toMatch(/not found/i);
+    expect((await tracker.getProject("ai"))?.setupMarks).toEqual({});
+  });
+
+  it("GivenTheToolList_WhenListed_ThenProjectSetupIsThereAndSaysItNeverRunsAStep", async () => {
     const { app, grants } = await setup();
     const tool = (await mcpTools(app, grants, RESOURCE)).find((t) => t.name === "project_setup");
-    expect(tool?.description).toMatch(/Read-only: it never does a step/);
+    expect(tool?.description).toMatch(/It never runs a step or reads a token/);
   });
 });
