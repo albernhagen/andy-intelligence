@@ -129,6 +129,8 @@ jobs:
           smoke-checks-other-hosts: |
             /health 200
             /api/me 404
+          # Prod's image gets a release- tag so registry cleanup keeps it (AI-389: M6.23).
+          keep-tag-prefix: ${{ steps.inputs.outputs.environment == 'prod' && 'release-' || '' }}
 
       # Rollback: pin all traffic to the revision, then check /health.
       - id: rollback

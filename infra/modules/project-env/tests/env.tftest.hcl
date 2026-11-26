@@ -143,6 +143,11 @@ run "given_promote_from_dev_when_planned_then_service_agent_reads_that_repo_only
     condition     = google_artifact_registry_repository_iam_member.promote_source_read[0].project == "example-dev-000000" && google_artifact_registry_repository_iam_member.promote_source_read[0].role == "roles/artifactregistry.reader" && google_artifact_registry_repository_iam_member.promote_source_read[0].member == "serviceAccount:service-123456789012@serverless-robot-prod.iam.gserviceaccount.com"
     error_message = "Promote should give only this project's Cloud Run service agent read on the dev repo."
   }
+
+  assert {
+    condition     = google_artifact_registry_repository_iam_member.promote_source_tag[0].project == "example-dev-000000" && google_artifact_registry_repository_iam_member.promote_source_tag[0].repository == "example" && google_artifact_registry_repository_iam_member.promote_source_tag[0].role == "roles/artifactregistry.writer"
+    error_message = "Promote should let this project's main deployer tag release-* on the dev repo only (AI-389)."
+  }
 }
 
 run "given_a_runtime_role_of_owner_when_planned_then_rejected" {

@@ -215,10 +215,28 @@ describe("template release.yml meets the release contract (ADR-0114)", () => {
     expect(names).toEqual(["action", "environment", "digest", "revision", "request"]);
   });
 
+  it("GivenAPromote_WhenRead_ThenOnlyProdGetsTheReleaseKeepTag", () => {
+    expect(RELEASE).toContain(
+      "keep-tag-prefix: ${{ steps.config.outputs.environment == 'prod' && 'release-' || '' }}",
+    );
+  });
+
   it("GivenControlPlaneRelease_WhenCompared_ThenTheStepsAreTheSame", () => {
     const ids = (text) => [...text.matchAll(/^ {6}- id: ([\w-]+)$/gm)].map((m) => m[1]);
     const ours = ids(RELEASE).filter((id) => id !== "config");
     const theirs = ids(read(".github/workflows/release.yml")).filter((id) => id !== "inputs");
     expect(ours).toEqual(theirs);
+  });
+});
+
+describe("template deploy.yml keeps what prod runs (AI-389: M6.23)", () => {
+  it("GivenTheDeployStep_WhenRead_ThenItDeploysByDigestAndTagsOnlyProd", () => {
+    const step = DEPLOY.slice(DEPLOY.indexOf("- id: deploy"));
+    expect(step).toContain(
+      "image: ${{ steps.config.outputs.image }}@${{ steps.build.outputs.digest }}",
+    );
+    expect(step).toContain(
+      "keep-tag-prefix: ${{ steps.config.outputs.environment == 'prod' && 'release-' || '' }}",
+    );
   });
 });
