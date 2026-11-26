@@ -1,6 +1,6 @@
 ---
 title: A review that should run and doesn't fails its check; a re-sync merge carries the verdict
-status: proposed (AI-346; Andy decides at review), amended by 0141 (agent PRs get a real review)
+status: accepted (Andy, 2026-11-25); amended by 0141 (agent PRs get a real review)
 date: 2026-11-21
 amends: 0026 (an agent that could not run gave a neutral pass)
 ---

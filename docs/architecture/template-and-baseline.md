@@ -17,7 +17,7 @@ specs/NNN-name/{design.md, tech-design.md, tasks.md, tickets/*.md, mockups/}
 .github/workflows/                # thin callers → platform composite actions, pinned by SHA (ADR-0038)
 .andy/baseline.json               # baseline version (andy-intelligence commit) this repo is on
 CODEOWNERS                        # kept paths only (ADR-0124): code-owner review set, not enforced (AI-380); no `*` line
-infra/                            # Terraform: dev/prod Cloud Run, Cloud Deploy pipeline, read-only agent SAs
+infra/                            # Terraform per deploy kind (`cloud-run`: Cloud Run, deployers, read-only agent SAs; ADR-0114)
 ```
 **Required CI checks** on `main`: tests, lint, typecheck, protected-path check, secret scan, security scans and security-review agent (§9.1), "PR references a ticket" (ticket key in branch name or PR body, verified against the control-plane API).
 
@@ -66,7 +66,7 @@ Build runs (plan approval, sandbox, publish limits) and read caps (AI-222): [`ba
 | Cloud Run caps, log exclusions, usage alerts, daily Firestore backup (7-day retention), Cloud Tasks queue caps (rate, concurrency, retries) | 0028 | `infra/control-plane` | TF | not yet carried (M6: Dev → prod releases) |
 | Alert: config change not in the change log (AI-136); test keeps filter and message in step | — | `infra/control-plane`, `config-changes.test.ts` | TF | not yet carried (M6: Dev → prod releases) |
 | Cost kill switch (opt-in) | 0028, 0036 | `infra/billing/kill-switch.tf` + workflow YAML | TF | not yet carried (M6: Dev → prod releases) |
-| Safe deploy: no-traffic revision, smoke test, then traffic | 0076 | `platform/actions/cloud-run-safe-deploy` | A | control plane only until M6: Dev → prod releases |
+| Safe deploy: no-traffic revision, smoke test, then traffic | 0076, 0114 | `platform/actions/cloud-run-safe-deploy` | A | control plane only until M6: Dev → prod releases, then `cloud-run` projects |
 | UI screenshot checks (Playwright): a diff fails, actual images uploaded; 10-minute cap; skips docs-only PRs | 0045, 0059 | `ui-screenshots.yml` → `platform/actions/ui-screenshots`; config and images in `apps/web/e2e/` | — | control plane only; a managed web UI can call the action (needs `playwright.config.ts`; input `base-ref`). Required here only (`github/source-only.json`, AI-350) |
 | Fonts served by the app: the web build fails if a built file names a font host or loads a font from another host | 0151 | `apps/web/scripts/check-fonts.ts` (run by `pnpm build`) | — | control plane only; a managed web UI can copy the script |
 | Refine caps (questions, children); email (20/day, 10-min batch) | 0028, 0075 | `packages/domain/src/{refine-gate,notify-email}.ts` | — | control plane |

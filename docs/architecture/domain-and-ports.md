@@ -10,7 +10,7 @@ All records carry `project_id` where applicable. Zod schemas in `packages/contra
 
 | Entity | Key fields |
 |---|---|
-| **Project** | name, repos, GCP dev/prod project IDs, policy overrides, budget allocation, autonomy level, enabled, `autoRefine` (default on), `autoBuild` (default off, ADR-0063), `planApproval` (default `none`, ADR-0050), `mergeMode` (unset merges nothing, ADR-0134), `autoMerge` (suggests one), `executor` (`actions` or `local`, ADR-0089), `environments` (`prod-only` default, `dev-and-prod`; AI-160, ADR-0050), `spendCaps` (own caps, only below global; AI-249, ADR-0129) |
+| **Project** | name, repos, GCP dev/prod project IDs, policy overrides, budget allocation, autonomy level, enabled, `autoRefine` (default on), `autoBuild` (default off, ADR-0063), `planApproval` (default `none`, ADR-0050), `mergeMode` (unset merges nothing, ADR-0134), `autoMerge` (suggests one), `executor` (`actions` or `local`, ADR-0089), `deployKind` (`none` default, `cloud-run`; ADR-0114), `environments` (`prod-only` default, `dev-and-prod`; AI-160, ADR-0050), `spendCaps` (own caps, only below global; AI-249, ADR-0129) |
 | **Milestone** | name, outcome, order, status (not reviewed/approved/parked), optional case: serves, expected return, cheapest test (ADR-0149; effort derived from its tickets, never stored); ADR-0131; `MilestoneStore` |
 | **Ticket** (system of record) | key (`AI-42`), title, body, acceptance criteria (the checklist; EARS for features), assumptions, type (epic/feature/chore/bug/spike, empty at capture; ADR-0058), parent, stage, size, size reason, overrides (assignee agent/me or a harness key, resolved against the project's `defaultWorker`, ADR-0082; executor, ADR-0089; tier, model pin, autonomy, target env), needs_attention (blocked on a human), DoR status, rank, blocked_by (keys, any project), archived, out_of_scope, touches (areas or path globs; ≤ 20 × 300 chars each), outcome (epics only, ≤ 300 chars: what is true when it is done; an epic's criteria are its "Done when"; ADR-0108). No stored tier: derived from size (ADR-0062) |
 | **TicketEvent** | ticket, kind (comment / stage_change / field_change / run_linked / pr_linked …), actor (`user:<uid>` for a signed-in user by auth uid, never an email (AI-19); legacy `andy`, read as the owner; agent:<run> / system; label derived on read), body/diff, timestamp; the ticket's full history |
@@ -18,7 +18,7 @@ All records carry `project_id` where applicable. Zod schemas in `packages/contra
 | **Run** | ticket, step (refine/plan/build/review/verify/scout), harness, provider, model, tier, status, started/ended, deadline, attempt + retry_of, tokens, usage (input, output, cache read and write tokens, turns, wall time; null = cost unknown), cost_usd (actual or API-equivalent estimate), quota delta (percentage points per window since the previous reading), quota snapshot, links (Action run, Jules session, PR), build plan, branch, base (AI-122; ADR-0063), plan decision (who, when, reason) and a build's approved plan run (ADR-0050), executor identity (Actions `run_id`, Jules session id) to correlate completion signals, **outcome** (merged_clean / reworked / reverted / failed), would_auto_merge |
 | **QuotaReading** | provider, window (5h / weekly / daily-tasks), used_pct, resets_at, source, taken_at, confidence |
 | **ConfigChange** | entity, diff, actor (andy/ui/agent/scout), reason, status (pending/accepted/applied/reverted/rejected), project, dedupe key, decided by/at, timestamps; project-settings writes log, revert (built, M4.11-12) |
-| **Release** | project, image digest, tickets included, notes, status |
+| **Release** | project, artifact (image digest for `cloud-run`), tickets included, notes, status |
 | **ReleaseNote** | merged PR's untrusted note, ticket, doc links (ADR-0121) |
 | **CodeHostEvent** | delivery ID (document ID), project, repo, kind (pull_request / check_run / workflow_run), action, normalized PR / check / workflow fields, received_at; TTL 30 days (ADR-0041) |
 | **NightLaunch** | epic, project, budget (agent tasks, tokens, USD), stop time (≤ 16 h away), status (planned to ended), started/ended, end reason, child ticket keys, epic branch, start sha (ADR-0049) |
@@ -41,7 +41,7 @@ Contracts live in `packages/contracts` (Zod schemas, TypeScript interfaces; Open
 | `ModelGateway` | Completion, Usage, Cost | **OpenRouter** (AI-250: built, unwired; direct single-call steps) | LiteLLM, direct providers |
 | `QuotaSource` (`QuotaStore` adds `save`) | QuotaReading | Claude `rate_limit_event` capture from run reports (§10.5), Jules task counter | Official APIs when available |
 | `Notifier` | Notice, Urgency | UI (banner + Needs-you inbox); **Email** on Resend (AI-77: batched, 20 a day; `NotifyLedger`, `NotifyFlushQueue`) | Web Push (`PushSender`: AI-178), `PushSubscriptionStore` (ADR-0052), Slack |
-| `Deployer` | Release, Promotion, Rollback | Cloud Deploy | — |
+| `Deployer` | Release, Promotion, Rollback | `release.yml` by `workflow_dispatch` (ADR-0114) | other deploy kinds |
 | `Evaluator` | Suite, Case, Score, per-case result | Agent evals (M1.17: Agent evals v1, ADR-0086); Ori Eval for scout smoke tests | Claude Code runner (`scripts/evals/evaluator.mjs`) |
 | `Telemetry` | Trace, Span, CostEvent | OTel → Cloud Trace / Cloud Logging | BigQuery sink |
 
