@@ -4,7 +4,7 @@ import {
   type Project,
 } from "@andy/contracts";
 import { Hono } from "hono";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import type { AuthEnv } from "./auth";
 import {
   DEPLOYMENTS_PATH,
@@ -397,6 +397,25 @@ describe("release requests matched to reports (AI-199: M6.12)", () => {
     expect(
       (await s.deployments.list("ai", "prod")).filter((d) => d.kind === "promote"),
     ).toHaveLength(1);
+  });
+
+  it("GivenTheRecordFailsAfterTheClaim_WhenTheWorkflowRetries_ThenTheRequestMatchesAgain", async () => {
+    const requests = new InMemoryReleaseRequestStore();
+    const s = setup(undefined, undefined, requests);
+    await devBuild(s);
+    const request = await asked(requests);
+    const body = {
+      imageDigest: PROMOTED,
+      environment: "prod",
+      kind: "promote",
+      request: request.id,
+    };
+    vi.spyOn(s.deployments, "record").mockRejectedValueOnce(new Error("store down"));
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    expect((await s.start(release(), body)).status).toBe(500);
+    expect((await requests.get(request.id))?.status).toBe("dispatched");
+    expect((await s.start(release(), body)).status).toBe(201);
+    expect((await requests.get(request.id))?.status).toBe("started");
   });
 
   it("GivenAReleaseRunByHand_WhenItReportsWithoutARequest_ThenItIsRecordedAsBefore", async () => {

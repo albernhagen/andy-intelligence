@@ -175,6 +175,8 @@ export function registerDeploymentCallbacks(
     // A release ships an earlier build: record that build's commit, found from a succeeded
     // deployment of the same digest (one bounded read). An unknown digest records nothing.
     let gitSha = caller.sha;
+    /** The release request this report claimed, and the status it had before. */
+    let claimed: { id: string; from: ReleaseRequestStatus } | null = null;
     if (plan.workflow === "release") {
       const recent = await deps.deployments.list(
         caller.project.id,
@@ -194,7 +196,8 @@ export function registerDeploymentCallbacks(
       // A named request must be the owner's promote or rollback of this digest (ADR-0160). An
       // empty one is a run started by hand from the code host, recorded as before.
       if (body.data.request !== undefined && deps.releaseRequests) {
-        const mismatch = releaseRequestMismatch(await deps.releaseRequests.get(body.data.request), {
+        const asked = await deps.releaseRequests.get(body.data.request);
+        const mismatch = releaseRequestMismatch(asked, {
           projectId: caller.project.id,
           kind: plan.kind,
           environment: plan.environment,
@@ -224,24 +227,41 @@ export function registerDeploymentCallbacks(
           });
           return c.json({ error: "release request already matched" }, 422);
         }
+        claimed = { id: body.data.request, from: asked!.status };
       }
     }
-    const previous = await deps.deployments.latestGood(caller.project.id, plan.environment);
-    const deployment = await deps.deployments.record({
-      projectId: caller.project.id,
-      environment: plan.environment,
-      imageDigest: body.data.imageDigest,
-      gitSha,
-      revision: null,
-      kind: plan.kind,
-      status: "started",
-      startedAt: now().toISOString(),
-      finishedAt: null,
-      actor: "system",
-      previousDeploymentId: previous?.id ?? null,
-      url: body.data.url ?? null,
-      request: body.data.request ?? null,
-    });
+    let deployment: Deployment;
+    try {
+      const previous = await deps.deployments.latestGood(caller.project.id, plan.environment);
+      deployment = await deps.deployments.record({
+        projectId: caller.project.id,
+        environment: plan.environment,
+        imageDigest: body.data.imageDigest,
+        gitSha,
+        revision: null,
+        kind: plan.kind,
+        status: "started",
+        startedAt: now().toISOString(),
+        finishedAt: null,
+        actor: "system",
+        previousDeploymentId: previous?.id ?? null,
+        url: body.data.url ?? null,
+        request: body.data.request ?? null,
+      });
+    } catch (err) {
+      // Release the claim so the workflow's retry can match the request again, then fail.
+      if (claimed && deps.releaseRequests) {
+        await deps.releaseRequests
+          .update(claimed.id, { status: claimed.from, updatedAt: now().toISOString() }, ["started"])
+          .catch((e: unknown) =>
+            log("WARNING", "release request claim not released", {
+              request: claimed?.id,
+              error: e instanceof Error ? e.message : String(e),
+            }),
+          );
+      }
+      throw err;
+    }
     log("INFO", "deployment started", {
       deploymentId: deployment.id,
       projectId: caller.project.id,
