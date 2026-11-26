@@ -273,7 +273,12 @@ export class PullRequestMerger {
     }
     if (judged.state === "behind") return { state: "behind", headSha: pr.headSha };
     if (judged.state === "held") {
-      return { state: "held", headSha: pr.headSha, checks: judged.verdict.mainRedChecks };
+      return {
+        state: "held",
+        headSha: pr.headSha,
+        checks: judged.verdict.mainRedChecks,
+        mainSha: judged.baseSha,
+      };
     }
     return { state: judged.state, headSha: pr.headSha, reasons };
   }

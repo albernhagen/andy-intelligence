@@ -12,8 +12,8 @@ import {
 } from "@andy/contracts";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { sign } from "@octokit/webhooks-methods";
-import { describe, expect, it, onTestFinished, vi } from "vitest";
-import { MAIN_RED_WAKE_MS, MergeQueue } from "@andy/domain";
+import { describe, expect, it } from "vitest";
+import { MergeQueue } from "@andy/domain";
 import { createApp } from "../app";
 import { WEBHOOK_PATH } from "../github/webhooks";
 import type { TokenVerifier } from "../auth";
@@ -430,7 +430,7 @@ describe("merge_pr while main is red (AI-382)", () => {
           }
         : listHeadChecks(repo, sha);
     /** A signed check_run completed delivery on main's tip: names no PR. */
-    const mainCheckHook = async (id: string) => {
+    const mainCheckHook = async (id: string, headSha = MAIN) => {
       const body = JSON.stringify({
         action: "completed",
         repository: { full_name: REPO },
@@ -439,7 +439,7 @@ describe("merge_pr while main is red (AI-382)", () => {
           name: "ci",
           status: "completed",
           conclusion: main.ci === "success" ? "success" : "failure",
-          head_sha: MAIN,
+          head_sha: headSha,
           html_url: `https://github.com/${REPO}/runs/2`,
           pull_requests: [],
         },
@@ -474,20 +474,16 @@ describe("merge_pr while main is red (AI-382)", () => {
   });
 
   it("GivenAPrHeldForMainRed_WhenMainsCheckPassesAndItsWebhookArrives_ThenThePrMergesWithNoOneCallingAgain", async () => {
-    vi.useFakeTimers({ toFake: ["Date"], now: new Date("2026-11-25T10:00:00.000Z") });
-    onTestFinished(() => void vi.useRealTimers());
     const t = await redMain("failure");
     await t.mergePr();
-    // Still red: a check finishing on main a minute later doesn't merge anything.
-    vi.advanceTimersByTime(MAIN_RED_WAKE_MS);
+    // Still red: a check finishing on main doesn't merge anything.
     expect((await t.mainCheckHook("m-1")).status).toBe(200);
     expect(t.host.merges).toEqual([]);
 
     t.main.ci = "success";
-    // Within a minute of the last judgement: the wake is throttled.
-    expect((await t.mainCheckHook("m-2")).status).toBe(200);
+    // A check finishing on another commit doesn't wake the held queue.
+    expect((await t.mainCheckHook("m-2", "e".repeat(40))).status).toBe(200);
     expect(t.host.merges).toEqual([]);
-    vi.advanceTimersByTime(MAIN_RED_WAKE_MS);
     expect((await t.mainCheckHook("m-3")).status).toBe(200);
     expect(t.host.merges).toEqual([{ fullName: REPO, number: 7, sha: HEAD }]);
     const events = await t.tracker.listEvents("ai", t.ticket.id);

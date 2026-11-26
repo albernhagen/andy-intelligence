@@ -17,7 +17,7 @@ const mainRed = {
   since: "2026-11-25T10:00:00.000Z",
   checks: ["ci"],
   raisedAt: null,
-  checkedAt: null,
+  sha: null,
 };
 
 describe("MergeHoldReader", () => {

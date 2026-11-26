@@ -59,8 +59,11 @@ export const MainRedHold = z.object({
   checks: z.array(z.string().min(1).max(256)).max(20),
   /** When the one Needs-you note past the cap was raised; null: not yet. */
   raisedAt: Timestamp.nullable(),
-  /** When a judgement last found it still red: completed checks wake it at most once a minute. */
-  checkedAt: Timestamp.nullable().default(null),
+  /**
+   * The default branch's tip last judged red: a completed check run on it wakes the held queue.
+   * Null: not known (any completed check run wakes it).
+   */
+  sha: z.string().min(1).max(64).nullable().default(null),
 });
 export type MainRedHold = z.infer<typeof MainRedHold>;
 

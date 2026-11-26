@@ -3,7 +3,6 @@ import type { MergeQueueEntry } from "@andy/contracts";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
   MAX_HEAD_HOLD_MS,
-  MAIN_RED_WAKE_MS,
   MAX_MAIN_RED_HOLD_MS,
   MAX_SYNCS_PER_PR,
   MERGE_QUEUE_LEASE_MS,
@@ -14,6 +13,7 @@ import {
 } from "./merge-queue";
 
 const REPO = "owner/repo";
+const MAIN_TIP = "d".repeat(40);
 const sha = (n: number) => n.toString(16).padStart(40, "0");
 
 interface FakePr {
@@ -59,7 +59,7 @@ class World implements QueueJudge {
     if (!pr?.open) return { state: "gone", detail: "closed" };
     if (pr.ineligible) return { state: "ineligible", headSha: pr.head, reasons: [pr.ineligible] };
     const red = this.red.get(repo);
-    if (red) return { state: "held", headSha: pr.head, checks: red };
+    if (red) return { state: "held", headSha: pr.head, checks: red, mainSha: MAIN_TIP };
     if (pr.checks === "failed")
       return { state: "failed", headSha: pr.head, reasons: ["checks_failed"] };
     if (pr.checks === "pending")
@@ -489,20 +489,19 @@ describe("MergeQueue while main is red (AI-382)", () => {
       since: "2026-11-25T10:00:00.000Z",
       checks: ["ci"],
       raisedAt: null,
-      checkedAt: "2026-11-25T10:00:00.000Z",
+      sha: MAIN_TIP,
     });
   });
 
-  it("GivenAHeldQueue_WhenChecksCompleteWithinAMinuteOfTheLastJudgement_ThenOnlyTheFirstWakesIt", async () => {
+  it("GivenAHeldQueue_WhenACheckCompletesOnAnotherCommit_ThenNothingIsJudgedUntilOneCompletesOnTheRedTip", async () => {
     world.red.set(REPO, ["ci"]);
     world.add(1);
     const q = queue();
     await offer(q, 1);
     world.red.delete(REPO);
-    later(MAIN_RED_WAKE_MS - 1);
-    expect(await q.advanceFor(REPO, [], false, true)).toEqual([]);
-    later(1);
-    const [outcome] = await q.advanceFor(REPO, [], false, true);
+    // A check run on some pushed branch: can't buy a judgement while held.
+    expect(await q.advanceFor(REPO, [], false, "f".repeat(40))).toEqual([]);
+    const [outcome] = await q.advanceFor(REPO, [], false, MAIN_TIP);
     expect(outcome).toMatchObject({ number: 1, outcome: "merged" });
   });
 
@@ -523,14 +522,12 @@ describe("MergeQueue while main is red (AI-382)", () => {
     world.add(1);
     const q = queue();
     await offer(q, 1);
-    later(MAIN_RED_WAKE_MS);
     // A completed check while main is still red: still held.
-    expect(await q.advanceFor(REPO, [], false, true)).toEqual([
+    expect(await q.advanceFor(REPO, [], false, MAIN_TIP)).toEqual([
       { number: 1, outcome: "waiting", reason: "main_red: ci" },
     ]);
     world.red.delete(REPO);
-    later(MAIN_RED_WAKE_MS);
-    const [outcome] = await q.advanceFor(REPO, [], false, true);
+    const [outcome] = await q.advanceFor(REPO, [], false, MAIN_TIP);
     expect(outcome).toMatchObject({ number: 1, outcome: "merged" });
     expect(world.merges).toEqual([1]);
     expect((await store.get(REPO)).mainRed).toBeNull();
@@ -551,7 +548,7 @@ describe("MergeQueue while main is red (AI-382)", () => {
     const q = queue();
     await offer(q, 1);
     const judge = vi.spyOn(world, "judge");
-    expect(await q.advanceFor(REPO, [], false, true)).toEqual([]);
+    expect(await q.advanceFor(REPO, [], false, MAIN_TIP)).toEqual([]);
     expect(judge).not.toHaveBeenCalled();
   });
 
@@ -573,7 +570,7 @@ describe("MergeQueue while main is red (AI-382)", () => {
     const q = queue();
     await offer(q, 1);
     later(MAX_MAIN_RED_HOLD_MS - 1000);
-    await q.advanceFor(REPO, [], false, true);
+    await q.advanceFor(REPO, [], false, MAIN_TIP);
     expect(world.notes).toEqual([]);
 
     later(2000);
@@ -586,14 +583,13 @@ describe("MergeQueue while main is red (AI-382)", () => {
 
     // Held for hours: no second note, and the PR's own hold cap is paused, so it isn't dropped.
     later(MAX_HEAD_HOLD_MS * 3);
-    await q.advanceFor(REPO, [], false, true);
+    await q.advanceFor(REPO, [], false, MAIN_TIP);
     await q.advanceFor(REPO, [1], false);
     expect(world.notes).toHaveLength(1);
     expect((await store.get(REPO)).entries.map((e) => e.number)).toEqual([1]);
 
     world.red.delete(REPO);
-    later(MAIN_RED_WAKE_MS);
-    await q.advanceFor(REPO, [], false, true);
+    await q.advanceFor(REPO, [], false, MAIN_TIP);
     expect(world.merges).toEqual([1]);
   });
 
@@ -630,8 +626,7 @@ describe("MergeQueue while main is red (AI-382)", () => {
     await q.advanceFor(REPO, [1], false);
     later(MAX_HEAD_HOLD_MS * 2);
     world.red.delete(REPO);
-    later(MAIN_RED_WAKE_MS);
-    await q.advanceFor(REPO, [], false, true);
+    await q.advanceFor(REPO, [], false, MAIN_TIP);
     expect(world.merges).toEqual([1]);
     expect(world.notes).toEqual([]);
     expect((await store.get(REPO)).entries.map((e) => e.number)).toEqual([2]);

@@ -12,7 +12,7 @@ import {
 } from "@andy/contracts";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { PullRequestGate } from "./gate-service";
-import { MAIN_RED_WAKE_MS, MAX_MAIN_RED_HOLD_MS, MergeQueue } from "./merge-queue";
+import { MAX_MAIN_RED_HOLD_MS, MergeQueue } from "./merge-queue";
 import { TicketService } from "./tickets";
 
 /**
@@ -233,8 +233,6 @@ describe("PullRequestGate with the merge queue (AI-110)", () => {
       sha === tip(mainTip)
         ? { items: [check("check", mainChecks.conclusion)], complete: true }
         : listHeadChecks(repo, sha);
-    let clock = now();
-    queue = new MergeQueue(new InMemoryMergeQueueStore(), host, () => clock);
     const { run, pr } = await agentPr(await readyTicket("A"));
 
     expect(await gate().apply(opened(pr), await project())).toEqual([
@@ -245,9 +243,9 @@ describe("PullRequestGate with the merge queue (AI-110)", () => {
     expect((await queue.state(REPO.fullName)).mainRed?.checks).toEqual(["check"]);
 
     mainChecks.conclusion = "success";
-    // Main's own check finishing a minute on: a completed check naming no PR.
-    clock = new Date(clock.getTime() + MAIN_RED_WAKE_MS);
-    await queue.advanceFor(REPO.fullName, [], false, true);
+    expect((await queue.state(REPO.fullName)).mainRed?.sha).toBe(tip(mainTip));
+    // Main's own check finishing on its red tip: a completed check naming no PR.
+    await queue.advanceFor(REPO.fullName, [], false, tip(mainTip));
     expect(host.merges.map((m) => m.number)).toEqual([pr.number]);
     expect((await queue.state(REPO.fullName)).mainRed).toBeNull();
   });
@@ -266,7 +264,7 @@ describe("PullRequestGate with the merge queue (AI-110)", () => {
 
     clock = new Date(clock.getTime() + MAX_MAIN_RED_HOLD_MS + 1);
     await queue.advanceFor(REPO.fullName, [], false);
-    await queue.advanceFor(REPO.fullName, [], false, true);
+    await queue.advanceFor(REPO.fullName, [], false, tip(mainTip));
 
     expect(host.merges).toEqual([]);
     expect((await queue.state(REPO.fullName)).entries.map((e) => e.number)).toEqual([pr.number]);

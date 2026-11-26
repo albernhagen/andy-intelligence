@@ -184,7 +184,7 @@ export function registerGitHubWebhook(app: Hono<AuthEnv>, deps: WebhookDeps): vo
 
   /**
    * AI-110: moves the merge queue on from this event (checks or a push on the head PR, main
-   * moving, or main's own checks finishing while the queue is held for a red main: AI-382). Logged, never retried: the next event in the repo advances it again.
+   * moving, or a check finishing on main's red tip while the queue is held: AI-382). Logged, never retried: the next event in the repo advances it again.
    */
   async function advanceQueue(record: CodeHostEvent) {
     if (!queue) return;
@@ -195,13 +195,16 @@ export function registerGitHubWebhook(app: Hono<AuthEnv>, deps: WebhookDeps): vo
           ? [record.pullRequest.number]
           : [];
     try {
-      // A completed check wakes a queue held for a red main (AI-382): main's checks name no PR.
-      const checkCompleted = record.kind === "check_run" && record.checkRun.status === "completed";
+      // A check completed on main's red tip wakes a held queue (AI-382): main's checks name no PR.
+      const completedCheckSha =
+        record.kind === "check_run" && record.checkRun.status === "completed"
+          ? record.checkRun.headSha
+          : null;
       const outcomes = await queue.advanceFor(
         record.repo,
         numbers,
         movesDefaultBranch(record),
-        checkCompleted,
+        completedCheckSha,
       );
       if (outcomes.length) {
         log("INFO", "webhook merge queue", { deliveryId: record.deliveryId, outcomes });

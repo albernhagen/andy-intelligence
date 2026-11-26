@@ -249,7 +249,7 @@ export class PullRequestGate {
     }
     if (state === "behind") return { state, headSha: pr.headSha };
     if (state === "held")
-      return { state, headSha: pr.headSha, checks: judged.verdict.mainRedChecks };
+      return { state, headSha: pr.headSha, checks: judged.verdict.mainRedChecks, mainSha: baseSha };
     return { state, headSha: pr.headSha, reasons };
   }
 
