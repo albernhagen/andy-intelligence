@@ -105,7 +105,7 @@ Then Andy tells the coordinator "run AI-151 in the cloud".
 ### What the coordinator and workers do differently
 
 - The coordinator starts a cloud worker only when Andy asks for the cloud in words.
-- A cloud session starts from the branch on GitHub (the default branch from the web), never from unpushed local work: push first and name the branch in the brief. The clone is shallow (50 commits) and sits on a session branch `claude/<name>`; `main` can move after the clone, so the worker fetches it before cutting its branch.
+- A cloud session starts from the branch on GitHub (the default branch from the web), never from unpushed local work: push first and name the branch in the brief. The clone is shallow (50 commits) and sits on a session branch `claude/<name>`; `main` can move after the clone, so the worker fetches it before cutting its branch. After `main` moved again, the fetched `main` shared no history with the branch and the pre-push hook failed with `no merge base`: `git fetch --deepen=100 origin main` fixed it.
 - The worker process restarted once mid-session: conversation and files were kept, the command in flight lost its result. An idle VM being reclaimed was not observed.
 - Cloud workers send the coordinator no note when a turn ends: watch their PRs with `survey`. The PR description is the worker's whole report.
 - GitHub from the VM goes through a proxy. `gh pr` and `gh issue` fail with `HTTP 403: GitHub GraphQL is not available from Claude Code sessions`. `gh api` (REST) works for opening a PR, reading it, its checks and its comments, and commenting. `gh auth status` says the token is invalid (the proxy adds the real one): ignore it. The session also has GitHub MCP tools limited to this repo.
