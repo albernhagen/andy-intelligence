@@ -13,10 +13,9 @@ AI-206: M6.17. A `cloud-run` project's `deploy.yml` and `release.yml` (from `tem
 
 ## Credentials
 
-No new credential. GitHub OIDC → the environment's Workload Identity provider → `<service>-deploy` (push to `<service>` registry repo, `run.developer` on `<service>`, actAs `<service>-run`). The same job token, audience the control plane, signs the deployment reports.
+No new credential. GitHub OIDC → the environment's Workload Identity provider → `<service>-deploy` (push to `<service>` registry repo, `run.developer` on `<service>`, actAs `<service>-run`; on prod in `dev-and-prod`, also read on the dev `<service>` repo so promote can check the digest, AI-390: Promote in dev-and-prod: prod deployer reads the dev registry). The same job token, audience the control plane, signs the deployment reports.
 
 ## Residual risks (R-AI-206)
 
 - **Repo write access deploys.** Anyone who can merge to `main` or dispatch `release.yml` can ship code to that project's first environment and promote or roll back prod, within that project only. Risk file: `risks/R-AI-206.md`.
-- **Promote in `dev-and-prod` can't read the dev registry yet.** `cloud-run-release-check` describes the digest with prod's deployer, which `project-env` gives no read on the dev repo (only prod's Cloud Run service agent). Promote fails before traffic moves until that grant exists (AI-390: Promote in dev-and-prod: prod deployer reads the dev registry).
 - **The baseline keeps files once written.** Changing `deployKind` from `cloud-run` to `none` leaves both workflows in the repo; delete them by hand.
